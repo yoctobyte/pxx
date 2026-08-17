@@ -470,6 +470,37 @@ Same statement, no divergence, for the other three: `is_integer`, `hex` and
 `conjugate` are exact over every double including the infinities, NaN and the
 subnormals.
 
+## `sys.path` cannot work, and that is PERMANENT — the answer is `-Fu` (2026-08-17)
+
+**Not a bug, and not fixable.** `sys.path.insert(0, "/path/to/pkg")` before an
+import is how CPython finds a third-party package. Under NilPy it does nothing
+to imports, because **`sys.path` is a RUNTIME list and pxx resolves imports at
+COMPILE time**. No amount of work makes a compile-time resolver honour a list
+the program mutates while running.
+
+The NilPy answer is the unit search path:
+
+```sh
+./compiler/pascal26 -Fu/abs/path/to/library_candidates/webencodings drv.npy drv
+```
+
+`-Fu` takes the directory *containing* the package directory — the same "parent
+of the package" convention Python's own path entries use.
+
+**Why this is written down rather than left obvious:** without `-Fu` the failure
+is `error: import: no unit named webencodings and no shim mimic_webencodings`,
+which reads as *"this feature does not exist"* for a feature that does — and
+`-Fu` is absent from the compiler's usage line, so nothing points at it. That
+combination produced a wrong first diagnosis on the first third-party corpus
+attempt ("pxx cannot resolve third-party packages at all") and sent the next
+move to `sys.path`, which silently does nothing. See
+[[doc-n-fu-is-how-a-python-package-is-found]] for the message and usage-line
+fixes.
+
+This entry exists so a future session does not try to "fix" `sys.path`.
+Assigning to it is legal and harmless — it just has no effect on imports, the
+same way it has no effect in any AOT-compiled Python.
+
 ## The `--strict-python` flag (shipped 2026-08-13, no rules wired yet)
 
 Every divergence on this page is a **laxity**: NilPy accepts something CPython

@@ -201,3 +201,45 @@ quick` GREEN with the FPC seed canary PASS.
 
 Both handlers live in `pyparser.inc` — **Track N's file, no Track A handoff
 needed**, which was an open question and is now answered.
+
+## Bounded collapse check (asked for, ~30 min) — NOT collapsible in this ticket
+
+The ordering constraint below is a symptom of two handlers serving one concept,
+so before working around it I checked whether they merge. **They do not, inside
+this ticket's scope.** Recording the reasoning so nobody re-runs the check.
+
+| | `PyParseOneImport` | `PyParseImportRun` |
+| --- | --- | --- |
+| size | 105 lines | **283 lines** |
+| callers | **1** (:23635, an import inside a block) | **4** (:17820, :32012, :32778, and the prescan) |
+| role (its own forward decl) | "ONE import statement, inside a block" | "`import` / `from ... import`, **wherever it appears**" |
+
+`PyParseImportRun` is a **superset**, not a peer: the extra ~178 lines are alias
+binding (`PyImpAliasSym`), consumed-only roots (itertools/collections), the
+`typing` special list, and the soft/try-import handling. The tree already knows
+they are duplicated — `:31581` says *"Shares the resolver with
+PyParseImportRun"* and `:31890` / `:31900` call each other **"the twin list"**
+and **"the twin site"** outright.
+
+So the collapse direction is forced: `PyParseImportRun`'s loop body should *be*
+`PyParseOneImport`, which means first lifting those ~178 lines into the shared
+body and then re-verifying four call paths, one of which is the prescan whose
+routing is exactly what is fragile here. **That is a parser refactor, not a
+corpus fix**, and doing it under a ticket about compiling webencodings is how a
+corpus ticket becomes an afternoon in the import parser.
+
+Filed separately: [[refactor-n-two-import-handlers-are-twins]]. Taking the
+staged route here, as agreed.
+
+## The trap this leaves for the next person — state it in these terms
+
+Widening the prescan to `[tkIdent, tkDot]` is a one-line change that is
+**obviously correct about the prescan** and still wrong, because it silently
+reroutes `from . import sub` from the handler that copes to the one that does
+not. This is `normalise-dont-special-case.md`'s "fix one arm of a double case,
+grep for the sibling" — except the sibling is not a second call site, it is a
+second **destination**. Nothing in the diff hints at it; it is only visible by
+running the *other* form after making the change.
+
+So: **after touching import routing, run both relative forms, not the one you
+were fixing.**
