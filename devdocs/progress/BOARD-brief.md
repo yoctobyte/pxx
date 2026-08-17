@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:11 blocked:3 backlog:224 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1985 rejected:38`
+`unfinished:12 blocked:3 backlog:221 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1988 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-nilpy-thirdparty-libraries-as-targets` [N] — owner: frank2
+_none — no lane is locked._
 
-## unfinished (11) — parked mid-flight; re-claim, do not duplicate
+## unfinished (12) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
@@ -23,6 +23,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-six-and-warnings-shims` [B] — blocked-by: bug-n-the-builtin-warning-exception-hierarchy-is-missing, decide-how-python-shaped-shims-should-be-shipped
+- `feature-nilpy-thirdparty-libraries-as-targets` [N]
 - `feature-pascal-corpus-generics` [P]
 
 ## blocked (3) — has an unmet blocker; do not claim
@@ -31,7 +32,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 209, ranked
+## Ready — top 30 of 206, ranked
 
 - `[p 70] [U]` decide-how-python-shaped-shims-should-be-shipped (unblocks 1)
 - `[p 70] [U]` decide-week-theme-2026-08-17
@@ -43,11 +44,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [C]` bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
-- `[p 55] [N]` bug-n-a-package-does-not-re-export-what-its-init-imports
 - `[p 55] [N]` bug-n-a-subpackage-directory-does-not-resolve-as-a-module
 - `[p 55] [N]` bug-n-a-temporary-receiver-resolves-to-the-shim-type-not-the-user-class
-- `[p 55] [N]` bug-n-from-import-as-alias-binds-zero-inside-a-pulled-module
-- `[p 55] [N]` bug-n-relative-import-from-a-package-is-not-parsed
 - `[p 55] [U]` decide-what-an-unwired-test-may-assert
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
@@ -63,5 +61,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
+- `[p 50] [A]` feature-nilpy-collections-and-string-methods
+- `[p 50] [P]` feature-p-read-text-into-a-char-arm
+- `[p 50] [A]` feature-pascal-asmmode-directive-tolerance
 
-_179 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_176 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

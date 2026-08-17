@@ -4,6 +4,7 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`from .sub import NAME` — an intra-package relative import — fails with `error: undefined variable (from)`. Plain `from pkg import NAME` parses fine; the leading dot is what breaks. This blocks ALL FOUR Python corpora (webencodings, tinycss2, html5lib, reportlab), because every real package uses relative imports in its __init__.py."
+status: done
 ---
 
 # A relative import (`from .sub import X`) is not parsed
@@ -381,3 +382,6 @@ evidence about a second GATE — `normalise-dont-special-case.md`'s "grep for th
 sibling" applied to the routing condition rather than to the handler. The
 condition `Tokens[i + 1].Kind = tkIdent` appears at three sites; grepping the
 *shape* of the condition, not the name of the routine, is what finds all three.
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.

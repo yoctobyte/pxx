@@ -4,6 +4,7 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`from mod import NAME as ALIAS` binds ALIAS to 0 — silently, no diagnostic — when the statement is inside a pulled `.py` MODULE. The identical statement in a top-level `.npy` program binds correctly, so it is the module path only. Silent-wrong-value class."
+status: done
 ---
 
 # `from mod import NAME as ALIAS` binds 0 inside a pulled `.py` module
@@ -155,3 +156,6 @@ should bind NAME in the importing module exactly as `from mod import NAME as
 NAME` already does — which is also precisely CPython's semantics, since a
 from-import binds a name in the importer's namespace rather than opening a
 window onto the exporter's. **One mechanism serves both tickets.**
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.

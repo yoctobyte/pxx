@@ -4,6 +4,7 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`from pkg import NAME` fails with `undefined variable (NAME)` when pkg's `__init__.py` obtained NAME by importing it, rather than defining it. Flat unit scope: a module's imports do not join what it re-exports. This is how nearly every real package publishes its public API, so it blocks the third-party corpora one rung past relative imports."
+status: done
 ---
 
 # A package does not re-export what its `__init__.py` imports
@@ -158,3 +159,6 @@ this fix did not shift the wall it was not aiming at.
 separate mechanism from sub-MODULE resolution; html5lib has real subpackages
 (`_trie`, `treebuilders`, `treewalkers`), so this will be the next rung there.
 Filed as [[bug-n-a-subpackage-directory-does-not-resolve-as-a-module]].
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.

@@ -2,7 +2,7 @@
 track: N
 prio: 60
 type: feature
-status: working
+status: unfinished
 owner: frank2
 ---
 
@@ -869,3 +869,25 @@ method caveat that standalone-compiling every file overstates the walls.
 Further Track N work on this ticket has **low yield** until the shims exist. The
 next unit of progress is `mimic_six` (15 files), then `codecs.CodecInfo`
 (webencodings' last wall), then `warnings`. All Track B.
+
+## PARKED 2026-08-17 — not blocked on Track N, and the deliverable is still unwired
+
+Moved out of `working/` because this session halted with it incomplete rather
+than finished. **The Makefile corpus targets — this ticket's actual deliverable —
+are still not wired.** Three frontend fixes landed and none of them was that.
+
+Why parked rather than pushed further: wiring `webencodings` today would assert
+`codecs.CodecInfo`, a Track B `mimic_codecs` gap, not a corpus result — a target
+that tests another lane's hole is worse than no target, because it goes red for a
+reason its own lane cannot fix. The A/B scan above is the evidence: ~40 of 58
+files stop at a missing module, and Track N is not the lever.
+
+Critical path is now `decide-how-python-shaped-shims-should-be-shipped`
+(raised to 70 by the coordinator on these numbers, with the user). Nothing here
+is buildable until that is answered — which is why this is parked on a decision
+rather than on work.
+
+**Resume condition:** the shim question is answered and `mimic_six` exists (15 of
+58 files). Then re-run the A/B scan in this file — with `-Fu`, against a pin, and
+naming the sha — before choosing the next rung. Do not read the next step out of
+the prose above; every scan in this file has been superseded by the next one.
