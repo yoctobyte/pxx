@@ -5951,7 +5951,7 @@
    "status": "timeout"
   },
   {
-   "bad": "f9ef914d57e1ff27dbccbbc4e0d178f7f4c95e7d",
+   "bad": "5215148bb45482fea46e986e937a594c2211e4e7",
    "good": "a905532193d96e17693aefb5d32eb1f40139d940",
    "job": "test-nilpy#src:examples/tk/callbacks.npy",
    "name": "test-nilpy#13",
@@ -5960,11 +5960,7 @@
    "range": [
     "f04f29bb1c60f84c4210ae1a70b207e36cd9a3a9",
     "5ee0de5ffca91e58cfe3bc01c894534a20c96824",
-    "5215148bb45482fea46e986e937a594c2211e4e7",
-    "a52ef1948408e8deedf8c1891c1bc8da399496a7",
-    "8403861bbfb45b5cde6fe8e85a7a3e5c47fd3350",
-    "a78ff150e22e8827e68108a0b0f4436566667e5c",
-    "f9ef914d57e1ff27dbccbbc4e0d178f7f4c95e7d"
+    "5215148bb45482fea46e986e937a594c2211e4e7"
    ],
    "src": "examples/tk/callbacks.npy",
    "status": "fail"
