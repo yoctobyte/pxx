@@ -1032,8 +1032,30 @@ CORPUS_ROOTS = [
     # directory literally named `...external/`) costs a SKIP, which this file
     # announces loudly, so the permissive direction is the safe one.
     (re.compile(r"external/([A-Za-z0-9_.+-]+)"), "external",
-     "these are NOT fetchable by script — clone each into external/: %s"),
+     # Was "these are NOT fetchable by script — clone each into external/".
+     # FALSE, and false from the day it was written (2026-08-14):
+     # tools/install_externals.sh has fetched synapse since 2026-06-07. The
+     # cost was not a wrong sentence -- it was that Track B's gate was
+     # unrunnable in a fresh clone with no trail back to the one command that
+     # fixes it. The fetcher was never missing; it was undiscoverable, and this
+     # message is what hid it.
+     #
+     # A true statement about the wrong subject, again: "not fetchable" is true
+     # of a tree nothing fetches, and this asserted it of EVERY tree under the
+     # root. So the hint is now per-TREE, not per-root -- see CORPUS_FETCHERS.
+     "clone into external/ by hand: %s"),
 ]
+# Per-TREE fetch commands, consulted before the per-root hint above. A root-level
+# hint necessarily flattens its members: it must say one thing about trees whose
+# provenance differs, and the safe-sounding wording ("not fetchable") is the one
+# that silently costs the most, because it tells a reader to stop looking.
+#
+# Add a tree here the moment something can fetch it. A missing entry degrades to
+# the root hint, which is honest -- it says clone it yourself, which is what you
+# do when nothing automates it.
+CORPUS_FETCHERS = {
+    ("external", "synapse"): "tools/install_externals.sh",
+}
 # A recipe line that tests for its own corpus path before using it handles the
 # absence itself (prints SKIP, exits 0), so it must NOT drag the whole job into
 # a skip: jobs bundle several sources, and the stb probe shared one with the
@@ -1658,9 +1680,19 @@ def corpus_warning(absent, njobs):
     lines += ["  !!",
               "  !! Fetch them (gitignored, nothing enters the repo):"]
     hints = {root: hint for _, root, hint in CORPUS_ROOTS}
+    # Trees WITH a known fetcher are listed one per line with their command;
+    # only the remainder falls through to the root hint. Grouping them all under
+    # one line is what let a fetchable tree inherit "not fetchable".
     for root in sorted({r for r, _ in names}):
-        trees = " ".join(m for r, m in names if r == root)
-        lines.append("  !!   " + hints[root] % trees)
+        rest = []
+        for _, m in sorted((r, m) for r, m in names if r == root):
+            cmd = CORPUS_FETCHERS.get((root, m))
+            if cmd:
+                lines.append("  !!   %s/%s — fetch it: %s" % (root, m, cmd))
+            else:
+                rest.append(m)
+        if rest:
+            lines.append("  !!   " + hints[root] % " ".join(rest))
     lines += ["  " + "!" * 68, ""]
     return "\n".join(lines)
 
