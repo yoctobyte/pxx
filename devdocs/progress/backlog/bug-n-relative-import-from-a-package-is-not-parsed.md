@@ -79,3 +79,59 @@ is Track A and must be filed, not edited.
 `tools/gate.sh quick` **before committing** so the FPC seed canary runs.
 Stretch check that actually matters: `webencodings/__init__.py` compiles past
 line 19.
+
+---
+
+## CORRECTION 2026-08-17, same session — the mechanism, and it is NOT "unimplemented"
+
+Read the code after filing the above. `PyEatRelativeImportDots` already exists
+(`pyparser.inc`, called from the import loop at :31679), so relative imports are
+partly built. The ticket's "is not parsed" framing is too coarse. Three distinct
+states, measured:
+
+| form | result | |
+| --- | --- | --- |
+| `from . import sub` then `sub.VALUE` | **parses**, then `error: undefined variable (sub)` | binds nothing usable |
+| `from .sub import VALUE` | `error: undefined variable (from)` | never handled |
+| `from pkg import VALUE` | works | the absolute form is fine |
+
+### The dot-eater succeeds only for the bare-dot form
+
+```pascal
+function PyEatRelativeImportDots: Boolean;
+begin
+  Result := False;
+  if CurTok.Kind <> tkDot then Exit;
+  while CurTok.Kind = tkDot do Next;
+  Result := CurTok.Kind = tkUses;     { i.e. only `from . import x` }
+end;
+```
+
+It returns True **only** when the token after the dots is `import`. For
+`from .sub import VALUE` the next token is the identifier `sub`, so it returns
+False — **after having already consumed the dots**. That side-effect-on-failure
+is a defect in its own right: the caller's fallback path resumes mid-statement
+with the dots gone and no way to know a relative import was intended, which is
+why the error surfaces as `undefined variable (from)` and names neither the dot
+nor the import.
+
+So there are two things to fix and they are independent:
+
+1. **`from .mod import NAME`** — the common form, unhandled. The dot-eater needs
+   to report the LEVEL (dot count) and let the caller consume a module name
+   after it, rather than returning a bare Boolean that conflates "no dots" with
+   "dots but not the bare form".
+2. **`from . import sub`** — parses but does not bind `sub` as a usable module
+   name. `ParseUsesUnit` is called for it, so the unit is pulled in; what is
+   missing is the local binding, and that is a different half from the parse.
+
+Both are needed: `webencodings/__init__.py` uses form 1 (`from .labels import
+LABELS`) and `webencodings/tests.py` uses form 2 (`from . import lookup, ...`).
+
+### Where this stopped
+
+Banked here rather than fixed — locating the second half (why `sub` is unbound)
+is investigation, and this session has not been cleared. Form 1's parse looks
+like a contained change in `pyparser.inc` (Track N's file); form 2 may reach the
+resolver, so **check whether it lands in `parser.inc` before editing** — that
+half would be Track A and filed, not fixed.
