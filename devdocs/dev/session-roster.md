@@ -331,6 +331,22 @@ clears it or the check releases it.
   attributing the reds is exactly the state that survives because each individual
   report looks unchanged.
   frank2 busy (`shell`), tree clean, nothing unpushed. No pending clears.
+  **RESOLVED same cycle, and the alarm was wrong twice.** (a) It did not verify
+  v347: the verified sha `08bdf2729` is a docs commit 85 seconds BEFORE the pin
+  commit, and `VERSION` at that sha reads **346** — the `ver` field is taken from
+  pin state at report time rather than from the verified tree. (b) **Job names are
+  POSITIONAL** (`"%s#%02d" % (target, index)`, an index into the target's `make -n`
+  recipe), so `lib-test#117` is `lib_tls13_keys.pas` at the verified sha and
+  `lib_tls.pas` at HEAD — a `test-nilpy` job inserted tonight shifted everything
+  after it. Both unattributed reds reproduce as **pass** under v346, v347 and HEAD.
+  Pin-lag hypothesis disconfirmed; likely transient timeout in a 186-job parallel
+  run. Filed for T as
+  `bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label` (p55).
+  **The systemic part: `new_red`/`fixed` diffing silently degrades whenever the job
+  list changes**, because two runs' red lists cannot be compared once positions
+  shift — and seven tests were added tonight. `#36` was attributable only because it
+  independently appears in `open_regressions`, where the stable `src:` selector is
+  stored. `Job.sel` already exists; `pin_verify.red` just does not use it.
 
 - 2026-08-17 hourly check #3 (cron) — **active, no blocks.** frank2 busy on the
   `digits = string.digits` Pascal-shim collision (corrected table's #1, 8 files);

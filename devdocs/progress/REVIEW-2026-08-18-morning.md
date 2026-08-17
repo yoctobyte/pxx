@@ -352,6 +352,43 @@ we were fixing. Both workers caught the two that would have cost real time. That
 arrangement worked — but it worked because there were two of them awake, and it is
 the honest input to how much of this should run unattended.
 
+## Our regression detection has a silent degradation mode
+
+Found chasing a false alarm I raised: Track T's full tier appeared to report **pin
+v347 RED on three jobs**. Both halves of that sentence were wrong.
+
+**It verified v346, not v347.** The verified sha is a docs commit 85 seconds before
+the pin commit; `VERSION` at that sha reads 346. The version label is taken from pin
+state *at report time* rather than from the tree that was verified.
+
+**And the job names are positional** — `"%s#%02d" % (target, index)`, an index into
+the target's `make -n` recipe. So the same name means different files at different
+shas:
+
+| name | at the verified sha | at HEAD |
+| --- | --- | --- |
+| `lib-test#117` | `lib_tls13_keys.pas` | **`lib_tls.pas`** |
+| `test-nilpy#12` | `field_class_identity.npy` | **`uses_tkinter_and_configparser.pas`** |
+
+A `test-nilpy` job added tonight shifted everything after it. Nothing in the record
+says which sha to resolve against.
+
+**The consequence is bigger than the false alarm: `new_red` / `fixed` diffing
+degrades silently whenever the job list changes**, because two runs' red lists
+cannot be compared once positions shift — and seven tests were added tonight. The
+one red that *was* attributable, `crtl_exp2`, was attributable only because it also
+appears in `open_regressions`, where a stable `src:` selector is stored. `Job.sel`
+already exists in testmgr; `pin_verify.red` simply does not use it.
+
+Filed for Track T as
+`bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label` (p55).
+Both unattributed reds reproduce as **pass** under v346, v347 and HEAD, so the
+likely truth is transient timeout in a 186-job parallel run — recorded as unproven
+rather than closed as flake.
+
+This is "prefer labelled output over positional" — the rule that came out of a probe
+trap two hours earlier — living inside our own reporting format.
+
 ## A measurement rule worth keeping
 
 **A ladder row counts transitive victims, not importers.** Three corpus files import
