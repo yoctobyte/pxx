@@ -532,6 +532,37 @@ type
   ReferenceError    = class(Exception) end;
   StopAsyncIteration = class(Exception) end;
 
+  { The WARNING hierarchy. These are BUILTINS in CPython, not members of the
+    `warnings` module, and calling code names them bare — `warnings.warn(msg,
+    DeprecationWarning)` and, far more often, `class DataLossWarning(UserWarning)`.
+    That is why no `mimic_warnings` shim could ever supply them however it was
+    written, and why they belong here instead
+    (bug-n-the-builtin-warning-exception-hierarchy-is-missing).
+
+    Measured need: html5lib has 16 non-test `warnings.warn` call sites, every one
+    of which passes a category — 14 `DataLossWarning` (whose declaration is the
+    `UserWarning` subclass above) and 2 `DeprecationWarning`.
+
+    THE WHOLE TREE, not the three that are load-bearing today. A partial table is
+    the bad failure mode here: the missing name does not announce itself as
+    missing, it surfaces later as `undefined variable (ResourceWarning)` in
+    somebody's library, and each addition would be another round trip through a
+    pin. Read off CPython 3.12's `builtins` rather than memory — all twelve derive
+    directly from `Warning` except `Warning` itself, which derives from
+    `Exception`; none of them nest. }
+  Warning           = class(Exception) end;
+  UserWarning       = class(Warning) end;
+  DeprecationWarning = class(Warning) end;
+  PendingDeprecationWarning = class(Warning) end;
+  SyntaxWarning     = class(Warning) end;
+  RuntimeWarning    = class(Warning) end;
+  FutureWarning     = class(Warning) end;
+  ImportWarning     = class(Warning) end;
+  UnicodeWarning    = class(Warning) end;
+  BytesWarning      = class(Warning) end;
+  ResourceWarning   = class(Warning) end;
+  EncodingWarning   = class(Warning) end;
+
   TPyBytes = class
   public
     FLen: Integer;
