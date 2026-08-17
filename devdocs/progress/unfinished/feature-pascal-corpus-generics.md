@@ -317,7 +317,23 @@ the other. Filed as
 scope note that the real shape is arity-overloaded class names (FPC's
 `TDictionary` / `TDictionary<K,V>`), not a guard for this one pair.
 
-Not started.
+**CLEARED 2026-08-17** in `eda43dea7` — and it was not a name table. Two
+unrelated defects wore one symptom: a bare `X.M` impl header was handed to the
+template on a name match, and `SpecializeStream` rewrote the base-class
+reference so the specialization inherited from itself. Two controls separated
+them; the filed name-table scope was an inference from the error text and wrong.
+See that ticket for the record.
+
+### The wall now (635)
+
+```
+error: unknown type: array
+  near: FEqualityComparer_Pointer_Instance Pointer FEqualityComparerInstances >>> array TTypeKind
+```
+
+An inline `array[TTypeKind] of ...` type in a class FIELD declaration —
+an anonymous array type where only a named one is accepted. Unrelated to
+generics. Not started.
 
 ### Side finding, filed separately
 

@@ -4,7 +4,7 @@ prio: 50
 type: bug
 blocked-by: []
 summary: "`THS = class ... end;` and `THS<T> = class ... end;` in one unit collide — pxx keys a class by NAME with no generic-arity component, so the second declaration overwrites the first and its methods report `unresolved forward`. FPC compiles the pair and prints both. Surfaces in rtl-generics as the misleading `base type not found: THS$LongInt`, because the collision is first observed through a base clause."
-status: working
+status: done
 owner: claude-AP
 ---
 
@@ -91,3 +91,55 @@ to bite, and it is why the corpus failure appeared in a base clause first.
 The measured table above matching `fpc -Mdelphi` row for row, plus a
 three-way (`TFoo`, `TFoo<T>`, `TFoo<T,U>`) coexistence case; `gate.sh quick`;
 self-host fixedpoint.
+
+## 2026-08-17 — FIXED in eda43dea7. The diagnosis above was wrong.
+
+Both spellings now work; `TD`, `TD<K>` and `TD<K,V>` coexist and match
+`fpc -Mdelphi` row for row.
+
+**The name-table story in this ticket is wrong, and worth leaving on the record
+rather than editing out.** It says a class is keyed by name with no arity
+component, so the two declarations become one row. They do not: generic templates
+live in `Templates[]` and classes in the `UCls*` table, and the two never
+collided. I inferred a shared key from a single symptom
+(`base type not found: THS$LongInt`) and then scoped a name-table redesign — "a
+key change plus every lookup that builds the key" — around the inference.
+
+**Two unrelated defects were wearing one symptom.**
+
+1. `ParseSubroutine` handed a bare `X.M` implementation header to a TEMPLATE
+   whenever a template of that name existed, matching on the name alone. That
+   spelling is also how a generic method impl is legitimately written, so the
+   header really is ambiguous and no spelling rule separates them; it is now
+   resolved by asking which class DECLARES the method. This is what produced
+   `unresolved forward` on the ordinary class's own method.
+
+2. `SpecializeStream` rewrites every occurrence of the template's name to the
+   specialized name, which also caught the base-class reference in
+   `THS<T> = class(THS)` — emitting a specialization that inherits from itself.
+   A base-class position now keeps the token, since the template's own name
+   cannot mean the specialization there.
+
+Neither is a name table.
+
+**What separated them was two controls, in about a minute:** drop the
+inheritance (defect 1 alone still fails), and drop each class's methods in turn
+(only the ordinary class's method fails). Both were available yesterday when the
+ticket was filed; I reasoned from the error text instead, which is the exact
+failure this repo's debugging note warns about. The scope estimate was wrong in
+the expensive direction — it made the work look like a design change worth
+deferring, and it was two guards.
+
+**Test.** `test/test_generic_name_overload.pas`, wired into `test-core`. The
+inheritance row is the load-bearing one — `TD<LongInt>.N` must reach the
+NON-generic parent's method through the specialization, which a compile-only
+check would not catch. A typecast control (`TBox<T>(o)` inside a template body,
+where the name DOES mean the specialization) guards the second fix from
+over-reaching.
+
+Unblocks [[feature-pascal-corpus-generics]]: generics.defaults walks from line
+525 to 635, where the next wall is an inline `array[TTypeKind] of` type in a
+class field — unrelated.
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.
