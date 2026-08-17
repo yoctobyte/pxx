@@ -5,15 +5,16 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:3 backlog:210 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1978 rejected:38`
+`unfinished:11 blocked:3 backlog:210 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1978 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (10) — parked mid-flight; re-claim, do not duplicate
+## unfinished (11) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
+- `bug-nilpy-a-dict-cannot-be-unpacked-into-a-call` [N] — blocked-by: bug-a-nilpy-leading-double-star-in-a-call-is-not-detected
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `bug-p-cannot-call-directly-through-a-procedural-type-cast` [P]

@@ -12,11 +12,12 @@ _none_
 
 _none_
 
-## unfinished (10)
+## unfinished (11)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
+| bug-nilpy-a-dict-cannot-be-unpacked-into-a-call | N | 40 | bug | `f(**d)` — unpacking a dict into a call — is a PARSE error (\"expected expression\") for every callee shape: a plain def, a **kwargs def, a method, a constructor. Only the forwarding shape `f(*args, **kwargs)` inside a def that declares them works. | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | bug-p-cannot-call-directly-through-a-procedural-type-cast | P | 35 | bug | `TFn(p)(args)` — calling straight through a procedural-type cast — is `unexpected token`, where FPC compiles and runs it. Assigning the cast to a variable first and calling that works, so the capability is present and only this spelling is refused. Hit twice while writing repros for the rtl-generics constant-initializer walls. | — |
@@ -39,6 +40,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
 | bug-a-riscv32-softfloat-has-no-subnormals | A | 40 | bug | riscv32 flushes subnormals: (1e-320 * 0.5) * 2.0 <> 1e-320, Exp(-745) returns 0 where every other target gives a subnormal, and Ln(5e-324) answers -746.52 instead of -744.44. Identical in both float modes, so it is the target's soft-float runtime, not the math unit. i386, arm32, aarch64 and x86-64 are all correct. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-inttohex-of-a-negative-integer-prints-16-digits | B | 40 | bug | `IntToHex(-1, 8)` prints FFFFFFFFFFFFFFFF where FPC prints FFFFFFFF: lib/rtl/sysutils declares only the Int64 overload, so a 32-bit Integer argument is sign-extended to 64 bits and renders eight extra F's. Positive values agree, so it only shows on negatives — where hex is most often used | — |
@@ -51,7 +53,6 @@ _none_
 | bug-n-abs-of-a-complex-raises-typeerror | N | 35 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 35 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
 | bug-n-pylib-cannot-reach-the-rtl-power-so-complex-magnitude-loses-ulps | N | 25 | bug | `pycomplex_pow` computes \|z\|**b as exp(b*ln\|z\|) — two roundings — where CPython calls pow() directly, so `(-8.0) ** 0.5` gives an imaginary part of 2.8284271247461894 against CPython's 2.8284271247461903 (~4 ulp). The cause is structural: pylib lives in compiler/builtin and cannot reach the RTL's correctly-rounded Power, which is why it carries its own series ln/exp in the first place. | — |
-| bug-nilpy-a-dict-cannot-be-unpacked-into-a-call | N | 40 | bug | `f(**d)` — unpacking a dict into a call — is a PARSE error (\"expected expression\") for every callee shape: a plain def, a **kwargs def, a method, a constructor. Only the forwarding shape `f(*args, **kwargs)` inside a def that declares them works. | — |
 | bug-nilpy-an-extended-slice-cannot-be-assigned | N | 30 | bug | `l[::2] = [7, 8]` is a parse error. The READ form `l[::2]` works, and the plain-slice ASSIGN `l[1:3] = [9]` works; only the strided assignment is missing. | — |
 | bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds | N | 20 | bug | A dict VALUE as the `*=` target still rebinds, so an alias of it keeps the old contents. The parameter half landed 2026-08-15 (pymul_v_inplace); this is the residue, and `+=` has the same split. | — |
 | bug-nilpy-classmethod-constructors-on-builtin-types-are-absent | N | 25 | bug | `bytes.fromhex(\"6162\")` and `float.fromhex(\"0x1p3\")` are `undefined variable (bytes)` / `(float)` — the TYPE used as a namespace resolves only for the handful of names the stdlib table lists (int.from_bytes, dict.fromkeys, str.maketrans). | — |
@@ -528,10 +529,10 @@ _none_
 - [p 45] [A] refactor-centralize-managed-string-pchar-conversion
 - [p 45] [A] task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc
 - [p 42] [A] feature-pascal-builtin-tobject-class
+- [p 40] [A] bug-a-nilpy-leading-double-star-in-a-call-is-not-detected (unblocks 1)
 - [p 40] [A] bug-a-riscv32-softfloat-has-no-subnormals
 - [p 40] [B] bug-b-inttohex-of-a-negative-integer-prints-16-digits
 - [p 40] [E] bug-b-mandelbrot-gui-demo-does-not-build-missing-gtk3-c
-- [p 40] [N] bug-nilpy-a-dict-cannot-be-unpacked-into-a-call
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 40] [P] compat-pascal-a-string-n-field-makes-a-record-a-different-size-than-fpc
 - [p 40] [P] compat-pascal-index-a-function-call-result
@@ -663,6 +664,7 @@ _none_
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
+- **1** — bug-a-nilpy-leading-double-star-in-a-call-is-not-detected
 - **1** — bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind
