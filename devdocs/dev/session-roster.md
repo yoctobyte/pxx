@@ -78,6 +78,37 @@ still apply — they prevent conflicting EDITS to the same file, not tree damage
 
    The whole queue is one command: `tools/progress.sh ready --track U`.
 
+   **Filter first — most things are not decisions** (human, 2026-08-17):
+
+   - **Philosophy check before filing.** If the stated principles already settle
+     it, DERIVE the answer, say which rule and why, and file it as a
+     CONFIRMATION rather than a fork. Escalating a settled question is not
+     service; it is homework assigned to the human. Worked example: the
+     unary-minus widening was filed as a three-way fork and is not one — the
+     "default is the reference implementation" rule plus CLAUDE.md's escape rule
+     (a silent wrong VALUE is a bug, not a parity preference) both require the
+     same answer. What survived was narrower and honest: the blast radius the
+     philosophy does not price.
+   - **Escalate the PARADOXES.** This project pursues aims that genuinely pull
+     against each other — pxx's own dialect vs FPC parity, NilPy's one-directional
+     CPython compatibility — and it is doing something with no reference to copy,
+     so "mimic this behaviour" often has no answer. Where two principles collide,
+     no precedent exists, or a GOAL is being chosen, that is real Track U work.
+   - **Teach the mechanism.** The human has stated learning compiler internals as
+     a sub-goal. A note carrying only a verdict teaches nothing and cannot be
+     checked. Include why the machinery behaves that way — it is also what lets
+     the human catch the overlooked thing, which has repeatedly been the actual
+     failure mode.
+
+   **A sub-goal is not a goal.** Closing the ticket, making the suite green, or
+   reaching the stated gate are proxies. A shortcut that reaches one by violating
+   the point is a failure even when everything passes — this is the
+   platonic-code rule, and it applies to FIXES as much as to library code.
+   Worked example, 2026-08-17: frank2 could have extended a fix two lines to
+   cover `def f(a=1, **kw)`; it would have answered `len(kw)=3` where CPython
+   says 1. It left the honest error in place instead. A wrong value is strictly
+   worse than a refusal.
+
    Worked example of the target shape: the pin-ownership question on 2026-08-17.
    Coordinator measured (~12 pins/week, ~7 min of lock), recommended one option,
    named the rejected alternative and why. The human answered in three words.
