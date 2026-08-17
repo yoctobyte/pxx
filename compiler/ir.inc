@@ -6458,6 +6458,46 @@ begin
         Exit;
       end;
 
+      { `@fp` in DELPHI mode is the pointer the procvar HOLDS, not the address
+        of the variable. Measured against FPC 3.2.2 with the variable's own
+        address obtained independently (an untyped `var` parameter), so all
+        three candidate answers are distinguishable:
+
+          address of the variable fp    4389424
+          code address of ImplNil       4198544
+          fp() call result              0
+          @fp                           4198544   <- the VALUE it holds
+
+        PXX returned the variable's address, and the wrong value was a VALID
+        POINTER: Synapse forwards its OpenSSL verify callback as
+        `_SslCtxSetVerify(ctx, mode, @arg2)` over a value parameter, so OpenSSL
+        stored a live stack slot and X509_verify_cert later CALLED it — a TLS
+        handshake jumping into the stack, far from the mistake.
+
+        Done HERE rather than in the parser's `@` factor, which is where the
+        first attempt put it and why that attempt regressed
+        test_procvar_value_context: Delphi mode ALREADY has a rule that a bare
+        procvar in a value context is CALLED, and IRProcVarAutoCall exempts
+        `@fp` precisely BY IT BEING AN_ADDR (see its guard). Rebuilding `@fp`
+        as an AN_IDENT to carry the value therefore walked straight into the
+        auto-call and made `@fp` mean `fp()` — 0 instead of the code address.
+        Keeping the node AN_ADDR preserves every existing exemption and changes
+        only what it lowers to.
+
+        Method pointers ({Code,Data}, tyRecord) keep address-of: `@m` there is
+        not a single pointer and no measurement says otherwise.
+        bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert }
+      if DelphiMode and (ASTKind[ASTLeft[node]] = AN_IDENT) and
+         (ASTIVal[ASTLeft[node]] >= 0) and
+         (Integer(ASTIVal[ASTLeft[node]]) < SymCount) and
+         (SymProcSig[Integer(ASTIVal[ASTLeft[node]])] >= 0) and
+         (Syms[ASTIVal[ASTLeft[node]]].TypeKind <> tyRecord) then
+      begin
+        Result := IRLowerAST(ASTLeft[node]);
+        if Result >= 0 then IRTk[Result] := Ord(tyPointer);
+        Exit;
+      end;
+
       Result := IRLowerAddress(ASTLeft[node]);
       { The address VALUE is a pointer no matter what it points at.
         IRLowerAddress tags its node with the pointee's type; for a float

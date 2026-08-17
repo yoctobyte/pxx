@@ -2,7 +2,8 @@
 slug: bug-a-package-and-sibling-module-resolution-is-the-corpus-wall
 track: A
 prio: 65
-status: backlog
+status: working
+owner: frank2
 ---
 
 # Package / sibling-module resolution is now the largest corpus wall

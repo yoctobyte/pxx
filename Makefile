@@ -2039,9 +2039,9 @@ test-nilpy: $(COMPILER)
 	@# Both expectations match FPC 3.2.2 under the same flag, verified 2x2.
 	@# bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
 	./$(COMPILER) -Mdelphi test/test_pascal_at_procvar_mode.pas $(TESTTMP)/test_pascal_at_procvar_d26
-	test "$$($(TESTTMP)/test_pascal_at_procvar_d26)" = "$$(printf 'TRUE\nTRUE\nFALSE')"
+	test "$$($(TESTTMP)/test_pascal_at_procvar_d26)" = "$$(printf 'TRUE\nTRUE\nFALSE\nTRUE\nFALSE')"
 	./$(COMPILER) -Mobjfpc test/test_pascal_at_procvar_mode.pas $(TESTTMP)/test_pascal_at_procvar_o26
-	test "$$($(TESTTMP)/test_pascal_at_procvar_o26)" = "$$(printf 'FALSE\nFALSE\nTRUE')"
+	test "$$($(TESTTMP)/test_pascal_at_procvar_o26)" = "$$(printf 'FALSE\nFALSE\nTRUE\nFALSE\nTRUE')"
 	./$(COMPILER) test/test_nilpy_method_on_fresh_construction.npy $(TESTTMP)/test_nilpy_method_fresh_ctor26
 	test "$$($(TESTTMP)/test_nilpy_method_fresh_ctor26)" = "$$(printf '5\n7\na9\n6\n3 a3\n[1, 2]')"
 	./$(COMPILER) test/test_nilpy_discarded_string_result.npy $(TESTTMP)/test_nilpy_discarded_string_result26

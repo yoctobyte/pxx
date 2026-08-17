@@ -10328,34 +10328,6 @@ begin
         CurASTNode := node;
         LastExprTk := tyPointer;
       end
-      { @procvar in DELPHI/TP mode is the procvar's VALUE, not the variable's
-        address. Measured against FPC 3.2.2, which splits on mode:
-
-          {$MODE DELPHI} / {$MODE TP}      @p  ->  the code pointer p holds
-          {$MODE OBJFPC} / {$MODE FPC}     @p  ->  the address of p itself
-
-        PXX did the objfpc thing unconditionally, which is right for its own
-        dialect and wrong for the Delphi-mode source we compile with
-        --mimic-fpc. The cost was not a diagnostic: Synapse's ssl_openssl3_lib
-        forwards its verify callback as `_SslCtxSetVerify(ctx, mode, @arg2)`
-        over a value parameter `arg2: PFunction`. Under FPC that passes NULL;
-        under PXX it passed the ADDRESS OF THE PARAMETER — a live stack slot —
-        which OpenSSL stored and X509_verify_cert later called, so a TLS
-        handshake transferred control into the stack (rip == rax == a [stack]
-        address) far from anything that named the mistake.
-        bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
-
-        Scoped to DelphiMode so PXX's own objfpc-ish dialect — and the
-        compiler's own sources under the self-host gate — keep address-of.
-        FPC's `tp` agrees with delphi here, but PXX accepts `-Mtp` as INERT by
-        design (see the mode-switch test), so this deliberately does not key on
-        it: that is the existing mode policy, not an oversight in this fix. }
-      else if DelphiMode and (idx >= 0) and (SymProcSig[idx] >= 0) then
-      begin
-        Next;
-        CurASTNode := ParseLValueAST(idx, TokPos - 2);
-        LastExprTk := tyPointer;
-      end
       else
       begin
         Next;

@@ -39,8 +39,20 @@ begin
   Result := captured;
 end;
 
+{ @x on an UNTYPED var parameter is unambiguously the VARIABLE's address, which
+  is what makes the three candidate answers below distinguishable. Without this,
+  a procvar holding a real routine is non-zero under BOTH readings and the test
+  silently stops discriminating — which is exactly how test_procvar_value_context
+  line 116 passed while `@fp` meant the wrong thing. }
+procedure VarAddrOf(var x; out where: PtrUInt);
+begin
+  where := PtrUInt(@x);
+end;
+
 var
   atNil, atDummy, codeDummy: PtrUInt;
+  fp: PFunction;
+  fpVarAddr, atFp: PtrUInt;
 begin
   { `@Dummy` on a ROUTINE is a code address in every mode — the reference point.
     Deliberately not `Pointer(arg2)`: in delphi mode a bare procvar name means
@@ -57,4 +69,17 @@ begin
   WriteLn(atNil = 0);
   WriteLn(atDummy = codeDummy);
   WriteLn(atNil = atDummy);
+
+  { The same question over a VARIABLE holding a real routine, where all three
+    candidates differ: the variable's own address, the code address it holds,
+    and (in delphi mode, where a bare procvar in a value context is CALLED) the
+    call result. `@fp` must be the code address in delphi and the variable's
+    address in objfpc — and must never be the call result in either. }
+  fp := @Dummy;
+  VarAddrOf(fp, fpVarAddr);
+  Capture(@fp);
+  atFp := captured;
+
+  WriteLn(atFp = codeDummy);
+  WriteLn(atFp = fpVarAddr);
 end.

@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:13 blocked:4 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:81 done:1993 rejected:38`
+`working:1 unfinished:13 blocked:4 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:81 done:1993 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `bug-a-package-and-sibling-module-resolution-is-the-corpus-wall` [A] — owner: frank2
 
 ## unfinished (13) — parked mid-flight; re-claim, do not duplicate
 
@@ -37,7 +37,7 @@ _none — no lane is locked._
 ## Ready — top 30 of 206, ranked
 
 - `[p 70] [U]` decide-week-theme-2026-08-17
-- `[p 65] [A]` bug-a-package-and-sibling-module-resolution-is-the-corpus-wall
+- `[p 70] [P]` regression-test-core-test-procvar-value-context
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 60] [P]` feature-pascal-corpus-oop
