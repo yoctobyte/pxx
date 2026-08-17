@@ -146,3 +146,10 @@ shared symptom makes them look like duplicates, and because three tickets in one
 repo about a compilation unit being processed twice is worth someone asking
 whether "how many times has this file been compiled" deserves one answer rather
 than three mechanisms. Not proposed here; noted.
+
+**Escalated 2026-08-17** as [[decide-one-answer-to-have-i-already-compiled-this-unit]]
+(Track U) — three mechanisms for one concept crosses
+`root-cause-over-microfix.md`'s own "three is a design flaw" threshold, so it is
+a design call for the user rather than something a worker settles in passing.
+**This ticket is NOT blocked on that decision** and should be fixed regardless;
+the decision only governs whether the fix stays narrow or begins a unification.

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:12 blocked:4 backlog:221 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1988 rejected:38`
+`unfinished:12 blocked:4 backlog:222 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1988 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -33,7 +33,7 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 206, ranked
+## Ready — top 30 of 207, ranked
 
 - `[p 70] [U]` decide-how-python-shaped-shims-should-be-shipped (unblocks 1)
 - `[p 70] [U]` decide-week-theme-2026-08-17
@@ -66,4 +66,4 @@ _none — no lane is locked._
 - `[p 50] [P]` feature-p-read-text-into-a-char-arm
 - `[p 50] [A]` feature-pascal-asmmode-directive-tolerance
 
-_176 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_177 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
