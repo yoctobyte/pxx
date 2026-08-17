@@ -101,3 +101,4 @@
 2026-08-16T17:35:35Z	plexus	b156e9c145fd512af303eb3ef5dcfeb38256f678	would NOT pin b156e9c145fd — 2 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c, lib-test#src:test/lib_tls.pas
 2026-08-16T18:42:27Z	plexus	d91b82d6516b8c77ee5e50205dba84901c235fb0	would-pin PENDING d91b82d6516b — qualifies, streak 1/2
 2026-08-17T15:39:11Z	plexus	eda43dea7629d94058a698e709908e31f3b74275	would NOT pin eda43dea7629 — 1 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c
+2026-08-17T21:48:59Z	plexus	8f629af386321e43a837f6e76fbec995da30c3bf	would NOT pin 8f629af38632 — 2 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c, test-nilpy#src:examples/tk/callbacks.npy
