@@ -100,3 +100,19 @@ checking the tier composition. A per-sha verdict list invites the assumption tha
 later verdicts supersede earlier ones; here they cover **disjoint job sets**, so
 they cannot. Same shape as the rest of tonight's findings — a true statement about
 the wrong subject.
+
+### Root cause candidate identified — see the harness ticket
+
+The recipe's `timeout 120` at `Makefile:363` is **hardcoded inside the make recipe**,
+so it fires within make and reaches testmgr as an ordinary `fail`. Every part of
+testmgr's contention machinery — `PEER_TIME_FACTOR` budget stretching, the co-tenant
+retry rule, the `timeout` status itself — is structurally unable to see it. On a
+loaded box testmgr stretches its own budgets while this ceiling stays rigid.
+
+That is the mechanism this stub was groping at, and it is filed as
+`bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic` (T, p55).
+It also explains why six previously-closed timeout tickets did not stop the class:
+all six fixed testmgr's OWN timeouts.
+
+This stub stays open until either that fix lands or the job reds again with a
+duration attached. **Still not closed as flake** — unproven.
