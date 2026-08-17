@@ -192,6 +192,52 @@ Changing that is a separate decision, not a rider on this fix.
 - confirmed RED on a baseline built from HEAD-minus-this-diff (delphi mode
   produced the objfpc row), so the test is real and the scoping is proven.
 
+### FOLLOW-UP `e6f2264d3` — the first fix was in the wrong PLACE, and a node-kind coupling is why
+
+`2ee660831` put the change in the parser's `@` factor, rebuilding `@fp` as an
+`AN_IDENT` carrying the procvar's value. That went NEW-RED in
+`test_procvar_value_context` (line 116, delphi: `Int64(@fpNil) = 0`).
+
+**The coupling that caused it, named here because it is invisible at the edit
+site.** `IRProcVarAutoCall` (`ir.inc`) implements the OTHER delphi rule — a bare
+procvar in a value context is CALLED — and it exempts `@fp` **by node kind**:
+
+```pascal
+if (n < 0) or (ASTKind[n] <> AN_IDENT) then Exit;   { `@fp` is AN_ADDR, ... }
+```
+
+So the exemption is a property of what the parser happens to BUILD, with nothing
+referencing it from the parser side. Any change that rebuilds that expression as
+a different node silently acquires the auto-call, nothing fails where the edit
+was made, and the damage surfaces as unrelated behaviour — here, `@fp` quietly
+becoming `fp()`.
+
+**Resolution:** keep the node `AN_ADDR`, so every existing exemption still
+applies by construction, and change only what it LOWERS to — in `AN_ADDR`'s
+lowering, beside the `@s`-on-a-managed-string special case, which is the same
+shape. Adding a condition to the guard would have worked and is worse: it grows
+the special case instead of leaving one path.
+
+### The assertion that looked like coverage and was not
+
+Line 116 asserts `Int64(@fpNil) <> 0` where `fpNil` holds `@ImplNil`. **That is
+true under BOTH address-of and value-of** — it separates only the third answer
+(the call result, 0). It had been green on `pinned` for the wrong reason, and it
+is why the original mode measurement and the test could both be honest and
+disagree.
+
+Rule earned: **ask of any assertion which OTHER candidate answers would also
+satisfy it.** N candidate behaviours need a discriminator with N distinguishable
+outputs. Getting one here meant obtaining the variable's own address through a
+route that is not `@` at all — an untyped `var` parameter — which is the same
+"the evidence must sit outside the thing being varied" rule as the count
+assertion and the self-overwriting differential below.
+
+`test_pascal_at_procvar_mode` shared that blind spot (it only tested a
+PARAMETER, where the two readings collapse) and now carries the three-way
+VARIABLE case: 5 assertions x 2 modes, all ten cells matching FPC 3.2.2, RED on
+the pre-fix baseline.
+
 ### Two traps worth recording
 
 **A stale binary nearly sent me the wrong way.** Building the FPC control as
