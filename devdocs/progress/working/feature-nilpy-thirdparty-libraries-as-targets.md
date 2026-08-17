@@ -2,7 +2,8 @@
 track: N
 prio: 60
 type: feature
-status: backlog
+status: working
+owner: frank2
 ---
 
 # META: third-party Python libraries as pxx targets — classify, then compile
@@ -652,3 +653,66 @@ quickjs / duktape targets for the shape.
 Expected outcome worth stating up front: **the open-bug count will RISE.** That
 is the intended result, not a regression — it is the same trade the C corpora
 made, and it is why C's frontend now has 3 open bugs against N's 17.
+
+---
+
+## 2026-08-17 (frank2, Track N) — started on webencodings; the FIRST blocker is relative imports
+
+Confirmed the measurement independently before starting: `grep -c` in the
+Makefile gives webencodings 0, tinycss2 0, html5lib 1, reportlab 1 against
+lua 56 / sqlite 46 / quickjs 25 / zlib 21. All four Python trees are present
+under `library_candidates/`.
+
+### Module resolution already works — via `-Fu`, not `sys.path`
+
+First attempt used `sys.path.insert(0, ...)` as CPython does. That is a RUNTIME
+concept and pxx resolves imports at COMPILE time, so it cannot work and should
+not be expected to. The working spelling is the Pascal unit-search flag:
+
+```sh
+./compiler/pascal26 -Fu<abs path to package root> drv.npy drv
+```
+
+(or running with the package root as cwd). With that, `from webencodings import
+lookup, decode, encode, UTF8` **resolves the package and begins compiling its
+`__init__.py`** — it is not a "no module named" failure at all. Worth recording
+because `-Fu` is not in the compiler's usage line.
+
+Bonus confirmation: the compile emits `note: codecs -> mimic_codecs (shim,
+subset)`, so the `mimic_codecs` shim written earlier this session is doing real
+work on genuinely third-party code rather than only on our own tests.
+
+### The blocker: `from .sub import NAME` is not parsed
+
+`webencodings/__init__.py:19` is `from .labels import LABELS` and the compile
+dies there. Reduced to five lines, no third-party code involved:
+
+```
+pkg/sub.py        VALUE = 7
+pkg/__init__.py   from .sub import VALUE
+main.npy          from pkg import VALUE
+                  print(VALUE)
+```
+
+| | |
+| --- | --- |
+| CPython | `7` |
+| pxx | `pascal26:1: error: undefined variable (from)` |
+
+The leading dot is what breaks it — plain `from pkg import VALUE` parses fine.
+
+**This blocks all four corpora, not just webencodings.** An intra-package
+relative import in `__init__.py` is how essentially every real Python
+distribution is laid out, so nothing further can be measured until it works.
+That makes it the true first rung, ahead of "wire a Makefile target" — a target
+wired today would only assert the same parse error.
+
+Filed as [[bug-n-relative-import-from-a-package-is-not-parsed]].
+
+### Note on what this says about the ticket's premise
+
+The premise — that our own `.npy` tests and uforth cannot surface what we do not
+support, because we unconsciously write around it — is confirmed on the very
+first contact. Relative imports are unavoidable in third-party layout and
+completely avoidable in a single-file test, which is exactly why 17 open N bugs
+and 628 commits in 30 days never hit it.

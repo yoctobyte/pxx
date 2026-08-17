@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:10 blocked:3 backlog:215 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1984 rejected:38`
+`working:1 unfinished:10 blocked:3 backlog:215 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1984 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-nilpy-thirdparty-libraries-as-targets` [N] — owner: frank2
 
 ## unfinished (10) — parked mid-flight; re-claim, do not duplicate
 
@@ -34,7 +34,6 @@ _none — no lane is locked._
 
 - `[p 70] [U]` decide-week-theme-2026-08-17
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
-- `[p 60] [N]` feature-nilpy-thirdparty-libraries-as-targets
 - `[p 60] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 60] [P]` feature-pascal-corpus-oop
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
@@ -42,6 +41,7 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [C]` bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
+- `[p 55] [N]` bug-n-relative-import-from-a-package-is-not-parsed
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
