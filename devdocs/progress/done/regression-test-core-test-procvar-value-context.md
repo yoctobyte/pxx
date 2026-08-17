@@ -27,3 +27,6 @@ ok: /tmp/testmgr-scratch-450957/test_procvar_value_context26  [code=56343B  data
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-17 — auto-closed by the plexus watcher: `test-core#src:test/test_procvar_value_context.pas` passes at e6f2264d38ea (tier native); it was red at 0e4ad46330ca. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
