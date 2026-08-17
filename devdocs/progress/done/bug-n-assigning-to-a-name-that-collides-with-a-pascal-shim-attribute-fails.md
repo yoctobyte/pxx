@@ -188,4 +188,4 @@ that genuinely lacks the member, not a resolution failure — and belong to Trac
 - `webencodings/docs/conf.py` — `os`
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 89283d654.
