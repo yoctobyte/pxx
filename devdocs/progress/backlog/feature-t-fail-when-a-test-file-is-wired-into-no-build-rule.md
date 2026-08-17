@@ -189,3 +189,66 @@ now correctly declined to do.
 builds-today group, and let each non-builder carry its compiler error as its
 exemption reason. Estimated from the sample: ~40 trivially wireable, ~15
 helpers, ~30 blocked or harness-dependent.
+
+## Full triage RUN (85 files) — and the prediction was wrong in a useful direction
+
+**On the hook: I was never blocked, and the mistake was mine.**
+`no-full-suite.sh:29` exits 0 when `PXX_TRACK=T`, and its own line 16 says why —
+*"Track T owns the suites — it is the lane whose whole job is running them, and
+its gate genuinely is `--tier full`. It escapes by exporting PXX_TRACK=T."*
+CLAUDE.md:547 repeats it. I asked for authorisation for something the hook
+already grants this lane, having checked *"does this hook refuse this command?"*
+(true) instead of *"does it refuse ME?"* (false).
+
+Declining to **modify** the hook, and declining to reshape a command to slip
+past it, were both right and stand. Treating it as a wall without reading
+whether it exempts my lane was not. The whole run is ~11 s of compile-only
+invocations.
+
+### Result, against the prediction
+
+| bucket | predicted | **actual** |
+| --- | --- | --- |
+| builds today | ~40 | **61** |
+| helper (unit / no main) | ~15 | **5** |
+| blocked / other | ~30 | **19** |
+
+Recording the miss because a prediction you can check is worth more than one you
+cannot: I under-counted buildability by a third. The sample of 12 was drawn
+after excluding `manual/`, `relpath/`, `gamelib/` and `esp`, i.e. after removing
+the clusters most likely to build cleanly — so it was biased pessimistic by
+construction.
+
+### Two caveats that matter more than the headline
+
+**1. None of the 61 has an `.expected`.** The ten that did were already wired by
+the A/P and N lanes. So "trivially wireable" overstates it: these compile, but
+wiring one means deciding what it should assert. The C ones largely self-assert
+(`assert()` / non-zero exit), so a compile-and-run rule is enough; the Pascal
+ones need an expectation recorded or an output-comparing rule.
+
+**2. The `blocked` bucket conflates "needs flags" with "genuinely blocked".**
+The triage compiled bare, with no unit or include paths. Retried properly:
+
+```
+synapse_smoke_blcksock.pas   --mimic-fpc -Fuexternal/synapse  ->  BUILDS
+synapse_smoke_synaip.pas     --mimic-fpc -Fuexternal/synapse  ->  BUILDS
+```
+
+Five of the 19 are synapse smokes that build once the corpus path is supplied —
+the corpus I fetched earlier today after fixing the message that said it could
+not be fetched. Four more want `-I` for `ctype.c`. So the genuinely-blocked
+count is closer to **10**, and the real split is roughly **66 / 5 / 10 + 4
+harness-dependent**.
+
+### The genuinely blocked, by error
+
+| error | n | reading |
+| --- | --- | --- |
+| `undefined variable (InlineAsmLineHoleN)` | 4 | the `test_asm_emit_*` set needs a harness, not a standalone rule |
+| `unit source not found: zgl_math_2d` | 1 | a corpus that is not fetched |
+| `unresolved forward: AsmRecordGlobalFixup` | 1 | genuine |
+| `external (dynamic) symbols not yet supported` | esp set | aspirational, feature unimplemented |
+
+Those are the only entries where `UNWIRED.txt` is the right answer, and each
+carries a compiler error as its reason — an observation rather than a summary.
