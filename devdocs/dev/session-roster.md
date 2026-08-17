@@ -68,6 +68,16 @@ unrelated two-line defects. Same ticket, same model, different context depth.
 - **Never widen the gate.** `make compiler/pascal26` + your repro +
   `tools/gate.sh quick`. Breadth is Track T's job, offloaded, async. A hook
   refuses full suites; that is deliberate.
+- **Gate-widening authority — `tools/twatch.py --status` now has THREE exit
+  states** (`dea60e34e`), and only one of them authorises anything:
+  `0` UP, `1` **proven** down, `2` cannot tell. CLAUDE.md's single exception to
+  the quick-tier loop is "Track T is PROVEN down" — that is exit **1**, and
+  nothing else. Exit 2 is not permission to widen; it means cover yourself with
+  your own lane gate, which is what truthiness callers already do. Before
+  `dea60e34e` a DOWN computed from an unfetched checkout could report the
+  coordinator's own staleness as T being down, which would have sent every
+  worker into ten-minute sweeps on no evidence. If someone asks to widen, check
+  the exit code, not the word.
 - **Verify a peer's claim before acting on it**, and name the sha in your own.
   Two overclaims were caught between sessions on 2026-08-16, in both directions;
   each cost one message where believing it would have cost far more. Also check
