@@ -122,4 +122,4 @@ this table. That was the half of the gate that mattered: a corrected instrument
 nobody re-runs leaves the wrong numbers in circulation.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 831215a86.
