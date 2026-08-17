@@ -88,6 +88,23 @@ and the tally is roughly even between the coordinator and the workers:
 - 6-7 corpus files blocked on `webencodings` — an artefact of the scan passing one
   `-Fu` root, which ranked a non-existent compiler bug as the top lever.
 
+**And the sharpest one, found at the end of the night:** a Track A ticket's
+acceptance criterion was *"the emitted binary contains zero `syscall`
+instructions — verify with `objdump -d | grep -c syscall`"*. pxx writes ELFs with
+program headers only and **no section headers**, and `objdump -d` disassembles
+sections — so it prints a three-line header and then `0`, for every pxx binary
+ever built. Reproduced here on `compiler/pascal26`: `objdump` says **0**, a
+correct instrument says **1093**. That test would have passed on day one and kept
+passing whatever the port did.
+
+It is a category worse than the others: those checks could not *discriminate*
+between candidate answers; this one **cannot fail at all**. The replacement
+(`tools/syscall_scan.py`) fixes the family, not the instance — it reads program
+headers, uses per-arch mnemonics (the word "syscall" reports a clean zero on every
+cross target regardless of truth), and **refuses to report a count it could not
+measure**, because an instrument that cannot distinguish *measured zero* from
+*failed to measure* will eventually report the second as the first.
+
 The rule that came out of it, and the one worth keeping: **ask which other
 candidate answers would also satisfy the check.** If more than one would, it is not
 testing what its name says. Its corollaries — the evidence must sit outside the
@@ -95,8 +112,25 @@ thing being varied; a ticket's *cause* ages faster than its *symptom*; a constan
 nobody can explain is a wound until proven a baseline — are all the same rule from
 different angles.
 
+## Housekeeping for the morning (not done overnight, deliberately)
+
+`tools/progress.sh check` reports **17 resolved tickets awaiting their landed sha**
+(`tools/sync.sh` fills them in) and 3 STATUS-DRIFT lines where a ticket's body says
+`working` while its folder says otherwise. Both are bookkeeping. Not run overnight
+because `sync.sh` pushes on behalf of other lanes' resolves, and doing that
+unsupervised is the kind of helpfulness that is hard to unpick.
+
 ## Open at the time of writing
 
-- frank2 (A) → `feature-port-rtl-over-libc` (p55, unblocks 3).
+- frank2 (A) → `feature-port-rtl-over-libc` **PARKED in `unfinished/`, and the park
+  is clean** — verified independently: zero `compiler/` and zero `lib/` diff, no
+  CRITICAL from `progress.sh check`. It stopped at synthesising PLT imports from
+  codegen with the self-host fixedpoint riding on it, which is not overnight work.
+  It leaves behind a working acceptance instrument, real baselines (pxx hello-world
+  57, one libc call 55, `/bin/true` 0), a corrected criterion, and a smaller plan:
+  libc calls already work with no compiler change, and all 62 raw-syscall sites
+  across 11 RTL units funnel through **one** `IR_SYSCALL` op, so the port needs no
+  `lib/rtl` edits at all.
+- frank2 then pulling its own next Track A item, excluding the policy ticket.
 - frank3 (B) → `mimic_warnings`, the last wall on 3 corpus files.
 - Pin at **v346**. Track T's agent is down; its watcher is up and files stubs itself.
