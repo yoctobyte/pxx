@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| bug-a-package-and-sibling-module-resolution-is-the-corpus-wall | A | 65 | bug | Package / sibling-module resolution is now the largest corpus wall | — |
+_none_
 
 ## unfinished (13)
 
@@ -428,9 +426,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1995)
+## done (1996)
 
-1995 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1996 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 

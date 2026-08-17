@@ -33198,6 +33198,34 @@ begin
   end;
 end;
 
+{ The directory a relative import of LEVEL dots resolves against, starting from
+  the importing file's own directory. Level 0 and 1 both mean "here" — `from
+  .mod` is this package — and each dot beyond the first climbs one package.
+  Returns '' when the climb would go above the root, so the caller simply finds
+  nothing rather than resolving against something arbitrary.
+
+  `dir` carries a trailing separator throughout the resolver, so a climb is:
+  drop the trailing '/', then drop back to and including the previous '/'. }
+function PyRelativeDir(const dir: AnsiString; level: Integer): AnsiString;
+var i, climbs: Integer;
+begin
+  Result := dir;
+  climbs := level - 1;
+  while climbs > 0 do
+  begin
+    if Length(Result) = 0 then begin Result := ''; Exit; end;
+    { drop the trailing separator }
+    if Result[Length(Result)] = '/' then
+      Result := Copy(Result, 1, Length(Result) - 1);
+    { …then the last segment }
+    i := Length(Result);
+    while (i > 0) and (Result[i] <> '/') do Dec(i);
+    if i <= 0 then begin Result := ''; Exit; end;
+    Result := Copy(Result, 1, i);
+    Dec(climbs);
+  end;
+end;
+
 { Does a `mimic_<name>` shim exist as a FILE? Asked before falling back to a
   host header for a NilPy import: the shim mapping itself runs later still, and
   by then the header would already have won. A file probe rather than a
@@ -33322,6 +33350,8 @@ var
   { The RESOLVED FILE key, and the already-compiled entry holding it — the
     second key space that makes one module one unit however it was spelled. }
   pyFileIdx, pyDupIdx: Integer;
+  { leading-dot count of this relative import; see PyRelativeDir }
+  pyRelLevel: Integer;
   isPyUnit, savedPyExprMode: Boolean;
   { The dotted module path this import was written with, claimed from the global
     on entry so a nested unit parse cannot see a stale one. Empty unless it
@@ -33362,6 +33392,10 @@ begin
   pyDotted := PyDottedImport;
   PyDottedImport := '';
   if PyDottedMangled(pyDotted) <> lo then pyDotted := '';
+  { Same claim-and-clear for the relative LEVEL, and for the same reason: the
+    nested parse of whatever this resolves to must not inherit it. }
+  pyRelLevel := PyRelativeLevel;
+  PyRelativeLevel := 0;
   pyDottedIsPath := False;
   for i := 1 to Length(pyDotted) do
     if pyDotted[i] = '.' then pyDottedIsPath := True;
@@ -33547,7 +33581,17 @@ begin
       Scope is unchanged — still the importing file's own directory, Python's
       own first rule — so the `tk.npy` shadowing note above still holds: this
       adds the `__init__` spelling, not a new root. }
-    PyTryPackageSource(CurUnitDir, lo, True, path, UnitContent);
+    { …and for `from ..mod` the search starts one package UP, not here. The
+      relative form passes the bare name (the dots are stripped by the
+      frontend), so without the LEVEL every relative import was looked up in the
+      importing file's own directory — right for `.`, wrong for every `..`.
+      html5lib reaches its parent that way throughout (`filters/lint.py`:
+      `from ..constants import namespaces`), and it failed as "no unit named
+      constants" while the absolute `from html5lib.constants import ...` on the
+      same tree resolved fine.
+      bug-a-package-and-sibling-module-resolution-is-the-corpus-wall }
+    PyTryPackageSource(PyRelativeDir(CurUnitDir, pyRelLevel), lo, True,
+                       path, UnitContent);
     if Length(UnitContent) > 0 then isPyUnit := True;
   end;
 

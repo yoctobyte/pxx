@@ -99,6 +99,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-a-open-array-of-variant-silent-miscompile | A | 45 | bug | Open `array of Variant` parameter silently miscompiles (reads only first elem) | — |
 | bug-a-open-array-value-parameter-aliases-instead-of-copying | A | 50 | bug | An OPEN ARRAY value parameter (`x: array of Integer`) aliases the caller's data — the callee's `x[0] := n` is visible to the caller. FPC copies. A NAMED dynamic-array value param correctly aliases in both. | — |
 | bug-a-overload-resolution-ignores-class-identity | A | 80 | bug | Overload resolution never checks CLASS IDENTITY for a class-typed parameter — it takes the first candidate whose arity fits, so an unrelated class binds silently and the callee reads one class's fields as another's | — |
+| bug-a-package-and-sibling-module-resolution-is-the-corpus-wall | A | 65 | bug | Package / sibling-module resolution is now the largest corpus wall | — |
 | bug-a-parallel-for-aarch64-multi-capture | A | 40 | bug | aarch64: `parallel for` with 2+ captures → Bus error (alignment) | — |
 | bug-a-param-pointer-rule-divergence | A | 40 | bug | "Param slot holds a pointer" is written 8 times; 3 copies disagree | — |
 | bug-a-pointer-difference-as-vararg-pushes-8-bytes-on-32bit | A | 65 | bug | On i386/arm32 a bare pointer-difference passed to a variadic function pushes 8 bytes instead of 4, so EVERY later argument reads the wrong slot — printf(\"%d %d\", p-q, 7) prints 3 0 | — |

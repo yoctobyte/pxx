@@ -1,0 +1,12 @@
+# A relative import's DOT LEVEL decides which package it resolves against.
+# `from ..constants import TOP` must climb to the parent package; `from .peer`
+# must not. Both spellings live in the same file, so ignoring the level fails
+# this test whichever way it is ignored.
+#
+# Before this, every relative import resolved against the importing file's own
+# directory, so `..` silently searched the subpackage — "no unit named
+# constants" — while the absolute spelling on the same tree resolved fine.
+# bug-a-package-and-sibling-module-resolution-is-the-corpus-wall
+from relpkg.sub.leaf import VAL
+
+print(VAL)

@@ -31618,6 +31618,7 @@ end;
   see the note at the statement-level call site for why the newline matters. }
 procedure PyParseOneImport;
 var impName, impAlias, impRoot: AnsiString; aStrIdx, realStrIdx: Integer;
+    impLevel: Integer;
 begin
   { SoftUnitMissed describes THIS import, and nothing else. It is a global, and
     a soft miss recorded by an earlier one — a module's own `try: from PIL
@@ -31635,12 +31636,14 @@ begin
       module with ParseUsesUnit and binds the names through flat unit scope.
       The relative and absolute forms differ only in how the module NAME is
       spelled, so there is nothing to duplicate here. }
-    if (PyRelativeImportLevel > 0) and (CurTok.Kind = tkUses) then
+    impLevel := PyRelativeImportLevel;
+    if (impLevel > 0) and (CurTok.Kind = tkUses) then
     begin
       { `from . import a, b` — the names ARE the modules. }
       Next;                                { past `import` }
       while CurTok.Kind = tkIdent do
       begin
+        PyRelativeLevel := impLevel;
         ParseUsesUnit(CurTok.SVal);
         Next;
         if PyIsIdent('as') then
@@ -31659,7 +31662,10 @@ begin
       Error('Nil Python: expected import after from ' + impName);
     Next;
     if not PyImportRootIsConsumedOnly(impRoot) then
+    begin
+      PyRelativeLevel := impLevel;
       ParseUsesUnit(impName);
+    end;
     while CurTok.Kind = tkIdent do
     begin
       Next;
@@ -31723,7 +31729,7 @@ end;
 
 procedure PyParseImportRun;
 var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
-    aStrIdx, realStrIdx, optSym: Integer;
+    aStrIdx, realStrIdx, optSym, impLevel: Integer;
     aliasSym, aliasCi, aliasRealSym, aliasRealProc: Integer;
 begin
   while (CurTok.Kind = tkUses) or PyIsIdent('from') do
@@ -31733,12 +31739,14 @@ begin
       Next;
       { see the sibling above: dots + identifier falls through to the ordinary
         from-import path rather than growing a second one. }
-      if (PyRelativeImportLevel > 0) and (CurTok.Kind = tkUses) then
+      impLevel := PyRelativeImportLevel;
+      if (impLevel > 0) and (CurTok.Kind = tkUses) then
       begin
         { `from . import a, b` — see PyRelativeImportLevel }
         Next;                              { past `import` }
         while CurTok.Kind = tkIdent do
         begin
+          PyRelativeLevel := impLevel;
           ParseUsesUnit(CurTok.SVal);
           Next;
           if PyIsIdent('as') then
@@ -31790,6 +31798,7 @@ begin
           works (unit scope is flat). This is the form real code uses to reach a
           shim — `from configparser import ConfigParser`. An unknown module still
           fails, with the unit resolver's own "unit source not found: X". }
+        PyRelativeLevel := impLevel;
         ParseUsesUnit(impName);
         while CurTok.Kind = tkIdent do
         begin

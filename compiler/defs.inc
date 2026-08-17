@@ -2307,6 +2307,19 @@ var
     ignored, e.g. `import typing`) cannot steer a later, unrelated import.
     feature-nilpy-dotted-imports-resolve-to-source-files }
   PyDottedImport : AnsiString;
+  { Leading-dot count of the relative import being resolved: 0 = absolute,
+    1 = `from .mod`, 2 = `from ..mod`, N = N-1 package levels UP. Claimed and
+    cleared by ParseUsesUnitBody exactly like PyDottedImport above, so a stale
+    value cannot steer a later unrelated import.
+
+    Level 1 needed nothing — "this package" is CurUnitDir, which the sibling
+    probe already searches — so the dots were simply skipped, and the note on
+    PyRelativeImportLevel called that "the closest available one for `..`".
+    It is not close enough: `from ..constants import X` was then looked up in
+    the SUBpackage's own directory, where it does not exist, and html5lib's
+    filters/ and treewalkers/ reach their parent that way throughout.
+    bug-a-package-and-sibling-module-resolution-is-the-corpus-wall }
+  PyRelativeLevel : Integer;
   { Base name (no dir, no ext) of the source file currently being lexed; used to
     resolve the `*` in $R *.lfm / $R *.res to the current unit. }
   CurSrcBaseName : AnsiString;

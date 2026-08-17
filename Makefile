@@ -284,6 +284,15 @@ test-nilpy: $(COMPILER)
 	# bug-a-a-python-module-s-identity-is-its-name-not-its-file
 	./$(COMPILER) test/test_nilpy_module_identity.npy $(TESTTMP)/test_nilpy_module_identity26
 	test "$$($(TESTTMP)/test_nilpy_module_identity26)" = "$$(printf 'body-ran\nTrue')"
+	# A relative import's DOT LEVEL decides which package it resolves against:
+	# `from ..constants import TOP` climbs to the parent, `from .peer` does not.
+	# Both spellings are in the one file, so ignoring the level fails this
+	# whichever way it is ignored. html5lib's filters/ reach their parent this
+	# way throughout, and it read as "no unit named constants" while the
+	# absolute spelling on the same tree resolved fine.
+	# bug-a-package-and-sibling-module-resolution-is-the-corpus-wall
+	./$(COMPILER) test/test_nilpy_relative_parent_import.npy $(TESTTMP)/test_nilpy_relative_parent26
+	test "$$($(TESTTMP)/test_nilpy_relative_parent26)" = "42"
 	rm -f /tmp/test_nilpy_sqlite_crud.db
 	./$(COMPILER) test/test_nilpy_sqlite_crud.npy $(TESTTMP)/test_nilpy_sqlite_crud26
 	test "$$($(TESTTMP)/test_nilpy_sqlite_crud26)" = "$$(printf '1 alice\n2 bob')"
