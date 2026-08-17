@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_six.py against real `six` on CPython.
+
+This file is a DIFFERENTIAL, not a spec: it runs unmodified under CPython with
+the real `six` installed, and every line below was checked to produce identical
+output both ways. That is the whole point -- `six` is a table of aliases, and
+the failure mode for a table of aliases is a plausible-looking wrong entry, not
+a crash. An expectation typed from memory would encode the same mistake twice.
+
+Scoped to what webencodings / html5lib / tinycss2 actually import, which is what
+mimic_six is scoped to (feature-nilpy-six-and-warnings-shims).
+
+`with_metaclass` is deliberately not exercised: it refuses by design, for a
+reason recorded in the shim and in
+bug-n-a-class-base-that-is-an-expression-does-not-compile.
+"""
+
+import six
+from six import text_type, binary_type, string_types, integer_types
+from six import PY2, PY3, unichr, viewkeys, iterkeys, itervalues, iteritems
+
+fails = 0
+
+
+def check(name, got, want):
+    global fails
+    if got == want:
+        print(name + "=ok")
+    else:
+        fails = fails + 1
+        print(name + "=FAIL got " + repr(got) + " want " + repr(want))
+
+
+# the version flags: the whole reason six exists, and trivially fixed here
+check("py2", PY2, False)
+check("py3", PY3, True)
+check("attr", six.PY3, True)
+
+# the type aliases, used both as constructors and as isinstance targets
+check("text", text_type("x"), "x")
+check("text-int", text_type(5), "5")
+check("isstr", isinstance("a", string_types), True)
+check("isstr-neg", isinstance(5, string_types), False)
+check("isbytes", isinstance(b"q", binary_type), True)
+check("isint", isinstance(3, integer_types), True)
+check("isint-neg", isinstance("3", integer_types), False)
+
+# unichr is chr on py3; html5lib imports it AS chr
+check("unichr", unichr(65), "A")
+check("unichr-hi", unichr(0x2603), "☃")
+
+d = {"x": 1, "y": 2}
+e = {"y": 9, "z": 3}
+
+# the dict-iteration family
+check("iterkeys", sorted(iterkeys(d)), ["x", "y"])
+check("itervalues", sorted(itervalues(d)), [1, 2])
+check("iteritems", sorted(iteritems(d)), [("x", 1), ("y", 2)])
+
+# viewkeys: html5lib uses it for set algebra, which is the only use that matters
+check("viewkeys-and", sorted(viewkeys(d) & viewkeys(e)), ["y"])
+check("viewkeys-or", sorted(viewkeys(d) | viewkeys(e)), ["x", "y", "z"])
+check("viewkeys-sub", sorted(viewkeys(d) - viewkeys(e)), ["x"])
+
+if fails == 0:
+    print("MIMIC-SIX OK")
+else:
+    print("MIMIC-SIX FAILED " + str(fails))

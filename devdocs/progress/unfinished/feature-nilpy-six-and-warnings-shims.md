@@ -2,7 +2,7 @@
 track: B
 prio: 45
 type: feature
-blocked-by: [decide-how-python-shaped-shims-should-be-shipped, bug-n-the-builtin-warning-exception-hierarchy-is-missing]
+blocked-by: [bug-n-the-builtin-warning-exception-hierarchy-is-missing]
 status: unfinished
 owner: frank3
 ---
@@ -255,3 +255,107 @@ that might have to be unpicked.
 **Nothing here is a defect in the `six` content** — the name list, its scoping to
 what html5lib/tinycss2 actually import, and the `viewkeys`-is-a-function trap
 are all still correct and still the work. Only *where the file goes* is open.
+
+## 2026-08-17 (frank3, later) — the `six` half is LANDED. Measured on v345.
+
+The mechanism fork this ticket was parked on is settled: the shim slot now
+probes `mimic_<name>.py` (Track A, `42ab5131e`), which is the option this
+ticket's `decide-` recommended, so the file lives in the shim namespace and is
+refusable. Verified rather than assumed:
+
+```
+import six          (no shim)  -> error: no unit named six and no shim mimic_six
+import six          (shim)     -> note: six -> mimic_six (shim, subset)
+import six --no-shims          -> error: ... (--no-shims refuses the mimic_ substitution)
+```
+
+So `--no-shims` still means what it says. That was the whole content of
+[[decide-how-python-shaped-shims-should-be-shipped]].
+
+### What landed
+
+`lib/rtl/mimic_six.py`, scoped to the surface the corpora actually import
+(re-grepped on v345 across webencodings + html5lib + tinycss2, non-test):
+`text_type` x11, `unichr` x4, `PY3`/`PY2` x4, `binary_type`, `string_types`,
+`viewkeys`, `with_metaclass`, plus the one-line siblings (`integer_types`,
+`class_types`, `iterkeys`/`itervalues`/`iteritems`, `viewvalues`/`viewitems`,
+`MAXSIZE`).
+
+`test/lib_mimic_six.npy` is in `make lib-test` — and is a **differential, not a
+spec**: the same `.npy` runs under CPython against the REAL `six`, and the two
+outputs are byte-identical. An alias table's failure mode is a plausible wrong
+entry, which a hand-typed expectation would simply encode twice.
+
+### Two judgement calls, both measured first
+
+**`viewkeys` returns a `set`, not a keys view.** Its only corpus use is set
+algebra (`viewkeys(a) & viewkeys(b)`, html5parser.py:2779). Measured: two
+`.keys()` results come back as lists here and `list & list` is a TypeError,
+while `set & set` works. What that gives up is liveness; no corpus site holds a
+view across a mutation, and returning the faithful-but-unusable thing would fail
+at the `&`.
+
+**`with_metaclass` refuses rather than returning `object`** — see below.
+
+### The count did NOT move, and that is the predicted outcome
+
+| | files compiling |
+| --- | --- |
+| without `mimic_six` | 4 / 48 |
+| with `mimic_six` | 4 / 48 |
+
+But **13 files had `six` as their FIRST wall, and now 0 do.** This ticket's own
+"Note on how the file counts read" called it exactly: a file is rejected at its
+first unavailable import, so the counts are a lower bound on the unblock and
+landing `six` reveals the next layer. It did.
+
+The next layer, measured (first error per file, non-test, 48 files):
+
+| wall | files |
+| --- | --- |
+| `webencodings` (a sibling corpus package, not a shim) | 6 |
+| `undefined variable` | 5 |
+| `xml.dom` | 4 |
+| `constants` (html5lib's own module — sibling resolution) | 4 |
+| class-inherits-from-itself | 3 |
+| **`warnings`** | 3 |
+| `six.moves` | 3 |
+| `xml.sax.xmlreader` | 2 |
+| `genshi` | 2 |
+| `bisect` | 2 |
+
+`six` does not appear at all. The two biggest remaining items are **package/
+sibling resolution** (`webencodings`, `constants`, `_utils` — 11 files between
+them), not missing shims.
+
+### `six.moves` is deliberately absent
+
+Three sites want `http_client`, `urllib`, `urllib_parse` from it. Those are
+stdlib re-exports needing `urllib` and `http.client` to exist — a different job
+with a different blocker, and faking them is exactly the T1 violation this
+ticket warned about.
+
+### The `warnings` half is UNCHANGED and still blocked
+
+Re-measured on v345: `Warning` / `UserWarning` / `DeprecationWarning` still do
+not exist, and 14 of html5lib's 16 non-test `warnings.warn` sites need
+`UserWarning` merely to declare `DataLossWarning`. Still
+[[bug-n-the-builtin-warning-exception-hierarchy-is-missing]], still not
+something a `mimic_warnings` can supply, since calling code names them bare.
+
+### New blocker found for `with_metaclass`, and it is smaller than expected
+
+`class Phase(with_metaclass(...))` does not compile because **a class base that
+is an expression does not compile** — `B = object; class P(B)` fails where
+`class P(object)` and `class P(SomeClass)` work. Filed as
+[[bug-n-a-class-base-that-is-an-expression-does-not-compile]].
+
+The good news is in that ticket: html5lib's `getMetaclass` returns plain `type`
+unless its debug flag is set, so the real path asks for **no metaclass at all**.
+Supporting `with_metaclass` therefore does not need metaclasses, only base-
+expression evaluation. `mimic_six` refuses it with a message naming that ticket
+rather than returning `object`, because `object` would be semantically right and
+*still* would not compile at the call site.
+
+**Ticket stays in `unfinished/`**: the `six` half is done, the `warnings` half is
+blocked on the builtin hierarchy.
