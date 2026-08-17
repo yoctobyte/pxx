@@ -303,6 +303,31 @@ clears it or the check releases it.
 
 ### Check log
 
+- 2026-08-17 **OVERNIGHT RUN begins.** Rene away until morning; reviews results
+  then. Coordinator runs the hourly check, pins on request, banks decisions as
+  Track U tickets (never as chat — chat dies with the session, and he is asleep).
+  The red is closed: `test_procvar_value_context`, `test_procvar_fpc_mode` and
+  `test_pascal_at_procvar_mode` all OK on a fresh build at `9ff975ee8`, verified
+  here rather than taken from the worker's report.
+
+  **The overnight chain, so a fresh check knows what it is watching:**
+  1. frank2 (A) → `bug-a-package-and-sibling-module-resolution-is-the-corpus-wall`
+     (p65, claimed). Biggest lever: `webencodings` + `constants` + `_utils` are
+     11 files. It already has a cause — `from ..constants import X`, parent-
+     relative imports ignoring the dot LEVEL.
+  2. frank3 (B, lent to an N-tagged ticket) → the builtin `Warning` hierarchy.
+     Lands in `compiler/builtin/pylib.pas`, **disjoint from frank2's
+     `parser.inc`/`ir.inc`**, which is why it is safe to run both tonight.
+  3. When (2) lands → **coordinator pins** so Track B ground moves.
+  4. Then frank3 finishes the `warnings` half of its own parked
+     `feature-nilpy-six-and-warnings-shims`.
+
+  **Overnight rules for whoever runs a check:** do not dispatch to fill capacity —
+  idle is correct when the queue is only float work; the shared token budget is
+  the binding constraint, not throughput. Do not take a ticket. Do not tell a
+  session to revert. A worker asking for a clear cannot get one until morning:
+  log it, and at 2h release it to auto-compact with the required wording.
+
 - 2026-08-17, hourly check #2 (cron) — **quiet, one open red.** frank2 busy on
   `test-core#test_procvar_value_context` NEW-RED (still `FAIL 14` at HEAD;
   its `@procvar` delphi-mode fix `2ee660831` is an ancestor of the red sha, and
