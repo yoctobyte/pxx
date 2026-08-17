@@ -310,11 +310,26 @@ clears it or the check releases it.
   claimed the corpora were unfetchable while a fetcher had existed since June.
   Found, fixed and closed on the same day.
 - 2026-08-17 overnight — **T's AGENT side is down; the watcher daemon keeps
-  publishing `tstate/`.** So reds still surface (a Monitor on tstate reds landing on
-  origin/master caught tonight's NEW-RED within minutes), but **nobody is filing
-  regression tickets until morning**. The coordinator routes any red straight to the
-  owning lane and files the ticket at review time. Do not read T's silence as health;
-  read `tstate/`.
+  publishing `tstate/`.** Do not read T's silence as health; read `tstate/`.
+  **CORRECTED (T, before going dark) — do NOT hand-file a regression ticket.**
+  The watcher has `autoticket: true` in `twatch.conf` and files stubs ITSELF,
+  independently of any agent being awake (2 filed today, the `tstate-ticket`
+  commits). A hand-written ticket would sit alongside the stub as a duplicate,
+  because `already_filed` dedupes by slug and yours would not collide.
+  What is actually missing overnight is **enrichment, not filing**: the diagnosis,
+  the "this bisect is right but it is a feature not a fault" reading, and closing
+  stubs that resolve themselves. Face 1 covers detection and filing; face 2 covers
+  judgement. So route to the owning lane and enrich the existing stub.
+  **Reading a stub unattended — two traps, both in `devdocs/dev/track-t.md` under
+  the bisect-trust table:**
+  - the `track:` in frontmatter is a **guess from the test path** and says so in the
+    body. Correct it rather than trusting it. It is deliberately ABSENT on a
+    timeout, because a source path says what a job compiles, not what went wrong.
+  - **a converged bisect range is not an accusation.** Three of today's were
+    legitimate-but-not-a-fault: an innocent commit (timeout), a correct commit that
+    implemented a deliberately-refused behaviour, and one that could not be causal
+    at all. The stub flags the latter two; the middle category is undecidable and
+    only says "check whether this commit implemented the thing being refused".
 - 2026-08-17 overnight — BOARD.md rebase churn resolved as a NON-issue, by reading
   the code rather than reasoning about it: `sync.sh` does `checkout --ours` purely to
   un-conflict the file and then **regenerates the board from the tickets**, so the
