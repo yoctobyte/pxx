@@ -129,3 +129,62 @@ So a bisect verdict here is evidence about **load at the moment of each probe**,
 the job passing standalone at HEAD (measured above) outranks it. Whoever reads that
 result tomorrow: check it against a standalone run before acting, and prefer fixing
 the harness gap over chasing the named commit.
+
+## The bisect converged — and my prediction about it was WRONG
+
+Result: **`5215148bb` — "test(N): the tkinter facade's 2453 lines were gated on
+'it still parses'"**, a one-commit range.
+
+I predicted (above) that a bisect here would name an innocent commit, in the shape
+`bug-t-a-timeout-bisects-to-an-innocent-commit` recorded for `crtl_exp2`. **That
+prediction is falsified.** The named commit is not innocent and not arbitrary — it is
+the most informative answer available.
+
+What it did: the three tk `.npy` tests had been **compiled and never executed**, so
+2453 lines of facade were gated on "it still parses". This commit added the
+`.expected` files and eighteen Makefile lines that RUN them under Xvfb and diff the
+output. Those eighteen lines contain:
+
+    timeout 120 xvfb-run -a $(TESTTMP)/$$bin > $(TESTTMP)/$$src.got 2>&1
+
+That is `Makefile:363` — **the exact line independently identified as the mechanism**
+before the bisect finished. So the bisect and the static reading converge on the same
+place by different routes.
+
+**The bisect is right and "culprit" is the wrong word for what it found.** The commit
+did not break the program. It introduced the *first execution* of it, and with the
+execution came the fixed 120s ceiling that cannot participate in testmgr's contention
+logic. Before it, the job could not fail this way because the job never ran anything.
+
+So the correct reading is: **the test got stronger, and the new step is load-sensitive
+in a way the harness cannot express.** Nothing here argues for reverting or altering
+`5215148bb` — running those tests was plainly the right change, and the comment in it
+("the comments above said 'run under Xvfb by hand', which means in practice never")
+is a good catch on its own terms.
+
+### What this does and does not settle
+
+- **Settles:** the failure requires the *run* step, not compilation. Consistent with
+  everything measured — the file compiles clean at HEAD and the accused sha differs
+  from HEAD by prose only.
+- **Does not settle:** timeout versus genuinely nondeterministic output. The HEAD
+  measurement (exit 0, byte-identical against `callbacks.expected`) says the run
+  passes uncontended, and the commit asserts output determinism was checked over
+  repeated runs — but neither rules out a rare nondeterministic path. **A recorded
+  duration would separate these**, which is precisely what the harness ticket asks
+  for.
+
+### Correction worth keeping
+
+Two different failure modes were being conflated under "a timeout bisects badly":
+
+1. **`crtl_exp2`'s shape** — the range spans commits that all run the job, the budget
+   is straddled somewhere in the middle, and the bisect lands arbitrarily.
+2. **This shape** — the range spans the commit where the job *started doing the
+   expensive thing*, so the bisect lands on it exactly and correctly.
+
+I applied (1) to a case that was (2), from the surface similarity of "long range,
+timeout-ish red". That is the night's own recurring theme turned on me: a true
+statement about the wrong subject. **A bisect result is not discredited by the
+failure being duration-driven** — it depends on whether the duration-driven step
+exists across the whole range.
