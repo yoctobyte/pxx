@@ -4,7 +4,7 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`import string` then `digits = string.digits` fails with `undefined variable (digits)` — the LHS name breaks resolution of the same-named attribute on the RHS. Only for PASCAL shim modules (mimic_*.pas); a .py shim and a plain NilPy module both work. Blocks html5lib's constants.py:544, which most of html5lib imports."
-status: working
+status: done
 owner: frank2
 ---
 
@@ -158,3 +158,34 @@ The repro prints `0123456789`, all four FAIL rows above become ok, and
 `html5lib/constants.py` stops reporting `undefined variable (digits)`.
 
 `tools/gate.sh quick` GREEN with the FPC seed canary run (concurrent).
+
+## Corpus effect — measured, and smaller than the ticket implies
+
+58 non-test `.py` files across `html5lib` / `tinycss2` / `webencodings`, scanned
+twice: once with a binary built from `HEAD~1` and once from the fix, both built
+here, both verified to differ (`cmp`). **Absolute counts here are NOT comparable
+to frank3's corrected ladder** — this scan passes only `-Fulibrary_candidates/<root>`,
+so `six` and `webencodings` go unresolved and inflate the failure count. The
+delta is what this measures.
+
+| | before | after |
+| --- | --- | --- |
+| compiles | 6 | **6** |
+| `undefined variable (X)` | 7 | **4** |
+
+Three files cleared the wall — `html5lib/constants.py`, `filters/whitespace.py`,
+`treewalkers/__init__.py` — and every one of them now stops on
+**`Nil Python: too many inferred module locals`**, one step further in. So the
+wall moved rather than vanished, and the compile count is unchanged. That next
+wall is the honest lever on `constants.py` now.
+
+The four remaining `undefined variable` rows are a **different class** — a shim
+that genuinely lacks the member, not a resolution failure — and belong to Track B:
+
+- `tinycss2/serializer.py` — `re.MULTILINE` (`lib/rtl/regex.pas` has no such const)
+- `html5lib/debug-info.py` — `platform.python_implementation()`
+- `webencodings/webencodings/__init__.py` — `CodecInfo`
+- `webencodings/docs/conf.py` — `os`
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.
