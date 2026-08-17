@@ -56,8 +56,31 @@ still apply — they prevent conflicting EDITS to the same file, not tree damage
    worker-initiated: several open N bugs (the NilPy string kind, `abs()` of a
    complex) land in `compiler/builtin` despite reading like pure frontend work.
    A worker hitting one should STOP and hand it up, not pin on its own.
-3. Route **Track U** (decisions) to the human. Workers file `decide-*` and move
-   on; they do not wait.
+3. Route **Track U** (decisions) to the human — **as TICKETS, never as chat.**
+   Workers file `decide-*` and move on; they do not wait.
+
+   **The human's stated goal (2026-08-17): read DECISION NOTES, not bug reports.**
+   Two months of "entertain yourself all night on track A+N" made babysitting the
+   binding constraint, and the win is not more autonomy — it is that what reaches
+   the human is pre-digested. So:
+
+   - Anything needing human judgement becomes a `decide-*` ticket in Track U.
+     If it only exists in a chat message, it is invisible the moment that session
+     is cleared, and the human cannot read it on their own schedule.
+   - Every `decide-*` carries, in this order: **the measurement**, the options
+     with their real costs, and **a recommendation**. A decision that arrives
+     pre-measured costs seconds; one that arrives as a question costs an
+     investigation.
+   - State a **read time** at the top and keep it honest. These are read when
+     tired, at the end of a day.
+   - Say what changes on each answer, so the human is choosing between outcomes
+     rather than adjudicating an argument.
+
+   The whole queue is one command: `tools/progress.sh ready --track U`.
+
+   Worked example of the target shape: the pin-ownership question on 2026-08-17.
+   Coordinator measured (~12 pins/week, ~7 min of lock), recommended one option,
+   named the rejected alternative and why. The human answered in three words.
 4. Keep this file current.
 
 **The coordinator should not debug** — the moment it takes a HARD ticket it
