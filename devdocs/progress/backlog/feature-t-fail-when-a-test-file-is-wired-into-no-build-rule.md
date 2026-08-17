@@ -64,3 +64,75 @@ T's own tooling and T's call.
 The check fails on a deliberately unwired test file and passes on the tree once
 the real gaps are wired; `tools/testmgr.py --tier full` green for the tooling
 change.
+
+## 2026-08-17 — BUILT, and the sweep says 98
+
+`tools/check_test_wiring.py` (`bb1ec8ca5`). The ticket asked for the count
+before deciding whether this is a ticket or a one-off. It is neither: it is a
+backlog.
+
+| | |
+| --- | --- |
+| naive (path in Makefile only) | 192 |
+| **after following indirect wiring** | **98** |
+| of those, with an `.expected` sibling | **10** |
+
+### The two indirect passes are what make 98 credible
+
+A checker reporting 192 would have been dismissed as noise on first contact, and
+permanently. Both classes it now follows are genuinely "something runs it":
+
+- **directory references** — `-Futest/case_units` names the dir, never
+  `uPSUtils.pas`;
+- **imports from a wired subject** — `uses` / `#include`, so `cenum_lib.c`
+  counts as run because the test including it runs.
+
+Roughly half the naive answer was real wiring reached indirectly. Same insight
+as the corpus-hint fix: **an over-cautious signal has a cost, and it is paid
+silently.**
+
+### The 10 are the finding; the other 88 are the backlog
+
+Every one traced landed **with a fix in the last two days** — a regression test
+shipped alongside its own fix, running nowhere:
+
+```
+test_const_real_expressions.pas        8938aed7d  fix(P): real-valued constant expressions
+test_for_limit_once_and_type_max.pas   dfc3b7449  fix(A): a for loop evaluates its limit once
+test_set_symmetric_difference.pas      135db3071  feat(P): support >< (set symmetric difference)
+test_local_typed_const_is_static.pas   3ed3e2653  fix(P): a routine-local typed const is static
+test_integer_longint_overload.pas      (strict-overload-width work)
++ 5 test_nilpy_*.npy
+```
+
+That is a **different severity** from the other 88. A test that runs nowhere is
+worse than no test, because it makes the fix look protected. Several of these
+were confirmed green during triage **by hand** — which is exactly the
+verification that does not survive everyone forgetting, and is the argument this
+ticket opened with.
+
+### Deliberately NOT gated yet
+
+It would be red on arrival, which trains people to skip a step, and it would
+gate other lanes on work they have not been given. Gating is the follow-up once
+the real gaps are wired.
+
+`test/UNWIRED.txt` ships **empty** for the same reason — the 98 are a backlog,
+not exemptions. An entry with no reason is **refused** rather than honoured, and
+stale entries (now wired, or the file is gone) are reported, because a stale
+exemption only hides future gaps. A self-auditing exemption list is the only
+kind worth having.
+
+### The hook was NOT touched, and that is not Track T's call
+
+This ticket suggests narrowing `.claude/hooks/no-full-suite.sh` "is T's own
+tooling and T's call". **It is not.** That file is harness configuration — a
+guard on which commands may run — and changing it belongs to the user, not to a
+lane and not on a peer's suggestion. Three agents have now declined to route
+around it, which is the right pattern; the question of whether a read-only
+`grep` over `test/` should trip a full-suite guard is a real one, and it is
+Rene's to answer.
+
+Nothing was reshaped to slip past it either. The permanent checker is what this
+ticket asks for, a tool is its natural form, and it does not match a heuristic
+aimed at ten-minute compile sweeps.
