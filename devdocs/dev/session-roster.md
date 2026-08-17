@@ -52,9 +52,19 @@ unrelated two-line defects. Same ticket, same model, different context depth.
 
 ## Standing constraints
 
-- **Box contention is real.** Measured on plexus: same tier, 403s idle vs 791s
-  with one co-tenant. The dev box is 8 cores. More workers is not linearly more
-  throughput — add them one at a time and watch gate times.
+- **Box contention is real.** Measured on plexus: same tier, same day, one
+  variable — **403s idle vs 791s with one co-tenant**. Nearly 2x.
+  **Two different boxes, do not mix the numbers:** that measurement is plexus
+  (12 threads, E5-2620 v2), which is the watcher's box, not the dev box (8
+  threads). The ratio is suggestive for both; the absolute seconds are not
+  transferable. More workers is not linearly more throughput — add them one at a
+  time and watch gate times.
+  What it establishes is that **co-tenancy dominates this measurement**, which
+  is enough to make a timeout unsound to bisect. It does NOT establish the
+  absence of slow-creep underneath: a signal smaller than a 2x swing is
+  invisible to it. `testmgr` now prints `NEAR BUDGET (Ns of Ns)` on a job that
+  passed while eating most of its budget, which is the instrument for that
+  residual — it answers by accumulating on undisturbed runs, not by argument.
 - **Never widen the gate.** `make compiler/pascal26` + your repro +
   `tools/gate.sh quick`. Breadth is Track T's job, offloaded, async. A hook
   refuses full suites; that is deliberate.
