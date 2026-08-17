@@ -2,8 +2,8 @@
 track: B
 prio: 15
 type: feature
-blocked-by: [bug-n-a-class-only-module-reads-every-class-attribute-as-zero, bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails]
-summary: "The xml_dom ladder row (4 files) is two unrelated questions. Three files need only `Node` — 12 integer constants, zero methods, closed by the DOM spec, trivially shimmable. One file needs a real DOM (~25 methods plus a private minidom internal) and is a project, not a shim. MEASURED CONCLUSION: do not write it — the shim unblocks ZERO files today, and writing it before the class-only-module bug lands would produce a shim whose every constant reads as 0."
+blocked-by: [bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero, bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails]
+summary: "The xml_dom ladder row (4 files) is two unrelated questions. Three files need only `Node` — 12 integer constants, zero methods, closed by the DOM spec, trivially shimmable. One file needs a real DOM (~25 methods plus a private minidom internal) and is a project, not a shim. MEASURED CONCLUSION: do not write it — the shim unblocks ZERO files today, and writing it before the trailing-class initialiser bug lands would produce a shim whose every constant reads as 0."
 ---
 
 # `xml.dom` is two questions, and neither one is worth doing yet
@@ -109,11 +109,18 @@ unblock, not on how tractable the work looks.
 
 ### And it would be silently wrong if written
 
-This is the part that could not have been reasoned to. A constants-only shim is
-a module whose body is **nothing but a class**, and that shape currently reads
-every attribute back as **0**
-([[bug-n-a-class-only-module-reads-every-class-attribute-as-zero]], found while
-measuring this row).
+This is the part that could not have been reasoned to. A class whose definition
+is not followed by a module-level statement currently loses its attribute
+initialisers and reads every one back as **0**
+([[bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero]], found while
+measuring this row). A constants-only shim is exactly that shape: one class,
+nothing after it.
+
+Note this is *not* avoidable by writing the shim more carefully. Putting a
+module-level statement after `class Node` would mask it — and masking it is
+worse than hitting it, because the shim would then be correct only by virtue of
+a trailing line nobody could explain, and would silently break the day someone
+tidied it away.
 
 So the obvious `mimic_xml_dom.py` — 12 constants, no module-level code — would
 compile, import, and give `Node.TEXT_NODE == 0`, `Node.ELEMENT_NODE == 0`,
@@ -131,7 +138,7 @@ shim on a broken substrate does it too.
 ## When to revisit
 
 Do question 1 when
-[[bug-n-a-class-only-module-reads-every-class-attribute-as-zero]] is fixed AND
+[[bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero]] is fixed AND
 the `digits` bug is fixed — at which point it is 20 lines and genuinely
 complete, and there will be files behind it to unblock. Verify with an assertion
 on an actual constant *value* (`Node.TEXT_NODE == 3`), never merely that the

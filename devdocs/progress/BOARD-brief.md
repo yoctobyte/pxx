@@ -37,7 +37,7 @@ _none — no lane is locked._
 ## Ready — top 30 of 207, ranked
 
 - `[p 70] [U]` decide-week-theme-2026-08-17
-- `[p 60] [N]` bug-n-a-class-only-module-reads-every-class-attribute-as-zero (unblocks 1)
+- `[p 60] [N]` bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero (unblocks 1)
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 60] [P]` feature-pascal-corpus-oop
