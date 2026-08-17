@@ -1,0 +1,19 @@
+sig=fpc-self_assign
+seed=54709
+sha=d91b82d6516b
+compiler=/home/neo/trackt-watch/compiler/pascal26
+note=FPC CONTRADICTS ITSELF (-O0 vs -O2) -- an FPC bug, no judgement needed; pxx is not involved
+
+fpc-O0       7612932849724200842
+fpc-O2       <crash>(rc=217)
+pxx-O0       7612932849724200842
+pxx-O2       7612932849724200842
+pxx-O3       7612932849724200842
+
+first divergence at checkpoint 1 of 1 -- a `assign` statement
+    fpc-O0     114561702367602299
+    fpc-O2     <crash>(rc=217)
+    (checkpoint N = the Nth statement of the traced program;
+     everything before it agrees, so the bug is AT that statement)
+
+repro: tools/pasmith.py --seed 54709 --vars 10 --funcs 3 --stmts 20 --depth 3 --classes 4 --objs 3 --strs 3 --recs 2 --arrs 2 --enums 2 --shorts 2 --excepts 3 --modeprocs 2 --intfs 0 --hier 4 --mptrs 0 --props 3 --exdtor 3 --clsm 3 --checks 1 --consts 1
