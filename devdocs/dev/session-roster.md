@@ -216,3 +216,16 @@ bugs, 38% of last month's commits), open a frontend from `experimental/`
 (`feature-esoteric-ada`, `feature-esoteric-cobol` — near-ideal parallel work,
 own files, own gate), or push the corpora. Workers proceed on the ranked queue
 until this is answered.
+
+**Measured 2026-08-17, and it collapses two of those three into one.** Makefile
+references per corpus: lua 56, sqlite 46, chess 31, quickjs 25, zlib 21 — versus
+webencodings 0, tinycss2 0, html5lib 1, reportlab 1 (both comments, not rules).
+The C frontend built corpus discipline and NilPy did not. So "finish NilPy" and
+"push the corpora" are the SAME week: the four Python packages are the only code
+on this box we could not have unconsciously shaped to fit what NilPy supports,
+which is exactly what the current 17 open N bugs cannot tell us. Banked in
+`feature-nilpy-thirdparty-libraries-as-targets` with the reusable C pattern and
+the expectation that the bug count RISES.
+
+Also at zero and worth noting separately: `fpc-testsuite` (P conformance,
+already tagged rainy-day), `zengl`, `freebsd-regex`.
