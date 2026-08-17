@@ -236,4 +236,4 @@ a design call for the user rather than something a worker settles in passing.
 the decision only governs whether the fix stays narrow or begins a unification.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 030ce07ea.
