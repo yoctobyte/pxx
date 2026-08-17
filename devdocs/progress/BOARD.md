@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| meta-a-second-paths-reimplement-the-first-paths-decisions | A | 60 | meta | One concept, two mechanisms, and only one carries the capability | — |
+_none_
 
 ## unfinished (13)
 
@@ -433,9 +431,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (2000)
+## done (2001)
 
-2000 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2001 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 

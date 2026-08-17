@@ -1805,6 +1805,7 @@ should not read it to find out what to do. Grep it freely._
 | lib-intToStr-missing | B | 50 | lib | `IntToStr` not available | — |
 | lib-string-copy-trim-missing | B | 50 | lib | String `Copy` / `Trim` not available | — |
 | lib-text-file-io-assign-rewrite | B | 50 | lib | Text file I/O: `Assign`/`Rewrite`/`Reset`/`WriteLn(f,…)`/`CloseFile` missing | — |
+| meta-a-second-paths-reimplement-the-first-paths-decisions | A | 60 | meta | One concept, two mechanisms, and only one carries the capability | — |
 | meta-multithreading | A | 45 | meta | Meta: multithreading — libc-free Pascal threads (umbrella / epic) | — |
 | meta-track-b-compiler-wishlist | B | 50 | meta | Track-B wishlist — compiler features most wanted to unblock libraries + demos | — |
 | meta-track-w-collision-windows-vs-website | A | 45 | meta | Track letter W is claimed by TWO lanes — Windows and Website | — |

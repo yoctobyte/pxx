@@ -2,7 +2,7 @@
 slug: meta-a-second-paths-reimplement-the-first-paths-decisions
 track: A
 prio: 60
-status: working
+status: done
 owner: frank2
 ---
 
@@ -174,10 +174,53 @@ fix was predicted from the list and confirmed against FPC before it was made —
 none was found by a corpus or a bug report, which is the argument the ticket was
 filed to make.
 
-## Still open under step 1
+## Third slice: `isRefArg` (row 4's question) — a NEGATIVE result
 
-The `isRefArg` question from row 4 — asked in at least two places and possibly
-more — is the next enumerable slice, and it is the one with teeth: unlike a
-name-resolution miss, getting it wrong produces a *wrong value or a segfault*
-rather than a diagnostic (that is exactly how row 4 presented). Rows 1 and 2
-remain mechanism duplication with no equivalent grep.
+The slice with teeth, because getting this one wrong yields a wrong value or a
+segfault rather than a diagnostic. Enumerated all 34 call sites of
+`IRLowerCallArg` by the fourth argument they pass. Twenty-eight compute it from
+the parameter; **four still pass a hardcoded `False`** (plus the one already
+fixed at `ir.inc:9490`). All four were checked, and **none is a live defect**:
+
+- `ir.inc:7274/7276` and `7326/7328` — the `pytruediv_f` and `pyfloormod_i`
+  pylib calls. Both routines are declared `(a: Double; b: Double)` /
+  `(a: Int64; b: Int64)` in `compiler/builtin/pylib.pas`, i.e. by value, so
+  `False` is the correct answer and the sibling sites' computed form evaluates
+  to it. Inconsistent spelling, not a defect.
+- `ir.inc:9504` and `9550` — the FLOAT and INT arms of the very default-fill
+  block whose variant arm was the row-4 bug. Harmless for the reason recorded in
+  the comment there: a scalar default is boxed into a temp whose **address** is
+  the argument no matter what `isRefArg` says. Only a default that is *already*
+  a variant reached the load that broke.
+
+**Left unchanged deliberately.** There is no measured behaviour difference, and
+an unmeasured edit to the argument-marshalling path is a bad trade — this is the
+one place in the audit where being wrong is silent. Recorded here so the next
+reader does not have to re-derive it, and so a future change to the boxed-scalar
+path knows these two are relying on it.
+
+So row 4's question is **bounded**: it was asked wrong in exactly one place, and
+that place is fixed.
+
+## Closing this out
+
+Step 1 is done for every axis that has a method. Two questions were enumerable —
+"was this name qualified?" and "is this parameter by-ref?" — and both were run to
+the end: 9 real divergences fixed on the first, 0 found on the second, each
+checked against an oracle rather than argued. Step 3 (grep for hand-rolled
+compensations) turned up the `= None` branch already named in the original text
+and nothing further.
+
+**What is left is rows 1 and 2, and they are left because there is no method for
+them** — mechanism duplication has no question to grep for. That is not a task
+that fits in a session; if someone finds a way to enumerate it, that is a new
+ticket, not this one continuing to sit in `working/` as a lock nobody holds.
+
+The durable output is not the nine fixes. It is the test for which instances of
+this pattern are auditable at all: **a second path that re-answers a QUESTION can
+be enumerated by grepping for the question and checking who asks it; a second
+path that re-implements a MECHANISM cannot.** That distinction is worth carrying
+into `devdocs/dev/normalise-dont-special-case.md` the next time someone edits it.
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.
