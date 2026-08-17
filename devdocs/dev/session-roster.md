@@ -403,6 +403,12 @@ unrelated two-line defects. Same ticket, same model, different context depth.
   `install_externals.sh` only ASSERTED the property, in a PROVENANCE string
   written into the very tree it describes; routed to frank3 to mirror the real
   guard. **Any new fetcher copies that check — a claim in a comment is not one.**
+- **`pinned` is NOT a baseline for a Track A A/B test** (frank2, 2026-08-17).
+  It is many commits behind HEAD, so comparing a compiler change against it makes
+  a **pre-existing failure look like your regression** AND **someone else's fix
+  look like yours** — both readings flipped when a proper baseline was built.
+  Build the baseline from **HEAD minus your own diff**. `pinned` is Track B's
+  ground, not a control.
 - **Verify a peer's claim before acting on it**, and name the sha in your own.
   Two overclaims were caught between sessions on 2026-08-16, in both directions;
   each cost one message where believing it would have cost far more. Also check
