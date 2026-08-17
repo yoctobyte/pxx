@@ -457,6 +457,25 @@ uforth shard and never touches `test-nilpy`. I read it as a confirming re-run fo
 about a minute before checking. A per-sha verdict list invites reading later verdicts
 as superseding earlier ones when they cover disjoint job sets.
 
+### Follow-up: the bisect landed, and it corrected me
+
+I wrote above that a bisect on the callbacks red would name a commit and be wrong.
+**It converged on `5215148bb` and the answer is right** — the commit that stopped
+compiling the three tk tests without running them and added the eighteen Makefile
+lines that run them under Xvfb. Those lines are where `timeout 120 xvfb-run` entered
+the tree: `Makefile:363`, the same line the harness ticket identifies statically. Two
+independent routes, one place.
+
+The commit is not a culprit. It introduced the first *execution* of tests that had
+been gated on "it still parses" — a good change — and the execution brought a fixed
+ceiling the harness cannot stretch.
+
+My error was pattern-matching this onto `crtl_exp2`, where the range spans commits
+that all run the job so the landing is arbitrary. Here the range spans the commit
+where the job started doing the expensive thing, so the landing is exact. **A
+duration-driven failure does not by itself discredit a bisect.** Passed to plexus-T,
+since that distinction may be worth encoding in the report.
+
 ## Housekeeping for the morning (not done overnight, deliberately)
 
 `tools/progress.sh check` reports **17 resolved tickets awaiting their landed sha**
