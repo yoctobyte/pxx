@@ -142,4 +142,4 @@ Unblocks [[feature-pascal-corpus-generics]]: generics.defaults walks from line
 class field — unrelated.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 604c26fda.
