@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:13 blocked:4 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:81 done:1998 rejected:38`
+`unfinished:13 blocked:4 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:81 done:1999 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -45,7 +45,6 @@ _none — no lane is locked._
 - `[p 55] [C]` bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails
-- `[p 55] [B]` bug-t-the-ladder-scan-passes-only-one-root-so-cross-package-imports-read-as-walls
 - `[p 55] [U]` decide-what-an-unwired-test-may-assert
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
@@ -66,5 +65,6 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-pascal-asmmode-directive-tolerance
 - `[p 50] [A]` feature-pascal-initialize-finalize-intrinsics
 - `[p 50] [A]` feature-release-checksums-repro
+- `[p 48] [P]` feature-pascal-class-management-operators
 
 _176 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

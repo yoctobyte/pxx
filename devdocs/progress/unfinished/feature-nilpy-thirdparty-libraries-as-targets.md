@@ -891,3 +891,12 @@ rather than on work.
 58 files). Then re-run the A/B scan in this file — with `-Fu`, against a pin, and
 naming the sha — before choosing the next rung. Do not read the next step out of
 the prose above; every scan in this file has been superseded by the next one.
+
+> **2026-08-17 — the wall table quoted above is SUPERSEDED.** It came from a scan
+> that passed only the scanned file's own `-Fu` root, so cross-package imports
+> (`tinycss2` -> `webencodings`) recorded as compiler walls. Corrected table and
+> the tool that now produces it (`tools/nilpy_ladder.py`):
+> [[bug-t-the-ladder-scan-passes-only-one-root-so-cross-package-imports-read-as-walls]].
+> The `webencodings` and `constants` rows were artefacts and are gone; the real
+> top two are `undefined variable (digits)` (8 files) and
+> `undefined variable (CodecInfo)` (7 files).
