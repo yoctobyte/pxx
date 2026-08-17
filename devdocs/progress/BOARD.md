@@ -93,7 +93,6 @@ _none_
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | compat-pascal-writeln-of-a-single-uses-double-width | A | 30 | compat | WriteLn/Str of a Single print the value's full Double expansion — 17 significant digits and a 3-digit exponent — where FPC prints 10 digits and a 2-digit exponent: pxx ' 1.0000000149011612E-001' vs FPC ' 1.000000015E-01'. Same class as the FloatToStr(Single) bug fixed in lib/rtl, but this path is the compiler's own float writer, so the RTL cannot reach it. Text-only divergence, no wrong value. | — |
-| decide-how-python-shaped-shims-should-be-shipped | U | 70 | decide | A shim whose content is Python-level aliases (six: `text_type = str`) cannot be written in the mimic_<name>.pas slot, and the working alternative — a NilPy .py in a library root — silently defeats --no-shims. Three options, recommendation is to let the shim lookup also probe mimic_<name>.py. | — |
 | decide-nilpy-exec-injects-a-builtins-key | U | 40 | decide | CPython's exec(src, g, l) injects a `__builtins__` key into the globals dict; NilPy does not, because it has no module object to put there. So sorted(d.keys()) after an exec differs. Three options: leave it out (today), inject the key with a placeholder value, or inject a real minimal namespace. The fork is what a program that ITERATES the dict should see. | — |
 | decide-one-answer-to-have-i-already-compiled-this-unit | U | 40 | decide | Three tickets in three lanes are all 'a compilation unit got processed twice', served by three unrelated mechanisms: unit-NAME keying (Pascal/NilPy), an @cpath: key space (path-form C units), and preprocessor include-guard visibility (C headers). Two is a smell, three is a design flaw. Question for the user: does 'have I already compiled this translation unit?' deserve ONE answer, or are three correct-in-their-own-lane answers the right shape? | — |
 | decide-staff-track-c-to-unblock-own-language-first | U | 50 | decide | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (C, p55) is the only thing blocking feature-a-own-language-first-symbol-resolution, and Track C is unstaffed. Staff it, fold it into an existing session, or leave the chain parked? | — |
@@ -118,6 +117,7 @@ _none_
 | feature-a-rdrand-cpuid-compiler-builtins | A | 35→45 | feature | lib/rtl/random.pas cites `feature-rdrand-cpuid-compiler-builtins` in a source comment for its tier-1 hardware entropy path — and that ticket was never filed. Tiers 2 and 3 ship; tier 1 needs compiler intrinsics for CPUID + RDRAND (x86), MRS RNDR (aarch64) and the ESP RNG register, because the library's design mandate keeps per-arch instructions OUT of the .pas. | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 25 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
 | feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit | A | 50 | feature | Strict flags currently exempt code by `CurrentUnitIdx < 0` — main program vs ANY unit — so `--strict-fpc` polices the one file that isn't FPC's and exempts Synapse entirely. The right axis is OURS vs THEIRS: our RTL is written in the pxx dialect and no command-line flag should re-judge it, while external units and the user's own program should be policed. Unblocks folding --strict-overload into the umbrella. | — |
+| feature-a-the-shim-slot-should-find-a-python-shaped-shim | A | 70 | feature | The shim slot is Pascal-only; a Python-shaped shim has nowhere honest to live | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-b-hardware-sqrt-on-aarch64-and-arm32 | B | 20 | feature | Sqrt is one `sqrtsd` on x86-64 (15x faster than the software path and correctly rounded by IEEE mandate). aarch64 `fsqrt` and arm32 `vsqrt` are the same one-instruction win and both run here under qemu, so the change is verifiable on this box. The portable SqrtSoft stays as the fallback for riscv32/xtensa. | — |
 | feature-b-rtl-lnxp1-fpc-compat | B | 20 | feature | FPC's math unit exports LnXP1(x) = ln(1+x) and pxx does not. The implementation already exists as of 2026-08-15 — LnP1, added as an internal helper for the hyperbolic family — so this is an interface line and a name, not an algorithm. Note WHY the name matters: `Log1p` would hijack libc's through pxxcio, `LnXP1` does not. | — |
@@ -344,7 +344,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (80)
+## decided (81)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -365,6 +365,7 @@ _none_
 | decide-forin-mixed-int-float-ctor-vs-fpc | U | 20 | decide | `for d in [1, 2.5]` — FPC 3.2.2 prints `1.00 0.00`, dropping the 2.5; pxx prints `1.00 2.50`. Shipped as the correct answer rather than copied, because losing a written value is a defect and not a semantic choice. Confirm, or put FPC's answer behind --strict-fpc. | — |
 | decide-gate-line-convention | U | 60 | decide | Should ticket Gate: lines prescribe the long local suite, or the 40s native confirm plus Track T offload? Today they say the former while CLAUDE.md says the latter. | — |
 | decide-gpc-as-corpus-target | U | 45 | decide | Track U: reject the GPC corpus wish, or keep it? Two sweeps have called it a rejection candidate. | — |
+| decide-how-python-shaped-shims-should-be-shipped | U | 70 | decide | A shim whose content is Python-level aliases (six: `text_type = str`) cannot be written in the mimic_<name>.pas slot, and the working alternative — a NilPy .py in a library root — silently defeats --no-shims. Three options, recommendation is to let the shim lookup also probe mimic_<name>.py. | — |
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | decide-ipv6-dualstack-and-aaaa-ordering | U | 40 | decide | Policy: IPV6_V6ONLY on a :: listener, and which address wins when a host has both A and AAAA | — |
 | decide-may-agents-fetch-thirdparty-sources-as-oracles | U | 50 | decide | Several ranked Track B tickets need a third-party package present on the box — as a differential oracle (reportlab) or as the compile target itself (html5lib, tinycss2, webencodings). None is installed here and fetching one is a supply-chain action, so the lane is stalled on a policy answer, not on work | — |
@@ -478,8 +479,8 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [U] decide-how-python-shaped-shims-should-be-shipped (unblocks 1)
 - [p 70] [U] decide-week-theme-2026-08-17
+- [p 70] [A] feature-a-the-shim-slot-should-find-a-python-shaped-shim
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
 - [p 60] [P] feature-pascal-corpus-oop

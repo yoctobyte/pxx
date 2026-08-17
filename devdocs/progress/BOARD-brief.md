@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:13 blocked:4 backlog:222 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1988 rejected:38`
+`unfinished:13 blocked:4 backlog:222 experimental:20 rainy-day:40 done-followup:3 decided:81 done:1988 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -36,8 +36,8 @@ _none — no lane is locked._
 
 ## Ready — top 30 of 207, ranked
 
-- `[p 70] [U]` decide-how-python-shaped-shims-should-be-shipped (unblocks 1)
 - `[p 70] [U]` decide-week-theme-2026-08-17
+- `[p 70] [A]` feature-a-the-shim-slot-should-find-a-python-shaped-shim
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 60] [P]` feature-pascal-corpus-oop

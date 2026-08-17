@@ -111,3 +111,33 @@ all.
 The `six` content itself — the name list, its scoping to what html5lib and
 tinycss2 actually import, and the `viewkeys`-is-a-function trap — is settled in
 the parent ticket and is unaffected by this. Only *where the file goes*.
+
+
+## DECIDED (Rene, 2026-08-17)
+
+> *"`--no-shims` is just 'unsupported'. Define it: we will not provide shims.
+> Done. And not sneakily load other shims."*
+
+Two rulings, and the second is what settles the open question.
+
+**1. The flag's meaning is simply "unsupported".** It says we provide no shims for
+this build. Nothing more is promised and nothing is hardened — no refusal
+machinery, no scanning for suspiciously-named library files, no guarantee that
+survives a determined programmer. Past the opt-out, the results are the
+programmer's. Its help text should state what it actually checks.
+
+**2. A shim must be RECOGNISABLE as a shim.** "Not sneakily load other shims" is
+the operative half: a `lib/**/six.py` that satisfies `import six` while the build
+reports no shims is not a broken guarantee, it is a **dishonest tree**. This is
+the same rule as the 2026-07-26 ruling — *no file in the tree carries the upstream
+name, the tree says what each shim is* — and it holds whether or not any flag
+exists.
+
+So: Python-shaped shims are named `mimic_<name>.py` and found by the same lookup
+as `mimic_<name>.pas`. The shim slot being Pascal-only is an accident of when it
+was written. `--no-shims` continuing to mean something is a consequence of the
+tree being honest, never the justification.
+
+**Re-filed as `feature-a-the-shim-slot-should-find-a-python-shaped-shim`** (A,
+p70) — the lookup is `PyMimicShimExists` in `parser.inc`, shared ground, so it is
+Track A work rather than N's.
