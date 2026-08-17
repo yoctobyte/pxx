@@ -2,9 +2,9 @@
 track: B
 prio: 45
 type: feature
-blocked-by: [bug-n-the-builtin-warning-exception-hierarchy-is-missing]
-status: unfinished
+blocked-by: []
 owner: frank3
+status: done
 ---
 
 # `mimic_six` and `mimic_warnings` — the biggest lever for the library campaign
@@ -359,3 +359,91 @@ rather than returning `object`, because `object` would be semantically right and
 
 **Ticket stays in `unfinished/`**: the `six` half is done, the `warnings` half is
 blocked on the builtin hierarchy.
+
+## 2026-08-17 (frank3, third pass) — the `warnings` half is LANDED. Ticket closes.
+
+Its blocker, [[bug-n-the-builtin-warning-exception-hierarchy-is-missing]], was
+fixed and pinned (**v346**) — the categories now reach `PXX_STABLE`, verified
+before anything was written.
+
+### Scope, re-measured on v346
+
+Across html5lib + tinycss2 + webencodings, **non-test** code imports `warnings`
+in exactly three files and calls exactly one thing: `warnings.warn(msg, Category)`,
+16 times. `simplefilter` / `catch_warnings` / `resetwarnings` appear **only** in
+those projects' own test suites.
+
+That corrects my own count from earlier today, which reported 3 `simplefilter`,
+2 `catch_warnings` and 1 `resetwarnings` in non-test code. Wrong: the `grep -h`
+that produced it suppressed filenames, so the `grep -v /tests/` filtering the
+paths had nothing left to match on. The earlier 2026-08-09 note ("they appear
+ONLY in html5lib's test files") was right and I contradicted it with a bad
+measurement.
+
+They are implemented anyway — a few lines each, and a library that calls one
+should not die on an AttributeError — but nothing in the measured corpus
+exercises them, and the file says so.
+
+### What landed
+
+`lib/rtl/mimic_warnings.py` + `test/lib_mimic_warnings.npy` in `make lib-test`.
+
+**The test asserts stdout ONLY**, and that is the honest choice rather than a
+gap: stderr is exactly where the two implementations differ on purpose. CPython
+prints `<file>:<line>: <Category>: <message>` plus the offending source line
+because it walks the call stack; there is no frame introspection here, so this
+prints `<Category>: <message>`. Asserting stderr would either encode our format
+as though it were CPython's, or fail for a documented divergence. The test runs
+unmodified under CPython and the stdout is byte-identical.
+
+Two divergences, both measured before choosing:
+
+- **No source location** (above).
+- **Dedupe by (category, message), not by location.** Measured: CPython's
+  default filter reports once per call site — a `warn()` in a three-iteration
+  loop prints once. Without a location the text is the closest analogue. It
+  matches CPython for the common case and differs when one message is warned
+  from two places (CPython twice, this once). Printing every time was the
+  alternative and is *further* from CPython, not closer: it turns a loop into a
+  flood.
+
+`catch_warnings(record=True)` **refuses** rather than returning an empty list —
+an empty list reads as "no warnings were raised" in exactly the place a caller
+is asserting on it.
+
+### A silent segfault found on the way
+
+The natural signature is `warn(message, category=UserWarning)`. That **segfaults
+the moment the default is taken** — exit 139, no diagnostic, no output. Any type
+as a default parameter value does it: user class, builtin type, builtin
+exception, and merely reading `.__name__` off it is enough. Passing the argument
+explicitly is fine, so the fault is in materialising the default.
+
+Filed as
+[[bug-n-a-type-as-a-default-parameter-value-segfaults-when-the-default-is-taken]]
+(N, p60 — it is silent, and it breaks NilPy's upward-compatibility contract,
+since `warnings.warn("x")` is ordinary working CPython).
+
+The shim takes `category=None` and substitutes, **registered in
+`devdocs/dev/track-b-workarounds.md`** with a revert-to note per the Track B
+convention — the sanctioned way to sidestep an open compiler bug without hiding
+it. The test's `warn("no category given")` line is that workaround's regression
+guard.
+
+### Corpus effect: same shape as `six`
+
+`warnings` is no longer the first wall on any of the three files that import it.
+They now stop on `undefined variable (digits)` (`_ihatexml.py`),
+`xml.sax.saxutils` (`sanitizer.py`) and `constants` (`etree_lxml.py`) — i.e. the
+next layer, of which the biggest item remains package/sibling resolution.
+
+### Both halves are done — resolving.
+
+`six` landed earlier today (`c061ece2b`), `warnings` here. `six.moves` stays
+deliberately absent: stdlib re-exports needing `urllib`/`http.client`, a
+different job with a different blocker.
+
+`make lib-test` green against stable **v346**.
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.

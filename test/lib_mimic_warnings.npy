@@ -1,0 +1,86 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_warnings.py -- the contract it shares with CPython.
+
+Runs unmodified under CPython, and asserts ONLY on stdout, because stderr is
+where the two deliberately differ: CPython prints
+`<file>:<line>: <Category>: <message>` plus the source line (it walks the call
+stack), and this shim prints `<Category>: <message>` (it cannot). Asserting on
+stderr would either encode our format as if it were CPython's, or fail for a
+divergence that is documented and intended.
+
+What IS shared, and is what libraries actually depend on: warn() accepts a
+message and a category and does not raise; the filter calls are callable and
+harmless; catch_warnings works as a context manager. Those are asserted here and
+they hold identically both ways.
+
+`catch_warnings(record=True)` is deliberately NOT exercised: CPython supports it
+and this shim refuses it, so it is a real divergence rather than a shared
+contract, and it is refused precisely so it cannot silently return an empty list
+that reads as "no warnings were raised".
+
+The Warning CATEGORIES are builtins, covered by test_nilpy_warning_hierarchy.
+"""
+
+import warnings
+
+fails = 0
+
+
+def check(name, got, want):
+    global fails
+    if got == want:
+        print(name + "=ok")
+    else:
+        fails = fails + 1
+        print(name + "=FAIL got " + repr(got) + " want " + repr(want))
+
+
+class DataLossWarning(UserWarning):
+    pass
+
+
+# warn() with an explicit category -- the only shape the corpora use, 16 times.
+warnings.warn("lost some data", DataLossWarning)
+print("warn-category=ok")
+
+# warn() with no category at all. This is the line that would have segfaulted:
+# the natural signature is `category=UserWarning`, and a TYPE as a default value
+# crashes when the default is taken
+# (bug-n-a-type-as-a-default-parameter-value-segfaults-when-the-default-is-taken).
+# The shim takes None and substitutes, which is why this returns rather than
+# dumping core -- so this assertion is the workaround's regression guard.
+warnings.warn("no category given")
+print("warn-default=ok")
+
+# A builtin category, named bare, which is why they had to be builtins.
+warnings.warn("old interface", DeprecationWarning)
+print("warn-builtin-category=ok")
+
+# warn() returns None in both implementations -- it reports, it does not raise.
+check("warn-returns-none", warnings.warn("x", DataLossWarning), None)
+
+# The filter surface: callable and harmless. Nothing in the measured corpus
+# uses these, but a library that calls one must not die on an AttributeError.
+warnings.simplefilter("always")
+print("simplefilter=ok")
+warnings.filterwarnings("ignore")
+print("filterwarnings=ok")
+warnings.resetwarnings()
+print("resetwarnings=ok")
+
+# catch_warnings as a context manager.
+with warnings.catch_warnings():
+    warnings.warn("inside the block", DataLossWarning)
+print("catch-warnings=ok")
+
+# ...and it is reusable, i.e. entering twice does not leave broken state.
+with warnings.catch_warnings():
+    warnings.warn("second block", DataLossWarning)
+with warnings.catch_warnings():
+    warnings.warn("third block", DataLossWarning)
+print("catch-warnings-reentry=ok")
+
+if fails == 0:
+    print("MIMIC-WARNINGS OK")
+else:
+    print("MIMIC-WARNINGS FAILED " + str(fails))

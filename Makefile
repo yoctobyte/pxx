@@ -10198,6 +10198,15 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_six.npy $(TESTTMP)/lib_mimic_six
 	test "$$($(TESTTMP)/lib_mimic_six | grep -c '=ok')" = "18"
 	test "$$($(TESTTMP)/lib_mimic_six | tail -1)" = "MIMIC-SIX OK"
+	# The `warnings` shim. Asserts stdout ONLY and runs unmodified under
+	# CPython: stderr is where the two deliberately differ, since CPython
+	# prefixes `<file>:<line>:` by walking the call stack and this shim
+	# cannot. The `warn("no category given")` line is the regression guard
+	# for a registered workaround -- the natural `category=UserWarning`
+	# default segfaults when taken (see track-b-workarounds.md).
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_warnings.npy $(TESTTMP)/lib_mimic_warnings
+	test "$$($(TESTTMP)/lib_mimic_warnings 2>/dev/null | grep -c '=ok')" = "9"
+	test "$$($(TESTTMP)/lib_mimic_warnings 2>/dev/null | tail -1)" = "MIMIC-WARNINGS OK"
 	# DNS backend selection: the default (dns_wire) must be undisturbed by the
 	# new backend, and -dPXX_DNS_RESOLVED must agree with it. Both use only
 	# localhost, so neither needs the network; the resolved half skips itself
@@ -10565,7 +10574,7 @@ endif
 	@rc=0; tools/reportlab_diff.py || rc=$$?; \
 	 if [ $$rc = 77 ]; then echo "SKIP reportlab_diff -- prerequisite absent (see line above)"; \
 	 elif [ $$rc != 0 ]; then echo "reportlab_diff: the mimic diverged from the oracle"; exit 1; fi
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + strtofloat-roundtrip + mimic-six + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff + synapse-ssl) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + strtofloat-roundtrip + mimic-six + mimic-warnings + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff + synapse-ssl) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check

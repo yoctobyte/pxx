@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:14 blocked:4 backlog:218 experimental:20 rainy-day:40 done-followup:3 decided:81 done:1996 rejected:38`
+`unfinished:13 blocked:4 backlog:219 experimental:20 rainy-day:40 done-followup:3 decided:81 done:1997 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (14) — parked mid-flight; re-claim, do not duplicate
+## unfinished (13) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
@@ -22,7 +22,6 @@ _none — no lane is locked._
 - `feature-a-typeref-migrate-consumers` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
-- `feature-nilpy-six-and-warnings-shims` [B] — blocked-by: bug-n-the-builtin-warning-exception-hierarchy-is-missing
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
 - `feature-pascal-corpus-generics` [P]
 - `feature-port-rtl-over-libc` [A]
@@ -35,9 +34,10 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 204, ranked
+## Ready — top 30 of 205, ranked
 
 - `[p 70] [U]` decide-week-theme-2026-08-17
+- `[p 60] [N]` bug-n-a-type-as-a-default-parameter-value-segfaults-when-the-default-is-taken
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 60] [P]` feature-pascal-corpus-oop
@@ -66,6 +66,5 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-pascal-asmmode-directive-tolerance
 - `[p 50] [A]` feature-pascal-initialize-finalize-intrinsics
 - `[p 50] [A]` feature-release-checksums-repro
-- `[p 48] [P]` feature-pascal-class-management-operators
 
-_174 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_175 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
