@@ -2,6 +2,7 @@
 track: T
 prio: 45
 type: feature
+status: done
 ---
 
 # Track T: uforth benchmark harness — pxx-compiled vs interpreted Python baselines
@@ -150,3 +151,59 @@ Anyone picking this up: the 45 rows are still a useful sanity check on the
 harness's output shape, but do not treat them as a comparable baseline. They
 predate the 2026-08-02 MEASUREMENT BASIS CHANGED line at the top of bench.tsv,
 which explicitly says not to compare across it.
+
+## 2026-08-17 — verified working, follow-ups actually filed, resolving
+
+The harness landed 2026-07-22 and the ticket then sat in the ready queue for
+almost a month. Two things closed it out.
+
+### The three "filed, not blocking" follow-ups were NOT filed
+
+Checked before resolving, and none of the three existed as a ticket anywhere —
+the exact invisible-work class
+`project_decided_tickets_are_invisible_work_and_get_rediscovered` describes, and
+the same way `bug-t-twatch-status-false-down` sat unbuilt after being named only
+in a `decided/` body. Now real, rankable tickets:
+
+- [[feature-t-uforth-bench-on-the-watcher-idle-phase]] — daemon integration.
+  **This subsumes follow-up 3** ("run on a quiet box"): the watcher's idle bench
+  phase already refuses to bench under load, so hanging uforth off it makes the
+  quiet baseline a property of the schedule rather than of someone catching the
+  box idle by hand. It is also the instrument for the open slow-creep residual
+  in [[bug-t-a-timeout-bisects-to-an-innocent-commit]].
+- [[feature-t-uforth-bench-restore-the-elfhash-outlier]] — the skipped ~100x
+  workload.
+
+### Re-run confirms the harness works, and the numbers have moved a lot
+
+`--runs 1 --no-write`, on a box with a co-tenant (so read the ratios loosely —
+the RSS figure is not loose):
+
+| workload | cpython | pxx | speedup | pxx RSS | was (2026-07-22) |
+| --- | --- | --- | --- | --- | --- |
+| microbench-doloop | 17.7 s | 29.6 s | **0.60x** | **16.7 MB** | 0.31x, **582 MB** |
+| prelim | 0.52 s | 1.29 s | **0.40x** | 16.7 MB | 0.24x, 32 MB |
+| core | 1.44 s | 3.97 s | **0.36x** | 16.7 MB | 0.17x, 166 MB |
+
+Speedups roughly doubled across all three. **The standout is RSS: 582 MB → 16.7
+MB on the microbench**, a ~35x reduction, and now flat at 16.7 MB across
+workloads rather than scaling with the run. That was the single worst number in
+this ticket ("the pxx runtime/GC footprint on a tight loop") and it is gone.
+
+Both runs were taken under co-tenancy, so the wall-clock ratios carry the usual
+caveat and a ~2x swing is available from load alone — but a 35x RSS change is
+far outside that, and flat-across-workloads is a structural signature rather
+than a noisy one. Whatever landed, it worked; attributing it is Track O/N's, not
+T's.
+
+**T owns the tool, never the bug** — no finding here is fixed under T, and the
+remaining ratios stay Track O's to read against this ticket's own guidance that
+they must not be read as "pxx is slow" (uforth is a Forth VM on heavy dynamic
+dispatch, near the worst case for AOT and the best for CPython, with 141
+PYTHON-bodied stdlib words exec'd at every startup).
+
+Resolving: the deliverable landed, it demonstrably runs, and the follow-ups are
+now rankable work rather than prose.
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.

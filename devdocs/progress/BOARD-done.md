@@ -1740,6 +1740,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-t-snapshot-compiler-binary-per-run | T | 70 | feature | A test run should snapshot the compiler binary into its own scratch dir at start and run against that copy, so a concurrent rebuild cannot swap the binary out mid-run | — |
 | feature-t-testmgr-owns-pinning-interruptible | T | 60 | feature | Move the pin gate into testmgr so pinning is scheduled, resource-aware and INTERRUPTIBLE, instead of a long foreground gate.sh run a dev agent has to babysit | — |
 | feature-t-trackt-setup-autodetect-box-role | T | 70 | feature | trackt's profile wizard asks instead of detecting, and its NON-INTERACTIVE default is 'dedicated' — so a Pi provisioned headless over ssh enrols itself as a full-matrix fuzzing box, the exact opposite of its role | — |
+| feature-t-uforth-benchmark-harness | T | 45 | feature | Track T: uforth benchmark harness — pxx-compiled vs interpreted Python baselines | — |
 | feature-t-watcher-health-verdict-and-host-local-alerting | T | 70 | feature | Nothing detects a watcher that is running but wedged, and nothing pushes a problem at anyone. Split it: a portable health verdict in the repo, platform-specific delivery on the host. | — |
 | feature-target-aarch64 | A | 50 | feature | Compile target: ARM64 / AArch64 Linux | feature-target-i386 |
 | feature-target-arm32 | A | 50 | feature | Compile target: ARM32 Linux | feature-target-aarch64 |
