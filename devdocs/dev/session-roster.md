@@ -18,7 +18,11 @@ briefing: no more, no less.**
 **Tokens are the binding constraint, not throughput** (human, 2026-08-17). There
 are 5-hour and weekly limits, they are SHARED across every session, and a single
 session running flat out can consume a max plan on its own. So parallel workers
-are a way to spend the budget faster, not a way to get more of it. Idling is
+are a way to spend the budget faster, not a way to get more of it.
+**Target concurrency: 1-2 workers plus the coordinator** (human, 2026-08-17) —
+one or two tracks running continuously is already enough to consume a max plan,
+so that is the intended level, not a floor to grow from. Adding a third worker
+buys throughput the budget cannot pay for. Idling is
 therefore *fair and often correct* — the coordinator's job is to make sure nobody
 is BLOCKED, not to keep everybody busy. Prefer fewer workers on work that matters
 over full occupancy, and treat "everyone is active" as a cost, not a scoreboard.
