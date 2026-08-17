@@ -9758,10 +9758,24 @@ lib-test: pxx-stable-check
 	test "$$($(TESTTMP)/lib_net_timeout)" = "$$(printf 'connect=ok\nrefused=ok\nrecv=ok\nrecv-timeout=ok')"
 	$(PXX_STABLE) test/lib_dns_wire.pas $(TESTTMP)/lib_dns_wire
 	test "$$($(TESTTMP)/lib_dns_wire)" = "$$(printf 'qlen=29\nqhdr=ok\nqname=ok\nrcode=0\nid=ok\ncount=2\nip0=ok\nip1=ok\nminttl=ok\nq6type=ok\nrcode6=0\nid6=ok\ncount6=1\nip6=ok\ncname=ok\nnegttl=ok\nnegttl-none=ok')"
+	# Synapse lives in external/, which is gitignored and fetched on demand by
+	# tools/install_externals.sh -- so a fresh clone does not have it. Without
+	# this guard lib-test died INSIDE the compiler on `unit source not found:
+	# synacode`, partway through an otherwise-green suite, which reads as a
+	# regression someone just introduced rather than a missing dependency and
+	# costs a bisect before anyone checks whether the tree was ever there
+	# (bug-b-lib-test-unrunnable-in-a-fresh-clone-no-synapse-fetch). Skipping
+	# loudly rather than failing keeps Track B's gate runnable in a fresh
+	# clone; the recipe lines below are unchanged, so testmgr's per-line job
+	# split and its own CORPUS_ROOTS skip both still see them.
+ifeq ($(wildcard external/synapse),)
+	@echo "SKIP lib_synapse + lib_synapse_transitive_unit -- external/synapse absent; fetch it with: tools/install_externals.sh"
+else
 	$(PXX_STABLE) --mimic-fpc -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse.pas $(TESTTMP)/lib_synapse
 	test "$$($(TESTTMP)/lib_synapse)" = "$$(printf 'b64=SGVsbG8sIFdvcmxkIQ==\nb64d=Hello, World!\nmd5=900150983cd24fb0d6963f7d28e17f72\nsha1=a9993e364706816aba3e25717850c26c9cd0d89d\ncrc32=3421780262\nurl=a%%20b&c\nsrv-got=ping\ncli-got=pong')"
 	$(PXX_STABLE) --mimic-fpc -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse_transitive_unit.pas $(TESTTMP)/lib_synapse_transitive_unit
 	test "$$($(TESTTMP)/lib_synapse_transitive_unit)" = "ok"
+endif
 	$(PXX_STABLE) test/lib_dns_cache.pas $(TESTTMP)/lib_dns_cache
 	test "$$($(TESTTMP)/lib_dns_cache)" = "$$(printf 'hit=ok\nmiss-other=ok\nexpired=ok\nneg-hit=ok\nneg-expired=ok\nqtype-a=ok\nqtype-aaaa=ok\nreplace-val=ok\nreplace-count=ok\nttl-zero-noop=ok\nfull-live=ok\nevict-cap=ok\nevict-oldest=ok\nevict-newkept=ok\nv6-hit=ok\nv6-coexist=ok\nv6-expired=ok\nv6-neg=ok\ncn-hit=ok\ncn-coexist=ok\ncn-expired=ok\ncn-ttl-noop=ok')"
 	$(PXX_STABLE) test/lib_dns_config.pas $(TESTTMP)/lib_dns_config
