@@ -315,6 +315,23 @@ clears it or the check releases it.
 
 ### Check log
 
+- 2026-08-17 hourly check #4 (cron) — **a pin verifies RED and it needs attention.**
+  Track T's full tier ran against **pin v347** (`08bdf2729`) and `pin_verify` came
+  back **RED on three jobs**: `lib-test#36`, `lib-test#117`, `test-nilpy#12`. Only
+  the first is accounted for (`crtl_exp2.c`, open regression from 15:39, pre-existing,
+  not caused by the pin). **The other two appear in neither `open_regressions` nor
+  `new_red`**, while every native-tier run around it is GREEN.
+  Dispatched frank3 to identify the two jobs by source path, reproduce each against
+  `PXX_STABLE` vs a HEAD build, and **report before fixing** — if it is pin lag the
+  answer is another pin, which is the coordinator's.
+  **Standing caution recorded from it:** `new_red: []` does NOT mean benign. It
+  compares against the previous run, so a job failing under the pin for several runs
+  is not new and is still wrong — the same "constant nobody can explain" shape Track
+  T flagged before going dark, at a different scale. A pin verifying RED with nobody
+  attributing the reds is exactly the state that survives because each individual
+  report looks unchanged.
+  frank2 busy (`shell`), tree clean, nothing unpushed. No pending clears.
+
 - 2026-08-17 hourly check #3 (cron) — **active, no blocks.** frank2 busy on the
   `digits = string.digits` Pascal-shim collision (corrected table's #1, 8 files);
   dirty tree, nothing unpushed. frank3 idle with everything landed → dispatched to
