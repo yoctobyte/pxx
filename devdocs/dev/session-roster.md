@@ -667,3 +667,24 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   preserving the verdict and discarding the discriminator.
   frank2 and frank3 idle by design (token budget); tree clean, nothing unpushed;
   no pending clears; Track U queue unchanged, still awaiting the user.
+
+- 2026-08-18 hourly check #6 (cron) — **one dispatch, one deliberate non-dispatch.**
+  No pending clears outstanding (frank2-f1's row is the cleared worked example).
+  `working/` empty — no live locks — so both idle workers were genuinely unassigned.
+  **plexus-T → `bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic`**
+  (T, p55, top of its queue; filed by the coordinator last cycle). Its own lane, and
+  it is costing us live: its watcher is mid-bisect on the callbacks red, which does
+  not reproduce, so that bisect will name a commit and be wrong. Told it so, and
+  asked it to report if the converged commit *does* touch something the job builds —
+  that would falsify my reading. Also corrected my earlier error to its face:
+  `PXX_TRACK=T` is its own escape from the no-full-suite hook and needs no
+  authorisation from me.
+  **frank3 left idle ON PURPOSE**, and the reason is worth keeping. Track B's whole
+  ready queue is float work (p30 `strtofloat`, then four at p20) and **float handling
+  is a standing LOW-PRIO ruling** — one I have already broken twice by finding
+  another category the ticket also fits ("3600x is performance, not accuracy"). A
+  standing priority ruling is not re-litigated by reclassification. The alternative,
+  moving frank3 to the two p60 N bugs, is a **lane change**, which is the human's
+  call and not a gap for a check to fill. Token budget agrees: frank2 busy +
+  plexus-T dispatched = two workers plus coordinator, which is the stated target.
+  Took no ticket myself. Nothing unpushed, no CRITICAL, watcher UP, pin v347.
