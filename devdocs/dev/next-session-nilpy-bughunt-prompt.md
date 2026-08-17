@@ -1,3 +1,8 @@
+> **STALE (2026-08-17).** The ticket this points at
+> (`bug-nilpy-nonlocal-capture-in-an-escaping-closure-fails-to-parse`) is DONE.
+> Kept as a record of that session, not as a dispatch. For current assignments
+> see `devdocs/dev/session-roster.md`; for the queue, `progress.sh next --track N`.
+
 # Next session: Track A+N, bughunting / bugfixing
 
 _Written 2026-08-06 at the end of a long A+N session, as a prompt to self.
