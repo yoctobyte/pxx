@@ -7,6 +7,18 @@ status: backlog
 
 # Synapse builds under `--mimic-fpc`. What does it actually NEED?
 
+> **Scope (owner, 2026-08-17): this is about PASCAL programs importing Synapse.**
+> NilPy importing Synapse is the wrong measurement and is not a goal — Python has
+> its own TCP stack, so a `.npy` reaching for `blcksock` would be solving a
+> problem the language already solved. Verified clean at filing: no `.npy` in the
+> tree imports `synapse` / `blcksock` / `synautil`.
+>
+> The distinction matters because the two compatibility mechanisms are separate
+> and it would be easy to merge them by accident: **Pascal** libraries are
+> configured by the curated define set (`PasApplyMimicDefines`, and eventually the
+> scoped `pxxlib.cfg` manifest), while **NilPy** compatibility goes through the
+> `mimic_<name>` shim slot. A per-library manifest is a Pascal-corpus concept.
+
 **Read time: 2 minutes.** Owner already stated the answer; this records it and
 asks how far to take it.
 
