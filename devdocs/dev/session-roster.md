@@ -213,6 +213,16 @@ unrelated two-line defects. Same ticket, same model, different context depth.
   reverted) and recommended a fresh session — correct read, acted on rather than
   thanked for. All work banked and pushed before stopping.
 
+  **Second coordinator error, worse than the first, caught by the human:** the
+  stop instruction said to revert anything in flight. **Never tell a stopping
+  session to revert.** Uncommitted work is the only state in this repo with no
+  backup, discarding it takes every other uncommitted change in those files with
+  it, and a diff cannot tell you afterwards which half was the good half. A dirty
+  idle tree costs nothing. The correct instruction is: touch nothing, optionally
+  commit a marked WIP, report and idle. "Stop cleanly" and "leave no mess" are
+  different instructions and I reached for the second while meaning the first —
+  tidiness is not a goal.
+
   **Coordinator error worth keeping:** my first response was to redirect it to a
   mechanical batch (test-wiring) instead of the fiddly step. That is a sound
   instinct in general and was wrong *here* — the human's call was pause and stop,
