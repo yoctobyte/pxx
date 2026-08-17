@@ -2029,6 +2029,19 @@ test-nilpy: $(COMPILER)
 	@# a source-level mode directive OVERRIDES the command line, as in FPC
 	./$(COMPILER) -Mobjfpc test/test_pascal_self_result_delphi.pas $(TESTTMP)/test_pascal_mode_override26
 	test "$$($(TESTTMP)/test_pascal_mode_override26)" = "$$(printf '42\n4\n7\n3\n10')"
+	@# `@procvar` splits on mode and PXX did the objfpc thing unconditionally:
+	@# delphi/tp yield the code pointer the procvar HOLDS, objfpc/fpc the ADDRESS
+	@# OF the variable. Not a diagnostic when wrong — Synapse forwards an OpenSSL
+	@# callback as `_SslCtxSetVerify(ctx, mode, @arg2)` over a value parameter, so
+	@# PXX handed OpenSSL a live stack slot, which it stored and X509_verify_cert
+	@# then CALLED: the TLS handshake jumped into the stack.
+	@# The two runs must DIFFER, so the test cannot pass if the mode is ignored.
+	@# Both expectations match FPC 3.2.2 under the same flag, verified 2x2.
+	@# bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
+	./$(COMPILER) -Mdelphi test/test_pascal_at_procvar_mode.pas $(TESTTMP)/test_pascal_at_procvar_d26
+	test "$$($(TESTTMP)/test_pascal_at_procvar_d26)" = "$$(printf 'TRUE\nTRUE\nFALSE')"
+	./$(COMPILER) -Mobjfpc test/test_pascal_at_procvar_mode.pas $(TESTTMP)/test_pascal_at_procvar_o26
+	test "$$($(TESTTMP)/test_pascal_at_procvar_o26)" = "$$(printf 'FALSE\nFALSE\nTRUE')"
 	./$(COMPILER) test/test_nilpy_method_on_fresh_construction.npy $(TESTTMP)/test_nilpy_method_fresh_ctor26
 	test "$$($(TESTTMP)/test_nilpy_method_fresh_ctor26)" = "$$(printf '5\n7\na9\n6\n3 a3\n[1, 2]')"
 	./$(COMPILER) test/test_nilpy_discarded_string_result.npy $(TESTTMP)/test_nilpy_discarded_string_result26

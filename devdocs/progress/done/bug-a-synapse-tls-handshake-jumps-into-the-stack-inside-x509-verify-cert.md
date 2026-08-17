@@ -4,6 +4,8 @@ prio: 50
 type: bug
 blocked-by: []
 summary: "A Synapse TLS client handshake segfaults inside libcrypto's X509_verify_cert with RIP pointing INTO THE STACK (rax == rip — a tail call through a function pointer holding a stack address). The byte-identical program built with FPC completes the handshake. The loader, the dlsym'd symbols and C->Pascal callbacks are each separately proven working, so the fault is ours and is narrower than any of them."
+status: done
+owner: frank2
 ---
 
 # A Synapse TLS handshake jumps into the stack inside `X509_verify_cert`
@@ -130,8 +132,84 @@ guessed at a cause instead of measuring one the guess was wrong — see
 resolution" guess, actually a procvar-in-value-context bug) and its 2026-08-15
 note (the "inside libssl" guess, actually our own errno).
 
+## 2026-08-17 (frank2, Track A) — RESOLVED. `@procvar` means something different in delphi mode.
+
+Re-measured at HEAD first: **both premises still hold.** pxx segfaults, FPC
+prints `ssl=0`, same machine / OpenSSL 3.0.13 / server. Track B's five negatives
+were inherited and none of them needed re-treading — the cause is narrower than
+all of them, exactly as they said.
+
+### Root cause
+
+`ssl_openssl3_lib.pas:832` forwards the verify callback as
+
+```pascal
+procedure SslCtxSetVerify(ctx: PSSL_CTX; mode: Integer; arg2: PFunction);
+begin
+  if InitSSLInterface and Assigned(_SslCtxSetVerify) then
+    _SslCtxSetVerify(ctx, mode, @arg2);      // <-- @ over a VALUE PARAMETER
+end;
+```
+
+`PFunction = procedure` — a procedural type — and **`@` over a procedural
+variable is mode-dependent in FPC.** Measured, not recalled, with a probe of
+this exact shape:
+
+| mode | `@arg2` |
+| --- | --- |
+| delphi / tp | the code pointer `arg2` **holds** (`0` for nil) |
+| objfpc / fpc | the **address of the variable** (a stack slot) |
+
+PXX did the objfpc thing unconditionally. So where FPC passes `NULL`, PXX passed
+**the address of a live stack parameter**. OpenSSL stored it as the verify
+callback, `X509_verify_cert` called it after the server certificate arrived, and
+control transferred into the stack.
+
+That accounts for every register in the report: `rip == rax` because it is an
+indirect tail call, both inside `[stack]` because the pointer IS a stack
+address, and the fault landing in cert verification because that is simply when
+the stored pointer is first used — arbitrarily far from the call that set it.
+
+### Fix
+
+One branch in the `@` factor: in `DelphiMode`, `@sym` where `SymProcSig[sym] >= 0`
+yields the lvalue rather than `AN_ADDR` over it. Scoped to `DelphiMode`, so PXX's
+own objfpc-ish dialect and the compiler's own sources are untouched — confirmed
+by the objfpc half of the test being byte-identical before and after, and by the
+self-host fixedpoint.
+
+`-Mtp` deliberately NOT keyed on: FPC's tp agrees with delphi here, but PXX
+accepts `-Mtp` as inert by existing policy (the mode-switch test asserts it).
+Changing that is a separate decision, not a rider on this fix.
+
+### Verified
+
+- **the ticket's gate**: `sslprobe` prints `connect=0` / `ssl=0` under pxx,
+  matching FPC on the same machine and server;
+- `test/test_pascal_at_procvar_mode.pas`, enumerated in `make test` under BOTH
+  `-Mdelphi` and `-Mobjfpc`. The two runs must differ, so it cannot pass if the
+  mode is ignored. **2x2 differential against FPC 3.2.2: all four cells agree.**
+- confirmed RED on a baseline built from HEAD-minus-this-diff (delphi mode
+  produced the objfpc row), so the test is real and the scoping is proven.
+
+### Two traps worth recording
+
+**A stale binary nearly sent me the wrong way.** Building the FPC control as
+`sslprobe` overwrote the pxx binary of the same name, and the next three
+LD_PRELOAD experiments "proved" that preloading libcrypto fixed the crash. It
+did not — I was running the FPC build. Distinct output names (`_pxx` / `_fpc`)
+from the start, or the differential lies to you and reads as a discovery.
+
+**A brace comment does not nest, so `{$MODE DELPHI}` inside one is ARMED.** The
+first draft of the test documented the mode table using directive spelling; FPC
+parsed it as a real directive and refused the file. Mode names are written bare
+in the test for this reason, with a note saying why.
+
 ## Gate
 
 `sslprobe` above completes the handshake and prints `ssl=0` under pxx, matching
 FPC. Then item (d) of `feature-real-dynlib-loader` can add a real end-to-end TLS
 assertion to `lib-test`.
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.
