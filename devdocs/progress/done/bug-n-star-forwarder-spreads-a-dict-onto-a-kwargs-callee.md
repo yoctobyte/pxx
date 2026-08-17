@@ -4,6 +4,8 @@ prio: 35
 type: bug
 blocked-by: []
 summary: "`def g(**kw)` called as `g(**d)` raises `TypeError: forwarded call got 2 arguments, expected 1 to 1` at RUN TIME. PyStarForwardCall reads Procs[].ParamCount, which counts the `kw` collector as one ordinary named slot, so it tries to spread the dict's keys onto it instead of passing the dict INTO it. ProcPyKwIdx already records the collector — the forwarder just never consults it."
+status: done
+owner: frank2
 ---
 
 # The star forwarder spreads a dict onto a callee that has its own `**kwargs`
@@ -93,3 +95,60 @@ with 0/1/2 keys, `g(a=1, b=2)` direct (must not regress), `f(**d)` on an
 ordinary def (must not regress), `f(*[], **{"b": 9})` default preservation,
 and `dict(**d)`. Then `tools/gate.sh quick` — **including the FPC seed canary**,
 which is what caught a duplicate-forward error PXX tolerated in `a057789bc`.
+
+---
+
+## FIXED 2026-08-17 (frank2, Track N) — `pyparser.inc` only, no pin
+
+The diagnosis held exactly. Four edits in `PyStarForwardCall`, all guarded on a
+new `kwIdx`, so nothing outside the collector case changes:
+
+1. `kwIdx := ProcPyKwIdx[procIdx]` (only when a dict is actually forwarded), and
+   `if kwIdx = 0 then total := 0` — the collector fills no positional slot, so
+   the positional count is zero and `required` falls out of it.
+2. The arity guard switches from `pystar_check_arity_kw` to the list-only
+   `pystar_check_arity`. `g(**{"a":1,"b":2})` supplies **zero** positional
+   arguments; the _kw guard counts the dict's keys and was the thing raising
+   "got 2 arguments, expected 1 to 1". The list-only guard still rejects `g(1)`,
+   which CPython also refuses.
+3. **The dict must also stop being spliced into that guard's argument list.**
+   Missing this was the one wrong step: swapping the guard alone left the
+   arguments as `(list, dict, lo, hi)`, so `dict` bound as `lo` and the symptom
+   simply changed to "got 2 arguments, expected 0 to 0". Caught by running it,
+   not by reading it.
+4. The collector's slot is allocated outside the positional fill loop and
+   assigned the dict whole, then appended as the last call argument — where
+   Python puts it.
+
+### Measured, CPython as oracle, 11/11
+
+New test `test/test_nilpy_kwargs_collector_forward.npy` (`.expected` generated
+from CPython) covers `g(**d)` with 2/1/0 keys, `g(*[], **d)`, nested
+`fwd(*args, **kwargs)` into a `**kw` callee, both direct-call forms, and the
+regression side: `f(**d)`, `f(**{"b": 9})` default preservation, `f(*[3,4])`,
+`dict(**d)`.
+
+`make compiler/pascal26` converged, `tools/gate.sh quick` **GREEN with the FPC
+seed canary PASS** — gated before committing precisely so the canary ran rather
+than printing SKIP on a clean tree.
+
+### Deliberately NOT fixed: the remainder case (`kwIdx > 0`)
+
+`def f(a=1, **kw)` called as `f(**{"a":5,"x":7,"y":8})` must give `a=5` and
+`kw={"x":7,"y":8}` — the collector gets the **unconsumed** keys. There is no
+runtime helper for that remainder (`pylib.pas` has `pystar_arg_kw`, `_has`,
+`_argc`, `_check_arity*` and nothing that subtracts consumed names), and adding
+one means `compiler/builtin/**`, which **needs a PIN** and is therefore
+coordinator-scheduled.
+
+So `kwIdx > 0` is explicitly reset to -1 and takes the old path unchanged. It
+still fails, exactly as before, rather than silently answering `len(kw) = 3`
+where CPython says 1 — a wrong value would have been worse than the error.
+Filed: [[bug-n-kwargs-collector-alongside-named-params-needs-the-remainder]].
+
+Also still out of scope and unchanged: `def h(*args, **kw)` called as `h(**d)`
+compile-fails before reaching the forwarder (guard `ProcPyStarIdx < 0` in
+`parser.inc`, Track A).
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.

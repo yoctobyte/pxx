@@ -52,8 +52,8 @@ _none_
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 25 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-n-abs-of-a-complex-raises-typeerror | N | 35 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 35 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
+| bug-n-kwargs-collector-alongside-named-params-needs-the-remainder | N | 30 | bug | `def f(a=1, **kw)` called as `f(**{'a':5,'x':7,'y':8})` must give a=5 and kw={'x':7,'y':8} — the collector takes the UNCONSUMED keys. pylib has no helper that subtracts consumed names, and adding one is compiler/builtin/** which NEEDS A PIN, so this is coordinator-scheduled, not worker-startable. | — |
 | bug-n-pylib-cannot-reach-the-rtl-power-so-complex-magnitude-loses-ulps | N | 25 | bug | `pycomplex_pow` computes \|z\|**b as exp(b*ln\|z\|) — two roundings — where CPython calls pow() directly, so `(-8.0) ** 0.5` gives an imaginary part of 2.8284271247461894 against CPython's 2.8284271247461903 (~4 ulp). The cause is structural: pylib lives in compiler/builtin and cannot reach the RTL's correctly-rounded Power, which is why it carries its own series ln/exp in the first place. | — |
-| bug-n-star-forwarder-spreads-a-dict-onto-a-kwargs-callee | N | 35 | bug | `def g(**kw)` called as `g(**d)` raises `TypeError: forwarded call got 2 arguments, expected 1 to 1` at RUN TIME. PyStarForwardCall reads Procs[].ParamCount, which counts the `kw` collector as one ordinary named slot, so it tries to spread the dict's keys onto it instead of passing the dict INTO it. ProcPyKwIdx already records the collector — the forwarder just never consults it. | — |
 | bug-nilpy-an-extended-slice-cannot-be-assigned | N | 30 | bug | `l[::2] = [7, 8]` is a parse error. The READ form `l[::2]` works, and the plain-slice ASSIGN `l[1:3] = [9]` works; only the strided assignment is missing. | — |
 | bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds | N | 20 | bug | A dict VALUE as the `*=` target still rebinds, so an alias of it keeps the old contents. The parameter half landed 2026-08-15 (pymul_v_inplace); this is the residue, and `+=` has the same split. | — |
 | bug-nilpy-classmethod-constructors-on-builtin-types-are-absent | N | 25 | bug | `bytes.fromhex(\"6162\")` and `float.fromhex(\"0x1p3\")` are `undefined variable (bytes)` / `(float)` — the TYPE used as a namespace resolves only for the handful of names the stdlib table lists (int.from_bytes, dict.fromkeys, str.maketrans). | — |
@@ -419,9 +419,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1980)
+## done (1981)
 
-1980 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1981 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -568,7 +568,6 @@ _none_
 - [p 35] [A] bug-a-nilpy-double-star-in-a-mixed-argument-list
 - [p 35] [N] bug-n-abs-of-a-complex-raises-typeerror
 - [p 35] [N] bug-n-exec-ignores-a-caller-supplied-builtins-mapping
-- [p 35] [N] bug-n-star-forwarder-spreads-a-dict-onto-a-kwargs-callee
 - [p 35] [N] bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
 - [p 35] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
@@ -595,6 +594,7 @@ _none_
 - [p 35] [D] task-d-document-the-strict-overload-width-flag
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
 - [p 30] [B] bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents
+- [p 30] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder
 - [p 30] [N] bug-nilpy-an-extended-slice-cannot-be-assigned
 - [p 30] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
 - [p 30] [P] bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits

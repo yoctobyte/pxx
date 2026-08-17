@@ -15226,7 +15226,7 @@ function PyStarForwardCall(procIdx, listNode, dictNode: Integer): Integer;
 var required, total, fwdTotal, n, k, i, argNode, lastArg, callNode, elemNode: Integer;
     nameNode, headNode, hasArg, hasCall: Integer;   { the parameter's name literal and the was-it-supplied test, for a kwargs fetch; the arg chain's head }
     lenNode, cntNode, condNode, pairNode, ternNode, chkArg, a2, a3: Integer;
-    listSym, dictSym, asgn, listCi, dictCi: Integer;
+    listSym, dictSym, asgn, listCi, dictCi, kwIdx: Integer;
     slotSyms: array[0..15] of Integer;
     ptk: TTypeKind;
 begin
@@ -15265,6 +15265,26 @@ begin
   end;
 
   total := Procs[procIdx].ParamCount;
+  { A `**kwargs` COLLECTOR is not an ordinary named slot: it ABSORBS the
+    forwarded dict whole, it fills no positional position, and it is never
+    bound by looking up its own name as a key. ProcPyKwIdx records it (-1 =
+    none) and four constructor paths already consult it; this one never did.
+    So `def g(**kw)` was read as one named parameter called `kw`: the arity
+    guard asserted "1 to 1" against a two-key dict, and the spread loop
+    searched the dict for a key literally named "kw".
+    bug-n-star-forwarder-spreads-a-dict-onto-a-kwargs-callee
+
+    Scoped to kwIdx = 0 — a callee whose ONLY parameter is the collector, so
+    the whole dict goes in and no key is consumed first. With named parameters
+    beside it (`def f(a=1, **kw)`, kwIdx > 0) the collector must receive the
+    UNCONSUMED keys, and there is no runtime helper for that remainder; adding
+    one means pylib.pas, which is `compiler/builtin/**` and needs a PIN. Left
+    exactly as it was rather than silently handing over the whole dict, which
+    would answer len(kw) = 3 where CPython says 1. }
+  kwIdx := -1;
+  if dictSym >= 0 then kwIdx := ProcPyKwIdx[procIdx];
+  if kwIdx > 0 then kwIdx := -1;   { the remainder case: unchanged }
+  if kwIdx = 0 then total := 0;    { the collector fills no positional slot }
   required := total;
   while (required > 0) and (required - 1 < MAX_PROC_PARAMS) and
         ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + (required - 1)] do
@@ -15312,7 +15332,10 @@ begin
     "got 2 arguments, expected 3 to 3": the keyword was collected at the callee
     and then dropped at the forwarded call site.
     feature-nilpy-star-args-kwargs }
-  if dictSym >= 0 then
+  { ...and the dict is spliced into the guard's arguments only when the guard
+    is the _kw one. With a collector absorbing it there is no dict operand to
+    pass, and leaving it spliced bound it as the `lo` argument. }
+  if (dictSym >= 0) and (kwIdx < 0) then
   begin
     a3 := AllocNode(AN_ARG);
     ASTLeft[a3] := PyMakeIdent(dictSym);
@@ -15320,7 +15343,12 @@ begin
     ASTRight[chkArg] := a3;
   end;
   callNode := AllocNode(AN_CALL);
-  if dictSym >= 0 then
+  { pystar_check_arity_kw counts the dict's keys as arguments, which is right
+    when they land on named slots and wrong when the collector swallows them:
+    `g(**{"a":1,"b":2})` supplies ZERO positional arguments to `def g(**kw)`.
+    Count the list only in that case — the list-only guard still rejects
+    `g(1)`, which CPython refuses too. }
+  if (dictSym >= 0) and (kwIdx < 0) then
     ASTIVal[callNode] := FindProc('pystar_check_arity_kw')
   else
     ASTIVal[callNode] := FindProc('pystar_check_arity');
@@ -15421,6 +15449,18 @@ begin
     PyHoistStmt(asgn);
   end;
 
+  { the collector's own slot: the forwarded dict, whole and unspread. Allocated
+    here rather than in the loop above because that loop walks the POSITIONAL
+    slots, which this is not. }
+  if kwIdx >= 0 then
+  begin
+    slotSyms[kwIdx] := AllocVar(PyHiddenName('fwda'), tyVariant);
+    asgn := AllocNode(AN_ASSIGN);
+    ASTLeft[asgn] := PyMakeIdent(slotSyms[kwIdx]);
+    ASTRight[asgn] := PyMakeIdent(dictSym);
+    PyHoistStmt(asgn);
+  end;
+
   { one call per accepted arity, folded into a ternary chain from the top down;
     the LOWEST arity is the final else, which the arity guard has made safe }
   Result := -1;
@@ -15469,6 +15509,15 @@ begin
           + ' has a type no runtime argument can be coerced to');
       argNode := AllocNode(AN_ARG);
       ASTLeft[argNode] := elemNode;
+      if lastArg < 0 then ASTLeft[callNode] := argNode
+      else ASTRight[lastArg] := argNode;
+      lastArg := argNode;
+    end;
+    { and the collector last, which is where Python puts it }
+    if kwIdx >= 0 then
+    begin
+      argNode := AllocNode(AN_ARG);
+      ASTLeft[argNode] := PyMakeIdent(slotSyms[kwIdx]);
       if lastArg < 0 then ASTLeft[callNode] := argNode
       else ASTRight[lastArg] := argNode;
       lastArg := argNode;

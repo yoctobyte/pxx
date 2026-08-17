@@ -1,0 +1,11 @@
+two keys   2
+one key    1
+no keys    0
+empty star 2
+nested fwd 2
+direct kw  2
+direct non 0
+named full 65
+named part 91
+positional 43
+dict ctor  {'a': 5, 'b': 6}

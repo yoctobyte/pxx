@@ -1,0 +1,31 @@
+# A **kwargs COLLECTOR absorbs a forwarded dict whole — it is not an ordinary
+# named slot to be bound by looking up its own name as a key.
+# bug-n-star-forwarder-spreads-a-dict-onto-a-kwargs-callee
+
+
+def g(**kw):
+    return len(kw)
+
+
+def fwd(*args, **kwargs):
+    return g(*args, **kwargs)
+
+
+d = {"a": 5, "b": 6}
+print("two keys  ", g(**d))
+print("one key   ", g(**{"z": 1}))
+print("no keys   ", g(**{}))
+print("empty star", g(*[], **d))
+print("nested fwd", fwd(a=1, b=2))
+print("direct kw ", g(a=1, b=2))
+print("direct non", g())
+
+# and the ordinary named-slot path must keep working, defaults included
+def f(a=1, b=2):
+    return a + b * 10
+
+
+print("named full", f(**d))
+print("named part", f(**{"b": 9}))
+print("positional", f(*[3, 4]))
+print("dict ctor ", dict(**d))
