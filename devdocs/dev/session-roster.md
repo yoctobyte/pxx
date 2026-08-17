@@ -25,8 +25,30 @@ still apply — they prevent conflicting EDITS to the same file, not tree damage
 1. Own the **A/P slot**. A and P share `lexer.inc`/`parser.inc` and must never be
    edited concurrently. Exactly one session may hold either at a time; the
    coordinator says who.
-2. **Serialize pins.** `make stabilize-fast && make pin` holds a repo lock and
-   blocks every other lane. One at a time, announced.
+2. **Pin — the coordinator RUNS it, not just schedules it** (human, 2026-08-17).
+   `make stabilize-fast && make pin` (~35s) holds a repo lock and blocks every
+   other lane, so one at a time, announced. A worker that needs a pin STOPS and
+   hands up; it never takes the lock itself.
+
+   Measured before deciding: ~12 pin-touching commits/week, ~1.7/day (three on
+   2026-08-16 alone). That is ~7 minutes of lock per week — so a dedicated
+   pinning checkout was rejected as over-engineering. The 35s was never the cost;
+   deciding WHEN is, and that needs to know who is mid-work, which is this role's
+   job anyway. A separate checkout would not even remove the lock: it exists
+   because a pin writes `stable_linux_amd64/**` to shared master, a repo-level
+   constraint, not a working-tree one.
+
+   **Track T must NOT pin.** CLAUDE.md: "the watcher never pins — it writes only
+   `tstate/`". T is the role that MEASURES health; pinning BLESSES binaries.
+   Keeping them apart means a bad measurement cannot directly produce a bad pin —
+   there is an independent party in between, which has already earned its keep
+   (two of T's own reads needed correcting on 2026-08-17, both caught by the
+   other side checking). "T writes only tstate" is a simple checkable invariant
+   and is not worth trading for seven minutes a week.
+
+   Batching is available if B starts waiting: several builtin changes can ride
+   one pin, trading a slightly staler `PXX_STABLE` for fewer lock events. Not the
+   default — per-fix pinning bisects better.
    **A change under `compiler/builtin/**` (pylib.pas, builtinheap.pas) NEEDS a
    pin** — Track B and the lib tests build with `PXX_STABLE`, so an unpinned
    builtin change is invisible to them and breaks the gate fixedpoint. That makes
