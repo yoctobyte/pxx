@@ -1192,7 +1192,8 @@ procedure ExDecOfMant(mant: Int64; exp2: Integer;
                       var ds: AnsiString; var decExp: Integer);
 var
   buf: TExDecBuf;
-  n, i, k, fracDigits: Integer;
+  n, i, j, k, at, fracDigits: Integer;
+  v: Int64;
   lp: AnsiString;
 begin
   n := 0;
@@ -1218,14 +1219,33 @@ begin
     while k > 0 do begin ExDecMul(buf, n, 5); k := k - 1; end;
   end;
   while (n > 1) and (buf[n - 1] = 0) do n := n - 1;
-  { top limb unpadded (that is what drops the leading zeros), the rest padded
-    to the full nine so limb boundaries do not swallow interior zeros }
-  ds := IntToStr(buf[n - 1]);
+  { Top limb unpadded (that is what drops the leading zeros), the rest padded
+    to the full nine so limb boundaries do not swallow interior zeros.
+
+    Built into a string sized ONCE and filled by index. The obvious spelling —
+    `ds := ds + lp` per limb, each limb zero-padded by `lp := '0' + lp` — is
+    quadratic: it reallocates and recopies the whole accumulated prefix every
+    limb, and a subnormal expands to ~765 digits (85 limbs). That was measured
+    as the single largest cost in StrToFloat's exact path, which calls this
+    about four times per parse: removing it took the mid-range case from 99 to
+    30 us per value and subnormals from 2.78 ms to 1.22 ms
+    (bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents).
+
+    Digits are emitted low-to-high within each limb, which is why the inner
+    loop walks j downwards into a slot whose base is already known. }
+  lp := IntToStr(buf[n - 1]);
+  SetLength(ds, Length(lp) + 9 * (n - 1));
+  for i := 1 to Length(lp) do ds[i] := lp[i];
+  at := Length(lp);
   for i := n - 2 downto 0 do
   begin
-    lp := IntToStr(buf[i]);
-    while Length(lp) < 9 do lp := '0' + lp;
-    ds := ds + lp;
+    v := buf[i];
+    for j := 9 downto 1 do
+    begin
+      ds[at + j] := Chr(Ord('0') + Integer(v mod 10));
+      v := v div 10;
+    end;
+    at := at + 9;
   end;
   decExp := Length(ds) - 1 - fracDigits;
 end;

@@ -72,3 +72,101 @@ magnitude; `test/lib_floattostr.pas` and the round-trip tests stay green
 byte-for-byte (correct rounding is not negotiable here); a randomised
 round-trip sweep — `FloatToStrExact(x, 17)` then `StrToFloat` — returns exactly
 `x` across the whole exponent range including subnormals; `make lib-test` green.
+
+## 2026-08-17 (frank3) — the stated cause is WRONG; a 2.2-3.1x fix landed; the gate is NOT met
+
+Measured against `pinned` **v344**, `-O2`. Reproduced the ticket's numbers first
+(95.6 us mid / 2657 us small / 2584 us sub), so the symptom is exactly as filed.
+
+### The diagnosis in this ticket is wrong, and it changes the fix
+
+> *"a 63-step bit-pattern search"*
+
+**It is about 4 steps, not 63.** Instrumented `ExDecNearest`'s `CmpBits` with a
+counter:
+
+| class | `ExDecNearest` calls | `CmpBits` calls | per parse | longest expansion |
+| --- | --- | --- | --- | --- |
+| mid | 322 | 1336 | **4.1** | 53 digits |
+| small | 400 | 1600 | **4.0** | 765 digits |
+| subnormal | 400 | 1600 | **4.0** | 765 digits |
+
+The search is seeded from `ExDecEstimate` and the doubling bracket converges
+almost immediately — the 63-step figure would be the *unseeded* worst case, and
+the seed is doing its job. So the cost is **not the number of comparisons, it is
+the price of one**, and the "widen the fast path so fewer inputs reach the
+search" framing is aimed at the wrong term: 4 comparisons at ~650 us each is
+what 2.6 ms is made of.
+
+### What the price of one comparison actually was
+
+Each comparison expands a candidate double to its exact decimal via
+`ExDecOfMant`, which built its digit string as:
+
+```pascal
+ds := IntToStr(buf[n - 1]);
+for i := n - 2 downto 0 do
+begin
+  lp := IntToStr(buf[i]);
+  while Length(lp) < 9 do lp := '0' + lp;   { and this, per limb }
+  ds := ds + lp;                            { reallocates + recopies everything }
+end;
+```
+
+That is **quadratic**: every limb reallocates and recopies the whole accumulated
+prefix, and a subnormal is ~765 digits over 85 limbs. Replaced with a string
+sized once and filled by index.
+
+| class | before | after | speedup |
+| --- | --- | --- | --- |
+| mid-range | 95.6 us | **30.5 us** | 3.1x |
+| small (~1e-310) | 2657 us | **1192 us** | 2.2x |
+| subnormal (~1e-320) | 2584 us | **1166 us** | 2.2x |
+
+The residue is the big-decimal multiply itself — for a subnormal, `exp2` is
+about -1074, so ~82 rounds of `ExDecMul(buf, n, 5^13)` over a limb array growing
+to ~85, i.e. ~14k 64-bit divisions per expansion, times four expansions. That is
+inherent to expanding-to-exact-decimal and will not come down by tuning; it
+comes down by **not doing it**, which is what Eisel-Lemire buys.
+
+### Correctness — the part that was not negotiable
+
+- **Round-trip sweep, 218,883 values, 0 mismatches**: every binary exponent x 8
+  mantissas, the 2000 smallest subnormals one by one, 300 powers of two each
+  way, the named boundaries, and 200k random finite bit patterns.
+  `FloatToStrExact(x, 17)` then `StrToFloat` returns the identical bit pattern.
+- **Formatter output byte-identical to before the change**: 155,884 lines
+  (`FloatToStrExact` at every precision 1..17 plus `FloatToStr`, over every
+  exponent and the subnormal floor) diffed against a build of the pre-change
+  `sysutils.pas`. `cmp` clean. `ExDecOfMant` feeds both directions, so this was
+  the check that mattered.
+- `make lib-test` green.
+
+### Landed as a gated test, because nothing guarded this
+
+`test/lib_strtofloat_roundtrip.pas` (~2.7 s, in `make lib-test`). `lib_floattostr`
+checks the FORMATTER against expected strings; the exact PARSE path had **no
+test at all**, which is how a performance change here could have traded away
+correct rounding silently.
+
+It immediately earned its place by flagging `-0.0`. That turned out to be **FPC
+parity, not a bug**: measured against FPC 3.2.2, `FloatToStr(-0.0)` prints `0`
+there too, while `StrToFloat('-0')` returns negative zero — the formatter drops
+a sign the parser preserves. pxx agrees on both halves bit for bit. (CPython
+differs, `repr(-0.0)` is `-0.0`, but FPC is this RTL's oracle.) The asymmetry is
+now asserted explicitly so a future one-sided "fix" breaks the test.
+
+### This ticket's gate is NOT met — deliberately left open
+
+> *"The mid-range and small-exponent rows above drop by at least an order of
+> magnitude"*
+
+3.1x and 2.2x are not 10x. **Eisel-Lemire remains the fix** and is now correctly
+scoped by the measurement above: it wins by removing the exact expansion from
+the common path entirely, not by reducing a step count that was never 63. The
+quadratic string build was a real and independent defect sitting underneath it,
+worth landing on its own — it also speeds up `FloatToStr` for every long
+expansion — but it is not the ticket.
+
+Moved back to `backlog/` so it can be ranked: it is not parked waiting on
+anything, it is remaining work.
