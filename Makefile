@@ -6113,6 +6113,13 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_for_var_inline26)" = "$$(printf '10\n6\nx=0\nx=10\nx=20\nx=30\nc=a\nc=b\nc=c\nr=1,2\nr=3,4\nm=0\nm=2')"
 	./$(COMPILER) test/test_case_sensitive_unit.pas $(TESTTMP)/test_case_sensitive_unit26
 	test "$$($(TESTTMP)/test_case_sensitive_unit26)" = "$$(printf 'unit\n7')"
+	# `System.X` reaches the BUILTIN even when a local is spelled like it. The
+	# exemption is written per intrinsic, so Ord/Chr and Length had it while
+	# High/Low/GetMem/QWord did not — each a live divergence from FPC 3.2.2,
+	# which is what this pins. Expectation verified against FPC directly.
+	# meta-a-second-paths-reimplement-the-first-paths-decisions
+	./$(COMPILER) test/test_pascal_system_qualified_intrinsic.pas $(TESTTMP)/test_pascal_sysqual26
+	test "$$($(TESTTMP)/test_pascal_sysqual26)" = "$$(printf '4\n0\nalloc\n300\n99 98 97 96')"
 	./$(COMPILER) test/test_qualified_units.pas $(TESTTMP)/test_qualified_units26
 	test "$$($(TESTTMP)/test_qualified_units26)" = "$$(printf 'from-program\nfrom-unit\n1074030207\n1074030207\n3\n7\n11\n22\n101\n201')"
 	./$(COMPILER) test/test_uses_alias.pas $(TESTTMP)/test_uses_alias26

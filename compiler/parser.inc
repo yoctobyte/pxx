@@ -13346,7 +13346,8 @@ begin
         AN_PTR_CAST with ASTIVal = -1 is the real-width-truncating value cast (the same node
         `Byte(x)` builds), not the Integer/LongWord value-pun. A variable, routine or user
         type alias of the same name still wins. }
-      if (FindSym(name) < 0) and (FindProc(name) < 0) and (FindTypeAlias(name) < 0) and
+      if ((qUnit = -2) or ((FindSym(name) < 0) and (FindProc(name) < 0) and
+                           (FindTypeAlias(name) < 0))) and
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
          (OrdinalNameToTk(name) <> tyUnknown) then
       begin
@@ -13499,7 +13500,8 @@ begin
         Exit;
       end;
 
-      if CaseEqual(name, 'TypeInfo') and (FindProc(name) < 0) and (FindSym(name) < 0) and
+      if CaseEqual(name, 'TypeInfo') and
+         ((qUnit = -2) or ((FindProc(name) < 0) and (FindSym(name) < 0))) and
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
@@ -14027,7 +14029,8 @@ begin
 
       { GetMem(size): function form, soft keyword (statement form GetMem(p, n)
         lives in ParseStatementAST). }
-      if CaseEqual(name, 'GetMem') and (procIdx < 0) and (FindSym(name) < 0) and
+      if CaseEqual(name, 'GetMem') and
+         ((qUnit = -2) or ((procIdx < 0) and (FindSym(name) < 0))) and
          (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
@@ -14146,8 +14149,24 @@ begin
 
       { High(x): soft-keyword intrinsic. High(arr) := Length(arr) - 1 — reuses
         the Length call + a subtraction, so no new IR/codegen; works for open
-        arrays, dyn arrays and (via the folds) static arrays alike. }
-      if CaseEqual(name, 'High') and (procIdx < 0) and (FindSym(name) < 0) and
+        arrays, dyn arrays and (via the folds) static arrays alike.
+
+        `(qUnit = -2)` is the SYSTEM-QUALIFIER EXEMPTION, and the same expression
+        appears verbatim at every soft-keyword intrinsic here — grep it. Writing
+        `System.High(a)` names the builtin on purpose, exactly as `System.Move`
+        does inside a class with its own Move, so a same-named local must not
+        take it: `var High: Integer` made `System.High(a)` report "undefined
+        variable (High)" where FPC 3.2.2 prints the bound.
+
+        It is spelled out per site because each intrinsic tests its own
+        preconditions. That is also how it drifted: `Ord`/`Chr` and `Length` had
+        it (someone hit Synapse's `System.Length(buf)`), and `High`, `Low`,
+        `GetMem`, `TypeInfo` and the ident-spelled ordinal casts did not — every
+        site broken until somebody tripped over that one. Found by enumerating
+        the guards rather than by falling over them.
+        meta-a-second-paths-reimplement-the-first-paths-decisions }
+      if CaseEqual(name, 'High') and
+         ((qUnit = -2) or ((procIdx < 0) and (FindSym(name) < 0))) and
          (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
@@ -14222,7 +14241,8 @@ begin
         compile-time constant. Low of an array variable is the declared lower
         index bound — Syms[].ConstVal for a 1-D static array (array[5..9] ->
         5); 0 for open/dynamic arrays and 0-based statics. }
-      if CaseEqual(name, 'Low') and (procIdx < 0) and (FindSym(name) < 0) and
+      if CaseEqual(name, 'Low') and
+         ((qUnit = -2) or ((procIdx < 0) and (FindSym(name) < 0))) and
          (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');

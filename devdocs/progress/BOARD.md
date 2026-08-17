@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| meta-a-second-paths-reimplement-the-first-paths-decisions | A | 60 | meta | One concept, two mechanisms, and only one carries the capability | — |
 
 ## unfinished (13)
 
@@ -39,7 +41,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (224)
+## backlog (223)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -251,7 +253,6 @@ _none_
 | idea-c-realworld-test-targets | C | 25 | idea | Real-world C programs as compiler stress tests (brainstorm) | — |
 | idea-cross-namespace-ambiguity-warning | A | 10 | idea | Warn when a call name matches in BOTH the Pascal and C namespaces | — |
 | idea-public-status-page | D | 30 | idea | Publish a live compatibility/corpus status report on the website — the static docs/reference/status.md page exists; wire it to the already-generated tstate reports (twatch_web conformance.html/bench.html/dashboard.html) so public numbers stay current instead of hand-maintained | — |
-| meta-a-second-paths-reimplement-the-first-paths-decisions | A | 60 | meta | One concept, two mechanisms, and only one carries the capability | — |
 | meta-constant-normalisation | A | 45 | meta | Standing index: stop writing compiler code that branches on constant-vs-variable. Each constant expression becomes its own uniquely-named read-only variable, so downstream has ONE shape to handle. Goal is less double work on future fixes, not speed. | — |
 | meta-dialect-extensions-and-fpc-strict | A | 60 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-float-accuracy-policy | U | 40 | meta | Standing index for the float-accuracy category the owner asked for on 2026-08-16: collect every float/exact-float ticket in one place, do NOT fix them piecemeal, and decide once how the fast/exact split should work — because the shipped policy (fast by default, 1-2 ulp never a bug) and the shipped TESTS (bit-exact CPython .expected) currently contradict each other. | — |
@@ -487,7 +488,6 @@ _none_
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
 - [p 60] [P] feature-pascal-corpus-oop
-- [p 60] [A] meta-a-second-paths-reimplement-the-first-paths-decisions
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [C] bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
