@@ -13024,19 +13024,34 @@ function PyCxCosSin(x: Double; wantSin: Boolean): Double;
 const PyTwoPi  = 6.283185307179586;
       PyPi     = 3.141592653589793;
       PyHalfPi = 1.5707963267948966;
+      { pi/2 as a two-double sum: Hi is the nearest double, Lo the part it cannot
+        hold. Hi + Lo is pi/2 to ~107 bits, so the reduction below keeps the
+        residual that single-precision subtraction annihilates. }
+      PyHalfPiHi = 1.5707963267948966;
+      PyHalfPiLo = 6.123233995736766e-17;
 var t, term, sum, xx, sn, cs: Double; i, n, q: Integer; neg: Boolean;
 begin
   { Reduce to [-pi, pi], then to a QUADRANT: the Taylor series is accurate to
     about a ulp on [-pi/4, pi/4] and drifts several ulp by pi/3, which is
     exactly where `(-8) ** (1/3)` lands. So fold into the octant and put the
-    quadrant back with the sin/cos identities. }
+    quadrant back with the sin/cos identities.
+
+    The subtraction is CODY-WAITE, in two pieces, and that is load-bearing rather
+    than fussy. PyHalfPi is the DOUBLE nearest pi/2, which differs from pi/2 by
+    about 6.12e-17 -- and that residual IS the answer near a quadrant boundary.
+    Subtracting the single-double constant made `t - 1*PyHalfPi` come out as
+    EXACTLY 0.0 for x = pi/2, so cos(pi/2) returned -0.0 where the true value is
+    6.123233995736766e-17. That is what made `(-4) ** 0.5` answer `(-0+2j)`
+    against CPython's `(1.2246467991473532e-16+2j)`: the real part is nothing but
+    this residual, scaled. Splitting the constant keeps it.
+    bug-n-pow-expected-predates-the-complex-type-and-pxx-differs-from-cpython }
   t := x;
   while t > PyPi do t := t - PyTwoPi;
   while t < -PyPi do t := t + PyTwoPi;
   neg := False;
   if t < 0.0 then begin t := -t; neg := True; end;   { sin is odd, cos is even }
   q := Trunc(t / PyHalfPi + 0.5);                     { nearest quadrant }
-  t := t - q * PyHalfPi;
+  t := (t - q * PyHalfPiHi) - q * PyHalfPiLo;
   q := q and 3;
 
   { one series each for sin and cos of the reduced angle }

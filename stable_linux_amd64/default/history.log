@@ -342,3 +342,4 @@
 2026-08-16T07:55:43Z  v342  dc6f0aa6985af6798cebb5d787bebdc37b709dd83b6275c2fc174777c74256d2  467a4e5dab2d1bd7ad244bb9375c3a2924ba065c  fix(P): a static local const survives the rollback and the inliner
 2026-08-16T09:27:12Z  v343  3aec5d280a57086cbfd970e220baff88b5f5af7934e37dbbc37cbff56993a077  4b7c49db4027826d1bee53a1e6a9d2322af8456d  tickets(T): the FPC probes measure against 3.2.2, so they inherit its bugs
 2026-08-16T10:12:12Z  v344  47836e63248f14048e86b26e2083028173651ec6e209349c17d4065142e0430c  341dbf99fd4acc5f38b11749041bb10920541601  fix(P): a unit-qualified class alias is a real re-export, and {$threadsafe on} defines PXX_THREADSAFE
+2026-08-17T18:57:06Z  v345  22067075f38a8174e504c81f5c875f910e6f473554e388e00d6d11d0a4142a75  dbe7a700d9c478bcecbd45d7622b9706dc6fc5b2  docs(progress): record the shas the resolves landed as
