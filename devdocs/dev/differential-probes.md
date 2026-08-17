@@ -127,3 +127,29 @@ outcome and not a sign the lanes are wrong.
 `devdocs/dev/debugging-playbook.md` (step 1 — which tool, in which order) and
 the tool table in `CLAUDE.md`. Ticket write-ups cite them constantly; those are
 history, not instructions — this page and the script headers are the live docs.
+
+## Hygiene: a differential that overwrites one of its own arms LIES TO YOU
+
+Recorded 2026-08-17, Track A, while chasing the Synapse TLS crash.
+
+The FPC control was built as `sslprobe` — **the same output name as the pxx
+binary**. The next three `LD_PRELOAD` experiments then "proved" that preloading
+libcrypto fixed the crash. They were running the FPC build.
+
+The failure mode is worse than a wasted hour: **it reads as a discovery.** The
+experiment produces a clean, consistent, repeatable result that points somewhere
+plausible and wrong, and nothing about the output says which binary produced it.
+
+**Rule: distinct output names from the very first command**, e.g. `probe.pxx` and
+`probe.fpc`, never a bare shared name you intend to rebuild. If a probe script
+takes an oracle flag, make it name the artefact after the oracle.
+
+Same family as "to count how many times something ran, the observable must live
+outside the thing being counted" — in a differential, the evidence must sit
+outside the arm being varied. See also the standing rule that any reported result
+names the sha of the binary it came from.
+
+**Adjacent Pascal trap from the same session:** a brace comment does **not** nest,
+so `{$MODE DELPHI}` written inside `{ ... }` as documentation is a **live
+directive**. Documenting a mode table in a `.pas` comment will change the mode or
+fail the parse. Use a spelling the preprocessor cannot read.
