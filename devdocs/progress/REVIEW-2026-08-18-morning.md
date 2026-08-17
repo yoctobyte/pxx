@@ -237,6 +237,32 @@ Worth noting *how* they were found: a lane doing its own work walked into them.
 That is the corpus argument again — the walls are where real code goes, not where
 we looked.
 
+## Two corrections the workers made to ME, both worth your attention
+
+Because they bear on how much unsupervised coordination is safe:
+
+**1. I told a worker to revert a workaround the night its bug was fixed.** It would
+have turned `lib-test` red — the fix postdates pin v346, and Track B builds on
+`pinned`. The worker **re-measured the repro against `pinned`** (still exit 139)
+rather than reasoning from timestamps, and declined. I pinned v347; it then verified
+the pin carried the fix before firing. Now recorded as a rule: **"fixed" and
+"revertible" are two events separated by a pin**, so a registry row is *armed*, not
+*fired*, in that window — and an armed revert is a worker blocked on a pin, which is
+mine to clear.
+
+**2. I ranked a corpus lever off a table without asking how the number was
+produced**, filed Track A work on it, and dispatched a worker. The instrument was
+wrong. Track B offered me the excuse that a bad instrument outranks a bad
+measurement — true, and it doesn't cover the part that matters: I'd spent the day
+telling everyone to check what their instruments can distinguish. Their words, and
+they're right: *a wrong number is recoverable; not asking how a number was produced
+is what let it dispatch work.*
+
+Net for the night: my errors were four, all of the same shape as the compiler bugs
+we were fixing. Both workers caught the two that would have cost real time. That
+arrangement worked — but it worked because there were two of them awake, and it is
+the honest input to how much of this should run unattended.
+
 ## Housekeeping for the morning (not done overnight, deliberately)
 
 `tools/progress.sh check` reports **17 resolved tickets awaiting their landed sha**
