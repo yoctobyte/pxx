@@ -4,7 +4,7 @@ prio: 40
 type: bug
 blocked-by: [bug-a-nilpy-leading-double-star-in-a-call-is-not-detected]
 summary: "`f(**d)` — unpacking a dict into a call — is a PARSE error (\"expected expression\") for every callee shape: a plain def, a **kwargs def, a method, a constructor. Only the forwarding shape `f(*args, **kwargs)` inside a def that declares them works."
-status: unfinished
+status: done
 owner: —  # handed off: the fix is in parser.inc (Track A)
 ---
 
@@ -174,3 +174,65 @@ running `f(*[], **d)`. One command would have shown the machinery already
 existed. Same failure as `frank2-search-done-before-designing`, one level in:
 grep the tree for the capability before designing it, and when a ticket says
 "the machinery is nearly all there", check whether it is in fact all there.
+
+---
+
+## 2026-08-17 — the headline case is FIXED (a057789bc); the MIXED forms are not
+
+Verified at HEAD after the handoff landed, `make compiler/pascal26` converged,
+CPython as oracle:
+
+| shape | before | after `a057789bc` |
+| --- | --- | --- |
+| `f(**d)` plain def | parse error | **65** ✅ (CPython 65) |
+| `f(*lst)` | 43 | **43** ✅ no regression |
+| `dict(**d)` | `{'a': 5}` | **`{'a': 5}`** ✅ no regression |
+| `f(3, **d)` | parse error | **`error: expected expression`** ✗ |
+| `f(**d, b=7)` | — | **`error: unexpected token`** ✗ |
+| `f(**d, **e)` | — | **`error: unexpected token`** ✗ |
+
+### Why the mixed forms are a SEPARATE defect, not an incomplete fix
+
+The fix gave the leading position the look-ahead the trailing one had, which is
+exactly what was scoped. The mixed forms fail somewhere else:
+
+- `f(3, **d)` never enters the star-forwarding branch at all — that branch is
+  guarded on `CurTok.Kind = tkStar` at the **start** of the argument list, and
+  here the first token is `3`. So it goes down the ordinary argument loop, which
+  has no `**` element handling. Fixing it means teaching that loop, not
+  extending the branch.
+- `f(**d, b=7)` / `f(**d, **e)` do enter the branch, but its trailing handling
+  accepts only a single `*`/`**` follower.
+
+This ticket's own design section predicted *"Mixed `f(x, **d)` and `f(**d, y=1)`
+fall out of the same lowering"* — measured, they do not. They are the ordinary
+argument loop's problem.
+
+Filed separately: [[bug-a-nilpy-double-star-in-a-mixed-argument-list]] (Track A,
+`parser.inc` again — not N's file).
+
+### Status
+
+The ticket's title claim is now false for the simple form and true for the mixed
+one. **Resolving it** on the simple form, with the residual carried by the new
+A ticket and the three callee gaps below carried separately. Keeping it open
+would hide that the common case works.
+
+### The three callee gaps (unchanged, still out of scope here)
+
+Re-measured at HEAD: `def g(**kw)` called as `g(**d)` now gets *past* the parse
+and fails at run time —
+
+```
+TypeError: forwarded call has no value for parameter 'kw' —
+an unexpected keyword argument was passed
+```
+
+(the message changed with the fix; it was "got 2 arguments, expected 1 to 1").
+Still wrong, still misleading — a `**kwargs` callee should simply receive the
+dict. **`PyStarForwardCall` is in `pyparser.inc`, which IS Track N's file**, so
+unlike the parse defects this one is mine to fix. Taking it next.
+Constructors-with-`**kwargs` and defaulted-methods stay refused by name.
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.
