@@ -402,6 +402,61 @@ so its net unblock is **zero**. That is a measurement that stopped work rather t
 starting it, and it was only visible by writing the shim to scratch and re-running
 the ladder.
 
+## Overnight: the one finding worth your time
+
+**Six closed tickets, one concept, and the class is still live.** A red that is
+really a blown time budget is indistinguishable in the record from a red that is a
+wrong value — and it has now been fixed six separate times, per-job, without the
+recurrence stopping.
+
+`tools/testmgr.py` reasons about this well. It stretches a job's budget when a
+co-tenant run is live (`PEER_TIME_FACTOR`), retries a co-tenant kill, and states the
+principle in its own comment: *"A kill/timeout while a co-tenant run was live is a
+statement about the BOX, not the artifact."*
+
+**None of that machinery can reach a `timeout N` written inside a make recipe** —
+and there are ten. The inner `timeout` kills the process, the recipe returns nonzero,
+`make` exits nonzero, and testmgr sees an ordinary `fail`. So the budget stays rigid
+on precisely the loaded box the stretching was designed for, the retry rule never
+fires, and the report cannot say TIMEOUT.
+
+That is why the six fixes did not generalise: **all six repaired testmgr's own
+timeouts.** The inner ones were never in scope, because from testmgr's side they do
+not look like timeouts at all.
+
+The worst instance is `Makefile:363` — a GUI binary under a virtual X server, the
+most load-sensitive shape in the suite, on a fixed 120s ceiling, inside a 2700-job
+tier. That is tonight's `callbacks.npy` red, and it is the fourth timeout-shaped red
+of the evening.
+
+Filed as `bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic`
+(T, p55) with three composable fixes, and an explicit note **not** to fix it by
+raising the constants — that trades a false RED for a slower suite and still leaves
+the two kinds of red indistinguishable, which is the cost the six closed tickets kept
+paying.
+
+**Why it is on this page rather than just in the queue:** the individual reds were
+each cheap to dismiss, which is exactly how the class survived six fixes. Worth
+knowing that a report you rely on has been merging two different failures all along.
+
+### The callbacks red itself
+
+Not closed as a flake — enriched and left open. Measured at HEAD with the job's own
+recipe: compiles, runs under Xvfb, exit 0, output byte-identical. The code is
+**identical** too — every commit between the accused sha and HEAD is prose. And the
+same sha reported GREEN on the native tier and RED on full, which puts the variable
+in the environment rather than the revision.
+
+Track T's watcher had auto-filed the stub, so this **enriched it in place** rather
+than hand-filing a duplicate. With T's agent down, enrichment — not filing — is the
+work that goes missing.
+
+One caution recorded in the ticket for the next reader: that sha carries a **third**
+verdict, `GREEN (slow)`, and it is not a re-run. The slow tier is exactly one demoted
+uforth shard and never touches `test-nilpy`. I read it as a confirming re-run for
+about a minute before checking. A per-sha verdict list invites reading later verdicts
+as superseding earlier ones when they cover disjoint job sets.
+
 ## Housekeeping for the morning (not done overnight, deliberately)
 
 `tools/progress.sh check` reports **17 resolved tickets awaiting their landed sha**
