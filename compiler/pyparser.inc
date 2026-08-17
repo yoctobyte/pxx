@@ -707,7 +707,12 @@ begin
 end;
 
 function PyStarOperandAsList(node, listCi: Integer): Integer; forward;
-function PyNewContainerTemp(const clsName, tag: AnsiString): Integer; forward;
+{ PyNewContainerTemp is forward-declared in parser.inc, which is included first
+  and now calls it (the leading `**d` lowering). Re-forwarding it here is an FPC
+  seed error -- "Function is already declared Public/Forward" -- since FPC is
+  single-pass and sees both. Same convention as PyMakeIdent / PyStarForwardCall,
+  noted at the PyMakeIdent comment above. PXX prescans and tolerates the
+  duplicate, so ONLY the seed build catches this. }
 procedure PyContainerCall1(tmpSym: Integer; const clsName, meth: AnsiString;
                            argA, argB: Integer); forward;
 

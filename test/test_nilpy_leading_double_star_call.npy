@@ -1,0 +1,27 @@
+# f(**d) with no leading *args.
+#
+# `**` lexes as TWO tkStar. The trailing star pair in the forwarding branch
+# always looked ahead for the second one; the LEADING position never did, so it
+# ate one star and handed `*d` to the expression parser -> "expected expression".
+# One concept, two sites, only the second told.
+#
+# Fixed by lowering to the `f(*[], **d)` spelling that already worked, rather
+# than adding a second forwarding mechanism: the keyword desugar the original
+# ticket proposed to build already existed.
+#
+# The last two rows are the regression risks -- dict(**d) and f(*lst) reach the
+# call machinery by DIFFERENT paths and must keep working.
+def f(a=1, b=2):
+    return a*10 + b
+
+d = {"a": 6, "b": 5}
+
+print(f(**d))                 # both keys supplied
+print(f(**{"b": 9}))          # partial: default for `a` must survive
+print(f(*[], **d))            # the pre-existing spelling, unchanged
+print(f(*[1], **{"b": 7}))    # positional + keyword together
+print(f(*[3, 4]))             # positional only
+
+print(dict(**d))              # regression risk: builtin callee
+lst = [8, 9]
+print(f(*lst))                # regression risk: ordinary list spread

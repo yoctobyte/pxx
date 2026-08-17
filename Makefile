@@ -1759,6 +1759,11 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_nilpy_ctor_kwargs_fallthrough.npy $(TESTTMP)/test_nilpy_ctorkwf26
 	$(TESTTMP)/test_nilpy_ctorkwf26 | diff -u test/test_nilpy_ctor_kwargs_fallthrough.expected -
 	$(TESTTMP)/test_nilpy_ctorargs26 | diff -u test/test_nilpy_ctor_star_and_kwargs.expected -
+	# f(**d) with no leading *args: `**` is two tkStar and only the TRAILING star
+	# pair looked ahead for the second. Last two rows are the regression risks --
+	# dict(**d) and f(*lst) reach the call machinery by different paths.
+	./$(COMPILER) test/test_nilpy_leading_double_star_call.npy $(TESTTMP)/test_nilpy_ldstar26
+	$(TESTTMP)/test_nilpy_ldstar26 | diff -u test/test_nilpy_leading_double_star_call.expected -
 	./$(COMPILER) test/test_nilpy_store_attr_of_an_element.npy $(TESTTMP)/test_nilpy_elemattr26
 	$(TESTTMP)/test_nilpy_elemattr26 | diff -u test/test_nilpy_store_attr_of_an_element.expected -
 	./$(COMPILER) test/test_nilpy_selector_on_a_dict_returning_call.npy $(TESTTMP)/test_nilpy_dictsel26

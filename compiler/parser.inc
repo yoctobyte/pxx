@@ -975,6 +975,7 @@ function PyFixIterableArgs(procIdx, argsHead, nArgs: Integer): Boolean; forward;
 { a builtin TYPE handed to a callback (Pointer) parameter — body in pyparser.inc }
 function PyFixCallableTypeArgs(const nm: AnsiString; argsHead, nArgs: Integer): Boolean; forward;
 function PyStarForwardCall(procIdx, listNode, dictNode: Integer): Integer; forward;   { *args/**kwargs forwarding call (pyparser.inc) }
+function PyNewContainerTemp(const clsName, tag: AnsiString): Integer; forward;   { a hoisted, empty pylib container temp (pyparser.inc) }
 function PyReprContainer(n: Integer): Integer; forward;   { repr() of a container node (pyparser.inc) }
 function PyMakeTruthy(n: Integer): Integer; forward;   { Nil Python truthiness, shared by bool()/if/not (pyparser.inc) }
 function VariantCastToTemp(n: Integer; target: TTypeKind): Integer; forward;   { a typecast of a VARIANT is the CONVERSION, not a reinterpret of the record; defined beside PromoDemoteToInt64 }
@@ -15875,6 +15876,31 @@ begin
                 not PyStarIsIterableForm(name) then
         begin
           Next;                          { the '*' }
+          { `f(**d)` with NO leading `*args`. `**` lexes as two tkStar, and only
+            the TRAILING star pair below ever looked ahead for the second one —
+            this leading position ate one star and handed `*d` to ParseArgExpr,
+            which reported `expected expression` at the call. One concept, two
+            sites, and only the second was told.
+
+            Lowered to the `f(*[], **d)` spelling that ALREADY works rather than
+            given a forwarding path of its own: PyStarForwardCall takes the dict
+            and binds its keys onto named slots, preserving defaults for the
+            absent ones. Building a second mechanism here would be the thing
+            normalise-dont-special-case warns about — measured by frank2, who
+            found the ticket's proposed keyword desugar already existed.
+            bug-a-nilpy-leading-double-star-in-a-call-is-not-detected }
+          if CurTok.Kind = tkStar then
+          begin
+            Next;                        { the second '*' }
+            ParseArgExpr;
+            fwdDict := CurASTNode;
+            { an empty positional list — same idiom the *args collectors use }
+            fwdList := PyMakeIdent(PyNewContainerTemp('TPyList', 'starkw'));
+            Expect(tkRParen, ')');
+            CurASTNode := PyStarForwardCall(procIdx, fwdList, fwdDict);
+            LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+            Exit;
+          end;
           ParseArgExpr;
           fwdList := CurASTNode;
           fwdDict := -1;
