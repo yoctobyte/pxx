@@ -35,7 +35,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (215)
+## backlog (216)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -218,6 +218,7 @@ _none_
 | feature-real-dynlib-loader | B | 45 | feature | Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect. | — |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
+| feature-t-fail-when-a-test-file-is-wired-into-no-build-rule | T | 45 | feature | A file in test/ is not a test until a build rule runs it. Two confirmed cases of a test that existed, passed, and was referenced by nothing — one ungated for two weeks. Proposed: a check (progress.sh check or testmgr) that fails when a test/*.expected or test/*.npy has no rule referencing it, converting the class from 'someone notices' to 'CI notices'. | — |
 | feature-t-fpc-probe-needs-a-trunk-oracle | T | 25 | feature | Every FPC-parity finding we produce is measured against installed FPC 3.2.2, so it inherits 3.2.2's bugs — and that has now twice produced a false 'pxx diverges from FPC' where pxx actually agreed with FPC trunk and only 3.2.2 was wrong. Give the probes a three-way verdict: pxx vs FPC-stable vs FPC-trunk. | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 20 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
 | feature-t-pasmith-rung-selftest | T | 35 | feature | A fuzz rung that has only ever been SILENT is indistinguishable from one that does not work. Proposes a --selftest that proves each rung's fold actually observes its construct, by MUTATING the generated program rather than by rebuilding an old compiler — cheaper, needs no checkout, and applies to rungs that were never written against a specific fix. | — |
@@ -528,6 +529,7 @@ _none_
 - [p 45] [P] feature-pascal-corpus-passrc
 - [p 45] [A] feature-pascal-exitcode-finalization-halt
 - [p 45] [B] feature-real-dynlib-loader
+- [p 45] [T] feature-t-fail-when-a-test-file-is-wired-into-no-build-rule
 - [p 45] [A] feature-toolchain-cli-ux
 - [p 45] [A] feature-writeln-as-library
 - [p 45] [A] meta-constant-normalisation
