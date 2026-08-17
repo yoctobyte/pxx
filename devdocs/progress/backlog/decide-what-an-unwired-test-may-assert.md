@@ -69,6 +69,49 @@ cost overrun.
 If option 2's yield is too slow to absorb, the honest fallback is to wire fewer
 files properly rather than all 61 cheaply.
 
+## A fourth form, measured — the oracle check that does not expire
+
+*Added 2026-08-17 by frank3, as a worked example rather than an opinion.*
+
+`test/lib_mimic_warnings.npy` (and `test/lib_mimic_six.npy`) were wired this way
+and it is worth naming, because it is option 2 with the verification made
+**permanent instead of historical**:
+
+> The test file is **valid CPython as well as valid NilPy**, imports the shim by
+> its real module name, and asserts only on the subset both implementations
+> agree on. So it runs two ways — `python3 t.py` and `pinned t.npy` — and both
+> print the same 9 `=ok` lines.
+
+Option 2 as written checks against the oracle **once, at wiring time**, and then
+records the answer. That answer is right when recorded and silently ages: nothing
+re-checks it, and if CPython's behaviour or our reading of it was wrong, the file
+looks exactly like a verified test forever after. Same failure mode as option 1,
+only delayed — which matters here because the ticket's own objection to option 1
+is *"nothing in the file says this expectation was never checked against
+anything."* A once-checked file says nothing either, past the day it was written.
+
+Making the test dual-runnable turns the oracle from a step in a procedure into a
+property of the file. It also forces the useful discipline: **you must decide
+what the two implementations genuinely share.** Concretely, `lib_mimic_warnings`
+asserts on stdout only, because stderr is where the shim deliberately differs
+(CPython walks the stack and prints `<file>:<line>:`; we cannot). Asserting on
+stderr would have encoded *our* format as if it were CPython's — option 1
+smuggled inside option 2. The divergence is stated in the file's docstring, so
+what is untested is visible rather than absent.
+
+**Where it applies is narrow, and that is the honest part.** It needs a frontend
+whose source is legal input to the reference implementation, so it is natural for
+NilPy (CPython runs the file), plausible for C (gcc compiles it), and **not
+available for Pascal** — an FPC-vs-pxx comparison needs two builds of one source,
+which is `tools/fpc_diff_probe.sh`'s job, not a property of a single file. So
+this does not replace option 2; it is the strictly better instance of it wherever
+the source is dual-legal, and Pascal still gets option 2 proper.
+
+One caution from wiring these: assert a **count** as well as the content
+(`lib-test` greps `= "9"`). My first version asserted 10 `=ok` lines when the
+file had 9 and lib-test went red — which is the check doing its job. Without it,
+a test that silently stops emitting half its assertions still passes.
+
 ## What changes on each answer
 
 - **3+2:** ~61 files wired over some days, a stream of new bug tickets, no false
