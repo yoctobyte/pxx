@@ -223,4 +223,4 @@ path that re-implements a MECHANISM cannot.** That distinction is worth carrying
 into `devdocs/dev/normalise-dont-special-case.md` the next time someone edits it.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 2611fb398.
