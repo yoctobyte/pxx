@@ -10,7 +10,7 @@ owner: frank2
 
 - **Type:** feature (Nil-Python frontend / stdlib surface) — **Track N**
   (the Tk binding underneath is Track B and already landed)
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-26 — needed now that the songformatter target is scoped to
   its GUI ([[feature-demo-songformatter-pxx-target]]).
 
@@ -137,3 +137,20 @@ application — the honest remaining question is songformatter's own surface
 `Notebook`, `PanedWindow`), which this ticket lists and which the examples above
 only partly touch. That is now measurable, because there is finally a harness
 that runs.
+
+### Resolved 2026-08-17 — gate met, remaining breadth split out
+
+This ticket's stated Gate is met: a `.npy` GUI case runs under Xvfb with a
+`command=`-style callback firing and a Canvas drawing, `gate.sh quick` green,
+self-host fixedpoint byte-identical. (Its Gate line also names `make
+test-nilpy`; per CLAUDE.md's precedence rule that naming is superseded by the
+quick gate, and the added recipe was dry-run by hand including its failure mode.)
+
+The breadth question — proving the widget/option surface against a real
+application rather than against examples we wrote ourselves — is split out as
+[[feature-nilpy-tkinter-surface-vs-a-real-application]] rather than left as an
+open tail here. It is the same self-selection argument the third-party corpus
+campaign is built on, and it is now measurable because a running harness exists.
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.
