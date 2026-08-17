@@ -1793,6 +1793,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-b-power-lost-a-ulp-when-it-got-26x-faster | B | 65 | regression | `11321a09c lib(B): Power and LogN, 26x each` made lib/rtl/math.pas's Power 1 ulp off CPython — `Power(2.0, 0.5)` and `Power(1e150, 2.0)` both moved. It is what turned test_nilpy_math_log and test_nilpy_math_domain_errors red in Track T's 343a52551808 cascade, and those two are still red at HEAD. | — |
 | regression-b113-floor-ceil-change-pulls-libm-into-system-libs-c | B | 70 | regression | NEW-RED: `--system-libs=c` now links libm — the Floor/Ceil result-type change | — |
 | regression-cascade-25678cbdd57c | T | 90 | regression | regression CASCADE: 60 jobs newly red at 25678cbdd57c (auto-filed by twatch) | — |
+| regression-cascade-343a52551808-triage | T | 40 | regression | triage: the 17-job CASCADE at bad=343a52551808 — its 5 NilPy jobs are GREEN natively at HEAD | — |
 | regression-cascade-343a52551808 | T | 70 | regression | regression CASCADE: 17 jobs newly red at 343a52551808 (auto-filed by twatch) | — |
 | regression-cascade-63d1d0de90d3 | T | 70 | regression | regression CASCADE: 29 jobs newly red at 63d1d0de90d3 (auto-filed by twatch) | — |
 | regression-cascade-aba953cae031 | T | 70 | regression | regression CASCADE: 15 jobs newly red at aba953cae031 (auto-filed by twatch) | — |
