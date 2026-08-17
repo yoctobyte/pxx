@@ -688,3 +688,22 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   call and not a gap for a check to fill. Token budget agrees: frank2 busy +
   plexus-T dispatched = two workers plus coordinator, which is the stated target.
   Took no ticket myself. Nothing unpushed, no CRITICAL, watcher UP, pin v347.
+
+- 2026-08-18, post-check-#6 — **dispatch to plexus-T WITHDRAWN, and correctly.** Its
+  user had asked it to wrap for a clean context before my message landed. A stop
+  request outranks a dispatch; I told it so explicitly rather than leaving the ticket
+  hanging over it. Second time this rule has come up in two days — the first cost
+  real work when I re-tasked a session that had asked to stop.
+  It committed two corrections to its OWN prior work before going (a too-broad rule
+  in `track-t.md` that the queued fix would trip) and did not start the ticket. That
+  ordering is right and worth keeping: **fix the inaccuracy you shipped, then stop;
+  do not start new work to look productive on the way out.**
+  What it found first is the sharper half of the night: `bisect_step` refuses to
+  bisect a `timeout`, so the callbacks bisect — correct, converged, exact — **ran only
+  because the inner timeout was invisible.** Fixing the ticket refuses that bisect.
+  The two changes must therefore land together, discriminated by "did the accused
+  commit introduce or enlarge the job's work?". Verified independently
+  (`twatch.py:1506` carries status onto the ledger for exactly this; ledger shows
+  `callbacks: fail` vs `crtl_exp2: timeout`) rather than relayed.
+  Ticket back in the queue **unclaimed at p55 with both halves written up** — a better
+  handoff than a rushed start. Coordinator took no ticket.

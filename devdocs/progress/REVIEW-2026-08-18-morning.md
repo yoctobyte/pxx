@@ -476,6 +476,35 @@ where the job started doing the expensive thing, so the landing is exact. **A
 duration-driven failure does not by itself discredit a bisect.** Passed to plexus-T,
 since that distinction may be worth encoding in the report.
 
+### And plexus-T found the sharper half — then stopped cleanly
+
+The dispatch is **withdrawn, not pending**: its user asked to wrap the session for a
+clean context before my message arrived, and a stop request outranks a dispatch. It
+committed two corrections to work it had already shipped (a too-broad rule in
+`track-t.md` that the queued fix would trip) and did not start the ticket. That was
+the right order — a live inaccuracy you authored is worth fixing before you go; the
+new work is not.
+
+Before stopping it found the thing neither of us had: **fixing the visibility breaks
+a guard that only works because of the gap.**
+
+`bisect_step` refuses to bisect any regression whose status is `timeout`. The
+callbacks bisect ran, converged, and was *correct* — and it ran **only because the
+inner timeout was invisible**. Record it as a timeout and that same exact bisect gets
+refused: a correct result suppressed by a guard written for the other shape.
+
+So the two changes must land in one commit, with the discriminator being the
+distinction that came out of my own wrong prediction — *did the accused commit
+introduce or enlarge the job's work?* Written into the ticket in T's words.
+
+I verified the coupling rather than relaying it: `twatch.py:1506` carries the status
+onto the ledger specifically so `bisect_step` can tell duration from behaviour, and
+the ledger shows `callbacks: fail` against `crtl_exp2: timeout` — this ticket's
+thesis demonstrated live in the record.
+
+**The ticket is unclaimed at p55 with both halves documented.** An unstarted p55 here
+is not a dropped ball; it is a better handoff than a rushed start would have been.
+
 ## Housekeeping for the morning (not done overnight, deliberately)
 
 `tools/progress.sh check` reports **17 resolved tickets awaiting their landed sha**
