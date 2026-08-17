@@ -116,3 +116,16 @@ all six fixed testmgr's OWN timeouts.
 
 This stub stays open until either that fix lands or the job reds again with a
 duration attached. **Still not closed as flake** — unproven.
+
+### If a bisect result arrives for this, do not trust it
+
+`twatch --status` shows this regression with **214 commits in range**. If the watcher
+bisects it, the answer will be confidently wrong: a duration-driven failure converges
+on whichever commit happened to straddle the budget, not on a first failure. That is
+`bug-t-a-timeout-bisects-to-an-innocent-commit` (done, p45), which recorded the same
+shape for `crtl_exp2` — the named commit touched nothing the job builds.
+
+So a bisect verdict here is evidence about **load at the moment of each probe**, and
+the job passing standalone at HEAD (measured above) outranks it. Whoever reads that
+result tomorrow: check it against a standalone run before acting, and prefer fixing
+the harness gap over chasing the named commit.
