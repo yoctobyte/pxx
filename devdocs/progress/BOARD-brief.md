@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:13 blocked:4 backlog:219 experimental:20 rainy-day:40 done-followup:3 decided:81 done:1996 rejected:38`
+`unfinished:14 blocked:4 backlog:218 experimental:20 rainy-day:40 done-followup:3 decided:81 done:1996 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (13) — parked mid-flight; re-claim, do not duplicate
+## unfinished (14) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
@@ -25,6 +25,7 @@ _none — no lane is locked._
 - `feature-nilpy-six-and-warnings-shims` [B] — blocked-by: bug-n-the-builtin-warning-exception-hierarchy-is-missing
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
 - `feature-pascal-corpus-generics` [P]
+- `feature-port-rtl-over-libc` [A]
 - `feature-real-dynlib-loader` [B] — blocked-by: bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
 
 ## blocked (4) — has an unmet blocker; do not claim
@@ -34,7 +35,7 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 205, ranked
+## Ready — top 30 of 204, ranked
 
 - `[p 70] [U]` decide-week-theme-2026-08-17
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -42,7 +43,6 @@ _none — no lane is locked._
 - `[p 60] [P]` feature-pascal-corpus-oop
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [O]` feature-opt-o3-register-pressure
-- `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
 - `[p 55] [C]` bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [B]` bug-t-the-ladder-scan-passes-only-one-root-so-cross-package-imports-read-as-walls
@@ -66,5 +66,6 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-pascal-asmmode-directive-tolerance
 - `[p 50] [A]` feature-pascal-initialize-finalize-intrinsics
 - `[p 50] [A]` feature-release-checksums-repro
+- `[p 48] [P]` feature-pascal-class-management-operators
 
-_175 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_174 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

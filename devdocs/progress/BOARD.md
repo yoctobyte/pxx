@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## unfinished (13)
+## unfinished (14)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -28,6 +28,7 @@ _none_
 | feature-nilpy-six-and-warnings-shims | B | 45 | feature | `mimic_six` and `mimic_warnings` — the biggest lever for the library campaign | bug-n-the-builtin-warning-exception-hierarchy-is-missing |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 60 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
 | feature-pascal-corpus-generics | P | 55 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
+| feature-port-rtl-over-libc | A | 55 | feature | RTL-over-libc lowering mode — route runtime primitives through a system C library instead of raw syscalls | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect. | bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert |
 
 ## blocked (4)
@@ -39,7 +40,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (219)
+## backlog (218)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -219,7 +220,6 @@ _none_
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | — |
 | feature-port-multi-os-abstraction | A | 55 | feature | UMBRELLA: abstract the target-OS axis — FreeBSD (native) + Windows (PE, Wine-tested), phased | feature-port-freebsd-native, feature-port-rtl-over-libc, feature-port-windows-pe |
 | feature-port-openbsd-libc | A | 50 | feature | OpenBSD/amd64 target — route RTL through libc.so; pinsyscalls satisfied by construction | feature-port-rtl-over-libc |
-| feature-port-rtl-over-libc | A | 55 | feature | RTL-over-libc lowering mode — route runtime primitives through a system C library instead of raw syscalls | — |
 | feature-port-windows-pe | M | 25→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
 | feature-promo-launch-plan | W | 25 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | — |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
@@ -482,7 +482,6 @@ _none_
 - [p 60] [P] feature-pascal-corpus-oop
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [O] feature-opt-o3-register-pressure
-- [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [C] bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [B] bug-t-the-ladder-scan-passes-only-one-root-so-cross-package-imports-read-as-walls
