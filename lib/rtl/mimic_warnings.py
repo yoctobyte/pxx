@@ -29,7 +29,7 @@ import sys
 _seen = {}
 
 
-def warn(message, category=None, stacklevel=1, source=None):
+def warn(message, category=UserWarning, stacklevel=1, source=None):
     """`warnings.warn(message, category)` -- report once, to stderr.
 
     TWO DELIBERATE DIVERGENCES FROM CPython, both forced and both visible:
@@ -49,18 +49,15 @@ def warn(message, category=None, stacklevel=1, source=None):
        every time was the alternative and it is further from CPython, not
        closer: it turns a loop into a flood.
 
-    `category=None` rather than `category=UserWarning` is a WORKAROUND, not the
-    intended signature: a type as a default parameter value segfaults the moment
-    the default is taken -- silently, exit 139, no diagnostic
-    (bug-n-a-type-as-a-default-parameter-value-segfaults-when-the-default-is-taken,
-    registered in devdocs/dev/track-b-workarounds.md). Revert to
-    `category=UserWarning` and delete the substitution below when that lands.
-    The observable difference is confined to an explicit `warn(msg, None)`,
-    which CPython rejects and this accepts -- laxer, which is the direction this
-    dialect is allowed to differ in.
+    `category=UserWarning` is CPython's own signature, and it briefly was NOT
+    what stood here: a type as a default parameter value used to segfault the
+    moment the default was taken -- silently, exit 139, no diagnostic -- so this
+    took `category=None` and substituted in the body. Fixed by 31172d1cc, which
+    reached Track B's ground with pin v347 (f5da30bc9); re-measured against that
+    pin before the workaround came out. Kept in the history because the shape is
+    worth recognising: the crash was in the CALLER's argument passing, so the
+    signature that looked wrong was the correct one all along.
     """
-    if category is None:
-        category = UserWarning
     name = category.__name__
     key = name + ":" + str(message)
     if key in _seen:

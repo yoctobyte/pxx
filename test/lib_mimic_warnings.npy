@@ -43,12 +43,13 @@ class DataLossWarning(UserWarning):
 warnings.warn("lost some data", DataLossWarning)
 print("warn-category=ok")
 
-# warn() with no category at all. This is the line that would have segfaulted:
-# the natural signature is `category=UserWarning`, and a TYPE as a default value
-# crashes when the default is taken
-# (bug-n-a-type-as-a-default-parameter-value-segfaults-when-the-default-is-taken).
-# The shim takes None and substitutes, which is why this returns rather than
-# dumping core -- so this assertion is the workaround's regression guard.
+# warn() with no category at all, i.e. the default is TAKEN -- which is exactly
+# the shape that used to segfault (exit 139, no diagnostic) when the default was
+# a type. Fixed in 31172d1cc, on Track B's ground from pin v347; the shim now
+# carries CPython's own `category=UserWarning` and the None-substitution is gone.
+# So this line no longer guards a workaround, it guards the FIX: if the
+# by-value/by-reference default-argument bug ever returns, this is where it lands
+# first, and it lands as a core dump rather than a wrong answer.
 warnings.warn("no category given")
 print("warn-default=ok")
 

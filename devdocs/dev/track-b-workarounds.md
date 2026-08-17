@@ -23,7 +23,6 @@ before assuming the workaround is still needed.
 | `lib/pcl/mimic_reportlab_pdfgen.pas` (`Canvas.Create`) | TWO constructors — a one-arg form forwarding an EXPLICIT `0` — instead of one with `pagesize: Variant = 0` | [[bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory]] — a constructor with a defaulted Variant parameter smashes the stack when the caller omits it; deterministic from Pascal (25/25), intermittent through NilPy, and it surfaces as a crash in unrelated code | the single `pagesize: Variant = 0` default |
 | `lib/rtl/ed25519.pas` (EC points) | a point's 4 field coords are **4 separate standalone TGf vars**, never an `array of TGf` or a record of TGf | [[bug-aggregate-member-array-as-var-param]] — passing an aggregate-member array by ref segfaults | a `TPoint = array[0..3] of TGf` / record |
 | `lib/rtl/math.pas` (`SinCosFast`, `FastTrigReduce`) | sin/cos returned in a `TSinCos` **record** by reference, and the reduction in a `TDd`, instead of `var sn, cs: Double` out-parameters | [[bug-a-i386-var-float-parameter-faults-on-first-access]] — ANY access through a by-reference float parameter segfaults on i386 (read, write, `out`, `Single`, every `-O` level); a record by reference is fine. Without this, the default-mode `Sin`/`Cos`/`Tan` crash on i386 | plain `var sn, cs: Double` — *but only if it reads better, which it does not:* the record mirrors `SinCosDd` and is the shape to keep |
-| `lib/rtl/mimic_warnings.py` (`warn`) | `category=None` + substitute `UserWarning` in the body, instead of `category=UserWarning` | [[bug-n-a-type-as-a-default-parameter-value-segfaults-when-the-default-is-taken]] — a TYPE as a default parameter value segfaults the moment the default is taken (exit 139, no diagnostic); any class, builtin type or builtin exception, and merely READING `.__name__` off it is enough. **FIXED on master in `31172d1cc` (2026-08-17 22:19) — but that commit POSTDATES the current pin v346 `ed7a91937` (21:47), and Track B compiles with `pinned`, not HEAD. Re-measured against `pinned`: the repro still segfaults (exit 139). So the revert is ARMED, not due: fire it when a pin carrying `31172d1cc` lands, not before — reverting against today's pin turns `make lib-test` red.** | `category=UserWarning`, and delete the `if category is None` substitution — **after the next pin** |
 
 ### Coding-pattern landmines (no single site — avoid in new Track B code)
 
@@ -77,6 +76,25 @@ now in `done/`, so the workaround can be removed and the idiomatic form restored
   **chess slice 2** (search + eval through `EvalTerms[i](pos)`); the demo was left
   blocked, not worked around, so nothing to revert — just resumable when chess is
   picked back up.
+
+## Reverted 2026-08-17
+
+- [[bug-n-a-type-as-a-default-parameter-value-segfaults-when-the-default-is-taken]]
+  **fixed (`31172d1cc`, pinned v347 `f5da30bc9`)** — reverted
+  `lib/rtl/mimic_warnings.py`'s `warn()` from `category=None` + a body
+  substitution back to CPython's own `category=UserWarning`, and dropped the
+  `if category is None` lines. Re-tested: `lib_mimic_warnings` 9/9 green.
+
+  **The interval is the point, and it is the shortest one this table has
+  recorded: filed, fixed and reverted inside one evening.** But it still took
+  TWO events, not one — the fix landed on master at 22:19 and only reached
+  Track B with the pin at 22:27, because B compiles with `$(PXX_STABLE)`, never
+  HEAD. A revert fired between those two moments would have turned `make
+  lib-test` red against a fix that already existed. So a row here is revertible
+  when the **pin** carries the fix, which is a different question from whether
+  the bug is fixed, and the only way to answer it is to re-run the repro against
+  `pinned` — timestamps invite exactly the wrong inference, since the fix
+  genuinely was in.
 
 ## Reverted 2026-06-25 (sis fixes, workarounds removed + re-tested)
 
