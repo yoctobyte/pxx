@@ -6119,7 +6119,7 @@ test-core: $(COMPILER)
 	# which is what this pins. Expectation verified against FPC directly.
 	# meta-a-second-paths-reimplement-the-first-paths-decisions
 	./$(COMPILER) test/test_pascal_system_qualified_intrinsic.pas $(TESTTMP)/test_pascal_sysqual26
-	test "$$($(TESTTMP)/test_pascal_sysqual26)" = "$$(printf '4\n0\nalloc\n300\n99 98 97 96')"
+	test "$$($(TESTTMP)/test_pascal_sysqual26)" = "$$(printf '4\n0\nalloc\n300\n0\n2\n99 98 97 96\n1 2')"
 	./$(COMPILER) test/test_qualified_units.pas $(TESTTMP)/test_qualified_units26
 	test "$$($(TESTTMP)/test_qualified_units26)" = "$$(printf 'from-program\nfrom-unit\n1074030207\n1074030207\n3\n7\n11\n22\n101\n201')"
 	./$(COMPILER) test/test_uses_alias.pas $(TESTTMP)/test_uses_alias26

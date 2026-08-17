@@ -143,8 +143,41 @@ qualified? is it by-ref? does it have defaults?) rather than re-implementing a
 *mechanism*. Those can be listed by grepping for the question and checking who
 asks it. Rows 1 and 2 are mechanism duplication and have no equivalent grep.
 
-Still open under step 1, and the natural next slices:
-`ParseStatementAST`'s copy of these same guards (the statement half of the
-own-field rule lives there, and it was never compared against this list), and the
-`isRefArg` question from row 4 — which is asked in at least two places and may be
-asked in more.
+## Second slice: the statement path, same axis
+
+`ParseStatementAST` (lines 22833–24814) keeps its **own** copy of these guards
+and had never been compared against the expression path's. Nine of them; four
+carried the exemption, five did not. Predicted, then oracle-confirmed before
+changing anything:
+
+```pascal
+var Break, Continue, Halt: Integer;
+...  if i = 1 then System.Continue;   { pxx: "unexpected token" }
+     System.Halt(0);                  { pxx: "unexpected token" }
+```
+
+FPC 3.2.2 accepts all of them. Fixed `Halt`, `Exit`, `Break`, `Continue` —
+`(qUnit = -2) or (<the site's own test>)`, identical to the expression side —
+and the test program now covers both halves in one file, diffed against FPC
+rather than compared to a hand-written expectation.
+
+**Left alone, deliberately:** `FreeAndNil` (SysUtils, not System — `System.FreeAndNil`
+is not valid FPC, so there is nothing to be compatible with) and
+`get_caller_stackinfo` (pxx-private). Both are the remaining known-bare
+statement sites.
+
+## Score for this axis
+
+23 guards across the two paths; 8 carried the exemption, 15 did not. **Nine
+fixed** (5 expression + 4 statement), six left bare with a stated reason. Every
+fix was predicted from the list and confirmed against FPC before it was made —
+none was found by a corpus or a bug report, which is the argument the ticket was
+filed to make.
+
+## Still open under step 1
+
+The `isRefArg` question from row 4 — asked in at least two places and possibly
+more — is the next enumerable slice, and it is the one with teeth: unlike a
+name-resolution miss, getting it wrong produces a *wrong value or a segfault*
+rather than a diagnostic (that is exactly how row 4 presented). Rows 1 and 2
+remain mechanism duplication with no equivalent grep.

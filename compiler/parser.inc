@@ -23332,10 +23332,11 @@ begin
         first. A user's own parameterless `procedure Exit` still shadows.
         bug-c-exit-shadows-pascal-exit. }
       else if (CaseEqual(name, 'Halt') or CaseEqual(name, 'Exit')) and
-              ((FindProc(name) < 0) or
-               ((Tokens[TokPos].Kind <> tkLParen) and
-                (Procs[FindProc(name)].ParamCount > 0))) and
-              (FindSym(name) < 0) then
+              ((qUnit = -2) or
+               ((((FindProc(name) < 0) or
+                  ((Tokens[TokPos].Kind <> tkLParen) and
+                   (Procs[FindProc(name)].ParamCount > 0))) and
+                 (FindSym(name) < 0)))) then
       begin
         { Halt / Exit: soft-keyword statements (bare, or with an optional
           (expr)). A user proc or in-scope symbol of the same name shadows —
@@ -23350,9 +23351,16 @@ begin
         end;
       end
       else if (CaseEqual(name, 'Break') or CaseEqual(name, 'Continue')) and
-              (FindProc(name) < 0) and (FindSym(name) < 0) then
+              ((qUnit = -2) or ((FindProc(name) < 0) and (FindSym(name) < 0))) then
       begin
-        { Break / Continue: bare soft-keyword statements. }
+        { Break / Continue: bare soft-keyword statements.
+
+          The SYSTEM-QUALIFIER EXEMPTION, same as the expression-side intrinsics
+          (see the note at `High` in ParseFactor): `System.Break` names the
+          builtin even where a local is spelled `Break`, and FPC 3.2.2 accepts
+          exactly that. The statement path had its own copy of these guards and
+          had never been compared against the expression path's list.
+          meta-a-second-paths-reimplement-the-first-paths-decisions }
         if CaseEqual(name, 'Break') then node := AllocNode(AN_BREAK)
         else node := AllocNode(AN_CONTINUE);
         Next;
