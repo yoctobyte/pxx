@@ -1116,3 +1116,4 @@
 {"date": "2026-08-17T21:28:40Z", "fixed": [], "full": true, "new_red": [], "pin": "v347", "sha": "08bdf27290b79f9f40711b2051922e300df52208", "tier": "full", "verdict": "RED", "wall": 1170.2}
 {"date": "2026-08-17T21:48:59Z", "fixed": [], "full": true, "new_red": ["test-nilpy#src:examples/tk/callbacks.npy"], "sha": "8f629af386321e43a837f6e76fbec995da30c3bf", "still_red": ["lib-test#src:test/crtl_exp2.c"], "tier": "full", "verdict": "RED", "wall": 1170.7}
 {"date": "2026-08-17T21:53:41Z", "fixed": [], "full": false, "new_red": [], "sha": "8f629af386321e43a837f6e76fbec995da30c3bf", "still_red": [], "tier": "slow", "verdict": "GREEN", "wall": 270.9}
+{"date": "2026-08-17T21:59:03Z", "fixed": [], "full": false, "new_red": [], "sha": "8f629af386321e43a837f6e76fbec995da30c3bf", "still_red": [], "tier": "opt", "verdict": "GREEN", "wall": 310.3}
