@@ -82,7 +82,9 @@ still apply — they prevent conflicting EDITS to the same file, not tree damage
 
    - **Philosophy check before filing.** If the stated principles already settle
      it, DERIVE the answer, say which rule and why, and file it as a
-     CONFIRMATION rather than a fork. Escalating a settled question is not
+     CONFIRMATION rather than a fork. **`devdocs/dev/frontend-compat-philosophy.md`
+     is the lookup** — the three frontends have three DIFFERENT answers to "what
+     does compatible mean", and confusing them produces confident wrong work. Escalating a settled question is not
      service; it is homework assigned to the human. Worked example: the
      unary-minus widening was filed as a three-way fork and is not one — the
      "default is the reference implementation" rule plus CLAUDE.md's escape rule

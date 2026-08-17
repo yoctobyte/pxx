@@ -8,6 +8,17 @@ The rule this list is written against: **a program CPython accepts must behave
 the same under pxx.** Every entry below is allowed to differ only for programs
 CPython itself rejects, or in a way no accepting program can observe.
 
+> **There is a THIRD category this file does not hold** (owner, 2026-08-17):
+> a divergence that an accepting program CAN observe and that **static
+> compilation cannot express**. Those are permanent, and they belong in
+> `devdocs/dev/frontend-compat-philosophy.md` rather than here or in the bug
+> backlog — a permanent limit filed as an ordinary bug sits open forever and gets
+> re-diagnosed by every new session. The bar for claiming one is high: show the
+> workaround space is genuinely EMPTY, not that the obvious approach failed.
+> "Most have sane workarounds" is the owner's framing, so assume one exists until
+> proven otherwise. Declaring a permanent limit is a Track U escalation, never a
+> worker's call.
+
 ---
 
 ## Mutating a dict while iterating it is not detected
