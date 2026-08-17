@@ -95,4 +95,4 @@ Two things carried forward rather than discarded with the ticket:
 No bisect was owed and none was spent. Resolving.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 5a0197a21.

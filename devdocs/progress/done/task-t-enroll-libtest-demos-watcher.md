@@ -302,4 +302,4 @@ whole point of advisory.
 Resolving.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 7bcaacf9e.

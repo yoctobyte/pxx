@@ -128,4 +128,4 @@ fixed 45 min rather than derived from the daemon's interval; deriving it is the
 cheap half of that idea and is worth doing if a wrong grace is ever observed.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit dea60e34e.
