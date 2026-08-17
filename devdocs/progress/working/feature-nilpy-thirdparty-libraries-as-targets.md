@@ -803,3 +803,69 @@ Worth marking which is which when writing these up.
 webencodings sat at line 50 before these fixes and sits at line 50 after — which
 is the point worth recording. It confirms the fixes moved the wall they were
 aiming at and left the one they were not.
+
+### LADDER RE-SCAN 2026-08-17 at `63d80e8fc`, A/B'd against the pin — 58 files
+
+Method changed from the earlier scans in this file and the numbers are therefore
+**not comparable to them**: every file is compiled with
+`-Fulibrary_candidates/<root>` so its intra-package imports resolve. Earlier
+scans did not pass `-Fu`, which is why they report more "no unit named
+<sibling>" and fewer deep walls. Stating it because a bare count from this table
+next to a bare count from the 2026-08-14 one reads as a regression and is not.
+
+Run twice — once with the pinned compiler (`47836e63`), once at HEAD — so the
+three fixes that landed today could be A/B'd rather than asserted.
+
+| | pinned | HEAD |
+| --- | ---: | ---: |
+| compile | **4** | **4** |
+| files whose wall MOVED | — | **2** |
+| files that REGRESSED | — | **0** |
+
+The four that compile are the same four in both runs:
+`webencodings/labels.py`, `webencodings/x_user_defined.py`,
+`html5lib/filters/base.py`, `html5lib/filters/__init__.py`.
+
+Both changed files improved, and both are the relative-import fix:
+
+| file | pinned | HEAD |
+| --- | --- | --- |
+| `webencodings/__init__.py` | `undefined variable (from)` | `undefined variable (CodecInfo)` |
+| `tinycss2/docs/conf.py` | `undefined variable (from)` | `no unit named webencodings` |
+
+**So: no library file compiles today that did not compile this morning.** Three
+frontend fixes landed and the compile count is flat; what they bought is two
+walls moved deeper. That is the honest read and it should be the headline,
+because "three bugs fixed" and "the ladder advanced" are different claims and
+only the first one is true.
+
+### The ranking, and why Track N is not the lever
+
+| first wall | files |
+| --- | ---: |
+| `no unit named six` | **15** |
+| `no unit named webencodings` (intra-stack) | 7 |
+| COMPILES | 4 |
+| `class Filter cannot inherit from itself` | 3 |
+| `no unit named xml_dom` | 3 |
+| `no unit named warnings` | 3 |
+| `unexpected character` (non-UTF8 fixtures) | 2 |
+| `xml_sax_xmlreader` / `pyperf` / `genshi_core` / `constants` | 2 each |
+| `CodecInfo`, `MULTILINE`, `digits`, `os`, `python_implementation`, `Mapping`, `_utils`, `urllib_request`, `setuptools`, `os_path`, `docutils`, `colorsys`, `argparse` | 1 each |
+
+**~40 of 58 files stop at a missing module.** `six` alone is 15 and is already
+measured as a pure shim job. This is the fourth time this ticket has measured
+that the ladder is gated by class-4 stdlib surface rather than by the NilPy
+language, and the first time it has been measured with `-Fu` and against a pin.
+
+The `class Filter cannot inherit from itself` row (3 files) is **not a
+regression** — identical on the pinned compiler — and **not a corpus blocker**:
+those files are imported in real use, and the module path works. See
+[[bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program]], including the
+method caveat that standalone-compiling every file overstates the walls.
+
+### Recommendation
+
+Further Track N work on this ticket has **low yield** until the shims exist. The
+next unit of progress is `mimic_six` (15 files), then `codecs.CodecInfo`
+(webencodings' last wall), then `warnings`. All Track B.
