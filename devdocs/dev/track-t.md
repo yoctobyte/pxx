@@ -315,9 +315,30 @@ down here with the guard that now handles each.
 | the bisect result is | because | guard |
 | --- | --- | --- |
 | a **real** first failure | the ordinary case | none needed |
-| an **innocent** commit | the signal was a TIMEOUT, which depends on box load as well as the tree, so the search converges on whichever commit straddled the budget | `bisect_step` refuses to bisect a `timeout` |
+| an **innocent** commit | the signal was a TIMEOUT **and the expensive step exists across the whole range**, so the search converges on whichever commit straddled the budget | `bisect_step` refuses to bisect a `timeout` — see the caveat below, this is currently too broad |
 | a commit that **cannot** be causal | the job builds only with `$(PXX_STABLE)` and the commit moved no pinned binary — the bytes that compiled it did not change | `pin_immune()`; testmgr publishes `pin_built` per job |
 | a **correct** commit that is not a fault | a feature retired a recorded divergence and its expectation was left behind — the range is *right*, the commit is not a defect | not decidable; the stub flags a REFUSAL expectation and asks the reader to check |
+
+**Caveat, 2026-08-18: the timeout guard is too broad, and a real case proved
+it.** "A timeout is a duration signal, therefore not bisectable" is wrong as
+stated. Two shapes:
+
+- `crtl_exp2` — every commit in the range already runs the job, and the budget is
+  straddled somewhere in the middle. The landing is wherever load tipped it:
+  **arbitrary**, and refusing is right.
+- `callbacks.npy` — the range SPANS the commit where the job *started* doing the
+  expensive thing (`5215148bb` added the Makefile lines that first EXECUTE three
+  tk tests, bringing `timeout 120 xvfb-run` with them). The landing is
+  **exact**, and refusing would have suppressed a correct result.
+
+That bisect only ran because the inner `timeout` was invisible to testmgr, so it
+was recorded as `fail`
+([[bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic]]).
+**Fixing that ticket will start refusing bisects like it** unless the guard
+learns the distinction — the discriminator being whether the accused commit
+introduced or enlarged the job's work, in the spirit of `pin_immune`.
+
+Recorded rather than fixed here because the two changes belong in one commit.
 
 The three guards sit in descending order of confidence, and it is worth keeping
 them distinguishable rather than blurring them into "the watcher is unsure":
