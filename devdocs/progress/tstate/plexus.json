@@ -5915,18 +5915,15 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-16T10:08:00Z",
+  "date": "2026-08-17T21:28:40Z",
   "red": [
-   "lib-test#08",
    "lib-test#36",
-   "test-nilpy#225",
-   "test-nilpy#437",
-   "test-nilpy#628",
-   "test-i386#03"
+   "lib-test#117",
+   "test-nilpy#12"
   ],
-  "sha": "4b7c49db4027826d1bee53a1e6a9d2322af8456d",
+  "sha": "08bdf27290b79f9f40711b2051922e300df52208",
   "tier": "full",
-  "ver": "v343",
+  "ver": "v347",
   "verdict": "RED"
  },
  "renamed_from": [
