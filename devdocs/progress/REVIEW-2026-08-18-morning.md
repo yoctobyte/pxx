@@ -72,7 +72,7 @@ Infrastructure:
 - A wiring checker found **98 test files that no build rule ran**. The ten that
   shipped alongside fixes in the last two days are now wired; the rest are triaged.
 
-## A second bug you may want to look at yourself
+## A second bug you may want to look at yourself — and it got WORSE on re-measure
 
 `bug-n-a-class-only-module-reads-every-class-attribute-as-zero` (N, p60). Found by
 Track B *while measuring whether to build a shim*, and **reproduced independently
@@ -98,14 +98,29 @@ present and fails deep inside a caller. The truth is worse: **a complete, spec-e
 shim on a broken substrate does it too.** Completeness is not the protection;
 measuring before coding is.
 
-**Caveat, and it may be mine:** the ticket records that *any* module-level statement
-in the file avoids the bug, and that our existing `.py` shims escape by accident
-because they happen to carry module-level assignments. **That row did not reproduce
-here** — I prepended `_x = 0` and still got `0 0 0`. Either my control is wrong, or
-the condition is narrower than stated, or `mimic_six` and `mimic_warnings` escape
-for a different reason — and if it is the third, those two shims are closer to
-silently reading zero than the ticket claims. Sent back for re-measurement; do not
-rely on that row until it is settled.
+**Re-measured, and the ticket is now `bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero`.**
+It is not a class-only-module bug at all — it is **positional and per-class**:
+
+    class K: A = 7      -> K.A = 7   (a statement follows K)
+    TOP = 1
+    class J: A = 9      -> J.A = 0   (nothing follows J)
+
+Verified here: pxx prints `K.A 7 J.A 0` where CPython prints `7 9`. So it hits **the
+last class in any module** — which is an ordinary way to end a file, not an edge
+case. Only a statement *after* the class helps; before does nothing. Methods are
+unaffected; only attribute initialisers are lost.
+
+The "our existing shims escape by accident because they carry module-level
+assignments" conclusion was also wrong. Both are safe, for two *different* reasons,
+neither the stated one: `mimic_six` has no classes at all, and `mimic_warnings`'
+`catch_warnings` has no class-level attributes. Real exposure today is nil — but the
+false guard would have been believed. **The true guard is narrower: a class with
+class-level constants must not be last in the file until this lands.**
+
+Worth noting the ticket also records that this is *not* avoidable by writing shims
+more carefully. A trailing `_ = None` would mask it, and masking is worse than
+hitting it — the shim would then be correct only by virtue of a line nobody could
+explain, and would break silently the day someone tidied it away.
 
 ## One bug you may want to look at yourself
 

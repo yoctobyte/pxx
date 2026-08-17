@@ -153,3 +153,32 @@ names the sha of the binary it came from.
 so `{$MODE DELPHI}` written inside `{ ... }` as documentation is a **live
 directive**. Documenting a mode table in a `.pas` comment will change the mode or
 fail the parse. Use a spelling the preprocessor cannot read.
+
+## A probe that FORMATS its output can answer a different question than you asked
+
+Recorded 2026-08-17, Track B, twice in one night by the same session.
+
+A boundary table was built by a probe piping each case through `head -1`. On the
+rows where the module-level statement was a `print`, **the print's own output was
+the first line** — so what got recorded as "the attribute reads correctly" was
+really "the print ran". The attribute value was never in the captured output at
+all.
+
+The framing that makes it memorable: **those rows were not mismeasured, they were
+unmeasured and labelled.** A mismeasurement is a wrong number; this produced a
+number that was never about the subject, and the table looked complete.
+
+Earlier the same night, the same lane's corpus scan died on strict UTF-8 decoding
+because a diagnostic can echo a source line and the corpora carry non-UTF-8 bytes —
+a scan that stops at the first odd byte is also its own artefact. Fixed with
+`errors="replace"`.
+
+**Rule: the capture step is part of the instrument.** `head`, `tail`, `grep -h`,
+`| head -1`, strict decoding, and "first line of output" are all places where the
+harness quietly changes the question. When a row of a boundary table surprises you,
+check what the harness captured before checking what the compiler did — and prefer
+labelled output (`K.A 7 J.A 0`) over positional output, so a shifted line cannot
+masquerade as a value.
+
+Related: `grep -h` suppresses filenames, which silently defeats a downstream
+`grep -v /tests/` filter — same lane, same night, different pipe.
