@@ -1795,6 +1795,21 @@ test-nilpy: $(COMPILER)
 	# regression risks -- named slots, default preservation, positional, dict(**d).
 	./$(COMPILER) test/test_nilpy_kwargs_collector_forward.npy $(TESTTMP)/test_nilpy_kwcoll26
 	$(TESTTMP)/test_nilpy_kwcoll26 | diff -u test/test_nilpy_kwargs_collector_forward.expected -
+	# Five tests that shipped WITH their fixes and were wired into nothing, so the
+	# fixes were defended only by their commit messages. Found by
+	# tools/check_test_wiring.py (Track T); all five verified passing before wiring.
+	# A regression test that runs nowhere is worse than none -- it makes the fix
+	# look protected. feature-t-fail-when-a-test-file-is-wired-into-no-build-rule
+	./$(COMPILER) test/test_nilpy_boolop_class_identity.npy $(TESTTMP)/boolid26
+	$(TESTTMP)/boolid26 | diff -u test/test_nilpy_boolop_class_identity.expected -
+	./$(COMPILER) test/test_nilpy_cast_user_shadow.npy $(TESTTMP)/castshadow26
+	$(TESTTMP)/castshadow26 | diff -u test/test_nilpy_cast_user_shadow.expected -
+	./$(COMPILER) test/test_nilpy_format_g_spec.npy $(TESTTMP)/fmtg26
+	$(TESTTMP)/fmtg26 | diff -u test/test_nilpy_format_g_spec.expected -
+	./$(COMPILER) test/test_nilpy_lambda_callfree_body_is_compiled.npy $(TESTTMP)/lamcf26
+	$(TESTTMP)/lamcf26 | diff -u test/test_nilpy_lambda_callfree_body_is_compiled.expected -
+	./$(COMPILER) test/test_nilpy_plain_class_callable_field.npy $(TESTTMP)/pccfield26
+	$(TESTTMP)/pccfield26 | diff -u test/test_nilpy_plain_class_callable_field.expected -
 	./$(COMPILER) test/test_nilpy_store_attr_of_an_element.npy $(TESTTMP)/test_nilpy_elemattr26
 	$(TESTTMP)/test_nilpy_elemattr26 | diff -u test/test_nilpy_store_attr_of_an_element.expected -
 	./$(COMPILER) test/test_nilpy_selector_on_a_dict_returning_call.npy $(TESTTMP)/test_nilpy_dictsel26
