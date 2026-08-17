@@ -1798,7 +1798,23 @@ begin
     if SpecializeTokens[subCount].Kind = tkIdent then
     begin
       s := GetTokenStrFromRaw(SpecializeTokens[subCount].SOffset, SpecializeTokens[subCount].SLen);
-      if CaseEqual(s, SpecializeTemplateName) then
+      { …except in a BASE-CLASS position (`= class(` immediately before it),
+        where the template's own name cannot mean this specialization -- a class
+        may not inherit from itself -- and so must mean the ordinary class
+        sharing the name (rtl-generics' `THashService<T> = class(THashService)`).
+        Rewriting it there produced `base type not found: THS$LongInt`, i.e. the
+        specialization looking for itself as its own parent.
+
+        Keyed on the two preceding tokens being `class` `(`, so an ordinary
+        typecast `TFoo(x)` inside the body -- where the name DOES mean the
+        specialization -- is untouched. }
+      if CaseEqual(s, SpecializeTemplateName) and (i >= 2) and
+         (TemplateTokens[tokStart + i - 1].Kind = tkLParen) and
+         (TemplateTokens[tokStart + i - 2].Kind = tkClass) then
+      begin
+        { leave the token exactly as it is: names the non-generic sibling }
+      end
+      else if CaseEqual(s, SpecializeTemplateName) then
       begin
         SpecializeTokens[subCount].SOffset := TokCharLen;
         SpecializeTokens[subCount].SLen := Length(specName);
@@ -30617,6 +30633,7 @@ end;
 procedure ParseSubroutine;
 var
   pzi      : Integer;  { pFixedLen/pFixedLo entry-zero loop }
+  nonGenCi : Integer;  { ordinary class sharing a generic template's name }
   isFunc   : Boolean;
   name     : AnsiString;
   retType  : TTypeKind;
@@ -30740,6 +30757,25 @@ begin
     for i := 0 to TemplateCount - 1 do
       if CaseEqual(Templates[i].Name, name) then
         depth := i;
+    { A generic template and an ORDINARY class may share a name -- FPC's
+      TDictionary alongside TDictionary<K,V>, and rtl-generics' THashService.
+      The bare `X.M` header served by this branch is ALSO how the non-generic
+      class's own method impl is written, so with both declared the header is
+      ambiguous and matching on the name alone silently gave it to the template:
+      the real class's body was buffered as generic-method tokens, never
+      compiled, and surfaced far away as `unresolved forward: X.M`.
+
+      Resolve it by asking which class actually DECLARES this method, rather
+      than by the spelling -- the two are indistinguishable here by construction.
+      A `X<T>.M` header never reaches this branch (CurTok would be '<', not '.'),
+      so nothing is taken away from the generic side; when no ordinary class of
+      the name exists, FindUClass fails and the behaviour is exactly as before. }
+    if depth >= 0 then
+    begin
+      nonGenCi := FindUClass(name);
+      if (nonGenCi >= 0) and (FindUMeth(nonGenCi, GetTokenStr(TokPos)) >= 0) then
+        depth := -1;
+    end;
     if depth >= 0 then
     begin
       { Start the captured range at the 'procedure'/'function' keyword (one

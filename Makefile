@@ -4191,6 +4191,9 @@ test-core: $(COMPILER)
 	# multi-param generics <TKey, TData> + constrained type params (fgl TFPGMap/TFPGObjectList shapes)
 	./$(COMPILER) test/test_generic_multiparam.pas $(TESTTMP)/test_generic_multiparam26
 	test "$$($(TESTTMP)/test_generic_multiparam26 | tail -1)" = "total ok 4 / 4"
+	# arity-overloaded class names: TD, TD<K>, TD<K,V> coexist; TD<K> inherits TD
+	./$(COMPILER) test/test_generic_name_overload.pas $(TESTTMP)/test_generic_name_overload26
+	test "$$($(TESTTMP)/test_generic_name_overload26)" = "$$(printf '0 1 2\n0')"
 	# parser gaps: impl-side `static;`/`reintroduce;` on a class function + PChar(expr)[i] indexing
 	./$(COMPILER) test/test_impl_static_and_pchar_index.pas $(TESTTMP)/test_impl_static_and_pchar_index26
 	test "$$($(TESTTMP)/test_impl_static_and_pchar_index26 | tail -1)" = "total ok 5 / 5"

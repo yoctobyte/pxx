@@ -4,6 +4,8 @@ prio: 50
 type: bug
 blocked-by: []
 summary: "`THS = class ... end;` and `THS<T> = class ... end;` in one unit collide — pxx keys a class by NAME with no generic-arity component, so the second declaration overwrites the first and its methods report `unresolved forward`. FPC compiles the pair and prints both. Surfaces in rtl-generics as the misleading `base type not found: THS$LongInt`, because the collision is first observed through a base clause."
+status: working
+owner: claude-AP
 ---
 
 # A generic and a non-generic class cannot share a name
