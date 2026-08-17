@@ -232,4 +232,4 @@ diagnosis and status are untouched — a rarer residual is exactly the thing 20
 runs cannot rule out.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 261184893.
