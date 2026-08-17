@@ -4,6 +4,8 @@ prio: 40
 type: bug
 blocked-by: []
 summary: "examples/mandelbrot/mandelbrot_gui.pas calls gtk_main_quit but does not `uses gtk3_c`, the C header that declares it — so `make demos` builds 34/35. Its two sibling GUI demos both use it. Verified one-line fix: adding gtk3_c to the uses clause builds the program clean."
+status: done
+owner: frank3
 ---
 
 # `mandelbrot_gui` does not build — `gtk_main_quit` with no `gtk3_c`
@@ -85,3 +87,54 @@ unblock.
 was only ever seen by whoever happened to run it and read the output. It is now
 an ADVISORY tstate job: reported to Track B, gating nobody, which is the status
 the recipe itself assigns it.
+
+## 2026-08-17 — FIXED (Track B, frank3)
+
+`examples/mandelbrot/mandelbrot_gui.pas` now reads
+
+```pascal
+uses gtk3, controls, stdctrls, forms, extctrls, graphics, math, sysutils, baseunix,
+     palparallel, mandelkernel, gtk3_c;
+```
+
+which is exactly what `raytracer_gui.pas` and `solitaire_gui.pas` already do.
+
+### Verified
+
+| check | result |
+| --- | --- |
+| `make demos` | **35/35** (was 34/35) |
+| `./build/demos/mandelbrot_gui --smoke` | renders, `serial == parallel — OK`, checksum 4883296 |
+| `./build/demos/mandelbrot_gui --gui-smoke` | `GUI SMOKE OK`, exit 0 |
+| `make lib-test` | green against stable v344 |
+
+`--gui-smoke` matters here specifically: `GuiAutoQuit` is the *only* caller of
+`gtk_main_quit`, so that run exercises the symbol the missing import broke,
+under a real X display and a real event loop. It quits cleanly.
+
+### On the ticket's open question — should `gtk3.pas` re-export the symbol?
+
+**No, and it cannot.** `lib/pcl/gtk3.pas` already has `uses gtk3_c` in its
+*interface*, and the symbol still is not visible to a program that uses `gtk3`
+— because Pascal units do not re-export their imports transitively (FPC behaves
+the same way). There is no `exports`-style spelling that would forward
+`gtk_main_quit` without hand-writing a wrapper for it and every other GTK entry
+point a demo might reach for, which is the opposite of what a *thin* binding is
+for.
+
+So "three demos need a C header for one symbol" is not an incomplete binding —
+it is the binding working as designed: `gtk3.pas` exists to add the three things
+C cannot express (`SignalConnect`, `SignalConnectData`, `PC`), and everything
+else comes straight from `gtk3_c.h`. Naming both in `uses` is the intended
+idiom, and the two sibling demos are the precedent. Nothing further to file.
+
+### Environment note (not part of the fix)
+
+`make lib-test` first failed in this checkout at `lib_synapse` with
+`unit source not found: synacode` — `external/synapse` is an untracked
+third-party tree with no fetch rule in the Makefile, so a fresh clone simply
+does not have it. Copied from a sibling checkout; unrelated to this ticket, but
+it is a real papercut for any new checkout.
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.

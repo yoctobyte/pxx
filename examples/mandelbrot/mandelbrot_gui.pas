@@ -49,7 +49,7 @@ program MandelbrotGUI;
 {$define PXX_MANAGED_STRING}
 
 uses gtk3, controls, stdctrls, forms, extctrls, graphics, math, sysutils, baseunix,
-     palparallel, mandelkernel;
+     palparallel, mandelkernel, gtk3_c;
 
 const
   INIT_W    = 900;
