@@ -168,6 +168,29 @@ is a feature, and the "big job" that is already half done.
 Worth deciding whether that changes anything procedurally, or whether "re-measure
 before starting" (which is what caught all three) is sufficient.
 
+## Staffing observation, for the steady-state question above
+
+Track B filed **three Track N tickets tonight, two of them on the corpus critical
+path, and it found all three by falling over them** while doing Track B work:
+
+- the type-as-default segfault (p60),
+- `bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails`
+  (p55) — `digits = string.digits` fails because the assignment TARGET breaks
+  resolution of the same-named attribute on the RHS; `constants.py:544` is exactly
+  that line, and most of html5lib imports `constants.py`,
+- the subpackage-directory ticket's `.npy` half, unblocked earlier and still
+  waiting.
+
+None was blocked on difficulty; all three were blocked on **nobody holding N**.
+That is not structural — Track A can take an N-tagged ticket whose fix lands in
+`parser.inc`, and I have queued two that way — but it means N work only happens
+when the A worker is free, and tonight the A worker was the bottleneck for the
+corpus campaign twice.
+
+Worth noting *how* they were found: a lane doing its own work walked into them.
+That is the corpus argument again — the walls are where real code goes, not where
+we looked.
+
 ## Housekeeping for the morning (not done overnight, deliberately)
 
 `tools/progress.sh check` reports **17 resolved tickets awaiting their landed sha**
