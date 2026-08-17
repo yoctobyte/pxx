@@ -2,7 +2,7 @@
 summary: "write(r:W) with a width but no decimals ignores W entirely — pxx always prints the full 16-decimal scientific form where FPC sizes the mantissa to the field"
 type: bug
 prio: 20
-track: B
+track: A
 ---
 
 # `write(r:W)` ignores the field width when no decimals are given
@@ -139,3 +139,20 @@ The probe is written and reproduces cleanly — `writeln(d:i)` for `i` in 1..26 
 differ today. Deliberately **not** added to `test/` as an unwired or red test:
 this repo already has tests that exist and run nowhere, and adding a red one to
 the gate for a fix that has not landed is the same failure wearing the other hat.
+
+
+## Re-tracked B -> A by the coordinator, 2026-08-17
+
+Track B measured it and handed the routing up rather than re-tracking unilaterally,
+which is the right split: a worker reports what it found, the coordinator moves the
+lane.
+
+`PXXWriteFloatSci` lives in `compiler/builtin/builtinheap.pas` and five backend
+emitters call it. **There is no `lib/rtl` component at all**, so this cannot be
+worked under Track B's gate — and `compiler/builtin/**` needs a **pin**, which is
+coordinator-scheduled. The `B` in the slug is now wrong; the frontmatter is what
+the ranker reads, so the slug is left alone rather than churned.
+
+Priority unchanged and deliberately low: float work is low priority by standing
+ruling (accuracy, ULP, rounding, range **and formatting**). Re-tracking is about
+who *can* do it, not about it becoming more important.
