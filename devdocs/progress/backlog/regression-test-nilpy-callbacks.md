@@ -80,3 +80,23 @@ report is the same family as the positional job names — the record preserves t
 verdict and discards the discriminator. A duration, or an explicit
 `TIMEOUT`-vs-`DIFF` verdict, would have made this stub self-attributing instead of
 needing a manual re-run.
+
+### Do not read the third verdict as a re-run
+
+`8f629af38632` carries **three** verdicts, and only two are about this job:
+
+    db7e583cd  GREEN (native)
+    474dc9293  RED   (full)    <- this stub
+    85c0ba748  GREEN (slow)    <- NOT a re-run of anything here
+
+The `slow` tier is **exactly one demoted shard** — `SLOW_SHARDS =
+{"test-uforth": ("blocktest",)}` (`tools/testmgr.py:1561`), pulled out because it
+was setting the wall time of every sweep. It never touches `test-nilpy`. Its
+`fixed: []` is therefore not evidence that this job is still failing, and its
+`GREEN` is not evidence that it recovered.
+
+Recorded because the coordinator briefly read it as a confirming re-run before
+checking the tier composition. A per-sha verdict list invites the assumption that
+later verdicts supersede earlier ones; here they cover **disjoint job sets**, so
+they cannot. Same shape as the rest of tonight's findings — a true statement about
+the wrong subject.
