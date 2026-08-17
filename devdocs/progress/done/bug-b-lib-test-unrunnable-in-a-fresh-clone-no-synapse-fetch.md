@@ -158,4 +158,4 @@ argument for two scripts. **Recommendation: keep it here.** Moving it later is a
 few lines if the owner disagrees.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 10a60fd99.
