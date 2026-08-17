@@ -438,7 +438,23 @@ unrelated two-line defects. Same ticket, same model, different context depth.
   (teach `PyParseImportRun` the relative forms, THEN widen the prescan). The
   ordering is load-bearing — widening first is a one-line change that looks
   obviously correct and reroutes the sibling form to a handler that cannot cope.
-- **frank2 (when cleared) → Track N bug queue**, ranked, top first. N holds 17 of the 32 open
+- **frank2 → TRACK A** (reassigned 2026-08-17 after a clear, human's call). Sole
+  holder of `parser.inc` / shared internals; the coordinator writes no code and
+  frank3 is B, so the exclusivity is clean. Queue: the p70 shim-slot ticket
+  (gates `six`, which gates 15 of 58 corpus files), then the module-identity bug
+  it filed itself, then the TLS-into-stack one.
+- **frank3 → STOOD DOWN**, B queue exhausted of anything worth tokens. What
+  remains is all float work, which is **low priority by standing ruling**
+  (accuracy, ULP, rounding, range AND formatting — mechanical, ranked ~20, meant
+  to stay there).
+  **Coordinator error to not repeat:** dispatched frank3 to a strtofloat perf
+  ticket by reasoning "3600x is performance, not accuracy", then offered a
+  float-formatting one. Both are float work; the distinction was plausible and was
+  talking past a rule the owner had already set. The work itself was good and
+  stands — a real quadratic string build — but it was the wrong dispatch. A
+  standing prio ruling is not re-litigated by finding a category the ticket also
+  fits.
+- **frank2 (superseded) → Track N bug queue**, ranked, top first. N holds 17 of the 32 open
   bug tickets and is fully carved out (`pylexer.inc` / `pyparser.inc` / pylib),
   so it collides with nobody. Shared-internals change → file a Track A ticket,
   do not edit under N.
