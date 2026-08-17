@@ -208,7 +208,23 @@ unrelated two-line defects. Same ticket, same model, different context depth.
 
 - **coordinator → also holds Track P** while testing the combined role (see
   above). P cannot collide with N.
-- **frank2 → Track N bug queue**, ranked, top first. N holds 17 of the 32 open
+- **frank2 → PAUSED 2026-08-17, awaiting the human's clear.** It reported its own
+  degradation (three rebuild-measure cycles on the prescan condition, one
+  reverted) and recommended a fresh session — correct read, acted on rather than
+  thanked for. All work banked and pushed before stopping.
+
+  **Coordinator error worth keeping:** my first response was to redirect it to a
+  mechanical batch (test-wiring) instead of the fiddly step. That is a sound
+  instinct in general and was wrong *here* — the human's call was pause and stop,
+  and a session mid-work does not become safe to hand new work just because the
+  new work is easy. Handing work to a degraded session is still handing it work.
+  When a worker says it should stop, the default is stop, not re-task.
+
+  On resume: `feature-nilpy-thirdparty-libraries-as-targets`, staged route step 1
+  (teach `PyParseImportRun` the relative forms, THEN widen the prescan). The
+  ordering is load-bearing — widening first is a one-line change that looks
+  obviously correct and reroutes the sibling form to a handler that cannot cope.
+- **frank2 (when cleared) → Track N bug queue**, ranked, top first. N holds 17 of the 32 open
   bug tickets and is fully carved out (`pylexer.inc` / `pyparser.inc` / pylib),
   so it collides with nobody. Shared-internals change → file a Track A ticket,
   do not edit under N.
