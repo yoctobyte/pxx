@@ -263,17 +263,32 @@ been fixed.
 
 That is worth more than a documentation tidy, because the hazard it described
 has been replaced by a **worse** one. A pin that cannot compile fails cleanly
-and announces itself. A pin that *can* compile is simply an **older compiler**,
-and reports older performance as though it were current:
+and announces itself. A pin that *can* compile produces a full, plausible pxx
+column for a compiler that is **not the one any recorded figure was taken
+with** — and says nothing.
 
-| microbench-doloop, same box, same day | pxx |
-| --- | --- |
-| HEAD-built compiler | 29.6 s |
-| pinned v344 | **44.1 s** |
+**RETRACTED, same day:** this section first cited "HEAD 29.6 s vs pin 44.1 s" as
+evidence the pin was stale. That attribution was wrong, and the correction is
+worth more than the claim was:
 
-So anyone re-running this ticket's recorded numbers against `$(PXX_STABLE)` now
-gets plausible, worse figures and reasonably concludes the append win regressed.
-It did not — they benchmarked a different compiler.
+- pin **v344** (`da44f561e`, 2026-08-16) **postdates** v299 (`86da0606d`,
+  2026-08-14), the pin that carried the in-place append work — and contains
+  both `9ffbba0bd` and `e0d7b6ca7`. Verified by `merge-base --is-ancestor`.
+- the two binaries are ~77 bytes apart.
+
+Two compilers 77 bytes apart, both carrying the same perf work, cannot differ by
+1.49x. And 1.49x sits inside the **1.96x** co-tenancy range measured on this
+very box (403 s → 791 s), on a day it was running three dev sessions plus
+sweeps. So the figure almost certainly measured **contention**, not the pin.
+
+Settling it needs two interleaved builds on a quiet box, which nobody has had
+lately. Until then the number is withdrawn rather than repaired.
+
+**The guard stands without it.** Benchmarking with `$(PXX_STABLE)` genuinely
+does measure a different compiler from every figure on record, and silence about
+that is the hazard; the shipped warning says exactly that and never quantified
+it. Whether the pin is faster or slower is the thing a reader should go and
+measure, not be told.
 
 **Guarded mechanically rather than by note**: `uforth_bench.py` warns when
 `--pxx` is a pinned/stable path, **at selection time rather than on failure**,

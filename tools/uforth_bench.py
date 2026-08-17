@@ -237,14 +237,23 @@ def main():
         # defaults to the HEAD compiler was that the pinned stable could not lex
         # uforth's char-code literals -- a clean, self-announcing failure. That
         # is no longer true (measured 2026-08-17: pin v344 compiles uforth.py
-        # fine), and the replacement hazard is worse, because it is silent: the
-        # pin is simply an OLDER compiler, so it reports older performance as if
-        # it were current.
+        # fine), and the replacement hazard is worse because it is SILENT: the
+        # run succeeds and produces a full, plausible pxx column for a compiler
+        # that is not the one any recorded figure was taken with.
         #
-        # Measured the same day, microbench-doloop: HEAD 29.6 s, pin 44.1 s.
-        # Someone re-running the recorded numbers against $(PXX_STABLE) gets
-        # plausible, wrong, worse figures and concludes the win regressed. It
-        # did not; they benchmarked a different compiler.
+        # Deliberately NOT quantified. A first version of this comment cited
+        # "HEAD 29.6 s vs pin 44.1 s" as evidence the pin was stale; that
+        # attribution was wrong. Pin v344 (2026-08-16) POSTDATES the in-place
+        # append work pinned as v299 (2026-08-14) and contains it, and the two
+        # binaries differ by ~77 bytes -- so a 1.49x gap cannot be the compiler.
+        # It sits inside the 1.96x co-tenancy range measured on this same box,
+        # and was taken while three dev sessions were running. The claim needs
+        # two interleaved builds on a quiet box, which nobody has had lately.
+        #
+        # The warning stands without a number: benchmarking with $(PXX_STABLE)
+        # measures a DIFFERENT compiler from every figure on record, and silence
+        # about that is the hazard. Whether it is faster or slower is exactly
+        # the thing the reader should go and measure, not be told.
         print("uforth-bench: WARNING — --pxx is a PINNED binary (%s). These "
               "numbers will describe the PIN, not HEAD, and every figure "
               "recorded for this harness was taken with the HEAD-built "
