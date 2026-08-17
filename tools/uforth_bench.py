@@ -38,6 +38,7 @@ Usage:
 
 import argparse
 import os
+import re
 import resource
 import shutil
 import subprocess
@@ -191,6 +192,11 @@ def discover_workloads(uforth_dir, full, scratch):
     return [w for w in wl if full or not w[2]]
 
 
+# A pinned/stable compiler path. Only used to explain a compile failure -- see
+# where it is referenced; the harness deliberately never selects the pin.
+PINNED_RE = re.compile(r"stable_[A-Za-z0-9_]+/[A-Za-z0-9_.-]+/(?:pinned|latest)")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--pxx", default=os.path.join(REPO, "compiler/pascal26"),
@@ -226,6 +232,25 @@ def main():
 
     # build the pxx native binary once
     pxx_native = None
+    if PINNED_RE.search(args.pxx):
+        # WARN ON SELECTION, not on failure. The original reason this harness
+        # defaults to the HEAD compiler was that the pinned stable could not lex
+        # uforth's char-code literals -- a clean, self-announcing failure. That
+        # is no longer true (measured 2026-08-17: pin v344 compiles uforth.py
+        # fine), and the replacement hazard is worse, because it is silent: the
+        # pin is simply an OLDER compiler, so it reports older performance as if
+        # it were current.
+        #
+        # Measured the same day, microbench-doloop: HEAD 29.6 s, pin 44.1 s.
+        # Someone re-running the recorded numbers against $(PXX_STABLE) gets
+        # plausible, wrong, worse figures and concludes the win regressed. It
+        # did not; they benchmarked a different compiler.
+        print("uforth-bench: WARNING — --pxx is a PINNED binary (%s). These "
+              "numbers will describe the PIN, not HEAD, and every figure "
+              "recorded for this harness was taken with the HEAD-built "
+              "compiler. Failing to reproduce them this way is not a "
+              "regression. Use ./compiler/pascal26 (the default) to compare "
+              "against the record." % os.path.basename(args.pxx))
     if os.path.isfile(args.pxx) and os.access(args.pxx, os.X_OK):
         out = os.path.join("/tmp", "uforth_bench_native_%d" % os.getpid())
         r = sh([args.pxx, ufpy, out])

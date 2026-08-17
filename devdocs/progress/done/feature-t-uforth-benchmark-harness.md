@@ -249,3 +249,38 @@ is a true fact about a different benchmark.
 the rest being **alloc churn**. That makes
 [[feature-t-uforth-bench-on-the-watcher-idle-phase]] the right next instrument —
 churn wants an undisturbed series, not one quiet run.
+
+### 2026-08-17 — the "pin cannot lex uforth" reason is STALE, and the hazard got worse
+
+This ticket records, as the reason the harness defaults to the HEAD compiler:
+
+> *Must use the CURRENT compiler — pinned stable can't lex uforth's char-code
+> literals (`empty char-code literal after #`)*
+
+**No longer true.** Measured today: pin v344 compiles `uforth.py` fine and
+produces a full pxx column. The limitation was real when written and has since
+been fixed.
+
+That is worth more than a documentation tidy, because the hazard it described
+has been replaced by a **worse** one. A pin that cannot compile fails cleanly
+and announces itself. A pin that *can* compile is simply an **older compiler**,
+and reports older performance as though it were current:
+
+| microbench-doloop, same box, same day | pxx |
+| --- | --- |
+| HEAD-built compiler | 29.6 s |
+| pinned v344 | **44.1 s** |
+
+So anyone re-running this ticket's recorded numbers against `$(PXX_STABLE)` now
+gets plausible, worse figures and reasonably concludes the append win regressed.
+It did not — they benchmarked a different compiler.
+
+**Guarded mechanically rather than by note**: `uforth_bench.py` warns when
+`--pxx` is a pinned/stable path, **at selection time rather than on failure**,
+saying the numbers describe the pin and that failing to reproduce the record
+this way is not a regression. Warning on failure would have been useless here
+precisely because there is no longer a failure to hang it on.
+
+The stale reason is left in the text above rather than edited out, with this
+section as its correction — the original sentence explains why the default was
+chosen, and that history is why the default is still right.
