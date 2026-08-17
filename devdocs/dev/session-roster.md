@@ -90,6 +90,14 @@ unrelated two-line defects. Same ticket, same model, different context depth.
   coordinator's own staleness as T being down, which would have sent every
   worker into ten-minute sweeps on no evidence. If someone asks to widen, check
   the exit code, not the word.
+- **Gate BEFORE you commit, not after.** `gate.sh quick`'s FPC seed canary only
+  runs while `compiler/**` has UNCOMMITTED changes; on a clean tree it prints
+  `SKIP` and you get no FPC coverage at all. This is not pedantry — PXX prescans
+  headers and FPC is single-pass, so an entire class of defect (declaration
+  order, a duplicate forward across two .inc files) passes `make
+  compiler/pascal26` AND `--tier quick` and is caught by the canary alone.
+  Live case 2026-08-17, `a057789bc`: self-host converged, quick tier green, and
+  the seed build was the only thing that failed.
 - **Verify a peer's claim before acting on it**, and name the sha in your own.
   Two overclaims were caught between sessions on 2026-08-16, in both directions;
   each cost one message where believing it would have cost far more. Also check
@@ -103,7 +111,10 @@ unrelated two-line defects. Same ticket, same model, different context depth.
   bug tickets and is fully carved out (`pylexer.inc` / `pyparser.inc` / pylib),
   so it collides with nobody. Shared-internals change → file a Track A ticket,
   do not edit under N.
-- **plexus-T →** watcher duty plus its own 13 ready T tickets.
+- **plexus-T →** DISPATCHED 2026-08-17 to work its own T queue (human:
+  "set track T to work"), not watcher duty alone. Top: the unsweepable tmp-paths
+  chore, the uforth benchmark harness (the instrument for the slow-creep
+  residual), full-tier coverage age.
 - **coordinator →** this file, the A/P slot, pins, escalations.
 
 ## Open question for the human (not blocking)
