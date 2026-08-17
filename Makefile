@@ -302,6 +302,15 @@ test-nilpy: $(COMPILER)
 	# bug-n-a-type-as-a-default-parameter-value-segfaults-when-the-default-is-taken
 	./$(COMPILER) test/test_nilpy_type_as_default_arg.npy $(TESTTMP)/test_nilpy_type_default26
 	test "$$($(TESTTMP)/test_nilpy_type_default26)" = "$$(printf 'm\nu\nW\nW\n0\nFalse')"
+	# `digits = string.digits` — a module attribute read through its qualifier
+	# while the program binds the same name. Did not compile: "undefined variable
+	# (digits)", accusing the line that creates the variable. Four lines, not one:
+	# the bare name must still be the PROGRAM's (that scoping rule is why the
+	# guard exists) and the qualified name the MODULE's, so a fix that simply
+	# dropped the guard fails line 1. Expectations are CPython's own output.
+	# bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails
+	./$(COMPILER) test/test_nilpy_shim_attr_name_collision.npy $(TESTTMP)/test_nilpy_shim_attr26
+	test "$$($(TESTTMP)/test_nilpy_shim_attr26)" = "$$(printf 'xyz\n0123456789\n0123456789\n6')"
 	rm -f /tmp/test_nilpy_sqlite_crud.db
 	./$(COMPILER) test/test_nilpy_sqlite_crud.npy $(TESTTMP)/test_nilpy_sqlite_crud26
 	test "$$($(TESTTMP)/test_nilpy_sqlite_crud26)" = "$$(printf '1 alice\n2 bob')"
@@ -6105,7 +6114,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_case_sensitive_unit.pas $(TESTTMP)/test_case_sensitive_unit26
 	test "$$($(TESTTMP)/test_case_sensitive_unit26)" = "$$(printf 'unit\n7')"
 	./$(COMPILER) test/test_qualified_units.pas $(TESTTMP)/test_qualified_units26
-	test "$$($(TESTTMP)/test_qualified_units26)" = "$$(printf '1074030207\n1074030207\n3\n7\n11\n22\n101\n201')"
+	test "$$($(TESTTMP)/test_qualified_units26)" = "$$(printf 'from-program\nfrom-unit\n1074030207\n1074030207\n3\n7\n11\n22\n101\n201')"
 	./$(COMPILER) test/test_uses_alias.pas $(TESTTMP)/test_uses_alias26
 	test "$$($(TESTTMP)/test_uses_alias26)" = "$$(printf '42\n7\n2')"
 	./$(COMPILER) test/test_relpath_uses.pas $(TESTTMP)/test_relpath_uses26

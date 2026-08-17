@@ -15746,9 +15746,22 @@ begin
         method-local `var S : TJSONString` later -- hence the decl-ORDER dependence.
 
         (The constant table not being SCOPED at all is a separate, larger defect --
-        bug-pascal-string-const-not-scoped -- and this guard does not pretend to fix it.) }
-      if (sci >= 0) and (FindSym(name) >= 0) then sci := -1;
-      if (sci < 0) and CaseEqual(name, 'LineEnding') and (FindSym(name) < 0) then
+        bug-pascal-string-const-not-scoped -- and this guard does not pretend to fix it.)
+
+        …and NOT when the name was reached through an explicit qualifier. A
+        written `unit.Name` asks for THAT unit's declaration by construction, so
+        an unrelated same-named variable elsewhere has no business cancelling
+        it — the same exemption `OwnFieldBeatsSym` already takes above. Without
+        it, `mimic_string.digits` stopped resolving the moment the program
+        declared anything called `digits`, and the diagnostic named `digits` —
+        i.e. it accused the very line that was creating the variable, pointing
+        away from the const it had just refused to see. In NilPy that is the
+        ordinary spelling of a module import (`digits = string.digits`), which
+        is how it reached the corpus as a wall.
+        bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails }
+      if (sci >= 0) and (qUnit = -1) and (FindSym(name) >= 0) then sci := -1;
+      if (sci < 0) and CaseEqual(name, 'LineEnding') and
+         ((qUnit <> -1) or (FindSym(name) < 0)) then
       begin
         { System.LineEnding as an ordinary expression (`s := s + LineEnding;`). Same
           FALLBACK discipline as the const-concat path: only when nothing else declares

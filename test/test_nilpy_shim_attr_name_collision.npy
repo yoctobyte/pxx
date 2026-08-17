@@ -1,0 +1,23 @@
+# A module attribute read through its qualifier, while the program ALSO binds a
+# variable of that same name — `digits = string.digits` is the ordinary Python
+# spelling of an import and it did not compile: "undefined variable (digits)",
+# reported against the very line creating the variable.
+#
+# Four assertions, because "it compiles" is not the property. The bare name must
+# still read the PROGRAM's value (an unqualified name is not the module's — that
+# scoping rule is what the guard being relaxed here exists for), the qualified
+# name must read the MODULE's, and the collision case must produce the module's
+# value rather than the program's previous one. A fix that let the qualifier see
+# through to the shim but also let it lose to the local would pass a compile
+# check and fail line 2.
+#
+# Expectations are CPython's own output.
+# bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails
+import string
+
+digits = "xyz"
+print(digits)
+print(string.digits)
+digits = string.digits
+print(digits)
+print(len(string.whitespace))
