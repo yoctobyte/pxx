@@ -4293,6 +4293,26 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_nested_proc_sibling_call26)" = "$$(printf 'a\nb-before\na7\nb-after\na7\na42\n3\n2\n1\n0\n15\n10005\n10')"
 	./$(COMPILER) test/test_nested_routine_depth2_capture.pas $(TESTTMP)/test_nested_routine_depth2_capture26
 	$(TESTTMP)/test_nested_routine_depth2_capture26 | diff -u test/test_nested_routine_depth2_capture.expected -
+	# Real-valued CONSTANT EXPRESSIONS — folded at compile time, so a wrong fold
+	# is a silently wrong literal rather than a diagnostic.
+	./$(COMPILER) test/test_const_real_expressions.pas $(TESTTMP)/test_const_real_expr26
+	$(TESTTMP)/test_const_real_expr26 | diff -u test/test_const_real_expressions.expected -
+	# A `for` loop evaluates its LIMIT ONCE, and the type's MAX as a limit must
+	# terminate rather than wrap — the two halves are in one file because a fix
+	# to either can break the other.
+	./$(COMPILER) test/test_for_limit_once_and_type_max.pas $(TESTTMP)/test_for_limit_once26
+	$(TESTTMP)/test_for_limit_once26 | diff -u test/test_for_limit_once_and_type_max.expected -
+	# `><` set symmetric difference.
+	./$(COMPILER) test/test_set_symmetric_difference.pas $(TESTTMP)/test_set_symdiff26
+	$(TESTTMP)/test_set_symdiff26 | diff -u test/test_set_symmetric_difference.expected -
+	# A routine-local TYPED CONST is STATIC — it keeps its value across calls,
+	# it is not re-initialised on entry.
+	./$(COMPILER) test/test_local_typed_const_is_static.pas $(TESTTMP)/test_local_typed_const26
+	$(TESTTMP)/test_local_typed_const26 | diff -u test/test_local_typed_const_is_static.expected -
+	# Integer vs LongInt overload selection: same width on this target, so the
+	# pick must come from the DECLARED type rather than the value's fit.
+	./$(COMPILER) test/test_integer_longint_overload.pas $(TESTTMP)/test_int_longint_ovl26
+	$(TESTTMP)/test_int_longint_ovl26 | diff -u test/test_integer_longint_overload.expected -
 	./$(COMPILER) test/test_nested_routine_local_shadows_own_name.pas $(TESTTMP)/test_nested_routine_local_shadows26
 	test "$$($(TESTTMP)/test_nested_routine_local_shadows26 | tail -1)" = "total ok 11 / 11"
 	./$(COMPILER) test/test_system_qualified_intrinsic.pas $(TESTTMP)/test_system_qualified_intrinsic26
