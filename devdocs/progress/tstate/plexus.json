@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-16T11:19:21Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "096da361dd93823dc6aa56f7a344de5f343127ec",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-16T11:24:41Z",
    "fixed": [],
    "new_red": [],
@@ -410,6 +402,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "66de48a841866cc9bc4df4b905403a1dfcbbff04",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-17T17:32:01Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "0d40a75268afb20ce56de79eb3f5ec9d4b9158b5",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1407,6 +1407,7 @@
   "test-core#src:test/test_const_expr_builtins.pas": "native",
   "test-core#src:test/test_const_open_array_managed.pas": "native",
   "test-core#src:test/test_const_precedence.pas": "native",
+  "test-core#src:test/test_const_real_expressions.pas": "native",
   "test-core#src:test/test_const_record_method_prebody.pas@1": "native",
   "test-core#src:test/test_const_record_method_prebody.pas@2": "native",
   "test-core#src:test/test_const_record_param.pas": "native",
@@ -1516,6 +1517,7 @@
   "test-core#src:test/test_float_width.pas": "native",
   "test-core#src:test/test_float_write.pas@1": "native",
   "test-core#src:test/test_float_write.pas@2": "native",
+  "test-core#src:test/test_for_limit_once_and_type_max.pas": "native",
   "test-core#src:test/test_for_var_inline.pas": "native",
   "test-core#src:test/test_forin_aggr_elems.pas": "native",
   "test-core#src:test/test_forin_bounds_nd.pas": "native",
@@ -1582,6 +1584,7 @@
   "test-core#src:test/test_int_arg_to_float_param.pas": "native",
   "test-core#src:test/test_int_sized_names_b261.pas": "native",
   "test-core#src:test/test_int_to_float.pas": "native",
+  "test-core#src:test/test_integer_longint_overload.pas": "native",
   "test-core#src:test/test_interface_arc.pas": "native",
   "test-core#src:test/test_interface_arc_exc.pas": "native",
   "test-core#src:test/test_interface_ascast_dead_branch_temp.pas": "native",
@@ -1627,6 +1630,7 @@
   "test-core#src:test/test_local_shadows_func.pas": "native",
   "test-core#src:test/test_local_shadows_method_assign.pas": "native",
   "test-core#src:test/test_local_typed_const.pas": "native",
+  "test-core#src:test/test_local_typed_const_is_static.pas": "native",
   "test-core#src:test/test_local_var_beats_string_const_b313.pas": "native",
   "test-core#src:test/test_lolcode_skeleton.lol": "native",
   "test-core#src:test/test_loop_control.pas": "native",
@@ -1936,6 +1940,7 @@
   "test-core#src:test/test_set_runtime.pas": "native",
   "test-core#src:test/test_set_shapes.pas": "native",
   "test-core#src:test/test_set_subrange.pas": "native",
+  "test-core#src:test/test_set_symmetric_difference.pas": "native",
   "test-core#src:test/test_setlength_dynarray_result.pas": "native",
   "test-core#src:test/test_setlength_grow_capacity.pas": "native",
   "test-core#src:test/test_setlength_managed_field.pas": "native",
@@ -4115,6 +4120,7 @@
   "test-core#src:test/test_const_expr_builtins.pas": "pass",
   "test-core#src:test/test_const_open_array_managed.pas": "pass",
   "test-core#src:test/test_const_precedence.pas": "pass",
+  "test-core#src:test/test_const_real_expressions.pas": "pass",
   "test-core#src:test/test_const_record_method_prebody.pas@1": "pass",
   "test-core#src:test/test_const_record_method_prebody.pas@2": "pass",
   "test-core#src:test/test_const_record_param.pas": "pass",
@@ -4223,6 +4229,7 @@
   "test-core#src:test/test_float_width.pas": "pass",
   "test-core#src:test/test_float_write.pas@1": "pass",
   "test-core#src:test/test_float_write.pas@2": "pass",
+  "test-core#src:test/test_for_limit_once_and_type_max.pas": "pass",
   "test-core#src:test/test_for_var_inline.pas": "pass",
   "test-core#src:test/test_forin_aggr_elems.pas": "pass",
   "test-core#src:test/test_forin_bounds_nd.pas": "pass",
@@ -4289,6 +4296,7 @@
   "test-core#src:test/test_int_arg_to_float_param.pas": "pass",
   "test-core#src:test/test_int_sized_names_b261.pas": "pass",
   "test-core#src:test/test_int_to_float.pas": "pass",
+  "test-core#src:test/test_integer_longint_overload.pas": "pass",
   "test-core#src:test/test_interface_arc.pas": "pass",
   "test-core#src:test/test_interface_arc_exc.pas": "pass",
   "test-core#src:test/test_interface_ascast_dead_branch_temp.pas": "pass",
@@ -4334,6 +4342,7 @@
   "test-core#src:test/test_local_shadows_func.pas": "pass",
   "test-core#src:test/test_local_shadows_method_assign.pas": "pass",
   "test-core#src:test/test_local_typed_const.pas": "pass",
+  "test-core#src:test/test_local_typed_const_is_static.pas": "pass",
   "test-core#src:test/test_local_var_beats_string_const_b313.pas": "pass",
   "test-core#src:test/test_lolcode_skeleton.lol": "pass",
   "test-core#src:test/test_loop_control.pas": "pass",
@@ -4642,6 +4651,7 @@
   "test-core#src:test/test_set_runtime.pas": "pass",
   "test-core#src:test/test_set_shapes.pas": "pass",
   "test-core#src:test/test_set_subrange.pas": "pass",
+  "test-core#src:test/test_set_symmetric_difference.pas": "pass",
   "test-core#src:test/test_setlength_dynarray_result.pas": "pass",
   "test-core#src:test/test_setlength_grow_capacity.pas": "pass",
   "test-core#src:test/test_setlength_managed_field.pas": "pass",
@@ -5824,11 +5834,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-17T17:27:42Z",
-  "sha": "66de48a841866cc9bc4df4b905403a1dfcbbff04",
+  "date": "2026-08-17T17:32:01Z",
+  "sha": "0d40a75268afb20ce56de79eb3f5ec9d4b9158b5",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 213.5
+  "wall": 223.1
  },
  "last_bench": {
   "conf_rows": 550,
