@@ -139,4 +139,4 @@ its-file` and `bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-veri
 cert`).
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 42ab5131e.
