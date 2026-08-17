@@ -187,6 +187,18 @@ unrelated two-line defects. Same ticket, same model, different context depth.
   compiler/pascal26` AND `--tier quick` and is caught by the canary alone.
   Live case 2026-08-17, `a057789bc`: self-host converged, quick tier green, and
   the seed build was the only thing that failed.
+- **Third-party source NEVER enters the repo** (owner, 2026-08-17, unprompted and
+  emphatic). Fetched on demand, gitignored, pinned, PROVENANCE.md — and the
+  invariant must be **enforced, not documented**. `library_candidates/` is 146M;
+  a single careless `git add -f` is a permanent object in the project's history.
+  Verified clean 2026-08-17: both roots gitignored, `git ls-files` returns ZERO
+  tracked paths under either.
+  `install_lib_candidates.sh:107` is the pattern — it `check-ignore`s its own
+  DEST and **refuses to fetch** if the root ever stops being ignored, so editing
+  `.gitignore` cannot silently turn the next fetch into a stageable vendor tree.
+  `install_externals.sh` only ASSERTED the property, in a PROVENANCE string
+  written into the very tree it describes; routed to frank3 to mirror the real
+  guard. **Any new fetcher copies that check — a claim in a comment is not one.**
 - **Verify a peer's claim before acting on it**, and name the sha in your own.
   Two overclaims were caught between sessions on 2026-08-16, in both directions;
   each cost one message where believing it would have cost far more. Also check
