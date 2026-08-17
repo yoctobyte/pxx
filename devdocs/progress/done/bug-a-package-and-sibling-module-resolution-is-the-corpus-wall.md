@@ -146,3 +146,56 @@ one that broke.
 
 ## Log
 - 2026-08-17 — resolved, commit 546c03e02.
+
+
+## CORRECTION — the `webencodings` row measured the HARNESS, not the compiler
+
+Found by Track A while fixing this (2026-08-17). **The coordinator filed this
+ticket citing that row as the largest lever; that was wrong**, and the error was
+in the instrument rather than in anyone's reading of it.
+
+`webencodings` is **cross-package**, not sibling: `tinycss2/bytes.py` does
+`from webencodings import ...`, and the ladder scan passes only the file's OWN
+candidate root on `-Fu`. Supply both roots and it resolves immediately — the wall
+moves to `undefined variable (CodecInfo)`, the known `mimic_codecs` gap already
+tracked on Track B.
+
+So 6-7 files of the "biggest wall" were the equivalent of leaving a library off
+`PYTHONPATH`. Track A did NOT change the scan — it is Track B's instrument and
+redefining another lane's measurement mid-campaign is not Track A's call — so this
+is routed rather than fixed.
+
+**Why it matters beyond one row:** while that row stands, it will keep ranking as
+the top lever and keep sending Track A after a resolution bug that does not exist.
+A measurement artefact that survives is worse than a missing measurement, because
+it is *actionable* and wrong.
+
+## What the fix actually was: the DOT LEVEL
+
+`from .constants import X` already worked. The defect was **`from ..constants
+import X`** — the parent-relative form html5lib's subpackages write.
+`PyRelativeImportLevel` already returned the dot count and **every caller discarded
+it**; its own note said the dots are "simply skipped" and called level 1 "the
+closest available one for `..`". Level >= 2 then resolved against the *sub*package's
+directory, where the module is not, while the absolute spelling on the same tree
+resolved fine. Fixed by publishing the level and climbing `level-1` packages.
+
+## Result, walls-first
+
+15 corpus files carry a parent-relative import; A/B'd against **HEAD-minus-the-diff**
+(not `pinned` — see the roster's standing note on why `pinned` is not a baseline):
+
+| file | before | after |
+| --- | --- | --- |
+| `filters/lint.py` | `no unit named constants` | `undefined variable (digits)` |
+| `filters/whitespace.py` | `no unit named constants` | `undefined variable (digits)` |
+| `treebuilders/base.py` | `no unit named constants` | `undefined variable (digits)` |
+| `treebuilders/__init__.py` | `no unit named _utils` | `xml_etree_elementtree` |
+| `treewalkers/__init__.py` | `no unit named constants` | `undefined variable (digits)` |
+
+**5 walls cleared, 0 regressions, compile count flat at 0.** `constants` and
+`_utils` leave the first-wall table entirely. Read by compile count this is a zero,
+which is exactly what the lagging/leading rule above predicts.
+
+Remaining walls in this population are `undefined variable (digits)` (i.e.
+`string.digits`) and `xml_etree_elementtree` — **library/shim work, not Track A**.
