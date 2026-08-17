@@ -151,4 +151,4 @@ compile-fails before reaching the forwarder (guard `ProcPyStarIdx < 0` in
 `parser.inc`, Track A).
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 5aea881e5.

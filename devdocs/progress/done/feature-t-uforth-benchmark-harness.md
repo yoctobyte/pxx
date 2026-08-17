@@ -206,7 +206,7 @@ Resolving: the deliverable landed, it demonstrably runs, and the follow-ups are
 now rankable work rather than prose.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit def4bce85.
 
 ### Attributed 2026-08-17 — the RSS drop is the in-place append fix
 
