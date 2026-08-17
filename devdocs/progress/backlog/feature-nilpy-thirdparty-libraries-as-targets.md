@@ -602,3 +602,53 @@ shim only reveals the next one. "50 of 58 files stop at a missing module" stays
 true and stays the biggest single lever; it is just not the whole distance.
 Worth re-running the scan after each shim lands rather than treating the
 original table as the remaining work.
+
+## 2026-08-17 — measured: the surface is FETCHED and WIRED TO NOTHING
+
+Counted Makefile references per corpus, against `library_candidates/` presence.
+Every tree below is present on disk.
+
+| corpus | frontend | Makefile refs |
+| --- | --- | ---: |
+| lua | C | 56 |
+| sqlite | C | 46 |
+| chess | C | 31 |
+| quickjs | C | 25 |
+| zlib | C | 21 |
+| cjson / csmith / duktape | C | 15 / 14 / 14 |
+| c-testsuite / tcc | C | 9 / 8 |
+| fcl-json | P | 9 |
+| **html5lib / reportlab** | **N** | **1 / 1 — both COMMENTS, not rules** |
+| **webencodings / tinycss2** | **N** | **0 / 0** |
+| fpc-testsuite | P | 0 |
+
+**The C frontend built corpus discipline; NilPy did not.** That is the whole
+finding, and it explains a shape that otherwise looks like bad luck: N took 628
+of 1751 track-tagged commits in the last 30 days (38%) while the only body of
+genuinely independent Python on the box was exercised by nothing.
+
+## Why this matters more than the open bug count
+
+The 17 open N bugs all came from surfaces we chose — our own `.npy` tests, and
+uforth, which is OUR code (see the provenance note: its value is semantic DEPTH
+under an external conformance suite, not language-surface BREADTH). Code written
+here can unconsciously avoid what NilPy does not support, so "it compiles" proves
+less than it looks.
+
+`webencodings`, `tinycss2`, `html5lib` and `reportlab` are the only Python on
+this machine that we could not have shaped to fit. Wiring them is what converts
+"we think we are on par with CPython" into a measured claim — and it will find
+the class of defect the current 17 cannot contain, precisely because nobody here
+chose the constructs.
+
+## Precedent to copy, so this is not a design job
+
+C's corpus pattern is mature and directly reusable: vendor pinned via
+`tools/install_lib_candidates.sh` (already done for all four), a Makefile target
+per corpus, run the library's OWN test suite as the oracle, reduce each failure
+to a minimal repro against CPython, fix one, add a regression test. See the lua /
+quickjs / duktape targets for the shape.
+
+Expected outcome worth stating up front: **the open-bug count will RISE.** That
+is the intended result, not a regression — it is the same trade the C corpora
+made, and it is why C's frontend now has 3 open bugs against N's 17.
