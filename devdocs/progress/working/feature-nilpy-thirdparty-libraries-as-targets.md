@@ -757,3 +757,49 @@ package.
 would assert rung 2's failure rather than a corpus result, so the order stands:
 fix rung 2, then wire `webencodings` as the first N corpus target with its own
 test suite as the oracle.
+
+### 2026-08-17 (cont.) — rungs 1 and 2 both landed; they were ONE mechanism
+
+Pushed: `a6d84f1c6` (relative imports in a package `__init__.py`), `85c0801ea`
+(an aliased import binding 0 inside a pulled module), `63d80e8fc` (a package
+re-exports what its `__init__.py` imports). Gate green on each.
+
+The two rungs listed above as separate work turned out to share a root, and the
+sequencing was forced rather than chosen:
+
+- **The alias bug was not a parse defect.** `PyFlushImportAliases` had exactly
+  one call site, in the main-program path; `ParsePyModule` never called it. So a
+  module's alias symbol was allocated — which is why it resolved instead of
+  erroring — and its `ALIAS = NAME` assignment was never emitted. Silent 0.
+- **Re-export is the same missing binding.** The deciding measurement is that an
+  *aliased* re-export already worked while the plain one did not: same units,
+  same visibility, opposite results. The alias makes a real symbol in the
+  importing unit; the plain form made none and leaned on flat unit scope, which
+  stops at the module boundary.
+
+So the ticket's fork — "make `uses` transitive, or bind the name?" — dissolved
+without needing a Track U decision, and `VisibilityAllows` (Track A ground, and
+deliberately non-transitive since 2026-08-15) was never touched. Binding is also
+just what CPython does: a from-import binds in the importer's namespace rather
+than opening a window onto the exporter's.
+
+**Method note, and it is the second one today.** Both fixes came from running the
+CONTROL in the spelling the ticket was not about — the absolute form, the
+aliased form — and in both cases the control is what identified the variable.
+The relative-import ticket's staged three-step plan and this ticket's design
+fork were each derived from a real observation and each dissolved on one extra
+measurement. Banked *observations* held up all day; banked *conclusions* did not.
+Worth marking which is which when writing these up.
+
+### Where the ladder stands
+
+| rung | status |
+| --- | --- |
+| relative imports in `__init__.py` | **done** (N) |
+| a package re-exports its imports | **done** (N) |
+| `codecs.CodecInfo` — `mimic_codecs` surface | **open, Track B** — webencodings:50 |
+| a subpackage DIRECTORY resolving as a module | **open, N** — [[bug-n-a-subpackage-directory-does-not-resolve-as-a-module]]; html5lib only (it has `_trie`, `treebuilders`, `treewalkers`), so it is that library's rung, not webencodings' |
+
+webencodings sat at line 50 before these fixes and sits at line 50 after — which
+is the point worth recording. It confirms the fixes moved the wall they were
+aiming at and left the one they were not.
