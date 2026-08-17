@@ -303,3 +303,38 @@ Resolving.
 
 ## Log
 - 2026-08-17 — resolved, commit 7bcaacf9e.
+
+## 2026-08-17 — the last 2 SKIPs are closed; `lib-test` coverage is now complete
+
+Every report this ticket produced ended `167/167 pass, 2 skip (corpus absent)`,
+and I quoted that line repeatedly without closing it. The two were:
+
+```
+lib-test#src:test/lib_synapse.pas
+lib-test#src:test/lib_synapse_transitive_unit.pas
+```
+
+They skipped because `external/synapse` was absent from the watcher's clone —
+and the reason nobody fetched it is that testmgr's own corpus warning said it
+**could not be fetched by script**. That was false, and false from the day it
+was written: `tools/install_externals.sh` has fetched synapse since 2026-06-07.
+Fixed in the same pass (per-tree fetch hints, `CORPUS_FETCHERS`).
+
+With the message corrected, closing them was one command:
+
+```
+tools/install_externals.sh        # in both clones
+lib-test#src:test/lib_synapse*.pas  ->  2/2 pass
+```
+
+Fetched into **both** `/home/neo/pxx` and the watcher's `/home/neo/trackt-watch`
+— the second is the one that matters, since tstate's coverage is what other
+lanes read. The corpus is gitignored, so the watcher clone's git state is
+unchanged and the daemon needed no restart: this adds a precondition, it does
+not edit the clone.
+
+**tstate now records no SKIPs for `lib-test` on plexus**, so a green there
+covers what it claims to. That was the one remaining gap between "the tier is
+green" and "the tier ran everything", which is the distinction this ticket's own
+`corpus_warning` exists to make loud — and it had been quietly true against us
+for the whole enrolment.
