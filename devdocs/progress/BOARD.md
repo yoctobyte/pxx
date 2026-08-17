@@ -12,13 +12,14 @@ _none_
 
 _none_
 
-## unfinished (9)
+## unfinished (10)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
+| bug-p-cannot-call-directly-through-a-procedural-type-cast | P | 35 | bug | `TFn(p)(args)` — calling straight through a procedural-type cast — is `unexpected token`, where FPC compiles and runs it. Assigning the cast to a variable first and calling that works, so the capability is present and only this spelling is refused. Hit twice while writing repros for the rtl-generics constant-initializer walls. | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-own-language-first-symbol-resolution | A | 55 | feature | Own-language-first symbol resolution: the native language wins | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
@@ -34,7 +35,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (211)
+## backlog (210)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -63,7 +64,6 @@ _none_
 | bug-nilpy-float-power-is-a-ulp-off-the-rtl-already-has-the-fix | B | 20 | bug | NilPy's `**` with a fractional exponent still uses exp(y*ln(x)), so 2**0.5 != math.sqrt(2); lib/rtl/math.pas's Power was fixed with a double-double kernel for exactly these cases and names 2^0.5 in its own comment | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
-| bug-p-cannot-call-directly-through-a-procedural-type-cast | P | 35 | bug | `TFn(p)(args)` — calling straight through a procedural-type cast — is `unexpected token`, where FPC compiles and runs it. Assigning the cast to a variable first and calling that works, so the capability is present and only this spelling is refused. Hit twice while writing repros for the rtl-generics constant-initializer walls. | — |
 | bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits | P | 30 | bug | `-b shr 1` answers 2147483644 where FPC says 9223372036854775804, for Byte, Word and Cardinal — in BOTH the default dialect and --strict-fpc. FPC's unary minus yields a 64-bit value for EVERY integer operand type (SizeOf(-x) is 8 for all seven, measured); pxx's truncates an unsigned operand to 32 bits before any widening can run, so the sign is already gone. | — |
 | bug-t-fuzz-sh-reports-an-identical-crash-as-a-divergence | T | 30 | bug | `tools/fuzz.sh` compares the RUNNER's crash text along with the program's output, so a mutant that segfaults identically on all four targets is reported as three DIVERGENCEs — native says \"timeout: the monitored command dumped core\", qemu says \"uncaught target signal 11\". Same output, same exit code, different reporter. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
@@ -560,7 +560,6 @@ _none_
 - [p 35] [N] bug-n-abs-of-a-complex-raises-typeerror
 - [p 35] [N] bug-n-exec-ignores-a-caller-supplied-builtins-mapping
 - [p 35] [N] bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
-- [p 35] [P] bug-p-cannot-call-directly-through-a-procedural-type-cast
 - [p 35] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
