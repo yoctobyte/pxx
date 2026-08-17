@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:10 blocked:3 backlog:219 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1985 rejected:38`
+`working:1 unfinished:10 blocked:3 backlog:222 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1985 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -30,7 +30,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 204, ranked
+## Ready — top 30 of 207, ranked
 
 - `[p 70] [U]` decide-week-theme-2026-08-17
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -42,6 +42,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [C]` bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-n-a-package-does-not-re-export-what-its-init-imports
+- `[p 55] [N]` bug-n-a-subpackage-directory-does-not-resolve-as-a-module
 - `[p 55] [N]` bug-n-a-temporary-receiver-resolves-to-the-shim-type-not-the-user-class
 - `[p 55] [N]` bug-n-from-import-as-alias-binds-zero-inside-a-pulled-module
 - `[p 55] [N]` bug-n-relative-import-from-a-package-is-not-parsed
@@ -61,7 +62,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
 - `[p 50] [A]` feature-nilpy-collections-and-string-methods
-- `[p 50] [P]` feature-p-read-text-into-a-char-arm
-- `[p 50] [A]` feature-pascal-asmmode-directive-tolerance
 
-_174 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_177 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
