@@ -161,4 +161,4 @@ separate mechanism from sub-MODULE resolution; html5lib has real subpackages
 Filed as [[bug-n-a-subpackage-directory-does-not-resolve-as-a-module]].
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 8548f98d8.

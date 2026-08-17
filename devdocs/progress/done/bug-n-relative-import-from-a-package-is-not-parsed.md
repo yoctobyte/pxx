@@ -384,4 +384,4 @@ condition `Tokens[i + 1].Kind = tkIdent` appears at three sites; grepping the
 *shape* of the condition, not the name of the routine, is what finds all three.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 8548f98d8.

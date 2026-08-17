@@ -158,4 +158,4 @@ from-import binds a name in the importer's namespace rather than opening a
 window onto the exporter's. **One mechanism serves both tickets.**
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 8548f98d8.
