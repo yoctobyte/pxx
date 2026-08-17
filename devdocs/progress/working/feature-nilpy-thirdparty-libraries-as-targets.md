@@ -716,3 +716,44 @@ support, because we unconsciously write around it — is confirmed on the very
 first contact. Relative imports are unavoidable in third-party layout and
 completely avoidable in a single-file test, which is exactly why 17 open N bugs
 and 628 commits in 30 days never hit it.
+
+### 2026-08-17 (cont.) — the relative-import blocker is CLEARED; the next two rungs are named
+
+Fixed and pushed (`a6d84f1c6`). Both forms now work where real packages write
+them — inside a package's `__init__.py`, which is a different parser path from
+the main program's leading import run, and the reason a green
+`test_nilpy_relative_import.npy` had been asserting the wrong position all
+along. Details, including why the previously-recorded three-step ordering
+turned out to be one change at two sites, are in
+[[bug-n-relative-import-from-a-package-is-not-parsed]].
+
+`webencodings/__init__.py` now compiles **past line 19 to line 50**.
+
+**The ladder's next two rungs, both found by walking one rung further:**
+
+| rung | wall | lane |
+| --- | --- | --- |
+| 1 (done) | relative imports in `__init__.py` | N |
+| 2 | a package does not re-export what its `__init__.py` imports — [[bug-n-a-package-does-not-re-export-what-its-init-imports]] | **N** |
+| 3 | `codecs.CodecInfo` (webencodings:50) — `mimic_codecs` surface | **B** |
+
+Rung 2 is the one that matters most and was invisible until now: importing the
+public names out of private modules in `__init__.py` is *the* way a Python
+package publishes an API, and all three fetched libraries do it. A corpus driver
+doing `from webencodings import lookup` meets it the moment the file compiles.
+
+Also found, and it is the dangerous kind: **`from mod import NAME as ALIAS`
+binds 0 inside a pulled module**, silently
+([[bug-n-from-import-as-alias-binds-zero-inside-a-pulled-module]]). Caught only
+because a probe's sum printed 5 where CPython printed 6.
+
+**This is the second and third confirmation of the ticket's premise in one
+session.** All three defects are invisible to a single-file `.npy` test — one
+needs a package boundary to cross, one needs a module to be pulled rather than
+run. 628 N commits in 30 days never touched them because nothing here had a
+package.
+
+**Still true that the Makefile targets are not yet wired.** Wiring one today
+would assert rung 2's failure rather than a corpus result, so the order stands:
+fix rung 2, then wire `webencodings` as the first N corpus target with its own
+test suite as the oracle.
