@@ -1,0 +1,9 @@
+# Test files deliberately not wired into any build rule, one per line as
+#   <path>  <reason>
+# An entry with no reason is REFUSED by tools/check_test_wiring.py — an
+# unexplained exemption is the invisible-work problem the checker exists to
+# remove, one level down.
+#
+# Empty on purpose right now: the 98 currently-unwired files are NOT exemptions,
+# they are the backlog this checker was written to surface. Exempt a file only
+# when "nothing runs it" is the correct end state and you can say why.
