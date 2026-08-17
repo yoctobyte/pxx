@@ -138,6 +138,36 @@ thing being varied; a ticket's *cause* ages faster than its *symptom*; a constan
 nobody can explain is a wound until proven a baseline — are all the same rule from
 different angles.
 
+## A systemic finding: the backlog's SCOPE estimates are stale, not just its causes
+
+Track A audited three Track A tickets tonight and **all three were mis-scoped** —
+not marginally, but in ways that would each have cost a session:
+
+1. `feature-port-rtl-over-libc` — acceptance criterion that **could not fail**
+   (`objdump -d | grep -c syscall` on a section-header-less ELF). Also: the libc
+   import machinery it assumed needed building already works, and the 62
+   raw-syscall sites funnel through **one** IR op, so `lib/rtl` needs no edits.
+2. `compat-pascal-write-fixed-huge-magnitude` — its newest note restates two
+   complaints that the notes *above it* already record as fixed. Measured against
+   `decimal.Decimal` at prec=400: digit-for-digit exact. What is live is a
+   different thing (`Str` vs `WriteLn`), and bigger than stated —
+   `PXXWriteFloatFixed` writes to output and never builds a string, so there is
+   **no entry point to route to**.
+3. `bug-a-nilpy-leading-double-star` — half already fixed and never closed, and
+   the remaining half is not the "~5 lines / one lookahead" the ticket claims:
+   free functions got a **run-time** arity dispatch, methods route to a
+   **compile-time** expansion that refuses any callee with defaults. Two mechanisms
+   for one concept, one of which got the capability. No lookahead fix can work.
+
+**Three for three is a property of the backlog, not three unlucky tickets.** We
+already knew a ticket's *cause* section ages faster than its *symptom* section;
+this says the same of its *scope*, and scope is what ranking is built on. A ticket
+whose stated size is wrong is mis-ranked in both directions — the "quick win" that
+is a feature, and the "big job" that is already half done.
+
+Worth deciding whether that changes anything procedurally, or whether "re-measure
+before starting" (which is what caught all three) is sufficient.
+
 ## Housekeeping for the morning (not done overnight, deliberately)
 
 `tools/progress.sh check` reports **17 resolved tickets awaiting their landed sha**
