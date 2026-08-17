@@ -601,6 +601,11 @@ test-nilpy: $(COMPILER)
 	# the oracle here, and agrees.
 	./$(COMPILER) test/test_nilpy_relative_import_in_package.npy $(TESTTMP)/test_nilpy_relimppkg26
 	$(TESTTMP)/test_nilpy_relimppkg26 | diff -u test/test_nilpy_relative_import_in_package.expected -
+	# a QUALIFIED construction must not resolve the classes nested in its own
+	# ARGUMENTS in the qualified unit — `codecs.CodecInfo(Codec().enc, ...)`
+	# built mimic_codecs' Codec instead of the user's. CPython is the oracle.
+	./$(COMPILER) test/test_nilpy_qualified_ctor_does_not_capture_its_args.npy $(TESTTMP)/test_nilpy_qualctorargs26
+	$(TESTTMP)/test_nilpy_qualctorargs26 | diff -u test/test_nilpy_qualified_ctor_does_not_capture_its_args.expected -
 	# backslash line continuation, and `class C(object):`
 	./$(COMPILER) test/test_nilpy_line_continuation.npy $(TESTTMP)/test_nilpy_linecont26
 	$(TESTTMP)/test_nilpy_linecont26 | diff -u test/test_nilpy_line_continuation.expected -

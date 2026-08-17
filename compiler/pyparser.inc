@@ -6136,6 +6136,27 @@ begin
   ci := -1;
   excArgsTup := -1;
   if PyCtorQualUnit >= 0 then ci := FindUClassInUnit(name, PyCtorQualUnit);
+  { A qualifier binds the ONE class name it precedes — never the constructions
+    nested in that class's own ARGUMENTS. It was left set across the argument
+    parse, so `codecs.CodecInfo(Codec().m)` resolved the inner `Codec` in
+    mimic_codecs and built the SHIM's class instead of the user's: the user's
+    __init__ never ran and the call died at run time with
+    "'Codec' object has no attribute 'm'".
+
+    Silent and shape-dependent, which is what made it expensive to place — the
+    SAME class through a named receiver (`z = Codec(); codecs.CodecInfo(z.m)`)
+    was correct, because the construction had already happened outside the
+    qualified call. So did any name the qualified unit does not happen to
+    declare, since FindUClassInUnit then misses and the ordinary lookup answers.
+    It bites exactly the names a shim exports — Codec, StreamReader,
+    IncrementalEncoder — which is every real `encodings` module's vocabulary.
+
+    Cleared here rather than at the call site because THIS is the construction
+    the qualifier was for; the sibling flag below already scopes itself the same
+    way ("one construction only — never inherited inwards") and this one was
+    simply missed. The caller still clears it after the whole expression.
+    bug-n-a-temporary-receiver-resolves-to-the-shim-type-not-the-user-class }
+  PyCtorQualUnit := -1;
   { skip a same-named RECORD (the RTL's `Text` file type against tkinter's Text
     widget): a construction always means the class }
   if ci < 0 then ci := FindUClassNonRecord(name);

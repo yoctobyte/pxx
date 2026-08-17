@@ -1,0 +1,68 @@
+# bug-n-a-temporary-receiver-resolves-to-the-shim-type-not-the-user-class
+#
+# A QUALIFIED construction (`codecs.CodecInfo(...)`) remembers which unit the
+# qualifier named, so the class resolves there rather than by first match. That
+# unit was left set while the construction's own ARGUMENTS were parsed, so a
+# nested `Codec()` in the argument list resolved in mimic_codecs and built the
+# SHIM's class instead of the user's: the user's __init__ never ran and the call
+# died at run time with "'Codec' object has no attribute 'enc'".
+#
+# A qualifier binds the one class name it precedes, never what is nested inside
+# that class's arguments.
+#
+# Why it was hard to see: the SAME class through a named receiver was correct
+# (the construction had already happened outside the qualified call), and so was
+# any class name the qualified unit does not happen to declare — the in-unit
+# lookup misses and the ordinary one answers. It bit exactly the names a shim
+# exports (Codec, StreamReader, IncrementalEncoder), which is every real
+# `encodings` module's vocabulary.
+#
+# CPython is the oracle here and agrees on every line.
+import codecs
+
+
+class Codec:
+    def enc(self, x):
+        return ("user-enc", x)
+
+    def dec(self, x):
+        return ("user-dec", x)
+
+
+class StreamReader:
+    def enc(self, x):
+        return ("sr-enc", x)
+
+    def dec(self, x):
+        return ("sr-dec", x)
+
+
+class Plain:
+    def enc(self, x):
+        return ("plain-enc", x)
+
+    def dec(self, x):
+        return ("plain-dec", x)
+
+
+# the bug: temporaries whose class names COLLIDE with mimic_codecs types
+ci = codecs.CodecInfo(Codec().enc, Codec().dec)
+print(ci.encode(1))
+print(ci.decode(2))
+
+# a second colliding name, to prove it is not special to `Codec`
+sr = codecs.CodecInfo(StreamReader().enc, StreamReader().dec)
+print(sr.encode(3))
+
+# control: a NON-colliding name went through the ordinary lookup and always
+# worked — it must keep working
+pl = codecs.CodecInfo(Plain().enc, Plain().dec)
+print(pl.encode(4))
+
+# control: the named receiver, which was the correct arm of the double case
+z = Codec()
+nz = codecs.CodecInfo(z.enc, z.dec)
+print(nz.encode(5))
+
+# control: the user's class is still reachable in its own right
+print(Codec().enc(6))

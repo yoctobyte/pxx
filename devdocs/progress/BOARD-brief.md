@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:13 blocked:4 backlog:222 experimental:20 rainy-day:40 done-followup:3 decided:81 done:1988 rejected:38`
+`unfinished:13 blocked:4 backlog:221 experimental:20 rainy-day:40 done-followup:3 decided:81 done:1989 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -34,7 +34,7 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 207, ranked
+## Ready — top 30 of 206, ranked
 
 - `[p 70] [U]` decide-week-theme-2026-08-17
 - `[p 70] [A]` feature-a-the-shim-slot-should-find-a-python-shaped-shim
@@ -47,7 +47,6 @@ _none — no lane is locked._
 - `[p 55] [A]` bug-a-a-python-module-s-identity-is-its-name-not-its-file (unblocks 1)
 - `[p 55] [C]` bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
-- `[p 55] [N]` bug-n-a-temporary-receiver-resolves-to-the-shim-type-not-the-user-class
 - `[p 55] [U]` decide-what-an-unwired-test-may-assert
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
@@ -66,5 +65,6 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
 - `[p 50] [A]` feature-nilpy-collections-and-string-methods
 - `[p 50] [P]` feature-p-read-text-into-a-char-arm
+- `[p 50] [A]` feature-pascal-asmmode-directive-tolerance
 
-_177 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_176 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

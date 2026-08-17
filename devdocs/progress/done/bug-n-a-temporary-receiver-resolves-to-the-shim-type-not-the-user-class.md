@@ -4,6 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "After `import codecs`, a user class whose name matches a mimic_codecs TYPE (Codec, StreamReader, IncrementalEncoder…) is shadowed by the shim's type — but ONLY when constructed as a temporary inside an argument list. `f(x=Codec().m)` raises AttributeError while `z = Codec(); f(x=z.m)` works. Silent wrong name resolution, hits every real encodings module."
+status: done
+owner: frank2
 ---
 
 # A temporary receiver in an argument resolves to the SHIM's type, not the user's class
@@ -137,3 +139,92 @@ The three-cell matrix above: all three run and print `built 2`, matching CPython
 Then `x_user_defined.py` builds its `codec_info` without raising, and
 `webencodings` imports (which additionally needs a pin carrying the relative-import
 fixes).
+
+---
+
+## ROOT CAUSE + FIXED 2026-08-17 — a qualifier leaked into its own argument list
+
+Re-measured at HEAD first, as this ticket asked: **reproduces exactly as filed**,
+so nothing that landed since v344 had touched it.
+
+### The mechanism
+
+`PyCtorQualUnit` records which unit a QUALIFIED construction named, so
+`codecs.CodecInfo(...)` resolves `CodecInfo` in `mimic_codecs` rather than by
+first match (`feature-nilpy-qualified-class-construction`). It is set at
+`parser.inc:10021`, and cleared only **after the whole construction expression
+has been parsed** — arguments included.
+
+`PyClassCreate` consults it first:
+
+```pascal
+if PyCtorQualUnit >= 0 then ci := FindUClassInUnit(name, PyCtorQualUnit);
+```
+
+So a nested `Codec()` in the argument list asked `FindUClassInUnit('Codec',
+mimic_codecs)` and got the SHIM's row. The user's `__init__` never ran; the
+object had no `m`; the failure landed at run time.
+
+**A qualifier binds the one class name it precedes, never the constructions
+nested inside that class's arguments.**
+
+### The fix, and why it belongs where it is
+
+`PyClassCreate` now clears `PyCtorQualUnit` immediately after resolving its own
+name. The sibling flag two lines below already scopes itself exactly this way —
+`PyCtorNoParens := False; { one construction only — never inherited inwards }` —
+so this is the same rule applied to the flag that was missed, not a new one.
+The call site still clears it after the expression, unchanged.
+
+`pyparser.inc`, Track N. No Track A change was needed.
+
+### Every cell of the shape matrix, and what each proved
+
+| shape | before | after |
+| --- | --- | --- |
+| `codecs.CodecInfo(Codec().m)` | **AttributeError** | works |
+| `codecs.CodecInfo(encode=Codec().m)` | **AttributeError** | works |
+| `codecs.CodecInfo(StreamReader().m)` | **AttributeError** | works |
+| `codecs.CodecInfo(encode=Zork().m)` — non-colliding name | works | works |
+| `z = Codec()` then `codecs.CodecInfo(z.m)` | works | works |
+| `g(Codec().m)` — user callee | works | works |
+| `Codec().m(1)` / `f = Codec().m` | works | works |
+| `codecs.Codec()` — the qualifier's actual job | shim's class | **still shim's class** |
+
+The two "works before" rows are what identified the mechanism. A non-colliding
+name works because `FindUClassInUnit` MISSES and the ordinary lookup answers; a
+user callee works because no qualifier was ever set. So the bug needed a
+qualified callee AND a name the qualified unit declares — which is exactly a
+shim's vocabulary, and exactly what every real `encodings` module is built from.
+
+### The ticket's framing was slightly off, and it matters for the next reader
+
+"A temporary receiver in an argument" is too broad: `g(Codec().m)` with a plain
+user callee was always fine. The variable is the **qualified callee**, not the
+temporary and not the argument position. The temporary matters only because a
+named receiver is constructed before the qualified call begins, so it never sees
+the leaked flag.
+
+### A second bug was suspected and DISPROVED — recorded so it is not re-chased
+
+`codecs.Codec().decode` in an argument failed after the fix, which looked like a
+nested qualified construction losing its qualifier. It is not: **the shim's
+`Codec` class declares only a constructor** (`lib/rtl/mimic_codecs.pas:36`), so
+`.decode` is correctly absent. Re-tested with a member that exists
+(`codecs.IncrementalEncoder().errors` in an argument, alongside a colliding user
+class): correct on HEAD **and** on pinned. There is no second defect.
+
+That `codecs.Codec` lacks `encode`/`decode` at all is a `mimic_codecs` SURFACE
+gap (Track B), not a resolution bug, and is not filed here.
+
+### Test
+
+`test/test_nilpy_qualified_ctor_does_not_capture_its_args.npy`, wired into
+`test-nilpy`. **CPython is the oracle and agrees on every line.** Verified to
+FAIL on the pinned compiler and pass at HEAD, so it is a real regression test
+rather than a passing snapshot. It carries the controls too — a second colliding
+name, a non-colliding name, the named receiver, and the user's class reached on
+its own.
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.
