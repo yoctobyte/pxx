@@ -2,9 +2,9 @@
 track: N
 prio: 55
 type: bug
-blocked-by: []
+blocked-by: [bug-a-a-python-module-s-identity-is-its-name-not-its-file]
 summary: "`from .inner import X` (RELATIVE) where `inner` is a subpackage directory fails with `no unit named inner`, while the absolute `from pkg.inner import X` works — so directory-as-module resolution exists and the relative form just hands the resolver a bare name instead of the package-qualified one. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung."
-status: working
+status: blocked
 owner: frank2
 ---
 
@@ -168,3 +168,30 @@ the absolute spelling produces, and to let one file map to exactly one unit.
 - a class from that module must satisfy `isinstance` regardless of which
   spelling imported it — add this, it is the assertion that catches a partial
   fix.
+
+## BLOCKED 2026-08-17 — both halves are Track A's file, filed and handed up
+
+Traced to the end and stopped at the lane boundary rather than crossing it.
+Filed as [[bug-a-a-python-module-s-identity-is-its-name-not-its-file]].
+
+The Track N side (`pyparser.inc`) **cannot** fix this alone, and that was
+checked rather than assumed:
+
+- composing the relative name needs the current module's own **unmangled**
+  dotted identity, and no per-unit record of it exists — `pkg_sub` is ambiguous
+  between package `pkg_sub` and module `sub` in package `pkg`;
+- deriving it from `CurUnitDir` relative to `SourceFileDir` breaks under `-Fu`,
+  where the package root is a `PasUnitDir` instead. That is a guess, so it was
+  not made.
+
+Both real fix points are in `parser.inc`: the compiled-unit dedupe key
+(`guardIdx`, ~:33385) which is a NAME and should be the resolved FILE, and the
+sibling probe (:33489) which never tries `<CurUnitDir>/<name>/__init__.py`
+although `PyTryPackageSource` already implements that form — it is simply not
+called with `CurUnitDir`.
+
+**This ticket stays for the `.npy` coverage**, which is Track N's to write once
+the A fix lands: the count-asserting test (a module appending to a list on
+import, importer asserting length 1 after importing it by both spellings) plus
+an `isinstance`-across-spellings check. Do not write it as an output-comparison
+test — the probe's visible output was already correct while the module ran twice.
