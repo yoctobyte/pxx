@@ -94,3 +94,64 @@ and absolute spellings, + the top-level control still `1`, then
 Add a regression test alongside
 `test/test_nilpy_relative_import_in_package.npy`, which deliberately avoids
 aliases today precisely because of this bug.
+
+---
+
+## ROOT CAUSE + FIXED 2026-08-17 — the binding was queued and never materialised
+
+Not a parse defect at all, and the guess above ("`PyParseOneImport` discards
+`as`") was only half the story — the prescan's `PyParseImportRun` *does* handle
+the alias for a module, and queues it correctly.
+
+**`PyFlushImportAliases` had exactly one call site: `:32821`, in the MAIN
+PROGRAM path.** `ParsePyModule` never called it. So for a pulled module the
+alias symbol was allocated (which is why the name resolved instead of erroring)
+and its `ALIAS = NAME` assignment was never emitted into any body — leaving a
+fresh variant global, which reads as 0. That is the entire bug, and it explains
+the shape precisely: a *diagnostic* would have needed the symbol to be missing,
+and the symbol was the one part that worked.
+
+### The fix
+
+`ParsePyModule` now flushes into its own body, as the module's first statement —
+which is where Python binds an import. One subtlety made it more than a one-line
+call, and it is the interesting part:
+
+**the alias queue is GLOBAL, and the main program's entries are still on it.**
+The program parses its leading imports (queuing aliases) and does not flush
+until `:32821`, which is *after* every unit those imports pull has been
+compiled. A module draining the whole queue would emit the PROGRAM's assignments
+inside ITSELF — the names would bind in the wrong namespace and the program
+would be left holding the symbols with none of the assignments. That is the same
+"binds 0" defect, moved up one level and harder to see.
+
+So the flush is bounded: `ParsePyModule` records `PyImpAliasCount` on entry and
+`PyFlushImportAliasesFrom(seq, base)` drains only its own suffix.
+`PyFlushImportAliases(seq)` remains as `…From(seq, 0)` for the program path.
+
+### Verified
+
+| | CPython | pxx before | pxx after |
+| --- | --- | --- | --- |
+| `from .two import A as AA` in `__init__.py` | 1 | **0** | 1 |
+| same, absolute spelling | — | 0 | 1 |
+| top-level program control | 1 | 1 | 1 |
+| the four-form probe that first exposed it | 6 | **5** | 6 |
+
+Pinned by `test/test_nilpy_relative_import_in_package.npy` (the `RENAMED` /
+`through-alias` line), CPython-oracled.
+
+### Worth carrying: an aliased name DOES re-export, and that identifies the sibling's fix
+
+While verifying, `from pkg import AA` was measured working when `__init__.py`
+wrote `from .two import A as AA` — because the alias creates a REAL symbol in
+the importing unit. The un-aliased `from .two import A` creates none and leans
+on flat unit scope, which is exactly why it does not re-export.
+
+So [[bug-n-a-package-does-not-re-export-what-its-init-imports]] is not a
+visibility problem to be solved by making `uses` transitive (which the user
+ruled out, 2026-08-15). It is the same missing binding: `from mod import NAME`
+should bind NAME in the importing module exactly as `from mod import NAME as
+NAME` already does — which is also precisely CPython's semantics, since a
+from-import binds a name in the importer's namespace rather than opening a
+window onto the exporter's. **One mechanism serves both tickets.**

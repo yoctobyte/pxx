@@ -724,11 +724,21 @@ procedure PyContainerCall1(tmpSym: Integer; const clsName, meth: AnsiString;
   happens before the program's statement list exists and before ASTArenaFloor
   is set, so an AST node built there has nowhere to be appended and can be
   handed out again by the next unit compile. }
-function PyFlushImportAliases(seq: Integer): Integer;
+function PyFlushImportAliasesFrom(seq, base: Integer): Integer;
+{ ...but only the bindings queued from `base` on. A pulled `.py` MODULE has to
+  flush its OWN aliases into its OWN body, and the queue is global: the main
+  program queues its leading imports first and does not flush until :32821,
+  which is AFTER every unit those imports pull has been compiled. A module that
+  drained the whole queue would emit the program's `ALIAS = NAME` assignments
+  inside itself — the names would be the module's, not the program's, and the
+  program would be left with the symbols and none of the assignments, i.e. the
+  very "binds 0" this exists to prevent, moved one level up.
+  So the caller records the count on entry and passes it back.
+  bug-n-from-import-as-alias-binds-zero-inside-a-pulled-module }
 var i, rhs, asgn: Integer;
 begin
   Result := seq;
-  for i := 0 to PyImpAliasCount - 1 do
+  for i := base to PyImpAliasCount - 1 do
   begin
     if PyImpAliasSrc[i] >= 0 then
       rhs := PyMakeIdent(PyImpAliasSrc[i])
@@ -742,7 +752,12 @@ begin
     ASTRight[asgn] := rhs;
     Result := PySeqAppend(Result, asgn);
   end;
-  PyImpAliasCount := 0;
+  PyImpAliasCount := base;
+end;
+
+function PyFlushImportAliases(seq: Integer): Integer;
+begin
+  PyFlushImportAliases := PyFlushImportAliasesFrom(seq, 0);
 end;
 
 function PyHoistPark: Integer;
@@ -32365,7 +32380,7 @@ procedure ParsePyUnit(const uname: AnsiString);
 var stmt, seqNode, lastSeq, procIdx, patchPos, savedSC, savedFS: Integer;
     dbgI: Integer;
     savedScanLo, savedMainTok, savedNest, savedLam, savedHoist, savedFloor: Integer;
-    savedSelf2: Integer;
+    savedSelf2, savedImpAlias: Integer;
     savedExprMode: Boolean;
     dummyNames: array[0..0] of AnsiString;
     dummyTypes: array[0..0] of TTypeKind;
@@ -32375,6 +32390,9 @@ begin
   savedExprMode := PyExprMode;
   savedNest := PyPendNestCount;
   savedLam := PyPendLamCount;
+  { the import-alias queue is GLOBAL and the main program's entries are still
+    on it here — flush only what THIS module adds. See PyFlushImportAliasesFrom. }
+  savedImpAlias := PyImpAliasCount;
   { the pre-passes below scan "the compilation unit": for a module that is its
     own token span, not the program's }
   PyScanLo := TokPos - 1;
@@ -32413,6 +32431,15 @@ begin
     these nodes out again — see ASTArenaFloor in defs.inc. }
   savedFloor := ASTArenaFloor;
   ASTArenaFloor := ASTNodeCount;
+  { `from mod import NAME as ALIAS` in THIS module's own imports. The prescan
+    above allocated the alias symbol and queued the binding; nothing materialised
+    it, because the only flush point was the main program's (:32821). So the
+    symbol existed, the assignment never ran, and every aliased import inside a
+    pulled module read as 0 — silently, which is what made it expensive.
+    Emitted as the module body's FIRST statement, which is where Python binds it.
+    bug-n-from-import-as-alias-binds-zero-inside-a-pulled-module }
+  stmt := PyFlushImportAliasesFrom(-1, savedImpAlias);
+  if stmt >= 0 then ASTLeft[lastSeq] := stmt;
   PySkipNewlines;
   while CurTok.Kind <> tkEOF do
   begin

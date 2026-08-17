@@ -68,3 +68,28 @@ block/function, an import inside `try:`/`except ImportError:`, and one reached
 through the prescan. Both relative forms (`from . import x`,
 `from .mod import x`) run **after every routing change** — see the trap recorded
 on the originating ticket.
+
+## 2026-08-17 — this is no longer a tidiness argument; it is a defect generator with a measured rate
+
+Two defects in two days trace to the split, and the second one is the shape that
+makes the case:
+
+1. [[bug-n-relative-import-from-a-package-is-not-parsed]] — the routing
+   *condition* is duplicated at three sites, and a session that found two of
+   them derived a three-step plan from the pair that did not survive contact
+   with the third.
+2. [[bug-n-from-import-as-alias-binds-zero-inside-a-pulled-module]] — **a fix
+   applied to one twin and not the other.** `bug-nilpy-from-import-as-alias-is-
+   discarded` was fixed in `PyParseImportRun` alone; `PyParseOneImport` still
+   parses `as` and drops it. Silent wrong value: the alias read as 0, no
+   diagnostic.
+
+Item 2 is the one to weigh. It is not "the code is duplicated", it is "we
+already fixed this bug once and it stayed broken on the other path", which is
+precisely `normalise-dont-special-case.md`'s failure mode — the second path is
+the one that stays broken. The rate is what is new: the twins were known and
+labelled in-tree ("the twin list", "the twin site") and that labelling did not
+prevent either defect.
+
+Not taken yet — the corpus rungs come first — but the cost side of this ticket's
+trade-off should now be read as ongoing, not one-off.

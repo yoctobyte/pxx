@@ -16,11 +16,18 @@
 # The two spellings are both exercised here: `from .mod import names` and the
 # bare `from . import mod` with qualified access.
 #
+# `from .mod import NAME as ALIAS` is exercised too, and it is the reason U is
+# here: inside a pulled module the alias SYMBOL was allocated and its binding
+# never materialised, so the name read as 0 with no diagnostic. The only flush
+# point was the main program's, and a module has its own body to emit into.
+#
 # Note what is deliberately NOT asserted: a name IMPORTED into __init__.py is
 # not re-exported to the package's own importers (flat unit scope), which is a
 # separate defect with its own ticket. Only names this __init__.py DEFINES are
-# read here.
-from nilpy_relpkg import S, T
+# read here — U is computed FROM the alias rather than being it, which is what
+# keeps the two concerns apart.
+from nilpy_relpkg import S, T, U
 
 print("sum", S)
 print("through-func", T)
+print("through-alias", U)

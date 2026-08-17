@@ -3,6 +3,8 @@
 # single-file .npy test can express — see the test that imports this.
 from .two import A, B
 from . import two
+from .two import A as RENAMED
 
 S = A + B + two.B
 T = two.bump(A)
+U = RENAMED + 100
