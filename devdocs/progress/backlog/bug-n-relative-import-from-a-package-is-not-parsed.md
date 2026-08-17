@@ -275,7 +275,7 @@ nobody wrote down gets walked again.
    (does not), moving its failure from line 2 to line 1. Measured, reverted,
    baseline confirmed restored on both forms.
 
-### The resulting order, which is the actual finding
+### The resulting order, which is the actual finding — SUPERSEDED, see FIXED below
 
 `PyParseImportRun` must handle the relative forms **first**; only then may the
 prescan be widened; the `from . import sub` local binding is third and
@@ -285,3 +285,99 @@ Also verified while in there: `from sub import VALUE` and `import sub` **inside
 a package `__init__.py` both work today** — so nested imports are fine and the
 defect is specific to the leading dot. That control is what proved the dot, not
 the nesting, is the variable.
+
+---
+
+## FIXED 2026-08-17 — there was a THIRD site with the same condition, and it was the one that mattered
+
+Both relative forms now work end to end. The fix is two characters wider than
+the previous session's, and the reason it was not found is worth more than the
+fix: **the search stopped at the first site matching the pattern.**
+
+```
+CPython   pxx before   pxx after
+from .sub import VALUE (inside pkg/__init__.py)   7   error: undefined variable (from)   7
+from . import sub      (inside pkg/__init__.py)   7   error: undefined variable (sub)    7
+```
+
+### The third site
+
+`PyPreScanImports` was correctly identified as requiring `tkIdent` one token
+past `from`. **`PyParseStatement:23626` has the identical condition**, and *that*
+is the gate a relative import in a real package actually hits:
+
+```pascal
+if (CurTok.Kind = tkUses) or (PyIsIdent('from') and (TokPos < TokCount) and
+    (Tokens[TokPos].Kind = tkIdent)) then     { -> [tkIdent, tkDot] }
+```
+
+A pulled `.py` MODULE parses its statements through `PyParseStatement`
+(`ParsePyModule`'s body loop), not through the main program's leading
+`PyParseImportRun`. So:
+
+| where the relative import is written | path | worked before? |
+| --- | --- | --- |
+| the main program (`.npy`) | `PyParseImportRun` at :32778 | **yes** — and `test_nilpy_relative_import.npy` asserted exactly this |
+| a package's `__init__.py` | `PyParseStatement` gate at :23626 | **no** |
+
+That table is the whole bug. The existing regression test covered the form that
+already worked, in the position no third-party package ever uses.
+
+### Widening BOTH sites also dissolves the recorded ordering constraint
+
+The previous session measured that widening the prescan alone regresses
+`from . import sub` from a line-2 failure to a line-1 one, and concluded that
+`PyParseImportRun` must learn the relative forms first. **That conclusion was an
+artefact of changing one of the two gates.** Re-measured here:
+
+- prescan widened alone → form 1 unchanged, form 2 regressed. *Reproduced the
+  recorded result exactly.*
+- prescan **and** statement gate widened → **both forms work.** No handler
+  change was needed; the fall-throughs landed in 22da0d833 were already correct
+  and were simply never reached.
+
+So "step 1 then step 2 then step 3" was three steps for what is one change at
+two sites. The staged plan is retired, not executed.
+
+### Verified spellings
+
+`from .mod import NAME`, several names at once, `from . import mod` with
+qualified access, and both in one `__init__.py` — all agreeing with CPython.
+Pinned by **`test/test_nilpy_relative_import_in_package.npy`** (a real package
+under `test/nilpy_relpkg/`), wired into `test-nilpy` in the Makefile next to its
+top-level sibling. CPython is the oracle for this one and agrees, which the
+older test could not manage.
+
+### The stretch check the Gate section asked for
+
+`webencodings/__init__.py` compiled with
+`-Fu library_candidates/webencodings`: **past line 19**, now stopping at
+**line 50, `codecs.CodecInfo`** — a `mimic_codecs` surface gap (Track B), not a
+frontend one. The blocker this ticket was filed for is gone.
+
+### Two SEPARATE defects found while verifying, both pre-existing and NOT dot-related
+
+Both were caught only because the controls were run in the absolute spelling
+too, and both are filed rather than fixed here:
+
+1. **A name imported into a package's `__init__.py` is not re-exported.**
+   `from pkg import VALUE` fails with `undefined variable (VALUE)` when
+   `__init__.py` got VALUE via an import — relative *or absolute*, identically.
+   A name `__init__.py` DEFINES re-exports fine. Flat unit scope.
+   → [[bug-n-a-package-does-not-re-export-what-its-init-imports]]
+2. **`from mod import NAME as ALIAS` binds 0 inside a pulled module** — silently,
+   no diagnostic. The same statement in a top-level program binds correctly, so
+   it is the module path only. This is the silent-wrong-value class.
+   → [[bug-n-from-import-as-alias-binds-zero-inside-a-pulled-module]]
+
+The second one is why the multi-form probe printed 5 where CPython printed 6.
+Nothing announced it; it was one term off in a sum.
+
+### Method note, since the previous session's ordering finding did not survive
+
+The recorded regression was real and reproduced exactly. What made it point the
+wrong way is that it was read as evidence about the HANDLERS when it was
+evidence about a second GATE — `normalise-dont-special-case.md`'s "grep for the
+sibling" applied to the routing condition rather than to the handler. The
+condition `Tokens[i + 1].Kind = tkIdent` appears at three sites; grepping the
+*shape* of the condition, not the name of the routine, is what finds all three.

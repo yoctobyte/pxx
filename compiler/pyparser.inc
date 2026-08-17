@@ -23624,7 +23624,7 @@ begin
     block of them after its docstring or a try/except. Same code as the leading
     run (PyParseImportRun); before this they were consumed and dropped. }
   if (CurTok.Kind = tkUses) or (PyIsIdent('from') and (TokPos < TokCount) and
-      (Tokens[TokPos].Kind = tkIdent)) then
+      (Tokens[TokPos].Kind in [tkIdent, tkDot])) then
   begin
     { ONE import statement, not a run: inside a block the trailing NEWLINE
       terminates the statement and belongs to the block parser, while
@@ -31999,7 +31999,7 @@ begin
     else if ((Tokens[i].Kind = tkUses) or
              ((Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'from') and
               (i + 1 < MainProgramTokCount) and
-              (Tokens[i + 1].Kind = tkIdent))) and
+              (Tokens[i + 1].Kind in [tkIdent, tkDot]))) and
             ((i = PyScanLo) or (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent])) then
     begin
       TokPos := i;

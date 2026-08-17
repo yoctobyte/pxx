@@ -595,6 +595,12 @@ test-nilpy: $(COMPILER)
 	# see the test header for what is asserted instead.
 	./$(COMPILER) test/test_nilpy_relative_import.npy $(TESTTMP)/test_nilpy_relimp26
 	$(TESTTMP)/test_nilpy_relimp26 | diff -u test/test_nilpy_relative_import.expected -
+	# ...and the same forms inside a PACKAGE's __init__.py, which is a different
+	# parser path (a pulled module's statements, not the main program's leading
+	# import run) and the one every third-party corpus actually walks. CPython IS
+	# the oracle here, and agrees.
+	./$(COMPILER) test/test_nilpy_relative_import_in_package.npy $(TESTTMP)/test_nilpy_relimppkg26
+	$(TESTTMP)/test_nilpy_relimppkg26 | diff -u test/test_nilpy_relative_import_in_package.expected -
 	# backslash line continuation, and `class C(object):`
 	./$(COMPILER) test/test_nilpy_line_continuation.npy $(TESTTMP)/test_nilpy_linecont26
 	$(TESTTMP)/test_nilpy_linecont26 | diff -u test/test_nilpy_line_continuation.expected -

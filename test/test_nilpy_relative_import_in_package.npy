@@ -1,0 +1,26 @@
+# feature-nilpy-thirdparty-libraries-as-targets — relative imports INSIDE a
+# pulled .py MODULE, which is a different code path from the one
+# test_nilpy_relative_import.npy covers.
+#
+# That test puts the relative imports in the MAIN PROGRAM, which reaches them
+# through PyParseImportRun's leading run and always worked. A real package
+# writes them in its `__init__.py`, and a pulled module's statements go through
+# PyParseStatement instead — whose import gate required an IDENTIFIER one token
+# past `from`, so a leading dot fell out of import handling entirely and the
+# statement parser met a bare `from` and called it an undefined variable.
+#
+# webencodings/__init__.py:19 (`from .labels import LABELS`) is what found it,
+# and it blocked ALL FOUR fetched Python corpora, because a package that does
+# not use relative imports internally is the exception.
+#
+# The two spellings are both exercised here: `from .mod import names` and the
+# bare `from . import mod` with qualified access.
+#
+# Note what is deliberately NOT asserted: a name IMPORTED into __init__.py is
+# not re-exported to the package's own importers (flat unit scope), which is a
+# separate defect with its own ticket. Only names this __init__.py DEFINES are
+# read here.
+from nilpy_relpkg import S, T
+
+print("sum", S)
+print("through-func", T)
