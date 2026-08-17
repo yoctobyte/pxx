@@ -641,3 +641,29 @@ the expectation that the bug count RISES.
 
 Also at zero and worth noting separately: `fpc-testsuite` (P conformance,
 already tagged rainy-day), `zengl`, `freebsd-regex`.
+
+- 2026-08-17 hourly check #5 (cron) — **`test-nilpy#src:examples/tk/callbacks.npy`
+  NEW-RED at `8f629af38632`, enriched, not filed.** First red tonight carrying a
+  **stable `src:` selector** rather than a positional index, so it was attributable
+  on sight — the fix from check #4 paying off within one cycle.
+  Verified at HEAD (`139a4a1f0`) with the job's own recipe: compiles clean, runs
+  under `timeout 120 xvfb-run -a`, exit 0, output byte-identical to
+  `callbacks.expected`. **And the code is identical** — every commit between the
+  accused sha and HEAD is tstate/roster/ticket prose, zero `compiler/` or `lib/`,
+  so nothing could have fixed it in between. The **same sha** also reported GREEN on
+  the native tier (`db7e583cd`) and RED on full (`474dc9293`), which localises the
+  variable to the run environment rather than the revision.
+  **Fourth timeout-shaped red on that host tonight** (`crtl_exp2` recorded timeout,
+  plus the two check-#4 reds that reproduce as pass). Recorded as probable transient,
+  **explicitly not closed as flake** — one is noise, four in an evening is a property
+  of the host or the tier's parallelism.
+  Track T's watcher had already auto-filed the stub, so per T's instruction before
+  going dark this **enriched the stub in place** rather than hand-filing a duplicate
+  (`already_filed` dedupes by slug, so a hand-written one would not collide). That is
+  the face-2 work that is actually missing overnight: **enrichment, not filing.**
+  **Note added for the tooling ticket:** the stub records a verdict but no duration,
+  so the one fact separating "hit the 120s ceiling" from "produced wrong output" is
+  absent from the record — the same family as the positional job names, a report
+  preserving the verdict and discarding the discriminator.
+  frank2 and frank3 idle by design (token budget); tree clean, nothing unpushed;
+  no pending clears; Track U queue unchanged, still awaiting the user.
