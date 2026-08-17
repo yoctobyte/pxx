@@ -1,0 +1,21 @@
+warning-is-exception=ok
+user-sub-warning=ok
+deprecation-sub-warning=ok
+pending-sub-warning=ok
+syntax-sub-warning=ok
+runtime-sub-warning=ok
+future-sub-warning=ok
+import-sub-warning=ok
+unicode-sub-warning=ok
+bytes-sub-warning=ok
+resource-sub-warning=ok
+encoding-sub-warning=ok
+siblings=ok
+subclass-user=ok
+subclass-warning=ok
+subclass-exception=ok
+raise-catch-user=ok
+raise-catch-warning=ok
+catch-as-exception=ok
+class-as-arg=ok
+WARNING-HIERARCHY OK

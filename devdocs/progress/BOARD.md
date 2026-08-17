@@ -41,7 +41,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (220)
+## backlog (218)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -60,7 +60,6 @@ _none_
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 35 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
 | bug-n-kwargs-collector-alongside-named-params-needs-the-remainder | N | 30 | bug | `def f(a=1, **kw)` called as `f(**{'a':5,'x':7,'y':8})` must give a=5 and kw={'x':7,'y':8} — the collector takes the UNCONSUMED keys. pylib has no helper that subtracts consumed names, and adding one is compiler/builtin/** which NEEDS A PIN, so this is coordinator-scheduled, not worker-startable. | — |
 | bug-n-pylib-cannot-reach-the-rtl-power-so-complex-magnitude-loses-ulps | N | 25 | bug | `pycomplex_pow` computes \|z\|**b as exp(b*ln\|z\|) — two roundings — where CPython calls pow() directly, so `(-8.0) ** 0.5` gives an imaginary part of 2.8284271247461894 against CPython's 2.8284271247461903 (~4 ulp). The cause is structural: pylib lives in compiler/builtin and cannot reach the RTL's correctly-rounded Power, which is why it carries its own series ln/exp in the first place. | — |
-| bug-n-the-builtin-warning-exception-hierarchy-is-missing | N | 40→45 | bug | `Warning`, `UserWarning` and `DeprecationWarning` do not exist in NilPy, so `class DataLossWarning(UserWarning)` will not compile. They are BUILTINS, named bare by calling code, so no mimic_warnings shim can supply them — this blocks the warnings shim and 16 non-test html5lib call sites. | — |
 | bug-nilpy-an-extended-slice-cannot-be-assigned | N | 30 | bug | `l[::2] = [7, 8]` is a parse error. The READ form `l[::2]` works, and the plain-slice ASSIGN `l[1:3] = [9]` works; only the strided assignment is missing. | — |
 | bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds | N | 20 | bug | A dict VALUE as the `*=` target still rebinds, so an alias of it keeps the old contents. The parameter half landed 2026-08-15 (pymul_v_inplace); this is the residue, and `+=` has the same split. | — |
 | bug-nilpy-classmethod-constructors-on-builtin-types-are-absent | N | 25 | bug | `bytes.fromhex(\"6162\")` and `float.fromhex(\"0x1p3\")` are `undefined variable (bytes)` / `(float)` — the TYPE used as a namespace resolves only for the handful of names the stdlib table lists (int.from_bytes, dict.fromkeys, str.maketrans). | — |
@@ -259,7 +258,6 @@ _none_
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-n-two-import-handlers-are-twins | N | 30 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
-| regression-test-core-test-procvar-value-context | P | 70 | regression | regression: test-core#src:test/test_procvar_value_context.pas red at 0e4ad46330ca (auto-filed by twatch) | — |
 | task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 40 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
 | task-d-document-the-strict-overload-width-flag | D | 35 | task | `--strict-overload-width` shipped 2026-08-15 with no row in docs/reference/cli.md, modes.md or directives.md. One table row each, plus the one sentence that explains why it is standalone rather than part of the --strict-fpc umbrella. | — |
@@ -430,9 +428,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1993)
+## done (1995)
 
-1993 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1995 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -480,7 +478,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [U] decide-week-theme-2026-08-17
-- [p 70] [P] regression-test-core-test-procvar-value-context
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
 - [p 60] [P] feature-pascal-corpus-oop
@@ -511,7 +508,6 @@ _none_
 - [p 50] [A] feature-release-checksums-repro
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [N] bug-n-the-builtin-warning-exception-hierarchy-is-missing (unblocks 1)
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
 - [p 45] [N] bug-n-a-class-base-that-is-an-expression-does-not-compile
 - [p 45] [N] bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program
@@ -692,7 +688,6 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
-- **1** — bug-n-the-builtin-warning-exception-hierarchy-is-missing
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy

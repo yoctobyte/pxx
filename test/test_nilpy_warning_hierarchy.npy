@@ -1,0 +1,90 @@
+# SPDX-License-Identifier: 0BSD
+"""The builtin Warning exception hierarchy.
+
+These are BUILTINS in CPython, not members of the `warnings` module: calling
+code names them bare, and overwhelmingly by SUBCLASSING them —
+html5lib/constants.py declares `class DataLossWarning(UserWarning)`. That is why
+they live in compiler/builtin/pylib.pas and why no shim could have supplied them
+(bug-n-the-builtin-warning-exception-hierarchy-is-missing).
+
+Runs unmodified under CPython, where every assertion below is also true, so the
+expectations are read off the oracle rather than typed from memory.
+
+The whole tree is asserted, not just the three names html5lib needs today. A
+partial table does not announce itself as partial — the missing name surfaces
+much later as `undefined variable (ResourceWarning)` inside somebody's library —
+and every addition costs another pin, which holds a repo-wide lock.
+"""
+
+fails = 0
+
+
+def check(name, got, want):
+    global fails
+    if got == want:
+        print(name + "=ok")
+    else:
+        fails = fails + 1
+        print(name + "=FAIL got " + repr(got) + " want " + repr(want))
+
+
+# Warning derives from Exception; everything else derives from Warning.
+check("warning-is-exception", issubclass(Warning, Exception), True)
+
+# Spelled out one per line rather than looped over a list of classes:
+# issubclass() here takes class NAMES, not a variable holding a class, and says
+# so with a clear diagnostic. Naming all twelve is also what makes a missing one
+# a compile error in this file rather than a silent gap.
+check("user-sub-warning", issubclass(UserWarning, Warning), True)
+check("deprecation-sub-warning", issubclass(DeprecationWarning, Warning), True)
+check("pending-sub-warning", issubclass(PendingDeprecationWarning, Warning), True)
+check("syntax-sub-warning", issubclass(SyntaxWarning, Warning), True)
+check("runtime-sub-warning", issubclass(RuntimeWarning, Warning), True)
+check("future-sub-warning", issubclass(FutureWarning, Warning), True)
+check("import-sub-warning", issubclass(ImportWarning, Warning), True)
+check("unicode-sub-warning", issubclass(UnicodeWarning, Warning), True)
+check("bytes-sub-warning", issubclass(BytesWarning, Warning), True)
+check("resource-sub-warning", issubclass(ResourceWarning, Warning), True)
+check("encoding-sub-warning", issubclass(EncodingWarning, Warning), True)
+
+# They are siblings, not a chain: DeprecationWarning is NOT a UserWarning.
+check("siblings", issubclass(DeprecationWarning, UserWarning), False)
+
+# The shape that actually matters: subclassing one, which is how every real
+# library declares its own category.
+class DataLossWarning(UserWarning):
+    pass
+
+
+check("subclass-user", issubclass(DataLossWarning, UserWarning), True)
+check("subclass-warning", issubclass(DataLossWarning, Warning), True)
+check("subclass-exception", issubclass(DataLossWarning, Exception), True)
+
+# Instantiable, carrying a message, and catchable at each level of the chain.
+try:
+    raise DataLossWarning("lost some data")
+except UserWarning as e:
+    check("raise-catch-user", str(e), "lost some data")
+
+try:
+    raise DeprecationWarning("old")
+except Warning as e:
+    check("raise-catch-warning", str(e), "old")
+
+try:
+    raise UserWarning("plain")
+except Exception:
+    print("catch-as-exception=ok")
+
+# Passing the class itself as a value — `warnings.warn(msg, DataLossWarning)` is
+# the whole reason the corpus needs these.
+def warn_like(msg, category):
+    return category(msg)
+
+
+check("class-as-arg", str(warn_like("m", DataLossWarning)), "m")
+
+if fails == 0:
+    print("WARNING-HIERARCHY OK")
+else:
+    print("WARNING-HIERARCHY FAILED " + str(fails))

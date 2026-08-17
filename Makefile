@@ -639,6 +639,15 @@ test-nilpy: $(COMPILER)
 	# the oracle here, and agrees.
 	./$(COMPILER) test/test_nilpy_relative_import_in_package.npy $(TESTTMP)/test_nilpy_relimppkg26
 	$(TESTTMP)/test_nilpy_relimppkg26 | diff -u test/test_nilpy_relative_import_in_package.expected -
+	# The builtin Warning hierarchy. These are BUILTINS, not members of the
+	# `warnings` module -- calling code names them bare and, far more often,
+	# SUBCLASSES them (`class DataLossWarning(UserWarning)`), which is why no
+	# shim could supply them and they live in compiler/builtin/pylib.pas.
+	# All twelve are named individually so a missing one is a compile error
+	# here rather than a gap that surfaces later inside somebody's library.
+	# Runs unmodified under CPython; the .expected is that run's output.
+	./$(COMPILER) test/test_nilpy_warning_hierarchy.npy $(TESTTMP)/test_nilpy_warnhier26
+	$(TESTTMP)/test_nilpy_warnhier26 | diff -u test/test_nilpy_warning_hierarchy.expected -
 	# a QUALIFIED construction must not resolve the classes nested in its own
 	# ARGUMENTS in the qualified unit — `codecs.CodecInfo(Codec().enc, ...)`
 	# built mimic_codecs' Codec instead of the user's. CPython is the oracle.
