@@ -1,11 +1,38 @@
 ---
 slug: decide-what-synapse-actually-needs-vs-mimic-fpc
 track: U
-prio: 45
+prio: 20
 status: backlog
 ---
 
 # Synapse builds under `--mimic-fpc`. What does it actually NEED?
+
+> **DEPRIORITISED 45 -> 20 (owner, 2026-08-17): we are chasing the wrong fox.**
+> *"We already implemented our own TCP stack, including SSL. Synapse is a TEST
+> library, not something we will build on in practice."*
+>
+> That removes the load-bearing justification this ticket was written on. It
+> argued that `--mimic-fpc` weakens the claim we could make to Synapse's author,
+> and that five more smokes would cement the invocation — both true, and both
+> worth little once Synapse is a **corpus** rather than a **dependency**. A test
+> surface has to be honest about what it measures; it does not have to be
+> beautiful to integrate against, because nothing integrates against it.
+>
+> **The lesson for whoever reads this next**, and it is the reason the ticket is
+> kept rather than deleted: the coordinator built a case for *compiler* work
+> (directory-scoped define manifests, Track A) whose entire motivation was a
+> library we will never depend on. Every individual observation in it was correct.
+> The measurement was fine. It was pointed at the wrong subject — the same failure
+> this repo keeps recording, arriving this time as **misplaced priority** rather
+> than a wrong conclusion. Before proposing core work, ask what depends on the
+> thing that motivated it.
+>
+> **What survives:** Synapse stays a valuable corpus (real third-party Pascal,
+> compiles as-is, byte-exact codec vectors against FPC), so `--mimic-fpc` remains
+> the supported way to build it and nobody should hand-narrow it. Scoped
+> `pxxlib.cfg` manifests may still be worth building — but they must be justified
+> by a library we DO build on, or by the self-build safety argument, never by this
+> one.
 
 > **Scope (owner, 2026-08-17): this is about PASCAL programs importing Synapse.**
 > NilPy importing Synapse is the wrong measurement and is not a goal — Python has
