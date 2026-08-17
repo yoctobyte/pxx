@@ -153,4 +153,4 @@ open tail here. It is the same self-selection argument the third-party corpus
 campaign is built on, and it is now measurable because a running harness exists.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit a52ef1948.
