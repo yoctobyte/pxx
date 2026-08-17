@@ -315,6 +315,19 @@ clears it or the check releases it.
 
 ### Check log
 
+- 2026-08-17 hourly check #3 (cron) — **active, no blocks.** frank2 busy on the
+  `digits = string.digits` Pascal-shim collision (corrected table's #1, 8 files);
+  dirty tree, nothing unpushed. frank3 idle with everything landed → dispatched to
+  **measure and file the `xml.dom` surface** (corrected table row 3, 4 files, no
+  ticket existed). Deliberately bounded: measurement is the deliverable, code
+  optional, because `xml.dom` is a large API and an overnight half-shim looks
+  present and fails deep inside a caller.
+  Pin moved to **v347** this cycle so Track B's armed revert could fire; it fired
+  clean, `lib-test` green. No pending clears. tstate GREEN.
+  Note for the ranked queue: B's `ready` list below this is entirely p20 float
+  work, so the real B item had to come from the corrected ladder rather than from
+  `ready` — worth knowing that the queue does not currently surface corpus rows.
+
 - 2026-08-17 overnight — **Track T full tier GREEN: 2695 jobs, ZERO corpus skips**,
   six conformance shards and `demos#00` passing. Worth the headline for the morning:
   this morning `lib-test` ended `167/167, 2 skip (corpus absent)` and that line had
