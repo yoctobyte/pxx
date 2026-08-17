@@ -42,49 +42,65 @@ switch. Three costs:
    works is a thing nobody revisits — the same failure as recording our own output
    as an expectation (`decide-what-an-unwired-test-may-assert`).
 
-## The question — CORRECTED, this is not an open design question
+## CORRECTION — the per-library config EXISTS. Twice-wrong reasoning below.
 
-The coordinator first wrote that the per-library config mechanism "was designed
-and not built", inferred from finding no `.cfg` files. That was a filename guess
-answering the wrong question. What the history actually shows (`ad9811a63`,
-2026-06-19, "docs(config): per-library scoped define manifests"):
+The owner said flatly: *"we DID craft a config per imported library, long ago."*
+Correct. Two wrong conclusions were filed here before that landed, both from
+searching for the wrong artefact:
 
-The design exists and is specific. Manifest = `lib/synapse/pxxlib.cfg`, a small
-per-library build profile carrying defines/undefs/dialect mode/include paths.
-Load-bearing primitive = **per-unit define-scope push/pop keyed to the unit's
-source directory**, nearest-ancestor manifest wins. Scope follows the unit being
-COMPILED, not the caller — so cross-`uses` stays clean, siblings are isolated, and
-the user program is untouched. That non-virality is the whole point, and it is the
-same principle as the uses-never-leaks rule.
+1. First: "no `.cfg` files, so it was never built" — a filename guess.
+2. Then: "designed in `ad9811a63`, ticket closed early, only the fallback
+   shipped" — closer, still wrong about what shipped.
 
-**The state is the finding:**
+**What actually exists:** `compiler/lexer.inc:876`, `PasApplyMimicDefines`, whose
+own comment calls it *"the **curated** FPC 3.2.2 x86-64-Linux define set so
+identity-probing library headers (**jedi.inc / Synapse**) select their FPC path
+instead of Kylix/Delphi."* It sets `FPC`, `UNIX`, `ENDIAN_LITTLE`, `VER3`,
+`VER3_2`, `VER3_2_2` and the `FPC_VERSION`/`RELEASE`/`PATCH`/`FULLVERSION`
+values. That curation IS the per-library config — it was crafted around Synapse's
+identity probes, which is why Synapse compiles as-is.
 
-| ticket | what it holds | where it is |
-| --- | --- | --- |
-| `feature-mimic-fpc` | reframed as a scoped manifest, *"global `--mimic` becomes a fallback"* | **`done/`** |
-| `feature-dynamic-include-paths-config` | the define-scope primitive the manifest needs | **`backlog/`** |
+It also already has **two** delivery paths, not one: the `--mimic-fpc` CLI flag
+and a `{$MIMIC FPC}` source directive, the latter giving per-source-file
+granularity today.
 
-No `pxxlib.cfg` exists; no manifest loader is in `compiler/`. So **the fallback
-shipped and was marked done, while the mechanism it was a fallback FOR was left in
-the backlog.** `--mimic-fpc` is not a shortcut someone chose today — it is the
-only path that exists, because the ticket describing it as temporary was closed
-once the temporary part worked.
+**So the lesson is the recurring one, in the coordinator's own reasoning this
+time:** searching for `*.cfg` returned nothing, which was a TRUE fact about the
+WRONG subject — "is there a file named like a config" is not "does the
+configuration exist". Two successive conclusions were built on it, each more
+confident and more specific than the last, and the second one cited real commit
+history, which made it more persuasive rather than more correct.
 
-This is the repo's own recorded landmine: *check the design was built before
-reasoning about it* — one numbered work item undone leaves a design that reads as
-finished. Five sessions were lost to that shape once already.
+## What is ACTUALLY missing: scoping, not configuration
 
-Note the design also answers a question the owner raised separately: it selects
-Synapse's branch by scoping `undef FPC` to the library tree, which *"dodges the
-`{$ifdef FPC}`=real-FPC landmine AND cannot leak"*. The umbrella flag achieves the
-branch selection with neither property.
+The curated set applies **globally** (flag) or **per source file** (directive).
+What `ad9811a63` designed and `feature-dynamic-include-paths-config` (still
+`backlog/`) holds is the missing third thing: applying it automatically to a
+library's DIRECTORY TREE, via `lib/synapse/pxxlib.cfg` and a per-unit define-scope
+push/pop keyed to the unit's source directory, nearest-ancestor manifest wins,
+scope following the unit being COMPILED rather than the caller.
+
+Why that matters beyond tidiness — a hazard is recorded in the same comment:
+
+> *"NEVER call during a self-build — the compiler's own `{$ifdef FPC}` means
+> 'real FPC, not PXX'."*
+
+That is a rule enforced by remembering. Directory scoping would make it
+structural: the manifest applies to `external/synapse/**` and cannot reach
+`compiler/**`, so the landmine stops being reachable rather than stopping being
+stepped on. Same shape as the uses-never-leaks principle.
 
 ## Recommendation
 
-**Do not narrow the flag by hand, and do not wire the five extra synapse smokes
-under `--mimic-fpc`.** The right answer is already designed: finish
-`feature-dynamic-include-paths-config`, ship `lib/synapse/pxxlib.cfg`, and let the
-umbrella become the fallback it was always meant to be.
+**Do not narrow the flag by hand.** The define set is curated, deliberate, and
+already correct — narrowing it by experiment would be re-deriving work the owner
+did months ago. The open item is scoping it: finish
+`feature-dynamic-include-paths-config`, ship `lib/synapse/pxxlib.cfg`, and the
+global flag becomes the fallback it was designed to be.
+
+Wiring the five extra synapse smokes under `--mimic-fpc` is then fine in the
+interim — it is the supported path today, not a shortcut. Revisit when scoping
+lands.
 
 The decision for the owner is therefore **priority, not direction** — this is
 Track A work (define scoping is compiler internals), it is currently at backlog
