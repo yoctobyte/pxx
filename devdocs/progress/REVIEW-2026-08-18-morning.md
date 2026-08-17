@@ -72,6 +72,32 @@ Infrastructure:
 - A wiring checker found **98 test files that no build rule ran**. The ten that
   shipped alongside fixes in the last two days are now wired; the rest are triaged.
 
+## One bug you may want to look at yourself
+
+`bug-n-a-type-as-a-default-parameter-value-segfaults-when-the-default-is-taken`
+(N, p60). Found by Track B while writing `mimic_warnings`; **reproduced
+independently here** before it went in this digest:
+
+    class W: pass
+    def f(c=W): print(c.__name__)
+    f()          -> exit 139, segfault, NO diagnostic
+
+The same class passed explicitly prints `W` and exits 0, so the fault is in
+materialising the default, not in using a type as a value.
+
+Two things make it worth your attention rather than just the queue. It is
+**silent** — every other type-as-a-value gap in this dialect gives a clean refusal
+(`the class W cannot be used as a VALUE yet`), and a dialect that refuses
+consistently and then dumps core in one corner is worse than one that refuses
+everywhere, because the refusals are what teach people to trust the diagnostics.
+And `category=SomeClass` is an ordinary Python signature idiom, so this breaks the
+upward-compatibility contract on code CPython runs without complaint.
+
+Track B did **not** reshape around it: it used the sanctioned route
+(`category=None` + substitute), registered in `track-b-workarounds.md` with a
+revert-to note, and the test's warn-with-no-category line is that workaround's own
+regression guard. That is the pattern working exactly as designed.
+
 ## The theme, if you want one
 
 Nearly every expensive thing today was **a true statement about the wrong subject**,
@@ -132,5 +158,8 @@ unsupervised is the kind of helpfulness that is hard to unpick.
   across 11 RTL units funnel through **one** `IR_SYSCALL` op, so the port needs no
   `lib/rtl` edits at all.
 - frank2 then pulling its own next Track A item, excluding the policy ticket.
-- frank3 (B) → `mimic_warnings`, the last wall on 3 corpus files.
+- frank3 (B) → `mimic_warnings` **landed**; `feature-nilpy-six-and-warnings-shims`
+  resolved, both halves. `warnings` has left the first-wall table on all three files
+  that import it — same shape as `six`. Now on the `string.digits` gap, the next
+  wall on those files.
 - Pin at **v346**. Track T's agent is down; its watcher is up and files stubs itself.
