@@ -7,7 +7,7 @@ prio: 45
 # Enroll lib-test and demos in the watcher
 
 - **Type:** task (Track T — tools & testing)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-07-14
 - **Filed by:** Track B, after finding `make lib-test` red (esptimer) with no
   tstate record of when it broke.
@@ -247,3 +247,59 @@ red for an unknown number of commits and nothing recorded the first bad SHA.*
 **The `demos` half remains open** and unchanged: it prints FAIL without exiting
 nonzero, so it needs a gating mode or output parsing, which is a Makefile change
 and not Track T's ground. This ticket stays in backlog until that lands.
+
+## 2026-08-17 — the `demos` half is DONE too, without the Makefile change it seemed to need
+
+This ticket held `demos` out for days on one premise: *"it prints FAIL without
+exiting nonzero, so it needs a gating mode or output parsing — and that is a
+Makefile change, which is not Track T's ground."*
+
+The premise was half right. It **is** a Makefile change if you make `demos`
+gate — and that would overturn a deliberate decision, stated in the recipe
+itself:
+
+```
+echo "(demos is a dashboard, not a gate; FAILs -> file a ticket)"; exit 0
+```
+
+with its neighbour `c-interop-devtest` repeating it: *"This intentionally exits 0
+for candidate-library gaps; keep `lib-test` as the green gate."* Track B chose
+that, and changing it from Track T would be the wrong lane deciding.
+
+**So take the verdict from the OUTPUT and mark the job ADVISORY** — both halves
+entirely inside testmgr, no Makefile touched:
+
+- `demos_job()` runs `make demos`, echoes it for the log, and fails only if a
+  `^  FAIL  ` line appears. (`grep -q` alone would have inverted the verdict;
+  the pipeline preserves output and negates the match.)
+- `j.advisory = True`, so a broken demo is a **NOTICE** for Track B in tstate
+  rather than a red gating every other lane's push — exactly the status the
+  recipe assigns it. The mechanism already existed for `fpc-bootstrap`.
+
+That delivers this ticket's actual "Done when" — *a commit that breaks a demo
+compile shows up in tstate* — without the policy change it assumed was required.
+
+### It found a real one on its first run
+
+```
+  NOTICE   demos#00   corpus   87.0s
+  testmgr: GREEN          <- advisory: reported, not gating
+```
+
+34/35 demos build; `examples/mandelbrot/mandelbrot_gui.pas` does not, and has
+not since it landed on 2026-07-20. Filed as
+[[bug-b-mandelbrot-gui-demo-does-not-build-missing-gtk3-c]] with a verified
+one-line fix. Note the tier stayed **GREEN** while reporting it, which is the
+whole point of advisory.
+
+### Both halves of this ticket are now enrolled
+
+| | status |
+| --- | --- |
+| `lib-test` | in `TIERS["full"]` since 2026-08-14, now 167/167 |
+| `demos` | in `TIERS["full"]` as an advisory job, 2026-08-17 |
+
+Resolving.
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.

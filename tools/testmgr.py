@@ -317,6 +317,9 @@ SELFHOST_GATE_TIERS = ("native", "limited", "full")
 # way test-c-conformance has them — that mirroring would look like consistency
 # and would be the wrong call. The suite tests the frontend; the backends are
 # covered by the cross targets already in this tier.
+# `demos` rides with the other breadth work, never the inner loop: it builds
+# every example in the tree against the pin.
+DEMOS_TIERS = ("full",)
 PASCAL_CONFORMANCE_TIERS = ("full",)
 PASCAL_CONFORMANCE_TARGET = "test-pascal-conformance"
 # The suite dir is named EXPLICITLY in the job line rather than left to the
@@ -1609,6 +1612,8 @@ def generate(tier):
                     ["tools/optdiff.sh --shard %d/%d" % (i, OPT_SHARDS)])
             j.name = "optdiff#shard%d/%d" % (i, OPT_SHARDS)
             jobs.append(j)
+    if tier in DEMOS_TIERS:
+        jobs.append(demos_job())
     if tier in PASCAL_CONFORMANCE_TIERS:
         # Constructed here rather than behind a Makefile target, like optdiff
         # above: the recipe would be one line invoking a script that already
@@ -1678,6 +1683,43 @@ def selfhost_fixedpoint_job():
     j.cls = "selfhost"
     j.sel = "selfhost-fixedpoint#src:compiler/compiler.pas"
     j.est_mem = CLASSES["selfhost"]["est_mem"]
+    return j
+
+
+def demos_job():
+    """`make demos` — every example built against the PIN, as an ADVISORY job.
+
+    task-t-enroll-libtest-demos-watcher wanted this enrolled and could not,
+    because `demos` ends `exit 0` regardless of failures. That is not an
+    oversight to fix: the recipe says so out loud -- "demos is a dashboard, not
+    a gate; FAILs -> file a ticket" -- and its neighbour `c-interop-devtest`
+    repeats the pattern with "keep lib-test as the green gate". Track B chose
+    it, and changing the Makefile to make demos gate would overturn that
+    decision from the wrong lane.
+
+    So take the verdict from the OUTPUT instead of the exit status, and mark the
+    job ADVISORY. Both halves matter:
+
+      * reading `  FAIL  <src>` lines means testmgr sees a broken demo without
+        the Makefile changing its contract for humans typing `make demos`;
+      * advisory means a broken demo is a NOTICE for Track B in tstate, not a
+        red that gates every other lane's push -- which is exactly the status
+        the recipe already assigns it.
+
+    The result is what the ticket actually asked for ("a commit that breaks a
+    demo compile shows up in tstate") without the policy change it assumed was
+    required.
+
+    `grep -q` alone would invert the verdict, so the pipeline is written to
+    preserve the output for the log and fail only on a match.
+    """
+    j = Job("demos", 0,
+            ["out=$(make demos 2>&1); printf '%s\\n' \"$out\"; "
+             "! printf '%s\\n' \"$out\" | grep -q '^  FAIL  '"])
+    j.name = "demos#00"
+    j.cls = "corpus"          # builds every example; not a unit-sized job
+    j.advisory = True
+    j.sel = "demos#src:examples"
     return j
 
 
