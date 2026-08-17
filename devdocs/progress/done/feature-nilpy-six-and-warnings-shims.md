@@ -446,4 +446,4 @@ different job with a different blocker.
 `make lib-test` green against stable **v346**.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit eb29fa2a3.
