@@ -11,6 +11,10 @@
 # Needs: apt-get (download only, no sudo), dpkg-deb.
 set -eu
 
+# no-vendor-tracked: out-of-scope — installs to $PXX_CROSS_SYSROOT (default
+# $HOME/.cache/pxx-cross), OUTSIDE the repo, so it cannot put third-party source
+# under a tracked path. See tools/check_no_vendor_tracked.sh for why this is
+# declared explicitly instead of detected.
 dest="${PXX_CROSS_SYSROOT:-$HOME/.cache/pxx-cross}"
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT

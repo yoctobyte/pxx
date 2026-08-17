@@ -10,6 +10,12 @@
 # static and syscall-only, the ideal case (no target sysroot needed).
 # qemu-user-static + binfmt registration additionally lets the kernel
 # exec foreign binaries directly (./prog just works).
+# no-vendor-tracked: out-of-scope — installs SYSTEM packages via apt-get. Nothing
+# is written into the working tree, so it cannot put third-party source under a
+# tracked path. Declared rather than inferred: tools/check_no_vendor_tracked.sh
+# treats every tools/install_*.sh as in-scope until it says otherwise, because a
+# heuristic for "does this fetch into the repo?" can only guess, and its first
+# draft guessed wrong about install_externals.sh and silently protected nothing.
 set -eu
 
 sudo apt-get install -y qemu-user qemu-user-static binfmt-support

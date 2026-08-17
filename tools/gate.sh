@@ -192,6 +192,14 @@ case "$MODE" in
       seed_pid=$!
     fi
 
+    # Under a second, and it is the ONLY layer that survives `git add -f`.
+    # .gitignore is advisory and the fetchers' own guards only cover the roots
+    # they know about; this one derives the roots from the fetchers, so a new
+    # fetcher cannot quietly escape it. Cheap enough for the per-fix gate, which
+    # is the point — a check that only runs nightly cannot stop a push.
+    step "no vendor tracked" "$LOGDIR/no-vendor.log" \
+         tools/check_no_vendor_tracked.sh                                || RC=1
+
     step "self-host fixedpoint" "$LOGDIR/fixedpoint.log" fixedpoint      || RC=1
     step "testmgr --tier quick" "$LOGDIR/quick.log" \
          tools/testmgr.py --tier quick                                   || RC=1

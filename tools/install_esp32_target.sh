@@ -4,6 +4,15 @@
 #
 # Defaults:
 #   ESP_IDF_DIR=$HOME/esp/esp-idf
+#
+# no-vendor-tracked: out-of-scope — this clones esp-idf to $ESP_IDF_DIR (default
+# $HOME/esp/esp-idf), OUTSIDE the repo, so it cannot put third-party source under
+# a tracked path. Declared explicitly rather than inferred: tools/check_no_vendor_tracked.sh
+# derives its protected roots from the fetchers and treats an undeclared one as a
+# failure, so that adding a fetcher forces this decision instead of silently
+# widening the hole. NOTE the build OUTPUT does land in-tree, at
+# examples/esp32/*/build/ — gitignored, and checked separately by that script,
+# because a 9.1MB libwpa_supplicant.a from there is already in this repo history.
 #   ESP_IDF_VERSION=v6.0.1
 #   ESP_IDF_TARGETS=esp32s2,esp32s3
 #   ESP_IDF_QEMU_TOOLS="qemu-xtensa qemu-riscv32"
