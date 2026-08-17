@@ -293,6 +293,15 @@ test-nilpy: $(COMPILER)
 	# bug-a-package-and-sibling-module-resolution-is-the-corpus-wall
 	./$(COMPILER) test/test_nilpy_relative_parent_import.npy $(TESTTMP)/test_nilpy_relative_parent26
 	test "$$($(TESTTMP)/test_nilpy_relative_parent26)" = "42"
+	# A TYPE as a default parameter value, default actually TAKEN — segfaulted,
+	# exit 139, no diagnostic. A NilPy variant parameter is passed BY REFERENCE;
+	# the default-fill path passed a hardcoded isRefArg=False where the
+	# written-argument loop computes it from the parameter, so the callee got the
+	# variant's TAG (11, VT_CLASSREF) as its pointer. Only an already-variant
+	# default reached it, and a class is what lands there.
+	# bug-n-a-type-as-a-default-parameter-value-segfaults-when-the-default-is-taken
+	./$(COMPILER) test/test_nilpy_type_as_default_arg.npy $(TESTTMP)/test_nilpy_type_default26
+	test "$$($(TESTTMP)/test_nilpy_type_default26)" = "$$(printf 'm\nu\nW\nW\n0\nFalse')"
 	rm -f /tmp/test_nilpy_sqlite_crud.db
 	./$(COMPILER) test/test_nilpy_sqlite_crud.npy $(TESTTMP)/test_nilpy_sqlite_crud26
 	test "$$($(TESTTMP)/test_nilpy_sqlite_crud26)" = "$$(printf '1 alice\n2 bob')"

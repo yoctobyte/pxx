@@ -53,12 +53,12 @@ _none_
 | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine | C | 55 | bug | A C function DEFINITION whose name matches a Pascal intrinsic (`sqrt` `exp` `ln` `sin` `cos` `arctan`) binds to the Pascal proc entry via case-insensitive FindProc and overwrites its BodyAddr. The Pascal implementation then becomes unreachable by ANY spelling — bare `Sqrt`, `math.Sqrt` and `cmath.sqrt` all return the C body — so a C file silently replaces the RTL's math for the whole program. This is what the ten `__crtl_*` prefixes in lib/crtl exist to dodge. | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 25 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-n-a-class-base-that-is-an-expression-does-not-compile | N | 45 | bug | A class base which is a NAME bound to a type, or a call, does not compile: `B = object; class P(B)` fails where `class P(object)` and `class P(SomeClass)` both work. Blocks six.with_metaclass, which html5lib's parser spells as `class Phase(with_metaclass(...))` — the single remaining wall on html5parser.py. | — |
-| bug-n-a-type-as-a-default-parameter-value-segfaults-when-the-default-is-taken | N | 60 | bug | `def f(c=UserWarning)` segfaults at runtime the moment the default is actually taken — no diagnostic, exit 139. Any TYPE as a default value does it (user class, builtin type, builtin exception), whether or not the parameter is then called; ordinary values are fine. Passing the argument explicitly works, so the fault is in materialising the default. | — |
 | bug-n-abs-of-a-complex-raises-typeerror | N | 35 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
 | bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails | N | 55 | bug | `import string` then `digits = string.digits` fails with `undefined variable (digits)` — the LHS name breaks resolution of the same-named attribute on the RHS. Only for PASCAL shim modules (mimic_*.pas); a .py shim and a plain NilPy module both work. Blocks html5lib's constants.py:544, which most of html5lib imports. | — |
 | bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program | N | 45 | bug | `class X(mod.X)` — a class whose qualified base shares its name — is refused with `class X cannot inherit from itself` when written in the MAIN PROGRAM. The identical code in a pulled `.py` module compiles and dispatches correctly, and renaming either class makes the program case work too, so the variable is the name collision on the program path. This is how all ~100 of CPython's `encodings/*.py` and html5lib's filters are written. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 35 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
 | bug-n-kwargs-collector-alongside-named-params-needs-the-remainder | N | 30 | bug | `def f(a=1, **kw)` called as `f(**{'a':5,'x':7,'y':8})` must give a=5 and kw={'x':7,'y':8} — the collector takes the UNCONSUMED keys. pylib has no helper that subtracts consumed names, and adding one is compiler/builtin/** which NEEDS A PIN, so this is coordinator-scheduled, not worker-startable. | — |
+| bug-n-name-on-a-builtin-type-is-unimplemented | N | 35 | bug | `str.__name__` / `int.__name__` raise AttributeError: 'type' object has no attribute '__name__'. A USER class answers correctly, so only the builtin-type value (VT_BTYPE) is missing the attribute. Clean Python-shaped error, not a crash. | — |
 | bug-n-pylib-cannot-reach-the-rtl-power-so-complex-magnitude-loses-ulps | N | 25 | bug | `pycomplex_pow` computes \|z\|**b as exp(b*ln\|z\|) — two roundings — where CPython calls pow() directly, so `(-8.0) ** 0.5` gives an imaginary part of 2.8284271247461894 against CPython's 2.8284271247461903 (~4 ulp). The cause is structural: pylib lives in compiler/builtin and cannot reach the RTL's correctly-rounded Power, which is why it carries its own series ln/exp in the first place. | — |
 | bug-nilpy-an-extended-slice-cannot-be-assigned | N | 30 | bug | `l[::2] = [7, 8]` is a parse error. The READ form `l[::2]` works, and the plain-slice ASSIGN `l[1:3] = [9]` works; only the strided assignment is missing. | — |
 | bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds | N | 20 | bug | A dict VALUE as the `*=` target still rebinds, so an alias of it keeps the old contents. The parameter half landed 2026-08-15 (pymul_v_inplace); this is the residue, and `+=` has the same split. | — |
@@ -428,9 +428,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1997)
+## done (1998)
 
-1997 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1998 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -478,7 +478,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [U] decide-week-theme-2026-08-17
-- [p 60] [N] bug-n-a-type-as-a-default-parameter-value-segfaults-when-the-default-is-taken
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
 - [p 60] [P] feature-pascal-corpus-oop
@@ -579,6 +578,7 @@ _none_
 - [p 35] [A] bug-a-nilpy-double-star-in-a-mixed-argument-list
 - [p 35] [N] bug-n-abs-of-a-complex-raises-typeerror
 - [p 35] [N] bug-n-exec-ignores-a-caller-supplied-builtins-mapping
+- [p 35] [N] bug-n-name-on-a-builtin-type-is-unimplemented
 - [p 35] [N] bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
 - [p 35] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven

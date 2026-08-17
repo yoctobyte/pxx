@@ -9467,7 +9467,29 @@ begin
             dfltAST := AllocNode(AN_IDENT);
             ASTIVal[dfltAST] := ProcParamDefaultSym[cpi * MAX_PROC_PARAMS + pathIdx];
             ASTTk[dfltAST] := Ord(Syms[ProcParamDefaultSym[cpi * MAX_PROC_PARAMS + pathIdx]].TypeKind);
-            value := IRLowerCallArg(cpi, pathIdx, dfltAST, False);
+            { isRefArg from the PARAMETER, exactly as the written-argument loop
+              above computes it — not a hardcoded False.
+
+              A NilPy variant parameter is by-reference: what crosses the call
+              is the address of a 16-byte slot. IRLowerCallArg takes that
+              address only when told the parameter is by-ref; with False it
+              LOADED the global instead, so the callee received the variant's
+              first 8 bytes — its TAG — as the pointer it then dereferenced.
+
+              Invisible for every default that is not ALREADY a variant: a
+              scalar (`b=1`, `b=1.0`) is boxed into a temp whose address is the
+              argument no matter what isRefArg says, and `= None` hand-builds a
+              temp and LEAs it a few lines below — which is the same address
+              being taken by hand, one branch over. Only a default whose hidden
+              global is itself a variant reached the load, and the only value
+              that lands there is a TYPE (`def f(c=W)`), because
+              feature-nilpy-class-as-a-value boxes a class into a VT_CLASSREF
+              variant. So it presented as "a type as a default segfaults" —
+              exit 139 with no diagnostic, the tag 11 read as an address.
+              bug-n-a-type-as-a-default-parameter-value-segfaults-when-the-default-is-taken }
+            value := IRLowerCallArg(cpi, pathIdx, dfltAST,
+                       (pathIdx < Procs[cpi].ParamCount) and
+                       Procs[cpi].Params[pathIdx].IsRef);
             argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[dfltAST]);
           end
           else if (Procs[cpi].Params[pathIdx].TypeKind = tyVariant) and

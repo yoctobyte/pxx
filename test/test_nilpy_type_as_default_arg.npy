@@ -1,0 +1,66 @@
+# A TYPE as a default parameter value, with the default actually TAKEN.
+#
+# This segfaulted — exit 139, no diagnostic. A NilPy variant parameter is
+# passed BY REFERENCE (the callee reads a 16-byte slot through a pointer), and
+# the default-fill path handed IRLowerCallArg a hardcoded isRefArg=False where
+# the written-argument loop computes it from the parameter. So the global was
+# LOADED instead of addressed and the callee received the variant's TAG (11,
+# VT_CLASSREF) as its pointer.
+#
+# Only a default whose hidden global is ALREADY a variant could reach it, and
+# a class is the value that lands there — every scalar default is boxed into a
+# temp whose address is passed regardless. Hence "a type as a default
+# segfaults".
+# bug-n-a-type-as-a-default-parameter-value-segfaults-when-the-default-is-taken
+
+
+class W:
+    def __init__(self, m="d"):
+        self.m = m
+
+    def __str__(self):
+        return self.m
+
+
+# the default is TAKEN — the crashing case
+def taken(c=W):
+    return c("m")
+
+
+# the default is PRESENT but overridden — worked before, must keep working
+def unused(c=W):
+    return c("u")
+
+
+# reading the type without calling it was enough to crash
+def read_only(c=W):
+    return c.__name__
+
+
+# a type reached through an ordinary global, not a bare class name
+g = W
+
+
+def via_global(c=g):
+    return c.__name__
+
+
+# non-type non-constant defaults share the same path and must not regress
+def listy(c=[]):
+    return len(c)
+
+
+class Other:
+    def __init__(self, m="o"):
+        self.m = m
+
+    def __str__(self):
+        return self.m
+
+
+print(str(taken()))
+print(str(unused(Other)))
+print(read_only())
+print(via_global())
+print(listy())
+print(taken() is None)
