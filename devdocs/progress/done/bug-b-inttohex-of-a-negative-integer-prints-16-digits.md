@@ -221,4 +221,4 @@ effect" from reading as "the flag fixed it".
 Nothing remains in `lib/rtl` for this ticket. Closing.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit c1c814d8c.
