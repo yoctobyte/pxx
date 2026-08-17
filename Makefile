@@ -9816,6 +9816,13 @@ else
 	test "$$($(TESTTMP)/lib_synapse)" = "$$(printf 'b64=SGVsbG8sIFdvcmxkIQ==\nb64d=Hello, World!\nmd5=900150983cd24fb0d6963f7d28e17f72\nsha1=a9993e364706816aba3e25717850c26c9cd0d89d\ncrc32=3421780262\nurl=a%%20b&c\nsrv-got=ping\ncli-got=pong')"
 	$(PXX_STABLE) --mimic-fpc -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse_transitive_unit.pas $(TESTTMP)/lib_synapse_transitive_unit
 	test "$$($(TESTTMP)/lib_synapse_transitive_unit)" = "ok"
+	# Synapse's OpenSSL 3 binding compiles AND the opt-in dlopen loader resolves
+	# real libssl/libcrypto symbols (feature-real-dynlib-loader). -dPXX_DYNLIB_LIBC
+	# is the opt-in libc-linked loader; the default syscall-only build has no
+	# loader by design, so this is the one recipe line that asks for it.
+	$(PXX_STABLE) --mimic-fpc -dPXX_DYNLIB_LIBC -Fuexternal/synapse -Fulib/rtl -Fulib/rtl/platform/posix test/lib_synapse_ssl.pas $(TESTTMP)/lib_synapse_ssl
+	test "$$($(TESTTMP)/lib_synapse_ssl | grep -c '=ok')" = "3"
+	test "$$($(TESTTMP)/lib_synapse_ssl | tail -1)" = "SYNAPSE-SSL OK"
 endif
 	$(PXX_STABLE) test/lib_dns_cache.pas $(TESTTMP)/lib_dns_cache
 	test "$$($(TESTTMP)/lib_dns_cache)" = "$$(printf 'hit=ok\nmiss-other=ok\nexpired=ok\nneg-hit=ok\nneg-expired=ok\nqtype-a=ok\nqtype-aaaa=ok\nreplace-val=ok\nreplace-count=ok\nttl-zero-noop=ok\nfull-live=ok\nevict-cap=ok\nevict-oldest=ok\nevict-newkept=ok\nv6-hit=ok\nv6-coexist=ok\nv6-expired=ok\nv6-neg=ok\ncn-hit=ok\ncn-coexist=ok\ncn-expired=ok\ncn-ttl-noop=ok')"
@@ -10469,7 +10476,7 @@ endif
 	@rc=0; tools/reportlab_diff.py || rc=$$?; \
 	 if [ $$rc = 77 ]; then echo "SKIP reportlab_diff -- prerequisite absent (see line above)"; \
 	 elif [ $$rc != 0 ]; then echo "reportlab_diff: the mimic diverged from the oracle"; exit 1; fi
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff + synapse-ssl) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check

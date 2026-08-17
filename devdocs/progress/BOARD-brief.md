@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:12 blocked:4 backlog:222 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1988 rejected:38`
+`unfinished:13 blocked:4 backlog:222 experimental:20 rainy-day:40 done-followup:3 decided:80 done:1988 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (12) — parked mid-flight; re-claim, do not duplicate
+## unfinished (13) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
@@ -25,6 +25,7 @@ _none — no lane is locked._
 - `feature-nilpy-six-and-warnings-shims` [B] — blocked-by: bug-n-the-builtin-warning-exception-hierarchy-is-missing, decide-how-python-shaped-shims-should-be-shipped
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
 - `feature-pascal-corpus-generics` [P]
+- `feature-real-dynlib-loader` [B] — blocked-by: bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
 
 ## blocked (4) — has an unmet blocker; do not claim
 
@@ -55,6 +56,7 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
+- `[p 50] [A]` bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert (unblocks 1)
 - `[p 50] [N]` feature-nilpy-tkinter-facade (unblocks 1)
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
 - `[p 50] [U]` decide-staff-track-c-to-unblock-own-language-first
@@ -64,6 +66,5 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
 - `[p 50] [A]` feature-nilpy-collections-and-string-methods
 - `[p 50] [P]` feature-p-read-text-into-a-char-arm
-- `[p 50] [A]` feature-pascal-asmmode-directive-tolerance
 
 _177 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

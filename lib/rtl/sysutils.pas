@@ -21,6 +21,22 @@ type
     failed to compile with "unknown type" (tset4). }
   TSysCharSet = set of AnsiChar;
 
+  { FPC declares `HModule` in SYSTEM, so it is visible with no uses clause at
+    all — verified: a program with an empty uses clause compiles `var h: HModule`
+    under FPC. pxx has no System unit, so code that reaches it implicitly has
+    nowhere to find it, and `dynlibs` declaring it (as it does) is not enough:
+    units do not re-export their imports transitively, so Synapse's
+    `ssl_openssl3_lib.pas` — which gets there via `synafpc` -> `dynlibs` — fails
+    with `unknown type: HModule` at its LoadLib/GetProcAddr helpers.
+
+    Declared independently of dynlibs.TLibHandle rather than aliased through it,
+    which is exactly what FPC does: System.HModule and DynLibs.TLibHandle are
+    separate declarations of the same width, and both are PtrInt here, so the
+    two spellings stay assignable. Aliasing instead would drag `dynlibs` (and
+    `platform` behind it) into every single unit that uses SysUtils, for a type
+    most of them never name. }
+  HModule = PtrInt;
+
   TFileInfo = record
     Name: AnsiString;
     IsDir: Boolean;

@@ -2,15 +2,15 @@
 track: B
 prio: 45  # auto
 type: feature
-blocked-by: []
+blocked-by: [bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert]
 summary: "Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect."
 ---
 
 # Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy
 
 - **Type:** feature / design decision (runtime infrastructure)
-- **Status:** unfinished
-- **Owner:** claude-B
+- **Status:** working
+- **Owner:** frank3
   the link-libc profile / loader-vs-link decision)
 - **Opened:** 2026-06-24
 - **Found-by:** Synapse recon ([[feature-synapse-compile-check]]) — `dynlibs`
@@ -332,3 +332,76 @@ which is what `unfinished/` means.
 and `/usr/aarch64-linux-gnu` hold `bin` only — no `ld-linux*`, no libc — so
 arm32/aarch64 cannot RUN a dynamically linked binary on this box. That one needs
 a different machine or a container, not a decision.
+
+## 2026-08-17 (frank3, Track B) — item (d) advances; the loader itself is now GATED
+
+Premises re-measured first, against `pinned` **v344**.
+
+### Item (b): unchanged, still genuinely host-limited
+
+`/usr/arm-linux-gnueabi` and `/usr/aarch64-linux-gnu` still contain `bin` only —
+no `ld-linux*`, no libc. arm32/aarch64 still cannot RUN a dynamically linked
+binary on this box. Not a decision and not work: it needs a different machine or
+a container.
+
+### The DWARF blocker really is cleared
+
+`dd193ae6f` is an ancestor of the v344 pin, and `-g` on a `TTCPBlockSocket`
+program now compiles and runs. That is what let item (d) be investigated with a
+debugger rather than blind, as the 2026-08-15 note asked.
+
+### A Track B gap found and fixed on the way: `HModule`
+
+`ssl_openssl3_lib.pas` did not compile — `unknown type: HModule` at its
+`LoadLib`/`GetProcAddr` helpers. The 2026-07-20 note added `HModule` to
+`lib/rtl/dynlibs.pas`, which is not enough: that unit reaches the type through
+`synafpc` -> `dynlibs`, and **units do not re-export their imports
+transitively** (the same fact that decided the `gtk3_c` question earlier today).
+
+Measured where FPC actually keeps it rather than assumed: `var h: HModule`
+compiles under FPC with an **empty uses clause**, so it lives in `System`. pxx
+has no System unit, so it is now declared in `lib/rtl/sysutils.pas` — the unit
+`ssl_openssl3_lib.pas` does use, and where this repo already fills FPC-surface
+gaps (`TSysCharSet` precedent). Declared independently rather than aliased
+through `dynlibs`, which is what FPC does too (`System.HModule` and
+`DynLibs.TLibHandle` are separate declarations of the same width, both `PtrInt`
+here, so the spellings stay assignable) — aliasing would drag `dynlibs` and
+`platform` into every unit that uses SysUtils for a type most never name.
+
+### The loader is now GATED, which it never was
+
+`test/lib_synapse_ssl.pas`, inside the existing `external/synapse` guard in
+`make lib-test`, asserts the two things that are TRUE today:
+
+- `uses ssl_openssl3` compiles (the `HModule` regression), and
+- `InitSSLInterface` + `OpenSSLVersion(0)` answer `OpenSSL 3.0.13 30 Jan 2024`.
+
+That second one is this ticket's whole point — the dlopen loader resolving real
+symbols out of a third-party `.so` we do not control — and until now it was only
+ever demonstrated by hand. A stub would answer `''`; the test fails if it does.
+
+### Item (d): past the old wall, stopped at a new one that is NOT ours to fix
+
+With a local `openssl s_server`, the probe now reaches and fails **inside the TLS
+handshake**: `connect=0`, then SIGSEGV with `rip == rax` and **`rip` inside
+`[stack]`** — a tail call through a function pointer holding a stack address.
+Hand-resolved symbols put it in libcrypto's certificate-verification path
+(`X509_verify_cert`, reached from `SSL_get_ex_data_X509_STORE_CTX_idx`).
+
+**The byte-identical program built with FPC completes the handshake (`ssl=0`).**
+Same machine, same OpenSSL, same server, same source. So it is ours.
+
+Filed as
+[[bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert]]
+(Track A) with the full register/symbol evidence and, importantly, the list of
+things measured NOT to be at fault: the loader, C→Pascal callbacks through a
+`dlsym`'d pointer (a Pascal `cdecl` comparator drives libc's `qsort` correctly),
+the socket layer, and Synapse's own callback surface.
+
+Item (d) is therefore **blocked on Track A**, not on this ticket, exactly as it
+was in the 2026-07-20 round. Parking in `unfinished/` with both remaining items
+recorded: (b) needs a box, (d) needs the compiler fix.
+
+**Not added to the suite:** a real handshake assertion. It would be red today for
+a reason that belongs to another ticket, and `lib_synapse_ssl.pas` says so in its
+header so the omission is visible rather than silent.
