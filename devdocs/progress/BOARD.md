@@ -39,7 +39,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (221)
+## backlog (220)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -116,7 +116,6 @@ _none_
 | feature-a-rdrand-cpuid-compiler-builtins | A | 35→45 | feature | lib/rtl/random.pas cites `feature-rdrand-cpuid-compiler-builtins` in a source comment for its tier-1 hardware entropy path — and that ticket was never filed. Tiers 2 and 3 ship; tier 1 needs compiler intrinsics for CPUID + RDRAND (x86), MRS RNDR (aarch64) and the ESP RNG register, because the library's design mandate keeps per-arch instructions OUT of the .pas. | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 25 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
 | feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit | A | 50 | feature | Strict flags currently exempt code by `CurrentUnitIdx < 0` — main program vs ANY unit — so `--strict-fpc` polices the one file that isn't FPC's and exempts Synapse entirely. The right axis is OURS vs THEIRS: our RTL is written in the pxx dialect and no command-line flag should re-judge it, while external units and the user's own program should be policed. Unblocks folding --strict-overload into the umbrella. | — |
-| feature-a-the-shim-slot-should-find-a-python-shaped-shim | A | 70 | feature | The shim slot is Pascal-only; a Python-shaped shim has nowhere honest to live | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-b-hardware-sqrt-on-aarch64-and-arm32 | B | 20 | feature | Sqrt is one `sqrtsd` on x86-64 (15x faster than the software path and correctly rounded by IEEE mandate). aarch64 `fsqrt` and arm32 `vsqrt` are the same one-instruction win and both run here under qemu, so the change is verifiable on this box. The portable SqrtSoft stays as the fallback for riscv32/xtensa. | — |
 | feature-b-rtl-lnxp1-fpc-compat | B | 20 | feature | FPC's math unit exports LnXP1(x) = ln(1+x) and pxx does not. The implementation already exists as of 2026-08-15 — LnP1, added as an internal helper for the hyperbolic family — so this is an interface line and a name, not an algorithm. Note WHY the name matters: `Log1p` would hijack libc's through pxxcio, `LnXP1` does not. | — |
@@ -429,9 +428,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1990)
+## done (1991)
 
-1990 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1991 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -479,7 +478,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 70] [U] decide-week-theme-2026-08-17
-- [p 70] [A] feature-a-the-shim-slot-should-find-a-python-shaped-shim
 - [p 60] [C] feature-c-csmith-differential-fuzzing
 - [p 60] [P] feature-pascal-corpus-fpc-testsuite
 - [p 60] [P] feature-pascal-corpus-oop

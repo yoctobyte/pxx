@@ -33202,15 +33202,54 @@ end;
   host header for a NilPy import: the shim mapping itself runs later still, and
   by then the header would already have won. A file probe rather than a
   registry, because the shim is not loaded at this point — the question is only
-  whether one is there to be loaded. }
-function PyMimicShimExists(const lo: AnsiString): Boolean;
-var p, c: AnsiString;
+  whether one is there to be loaded.
+
+  A shim may be written in EITHER language, so all four spellings are one
+  lookup rather than two mechanisms. Some Python modules cannot honestly be
+  expressed in Pascal — `six` is entirely aliases (`text_type = str`), and "the
+  `str` type object as a value" is not a thing a Pascal unit says — so those
+  ship as `mimic_<name>.py` and the NilPy loader below picks them up. Asking
+  only about `.pas` here made a `.py` shim invisible to THIS question alone: it
+  loaded fine for a plain name, but any name that also names a host C header
+  lost to the header, and the failure surfaced far away as `undefined variable`
+  on the first attribute touched.
+  feature-a-the-shim-slot-should-find-a-python-shaped-shim }
+{ One root, all four spellings a shim may be written in. }
+function PyMimicShimAt(const root, lo: AnsiString): Boolean;
+var pfx, p, c: AnsiString;
 begin
   Result := False;
-  ConcatThree('lib/pcl/mimic_', lo, '.pas', p); LoadFile(p, c);
+  if Length(root) = 0 then Exit;
+  ConcatThree(root, 'mimic_', '', pfx);
+  ConcatThree(pfx, lo, '.pas', p); LoadFile(p, c);
   if Length(c) > 0 then begin Result := True; Exit; end;
-  ConcatThree('lib/rtl/mimic_', lo, '.pas', p); LoadFile(p, c);
+  ConcatThree(pfx, lo, '.pp', p);  LoadFile(p, c);
   if Length(c) > 0 then begin Result := True; Exit; end;
+  ConcatThree(pfx, lo, '.py', p);  LoadFile(p, c);
+  if Length(c) > 0 then begin Result := True; Exit; end;
+  ConcatThree(pfx, lo, '.npy', p); LoadFile(p, c);
+  if Length(c) > 0 then begin Result := True; Exit; end;
+end;
+
+function PyMimicShimExists(const lo, rtldir, lcldir: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := True;
+  { The -Fu roots first, matching the loader: the shim mapping resolves through
+    ParseUsesUnit, which probes PasUnitDirs for `mimic_<name>.py` like any other
+    unit — so a shim CAN live in a -Fu root, and this question has to be able to
+    see one or it answers "no shim" about a shim that will then load. }
+  for i := 0 to PasUnitDirCount - 1 do
+    if PyMimicShimAt(PasUnitDirs[i], lo) then Exit;
+  { …then the ExeDir-anchored library roots the loader uses… }
+  if PyMimicShimAt(lcldir, lo) then Exit;
+  if PyMimicShimAt(rtldir, lo) then Exit;
+  { …then the CWD-relative fallback, for the same reason the loader carries one:
+    the STABLE binary lives two levels down, so its '../lib/rtl' does not exist
+    and only the relative form finds the tree. }
+  if PyMimicShimAt('lib/pcl/', lo) then Exit;
+  if PyMimicShimAt('lib/rtl/', lo) then Exit;
+  Result := False;
 end;
 
 
@@ -33901,7 +33940,8 @@ begin
     a same-named C header. `import sqlite3` still reaches sqlite3.h (nothing
     ships a mimic_sqlite3), and `import string` will reach mimic_string the
     moment it is written. }
-  if (Length(UnitContent) = 0) and isNilPy and (not PyMimicShimExists(lo)) then
+  if (Length(UnitContent) = 0) and isNilPy and
+     (not PyMimicShimExists(lo, rtldir, lcldir)) then
     PyTryHostHeader(cName, path, UnitContent, isCUnit, isCHeader);
 
   { NilPy SHIM MAPPING. A Python module we implement ourselves lives under OUR

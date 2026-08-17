@@ -264,6 +264,17 @@ test-nilpy: $(COMPILER)
 	  3[0-9][0-9][0-9][0-9][0-9][0-9]) ;; \
 	  *) echo "FAIL: sqlite3_libversion_number() gave '$$v', not a 3.x.y version"; exit 1;; \
 	esac
+	# A mimic_<name>.py shim is found AS a shim. The module name deliberately
+	# collides with a host C header (/usr/include/search.h): that is the one
+	# case where "is there a shim?" is asked, and asking it about `.pas` alone
+	# let the header win, failing far away as `undefined variable`.
+	# The --no-shims half is the half that matters — it proves the .py shim is
+	# visible as a SHIM rather than masquerading as an ordinary library module.
+	./$(COMPILER) -Futest/shims test/test_nilpy_shim_py.npy $(TESTTMP)/test_nilpy_shim_py26
+	test "$$($(TESTTMP)/test_nilpy_shim_py26)" = "$$(printf 'py-shim\nx True')"
+	if ./$(COMPILER) --no-shims -Futest/shims test/test_nilpy_shim_py.npy $(TESTTMP)/test_nilpy_shim_py_ns26 2>/dev/null; then \
+	  echo "FAIL: --no-shims accepted a mimic_ .py shim"; exit 1; \
+	fi
 	rm -f /tmp/test_nilpy_sqlite_crud.db
 	./$(COMPILER) test/test_nilpy_sqlite_crud.npy $(TESTTMP)/test_nilpy_sqlite_crud26
 	test "$$($(TESTTMP)/test_nilpy_sqlite_crud26)" = "$$(printf '1 alice\n2 bob')"

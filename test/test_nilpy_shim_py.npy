@@ -1,0 +1,7 @@
+# A mimic_<name>.py shim is found AS a shim, even when the module name also
+# names a host C header (/usr/include/search.h).
+# feature-a-the-shim-slot-should-find-a-python-shaped-shim
+import search
+
+print(search.found())
+print(search.text_type("x"), search.PY3)
