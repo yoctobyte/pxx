@@ -2,6 +2,9 @@
 track: B
 prio: 45
 type: feature
+blocked-by: [decide-how-python-shaped-shims-should-be-shipped, bug-n-the-builtin-warning-exception-hierarchy-is-missing]
+status: unfinished
+owner: frank3
 ---
 
 # `mimic_six` and `mimic_warnings` — the biggest lever for the library campaign
@@ -171,3 +174,84 @@ this ticket is for. `itertools` and `operator` are the two imports behind it.
 
 So the remaining job here is what the title says and nothing more: write the
 shims. Nothing in Track N blocks it now.
+
+## 2026-08-17 (frank3, Track B) — re-measured on v344. The two halves have DIFFERENT blockers now.
+
+Premises re-checked before writing a line, because this ticket's premises have
+been wrong twice already. Against `pinned` **v344**.
+
+### The `six` half: every language prerequisite now holds
+
+```python
+text_type = str          binary_type = bytes
+string_types = (str,)    integer_types = (int,)
+class_types = (type,)    isinstance("a", string_types)   # True, matches CPython
+```
+
+All compile and answer correctly, as does passing a plain class as an argument.
+The 2026-08-14 note is confirmed on this pin, not just the one it was written on.
+
+### The `warnings` half is blocked again — on a NEW thing, not the old one
+
+The old blocker (a class cannot be passed as a value) is **gone**: `warn("m", W)`
+for a user class `W` compiles and runs. But measured against the real html5lib
+sources rather than assumed:
+
+| category passed to `warnings.warn` | non-test sites |
+| --- | --- |
+| `DataLossWarning` | **14** |
+| `DeprecationWarning` | 2 |
+
+and `html5lib/constants.py:2940` is `class DataLossWarning(UserWarning):`.
+
+**`Warning`, `UserWarning` and `DeprecationWarning` do not exist in NilPy.**
+
+```
+print(Warning, UserWarning, DeprecationWarning)
+  -> pascal26: error, near: print  Warning >>>  UserWarning
+```
+
+CPython prints all three — they are builtins, not members of the `warnings`
+module, so a `mimic_warnings` **cannot supply them**: the calling code names them
+bare. All 16 sites need them (14 to define `DataLossWarning`, 2 directly).
+
+Filed as [[bug-n-the-builtin-warning-exception-hierarchy-is-missing]]. Until it
+lands, a `mimic_warnings` would resolve `import warnings` and then fail at the
+first category — worse than the honest missing module, and against the T1 rule
+in `devdocs/dev/python-compat-tiers.md`. **The `warnings` half is parked, again
+for a measured reason rather than a guessed one.**
+
+### The `six` half is blocked on a DESIGN fork, not a defect
+
+Writing it revealed that the ticket's title assumes a mechanism that does not fit
+the content. `six` is a file of Python-level aliases — `text_type = str`,
+`string_types = (str,)` — and the shim slot the title names is **Pascal only**:
+`parser.inc:33210` probes `lib/pcl/mimic_<name>.pas` then `lib/rtl/mimic_<name>.pas`,
+and nothing else. Expressing "the `str` type object, as a value" from Pascal is
+not something any existing shim does.
+
+Measured that the alternative works: a NilPy `.py` module in a library root
+(`feature-nilpy-import-a-py-module-from-the-library-path`, resolved at
+`parser.inc:33845`) serves it exactly, byte-for-byte with CPython:
+
+```
+from six import text_type, PY3, binary_type, unichr, viewkeys
+print(text_type("x"), PY3, unichr(65), sorted(viewkeys({"a": 1})))
+  pxx:     x True A ['a']
+  CPython: x True A ['a']
+```
+
+**But that route silently defeats `--no-shims`.** That flag exists so "a build
+that succeeds provably used no compatibility shim" (`defs.inc:1571`), and it
+refuses only the `mimic_` substitution. A `lib/**/six.py` is a real library
+module by the resolver's rules, so it would satisfy `import six` under
+`--no-shims` and quietly falsify exactly the guarantee the flag sells.
+
+Not guessing between those. Filed as
+[[decide-how-python-shaped-shims-should-be-shipped]] with the three options and
+a recommendation; parking this in `unfinished/` rather than shipping a mechanism
+that might have to be unpicked.
+
+**Nothing here is a defect in the `six` content** — the name list, its scoping to
+what html5lib/tinycss2 actually import, and the `viewkeys`-is-a-function trap
+are all still correct and still the work. Only *where the file goes* is open.
