@@ -130,6 +130,18 @@ still apply — they prevent conflicting EDITS to the same file, not tree damage
    its gate genuinely is the full tier. Do not tell T it needs authorisation for a
    deep run — the coordinator did on 2026-08-17, having not checked the hook.
 
+   **"Fixed" and "revertible" are TWO events, separated by a pin** (Track B,
+   2026-08-17). A Track B workaround registered in `track-b-workarounds.md` cannot
+   close when the bug is fixed on master — B builds on `pinned`, so the revert is
+   only safe once a pin CARRIES the fix. The coordinator told a worker to revert
+   the same night the bug was fixed; the worker re-measured the repro **against
+   `pinned`** (still exit 139) instead of reasoning from timestamps, and declined.
+   Reverting would have turned `lib-test` red.
+   So: a registry row is **armed, not fired** in that window — recording the fixing
+   sha, the pin it postdates, and the re-measured result. And the coordinator owes
+   the pin: when a worker reports an armed revert, that IS a worker blocked on a
+   pin.
+
    Batching is available if B starts waiting: several builtin changes can ride
    one pin, trading a slightly staler `PXX_STABLE` for fewer lock events. Not the
    default — per-fix pinning bisects better.
