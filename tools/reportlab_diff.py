@@ -16,7 +16,7 @@ EXTRACTED TEXT plus per-word bounding boxes via `pdftotext -bbox`, which is what
 Requires the oracle:  tools/install_lib_candidates.sh reportlab
 Usage:                tools/reportlab_diff.py [case.py ...]     (default: all built-in cases)
 """
-import os, re, subprocess, sys, tempfile
+import os, re, shutil, subprocess, sys, tempfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 ORACLE = os.path.join(ROOT, "library_candidates", "reportlab", "src")
@@ -112,6 +112,15 @@ def main():
     if not os.path.isdir(ORACLE):
         print("reportlab oracle absent — run: tools/install_lib_candidates.sh reportlab")
         return 77          # distinct from pass/fail: nothing was compared
+    # Same 77 for the OTHER missing prerequisite. Without this the bare
+    # subprocess call raises FileNotFoundError and this probe exits 1 — i.e.
+    # a box with no poppler-utils reports "the mimic diverged from reportlab"
+    # when nothing was compared at all. That distinction is the whole point of
+    # having a third exit code, and it started mattering the moment this got
+    # wired into `make lib-test`.
+    if shutil.which("pdftotext") is None:
+        print("pdftotext absent (poppler-utils) — cannot extract glyph positions")
+        return 77
     # 1e-3 pt is ~350nm on paper: far below anything renderable, and above
     # pdftotext's own printed precision (it emits ~5 decimal places).
     tol = 1e-3

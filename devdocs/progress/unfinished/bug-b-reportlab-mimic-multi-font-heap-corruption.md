@@ -246,3 +246,31 @@ Filed as [[bug-c-crtl-utoa-digit-loop-is-unbounded]] — deliberately NOT fixed
 here, because bounding the loop would hide the defect that is still unnamed.
 
 **Still open:** why `v` stops shrinking. Parked here rather than guessed at.
+
+## 2026-08-17 — evidence only, from Track B (frank3). Diagnosis and status untouched.
+
+Not a claim that this is fixed, and nothing here is owned by me — appended
+because the run data bears on whoever closes it.
+
+Ran `tools/reportlab_diff.py` (all three cases, the harness that originally
+reproduced this on 2 of 3) **20 consecutive times against pinned v344: 20/20
+clean, 0 failures.** Every case at worst delta 0.000029 pt.
+
+For scale against this ticket's own numbers: at the originally recorded ~1-in-6
+rate, 20 clean runs is roughly a 0.03 probability event, so the frequent form of
+the fault is gone — consistent with this ticket's own "largely fixed by a
+workaround".
+
+**It does not touch the residual.** This ticket already records that the
+rare tail is what remains, and 20 runs cannot rule out a fault at the 3/40 rate
+the `__crtl_utoa` probe measured — let alone rarer. The open question recorded
+above (*why `v` stops shrinking*, and why an in-loop probe never fires) is
+untouched by this and is still the thing to settle.
+
+Relevant consequence: `tools/reportlab_diff.py` is now wired into `make lib-test`
+on the strength of the 20/20 measurement
+([[feature-lib-reportlab-fidelity-vs-oracle]]). So **if the residual fires, it
+will now surface as an intermittent Track B gate red** rather than only when
+someone runs the probe by hand. If that starts happening, this ticket is the
+cause and the wiring is the messenger — ping frank3 or unwire that one line
+rather than chasing it as a new lib regression.

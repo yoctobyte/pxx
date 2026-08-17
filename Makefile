@@ -10457,7 +10457,19 @@ endif
 	$(PXX_STABLE) --strict-overload-width -dSTRICT_WIDTH -Fulib/rtl test/lib_inttohex.pas $(TESTTMP)/lib_inttohex_strict
 	test "$$($(TESTTMP)/lib_inttohex_strict | grep -c '=ok')" = "19"
 	test "$$($(TESTTMP)/lib_inttohex_strict | tail -1)" = "INTTOHEX OK"
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + pyexec + format-ge + namevalue + markdown + inttohex) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	# The reportlab mimic against REAL reportlab (feature-lib-reportlab-fidelity-vs-oracle).
+	# Validity is not agreement: the mimic reimplements a drawing API rather than
+	# wrapping one, so every metric and coordinate convention in it is an
+	# independent guess. This compares extracted text plus per-word glyph boxes.
+	# Deferred from the gate until now because the NilPy showPage crash made it
+	# intermittently red; measured 20/20 clean before wiring it in.
+	# Exit 77 = a prerequisite is absent (oracle not fetched, or no poppler-utils)
+	# and NOTHING was compared -- skip loudly, exactly like the synapse guard
+	# above, so a fresh clone does not read a missing vendor tree as a divergence.
+	@rc=0; tools/reportlab_diff.py || rc=$$?; \
+	 if [ $$rc = 77 ]; then echo "SKIP reportlab_diff -- prerequisite absent (see line above)"; \
+	 elif [ $$rc != 0 ]; then echo "reportlab_diff: the mimic diverged from the oracle"; exit 1; fi
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check

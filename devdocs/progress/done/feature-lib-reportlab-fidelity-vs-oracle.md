@@ -3,7 +3,7 @@ summary: "The reportlab mimic produces a VALID PDF, never one shown to agree wit
 type: feature
 track: B
 prio: 45
-status: working
+status: done
 owner: frank3
 ---
 
@@ -146,3 +146,90 @@ the identical calls from Pascal are 25/25 clean — and re-filed as `track: N`.
 Nothing further is actionable here under Track B until that lands; the harness
 and the shim are both ready, and the one case that completes agrees with the
 oracle to 0.000029 pt.
+
+## 2026-08-17 — WIRED INTO THE GATE (Track B, frank3)
+
+The ticket's last note said "nothing further is actionable here under Track B
+until [the NilPy crash] lands". That was 8 days old, so it was **measured rather
+than trusted** — and it no longer holds.
+
+### The blocker is gone, and one green run does not say so
+
+Fetched the oracle (`tools/install_lib_candidates.sh reportlab`) and ran the
+harness. All three cases pass:
+
+```
+many_fonts   ok (5 words, worst delta 0.000029 pt)
+positions    ok (4 words, worst delta 0.000029 pt)
+text_fonts   ok (9 words, worst delta 0.000029 pt)
+REPORTLAB DIFF: OK
+```
+
+The crash this was parked on was **intermittent** (~1 run in 6), and this
+ticket's own history records the trap: earlier per-case results here were
+sampling noise read as fidelity findings. So a single green run is worth
+nothing as evidence that it is fixed. **Ran the harness 20 times: 20/20 clean,
+0 failures.** That is the measurement that justifies wiring it into a gate; the
+0.000029 pt figure was never the question, the crash rate was.
+
+0.000029 pt is `pdftotext`'s own print precision, against a tolerance of 1e-3 pt
+(~350 nm on paper) — so the mimic and real reportlab agree on glyph placement as
+closely as the extraction tool can report.
+
+### Wired in
+
+`make lib-test` now runs `tools/reportlab_diff.py`, which the ticket
+deliberately deferred while the crash was live. ~16.5 s.
+
+```make
+@rc=0; tools/reportlab_diff.py || rc=$$?; \
+ if [ $$rc = 77 ]; then echo "SKIP reportlab_diff -- prerequisite absent (see line above)"; \
+ elif [ $$rc != 0 ]; then echo "reportlab_diff: the mimic diverged from the oracle"; exit 1; fi
+```
+
+Exit 77 means a prerequisite is absent and **nothing was compared** — skip
+loudly, the same shape as the synapse guard added earlier today
+([[bug-b-lib-test-unrunnable-in-a-fresh-clone-no-synapse-fetch]]), so a fresh
+clone cannot read a missing vendor tree as a divergence.
+
+### A second 77 case the wiring exposed
+
+The harness returned 77 for a missing oracle but **not** for a missing
+`pdftotext`: that path fell through to a bare `subprocess.run`, raising an
+uncaught `FileNotFoundError` and exiting 1. Confirmed as the real failure mode,
+not assumed. Harmless while this was a probe you ran by hand; the moment it
+became a gate it meant **a box without poppler-utils would report "the mimic
+diverged from reportlab" when nothing had been compared at all** — which is the
+precise confusion the third exit code exists to prevent. Now `shutil.which`
+returns 77 with its own message.
+
+### Gate — both branches exercised in the real target, not simulated
+
+| state | `make lib-test` |
+| --- | --- |
+| oracle + pdftotext present | **exit 0**, `REPORTLAB DIFF: OK`, three cases at 0.000029 pt |
+| `library_candidates/reportlab` moved away | **exit 0**, prints the oracle-absent line + `SKIP reportlab_diff` |
+| PATH without `pdftotext` (harness direct) | exit 77, `pdftotext absent (poppler-utils)` |
+
+### What this ticket asked for, and where it stands
+
+The gate line asked for a harness that runs, a documented set of scripts
+agreeing with the oracle within a stated tolerance, and divergences fixed or
+ticketed. All three hold: the harness is in `make lib-test` rather than
+optional, the three cases agree to 0.000029 pt against a 1e-3 pt tolerance, and
+the three divergences it originally found (the one-arg `Canvas` segfault, the
+0.11 pt A4 baseline shift from two disagreeing encodings of A4, and five raw
+`AnsiString`→`const char *` sites) were fixed on 2026-08-09.
+
+**Coverage is deliberately not what this measures.** The cases stay inside the
+mimic's documented subset because this probe tests fidelity — a case using
+something the mimic refuses would fail loudly and teach nothing. Widening the
+subset is separate work and wants its own ticket.
+
+Resolving. [[bug-b-reportlab-mimic-multi-font-heap-corruption]] remains open and
+owned by agent-AN; the 20/20 run data is added there as evidence but its
+diagnosis and status are untouched — a rarer residual is exactly the thing 20
+runs cannot rule out.
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.

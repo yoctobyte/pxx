@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-lib-reportlab-fidelity-vs-oracle | B | 45 | feature | The reportlab mimic produces a VALID PDF, never one shown to agree with real reportlab. Differential-test lib/pcl/mimic_reportlab_* against CPython+reportlab on the same script | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 60 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
 
 ## unfinished (10)
@@ -38,7 +37,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (216)
+## backlog (218)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -51,8 +50,10 @@ _none_
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | — |
 | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine | C | 55 | bug | A C function DEFINITION whose name matches a Pascal intrinsic (`sqrt` `exp` `ln` `sin` `cos` `arctan`) binds to the Pascal proc entry via case-insensitive FindProc and overwrites its BodyAddr. The Pascal implementation then becomes unreachable by ANY spelling — bare `Sqrt`, `math.Sqrt` and `cmath.sqrt` all return the C body — so a C file silently replaces the RTL's math for the whole program. This is what the ten `__crtl_*` prefixes in lib/crtl exist to dodge. | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 25 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
+| bug-n-a-package-does-not-re-export-what-its-init-imports | N | 55 | bug | `from pkg import NAME` fails with `undefined variable (NAME)` when pkg's `__init__.py` obtained NAME by importing it, rather than defining it. Flat unit scope: a module's imports do not join what it re-exports. This is how nearly every real package publishes its public API, so it blocks the third-party corpora one rung past relative imports. | — |
 | bug-n-abs-of-a-complex-raises-typeerror | N | 35 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 35 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
+| bug-n-from-import-as-alias-binds-zero-inside-a-pulled-module | N | 55 | bug | `from mod import NAME as ALIAS` binds ALIAS to 0 — silently, no diagnostic — when the statement is inside a pulled `.py` MODULE. The identical statement in a top-level `.npy` program binds correctly, so it is the module path only. Silent-wrong-value class. | — |
 | bug-n-kwargs-collector-alongside-named-params-needs-the-remainder | N | 30 | bug | `def f(a=1, **kw)` called as `f(**{'a':5,'x':7,'y':8})` must give a=5 and kw={'x':7,'y':8} — the collector takes the UNCONSUMED keys. pylib has no helper that subtracts consumed names, and adding one is compiler/builtin/** which NEEDS A PIN, so this is coordinator-scheduled, not worker-startable. | — |
 | bug-n-pylib-cannot-reach-the-rtl-power-so-complex-magnitude-loses-ulps | N | 25 | bug | `pycomplex_pow` computes \|z\|**b as exp(b*ln\|z\|) — two roundings — where CPython calls pow() directly, so `(-8.0) ** 0.5` gives an imaginary part of 2.8284271247461894 against CPython's 2.8284271247461903 (~4 ulp). The cause is structural: pylib lives in compiler/builtin and cannot reach the RTL's correctly-rounded Power, which is why it carries its own series ln/exp in the first place. | — |
 | bug-n-relative-import-from-a-package-is-not-parsed | N | 55 | bug | `from .sub import NAME` — an intra-package relative import — fails with `error: undefined variable (from)`. Plain `from pkg import NAME` parses fine; the leading dot is what breaks. This blocks ALL FOUR Python corpora (webencodings, tinycss2, html5lib, reportlab), because every real package uses relative imports in its __init__.py. | — |
@@ -422,9 +423,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (1984)
+## done (1985)
 
-1984 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+1985 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -480,6 +481,8 @@ _none_
 - [p 55] [A] feature-port-rtl-over-libc (unblocks 3)
 - [p 55] [C] bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
+- [p 55] [N] bug-n-a-package-does-not-re-export-what-its-init-imports
+- [p 55] [N] bug-n-from-import-as-alias-binds-zero-inside-a-pulled-module
 - [p 55] [N] bug-n-relative-import-from-a-package-is-not-parsed
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
