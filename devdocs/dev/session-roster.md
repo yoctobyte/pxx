@@ -27,19 +27,31 @@ Track **B** worker: to be added once this roster proves out. Not yet.
    on; they do not wait.
 4. Keep this file current.
 
-**The coordinator does not debug.** The moment it takes a hard ticket it becomes
-a worker with a stale plan attached. If it must investigate, it hands the lane
-off first.
+**The coordinator should not debug** — the moment it takes a HARD ticket it
+becomes a worker with a stale plan attached.
+
+Being tested 2026-08-17 at the human's request: coordinator also holding a
+ticket. If you try it, the constraints that make it survivable are (a) a lane
+that cannot collide with a live worker, (b) a ticket already diagnosed, so it
+needs execution rather than investigation, and (c) coordination interrupts win —
+a peer message or a red is handled before the next edit, never after "just one
+more thing". Abandon the ticket, not the role, if those stop holding.
 
 ## The rule that makes context-clearing safe
 
 Clearing is not the risk; **unbanked knowledge is**. Anything learned that is not
 in a ticket body or a memory file dies at the clear.
 
-So: **bank, then clear.** A worker finishing a ticket writes the diagnosis into
-the ticket (especially when the filed diagnosis turned out wrong — say so, and
-leave the wrong reasoning visible), adds a memory file if the lesson generalises,
-pushes, and only then clears.
+**A session cannot clear itself** (human, 2026-08-17) — so "bank, then clear" is
+the wrong instruction: it implies the worker controls the timing. It does not.
+A clear can arrive mid-ticket, between any two tool calls.
+
+So: **bank CONTINUOUSLY.** Write the diagnosis into the ticket as you establish
+it, not when you finish — especially when the filed diagnosis turns out wrong
+(say so, and leave the wrong reasoning visible). Add a memory file when a lesson
+generalises. Push each logical unit. A worker that banks only at the end is one
+clear away from losing the whole investigation, and nobody will know what was
+lost, including the next session.
 
 Orientation for a fresh session is cheap and already built: `BOARD-brief.md`
 (~3KB), `tools/progress.sh next --track <X>`, the memory index, this file.
@@ -85,6 +97,8 @@ unrelated two-line defects. Same ticket, same model, different context depth.
 
 ## Current assignments
 
+- **coordinator → also holds Track P** while testing the combined role (see
+  above). P cannot collide with N.
 - **frank2 → Track N bug queue**, ranked, top first. N holds 17 of the 32 open
   bug tickets and is fully carved out (`pylexer.inc` / `pyparser.inc` / pylib),
   so it collides with nobody. Shared-internals change → file a Track A ticket,
