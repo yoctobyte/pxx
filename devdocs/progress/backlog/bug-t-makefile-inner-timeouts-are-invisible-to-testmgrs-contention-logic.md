@@ -106,3 +106,65 @@ the job by hand to learn which kind of red it was.
   is the same family one level out — a report that preserves the verdict and discards
   the discriminator. This ticket is the *duration* discriminator; that one is the
   *identity* discriminator.
+
+## 2026-08-18, Track T — a TRAP for whoever fixes this: it will break my timeout guard
+
+Not yet started; recording an interaction found while verifying the dispatch,
+because a fix could plausibly ship a regression without noticing.
+
+**Measured now**, from plexus' live ledger:
+
+```
+test-nilpy#src:examples/tk/callbacks.npy | status: fail    | range: 1 | bad: 5215148bb454
+lib-test#src:test/crtl_exp2.c            | status: timeout | range: 16
+```
+
+`callbacks` is recorded **`fail`**, not `timeout` — which is this ticket's thesis
+demonstrated live: the inner `timeout 120` (Makefile:363, introduced by
+`5215148bb`, verified) killed the process, make returned nonzero, and testmgr saw
+an ordinary failure.
+
+### The trap
+
+`bisect_step` refuses to bisect any regression whose status is `timeout`
+([[bug-t-a-timeout-bisects-to-an-innocent-commit]]). The callbacks bisect ran,
+converged to one commit, and was **correct** — it landed exactly on the commit
+that introduced the expensive step.
+
+It ran only because the inner timeout was invisible. **Fix this ticket, and that
+same bisect gets refused** — a correct, useful result suppressed by a guard
+written for a different shape.
+
+### The distinction the guard is missing
+
+Two timeout shapes, and only one is unbisectable:
+
+| shape | example | is the bisect sound? |
+| --- | --- | --- |
+| the expensive step exists across the WHOLE range; the budget is straddled somewhere in the middle | `crtl_exp2` | **No** — the landing is wherever load tipped it, arbitrary |
+| the range SPANS the commit where the job started doing the expensive thing | `callbacks` | **Yes** — the landing is exact |
+
+So "a timeout is a duration signal, therefore not bisectable" — which is what I
+wrote in `track-t.md` and encoded in the guard — is **too broad**. A
+duration-driven failure does not by itself discredit a bisect; what discredits it
+is the expensive step being present across the entire range.
+
+Credit: the distinction is the coordinator's, from retracting its own prediction
+that the callbacks bisect would name an innocent commit.
+
+### What that implies for the fix
+
+Whoever lands this should expect to touch `bisect_step` in the same change, or
+the improvement will read as a regression the first time a legitimate
+timeout-bisect is refused. A cheap discriminator, in the spirit of the existing
+`pin_immune` check: **did the accused commit introduce or enlarge the job's
+work?** If it added the recipe lines that run the thing, the landing is exact and
+the bisect should stand. If every commit in the range already ran it, the
+existing refusal is right.
+
+Also worth noting the bisect result and this ticket's static reading (ten
+hardcoded `timeout N` literals, Makefile:363 named as instance one) converge on
+the same line by two independent routes — which is stronger evidence than either
+alone, and is why "culprit" is the wrong word for `5215148bb`. That commit
+introduced the first *execution* of tests that had only ever been parsed.
+Running them was right; the fixed ceiling came with them.
