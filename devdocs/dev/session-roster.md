@@ -12,9 +12,13 @@ Updated 2026-08-17.
 | --- | --- | --- | --- |
 | frankonpiler | **coordinator** | none — assigns, does not code | persistent |
 | frank2 | worker | **N** (Nil-Python) | fresh per ticket / small batch |
+| frank3 | worker | **B** (libraries/demos) | fresh per ticket / small batch |
 | plexus-T | watcher + Track T agent | T (own clone, own box) | its own |
 
-Track **B** worker: to be added once this roster proves out. Not yet.
+Each session is its OWN CHECKOUT — `/home/rene/frankonpiler`, `/home/rene/frank2`,
+`/home/rene/frank3`, plus `franktrackD` for the watcher. So two agents never share
+a working tree; they meet only at push/merge, which is ordinary git. Lane rules
+still apply — they prevent conflicting EDITS to the same file, not tree damage.
 
 ## The coordinator's actual job
 
@@ -23,6 +27,13 @@ Track **B** worker: to be added once this roster proves out. Not yet.
    coordinator says who.
 2. **Serialize pins.** `make stabilize-fast && make pin` holds a repo lock and
    blocks every other lane. One at a time, announced.
+   **A change under `compiler/builtin/**` (pylib.pas, builtinheap.pas) NEEDS a
+   pin** — Track B and the lib tests build with `PXX_STABLE`, so an unpinned
+   builtin change is invisible to them and breaks the gate fixedpoint. That makes
+   a surprising number of *frontend* bugs coordinator-scheduled rather than
+   worker-initiated: several open N bugs (the NilPy string kind, `abs()` of a
+   complex) land in `compiler/builtin` despite reading like pure frontend work.
+   A worker hitting one should STOP and hand it up, not pin on its own.
 3. Route **Track U** (decisions) to the human. Workers file `decide-*` and move
    on; they do not wait.
 4. Keep this file current.
@@ -111,6 +122,9 @@ unrelated two-line defects. Same ticket, same model, different context depth.
   bug tickets and is fully carved out (`pylexer.inc` / `pyparser.inc` / pylib),
   so it collides with nobody. Shared-internals change → file a Track A ticket,
   do not edit under N.
+- **frank3 → Track B**, ranked. Builds with `$(PXX_STABLE)` and NEVER rebuilds
+  the compiler, so it is the cheapest lane to add on a contended box and cannot
+  collide with A/P/N. Compiler gaps it finds → file into the owning lane.
 - **plexus-T →** DISPATCHED 2026-08-17 to work its own T queue (human:
   "set track T to work"), not watcher duty alone. Top: the unsweepable tmp-paths
   chore, the uforth benchmark harness (the instrument for the slow-creep
