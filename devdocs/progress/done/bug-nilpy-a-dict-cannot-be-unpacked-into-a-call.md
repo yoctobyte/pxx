@@ -235,4 +235,4 @@ unlike the parse defects this one is mine to fix. Taking it next.
 Constructors-with-`**kwargs` and defaulted-methods stay refused by name.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 34e4bfe86.
