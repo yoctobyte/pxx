@@ -293,6 +293,16 @@ clears it or the check releases it.
 
 ### Check log
 
+- 2026-08-17, hourly check #1 (cron) — frank3 **busy** (strtofloat). frank2 idle
+  with `working/` empty, i.e. between tickets: dispatched to
+  `feature-nilpy-tkinter-facade` (p50). plexus-T idle, watcher publishing tstate.
+  No pending clears. **Blocked, and it is the human's call, not a dispatch
+  problem: three Track A tickets are filed with no Track A worker staffed** —
+  `feature-a-the-shim-slot-should-find-a-python-shaped-shim` (p70, gates `six`,
+  which gates 15 of 58 corpus files), `bug-a-a-python-module-s-identity-is-its-
+  name-not-its-file` (p55), `bug-a-synapse-tls-handshake-jumps-into-the-stack-
+  inside-x509-verify-cert` (p50). Surfaced to the human; nothing a check can fix.
+
 - 2026-08-17 — protocol created. frank2 idle and clean, frank3 on B, plexus-T
   quiet. No releases needed.
 - 2026-08-17, first real run (manual) — **all three workers idle.** frank2 stopped
