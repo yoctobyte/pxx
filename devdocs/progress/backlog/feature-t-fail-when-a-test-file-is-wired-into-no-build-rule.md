@@ -136,3 +136,56 @@ Rene's to answer.
 Nothing was reshaped to slip past it either. The permanent checker is what this
 ticket asks for, a tool is its natural form, and it does not match a heuristic
 aimed at ten-minute compile sweeps.
+
+## Triage: the discriminator is the COMPILER, not the text
+
+The coordinator asked whether the checker could classify the remaining 85 into
+categories — needs-hardware, manual-only, fixture, genuinely-orphaned — so only
+the last group needs action. Measured rather than assumed, and the answer is
+**yes, but not from text**.
+
+### Text-based classification does not hold up
+
+The obvious hypothesis was that the `test_esp_*` cluster (18 files mentioning
+esp32/xtensa) is legitimately unwired as hardware-dependent. **It isn't
+hardware.** Sibling esp tests ARE wired and cross-compile with
+`--esp-profile=bare --target=xtensa`, needing no device. So the marker that
+looked like a category (`esp32` in the source) is present in both wired and
+unwired files and separates nothing.
+
+What actually blocks them: `test_esp_hello.pas` fails with
+`target esp32: external (dynamic) symbols not yet supported`. They are
+**aspirational tests for an unimplemented feature** — a real category, and one
+no amount of grepping the file would have revealed.
+
+### Attempting the build classifies cleanly, and the ERROR names the bucket
+
+Sample of 12 (excluding manual/, relpath/, gamelib/, esp):
+
+| outcome | meaning | n |
+| --- | --- | --- |
+| **builds** | genuine orphan — wire it, it works today | **6** |
+| `this file is a unit, not a program` / `main function not found` | helper consumed by another test — exempt, reason writes itself | 2 |
+| `undefined variable (InlineAsmLineHole…)` | needs a harness/context, not standalone (the `test_asm_emit_*` set) | 4 |
+
+Half the sample builds today. Those are not a reading task — they are four lines
+of Makefile each, and the `.expected` question is separate.
+
+**So the triage is mechanical**: attempt each, bucket by outcome, and the
+compiler's own message becomes the `UNWIRED.txt` reason for everything that does
+not build. That yields an exemption list whose entries are individually
+justified by an observation rather than by someone's summary — which is the only
+kind that does not decay.
+
+### Why the full sweep is NOT run here
+
+Eighty-five compiles is a genuine compile sweep, which is exactly what
+`.claude/hooks/no-full-suite.sh` exists to refuse. The 12-file sample above is
+bounded and proves the method; the full run needs the owner's authorisation, and
+reshaping the command to slip past the hook would be the thing three agents have
+now correctly declined to do.
+
+**Recommended:** authorise one bounded triage run, bucket the 85, wire the
+builds-today group, and let each non-builder carry its compiler error as its
+exemption reason. Estimated from the sample: ~40 trivially wireable, ~15
+helpers, ~30 blocked or harness-dependent.
