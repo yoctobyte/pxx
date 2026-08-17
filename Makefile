@@ -1764,6 +1764,12 @@ test-nilpy: $(COMPILER)
 	# dict(**d) and f(*lst) reach the call machinery by different paths.
 	./$(COMPILER) test/test_nilpy_leading_double_star_call.npy $(TESTTMP)/test_nilpy_ldstar26
 	$(TESTTMP)/test_nilpy_ldstar26 | diff -u test/test_nilpy_leading_double_star_call.expected -
+	# A **kwargs COLLECTOR absorbs the forwarded dict whole; it is not an ordinary
+	# named slot. PyStarForwardCall counted it via Procs[].ParamCount, so the arity
+	# guard asserted "1 to 1" against a two-key dict. Last four rows are the
+	# regression risks -- named slots, default preservation, positional, dict(**d).
+	./$(COMPILER) test/test_nilpy_kwargs_collector_forward.npy $(TESTTMP)/test_nilpy_kwcoll26
+	$(TESTTMP)/test_nilpy_kwcoll26 | diff -u test/test_nilpy_kwargs_collector_forward.expected -
 	./$(COMPILER) test/test_nilpy_store_attr_of_an_element.npy $(TESTTMP)/test_nilpy_elemattr26
 	$(TESTTMP)/test_nilpy_elemattr26 | diff -u test/test_nilpy_store_attr_of_an_element.expected -
 	./$(COMPILER) test/test_nilpy_selector_on_a_dict_returning_call.npy $(TESTTMP)/test_nilpy_dictsel26
