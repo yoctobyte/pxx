@@ -212,4 +212,4 @@ FPC. Then item (d) of `feature-real-dynlib-loader` can add a real end-to-end TLS
 assertion to `lib-test`.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 2ee660831.
