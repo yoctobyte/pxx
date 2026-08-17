@@ -85,6 +85,57 @@ Track U escalation, not a worker's call.
 
 ---
 
+## What a CORPUS is for — and why difficulty in one is not a defect
+
+Stated by the project owner, 2026-08-17, after a session built a case for compiler
+work on a justification that did not hold.
+
+**A corpus is a measuring instrument, not a dependency.** It earns its place by
+being code we could not have unconsciously shaped to fit what we already support.
+It does not have to be pleasant to integrate against, because nothing integrates
+against it.
+
+Worked example, Synapse:
+
+> *"We already implemented our own TCP stack, including SSL. Synapse is a TEST
+> library, not something we will build on in practice. It serves to test Pascal.
+> Anything written there is native for Python these days. If we ever need it, we
+> chase it when the time comes."*
+
+So the value of Synapse is **real third-party Pascal that compiles as-is**, with
+byte-exact codec vectors against FPC. Its SMTP/FTP/etc are genuinely good code and
+are not the point. This cuts two ways and both matter:
+
+**1. Do not justify core work with a corpus.** Before proposing a compiler change,
+ask what actually DEPENDS on the thing that motivated it. A case can be built
+where every observation is correct, every measurement sound, and the whole thing
+aimed at a library we will never ship against — the repo's recurring
+"true fact about the wrong subject", arriving as misplaced PRIORITY rather than a
+wrong conclusion. See `decide-what-synapse-actually-needs-vs-mimic-fpc`, kept at
+prio 20 as the worked example.
+
+**2. Difficulty compiling an OLD corpus is expected cost, not a bug signal.**
+
+> *"Compiling Synapse as-is already takes hacks because it's full of
+> platform/compiler dependent ifdefs."*
+
+Two decades of Pascal means a thicket of directives probing for compilers, RTLs
+and platforms that are not us. When such a library needs coaxing, the default
+reading is **the library is identity-probing**, not **our compiler is wrong**. So
+a `--mimic-fpc` define set is a legitimate answer, not a workaround to be
+apologised for or narrowed by hand.
+
+The line that still holds, because it is the one the platonic-code rule protects:
+if the compiler produces a **silently wrong value** on corpus code, that is a bug
+in any corpus, however old. Ugliness getting it to *compile* is expected;
+wrongness once it *runs* never is.
+
+**Where this does NOT apply:** a corpus we intend to build on is a dependency, and
+the calculus flips — then integration friction IS worth fixing. Ask which kind you
+have before spending.
+
+---
+
 ## Why these differ at all — the thing worth understanding
 
 The three positions are not inconsistent; they follow from what each frontend is
