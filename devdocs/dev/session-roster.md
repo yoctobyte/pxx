@@ -325,6 +325,12 @@ clears it or the check releases it.
   - the `track:` in frontmatter is a **guess from the test path** and says so in the
     body. Correct it rather than trusting it. It is deliberately ABSENT on a
     timeout, because a source path says what a job compiles, not what went wrong.
+  - the guards themselves are **one day old**, verified against synthetic cases,
+    one live ledger entry (the timeout guard vs `crtl_exp2`) and four real commits
+    for pin-provenance — not against a week of traffic. A stub arriving with no
+    bisect range and no obvious reason is most likely a guard firing correctly; if
+    one fires where it should not, the reasoning is in the code comments rather
+    than only in the ticket.
   - **a converged bisect range is not an accusation.** Three of today's were
     legitimate-but-not-a-fault: an innocent commit (timeout), a correct commit that
     implemented a deliberately-refused behaviour, and one that could not be causal
@@ -479,6 +485,20 @@ unrelated two-line defects. Same ticket, same model, different context depth.
   look like yours** — both readings flipped when a proper baseline was built.
   Build the baseline from **HEAD minus your own diff**. `pinned` is Track B's
   ground, not a control.
+- **Write claims specifically enough to be falsified — that is what makes peer
+  review work at all** (plexus-T, 2026-08-17). Four coordinator claims were caught
+  by peers in one day, and every one was catchable *because it carried shas, counts
+  or timings*. The pin-vs-HEAD claim came with shas and a byte count and died in two
+  commands. **A vague claim survives scrutiny; a specific one does not.** So the
+  discipline is not "be careful what you assert" — it is "assert it in a form
+  someone can check", which means naming the sha, the count, the file:line, the
+  measured seconds. Hedged prose is not humility, it is armour.
+- **A constant nobody can explain is the shape to distrust.** `lib-test` ended
+  `167/167, 2 skip` for two months, quoted upward repeatedly, TRUE every single
+  time — and the 2 was a coverage hole caused by a wrong message, not a property of
+  the corpus. Nothing about the number could distinguish a baseline from a wound.
+  If a figure in `tstate/` has never changed and nobody can say *why* it is that
+  value, ask.
 - **Verify a peer's claim before acting on it**, and name the sha in your own.
   Two overclaims were caught between sessions on 2026-08-16, in both directions;
   each cost one message where believing it would have cost far more. Also check
