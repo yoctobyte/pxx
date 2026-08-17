@@ -171,4 +171,4 @@ become ok. Then `mimic_warnings`'s signature reverts and its registry entry is
 dropped.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit 31172d1cc.
