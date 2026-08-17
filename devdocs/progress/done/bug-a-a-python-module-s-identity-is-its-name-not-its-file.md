@@ -4,6 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "A `.py` module reached by two import spellings is compiled TWICE as two units (`sub` and `pkg_sub`), because the compiled-unit dedupe key is the unit NAME, not the resolved file. Its module body runs twice — CPython guarantees once — giving duplicated registry side effects and two distinct copies of every class, so isinstance across them fails. Same root also makes a relative subpackage import unresolvable. Filed from Track N: both halves live in parser.inc."
+status: done
+owner: frank2
 ---
 
 # A Python module's identity is its NAME, not its FILE — so one file compiles twice
@@ -132,6 +134,85 @@ half of the test belongs with the N ticket
 [[bug-n-a-subpackage-directory-does-not-resolve-as-a-module]], which is parked
 blocked on this.
 
+## 2026-08-17 (frank2, Track A) — RESOLVED. Both symptoms, plus a third thing the ticket did not predict.
+
+Both symptoms reproduced exactly as written, against the CPython oracle. The
+root-cause section held up — this one had NOT gone stale.
+
+### A/B baseline, stated because it nearly misled me
+
+First A/B was against `pinned`, which is many commits behind HEAD, and it made a
+*pre-existing* failure look like my regression and a *fixed* case look like my
+fix. Rebuilt a proper baseline instead — HEAD with only my two files reverted —
+and re-ran everything against that. **`pinned` is not a baseline for a Track A
+change; HEAD-minus-your-diff is.**
+
+### Symptom 2 — the small independent half
+
+The sibling probe hand-rolled `<CurUnitDir>/<lo>.py` / `.npy` and so never tried
+the `<name>/__init__` form, while `PyTryPackageSource` — three lines away —
+already knew it. Replaced the two `LoadFile`s with that call. Scope is unchanged
+(still the importing file's own directory), so the `tk.npy` shadowing note above
+still holds: this adds a spelling, not a root.
+
+### Symptom 1 — dedupe on the resolved FILE
+
+Took the ticket's first direction (second key space alongside the name key,
+`@cpath:` precedent). `CompiledUnitFile[]` parallels `CompiledUnits[]`; once
+resolution has picked a file, a match means this spelling is a second name for
+one module → register a unit alias and do not parse it again.
+
+**Measured before writing it:** both spellings resolve to the *identical* string
+`pkg/sub.py`, so plain equality suffices. Deliberately NOT canonicalising — a
+symlink or `./x` vs `x` still slips through. Strictly better than today, honest
+about the limit, and the general answer is the Track U question
+[[decide-one-answer-to-have-i-already-compiled-this-unit]].
+
+### The part the ticket did not predict — an alias is not visibility
+
+Aliasing alone **regressed** `isinstance` from a wrong answer to a compile
+error (`unknown type in isinstance: C`). Visibility is per uses-edge
+(`symtab.inc:799`), and the edge recorded on entry names the SPELLING
+(`pkg_sub`) while the symbols register under the name the file was first
+compiled as (`sub`). The alias answers a qualifier; it does not grant
+visibility.
+
+Caught by testing **both import orders** — whichever spelling lost the race was
+the one that broke, which is what identified the missing thing as the edge
+rather than the alias. One added `RecordUsesEdge` to the real unit fixes it.
+
+### Verified — all five repros match CPython exactly
+
+| repro | baseline | now | CPython |
+| --- | --- | --- | --- |
+| body-runs-twice | `sub-init-ran` ×2, `5 5` | ×1, `5 5` | ×1, `5 5` |
+| relative subpackage | `no unit named inner` | `42` | `42` |
+| isinstance across spellings | `False` | `True` | `True` |
+| dotted-first order | `False` | `True` | `True` |
+| relative-only class | ok | ok | ok |
+
+### Regression test
+
+`test/test_nilpy_module_identity.npy` + package `test/dualspell/`, enumerated in
+`test-nilpy`. **Asserts the COUNT** as the ticket demanded — `body-ran` once —
+plus the isinstance line for a partial fix. Confirmed it FAILS on the baseline
+binary (`body-ran` twice, `False`) and passes on the fix, so it is a real test
+and not a tautology.
+
+One trap worth recording: the ticket suggested a module-level list appended on
+import, with the importer asserting `len == 1`. **That shape does not work** —
+each copy appends to its OWN list, so the importer sees `1` either way. It reads
+like a count assertion and is a value assertion. A side effect OUTSIDE the
+module (the `print`) is what actually counts the body.
+
+### Left open, deliberately
+
+Scoped to `isPyUnit`. The KNOWN LIVE EXPOSURE note above (`mimic_codecs.pas`
+registering at import time) is a **Pascal** unit and is untouched by this:
+extending file-identity dedupe to Pascal `uses` would change Pascal resolution
+under a self-host gate, which is not this ticket and not worth riding along.
+Still true, still flagged, still independent — as the note already said.
+
 ## Sibling check — "a translation unit compiles twice" is a recurring class here
 
 Grepped for the sibling before filing, per
@@ -153,3 +234,6 @@ than three mechanisms. Not proposed here; noted.
 a design call for the user rather than something a worker settles in passing.
 **This ticket is NOT blocked on that decision** and should be fixed regardless;
 the decision only governs whether the fix stays narrow or begins a unification.
+
+## Log
+- 2026-08-17 — resolved, commit PENDING-COMMIT.

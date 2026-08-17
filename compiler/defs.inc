@@ -2247,6 +2247,16 @@ var
   HideRankVal : Integer;
   HideRankValid : Boolean;
   CompiledUnits : array[0..255] of Integer;
+  { The FILE each compiled unit actually resolved to (Strs[] idx of the path),
+    -1 when it did not come from a file we can key on. CompiledUnits is keyed on
+    the unit NAME, but a Python module reached by two spellings arrives under two
+    names — relative `from .sub import X` passes bare `sub`, dotted
+    `from pkg.sub import X` passes `pkg_sub` — so the name key deduped neither
+    and the same file was compiled TWICE. Its body ran twice (CPython guarantees
+    once) and every class in it existed as two distinct copies that fail
+    isinstance against each other.
+    bug-a-a-python-module-s-identity-is-its-name-not-its-file (symptom 1). }
+  CompiledUnitFile : array[0..255] of Integer;
   CompiledUnitCount : Integer;
   CurrentUnitIdx : Integer; { Strs[] name while parsing an imported unit, else -1 }
   { `uses 'name' as alias` table: a qualifier `alias.Sym` resolves to the real

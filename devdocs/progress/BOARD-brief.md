@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:13 blocked:4 backlog:220 experimental:20 rainy-day:40 done-followup:3 decided:81 done:1991 rejected:38`
+`unfinished:13 blocked:4 backlog:219 experimental:20 rainy-day:40 done-followup:3 decided:81 done:1992 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -34,7 +34,7 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 206, ranked
+## Ready — top 30 of 205, ranked
 
 - `[p 70] [U]` decide-week-theme-2026-08-17
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
@@ -43,7 +43,6 @@ _none — no lane is locked._
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
-- `[p 55] [A]` bug-a-a-python-module-s-identity-is-its-name-not-its-file (unblocks 1)
 - `[p 55] [C]` bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [U]` decide-what-an-unwired-test-may-assert
@@ -66,5 +65,6 @@ _none — no lane is locked._
 - `[p 50] [P]` feature-p-read-text-into-a-char-arm
 - `[p 50] [A]` feature-pascal-asmmode-directive-tolerance
 - `[p 50] [A]` feature-pascal-initialize-finalize-intrinsics
+- `[p 50] [A]` feature-release-checksums-repro
 
-_176 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_175 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

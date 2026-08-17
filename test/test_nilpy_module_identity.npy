@@ -1,0 +1,16 @@
+# A module reached by two import spellings is ONE module.
+# bug-a-a-python-module-s-identity-is-its-name-not-its-file
+#
+# Two observables, and the first is the one that matters: `body-ran` must appear
+# ONCE. The module body running twice is invisible to any value comparison —
+# the original repro printed the RIGHT answer while running the body twice — so
+# this test asserts a COUNT, not a value.
+#
+# The second catches a partial fix that dedupes the body but not the class rows:
+# `mine` is built by the relative spelling, `C` names the dotted one, and two
+# copies of one class fail isinstance against each other (it printed False
+# before this landed).
+from dualspell import mine
+from dualspell.sub import C
+
+print(isinstance(mine, C))

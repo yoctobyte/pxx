@@ -275,6 +275,15 @@ test-nilpy: $(COMPILER)
 	if ./$(COMPILER) --no-shims -Futest/shims test/test_nilpy_shim_py.npy $(TESTTMP)/test_nilpy_shim_py_ns26 2>/dev/null; then \
 	  echo "FAIL: --no-shims accepted a mimic_ .py shim"; exit 1; \
 	fi
+	# One FILE is one module however it was spelled. The assertion that matters
+	# is the COUNT — `body-ran` once, not twice: the module body running twice
+	# is invisible to a value comparison (the original repro printed the right
+	# answer while running the body twice), and import-time registry population
+	# is exactly that shape. The isinstance line catches a partial fix that
+	# dedupes the body but not the class rows.
+	# bug-a-a-python-module-s-identity-is-its-name-not-its-file
+	./$(COMPILER) test/test_nilpy_module_identity.npy $(TESTTMP)/test_nilpy_module_identity26
+	test "$$($(TESTTMP)/test_nilpy_module_identity26)" = "$$(printf 'body-ran\nTrue')"
 	rm -f /tmp/test_nilpy_sqlite_crud.db
 	./$(COMPILER) test/test_nilpy_sqlite_crud.npy $(TESTTMP)/test_nilpy_sqlite_crud26
 	test "$$($(TESTTMP)/test_nilpy_sqlite_crud26)" = "$$(printf '1 alice\n2 bob')"

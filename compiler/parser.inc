@@ -33319,6 +33319,9 @@ var
   lastSlash, lastDot: Integer;
   isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
   guardIdx: Integer;   { CompiledUnits key — see the note at its assignment }
+  { The RESOLVED FILE key, and the already-compiled entry holding it — the
+    second key space that makes one module one unit however it was spelled. }
+  pyFileIdx, pyDupIdx: Integer;
   isPyUnit, savedPyExprMode: Boolean;
   { The dotted module path this import was written with, claimed from the global
     on entry so a nested unit parse cannot see a stale one. Empty unless it
@@ -33433,6 +33436,7 @@ begin
   if CompiledUnitCount < 256 then
   begin
     CompiledUnits[CompiledUnitCount] := guardIdx;
+    CompiledUnitFile[CompiledUnitCount] := -1;  { filled in once resolved }
     Inc(CompiledUnitCount);
   end;
 
@@ -33530,13 +33534,20 @@ begin
     { An empty CurUnitDir means the importer was named without a directory
       (`pascal26 main.py`), so the bare name IS the relative path — the sibling
       is in the working directory. }
-    ConcatThree(CurUnitDir, lo, '.py', path);
-    LoadFile(path, UnitContent);
-    if Length(UnitContent) = 0 then
-    begin
-      ConcatThree(CurUnitDir, lo, '.npy', path);
-      LoadFile(path, UnitContent);
-    end;
+    { PyTryPackageSource, not two hand-rolled LoadFiles: a sibling may be a
+      package DIRECTORY as well as a flat file. `from .inner import IN` passes
+      the bare `inner` (the relative form skips the dots), and probing only
+      `<CurUnitDir>/inner.py` missed `<CurUnitDir>/inner/__init__.py` — so a
+      relative subpackage import failed with "no unit named inner" while the
+      absolute `from pkg.inner import IN` on the SAME directory resolved fine.
+      The resolver was never missing the package concept; the relative spelling
+      simply never reached the probe that already knew it.
+      bug-a-a-python-module-s-identity-is-its-name-not-its-file (symptom 2).
+
+      Scope is unchanged — still the importing file's own directory, Python's
+      own first rule — so the `tk.npy` shadowing note above still holds: this
+      adds the `__init__` spelling, not a new root. }
+    PyTryPackageSource(CurUnitDir, lo, True, path, UnitContent);
     if Length(UnitContent) > 0 then isPyUnit := True;
   end;
 
@@ -34026,6 +34037,70 @@ begin
     else
       ConcatThree('uses: unit source not found: ', lo, '', emsg);
     Error(emsg);
+  end;
+
+  { A PYTHON MODULE'S IDENTITY IS ITS FILE, not the spelling that reached it.
+    CompiledUnits is keyed on the unit NAME, and the two ways to import one
+    module arrive under two different names: `from .sub import X` passes the
+    bare `sub` (the relative form deliberately skips the dots — NilPy's unit
+    scope is flat), while `from pkg.sub import X` passes the mangled `pkg_sub`.
+    Two keys, no dedupe, so the file was compiled TWICE:
+
+      - its module body RAN twice, where CPython guarantees once. Import-time
+        registry population is exactly this shape — `codecs.register(...)`, what
+        webencodings does — so the duplicate is silent and cumulative;
+      - every class in it existed as two distinct copies, and an object built by
+        one fails `isinstance` against the other.
+
+    Measured, and it is why the value-based test would never have caught it: the
+    repro printed the RIGHT answer (`5 5`) while running the body twice. The
+    defect is in how many times something happened.
+
+    So: once resolution has picked a FILE, ask whether that file is already
+    compiled under some other name. If it is, this spelling is a second name for
+    one module — register it as a unit ALIAS (the mechanism the shim mapping
+    already uses; FindCompiledUnitOrAlias chases the chain, so `pkg.sub.X` still
+    resolves) and do not parse it again.
+
+    Keyed on the resolved path TEXT. Both spellings of the repro produce the
+    identical string, measured, because they are built from the same root — this
+    is deliberately not a canonicalising comparison, so two roots spelling one
+    file differently (a symlink, `./x` vs `x`) still slip through. That is
+    strictly better than today and honest about its limit; the general answer is
+    the Track U question decide-one-answer-to-have-i-already-compiled-this-unit.
+    bug-a-a-python-module-s-identity-is-its-name-not-its-file (symptom 1). }
+  if isPyUnit then
+  begin
+    pyFileIdx := InternStr(path);
+    pyDupIdx := -1;
+    for i := 0 to CompiledUnitCount - 1 do
+      if CompiledUnitFile[i] = pyFileIdx then pyDupIdx := i;
+    if pyDupIdx >= 0 then
+    begin
+      if UnitAliasCount < MAX_UNIT_ALIASES then
+      begin
+        UnitAliasName[UnitAliasCount] := strIdx;
+        UnitAliasReal[UnitAliasCount] := CompiledUnits[pyDupIdx];
+        Inc(UnitAliasCount);
+      end
+      else
+        Error('too many unit aliases (raise MAX_UNIT_ALIASES)');
+      { The alias answers a QUALIFIER; it does not make the module's symbols
+        VISIBLE. Visibility is per uses-edge (symtab.inc:799) and the edge
+        recorded on entry points at the SPELLING (`pkg_sub`), while the symbols
+        are registered under the name the file was first compiled as (`sub`) —
+        so without this, `from pkg.sub import C` left C unresolvable and
+        isinstance reported "unknown type". Measured both ways round: whichever
+        spelling lost the race was the one that broke, which is what says the
+        missing thing is the edge and not the alias. }
+      RecordUsesEdge(CurrentUnitIdx, CompiledUnits[pyDupIdx], InInterface);
+      CurrentCLibrary := savedCurrentCLibrary;
+      Exit;
+    end;
+    { Not a duplicate — record the file against the entry claimed above, so the
+      NEXT spelling of it finds this one. }
+    if (savedCUC >= 0) and (savedCUC < CompiledUnitCount) then
+      CompiledUnitFile[savedCUC] := pyFileIdx;
   end;
 
   if isPyUnit then
