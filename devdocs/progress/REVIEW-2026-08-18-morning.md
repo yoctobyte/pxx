@@ -98,6 +98,52 @@ Track B did **not** reshape around it: it used the sanctioned route
 revert-to note, and the test's warn-with-no-category line is that workaround's own
 regression guard. That is the pattern working exactly as designed.
 
+## The finding I'd most want you to read: four subsystems, same defect shape
+
+Filed as `meta-a-second-paths-reimplement-the-first-paths-decisions` (A, p60).
+**Four distinct subsystems in one day** where one concept has two mechanisms and
+only one carries the capability: `@procvar` lowering, method star-unpack (free
+functions get a run-time arity dispatch, methods a compile-time expansion that
+refuses defaults), Pascal-vs-`.py` shim attribute resolution, and written-args vs
+default-fill. The repo's own rule is two is a smell, three is a design flaw.
+
+Track A's generalisation is the part worth keeping: **wherever a second path
+constructs call arguments, it reimplements the first path's decisions and drifts.**
+It starts as a copy, the original grows a capability, the copy does not — and
+nothing fails at the edit site, because the copy is still internally consistent.
+
+And there is a **grep-able tell**: a hand-rolled compensation sitting next to a
+general mechanism. In tonight's segfault, `= None` hand-builds a temp and LEAs it
+one branch away from the load that was broken for everything else — somebody hit
+this, fixed their case locally, and never saw the general one. When you find a
+special case doing manually what a nearby general mechanism does automatically,
+the general mechanism is probably broken for everything without its own special
+case.
+
+The segfault itself resolved to **one hardcoded `False`**: the written-argument
+loop computes by-ref from the parameter; the default-fill path forty lines below
+did not, so the callee received the variant's tag (`0xb` = `VT_CLASSREF`) as the
+pointer it dereferenced. The type was incidental — a class is simply the only
+value that lands in the uncovered path.
+
+## The corpus ladder, corrected — and my error in it
+
+I ranked package/sibling resolution as the top lever and filed Track A work on it.
+**The instrument was wrong**: the scan passed only each file's own `-Fu` root, so
+cross-package imports recorded as walls. Track B fixed the scan, re-ran it, and
+**updated all four citing tickets** — that last part being the half that matters,
+since a corrected instrument nobody re-runs just leaves the wrong numbers in
+circulation with a fresh timestamp.
+
+Corrected table: `digits` **8**, `CodecInfo` **7**, `xml_dom` 4, inherit-from-itself
+3, `six_moves` 3. `webencodings` (6) and `constants` (4) are gone — both artefacts.
+**Package/sibling resolution has no row at all.**
+
+The good news is the shape: **15 of the 44 failing files sit behind just two root
+causes**, both already filed, both reaching wide through one file each
+(`constants.py`, `webencodings/__init__.py`). A table whose top entries are known
+single causes is worth much more than one whose top entries are symptoms.
+
 ## The theme, if you want one
 
 Nearly every expensive thing today was **a true statement about the wrong subject**,
