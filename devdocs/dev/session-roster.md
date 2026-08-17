@@ -239,7 +239,15 @@ equivalent.
 So a release message always carries:
 
 - **Re-read the ticket from disk before continuing.** Do not act on your own
-  summary of it. The summary is what compaction preserved and it is the least
+  summary of it. But note the limit found 2026-08-17: a banked **diagnosis** is
+  more persuasive than a banked **observation**, and less reliable. A cleared
+  session was told to trust its ticket over its recollection — right for the facts
+  in it, wrong for the PLAN in it. The banked "forced three-step order" rested on
+  a real measured regression and was still incorrect: one condition existed at
+  three sites, the pre-clear session found two, and "the handlers must be taught
+  first" explained the failure just as well as "there is a third site" did.
+  Re-measuring took minutes. So: inherit facts, re-derive conclusions, and when
+  banking a conclusion say what it rests on. The summary is what compaction preserved and it is the least
   trustworthy thing you now hold.
 - **Re-establish the baseline by running it**, not by recalling it. Whatever you
   "know" passes or fails, measure once before building on it.
