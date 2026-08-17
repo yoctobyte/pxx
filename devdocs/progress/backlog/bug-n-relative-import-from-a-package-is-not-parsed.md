@@ -243,3 +243,45 @@ running the *other* form after making the change.
 
 So: **after touching import routing, run both relative forms, not the one you
 were fixing.**
+
+## Dead ends — what is ALREADY DONE and must not be re-walked
+
+Three rebuild-and-measure cycles went into locating the prescan condition, one
+of which had to be reverted. Recording what those ruled out, because a dead end
+nobody wrote down gets walked again.
+
+1. **`sys.path.insert(...)` — not a route, ever.** The obvious CPython move, and
+   it silently does nothing: runtime list, compile-time resolver. Now a
+   permanent-limit entry in `devdocs/dev/nilpy-semantics-divergences.md`.
+   The answer is `-Fu`.
+2. **"pxx cannot resolve third-party packages" — false, and it was my first
+   diagnosis.** `-Fu <parent of package dir>` resolves the package and begins
+   compiling its `__init__.py`. The misleading part is that without `-Fu` the
+   error is `no unit named X`, a feature-missing message for a feature that
+   exists ([[doc-n-fu-is-how-a-python-package-is-found]]).
+3. **Teaching the two import handlers the dotted form is ALREADY IN PLACE and
+   changed nothing on its own.** Landed in 22da0d833: `PyRelativeImportLevel`
+   plus a fall-through at *both* call sites (`PyParseOneImport:31602`,
+   `PyParseImportRun:31700`) for "level > 0 and the next token is an
+   identifier". Measured after: **both relative forms fail exactly as before.**
+   The reason is item 4 — those handlers are never reached for a dotted import.
+
+   **So do not start by re-editing the call sites.** That is done. Start at the
+   prescan.
+4. **The prescan is the gate, and widening it alone REGRESSES the sibling.**
+   `PyPreScanImports` requires `tkIdent` one token past `from`, so a dotted line
+   is invisible to it. Widening to `[tkIdent, tkDot]` reroutes
+   `from . import sub` from `PyParseOneImport` (copes) to `PyParseImportRun`
+   (does not), moving its failure from line 2 to line 1. Measured, reverted,
+   baseline confirmed restored on both forms.
+
+### The resulting order, which is the actual finding
+
+`PyParseImportRun` must handle the relative forms **first**; only then may the
+prescan be widened; the `from . import sub` local binding is third and
+independent. Any other order regresses something that works today.
+
+Also verified while in there: `from sub import VALUE` and `import sub` **inside
+a package `__init__.py` both work today** — so nested imports are fine and the
+defect is specific to the leading dot. That control is what proved the dot, not
+the nesting, is the variable.
