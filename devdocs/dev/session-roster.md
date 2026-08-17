@@ -303,6 +303,24 @@ clears it or the check releases it.
 
 ### Check log
 
+- 2026-08-17 overnight — **Track T full tier GREEN: 2695 jobs, ZERO corpus skips**,
+  six conformance shards and `demos#00` passing. Worth the headline for the morning:
+  this morning `lib-test` ended `167/167, 2 skip (corpus absent)` and that line had
+  been true-and-misleading for two months, because T's own CORPUS_ROOTS message
+  claimed the corpora were unfetchable while a fetcher had existed since June.
+  Found, fixed and closed on the same day.
+- 2026-08-17 overnight — **T's AGENT side is down; the watcher daemon keeps
+  publishing `tstate/`.** So reds still surface (a Monitor on tstate reds landing on
+  origin/master caught tonight's NEW-RED within minutes), but **nobody is filing
+  regression tickets until morning**. The coordinator routes any red straight to the
+  owning lane and files the ticket at review time. Do not read T's silence as health;
+  read `tstate/`.
+- 2026-08-17 overnight — BOARD.md rebase churn resolved as a NON-issue, by reading
+  the code rather than reasoning about it: `sync.sh` does `checkout --ours` purely to
+  un-conflict the file and then **regenerates the board from the tickets**, so the
+  resolution IS the re-derivation and a silently dropped row cannot occur. It also
+  refuses to auto-resolve anything that is not a board file. Closed; do not re-raise.
+
 - 2026-08-17 **OVERNIGHT RUN begins.** Rene away until morning; reviews results
   then. Coordinator runs the hourly check, pins on request, banks decisions as
   Track U tickets (never as chat — chat dies with the session, and he is asleep).
