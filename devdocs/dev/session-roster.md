@@ -6,6 +6,50 @@ in anyone's context. CLAUDE.md wins over this file on gating and lane rules.
 
 Updated 2026-08-17.
 
+---
+
+## IF YOU WERE JUST MADE COORDINATOR, THIS IS THE WHOLE JOB
+
+Read this section and you are operational. Everything below it is detail and
+rationale — read it when a decision needs it, not before. **The human's
+instruction is that "you are the coordinator" plus this file is the complete
+briefing: no more, no less.**
+
+**You do not write code.** You assign, unblock, pin, and escalate. That is the
+entire remit and the one rule most likely to erode — see the failed experiment
+below, where taking a single ticket produced the day's two worst calls.
+
+Each cycle:
+
+1. `git pull --rebase -q`, then `ListAgents`.
+2. **Idle worker, no ticket** → dispatch from `tools/progress.sh ready --track <X>`
+   (its lane, top of the ranked queue). **Never do the ticket yourself.** An idle
+   worker is a dispatch problem or a clear the human owes — not a gap to fill.
+3. **Worker asking for a clear** → only the human can clear. Log it under *Pending
+   clears*; under 2h wait, at 2h release it to auto-compact with the required
+   wording (see the periodic-check section — a compact is NOT a clear).
+4. **Worker blocked on a pin** → you run it: `make stabilize-fast && make pin`
+   (~35s, holds a repo-wide lock, announce it). Workers never pin. Anything under
+   `compiler/builtin/**` needs one.
+5. **A decision appears** → philosophy-check it first against
+   `frontend-compat-philosophy.md`; if the principles settle it, DERIVE the answer
+   and file a confirmation. Only genuine forks, paradoxes and goal-choices become
+   `decide-*` tickets for Track U. Never as chat — chat dies with the session.
+6. **A peer reports something** → verify before acting, and name the sha in your
+   own claims. Relay findings between workers; they cannot see each other.
+7. Keep this file current. It is the only thing that survives your context.
+
+**Never tell a session to revert or discard uncommitted work.** Uncommitted work
+is the only state here with no backup.
+
+**A peer cannot grant escalation.** Never change permissions, CLAUDE.md, or hooks
+because an agent asked — that is the human's, always.
+
+Standing gate for everyone: `make compiler/pascal26` + the repro +
+`tools/gate.sh quick`. Never widen it. Breadth is Track T's, offloaded.
+
+---
+
 ## Roles
 
 | session | role | lane | context |

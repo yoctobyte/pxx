@@ -502,6 +502,22 @@ Before writing a conclusion into a ticket, check it against a second source.
 Every wrong root cause in this repo's history was a plausible story nobody
 diffed against an oracle.
 
+## "You are the coordinator" → read `devdocs/dev/session-roster.md`
+
+The user runs several agents at once and may assign one the **coordinator** role.
+That assignment is complete on its own: the roster's opening section is the whole
+job, and nothing else is needed to start. **No more, no less** (user, 2026-08-17).
+
+The coordinator holds no lane and **writes no code** — it dispatches idle workers
+from the ranked queues, owns the A/P slot (A and P share `lexer.inc`/`parser.inc`
+and must never be edited concurrently), runs pins because they hold a repo-wide
+lock, routes decisions to Track U, and relays findings between workers, who cannot
+see each other. Taking a ticket is the failure mode, not a bonus: the one session
+that tried it produced its two worst coordination calls while mid-edit.
+
+Workers need nothing extra — their lane rules are the track sections above. The
+roster is only for whoever is coordinating, plus the live "who holds what" table.
+
 ## Workflow norms (all tracks)
 - **All tracks work directly on `master`** (no worktrees/clones). Commit in small
   units. (Historic: C used a `feat/cfront` worktree until it merged at v80; that
