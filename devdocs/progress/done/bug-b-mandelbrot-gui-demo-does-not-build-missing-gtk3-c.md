@@ -137,4 +137,4 @@ does not have it. Copied from a sibling checkout; unrelated to this ticket, but
 it is a real papercut for any new checkout.
 
 ## Log
-- 2026-08-17 — resolved, commit PENDING-COMMIT.
+- 2026-08-17 — resolved, commit c1a28f623.
