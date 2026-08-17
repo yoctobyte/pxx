@@ -184,6 +184,42 @@ Detaching is not the bug and is not going away: `twatch` checks out arbitrary
 shas to test them, which is why it demands its own clone and refuses a dirty
 one. The defect is only ever in readers that assume the tree reflects now.
 
+## Rule: "filed", "done", "already handled" are CLAIMS — and `ls` settles them
+
+Work that exists in prose but not as a rankable ticket is invisible to
+`progress.sh next` / `ready`. It is then either rediscovered from scratch or
+silently never happens, which is what
+`project_decided_tickets_are_invisible_work_and_get_rediscovered` names. Three
+instances surfaced on 2026-08-16/17 alone, all in Track T's own area:
+
+| where the claim lived | reality |
+| --- | --- |
+| `feature-t-uforth-benchmark-harness` listed three follow-ups as *"filed, not blocking"* | none of the three existed anywhere |
+| `decided/decide-watcher-lifecycle-manual-only.md` named a slug for the status bug | never filed; nothing scheduled it, so nothing built it |
+| `feature-t-uforth-benchmark-harness` itself | **built** 2026-07-22 and left in `backlog/`, so it sat in the ready queue for a month as phantom work |
+
+Note the third is the mirror of the first two: the ticket outlived the work
+instead of the work outliving the ticket. Both directions cost the same thing —
+the queue stops describing reality.
+
+**The check is one command and it is not optional when the phrase appears:**
+
+```sh
+ls devdocs/progress/*/<slug>.md          # does the ticket exist at all?
+grep -rl "<slug>" devdocs/progress/      # ...under any name?
+```
+
+Treat *filed / done / already handled / tracked separately* in a ticket body as
+**unverified** until that returns something. It is the same discipline as
+verifying a peer's claim before acting on it, applied to the claims a ticket
+makes about itself — and a ticket is the harder case, because prose in a ticket
+reads as a record rather than as an assertion.
+
+**When resolving, check the inverse too:** if the body says a follow-up was
+filed, file it now or delete the sentence. A resolved ticket that leaves a
+phantom follow-up behind converts one invisible item into a permanently
+invisible one, since nobody re-reads `done/`.
+
 ## Rule: a coverage claim needs its BOUNDARY checked, not just its result
 
 Track T's product is coverage claims — "the tier is green", "this sweep covered
