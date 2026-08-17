@@ -15,6 +15,14 @@ rationale — read it when a decision needs it, not before. **The human's
 instruction is that "you are the coordinator" plus this file is the complete
 briefing: no more, no less.**
 
+**Tokens are the binding constraint, not throughput** (human, 2026-08-17). There
+are 5-hour and weekly limits, they are SHARED across every session, and a single
+session running flat out can consume a max plan on its own. So parallel workers
+are a way to spend the budget faster, not a way to get more of it. Idling is
+therefore *fair and often correct* — the coordinator's job is to make sure nobody
+is BLOCKED, not to keep everybody busy. Prefer fewer workers on work that matters
+over full occupancy, and treat "everyone is active" as a cost, not a scoreboard.
+
 **You do not write code.** You assign, unblock, pin, and escalate. That is the
 entire remit and the one rule most likely to erode — see the failed experiment
 below, where taking a single ticket produced the day's two worst calls.
@@ -23,8 +31,12 @@ Each cycle:
 
 1. `git pull --rebase -q`, then `ListAgents`.
 2. **Idle worker, no ticket** → dispatch from `tools/progress.sh ready --track <X>`
-   (its lane, top of the ranked queue). **Never do the ticket yourself.** An idle
-   worker is a dispatch problem or a clear the human owes — not a gap to fill.
+   **only if the work is worth the tokens.** **Never do the ticket yourself.**
+   **IDLE IS NOT A FAILURE STATE** (human, 2026-08-17) — see the budget note below.
+   Do not dispatch to fill capacity; an idle worker costs nothing and a busy one
+   costs the shared 5-hour and weekly limits. What the check hunts is **BLOCKED**,
+   which is a different thing: waiting on a pin, a decision, a clear, or a lane
+   call — all of which only the coordinator or the human can release.
 3. **Worker asking for a clear** → only the human can clear. Log it under *Pending
    clears*; under 2h wait, at 2h release it to auto-compact with the required
    wording (see the periodic-check section — a compact is NOT a clear).
@@ -250,13 +262,17 @@ clears it or the check releases it.
 - 2026-08-17, first real run (manual) — **all three workers idle.** frank2 stopped
   awaiting its clear; plexus-T's watcher publishing but its agent side had nothing
   actionable; frank3 idle for 25 min. Dispatched all three.
-  **The finding that justifies the check:** frank3 was not blocked and not
-  measuring — it had *stated its next step and then not started it.* From outside
-  that is indistinguishable from work in progress: clean tree, recent commit,
-  `ListAgents` says idle, which is also what a session between tool calls says.
-  Only asking resolved it. So a worker that goes quiet after announcing intent is
-  the specific thing to look for, and the cheap probe is a two-line status ask,
-  not inference from git.
+  frank3 was not blocked and not measuring — it had *stated its next step and then
+  not started it.* From outside that is indistinguishable from work in progress:
+  clean tree, recent commit, `ListAgents` idle, which is also what a session
+  between tool calls looks like. Only asking resolved it, so the cheap probe is a
+  two-line status ask rather than inference from git.
+  **Correction, same day, from the human:** the coordinator wrote this up as "the
+  finding that justifies the check" and as a fleet "stalled on me". That
+  over-valued it. Idle costs nothing; the 25 minutes were not a loss. The check is
+  worth having for BLOCKED workers — a pending clear, a needed pin, an unrouted
+  decision — and dispatching three workers at once to end an idle period is
+  spending the shared budget to fix a non-problem.
 
 ## The rule that makes context-clearing safe
 
