@@ -4,6 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`from .inner import X` (RELATIVE) where `inner` is a subpackage directory fails with `no unit named inner`, while the absolute `from pkg.inner import X` works — so directory-as-module resolution exists and the relative form just hands the resolver a bare name instead of the package-qualified one. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung."
+status: working
+owner: frank2
 ---
 
 # A subpackage DIRECTORY does not resolve as a module
@@ -100,3 +102,69 @@ FPC seed canary runs. Add the two-level case to
 for exactly this reason.
 
 Stretch check: `html5lib/__init__.py` gets past its subpackage imports.
+
+---
+
+## MEASURED 2026-08-17 — the same naming defect ALSO runs a module TWICE
+
+Found while confirming the narrowing above, and it is worse than the resolution
+failure this ticket was filed for. **The two spellings do not merely disagree
+about whether a name resolves — they compile the same file as two separate
+units, so its module-level code executes twice.**
+
+```
+pkg/sub.py        print("sub-init-ran")
+                  X = 5
+pkg/__init__.py   from .sub import X
+                  P = X
+main.npy          from pkg import P
+                  from pkg.sub import X
+                  print(P, X)
+```
+
+| | output |
+| --- | --- |
+| CPython | `sub-init-ran` **once**, then `5 5` |
+| pxx | `sub-init-ran` **TWICE**, then `5 5` |
+
+The relative spelling resolves `sub.py` to a unit named `sub`; the dotted
+spelling resolves the same file to `pkg_sub`. Two unit rows, two compilations,
+two initialisers.
+
+### Why this is the more serious half
+
+Python guarantees a module body runs **exactly once** — `sys.modules` is a cache,
+and real code depends on it: module-level singletons, registry population
+(`codecs.register(...)`, exactly what webencodings does), connection setup,
+`_initialised = True` guards. Running it twice gives:
+
+- duplicated side effects (a registry gains every entry twice);
+- **two distinct copies of every class in the module**, so an object made by one
+  copy fails `isinstance` against the other — the silent-wrong-answer shape,
+  and precisely the divergence
+  `devdocs/dev/nilpy-semantics-divergences.md` calls out as a genuine bug rather
+  than a laxity (a program CPython accepts and runs can observe it);
+- module-level state silently forked into two copies.
+
+The printed `5 5` is correct, which is what makes it expensive: the observable
+answer looks right while the module ran twice.
+
+### It is one root cause, not two tickets
+
+Both symptoms are the same defect — **the relative form does not compose its
+level with the current package, so it names a unit the absolute form spells
+differently.** Fixing the naming fixes the resolution failure AND the double
+execution, which is the `root-cause-over-microfix.md` case: the deeper fix
+deletes a case rather than adding one, and turns both symptoms green at once.
+
+So the fix is NOT "teach the resolver about directories" (it already knows —
+measured above). It is to make the relative spelling produce the same unit name
+the absolute spelling produces, and to let one file map to exactly one unit.
+
+### Check when fixing
+
+- the module body must run **once** in the repro above;
+- one file must yield one unit under BOTH spellings, mixed in the same program;
+- a class from that module must satisfy `isinstance` regardless of which
+  spelling imported it — add this, it is the assertion that catches a partial
+  fix.
