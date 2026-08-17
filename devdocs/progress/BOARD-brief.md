@@ -42,6 +42,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [C]` bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-n-a-package-does-not-re-export-what-its-init-imports
+- `[p 55] [N]` bug-n-a-temporary-receiver-resolves-to-the-shim-type-not-the-user-class
 - `[p 55] [N]` bug-n-from-import-as-alias-binds-zero-inside-a-pulled-module
 - `[p 55] [N]` bug-n-relative-import-from-a-package-is-not-parsed
 - `[p 55] [U]` decide-what-an-unwired-test-may-assert
