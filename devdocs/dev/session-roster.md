@@ -119,8 +119,22 @@ still apply — they prevent conflicting EDITS to the same file, not tree damage
 **The coordinator should not debug** — the moment it takes a HARD ticket it
 becomes a worker with a stale plan attached.
 
-Being tested 2026-08-17 at the human's request: coordinator also holding a
-ticket. If you try it, the constraints that make it survivable are (a) a lane
+**Tested 2026-08-17 and the answer is NO** (human called it out). The coordinator
+took a ticket, and both of the day's worst coordination calls happened while it
+was mid-edit: it re-tasked a worker that had just asked to stop, then told that
+worker to REVERT its uncommitted work, which it did. The rule's stated reason is
+"a worker with a stale plan attached"; the observed reason is narrower and worse
+— **coordination interrupts get answered badly while mid-edit**, which is exactly
+the clause ("interrupts win") the same session had written and then not honoured.
+
+The tell, for next time: it took the batch **because a worker went idle.** Filling
+a worker gap yourself is the drift — not the ticket's difficulty, not its lane.
+An idle worker is a dispatch problem or a clear the human needs to make. If there
+is genuinely no one to give it to, it waits; the queue is not going anywhere, and
+a ticket done by the coordinator costs the coordination it was doing instead.
+
+Original framing, kept because the constraints were right even though the
+experiment failed: coordinator also holding a ticket. If you try it, the constraints that make it survivable are (a) a lane
 that cannot collide with a live worker, (b) a ticket already diagnosed, so it
 needs execution rather than investigation, and (c) coordination interrupts win —
 a peer message or a red is handled before the next edit, never after "just one
