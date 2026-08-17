@@ -119,6 +119,14 @@ def consumed_by(wired, subject_paths):
         stem.setdefault(os.path.splitext(os.path.basename(p))[0].lower(), []).append(p)
     uses_re = re.compile(r"^\s*uses\s+([^;]+);", re.I | re.M)
     inc_re = re.compile(r'#\s*include\s+"([^"]+)"')
+    # NilPy imports a sibling .npy as a MODULE, so the reference is a bare
+    # identifier with no path and no extension -- nothing the other two patterns
+    # can see. Missed on the first cut, and it surfaced exactly as predicted: a
+    # legitimate helper (test_nilpy_file_dunder_helper.npy, imported by
+    # test_nilpy_file_dunder.npy) sitting in the report, which is how a list
+    # becomes something people skim.
+    py_re = re.compile(r"^\s*(?:import\s+([\w.]+)|from\s+([\w.]+)\s+import)",
+                       re.M)
     for p in subject_paths:
         if p not in wired and p not in reached:
             continue                     # only follow from something wired
@@ -132,6 +140,9 @@ def consumed_by(wired, subject_paths):
             names += [n.strip().lower() for n in m.split(",")]
         names += [os.path.splitext(os.path.basename(i))[0].lower()
                   for i in inc_re.findall(text)]
+        for a, b in py_re.findall(text):
+            # last dotted component; stdlib names simply match no test file
+            names.append((a or b).split(".")[-1].lower())
         for n in names:
             for q in stem.get(n, ()):
                 reached.add(q)
