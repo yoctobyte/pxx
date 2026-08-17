@@ -241,12 +241,22 @@ clears it or the check releases it.
 
 | worker | asked at | released? |
 | --- | --- | --- |
-| frank2-f1 | 2026-08-17, mid-afternoon | released by the human (recovered from context, `38a88a8b8`); row kept as the worked example |
+| frank2-f1 | 2026-08-17, mid-afternoon | CLEARED by the human, re-briefed from disk. Row kept as the worked example |
 
 ### Check log
 
 - 2026-08-17 — protocol created. frank2 idle and clean, frank3 on B, plexus-T
   quiet. No releases needed.
+- 2026-08-17, first real run (manual) — **all three workers idle.** frank2 stopped
+  awaiting its clear; plexus-T's watcher publishing but its agent side had nothing
+  actionable; frank3 idle for 25 min. Dispatched all three.
+  **The finding that justifies the check:** frank3 was not blocked and not
+  measuring — it had *stated its next step and then not started it.* From outside
+  that is indistinguishable from work in progress: clean tree, recent commit,
+  `ListAgents` says idle, which is also what a session between tool calls says.
+  Only asking resolved it. So a worker that goes quiet after announcing intent is
+  the specific thing to look for, and the cheap probe is a two-line status ask,
+  not inference from git.
 
 ## The rule that makes context-clearing safe
 
