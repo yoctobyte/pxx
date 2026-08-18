@@ -718,3 +718,19 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   queue is unchanged and still entirely float (p30 `strtofloat`, then p20s), which is
   a standing low-prio ruling, and moving it to another lane is the human's call.
   Two idle workers and zero dispatches is the correct state tonight, not a stall.
+
+- 2026-08-18 hourly check #8 (cron) — **quiet on paper; one status ping sent.** No
+  pending clears, `working/`+`urgent/` empty, nothing unpushed, no CRITICAL. frank3
+  and plexus-T unchanged from #7 (frank3 idle by design — B's queue is still all
+  float; plexus-T idle-because-wrapping, not available).
+  **The one thing worth checking was the worker that looks BUSY.** frank2-f1 has read
+  `shell` at every check tonight, but its last commit was 23:03, the tree is clean, and
+  it holds no claimed ticket — equally consistent with a long measurement and with a
+  stall. Sent a **non-blocking status ping**: not a dispatch, one line answers it,
+  ignore until any run finishes. Offered a pin if it is blocked on one (the single
+  thing worth interrupting for) and a dispatch if it is between tickets.
+  **Worth keeping as a check-protocol gap:** steps 3-5 only examine IDLE workers, so a
+  session that is stalled *inside a shell* is invisible to this check by construction —
+  it never appears in the idle list, and `working/` shows nothing because it never
+  claimed. The cheap tell is **last-commit age against a clean tree**, which is two git
+  commands and catches what `ListAgents` cannot see.
