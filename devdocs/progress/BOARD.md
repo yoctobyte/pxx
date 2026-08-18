@@ -39,7 +39,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (231)
+## backlog (225)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -77,6 +77,7 @@ _none_
 | bug-t-fuzz-sh-reports-an-identical-crash-as-a-divergence | T | 30 | bug | `tools/fuzz.sh` compares the RUNNER's crash text along with the program's output, so a mutant that segfaults identically on all four targets is reported as three DIVERGENCEs — native says \"timeout: the monitored command dumped core\", qemu says \"uncaught target signal 11\". Same output, same exit code, different reporter. | — |
 | bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic | T | 55 | bug | Ten `timeout N` calls are hardcoded INSIDE Makefile recipes, so they fire within make and surface to testmgr as an ordinary `fail`. Every piece of testmgr's contention machinery — PEER_TIME_FACTOR budget stretching, co-tenant retry, the `timeout` status itself — is structurally unable to see them. That is why six separately-fixed timeout tickets did not stop the class recurring: all six fixed testmgr's OWN timeouts, and the inner ones were never in scope. | — |
 | bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label | T | 55 | bug | The pin_verify record is unattributable and mislabelled. Its `red` list stores POSITIONAL job names (`lib-test#117`), which name a different file as soon as the job list changes — resolved at HEAD, lib-test#117 is lib_tls.pas; resolved at the verified sha it is lib_tls13_keys.pas. And its `ver` said v347 while the verified tree carried pin 346. Neither unattributed red reproduces under either pin. | — |
+| bug-t-split-jobs-misses-a-tmp-path-reached-through-a-shell-variable | T | 45 | bug | `split_jobs` keeps a producer with its consumer by union-find over literal /tmp paths, so a recipe that reaches its artifact through a shell variable (`$(TESTTMP)/$$bin` in a for-loop) exposes no shared token, is never merged, and runs under job isolation with a scratch dir where the artifact was never built. Third instance of the class the splitter's own comments describe. | — |
 | bug-t-sync-fills-one-spelling-of-pending-commit-and-check-counts-two | T | 45 | bug | `check` has reported the same 17 PENDING-COMMIT tickets for weeks and `sync.sh` reports nothing to fill, because they anchor on DIFFERENT spellings of the field: check substring-matches the placeholder anywhere, sync greps only the Log form `commit 4b8864737` (space), and all 15 live instances are the frontmatter form `commit: PENDING-COMMIT` (colon). Both tools are behaving correctly and the count can never go down. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
 | chore-t-split-lib-test-into-jobs-that-name-what-failed | T | 35 | chore | One lib-test job bundles several sources, so its tstate key names only the FIRST of them: `lib-test#src:test/crtl_exp2.c` is really `crtl_exp2.c examples/tk/hello.npy +5`, and a timeout in the tk step reads as a C-math regression. Split it so a job names what failed. Do it while lib-test is green — the baseline is recorded here. | — |
@@ -262,13 +263,6 @@ _none_
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-n-two-import-handlers-are-twins | N | 30 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
-| regression-test-aarch64-test-set-runtime | P | 70 | regression | regression: test-aarch64#src:test/test_set_runtime.pas red at 61e2448bac6d (auto-filed by twatch) | — |
-| regression-test-core-test-nested-class-type-b348 | P | 70 | regression | regression: test-core#src:test/test_nested_class_type_b348.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
-| regression-test-core-test-set-literal-element-types | P | 70 | regression | regression: test-core#src:test/test_set_literal_element_types.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
-| regression-test-core-test-set-runtime | P | 70 | regression | regression: test-core#src:test/test_set_runtime.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
-| regression-test-nilpy-callbacks | N | 70 | regression | regression: test-nilpy#src:examples/tk/callbacks.npy red at 8f629af38632 (auto-filed by twatch) | — |
-| regression-test-pascal-conformance-shard4-6 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 red at 61e2448bac6d (auto-filed by twatch) | — |
-| regression-test-pascal-conformance-shard5-6 | T | 70 | regression | regression: test-pascal-conformance#shard5/6 red at 61e2448bac6d (auto-filed by twatch) | — |
 | task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 40 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
 | task-d-document-the-strict-overload-width-flag | D | 35 | task | `--strict-overload-width` shipped 2026-08-15 with no row in docs/reference/cli.md, modes.md or directives.md. One table row each, plus the one sentence that explains why it is standalone rather than part of the --strict-fpc umbrella. | — |
@@ -440,9 +434,9 @@ _none_
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 | decide-week-theme-2026-08-17 | U | 70 | decide | What should the next week of work aim at? Measured: the bug backlog already peaked (61 on 08-03 -> 32 now) and 65% of open tickets are features, so this is no longer a burn-down question. Three candidate themes with the numbers behind each. | — |
 
-## done (2003)
+## done (2010)
 
-2003 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2010 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -489,13 +483,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [P] regression-test-aarch64-test-set-runtime
-- [p 70] [P] regression-test-core-test-nested-class-type-b348
-- [p 70] [P] regression-test-core-test-set-literal-element-types
-- [p 70] [P] regression-test-core-test-set-runtime
-- [p 70] [N] regression-test-nilpy-callbacks
-- [p 70] [T] regression-test-pascal-conformance-shard4-6
-- [p 70] [T] regression-test-pascal-conformance-shard5-6
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
 - [p 65] [P] feature-pascal-corpus-oop
@@ -532,6 +519,7 @@ _none_
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
 - [p 45] [N] bug-n-a-class-base-that-is-an-expression-does-not-compile
 - [p 45] [N] bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program
+- [p 45] [T] bug-t-split-jobs-misses-a-tmp-path-reached-through-a-shell-variable
 - [p 45] [T] bug-t-sync-fills-one-spelling-of-pending-commit-and-check-counts-two
 - [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
 - [p 45] [U] decide-unary-minus-widening-in-the-default-dialect

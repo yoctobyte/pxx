@@ -1840,6 +1840,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-optdiff-shard8-12 | T | 70 | regression | regression: optdiff#shard8/12 red at 28eb1a105ddb (auto-filed by twatch) | — |
 | regression-test-aarch64-test-asyncecho | T | 70 | regression | regression: test-aarch64#src:test/test_asyncecho.pas red at 88986014e07d (auto-filed by twatch) | — |
 | regression-test-aarch64-test-lfm | T | 70 | regression | regression: test-aarch64#src:test/test_lfm.pas red at adaecd1206f3 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-set-runtime | P | 70 | regression | regression: test-aarch64#src:test/test_set_runtime.pas red at 61e2448bac6d (auto-filed by twatch) | — |
 | regression-test-aarch64-test-streaming-enumset | T | 70 | regression | regression: test-aarch64#src:test/test_streaming_enumset.pas red at adaecd1206f3 (auto-filed by twatch) | — |
 | regression-test-arm32-httpdemo | T | 70 | regression | regression: test-arm32#src:examples/net/httpdemo.pas red at be7f80936b0c (auto-filed by twatch) | — |
 | regression-test-arm32-test-asyncecho | T | 70 | regression | regression: test-arm32#src:test/test_asyncecho.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
@@ -1897,6 +1898,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-interface-mainbody-ascast-temp | T | 70 | regression | regression: test-core#src:test/test_interface_mainbody_ascast_temp.pas red at daf8d692af04 (auto-filed by twatch) | — |
 | regression-test-core-test-local-typed-const | P | 70 | regression | RESOLVED. A real regression from 3ed3e2653 (routine-local typed const made static): a SCALAR local const read in an expression stopped compiling — invalid IR symbol reference in load_sym — while the array shapes and the counter idiom the fix targeted both worked. Bisected by Track T; root cause was SymRollbackTo handing the index back and the -O2 inliner still loading it. Fixed in 467a4e5da, carried by pin v342. | — |
 | regression-test-core-test-managed-block-meta | T | 70 | regression | regression: test-core#src:test/test_managed_block_meta.pas red at 86da0606d916 (auto-filed by twatch) | — |
+| regression-test-core-test-nested-class-type-b348 | P | 70 | regression | regression: test-core#src:test/test_nested_class_type_b348.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
 | regression-test-core-test-nested-cow | T | 70 | regression | regression: test-core#src:test/test_nested_cow.pas red at 899e51cda3ba (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-augmented-assign-class-dunder | T | 70 | regression | regression: test-core#src:test/test_nilpy_augmented_assign_class_dunder.npy red at e8450c58d67e (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-c-define-const | T | 70 | regression | regression: test-core#src:test/test_nilpy_c_define_const.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
@@ -1914,6 +1916,8 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-platform-defines | T | 70 | regression | regression: test-core#src:test/test_platform_defines.pas@2 red at 96147f570d29 (auto-filed by twatch) | — |
 | regression-test-core-test-procvar-value-context | P | 70 | regression | regression: test-core#src:test/test_procvar_value_context.pas red at 0e4ad46330ca (auto-filed by twatch) | — |
 | regression-test-core-test-relpath-uses | T | 70 | regression | regression: test-core#src:test/test_relpath_uses.pas red at 34c41bde6fd6 (auto-filed by twatch) | — |
+| regression-test-core-test-set-literal-element-types | P | 70 | regression | regression: test-core#src:test/test_set_literal_element_types.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
+| regression-test-core-test-set-runtime | P | 70 | regression | regression: test-core#src:test/test_set_runtime.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
 | regression-test-core-test-sqlite-crud-lazy | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud_lazy.pas red at f913bd22ae30 (auto-filed by twatch) | — |
 | regression-test-core-test-sqlite-crud | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud.pas red at ff90643ef2a3 (auto-filed by twatch) | — |
 | regression-test-core-test-static-array-length | T | 70 | regression | regression: test-core#src:test/test_static_array_length.pas red at fb9346bd4bce (auto-filed by twatch) | — |
@@ -1939,6 +1943,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-i386-test-timer | T | 70 | regression | regression: test-i386#src:test/test_timer.pas red at aaa58e72c1e8 (auto-filed by twatch) | — |
 | regression-test-lua-00 | T | 70 | regression | regression: test-lua#00 red at 074e902b62ef (auto-filed by twatch) | — |
 | regression-test-lua-cross-runner | T | 70 | regression | regression: test-lua-cross#src:test/lua/runner.c red at 940b261f8678 (auto-filed by twatch) | — |
+| regression-test-nilpy-callbacks | N | 70 | regression | regression: test-nilpy#src:examples/tk/callbacks.npy red at 8f629af38632 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-args-errors | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_args_errors.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-containers | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_containers.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-cpyext-cython | T | 70 | regression | regression: test-nilpy#src:test/test_cpyext_cython.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
@@ -1968,6 +1973,8 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-nilpy-test-nilpy-str-isnumeric-istitle | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_str_isnumeric_istitle.npy red at 0d6de0cbeae1 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-uses-order-pylib-exception-a | T | 70 | regression | regression: test-nilpy#src:test/test_uses_order_pylib_exception_a.pas red at be7f80936b0c (auto-filed by twatch) | — |
 | regression-test-opt-c-inline-strlit-arg | T | 70 | regression | regression: test-opt#src:test/c_inline_strlit_arg.c red at 36d1bffda39d (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard4-6 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 red at 61e2448bac6d (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard5-6 | T | 70 | regression | regression: test-pascal-conformance#shard5/6 red at 61e2448bac6d (auto-filed by twatch) | — |
 | regression-test-smoke-11 | T | 70 | regression | regression: test-smoke#11 red at 163ffea562fa (auto-filed by twatch) | — |
 | regression-test-smoke-compiler | T | 70 | regression | regression: test-smoke#src:compiler/compiler.pas red at b11e604f8043 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-aarch64-00 | T | 70 | regression | regression: test-sqlite-threads-aarch64#00 red at 83006e927e35 (auto-filed by twatch) | — |

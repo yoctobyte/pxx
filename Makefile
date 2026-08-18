@@ -357,10 +357,25 @@ test-nilpy: $(COMPILER)
 	# Output is deterministic (checked over repeated runs). Skipped, not failed,
 	# where Xvfb is absent -- same guard shape as the tkhtmlview oracle below.
 	# feature-nilpy-tkinter-facade
+	# The loop lists each binary by its FULL path, not a bare basename joined to
+	# $(TESTTMP) inside the body. That is load-bearing, not style: testmgr splits
+	# a recipe into independently-scheduled jobs and keeps a producer and its
+	# consumer together by scanning the job text for shared literal /tmp paths
+	# (tools/testmgr.py split_jobs). This loop RUNS three binaries but COMPILES
+	# only callbacks.npy -- the other two are built by earlier lines that landed
+	# in other jobs. Spelled as `$(TESTTMP)/$$bin` the two consumed paths never
+	# appear literally anywhere in this job, so the scan saw no shared token, the
+	# jobs were never merged, and the callbacks job ran with a scratch dir where
+	# test_nilpy_tkinter26 had never been built:
+	#     /usr/bin/xvfb-run: 200: /tmp/.../test_nilpy_tkinter26: not found
+	# Written out in full, the producers and this consumer share tokens and
+	# testmgr merges them into one ordered job. Same failure class the splitter
+	# already handles for .so/LD_LIBRARY_PATH, reached through a shell variable.
+	# regression-test-nilpy-callbacks
 	@if command -v xvfb-run >/dev/null 2>&1; then \
-	  for t in tkinter_facade:test_nilpy_tkinter26 field_class_identity:test_nilpy_fldcls26 callbacks:test_nilpy_tkcb26; do \
+	  for t in tkinter_facade:$(TESTTMP)/test_nilpy_tkinter26 field_class_identity:$(TESTTMP)/test_nilpy_fldcls26 callbacks:$(TESTTMP)/test_nilpy_tkcb26; do \
 	    src=$${t%%:*}; bin=$${t##*:}; \
-	    timeout 120 xvfb-run -a $(TESTTMP)/$$bin > $(TESTTMP)/$$src.got 2>&1 \
+	    timeout 120 xvfb-run -a $$bin > $(TESTTMP)/$$src.got 2>&1 \
 	      || { echo "  tk: $$src EXITED NONZERO under Xvfb"; cat $(TESTTMP)/$$src.got; exit 1; }; \
 	    diff -u examples/tk/$$src.expected $(TESTTMP)/$$src.got \
 	      || { echo "  tk: $$src OUTPUT CHANGED"; exit 1; }; \

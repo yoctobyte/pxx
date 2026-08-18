@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:13 blocked:4 backlog:231 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2003 rejected:38`
+`unfinished:13 blocked:4 backlog:225 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2010 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -34,15 +34,8 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 216, ranked
+## Ready — top 30 of 210, ranked
 
-- `[p 70] [P]` regression-test-aarch64-test-set-runtime
-- `[p 70] [P]` regression-test-core-test-nested-class-type-b348
-- `[p 70] [P]` regression-test-core-test-set-literal-element-types
-- `[p 70] [P]` regression-test-core-test-set-runtime
-- `[p 70] [N]` regression-test-nilpy-callbacks
-- `[p 70] [T]` regression-test-pascal-conformance-shard4-6
-- `[p 70] [T]` regression-test-pascal-conformance-shard5-6
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
@@ -66,5 +59,12 @@ _none — no lane is locked._
 - `[p 50] [U]` decide-staff-track-c-to-unblock-own-language-first
 - `[p 50] [D]` docs-cross-language-qualifier-note-is-wrong
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
+- `[p 50] [C]` feature-c-vla-via-alloca
+- `[p 50] [E]` feature-demo-songformatter-pxx-target
+- `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
+- `[p 50] [A]` feature-nilpy-collections-and-string-methods
+- `[p 50] [P]` feature-p-read-text-into-a-char-arm
+- `[p 50] [A]` feature-pascal-asmmode-directive-tolerance
+- `[p 50] [A]` feature-pascal-initialize-finalize-intrinsics
 
-_186 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_180 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

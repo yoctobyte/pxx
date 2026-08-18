@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: N
+status: done
+owner: frank2-7e
 ---
 
 > **Track guessed as N** from the test source. The ranker reads frontmatter, so an unset track parks a stub in Track T's queue regardless of what the body says -- correct the `track:` line if this is wrong.
@@ -188,3 +190,121 @@ timeout-ish red". That is the night's own recurring theme turned on me: a true
 statement about the wrong subject. **A bisect result is not discredited by the
 failure being duration-driven** — it depends on whether the duration-driven step
 exists across the whole range.
+
+## RESOLVED — and it is not a timeout. Measured, then reproduced deterministically.
+
+*(frank2-7e, 2026-08-18, at `e252a17c7`.)*
+
+The enrichment above converged — twice, by two routes — on `Makefile:363`'s
+`timeout 120` as a load-sensitive ceiling. **That reading is falsified.** The
+line is implicated, but not for its timeout.
+
+### The measurement that separates the two
+
+The whole enrichment asked for one fact the record discarded: a duration.
+
+| | value |
+| --- | --- |
+| `callbacks` under `xvfb-run`, wall | **0.14 s** |
+| `tkinter_facade` / `field_class_identity` | 0.24 s / 0.12 s |
+| slowest of 20 consecutive runs | **120 ms** |
+| the ceiling | 120 000 ms |
+
+A ~1000x margin. No tier contention closes that. And 20/20 runs were
+byte-identical against `callbacks.expected`, so the *other* arm of the open fork
+— "timeout versus genuinely nondeterministic output" — is closed too: the output
+is deterministic. Neither arm of the fork was the answer, which is why measuring
+beat choosing between them.
+
+### What the log tail actually said
+
+The recorded failure was never a timeout, and it names its own cause:
+
+```
+/usr/bin/xvfb-run: 200: /tmp/testmgr-scratch-793537/test_nilpy_tkinter26: not found
+```
+
+A missing **binary**, and not even `callbacks` — `tkinter_facade`. A `timeout`
+kill is rc 124 and silent. The discriminator was in the record after all; it was
+read as timeout-shaped because the surrounding evidence was.
+
+### Root cause: a producer/consumer edge invisible to the job splitter
+
+`tools/testmgr.py split_jobs` cuts a recipe into independently-scheduled jobs and
+keeps a producer with its consumer by union-find over **shared literal `/tmp`
+paths**. The tk block RUNS three binaries but COMPILES one:
+
+```
+JOB test-nilpy#src:examples/tk/tkinter_facade.npy   -> /tmp/test_nilpy_tkinter26
+JOB test-nilpy#src:examples/tk/field_class_identity.npy -> /tmp/test_nilpy_fldcls26
+JOB test-nilpy#src:examples/tk/callbacks.npy       -> /tmp/test_nilpy_tkcb26
+                                                      + the xvfb loop over ALL THREE
+```
+
+The loop reached its binaries as `$(TESTTMP)/$$bin` — built from a **shell
+variable**. Dumping each job's `/tmp` tokens shows the consumer exposing exactly
+one path, its own:
+
+```
+src:examples/tk/callbacks.npy   /tmp tokens: ['/tmp/test_nilpy_tkcb26']
+```
+
+No shared token, no merge, three unordered jobs — and the callbacks job runs
+`test_nilpy_tkinter26` in a scratch dir where nothing ever built it.
+
+**Reproduced deterministically** (fresh scratch, compile only `callbacks.npy`,
+run the job's own loop) — identical to the report down to the compile stats:
+
+```
+ok: .../test_nilpy_tkcb26  [code=2510321B  data=76272B  bss=197364B  procs=1947]
+  tk: tkinter_facade EXITED NONZERO under Xvfb
+/usr/bin/xvfb-run: 184: .../test_nilpy_tkinter26: not found
+```
+
+So: 100% reproducible under job isolation, not a flake, not load-sensitive, and
+green on a native tier only because some earlier job happened to leave the other
+two binaries in the shared per-run scratch first.
+
+### Fix (Track N — `Makefile`, the test-nilpy tk block)
+
+Spell the three binaries by full path in the loop's item list, so the two paths
+this job consumes appear literally in its own text. The existing union-find then
+merges producers and consumer into one ordered job — verified: the merged job now
+compiles all three binaries it runs. No `testmgr.py` change: the tool cannot
+resolve shell variables in general, so the recipe stating its paths is the
+normalising fix rather than a second mechanism.
+
+Verified green in isolation (all three run and diff clean in a fresh scratch).
+
+### Consequences for Track T
+
+1. **The selector for this job CHANGES.** The merged job's first source is now
+   `examples/tk/tkinter_facade.npy`, so `test-nilpy#src:examples/tk/callbacks.npy`
+   — this ticket's repro line and the key twatch has red/green history under —
+   **no longer selects anything**. Expect the old id to go silent and a new one
+   to appear; that is this fix, not a disappearance.
+2. **This is the third instance of one class**, and the splitter's own comments
+   name the first two: a `.so` found by soname, and a bare-`/tmp`
+   `LD_LIBRARY_PATH` consumer. Both got synthetic tokens. This one arrives
+   through a *shell variable*, which the comment's phrase "invisible to a
+   filename scan" already anticipates in spirit. A lint — flag any job whose text
+   runs `$(TESTTMP)/$$<var>` or otherwise reaches /tmp through a variable — would
+   catch the next one at authoring time. Filed as a suggestion for T, not done
+   here (T owns the tool).
+3. `bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic`
+   (T, p55) is a **real and separate** gap — `timeout 120` inside a make recipe
+   genuinely is invisible to testmgr's contention machinery. It is simply not
+   what failed here. It should stand on its own evidence (`crtl_exp2`), with this
+   job removed from its supporting set.
+
+### Correction to the enrichment worth keeping
+
+The bisect landed on `5215148bb` and the static reading landed on `Makefile:363`,
+and their agreement was read as confirmation. Both were right about the *line*
+and wrong about the *mechanism*: that commit introduced the first execution of
+these tests, and with it both a 120 s ceiling **and** a three-binary dependency
+expressed through a shell variable. Two candidate mechanisms arrived in one
+commit; the convergence of two routes on the same line could not distinguish
+them, and reading agreement as confirmation is what made the timeout look
+settled. The duration was the cheap discriminator and it was one command away.
+- 2026-08-18 — resolved, commit PENDING-COMMIT.
