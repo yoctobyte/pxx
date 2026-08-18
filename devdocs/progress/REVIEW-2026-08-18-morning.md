@@ -685,3 +685,32 @@ CPython:
 - `bug-n-two-argument-super-does-not-parse` (p60) — `super(Filter, self).__init__(...)`
   is `unexpected token`; the zero-arg form works. html5lib writes the two-arg form in
   EVERY filter.
+
+## One item to SCHEDULE rather than queue: yield
+
+`feature-nilpy-yield-outside-a-for-loop` is now **demonstrably the single wall in front of
+the entire html5lib filter pipeline.** Tonight `sanitizer.py` and `lint.py` both cleared
+two-argument `super` and landed on it. **Zero files compile completely**, and the ladder
+count will not move until yield lands.
+
+It was attempted once today and parked with the diagnosis banked — correctly. Three
+things make it a scheduling decision rather than a queue pick:
+
+- **It is not blocked on your boxed-def ruling.** Measured: the engine refuses generator
+  METHODS outright (`parser.inc:31543`), so the boxed-callable route was never available,
+  and the route that works — a lifted free function consumed by a plain for-in — needs no
+  callable value. Verified on the html5lib nested-filter shape (`10 20 40 50`).
+- **It is smaller than its ticket says.** The generator engine is built and proven for
+  Pascal: yield keyword, `AN_YIELD`/`IR_YIELD`, both runtimes, and the
+  `GetEnumerator`/`MoveNext`/`Current` object protocol. NilPy has none of it wired.
+- **Its remaining failure mode is SILENT STACK CORRUPTION, not a compile error.**
+  `PyEmitParamSpills` spills argument registers into every param slot, but in the
+  stackless step ABI only `__genself` arrives in a register. The crash is localised, the
+  next move is named in the ticket, and the guard-it A/B is recorded.
+
+That last point is why I declined the worker's offer to retry it at the tail of a long
+session, and why it should get a session with room rather than the last hour of one. The
+more the board depends on it, the more expensive a plausible-but-wrong fix becomes — and
+silent corruption is the failure mode that survives a green gate.
+
+**Everything else in N is ordinary queue work.** This one is worth you deciding when.
