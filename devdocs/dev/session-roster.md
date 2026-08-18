@@ -757,3 +757,31 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   `Finalize` half and needs correcting either way.
   Otherwise quiet — no pending clears, `working/`+`urgent/` empty, nothing unpushed,
   no CRITICAL, frank3 and plexus-T unchanged. Coordinator took no ticket.
+
+- 2026-08-18 hourly check #10 (cron) — **frank2-f1 was NOT working, and three checks
+  in a row misread it.** The pane was byte-identical to an hour earlier, with
+  `take the qualified base class ticket next` sitting **UNSENT in the input box** and
+  the footer offering `/clear to save 227.2k tokens`. It has been idle since answering
+  the #8 ping.
+  **Two protocol corrections, both worth more than tonight's dispatch:**
+  1. **`shell` in `ListAgents` does not mean working.** It can be a lingering shell
+     while the agent idles — the exact reading that made #7, #8 and #9 leave it alone.
+     Steps 3-5 treat the idle list as the dispatch population, so a worker in this
+     state is invisible to the check *and* looks accounted for.
+  2. **A typed-but-unsent prompt is the nastiest of these**, because it looks like an
+     assignment that was made. Anyone reading that pane — including me at #9 — sees a
+     task and concludes the worker has one. It had not received it.
+  Reinforces #9's lesson rather than replacing it: **capture the pane, and compare it
+  against the previous capture.** A single capture showed work; two identical captures
+  showed a frozen session. The diff is the signal, not the content.
+  **Did NOT type into its pane.** Injecting input into another session impersonates
+  its user; the dispatch went through `SendMessage` instead. Recording that boundary
+  because the fix was one keystroke away and would have been wrong.
+  Dispatched frank2-f1 → `bug-n-a-qualified-base-class-named-like-its-subclass-is-rejected-as-self-inheritance`
+  (N, p60) — the same ticket the unsent prompt named, which it filed itself. A+N is an
+  intended combined-track pair (N's files are disjoint); nobody else holds N.
+  **Left the clear decision to the worker**, since only its user can clear it: start
+  now on 227k, or say so and I record a clear request. Explicitly told it not to start
+  and then ask mid-edit.
+  Otherwise quiet: no pending clears, `working/`+`urgent/` empty, nothing unpushed, no
+  CRITICAL. frank3 idle by design (B queue still all float). Coordinator took no ticket.
