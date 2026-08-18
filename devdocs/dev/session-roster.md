@@ -1607,3 +1607,29 @@ rerank it deliberately rather than inheriting the number).
   the variant cell keyed on `Params[k].IsRef`, true of both a Pascal `var` param and a
   generator's by-ref `const record`, so a Pascal generator was told it needed pylib's
   `pycell_new`. The watcher's `track: P` guess is wrong (fix is in `parser.inc` = A).
+
+- **check 2026-08-19 (00:xx) — triage confirmed, and the check prompt itself was fixed.**
+  Track T reports **`FIXED: test-core#src:test/test_stackless_gen.pas`** at
+  `18bcb92ffb8b` and auto-closed the regression — my "already fixed by `f132f1f7e`, do not
+  start on it" annotation was right, and not building to confirm (frank2 held the tree)
+  cost nothing but an hour. The generator work also cleared **slow GREEN, opt GREEN and
+  bench ok** on the full matrix; the only remaining red is the documented `crtl_exp2`
+  false positive. **So yield landed AND survived the full cross-target sweep.**
+
+  **The hourly cron prompt carried a durable fact that had become FALSE** — it still said
+  yield was scheduled-not-queue work reserved for a fresh session, hours after it landed
+  in `done/`. Exactly the hazard the prompt itself warns about, in the prompt itself.
+  Replaced (job `9108876a` → `acbdd5c1`, same :23 schedule). What changed:
+  - the yield entry is **gone**, replaced by a pointer to the STANDING MANDATE section at
+    the end of this file — so the charter lives in one place that can be edited, rather
+    than being copied into a prompt that cannot self-correct;
+  - added **"read `ready` for EVERY staffed lane"**, the failure that hid Track A's p55
+    FreeBSD ticket for a day;
+  - added the two-claims pin rule, "a title names the encounter not the boundary", "the
+    file exists ≠ the work is done", "never build while a worker holds the tree", and the
+    `crtl_exp2` false-positive shape with its re-prove-if-the-pin-moved caveat;
+  - dropped the hardcoded 6/48 figure in favour of "re-measure, never quote a scan".
+
+  **Lesson for whoever maintains that prompt: a durable fact with a subject that can be
+  COMPLETED is not durable.** Point at a file for anything that can finish; reserve the
+  prompt for rules that stay true. Both workers idle/quiet, nothing blocked, no dispatch.
