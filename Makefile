@@ -527,6 +527,16 @@ test-nilpy: $(COMPILER)
 	# class became its own parent and the ancestor walk hung with no diagnostic.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_class_named_after_its_imported_base.npy $(TESTTMP)/test_nilpy_samename26
 	test "$$($(TESTTMP)/test_nilpy_samename26)" = "$$(printf 'override: derived\ninherited: pascal-side\nbase: base pascal-side')"
+	# ...and the same shape with a .py MODULE rather than a Pascal unit, which
+	# never got that fix. The shell pre-pass asked FindUClass (flat), so once the
+	# program had shelled `Filter` the module registered none and its declaration
+	# filled the program's row. Loud face: "cannot inherit from itself". Silent
+	# face, and the one that matters: `class Other(mod.Filter)` compiled clean and
+	# inherited the PROGRAM's Filter. Three distinguishable answers, so a
+	# re-merge changes lines 2 and 3. Expectations are CPython's.
+	# bug-n-a-qualified-base-class-named-like-its-subclass-is-rejected-as-self-inheritance
+	./$(COMPILER) test/test_nilpy_qualified_base_same_name.npy $(TESTTMP)/test_nilpy_qbasename26
+	test "$$($(TESTTMP)/test_nilpy_qbasename26)" = "$$(printf 'derived\nmodule\nmodule')"
 	# and the cycle itself REPORTS rather than spinning, whatever caused it
 	! ./$(COMPILER) test/test_nilpy_class_inherits_itself_fail.npy $(TESTTMP)/test_nilpy_selfbase26 > $(TESTTMP)/test_nilpy_selfbase.log 2>&1
 	grep -q 'cannot inherit from itself' $(TESTTMP)/test_nilpy_selfbase.log
@@ -6551,6 +6561,9 @@ test-core: $(COMPILER)
 	# class became its own parent and the ancestor walk hung with no diagnostic.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_class_named_after_its_imported_base.npy $(TESTTMP)/test_nilpy_samename26
 	test "$$($(TESTTMP)/test_nilpy_samename26)" = "$$(printf 'override: derived\ninherited: pascal-side\nbase: base pascal-side')"
+	# the same shape with a .py MODULE — see the note on this pair in test-nilpy
+	./$(COMPILER) test/test_nilpy_qualified_base_same_name.npy $(TESTTMP)/test_nilpy_qbasename26
+	test "$$($(TESTTMP)/test_nilpy_qbasename26)" = "$$(printf 'derived\nmodule\nmodule')"
 	# and the cycle itself REPORTS rather than spinning, whatever caused it
 	! ./$(COMPILER) test/test_nilpy_class_inherits_itself_fail.npy $(TESTTMP)/test_nilpy_selfbase26 > $(TESTTMP)/test_nilpy_selfbase.log 2>&1
 	grep -q 'cannot inherit from itself' $(TESTTMP)/test_nilpy_selfbase.log

@@ -1,0 +1,36 @@
+# A qualified base class `mod.X` must resolve to the MODULE's class even when
+# the importing program declares a class of that same name.
+#
+# NilPy pre-registers a shell row for every `class NAME` it scans, and that test
+# was flat rather than per-unit: once the program had shelled `Filter`, the
+# imported module registered no shell and its declaration FILLED the program's
+# row. One row, two different classes. Two faces, and the second is the one that
+# matters:
+#
+#   class Filter(nilpy_qbasemod.Filter)  -> "cannot inherit from itself" (loud)
+#   class Other(nilpy_qbasemod.Filter)   -> compiled clean and inherited the
+#                                           PROGRAM's Filter (silent, wrong)
+#
+# So this asserts three DISTINGUISHABLE answers, not that it compiles: if the
+# rows merge again, line 2 prints "derived" instead of "module" and line 3
+# prints "derived" too. The Pascal-unit spelling of this was fixed long ago and
+# has its own test (test_nilpy_class_named_after_its_imported_base.npy); the
+# .py-module path never got it.
+#
+# Expectations are CPython's own output.
+# bug-n-a-qualified-base-class-named-like-its-subclass-is-rejected-as-self-inheritance
+import nilpy_qbasemod
+
+
+class Filter(nilpy_qbasemod.Filter):
+    def who(self):
+        return "derived"
+
+
+class Other(nilpy_qbasemod.Filter):
+    pass
+
+
+print(Filter().who())
+print(Other().who())
+print(nilpy_qbasemod.Filter().who())

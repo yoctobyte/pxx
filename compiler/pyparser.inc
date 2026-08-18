@@ -4683,9 +4683,27 @@ end;
 procedure PyRegisterClassShells;
 var i: Integer;
 begin
+  { …asked PER UNIT, not flat. FindUClass matches on name alone, so once the
+    MAIN PROGRAM had shelled `Filter`, an imported .py module declaring its own
+    `Filter` registered no shell of its own and its declaration then FILLED the
+    program's row — one row for two different classes.
+
+    That is the same merge the Pascal-unit case was fixed for (the note in
+    test_nilpy_class_named_after_its_imported_base.npy describes it exactly);
+    the .py module path simply never got it. Its two faces:
+
+      class Filter(base.Filter)    -> "cannot inherit from itself", because the
+                                      base really WAS the row being declared;
+      class Derived(other.Filter)  -> compiles clean and inherits the PROGRAM's
+                                      Filter — a silent wrong answer, which is
+                                      the half that matters.
+
+    A class of the same name in another unit is a DIFFERENT class, so the shell
+    must exist once per declaring unit.
+    bug-n-a-qualified-base-class-named-like-its-subclass-is-rejected-as-self-inheritance }
   for i := PyScanLo to MainProgramTokCount - 2 do
     if (Tokens[i].Kind = tkClass) and (Tokens[i + 1].Kind = tkIdent) and
-       (FindUClass(GetTokenStr(i + 1)) < 0) then
+       (FindUClassInUnit(GetTokenStr(i + 1), CurrentUnitIdx) < 0) then
       { Marked FORWARD, because that is what these rows are: a stub so a class
         can be NAMED before its declaration is parsed, which the full parse then
         fills. Left unmarked they are indistinguishable from a real declaration,
@@ -31030,7 +31048,13 @@ begin
     this body reaches PyParseClass again — so the header fills the globals, and
     the two consumers below re-publish from this frame's own copy }
   PyMixN := 0;
-  ci := FindUClass(CurTok.SVal);
+  { This unit's own row first — the shell pre-pass now registers one per unit,
+    and a flat lookup would still hand an imported module's declaration the
+    PROGRAM's same-named row and merge the two. The flat fallback stays for the
+    rows that pre-pass does not cover (a class NESTED in a body, and the
+    compiler-minted shells). Same rule the shell test above states. }
+  ci := FindUClassInUnit(CurTok.SVal, CurrentUnitIdx);
+  if ci < 0 then ci := FindUClass(CurTok.SVal);
   Next;
   if CurTok.Kind = tkLParen then
   begin
