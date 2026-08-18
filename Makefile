@@ -10416,6 +10416,19 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_dom.npy $(TESTTMP)/lib_mimic_xml_dom
 	test "$$($(TESTTMP)/lib_mimic_xml_dom | grep -c '=ok')" = "20"
 	test "$$($(TESTTMP)/lib_mimic_xml_dom | tail -1)" = "MIMIC-XML-DOM OK"
+	# urllib.parse, reached the way the corpus reaches it: `from six.moves
+	# import urllib_parse as urlparse`, a RENAMED re-export through two shims
+	# (feature-b-mimic-six-moves-needs-http-client-and-urllib). Testing
+	# urllib.parse directly would pass without proving that path, which is the
+	# one spelling html5lib/filters/sanitizer.py uses and the one that did not
+	# work before pin v351. The cases are the sanitizer's own: the scheme is
+	# lower-cased (a lower-case allow-list otherwise lets JavaScript: through),
+	# `data:` keeps its semicolon while `http:` splits ;params off, and an
+	# unbalanced [ raises ValueError -- which the sanitizer catches to DELETE
+	# the attribute.
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_six_moves.npy $(TESTTMP)/lib_mimic_six_moves
+	test "$$($(TESTTMP)/lib_mimic_six_moves | grep -c '=ok')" = "27"
+	test "$$($(TESTTMP)/lib_mimic_six_moves | tail -1)" = "MIMIC-SIX-MOVES OK"
 	# DNS backend selection: the default (dns_wire) must be undisturbed by the
 	# new backend, and -dPXX_DNS_RESOLVED must agree with it. Both use only
 	# localhost, so neither needs the network; the resolved half skips itself

@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:15 blocked:5 backlog:233 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2019 rejected:38`
+`unfinished:14 blocked:5 backlog:235 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2020 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (15) — parked mid-flight; re-claim, do not duplicate
+## unfinished (14) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults` [N]
@@ -21,7 +21,6 @@ _none — no lane is locked._
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-own-language-first-symbol-resolution` [A] — blocked-by: bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
 - `feature-a-typeref-migrate-consumers` [A]
-- `feature-b-mimic-six-moves-needs-http-client-and-urllib` [B] — blocked-by: bug-n-from-import-with-an-as-rename-loses-what-it-renames, feature-b-mimic-urllib-request-over-the-rtl-http-stack
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
@@ -37,13 +36,15 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 218, ranked
+## Ready — top 30 of 220, ranked
 
 - `[p 88] [U]` decide-how-a-compiled-def-carries-its-signature-when-boxed (unblocks 2)
 - `[p 70] [N]` bug-n-a-renamed-class-loses-its-class-level-attributes
+- `[p 65] [N]` bug-n-subscripting-a-container-literal-inside-a-function-segfaults
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
+- `[p 60] [N]` bug-n-two-argument-super-does-not-parse
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [N]` feature-nilpy-yield-outside-a-for-loop
 - `[p 58] [O]` feature-opt-o3-register-pressure
@@ -67,7 +68,5 @@ _none — no lane is locked._
 - `[p 50] [D]` docs-cross-language-qualifier-note-is-wrong
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [C]` feature-c-vla-via-alloca
-- `[p 50] [E]` feature-demo-songformatter-pxx-target
-- `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
 
-_188 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_190 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

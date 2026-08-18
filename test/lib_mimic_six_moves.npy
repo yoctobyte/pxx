@@ -1,0 +1,102 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_six_moves.py + mimic_urllib_parse.py against CPython.
+
+A DIFFERENTIAL: this file runs unmodified under CPython with the real `six`
+installed, where `from six.moves import urllib_parse` finds the stdlib
+`urllib.parse`, and every line was checked to produce identical output both
+ways.
+
+IT IS REACHED THE WAY THE CORPUS REACHES IT. `html5lib/filters/sanitizer.py`
+writes `from six.moves import urllib_parse as urlparse` and then calls
+`urlparse.urlparse(...)` — a renamed re-export, which is precisely the spelling
+that did not work before pin v351. Testing `urllib.parse` directly would pass
+without proving the path the one real caller uses.
+
+WHAT IS ASSERTED, and why these cases. A URL splitter's failure mode is a
+plausible wrong field, so every case below is one the corpus's sanitizer can
+actually observe:
+
+  * the scheme is LOWER-CASED — a sanitizer matching a lower-case allow-list
+    lets `JavaScript:` through if this is missed, which is a security
+    difference rather than a cosmetic one;
+  * `data:` keeps its semicolon in the path while `http:` splits `;params` off
+    — the sanitizer reads `uri.path` for `data:` URLs to check the content
+    type, and a truncated path changes the verdict;
+  * an unbalanced `[` raises ValueError — the sanitizer catches exactly that
+    and DELETES the attribute, so a shim that returned a result instead would
+    keep an attribute it meant to drop.
+"""
+
+from six.moves import urllib_parse as urlparse
+
+fails = 0
+
+
+def check(name, got, want):
+    global fails
+    if got == want:
+        print(name + "=ok")
+    else:
+        fails = fails + 1
+        print(name + "=FAIL got " + repr(got) + " want " + repr(want))
+
+
+# the ordinary case, all six fields
+r = urlparse.urlparse("http://example.org/a/b?q=1#f")
+check("scheme", r.scheme, "http")
+check("netloc", r.netloc, "example.org")
+check("path", r.path, "/a/b")
+check("params", r.params, "")
+check("query", r.query, "q=1")
+check("fragment", r.fragment, "f")
+
+# the scheme is lower-cased, and the netloc is NOT
+r = urlparse.urlparse("HTTP://Example.ORG/x")
+check("scheme_lowered", r.scheme, "http")
+check("netloc_case_kept", r.netloc, "Example.ORG")
+
+# schemes the sanitizer's allow-list is about
+check("javascript", urlparse.urlparse("javascript:alert(1)").scheme, "javascript")
+check("vbscript", urlparse.urlparse("vbscript:x").scheme, "vbscript")
+check("mailto_path", urlparse.urlparse("mailto:a@b.c").path, "a@b.c")
+
+# data: keeps the semicolon (data is not in uses_params); http splits it
+d = urlparse.urlparse("data:text/html;base64,AAA")
+check("data_scheme", d.scheme, "data")
+check("data_path_intact", d.path, "text/html;base64,AAA")
+check("data_no_params", d.params, "")
+h = urlparse.urlparse("http://h/a;p")
+check("http_params_split", h.params, "p")
+check("http_path_trimmed", h.path, "/a")
+
+# no scheme at all: a leading digit is not a scheme, and the colon stays put
+check("not_a_scheme", urlparse.urlparse("1a:b").scheme, "")
+check("not_a_scheme_path", urlparse.urlparse("1a:b").path, "1a:b")
+
+# netloc without a scheme, and a bare path
+check("protocol_relative", urlparse.urlparse("//host/path").netloc, "host")
+check("bare_path", urlparse.urlparse("/just/path").path, "/just/path")
+check("empty", urlparse.urlparse("").scheme, "")
+
+# the ValueError the sanitizer depends on
+raised = False
+try:
+    urlparse.urlparse("http://[bad")
+except ValueError:
+    raised = True
+check("ipv6_raises", raised, True)
+
+# round trip
+check("unparse", urlparse.urlunparse(urlparse.urlparse("http://h/a;p?q#f")),
+      "http://h/a;p?q#f")
+
+# percent-encoding, where `/` is safe by default
+check("quote", urlparse.quote("a b/c?d"), "a%20b/c%3Fd")
+check("quote_unsafe", urlparse.quote("a b/c?d", ""), "a%20b%2Fc%3Fd")
+check("unquote", urlparse.unquote("a%20b%2Fc"), "a b/c")
+check("unquote_stray", urlparse.unquote("100%"), "100%")
+
+if fails == 0:
+    print("MIMIC-SIX-MOVES OK")
+else:
+    print("MIMIC-SIX-MOVES FAIL " + str(fails))

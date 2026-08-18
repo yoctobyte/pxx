@@ -12,7 +12,7 @@ _none_
 
 _none_
 
-## unfinished (15)
+## unfinished (14)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -24,7 +24,6 @@ _none_
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-a-own-language-first-symbol-resolution | A | 55 | feature | Own-language-first symbol resolution: the native language wins | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
-| feature-b-mimic-six-moves-needs-http-client-and-urllib | B | 35 | feature | `six.moves` is now the largest module-shim row on the ladder (4 files: html5lib/__init__.py, _inputstream.py, html5parser.py, filters/sanitizer.py). It cannot be shimmed on its own — six.moves is a table of RE-EXPORTS of `http.client`, `urllib` and `urllib.parse`, so it needs those modules to exist. urllib.parse is pure string work and is the tractable half; http.client needs the HTTP client filed separately. | bug-n-from-import-with-an-as-rename-loses-what-it-renames, feature-b-mimic-urllib-request-over-the-rtl-http-stack |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
@@ -42,7 +41,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (233)
+## backlog (235)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -69,6 +68,8 @@ _none_
 | bug-n-name-on-a-builtin-type-is-unimplemented | N | 35 | bug | `str.__name__` / `int.__name__` raise AttributeError: 'type' object has no attribute '__name__'. A USER class answers correctly, so only the builtin-type value (VT_BTYPE) is missing the attribute. Clean Python-shaped error, not a crash. | — |
 | bug-n-pylib-cannot-reach-the-rtl-power-so-complex-magnitude-loses-ulps | N | 25 | bug | `pycomplex_pow` computes \|z\|**b as exp(b*ln\|z\|) — two roundings — where CPython calls pow() directly, so `(-8.0) ** 0.5` gives an imaginary part of 2.8284271247461894 against CPython's 2.8284271247461903 (~4 ulp). The cause is structural: pylib lives in compiler/builtin and cannot reach the RTL's correctly-rounded Power, which is why it carries its own series ln/exp in the first place. | — |
 | bug-n-self-class-cannot-be-called-as-a-constructor | N | 45 | bug | `self.__class__(args)` does not compile — `error: A has no method __class__` — while `self.__class__.__name__` reads fine and `type(a).__name__` works. Calling the class object is the standard Python idiom for 'construct another one of my own type', and it is what CPython's own xml.sax AttributesImpl.copy() does; lib/rtl/mimic_xml_sax_xmlreader.py names its class explicitly instead, registered in track-b-workarounds.md. | — |
+| bug-n-subscripting-a-container-literal-inside-a-function-segfaults | N | 65 | bug | `return (a, b)[i]` inside a function or method segfaults at runtime, no diagnostic. Both tuple and list literals; constant or variable index; constant or variable contents — all crash. The SAME expression at module level works, binding the literal to a local first works, and subscripting a string literal works. Found writing lib/rtl/mimic_urllib_parse.py, where a ParseResult's __getitem__ is exactly this shape. | — |
+| bug-n-two-argument-super-does-not-parse | N | 60 | bug | `super(Cls, self).__init__(x)` is `error: unexpected token`, while the zero-argument `super().__init__()` works. The two-argument form is Python 2's spelling, still valid Python 3 and still what portable libraries write — html5lib uses it in every filter. It is now the wall html5lib/filters/sanitizer.py sits on, the file the six.moves work was aimed at. | — |
 | bug-nilpy-an-extended-slice-cannot-be-assigned | N | 30 | bug | `l[::2] = [7, 8]` is a parse error. The READ form `l[::2]` works, and the plain-slice ASSIGN `l[1:3] = [9]` works; only the strided assignment is missing. | — |
 | bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds | N | 20 | bug | A dict VALUE as the `*=` target still rebinds, so an alias of it keeps the old contents. The parameter half landed 2026-08-15 (pymul_v_inplace); this is the residue, and `+=` has the same split. | — |
 | bug-nilpy-classmethod-constructors-on-builtin-types-are-absent | N | 25 | bug | `bytes.fromhex(\"6162\")` and `float.fromhex(\"0x1p3\")` are `undefined variable (bytes)` / `(float)` — the TYPE used as a namespace resolves only for the handful of names the stdlib table lists (int.from_bytes, dict.fromkeys, str.maketrans). | — |
@@ -133,7 +134,7 @@ _none_
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-b-a-real-minidom-is-an-implementation-not-a-shim | B | 15 | feature | Question 2 of the xml.dom row, re-filed on its own as that ticket said it should be. html5lib/treebuilders/dom.py wants a document you can build and mutate — ~25 DOM methods, getDOMImplementation().createDocument(), weakref.proxy(), and a reach into minidom's PRIVATE _child_node_types. That is a DOM implementation, not a compatibility alias. It unblocks exactly one corpus file and should be ranked as an implementation project, not alongside shims. | — |
 | feature-b-hardware-sqrt-on-aarch64-and-arm32 | B | 20 | feature | Sqrt is one `sqrtsd` on x86-64 (15x faster than the software path and correctly rounded by IEEE mandate). aarch64 `fsqrt` and arm32 `vsqrt` are the same one-instruction win and both run here under qemu, so the change is verifiable on this box. The portable SqrtSoft stays as the fallback for riscv32/xtensa. | — |
-| feature-b-mimic-urllib-request-over-the-rtl-http-stack | B | 30→35 | feature | lib/rtl/mimic_urllib_request.py currently REFUSES: it makes importing code compile and raises NotImplementedError on any call. The client it needs ALREADY EXISTS — lib/rtl/http.pas, gated by make lib-test as http + redirect + keepalive + pool + gzip + cookie + json, over the TLS seam. So this is not an HTTP project, it is a Python face on an existing unit, in the shape mimic_codecs.pas already demonstrates (a .pas shim reached from NilPy). The one corpus caller is a code generator, so no library file is blocked on it. | — |
+| feature-b-mimic-urllib-request-over-the-rtl-http-stack | B | 30 | feature | lib/rtl/mimic_urllib_request.py currently REFUSES: it makes importing code compile and raises NotImplementedError on any call. The client it needs ALREADY EXISTS — lib/rtl/http.pas, gated by make lib-test as http + redirect + keepalive + pool + gzip + cookie + json, over the TLS seam. So this is not an HTTP project, it is a Python face on an existing unit, in the shape mimic_codecs.pas already demonstrates (a .pas shim reached from NilPy). The one corpus caller is a code generator, so no library file is blocked on it. | — |
 | feature-b-rtl-lnxp1-fpc-compat | B | 20 | feature | FPC's math unit exports LnXP1(x) = ln(1+x) and pxx does not. The implementation already exists as of 2026-08-15 — LnP1, added as an internal helper for the hyperbolic family — so this is an interface line and a name, not an algorithm. Note WHY the name matters: `Log1p` would hijack libc's through pxxcio, `LnXP1` does not. | — |
 | feature-c-csmith-differential-fuzzing | C | 65 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-entry-stub-must-run-initializers-for-environ | C | 45 | feature | `char **envp = environ;` silently becomes NULL in a C program: environ is a VARIABLE read directly, with no call to trigger crtl's lazy /proc/self/environ load, and the C entry stub has no init phase. The fini half landed 2026-08-10; this is the init half | — |
@@ -445,9 +446,9 @@ _none_
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 | decide-week-theme-2026-08-17 | U | 70 | decide | What should the next week of work aim at? Measured: the bug backlog already peaked (61 on 08-03 -> 32 now) and 65% of open tickets are features, so this is no longer a burn-down question. Three candidate themes with the numbers behind each. | — |
 
-## done (2019)
+## done (2020)
 
-2019 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2020 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -496,9 +497,11 @@ _none_
 
 - [p 88] [U] decide-how-a-compiled-def-carries-its-signature-when-boxed (unblocks 2)
 - [p 70] [N] bug-n-a-renamed-class-loses-its-class-level-attributes
+- [p 65] [N] bug-n-subscripting-a-container-literal-inside-a-function-segfaults
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
 - [p 65] [P] feature-pascal-corpus-oop
+- [p 60] [N] bug-n-two-argument-super-does-not-parse
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [N] feature-nilpy-yield-outside-a-for-loop
 - [p 58] [O] feature-opt-o3-register-pressure
@@ -602,7 +605,6 @@ _none_
 - [p 40] [U] meta-float-accuracy-policy
 - [p 40] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 35] [A] feature-a-expose-rounding-mode-intrinsic-to-pascal (unblocks 1)
-- [p 35] [B] feature-b-mimic-urllib-request-over-the-rtl-http-stack (unblocks 1)
 - [p 35] [A] bug-a-nilpy-double-star-in-a-mixed-argument-list
 - [p 35] [N] bug-n-abs-of-a-complex-raises-typeerror
 - [p 35] [N] bug-n-exec-ignores-a-caller-supplied-builtins-mapping
@@ -641,6 +643,7 @@ _none_
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
 - [p 30] [A] compat-pascal-writeln-of-a-single-uses-double-width
 - [p 30] [D] docs-publish-the-three-language-rounding-table
+- [p 30] [B] feature-b-mimic-urllib-request-over-the-rtl-http-stack
 - [p 30] [N] feature-nilpy-fstring-nested-spec-and-nested-fstring
 - [p 30] [N] feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition
 - [p 30] [N] feature-nilpy-list-sort-inplace-key-reverse
@@ -726,7 +729,6 @@ _none_
 - **1** — feature-a-expose-rounding-mode-intrinsic-to-pascal
 - **1** — feature-a-own-language-first-symbol-resolution
 - **1** — feature-a-rdrand-cpuid-compiler-builtins
-- **1** — feature-b-mimic-urllib-request-over-the-rtl-http-stack
 - **1** — feature-nilpy-object-reclamation
 - **1** — feature-nilpy-parallel-for-in
 - **1** — feature-os-targets-bsd-mac

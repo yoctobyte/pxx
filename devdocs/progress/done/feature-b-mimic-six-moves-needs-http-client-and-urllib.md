@@ -4,7 +4,7 @@ prio: 35
 type: feature
 blocked-by: [feature-b-mimic-urllib-request-over-the-rtl-http-stack, bug-n-from-import-with-an-as-rename-loses-what-it-renames]
 summary: "`six.moves` is now the largest module-shim row on the ladder (4 files: html5lib/__init__.py, _inputstream.py, html5parser.py, filters/sanitizer.py). It cannot be shimmed on its own — six.moves is a table of RE-EXPORTS of `http.client`, `urllib` and `urllib.parse`, so it needs those modules to exist. urllib.parse is pure string work and is the tractable half; http.client needs the HTTP client filed separately."
-status: working
+status: done
 owner: frank3-fc
 ---
 
@@ -109,3 +109,74 @@ the five shims in [[feature-b-module-shims-for-the-html5lib-corpus]] are), add
 `mimic_six_moves.py` re-exporting it, re-run the ladder, and report past-vs-onto.
 The `http_client` half stays out of scope — that is
 [[feature-b-mimic-urllib-request-over-the-rtl-http-stack]].
+
+---
+
+## LANDED 2026-08-18 (frank3-fc) — the urllib_parse half, on pinned v351
+
+The blocker ([[bug-n-from-import-with-an-as-rename-loses-what-it-renames]]) was
+fixed and reached Track B in v351, so the park is over. `mimic_urllib_parse.py`
+and `mimic_six_moves.py` are in, `make lib-test` green.
+
+**The park was the right call and this is the evidence:** the shim's CONTENTS
+were never the blocker. Written now, in the same shape it would have had two
+hours ago, it moves five files. Written then, it would have moved none.
+
+### Verified by value, through the corpus's own spelling
+
+`test/lib_mimic_six_moves.npy` reaches urllib.parse the way
+`html5lib/filters/sanitizer.py` does — `from six.moves import urllib_parse as
+urlparse`, a RENAMED re-export through two shims — because testing
+`urllib.parse` directly would pass without exercising that path, and that path
+is the one that did not work before v351. 27 checks, identical under CPython.
+
+The cases are the sanitizer's own, not generic ones: the scheme is lower-cased
+(a lower-case allow-list otherwise lets `JavaScript:` through — a security
+difference, not a cosmetic one), `data:` keeps its semicolon while `http:`
+splits `;params` off (the sanitizer reads `uri.path` to check a `data:` content
+type), and an unbalanced `[` raises ValueError (the sanitizer catches exactly
+that and DELETES the attribute).
+
+### Score: past the wall 0, onto the next wall 5
+
+`missing module: six_moves` 5 → 0.
+
+| file | now |
+| --- | --- |
+| `html5lib/__init__.py` | undefined variable (yield) |
+| `_inputstream.py` | undefined variable (yield) |
+| `_tokenizer.py` | undefined variable (yield) |
+| `html5parser.py` | undefined variable (yield) |
+| `filters/sanitizer.py` | **unexpected token** — see below |
+
+compile **6/48 → 6/48**. `yield` is now **18 files**, and this ticket put four
+of them there.
+
+**Attribution:** the row cleared because this shim exists — before it, those
+files stopped at `missing module: six_moves`. But `sanitizer.py` also needed
+frank2's rename fix to get past `urllib_parse as urlparse`, so that file is a
+joint result and not this ticket's alone.
+
+### The one file this ticket existed for moved one step, onto a new wall
+
+`sanitizer.py:769` is `super(Filter, self).__init__(source)` — the
+two-argument `super`, which does not parse:
+[[bug-n-two-argument-super-does-not-parse]] (N, p60). html5lib writes it in
+every filter, so it is not one file's habit.
+
+### Still out of scope, unchanged
+
+The `http_client` half. `_inputstream.py` imports it and would stop there if
+`yield` were fixed; `lib/rtl/http.pas` exists and needs a Python face —
+[[feature-b-mimic-urllib-request-over-the-rtl-http-stack]].
+
+### One workaround taken
+
+`ParseResult.__getitem__` binds its field tuple to a local before indexing,
+because subscripting a container literal inside a function body segfaults
+([[bug-n-subscripting-a-container-literal-inside-a-function-segfaults]], N,
+p65, found here). Registered in `devdocs/dev/track-b-workarounds.md` with its
+revert condition.
+
+## Log
+- 2026-08-18 — resolved, commit PENDING-COMMIT.
