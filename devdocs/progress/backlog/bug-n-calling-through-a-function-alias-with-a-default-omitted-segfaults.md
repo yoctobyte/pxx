@@ -123,3 +123,41 @@ it is still wrong.
 Found by varying the shape after a simpler four-line version of the reported repro
 PASSED — worth recording, because that near-miss would have read as "cannot reproduce"
 and bounced the ticket.
+
+## RE-SCOPED 2026-08-18 (frank2-7e) — not about imports, and not about aliases
+
+Measured at HEAD after
+[[bug-n-a-default-argument-is-dropped-on-every-cross-module-call]] landed
+(`3d66bdff7`). That fix was expected to retire this ticket. **It does not**, and
+the rows below say why the title is aiming at the wrong thing.
+
+| shape | pxx | CPython |
+| --- | --- | --- |
+| `from M import f as zz; zz(1)` | (empty / garbage) | 7 |
+| `from M import g as qq; qq(1)` (two defaults) | no output at all | 16 |
+| `from M import f as zz; zz(1, 5)` | 5 | 5 |
+| **`def loc(a, lo=7): ...` then `zz = loc; zz(1)`** | (empty) | **7** |
+
+The last row is the point: **one file, no import, no alias syntax** — a plain
+assignment of a function to a name. It fails identically. So the defect is
+*calling through a function-VALUED name*: the call does not consult the callee's
+declared defaults, because at that point the target is a procedural value rather
+than a known proc. Supplying every argument is correct, which is what keeps it
+invisible.
+
+So this ticket's scope is **calls through a procedural value drop parameter
+defaults**, and `from X import f as g` is one way to reach it, not the cause.
+Retitling is left to whoever takes it, per the same convention applied to
+[[feature-nilpy-yield-outside-a-for-loop]].
+
+**Do not read this ticket's own repro as still current either.** It uses a
+COLLIDING alias name, and that shape is a different defect again —
+[[bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module]]
+(N, p85): the alias binds to the source module's own same-named member, which is
+wrong with every argument supplied and no default in play. That is very likely
+the actual cause of the SEGFAULT recorded here, since the call lands on a
+different function with a different signature — a better explanation than a
+dereferenced dropped default.
+
+Three defects were entangled under this one ticket. Two are now separated and
+one (the cross-module default) is fixed; what remains here is the third.
