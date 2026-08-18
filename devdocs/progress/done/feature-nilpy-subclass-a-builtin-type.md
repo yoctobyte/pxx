@@ -192,4 +192,4 @@ raising TypeError. All match CPython.
 A/P slot declared to the coordinator and held for the job.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit 1cbe666b5.
