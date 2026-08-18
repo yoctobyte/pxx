@@ -693,13 +693,21 @@ begin
   if Result then value := a;
 end;
 
+{ The single float parser; body far below, next to the exact-decimal
+  machinery it uses. Forward-declared because the whole StrToFloat family
+  up here is a wrapper over it. }
+function ParseFloatCore(const s: AnsiString; var value: Double): Boolean; forward;
+
 function TryStrToFloat(const s: AnsiString; var value: Double): Boolean;
-var a, b: Double;
 begin
-  a := StrToFloatDef(s, 0.0);
-  b := StrToFloatDef(s, 1.0);
-  Result := (a = b);
-  if Result then value := a;
+  { One parse. This used to call StrToFloatDef TWICE -- once defaulting to 0.0,
+    once to 1.0 -- and compare the answers, using disagreement as the failure
+    signal because the parser had no other way to report it. That cost a full
+    second parse on EVERY call, and StrToFloat goes through here, so the whole
+    family paid it: measured at 1.9-2.0x on every shape from the fast path to a
+    subnormal ([[bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents]]).
+    ParseFloatCore returns the flag directly, so the trick is not needed. }
+  Result := ParseFloatCore(s, value);
 end;
 
 constructor Exception.Create(const msg: string);
@@ -1747,6 +1755,14 @@ begin
 end;
 
 function StrToFloatDef(const s: AnsiString; def: Double): Double;
+begin
+  if not ParseFloatCore(s, Result) then Result := def;
+end;
+
+{ The one parser. StrToFloatDef, TryStrToFloat and StrToFloat are all thin
+  wrappers over it -- there is exactly one scan per call, and failure is a
+  returned flag rather than an answer that has to be probed for. }
+function ParseFloatCore(const s: AnsiString; var value: Double): Boolean;
 const
   { every digit past this is beyond any midpoint's ~1080, so it can only break
     a tie — which the sticky digit below does, without unbounded strings }
@@ -1754,8 +1770,31 @@ const
 var i, digit, e, k: Integer; c: Char; neg, eneg: Boolean;
     w, p: Double; in_frac, started, estarted, sticky: Boolean;
     ds, t: AnsiString; fracCount, nd, expo, lead: Integer; sig: Int64;
+    dsLen, dsCap: Integer;
+
+  { Append one digit to ds without reallocating per digit. The old code was
+    `ds := ds + c` inside the scan loop, which reallocates and recopies the
+    whole accumulated prefix on EVERY digit -- the same quadratic-append shape
+    already fixed once in ExDecOfMant, sitting in a second place. Capacity
+    doubles, so an ordinary number costs one allocation and a 1200-digit one
+    costs six. }
+  procedure DsPush(ch: Char);
+  begin
+    if dsLen = dsCap then
+    begin
+      { 32 covers all ordinary input in one allocation; a nested
+        procedure cannot see the enclosing const block, hence the literal }
+      if dsCap = 0 then dsCap := 32 else dsCap := dsCap * 2;
+      SetLength(ds, dsCap);
+    end;
+    dsLen := dsLen + 1;
+    ds[dsLen] := ch;
+  end;
+
 begin
-  Result := def;
+  Result := False;
+  value := 0.0;
+  dsLen := 0; dsCap := 0;
   { FPC skips whitespace at BOTH ends before parsing, and its notion of
     whitespace is any char <= ' ' — measured, not assumed: #0, #1, #11 and #12
     around a float are all accepted there, which is exactly Trim's rule. This
@@ -1779,9 +1818,9 @@ begin
       digit := Ord(c) - Ord('0');
       if in_frac then fracCount := fracCount + 1;
       { keep the digits themselves; the value is reconstructed exactly below }
-      if Length(ds) < EXDEC_INMAX then
+      if dsLen < EXDEC_INMAX then
       begin
-        if (ds <> '') or (digit <> 0) then ds := ds + c;   { drop leading zeros }
+        if (dsLen > 0) or (digit <> 0) then DsPush(c);     { drop leading zeros }
       end
       else if digit <> 0 then
         sticky := True;
@@ -1821,13 +1860,15 @@ begin
   { a dropped nonzero digit past the cap makes the value strictly greater than
     the kept prefix — exactly what a sticky bit is for, and enough to settle any
     tie, since a midpoint has far fewer significant digits than the cap }
-  if sticky then ds := ds + '1';
+  if sticky then DsPush('1');
+  SetLength(ds, dsLen);                 { trim the buffer to what was written }
 
-  if ds = '' then                       { all digits were zero }
+  if dsLen = 0 then                     { all digits were zero }
   begin
     w := 0.0;
     if neg then w := -w;                { preserves -0.0 }
-    Result := w;
+    value := w;
+    Result := True;
     Exit;
   end;
 
@@ -1863,7 +1904,8 @@ begin
       w := w / p;
     end;
     if neg then w := -w;
-    Result := w;
+    value := w;
+    Result := True;
     Exit;
   end;
 
@@ -1872,7 +1914,8 @@ begin
   lead := nd - 1 + expo;
   w := ExDecNearest(ds, lead, nd, expo);
   if neg then w := -w;
-  Result := w;
+  value := w;
+  Result := True;
 end;
 
 function StrToFloat(const s: AnsiString): Double;

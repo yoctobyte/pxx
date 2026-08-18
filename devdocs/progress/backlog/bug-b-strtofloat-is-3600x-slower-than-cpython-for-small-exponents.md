@@ -4,6 +4,8 @@ prio: 30
 type: bug
 blocked-by: []
 summary: "StrToFloat costs 2.6-2.9 ms per value for small-exponent input ('1.2e-320') against 0.72 us in CPython — a ~3600x gap — and 116 us even mid-range. The answer is right; the slow path is a 63-step bit-pattern search whose every step expands a candidate to its EXACT ~1080-digit decimal. Correct by construction and priced accordingly. Found timing a float differential harness, where parsing 121k values took ~60 s and the arithmetic under test took none of it."
+status: working
+owner: frank3-fc
 ---
 
 # `StrToFloat` is milliseconds per value for small exponents
@@ -170,3 +172,114 @@ expansion — but it is not the ticket.
 
 Moved back to `backlog/` so it can be ranked: it is not parked waiting on
 anything, it is remaining work.
+
+## 2026-08-18 (frank3-fc) — the title names the wrong axis, and the biggest cost was TWO PARSES
+
+**Compiler binary: `pinned` v352, sha `0d2087d629bf`, pin commit `b14da0847`,
+`-O2`.** Every A/B below is the same compiler with only `lib/rtl/sysutils.pas`
+differing, so nothing here is a pin artefact.
+
+### Where the cliff actually is — measured against the INTERNAL exponent
+
+The title says "small exponents". It is not small exponents, and it is not one
+cliff. The parser's fast path tests `nd <= 15` and `-22 <= expo <= 22`, where
+`expo` is the exponent **after** the decimal point is folded in
+(`expo := e - fracCount`). Sweeping that directly, 2000 values a row:
+
+| nd | expo | before |
+| --- | --- | --- |
+| 15 | 0 … 22 | ~2.5 us (flat) |
+| 15 | **23** | **41.9 us** — a 17x step at the edge |
+| 15 | 100 / −100 | 161 us / 248 us |
+| 15 | 200 / −200 | 187 us / 605 us |
+| 15 | −300 | 1109 us |
+| **17** | **0** | **22.1 us** — no exponent at all, and already 9x the fast path |
+| 17 | −300 | 1138 us |
+
+So there are three separate facts the one title flattens:
+
+1. **The edge is `|expo| > 22` in EITHER direction**, not "small".
+2. **A 16- or 17-digit significand alone falls off it**, at exponent zero —
+   which is every value a differential harness writes with
+   `FloatToStrExact(x, 17)`, i.e. the exact case that found this ticket.
+3. Past the edge the cost **grows with `|expo|`** (the expansion gets longer),
+   and the negative side is 2-3x the positive at equal magnitude.
+
+The earlier note in this ticket already corrected the *stated cause* (4 search
+steps, not 63). This corrects the *stated boundary*.
+
+### The largest single cost was not float work at all
+
+`StrToFloat` → `TryStrToFloat` → **`StrToFloatDef` twice**, once defaulting to
+`0.0` and once to `1.0`, comparing the two answers because the parser had no
+way to report failure. Every `StrToFloat` therefore parsed its input **twice**,
+including two full `ExDecNearest` searches on the slow path.
+
+Measured before believing the source — `StrToFloat` against `StrToFloatDef` on
+identical input:
+
+| shape | StrToFloatDef | StrToFloat | ratio |
+| --- | --- | --- | --- |
+| nd=15 expo=0 | 1501 ns | 2287 ns | 1.52x |
+| nd=15 expo=23 | 20383 ns | 40301 ns | **1.97x** |
+| nd=15 expo=−100 | 125814 ns | 244726 ns | **1.94x** |
+| nd=17 expo=−300 | 614140 ns | 1158790 ns | **1.88x** |
+
+A 2x on the whole family, produced by using the default value as a failure
+sentinel. Nothing about floats, and invisible from the float-parsing code.
+
+### And the quadratic append had a sibling
+
+`devdocs/dev/normalise-dont-special-case.md` says to grep for the sibling
+before closing a double case. The 2026-08-17 note in this ticket fixed a
+quadratic string build in `ExDecOfMant`; the **same shape** was sitting in the
+scan loop of the parser itself — `ds := ds + c` per digit, reallocating and
+recopying the accumulated prefix on every digit. Fast-path cost was linear in
+digit count for that reason alone: 607 ns at 1 digit rising ~130 ns per digit
+to 2565 ns at 15.
+
+### What landed
+
+- **One parse.** `ParseFloatCore(s, value): Boolean` is now the single parser;
+  `StrToFloatDef`, `TryStrToFloat` and `StrToFloat` are wrappers. Failure is a
+  returned flag.
+- **No per-digit reallocation.** The digit buffer doubles (`DsPush`), so an
+  ordinary number costs one allocation instead of fifteen.
+
+### Results — same compiler, only sysutils.pas differing
+
+| row | before | after | gain |
+| --- | --- | --- | --- |
+| fast path (nd=15, \|expo\|<=22) | 2823 ns | **597 ns** | **4.7x** |
+| mid-range, 17 digits (the ticket's own row) | 47.8 us | **23.5 us** | **2.03x** |
+| small (~1e-310) | 1205 us | **600 us** | **2.01x** |
+| subnormal (~1e-320) | 1205 us | **587 us** | **2.05x** |
+| `StrToFloat` / `StrToFloatDef` | 1.9-2.0x | **1.00-1.09x** | double parse gone |
+
+Against CPython on identical strings, the fast path goes from **21x slower to
+4.4x** (597 ns vs 137 ns). Cumulatively since this ticket was filed, its own
+three rows are **4.1x, 4.4x and 4.3x** faster.
+
+### Correctness
+
+- `test/lib_strtofloat_roundtrip.pas` green — 6846 checked values, the sweep
+  that exists precisely so a performance change here cannot trade away correct
+  rounding silently.
+- `test/lib_floattostr.pas` green.
+- `make lib-test` green.
+
+### The gate is still NOT met, and the remaining work is unchanged
+
+> "The mid-range and small-exponent rows above drop by at least an order of
+> magnitude"
+
+2x is not 10x. **Eisel-Lemire remains the fix**, and it is now better scoped:
+the residual cost is entirely the exact decimal expansion in `ExDecNearest`,
+which Lemire removes from the common path rather than speeds up. One useful
+datum for whoever takes it — the primitive it needs exists: `MulHiU64` in
+`lib/rtl/wideint.pas`, an unsigned 64x64→128 high-half multiply, intrinsic on
+64-bit targets (`IR_MULHI`) with a Pascal fallback on 32-bit. So the 128-bit
+multiply is not an obstacle; the work is the power-of-ten table and the
+decline-and-defer logic.
+
+Left in `working/` → returned to `backlog/`: not blocked, just unfinished.
