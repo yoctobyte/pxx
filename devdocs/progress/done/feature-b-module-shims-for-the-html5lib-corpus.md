@@ -197,4 +197,4 @@ rather than dropping the alias from the shim.
 each shim, not batched.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit 1b2164b35.
