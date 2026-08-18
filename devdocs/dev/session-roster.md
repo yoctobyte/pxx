@@ -1434,3 +1434,65 @@ valuable review.
   OS abstraction into existence), MINIX is the **freestanding** axis (kernel, no libc
   beneath, boot) which no application corpus or BSD port can teach. Sequencing note added
   to `decide-which-minix-is-the-target`.
+
+---
+
+## STANDING MANDATE — coordinate for one week (user, 2026-08-18)
+
+> "You coordinate. We will evaluate results after a week. And I hope NilPy gets over the
+> bump."
+
+**Evaluate: 2026-08-25.** This section is the charter for every coordinator session in
+between — it outlives any one context, so read it before the check log.
+
+### What "NilPy over the bump" means concretely
+
+Not a vibe — a measurement, and the bump has a name. As of tonight the third-party
+ladder stands at **6/48 compiled**, with the remaining blockers split:
+
+| blocker class | files |
+| --- | --- |
+| missing module | **8** (4 behind `decide-xml-etree-…`) |
+| **language** | **32** |
+| — of which **`yield`** | **18** |
+
+**`yield` IS the bump.** It is more than every missing-module row combined, it is not
+blocked on the boxed-def decision, and the generator engine is already built and proven
+for Pascal (`slgen.pas`, stackless, working). Landing it is the single highest-value
+thing that can happen this week.
+
+**How to report it, every time:** re-run `tools/nilpy_ladder.py`, **name the sha of the
+compiler binary used**, and report **past-a-wall separately from onto-the-next-wall**.
+The headline count can sit still while a great deal moves — it did all of 2026-08-18.
+Never quote an earlier scan as current; every table is a snapshot.
+
+### The one dispatch rule that must not be broken
+
+**`feature-nilpy-yield-outside-a-for-loop` (p75, top of N) goes to a FRESH session only.**
+Its failure mode is **silent stack corruption** in `PyEmitParamSpills`, not a compile
+error. Handing it to a long-running session because `next` ranks it first is precisely
+what the ticket's banner exists to prevent. The diagnosis is banked so a fresh session
+starts from it rather than rediscovering it. **First thing a fresh worker gets.**
+
+### Standing coordinator rules for the week
+
+- **Read `ready` for EVERY staffed lane** — A, N, B, C, T — not the ones a check prompt
+  happens to name. Following the prompt literally hid a ready, unblocked, p55 Track A
+  ticket (`feature-port-freebsd-native`) from the coordinator for an entire day. A prompt
+  that enumerates *some* queues reads as enumerating *the* queues.
+- **Never decide a `decide-*`.** Eight are queued for the human, four freshly framed.
+  Escalate, don't guess — that is the whole of Track U.
+- **Verify, then name the sha.** HEAD and `PXX_STABLE` are different grounds. "Fixed at
+  HEAD" and "unblocked for B" are two claims and the second needs its own measurement.
+  Both errors happened on 2026-08-18; both were caught by workers, not by me.
+- **Idle is a valid state.** Target 1-2 workers plus the coordinator. Hunt for blocked;
+  never dispatch to fill capacity. But **do not bank a day while the user is paying for
+  idle capacity** — that call was made once and was wrong.
+- **The coordinator writes no code.** Filing, ranking, routing and verifying only.
+
+### Open horizon items parked for the week
+
+Three lighthouses (FPC, Linux tinyconfig, MINIX — the last chunked into four separable
+goals) and `refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files` (p60, prio is a
+*proposal*: it buys parallelism, not features, and grew a great deal after filing —
+rerank it deliberately rather than inheriting the number).
