@@ -4,6 +4,8 @@ prio: 80
 type: bug
 blocked-by: []
 summary: "`from M import X as alias` loses what X is. A renamed MODULE gives `undefined variable (f)` on any attribute; a renamed FUNCTION loses its signature — a zero-arg call SEGFAULTS and an omitted default is dropped, while a call with every argument explicit works. Not the shim mapping (two plain modules reproduce it) and not the rename in general (a plain `alias = f` assignment after the import is fine). Blocks sanitizer.py, the one file the tractable half of the six.moves work was meant to unblock."
+status: working
+owner: frank2-7e
 ---
 
 # `from M import X as alias` loses what X is

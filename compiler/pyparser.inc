@@ -12265,15 +12265,28 @@ end;
   half-finished wrapper.
   feature-nilpy-callable-value-unified-dispatch }
 function PyGetOrMakeCallableWrapper(realPi: Integer): Integer;
-var wrapName: AnsiString; wrapPi: Integer;
-    pnames: array[0..0] of AnsiString; ptypes: array[0..0] of TTypeKind;
+{ The wrapper takes the REAL proc's arity, not a hardcoded one. It was
+  `array[0..0]` / `nParams = 1`, which is why the gate below could only ever
+  admit a one-parameter callee: a wrapper for any other arity would have called
+  the real proc with the wrong number of arguments. The body builder was already
+  arity-generic (it loops `for i := 0 to nparams - 1` over the wrapper's own
+  parameters), so nothing else had to change — with 0 it hand-builds
+  `return REALPROC()`.
+  bug-n-from-import-with-an-as-rename-loses-what-it-renames }
+var wrapName: AnsiString; wrapPi, wpi: Integer;
+    pnames: array[0..MAX_PROC_PARAMS - 1] of AnsiString;
+    ptypes: array[0..MAX_PROC_PARAMS - 1] of TTypeKind;
 begin
   wrapName := '$pycallwrap_' + AIntToStr(realPi);
   wrapPi := FindProc(wrapName);
   if wrapPi >= 0 then begin Result := wrapPi; Exit; end;
-  pnames[0] := 'a0';
-  ptypes[0] := tyVariant;
-  wrapPi := RegisterProc(wrapName, True, tyVariant, 1, pnames, ptypes);
+  for wpi := 0 to Procs[realPi].ParamCount - 1 do
+  begin
+    pnames[wpi] := 'a' + AIntToStr(wpi);
+    ptypes[wpi] := tyVariant;
+  end;
+  wrapPi := RegisterProc(wrapName, True, tyVariant,
+                         Procs[realPi].ParamCount, pnames, ptypes);
   Procs[wrapPi].BodyAddr := -1;
   if PyPendLamCount >= PY_MAX_NESTED then
     Error('Nil Python: too many pending callable-value wrappers/lambdas');
@@ -12348,7 +12361,18 @@ begin
         paramsAllVariant := False;
         Break;
       end;
-    if paramsAllVariant and (Procs[pi].ParamCount = 1) and
+    { ANY arity, not just one. A callable value whose callee returns a scalar
+      needs the return side adapted regardless of how many arguments it takes —
+      the dispatcher always calls through the Variant-hidden-destination
+      convention. `ParamCount = 1` was not a deliberate restriction but the
+      arity the wrapper builder happened to hardcode, and it left a
+      ZERO-parameter scalar-returning def with no wrapper at all: the box
+      pointed straight at a proc using the integer-return ABI, and calling it
+      SEGFAULTED. That is the whole of the "zero-argument call crashes, one
+      argument works" boundary in the ticket — it was never about argument
+      count reaching the callee, only about which arity got a wrapper built.
+      bug-n-from-import-with-an-as-rename-loses-what-it-renames }
+    if paramsAllVariant and (Procs[pi].ParamCount <= MAX_PROC_PARAMS) and
        Procs[pi].IsFunc and PyScalarWrappableRetType(Procs[pi].RetType) then
       pi := PyGetOrMakeCallableWrapper(pi);
   end;
@@ -31807,6 +31831,7 @@ procedure PyParseImportRun;
 var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
     aStrIdx, realStrIdx, optSym, impLevel: Integer;
     aliasSym, aliasCi, aliasRealSym, aliasRealProc: Integer;
+    aliasUnitTarget: Integer;   { the unit a from-imported SUBMODULE name really names }
 begin
   while (CurTok.Kind = tkUses) or PyIsIdent('from') do
   begin
@@ -32018,8 +32043,29 @@ begin
              (FindCompiledUnit(impAlias) < 0) and
              (not UnitDeclaresClassExactly(impAlias, FindUnitOrAlias(impName))) then
           begin
+            { Point the alias at what the imported NAME resolves to, not at the
+              module the import was written against. `from sm import
+              urllib_parse` works today only because sm's own
+              `import pp as urllib_parse` left a global alias that
+              FindUnitOrAlias chases: the name is registered against sm, and the
+              chase happens to find pp anyway. Rename it — `from sm import
+              urllib_parse as up` — and the new name is registered against sm
+              with nothing to chase, so `up.urlparse(...)` reported `undefined
+              variable (urlparse)` while the un-renamed spelling worked. That is
+              html5lib/filters/sanitizer.py:15 exactly.
+
+              So resolve impReal first and register the alias against THAT unit;
+              fall back to impName when the name is not itself a module, which
+              is the `from tkinter import ttk` case this registration exists for
+              (ttk names no unit, so the import's own module is the right
+              target and behaviour is unchanged).
+              bug-n-from-import-with-an-as-rename-loses-what-it-renames }
+            aliasUnitTarget := FindUnitOrAlias(impReal);
             UnitAliasName[UnitAliasCount] := InternStr(LowerCase(impAlias));
-            UnitAliasReal[UnitAliasCount] := InternStr(LowerCase(impName));
+            if aliasUnitTarget >= 0 then
+              UnitAliasReal[UnitAliasCount] := aliasUnitTarget
+            else
+              UnitAliasReal[UnitAliasCount] := InternStr(LowerCase(impName));
             Inc(UnitAliasCount);
           end;
           { The module did not resolve and we are inside a `try:` whose handler

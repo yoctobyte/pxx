@@ -568,6 +568,17 @@ test-nilpy: $(COMPILER)
 	# bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_shim_from_import_class_attrs.npy $(TESTTMP)/test_nilpy_shimattr26
 	test "$$($(TESTTMP)/test_nilpy_shimattr26)" = "$$(printf '1\n3\n9\n7\n9\n1\n49\nok')"
+	# `from M import X as alias` lost what X was, two independent ways: a renamed
+	# MODULE resolved against the module the import was written against rather than
+	# what the name names (the un-renamed form worked only by accident, via a chase
+	# the exporting module happened to leave behind) -- sanitizer.py:15 exactly; and
+	# a renamed ZERO-PARAMETER def segfaulted, because the callable-value wrapper
+	# that adapts a scalar return was gated on the one arity its builder hardcoded.
+	# The sweep covers several name lengths AND arities on purpose: the earlier
+	# "2+ characters crashes" reading was a confound for the RETURN TYPE.
+	# bug-n-from-import-with-an-as-rename-loses-what-it-renames
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_from_import_as_rename.npy $(TESTTMP)/test_nilpy_asrename26
+	test "$$($(TESTTMP)/test_nilpy_asrename26)" = "$$(printf 'parsed:x\nparsed:y\n7\n7\nQ\n7\nR')"
 	# TWO imported bases have no answer and are REFUSED, not half-taken
 	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_two_imported_bases_fail.npy $(TESTTMP)/test_nilpy_twoimp26 > $(TESTTMP)/test_nilpy_twoimp.log 2>&1
 	grep -q 'names TWO base classes whose bodies are not in this file' $(TESTTMP)/test_nilpy_twoimp.log
@@ -6633,6 +6644,17 @@ test-core: $(COMPILER)
 	# bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_shim_from_import_class_attrs.npy $(TESTTMP)/test_nilpy_shimattr26
 	test "$$($(TESTTMP)/test_nilpy_shimattr26)" = "$$(printf '1\n3\n9\n7\n9\n1\n49\nok')"
+	# `from M import X as alias` lost what X was, two independent ways: a renamed
+	# MODULE resolved against the module the import was written against rather than
+	# what the name names (the un-renamed form worked only by accident, via a chase
+	# the exporting module happened to leave behind) -- sanitizer.py:15 exactly; and
+	# a renamed ZERO-PARAMETER def segfaulted, because the callable-value wrapper
+	# that adapts a scalar return was gated on the one arity its builder hardcoded.
+	# The sweep covers several name lengths AND arities on purpose: the earlier
+	# "2+ characters crashes" reading was a confound for the RETURN TYPE.
+	# bug-n-from-import-with-an-as-rename-loses-what-it-renames
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_from_import_as_rename.npy $(TESTTMP)/test_nilpy_asrename26
+	test "$$($(TESTTMP)/test_nilpy_asrename26)" = "$$(printf 'parsed:x\nparsed:y\n7\n7\nQ\n7\nR')"
 	# TWO imported bases have no answer and are REFUSED, not half-taken
 	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_two_imported_bases_fail.npy $(TESTTMP)/test_nilpy_twoimp26 > $(TESTTMP)/test_nilpy_twoimp.log 2>&1
 	grep -q 'names TWO base classes whose bodies are not in this file' $(TESTTMP)/test_nilpy_twoimp.log

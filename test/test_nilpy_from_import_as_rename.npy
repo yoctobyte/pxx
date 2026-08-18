@@ -1,0 +1,43 @@
+# `from M import X as alias` lost what X was, in two independent ways.
+#
+# 1. A renamed MODULE resolved against the module the import was WRITTEN
+#    against instead of against what the name names. The un-renamed spelling
+#    worked only by accident -- the exporting module's own `import ... as ...`
+#    left a global alias that the chase happened to find. Renaming gave the new
+#    name nothing to chase, so every attribute came back `undefined variable`.
+#    html5lib/filters/sanitizer.py:15 is exactly this shape.
+#
+# 2. A renamed zero-parameter def SEGFAULTED. The callable-value wrapper that
+#    adapts a scalar return was gated on ParamCount = 1 -- not a decision, just
+#    the arity its builder hardcoded -- so a zero-parameter def got no wrapper
+#    and the box pointed at a proc using the integer-return ABI while the
+#    dispatcher called it through the Variant convention.
+#
+# The two earlier readings of this bug -- "renaming loses the SIGNATURE" and
+# "crashes whenever the source name is 2+ characters" -- were both confounds.
+# Name length correlated because `name` and single letters happened to infer a
+# Variant return; the real axis is the return type, and the wrapper arity.
+# Hence the sweep below over several name lengths AND arities.
+# bug-n-from-import-with-an-as-rename-loses-what-it-renames
+
+# 1. renamed module, and the un-renamed control
+from renmod import parsemod as pm
+print(pm.urlparse("x"))
+
+from renmod import parsemod
+print(parsemod.urlparse("y"))
+
+# 2. renamed defs -- zero args is the row that crashed, at several name lengths
+from renmod_inner import zero as z
+print(z())
+
+from renmod_inner import zero as zzzz
+print(zzzz())
+
+from renmod_inner import onearg as oa
+print(oa("Q"))
+
+# the un-renamed spellings must keep working
+from renmod_inner import zero
+print(zero())
+print(onearg("R"))
