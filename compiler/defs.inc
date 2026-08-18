@@ -2190,6 +2190,17 @@ var
     bug-c-sibling-translation-units-cannot-see-each-other }
   CTUnitIdx        : array[0..255] of Integer;
   CTUnitCount      : Integer;
+  { NILPY MODULE PROVENANCE. Which units came from a `.py` MODULE (ParsePyUnit)
+    rather than from Pascal source. Needed because "the routine lives in another
+    unit" was being used as a PROXY for "the routine is a Pascal library facade",
+    and a user's imported .py module satisfies the proxy while wanting the
+    opposite treatment for its parameter defaults — see DefaultArgValueNode in
+    parser.inc. A PARALLEL ARRAY on the CTUnitIdx pattern, not a field: a new
+    TProc/TSymbol field is the known self-host landmine
+    (project_tsymbol_field_landmine).
+    bug-n-a-default-argument-is-dropped-on-every-cross-module-call }
+  PyModUnitIdx     : array[0..255] of Integer;
+  PyModUnitCount   : Integer;
   { C TRANSLATION-UNIT PROVENANCE. The preprocessor inlines every #include into
     ONE buffer and crtl's modules are pulled into the SAME buffer, so by parse
     time `fcntl.c` and `unistd.c` are one translation unit as far as pxx is

@@ -1,0 +1,18 @@
+# Imported module whose functions and methods carry PARAMETER DEFAULTS. The
+# defaults must survive the module boundary: see
+# test_nilpy_cross_module_defaults.npy.
+def f(a, lo=7):
+    return lo
+
+
+def g(a, lo=3, hi=13):
+    return lo + hi
+
+
+def s(a, name='dflt'):
+    return name
+
+
+class C:
+    def m(self, a, lo=7):
+        return lo

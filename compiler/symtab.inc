@@ -546,6 +546,29 @@ begin
     if CTUnitIdx[i] = unitIdx then begin UnitIsCTranslationUnit := True; Exit; end;
 end;
 
+function UnitIsPyModule(unitIdx: Integer): Boolean;
+{ True for a `.py` MODULE pulled in by an import (ParsePyUnit). Mirrors
+  UnitIsCTranslationUnit above; see PyModUnitIdx in defs.inc for why the fact is
+  RECORDED rather than inferred from `ProcUnitIdx >= 0`. }
+var i: Integer;
+begin
+  UnitIsPyModule := False;
+  if unitIdx < 0 then Exit;
+  for i := 0 to PyModUnitCount - 1 do
+    if PyModUnitIdx[i] = unitIdx then begin UnitIsPyModule := True; Exit; end;
+end;
+
+procedure MarkUnitPyModule(unitIdx: Integer);
+var i: Integer;
+begin
+  if unitIdx < 0 then Exit;
+  for i := 0 to PyModUnitCount - 1 do
+    if PyModUnitIdx[i] = unitIdx then Exit;
+  if PyModUnitCount > 255 then Exit;
+  PyModUnitIdx[PyModUnitCount] := unitIdx;
+  Inc(PyModUnitCount);
+end;
+
 procedure MarkUnitCTranslationUnit(unitIdx: Integer);
 var i: Integer;
 begin

@@ -4,6 +4,8 @@ prio: 90
 type: bug
 blocked-by: []
 summary: "Calling an IMPORTED function or method and omitting a defaulted parameter silently passes None/0 instead of the default. `plainmod.withdef(1)` returns None where CPython returns 7; two defaults returns 0 where CPython returns 16; an imported class's method behaves the same. Exit 0, no diagnostic, no crash. The same call in the SAME file is correct, and supplying the argument explicitly is correct. The already-filed alias segfault is one symptom of this, not the whole bug."
+status: done
+owner: frank2-7e
 ---
 
 # A default argument is dropped on every cross-module call
@@ -150,3 +152,110 @@ The alias-default ticket
 SYMPTOM of this one — the alias rows are where the dropped default happens to get
 dereferenced instead of silently substituted. Keep its repro as a regression test, since
 a crash is the shape that fails loudly, but fix it here.
+
+## FIXED 2026-08-18 (frank2-7e, combined A+N)
+
+### Root cause — an over-broad predicate, measured before it was touched
+
+`DefaultArgValueNode` (`compiler/parser.inc`, ~2988):
+
+```pascal
+else if isNilPy and (Procs[mpi].Params[k].TypeKind = tyVariant) and
+        (ProcParamDefaultIsNone[mpi * MAX_PROC_PARAMS + k] or
+         (ProcUnitIdx[mpi] >= 0)) then
+  exprNode := PyMakeNone
+```
+
+`ProcUnitIdx[mpi] >= 0` means "this routine lives in another unit", and it forced
+the None path **regardless of the declared default**.
+
+Confirmed with a probe before editing, rather than read off the source — the
+declared value is present and correct and is simply discarded:
+
+```
+PXXDBG n.defarg proc=f k=1 unitidx=612 tk=22 isnone=FALSE sym=-1 val=7 isNilPy=TRUE
+                          ^^^^^^^^^^^^ forces None            ^^^^^ the right answer
+```
+
+**The clause is deliberate and load-bearing, not an oversight.** Its comment says
+why: a `lib/pcl` Pascal façade declares `const opt: Variant = 0` as a SENTINEL
+meaning "not supplied", and 26 call sites across `lib/pcl` test `pyvartag(v) <> 0`
+to find out. Boxing that 0 as an integer made an omitted option look GIVEN —
+`canvas.configure(yscrollcommand=...)` passed a filled `xscrollcommand` and
+tkinter refused it.
+
+So `ProcUnitIdx >= 0` was standing in for *"this is a Pascal library façade"*, and
+a user's imported `.py` module satisfies the proxy while needing the opposite
+answer. A fact inferred from a proxy instead of recorded.
+
+### Fix — record the fact
+
+A per-unit "this unit is a NilPy module" marker on the existing
+`CTUnitIdx` / `UnitIsCTranslationUnit` pattern: `PyModUnitIdx` in `defs.inc`,
+`UnitIsPyModule` / `MarkUnitPyModule` in `symtab.inc`, set in `ParsePyUnit`. The
+predicate then reads `(ProcUnitIdx[mpi] >= 0) and not UnitIsPyModule(...)`.
+
+A **parallel array, not a `TProc` field** — a new field there is the known
+self-host landmine (`project_tsymbol_field_landmine`), and the C-translation-unit
+list next to it already uses this shape.
+
+### Verified by VALUE against CPython, every shape the ticket asked for
+
+| call | before | after | CPython |
+| --- | --- | --- | --- |
+| `import M; M.f(1)` | None | **7** | 7 |
+| `import M as m; m.f(1)` | None | **7** | 7 |
+| `import M; M.g(1)` (two defaults) | 0 | **16** | 16 |
+| `import M; M.g(1, 5)` (only some omitted) | 5 | **18** | 18 |
+| `from M import C; C().m(1)` | None | **7** | 7 |
+| `M.s(1)` (**string** default) | dflt | dflt | dflt |
+| `M.f(1, 3)` (supplied) | 3 | 3 | 3 |
+
+The string default was **already correct**, which is diagnostic rather than
+incidental: `ProcParamDefaultIsStr` is tested *before* the variant branch, so only
+variant-typed parameters were ever affected.
+
+### The façade behaviour is NOT regressed
+
+The risk in this fix was trading a silent NilPy bug for a silent tkinter one. The
+three tk examples exercise `configure()` with omitted options and now actually RUN
+under Xvfb (`5215148bb`): `tkinter_facade`, `field_class_identity` and `callbacks`
+all still match their `.expected` byte for byte.
+
+### Regression test
+
+`test/test_nilpy_cross_module_defaults.npy` + `test/nilpy_units/defmod.npy`, wired
+into `test-nilpy` by name (the suite enumerates and never globs). Verified both
+ways: on pinned v348 it prints `None / 0 / 5 / 3 / dflt / None`, at HEAD
+`7 / 16 / 18 / 3 / dflt / 7`.
+
+**Why the suite could not see this**, now covered: it needs a `.py` callee, a
+variant parameter and an omitted argument *at once*. A Pascal-callee test would
+have passed — `import pasmod; pasmod.pf(1)` with `lo: Integer = 7` is correct
+today and always was, because an Integer parameter never reaches the branch.
+
+### Two OTHER bugs found here — this ticket does NOT retire the alias one
+
+1. **[[bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module]]**
+   (filed, N p85). `from mmod import f as g` binds `g` to mmod's own `g`:
+   `g(1, 5)` gives 18 with **every argument supplied**, so no default is
+   involved. Aliasing to a name that is a CLASS in the module constructs that
+   class instead. Independent of this ticket and unaffected by this fix.
+
+2. **Calling through a function-VALUED name still drops defaults** — and its
+   scope is wider than
+   [[bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults]]
+   states. `from M import f as zz; zz(1)` is still wrong after this fix, and so
+   is a plain **same-file** `zz = loc; zz(1)`. So it is not about imports or
+   module boundaries at all: a call through a procedural value does not consult
+   the callee's defaults. That ticket stays open and should be re-scoped.
+
+### Gate
+
+`make compiler/pascal26` (fixedpoint, converged) + the value table above + the tk
+façade check + the new test failing pre-fix and passing post-fix +
+`tools/gate.sh quick` GREEN (FPC seed canary included — this adds a routine and a
+parallel array). No pin needed; nothing in `compiler/builtin/**`.
+
+## Log
+- 2026-08-18 — resolved, commit PENDING-COMMIT.

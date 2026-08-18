@@ -531,6 +531,14 @@ test-nilpy: $(COMPILER)
 	# bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_shim_class_in_imported_module.npy $(TESTTMP)/test_nilpy_shimcls26
 	test "$$($(TESTTMP)/test_nilpy_shimcls26)" = "$$(printf 'utf-8\nx-regress')"
+	# an IMPORTED module's parameter DEFAULTS must survive the module boundary.
+	# DefaultArgValueNode forced the None path for any callee in another unit,
+	# which was a proxy for "a Pascal lib/pcl facade" that a user .py module also
+	# satisfies. Needs a .py callee, a variant parameter and an omitted argument at
+	# once -- a Pascal callee never reaches the branch.
+	# bug-n-a-default-argument-is-dropped-on-every-cross-module-call
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_cross_module_defaults.npy $(TESTTMP)/test_nilpy_xmoddef26
+	test "$$($(TESTTMP)/test_nilpy_xmoddef26)" = "$$(printf '7\n16\n18\n3\ndflt\n7')"
 	# TWO imported bases have no answer and are REFUSED, not half-taken
 	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_two_imported_bases_fail.npy $(TESTTMP)/test_nilpy_twoimp26 > $(TESTTMP)/test_nilpy_twoimp.log 2>&1
 	grep -q 'names TWO base classes whose bodies are not in this file' $(TESTTMP)/test_nilpy_twoimp.log

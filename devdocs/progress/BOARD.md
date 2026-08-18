@@ -8,7 +8,7 @@ lives in git, not in a timestamp._
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-n-a-default-argument-is-dropped-on-every-cross-module-call | N | 90 | bug | Calling an IMPORTED function or method and omitting a defaulted parameter silently passes None/0 instead of the default. `plainmod.withdef(1)` returns None where CPython returns 7; two defaults returns 0 where CPython returns 16; an imported class's method behaves the same. Exit 0, no diagnostic, no crash. The same call in the SAME file is correct, and supplying the argument explicitly is correct. The already-filed alias segfault is one symptom of this, not the whole bug. | — |
+| bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module | N | 85 | bug | `from M import f as g` binds `g` to M's OWN `g` when the alias name collides with another member of M. `g(1, 5)` returns 18 (M's g) where CPython returns 5 — every argument supplied, no default involved, so this is a pure name-binding defect. Aliasing to a name that is a CLASS in M constructs that class instead. Exit 0, no diagnostic. | — |
 
 ## working (0)
 
@@ -443,9 +443,9 @@ _none_
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 | decide-week-theme-2026-08-17 | U | 70 | decide | What should the next week of work aim at? Measured: the bug backlog already peaked (61 on 08-03 -> 32 now) and 65% of open tickets are features, so this is no longer a burn-down question. Three candidate themes with the numbers behind each. | — |
 
-## done (2012)
+## done (2013)
 
-2012 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2013 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -492,7 +492,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [urgent p 90] [N] bug-n-a-default-argument-is-dropped-on-every-cross-module-call
+- [urgent p 85] [N] bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
 - [p 70] [N] bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite

@@ -2987,7 +2987,8 @@ begin
   end
   else if isNilPy and (Procs[mpi].Params[k].TypeKind = tyVariant) and
           (ProcParamDefaultIsNone[mpi * MAX_PROC_PARAMS + k] or
-           (ProcUnitIdx[mpi] >= 0)) then
+           ((ProcUnitIdx[mpi] >= 0) and
+            (not UnitIsPyModule(ProcUnitIdx[mpi])))) then
     { A variant parameter is passed by REFERENCE — the callee reads a 16-byte
       slot through a pointer — so a `= None` default cannot be a bare ordinal:
       the callee dereferences it the moment it touches the parameter.

@@ -32483,6 +32483,11 @@ var stmt, seqNode, lastSeq, procIdx, patchPos, savedSC, savedFS: Integer;
     dummyNames: array[0..0] of AnsiString;
     dummyTypes: array[0..0] of TTypeKind;
 begin
+  { Record that THIS unit is a NilPy module. `ProcUnitIdx >= 0` was standing in
+    for "a Pascal library facade" at DefaultArgValueNode (parser.inc), and an
+    imported .py module met the proxy while needing the opposite answer for its
+    parameter defaults. bug-n-a-default-argument-is-dropped-on-every-cross-module-call }
+  MarkUnitPyModule(CurrentUnitIdx);
   savedScanLo := PyScanLo;
   savedMainTok := MainProgramTokCount;
   savedExprMode := PyExprMode;

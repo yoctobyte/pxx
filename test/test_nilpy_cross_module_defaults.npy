@@ -1,0 +1,28 @@
+# Calling an IMPORTED function or method and omitting a defaulted parameter must
+# pass the DECLARED default, not None.
+#
+# bug-n-a-default-argument-is-dropped-on-every-cross-module-call: DefaultArgValueNode
+# forced the None path whenever `ProcUnitIdx[mpi] >= 0`, i.e. whenever the callee
+# lived in another unit. That test was standing in for "this is a Pascal library
+# facade", whose `const opt: Variant = 0` really does mean "not supplied" and whose
+# callers test pyvartag(v) <> 0. A user's imported .py module satisfies the proxy
+# and wants the opposite answer, so every cross-module call that let a default
+# apply silently received None (or 0 for two defaults). Exit 0, no diagnostic.
+#
+# Every value below is CPython 3's on the same source.
+#
+# WHY THE SUITE COULD NOT SEE THIS: single-file programs are all correct, and at
+# the time this was found 716 .npy tests sat against 10 sibling .py modules -- so
+# almost nothing called into a USER module. A Pascal-callee test would also have
+# passed, because a Pascal `lo: Integer = 7` parameter is not a variant and never
+# reaches the branch. It needs a .py callee, a variant parameter, and an omitted
+# argument at once.
+import defmod
+from defmod import C
+
+print(defmod.f(1))            # 7  -- was None
+print(defmod.g(1))            # 16 -- was 0
+print(defmod.g(1, 5))         # 18 -- only SOME defaults omitted
+print(defmod.f(1, 3))         # 3  -- supplied explicitly, always worked
+print(defmod.s(1))            # dflt -- a STRING default, not an ordinal
+print(C().m(1))               # 7  -- an imported class's method
