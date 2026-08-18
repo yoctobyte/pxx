@@ -17,6 +17,10 @@ begin
   IRCount := 0;
   IRLabelCount := 0;
   IRLoopStackDepth := 0;
+  { the sequence-spine stack is scratch WITHIN one lowering; reset it with the
+    rest so a lowering that stopped early (an Error) cannot leak slots into the
+    next one }
+  IRSeqSpineTop := 0;
   CurLowerLine := 0;
   CurLowerFile := 1;
 end;
@@ -4904,6 +4908,7 @@ end;
 
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
+    seqBase, seqCur: Integer;       { iterative AN_SEQ spine walk — see the arm }
     cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
     promoLhs, promoRhs, promoDst, promoSym, promoOp: Integer;   { promotable-int slot lowering }
     vuExitUnboxed: Boolean;         { `return <variant>` unboxed to a scalar result }
@@ -10987,11 +10992,49 @@ begin
     end;
     AN_PAIR, AN_SEQ:
     begin
-      left := IRDropManagedStrResult(IRLowerAST(ASTLeft[node]));
-      IRMarkStatementNode(left);
-      right := IRDropManagedStrResult(IRLowerAST(ASTRight[node]));
+      { A statement list is a RIGHT-LEANING cons chain, and lowering it by
+        recursing on the tail cost ONE FRAME PER STATEMENT. IRLowerAST's frame is
+        about 6 KB, so ~1700 statements needed ~10 MB and the compiler died on
+        the 8 MB default stack — SIGSEGV, exit 139, no diagnostic, and the crash
+        landed in an unrelated leaf (IRLowerAddress) 1727 frames from the cause.
+        NilPy reaches this first because an imported module's body is inlined
+        into the importer, but nothing about it is NilPy-specific: a long enough
+        Pascal `begin ... end` is the same chain.
+
+        So walk the spine instead. Order is preserved EXACTLY — that is the whole
+        constraint, and it is why the fold runs backwards:
+
+          lower  left0, left1, ... leftk, tail   (the loop below, in order)
+          append BLOCK_k, BLOCK_k-1, ... BLOCK_0 (innermost first, as before)
+
+        The recursive version also passed each inner BLOCK through
+        IRDropManagedStrResult and IRMarkStatementNode. Both are no-ops on an
+        IR_BLOCK — the first only rewrites a managed-string CALL result, the
+        second only tags a call — so dropping them changes nothing, and the
+        equality was verified by compiling the same sources with the old and new
+        compiler and comparing the emitted binaries byte for byte.
+        bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow }
+      seqBase := IRSeqSpineTop;
+      seqCur := node;
+      while (ASTKind[seqCur] = AN_SEQ) or (ASTKind[seqCur] = AN_PAIR) do
+      begin
+        left := IRDropManagedStrResult(IRLowerAST(ASTLeft[seqCur]));
+        IRMarkStatementNode(left);
+        if IRSeqSpineTop >= MAX_IR_SEQ_SPINE then
+          Error('statement sequence too long (MAX_IR_SEQ_SPINE)');
+        IRSeqSpine[IRSeqSpineTop] := left;
+        IRSeqSpineTop := IRSeqSpineTop + 1;
+        seqCur := ASTRight[seqCur];
+      end;
+      { seqCur is the TAIL — the first node that is not itself a sequence. }
+      right := IRDropManagedStrResult(IRLowerAST(seqCur));
       IRMarkStatementNode(right);
-      Result := IRAppend(IR_BLOCK, left, right, -1, 0, 0);
+      while IRSeqSpineTop > seqBase do
+      begin
+        IRSeqSpineTop := IRSeqSpineTop - 1;
+        right := IRAppend(IR_BLOCK, IRSeqSpine[IRSeqSpineTop], right, -1, 0, 0);
+      end;
+      Result := right;
     end;
 
   else

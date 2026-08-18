@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:13 blocked:4 backlog:226 experimental:20 rainy-day:40 done-followup:3 decided:81 done:2002 rejected:38`
+`working:1 unfinished:13 blocked:4 backlog:225 experimental:20 rainy-day:40 done-followup:3 decided:81 done:2002 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow` [N] — owner: frank2
 
 ## unfinished (13) — parked mid-flight; re-claim, do not duplicate
 
@@ -34,7 +34,7 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 211, ranked
+## Ready — top 30 of 210, ranked
 
 - `[p 70] [U]` decide-week-theme-2026-08-17
 - `[p 70] [N]` regression-test-nilpy-callbacks
@@ -57,7 +57,6 @@ _none — no lane is locked._
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
-- `[p 50] [N]` bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow
 - `[p 50] [U]` decide-finalize-noop-vs-refusal
 - `[p 50] [U]` decide-staff-track-c-to-unblock-own-language-first
 - `[p 50] [D]` docs-cross-language-qualifier-note-is-wrong
@@ -66,5 +65,6 @@ _none — no lane is locked._
 - `[p 50] [E]` feature-demo-songformatter-pxx-target
 - `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
 - `[p 50] [A]` feature-nilpy-collections-and-string-methods
+- `[p 50] [P]` feature-p-read-text-into-a-char-arm
 
-_181 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_180 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

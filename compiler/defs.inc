@@ -112,6 +112,10 @@ const
   MAX_GOTO_LABELS = 2048; { was 64 — a stackless generator burns ~1 label per
                             yield + 2-3 per flattened if/while/for/case; chess's
                             GenMoves alone needs several hundred }
+  MAX_IR_SEQ_SPINE = 1048576;   { statement slots for IRLowerAST's iterative sequence
+                                  lowering — see IRSeqSpine. 4 MB of BSS against a
+                                  compiler that already reserves 162 MB, and it buys a
+                                  DIAGNOSTIC where the recursive version segfaulted. }
   MAX_DECL_ITEMS = 32768;       { top-level subroutine items recorded by the declaration pre-scan }
   MAX_PAS_DEFINES = 1024;       { jedi.inc-grade compatibility headers define hundreds }
   MAX_C_CMD_DEFINES = 256;      { C `-D`/`-U` command-line predefines }
@@ -2792,6 +2796,25 @@ var
   GotoLabelNLen   : array[0..MAX_GOTO_LABELS-1] of Integer; { name length }
   GotoLabelCodePos: array[0..MAX_GOTO_LABELS-1] of Integer; { code position; -1 = not yet placed }
   GotoLabelIRId   : array[0..MAX_GOTO_LABELS-1] of Integer; { IR label ID for IR path; -1 = unallocated }
+
+  { Scratch stack for IRLowerAST's statement-sequence lowering, which used to
+    recurse down the AN_SEQ right spine — ONE FRAME PER STATEMENT. IRLowerAST's
+    frame is ~6 KB, so a module with ~1700 statements needed ~10 MB of stack and
+    the compiler SEGFAULTED at the 8 MB default with no diagnostic. Measured on
+    html5lib: 1728 frames deep, and the crash landed in an unrelated leaf far
+    from the cause.
+
+    Used with stack discipline — each nesting level records its base index and
+    restores it — so a sequence nested inside another sequence's statement
+    reserves its own slots above and cannot disturb the outer one. Depth is now
+    O(block nesting) instead of O(statements).
+
+    Sized for one MILLION accumulated statements, which is far past any real
+    input, and an overflow REPORTS rather than crashing — the property the old
+    code could not offer at any size.
+    bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow }
+  IRSeqSpine    : array[0..MAX_IR_SEQ_SPINE-1] of Integer;
+  IRSeqSpineTop : Integer;
   GotoLabelCount  : Integer;
   GotoFixupCodePos: array[0..255] of Integer; { code position of the jmp rel32 operand }
   GotoFixupNOff   : array[0..255] of Integer; { name offset }

@@ -1,0 +1,16 @@
+# A long statement chain in an IMPORTED module — the shape that segfaulted the
+# compiler, and the reason it has to be an import: the main program's top-level
+# statements are lowered one at a time, while a module body arrives as one
+# right-leaning AN_SEQ chain. IRLowerAST recursed down it, one ~6 KB frame per
+# statement, and html5lib reached 1728 frames / ~10 MB — over the 8 MB default.
+# SIGSEGV, exit 139, no diagnostic, and the crash landed in an unrelated leaf.
+#
+# Run under a DELIBERATELY SMALL stack (see the Makefile line): that is what
+# makes 400 statements enough to catch a return of the recursion without
+# checking in a 2000-line file. With the recursion back, this segfaults at
+# 1 MB; iterative, it does not care.
+# bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow
+import nilpy_deepseq_mod
+
+print(nilpy_deepseq_mod.v0)
+print(nilpy_deepseq_mod.v399)

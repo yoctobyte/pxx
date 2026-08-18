@@ -537,6 +537,16 @@ test-nilpy: $(COMPILER)
 	# bug-n-a-qualified-base-class-named-like-its-subclass-is-rejected-as-self-inheritance
 	./$(COMPILER) test/test_nilpy_qualified_base_same_name.npy $(TESTTMP)/test_nilpy_qbasename26
 	test "$$($(TESTTMP)/test_nilpy_qbasename26)" = "$$(printf 'derived\nmodule\nmodule')"
+	# A long statement chain in an IMPORTED module, compiled under a DELIBERATELY
+	# SMALL stack. Lowering a statement list used to recurse once per statement
+	# (~6 KB a frame), so html5lib reached 1728 frames / ~10 MB and the compiler
+	# SEGFAULTED on the 8 MB default with no diagnostic. The 1 MB limit is what
+	# lets 400 statements catch that without checking in a 2000-line file: with
+	# the recursion back this dies 139, iterative it does not care. An import,
+	# not the main program — top-level statements are lowered one at a time.
+	# bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow
+	bash -c 'ulimit -s 1024; ./$(COMPILER) test/test_nilpy_deep_statement_chain.npy $(TESTTMP)/test_nilpy_deepseq26'
+	test "$$($(TESTTMP)/test_nilpy_deepseq26)" = "$$(printf '0\n399')"
 	# and the cycle itself REPORTS rather than spinning, whatever caused it
 	! ./$(COMPILER) test/test_nilpy_class_inherits_itself_fail.npy $(TESTTMP)/test_nilpy_selfbase26 > $(TESTTMP)/test_nilpy_selfbase.log 2>&1
 	grep -q 'cannot inherit from itself' $(TESTTMP)/test_nilpy_selfbase.log
@@ -6564,6 +6574,16 @@ test-core: $(COMPILER)
 	# the same shape with a .py MODULE — see the note on this pair in test-nilpy
 	./$(COMPILER) test/test_nilpy_qualified_base_same_name.npy $(TESTTMP)/test_nilpy_qbasename26
 	test "$$($(TESTTMP)/test_nilpy_qbasename26)" = "$$(printf 'derived\nmodule\nmodule')"
+	# A long statement chain in an IMPORTED module, compiled under a DELIBERATELY
+	# SMALL stack. Lowering a statement list used to recurse once per statement
+	# (~6 KB a frame), so html5lib reached 1728 frames / ~10 MB and the compiler
+	# SEGFAULTED on the 8 MB default with no diagnostic. The 1 MB limit is what
+	# lets 400 statements catch that without checking in a 2000-line file: with
+	# the recursion back this dies 139, iterative it does not care. An import,
+	# not the main program — top-level statements are lowered one at a time.
+	# bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow
+	bash -c 'ulimit -s 1024; ./$(COMPILER) test/test_nilpy_deep_statement_chain.npy $(TESTTMP)/test_nilpy_deepseq26'
+	test "$$($(TESTTMP)/test_nilpy_deepseq26)" = "$$(printf '0\n399')"
 	# and the cycle itself REPORTS rather than spinning, whatever caused it
 	! ./$(COMPILER) test/test_nilpy_class_inherits_itself_fail.npy $(TESTTMP)/test_nilpy_selfbase26 > $(TESTTMP)/test_nilpy_selfbase.log 2>&1
 	grep -q 'cannot inherit from itself' $(TESTTMP)/test_nilpy_selfbase.log
