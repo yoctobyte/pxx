@@ -179,4 +179,4 @@ p65, found here). Registered in `devdocs/dev/track-b-workarounds.md` with its
 revert condition.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit 53ccaa4da.
