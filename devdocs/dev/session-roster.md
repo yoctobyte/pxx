@@ -1534,3 +1534,31 @@ rerank it deliberately rather than inheriting the number).
   `urgent/` empty — worth noting frank2 has not claimed, so the reminder goes at its next
   natural report rather than as an interruption now. Same single documented false-positive
   red. No dispatch.
+
+- **2026-08-18 night — BOTH WORKERS CLEARED BY THE USER; yield finally dispatched.**
+  The one thing the whole day's dispatch discipline was protecting: `yield` goes to a
+  FRESH session, and both are now fresh with full budget.
+
+  **frank2-7e (A+N, sole-A) → `feature-nilpy-yield-outside-a-for-loop` (p75).** The
+  week's bet: 18 of the 32 remaining language walls, more than every missing-module
+  blocker combined. Briefed self-contained (a cleared session remembers nothing), pointed
+  at the four load-bearing sections of the 494-line ticket rather than the whole thing,
+  and warned about three things: **(1) the ticket contradicts itself** — a section near
+  line 252 says it depends on the pending boxed-def decision at step 4, and a later one
+  near 345 says re-measure that before believing it; the stale half comes FIRST, so a
+  fresh reader hits it and may stop wrongly. **(2)** do not start boxed-def option B
+  speculatively. **(3)** the failure mode is silent stack corruption in
+  `PyEmitParamSpills`, so measure rather than reason. Told to bank-and-park in
+  `unfinished/` rather than half-land a Track A change.
+
+  **frank3-fc (B) → `feature-b-mimic-urllib-request-over-the-rtl-http-stack` (p30).**
+  Best available in B. Briefed on the pin boundary, on the file being a *present-and-
+  refusing stub* (its existence is the ticket's premise, not evidence of completion), and
+  on `mimic_codecs.pas` as the established pattern to follow rather than inventing a
+  second one. Told the single corpus caller is a code generator, so nothing is blocked —
+  aim for an honest surface, refuse loudly where the RTL cannot back the real API.
+
+  **Note for the next coordinator session:** that self-contradiction inside the yield
+  ticket is worth fixing properly once the work settles — marking the superseded section
+  as superseded, in place, the way Track T banner-corrected its own closed timeout ticket.
+  Not doing it mid-flight while a worker is reading the file.
