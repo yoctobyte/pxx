@@ -42,7 +42,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (232)
+## backlog (233)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -56,13 +56,14 @@ _none_
 | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine | C | 55 | bug | A C function DEFINITION whose name matches a Pascal intrinsic (`sqrt` `exp` `ln` `sin` `cos` `arctan`) binds to the Pascal proc entry via case-insensitive FindProc and overwrites its BodyAddr. The Pascal implementation then becomes unreachable by ANY spelling — bare `Sqrt`, `math.Sqrt` and `cmath.sqrt` all return the C body — so a C file silently replaces the RTL's math for the whole program. This is what the ten `__crtl_*` prefixes in lib/crtl exist to dodge. | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 25 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
 | bug-n-a-class-base-that-is-an-expression-does-not-compile | N | 45 | bug | A class base which is a NAME bound to a type, or a call, does not compile: `B = object; class P(B)` fails where `class P(object)` and `class P(SomeClass)` both work. Blocks six.with_metaclass, which html5lib's parser spells as `class Phase(with_metaclass(...))` — the single remaining wall on html5parser.py. | — |
+| bug-n-a-from-import-of-a-compiler-provided-module-binds-no-names | N | 55 | bug | `from sys import argv` now resolves but binds nothing — a bare `argv` is `undefined variable` while `sys.argv` works. Consuming a from-import of a compiler-provided root (sys, os, textwrap, select, typing, itertools, dataclasses, __future__) discards the names it publishes, so the spelling CPython programs actually use is the one that does not work. General across all eight roots. | — |
+| bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through | N | 45 | bug | sys.version_info throws at RUNTIME with a message admitting its own guard failed: 'the code guarding that (the flag its except-branch sets) let this call through anyway'. Two defects — the member is missing, and the compile-time guard meant to catch that does not fire. A guard that reports its own failure and continues is worse than no guard. | — |
 | bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members | N | 40 | bug | A module that defines a name equal to its own module name makes every QUALIFIED access to the module's other members fail: `import bisect; bisect.bisect_left(...)` gives `no class declares a method or callable field .bisect_left()`, because `bisect` resolves to the module's member rather than the module. CPython's own Lib/bisect.py has `bisect = bisect_right`, so this is ordinary stdlib-shaped code. From-imports are unaffected. | — |
 | bug-n-a-unicode-identifier-is-rejected-by-the-lexer | N | 25 | bug | `_κ = 5` is legal Python 3 and the NilPy lexer rejects it with `unexpected character`. Non-ASCII in a STRING literal already works, so this is the identifier path only. Two tinycss2 files (color4.py, color5.py) use Greek letters as names for colour-space constants. | — |
 | bug-n-abs-of-a-complex-raises-typeerror | N | 35 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
 | bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program | N | 45 | bug | `class X(mod.X)` — a class whose qualified base shares its name — is refused with `class X cannot inherit from itself` when written in the MAIN PROGRAM. The identical code in a pulled `.py` module compiles and dispatches correctly, and renaming either class makes the program case work too, so the variable is the name collision on the program path. This is how all ~100 of CPython's `encodings/*.py` and html5lib's filters are written. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 35 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
 | bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes | N | 75 | bug | `from <shim> import Class` then `Class.CONSTANT` is a compile error — `undefined variable (CONSTANT)` — while the SAME file imported as a plain module works, the same shim reached by its literal mimic_ filename works, and the qualified `import shim; shim.Class.CONSTANT` works. So the class object carries its attributes; only the binding produced by a from-import through the mimic_ mapping loses them. Blocks every shim that exports a constants class, mimic_xml_dom included, because the corpus spelling is exactly `from xml.dom import Node` then `Node.TEXT_NODE`. | — |
-| bug-n-from-sys-import-fails-while-import-sys-works | N | 55 | bug | `import sys` works and `from sys import version_info` does not — `error: import: no unit named sys and no shim mimic_sys`. Same for `os`. The from-import path does not consult whatever table the plain-import path resolves builtin modules through; `math`, `time` and the mimic_ shims resolve either way, so it is these compiler-provided modules specifically. One corpus file (html5lib/_tokenizer.py) stops here. | — |
 | bug-n-kwargs-collector-alongside-named-params-needs-the-remainder | N | 30 | bug | `def f(a=1, **kw)` called as `f(**{'a':5,'x':7,'y':8})` must give a=5 and kw={'x':7,'y':8} — the collector takes the UNCONSUMED keys. pylib has no helper that subtracts consumed names, and adding one is compiler/builtin/** which NEEDS A PIN, so this is coordinator-scheduled, not worker-startable. | — |
 | bug-n-name-on-a-builtin-type-is-unimplemented | N | 35 | bug | `str.__name__` / `int.__name__` raise AttributeError: 'type' object has no attribute '__name__'. A USER class answers correctly, so only the builtin-type value (VT_BTYPE) is missing the attribute. Clean Python-shaped error, not a crash. | — |
 | bug-n-pylib-cannot-reach-the-rtl-power-so-complex-magnitude-loses-ulps | N | 25 | bug | `pycomplex_pow` computes \|z\|**b as exp(b*ln\|z\|) — two roundings — where CPython calls pow() directly, so `(-8.0) ** 0.5` gives an imaginary part of 2.8284271247461894 against CPython's 2.8284271247461903 (~4 ulp). The cause is structural: pylib lives in compiler/builtin and cannot reach the RTL's correctly-rounded Power, which is why it carries its own series ln/exp in the first place. | — |
@@ -444,9 +445,9 @@ _none_
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 | decide-week-theme-2026-08-17 | U | 70 | decide | What should the next week of work aim at? Measured: the bug backlog already peaked (61 on 08-03 -> 32 now) and 65% of open tickets are features, so this is no longer a burn-down question. Three candidate themes with the numbers behind each. | — |
 
-## done (2014)
+## done (2015)
 
-2014 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2015 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -503,7 +504,7 @@ _none_
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [C] bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
-- [p 55] [N] bug-n-from-sys-import-fails-while-import-sys-works
+- [p 55] [N] bug-n-a-from-import-of-a-compiler-provided-module-binds-no-names
 - [p 55] [T] bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 - [p 55] [T] bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label
 - [p 55] [U] decide-what-an-unwired-test-may-assert
@@ -532,6 +533,7 @@ _none_
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
 - [p 45] [N] bug-n-a-class-base-that-is-an-expression-does-not-compile
+- [p 45] [N] bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through
 - [p 45] [N] bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program
 - [p 45] [N] bug-n-self-class-cannot-be-called-as-a-constructor
 - [p 45] [T] bug-t-split-jobs-misses-a-tmp-path-reached-through-a-shell-variable
