@@ -70,3 +70,42 @@ carved out into their own lexer/parser; Pascal never was.
 neutral, but the default is per-language files, and "make it serve both" is the move
 this note exists to refuse. Tracked as
 `refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files`.
+
+## Granularity: a file is the unit of ownership, not a topic label
+
+Measured 2026-08-18: `compiler/` is **58 files, 169k lines, one subdirectory**
+(`builtin/`). `parser.inc` is **36,217 lines**; `pyparser.inc` is 34,374.
+
+> "A human would have made a subfolder with dozens of files. AI agents insist on having
+> a single `.inc` file per topic. Which is fair but lacks design." — user, 2026-08-18
+
+**The mechanism is a friction gradient, not laziness.** Appending to an existing file
+requires no judgement about where the code belongs and no include-list edit; creating a
+new file requires both. Repeated a few thousand times, that asymmetry produces a 36k-line
+file. Pascal's `{$I}` makes splitting mechanically trivial, so there is no technical
+excuse.
+
+**Two costs, both already being paid:**
+
+1. **Granularity IS concurrency.** The track rule "A and P must never edit these
+   concurrently" keys on *files*. `parser.inc` serializes two lanes **because it is one
+   file**. Split into per-area files, the lanes would collide only when genuinely working
+   the same area. A monolith converts occasional contention into permanent serialization.
+
+2. **It manufactures the repo's most common bug shape** — *one concept, N independent
+   sites; fix one and the others stay wrong.* Class attributes (3 lowerings × 4 routes),
+   `Callable` (3 representations), the subscript protocol (3 members), value→text (3
+   paths), a variadic def (4 carriers), name resolution (6 tables). **In a 36k-line file
+   you cannot see that the sibling exists**, so you add a parallel path instead of
+   extending the existing one. The monolith is not only where those bugs live; it is part
+   of why they keep being written.
+
+**The real counter-argument, and it is specific to this codebase:** this is a
+**single-pass** compiler where include ORDER is load-bearing, and a routine header
+missing `forward;` silently **nests every later routine** — surfacing as a "nested
+routine token buffer overflow" naming code nobody touched. So splitting carries a known
+landmine class. That is an argument for doing it deliberately, in slices, with the
+self-host fixedpoint as the gate after each — **not** for leaving 36k-line files alone.
+
+**How to apply, going forward:** when adding a genuinely new area to a large `.inc`,
+create the file. The judgement it costs you is the judgement the design needs.

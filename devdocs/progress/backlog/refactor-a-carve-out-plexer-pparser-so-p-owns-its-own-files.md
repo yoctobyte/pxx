@@ -108,3 +108,24 @@ Now written up as a standing principle in
 **Consequence for whoever takes this:** measure the split by *what Pascal alone needs*,
 not by what looks factorable. Two similar-looking routines in `pasparser.inc` and
 `pyparser.inc` are the intended end state, not debt to be cleaned up later.
+
+## The rename alone is only half the fix — it must also SPLIT
+
+`parser.inc` is **36,217 lines** (measured 2026-08-18; `pyparser.inc` 34,374; the whole
+compiler is 58 files / 169k lines with exactly one subdirectory).
+
+Renaming to `pasparser.inc` fixes **ownership**. It does not fix **contention**: A and P
+would still serialize, because the lane rule keys on files and there would still be one
+file. **Granularity is what buys parallelism** — split into per-area units (declarations,
+statements, expressions, types, classes, generics, units, directives) and the lanes
+collide only when genuinely working the same area.
+
+Second reason, independent of concurrency: a 36k-line file is where *"one concept, N
+independent sites"* bugs are born — you cannot see that the sibling path exists, so you
+write a second one. That shape dominates this repo's bug history.
+
+**Method, given the known hazard:** this is a single-pass compiler where include ORDER is
+load-bearing and a header missing `forward;` nests every later routine. So slice by slice,
+with `make compiler/pascal26` (the byte-identical fixedpoint) as the gate after each —
+never one big move. Rationale in
+`devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md`.
