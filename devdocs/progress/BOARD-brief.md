@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:16 blocked:5 backlog:233 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2016 rejected:38`
+`unfinished:15 blocked:5 backlog:233 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2017 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (16) — parked mid-flight; re-claim, do not duplicate
+## unfinished (15) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults` [N]
@@ -25,7 +25,6 @@ _none — no lane is locked._
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
-- `feature-nilpy-xml-dom-is-two-questions-not-one` [B] — blocked-by: bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes
 - `feature-pascal-corpus-generics` [P]
 - `feature-port-rtl-over-libc` [A]
 - `feature-real-dynlib-loader` [B] — blocked-by: bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert

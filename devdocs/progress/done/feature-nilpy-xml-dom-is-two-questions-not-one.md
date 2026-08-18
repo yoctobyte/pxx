@@ -4,7 +4,7 @@ prio: 55
 type: feature
 blocked-by: [bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes]
 summary: "The xml_dom ladder row (4 files) is two unrelated questions. Three files need only `Node` — 12 integer constants, zero methods, closed by the DOM spec, trivially shimmable. One file needs a real DOM (~25 methods plus a private minidom internal) and is a project, not a shim. MEASURED CONCLUSION: do not write it — the shim unblocks ZERO files today, and writing it before the trailing-class initialiser bug lands would produce a shim whose every constant reads as 0."
-status: working
+status: done
 owner: frank3-fc
 ---
 
@@ -249,3 +249,57 @@ were unblocked.
    files were previously measured to land on `digits` (now fixed) and
    `weakref`; that measurement predates two pins and must be re-taken, not
    quoted.
+
+---
+
+## LANDED 2026-08-18 (frank3-fc) — pinned v350 (`66f59112e1a9`, pin `46a6189a9`)
+
+The blocker
+([[bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes]]) was
+fixed in `6cd63b836` and reached Track B in v350. Question 1 is in.
+
+**Verified by VALUE, which is the whole point of this ticket.**
+`test/lib_mimic_xml_dom.npy` reads all twelve nodeType constants back and diffs
+them against the numbers CPython gives — 20 checks green, plus the distinctness
+and comparison shapes html5lib's treewalkers actually branch on. Wired into
+`make lib-test` (green, exit 0). A test asserting the import resolved would have
+passed during both compiler bugs while the shim answered zero; this one would
+not have.
+
+### The cause was in neither place we looked
+
+`ConsumeUnitQualifier` was eating `Node` as a unit qualifier and then looking
+`TEXT_NODE` up as a bare symbol — which is exactly why the diagnostic named the
+ATTRIBUTE and read as a class-attribute fault to everyone. The guard that skips
+that for a class looked the unit up by the name the SOURCE wrote, so for a shim
+it searched the bare module name, found nothing, and stood down for every shim.
+One identifier. Worth recording because the symptom description in the bug
+ticket was accurate and still pointed at the wrong subsystem.
+
+### Score: past the wall 0, onto the next wall 3
+
+| file | was (v349) | now (v350) |
+| --- | --- | --- |
+| `treewalkers/base.py` | undefined variable (DOCUMENT_NODE) | undefined variable (yield) |
+| `treewalkers/dom.py` | undefined variable (DOCUMENT_NODE) | undefined variable (yield) |
+| `treewalkers/etree.py` | undefined variable (DOCUMENT_NODE) | undefined variable (yield) |
+| `treebuilders/dom.py` | missing module: weakref | unchanged — question 2 |
+
+Compile count **6/48 → 6/48**. This ticket did not move the compile number and
+should not be read as having done so: it moved three files off a shim wall onto
+`yield`, which is now the top row at 14 files.
+
+**Attribution, since v350 carries more than this ticket:**
+`html5lib/_tokenizer.py` also moved (`missing module: sys` →
+`missing module: six_moves`). That is
+[[bug-n-from-sys-import-fails-while-import-sys-works]] being fixed — frank2's
+work, not this ticket's. Nothing else changed.
+
+### What remains under this row
+
+Question 2 only, split out as [[feature-b-a-real-minidom-is-an-implementation-not-a-shim]]
+(B, p15), and `treebuilders/dom.py` still sits on `missing module: weakref`
+exactly where it was measured.
+
+## Log
+- 2026-08-18 — resolved, commit PENDING-COMMIT.

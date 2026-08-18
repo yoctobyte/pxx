@@ -33,16 +33,16 @@ VALUES, not that the import resolves -- resolving is exactly what it did while
 answering zero. test/lib_mimic_xml_dom.npy asserts `TEXT_NODE == 3` against
 CPython for that reason, and its assertions are load-bearing.
 
-NOT YET GATED, AND NOT YET USABLE THROUGH ITS OWN SPELLING. As of pinned v349,
-`from xml.dom import Node` followed by `Node.TEXT_NODE` does not compile --
-`undefined variable (TEXT_NODE)` -- while the byte-identical file as a plain
-module, the same shim reached by its literal `mimic_xml_dom` name, and
-`import`-plus-qualified access all answer correctly. That is
-bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes (N, p75), and
-the failing spelling is html5lib's own, so there is nothing to rewrite here.
-test/lib_mimic_xml_dom.npy therefore is NOT wired into `make lib-test` yet: it
-passes under CPython and cannot pass under pxx until that lands. Wire it in and
-re-run the ladder then; the file is checked in so the work is not re-done.
+BLOCKED FIVE TIMES BEFORE IT LANDED, AND THE LAST ONE WAS NOT ABOUT THIS FILE.
+As of v349, `from xml.dom import Node` then `Node.TEXT_NODE` did not compile:
+`ConsumeUnitQualifier` was eating `Node` as a unit qualifier and then looking
+`TEXT_NODE` up as a bare symbol, which is why the diagnostic named the
+ATTRIBUTE and read as a class-attribute fault to everyone who looked at it. The
+guard that should have skipped that for a class looked the unit up by the name
+the SOURCE wrote, so for a shim it searched the bare module name, found nothing,
+and stood down for every shim there is
+(bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes, fixed in
+6cd63b836, reaching Track B in pin v350). Landed and gated from v350.
 
 DELIBERATELY ABSENT: `minidom`. `html5lib/treebuilders/dom.py` wants a real DOM
 -- ~25 methods, document construction and mutation, plus a reach into minidom's

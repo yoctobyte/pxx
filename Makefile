@@ -10366,6 +10366,16 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_sax_xmlreader.npy $(TESTTMP)/lib_mimic_xmlreader
 	test "$$($(TESTTMP)/lib_mimic_xmlreader | grep -c '=ok')" = "21"
 	test "$$($(TESTTMP)/lib_mimic_xmlreader | tail -1)" = "MIMIC-XMLREADER OK"
+	# xml.dom.Node's twelve nodeType constants
+	# (feature-nilpy-xml-dom-is-two-questions-not-one). Every assertion is on a
+	# VALUE, deliberately: a constants-only class was the exact construct that
+	# read back as 0 under two separate compiler bugs, and a test checking that
+	# the import resolves would have passed the whole time the shim was
+	# answering zero. If these are ever "simplified" to presence checks the
+	# coverage is gone and nothing will fail to say so.
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_dom.npy $(TESTTMP)/lib_mimic_xml_dom
+	test "$$($(TESTTMP)/lib_mimic_xml_dom | grep -c '=ok')" = "20"
+	test "$$($(TESTTMP)/lib_mimic_xml_dom | tail -1)" = "MIMIC-XML-DOM OK"
 	# DNS backend selection: the default (dns_wire) must be undisturbed by the
 	# new backend, and -dPXX_DNS_RESOLVED must agree with it. Both use only
 	# localhost, so neither needs the network; the resolved half skips itself
