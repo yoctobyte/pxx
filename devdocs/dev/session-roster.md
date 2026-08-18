@@ -961,3 +961,32 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   reporter files the shape they hit and the shape is almost never the boundary — so a
   title is evidence about the encounter, not the defect, and nothing should be SIZED from
   one. Convention in use: re-scope in the body, leave the retitle to whoever takes it.
+
+- 2026-08-18 ~19:15 — **pin v349, forced by a coordinator error worth recording.** I
+  verified frank2-7e's last-class fix with the **HEAD** compiler, saw the right values,
+  and told frank3-fc the `xml_dom` ticket was unblocked. **Track B ships on
+  `$(PXX_STABLE)`, and I never checked whether the fix was in it.** It was not — and
+  neither were the other two:
+
+  ```
+  12275b26f  last-class hoist drain      not in v348
+  3d66bdff7  cross-module defaults       not in v348
+  b67db02bb  shim-class visibility       not in v348
+  ```
+
+  frank3 measured on its own toolchain instead of trusting my ordering, found the bug
+  fully live there, and **refused to land a shim that would have read every nodeType as
+  0** — the exact failure its two earlier refusals were right about, arriving through the
+  PIN rather than through the code. Third correct refusal on one ticket, and this one
+  caught the coordinator rather than the compiler.
+  Pinned v349 (`596799fd9c6e`, `a6e8e763e`) and verified the repro **on the pinned
+  binary** before releasing it: `1 3 9` / `1 3`, where v348 gave `0 0 0` / `0 0`.
+  **The generalisable rule, which is a sharpening of one I have been repeating all day:**
+  "verify against a known sha" is not enough — verify against **the binary the CONSUMER
+  will use**. HEAD and `PXX_STABLE` are different grounds and a fix can be green on one
+  and absent from the other for hours. A/N/P verify at HEAD; B and E ship on the pin. So
+  **when a compiler fix is what unblocks a library ticket, the pin is part of the fix**,
+  not a later convenience — announce it and run it before declaring anything unblocked.
+  Also worth keeping: told it was blocked, frank3 did everything that did NOT need the
+  pin (the ticket's own design question, the shim, the CPython half of the differential)
+  and drew the line exactly at landing. That is how to spend a block.
