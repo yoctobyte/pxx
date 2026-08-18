@@ -1120,3 +1120,4 @@
 {"date": "2026-08-18T02:50:33Z", "fixed": [], "full": false, "new_red": [], "sha": "e0f6748717e67d50d39ca5fc04057814575c4890", "still_red": [], "tier": "native", "verdict": "GREEN", "wall": 214.6}
 {"date": "2026-08-18T03:10:52Z", "fixed": [], "full": true, "new_red": [], "sha": "e0f6748717e67d50d39ca5fc04057814575c4890", "still_red": ["lib-test#src:test/crtl_exp2.c", "test-nilpy#src:examples/tk/callbacks.npy"], "tier": "full", "verdict": "RED", "wall": 1171.0}
 {"date": "2026-08-18T03:15:49Z", "fixed": [], "full": false, "new_red": [], "sha": "e0f6748717e67d50d39ca5fc04057814575c4890", "still_red": [], "tier": "slow", "verdict": "GREEN", "wall": 290.1}
+{"date": "2026-08-18T03:21:11Z", "fixed": [], "full": false, "new_red": [], "sha": "e0f6748717e67d50d39ca5fc04057814575c4890", "still_red": [], "tier": "opt", "verdict": "GREEN", "wall": 309.4}
