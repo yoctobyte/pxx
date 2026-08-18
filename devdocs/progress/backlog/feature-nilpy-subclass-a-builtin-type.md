@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 40
+prio: 55
 type: feature
 blocked-by: []
 summary: "`class X(list)` / `(dict)` / `(str)` is refused with `Nil Python: unknown base class <t>` — a NilPy class can only inherit from another user class or `object`. Base-class resolution goes through FindUClassNonRecord, a USER-class lookup, and the builtin types are not user classes. 4 corpus files, one of them imported by 10 others."
@@ -66,3 +66,16 @@ be a shim question instead — worth separating when this is picked up.
 `make test-nilpy` + self-host byte-identical. Plus: a `list` subclass that
 appends and indexes, a `dict` subclass that is read through `[]` and `in`, and
 each passed to a function annotated with the builtin type.
+
+## Reranked 40 -> 55 by the coordinator, 2026-08-18 — it gates a chokepoint
+
+Verified independently before reranking: `class X(list)`, `(dict)` and `(str)` all fail
+with `unknown base class`, while `object` compiles. So this is the whole builtin
+surface, as filed, not one missing name.
+
+The rerank is not about the row size. `html5lib/_utils.py` carries
+`MethodDispatcher(dict)` and is imported by **10 of html5lib's 52 files** — the same
+chokepoint shape `constants.py` had for the `digits` wall, which is the row that
+actually moved on 2026-08-18. So this blocks a file that blocks ten, and it pairs with
+[[feature-b-module-shims-for-the-html5lib-corpus]]: `_utils.py` needs both, and scoring
+it as shim-only would under-count it.

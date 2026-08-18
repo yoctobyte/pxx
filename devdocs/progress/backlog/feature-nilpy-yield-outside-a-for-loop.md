@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 35
+prio: 58
 type: feature
 ---
 
@@ -108,3 +108,22 @@ That is the argument for ranking it alongside the shims rather than behind them.
 
 Recorded as evidence only. Ranking is the coordinator's and the user's call —
 `prio:` deliberately untouched.
+
+## Reranked 35 -> 58 by the coordinator, 2026-08-18 — on corpus evidence
+
+Rank follows evidence rather than preceding it, so this moved only once the files were
+named. Three corpus files stop on `yield` and nothing else
+(`html5lib/filters/inject_meta_charset.py`, `optionaltags.py`, `whitespace.py`), and 11
+more reach it once the module shims land.
+
+Placed at 58 rather than at the shim ticket's 60 deliberately: the shims unblock more
+files outright, but these two **compound** and neither alone opens html5lib's pipeline.
+Scheduling them in the same window is the point of the number, not the ordering between
+them. See [[feature-b-module-shims-for-the-html5lib-corpus]].
+
+**Title warning, raised by frank2-7e and left in place rather than fixed here:** this
+ticket's title has already been wrong once, and it is still wrong. The 2026-07-31 recon
+was re-measured 2026-08-18 and is exactly right — **no** `yield` shape works, including
+the for-driven and method forms the title implies are fine. Anyone sizing this from the
+title alone will read it as a context bug and under-scope it. Retitling is a hygiene
+call left for whoever takes it.
