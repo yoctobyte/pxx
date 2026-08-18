@@ -41,7 +41,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (235)
+## backlog (234)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -68,7 +68,6 @@ _none_
 | bug-n-name-on-a-builtin-type-is-unimplemented | N | 35 | bug | `str.__name__` / `int.__name__` raise AttributeError: 'type' object has no attribute '__name__'. A USER class answers correctly, so only the builtin-type value (VT_BTYPE) is missing the attribute. Clean Python-shaped error, not a crash. | — |
 | bug-n-pylib-cannot-reach-the-rtl-power-so-complex-magnitude-loses-ulps | N | 25 | bug | `pycomplex_pow` computes \|z\|**b as exp(b*ln\|z\|) — two roundings — where CPython calls pow() directly, so `(-8.0) ** 0.5` gives an imaginary part of 2.8284271247461894 against CPython's 2.8284271247461903 (~4 ulp). The cause is structural: pylib lives in compiler/builtin and cannot reach the RTL's correctly-rounded Power, which is why it carries its own series ln/exp in the first place. | — |
 | bug-n-self-class-cannot-be-called-as-a-constructor | N | 45 | bug | `self.__class__(args)` does not compile — `error: A has no method __class__` — while `self.__class__.__name__` reads fine and `type(a).__name__` works. Calling the class object is the standard Python idiom for 'construct another one of my own type', and it is what CPython's own xml.sax AttributesImpl.copy() does; lib/rtl/mimic_xml_sax_xmlreader.py names its class explicitly instead, registered in track-b-workarounds.md. | — |
-| bug-n-subscripting-a-container-literal-inside-a-function-segfaults | N | 65 | bug | `return (a, b)[i]` inside a function or method segfaults at runtime, no diagnostic. Both tuple and list literals; constant or variable index; constant or variable contents — all crash. The SAME expression at module level works, binding the literal to a local first works, and subscripting a string literal works. Found writing lib/rtl/mimic_urllib_parse.py, where a ParseResult's __getitem__ is exactly this shape. | — |
 | bug-n-two-argument-super-does-not-parse | N | 60 | bug | `super(Cls, self).__init__(x)` is `error: unexpected token`, while the zero-argument `super().__init__()` works. The two-argument form is Python 2's spelling, still valid Python 3 and still what portable libraries write — html5lib uses it in every filter. It is now the wall html5lib/filters/sanitizer.py sits on, the file the six.moves work was aimed at. | — |
 | bug-nilpy-an-extended-slice-cannot-be-assigned | N | 30 | bug | `l[::2] = [7, 8]` is a parse error. The READ form `l[::2]` works, and the plain-slice ASSIGN `l[1:3] = [9]` works; only the strided assignment is missing. | — |
 | bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds | N | 20 | bug | A dict VALUE as the `*=` target still rebinds, so an alias of it keeps the old contents. The parameter half landed 2026-08-15 (pymul_v_inplace); this is the residue, and `+=` has the same split. | — |
@@ -446,9 +445,9 @@ _none_
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 | decide-week-theme-2026-08-17 | U | 70 | decide | What should the next week of work aim at? Measured: the bug backlog already peaked (61 on 08-03 -> 32 now) and 65% of open tickets are features, so this is no longer a burn-down question. Three candidate themes with the numbers behind each. | — |
 
-## done (2021)
+## done (2022)
 
-2021 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2022 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -496,7 +495,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 88] [U] decide-how-a-compiled-def-carries-its-signature-when-boxed (unblocks 2)
-- [p 65] [N] bug-n-subscripting-a-container-literal-inside-a-function-segfaults
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
 - [p 65] [P] feature-pascal-corpus-oop

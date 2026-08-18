@@ -4079,6 +4079,64 @@ begin
   end;
 end;
 
+{ Where the container LITERAL that starts at `startIdx` CLOSES, or -1 if it
+  does not close inside the span. Its only caller is PyLiteralPostfixType. }
+function PyLitGroupEnd(startIdx, endIdx: Integer): Integer;
+var k, depth: Integer;
+begin
+  Result := -1;
+  depth := 0;
+  k := startIdx;
+  while k < endIdx do
+  begin
+    if Tokens[k].Kind in [tkLBrack, tkLParen, tkBegin] then Inc(depth)
+    else if Tokens[k].Kind in [tkRBrack, tkRParen, tkEnd] then
+    begin
+      Dec(depth);
+      if depth = 0 then begin Result := k; Exit; end;
+    end;
+    Inc(k);
+  end;
+end;
+
+{ A container LITERAL is not always the WHOLE expression: `(1, 2)[0]`,
+  `[1, 2].count(1)` and `{"a": 1}["a"]` all START with one and are not one.
+  The two literal arms below used to answer the literal's own class and Exit
+  the moment they saw the opening bracket, so `def f(): return (1, 2)[0]`
+  registered a CLASS result, the element variant was read back as an object
+  handle, and `print(f())` walked a dangling list inside pylist_repr and
+  SEGFAULTED. Every axis crossed the same way — tuple or list, constant or
+  variable contents, constant or variable index — because none of them is the
+  axis: the literal-vs-bound one is. Binding it first (`t = (1, 2)` then
+  `t[0]`) always worked, because a bare ident reaches the `name[...]` arm
+  further down, which has answered "a subscript yields a VARIANT" since
+  bug-nilpy-subscript-and-slice-of-a-variant-get-the-wrong-static-type.
+  That arm is keyed to an IDENT receiver, so the literal receiver never met it
+  — the sibling case devdocs/dev/normalise-dont-special-case.md is about.
+
+  Answers the type of whatever POSTFIX follows the literal, and tyUnknown when
+  the literal really is the whole expression (or is only an operand, `[1] + x`,
+  where the existing literal answer is right).
+  bug-n-subscripting-a-container-literal-inside-a-function-segfaults }
+function PyLiteralPostfixType(startIdx, endIdx: Integer): TTypeKind;
+var ce: Integer;
+begin
+  Result := tyUnknown;
+  ce := PyLitGroupEnd(startIdx, endIdx);
+  if (ce < 0) or (ce + 1 >= endIdx) then Exit;
+  { `[1, 2, 3][0:2]` — a SLICE yields the container again, so the literal's own
+    class stays the right answer. }
+  if (Tokens[ce + 1].Kind = tkLBrack) and not PySliceBracketAt(ce + 1, endIdx) then
+  begin
+    Result := tyVariant;
+    Exit;
+  end;
+  { `[1, 2].count(1)` / `(a, b)[0].upper()` — a method on a literal. The
+    element or result could be anything, and tyVariant is the answer this scan
+    already gives for a call it cannot type statically. }
+  if Tokens[ce + 1].Kind = tkDot then Result := tyVariant;
+end;
+
 function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
     fldCi, fldAt: Integer; fldTk: TTypeKind;
@@ -4186,6 +4244,8 @@ begin
   if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkLParen) and
      PyTupleParenAt(startIdx) then
   begin
+    Result := PyLiteralPostfixType(startIdx, endIdx);
+    if Result <> tyUnknown then begin PyInferLastCi := -1; Exit; end;
     Result := tyClass;
     PyInferLastCi := FindUClass('TPyList');
     Exit;
@@ -4193,6 +4253,8 @@ begin
   if (startIdx < endIdx) and
      ((Tokens[startIdx].Kind = tkLBrack) or (Tokens[startIdx].Kind = tkBegin)) then
   begin
+    Result := PyLiteralPostfixType(startIdx, endIdx);
+    if Result <> tyUnknown then begin PyInferLastCi := -1; Exit; end;
     Result := tyClass;   { list / set-as-list / dict literal }
     if (Tokens[startIdx].Kind = tkBegin) and PyDictLiteralAt(startIdx) then
       PyInferLastCi := FindUClass('TPyDict')

@@ -555,6 +555,19 @@ test-nilpy: $(COMPILER)
 	# while their from-spelling worked. Every root is imported both ways here, so
 	# adding a root to one path and forgetting the other fails HERE.
 	# bug-n-from-sys-import-fails-while-import-sys-works
+	# `return (a, b)[i]` inside a function SEGFAULTED, tuple and list alike, with
+	# constant or variable contents and a constant or variable index -- while the
+	# same expression at module level, and binding the literal to a local first,
+	# both worked. None of those was the axis: the return-type scan answered the
+	# LITERAL's class and Exited on the opening bracket, ignoring the postfix, so
+	# the element variant came back through a class result slot and print walked a
+	# dangling list. The subscript-yields-a-variant rule existed but was keyed to an
+	# IDENT receiver, which is why only literal-vs-bound predicted the crash.
+	# Last three rows are the neighbours that must NOT move: a slice still yields
+	# the container, a bare literal still returns as one, and a literal OPERAND is
+	# untouched. bug-n-subscripting-a-container-literal-inside-a-function-segfaults
+	./$(COMPILER) test/test_nilpy_subscript_container_literal.npy $(TESTTMP)/test_nilpy_sublit26
+	test "$$($(TESTTMP)/test_nilpy_sublit26)" = "$$(printf '1\n8\n20\n2\n2\n3\nno yes\nx y\n[1, 2]\n(1, 2)\n[1, 2, 3]')"
 	./$(COMPILER) test/test_nilpy_import_spellings.npy $(TESTTMP)/test_nilpy_impspell26
 	test "$$($(TESTTMP)/test_nilpy_impspell26)" = "$$(printf 'both spellings resolve\nunits still resolve')"
 	# `from <shim> import Class` then `Class.ATTR` was `undefined variable`, while
@@ -6654,6 +6667,19 @@ test-core: $(COMPILER)
 	# while their from-spelling worked. Every root is imported both ways here, so
 	# adding a root to one path and forgetting the other fails HERE.
 	# bug-n-from-sys-import-fails-while-import-sys-works
+	# `return (a, b)[i]` inside a function SEGFAULTED, tuple and list alike, with
+	# constant or variable contents and a constant or variable index -- while the
+	# same expression at module level, and binding the literal to a local first,
+	# both worked. None of those was the axis: the return-type scan answered the
+	# LITERAL's class and Exited on the opening bracket, ignoring the postfix, so
+	# the element variant came back through a class result slot and print walked a
+	# dangling list. The subscript-yields-a-variant rule existed but was keyed to an
+	# IDENT receiver, which is why only literal-vs-bound predicted the crash.
+	# Last three rows are the neighbours that must NOT move: a slice still yields
+	# the container, a bare literal still returns as one, and a literal OPERAND is
+	# untouched. bug-n-subscripting-a-container-literal-inside-a-function-segfaults
+	./$(COMPILER) test/test_nilpy_subscript_container_literal.npy $(TESTTMP)/test_nilpy_sublit26
+	test "$$($(TESTTMP)/test_nilpy_sublit26)" = "$$(printf '1\n8\n20\n2\n2\n3\nno yes\nx y\n[1, 2]\n(1, 2)\n[1, 2, 3]')"
 	./$(COMPILER) test/test_nilpy_import_spellings.npy $(TESTTMP)/test_nilpy_impspell26
 	test "$$($(TESTTMP)/test_nilpy_impspell26)" = "$$(printf 'both spellings resolve\nunits still resolve')"
 	# `from <shim> import Class` then `Class.ATTR` was `undefined variable`, while

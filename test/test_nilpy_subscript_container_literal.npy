@@ -1,0 +1,71 @@
+# `return (a, b)[i]` inside a function segfaulted: the return-type inference
+# answered the LITERAL's class (a TPyList) and Exited on the opening bracket,
+# ignoring everything after it, so the element variant was handed back through
+# a class result slot and print walked a dangling list.
+# Every row here is a shape that crashed; the last three are the neighbours
+# that must NOT change.
+# bug-n-subscripting-a-container-literal-inside-a-function-segfaults
+
+
+def tup():
+    return (1, 2)[0]
+
+
+def tup_vars(a, b, i):
+    return (a, b)[i]
+
+
+def lst():
+    return [10, 20, 30][1]
+
+
+def dct():
+    return {"a": 1, "b": 2}["b"]
+
+
+def meth_on_literal():
+    return [1, 2, 1].count(1)
+
+
+def nested():
+    return [[1, 2], [3, 4]][1][0]
+
+
+def lut(flag):
+    # how Python spells a small lookup table
+    return ("no", "yes")[flag]
+
+
+class Rec:
+    def __init__(self):
+        self.a = "x"
+
+    def field(self, i):
+        return (self.a, "y")[i]
+
+
+def slice_of_literal():
+    # a SLICE yields the container again -- still a list
+    return [1, 2, 3][0:2]
+
+
+def whole_literal():
+    return (1, 2)
+
+
+def literal_operand():
+    return [1, 2] + [3]
+
+
+print(tup())
+print(tup_vars(7, 8, 1))
+print(lst())
+print(dct())
+print(meth_on_literal())
+print(nested())
+print(lut(0), lut(1))
+r = Rec()
+print(r.field(0), r.field(1))
+print(slice_of_literal())
+print(whole_literal())
+print(literal_operand())
