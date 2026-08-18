@@ -111,3 +111,47 @@ compiler inferred; print it.
 Check it against a second source before writing it down. Every wrong root cause
 in this repo's ticket history was a plausible story that nobody diffed against
 an oracle. `pydiff`, gcc, FPC and CPython are all cheaper than a reverted fix.
+
+### When a NEW variable explains everything you have seen, cross it against the old one
+
+Varying what you held fixed is how you find a boundary. Walking that one new
+axis is how you write down a rule that fits every observation you have and is
+still wrong.
+
+Worked example, `bug-n-from-import-with-an-as-rename-loses-what-it-renames`,
+2026-08-18. `from M import X as alias` was misbehaving. Two sessions measured
+it, and each produced a table that was accurate and complete for the rows in
+it:
+
+| reading | evidence for it | why it was wrong |
+| --- | --- | --- |
+| "the argument count is the axis" | `alias()` with no arguments crashed; `alias(x)` worked | every working row happened to use a one-character source name |
+| "the source name's length is the axis" | `a` worked, `ab`/`abc`/`abcd` crashed; a name sweep agreed | every crashing row happened to be a zero-argument call |
+
+Both rules fit all the data their author had. Crossing the two settled it in
+six compiles:
+
+```
+name len 12, ZERO args   -> CORE DUMPED     name len  1, ZERO args  -> ok
+name len 12, ONE arg     -> ok              name len  6, ONE arg    -> ok
+```
+
+The crash needs **both** — zero arguments *and* a source name of two or more
+characters. Neither variable alone predicts it, so neither rule was safe to act
+on, and the second one had already been written into the ticket as superseding
+the first.
+
+**Two symptoms with different boundaries under one construct usually means two
+faults.** The same investigation had a second symptom — an omitted default
+coming back silently wrong — which was present at *every* name length and so
+could not be the length fault at all. A fix aimed at the crash would have
+turned the obvious test green and left that one alive. If your two symptoms
+disagree about where the boundary is, do not unify them; record both, and say
+in the ticket that a fix for one must be re-measured against the other before
+it closes.
+
+The corollary, since it is what actually caught this: **two sessions measuring
+the same bug and disagreeing is a signal, not a nuisance.** Four confounded
+readings were resolved that way in one day — including one where the correction
+to a confound was itself confounded. Deferring to whoever measured last would
+have given the wrong answer three of those four times.
