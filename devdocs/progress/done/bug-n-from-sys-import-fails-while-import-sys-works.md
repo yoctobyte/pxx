@@ -141,4 +141,4 @@ mimic_sys" section. Stays Track N; lane unchanged.
 Neither belongs here: this ticket was the resolver divergence and that is closed.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit a90ce7bb8.
