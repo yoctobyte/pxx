@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:13 blocked:4 backlog:232 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2013 rejected:38`
+`urgent:1 unfinished:14 blocked:4 backlog:232 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2013 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -15,9 +15,10 @@ _none — no lane is locked._
 
 - `bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module` [N]
 
-## unfinished (13) — parked mid-flight; re-claim, do not duplicate
+## unfinished (14) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
+- `bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `bug-p-cannot-call-directly-through-a-procedural-type-cast` [P]
@@ -41,7 +42,7 @@ _none — no lane is locked._
 ## Ready — top 30 of 217, ranked
 
 - `[p 85] [N]` bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
-- `[p 88] [N]` bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
+- `[p 88] [U]` decide-how-a-compiled-def-carries-its-signature-when-boxed
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop

@@ -4,6 +4,8 @@ prio: 88
 type: bug
 blocked-by: []
 summary: "A call through a module-level function ALIAS that omits a defaulted parameter segfaults at runtime, with no diagnostic at compile time. `f = g` then `f(a, b)` where g is `def g(a, b, lo=0, hi=-1)` crashes; the same call with all four arguments supplied is fine, and calling `g` directly with the defaults omitted is fine. Six-line repro, no imports involved."
+status: unfinished
+owner: unassigned
 ---
 
 # Calling through a function alias with a default omitted segfaults
@@ -193,3 +195,79 @@ coordinator's error, corrected on measurement rather than on argument.
 **Title is still the filed one and is now wrong twice over** — it names aliases and
 segfaults, and the defect is neither. Retitle left to whoever takes it, same convention
 as the yield ticket, but do not size this from its title.
+
+## DIAGNOSED 2026-08-18 (frank2-7e) — banked and escalated, NOT microfixed
+
+Measured at HEAD `61c9f0b87`, self-host fixedpoint, differential against CPython.
+
+### It is not defaults — the whole signature is bypassed
+
+Calling through a procedural value consults **nothing** about the callee:
+
+| | direct call | through a procedural value |
+| --- | --- | --- |
+| omitted default | filled correctly | **dropped** (empty/garbage) or **SIGSEGV** |
+| too FEW args | compile error | **no error**, runs on garbage |
+| too MANY args | compile error | **no error**, wrong answer (`zz(1,2,3)` → 2) |
+
+CPython raises `TypeError` for both arity rows. So "a default is dropped" is one
+visible face of "the call site knows nothing about the callee".
+
+### Severity is worse than the title: ordinary callback shapes CRASH
+
+| shape | result |
+| --- | --- |
+| `zz = loc; zz(1)` (same file, no import) | wrong value, exit 0 |
+| `handlers = [loc]; handlers[0](1)` | **SIGSEGV** |
+| `d = {"x": loc}; d["x"](1)` | **SIGSEGV** |
+| `def call(fn): return fn(1)` — a function passed as an ARGUMENT | **SIGSEGV** |
+| `cb = k.m` — a BOUND METHOD as a callback | **SIGSEGV** |
+| `g = lambda a, lo=7: lo; g(1)` | **correct** |
+
+Dispatch tables, handler lists and callback parameters are how Python is written.
+
+### Root cause, and the lambda row is the discriminator
+
+A compiled `def` reaching a variant is boxed as **VT_CALLABLE_TAG (12): a bare
+CODE ADDRESS** (`defs.inc`). An address carries no arity and no defaults, so the
+call site has nothing to fill from and nothing to check against — it jumps with
+whatever arguments were written and the callee reads its remaining parameter
+slots off the stack.
+
+A **lambda works** because it takes the other path: an owned callable object
+(`pyvar_of_callable` → VT_PYCLOSURE/VT_BOUNDFN), and `TPyClosure` already carries
+`ReqN..TotN`, *"the legal argument-count RANGE"* (`pyeval.pas`). The information
+this bug needs already exists — for one of the two representations.
+
+**That is the shape of the defect: two mechanisms for one concept**, and the one
+that carries the signature is the one nobody hit.
+
+### Why this is escalated rather than fixed here
+
+The obvious fix — route a compiled `def` through the same owned-callable
+representation as a lambda — is a **lifetime change**, and `defs.inc` says the
+bare-address form was chosen deliberately for exactly that reason: *"the slot
+does NOT own it, which is why this tag stays out of the variant clear/retain
+object-tag lists: that is the lifetime these values already had while they wore
+VT_INT64."* Getting ownership wrong here produces leaks or double-frees, which
+are silent.
+
+And the tempting narrow fix is a trap of the kind that already bit this repo
+today. Resolving the target statically (`zz = loc`) would fix the assignment row
+and leave `handlers[0](1)`, the dict table, the callback parameter and the bound
+method **still segfaulting** — a passing test certifying a hole, which is exactly
+what the `CodecInfo` probe stopped a few hours ago.
+
+So: diagnosis banked, decision escalated as
+[[decide-how-a-compiled-def-carries-its-signature-when-boxed]] (Track U).
+**Not microfixed as a consolation.**
+
+**Recommendation** (in the decision ticket): give the callable value its
+signature rather than teach the call site to guess — the lambda path proves the
+representation exists and works. The open question is ownership, not design.
+
+### Retitling
+
+The title still says "calling through a function alias" and is wrong twice over:
+not aliases, not imports. Left for whoever takes the decision, per the convention
+already applied to [[feature-nilpy-yield-outside-a-for-loop]].
