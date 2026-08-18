@@ -30,3 +30,6 @@ pascal26:42: error: invalid optional IR node reference in block first
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-18 — auto-closed by the plexus watcher: `test-aarch64#src:test/test_set_runtime.pas` passes at 5b43ad800d23 (tier full); it was red at 61e2448bac6d. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
