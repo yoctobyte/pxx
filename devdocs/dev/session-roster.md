@@ -1310,7 +1310,7 @@ valuable review.
   job green on every tier. That is the strongest signal of the day and it arrived after
   the bank: today's four N landings plus the P and A fixes hold up under the full
   cross-target sweep, not just under `quick`.
-- **checks 2026-08-18 (+2h, +3h):** unchanged — zero commits since `fb2829cf2`, `working/`
+- **checks 2026-08-18 (+2h through +5h):** unchanged — zero commits since `fb2829cf2`, `working/`
   and `urgent/` empty, all workers idle, T UP with the same single documented
   false-positive red. Nothing to dispatch; day stays banked. *(Rolling one entry forward
   rather than appending an identical line per hour — a quiet check log should not outgrow
