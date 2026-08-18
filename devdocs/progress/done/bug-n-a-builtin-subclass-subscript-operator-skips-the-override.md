@@ -180,4 +180,4 @@ unchanged. Wired into `test-nilpy` and `test-core`.
 `test_nilpy_unbound_builtin_method.npy` re-diffed against CPython: unchanged.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit 2087aa018.
