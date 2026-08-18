@@ -1,0 +1,48 @@
+# `super(Cls, self)` -- Python 2's spelling, still valid Python 3, and what
+# every library written to run on both still contains (html5lib writes it in
+# every filter). Only `super()` was accepted; the two-argument form died on the
+# class name with a bare "unexpected token" that never mentioned super.
+# Both spellings now go through ONE argument consumer, so the lowering below is
+# shared and there is no second path to keep in step.
+# bug-n-two-argument-super-does-not-parse
+
+
+class Base:
+    def __init__(self, n):
+        self.n = n
+
+    def who(self):
+        return "Base"
+
+
+class Zero(Base):
+    def __init__(self, n):
+        super().__init__(n)          # the zero-argument spelling still works
+
+
+class Two(Base):
+    def __init__(self, n):
+        super(Two, self).__init__(n)
+        self.m = n * 2
+
+    def who(self):
+        # the EXPRESSION position, which is the second parse site
+        return "Two+" + super(Two, self).who()
+
+
+class Filter:
+    def __init__(self, source):
+        self.source = source
+
+
+class WhitespaceFilter(Filter):
+    # the exact shape every html5lib filter writes
+    def __init__(self, source):
+        super(WhitespaceFilter, self).__init__(source)
+
+
+print(Zero(3).n)
+t = Two(4)
+print(t.n, t.m)
+print(t.who())
+print(WhitespaceFilter("stream").source)

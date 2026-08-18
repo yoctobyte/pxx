@@ -16762,6 +16762,69 @@ begin
 end;
 
 function PyParseBlock: Integer; forward;
+{ Consume `super`'s ARGUMENT LIST, in either spelling, positioned on the '('.
+
+  Python has two: `super()` and `super(Cls, self)`. The second is Python 2's,
+  still valid Python 3, and still what every library written to run on both
+  contains — html5lib writes `super(Filter, self).__init__(source)` in EVERY
+  filter. Only the zero-argument form was accepted, and the two-argument one
+  died on the class name with a bare "unexpected token" that never mentioned
+  super, so it read as a mystery rather than as a missing spelling.
+
+  ONE consumer for both spellings, called from the statement site and the
+  expression site alike: the lowering below is untouched and there is no second
+  path to keep in step (devdocs/dev/normalise-dont-special-case.md).
+
+  `super(Cls, self)` means "start the MRO after Cls", and for the enclosing
+  class that is exactly what `super()` means — which is what every real use
+  writes. Naming a DIFFERENT class (skipping a level) is a different lowering
+  than the inherited call this builds, so it is REFUSED, by name and loudly,
+  rather than silently treated as the enclosing one. Same for `super(Cls, cls)`
+  in a classmethod: the receiver would not be an instance.
+  bug-n-two-argument-super-does-not-parse }
+procedure PySuperConsumeArgs;
+var argCls, argRcv, ownCls: AnsiString;
+begin
+  Expect(tkLParen, '(');
+  if CurTok.Kind = tkRParen then
+  begin
+    Next;                     { `super()` — the zero-argument spelling }
+    Exit;
+  end;
+  if CurTok.Kind <> tkIdent then
+    Error('Nil Python: super(...) takes either no arguments or `super(<class>, self)`');
+  argCls := CurTok.SVal;
+  Next;
+  if CurTok.Kind <> tkComma then
+  begin
+    { Distinguish the two ways a non-comma gets here, or `super(type(self), self)`
+      is reported as a one-argument form and reads as nonsense. }
+    if CurTok.Kind = tkRParen then
+      Error('Nil Python: super(' + argCls + ') — the one-argument form is an unbound ' +
+            'super and is not supported; write super() or super(' + argCls + ', self)')
+    else
+      Error('Nil Python: super(' + argCls + ' ...) — the first argument must be a plain ' +
+            'class name, not a computed expression; write super() or super(<class>, self)');
+  end;
+  Next;
+  if CurTok.Kind <> tkIdent then
+    Error('Nil Python: super(' + argCls + ', ...) — the second argument must be `self`');
+  argRcv := CurTok.SVal;
+  Next;
+  Expect(tkRParen, ')');
+  ownCls := '';
+  if CurSelfClass >= REC_UCLASS_BASE then
+    ownCls := PyRawName(UClsNOff[CurSelfClass - REC_UCLASS_BASE],
+                        UClsNLen[CurSelfClass - REC_UCLASS_BASE]);
+  if not CaseEqual(argRcv, 'self') then
+    Error('Nil Python: super(' + argCls + ', ' + argRcv + ') — only `self` is supported ' +
+          'as the second argument (a classmethod super is not)');
+  if (ownCls <> '') and (not CaseEqual(argCls, ownCls)) then
+    Error('Nil Python: super(' + argCls + ', self) inside class ' + ownCls +
+          ' — starting the lookup above the enclosing class is not supported; ' +
+          'super(' + ownCls + ', self) and super() are');
+end;
+
 function PyMakeSuperCall(const name: AnsiString): Integer;
 { `super().<name>(args)` — Pascal's `inherited <name>(args)`. CurTok is the '('
   that opens the argument list; the caller has consumed `super ( ) . name`.
@@ -24062,7 +24125,7 @@ begin
   if PyIsIdent('super') and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkLParen) then
   begin
-    Next; Expect(tkLParen, '('); Expect(tkRParen, ')');
+    Next; PySuperConsumeArgs;
     Expect(tkDot, '.');
     if CurTok.Kind <> tkIdent then Error('Nil Python: expected method after super().');
     name := CurTok.SVal;

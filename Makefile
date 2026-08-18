@@ -566,6 +566,15 @@ test-nilpy: $(COMPILER)
 	# Last three rows are the neighbours that must NOT move: a slice still yields
 	# the container, a bare literal still returns as one, and a literal OPERAND is
 	# untouched. bug-n-subscripting-a-container-literal-inside-a-function-segfaults
+	# `super(Cls, self).__init__(x)` was `unexpected token` -- a diagnostic that
+	# never mentioned super -- while `super()` worked. It is Python 2's spelling,
+	# still valid Python 3 and what every both-Pythons library contains; html5lib
+	# writes it in EVERY filter. Both spellings now share one argument consumer, so
+	# a change to the lowering cannot drift between them. Covers the STATEMENT and
+	# the EXPRESSION parse site -- there are two, and the second lives in the shared
+	# parser.inc. bug-n-two-argument-super-does-not-parse
+	./$(COMPILER) test/test_nilpy_two_argument_super.npy $(TESTTMP)/test_nilpy_super2arg26
+	test "$$($(TESTTMP)/test_nilpy_super2arg26)" = "$$(printf '3\n4 8\nTwo+Base\nstream')"
 	./$(COMPILER) test/test_nilpy_subscript_container_literal.npy $(TESTTMP)/test_nilpy_sublit26
 	test "$$($(TESTTMP)/test_nilpy_sublit26)" = "$$(printf '1\n8\n20\n2\n2\n3\nno yes\nx y\n[1, 2]\n(1, 2)\n[1, 2, 3]')"
 	./$(COMPILER) test/test_nilpy_import_spellings.npy $(TESTTMP)/test_nilpy_impspell26
@@ -6678,6 +6687,15 @@ test-core: $(COMPILER)
 	# Last three rows are the neighbours that must NOT move: a slice still yields
 	# the container, a bare literal still returns as one, and a literal OPERAND is
 	# untouched. bug-n-subscripting-a-container-literal-inside-a-function-segfaults
+	# `super(Cls, self).__init__(x)` was `unexpected token` -- a diagnostic that
+	# never mentioned super -- while `super()` worked. It is Python 2's spelling,
+	# still valid Python 3 and what every both-Pythons library contains; html5lib
+	# writes it in EVERY filter. Both spellings now share one argument consumer, so
+	# a change to the lowering cannot drift between them. Covers the STATEMENT and
+	# the EXPRESSION parse site -- there are two, and the second lives in the shared
+	# parser.inc. bug-n-two-argument-super-does-not-parse
+	./$(COMPILER) test/test_nilpy_two_argument_super.npy $(TESTTMP)/test_nilpy_super2arg26
+	test "$$($(TESTTMP)/test_nilpy_super2arg26)" = "$$(printf '3\n4 8\nTwo+Base\nstream')"
 	./$(COMPILER) test/test_nilpy_subscript_container_literal.npy $(TESTTMP)/test_nilpy_sublit26
 	test "$$($(TESTTMP)/test_nilpy_sublit26)" = "$$(printf '1\n8\n20\n2\n2\n3\nno yes\nx y\n[1, 2]\n(1, 2)\n[1, 2, 3]')"
 	./$(COMPILER) test/test_nilpy_import_spellings.npy $(TESTTMP)/test_nilpy_impspell26

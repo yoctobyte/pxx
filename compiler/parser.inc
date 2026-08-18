@@ -907,6 +907,7 @@ function PyWrapHeapCallableCall(calleeNode, argsHead, n, defCall: Integer): Inte
 function PyBareNoneHere: Boolean; forward;  { a `None` with nothing after it that could continue an expression — pyparser.inc }
 function PyNoneOperandHere: Boolean; forward;  { a `None` that is an OPERAND of the enclosing operator, whatever follows — pyparser.inc }
 function PyMakeSuperCall(const name: AnsiString): Integer; forward;  { `super().m(args)` as a value (pyparser.inc) }
+procedure PySuperConsumeArgs; forward;  { `super()` / `super(Cls, self)` argument list, either spelling (pyparser.inc) }
 function PyDynAttrEverAssigned(const nm: AnsiString): Boolean; forward;  { is `.nm =` written anywhere? (pyparser.inc) }
 function PyIndexCoerce(n: Integer): Integer; forward;  { Python __index__: an object used where an integer is required (pyparser.inc) }
 function PyIndexNotIntKind(kind: AnsiString; idxNode: Integer): Integer; forward;  { …and the TypeError when it declares none (pyparser.inc) }
@@ -16696,7 +16697,7 @@ begin
   if PyExprMode and PyIsIdent('super') and (TokPos < TokCount) and
      (Tokens[TokPos].Kind = tkLParen) then
   begin
-    Next; Expect(tkLParen, '('); Expect(tkRParen, ')');
+    Next; PySuperConsumeArgs;
     Expect(tkDot, '.');
     if CurTok.Kind <> tkIdent then Error('Nil Python: expected method after super().');
     sdName := CurTok.SVal;
