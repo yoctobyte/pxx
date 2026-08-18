@@ -205,7 +205,7 @@ binds fine and only `ClassName.member` breaks. Different mechanism, different
 fix. Resemblance is not evidence.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit 3b5018582.
 
 ## RESOLVED 2026-08-18 (frank2-7e) — the guard asked the SPELLING
 
