@@ -168,3 +168,70 @@ the same line by two independent routes — which is stronger evidence than eith
 alone, and is why "culprit" is the wrong word for `5215148bb`. That commit
 introduced the first *execution* of tests that had only ever been parsed.
 Running them was right; the fixed ceiling came with them.
+
+---
+
+## CORRECTION 2026-08-18 — the callbacks example is FALSIFIED. This ticket still stands.
+
+Written by the coordinator, who filed this ticket overnight and put callbacks in its
+supporting set. **That half was wrong and must be struck.** The thesis is not.
+
+`regression-test-nilpy-callbacks` was resolved (`9f11b405d`) and the cause was **not a
+timeout of any kind**. Measured:
+
+| | |
+| --- | --- |
+| callbacks runtime under `xvfb-run` | **0.14s** |
+| the ceiling it was said to be straddling | **120s** |
+| slowest of 20 consecutive runs | 120ms |
+| output vs `callbacks.expected` | **20/20 byte-identical** |
+
+A ~1000x margin. No amount of tier contention closes that, and the 20/20 also closes the
+*other* arm of the fork this ticket recorded ("timeout vs nondeterministic output").
+Neither arm was the answer.
+
+The real cause: `testmgr`'s `split_jobs` merges a producer with its consumer by
+union-find over shared **literal** `/tmp` paths. The tk block RUNS three binaries but
+COMPILES one, and reached the other two as `$(TESTTMP)/$$bin` — a shell variable — so no
+shared token appeared, the jobs were never merged, and the callbacks job ran a binary
+nothing had built in its scratch. The recorded log tail said so all along:
+
+```
+/usr/bin/xvfb-run: 200: /tmp/.../test_nilpy_tkinter26: not found
+```
+
+A missing binary. **A timeout kill is rc 124 and silent** — that is the discriminator,
+and it was in the record the whole time. It read as timeout-shaped because everything
+around it was.
+
+### What to strike, and what survives
+
+- **Strike** every use of `callbacks` as evidence — notably the "range SPANS the commit
+  where the job started doing the expensive thing → landing is exact" row in the table
+  above. That row's example is now known not to be a timeout at all.
+- **Keep** the thesis and rest it on `crtl_exp2` (a genuinely recorded `timeout`, range
+  16) plus the two unattributable pin-verify reds. A `timeout` inside a make recipe
+  really is invisible to the contention machinery. That is real and separate.
+- Note the ticket already observed that callbacks was recorded **`fail`**, not
+  `timeout`, and treated that as a wrinkle in the thesis. **It was the tell.** Recorded
+  because noticing a datum does not equal weighing it.
+
+### The methodological failure worth keeping
+
+Two independent routes — the bisect (`5215148bb`) and a static reading of the recipe
+(`Makefile:363`) — converged on the same `timeout 120` line, and that agreement was read
+as confirmation. It was not. `5215148bb` introduced the **first execution** of these
+tests, and with that execution came BOTH a 120s ceiling AND a three-binary dependency
+spelled through a shell variable. **Two candidate mechanisms entered in one commit**, so
+no amount of agreement between methods that both land on the commit can separate them.
+
+Convergence localises; only a measurement discriminates. The duration was never taken
+until the ticket was actually worked — one `time` invocation would have killed the
+timeout theory at the start.
+
+This is the SECOND time in one day that a commit was read as the cause when it was the
+**uncoverer** — see `5b43ad800`, where an iterative rewrite exposed a latent unassigned
+`Result`. Both times the commit genuinely introduced the *conditions* under which an
+older or adjacent defect became visible. Worth a standing habit: when a range is one
+commit wide, ask what that commit made possible for the first time, not only what it
+changed.
