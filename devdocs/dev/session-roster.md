@@ -1526,3 +1526,11 @@ rerank it deliberately rather than inheriting the number).
   "float bugs are low prio" rule is about *accuracy*, not three-order-of-magnitude
   performance cliffs — and p30 is now *correct*, since the cross-cutting cost has been
   extracted and the remainder genuinely is float work.
+
+- **check 2026-08-18 (+9h):** quiet, nobody blocked. **Track T independently confirms
+  frank3's strtofloat landing** — `df15ae3fe1dc` GREEN (native) on plexus, which is a
+  second source for the lib-test-green claim rather than the worker's own word. frank2
+  still working the subscript-override dispatch (busy, not pinged). `working/` and
+  `urgent/` empty — worth noting frank2 has not claimed, so the reminder goes at its next
+  natural report rather than as an interruption now. Same single documented false-positive
+  red. No dispatch.
