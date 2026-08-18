@@ -1,21 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-18T05:04:33Z",
-   "fixed": [
-    "test-aarch64#src:test/test_set_runtime.pas",
-    "test-arm32#src:test/test_set_runtime.pas",
-    "test-i386#src:test/test_set_runtime.pas",
-    "test-pascal-conformance#shard4/6",
-    "test-pascal-conformance#shard5/6",
-    "test-riscv32#src:test/test_set_runtime.pas"
-   ],
-   "new_red": [],
-   "sha": "5b43ad800d239d8839d4efa18793bc86ee5fc867",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-18T05:09:21Z",
    "fixed": [],
    "new_red": [],
@@ -409,6 +394,14 @@
    "new_red": [],
    "sha": "18bcb92ffb8b191e969ab5456eefc49d9abcb1e5",
    "tier": "slow",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-18T22:14:27Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "18bcb92ffb8b191e969ab5456eefc49d9abcb1e5",
+   "tier": "opt",
    "verdict": "GREEN"
   }
  ],
@@ -5948,11 +5941,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-18T22:09:08Z",
+  "date": "2026-08-18T22:14:27Z",
   "sha": "18bcb92ffb8b191e969ab5456eefc49d9abcb1e5",
-  "tier": "slow",
+  "tier": "opt",
   "verdict": "GREEN",
-  "wall": 274.9
+  "wall": 305.4
  },
  "last_bench": {
   "conf_rows": 550,
