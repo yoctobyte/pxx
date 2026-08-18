@@ -378,3 +378,100 @@ framing in this ticket (mine and the parking session's) should not be inherited.
 
 The boxed-def dependency is now doubly suspect: generator state lives in a heap record,
 and the consumption side is an enumerator object. **Measure before planning around it.**
+
+## ATTEMPTED AND PARKED 2026-08-18 (frank2-7e, Track A+N) — wired end to end, parked on a frame-layout crash
+
+First session to actually build this rather than scope it. A NilPy generator now
+compiles end to end and **prints its first value**, then segfaults. Reverted to a
+clean tree — nothing is half-applied in `compiler/**`, `make compiler/pascal26`
+converges at HEAD. Banking the wiring and the exact blocker.
+
+### THE DEPENDENCY DOES NOT SURVIVE MEASUREMENT — this ticket is NOT gated
+
+Measured, as the coordinator asked. `decide-how-a-compiled-def-carries-its-signature-when-boxed`
+does **not** gate this. Reason: generator *methods* are refused by the engine
+outright, so the boxed-callable route was never on the table — and the route that
+DOES work needs no callable value at all.
+
+```
+stackless generator/async methods are not supported (v1)
+for-in: unsupported iterable expression
+```
+
+**The lifted route works today.** A generator method lowered to a free function
+taking the receiver, consumed as a plain for-in, verified end to end at HEAD:
+
+```pascal
+function Filt__iter__(self: TF): Integer; generator; stackless;
+...
+for v in Filt__iter__(f) do WriteLn(v);
+```
+
+Verified including the exact html5lib nested-filter shape — a generator iterating
+another generator, with `continue` in the body: prints `10 20 40 50`. Also
+verified: stackless generator over **Variant** elements (`1 2 done`), which is
+what NilPy values are, and the object-enumerator protocol (`10 20 30`).
+
+So the implementation order in the sections above is sound and step 4 needs no
+ruling from Track U. Anyone inheriting the "read the decision first" note can drop it.
+
+### The wiring, as implemented (all in `pyparser.inc` except one shared hunk)
+
+Every step below was reached and worked; listing them so the next session
+re-applies rather than re-derives.
+
+1. **No new lexer token needed.** `yield` arrives as an identifier and is handled
+   at statement position, next to the `pass` arm.
+2. `PyDefBodyHasYield(bodyStart)` — token scan over the def's span, with a
+   `nestedDefDepth` counter so a nested `def`'s yield does not mark the outer one.
+   (Python decides generator-ness from the body at compile time; this matches it.)
+3. `PyApplyGeneratorABI(bodyStart)` — the stackless ABI is
+   `function(__genself: Pointer): Boolean`, so the 10 `PyHdr*` arrays shift down
+   by one, `__genself`/`tyPointer` is injected at index 0, `PyHdrNParams+1`,
+   `PyHdrRetType := tyBoolean`, `PyHdrIsProc := False`.
+4. `PyPullSlgenIfGenerators` — scans the module for a statement-start `yield` and
+   issues `ParseUsesUnit('slgen')`; **must** be called at BOTH `PyPreScanImports`
+   sites or the unit is not in scope.
+5. Generator flags set **before** the locals pre-pass, not after — the pre-pass
+   trial-parses the body, and with the context unset `yield` is refused there
+   first. This cost a cycle; it is the non-obvious ordering constraint.
+6. `for x in gen()` routing, plus a shared-file change (declared, A/P slot held):
+   `ParseForInGeneratorAST` in **`parser.inc`** is Pascal-only — it does
+   `Expect(tkDo)` + `ParseStatementAST`. Made frontend-aware:
+   `if isNilPy then Expect(tkColon) + PyParseSuite`. Note **`PyParseSuite`**, not
+   `PyParseBlock` — the latter gives `unexpected token` / `expected expression`
+   on the NEWLINE/INDENT..DEDENT block.
+
+### The blocker, localised to one procedure
+
+The program prints the first yielded value, then **segfaults with a corrupted
+stack** (`bt` shows garbage frames). Localised by experiment, not by reading:
+
+| prologue emitters guarded with `if not isGen` | result |
+| --- | --- |
+| `PyEmitParamSpills` + `PyInitVariantLocals` + `EmitManagedLocalsZeroInit` | no crash, but **infinite loop printing the first value** — state never advances |
+| re-enable `PyEmitParamSpills` alone | **crash returns** |
+
+So `PyEmitParamSpills` (pyparser.inc:27513) is both the frame-corrupter and
+necessary for state to persist. It spills incoming argument registers into each
+param's frame slot — correct for an ordinary def, wrong here: in the stackless
+step ABI only `__genself` arrives in a register, and the declared params 1..n are
+**persistent instance slots the transform restores itself**, so spilling them
+writes register garbage over live state every step.
+
+**The next thing to try** (untested, this is where I stopped): make the spill
+loop generator-aware — spill `__genself` at pointer width and skip indices 1..n
+entirely — then re-test whether `PyInitVariantLocals` and
+`EmitManagedLocalsZeroInit` can be restored (they must NOT re-zero persistent
+slots on resume either, so expect the same shape of answer for both).
+
+### Why parked
+
+Per the standing instruction: it did not land green, so bank and park rather than
+iterate. The remaining work is x86-64 frame-layout integration between NilPy's
+prologue and the stackless step ABI — bounded and now precisely located, but real,
+and the failure mode is silent stack corruption rather than a compile error.
+
+Returned to `backlog/`, not `unfinished/`: the tree is clean and nothing is
+half-applied, so the queue should rank this as available work rather than hold a
+lock on it. Same call the previous parking session made, for the same reason.
