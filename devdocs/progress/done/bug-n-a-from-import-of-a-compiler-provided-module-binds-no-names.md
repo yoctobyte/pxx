@@ -136,4 +136,4 @@ real CPython programs use, not a corpus wall.
 `tools/gate.sh quick` GREEN. `pyparser.inc` only — no shared file, no A/P slot.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit 2cfeeccd8.
