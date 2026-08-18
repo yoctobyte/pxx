@@ -41,7 +41,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (232)
+## backlog (233)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -134,6 +134,7 @@ _none_
 | feature-b-hardware-sqrt-on-aarch64-and-arm32 | B | 20 | feature | Sqrt is one `sqrtsd` on x86-64 (15x faster than the software path and correctly rounded by IEEE mandate). aarch64 `fsqrt` and arm32 `vsqrt` are the same one-instruction win and both run here under qemu, so the change is verifiable on this box. The portable SqrtSoft stays as the fallback for riscv32/xtensa. | — |
 | feature-b-mimic-urllib-request-over-the-rtl-http-stack | B | 30 | feature | lib/rtl/mimic_urllib_request.py currently REFUSES: it makes importing code compile and raises NotImplementedError on any call. The client it needs ALREADY EXISTS — lib/rtl/http.pas, gated by make lib-test as http + redirect + keepalive + pool + gzip + cookie + json, over the TLS seam. So this is not an HTTP project, it is a Python face on an existing unit, in the shape mimic_codecs.pas already demonstrates (a .pas shim reached from NilPy). The one corpus caller is a code generator, so no library file is blocked on it. | — |
 | feature-b-rtl-lnxp1-fpc-compat | B | 20 | feature | FPC's math unit exports LnXP1(x) = ln(1+x) and pxx does not. The implementation already exists as of 2026-08-15 — LnP1, added as an internal helper for the hyperbolic family — so this is an interface line and a name, not an algorithm. Note WHY the name matters: `Log1p` would hijack libc's through pxxcio, `LnXP1` does not. | — |
+| feature-b-the-module-shim-batch-blocking-the-python-corpus | B | 62 | feature | The missing-module shims are the single largest lever on the third-party Python corpus, and until now they had no ranked ticket — the measurement lived only inside a META ticket parked in unfinished/, invisible to ready/next. Re-measure first: every count below is a dated snapshot. | — |
 | feature-c-csmith-differential-fuzzing | C | 65 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-entry-stub-must-run-initializers-for-environ | C | 45 | feature | `char **envp = environ;` silently becomes NULL in a C program: environ is a VARIABLE read directly, with no call to trigger crtl's lazy /proc/self/environ load, and the C entry stub has no init phase. The fini half landed 2026-08-10; this is the init half | — |
 | feature-c-esp-conformance-coverage | S | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
@@ -496,6 +497,7 @@ _none_
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
 - [p 65] [P] feature-pascal-corpus-oop
+- [p 62] [B] feature-b-the-module-shim-batch-blocking-the-python-corpus
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [N] feature-nilpy-yield-outside-a-for-loop
 - [p 58] [O] feature-opt-o3-register-pressure
