@@ -313,6 +313,30 @@ the header names exactly one REAL base, so it is single inheritance, and the
 multiple-inheritance refusal correctly does not fire. It still fires for
 `class C(A, B)` where both are real. bug-n-typevar-call-is-an-undefined-variable
 
+## A bad name in a `from` import is caught at the USE site, not the import (2026-08-18)
+
+`from sys import nosuch` does not fail. The name simply binds nothing, and the
+wall arrives when something reads it:
+
+| | CPython | pxx |
+| --- | --- | --- |
+| `from sys import nosuch` then `print(1)` | `ImportError` at the import | compiles, prints 1 |
+| `from sys import nosuch` then `print(nosuch)` | `ImportError` at the import | `error: undefined variable (nosuch)` |
+
+**Not a bug, by the upward-compatibility rule**: a program CPython accepts and
+runs contains no such import, so nothing that works there can observe the
+difference. It is a refusal we do not make — the same shape as the mutable tuple
+and the instantiable `Protocol` above.
+
+Recorded because it is easy to describe imprecisely. The from-import binding
+work (bug-n-a-from-import-of-a-compiler-provided-module-binds-no-names)
+deliberately keeps an unprovided name OFF the qualified any-attribute arm, so
+that reading it is a compile-time `undefined variable` rather than a weaker
+runtime AttributeError — and I first wrote that up as "still walls at compile
+time", which reads as though the IMPORT fails. It does not; the USE does. The
+design point is real, the wall is one statement later than that phrasing
+implies, and the coordinator caught it by measuring the unused case.
+
 ## `exec` binds, but injects no `__builtins__` key (2026-08-14)
 
 `exec(src, g, l)` now really does bind into `l` — it used to run and publish
