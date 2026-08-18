@@ -593,6 +593,18 @@ test-nilpy: $(COMPILER)
 	# still raising. feature-nilpy-subclass-a-builtin-type
 	./$(COMPILER) test/test_nilpy_subclass_a_builtin_type.npy $(TESTTMP)/test_nilpy_subbuiltin26
 	test "$$($(TESTTMP)/test_nilpy_subbuiltin26)" = "$$(printf '3 1 [2, 3] True False 6\n1\n2\n3\n2 1 True False 2\n['\''a'\'', '\''b'\'']\na\nb\n3 [5, 6] True ['\''x'\''] 1 True\nTypeError')"
+	# `list.append(self, x)` -- a builtin type's method called UNBOUND with an
+	# explicit self -- was `undefined variable (list)`, so the very first thing a
+	# builtin subclass does (override a method, delegate to the base) did not
+	# compile, while the user-class form `A.m(self)` had worked for weeks. Two
+	# halves: the builtin NAME was mapped onto its pylib class in the BASE-CLASS
+	# position only, and this was the one resolution path that did not go through
+	# PyMethNameFor, so pylib's fetch/store and at/put stayed invisible to
+	# `dict.__getitem__`. Also pins that the CONVERSION builtins (`list(x)`,
+	# `dict()`) keep their own path. Output is byte-identical to CPython's.
+	# bug-n-a-builtin-types-method-cannot-be-called-unbound
+	./$(COMPILER) test/test_nilpy_unbound_builtin_method.npy $(TESTTMP)/test_nilpy_unbndbuiltin26
+	test "$$($(TESTTMP)/test_nilpy_unbndbuiltin26)" = "$$(printf '2 7 7 7\n2 1 2\n2\n1\n2\n[1, 2, 3] ['\''k'\''] 2')"
 	./$(COMPILER) test/test_nilpy_from_import_binds_provided_names.npy $(TESTTMP)/test_nilpy_fromimpbind26
 	test "$$($(TESTTMP)/test_nilpy_fromimpbind26)" = "$$(printf '1 1\na/b y.txt c/d\nplain\n5\nshadowed')"
 	./$(COMPILER) test/test_nilpy_two_argument_super.npy $(TESTTMP)/test_nilpy_super2arg26
@@ -6736,6 +6748,18 @@ test-core: $(COMPILER)
 	# still raising. feature-nilpy-subclass-a-builtin-type
 	./$(COMPILER) test/test_nilpy_subclass_a_builtin_type.npy $(TESTTMP)/test_nilpy_subbuiltin26
 	test "$$($(TESTTMP)/test_nilpy_subbuiltin26)" = "$$(printf '3 1 [2, 3] True False 6\n1\n2\n3\n2 1 True False 2\n['\''a'\'', '\''b'\'']\na\nb\n3 [5, 6] True ['\''x'\''] 1 True\nTypeError')"
+	# `list.append(self, x)` -- a builtin type's method called UNBOUND with an
+	# explicit self -- was `undefined variable (list)`, so the very first thing a
+	# builtin subclass does (override a method, delegate to the base) did not
+	# compile, while the user-class form `A.m(self)` had worked for weeks. Two
+	# halves: the builtin NAME was mapped onto its pylib class in the BASE-CLASS
+	# position only, and this was the one resolution path that did not go through
+	# PyMethNameFor, so pylib's fetch/store and at/put stayed invisible to
+	# `dict.__getitem__`. Also pins that the CONVERSION builtins (`list(x)`,
+	# `dict()`) keep their own path. Output is byte-identical to CPython's.
+	# bug-n-a-builtin-types-method-cannot-be-called-unbound
+	./$(COMPILER) test/test_nilpy_unbound_builtin_method.npy $(TESTTMP)/test_nilpy_unbndbuiltin26
+	test "$$($(TESTTMP)/test_nilpy_unbndbuiltin26)" = "$$(printf '2 7 7 7\n2 1 2\n2\n1\n2\n[1, 2, 3] ['\''k'\''] 2')"
 	./$(COMPILER) test/test_nilpy_from_import_binds_provided_names.npy $(TESTTMP)/test_nilpy_fromimpbind26
 	test "$$($(TESTTMP)/test_nilpy_fromimpbind26)" = "$$(printf '1 1\na/b y.txt c/d\nplain\n5\nshadowed')"
 	./$(COMPILER) test/test_nilpy_two_argument_super.npy $(TESTTMP)/test_nilpy_super2arg26

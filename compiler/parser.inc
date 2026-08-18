@@ -1125,6 +1125,7 @@ procedure PyParseSetLiteral; forward;  { Nil Python {a, b} literal (pyparser.inc
 function PyClassCreateExpr: Integer; forward; { Nil Python ClassName(args) ctor (pyparser.inc) }
 function PyIsExactCtorName(const nm: AnsiString): Boolean; forward; { Nil Python: `Name(` is a ctor only on an EXACT-case class match (pyparser.inc) }
 function PyIsClassTypeExact(const nm: AnsiString): Boolean; forward; { Nil Python: is this name a class, matched EXACTLY (Python is case-sensitive)? (pyparser.inc) }
+function PyBuiltinBaseCi(const nm: AnsiString): Integer; forward; { Nil Python: the pylib class a BUILTIN type name (list/dict/set/bytes) stands for, or -1 (pyparser.inc) }
 function PyIsDictCompAhead: Boolean; forward; { Nil Python dict comprehension lookahead (pyparser.inc) }
 function PyParseDictCompExprValue: Integer; forward; { Nil Python dict comp in expression position (pyparser.inc) }
 
@@ -4825,6 +4826,19 @@ begin
           (bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class). }
         if (ci >= 0) and PyExprMode and (not PyIsClassTypeExact(fieldName)) then
           ci := -1;
+        { A BUILTIN type name as a RECEIVER — `list.append(self, x)`,
+          `dict.__getitem__(self, k)`: how a subclass of a builtin reaches the
+          base implementation it just overrode, and the reason to subclass a
+          container at all. PyBuiltinBaseCi already maps these onto their pylib
+          classes for the BASE-CLASS position; the name resolved there and not
+          here, so `class Stack(list)` compiled and its very first line did not
+          (bug-n-a-builtin-types-method-cannot-be-called-unbound).
+          Only ahead of a '.': a bare `list(x)` / `dict()` is the CONVERSION
+          builtin and has its own path, which this must not intercept. Exact
+          lowercase, because Python is case-sensitive and `List` is not `list`. }
+        if (ci < 0) and PyExprMode and (CurTok.Kind = tkDot) and
+           (fieldName = LowerCase(fieldName)) then
+          ci := PyBuiltinBaseCi(fieldName);
         if ci >= 0 then
         begin
           if CurTok.Kind <> tkDot then
@@ -4901,6 +4915,13 @@ begin
             argument count, so the wrong overload was picked (and then complained about
             the arguments it did not get). CountCallArgsAhead reads the call ahead --
             the method name is already consumed here, so it is scanning from the '('. }
+          { pylib spells several Python methods under other names (itemlist,
+            fetch/store, at/put); PyMethNameFor is the one translator every
+            resolution path goes through, and this path did not, so
+            `dict.__getitem__(self, k)` said 'class method not found' even once
+            the receiver resolved. A no-op for a class that declares the name
+            as written, which is every user class. }
+          if PyExprMode then fieldName := PyMethNameFor(ci, fieldName);
           mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
           if mmi < 0 then mmi := FindUMeth(ci, fieldName);
 

@@ -1,0 +1,75 @@
+# `list.append(self, x)` -- a BUILTIN type's method called UNBOUND with an
+# explicit self -- was `undefined variable (list)`, while the same call on a
+# user class (`A.m(self)`) had worked since
+# bug-nilpy-super-and-unbound-parent-method-calls. It is how a subclass of a
+# builtin reaches the base implementation it just overrode, i.e. the reason to
+# subclass a container at all, so it was the wall immediately behind
+# feature-nilpy-subclass-a-builtin-type.
+#
+# Two halves. The NAME: PyBuiltinBaseCi mapped list/dict/set/bytes onto their
+# pylib classes in the BASE-CLASS position only, so `class Stack(list)`
+# resolved and its very first line did not. The METHOD name: pylib spells the
+# subscript protocol fetch/store (dict) and at/put (list), so even with the
+# receiver resolved `dict.__getitem__` said `class method not found` -- this
+# path was the one resolution path that did not go through PyMethNameFor.
+# bug-n-a-builtin-types-method-cannot-be-called-unbound
+
+
+class Stack(list):
+    def append(self, x):
+        # delegate to the base, twice, so a silent no-op cannot pass
+        list.append(self, x)
+        list.append(self, x)
+
+    def first(self):
+        return list.__getitem__(self, 0)
+
+
+class Counted(dict):
+    def __getitem__(self, k):
+        return dict.__getitem__(self, k)
+
+    def __setitem__(self, k, v):
+        dict.__setitem__(self, k, v)
+
+
+class Uniq(set):
+    def add(self, x):
+        set.add(self, x)
+
+
+s = Stack()
+s.append(7)
+print(len(s), s[0], s[1], s.first())
+
+c = Counted()
+# the METHOD spellings, which is what this ticket is about; the OPERATOR forms
+# do not reach a builtin subclass's overrides at all --
+# bug-n-a-builtin-subclass-subscript-operator-skips-the-override
+c.__setitem__("a", 1)
+c.__setitem__("b", 2)
+print(len(c), c.__getitem__("a"), c["b"])
+print(dict.__len__(c))
+
+u = Uniq()
+u.add(4)
+u.add(4)
+print(len(u))
+
+
+# the user-class form is unchanged
+class A:
+    def m(self):
+        return 1
+
+
+class B(A):
+    def m(self):
+        return A.m(self) + 1
+
+
+print(B().m())
+
+# ...and the CONVERSION builtins keep their own path: a bare `list(x)` /
+# `dict()` must not be intercepted by the receiver mapping above
+print(list([1, 2, 3]), sorted(dict({"k": 5}).keys()), len(set([1, 1, 2])))

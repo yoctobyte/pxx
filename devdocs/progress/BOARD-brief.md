@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:14 blocked:5 backlog:233 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2025 rejected:38`
+`unfinished:14 blocked:5 backlog:233 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2026 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -48,7 +48,7 @@ _none — no lane is locked._
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [C]` bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
-- `[p 55] [N]` bug-n-a-builtin-types-method-cannot-be-called-unbound
+- `[p 55] [N]` bug-n-a-builtin-subclass-subscript-operator-skips-the-override
 - `[p 55] [T]` bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 - `[p 55] [T]` bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label
 - `[p 55] [T]` chore-t-split-lib-test-into-jobs-that-name-what-failed

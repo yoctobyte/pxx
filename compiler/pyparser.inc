@@ -13659,12 +13659,27 @@ begin
   begin
     if mname = 'items' then Result := 'itemlist'
     else if mname = 'keys' then Result := 'keylist'
-    else if mname = 'values' then Result := 'vallist';
+    else if mname = 'values' then Result := 'vallist'
+    { The SUBSCRIPT protocol under its Python names. pylib spells the pair
+      fetch/store and reaches them through the default `Items[]` property, so
+      the operator form `d[k]` always worked while the METHOD spelling — the
+      one a dict subclass writes to delegate to the base it just overrode
+      (`dict.__getitem__(self, key)`, html5lib's MethodDispatcher) — found no
+      such method. Same shape as the items/keys/values aliases above: one
+      capability, two spellings, only one of them wired.
+      bug-n-a-builtin-types-method-cannot-be-called-unbound }
+    else if mname = '__getitem__' then Result := 'fetch'
+    else if mname = '__setitem__' then Result := 'store'
+    else if mname = '__len__' then Result := 'count';
     Exit;
   end;
   if (FindUClass('TPyList') >= 0) and (ci = FindUClass('TPyList')) then
   begin
-    if mname = 'update' then Result := 'setupdate'
+    { the list half of the same subscript pair — pylib spells it at/put }
+    if mname = '__getitem__' then Result := 'at'
+    else if mname = '__setitem__' then Result := 'put'
+    else if mname = '__len__' then Result := 'count'
+    else if mname = 'update' then Result := 'setupdate'
     else if mname = 'intersection_update' then Result := 'setintersect'
     else if mname = 'difference_update' then Result := 'setdiff'
     else if mname = 'symmetric_difference_update' then Result := 'setsymdiff';
