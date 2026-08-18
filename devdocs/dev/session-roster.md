@@ -1057,3 +1057,29 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   `decide-how-a-compiled-def-carries-its-signature-when-boxed` (U, p88). It may drop from
   gating three items to two — if the rename cluster's fault turns out to be the rename
   binding rather than the callable representation, the p85 comes back to ready.
+
+- 2026-08-18 evening — **human left for the day; yield re-estimated and settled.** Two
+  challenges from Rene dismantled an estimate that had been steering dispatch all evening,
+  and both were settled by ten minutes of measurement rather than argument:
+  1. "I thought we already implemented yield for Pascal — minor mechanical work?" **Yes.**
+     The engine is built and proven: the `yield` keyword, `AN_YIELD`/`IR_YIELD`,
+     `coroutine.pas` (stackful) AND `slgen.pas` (stackless). Verified end to end —
+     `; generator; stackless;` prints `0 1 2 3` today.
+  2. "Isn't this the stackless optimization we deferred?" **No** — that "(later)" note is
+     on **`AN_AWAIT`** (async), not `AN_YIELD`. Generator stackless is done.
+  And I had to correct MYSELF on the remaining caveat: I called the `for t in obj` bridge
+  the genuinely non-mechanical part without checking whether Pascal has the object form.
+  It does — the FPC `GetEnumerator`/`MoveNext`/`Current` protocol at `parser.inc:19428`,
+  verified (`10 20 30`). So `__iter__`/`__next__` maps onto it nearly one-to-one.
+  **Net: yield is FRONTEND WIRING against three finished subsystems, not a dedicated
+  pass.** The old framing is on the ticket as superseded; do not inherit it. Next for
+  frank2 after the rename cluster.
+  **How the mis-estimate happened, because it is the day's own lesson turned on me:**
+  frank2-7e measured the STRATEGY question rigorously (19 generator functions, 76 yield
+  sites, zero inside try/with) and then estimated SCOPE from the ticket's framing rather
+  than from the code — and I relayed that estimate three times without reading
+  `defs.inc`. That is exactly "never size a ticket from its title", committed by the
+  coordinator, on a ticket whose title has already been wrong twice.
+  Autonomy re-armed with fresh standing state (job `90d95108`, hourly at :23) — the
+  previous prompt still described the morning's situation, which would have had the next
+  check dispatching against a board that no longer exists.
