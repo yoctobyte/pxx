@@ -1291,3 +1291,11 @@ Each of us found the other's version of one error in a single exchange. That is 
 arrangement working, and it is worth noting that it took **disagreement** to produce it —
 T agreed with my conclusion and attacked my method anyway, which is the harder and more
 valuable review.
+
+- **check 2026-08-18 (post-bank):** quiet, nobody blocked, and that is deliberate — the day
+  was banked, not stalled. `working/` and `urgent/` both empty; frank2-7e, frank3-fc and
+  plexus-T all idle with clean queues confirmed by each. T UP, native GREEN through
+  `118c4c42a5b3`; the single open red is the documented `crtl_exp2` false positive (now
+  carrying a correction banner at `d483dd50e`), not new breakage. Commits since T's last
+  tested sha are docs/roster only. **No dispatch:** the ranked N remainder is p50/p45, and
+  yield is scheduled work reserved for a fresh session per the user. Nothing invented.
