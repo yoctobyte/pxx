@@ -2,6 +2,8 @@
 track: N
 prio: 58
 type: feature
+status: working
+owner: frank2-7e
 ---
 
 # `yield` only works inside a `for` — a while-loop generator does not compile
@@ -127,3 +129,105 @@ was re-measured 2026-08-18 and is exactly right — **no** `yield` shape works, 
 the for-driven and method forms the title implies are fine. Anyone sizing this from the
 title alone will read it as a context bug and under-scope it. Retitling is a hygiene
 call left for whoever takes it.
+
+## SCOPED 2026-08-18 (frank2-7e) — strategy de-risked, then PARKED UNSTARTED
+
+Claimed, measured, not started. No compiler file was touched. The measurement
+below removes the main unknown so the next session does not have to decide the
+strategy first.
+
+### Confirmed a third time: nothing exists on the NilPy side
+
+`grep -c "'yield'" compiler/pyparser.inc` -> **0**, and the NilPy lexer has no
+yield token either. The 2026-07-31 recon stands: yield is unimplemented
+outright, not broken in a particular context. The TITLE still says otherwise --
+flagged, not retitled unilaterally.
+
+### What DOES exist, and it is a lot
+
+A complete Pascal generator feature, in **two** strategies that deliberately
+share a consumption interface:
+
+- **stackful** -- `; generator;` + `lib/rtl/coroutine`, a real 64 KB heap stack
+  per live generator (`CO_STACK_BYTES`), switched by `CoSwitch`.
+- **stackless** -- a state-machine transform in `parser.inc` (`SLCheckEligible`,
+  `MAX_GEN_STATES = 1024`) over `lib/rtl/slgen.pas`, persisting locals in slots.
+
+`defs.inc` records the key property: *"Share CURRENT/DONE offsets with the
+stackful layout so for-in reads the value/done flag identically for either
+strategy; only the advance step differs."* And `for x in Gen(args)` already has
+its desugar in `parser.inc`.
+
+So the runtime, the state machine, slot persistence and the iteration protocol
+all exist. What is missing is NilPy-side wiring, not generators.
+
+### THE STRATEGY QUESTION IS SETTLED -- by measurement, not by argument
+
+The stackless transform refuses `yield` inside a `try`, inside a `with`, and in
+an `if`/`while`/`for`/`case` *condition*; it allows yield at top level and in
+those constructs' bodies. The obvious worry is that real Python generators wrap
+a yield in `try`/`finally`, which would force the stackful path -- 64 KB per live
+generator, in a tokeniser pipeline that keeps several open at once.
+
+Measured over every non-test generator in the ladder corpora (html5lib,
+tinycss2, webencodings) using CPython's own `ast` module:
+
+| | |
+| --- | ---: |
+| generator functions (excluding `tests/**`) | **19** |
+| total `yield` sites | **76** |
+| generators with a `yield` inside `try`/`with` | **0** |
+
+**Zero.** Stackless covers the entire corpus, so this can be built on the cheap
+path with no 64 KB stack per generator. That was the single biggest open risk
+and it is now closed.
+
+### What the corpus needs is the METHOD form, not the module-level one
+
+The files whose first wall is `yield` are html5lib filters, and each is the same
+shape:
+
+```python
+class Filter(base.Filter):
+    def __iter__(self):
+        for token in base.Filter.__iter__(self):
+            yield token
+```
+
+A generator **method**, returned from `__iter__`, consumed by `for t in
+filter_instance`. So the tempting first increment -- a module-level `def` with
+yield driven by `for x in gen()` -- appears **nowhere** in this corpus and would
+move **zero** files. Whoever lands that half should report it as groundwork, not
+as ladder movement. (Same trap as the first-wall/reach split already recorded on
+the campaign: work that moves files ONTO the next wall is progress-shaped.)
+
+### Implementation order
+
+1. NilPy lexer: a `yield` token (none today).
+2. `pyparser`: a pre-pass marks a `def` whose body contains `yield` as a
+   generator -- Python decides this at compile time from the body, which matches
+   the existing `PyScanLo` pre-passes over a module's token span.
+3. Lower the marked def onto the **stackless** transform. **This lands in
+   `parser.inc`** (`SLCheckEligible` and the state-machine builder live there) --
+   a shared file, so it needs the A/P slot declared.
+4. The iteration protocol: a generator object returned from a call, and `for x
+   in <it>` over it. This is what the corpus needs and the largest piece.
+5. The module-level `for x in gen()` form then falls out.
+
+### Why parked rather than started
+
+A dedicated pass, as the recon said and as the corpus evidence confirms: 19
+generator functions, a full iteration protocol, landing in shared files. Steps
+1-3 move no corpus file on their own, so a partial landing would be a
+feature-shaped commit with nothing to show plus a new half-state in
+`parser.inc`.
+
+Returned to `backlog/` rather than `unfinished/` deliberately: nothing is
+half-applied, so the queue should rank it as available work, not as a lock.
+
+### Open question for whoever takes it
+
+Generators are stateful objects. If step 4 needs a callable value to carry
+state, read `decide-how-a-compiled-def-carries-its-signature-when-boxed` FIRST
+-- it is the same representation question, still with the human, and
+pre-empting its ruling would be wasted work in a lifetime-sensitive area.
