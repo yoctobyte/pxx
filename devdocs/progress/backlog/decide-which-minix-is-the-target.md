@@ -51,3 +51,55 @@ an OS boot goal.** Keep the lighthouse bounded; harvest NetBSD on its own terms.
   not needed at all (Option B).
 - Whether the build story is "`CC=pxx` plus GNU as/ld" (A) or "`CC=pxx` inside
   nbmake" (B), which is a materially larger integration.
+
+## Considerations added 2026-08-18 (user questions) — NONE of this is source-verified
+
+**Flagged explicitly: the notes below are from knowledge, not from reading a MINIX
+tree. There is no MINIX checkout on the box. Before this lighthouse is costed,
+step one is a PROBE — vendor a tree and measure — not trusting this section.**
+
+### POSIX reach
+
+MINIX 2 was built to be **POSIX.1 (1990) conformant** — that was its headline change
+over MINIX 1's V7 Unix compatibility. Classic surface: `open`/`read`/`write`/`fork`/
+`exec`/`wait`, signals, termios, directories. **No pthreads**, nothing from
+POSIX.1-2008. MINIX 3.2+ retargeted at NetBSD compatibility (POSIX + BSD extensions).
+
+For us POSIX.1 is close to ideal: a **small, closed, well-specified** surface — the
+same shape as the C conformance suites we already pass, not an open-ended API.
+
+### Syscalls — the architecturally interesting answer
+
+**The POSIX calls are NOT kernel syscalls.** MINIX is a microkernel: `read()` packs a
+message and sends it to the **VFS server**, a userspace process; `fork()` goes to the
+process manager. The kernel's own trap surface is tiny — the IPC primitives
+(`send`/`receive`/`sendrec`) plus a small set of privileged kernel calls.
+
+**Consequence for pxx: the syscall ABI is MINIX's problem, not ours.** It lives in
+MINIX's own libc as a small `_syscall` shim we compile like any other C — no syscall
+convention baked into the compiler. And the servers/drivers are, to the compiler,
+ordinary C programs, which is what makes the ladder real: PM, VFS and the drivers can
+be compiled and exercised long before anything boots.
+
+### Architecture — and this argues AGAINST this ticket's own recommendation
+
+MINIX 1/2 were x86 (8086 → i386), with historical 68k ports. MINIX 3 is i386-centric,
+**but 3.3 added an ARMv7 port** (BeagleBone Black, Cortex-A8).
+
+**That port lives in the 3.3 line — i.e. inside Option B, the version this ticket
+recommends against.** pxx has a working arm32 backend, so Option B would let one OS
+corpus exercise two backends. The recommendation still stands (bounded scope is the
+whole reason to prefer MINIX over the Linux dot), but the trade is sharper than the
+original framing admitted.
+
+### The strongest argument against the WHOLE goal, recorded honestly
+
+**The bug harvest lands on i386, not on x86-64.** There is no MINIX x86-64 port. Our
+default and most-used backend gets essentially no coverage from this campaign.
+
+Partial mitigation: i386 is our **canary backend** — the only one that validates a
+symbol's type kind, so it catches untyped-temp bugs the others accept silently
+(`project_i386_is_the_canary_for_untyped_temps`). Pointing an OS at the most pedantic
+backend is a real stress test. But if the goal is hardening the codegen most users
+touch, MINIX does not do that, and that should be weighed against "it is bounded and
+it will actually finish."
