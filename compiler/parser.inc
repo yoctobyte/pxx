@@ -33378,6 +33378,7 @@ procedure ParseUsesUnitBody(const name: AnsiString);
 var
   lo, cName, path: AnsiString;
   startPos, savedTokPos, strIdx, i, savedCurrentUnitIdx, savedCUC: Integer;
+  aliasEdgeIdx: Integer;
   savedCurTokKind: TTokenKind;
   savedCurTokSVal: AnsiString;
   savedCurTokIVal: Int64;
@@ -33464,6 +33465,7 @@ begin
     registers (CurrentUnitIdx below), so qualified access by base name is
     unchanged. }
   guardIdx := strIdx;
+  aliasEdgeIdx := -1;
   if isPath then
   begin
     lastDot := 0;
@@ -33479,6 +33481,23 @@ begin
     bug-pascal-uses-is-transitive wants every clause, not just first-loads,
     since visibility is per-importer, not per-load. }
   RecordUsesEdge(CurrentUnitIdx, strIdx, InInterface);
+  { ...and the RESOLVED edge, when the spelling is an alias for something else.
+    The edge above points at the SPELLING (`codecs`, `xml.dom`), but visibility
+    is per REAL unit and a shim's symbols live in `mimic_codecs`. Recording both
+    here, at the one site every `uses` passes through, is what makes visibility
+    correct by construction instead of by patches on the paths that happened to
+    be reported: this used to be fixed at the already-compiled early exit alone,
+    which is the arm the SECOND importer of a shim takes.
+
+    A no-op on a first load — the shim branch below registers the alias and
+    re-enters, so there is nothing to resolve yet and the recursion records the
+    real edge on its own way in. It only fires once an alias for this spelling
+    exists, which is exactly when the symbols live under another name.
+    bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim
+    meta-a-lookups-that-ask-about-the-spelling-not-the-resolved-unit }
+  aliasEdgeIdx := FindUnitOrAlias(Strs[strIdx].Text);
+  if (aliasEdgeIdx >= 0) and (aliasEdgeIdx <> strIdx) then
+    RecordUsesEdge(CurrentUnitIdx, aliasEdgeIdx, InInterface);
   if UsesInjected then
   begin
     MarkUnitAmbient(strIdx);
@@ -33526,9 +33545,13 @@ begin
       `pyDupIdx`), whose comment records it the first time round: an alias
       answers a QUALIFIER, it does not make a module's symbols VISIBLE.
       bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim }
-    realIdx := FindUnitOrAlias(Strs[strIdx].Text);
-    if (realIdx >= 0) and (realIdx <> strIdx) then
-      RecordUsesEdge(CurrentUnitIdx, realIdx, InInterface);
+    { The alias-resolved edge this arm used to record is now recorded for EVERY
+      `uses` at the single RecordUsesEdge site above, so the special case here
+      is redundant. Verified by removing it: the shim-visibility test that this
+      arm was written for stays green, as do the three later import tests.
+      Kept as a comment rather than deleted silently, because "the second
+      importer of a shim sees nothing" is a symptom worth being able to find
+      from here. }
     Exit;
   end;
 
