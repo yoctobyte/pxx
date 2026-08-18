@@ -714,3 +714,31 @@ more the board depends on it, the more expensive a plausible-but-wrong fix becom
 silent corruption is the failure mode that survives a green gate.
 
 **Everything else in N is ordinary queue work.** This one is worth you deciding when.
+
+## Tomorrow's agenda — the decision queue (assembled 2026-08-18 evening)
+
+The user is available for decision tickets tomorrow and asked for the queue to be ready
+rather than discovered on the spot. **Eight open `decide-*` tickets, all Track U, all in
+`backlog/`**, ranked:
+
+| prio | ticket | note |
+| --- | --- | --- |
+| 88 | `decide-how-a-compiled-def-carries-its-signature-when-boxed` | the one already in front of them; gates real work, and option B must not be started speculatively |
+| 55 | `decide-what-an-unwired-test-may-assert` | |
+| 50 | `decide-staff-track-c-to-unblock-own-language-first` | a **staffing** fork — the coordinator must not settle it |
+| 50 | `decide-finalize-noop-vs-refusal` | |
+| 45 | `decide-unary-minus-widening-in-the-default-dialect` | dialect philosophy; pairs with the FPC-faithful-by-default rule |
+| 40 | `decide-one-answer-to-have-i-already-compiled-this-unit` | |
+| 40 | `decide-nilpy-exec-injects-a-builtins-key` | |
+| 20 | `decide-what-synapse-actually-needs-vs-mimic-fpc` | |
+
+**Why this list is worth ranking rather than just listing:** a resolved decision propagates
+priority down its dependency edges, so answering the top one unblocks the chain behind it.
+And a `decide-*` that is resolved but never **re-filed into its owning lane** goes invisible
+to `ready`/`next` — the work then gets rediscovered later, sometimes with a fix the decision
+already rejected. So each answer tomorrow should end with the re-file, not with the answer.
+
+**Also requested for tomorrow: the philosophy conversation we did not get to** — the user
+raised it explicitly and it is not a ticket. Flagging it here so it is not lost between
+sessions; it belongs alongside `ir-as-substrate.md` and `normalise-dont-special-case.md`
+rather than in the queue.
