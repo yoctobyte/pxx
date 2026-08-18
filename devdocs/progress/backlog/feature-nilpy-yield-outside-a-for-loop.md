@@ -337,3 +337,44 @@ the board's largest row at 14 files.
 
 Whoever takes it: measure that first, in an hour, before planning around a decision that
 may not apply.
+
+### Correction to the section above: the ITERATION PROTOCOL also already exists
+
+I wrote that bridging Python's `for t in obj` to Pascal's `for x in Gen(args)` was "the
+genuinely NOT mechanical" part. **That was wrong — I had not checked whether Pascal has
+the object form. It does.**
+
+`parser.inc:19428` implements the FPC structural enumerator protocol:
+
+```
+for X in C do BODY   where C has GetEnumerator
+  ->  __e := C.GetEnumerator;
+      try while __e.MoveNext do begin X := __e.Current; BODY end;
+```
+
+Verified end to end at HEAD with a hand-written class — `for v in c do WriteLn(v)` over a
+`TColl.GetEnumerator` returning a `TEnum` with `MoveNext`/`Current` prints `10 20 30`.
+
+**So Python's `__iter__`/`__next__` maps onto machinery that is already built and proven**,
+essentially one-to-one: `__iter__` -> `GetEnumerator`, `__next__` -> `MoveNext` + `Current`
+(with StopIteration as the False return). That is the piece I had flagged as the hard part,
+and it is a naming/adaptation job over an existing protocol.
+
+### And the "stackless is deferred" memory is about ASYNC, not generators
+
+Worth stating because it is an easy misread of `defs.inc`. The "STACKLESS (later)" note
+sits on **`AN_AWAIT` (54)**, the async/await marker — not on `AN_YIELD` (52). Generator
+stackless is DONE: `; generator; stackless;` compiles and runs today (verified: prints
+`0 1 2 3`), and `slgen.pas` is a complete state-machine runtime. Nothing about generators
+is deferred.
+
+### Revised estimate
+
+Every engine this needs is built and proven for Pascal: the yield keyword, both generator
+strategies, and the object-enumerator for-in protocol. NilPy has none of it wired. So this
+is **frontend wiring against three finished subsystems**, not a dedicated pass — closer to
+the `.npy` lexer/parser work than to an object-model change, and the "dedicated-pass"
+framing in this ticket (mine and the parking session's) should not be inherited.
+
+The boxed-def dependency is now doubly suspect: generator state lives in a heap record,
+and the consumption side is an enumerator object. **Measure before planning around it.**
