@@ -903,3 +903,23 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   The probe printed the raw return value. Measure, don't reason, paid again — and the
   shape-varying is what found it, since an `Include` that is the SOLE statement never
   reaches the `AN_SEQ` arm and stayed green throughout.
+
+- 2026-08-18 ~09:00 — **pin v348, and a gap in how the pin lock is announced.** Ran
+  `make stabilize-fast && make pin` (converged byte-identical, `6214284a91ca`, pushed
+  `f5d85953a`) in the window where BOTH workers were idle — the cheapest possible time
+  to hold a repo-wide lock. Trigger was frank3's closing note that the corpus ladder
+  measures against `PXX_STABLE`, so v347 still counted `digits` and `CodecInfo` as walls
+  though both are fixed post-pin; several corpus files were expected to move on the pin
+  alone.
+  **frank2-7e flagged what my announcement missed: I told both workers not to commit,
+  rebase or push, and said nothing about BUILDING.** `make compiler/pascal26` rewrites
+  the same compiler binary `stabilize-fast` is producing, so a worker build during a pin
+  collides with the lock exactly as badly as a push. It held off on its own initiative.
+  **The pin announcement must name builds, not just git operations** — the lock is over
+  the compiler binary and `stable_linux_amd64/**`, and "do not push" is the wrong mental
+  model for it.
+  Also worth keeping: frank3, told to hold, **proposed a narrower permission than the
+  one it was waiting on** — "clear to read, not to write" for a read-only ladder run.
+  That let the post-pin measurement start immediately instead of after a round trip. Good
+  shape for any worker parked behind a lock whose reason does not cover what they want to
+  do.
