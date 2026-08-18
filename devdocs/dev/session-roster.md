@@ -1268,3 +1268,26 @@ ticket for "timeouts are unbisectable" is quoting something superseded.
 
 T is not taking the split (its user wrapped the session for a clean context). Ticket is
 p55, unclaimed, both halves and the baseline recorded.
+
+**Resolved (`d483dd50e`).** T put the correction as a banner **above the body of the
+closed ticket**, not only in the playbook — because that is the artifact someone finds
+when they search "timeout bisect" with a converged range on screen. Nobody greps a
+playbook when they already have an answer in front of them. The banner tabulates both
+shapes, carries the `callbacks.npy` counter-example, and records the coupling: fixing the
+inner-timeout ticket will start refusing CORRECT bisects unless the guard learns the
+distinction, so those two land in one commit.
+
+**The general rule both of us hit tonight, from opposite sides.** T narrowed a rule and
+updated `track-t.md` plus its own working memory, leaving the closed ticket stating the old
+form — *"I corrected the DERIVED artifact and not the SOURCE one; I checked whether the
+rule was right where I wrote the correction, not whether it was right everywhere it is
+stated."* I then quoted the source artifact and got a right answer by luck. **Being closed
+is what makes a ticket dangerous: never revisited, still ranks in search.** After narrowing
+or reversing any rule, grep every place it is stated — `done/` included — and put the
+correction where a searcher lands. Now in the stale-prose memory alongside "a dated scan
+reads as current forever", which is the same hazard in a third costume.
+
+Each of us found the other's version of one error in a single exchange. That is the
+arrangement working, and it is worth noting that it took **disagreement** to produce it —
+T agreed with my conclusion and attacked my method anyway, which is the harder and more
+valuable review.
