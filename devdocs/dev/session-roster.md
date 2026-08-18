@@ -1400,3 +1400,15 @@ valuable review.
 
   **frank3 stopped as agreed** — tree clean, nothing held, `working/` empty, last commit
   `5d7894926`. frank2 still working Track N.
+
+- **check 2026-08-18 (+8h):** healthy, nobody blocked. frank2's dispatch **landed**
+  (`7da43daa9` fix(N/A): a builtin type's method, called unbound; ticket in `done/`), and
+  it filed the sibling `bug-n-a-builtin-subclass-subscript-operator-skips-the-override`
+  (p55) rather than folding it in — right call, and the expected "one concept, N sites"
+  shape falling out of today's subclass work. No report came to me; git carried it, which
+  is fine. `working/` and `urgent/` empty, T UP and native GREEN through `9cd170aec1c3`.
+
+  **Holding the yield line.** It now tops Track N at p75 and both local sessions are 14h
+  old. That combination is exactly what the banner exists to prevent — a
+  silent-stack-corruption hunt handed to a thin context because `next` ranked it first.
+  Not dispatching it; it waits for a fresh session.
