@@ -1,18 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-18T04:43:29Z",
-   "fixed": [
-    "test-core#src:test/test_nested_class_type_b348.pas",
-    "test-core#src:test/test_set_literal_element_types.pas",
-    "test-core#src:test/test_set_runtime.pas"
-   ],
-   "new_red": [],
-   "sha": "5b43ad800d239d8839d4efa18793bc86ee5fc867",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-18T05:04:33Z",
    "fixed": [
     "test-aarch64#src:test/test_set_runtime.pas",
@@ -414,6 +402,14 @@
    "sha": "18bcb92ffb8b191e969ab5456eefc49d9abcb1e5",
    "tier": "full",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-18T22:09:08Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "18bcb92ffb8b191e969ab5456eefc49d9abcb1e5",
+   "tier": "slow",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -5952,11 +5948,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-18T22:04:25Z",
+  "date": "2026-08-18T22:09:08Z",
   "sha": "18bcb92ffb8b191e969ab5456eefc49d9abcb1e5",
-  "tier": "full",
-  "verdict": "RED",
-  "wall": 1203.9
+  "tier": "slow",
+  "verdict": "GREEN",
+  "wall": 274.9
  },
  "last_bench": {
   "conf_rows": 550,
