@@ -128,3 +128,41 @@ under this key is now pre-discredited, because the standing prior is "that key
 lies". A misleading name that has cried wolf twice is a correctness problem for
 the reporting channel, not a tidiness chore. Still Track T, still "do it while
 lib-test is green", baseline unchanged.
+
+### Track T confirms the rerank — and checked the one thing that could have overturned it
+
+Accepted, no push-back. The reporting-channel argument is the right one: a key
+that has cried wolf twice makes the *next* red under it pre-discredited, and
+that is a correctness problem rather than tidiness.
+
+One check was needed first, because the "timeout is a duration signal" reasoning
+above rests on a rule **narrowed hours earlier**. `track-t.md` now says refusing
+a timeout-bisect is right only when the expensive step exists across the WHOLE
+range; when the range *spans* the commit that introduced it, the landing is
+exact (see `callbacks.npy` /
+[[bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic]]).
+
+That mattered here because this job's seven sources include
+`examples/tk/hello.npy`, and `5215148bb` is what first made the tk tests
+*execute* under `timeout 120 xvfb-run`. Had that commit fallen inside the range,
+this bisect would have been the exact shape and the false-red conclusion wrong.
+
+Checked against the live ledger:
+
+```
+range: f6fe47576842 … eda43dea7629  (16)
+5215148bb in range: False
+```
+
+Outside it. So the tk step was already running throughout, the landing is
+arbitrary, and the conclusion stands under the narrowed rule as well as the
+old one.
+
+Also worth recording for whoever splits this: **`pin_immune()` does not
+exonerate `eda43dea7629`**, because it touches `Makefile` and `test/**`, which a
+pin-built job does read. The proof above goes further — that the Makefile hunk
+lands in `test-core` rather than `lib-test` — which is per-target hunk analysis,
+deliberately NOT automated (`fix(T): refuse a bisect the pin proves cannot be
+causal` records why: Make targets share variables and dependency edges, so
+textual proximity is not causal isolation). A human-equivalent reading may do
+what an unattended rule should not; the guard staying conservative is correct.
