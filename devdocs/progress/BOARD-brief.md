@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:13 blocked:4 backlog:225 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2010 rejected:38`
+`working:1 unfinished:12 blocked:4 backlog:226 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2010 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-nilpy-thirdparty-libraries-as-targets` [N] — owner: frank2-7e
 
-## unfinished (13) — parked mid-flight; re-claim, do not duplicate
+## unfinished (12) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
@@ -22,7 +22,6 @@ _none — no lane is locked._
 - `feature-a-typeref-migrate-consumers` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
-- `feature-nilpy-thirdparty-libraries-as-targets` [N]
 - `feature-pascal-corpus-generics` [P]
 - `feature-port-rtl-over-libc` [A]
 - `feature-real-dynlib-loader` [B] — blocked-by: bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
@@ -34,8 +33,9 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 210, ranked
+## Ready — top 30 of 211, ranked
 
+- `[p 65] [A]` bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
@@ -65,6 +65,5 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-nilpy-collections-and-string-methods
 - `[p 50] [P]` feature-p-read-text-into-a-char-arm
 - `[p 50] [A]` feature-pascal-asmmode-directive-tolerance
-- `[p 50] [A]` feature-pascal-initialize-finalize-intrinsics
 
-_180 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_181 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

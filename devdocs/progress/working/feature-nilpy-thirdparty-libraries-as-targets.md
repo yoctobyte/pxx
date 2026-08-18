@@ -2,8 +2,8 @@
 track: N
 prio: 65
 type: feature
-status: unfinished
-owner: frank2
+status: working
+owner: frank2-7e
 ---
 
 # META: third-party Python libraries as pxx targets — classify, then compile
@@ -900,3 +900,79 @@ the prose above; every scan in this file has been superseded by the next one.
 > The `webencodings` and `constants` rows were artefacts and are gone; the real
 > top two are `undefined variable (digits)` (8 files) and
 > `undefined variable (CodecInfo)` (7 files).
+
+## LADDER A/B 2026-08-18 — pin v347 (`08bdf2729`) vs HEAD (`c7974b6af`)
+
+*(frank2-7e, Track N. Resume condition from the 2026-08-17 park was met: the shim
+question is answered (`decide-how-python-shaped-shims-should-be-shipped`, decided)
+and `mimic_six` exists (`feature-nilpy-six-and-warnings-shims`, done).)*
+
+**Method:** `tools/nilpy_ladder.py` for the pinned run, unmodified. For the HEAD
+run the tool was **imported and only its `PXX` overridden** — its `-Fu` path rule,
+corpus detection and wall normalisation are its own, byte for byte. The tool is
+Track B's file and was not edited, and its docstring is explicit that retyping its
+path rule is how the last measurement artefact was made. Both runs, all roots.
+
+**Binary provenance:** `compiler/pascal26` is a self-host fixedpoint at
+`c7974b6af`; no `compiler/**` or `lib/rtl/**` commit lands between that build and
+HEAD, so the binary is the sha it claims to be.
+
+| | pin v347 | HEAD |
+| --- | ---: | ---: |
+| compile | 4/48 | **5/48** |
+| `undefined variable (digits)` | **8** | **0** |
+| `undefined variable (CodecInfo)` | 7 | **7** |
+| `class Filter cannot inherit from itself` | 3 | 0 |
+| `missing module: xml_etree_elementtree` | 2 | 4 |
+| `undefined variable (yield)` | 0 | 3 |
+| `Nil Python: unknown base class list` | 0 | 2 |
+
+**The ladder moved.** `digits` — the largest row and 8 files — is **gone**:
+[[bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails]]
+(`89283d654`) is NOT in pin v347, so this is the first scan to see it. The new
+rows (`yield`, `unknown base class list`, more `xml_etree_elementtree`) are those
+same eight files arriving at their next wall, not regressions.
+
+Unlike the 2026-08-17 scan, this one is **not** flat: +1 file compiles and the
+biggest wall is cleared outright.
+
+### The parked recommendation is SUPERSEDED
+
+The park above concluded "further Track N work has low yield until the shims
+exist — all Track B". That was written against the pre-correction table. It is no
+longer true, and the corrected table published the same day already contradicted
+it: the top two rows were both Track N tickets, not shims. One of them is now
+fixed and the wall is gone.
+
+### The top wall is now CodecInfo (7 files) and it is ROOT-CAUSED
+
+Filed as [[bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim]]
+(A, p65). Two-file repro: if two NilPy modules in one build both `import codecs`,
+the shim's CLASSES stop resolving in the imported module —
+`codecs.CodecInfo(...)` is `undefined variable (CodecInfo)` — while the same
+file's `codecs.lookup(...)` still works. Delete the importer's `import codecs`
+and it compiles. Boundary measured across eight shapes; it is specific to
+shim-aliased modules and specific to their classes, and an ordinary duplicate
+import is unaffected.
+
+**Track A, not N:** the deciding guard is `parser.inc:10014`, a shared file.
+Filed and handed up rather than edited.
+
+**Correction to the record:** the published table credits the `CodecInfo` row to
+[[bug-n-a-temporary-receiver-resolves-to-the-shim-type-not-the-user-class]], which
+is done and inside pin v347. The row is 7 on both sides of the A/B, so that
+ticket cannot be its cause. Different mechanism — see the new ticket.
+
+### Where the lever is now
+
+| wall | files | owner |
+| --- | ---: | --- |
+| `CodecInfo` | 7 | **A** — filed above, unblocks all of tinycss2 + webencodings |
+| `xml_dom` / `xml_etree_elementtree` / `six_moves` / `bisect` / `genshi_core` / `xml_sax_*` / `colorsys` / `copy` / `lxml` / `urllib_request` | 18 | **B** (module shims) |
+| `yield` (generators) | 3 | **N** |
+| `unknown base class list` / `Mapping` | 3 | **N** |
+| `unexpected character` (non-UTF8 fixtures) | 2 | corpus data, not a wall to fix |
+
+**Do not read the next step out of the prose above this section** — every scan in
+this file has been superseded by the next one, including the recommendation that
+was current this morning.
