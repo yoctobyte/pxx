@@ -1083,3 +1083,30 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   Autonomy re-armed with fresh standing state (job `90d95108`, hourly at :23) — the
   previous prompt still described the morning's situation, which would have had the next
   check dispatching against a board that no longer exists.
+
+- 2026-08-18 evening — **rename cluster landed as a set; pin v351; the wrong-name sweep is
+  now dispatched.** Working the three tickets together was the right call — they shared a
+  guard, and separating them would have produced partial fixes.
+  **The length rule is DEAD, and not by the correction frank3 and I converged on either.**
+  Verified on pinned v350: `name` (4 chars) returns 7 while `abc` and `run` (3 chars)
+  core-dump. The real axis is the callee's RETURN TYPE crossed with a wrapper whose arity
+  was hardcoded to 1; length correlated only because the working names happened to infer a
+  Variant return. **Three confounds in one ticket, and the axis nobody varied this time was
+  the one OUR correction introduced.** The test now sweeps lengths AND arities so no
+  reading can come back.
+  **A FOURTH instance of the wrong-name shape**, and this one answered a SILENT WRONG
+  VALUE: a renamed class became a module alias, so `N2.somefunc()` called the module's
+  function and returned 7 where CPython raises AttributeError. Verified — pinned v350
+  prints 7, HEAD refuses. Same guard as the morning's shim-class fix, the OTHER argument:
+  it asked whether the unit declares a class named the ALIAS while the class carries the
+  SOURCE name.
+  So the sweep is dispatched (Track A ticket, self-resolved under the combined-track rule).
+  Four instances is a CLASS, not a run, and it is cheaper than the fifth discovery.
+  Also: the boxed-def decision gates **three** items on independent evidence, not on my
+  bookkeeping — frank2-7e hit the same wall from the other side (a boxed def demonstrably
+  carries a code address and no signature) and confirmed p85's block rather than inheriting
+  it. The defaults symptom was SPLIT OUT rather than folded, with a warning that a
+  wrapper hardcoding defaults would answer for one call shape while the rest keep failing —
+  which is exactly the re-measure frank3 demanded when it flagged that a crash fix must not
+  close the dangerous symptom silently. **That hand-off worked across two sessions that
+  never spoke to each other.**
