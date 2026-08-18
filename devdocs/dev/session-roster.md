@@ -873,3 +873,33 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   one is "what has that host published lately", which `git fetch` answers for a watcher
   that reports over git and is deliberately on another box. A local `pgrep` cannot see
   a remote daemon and will always return the answer I wanted least.
+
+- 2026-08-18 ~06:45 — **the red is CLEARED, and the overnight diagnosis was WRONG in a
+  way worth recording.** frank2-7e (cold — a fresh context that rebuilt everything from
+  the diff) landed `5b43ad800`; master is green on the three named tests.
+  **The note frank2-f1 left in the tree would not have fixed it.** The cold session
+  built it, ran the three tests, and they still failed identically. There were two
+  defects and the comment named only the lesser:
+  1. the missing `seqCur >= 0` guard — real, kept, insufficient;
+  2. `AN_SET_INCL`/`AN_SET_EXCL` call `IRLowerSetBitMutate`, a **procedure**, and never
+     assigned `Result`, so `IRLowerAST` returned the result slot's leftovers.
+  **(2) is LATENT and predates `ce57db4cd`** — I verified this myself rather than
+  relaying it: `git show ce57db4cd^:compiler/ir.inc` shows the arm already had no
+  `Result :=`. While the `AN_SEQ` arm RECURSED, the leftover was a live value from the
+  frame just popped and happened to be a valid IR node index. Going iterative changed
+  the leftovers to `16777218` and the fold built an `IR_BLOCK` over it.
+  **So the commit routed as the regressor was the UNCOVERER, not the cause** — which is
+  exactly why leaving fix-vs-revert with the owner was right. A revert would have
+  re-buried a real defect and looked like a success.
+  Verified here before relaying: fixedpoint build at `9a40458bb`, all three tests PASS,
+  and frank2's minimal repro (`c := []; Include(c, 7);`) compiles. It swept the class —
+  no `AN_` arm in any of `ir.inc`'s 50 Integer-returning functions leaves `Result`
+  unassigned — and removed both `a.seq` probes.
+  It also resolved `bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow`
+  (`6d0efee09`); the two html5lib files now give ordinary diagnostics instead of a
+  silent segfault. `working/` is empty. Both workers idle, trees clean.
+  **Method note, from the worker itself:** it had two plausible theories before probing
+  (stale spine entry; `IRDropManagedStrResult` shrinking `IRCount`) and both were wrong.
+  The probe printed the raw return value. Measure, don't reason, paid again — and the
+  shape-varying is what found it, since an `Include` that is the SOLE statement never
+  reaches the `AN_SEQ` arm and stayed green throughout.
