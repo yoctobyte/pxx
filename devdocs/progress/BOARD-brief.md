@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:14 blocked:5 backlog:233 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2026 rejected:38`
+`unfinished:15 blocked:5 backlog:233 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2026 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (14) — parked mid-flight; re-claim, do not duplicate
+## unfinished (15) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults` [N]
@@ -21,6 +21,7 @@ _none — no lane is locked._
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-own-language-first-symbol-resolution` [A] — blocked-by: bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
 - `feature-a-typeref-migrate-consumers` [A]
+- `feature-b-the-module-shim-batch-blocking-the-python-corpus` [B] — blocked-by: decide-xml-etree-thin-tree-model-or-a-real-xml-library
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
@@ -42,7 +43,7 @@ _none — no lane is locked._
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
-- `[p 62] [B]` feature-b-the-module-shim-batch-blocking-the-python-corpus
+- `[p 62] [U]` decide-xml-etree-thin-tree-model-or-a-real-xml-library (unblocks 1)
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [N]` feature-nilpy-yield-outside-a-for-loop
 - `[p 58] [O]` feature-opt-o3-register-pressure
