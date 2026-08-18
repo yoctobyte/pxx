@@ -4,8 +4,8 @@ prio: 65
 type: bug
 blocked-by: []
 summary: "When two NilPy modules in one build both `import <shim>` (a mimic_-mapped module), the shim's CLASSES stop resolving in the imported module — `codecs.CodecInfo(...)` reports `undefined variable (CodecInfo)`. The unit alias and the shim's PROCS still resolve, so `codecs.lookup(...)` in the same file is fine. Top wall of the NilPy corpus ladder: 7 of 48 files."
-status: backlog
-owner: unassigned
+status: working
+owner: frank2-7e
 ---
 
 # A shim's classes are invisible when two modules import the same shim

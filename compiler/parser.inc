@@ -33388,6 +33388,7 @@ var
   lastSlash, lastDot: Integer;
   isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
   guardIdx: Integer;   { CompiledUnits key — see the note at its assignment }
+  realIdx: Integer;    { alias-resolved unit for the already-compiled edge }
   { The RESOLVED FILE key, and the already-compiled entry holding it — the
     second key space that makes one module one unit however it was spelled. }
   pyFileIdx, pyDupIdx: Integer;
@@ -33502,7 +33503,33 @@ begin
     if CompiledUnits[i] = guardIdx then
       isCompiled := True;
   end;
-  if isCompiled then Exit;
+  if isCompiled then
+  begin
+    { The edge recorded above points at the SPELLING (`codecs`), but visibility
+      is per REAL unit and a shim's symbols live in `mimic_codecs`. On the FIRST
+      import that does not matter — the shim branch below re-enters through
+      `ParseUsesUnit('mimic_' + lo)`, which records the real edge on the way in.
+      A SECOND importer never gets there: `guardIdx` is the spelling, so it is
+      already marked compiled and exits here, leaving that module with an edge
+      to a name nothing is declared under.
+
+      The symptom was silent and shape-dependent. `codecs.lookup(...)` kept
+      working, because a qualified PROC names its unit and never consults the
+      visibility-filtered scan; only the flat class lookup did, so
+      `codecs.CodecInfo(...)` in the second module reported `undefined variable
+      (CodecInfo)` while the line above it resolved fine. Whichever module
+      imported the shim first was the one that worked, which is what says the
+      missing thing is the EDGE and not the alias.
+
+      Same defect, same fix, as the duplicate-.py arm below (search
+      `pyDupIdx`), whose comment records it the first time round: an alias
+      answers a QUALIFIER, it does not make a module's symbols VISIBLE.
+      bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim }
+    realIdx := FindUnitOrAlias(Strs[strIdx].Text);
+    if (realIdx >= 0) and (realIdx <> strIdx) then
+      RecordUsesEdge(CurrentUnitIdx, realIdx, InInterface);
+    Exit;
+  end;
 
   { Mark as compiled. Remembered so a SOFT miss (the fallback-import probe
     below) can take the mark back off: nothing was loaded, so a later import of
