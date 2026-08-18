@@ -1,18 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-18T03:58:55Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:test/test_nested_class_type_b348.pas",
-    "test-core#src:test/test_set_literal_element_types.pas",
-    "test-core#src:test/test_set_runtime.pas"
-   ],
-   "sha": "ce57db4cdda52a364f78588e0115fbe4c96828c7",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-18T04:03:37Z",
    "fixed": [],
    "new_red": [],
@@ -421,6 +409,16 @@
    "sha": "9d96253f2c148dac0cda3f6674e0d9c51bf10d1c",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-18T20:57:02Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_stackless_gen.pas"
+   ],
+   "sha": "dfac1da00b04ad41b85996873b19ad4c767d37ca",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -4773,7 +4771,7 @@
   "test-core#src:test/test_sqlite_crud_autotyped.pas": "pass",
   "test-core#src:test/test_sqlite_crud_lazy.pas": "pass",
   "test-core#src:test/test_stack_frame_intrinsics_b270.pas": "pass",
-  "test-core#src:test/test_stackless_gen.pas": "pass",
+  "test-core#src:test/test_stackless_gen.pas": "fail",
   "test-core#src:test/test_static_array_ansistring_field.pas": "pass",
   "test-core#src:test/test_static_array_length.pas": "pass",
   "test-core#src:test/test_static_array_managed_scope_exit.pas": "pass",
@@ -5957,10 +5955,10 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-18T20:52:14Z",
-  "sha": "9d96253f2c148dac0cda3f6674e0d9c51bf10d1c",
+  "date": "2026-08-18T20:57:02Z",
+  "sha": "dfac1da00b04ad41b85996873b19ad4c767d37ca",
   "tier": "native",
-  "verdict": "GREEN",
+  "verdict": "RED",
   "wall": 224.1
  },
  "last_bench": {
@@ -6018,6 +6016,20 @@
    ],
    "src": "test/crtl_exp2.c examples/tk/hello.npy +5",
    "status": "timeout"
+  },
+  {
+   "bad": "dfac1da00b04ad41b85996873b19ad4c767d37ca",
+   "good": "9d96253f2c148dac0cda3f6674e0d9c51bf10d1c",
+   "job": "test-core#src:test/test_stackless_gen.pas",
+   "name": "test-core#721",
+   "opened": "2026-08-18T20:57:02Z",
+   "pin_built": false,
+   "range": [
+    "c59a57ff44a8957d4ac3fa1180f3f38c94a52fc5",
+    "dfac1da00b04ad41b85996873b19ad4c767d37ca"
+   ],
+   "src": "test/test_stackless_gen.pas",
+   "status": "fail"
   }
  ],
  "pin_shadow": {

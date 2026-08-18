@@ -3,8 +3,9 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `9d96253f2c14` | 2026-08-18T20:52:14Z | GREEN (native) | 224.1s | `df15ae3fe1dc` RED |
+| plexus | `dfac1da00b04` | 2026-08-18T20:57:02Z | RED (native) | 224.1s | `df15ae3fe1dc` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
 - **lib-test#src:test/crtl_exp2.c** — test/crtl_exp2.c examples/tk/hello.npy +5 (plexus): bad `eda43dea7629`, last good `d91b82d6516b`, 16 commit(s) in range
+- **test-core#src:test/test_stackless_gen.pas** — test/test_stackless_gen.pas (plexus): bad `dfac1da00b04`, last good `9d96253f2c14`, 2 commit(s) in range
