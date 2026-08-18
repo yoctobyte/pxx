@@ -258,4 +258,4 @@ façade check + the new test failing pre-fix and passing post-fix +
 parallel array). No pin needed; nothing in `compiler/builtin/**`.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit 3d66bdff7.
