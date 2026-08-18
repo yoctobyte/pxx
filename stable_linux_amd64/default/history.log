@@ -348,3 +348,4 @@
 2026-08-18T07:41:58Z  v348  6214284a91ca29ec7982d2e8bb5a98da7dd2e8d4a7eb564cc283e86e38b60f46  9ad1877e2695036b3e388d96d187df03f074d56a  tickets(N): the alias-default bug returns wrong VALUES, not just segfaults
 2026-08-18T08:46:50Z  v349  596799fd9c6ec67a718cf2c878b1c509e3ccbf95db752d6986c470c09a8b8d91  695bbbb5007f3a8d818b8b0ea7a6ffd72687d75c  tickets(B): unblock xml_dom and rerank 15 -> 55
 2026-08-18T09:43:02Z  v350  66f59112e1a9fe3bf032efded8fb8be9bf4a03fddf5d66d5cb7279e97a4f7ab9  b455949116595b73c7cd4ff3564f8afc5949b657  docs(progress): record the shas the resolves landed as
+2026-08-18T10:15:02Z  v351  e4ca45a1819cb70dc7e154638e6fcd570ee99413f1d2620e89e60fff121274fb  675c66b42a10cee5ae114313efb5709a29d578f6  docs(progress): record the shas the resolves landed as
