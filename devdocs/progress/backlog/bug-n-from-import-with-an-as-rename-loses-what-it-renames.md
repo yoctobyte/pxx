@@ -103,7 +103,7 @@ plain modules with no shim involved.
 
 ---
 
-## Coordinator measurement 2026-08-18 — the discriminator is the SOURCE NAME'S LENGTH
+## Coordinator measurement 2026-08-18 — the source name's length matters (SUPERSEDED — the rule below is too strong; see the two sections that follow before acting on any of it)
 
 **This supersedes the argument-count reading above.** Both earlier tables were accurate
 and both were confounded: every row that "worked" happened to use a **one-character**
