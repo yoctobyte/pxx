@@ -4,6 +4,7 @@ prio: 70
 type: decide
 blocked-by: []
 summary: "What should the next week of work aim at? Measured: the bug backlog already peaked (61 on 08-03 -> 32 now) and 65% of open tickets are features, so this is no longer a burn-down question. Three candidate themes with the numbers behind each."
+status: decided
 ---
 
 # Decide: the theme for the coming week
@@ -70,3 +71,38 @@ so this is a preference question, not a numbers question.
   tickets it will generate.
 - **(3)** frank3 or a new session takes a corpus; expect the open-bug count to
   RISE and that is the intended outcome, not a regression.
+
+## Ruling (human, 2026-08-18)
+
+**Option 3 with 1 as the second lane — as recommended. The two are ONE theme, not
+two.** The overnight measurement is what settled it: finish-NilPy and push-the-corpora
+turned out not to be competing choices, because the corpus that generates N's
+remaining work IS third-party-libraries-as-targets. Driving corpora forward and
+finishing NilPy are the same activity viewed from two ends.
+
+So this resolves as a **confirmation**, not a fork — which is why it sat at p70 with
+nothing blocked on it.
+
+Operative consequences, in the ticket rather than in chat:
+
+- **Expect the open-bug count to RISE, and that is the intended outcome.** Corpus work
+  is measured as the highest bug-discovery activity we have (6 fixes in one afternoon).
+  A burn-down view will read this week as regression. It is not.
+- **Discovery now outranks queue-draining** on the composition numbers (146 features vs
+  32 bugs). A corpus finding beats a mid-prio queue item for the same tokens.
+- **Option 2 (esoteric frontends) is explicitly NOT this week.** Left in
+  `experimental/`, unranked, as designed. It stays available as the fun-rather-than-
+  thorough choice; this ruling does not reject it, it defers it.
+- Staffing this ruling implies: frank2 → N, frank3 stays B. Set the same day.
+
+**Filing note (the failure mode this ticket must avoid):** a resolved `decide-*` that
+is never re-filed into its lane becomes invisible to `ready`/`next` and the work gets
+rediscovered later, sometimes with an approach the decision already rejected. Nothing
+new needs filing here — the corpus tickets already exist and are ranked
+(`feature-pascal-corpus-generics`, `feature-pascal-corpus-oop`,
+`feature-c-csmith-differential-fuzzing`, `feature-nilpy-thirdparty-libraries-as-targets`,
+quickjs). What this ruling changes is their PRIORITY relative to queue-drain work, so
+the theme lands as ranking, not as prose here.
+
+## Log
+- 2026-08-18 — decided, commit PENDING-COMMIT.

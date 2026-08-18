@@ -1350,7 +1350,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-c-corpus-chess | A | 60 | feature | C corpus: chess engine — perft as a compiler-independent oracle | — |
 | feature-c-corpus-duktape | A | 55 | feature | C corpus: Duktape — JS engine (GC + IEEE-754 corners) | — |
 | feature-c-corpus-expansion | A | 65 | feature | C test-corpus expansion: c-testsuite → zlib → tcc (+ csmith fuzz harness) | — |
-| feature-c-corpus-quickjs | C | 50 | feature | C corpus: bring up QuickJS — a real JS engine as a cfront target | — |
+| feature-c-corpus-quickjs | C | 65 | feature | C corpus: bring up QuickJS — a real JS engine as a cfront target | — |
 | feature-c-corpus-tcc | C | 50 | feature | C corpus: bring up tcc (TinyCC) as a real-world multi-file C target | — |
 | feature-c-corpus-zlib | A | 60 | feature | C corpus step 2: zlib v1.3.1 bring-up | bug-c-gzgetc-fnlike-macro-call |
 | feature-c-cross-lua-sqlite | C | 50 | feature | Cross-target lua 5.4 + sqlite3 — build & run on all backends | — |

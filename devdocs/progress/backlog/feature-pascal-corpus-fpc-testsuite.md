@@ -1,5 +1,5 @@
 ---
-prio: 60  # auto — rung 1 of the Pascal corpus; biggest dialect coverage per effort
+prio: 65
 ---
 
 # Pascal corpus rung 1 — FPC test-suite subset (conformance)
