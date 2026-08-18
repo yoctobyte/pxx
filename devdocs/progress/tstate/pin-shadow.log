@@ -105,3 +105,4 @@
 2026-08-18T03:10:52Z	plexus	e0f6748717e67d50d39ca5fc04057814575c4890	would NOT pin e0f6748717e6 — 2 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c, test-nilpy#src:examples/tk/callbacks.npy
 2026-08-18T04:23:37Z	plexus	61e2448bac6d3f61657fb54a746d3e33d2ad96fc	would NOT pin 61e2448bac6d — 11 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c, test-aarch64#src:test/test_set_runtime.pas, test-arm32#src:test/test_set_runtime.pas, test-core#src:test/test_nested_class_type_b348.pas, test-core#src:test/test_set_literal_element_types.pas
 2026-08-18T05:04:33Z	plexus	5b43ad800d239d8839d4efa18793bc86ee5fc867	would NOT pin 5b43ad800d23 — 2 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c, test-nilpy#src:examples/tk/callbacks.npy
+2026-08-18T06:41:03Z	plexus	8a7418902cf4075eb484343b12a47a00dc911810	would NOT pin 8a7418902cf4 — 2 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c, test-nilpy#src:examples/tk/callbacks.npy
