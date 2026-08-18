@@ -41,8 +41,8 @@ _none — no lane is locked._
 ## Ready — top 30 of 219, ranked
 
 - `[p 88] [U]` decide-how-a-compiled-def-carries-its-signature-when-boxed (unblocks 1)
+- `[p 80] [N]` bug-n-from-import-with-an-as-rename-loses-what-it-renames (unblocks 1)
 - `[p 75] [N]` bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes (unblocks 1)
-- `[p 75] [N]` bug-n-from-import-with-an-as-rename-loses-what-it-renames (unblocks 1)
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop

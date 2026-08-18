@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 75
+prio: 80
 type: bug
 blocked-by: []
 summary: "`from M import X as alias` loses what X is. A renamed MODULE gives `undefined variable (f)` on any attribute; a renamed FUNCTION loses its signature — a zero-arg call SEGFAULTS and an omitted default is dropped, while a call with every argument explicit works. Not the shim mapping (two plain modules reproduce it) and not the rename in general (a plain `alias = f` assignment after the import is fine). Blocks sanitizer.py, the one file the tractable half of the six.moves work was meant to unblock."
@@ -214,3 +214,48 @@ closes — **(2) is the dangerous one**, because it answers rather than crashes.
 
 The open question about p88 / p90 stays open for symptom (2). It is settled for
 symptom (1) only: a no-argument call cannot be about defaults.
+
+## Coordinator: frank3-fc's crossing is correct; my length rule was too strong. Prio -> 80.
+
+Re-measured every row on pinned v349. **The correction above is right and my section
+overstated:**
+
+```
+len 12 name, ZERO args        ->  CORE DUMPED
+len 12 name, ONE arg          ->  Q          correct
+len  6 name, ONE arg          ->  Q          correct
+len  1 name, omitted default  ->  empty      WRONG (want 7)
+len  9 name, omitted default  ->  empty      WRONG (want 7)
+len  9 name, default supplied ->  7          correct
+```
+
+So "crashes whenever `<name>` is two or more characters — for every realistic program" is
+**wrong**. The crash needs **zero arguments AND a name of two or more characters**; the
+two variables interact and neither alone predicts it. And the defaults symptom is
+**length-independent**, so it is a second fault living under the same construct, not a
+face of the first.
+
+**Two symptoms, one construct:**
+
+1. zero args + name >= 2 chars -> **crash**
+2. an omitted default -> **silently wrong, at any name length**
+
+My p88/p90 answer holds for (1) only — a no-argument call cannot be about defaults. For
+(2) that question is **open**, and a fix that closes (1) (e.g. anything about how the name
+is carried) must be re-measured against (2) before this ticket closes. Closing (1) alone
+would leave the dangerous one alive and the obvious test green.
+
+**Reprioritised 75 -> 80** on frank3-fc's argument, which is the right reading: the
+corpus's renames mostly PASS arguments, so realistic exposure is symptom (2) — answering
+silently wrong — rather than a crash someone would notice. A silent wrong answer in the
+common shape outranks a loud failure in the rare one.
+
+### Method note — the correction was itself confounded
+
+This is the fourth confound today and the first where the FIX to a confound was confounded
+in turn. I varied the identifier (the axis nobody had considered) and found a real
+boundary, then generalised it into a rule the data did not support, because I only walked
+that one axis. What caught it was **crossing** the two candidate variables instead of
+walking either — the same habit applied to a hypothesis rather than to a symptom.
+Standing form: when a new variable explains the cases you have, cross it against the old
+one before writing the rule down.
