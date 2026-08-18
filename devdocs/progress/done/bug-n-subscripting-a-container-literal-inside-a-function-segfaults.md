@@ -161,4 +161,4 @@ one of them is uncovered).
 `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit ff428c023.
