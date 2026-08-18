@@ -174,4 +174,4 @@ is the static-dispatch one filed above — the two look identical from NilPy.
   by http.pas's own suite, not by this one.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit 5a900c598.
