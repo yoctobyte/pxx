@@ -70,14 +70,8 @@ class SplitResult:
         self.fragment = fragment
 
     def __getitem__(self, i):
-        # The field tuple is bound to a local before being indexed. That is a
-        # WORKAROUND, not a preference: subscripting a container literal inside
-        # a function body segfaults
-        # (bug-n-subscripting-a-container-literal-inside-a-function-segfaults).
-        # Registered in devdocs/dev/track-b-workarounds.md.
-        fields = (self.scheme, self.netloc, self.path, self.query,
-                  self.fragment)
-        return fields[i]
+        return (self.scheme, self.netloc, self.path, self.query,
+                self.fragment)[i]
 
     def __len__(self):
         return 5
@@ -98,10 +92,8 @@ class ParseResult:
         self.fragment = fragment
 
     def __getitem__(self, i):
-        # Same workaround as SplitResult.__getitem__ above.
-        fields = (self.scheme, self.netloc, self.path, self.params, self.query,
-                  self.fragment)
-        return fields[i]
+        return (self.scheme, self.netloc, self.path, self.params, self.query,
+                self.fragment)[i]
 
     def __len__(self):
         return 6

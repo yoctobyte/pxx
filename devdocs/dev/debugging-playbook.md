@@ -150,6 +150,19 @@ disagree about where the boundary is, do not unify them; record both, and say
 in the ticket that a fix for one must be re-measured against the other before
 it closes.
 
+**And a crossed boundary still is not the mechanism.** The as-rename case above
+was resolved by a crossing; a sibling bug found the same evening was not. That
+one's boundary — "subscripting a container LITERAL inside a function crashes,
+binding it to a local first does not" — held on every row of a four-axis
+crossing, and the subscript turned out to be innocent: the fault was RETURNING
+anything derived from a literal, including a method call with no subscript in
+it, and the boundary looked like subscripts only because the rule that would
+have saved it lived in a path keyed to a non-literal receiver. So a crossing
+tells you where the behaviour changes, which is what you need to hand someone a
+repro — it does not tell you why, and a rule that fits every row you have can
+still be naming a correlate of the real path. Write the boundary into the
+ticket as a boundary, not as a cause, and say which one you are claiming.
+
 The corollary, since it is what actually caught this: **two sessions measuring
 the same bug and disagreeing is a signal, not a nuisance.** Four confounded
 readings were resolved that way in one day — including one where the correction
