@@ -1412,3 +1412,25 @@ valuable review.
   old. That combination is exactly what the banner exists to prevent — a
   silent-stack-corruption hunt handed to a thin context because `next` ranked it first.
   Not dispatching it; it waits for a fresh session.
+
+- **COORDINATION GAP, mine, found 2026-08-18 evening: I never read Track A's queue.**
+  The cron check prompt names `ready --track N` and `--track B`, and I followed it
+  literally all day. Track A's queue was never opened. Sitting in it, second from the top:
+  **`feature-port-freebsd-native` — p55, unblocked, ready, "unblocks 1"** (FreeBSD/amd64
+  native target: raw-syscall ELF, own syscall table, carry-flag error convention, ELF
+  brand), plus `feature-port-openbsd-libc` (p50) and `feature-port-multi-os-abstraction`
+  (p55, umbrella). The platform machinery already exists — `--platform=posix|esp`,
+  `lib/rtl/platform/{posix,esp}`.
+
+  **Worse than tonight's shim miss, not better.** That ticket was genuinely unfiled; this
+  one was filed AND ranked correctly and I simply never looked. A prompt that enumerates
+  *some* queues reads as enumerating *the* queues — the omission is invisible from inside
+  the loop, exactly like a first-wall table cannot see what is behind the wall.
+  **Fix: read `ready` for EVERY staffed lane, not the ones a prompt happens to name.**
+
+  Surfaced to the user because it directly answers what they were weighing — MINIX
+  (academic) versus BSD (real). The honest answer is that they are different axes:
+  FreeBSD is the **platform** axis (cheap, useful, ranked, and the thing that forces the
+  OS abstraction into existence), MINIX is the **freestanding** axis (kernel, no libc
+  beneath, boot) which no application corpus or BSD port can teach. Sequencing note added
+  to `decide-which-minix-is-the-target`.

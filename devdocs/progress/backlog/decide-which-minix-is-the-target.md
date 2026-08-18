@@ -103,3 +103,33 @@ symbol's type kind, so it catches untyped-temp bugs the others accept silently
 backend is a real stress test. But if the goal is hardening the codegen most users
 touch, MINIX does not do that, and that should be weighed against "it is bounded and
 it will actually finish."
+
+## A THIRD consideration, and it is the strongest against Option A (2026-08-18)
+
+**Object format.** MINIX 3 uses **ELF**. MINIX 2 used ACK's own a.out-ish format, and
+`compiler/elfwriter.inc` is the only object writer we have. So the moment the goal
+includes **"pxx RUNS ON MINIX"** rather than only "pxx compiles MINIX", Option A
+requires a whole new object writer and Option B does not.
+
+*(Recall, not source-verified — same caveat as the section above.)*
+
+**This reframes the fork.** The user separated two goals this ticket had collapsed:
+
+1. **pxx COMPILES MINIX** — MINIX as a corpus. Option A is better (plain C, assembly in
+   separate `.s` files, bounded).
+2. **pxx RUNS ON MINIX** — MINIX as a platform. Option B is better (ELF; POSIX.1 with
+   processes and no threads maps cleanly onto the existing `--platform=posix` PAL).
+
+The trophy — pxx running on MINIX, compiling MINIX — needs both, and the two halves
+disagree about the version. **That disagreement is now the real content of this
+decision**, not the original bounded-vs-NetBSD-tooling trade.
+
+## Sequencing note — this may not be the first OS to do
+
+`feature-port-freebsd-native` (**Track A, p55, unblocked, ready now**) is the same
+*platform* axis, on a real OS with real users, and `feature-port-multi-os-abstraction`
+is the umbrella that a second OS target forces into existence. **A MINIX platform port
+would reuse that abstraction rather than invent it**, so FreeBSD plausibly comes first
+on cost and usefulness both — leaving MINIX to earn its slot on the *freestanding*
+axis (kernel, no libc beneath, sections, link script, boot), which is the one thing
+neither a BSD port nor any application corpus teaches.
