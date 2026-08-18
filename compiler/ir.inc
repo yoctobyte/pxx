@@ -5336,11 +5336,26 @@ begin
       Result := IRAppend(IR_SET_SIGNAL, IRLowerAST(ASTLeft[node]),
                          IRLowerAST(ASTRight[node]), -1, 0, Ord(tyUnknown));
 
+    { Include/Exclude are STATEMENTS: IRLowerSetBitMutate appends its own
+      store roots and there is no value to hand back, so Result must be -1 --
+      the same "lowered to nothing" spelling IRLowerAST uses for node = -1.
+      Leaving Result unassigned returned whatever was in the result slot, and
+      the caller then folded that junk into an IR_BLOCK operand. It stayed
+      invisible while the AN_SEQ arm was recursive, because the junk happened
+      to be a live value from the frame the recursion had just popped;
+      lowering the spine iteratively changed the leftovers and the same latent
+      bug started reading e.g. 16777218. }
     AN_SET_INCL:
+    begin
       IRLowerSetBitMutate(IRLowerAddress(ASTLeft[node]), IRLowerAST(ASTRight[node]), True);
+      Result := -1;
+    end;
 
     AN_SET_EXCL:
+    begin
       IRLowerSetBitMutate(IRLowerAddress(ASTLeft[node]), IRLowerAST(ASTRight[node]), False);
+      Result := -1;
+    end;
 
     AN_DYN_COPY:
     begin
@@ -11016,7 +11031,15 @@ begin
         bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow }
       seqBase := IRSeqSpineTop;
       seqCur := node;
-      while (ASTKind[seqCur] = AN_SEQ) or (ASTKind[seqCur] = AN_PAIR) do
+      { `seqCur >= 0` FIRST: an empty tail is spelled -1, and IRLowerAST's own
+        guard for it sits at the top of the routine — which the recursive
+        version reached and this loop does not. Without the test `ASTKind[-1]`
+        reads out of bounds and the fold then built an IR_BLOCK over whatever it
+        found, surfacing as "invalid optional IR node reference in block first"
+        in three set/nested-class tests. Set literals are where -1 tails are
+        common, which is why those went first. }
+      while (seqCur >= 0) and
+            ((ASTKind[seqCur] = AN_SEQ) or (ASTKind[seqCur] = AN_PAIR)) do
       begin
         left := IRDropManagedStrResult(IRLowerAST(ASTLeft[seqCur]));
         IRMarkStatementNode(left);
