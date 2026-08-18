@@ -1,5 +1,19 @@
 # 🗼 Lighthouse — boot a Linux tinyconfig kernel built with PXX's C frontend
 
+> **STANDING REFUTATION — read before repeating the common objection.**
+> *"The kernel depends on far more tooling than we have."* **True but irrelevant, and
+> already settled as strategic decision #1 below:** pxx is a `.o` producer inside the
+> standard toolchain — `CC=pxx`, with the kernel's own Makefile, GNU `as` and
+> `ld -T vmlinux.lds` untouched. Mixing gcc-built and pxx-built objects per TU is then a
+> *bisection tool*, not a compromise. The kernel is also C-only, and objtool/ORC,
+> retpoline, kCFI, SLS and stack protector are all config-off-able.
+> The objection resurfaced again on 2026-08-18, which is why this banner exists.
+>
+> **The real wall is not tooling — it is one subsystem we do not have:** the GNU
+> inline-asm constraint engine (`asm` is currently in the parser's *skip list*), plus a
+> forced `always_inline` inliner required for **correctness** (asm `"i"` immediate
+> constraints need const-propagation), where today there is no inliner at all.
+
 - **Type:** goal (lighthouse / end-goal — NOT a sprint ticket)
 - **Track:** C (C frontend) + A (backend/ELF/codegen where noted)
 - **Status:** rainy-day

@@ -1,5 +1,15 @@
 # 🗼 Lighthouse — compile the FPC compiler (`pp.pas`) with PXX
 
+> **STANDING REFUTATION — read before repeating the common objection.**
+> *"FPC can't be compiled because its compiler leans on FPC's own RTL and
+> RTTI/introspection."* **That was probed against real 3.2.2 source on 2026-07-18
+> and is wrong.** The coupling is *semantic only*: refcounted strings through the
+> documented API, plus one missing `Initialize()` intrinsic — the shadow-RTL model
+> that already carried Synapse is expected to carry here. RTTI is not a gate: the
+> compiler *implements* introspection, its own source barely *uses* it.
+> The objection resurfaced again on 2026-08-18, which is why this banner exists.
+> The single real language gate is **extended precision** (`bestreal`, 35 files).
+
 - **Type:** goal (lighthouse / end-goal — NOT a sprint ticket)
 - **Status:** rainy-day 
 - **Opened:** 2026-06-18
