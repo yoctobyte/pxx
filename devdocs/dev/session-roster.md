@@ -1211,3 +1211,33 @@ everything pushed. The remaining unclaimed N items are p50/p45; the highest-valu
 reserved for a fresh session with room, per the user's call. Compile count sat at **6/48**
 all day while a great deal moved — that is the past-a-wall / onto-the-next-wall split
 doing its job, not a stalled campaign.
+
+**Both workers confirmed clean before close.** `working/` empty, nothing claimed, nothing
+unpushed on either side. One file in `unfinished/` carries frank3's name only as "Found
+by" — `bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults`, track N,
+p88, owner unassigned, parked behind the boxed-def decision. Not a lock and not an orphan.
+
+**frank3's sharpening of my pin rule is the version to keep**, because it is better than
+mine. I wrote it as a procedure (verify against the binary the consumer will use); frank3
+wrote it as two claims: *"fixed at HEAD" and "unblocked for B" are different claims, and
+the second needs its own measurement.* That is what actually stops the error — the failure
+was me asserting claim two having measured only claim one. Of the five refusals frank3 hit
+that day, three were the compiler and two were this gap. Now a memory.
+
+**Open lib-test red is a false positive, for the second time under that key.**
+`lib-test#src:test/crtl_exp2.c bad=eda43dea7629`. Re-proven innocent tonight rather than
+dismissed from memory, **because the pin moved twice today** (v351 `a6d6dfb84`, v352
+`b14da0847`) and that is precisely the confound that would make "just the timeout again" a
+wrong dismissal. The commit touches `Makefile`, `parser.inc`, a ticket and a test; nothing
+under `stable_linux_amd64/**` or `lib/**`; its Makefile hunk is a **test-core** step; and
+lib-test runs the PINNED compiler, which at that sha was still pre-v351. Reranked
+`chore-t-split-lib-test-into-jobs-that-name-what-failed` 35 → 55 and told plexus-T, with
+the reasoning open to its pushback since the tooling is T's: the hazard is no longer the
+false red but the *next* one, because a genuine C-math regression under that key now
+arrives pre-discredited.
+
+**Open with the user tomorrow:** the boxed-def decision (`decide-how-a-compiled-def-carries
+-its-signature-when-boxed`, p88) is still with them and gates two items; and Track B's
+opening question is whether a real XML library is in scope, which frank3 correctly refused
+to settle by itself — if the answer is anything other than a thin shim, that is a `decide-*`,
+not an absorbed assumption.
