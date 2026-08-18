@@ -76,3 +76,35 @@ Filed at 60 to sit at the top of Track A's ready queue, on the argument that it
 multiplies every future P and A ticket. But it buys **parallelism, not features**, and
 whether that outranks shipping work is the user's call — reranking it down is a
 legitimate answer, not a mistake.
+
+## SHARPENED by the user, 2026-08-18 — this is a naming accident, not an extraction
+
+The framing above ("retain only what is genuinely shared across frontends") understates
+it and points at the wrong shape. The user's correction:
+
+> `parser.inc` **was intended as `pasparser.inc`**. There could be a `commonparser.inc`.
+> But on more than one occasion I had to say — language parsing differs enough to
+> duplicate code. Do not try to fit all alternate cases into a single support function.
+> **What is shared is AST and IR, not the parser.**
+
+So the target is **not** "factor out the common parser". It is:
+
+1. `parser.inc` → **`pasparser.inc`**, owned by Track P. The generic name is an
+   accident of Pascal being the seed; it has been read as a mandate ever since.
+2. `commonparser.inc` may exist for what is **genuinely** language-neutral — and the
+   default is per-language files, not that file.
+3. **Explicitly refused: a universal support layer.** "Make this helper serve both
+   languages" is the move this refactor exists to prevent, not the method by which it
+   is carried out. A shared parser helper couples two specs and is then wrong in both —
+   the worked example is `VariantToBool` acquiring Python truthiness and being used for
+   Pascal's `b := v`.
+
+Now written up as a standing principle in
+**`devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md`** and linked from
+`CLAUDE.md`, because the rule had been stated at least three times (2026-07-20,
+2026-08-09, 2026-08-18) and existed in the repo only as one passing clause in
+`name-resolution.md`. Having to repeat a design rule is itself the bug.
+
+**Consequence for whoever takes this:** measure the split by *what Pascal alone needs*,
+not by what looks factorable. Two similar-looking routines in `pasparser.inc` and
+`pyparser.inc` are the intended end state, not debt to be cleaned up later.
