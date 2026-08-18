@@ -9,7 +9,7 @@ summary: "Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLI
 # Real dynamic-library loader (`dlopen`) — PAL primitives + libc policy
 
 - **Type:** feature / design decision (runtime infrastructure)
-- **Status:** working
+- **Status:** unfinished
 - **Owner:** frank3
   the link-libc profile / loader-vs-link decision)
 - **Opened:** 2026-06-24

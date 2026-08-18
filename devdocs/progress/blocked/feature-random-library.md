@@ -8,7 +8,7 @@ owner: claude-B
 # Random library — HW/OS/software tiered RNG (cross-target capability test)
 
 - **Type:** feature
-- **Status:** working
+- **Status:** blocked
   remaining work is HW tiers and thread-safe state)
 - **Relation:** a real, reusable RTL library that doubles as a broad
   cross-target test: runtime capability probing, per-target inline asm, a

@@ -8,7 +8,7 @@ prio: 25
 # A header carrying a body compiles twice across the macro-table reset
 
 - **Type:** bug — Track C (C frontend, preprocessor TU state)
-- **Status:** working
+- **Status:** backlog
 - **Opened:** 2026-08-05
 - **Found by:** the C duplicate-definition warning, after
   [[bug-c-string-h-compiles-stdlib-c-twice]] was fixed. It is the last file in
