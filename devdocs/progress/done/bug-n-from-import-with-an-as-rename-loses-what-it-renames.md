@@ -333,4 +333,4 @@ wired by name into `test-nilpy` and `test-core`. `gate.sh quick` GREEN, self-hos
 fixedpoint converged in 1 round. Fix `c3b8fc114`.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit d0a7cacd9.
