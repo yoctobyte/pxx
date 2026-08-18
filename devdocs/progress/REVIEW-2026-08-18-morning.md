@@ -660,3 +660,28 @@ which is why this is legible at all.
 `decide-how-a-compiled-def-carries-its-signature-when-boxed` (U, p88). Gates the
 procedural-value bug, the def-rebinding bug, and yield's step 4. Not urgent — both workers
 have landable work — but it is now upstream of the board's biggest row.
+
+## Late update — yield is now 18 files, over 4x the next row
+
+`six_moves` cleared (5 -> 0) when the `urllib_parse` shim landed; four of those five files
+went straight onto `yield`. Compile count still **6/48**.
+
+| row | files |
+| --- | ---: |
+| **`yield`** | **18** |
+| next largest | 4 |
+
+Every wall cleared today has drained into the same one. Combined with the re-estimate —
+**the generator engine is already built and proven for Pascal, so this is frontend
+wiring** — yield is now both the largest lever on the board and a smaller job than its
+ticket has been claiming. It is the obvious next piece of work and it is queued.
+
+Two new N bugs found by WRITING the shim rather than reading, both verified here against
+CPython:
+
+- `bug-n-subscripting-a-container-literal-inside-a-function-segfaults` (p65) —
+  `return (1, 2)[0]` inside a function **core-dumps**; at module level it is fine, and
+  binding to a local first is fine. Tuple and list both.
+- `bug-n-two-argument-super-does-not-parse` (p60) — `super(Filter, self).__init__(...)`
+  is `unexpected token`; the zero-arg form works. html5lib writes the two-arg form in
+  EVERY filter.
