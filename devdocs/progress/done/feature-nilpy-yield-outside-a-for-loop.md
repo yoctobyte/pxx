@@ -587,4 +587,4 @@ too. Three other things were:
   [[bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells]].
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit cbe88d992.
