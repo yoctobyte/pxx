@@ -8,10 +8,13 @@
 # `C.somefunc()` then called the module's function and ANSWERED 7, where CPython
 # raises AttributeError -- a silently wrong value, not a crash.
 #
-# The failure this pins is the SILENT one. Reading a genuine class attribute
-# through a renamed class is still unsupported and errors loudly; that is
-# bug-n-a-renamed-class-loses-its-class-level-attributes, and a loud error is
-# the correct behaviour to hold here until it lands.
+# The failure this pins is the SILENT one: `C.somefunc()` must REFUSE, never
+# answer 7. Reading a genuine class ATTRIBUTE through a renamed class now works
+# (bug-n-a-renamed-class-loses-its-class-level-attributes), and as a result the
+# refusal here got more accurate too -- "class method not found: somefunc"
+# names the real problem, where the earlier "undefined variable (N2)" blamed the
+# receiver. The Makefile accepts either, because what is pinned is the REFUSAL,
+# not its wording.
 # bug-n-a-renamed-class-loses-its-class-level-attributes
 
 from renmod_cls import Node as N2

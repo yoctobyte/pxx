@@ -850,13 +850,38 @@ end;
   bug-nilpy-identifiers-are-case-insensitive is the umbrella; this is the class
   half of it. }
 function PyIsClassTypeExact(const nm: AnsiString): Boolean;
-var ci: Integer;
+{ Is `nm` a class name spelled EXACTLY as Python would spell it? A Python name
+  is case-sensitive and Pascal's class lookup is not, so this guards the flat
+  namespace: a lowercase `f` must not answer for `class F`.
+
+  Both lookups above are alias-AWARE (FindUClass and IsClassType each scan the
+  class-alias registry), but the exactness test compared the CLASS's declared
+  name against what the user wrote — and for an alias those are different
+  strings by construction. So `from M import Node as N2` resolved N2 to the
+  right class row and was then rejected as inexact, and `N2.ELEMENT_NODE` died
+  as `undefined variable (N2)`: the RECEIVER, not the attribute. An alias is a
+  spelling the user really wrote, so it has to satisfy the test the same way a
+  declared name does.
+
+  Compared case-SENSITIVELY, exactly as the declared-name arm is, so the
+  guarantee this predicate exists for is unchanged: `f` still matches only an
+  alias literally spelled `f`, never one spelled `F`.
+  bug-n-a-renamed-class-loses-its-class-level-attributes }
+var ci, i: Integer;
 begin
   Result := False;
   if not IsClassType(nm) then Exit;
   ci := FindUClass(nm);
   if ci < 0 then Exit;
   Result := PyRawName(UClsNOff[ci], UClsNLen[ci]) = nm;
+  if Result then Exit;
+  for i := 0 to UClsAliasCount - 1 do
+    if (UClsAliasCi[i] >= 0) and
+       (PyRawName(UClsAliasNOff[i], UClsAliasNLen[i]) = nm) then
+    begin
+      Result := True;
+      Exit;
+    end;
 end;
 
 { `Name(` is a CONSTRUCTOR only when Name matches a class EXACTLY, Python's

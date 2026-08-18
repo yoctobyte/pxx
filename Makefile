@@ -587,7 +587,21 @@ test-nilpy: $(COMPILER)
 	# which is why it is pinned as a refusal.
 	# bug-n-a-renamed-class-loses-its-class-level-attributes
 	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_renamed_class_is_not_a_module.npy $(TESTTMP)/test_nilpy_rencls26 > $(TESTTMP)/test_nilpy_rencls.log 2>&1
-	grep -q 'undefined variable' $(TESTTMP)/test_nilpy_rencls.log
+	# either refusal counts -- the point is that it must not ANSWER 7. The message
+	# improved once the renamed class resolved properly ("class method not found"
+	# names the real problem, where "undefined variable (N2)" blamed the receiver).
+	grep -qE 'class method not found|undefined variable' $(TESTTMP)/test_nilpy_rencls.log
+	# a class imported under ANOTHER NAME must still answer its class attributes.
+	# Both class lookups are alias-aware, so the renamed name resolved to the right
+	# class row and constructed fine -- but PyIsClassTypeExact compared the CLASS's
+	# DECLARED name against what the user wrote, which for an alias differ by
+	# construction, so the name was resolved and then rejected as inexact. The
+	# error named the RECEIVER (N2), not the attribute, which is what said the
+	# fault was resolution and not attribute lookup. Last rows pin the
+	# case-sensitivity guarantee that same predicate exists for.
+	# bug-n-a-renamed-class-loses-its-class-level-attributes
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_renamed_class_attrs.npy $(TESTTMP)/test_nilpy_rencattr26
+	test "$$($(TESTTMP)/test_nilpy_rencattr26)" = "$$(printf '1\n3\nconstructed\n1\n99\n3')"
 	# TWO imported bases have no answer and are REFUSED, not half-taken
 	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_two_imported_bases_fail.npy $(TESTTMP)/test_nilpy_twoimp26 > $(TESTTMP)/test_nilpy_twoimp.log 2>&1
 	grep -q 'names TWO base classes whose bodies are not in this file' $(TESTTMP)/test_nilpy_twoimp.log
@@ -6672,7 +6686,21 @@ test-core: $(COMPILER)
 	# which is why it is pinned as a refusal.
 	# bug-n-a-renamed-class-loses-its-class-level-attributes
 	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_renamed_class_is_not_a_module.npy $(TESTTMP)/test_nilpy_rencls26 > $(TESTTMP)/test_nilpy_rencls.log 2>&1
-	grep -q 'undefined variable' $(TESTTMP)/test_nilpy_rencls.log
+	# either refusal counts -- the point is that it must not ANSWER 7. The message
+	# improved once the renamed class resolved properly ("class method not found"
+	# names the real problem, where "undefined variable (N2)" blamed the receiver).
+	grep -qE 'class method not found|undefined variable' $(TESTTMP)/test_nilpy_rencls.log
+	# a class imported under ANOTHER NAME must still answer its class attributes.
+	# Both class lookups are alias-aware, so the renamed name resolved to the right
+	# class row and constructed fine -- but PyIsClassTypeExact compared the CLASS's
+	# DECLARED name against what the user wrote, which for an alias differ by
+	# construction, so the name was resolved and then rejected as inexact. The
+	# error named the RECEIVER (N2), not the attribute, which is what said the
+	# fault was resolution and not attribute lookup. Last rows pin the
+	# case-sensitivity guarantee that same predicate exists for.
+	# bug-n-a-renamed-class-loses-its-class-level-attributes
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_renamed_class_attrs.npy $(TESTTMP)/test_nilpy_rencattr26
+	test "$$($(TESTTMP)/test_nilpy_rencattr26)" = "$$(printf '1\n3\nconstructed\n1\n99\n3')"
 	# TWO imported bases have no answer and are REFUSED, not half-taken
 	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_two_imported_bases_fail.npy $(TESTTMP)/test_nilpy_twoimp26 > $(TESTTMP)/test_nilpy_twoimp.log 2>&1
 	grep -q 'names TWO base classes whose bodies are not in this file' $(TESTTMP)/test_nilpy_twoimp.log

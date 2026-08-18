@@ -1,0 +1,42 @@
+# A class imported under another name must still answer its class attributes.
+#
+# Both class lookups are alias-aware, so the renamed name resolved to the right
+# class row and CONSTRUCTED fine -- but PyIsClassTypeExact compared the CLASS's
+# DECLARED name against what the user wrote, and for an alias those differ by
+# construction. So the name was resolved and then rejected as inexact, and
+# `N2.ELEMENT_NODE` failed as `undefined variable (N2)` -- naming the RECEIVER,
+# not the attribute, which is what said the fault was in name resolution rather
+# than in the attribute lookup.
+#
+# The predicate exists because a Python name is case-SENSITIVE while Pascal's
+# class lookup is not: a lowercase `f` must not answer for `class F`. The fix
+# widens exactly that predicate, so the last rows pin the guarantee.
+#
+# NOTE: importing BOTH `f` and `F` from one module is deliberately not done
+# here -- it fails on pinned v351 too, in either order, and is its own
+# pre-existing case-folding bug (bug-n-importing-both-f-and-F-from-one-module-
+# loses-the-class). Pinning it here would make this test red for a bug it is
+# not about.
+# bug-n-a-renamed-class-loses-its-class-level-attributes
+
+from renclsmod import Node as N2
+print(N2.ELEMENT_NODE)
+print(N2.TEXT_NODE)
+
+# and it still constructs under the new name
+n = N2()
+print("constructed")
+
+# the un-renamed spelling is unchanged
+from renclsmod import Node
+print(Node.ELEMENT_NODE)
+
+# case-sensitivity guarantee: with `class F` present in the same module, the
+# lowercase `f` must still be the FUNCTION and not the class
+from renclsmod import f
+print(f())
+
+# ...and a lowercase ALIAS of a class resolves to the class it names, which is
+# the arm the fix adds: exact-match against the ALIAS spelling
+from renclsmod import Node as lowernode
+print(lowernode.TEXT_NODE)

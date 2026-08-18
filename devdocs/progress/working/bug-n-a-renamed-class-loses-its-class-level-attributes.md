@@ -4,6 +4,8 @@ prio: 70
 type: bug
 blocked-by: []
 summary: "`from mod import Node as N` then `N.ELEMENT_NODE` is `undefined variable (ELEMENT_NODE)`, while the same import without the rename works and `N()` still constructs. Independent of shims and of dotted packages — a plain literal module reproduces it. The class-alias registry gives the new name the class ROW (construction works) but the ClassName.member read path does not follow it."
+status: working
+owner: frank2-7e
 ---
 
 # A renamed class loses its class-level attributes
