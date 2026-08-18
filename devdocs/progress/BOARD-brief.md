@@ -36,8 +36,8 @@ _none — no lane is locked._
 
 ## Ready — top 30 of 217, ranked
 
+- `[p 70] [N]` bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
 - `[p 65] [A]` bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim
-- `[p 65] [N]` bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop

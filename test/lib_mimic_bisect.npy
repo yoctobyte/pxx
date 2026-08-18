@@ -65,6 +65,13 @@ check("lo_hi", bisect_left(r, 2, 2, 5), 2)
 # Lib/bisect.py has:
 #   bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
 #   bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members
+#
+# THE FULL ARGUMENT LISTS BELOW ARE LOAD-BEARING. Do not "simplify" them to
+# bisect(r, 2) / insort(ia, 2). These two lines pass for a reason unrelated to
+# what they assert: supplying every argument is what avoids the alias bug, and
+# letting the defaults apply is what triggers it -- silently, since with a
+# single default the alias returns a plausible wrong number rather than
+# crashing. Tidying the calls would remove the coverage without failing.
 check("alias_is_right", bisect(r, 2, 0, len(r)), 4)
 
 # insort mutates in place; check the resulting list, not a return value
