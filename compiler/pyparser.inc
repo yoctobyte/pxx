@@ -259,6 +259,11 @@ var
   PyHdrDefSLen: array[0..31] of Integer;
   { parameter index of `*args` / `**kwargs` in the header just parsed, or -1 }
   PyHdrStarIdx: Integer;
+  { Set by PyApplyGeneratorABI, read by PyMarkGeneratorProc: the header arrays
+    no longer hold them once the ABI is rewritten (the declared result becomes
+    the step function's Boolean has-next, and the declared params shift to 1..n). }
+  PyGenElemTk: TTypeKind;      { the yielded ELEMENT type — always tyVariant here }
+  PyGenDeclParams: Integer;    { the def's own parameter count, excluding __genself }
   PyHdrKwIdx: Integer;
   { @dataclass field defaults, appended in declaration order per class ci.
     Looked up positionally by PyClassCreate to fill omitted trailing args. }
@@ -21083,7 +21088,8 @@ begin
 end;
 
 function PyParseFor: Integer;
-var name, name2: AnsiString;
+var genPi: Integer;
+    name, name2: AnsiString;
     enumMode: Boolean; symIdx, node, lhsNode, startNode, stopNode, stepNode: Integer;
     pair1, pair2, pair3, bodyNode, oneNode, limitNode, compSaved: Integer;
     rngStep, cmpNode, incNode, whileNode, keyN, hoistPre: Integer;
@@ -21171,6 +21177,33 @@ begin
   end;
   if parenTarget then Expect(tkRParen, ')');
   Expect(tkIn, 'in');
+  { `for x in gen(args):` where `gen` is a GENERATOR def — hand it to the shared
+    for-in desugar over the stackless instance protocol (ParseForInGeneratorAST,
+    parser.inc), which allocates the instance, seeds the argument slots, drives
+    the step function and frees it. Exactly the desugar Pascal's
+    `for x in Gen(args) do` uses; only the header's tail differs, and that is
+    handled inside it.
+
+    A single plain name only: a tuple target, an extra name or a comprehension
+    is not this shape, and a generator consumed any other way (`list(gen())`,
+    a bare `iter`) falls through to the ordinary paths and reports itself. }
+  if (name2 = '') and (PyForExtraCount = 0) and (PyCompTarget < 0) and
+     (CurTok.Kind = tkIdent) and
+     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    genPi := FindProcInUnit(CurTok.SVal, -1);
+    if genPi < 0 then genPi := FindProc(CurTok.SVal);
+    if (genPi >= 0) and ProcIsStackless[genPi] and ProcIsGenerator[genPi] then
+    begin
+      { The same binder every other for-in target uses — at module level the
+        loop variable is a GLOBAL, which PyProgSym does not answer for. }
+      symIdx := PyAssignTargetSym(name);
+      if symIdx < 0 then symIdx := AllocVar(name, tyVariant);
+      Next;                                { past the generator's name }
+      Result := ParseForInGeneratorAST(symIdx, genPi);
+      Exit;
+    end;
+  end;
   { THREE or more loop variables over a zip — `for row, label, value in zip(a,
     b, c):` — needs nothing of its own now that zip() is an N-way EXPRESSION:
     the two-name desugar below (PyParseForZip, an index walk over two
@@ -22328,11 +22361,13 @@ end;
   SymCellPtr points at a hidden pointer local, and PyMakeIdent then spells every
   use of the name `hidden^`. A PARAMETER additionally copies its incoming value
   into the cell — the caller wrote the slot, and from here on the slot is dead. }
-function PyPromoteCell(const nm: AnsiString; seq: Integer): Integer;
-var si, ps, newPi, callNode, asgn, rawNode, derefNode: Integer;
+{ The by-SYMBOL half of PyPromoteCell. Split out because the generator path
+  promotes symbols it has in hand (every variant LOCAL of a generator body)
+  rather than names it read out of the source. }
+function PyPromoteCellSym(si, seq: Integer): Integer;
+var ps, newPi, callNode, asgn, rawNode, derefNode: Integer;
 begin
   Result := seq;
-  si := PyProgSym(nm);
   if not PyCellPromotable(si) then Exit;
   newPi := FindProc('pycell_new');
   if newPi < 0 then Exit;
@@ -22363,6 +22398,11 @@ begin
     ASTRight[asgn] := rawNode;
     Result := PySeqAppend(Result, asgn);
   end;
+end;
+
+function PyPromoteCell(const nm: AnsiString; seq: Integer): Integer;
+begin
+  PyPromoteCell := PyPromoteCellSym(PyProgSym(nm), seq);
 end;
 
 { Every name a NESTED def in this body declares `nonlocal` becomes a frame cell.
@@ -24083,6 +24123,34 @@ begin
   end;
   if (CurTok.Kind = tkFor) or PyIsIdent('for') then begin Result := PyParseLoopMaybeElse(True); Exit; end;
   if PyIsIdent('pass') then begin Next; Exit; end;
+  { `yield E` — Nil Python generator. No lexer token: `yield` arrives as an
+    ordinary identifier and is recognised here, at statement position, the same
+    way `pass` is. The def containing it was already marked a stackless
+    generator by PyDefBodyHasYield (Python decides generator-ness from the body
+    at compile time), so the context flag is set before this body is parsed —
+    which is why the check below is an internal error rather than the user
+    diagnostic: a yield outside a def is caught by the marking pass. The node is
+    the SAME AN_YIELD the Pascal frontend builds, and it lowers through the same
+    stackless state-machine transform (SLLowerYield, parser.inc). }
+  if PyIsIdent('yield') then
+  begin
+    if not CurProcIsStackless then
+      Error('Nil Python: yield outside a function body');
+    Next;
+    { A bare `yield` yields None. }
+    if CurTok.Kind in [tkNewline, tkDedent, tkEOF, tkSemicolon] then
+      node := PyMakeNone
+    else
+    begin
+      PyParseBoolExpr;
+      node := CurASTNode;
+    end;
+    Result := AllocNode(AN_YIELD);
+    ASTLeft[Result] := node;
+    ASTIVal[Result] := -1;   { stackful self sym; the stackless lowering passes its own }
+    CurGenSeenYield := True;
+    Exit;
+  end;
   { `break` / `continue`. The lexer already maps break to tkBreak, but no
     statement rule ever consumed either, so both died as "expected expression"
     INSIDE a loop that otherwise worked — including a plain while. }
@@ -27059,8 +27127,157 @@ begin
   Result := (j >= 0) and (Tokens[j].Kind = tkAt);
 end;
 
+{ ===== Nil Python generators =====
+  A `def` whose body contains a `yield` is a GENERATOR, and Python decides that
+  at compile time from the body alone — there is no marker in the header. So the
+  frontend scans the def's token span before parsing it (PyDefBodyHasYield) and,
+  when it hits, rewrites the routine onto the STACKLESS generator ABI the Pascal
+  frontend already uses: `function(__genself: Pointer): Boolean`, a state-machine
+  step function over lib/rtl/slgen.pas. Nothing about the engine is new here —
+  the transform (SLCheckEligible / AssignStacklessSlots / BuildStacklessStep) and
+  the consumption protocol (ParseForInGeneratorAST) are shared with Pascal and
+  were built and proven there. What follows is the wiring.
+
+  Stackless rather than stackful deliberately: the stackful strategy costs a
+  64 KB heap stack per LIVE generator, and a Python filter pipeline holds several
+  open at once. Measured over the ladder corpora: 19 generator functions, 76
+  yield sites, ZERO with a yield inside a try or with — the two shapes the
+  stackless transform refuses. See feature-nilpy-yield-outside-a-for-loop. }
+
+{ Does this def's body contain a statement-position `yield`?
+
+  Scanned, not inferred from the header, because that is where Python keeps the
+  answer. A NESTED def's yield makes the INNER routine a generator and says
+  nothing about this one, so the scan stops descending at a `def` and resumes at
+  the matching dedent — without that, `def outer(): def inner(): yield 1` marked
+  outer a generator and its ordinary `return` then had nowhere to go. }
+function PyDefBodyHasYield(bodyStart: Integer): Boolean;
+var i, depth, nestDepth: Integer;
+begin
+  Result := False;
+  i := bodyStart;
+  depth := 1;        { the caller has already consumed the body's own INDENT }
+  nestDepth := -1;   { depth at which a nested def was seen; -1 = not inside one }
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then
+    begin
+      Dec(depth);
+      if (nestDepth >= 0) and (depth <= nestDepth) then nestDepth := -1;
+      if depth <= 0 then Break;
+    end
+    else if (nestDepth < 0) and (Tokens[i].Kind = tkFunction) then
+      nestDepth := depth
+    else if (nestDepth < 0) and (Tokens[i].Kind = tkIdent) and (i > 0) and
+            (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]) and
+            (GetTokenStr(i) = 'yield') then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
+{ Rewrite the parsed header onto the stackless step ABI:
+  `function(__genself: Pointer): Boolean`. The DECLARED parameters describe the
+  produced sequence and shift to 1..n, where they become persistent instance
+  slots the transform restores each step; the step function itself takes only
+  the instance pointer and returns has-next. Mirrors the Pascal rewrite in
+  ParseRoutine (parser.inc), on this frontend's own header arrays.
+
+  Every per-param array shifts, not just the interesting ones: the ONE array
+  left behind in the Pascal twin wrote a real parameter's attribute into the
+  injected slot and read stale data for the parameter itself, silently. }
+procedure PyApplyGeneratorABI;
+var i: Integer;
+begin
+  if PyHdrNParams >= 31 then
+    Error('Nil Python: too many parameters for a generator');
+  if PyHdrNParams > CO_MAX_PARAMS then
+    Error('Nil Python: a generator takes at most ' + AIntToStr(CO_MAX_PARAMS) +
+          ' parameters (v1)');
+  PyGenDeclParams := PyHdrNParams;
+  { Nil Python's values are variants, so that is the element type regardless of
+    what the return-type inference made of a body whose only exits are yields.
+    Fixing it here rather than inferring keeps the consumer side (the for-in
+    desugar's variant arm) from having to agree with a second inference pass. }
+  PyGenElemTk := tyVariant;
+  for i := PyHdrNParams downto 1 do
+  begin
+    PyHdrPNames[i]     := PyHdrPNames[i - 1];
+    PyHdrPTypes[i]     := PyHdrPTypes[i - 1];
+    PyHdrPCis[i]       := PyHdrPCis[i - 1];
+    PyHdrPSigs[i]      := PyHdrPSigs[i - 1];
+    PyHdrDefHas[i]     := PyHdrDefHas[i - 1];
+    PyHdrDefIsStr[i]   := PyHdrDefIsStr[i - 1];
+    PyHdrDefIsNone[i]  := PyHdrDefIsNone[i - 1];
+    PyHdrDefIsFloat[i] := PyHdrDefIsFloat[i - 1];
+    PyHdrDefIsBool[i]  := PyHdrDefIsBool[i - 1];
+    PyHdrDefSym[i]     := PyHdrDefSym[i - 1];
+    PyHdrDefVal[i]     := PyHdrDefVal[i - 1];
+    PyHdrDefSOff[i]    := PyHdrDefSOff[i - 1];
+    PyHdrDefSLen[i]    := PyHdrDefSLen[i - 1];
+  end;
+  if PyHdrKwIdx >= 0 then Inc(PyHdrKwIdx);
+  if PyHdrStarIdx >= 0 then Inc(PyHdrStarIdx);
+  PyHdrPNames[0]     := '__genself';
+  PyHdrPTypes[0]     := tyPointer;
+  PyHdrPCis[0]       := -1;
+  PyHdrPSigs[0]      := -1;
+  PyHdrDefHas[0]     := False;
+  PyHdrDefIsStr[0]   := False;
+  PyHdrDefIsNone[0]  := False;
+  PyHdrDefIsFloat[0] := False;
+  PyHdrDefIsBool[0]  := False;
+  PyHdrDefSym[0]     := -1;
+  PyHdrDefVal[0]     := 0;
+  PyHdrDefSOff[0]    := 0;
+  PyHdrDefSLen[0]    := 0;
+  Inc(PyHdrNParams);
+  { The step function RETURNS has-next; the declared result type describes the
+    yielded ELEMENT and is remembered separately (ProcGenElemTk). }
+  PyHdrRetType := tyBoolean;
+  PyHdrRetCi := -1;
+  PyHdrIsProc := False;
+end;
+
+{ Record the generator properties on the Proc, so the for-in desugar can see
+  them from a call site and the body compile can drive the transform. Must run
+  on BOTH registration paths — the shell pre-pass and the real parse — or the
+  two disagree about the routine's arity by exactly one. }
+procedure PyMarkGeneratorProc(procIdx: Integer);
+begin
+  if procIdx < 0 then Exit;
+  ProcIsGenerator[procIdx] := True;
+  ProcIsStackless[procIdx] := True;
+  ProcGenElemTk[procIdx]   := PyGenElemTk;
+  ProcGenElemRec[procIdx]  := REC_NONE;
+  ProcGenParamCnt[procIdx] := PyGenDeclParams;
+end;
+
+{ Pull lib/rtl/slgen into scope when the module defines any generator. The
+  transform and the for-in desugar both call SlNew/SlGet/SlSet/SlCurrent/SlFree
+  by name, so without the unit they fail at build time with "the slgen unit is
+  not in scope" — a true statement about a unit the user never asked for. }
+procedure PyPullSlgenIfGenerators;
+var i: Integer;
+begin
+  if FindProc('SlNew') >= 0 then Exit;      { already in scope }
+  for i := PyScanLo to MainProgramTokCount - 1 do
+    if (Tokens[i].Kind = tkIdent) and (i > 0) and
+       (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon]) and
+       (GetTokenStr(i) = 'yield') then
+    begin
+      ParseUsesUnit('slgen');
+      Exit;
+    end;
+end;
+
 procedure PyRegisterDefShells;
 var savedTok, i, depth, procIdx, savedHoist: Integer;
+    isGenDef: Boolean;
 begin
   savedTok := TokPos;
   { This pass parses HEADERS ONLY, but a header can queue a hoisted setup
@@ -27083,6 +27300,12 @@ begin
       TokPos := i;
       Next;                      { CurTok = 'def' }
       PyParseDefHeader;
+      { A def whose body yields is a GENERATOR, and its registered signature must
+        already be the stackless step ABI — the real parse rewrites the same
+        header the same way, and a shell registered with the declared arity would
+        disagree with the body's frame by exactly the injected __genself. }
+      isGenDef := PyDefBodyHasYield(TokPos - 1);
+      if isGenDef then PyApplyGeneratorABI;
       { "has the MAIN PROGRAM already declared this name", not "does any proc of
         this name exist anywhere". The old test was FindProc, which also sees
         UNIT procs — so a module-level `def len(x)` was never registered at all,
@@ -27094,6 +27317,7 @@ begin
         procIdx := RegisterProc(PyHdrName, not PyHdrIsProc, PyHdrRetType,
                                 PyHdrNParams, PyHdrPNames, PyHdrPTypes);
         PyApplyDefSignature(procIdx);
+        if isGenDef then PyMarkGeneratorProc(procIdx);
         { Record WHERE the def stands. The shell has to exist from the top of the
           module or the name is not visible at all (that was the `len` bug), but
           Python only rebinds a name when the `def` STATEMENT runs — so a call
@@ -27397,7 +27621,10 @@ begin
 end;
 
 procedure PyParseDef;
-var name, savedPfx, savedPfx2: AnsiString;
+var isGenDef: Boolean;
+    savedGenerator, savedGenStackless, savedGenSeen, savedGenIsVariant: Boolean;
+    savedGenStateCtr, savedGenSlotNext, savedGenScopeBase, savedGenElemOff: Integer;
+    name, savedPfx, savedPfx2: AnsiString;
     nparams, i, procIdx, idx, savedSC, savedFS, patchPos, bodyStart, bodyNode: Integer;
     pbInit, pbAsgn, pbOwn: Integer;
     pbLocal: array[0..MAX_PROC_PARAMS - 1] of Integer;
@@ -27412,6 +27639,17 @@ begin
     `TokPos := <def token>; Next`), which is the same token the queueing pass
     keyed the redefinition on. }
   defTok0 := TokPos - 1;
+  { A nested def is drained at the END of this routine, by re-entering here — so
+    every bit of generator context is per-invocation and must be stacked, or a
+    plain nested def inside a generator would compile as a second generator. }
+  savedGenerator     := CurProcIsGenerator;
+  savedGenStackless  := CurProcIsStackless;
+  savedGenSeen       := CurGenSeenYield;
+  savedGenIsVariant  := CurGenElemIsVariant;
+  savedGenStateCtr   := CurGenStateCtr;
+  savedGenSlotNext   := CurGenSlotNext;
+  savedGenScopeBase  := CurGenScopeBase;
+  savedGenElemOff    := CurGenElemOff;
   savedHoist := PyHoistHead;
   { PARK the queue on a fresh chain rather than merely remembering its head.
     `PyHoistHead := savedHoist` at the end cannot UNLINK anything: PySeqAppend
@@ -27447,6 +27685,25 @@ begin
   isProc := PyHdrIsProc;
   retType := PyHdrRetType;
   bodyStart := TokPos - 1;
+  { A `yield` anywhere in the body makes this a GENERATOR — the same scan and the
+    same ABI rewrite the shell pass ran, so the two agree about the arity. From
+    here on the routine is a stackless state-machine step function; the body
+    compile below drives the transform instead of emitting an ordinary frame. }
+  isGenDef := PyDefBodyHasYield(bodyStart);
+  if isGenDef then
+  begin
+    PyApplyGeneratorABI;
+    nparams := PyHdrNParams;
+    isProc := PyHdrIsProc;
+    retType := PyHdrRetType;
+    { Set BEFORE the local-typing pre-pass, not after. That pre-pass TRIAL-PARSES
+      the body, so it meets the `yield` statements too — with the context still
+      unset they are refused there, several passes before anything a user could
+      recognise. The ordering is not obvious and cost a cycle to find. }
+    CurProcIsGenerator := True;
+    CurProcIsStackless := True;
+    CurGenSeenYield := False;
+  end;
   PyScanDefGlobals(bodyStart);
 
   { Reuse the shell PyRegisterDefShells registered for this def. A shell has
@@ -27538,6 +27795,10 @@ begin
     and only when a parameter carried a default, which is what made it look like
     a defaults bug. }
   if Procs[procIdx].BodyAddr < 0 then retType := Procs[procIdx].RetType;
+  { …and the generator properties, on whichever Proc this parse settled on. The
+    shell pass already marked its own; a REDEFINITION or a name the shell pass
+    skipped reaches a Proc that has not been marked. }
+  if isGenDef then PyMarkGeneratorProc(procIdx);
 
   { A nested def's shell carries MORE parameters than its header: the trailing
     ones stand for the enclosing locals it captures. Take the count from the
@@ -27704,7 +27965,28 @@ begin
   if pbInit >= 0 then bodyNode := PySeqAppend(pbInit, bodyNode);
   { the cells are allocated FIRST: the body's first assignment stores through one }
   if cellInit >= 0 then bodyNode := PySeqAppend(cellInit, bodyNode);
-  bodyNode := PyPrependResultZero(procIdx, bodyNode);
+  if isGenDef then
+  begin
+    { The generator body is not compiled as written: it becomes a flat
+      goto/label STATE MACHINE — restore the persistent slots, jump to the
+      resume point, run to the next yield (which checkpoints and returns True),
+      and on fall-off mark done and return False. Every step of this is the
+      SHARED machinery the Pascal frontend drives (parser.inc); nothing about
+      the transform is Nil-Python-specific, which is the whole reason this
+      feature is wiring rather than an implementation.
+
+      No PyPrependResultZero: the step function's Result is the Boolean has-next
+      and every exit — each yield, and the fall-off tail BuildStacklessStep
+      appends — assigns it explicitly. }
+    if not CurGenSeenYield then
+      Error('Nil Python: internal — a def marked generator has no yield');
+    SLCheckEligible(bodyNode);
+    AssignStacklessSlots(procIdx);
+    bodyNode := BuildStacklessStep(bodyNode, procIdx);
+    ProcGenInstSize[procIdx] := SL_OFF_SLOTS + 8 * CurGenSlotNext;
+  end
+  else
+    bodyNode := PyPrependResultZero(procIdx, bodyNode);
   CompileAST(bodyNode);
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
@@ -27727,6 +28009,14 @@ begin
     are flushed by its statement loop; whatever is left is stale by
     construction. }
   PyHoistHead := savedHoist;
+  CurProcIsGenerator := savedGenerator;
+  CurProcIsStackless := savedGenStackless;
+  CurGenSeenYield    := savedGenSeen;
+  CurGenElemIsVariant := savedGenIsVariant;
+  CurGenStateCtr     := savedGenStateCtr;
+  CurGenSlotNext     := savedGenSlotNext;
+  CurGenScopeBase    := savedGenScopeBase;
+  CurGenElemOff      := savedGenElemOff;
   FrameSize := savedFS;
   CurProc := -1;
   PyNestPrefix := savedPfx;
@@ -33083,6 +33373,7 @@ begin
   PyClsEvalCi := -1;
   PyRegisterClassShells;          { the class ROWS the field pre-pass fills in }
   PyPreScanImports;
+  PyPullSlgenIfGenerators;        { a module that yields needs lib/rtl/slgen }
   PyRegisterClassFieldsPrepass;
   PyRegisterDefShells;
   PyCollectModuleLocalsAST;
@@ -33500,6 +33791,7 @@ begin
   { Module-local type collection runs AFTER the units above so proc return
     types (len, VariantToStr, pylib methods) resolve during inference. }
   PyPreScanImports;               { every top-level import, not just the leading ones }
+  PyPullSlgenIfGenerators;        { a module that yields needs lib/rtl/slgen }
   PyRegisterClassFieldsPrepass;   { fields must exist before local inference }
   PyRegisterDefShells;            { def signatures must exist before it too }
   PyCollectModuleLocalsAST;

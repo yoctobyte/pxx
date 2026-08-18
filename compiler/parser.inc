@@ -902,6 +902,7 @@ end;
 procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 function PyMakeNone: Integer; forward;  { the None VALUE (a VT_EMPTY variant) — pyparser.inc }
+function PyParseSuite: Integer; forward;  { a Nil Python `: <suite>` block — the frontend tail of a for-in header (pyparser.inc) }
 function PyNodeIsCallableValue(n: Integer): Boolean; forward;  { a bound method / lambda / function value — pyparser.inc }
 function PyWrapHeapCallableCall(calleeNode, argsHead, n, defCall: Integer): Integer; forward;  { Callable-param call through a heap callable — pyparser.inc }
 function PyBareNoneHere: Boolean; forward;  { a `None` with nothing after it that could continue an expression — pyparser.inc }
@@ -19206,8 +19207,43 @@ begin
     GenMakeIdent(gIdx, tyPointer), offLit, valNode, -1, -1, -1);
 end;
 
+{ A generator's declared parameter is stored into its persistent instance slot
+  by the for-in desugar, as ONE machine word. A Nil Python variant parameter is
+  by-REF, so the word must be an ADDRESS — and it must outlive the loop, which a
+  caller-side temporary does not: the callee reads it again at every resume,
+  long after the statement that produced the argument has finished.
+
+  So the argument gets a 16-byte heap cell (the same pycell_new a `nonlocal`
+  capture uses) and the slot holds the cell. Assigning INTO the cell goes down
+  the managed-variant path, so the argument is retained for the generator's
+  whole life. One cell per generator instance per variant argument, released
+  with neither the instance nor the loop — a bounded leak, recorded on the
+  ticket rather than hidden here. }
+function GenMakeVariantArgCell(argNode: Integer; var preSeq: Integer): Integer;
+var ps, newPi, callNode, asgn, derefNode: Integer;
+begin
+  newPi := FindProc('pycell_new');
+  if newPi < 0 then
+    Error('for-in generator: a variant argument needs pylib (pycell_new) in scope');
+  ps := AllocVar('', tyPointer);
+  Syms[ps].PtrElemTk := tyVariant;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := newPi;
+  ASTLeft[callNode] := -1;
+  ASTTk[callNode] := Ord(tyPointer);
+  preSeq := GenMakeSeq(preSeq, GenMakeSeq(
+              GenMakeAssign(GenMakeIdent(ps, tyPointer), callNode), -1));
+  derefNode := AllocNode(AN_DEREF);
+  ASTLeft[derefNode] := GenMakeIdent(ps, tyPointer);
+  ASTTk[derefNode] := Ord(tyVariant);
+  preSeq := GenMakeSeq(preSeq, GenMakeSeq(
+              GenMakeAssign(derefNode, argNode), -1));
+  Result := GenMakeIdent(ps, tyPointer);
+end;
+
 function ParseForInGeneratorAST(varIdx, gpi: Integer): Integer;
 var
+  savedHoist, argHoist, hoistSeq: Integer;
   bodyNode, nargs, gIdx: Integer;
   a0, a1, a2, a3: Integer;
   procAddr, nargsLit, callAlloc, callNext, callCur, callFree: Integer;
@@ -19218,6 +19254,16 @@ var
 begin
   if Syms[varIdx].TypeKind = tyAuto then
     Error('for var .. in <generator>: inline loop variable not yet supported here — declare the variable explicitly (feature-inline-loop-var-rio)');
+  { PARK the Nil Python hoist queue across the argument parse. A Python argument
+    can need setup statements of its own — a list/dict LITERAL is built by
+    hoisted statements, not by one expression node — and this desugar bypasses
+    the statement loop that would normally flush them. Dropped, the literal was
+    never constructed and the generator received None: `for v in g(["a","b"])`
+    raised a TypeError from inside `g`, while `d = ["a","b"]; for v in g(d)`
+    worked, which is the tell. They are spliced back in ahead of the instance
+    setup below, since the setup CONSUMES what they build. }
+  argHoist := -1;
+  savedHoist := PyHoistPark;
   { unused args default to 0 (no local array — must cross-compile) }
   a0 := GenZeroLit; a1 := GenZeroLit; a2 := GenZeroLit; a3 := GenZeroLit;
   nargs := 0;
@@ -19243,6 +19289,8 @@ begin
           ASTTk[instLit] := Ord(tyPointer);
           CurASTNode := instLit;
         end
+        else if PyExprMode then
+          PyParseBoolExpr        { the Nil Python expression grammar, not Pascal's }
         else
           ParseExpr;
         case nargs of
@@ -19256,8 +19304,22 @@ begin
       until not Eat(tkComma);
     Expect(tkRParen, ')');
   end;
-  Expect(tkDo, 'do');
-  bodyNode := ParseStatementAST;
+  argHoist := PyHoistPark;      { what the arguments queued }
+  PyHoistRestore(savedHoist);   { …and the enclosing statement's own queue back }
+  { The header's tail is the FRONTEND's, not the generator machinery's: Pascal
+    writes `do <statement>`, Nil Python writes `: <suite>`. PyParseSuite, not
+    PyParseBlock — the latter expects to be standing inside the block already and
+    reports `unexpected token` on the NEWLINE/INDENT the header still owns. }
+  if PyExprMode then
+  begin
+    Expect(tkColon, ':');
+    bodyNode := PyParseSuite;
+  end
+  else
+  begin
+    Expect(tkDo, 'do');
+    bodyNode := ParseStatementAST;
+  end;
 
   gIdx := AllocVar('', tyPointer);
   nargsLit := AllocNode(AN_INT_LIT);  ASTIVal[nargsLit] := nargs; ASTTk[nargsLit] := Ord(tyInt64);
@@ -19281,14 +19343,38 @@ begin
     callAlloc := GenMakeCall6(FindProc('SlNew'), tyPointer, instLit, -1, -1, -1, -1, -1);
     assignG := GenMakeAssign(GenMakeIdent(gIdx, tyPointer), callAlloc);
     assignG := GenMakeSeq(assignG, -1);
+    { The arguments' own setup runs FIRST — the slot stores read what it builds.
+      The hoist queue is already an AN_SEQ chain in queue order, so it is
+      CONCATENATED at its tail rather than re-queued statement by statement:
+      prepending them one at a time reverses the order, and a literal's setup is
+      order-dependent (build the list, then append to it). }
+    if argHoist >= 0 then
+    begin
+      hoistSeq := argHoist;
+      while ASTRight[hoistSeq] >= 0 do hoistSeq := ASTRight[hoistSeq];
+      ASTRight[hoistSeq] := assignG;
+      assignG := argHoist;
+    end;
     if nargs >= 1 then
+    begin
+      if Procs[gpi].Params[1].IsRef then a0 := GenMakeVariantArgCell(a0, assignG);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 0, a0), -1));
+    end;
     if nargs >= 2 then
+    begin
+      if Procs[gpi].Params[2].IsRef then a1 := GenMakeVariantArgCell(a1, assignG);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 8, a1), -1));
+    end;
     if nargs >= 3 then
+    begin
+      if Procs[gpi].Params[3].IsRef then a2 := GenMakeVariantArgCell(a2, assignG);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 16, a2), -1));
+    end;
     if nargs >= 4 then
+    begin
+      if Procs[gpi].Params[4].IsRef then a3 := GenMakeVariantArgCell(a3, assignG);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 24, a3), -1));
+    end;
 
     { advance = a direct call to the step function with the instance pointer.
       The step proc's ABI is (self + the declared params); only self is real (the
@@ -19321,6 +19407,16 @@ begin
       ASTTk[curDeref] := Ord(tyRecord);
       ASTIVal[curDeref] := Syms[varIdx].RecName;
       assignX := GenMakeAssign(GenMakeIdent(varIdx, tyRecord), curDeref);
+    end
+    else if ProcGenElemTk[gpi] = tyVariant then
+    begin
+      { Variant element — every Nil Python generator. Same indirection as the
+        record case (CURRENT holds the region's address), but the copy out is an
+        ordinary variant assignment, so the loop variable retains it properly. }
+      curDeref := AllocNode(AN_DEREF);
+      ASTLeft[curDeref] := callCur;
+      ASTTk[curDeref] := Ord(tyVariant);
+      assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), curDeref);
     end
     else
       assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), callCur);
@@ -20322,6 +20418,20 @@ begin
     GenMakeIdent(selfSym, tyPointer), GenMakeIntLit(off), valNode, -1, -1, -1);
 end;
 
+{ The instance's CURRENT region as a VARIANT lvalue: `PVariant(self + off)^`.
+  Used for a variant element type, where the one-word CURRENT slot cannot carry
+  the value. Assigning through this deref goes down the ordinary managed-variant
+  assignment path, so the previous element is released and the new one retained
+  — a blob copy (what the RECORD element does) would be ARC-blind and hand the
+  consumer a pointer whose payload the step function's own cleanup had freed. }
+function GenMakeVariantAt(selfSym, off: Integer): Integer;
+begin
+  Result := AllocNode(AN_DEREF);
+  ASTLeft[Result] := GenMakeArith(Ord(tkPlus),
+                       GenMakeIdent(selfSym, tyPointer), GenMakeIntLit(off));
+  ASTTk[Result] := Ord(tyVariant);
+end;
+
 { Does the subtree contain a suspension point — `yield` (generator) or `await`
   (async)? Both split the state machine the same way. }
 function SLHasYield(node: Integer): Boolean;
@@ -20421,9 +20531,18 @@ begin
   for i := CurGenScopeBase to SymCount - 1 do
     if SymGenSlot[i] >= 0 then
     begin
-      if Syms[i].IsRef then
+      if Syms[i].IsRef or (Syms[i].TypeKind = tyString) or
+         (Syms[i].TypeKind = tyAnsiString) then
+        { by-ref param: the caller ADDRESS. Managed string: the handle. Either
+          way ONE raw word, moved without touching a reference count. }
         stmt := GenSlSetStmt(selfSym, SL_OFF_SLOTS + 8 * SymGenSlot[i],
                              GenMakeSlotWord(i))
+      else if Syms[i].TypeKind = tyVariant then
+        stmt := GenMakeCall6(FindProc('SlBlob'), tyInt64,
+                  GenMakeIdent(selfSym, tyPointer),
+                  GenMakeIntLit(SL_OFF_SLOTS + 8 * SymGenSlot[i]),
+                  GenMakeSlotAddr(i),
+                  GenMakeIntLit(16), -1, -1)
       else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray then
         stmt := GenMakeCall6(FindProc('SlBlob'), tyInt64,
                   GenMakeIdent(selfSym, tyPointer),
@@ -20450,9 +20569,16 @@ begin
   for i := CurGenScopeBase to SymCount - 1 do
     if SymGenSlot[i] >= 0 then
     begin
-      if Syms[i].IsRef then
+      if Syms[i].IsRef or (Syms[i].TypeKind = tyString) or
+         (Syms[i].TypeKind = tyAnsiString) then
         stmt := GenMakeAssign(GenMakeSlotWord(i),
                               GenSlGet(selfSym, SL_OFF_SLOTS + 8 * SymGenSlot[i]))
+      else if Syms[i].TypeKind = tyVariant then
+        stmt := GenMakeCall6(FindProc('SlUnblob'), tyInt64,
+                  GenMakeIdent(selfSym, tyPointer),
+                  GenMakeIntLit(SL_OFF_SLOTS + 8 * SymGenSlot[i]),
+                  GenMakeSlotAddr(i),
+                  GenMakeIntLit(16), -1, -1)
       else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray then
         stmt := GenMakeCall6(FindProc('SlUnblob'), tyInt64,
                   GenMakeIdent(selfSym, tyPointer),
@@ -20490,7 +20616,18 @@ begin
   resumeLbl := NewSyntheticLabel;
   GenStateLabelIdx[k] := resumeLbl;
 
-  if CurGenElemOff >= 0 then
+  if CurGenElemIsVariant then
+  begin
+    { variant element: assign into the instance region (ARC-correct), then
+      publish the region's address in the CURRENT word. }
+    setCur := GenMakeAssign(GenMakeVariantAt(selfSym, CurGenElemOff), ASTLeft[node]);
+    setCur := GenMakeSeq(setCur,
+              GenMakeSeq(GenSlSetStmt(selfSym, SL_OFF_CURRENT,
+                GenMakeArith(Ord(tkPlus),
+                  GenMakeIdent(selfSym, tyPointer),
+                  GenMakeIntLit(CurGenElemOff))), -1));
+  end
+  else if CurGenElemOff >= 0 then
   begin
     setCur := GenMakeCall6(FindProc('SlBlob'), tyInt64,
                 GenMakeIdent(selfSym, tyPointer),
@@ -20765,13 +20902,16 @@ begin
 end;
 
 { Any persistent record slot in the current generator scope? }
+{ Any persistent slot in the current generator scope that is checkpointed by
+  BLOB copy — a record local, or a variant one (every Nil Python generator has
+  those). Both need slgen's SlBlob/SlUnblob. }
 function SLHasRecordSlot: Boolean;
 var i: Integer;
 begin
   Result := False;
   for i := CurGenScopeBase to SymCount - 1 do
-    if (SymGenSlot[i] >= 0) and (Syms[i].TypeKind = tyRecord) and
-       (not Syms[i].IsArray) and (not Syms[i].IsRef) then
+    if (SymGenSlot[i] >= 0) and (not Syms[i].IsArray) and (not Syms[i].IsRef) and
+       ((Syms[i].TypeKind = tyRecord) or (Syms[i].TypeKind = tyVariant)) then
       begin Result := True; Exit; end;
 end;
 
@@ -20794,14 +20934,25 @@ begin
     to this region; for-in derefs it into the loop variable. }
   CurGenElemOff := -1;
   CurGenElemRecId := REC_NONE;
+  CurGenElemIsVariant := False;
   if ProcGenElemTk[procIdx] = tyRecord then
   begin
     CurGenElemRecId := ProcGenElemRec[procIdx];
     CurGenElemOff := SL_OFF_SLOTS + 8 * CurGenSlotNext;
     Inc(CurGenSlotNext, (RecSize(CurGenElemRecId) + 7) div 8);
+  end
+  else if ProcGenElemTk[procIdx] = tyVariant then
+  begin
+    { A variant is a 16-byte {tag, payload} pair and does not fit the CURRENT
+      word, so it gets a two-slot region at the instance tail like a record —
+      but written by assignment, not by blob copy (see GenMakeVariantAt). Every
+      Nil Python generator lands here, because Nil Python's values are variants. }
+    CurGenElemIsVariant := True;
+    CurGenElemOff := SL_OFF_SLOTS + 8 * CurGenSlotNext;
+    Inc(CurGenSlotNext, 2);
   end;
   { Record locals / record element need the blob helpers (older slgen lacks them). }
-  if (CurGenElemOff >= 0) or SLHasRecordSlot then
+  if ((CurGenElemOff >= 0) and not CurGenElemIsVariant) or SLHasRecordSlot then
     if (FindProc('SlBlob') < 0) or (FindProc('SlUnblob') < 0) then
       Error('stackless generator: record support needs slgen SlBlob/SlUnblob (update lib/rtl/slgen.pas in scope)');
 
@@ -20850,12 +21001,49 @@ begin
   begin
     if (i = selfS) or (i = retS) then Continue;
     if (Syms[i].Kind <> skParam) and (Syms[i].Kind <> skLocal) then Continue;
+    { A CELL-PROMOTED name (SymCellPtr) keeps its symbol but its storage is the
+      heap cell, and every read and write already spells itself `cell^` — the
+      frame slot is dead, so persisting it would checkpoint garbage. The cell
+      POINTER is an ordinary pointer local and gets its own slot below, which is
+      how a Nil Python generator persists a variant across a yield without this
+      pass having to understand variant ARC. }
+    if SymCellPtr[i] >= 0 then Continue;
     tk := Syms[i].TypeKind;
     if Syms[i].IsRef then
     begin
       { by-ref (var/const-record) param: the slot persists the caller ADDRESS
         (one pointer word); save/restore go through AN_SLOTADDR so the word
         itself is copied, never the pointee. }
+      SymGenSlot[i] := CurGenSlotNext;
+      Inc(CurGenSlotNext);
+      Continue;
+    end;
+    if tk = tyVariant then
+    begin
+      { A VARIANT is a 16-byte {tag, payload} pair, so it gets a two-word slot
+        region and is checkpointed by BLOB COPY — bitwise, deliberately not by
+        assignment. Bitwise is what makes it refcount-neutral: the value has
+        exactly one live owner at a time (the frame while the step runs, the
+        instance while it is suspended), and neither copy is ever released
+        behind the other's back, because a generator step's epilogue does not
+        release its locals at all (EmitManagedLocalCleanup). An ASSIGNMENT here
+        would release whatever the destination happened to hold and retain the
+        source, on a slot region that is raw bytes rather than a live variant.
+
+        This is what a Nil Python generator body is made of: its named locals
+        are variants and so are the hidden temps the desugars mint mid-body —
+        which is why this cannot be solved on the frontend side by promoting
+        the ones it can see. }
+      SymGenSlot[i] := CurGenSlotNext;
+      Inc(CurGenSlotNext, 2);
+      Continue;
+    end;
+    if (tk = tyString) or (tk = tyAnsiString) then
+    begin
+      { A managed STRING local is one pointer-sized handle. Persisted as a RAW
+        WORD for the same reason a variant is blob-copied: bitwise moves keep
+        the reference count untouched, where an assignment would release the
+        destination's stale bytes. }
       SymGenSlot[i] := CurGenSlotNext;
       Inc(CurGenSlotNext);
       Continue;
@@ -20873,10 +21061,18 @@ begin
       Inc(CurGenSlotNext, (RecSize(Syms[i].RecName) + 7) div 8);
       Continue;
     end;
-    if Syms[i].IsArray or
-       (tk = tyString) or (tk = tyAnsiString) or
-       (tk = tySet) or (tk = tyVariant) then
-      Error('stackless generator: only ordinal/pointer/record locals are supported (arrays/strings/sets/variants pending)');
+    if Syms[i].IsArray or (tk = tySet) then
+      { NAME the local and its type kind. Without them this said only that some
+        local somewhere in the body was of an unsupported kind, and the ones that
+        actually trip it are HIDDEN desugar temps a reader cannot see in the
+        source at all — so the message pointed at a generator whose every visible
+        local was fine. The type kind is the ordinal because there is no
+        kind-to-text helper in the compiler; it is still the fastest way to tell
+        a string temp from a set temp. }
+      Error('stackless generator: local `' + Syms[i].Name + '` (type kind ' +
+            AIntToStr(Ord(tk)) + ') is not supported — only ordinal, pointer '
+            + 'and record locals persist across a yield '
+            + '(arrays/strings/sets/variants pending)');
     SymGenSlot[i] := CurGenSlotNext;
     Inc(CurGenSlotNext);
   end;

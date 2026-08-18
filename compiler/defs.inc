@@ -2720,6 +2720,7 @@ var
   CurGenScopeBase : Integer;  { first sym idx of the current stackless generator's scope (save/restore only its own slots, never leaked globals) }
   CurGenElemOff   : Integer;  { record element: byte offset of the CURRENT record region in the instance (-1 = scalar element) }
   CurGenElemRecId : Integer;  { record element: record id of the yielded record type }
+  CurGenElemIsVariant : Boolean; { variant element: the CURRENT region holds a 16-byte variant, stored by ARC-correct assignment (Nil Python's values are variants) }
   GenStateLabelIdx : array[0..MAX_GEN_STATES-1] of Integer; { resume label (GotoLabel slot) per state }
   SigRestorerAddr : Integer;  { code offset of the SA_RESTORER stub (rt_sigreturn) — x86-64 requires a userspace restorer }
   SigDispatchAddr : Integer;  { code offset of the shared signal dispatch handler (hook table -> call, else redefault + re-raise) }

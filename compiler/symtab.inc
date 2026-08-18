@@ -7789,6 +7789,20 @@ procedure EmitManagedLocalCleanup(retSymIdx: Integer);
 var i, procIdx: Integer;
 begin
   if CurProc < 0 then Exit;
+  { A STACKLESS GENERATOR step function RETURNS at every yield and is re-entered
+    at the next one, so its locals are not going out of scope on this path —
+    they are the generator's live state, checkpointed into the heap instance and
+    restored on resume. Releasing them here freed the very objects the instance
+    still points at, and the failure was silent: a Nil Python generator walking
+    `for t in xs` got a dangling list on its second step, so the loop simply
+    ENDED, one element in, with no error anywhere. (Pascal never saw it — its
+    class locals are not refcounted, so there was nothing to release.)
+
+    What the references cost instead is that they are dropped only when the
+    instance is freed, which today means they leak with it. That is a bounded
+    per-generator leak traded for correctness, and it is recorded on
+    feature-nilpy-yield-outside-a-for-loop rather than left to be rediscovered. }
+  if CurProcIsStackless then Exit;
   for i := Procs[CurProc].ScopeBase to SymCount - 1 do
   begin
     if (Syms[i].Kind = skLocal) and (i <> retSymIdx) then
