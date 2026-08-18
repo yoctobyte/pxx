@@ -1,10 +1,27 @@
 ---
 track: N
-prio: 58
+prio: 75
 type: feature
 status: working
 owner: frank2-7e
 ---
+
+> **RERANKED 58 → 75 on 2026-08-18, and the reason inverts the campaign's standing
+> assumption.** A Track B re-measure at pinned v352 (`0d2087d6…`, pin `b14da0847`)
+> found the missing-module batch had *already shipped* — what remains is **8 files, 4 of
+> them behind one Track U decision**, while the LANGUAGE walls are **32**. `yield` alone
+> is **18 files — more than every missing-module row combined.** Track N is the
+> bottleneck for this ladder again; the earlier "Track N is no longer the bottleneck"
+> read was measured before those shims landed and is superseded.
+>
+> **DISPATCH CONSTRAINT — this is SCHEDULED work, not queue work.** Despite now topping
+> Track N, it must NOT be handed to a long-running session just because `next` ranks it
+> first. Its remaining failure mode is **silent stack corruption** in `PyEmitParamSpills`,
+> not a compile error, and that is the worst possible thing to chase on a thin context.
+> It is smaller than the body below claims (the generator engine is built and proven for
+> Pascal — `slgen.pas`, stackless, working today), it is **NOT** blocked on
+> `decide-how-a-compiled-def-carries-its-signature-when-boxed`, and the diagnosis is
+> banked so a fresh session starts from it. Give it a fresh session with room.
 
 # `yield` only works inside a `for` — a while-loop generator does not compile
 

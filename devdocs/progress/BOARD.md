@@ -202,7 +202,7 @@ _none_
 | feature-nilpy-tkinter-surface-vs-a-real-application | N | 45 | feature | The tkinter façade is built and now genuinely gated (it runs under Xvfb), but its widget/option surface has never been proven against a real application. songformatter's GUI is the forcing target: tkinter.font metrics (descent/measure), Canvas.create_text anchoring, Notebook, PanedWindow. Measurable for the first time now that a running harness exists. | — |
 | feature-nilpy-user-defined-decorators | N | 30 | feature | A user-defined decorator — the ordinary `@wrap` over a `def`, not one of the four recognised names — is refused at parse time: \"unsupported decorator (only @dataclass and @overload)\". The decorator list is a NAME whitelist, so nothing a program declares itself can appear in it. | — |
 | feature-nilpy-walrus-operator | N | 30 | feature | `:=` (walrus) — the assignment expression is not parsed | — |
-| feature-nilpy-yield-outside-a-for-loop | N | 58 | feature | `yield` only works inside a `for` — a while-loop generator does not compile | — |
+| feature-nilpy-yield-outside-a-for-loop | N | 75 | feature | `yield` only works inside a `for` — a while-loop generator does not compile | — |
 | feature-opt-alloc-intent-hint | O | 25 | feature | Allocation-intent hint: tell the RTL growth policy how a buffer will be used | — |
 | feature-opt-arch-level-and-dispatch | O | 30 | feature | What x86-64 feature level does pxx emit for? Referenced as 'if raised' by two existing tickets and never filed; raised by the user 2026-08-15 when FMA came up. MEASURED: our own gate box plexus is a Xeon E5-2620 v2 (Ivy Bridge, 2013) with AVX but NO FMA and no AVX2 — x86-64-v2, not v3. So a v2 bump is safe and FMA would SIGILL on the machine that gates every push. Includes the answer to the 'dispatch defeats inlining' objection: multiversion whole FUNCTIONS, not instructions. | — |
 | feature-opt-bulk-copy-is-byte-at-a-time | O | 45 | feature | The runtime's bulk-copy primitives move ONE BYTE per iteration. Copy() on a 64-element array is ~23x slower than FPC's (2.54s vs 0.11s over 3M copies). A word-at-a-time loop -- ~10 lines, portable, no backend work -- was prototyped and measured at 3.3x of that back. | — |
@@ -495,12 +495,12 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 88] [U] decide-how-a-compiled-def-carries-its-signature-when-boxed (unblocks 2)
+- [p 75] [N] feature-nilpy-yield-outside-a-for-loop
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
 - [p 65] [P] feature-pascal-corpus-oop
 - [p 62] [U] decide-xml-etree-thin-tree-model-or-a-real-xml-library (unblocks 1)
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
-- [p 58] [N] feature-nilpy-yield-outside-a-for-loop
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [C] bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)

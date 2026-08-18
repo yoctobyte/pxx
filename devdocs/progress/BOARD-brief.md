@@ -40,12 +40,12 @@ _none — no lane is locked._
 ## Ready — top 30 of 218, ranked
 
 - `[p 88] [U]` decide-how-a-compiled-def-carries-its-signature-when-boxed (unblocks 2)
+- `[p 75] [N]` feature-nilpy-yield-outside-a-for-loop
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
 - `[p 62] [U]` decide-xml-etree-thin-tree-model-or-a-real-xml-library (unblocks 1)
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
-- `[p 58] [N]` feature-nilpy-yield-outside-a-for-loop
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [C]` bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
