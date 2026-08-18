@@ -1126,3 +1126,34 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   and the next check would have dispatched against a board that no longer exists.
   **A cron prompt is a snapshot that goes stale silently while the work moves; re-issue it
   whenever the standing state changes materially, not just when the schedule does.**
+
+- 2026-08-18 late — **the subscript ticket's BOUNDARY was right and its AXIS was wrong**,
+  which is a distinction worth keeping. Two rows nobody had crossed settled it (verified
+  here, HEAD vs pinned v351):
+
+  ```
+  def f(): print((1, 2)[0])          no return  ->  WORKS even on v351
+  def f(): return [1,2,1].count(1)   a METHOD   ->  SEGFAULT on v351
+  ```
+
+  So the subscript is innocent: it is **RETURNING anything derived from a container
+  literal**. `PyInferDefRetType` typed the return from a token scan whose literal arms
+  Exited on the OPENING bracket, so the def registered a `tyClass` result and the
+  container came back through a class slot.
+  **Why a clean four-axis crossing still named a correlate:** the "a subscript yields a
+  VARIANT" rule already existed, but it lives in the arm keyed to an IDENT receiver, so a
+  literal receiver never reached it. The reporter's scan was sound and the axis it named
+  was a true correlate — **crossing beats walking and still does not guarantee the
+  mechanism.** Both workers were told this explicitly so it does not read as a miss.
+  Fix written as "a literal is not always the whole expression" rather than as a subscript
+  case, which is why it also fixes a `.count(1)` row that was never in the ticket.
+  Pinned **v352** (`0d2087d629bf`, `b14da0847`) because the fix unblocks a REGISTERED
+  Track B workaround — the platonic ParseResult `__getitem__` core-dumps on v351 and
+  returns `x` on v352. The worker flagged the consumer itself; that rule is now being
+  applied by the workers rather than by me.
+  **Self-inflicted, recorded so the next coordinator does not repeat it:** I put backticks
+  inside a bash-quoted `git commit -m`, and command substitution silently ate the span —
+  `b14da0847`'s message has a hole where the repro should be. I did NOT force-push over a
+  pushed pin commit to fix prose while two sessions pull from master; a gappy message is a
+  far better outcome than rewritten history under a worker's feet. **Never put backticks
+  in a bash-quoted commit message.**
