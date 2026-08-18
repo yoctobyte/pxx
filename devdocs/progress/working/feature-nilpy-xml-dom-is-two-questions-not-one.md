@@ -4,6 +4,8 @@ prio: 55
 type: feature
 blocked-by: [bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero, bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails]
 summary: "The xml_dom ladder row (4 files) is two unrelated questions. Three files need only `Node` — 12 integer constants, zero methods, closed by the DOM spec, trivially shimmable. One file needs a real DOM (~25 methods plus a private minidom internal) and is a project, not a shim. MEASURED CONCLUSION: do not write it — the shim unblocks ZERO files today, and writing it before the trailing-class initialiser bug lands would produce a shim whose every constant reads as 0."
+status: working
+owner: frank3-fc
 ---
 
 # `xml.dom` is two questions, and neither one is worth doing yet

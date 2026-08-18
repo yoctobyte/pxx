@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:14 blocked:5 backlog:231 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2014 rejected:38`
+`working:1 unfinished:14 blocked:5 backlog:231 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2014 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-nilpy-xml-dom-is-two-questions-not-one` [B] — owner: frank3-fc
 
 ## unfinished (14) — parked mid-flight; re-claim, do not duplicate
 
@@ -54,7 +54,6 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [N]` feature-nilpy-subclass-a-builtin-type
-- `[p 55] [B]` feature-nilpy-xml-dom-is-two-questions-not-one
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [A]` feature-pascal-type-helpers
 - `[p 55] [A]` feature-signal-siginfo-ucontext
@@ -68,5 +67,6 @@ _none — no lane is locked._
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [E]` feature-demo-songformatter-pxx-target
 - `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
+- `[p 50] [A]` feature-nilpy-collections-and-string-methods
 
 _186 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

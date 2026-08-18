@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| feature-nilpy-xml-dom-is-two-questions-not-one | B | 55 | feature | The xml_dom ladder row (4 files) is two unrelated questions. Three files need only `Node` — 12 integer constants, zero methods, closed by the DOM spec, trivially shimmable. One file needs a real DOM (~25 methods plus a private minidom internal) and is a project, not a shim. MEASURED CONCLUSION: do not write it — the shim unblocks ZERO files today, and writing it before the trailing-class initialiser bug lands would produce a shim whose every constant reads as 0. | bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails, bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero |
 
 ## unfinished (14)
 
@@ -127,6 +129,7 @@ _none_
 | feature-a-shrink-managed-header-on-32-bit | A | 25 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
 | feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit | A | 50 | feature | Strict flags currently exempt code by `CurrentUnitIdx < 0` — main program vs ANY unit — so `--strict-fpc` polices the one file that isn't FPC's and exempts Synapse entirely. The right axis is OURS vs THEIRS: our RTL is written in the pxx dialect and no command-line flag should re-judge it, while external units and the user's own program should be policed. Unblocks folding --strict-overload into the umbrella. | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
+| feature-b-a-real-minidom-is-an-implementation-not-a-shim | B | 15 | feature | Question 2 of the xml.dom row, re-filed on its own as that ticket said it should be. html5lib/treebuilders/dom.py wants a document you can build and mutate — ~25 DOM methods, getDOMImplementation().createDocument(), weakref.proxy(), and a reach into minidom's PRIVATE _child_node_types. That is a DOM implementation, not a compatibility alias. It unblocks exactly one corpus file and should be ranked as an implementation project, not alongside shims. | — |
 | feature-b-hardware-sqrt-on-aarch64-and-arm32 | B | 20 | feature | Sqrt is one `sqrtsd` on x86-64 (15x faster than the software path and correctly rounded by IEEE mandate). aarch64 `fsqrt` and arm32 `vsqrt` are the same one-instruction win and both run here under qemu, so the change is verifiable on this box. The portable SqrtSoft stays as the fallback for riscv32/xtensa. | — |
 | feature-b-mimic-six-moves-needs-http-client-and-urllib | B | 35 | feature | `six.moves` is now the largest module-shim row on the ladder (4 files: html5lib/__init__.py, _inputstream.py, html5parser.py, filters/sanitizer.py). It cannot be shimmed on its own — six.moves is a table of RE-EXPORTS of `http.client`, `urllib` and `urllib.parse`, so it needs those modules to exist. urllib.parse is pure string work and is the tractable half; http.client needs the HTTP client filed separately. | feature-b-mimic-urllib-request-over-the-rtl-http-stack |
 | feature-b-mimic-urllib-request-over-the-rtl-http-stack | B | 30→35 | feature | lib/rtl/mimic_urllib_request.py currently REFUSES: it makes importing code compile and raises NotImplementedError on any call. The client it needs ALREADY EXISTS — lib/rtl/http.pas, gated by make lib-test as http + redirect + keepalive + pool + gzip + cookie + json, over the TLS seam. So this is not an HTTP project, it is a Python face on an existing unit, in the shape mimic_codecs.pas already demonstrates (a .pas shim reached from NilPy). The one corpus caller is a code generator, so no library file is blocked on it. | — |
@@ -198,7 +201,6 @@ _none_
 | feature-nilpy-tkinter-surface-vs-a-real-application | N | 45 | feature | The tkinter façade is built and now genuinely gated (it runs under Xvfb), but its widget/option surface has never been proven against a real application. songformatter's GUI is the forcing target: tkinter.font metrics (descent/measure), Canvas.create_text anchoring, Notebook, PanedWindow. Measurable for the first time now that a running harness exists. | — |
 | feature-nilpy-user-defined-decorators | N | 30 | feature | A user-defined decorator — the ordinary `@wrap` over a `def`, not one of the four recognised names — is refused at parse time: \"unsupported decorator (only @dataclass and @overload)\". The decorator list is a NAME whitelist, so nothing a program declares itself can appear in it. | — |
 | feature-nilpy-walrus-operator | N | 30 | feature | `:=` (walrus) — the assignment expression is not parsed | — |
-| feature-nilpy-xml-dom-is-two-questions-not-one | B | 55 | feature | The xml_dom ladder row (4 files) is two unrelated questions. Three files need only `Node` — 12 integer constants, zero methods, closed by the DOM spec, trivially shimmable. One file needs a real DOM (~25 methods plus a private minidom internal) and is a project, not a shim. MEASURED CONCLUSION: do not write it — the shim unblocks ZERO files today, and writing it before the trailing-class initialiser bug lands would produce a shim whose every constant reads as 0. | bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails, bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero |
 | feature-nilpy-yield-outside-a-for-loop | N | 58 | feature | `yield` only works inside a `for` — a while-loop generator does not compile | — |
 | feature-opt-alloc-intent-hint | O | 25 | feature | Allocation-intent hint: tell the RTL growth policy how a buffer will be used | — |
 | feature-opt-arch-level-and-dispatch | O | 30 | feature | What x86-64 feature level does pxx emit for? Referenced as 'if raised' by two existing tickets and never filed; raised by the user 2026-08-15 when FMA came up. MEASURED: our own gate box plexus is a Xeon E5-2620 v2 (Ivy Bridge, 2013) with AVX but NO FMA and no AVX2 — x86-64-v2, not v3. So a v2 bump is safe and FMA would SIGILL on the machine that gates every push. Includes the answer to the 'dispatch defeats inlining' objection: multiversion whole FUNCTIONS, not instructions. | — |
@@ -507,7 +509,6 @@ _none_
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-nilpy-subclass-a-builtin-type
-- [p 55] [B] feature-nilpy-xml-dom-is-two-questions-not-one
 - [p 55] [O] feature-opt-heap-per-thread-cache
 - [p 55] [A] feature-pascal-type-helpers
 - [p 55] [A] feature-signal-siginfo-ucontext
@@ -697,6 +698,7 @@ _none_
 - [p 20] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 15] [N] bug-nilpy-delattr-globals-and-locals-are-absent
 - [p 15] [A] compat-pascal-binop-operand-eval-order
+- [p 15] [B] feature-b-a-real-minidom-is-an-implementation-not-a-shim
 - [p 15] [B] feature-lib-mimic-string-template
 - [p 15] [N] feature-nilpy-nested-def-as-value
 - [p 15] [P] feature-pascal-corpus-expansion
