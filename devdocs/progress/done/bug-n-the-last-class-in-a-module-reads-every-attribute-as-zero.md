@@ -251,4 +251,4 @@ failing pre-fix and passing post-fix + `tools/gate.sh quick` GREEN. No pin neede
 nothing in `compiler/builtin/**`.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit 12275b26f.
