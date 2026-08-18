@@ -907,6 +907,7 @@ function PyWrapHeapCallableCall(calleeNode, argsHead, n, defCall: Integer): Inte
 function PyBareNoneHere: Boolean; forward;  { a `None` with nothing after it that could continue an expression — pyparser.inc }
 function PyNoneOperandHere: Boolean; forward;  { a `None` that is an OPERAND of the enclosing operator, whatever follows — pyparser.inc }
 function PyMakeSuperCall(const name: AnsiString): Integer; forward;  { `super().m(args)` as a value (pyparser.inc) }
+function PyRecIsCls(rec: Integer; const clsName: AnsiString): Boolean; forward;  { is this rec that pylib class, by identity OR inheritance? (pyparser.inc) }
 procedure PySuperConsumeArgs; forward;  { `super()` / `super(Cls, self)` argument list, either spelling (pyparser.inc) }
 function PyDynAttrEverAssigned(const nm: AnsiString): Boolean; forward;  { is `.nm =` written anywhere? (pyparser.inc) }
 function PyIndexCoerce(n: Integer): Integer; forward;  { Python __index__: an object used where an integer is required (pyparser.inc) }
@@ -11558,10 +11559,10 @@ begin
             they do. Without it a range fell into the no-__len__ arm below and
             `len(range(3))` raised "not a container". }
           if (atRecv >= REC_UCLASS_BASE) and
-             (atRecv <> REC_UCLASS_BASE + FindUClass('TPyList')) and
-             (atRecv <> REC_UCLASS_BASE + FindUClass('TPyDict')) and
-             (atRecv <> REC_UCLASS_BASE + FindUClass('TPyRange')) and
-             (atRecv <> REC_UCLASS_BASE + FindUClass('TPyBytes')) then
+             (not PyRecIsCls(atRecv, 'TPyList')) and
+             (not PyRecIsCls(atRecv, 'TPyDict')) and
+             (not PyRecIsCls(atRecv, 'TPyRange')) and
+             (not PyRecIsCls(atRecv, 'TPyBytes')) then
           begin
             { a CURSOR: CPython answers `object of type 'map' has no len()`,
               not a generic "not a container". Same runtime-raise shape as the

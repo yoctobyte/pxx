@@ -582,6 +582,17 @@ test-nilpy: $(COMPILER)
 	# rebinding the name the way CPython scopes it. A name the compiler does NOT
 	# provide still walls at compile time -- that row lives in the .npy's sibling
 	# check. bug-n-a-from-import-of-a-compiler-provided-module-binds-no-names
+	# `class X(list)` / `(dict)` was refused outright. Resolving the base name was
+	# the easy half: the frontend asked "is this rec EXACTLY TPyList?" in a dozen
+	# places -- an IDENTITY test standing in for a KIND question -- so a subclass
+	# compiled and then behaved as a non-container (len raised "not a container"
+	# for a real dict, `in` took the no-__contains__ arm, a slice was refused),
+	# while the RUNTIME had it right all along via Pascal's `is`. This pins len,
+	# index, slice, membership, iteration and an own method on both a list and a
+	# dict subclass, the plain containers unchanged, and a non-container class
+	# still raising. feature-nilpy-subclass-a-builtin-type
+	./$(COMPILER) test/test_nilpy_subclass_a_builtin_type.npy $(TESTTMP)/test_nilpy_subbuiltin26
+	test "$$($(TESTTMP)/test_nilpy_subbuiltin26)" = "$$(printf '3 1 [2, 3] True False 6\n1\n2\n3\n2 1 True False 2\n['\''a'\'', '\''b'\'']\na\nb\n3 [5, 6] True ['\''x'\''] 1 True\nTypeError')"
 	./$(COMPILER) test/test_nilpy_from_import_binds_provided_names.npy $(TESTTMP)/test_nilpy_fromimpbind26
 	test "$$($(TESTTMP)/test_nilpy_fromimpbind26)" = "$$(printf '1 1\na/b y.txt c/d\nplain\n5\nshadowed')"
 	./$(COMPILER) test/test_nilpy_two_argument_super.npy $(TESTTMP)/test_nilpy_super2arg26
@@ -6714,6 +6725,17 @@ test-core: $(COMPILER)
 	# rebinding the name the way CPython scopes it. A name the compiler does NOT
 	# provide still walls at compile time -- that row lives in the .npy's sibling
 	# check. bug-n-a-from-import-of-a-compiler-provided-module-binds-no-names
+	# `class X(list)` / `(dict)` was refused outright. Resolving the base name was
+	# the easy half: the frontend asked "is this rec EXACTLY TPyList?" in a dozen
+	# places -- an IDENTITY test standing in for a KIND question -- so a subclass
+	# compiled and then behaved as a non-container (len raised "not a container"
+	# for a real dict, `in` took the no-__contains__ arm, a slice was refused),
+	# while the RUNTIME had it right all along via Pascal's `is`. This pins len,
+	# index, slice, membership, iteration and an own method on both a list and a
+	# dict subclass, the plain containers unchanged, and a non-container class
+	# still raising. feature-nilpy-subclass-a-builtin-type
+	./$(COMPILER) test/test_nilpy_subclass_a_builtin_type.npy $(TESTTMP)/test_nilpy_subbuiltin26
+	test "$$($(TESTTMP)/test_nilpy_subbuiltin26)" = "$$(printf '3 1 [2, 3] True False 6\n1\n2\n3\n2 1 True False 2\n['\''a'\'', '\''b'\'']\na\nb\n3 [5, 6] True ['\''x'\''] 1 True\nTypeError')"
 	./$(COMPILER) test/test_nilpy_from_import_binds_provided_names.npy $(TESTTMP)/test_nilpy_fromimpbind26
 	test "$$($(TESTTMP)/test_nilpy_fromimpbind26)" = "$$(printf '1 1\na/b y.txt c/d\nplain\n5\nshadowed')"
 	./$(COMPILER) test/test_nilpy_two_argument_super.npy $(TESTTMP)/test_nilpy_super2arg26

@@ -1,0 +1,61 @@
+# `class X(list)` / `(dict)` was `Nil Python: unknown base class list` -- the
+# base-class lookup is a USER-class lookup and pylib's containers are not
+# spelled the way Python spells them.
+#
+# Resolving the name was the easy half. The compiler asked "is this rec EXACTLY
+# TPyList?" in a dozen places -- an IDENTITY test standing in for a KIND
+# question -- so a subclass compiled and then behaved as a non-container: len()
+# raised "not a container" for a real dict, `in` took the no-__contains__ arm,
+# and a slice was refused. The runtime was right all along (pylen_v tests
+# `o is TPyDict`, which Pascal answers through the chain); only the frontend
+# disagreed. One predicate now answers identity-or-inheritance for all of them.
+# feature-nilpy-subclass-a-builtin-type
+
+
+class Stack(list):
+    def total(self):
+        t = 0
+        for v in self:
+            t = t + v
+        return t
+
+
+class Registry(dict):
+    def keycount(self):
+        return len(self)
+
+
+s = Stack()
+s.append(1)
+s.append(2)
+s.append(3)
+
+# len, index, slice, membership, iteration, and a method of its own
+print(len(s), s[0], s[1:3], 2 in s, 9 in s, s.total())
+for v in s:
+    print(v)
+
+r = Registry()
+r["a"] = 1
+r["b"] = 2
+
+print(len(r), r["a"], "b" in r, "z" in r, r.keycount())
+print(sorted(r.keys()))
+for k in sorted(r):
+    print(k)
+
+# the plain containers must be untouched by the widening
+p = [4, 5, 6]
+d = {"x": 9}
+print(len(p), p[1:3], 5 in p, sorted(d.keys()), len(d), "x" in d)
+
+# ...and a class that is NOT a container still raises, rather than the
+# widening quietly making every instance measurable
+class Plain:
+    pass
+
+
+try:
+    len(Plain())
+except TypeError:
+    print("TypeError")

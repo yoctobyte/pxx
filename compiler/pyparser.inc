@@ -1209,6 +1209,39 @@ var
   clean unsupported error. Advances i past the annotation. }
 function PyAnnTypeAt(var i: Integer): TTypeKind; forward;
 
+{ Is `rec` this pylib class — BY IDENTITY OR BY INHERITANCE?
+
+  The frontend asked `rec <> REC_UCLASS_BASE + FindUClass('TPyList')` in a dozen
+  places, which is an IDENTITY test standing in for a KIND question. It was
+  right while nothing could descend from a pylib container; `class
+  MethodDispatcher(dict)` makes it wrong, and wrong in the worst direction —
+  the subclass IS a dict to the runtime (pylen_v tests `o is TPyDict`, which
+  Pascal answers correctly through the chain) but the COMPILER routed it to the
+  no-length arm, so `len(d)` raised "not a container" for a real dict.
+
+  One predicate for the question, so a new pylib container or a new consumer
+  cannot re-introduce the identity test by copying a neighbour.
+  feature-nilpy-subclass-a-builtin-type }
+{ The same question as PyRecIsCls, asked about a CLASS INDEX rather than a rec
+  id — the for-in lowering and its neighbours carry ci values, not recs. }
+function PyCiIsA(ci, target: Integer): Boolean;
+begin
+  PyCiIsA := (ci >= 0) and (target >= 0) and
+             ((ci = target) or IsSubclassOf(ci, target));
+end;
+
+function PyRecIsCls(rec: Integer; const clsName: AnsiString): Boolean;
+var target, ci: Integer;
+begin
+  Result := False;
+  if rec < REC_UCLASS_BASE then Exit;
+  target := FindUClass(clsName);
+  if target < 0 then Exit;
+  ci := rec - REC_UCLASS_BASE;
+  Result := (ci = target) or IsSubclassOf(ci, target);
+end;
+
+
 { ONE annotation term. PyAnnTypeAt below layers PEP 604 unions (`int | None`)
   over this, so every caller gets union support for free. }
 function PyAnnTypeTermAt(var i: Integer): TTypeKind;
@@ -2725,24 +2758,22 @@ begin
         { container type known only at run time (a dict/list slot value) —
           unbox and dispatch inside pyvar_contains. }
         node := FindProc('pyvar_contains')
-      else if ResolveNodeRec(right) = REC_UCLASS_BASE + FindUClass('TPyDict') then
+      else if PyRecIsCls(ResolveNodeRec(right), 'TPyDict') then
         node := FindProc('pydictcontains')
-      else if (FindUClass('TPyRange') >= 0) and
-              (ResolveNodeRec(right) = REC_UCLASS_BASE + FindUClass('TPyRange')) then
+      else if PyRecIsCls(ResolveNodeRec(right), 'TPyRange') then
         { `x in range(...)` is CONSTANT time in CPython — one modulo, not a
           scan — which is the whole reason a range is worth having as a value
           rather than as a materialised list. }
         node := FindProc('pyrange_contains')
-      else if (PyBytesCi >= 0) and
-              (ResolveNodeRec(right) = REC_UCLASS_BASE + PyBytesCi) then
+      else if PyRecIsCls(ResolveNodeRec(right), 'TPyBytes') then
         { BYTES: a bytes subsequence or an integer byte value. Without its own
           arm this fell to pycontains below, which scans a TPyList — so it read
           a TPyBytes' header words as variant slots and answered False for every
           bytes needle (bug-nilpy-bytes-membership-always-false-for-a-bytes-needle) }
         node := FindProc('pybytes_contains')
       else if (ResolveNodeRec(right) >= REC_UCLASS_BASE) and
-              (ResolveNodeRec(right) <> REC_UCLASS_BASE + FindUClass('TPyList')) and
-              (ResolveNodeRec(right) <> REC_UCLASS_BASE + FindUClass('TPyBytes')) then
+              (not PyRecIsCls(ResolveNodeRec(right), 'TPyList')) and
+              (not PyRecIsCls(ResolveNodeRec(right), 'TPyBytes')) then
       begin
         { A USER class (not one of pylib's own containers): `x in obj` must
           call obj.__contains__(x) when it declares one -- the fallback below
@@ -9355,7 +9386,7 @@ begin
   if (tk = tyString) or (tk = tyAnsiString) or (tk = tyChar) then
     Result := PyCallProc1('pyiter_of_str', node)
   else if (tk = tyClass) and (FindUClass('TPyRange') >= 0) and
-          (ResolveNodeRec(node) = REC_UCLASS_BASE + FindUClass('TPyRange')) then
+          PyRecIsCls(ResolveNodeRec(node), 'TPyRange') then
     { a RANGE is a sequence, not a list — `zip(range(3), xs)` must not try to
       read its three Int64 fields as a TPyList header }
     Result := PyCallProc1('pyiter_of_range', node)
@@ -9572,8 +9603,7 @@ begin
   { ...and a RANGE, which is a sequence in exactly this sense: r[i] is a
     POSITION, so an index object is asked for its __index__ like a list's is. }
   rangeCi := FindUClass('TPyRange');
-  Result := ((listCi >= 0) and (ci = listCi)) or ((bytesCi >= 0) and (ci = bytesCi))
-            or ((rangeCi >= 0) and (ci = rangeCi));
+  Result := PyCiIsA(ci, listCi) or PyCiIsA(ci, bytesCi) or PyCiIsA(ci, rangeCi);
 end;
 
 function PyIndexCoerce(n: Integer): Integer;
@@ -9747,7 +9777,7 @@ begin
   rec := ResolveNodeRec(baseNode);
   listCi := FindUClass('TPyList');
   if (listCi >= 0) and (rec = REC_UCLASS_BASE + listCi) then PyIndexSeqKind := 'list'
-  else if (PyBytesCi >= 0) and (rec = REC_UCLASS_BASE + PyBytesCi) then
+  else if PyRecIsCls(rec, 'TPyBytes') then
     PyIndexSeqKind := 'bytearray';
 end;
 
@@ -9845,13 +9875,11 @@ begin
   if rec < REC_UCLASS_BASE then Exit;
   listCi  := FindUClass('TPyList');
   bytesCi := PyBytesCi;
-  Result := ((listCi >= 0) and (rec = REC_UCLASS_BASE + listCi)) or
-            ((bytesCi >= 0) and (rec = REC_UCLASS_BASE + bytesCi)) or
+  Result := PyRecIsCls(rec, 'TPyList') or PyRecIsCls(rec, 'TPyBytes') or
             { a RANGE slices too, and answers a range. Without this the bracket
               was claimed by the default-property path, which demands a ']' and
               reported "Expected: ]" at the slice colon. }
-            ((FindUClass('TPyRange') >= 0) and
-             (rec = REC_UCLASS_BASE + FindUClass('TPyRange')));
+            PyRecIsCls(rec, 'TPyRange');
 end;
 
 { The sentinel an omitted bound is compiled to; pylib's PySliceBounds turns it
@@ -9905,18 +9933,17 @@ begin
     rec := ResolveNodeRec(baseNode);
     listCi  := FindUClass('TPyList');
     bytesCi := PyBytesCi;
-    if (bytesCi >= 0) and (rec = REC_UCLASS_BASE + bytesCi) then
+    if PyRecIsCls(rec, 'TPyBytes') then
     begin
       pname := 'pybytes_slice';
       retTk := tyClass;
     end
-    else if (listCi >= 0) and (rec = REC_UCLASS_BASE + listCi) then
+    else if PyRecIsCls(rec, 'TPyList') then
     begin
       pname := 'pylist_slice';
       retTk := tyClass;
     end
-    else if (FindUClass('TPyRange') >= 0) and
-            (rec = REC_UCLASS_BASE + FindUClass('TPyRange')) then
+    else if PyRecIsCls(rec, 'TPyRange') then
     begin
       { Slicing a range answers a RANGE, not a list — `range(10)[2:5]` is
         `range(2, 5)` in CPython, so slices compose without materialising.
@@ -13611,6 +13638,20 @@ end;
   that this compile-time path does not have, and NilPy accepting a call CPython
   rejects is laxness, not a defect — the opposite direction is the one that
   matters (devdocs/dev/nilpy-semantics-divergences.md). }
+{ The pylib class a BUILTIN type name stands for in a base-class position, or
+  -1. `list`/`dict`/`bytes`/`set` are real classes here under pylib's own names;
+  `str` is not a class at all (an AnsiString), so it is absent by construction
+  rather than by omission. bug/feature-nilpy-subclass-a-builtin-type }
+function PyBuiltinBaseCi(const nm: AnsiString): Integer;
+var lo: AnsiString;
+begin
+  Result := -1;
+  lo := LowerCase(nm);
+  if (lo = 'list') or (lo = 'set') then Result := FindUClass('TPyList')
+  else if lo = 'dict' then Result := FindUClass('TPyDict')
+  else if (lo = 'bytes') or (lo = 'bytearray') then Result := FindUClass('TPyBytes');
+end;
+
 function PyPylibMethodAlias(ci: Integer; const mname: AnsiString): AnsiString;
 begin
   Result := '';
@@ -17387,7 +17428,7 @@ begin
   { bytes prints as b'...' like CPython — it fell through to the integer path
     and printed the instance pointer (bug-nilpy-user-class-bytes-method-loses-
     identity: the visible half; the annotated form hit this too). }
-  else if (PyBytesCi >= 0) and (rec = REC_UCLASS_BASE + PyBytesCi) then pname := 'pybytes_repr'
+  else if PyRecIsCls(rec, 'TPyBytes') then pname := 'pybytes_repr'
   else
     { ...and any OTHER user class: `pyobj_str_of`, which produces CPython's
       `<__main__.N object at 0x...>` through the same renderer repr() and a
@@ -19531,7 +19572,7 @@ begin
   begin
     si := PyProgSym(GetTokenStr(TokPos + 1));
     if (si >= 0) and (Syms[si].TypeKind = tyClass) and
-       (Syms[si].RecName = REC_UCLASS_BASE + FindUClass('TPyList')) then
+       PyRecIsCls(Syms[si].RecName, 'TPyList') then
       Result := True;
   end;
 end;
@@ -19824,9 +19865,9 @@ begin
       ci := iterCi;
       isIter := True;
     end;
-    if (PyForExtraCount > 0) and (dictCi >= 0) and (ci = dictCi) then
+    if (PyForExtraCount > 0) and PyCiIsA(ci, dictCi) then
       Error('Nil Python: a dict for-target takes two names');
-    if (dictCi >= 0) and (ci = dictCi) then
+    if PyCiIsA(ci, dictCi) then
     begin
       { A two-name target reads the dict's parallel VALUE list by the same
         index; a single name iterates its KEYS, as Python does. }
@@ -31434,6 +31475,22 @@ begin
     end
     else
       baseCi := FindUClassNonRecord(CurTok.SVal);
+    { A BUILTIN type as the base — `class MethodDispatcher(dict)`. NilPy's
+      containers are real classes (pylib's TPyList / TPyDict / TPyBytes), they
+      are just not spelled the way Python spells them, so the user-class lookup
+      above finds nothing and the whole builtin surface was refused.
+      SCOPING PROBE 2026-08-18: resolving the name is the easy half; see the
+      ticket for what the run-time dispatch still keys on. }
+    if baseCi < 0 then baseCi := PyBuiltinBaseCi(CurTok.SVal);
+    { `class S(str)` cannot work the way `class L(list)` does and should say so:
+      NilPy's str is an AnsiString, a managed VALUE, not a class with a vtable,
+      so there is nothing to descend from. Naming it keeps the reader out of a
+      hunt for a missing registration. }
+    if (baseCi < 0) and
+       (CaseEqual(CurTok.SVal, 'str') or CaseEqual(CurTok.SVal, 'int') or
+        CaseEqual(CurTok.SVal, 'float') or CaseEqual(CurTok.SVal, 'tuple')) then
+      Error('Nil Python: ' + CurTok.SVal + ' cannot be subclassed — it is a ' +
+            'value type here, not a class (list, dict, set, bytes can be)');
     if baseCi < 0 then
       Error('Nil Python: unknown base class ' + CurTok.SVal);
     { A CYCLE guard, independent of the lookup fix above: a class can never be

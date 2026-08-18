@@ -54,6 +54,7 @@ _none_
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | — |
 | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine | C | 55 | bug | A C function DEFINITION whose name matches a Pascal intrinsic (`sqrt` `exp` `ln` `sin` `cos` `arctan`) binds to the Pascal proc entry via case-insensitive FindProc and overwrites its BodyAddr. The Pascal implementation then becomes unreachable by ANY spelling — bare `Sqrt`, `math.Sqrt` and `cmath.sqrt` all return the C body — so a C file silently replaces the RTL's math for the whole program. This is what the ten `__crtl_*` prefixes in lib/crtl exist to dodge. | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 25 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
+| bug-n-a-builtin-types-method-cannot-be-called-unbound | N | 55 | bug | `list.append(self, x)` / `dict.__getitem__(self, k)` — a BUILTIN type's method called unbound with an explicit self — is `undefined variable (list)`. The same call on a USER class (`A.m(self)`) works. It is how a builtin subclass reaches the base implementation it just overrode, so it is the immediate next wall behind feature-nilpy-subclass-a-builtin-type, and both html5lib sites need it. | — |
 | bug-n-a-call-through-a-callable-value-drops-the-callees-defaults | N | 70 | bug | A def called through a callable value ignores its own default arguments — `al = g; al(1)` where `g(x, lo=7)` answers empty instead of 7, and passing the def as an argument and calling it with fewer args SEGFAULTS. Not rename-specific and not import-specific: a same-file assignment reproduces it, and only a DIRECT call applies defaults. The box carries a code address and no signature, which is exactly the open decision. | decide-how-a-compiled-def-carries-its-signature-when-boxed |
 | bug-n-a-class-base-that-is-an-expression-does-not-compile | N | 45 | bug | A class base which is a NAME bound to a type, or a call, does not compile: `B = object; class P(B)` fails where `class P(object)` and `class P(SomeClass)` both work. Blocks six.with_metaclass, which html5lib's parser spells as `class Phase(with_metaclass(...))` — the single remaining wall on html5parser.py. | — |
 | bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through | N | 45 | bug | sys.version_info throws at RUNTIME with a message admitting its own guard failed: 'the code guarding that (the flag its except-branch sets) let this call through anyway'. Two defects — the member is missing, and the compile-time guard meant to catch that does not fire. A guard that reports its own failure and continues is worse than no guard. | — |
@@ -195,7 +196,6 @@ _none_
 | feature-nilpy-stdlib-coverage-gaps-measured | N | 30 | feature | Measured stdlib coverage: json and re are solid; os, time and math.fabs are absent | — |
 | feature-nilpy-str-format-named-keyword-fields | N | 25 | feature | `"{name} is {age}".format(name=..., age=...)` — named fields not supported | — |
 | feature-nilpy-str-surface-gaps-2026-08-09 | N | 25 | feature | str/bytes surface gaps found by the 2026-08-09 differential sweep | — |
-| feature-nilpy-subclass-a-builtin-type | N | 55 | feature | `class X(list)` / `(dict)` / `(str)` is refused with `Nil Python: unknown base class <t>` — a NilPy class can only inherit from another user class or `object`. Base-class resolution goes through FindUClassNonRecord, a USER-class lookup, and the builtin types are not user classes. 4 corpus files, one of them imported by 10 others. | — |
 | feature-nilpy-threadsafe-containers | N | 30 | feature | TPyList/TPyDict corrupt under concurrent mutation — append is a read-modify-write over a buffer PyListGrow may realloc, so two threads can use-after-free. Free-threaded CPython guarantees this cannot happen; adopt that contract under --threadsafe with one-way biased sharing. | — |
 | feature-nilpy-tkinter-surface-vs-a-real-application | N | 45 | feature | The tkinter façade is built and now genuinely gated (it runs under Xvfb), but its widget/option surface has never been proven against a real application. songformatter's GUI is the forcing target: tkinter.font metrics (descent/measure), Canvas.create_text anchoring, Notebook, PanedWindow. Measurable for the first time now that a running harness exists. | — |
 | feature-nilpy-user-defined-decorators | N | 30 | feature | A user-defined decorator — the ordinary `@wrap` over a `def`, not one of the four recognised names — is refused at parse time: \"unsupported decorator (only @dataclass and @overload)\". The decorator list is a NAME whitelist, so nothing a program declares itself can appear in it. | — |
@@ -443,9 +443,9 @@ _none_
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 | decide-week-theme-2026-08-17 | U | 70 | decide | What should the next week of work aim at? Measured: the bug backlog already peaked (61 on 08-03 -> 32 now) and 65% of open tickets are features, so this is no longer a burn-down question. Three candidate themes with the numbers behind each. | — |
 
-## done (2024)
+## done (2025)
 
-2024 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2025 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -501,12 +501,12 @@ _none_
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [C] bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
+- [p 55] [N] bug-n-a-builtin-types-method-cannot-be-called-unbound
 - [p 55] [T] bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 - [p 55] [T] bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label
 - [p 55] [U] decide-what-an-unwired-test-may-assert
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
-- [p 55] [N] feature-nilpy-subclass-a-builtin-type
 - [p 55] [O] feature-opt-heap-per-thread-cache
 - [p 55] [A] feature-pascal-type-helpers
 - [p 55] [A] feature-signal-siginfo-ucontext
