@@ -91,3 +91,62 @@ several defaults where only some are omitted, a default that is a string or a
 tuple rather than an int (None-shaped garbage may read as a plausible empty
 value), and a keyword argument passed by name out of order. The single-file
 control passing is not evidence of anything here.
+
+---
+
+## Coordinator verification 2026-08-18 — confirmed against the CPython oracle
+
+Reproduced independently at HEAD, differential against CPython on the same source file
+(the `.npy` is run by `python3` unmodified), module named lowercase to avoid the
+unrelated unit-name-case confound:
+
+```python
+# mmod.py
+def f(a, lo=7):        return lo
+def g(a, lo=3, hi=13): return lo + hi
+class C:
+    def m(self, a, lo=7): return lo
+```
+
+| call | pxx | CPython | |
+| --- | --- | --- | --- |
+| `from mmod import f; f(1)` | 7 | 7 | ok |
+| `import mmod; mmod.f(1)` | **None** | 7 | **DIVERGES** |
+| `import mmod as m; m.f(1)` | **None** | 7 | **DIVERGES** |
+| `from mmod import C; C().m(1)` | **None** | 7 | **DIVERGES** |
+| `import mmod; mmod.g(1)` (two defaults) | **0** | 16 | **DIVERGES** |
+| `import mmod; mmod.f(1, 3)` | 3 | 3 | ok |
+
+Exit 0 throughout, no diagnostic. Confirms the filed boundary exactly: the defect is
+crossing a module boundary while letting a default apply, and `from X import f` is the
+one form that survives.
+
+### The suite-blindness claim, measured
+
+The ticket argues the `.npy` suite cannot see this because single-file programs are all
+correct. Measured statically, and it holds:
+
+```
+716   .npy tests in test/
+ 10   sibling .py modules in test/
+```
+
+So at most ~10 of 716 tests can exercise a call into a **user** module at all — the 80
+files using bare `import X` are overwhelmingly importing stdlib names and shims, not
+local siblings. Coverage of this shape is close to nil, which is consistent with a defect
+this broad surviving unnoticed.
+
+### Consequence for the corpus numbers, and this is the part to carry
+
+Every "N/48 compiles" figure this campaign has published — including today's 6/48 — is a
+claim about **compiling**, not about running. The corpora are multi-module by
+construction, so the shape this bug breaks is the shape they are made of. **No ladder
+number should be read as "the library works"** until this lands. That is not a caveat on
+one report; it applies retroactively to every ladder A/B in
+[[feature-nilpy-thirdparty-libraries-as-targets]].
+
+The alias-default ticket
+(`bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults`, p70) is a
+SYMPTOM of this one — the alias rows are where the dropped default happens to get
+dereferenced instead of silently substituted. Keep its repro as a regression test, since
+a crash is the shape that fails loudly, but fix it here.
