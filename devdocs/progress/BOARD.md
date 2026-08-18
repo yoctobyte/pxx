@@ -10,11 +10,9 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-n-a-default-argument-is-dropped-on-every-cross-module-call | N | 90 | bug | Calling an IMPORTED function or method and omitting a defaulted parameter silently passes None/0 instead of the default. `plainmod.withdef(1)` returns None where CPython returns 7; two defaults returns 0 where CPython returns 16; an imported class's method behaves the same. Exit 0, no diagnostic, no crash. The same call in the SAME file is correct, and supplying the argument explicitly is correct. The already-filed alias segfault is one symptom of this, not the whole bug. | — |
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim | A | 65 | bug | When two NilPy modules in one build both `import <shim>` (a mimic_-mapped module), the shim's CLASSES stop resolving in the imported module — `codecs.CodecInfo(...)` reports `undefined variable (CodecInfo)`. The unit alias and the shim's PROCS still resolve, so `codecs.lookup(...)` in the same file is fine. Top wall of the NilPy corpus ladder: 7 of 48 files. | — |
+_none_
 
 ## unfinished (13)
 

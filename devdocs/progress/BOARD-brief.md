@@ -5,11 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:13 blocked:4 backlog:232 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2012 rejected:38`
+`urgent:1 unfinished:13 blocked:4 backlog:232 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2012 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
+
+## urgent (1) — jump the queue
+
+- `bug-n-a-default-argument-is-dropped-on-every-cross-module-call` [N]
 
 ## unfinished (13) — parked mid-flight; re-claim, do not duplicate
 
@@ -34,8 +38,9 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 216, ranked
+## Ready — top 30 of 217, ranked
 
+- `[p 90] [N]` bug-n-a-default-argument-is-dropped-on-every-cross-module-call
 - `[p 70] [N]` bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
@@ -65,6 +70,5 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [E]` feature-demo-songformatter-pxx-target
-- `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
 
-_186 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_187 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
