@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow | N | 50 | bug | `PY_MAX_LOCALS = 512` is too low for real modules — html5lib's constants.py needs between 513 and 1024 — but raising it is NOT the fix on its own: with the cap raised, two html5lib files SEGFAULT the compiler (exit 139, no diagnostic) at the default 8 MB stack. `ulimit -s unlimited` turns the crash back into a diagnostic, so it is a stack overflow the cap has been masking. | — |
+_none_
 
 ## unfinished (13)
 
@@ -442,9 +440,9 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 
-## done (2002)
+## done (2003)
 
-2002 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2003 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 

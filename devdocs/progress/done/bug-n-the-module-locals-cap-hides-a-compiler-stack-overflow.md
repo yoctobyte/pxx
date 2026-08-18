@@ -4,7 +4,7 @@ prio: 50
 type: bug
 blocked-by: []
 summary: "`PY_MAX_LOCALS = 512` is too low for real modules — html5lib's constants.py needs between 513 and 1024 — but raising it is NOT the fix on its own: with the cap raised, two html5lib files SEGFAULT the compiler (exit 139, no diagnostic) at the default 8 MB stack. `ulimit -s unlimited` turns the crash back into a diagnostic, so it is a stack overflow the cap has been masking."
-status: working
+status: done
 owner: frank2
 ---
 
@@ -168,3 +168,36 @@ one's byte-identical A/B stays clean.
 the DEFAULT stack limit (do not gate under `ulimit -s unlimited` — that is the
 instrument that proved the cause, not the fix). Plus `make test-nilpy` green +
 self-host fixedpoint.
+
+## Landed
+
+*(frank2, 2026-08-18.)*
+
+- `ce57db4cd` — the iterative spine walk (fact 2, the overflow).
+- `4af5ce89f` — `PY_MAX_LOCALS` 512 → 4096 (fact 1, the cap), safe only once
+  the frame-per-statement cost was gone.
+- `5b43ad800` — the follow-up red `ce57db4cd` uncovered. Two defects: the spine
+  loop tested `ASTKind[seqCur]` before `seqCur >= 0` (an empty tail is -1, and
+  the recursive version got that guard for free from `IRLowerAST`'s own
+  `if node = -1`), and — the real one — `AN_SET_INCL` / `AN_SET_EXCL` never
+  assigned `Result`. That second one is **latent and predates this ticket**:
+  while the arm recursed, the junk left in the result slot was a live value
+  from the frame the recursion had just popped and happened to be a valid IR
+  node index. Iterative lowering changed the leftovers, the junk became
+  16777218, and the fold built an `IR_BLOCK` over it — surfacing as
+  `invalid optional IR node reference in block first` on three test-core
+  Pascal tests natively, the same set test on aarch64/arm32/i386/riscv32, and
+  two `test-pascal-conformance` shards. Target-independent, as an IR-lowering
+  bug should be. Class swept: no `AN_` case arm in any of `ir.inc`'s 50
+  Integer-returning functions leaves `Result` unassigned.
+
+**Verified:** the two files this ticket opened on —
+`html5lib/filters/whitespace.py` and `html5lib/treewalkers/__init__.py` — no
+longer segfault at the **default 8 MB stack**; both now report ordinary
+diagnostics (`undefined variable (yield)`, and a missing
+`xml.etree.ElementTree` shim). Those are unrelated NilPy feature gaps, not this
+bug: the crash-without-a-diagnostic failure mode is gone, which is what this
+ticket asked for.
+
+## Log
+- 2026-08-18 — resolved, commit PENDING-COMMIT.
