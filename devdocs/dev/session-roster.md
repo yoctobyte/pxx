@@ -1174,3 +1174,40 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   **Generalisable: a recurring prompt is CODE, and embedding mutable state in it is the
   same mistake as a dated scan in a long-lived ticket.** Put the state where it is
   maintained and have the prompt fetch it.
+
+### 2026-08-18 evening — banking the day
+
+Verified `feature-nilpy-subclass-a-builtin-type` (`1cbe666b5`) myself on a fresh
+fixedpoint at HEAD, A/B against the v352 pin:
+
+```
+class X(list): len() on a subclass       HEAD=2       PINNED=error: unknown base class list
+class D(dict): in / iteration            HEAD=True 1  PINNED=error: unknown base class dict
+str stays refused, better message        HEAD=error: str cannot be subclassed — value type
+non-container class still raises on len  raises on both
+```
+
+**Two corrections from frank2 worth keeping, both of them about MY reasoning.**
+
+1. *The identity-vs-kind shape.* `rec <> REC_UCLASS_BASE + FindUClass('TPyList')` was an
+   IDENTITY test doing duty for a KIND question — exact until something could descend from
+   a container, silently wrong the moment `class X(list)` could. The tell: **the runtime
+   was right all along and only the compiler disagreed** (`pylen_v` tests `o is TPyDict`,
+   which Pascal answers through the inheritance chain). Sibling of today's
+   `ProcUnitIdx >= 0` standing in for "is a Pascal facade". Same family, one memory.
+   Corollary that saved the session: `class X(TPyList)` — pylib's own spelling — **already
+   compiled**, which turned a presumed object-model pass into a predicate fix. *Before
+   sizing a feature as missing, try it in the implementation's own vocabulary.*
+
+2. *My p55 rerank was sequencing-blind.* I ranked `_utils.py` up as a chokepoint;
+   frank2 measured that it does not move at all, because it stops on
+   `no unit named xml_etree_elementtree` long before reaching `MethodDispatcher(dict)`.
+   The chokepoint argument is real but only pays out **after** Track B's shims land. Same
+   trap as the yield reach count: a first-wall table cannot see what is behind the wall.
+
+**Banked here deliberately.** Queue state clean — nothing claimed, `working/` empty,
+everything pushed. The remaining unclaimed N items are p50/p45; the highest-value item
+(`feature-nilpy-yield-outside-a-for-loop`) is **scheduled work, not queue work** and is
+reserved for a fresh session with room, per the user's call. Compile count sat at **6/48**
+all day while a great deal moved — that is the past-a-wall / onto-the-next-wall split
+doing its job, not a stalled campaign.
