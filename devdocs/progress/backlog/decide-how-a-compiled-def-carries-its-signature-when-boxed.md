@@ -71,3 +71,30 @@ mechanisms but touch nothing else". That is a project-direction call, and
 `devdocs/dev/normalise-dont-special-case.md` argues for A while the comment in
 `defs.inc` argues the lifetime is load-bearing. Both are repo doctrine and they
 point opposite ways here.
+
+## Scope reduced 2026-08-18: this gates TWO items, not three
+
+`feature-nilpy-yield-outside-a-for-loop` was listed as waiting on this decision, on the
+reasoning that a generator's iteration protocol "may want a callable to carry state."
+**Measured, and it does not.** Verified by the coordinator at HEAD:
+
+- The engine **refuses generator METHODS outright** —
+  `parser.inc:31543: 'stackless generator/async methods are not supported (v1)'`. So the
+  boxed-callable route was never available to that ticket in the first place.
+- The route that DOES work needs no callable value at all: a lifted free function taking
+  the receiver, consumed by a plain for-in. Confirmed on the exact html5lib nested-filter
+  shape — a generator iterating a generator, with `continue` — which prints `10 20 40 50`.
+
+So yield is **not blocked on this decision** and the "read the ruling first" note has been
+struck from that ticket.
+
+**Still gated (both on measured evidence, not bookkeeping):**
+
+1. `bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module` (p85) —
+   static rebinding; re-measured at HEAD, still 18 where CPython says 5, reproduces with
+   no import at all.
+2. `bug-n-a-call-through-a-callable-value-drops-the-callees-defaults` (p70) — a boxed def
+   carries a code address and no signature, which IS this decision's subject.
+
+The second was confirmed independently from the other side by the worker that hit the
+same wall while fixing the rename cluster, rather than inherited from this ticket.
