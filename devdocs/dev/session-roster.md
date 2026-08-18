@@ -943,3 +943,21 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   says the non-owning lifetime is load-bearing). Not the coordinator's to settle, and
   **option B must not be started speculatively** — frank2-7e offered and was told to
   wait, because if A is chosen that is wasted work in a lifetime-sensitive area.
+
+- 2026-08-18 ~18:40 — **the U ownership fork now gates TWO tickets, not one.** frank2-7e
+  re-scoped the p85 (verified here: `b = a; b(1,5)` returns the ORIGINAL b — one file, no
+  import, no alias) and found its only correct destination is the dynamic call path,
+  which is the very path `decide-how-a-compiled-def-carries-its-signature-when-boxed`
+  is about. Routing to it today would trade wrong-values for wrong-values-or-crashes.
+  So `bug-n-an-import-alias-...` moved to `blocked/` behind that decision, alongside the
+  p88. **Both wait on one human ruling**, and the p85 fix is straightforward once it
+  lands (plan is in the ticket).
+  Not waking the human: they are at work, offered to rule from their phone, and the
+  worker has off-chain work — dispatched to
+  `bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero` (p60). Nothing is
+  stalled; the decision is not urgent, only gating.
+  **Pattern worth keeping, raised by frank2-7e:** three tickets today whose TITLE named
+  one shape while the rule was broader (yield, procedural-value, def-rebind). The
+  reporter files the shape they hit and the shape is almost never the boundary — so a
+  title is evidence about the encounter, not the defect, and nothing should be SIZED from
+  one. Convention in use: re-scope in the body, leave the retitle to whoever takes it.
