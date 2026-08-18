@@ -231,3 +231,51 @@ Generators are stateful objects. If step 4 needs a callable value to carry
 state, read `decide-how-a-compiled-def-carries-its-signature-when-boxed` FIRST
 -- it is the same representation question, still with the human, and
 pre-empting its ruling would be wasted work in a lifetime-sensitive area.
+
+## Coordinator note 2026-08-18 — this ticket now DEPENDS ON A PENDING DECISION at step 4
+
+Recorded here rather than as a `blocked-by`, because steps 1-3 are genuinely independent
+and blocking the whole ticket would hide available work. But **step 4 (the iteration
+protocol, the largest piece) may need a callable to carry state, which is the same
+representation question as
+[[decide-how-a-compiled-def-carries-its-signature-when-boxed]]** (U, p88, with the
+human).
+
+**Read that ruling before starting step 4, or you will build the wrong object twice.**
+That decision now gates three items: the p88 procedural-value bug, the p85 def-rebinding
+bug, and this step.
+
+### The dispatch trap, and it is the day's recurring shape
+
+**The corpus needs the generator METHOD form** — `def __iter__` with `yield`, consumed as
+`for t in filter_instance`, which is what the html5lib filters are. The tempting first
+increment, a module-level `def` driven by `for x in gen()`, **appears NOWHERE in these
+corpora and would move ZERO files.**
+
+So a session could land the lexer token, generator marking and the stackless lowering,
+have a genuinely working feature, and move the ladder not at all. **If a future report
+says "yield landed", ask WHICH SHAPE before believing any count moved.** Same
+first-wall-understates-reach trap as
+[[feedback_measuring_a_thing_is_not_filing_it]], wearing a different hat.
+
+### Settled by measurement, so it need not be asked again
+
+The strategy question was the biggest open risk and is now closed. Two generator
+strategies already exist for Pascal and share a consumption interface by design
+(`defs.inc`: both share CURRENT/DONE offsets "so for-in reads the value/done flag
+identically for either strategy; only the advance step differs").
+
+- **Stackful** costs a real 64 KB heap stack per LIVE generator — brutal for a tokeniser
+  pipeline holding several open at once.
+- **Stackless** is a state machine over `lib/rtl/slgen.pas` but REFUSES `yield` inside a
+  `try` or `with`.
+
+The textbook worry is that real Python generators wrap yields in `try/finally`. Measured
+across every non-test generator in the ladder corpora using CPython's own `ast`:
+**19 generator functions, 76 yield sites, ZERO with a yield inside try/with.** Stackless
+covers the entire corpus.
+
+**Title:** still says "outside a for loop", implying the for-driven form works. No shape
+works — NilPy has no `yield` handling at all (0 hits in `pyparser.inc`, no lexer token).
+That title has now misdirected three separate reads and is worth a rename by whoever owns
+the campaign.
