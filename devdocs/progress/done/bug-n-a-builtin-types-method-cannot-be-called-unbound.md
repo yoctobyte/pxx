@@ -131,4 +131,4 @@ which is why the test above pins the METHOD spellings and says so in a comment
 rather than quietly asserting today's wrong output.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit 7da43daa9.
