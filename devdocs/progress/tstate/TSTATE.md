@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `61e2448bac6d` | 2026-08-18T04:03:37Z | RED (native) | 214.2s | `e0f6748717e6` RED |
+| plexus | `61e2448bac6d` | 2026-08-18T04:23:37Z | RED (full) | 1186.5s | `61e2448bac6d` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -12,3 +12,9 @@
 - **test-core#src:test/test_nested_class_type_b348.pas** — test/test_nested_class_type_b348.pas (plexus): bad `ce57db4cdda5`, last good `e0f6748717e6`, 9 commit(s) in range
 - **test-core#src:test/test_set_literal_element_types.pas** — test/test_set_literal_element_types.pas test/test_set_literal_element_types.expected +5 (plexus): bad `ce57db4cdda5`, last good `e0f6748717e6`, 9 commit(s) in range
 - **test-core#src:test/test_set_runtime.pas** — test/test_set_runtime.pas (plexus): bad `ce57db4cdda5`, last good `e0f6748717e6`, 9 commit(s) in range
+- **test-aarch64#src:test/test_set_runtime.pas** — test/test_set_runtime.pas tools/run_target.sh (plexus): bad `61e2448bac6d`, last good `e0f6748717e6`, 12 commit(s) in range
+- **test-arm32#src:test/test_set_runtime.pas** — test/test_set_runtime.pas tools/run_target.sh (plexus): bad `61e2448bac6d`, last good `e0f6748717e6`, 12 commit(s) in range
+- **test-i386#src:test/test_set_runtime.pas** — test/test_set_runtime.pas tools/run_target.sh (plexus): bad `61e2448bac6d`, last good `e0f6748717e6`, 12 commit(s) in range
+- **test-pascal-conformance#shard4/6** — tools/run_pascal_conformance.sh (plexus): bad `61e2448bac6d`, last good `e0f6748717e6`, 12 commit(s) in range
+- **test-pascal-conformance#shard5/6** — tools/run_pascal_conformance.sh (plexus): bad `61e2448bac6d`, last good `e0f6748717e6`, 12 commit(s) in range
+- **test-riscv32#src:test/test_set_runtime.pas** — test/test_set_runtime.pas tools/run_target.sh (plexus): bad `61e2448bac6d`, last good `e0f6748717e6`, 12 commit(s) in range
