@@ -110,4 +110,4 @@ Folds with [[bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes]]
 import and every argument supplied — nor with the callable-value defaults gap.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit 1602f5b04.
