@@ -557,6 +557,17 @@ test-nilpy: $(COMPILER)
 	# bug-n-from-sys-import-fails-while-import-sys-works
 	./$(COMPILER) test/test_nilpy_import_spellings.npy $(TESTTMP)/test_nilpy_impspell26
 	test "$$($(TESTTMP)/test_nilpy_impspell26)" = "$$(printf 'both spellings resolve\nunits still resolve')"
+	# `from <shim> import Class` then `Class.ATTR` was `undefined variable`, while
+	# the qualified form, the literal mimic_ filename and the plain-module form all
+	# worked. A from-import registers the imported NAME as a unit alias (so
+	# `from tkinter import ttk` lets ttk.Notebook resolve); the guard meant to skip
+	# that for a CLASS asked the SPELLING which classes it declares, and a shim's
+	# classes live in mimic_<name>, so it stood down for every shim and the class
+	# name became a module alias. Carries the submodule row too -- that is the
+	# guard's reason to exist, so suppressing the alias outright fails HERE.
+	# bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_shim_from_import_class_attrs.npy $(TESTTMP)/test_nilpy_shimattr26
+	test "$$($(TESTTMP)/test_nilpy_shimattr26)" = "$$(printf '1\n3\n9\n7\n9\n1\n49\nok')"
 	# TWO imported bases have no answer and are REFUSED, not half-taken
 	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_two_imported_bases_fail.npy $(TESTTMP)/test_nilpy_twoimp26 > $(TESTTMP)/test_nilpy_twoimp.log 2>&1
 	grep -q 'names TWO base classes whose bodies are not in this file' $(TESTTMP)/test_nilpy_twoimp.log
@@ -6611,6 +6622,17 @@ test-core: $(COMPILER)
 	# bug-n-from-sys-import-fails-while-import-sys-works
 	./$(COMPILER) test/test_nilpy_import_spellings.npy $(TESTTMP)/test_nilpy_impspell26
 	test "$$($(TESTTMP)/test_nilpy_impspell26)" = "$$(printf 'both spellings resolve\nunits still resolve')"
+	# `from <shim> import Class` then `Class.ATTR` was `undefined variable`, while
+	# the qualified form, the literal mimic_ filename and the plain-module form all
+	# worked. A from-import registers the imported NAME as a unit alias (so
+	# `from tkinter import ttk` lets ttk.Notebook resolve); the guard meant to skip
+	# that for a CLASS asked the SPELLING which classes it declares, and a shim's
+	# classes live in mimic_<name>, so it stood down for every shim and the class
+	# name became a module alias. Carries the submodule row too -- that is the
+	# guard's reason to exist, so suppressing the alias outright fails HERE.
+	# bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_shim_from_import_class_attrs.npy $(TESTTMP)/test_nilpy_shimattr26
+	test "$$($(TESTTMP)/test_nilpy_shimattr26)" = "$$(printf '1\n3\n9\n7\n9\n1\n49\nok')"
 	# TWO imported bases have no answer and are REFUSED, not half-taken
 	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_two_imported_bases_fail.npy $(TESTTMP)/test_nilpy_twoimp26 > $(TESTTMP)/test_nilpy_twoimp.log 2>&1
 	grep -q 'names TWO base classes whose bodies are not in this file' $(TESTTMP)/test_nilpy_twoimp.log

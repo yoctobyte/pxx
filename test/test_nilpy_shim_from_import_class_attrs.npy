@@ -1,0 +1,46 @@
+# `from <shim> import Class` then `Class.ATTR` was `undefined variable (ATTR)`,
+# while the qualified spelling, the literal mimic_ filename and the plain-module
+# form all worked.
+#
+# Cause: a from-import registers the imported NAME as a unit alias, so
+# `from tkinter import ttk` lets `ttk.Notebook()` resolve. A guard was meant to
+# skip that for a CLASS -- but it asked which classes the unit `impName`
+# declares, and for a shim impName is the bare module (`shimattrprobe`) while
+# the class lives in `mimic_shimattrprobe`. No unit is compiled under the bare
+# name, so the guard stood down for every shim: the class name registered as a
+# MODULE alias, and ConsumeUnitQualifier then ate `Node` as a qualifier --
+# `Node.ELEMENT_NODE` became a bare lookup of ELEMENT_NODE inside the module.
+#
+# This test carries BOTH halves on purpose. The submodule row is the guard's
+# reason to exist, so a future fix that suppresses the alias outright fails
+# here rather than silently breaking `from tkinter import ttk`.
+# bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes
+
+from shimattrprobe import Node
+print(Node.ELEMENT_NODE)
+print(Node.TEXT_NODE)
+print(Node.DOCUMENT_NODE)
+
+# a name that is NOT a class must still register as a module alias
+from shimattrprobe import notaclass
+print(notaclass.somefunc())
+
+# NOTE: the `as` rename form (`from X import Node as N`, then `N.ATTR`) is
+# deliberately NOT here -- it fails for a separate reason, in the class-alias
+# registry, with or without a shim, and has its own ticket. Adding it here would
+# make this test red for a bug it is not about.
+#
+# the spellings that always worked must keep working
+import shimattrprobe
+print(shimattrprobe.Node.DOCUMENT_NODE)
+
+from mimic_shimattrprobe import Node
+print(Node.ELEMENT_NODE)
+
+# ordinary globals and functions through the same shim
+from shimattrprobe import SOMEGLOBAL, somefunc
+print(SOMEGLOBAL + somefunc())
+
+# the class object itself is still constructible
+n = Node()
+print("ok")

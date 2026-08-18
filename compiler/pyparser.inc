@@ -31994,10 +31994,29 @@ begin
             name `canvas` and beat the MODULE of that name imported later by
             `from reportlab.pdfgen import canvas`. Python keeps them apart
             because it is case-sensitive; here the class is the one that is
-            certainly not a submodule, so it is the one that does not register. }
+            certainly not a submodule, so it is the one that does not register.
+
+            FindUnitOrAlias, NOT FindCompiledUnit: impName is the name the
+            SOURCE wrote, and for a shim that is the bare module (`xml.dom`,
+            `probe`) while the class lives in `mimic_xml_dom` / `mimic_probe`.
+            Asking the spelling which classes it declares gets -1 — no unit is
+            compiled under it — so this guard silently stood down for every
+            shim, the class name registered as a MODULE alias, and the next
+            `Node.ELEMENT_NODE` was consumed by ConsumeUnitQualifier as a
+            qualifier: name became ELEMENT_NODE, looked up as a bare symbol in
+            mimic_probe, and reported `undefined variable (ELEMENT_NODE)` while
+            the qualified and literal spellings both worked. FindUnitOrAlias
+            chases the shim mapping (and the `as` chain) to the unit that
+            actually declares things.
+
+            Third instance today of one shape: a lookup done on the SPELLING
+            where visibility and declarations live under the RESOLVED unit
+            (bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim
+            was the same mistake at ParseUsesUnit's early exit).
+            bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes }
           if (UnitAliasCount < MAX_UNIT_ALIASES) and (not SoftUnitMissed) and
              (FindCompiledUnit(impAlias) < 0) and
-             (not UnitDeclaresClassExactly(impAlias, FindCompiledUnit(impName))) then
+             (not UnitDeclaresClassExactly(impAlias, FindUnitOrAlias(impName))) then
           begin
             UnitAliasName[UnitAliasCount] := InternStr(LowerCase(impAlias));
             UnitAliasReal[UnitAliasCount] := InternStr(LowerCase(impName));
