@@ -4,7 +4,7 @@ prio: 80
 type: bug
 blocked-by: []
 summary: "`from M import X as alias` loses what X is. A renamed MODULE gives `undefined variable (f)` on any attribute; a renamed FUNCTION loses its signature — a zero-arg call SEGFAULTS and an omitted default is dropped, while a call with every argument explicit works. Not the shim mapping (two plain modules reproduce it) and not the rename in general (a plain `alias = f` assignment after the import is fine). Blocks sanitizer.py, the one file the tractable half of the six.moves work was meant to unblock."
-status: working
+status: done
 owner: frank2-7e
 ---
 
@@ -261,3 +261,76 @@ that one axis. What caught it was **crossing** the two candidate variables inste
 walking either — the same habit applied to a hypothesis rather than to a symptom.
 Standing form: when a new variable explains the cases you have, cross it against the old
 one before writing the rule down.
+
+## RESOLVED 2026-08-18 (frank2-7e) — TWO faults here, and a third that is not this ticket
+
+Worked as part of the rename cluster. Re-measured every row at HEAD first.
+
+### Fault 1 — renamed MODULE (this is the sanitizer.py blocker)
+
+The alias was registered against the module the import was **written against**,
+not against what the imported NAME resolves to. The un-renamed spelling worked
+only by accident: `sm`'s own `import pp as urllib_parse` leaves a global alias
+that `FindUnitOrAlias` chases, so registering `urllib_parse` against `sm` still
+landed on `pp`. Rename it and the new name has nothing to chase.
+
+Fix: resolve `impReal` first and register the alias against **that** unit, falling
+back to `impName` when the name is not itself a module — the `from tkinter import
+ttk` case the registration exists for, unchanged. `from tk2 import ttk as t2` now
+works too, which it never did.
+
+### Fault 2 — renamed ZERO-PARAMETER def segfaulted
+
+`PyGetOrMakeCallableWrapper` builds the wrapper that adapts a scalar return to
+the Variant-hidden-destination convention every callable-value dispatcher
+assumes. It was hardcoded to arity 1 (`array[0..0]`, `nParams = 1`), which is why
+the gate above it said `ParamCount = 1` — **not a decision, just the arity its
+builder could produce.** A zero-parameter def therefore got no wrapper at all and
+the box pointed straight at a proc using the integer-return ABI.
+
+Fix: the wrapper takes the real proc's arity. The body builder was already
+arity-generic (`for i := 0 to nparams - 1` over its own parameters; with none it
+hand-builds `return REALPROC()`), so nothing else changed.
+
+### BOTH earlier readings were confounds
+
+| reading | why it failed |
+| --- | --- |
+| "renaming loses the SIGNATURE" | zero-arg crashes and one-arg works — but that is which arity got a WRAPPER, not what the call knows |
+| "crashes whenever the source name is 2+ chars" | **`name` (4) works; `abc` and `run` (3) crash** |
+
+The real axis is the callee's **return type** (`ret=22` variant works, `ret=13`
+crashes) crossed with the wrapper arity. Name length correlated because the
+names that happened to work inferred a Variant return. Measured with a probe
+printing `params`/`ret` per name; the test sweeps lengths AND arities so neither
+reading can come back.
+
+Third confound in this ticket, by the third session to touch it. The method note
+already in this file — *vary the axis nobody thought to vary* — is what found it
+again, and the axis this time was the one the previous correction introduced.
+
+### Fault 3 — NOT this ticket
+
+The omitted-default symptom is **not rename-specific**. Measured:
+
+| binding | `al(1)` where `g(x, lo=7)` |
+| --- | --- |
+| `from M import g as al` | empty (wrong) |
+| `from M import g` then `al = g` | **empty (wrong)** |
+| same-file `def g` then `al = g` | **empty (wrong)** |
+| same-file `def g`, DIRECT call | 7 ✅ |
+| `g` passed as an argument, called inside | **SEGFAULT** |
+
+So it is a general callable-value gap — a boxed def carries no defaults — and it
+belongs to [[decide-how-a-compiled-def-carries-its-signature-when-boxed]].
+Filed as [[bug-n-a-call-through-a-callable-value-drops-the-callees-defaults]]
+and deliberately kept OUT of this ticket's test.
+
+### Verification
+
+`test/test_nilpy_from_import_as_rename.npy`, green at HEAD, red on pinned v350,
+wired by name into `test-nilpy` and `test-core`. `gate.sh quick` GREEN, self-host
+fixedpoint converged in 1 round. Fix `c3b8fc114`.
+
+## Log
+- 2026-08-18 — resolved, commit PENDING-COMMIT.

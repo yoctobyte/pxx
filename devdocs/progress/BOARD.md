@@ -55,6 +55,7 @@ _none_
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | — |
 | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine | C | 55 | bug | A C function DEFINITION whose name matches a Pascal intrinsic (`sqrt` `exp` `ln` `sin` `cos` `arctan`) binds to the Pascal proc entry via case-insensitive FindProc and overwrites its BodyAddr. The Pascal implementation then becomes unreachable by ANY spelling — bare `Sqrt`, `math.Sqrt` and `cmath.sqrt` all return the C body — so a C file silently replaces the RTL's math for the whole program. This is what the ten `__crtl_*` prefixes in lib/crtl exist to dodge. | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 25 | bug | A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table | — |
+| bug-n-a-call-through-a-callable-value-drops-the-callees-defaults | N | 70 | bug | A def called through a callable value ignores its own default arguments — `al = g; al(1)` where `g(x, lo=7)` answers empty instead of 7, and passing the def as an argument and calling it with fewer args SEGFAULTS. Not rename-specific and not import-specific: a same-file assignment reproduces it, and only a DIRECT call applies defaults. The box carries a code address and no signature, which is exactly the open decision. | decide-how-a-compiled-def-carries-its-signature-when-boxed |
 | bug-n-a-class-base-that-is-an-expression-does-not-compile | N | 45 | bug | A class base which is a NAME bound to a type, or a call, does not compile: `B = object; class P(B)` fails where `class P(object)` and `class P(SomeClass)` both work. Blocks six.with_metaclass, which html5lib's parser spells as `class Phase(with_metaclass(...))` — the single remaining wall on html5parser.py. | — |
 | bug-n-a-from-import-of-a-compiler-provided-module-binds-no-names | N | 55 | bug | `from sys import argv` now resolves but binds nothing — a bare `argv` is `undefined variable` while `sys.argv` works. Consuming a from-import of a compiler-provided root (sys, os, textwrap, select, typing, itertools, dataclasses, __future__) discards the names it publishes, so the spelling CPython programs actually use is the one that does not work. General across all eight roots. | — |
 | bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through | N | 45 | bug | sys.version_info throws at RUNTIME with a message admitting its own guard failed: 'the code guarding that (the flag its except-branch sets) let this call through anyway'. Two defects — the member is missing, and the compile-time guard meant to catch that does not fire. A guard that reports its own failure and continues is worse than no guard. | — |
@@ -64,7 +65,6 @@ _none_
 | bug-n-abs-of-a-complex-raises-typeerror | N | 35 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
 | bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program | N | 45 | bug | `class X(mod.X)` — a class whose qualified base shares its name — is refused with `class X cannot inherit from itself` when written in the MAIN PROGRAM. The identical code in a pulled `.py` module compiles and dispatches correctly, and renaming either class makes the program case work too, so the variable is the name collision on the program path. This is how all ~100 of CPython's `encodings/*.py` and html5lib's filters are written. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 35 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
-| bug-n-from-import-with-an-as-rename-loses-what-it-renames | N | 80 | bug | `from M import X as alias` loses what X is. A renamed MODULE gives `undefined variable (f)` on any attribute; a renamed FUNCTION loses its signature — a zero-arg call SEGFAULTS and an omitted default is dropped, while a call with every argument explicit works. Not the shim mapping (two plain modules reproduce it) and not the rename in general (a plain `alias = f` assignment after the import is fine). Blocks sanitizer.py, the one file the tractable half of the six.moves work was meant to unblock. | — |
 | bug-n-kwargs-collector-alongside-named-params-needs-the-remainder | N | 30 | bug | `def f(a=1, **kw)` called as `f(**{'a':5,'x':7,'y':8})` must give a=5 and kw={'x':7,'y':8} — the collector takes the UNCONSUMED keys. pylib has no helper that subtracts consumed names, and adding one is compiler/builtin/** which NEEDS A PIN, so this is coordinator-scheduled, not worker-startable. | — |
 | bug-n-name-on-a-builtin-type-is-unimplemented | N | 35 | bug | `str.__name__` / `int.__name__` raise AttributeError: 'type' object has no attribute '__name__'. A USER class answers correctly, so only the builtin-type value (VT_BTYPE) is missing the attribute. Clean Python-shaped error, not a crash. | — |
 | bug-n-pylib-cannot-reach-the-rtl-power-so-complex-magnitude-loses-ulps | N | 25 | bug | `pycomplex_pow` computes \|z\|**b as exp(b*ln\|z\|) — two roundings — where CPython calls pow() directly, so `(-8.0) ** 0.5` gives an imaginary part of 2.8284271247461894 against CPython's 2.8284271247461903 (~4 ulp). The cause is structural: pylib lives in compiler/builtin and cannot reach the RTL's correctly-rounded Power, which is why it carries its own series ln/exp in the first place. | — |
@@ -445,9 +445,9 @@ _none_
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 | decide-week-theme-2026-08-17 | U | 70 | decide | What should the next week of work aim at? Measured: the bug backlog already peaked (61 on 08-03 -> 32 now) and 65% of open tickets are features, so this is no longer a burn-down question. Three candidate themes with the numbers behind each. | — |
 
-## done (2017)
+## done (2018)
 
-2017 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2018 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -494,8 +494,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 88] [U] decide-how-a-compiled-def-carries-its-signature-when-boxed (unblocks 1)
-- [p 80] [N] bug-n-from-import-with-an-as-rename-loses-what-it-renames (unblocks 1)
+- [p 88] [U] decide-how-a-compiled-def-carries-its-signature-when-boxed (unblocks 2)
 - [p 70] [N] bug-n-a-renamed-class-loses-its-class-level-attributes
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
@@ -718,10 +717,9 @@ _none_
 
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
+- **2** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
-- **1** — bug-n-from-import-with-an-as-rename-loses-what-it-renames
-- **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
