@@ -2,7 +2,7 @@
 track: B
 prio: 35
 type: feature
-blocked-by: [feature-b-mimic-urllib-request-over-the-rtl-http-stack, bug-n-from-import-of-a-submodule-with-an-as-rename-loses-the-module]
+blocked-by: [feature-b-mimic-urllib-request-over-the-rtl-http-stack, bug-n-from-import-with-an-as-rename-loses-what-it-renames]
 summary: "`six.moves` is now the largest module-shim row on the ladder (4 files: html5lib/__init__.py, _inputstream.py, html5parser.py, filters/sanitizer.py). It cannot be shimmed on its own — six.moves is a table of RE-EXPORTS of `http.client`, `urllib` and `urllib.parse`, so it needs those modules to exist. urllib.parse is pure string work and is the tractable half; http.client needs the HTTP client filed separately."
 status: working
 owner: frank3-fc
@@ -71,9 +71,12 @@ uri = urlparse.urlparse(val_unescaped)            # line 841
 
 `from M import <module> as alias` followed by `alias.f()` is
 `undefined variable (f)` —
-[[bug-n-from-import-of-a-submodule-with-an-as-rename-loses-the-module]] (N,
-p70). Without the rename it works; renaming a FUNCTION works; a top-level
-`import M as alias` works. And it is NOT the shim mapping: two plain modules
+[[bug-n-from-import-with-an-as-rename-loses-what-it-renames]] (N,
+p75). Without the rename it works and a top-level `import M as alias` works.
+(This ticket first said "renaming a FUNCTION works" — wrong, and corrected in
+the bug: a renamed function loses its signature, so a zero-argument call
+SEGFAULTS and an omitted default is dropped. The one-argument case I first
+measured is the shape that happens to survive.) And it is NOT the shim mapping: two plain modules
 reproduce it identically.
 
 So `mimic_urllib_parse.py` would today unblock **zero files** — the same

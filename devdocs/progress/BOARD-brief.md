@@ -21,7 +21,7 @@ _none — no lane is locked._
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-own-language-first-symbol-resolution` [A] — blocked-by: bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
 - `feature-a-typeref-migrate-consumers` [A]
-- `feature-b-mimic-six-moves-needs-http-client-and-urllib` [B] — blocked-by: bug-n-from-import-of-a-submodule-with-an-as-rename-loses-the-module, feature-b-mimic-urllib-request-over-the-rtl-http-stack
+- `feature-b-mimic-six-moves-needs-http-client-and-urllib` [B] — blocked-by: bug-n-from-import-with-an-as-rename-loses-what-it-renames, feature-b-mimic-urllib-request-over-the-rtl-http-stack
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
@@ -42,7 +42,7 @@ _none — no lane is locked._
 
 - `[p 88] [U]` decide-how-a-compiled-def-carries-its-signature-when-boxed (unblocks 1)
 - `[p 75] [N]` bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes (unblocks 1)
-- `[p 70] [N]` bug-n-from-import-of-a-submodule-with-an-as-rename-loses-the-module (unblocks 1)
+- `[p 75] [N]` bug-n-from-import-with-an-as-rename-loses-what-it-renames (unblocks 1)
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
