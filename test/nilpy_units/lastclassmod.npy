@@ -1,0 +1,18 @@
+# A module that ENDS with a class, which is the shape the bug selected: nothing
+# follows the class, so nothing flushed the hoist queue carrying its
+# pyclsattr_bind calls. A constants class is exactly what tends to sit here.
+TOP = 1
+
+
+class Early:
+    A = 7
+
+
+MIDDLE = 2
+
+
+class Node:
+    ELEMENT_NODE = 1
+    TEXT_NODE = 3
+    DOCUMENT_NODE = 9
+    NAME = 'node'

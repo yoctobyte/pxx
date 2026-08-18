@@ -539,6 +539,14 @@ test-nilpy: $(COMPILER)
 	# bug-n-a-default-argument-is-dropped-on-every-cross-module-call
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_cross_module_defaults.npy $(TESTTMP)/test_nilpy_xmoddef26
 	test "$$($(TESTTMP)/test_nilpy_xmoddef26)" = "$$(printf '7\n16\n18\n3\ndflt\n7')"
+	# the LAST class in a module must still initialise its class attributes: only
+	# the ordinary-statement branch of the module loop drained the hoist queue, so
+	# a class with nothing after it published no pyclsattr_bind and every attribute
+	# read back as its type's ZERO value. The class must be LAST -- any statement
+	# after it flushes the queue and hides the bug.
+	# bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_last_class_in_module_attrs.npy $(TESTTMP)/test_nilpy_lastcls26
+	test "$$($(TESTTMP)/test_nilpy_lastcls26)" = "$$(printf '1 2\n7\n1 3 9\nnode\n1')"
 	# TWO imported bases have no answer and are REFUSED, not half-taken
 	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_two_imported_bases_fail.npy $(TESTTMP)/test_nilpy_twoimp26 > $(TESTTMP)/test_nilpy_twoimp.log 2>&1
 	grep -q 'names TWO base classes whose bodies are not in this file' $(TESTTMP)/test_nilpy_twoimp.log

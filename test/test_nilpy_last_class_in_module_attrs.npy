@@ -1,0 +1,21 @@
+# Class attributes of the LAST class in an imported module must be initialised.
+#
+# bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero: PyEmitClsAttrBinds
+# hoists one pyclsattr_bind per class attribute, and only the ordinary-statement
+# branch of the module loop drained the hoist queue. A class with nothing after it
+# therefore published none of its attributes and every one read back as its type's
+# ZERO value -- 0 for an int, '' for a str. No diagnostic, no crash.
+#
+# THE SHAPE IS LOAD-BEARING: the class must be LAST in the module. Put any
+# module-level statement after it and the queue is flushed by that statement and
+# the bug is invisible -- which is why `Early` below is correct even on a broken
+# compiler and `Node` is not. Reading the same class defined in THIS file also
+# cannot see it, because any use of the class is itself a following statement.
+import lastclassmod
+from lastclassmod import Node
+
+print(lastclassmod.TOP, lastclassmod.MIDDLE)
+print(lastclassmod.Early.A)
+print(Node.ELEMENT_NODE, Node.TEXT_NODE, Node.DOCUMENT_NODE)
+print(Node.NAME)
+print(Node().ELEMENT_NODE)

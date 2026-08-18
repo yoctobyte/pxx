@@ -41,7 +41,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (232)
+## backlog (231)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -65,7 +65,6 @@ _none_
 | bug-n-name-on-a-builtin-type-is-unimplemented | N | 35 | bug | `str.__name__` / `int.__name__` raise AttributeError: 'type' object has no attribute '__name__'. A USER class answers correctly, so only the builtin-type value (VT_BTYPE) is missing the attribute. Clean Python-shaped error, not a crash. | — |
 | bug-n-pylib-cannot-reach-the-rtl-power-so-complex-magnitude-loses-ulps | N | 25 | bug | `pycomplex_pow` computes \|z\|**b as exp(b*ln\|z\|) — two roundings — where CPython calls pow() directly, so `(-8.0) ** 0.5` gives an imaginary part of 2.8284271247461894 against CPython's 2.8284271247461903 (~4 ulp). The cause is structural: pylib lives in compiler/builtin and cannot reach the RTL's correctly-rounded Power, which is why it carries its own series ln/exp in the first place. | — |
 | bug-n-self-class-cannot-be-called-as-a-constructor | N | 45 | bug | `self.__class__(args)` does not compile — `error: A has no method __class__` — while `self.__class__.__name__` reads fine and `type(a).__name__` works. Calling the class object is the standard Python idiom for 'construct another one of my own type', and it is what CPython's own xml.sax AttributesImpl.copy() does; lib/rtl/mimic_xml_sax_xmlreader.py names its class explicitly instead, registered in track-b-workarounds.md. | — |
-| bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero | N | 60 | bug | A class in an imported module that is not followed by a module-level statement never runs its class-attribute initialisers: every attribute reads as its type's zero value, no diagnostic. Positional and PER-CLASS, not per-module — in `class K / TOP=1 / class J`, K is correct and J reads zero. So it hits the LAST class in any module. Methods are unaffected; only class-level attribute initialisers are lost. | — |
 | bug-nilpy-an-extended-slice-cannot-be-assigned | N | 30 | bug | `l[::2] = [7, 8]` is a parse error. The READ form `l[::2]` works, and the plain-slice ASSIGN `l[1:3] = [9]` works; only the strided assignment is missing. | — |
 | bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds | N | 20 | bug | A dict VALUE as the `*=` target still rebinds, so an alias of it keeps the old contents. The parameter half landed 2026-08-15 (pymul_v_inplace); this is the residue, and `+=` has the same split. | — |
 | bug-nilpy-classmethod-constructors-on-builtin-types-are-absent | N | 25 | bug | `bytes.fromhex(\"6162\")` and `float.fromhex(\"0x1p3\")` are `undefined variable (bytes)` / `(float)` — the TYPE used as a namespace resolves only for the handful of names the stdlib table lists (int.from_bytes, dict.fromkeys, str.maketrans). | — |
@@ -443,9 +442,9 @@ _none_
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 | decide-week-theme-2026-08-17 | U | 70 | decide | What should the next week of work aim at? Measured: the bug backlog already peaked (61 on 08-03 -> 32 now) and 65% of open tickets are features, so this is no longer a burn-down question. Three candidate themes with the numbers behind each. | — |
 
-## done (2013)
+## done (2014)
 
-2013 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2014 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -496,7 +495,6 @@ _none_
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
 - [p 65] [P] feature-pascal-corpus-oop
-- [p 60] [N] bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero (unblocks 1)
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 58] [N] feature-nilpy-yield-outside-a-for-loop
 - [p 58] [O] feature-opt-o3-register-pressure
@@ -700,6 +698,7 @@ _none_
 - [p 15] [A] compat-pascal-binop-operand-eval-order
 - [p 15] [B] feature-lib-mimic-string-template
 - [p 15] [N] feature-nilpy-nested-def-as-value
+- [p 15] [B] feature-nilpy-xml-dom-is-two-questions-not-one
 - [p 15] [P] feature-pascal-corpus-expansion
 - [p 15] [A] idea-a-auto-enable-threadsafe-by-restarting-the-compile
 - [p 12] [P] task-pascal-conformance-long-tail
@@ -715,7 +714,6 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
-- **1** — bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero
 - **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind

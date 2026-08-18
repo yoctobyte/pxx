@@ -32646,6 +32646,33 @@ begin
     PySkipNewlines;
   end;
 
+  { DRAIN WHAT THE LAST STATEMENT HOISTED. Only the ordinary-statement branch
+    above flushes the hoist queue, so anything a TRAILING construct queued had
+    nothing after it to carry it in and was silently dropped. A class is the case
+    that bites: PyEmitClsAttrBinds hoists one pyclsattr_bind per class attribute,
+    so the LAST class in a module published none of them and every attribute read
+    back as its type's zero value — `Node.ELEMENT_NODE` was 0, a string was ''.
+    No diagnostic; the storage exists and was simply never initialised.
+
+    Ending a module with a class is an entirely ordinary way to write one, and a
+    constants class (DOM node types, enum-like flags, status codes) is exactly
+    the shape that ends up there. It survived because the same class in the
+    READING file is fine — there, any use of the class is itself a following
+    statement, which flushes the queue.
+    bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero }
+  stmt := PyFlushHoist(-1);
+  if stmt >= 0 then
+  begin
+    if ASTLeft[lastSeq] = -1 then ASTLeft[lastSeq] := stmt
+    else
+    begin
+      ASTRight[lastSeq] := AllocNode(AN_SEQ);
+      lastSeq := ASTRight[lastSeq];
+      ASTLeft[lastSeq] := stmt;
+    end;
+    ASTArenaFloor := ASTNodeCount;
+  end;
+
   { the module's import-time code, as this unit's initialization section }
   procIdx := RegisterProc('__init_' + uname, False, tyInteger, 0,
                           dummyNames, dummyTypes);
@@ -33028,6 +33055,16 @@ begin
     end;
     PySkipNewlines;
   end;
+  { The same final drain the module loop needs, for the same reason — see the
+    note there. In the PROGRAM this is masked rather than absent: a trailing
+    class's binds go unflushed here too, but any use of the class is itself a
+    following statement, so a program that reads the attribute has already
+    flushed them. Fixed on both arms deliberately: this is one defect reachable
+    through two loops, and the arm nobody can observe is the one that stays
+    broken (devdocs/dev/normalise-dont-special-case.md).
+    bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero }
+  mainNode := PyFlushHoist(mainNode);
+  ASTArenaFloor := ASTNodeCount;
   Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
   { Unit INITIALISATION, in dependency order, before the program's own body —
     the same thing ParseProgram does for Pascal. An imported `.py` module's

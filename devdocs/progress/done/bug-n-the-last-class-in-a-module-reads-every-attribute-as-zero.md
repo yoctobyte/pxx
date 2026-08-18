@@ -4,6 +4,8 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "A class in an imported module that is not followed by a module-level statement never runs its class-attribute initialisers: every attribute reads as its type's zero value, no diagnostic. Positional and PER-CLASS, not per-module — in `class K / TOP=1 / class J`, K is correct and J reads zero. So it hits the LAST class in any module. Methods are unaffected; only class-level attribute initialisers are lost."
+status: done
+owner: frank2-7e
 ---
 
 # The last class in a module reads every attribute as zero
@@ -172,3 +174,81 @@ the one asked**, and a table row is only as good as the bytes it actually read.
 The one conclusion downstream of the wrong row — "our shims escape because they
 carry module-level assignments" — was also wrong, and is corrected above. It
 mattered: it was load-bearing for "no shipped code is affected".
+
+## FIXED 2026-08-18 (frank2-7e) — the hoist queue was never drained at end of module
+
+### Measured, not reasoned — and the ticket's own cause paragraph was wrong
+
+The unverified reading above ("the init routine is truncated at the last
+module-level statement") is **not** what happens. `PXXDBG=a.ir:*` on the two-class
+repro shows `__init_nodemod` in full:
+
+```
+0: const_int ival=7
+1: store_sym [sym=$clsattr.K.A]
+...
+12: call  (pyclsattr_bind for K.A)
+13: const_int ival=1
+14: store_sym [sym=TOP]
+```
+
+Nothing is truncated: `TOP` — the LAST module-level statement — is present and
+correct. **`J` is simply absent entirely.** The routine is complete; the trailing
+class's work never entered it.
+
+### Root cause
+
+`PyEmitClsAttrBinds` publishes each class attribute with `PyHoistStmt`, i.e. onto
+the **hoist queue**. In `ParsePyUnit`'s module loop only the ordinary-statement
+branch drains it (`stmt := PySeqAppend(PyFlushHoist(-1), stmt)`); the class and
+def branches flush `PyFlushDefInit` and never `PyFlushHoist`. **After the loop
+there was no final drain at all**, so whatever the last construct hoisted was
+dropped on the floor before `CompileAST(seqNode)`.
+
+That is exactly the measured boundary: *only a statement AFTER helps, and its
+kind does not matter* — any ordinary statement flushes the queue, which is why an
+assignment and a `print` behaved identically, and why a statement BEFORE does
+nothing.
+
+### Fixed on BOTH arms — the program loop has the same hole
+
+`ParsePyProgram`'s loop is built the same way and also had no final drain. There
+the bug is **masked rather than absent**: any use of a class is itself a following
+statement, so a program that reads the attribute has already flushed the queue.
+That is the whole reason "the same class defined in the reading file is always
+correct", which the ticket recorded as a fact without a cause.
+
+Both loops now drain after the loop. Fixing only the observable arm would have
+left one defect reachable through two paths, with the unobservable one still
+broken — `devdocs/dev/normalise-dont-special-case.md`, and the reason that file
+says to grep for the sibling before closing.
+
+### Verified by value against CPython
+
+| shape | before | after | CPython |
+| --- | --- | --- | --- |
+| class LAST in module, 3 int attrs | `0 0 0` | **`1 3 9`** | `1 3 9` |
+| a `str` attribute on a trailing class | `''` | **`hi`** | `hi` |
+| trailing class read through an INSTANCE | `0` | **`1`** | `1` |
+| `class K / TOP=1 / class J` | K=7, J=0 | **K=7, J=9** | K=7, J=9 |
+| statement after the class (was already fine) | 7 | 7 | 7 |
+
+### Regression test
+
+`test/test_nilpy_last_class_in_module_attrs.npy` +
+`test/nilpy_units/lastclassmod.npy`, wired into `test-nilpy` by name.
+
+The module deliberately contains an `Early` class **with statements after it** as
+well as a trailing `Node`: on a broken compiler `Early` is correct and `Node` is
+not, so the test pins the *positional* rule rather than just "class attributes
+work". Verified both ways — on pinned v348 it prints `1 2 / 7 / 0 0 0 / (blank) /
+0`; at HEAD and under CPython it prints `1 2 / 7 / 1 3 9 / node / 1`.
+
+### Gate
+
+`make compiler/pascal26` (fixedpoint, converged) + the value table + the new test
+failing pre-fix and passing post-fix + `tools/gate.sh quick` GREEN. No pin needed;
+nothing in `compiler/builtin/**`.
+
+## Log
+- 2026-08-18 — resolved, commit PENDING-COMMIT.
