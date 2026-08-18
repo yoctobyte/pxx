@@ -810,3 +810,26 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   Clear decision left with the worker again (only its user can clear). Otherwise quiet:
   no pending clears, `working/`+`urgent/` empty, nothing unpushed, no CRITICAL, frank3
   idle by design. Coordinator took no ticket.
+
+- 2026-08-18 ~06:00 (monitor event, between checks) — **first REAL red of the night,
+  and it is native-tier.** `ce57db4cd` ("fix(A): lower a statement list iteratively")
+  RED on native with three NEW-REDs: `test_nested_class_type_b348.pas`,
+  `test_set_literal_element_types.pas`, `test_set_runtime.pas`.
+  **Attribution is one commit wide and clean** — `e0f6748717e6` GREEN on native,
+  `ce57db4cd` RED, nothing else between. Distinguished from the night's four
+  timeout-shaped reds on the two facts that matter: native is the FAST tier (no
+  contention story) and three related Pascal tests failing together is a behaviour
+  signal, not a duration one. The commit touches `ir.inc` (+51) and `defs.inc` (+23)
+  — shared core.
+  Routed to frank2-f1, which owns the commit and was still active: reproduce one,
+  decide fix-forward vs revert and say which, push promptly. Left the choice with it
+  rather than mandating a revert — CLAUDE.md's revert rule applies, but it can see the
+  cause faster than I can. Stated explicitly that this concerns a **committed, pushed**
+  change and asks nothing about its dirty tree, since that distinction cost real work
+  yesterday.
+  **No PushNotification.** The human set up overnight autonomy and will evaluate at
+  wake; a worker is on it with a one-commit range, so waking them adds nothing they
+  could do better. Recorded in the digest instead.
+  Worth keeping: the regressing commit is the **stack-overflow half** of
+  `bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow` — the half that was
+  correct to do first. So that ticket's ordering constraint is two-way, not one-way.

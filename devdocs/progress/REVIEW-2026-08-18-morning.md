@@ -505,6 +505,28 @@ thesis demonstrated live in the record.
 **The ticket is unclaimed at p55 with both halves documented.** An unstarted p55 here
 is not a dropped ball; it is a better handoff than a rushed start would have been.
 
+### One real regression, caught fast (may already be resolved by the time you read this)
+
+`ce57db4cd` — "lower a statement list iteratively" — went **RED on the native tier**
+with three `test-core` Pascal tests: nested class type, set literal element types, set
+runtime. Attribution is one commit wide: the sha before it was GREEN on native.
+
+**This is not the timeout noise from earlier tonight**, and the distinction is the
+point. Native is the fast tier, so there is no contention story, and three related
+tests failing together is a behaviour signal rather than a duration one. It is the
+first red of the night that survives its own scrutiny.
+
+Routed immediately to frank2, which owns the commit and was still active, with the
+choice of fix-forward vs revert left to it. The commit touches `ir.inc` and
+`defs.inc` — shared core.
+
+The irony worth noting: this commit is the **stack-overflow half** of the locals-cap
+ticket, and doing that half first was correct. So that ticket's ordering constraint
+turns out to run both ways.
+
+I did not wake you for it. A worker was on it within minutes with a one-commit range,
+and there was nothing you could have done faster.
+
 ## Housekeeping for the morning (not done overnight, deliberately)
 
 `tools/progress.sh check` reports **17 resolved tickets awaiting their landed sha**
