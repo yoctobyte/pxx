@@ -990,3 +990,26 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   Also worth keeping: told it was blocked, frank3 did everything that did NOT need the
   pin (the ticket's own design question, the shim, the CPython half of the differential)
   and drew the line exactly at landing. That is how to spend a block.
+
+- 2026-08-18 end of day — **the pin boundary does real work, and here is the evidence.**
+  Recorded because it will next be encountered as friction. Track B refused to land a
+  shim FIVE times today, and every refusal was correct. Three were the substrate being
+  wrong in a new way each time (a trailing class reading its attributes as zero; a
+  from-import through a shim mapping losing class attributes; an `as` rename losing what
+  it renames). **Two were PROCESS, and both were mine:**
+  - I verified a fix at HEAD and declared a Track B ticket unblocked without checking
+    whether the fix was in the pin. All three of that afternoon's compiler fixes were
+    newer than v348, so on B's real ground the bug was fully live.
+  - I dispatched B at the `urllib_parse` half of a shim *because* it had identified that
+    as unblocking `sanitizer.py`; it then measured that the blocker is an `as`-rename
+    bug, so the shim's contents are irrelevant. The dispatch premise did not survive its
+    own measurement.
+  **Neither was visible from Track A/N/P, because they verify at HEAD and B ships on
+  `$(PXX_STABLE)`.** The lane split is what surfaced both. So the pin boundary is not
+  coordination overhead with a safety story attached — it is a second, independent
+  measurement of the same tree, and today it caught the coordinator twice.
+  Practical form of that, already in this file above: verify against **the binary the
+  consumer will use**, and when a compiler fix is what unblocks a library ticket, the pin
+  is part of the fix.
+  Observation is frank3-fc's; recorded here because it belongs to whoever reads this next,
+  not to the session that noticed it.
