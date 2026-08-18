@@ -923,3 +923,23 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   That let the post-pin measurement start immediately instead of after a round trip. Good
   shape for any worker parked behind a lock whose reason does not cover what they want to
   do.
+
+- 2026-08-18 ~18:00 — **human left for the day; autonomy re-armed after the reboot had
+  silently disarmed it.** `CronList` was EMPTY: the overnight hourly checks were
+  session-only, so they died with the session the ~06:09 reboot killed, and nothing would
+  have run today. Re-created as hourly at :23 (job `c4b22827`, session-only again,
+  auto-expires in 7 days). **Check this at the start of any coordinator session — a
+  reboot disarms autonomy without any error, and the roster's check log going quiet is
+  the only symptom.**
+  Live state at handoff: frank2-7e = **Track A+N** (combined, human-confirmed sole-A) on
+  `bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module` (p85,
+  urgent). frank3-fc = Track B, idle by design (its queue is float work; the corpus is
+  what feeds it). Track T UP on plexus, one long-standing open regression
+  (`crtl_exp2.c`).
+  **Blocked on the human, and it is the only thing that is:**
+  `decide-how-a-compiled-def-carries-its-signature-when-boxed` (U, p88) — an OWNERSHIP
+  fork behind the crashiest open bug, where two repo doctrines point opposite ways
+  (normalise-don't-special-case says delete the second mechanism; the `defs.inc` comment
+  says the non-owning lifetime is load-bearing). Not the coordinator's to settle, and
+  **option B must not be started speculatively** — frank2-7e offered and was told to
+  wait, because if A is chosen that is wasted work in a lifetime-sensitive area.
