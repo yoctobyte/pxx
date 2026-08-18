@@ -19239,6 +19239,23 @@ end;
   whole life. One cell per generator instance per variant argument, released
   with neither the instance nor the loop — a bounded leak, recorded on the
   ticket rather than hidden here. }
+{ Does argument `k` of this generator need a heap cell to carry it?
+
+  ONLY a Nil Python VARIANT parameter. The test that shipped first was
+  `Params[k].IsRef`, which is also true of a Pascal `var` parameter and of the
+  by-ref `const record` a stackless generator takes — so a plain Pascal
+  generator was told it needed pylib's pycell_new, a unit a Pascal program has
+  no reason to have in scope, and test_stackless_gen went red. The by-ref
+  spellings are not interchangeable: a Pascal `var` argument already has a
+  caller-side address that outlives the loop, which is exactly what a Python
+  temporary does not. }
+function PyGenArgNeedsCell(gpi, k: Integer): Boolean;
+begin
+  Result := PyExprMode and (k < Procs[gpi].ParamCount) and
+            Procs[gpi].Params[k].IsRef and
+            (Procs[gpi].Params[k].TypeKind = tyVariant);
+end;
+
 function GenMakeVariantArgCell(argNode: Integer; var preSeq: Integer): Integer;
 var ps, newPi, callNode, asgn, derefNode: Integer;
 begin
@@ -19408,32 +19425,32 @@ begin
     end;
     if nargs >= 1 then
     begin
-      if Procs[gpi].Params[1].IsRef then a0 := GenMakeVariantArgCell(a0, assignG);
+      if PyGenArgNeedsCell(gpi, 1) then a0 := GenMakeVariantArgCell(a0, assignG);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 0, a0), -1));
     end;
     if nargs >= 2 then
     begin
-      if Procs[gpi].Params[2].IsRef then a1 := GenMakeVariantArgCell(a1, assignG);
+      if PyGenArgNeedsCell(gpi, 2) then a1 := GenMakeVariantArgCell(a1, assignG);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 8, a1), -1));
     end;
     if nargs >= 3 then
     begin
-      if Procs[gpi].Params[3].IsRef then a2 := GenMakeVariantArgCell(a2, assignG);
+      if PyGenArgNeedsCell(gpi, 3) then a2 := GenMakeVariantArgCell(a2, assignG);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 16, a2), -1));
     end;
     if nargs >= 4 then
     begin
-      if Procs[gpi].Params[4].IsRef then a3 := GenMakeVariantArgCell(a3, assignG);
+      if PyGenArgNeedsCell(gpi, 4) then a3 := GenMakeVariantArgCell(a3, assignG);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 24, a3), -1));
     end;
     if nargs >= 5 then
     begin
-      if Procs[gpi].Params[5].IsRef then a4 := GenMakeVariantArgCell(a4, assignG);
+      if PyGenArgNeedsCell(gpi, 5) then a4 := GenMakeVariantArgCell(a4, assignG);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 32, a4), -1));
     end;
     if nargs >= 6 then
     begin
-      if Procs[gpi].Params[6].IsRef then a5 := GenMakeVariantArgCell(a5, assignG);
+      if PyGenArgNeedsCell(gpi, 6) then a5 := GenMakeVariantArgCell(a5, assignG);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 40, a5), -1));
     end;
 
