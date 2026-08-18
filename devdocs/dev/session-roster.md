@@ -1569,3 +1569,41 @@ rerank it deliberately rather than inheriting the number).
   only red. `working/` still empty while both work — the claim reminder is deliberately
   HELD for their next natural report rather than interrupting active work on the week's
   highest-value ticket. No dispatch, nothing invented.
+
+- **check 2026-08-18 (+11h) — YIELD LANDED. The week's bet, resolved in one evening.**
+  `feature-nilpy-yield-outside-a-for-loop` is in `done/` across four commits
+  (`c59a57ff4` generators consumed by for-in → `1d84a4bef` generator METHODS, "the shape
+  the html5lib filters are made of" → `78842fec8` 6 parameters not 4 → `f132f1f7e` the
+  Pascal `var` fix). frank3 also landed `5a900c598` — a real `urlopen` over
+  `lib/rtl/http.pas`.
+
+  **frank2's own honest scoring, which is the part to keep:** all three yield-walled files
+  compile and **`yield` is no longer any file's wall** — but the html5lib count is
+  **unchanged at 7 of 33**, because the parameter lift moved three treewalkers onto their
+  NEXT wall. Its phrase: *"progress-shaped without being progress."* That is exactly the
+  past-a-wall / onto-the-next-wall discipline applied against its own result.
+  **Denominator caution for whoever reports upward: 7/33 is html5lib alone; the 6/48
+  figure used earlier today is the full ladder (html5lib + tinycss2 + webencodings). Do
+  not conflate them.**
+
+  **The banked plan was right about the engine, the strategy and the disproven Track U
+  dependency — and wrong about the crash site:** it was the EPILOGUE releasing the
+  generator's live state, not the prologue spills. Worth remembering the next time a
+  banked diagnosis is handed to a fresh session: it bought the strategy, not the bug.
+
+  Two gaps filed rather than left: `feature-nilpy-a-generator-as-a-first-class-value`
+  (p55 — `g = gen()`, `list(gen())`, `next(g)`; compile errors today, which is the right
+  failure mode and must stay one) and
+  `bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells` (p40 — the
+  deliberate trade behind the epilogue fix, with the ordering constraint that makes a
+  naive fix re-create the dangling pointer).
+
+  **Open red triaged, not left to trap someone:**
+  `test-core#src:test/test_stackless_gen.pas` is very likely ALREADY FIXED — `f132f1f7e`
+  names it and claims a verified green, and T's latest run at `78842fec8beb` predates that
+  commit. Annotated the ticket "do not start, re-verify at HEAD or wait for T's next run".
+  Deliberately did NOT build to confirm, because frank2 still holds the tree and a
+  concurrent `make` is a collision. Its root cause is another **identity-vs-kind** case:
+  the variant cell keyed on `Params[k].IsRef`, true of both a Pascal `var` param and a
+  generator's by-ref `const record`, so a Pascal generator was told it needed pylib's
+  `pycell_new`. The watcher's `track: P` guess is wrong (fix is in `parser.inc` = A).
