@@ -2,7 +2,7 @@
 track: B
 prio: 55
 type: feature
-blocked-by: [bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero, bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails]
+blocked-by: [bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes]
 summary: "The xml_dom ladder row (4 files) is two unrelated questions. Three files need only `Node` — 12 integer constants, zero methods, closed by the DOM spec, trivially shimmable. One file needs a real DOM (~25 methods plus a private minidom internal) and is a project, not a shim. MEASURED CONCLUSION: do not write it — the shim unblocks ZERO files today, and writing it before the trailing-class initialiser bug lands would produce a shim whose every constant reads as 0."
 status: working
 owner: frank3-fc
@@ -180,3 +180,60 @@ and `xml_etree_elementtree` a further 4, which puts it just under
 [[feature-b-module-shims-for-the-html5lib-corpus]] (p60) rather than at the bottom of the
 board. The refusal recorded in that ticket ("my own earlier refusal, still correct on
 v347") was correct when written and is now spent.
+
+---
+
+## Status 2026-08-18 (frank3-fc): question 2 split out, question 1 BLOCKED one
+## step short of landing
+
+**Measured against `pinned` v349 (`596799fd9c6e`, pin commit `a6e8e763e`)** —
+the pin carrying today's last-class-hoist and shim-class-visibility fixes.
+
+### Question 2 is settled and gone
+
+Re-filed as [[feature-b-a-real-minidom-is-an-implementation-not-a-shim]] (B,
+p15), exactly as this ticket instructed. Nothing about the answer changed: it
+is ~25 DOM methods plus `weakref.proxy` plus a patch of minidom's private
+`_child_node_types`, for one optional tree backend. An implementation, not a
+shim, and it no longer rides along under this row.
+
+### Question 1 is written and correct, and cannot land
+
+`lib/rtl/mimic_xml_dom.py` exists: twelve nodeType constants and the four
+namespace URIs, checked **programmatically** against CPython's `xml.dom` rather
+than typed from memory — zero mismatched, zero missing.
+`test/lib_mimic_xml_dom.npy` is a differential asserting all twelve by VALUE
+plus the distinctness and comparison shapes the treewalkers actually depend on;
+it passes under CPython (20 checks).
+
+It does not compile under pxx, for a reason that is not this ticket's:
+[[bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes]] (N, p75).
+`from <shim> import Class` then `Class.CONSTANT` is `undefined variable`, while
+the byte-identical file as a plain module answers correctly, the same shim by
+its literal `mimic_` filename answers correctly, and `import shim;
+shim.Class.CONSTANT` answers correctly.
+
+**The blocked spelling is the corpus's own.** `treewalkers/base.py` and
+`dom.py` do `from xml.dom import Node` and then compare `Node.TEXT_NODE`. So
+there is no shim-side rewrite available and none should be attempted — the
+qualified form works, but it is html5lib's source that would have to change,
+and compiling existing source unchanged is the mission.
+
+### Why this ticket's own refusal held a third time
+
+The refusal was always "do not write it on this substrate", and the substrate
+has now been wrong in three different ways in two days: the constants read
+zero, then the fix was not in the pin Track B ships against, and now the
+from-import binding drops the attributes. Each was found by measuring the
+VALUES rather than the import — which is the discipline this ticket exists to
+record.
+
+### What remains, when the blocker lands
+
+1. Compile `test/lib_mimic_xml_dom.npy` on a pin carrying the fix; the 20
+   checks must pass by value, not merely import.
+2. Wire it into `make lib-test` next to the other `mimic_*` differentials.
+3. Re-run `tools/nilpy_ladder.py` and report past-vs-onto. The four `xml_dom`
+   files were previously measured to land on `digits` (now fixed) and
+   `weakref`; that measurement predates two pins and must be re-taken, not
+   quoted.

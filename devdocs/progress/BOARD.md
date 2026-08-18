@@ -8,13 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| feature-nilpy-xml-dom-is-two-questions-not-one | B | 55 | feature | The xml_dom ladder row (4 files) is two unrelated questions. Three files need only `Node` — 12 integer constants, zero methods, closed by the DOM spec, trivially shimmable. One file needs a real DOM (~25 methods plus a private minidom internal) and is a project, not a shim. MEASURED CONCLUSION: do not write it — the shim unblocks ZERO files today, and writing it before the trailing-class initialiser bug lands would produce a shim whose every constant reads as 0. | bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails, bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero |
+_none_
 
-## unfinished (14)
+## unfinished (15)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -29,6 +27,7 @@ _none_
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
+| feature-nilpy-xml-dom-is-two-questions-not-one | B | 55 | feature | The xml_dom ladder row (4 files) is two unrelated questions. Three files need only `Node` — 12 integer constants, zero methods, closed by the DOM spec, trivially shimmable. One file needs a real DOM (~25 methods plus a private minidom internal) and is a project, not a shim. MEASURED CONCLUSION: do not write it — the shim unblocks ZERO files today, and writing it before the trailing-class initialiser bug lands would produce a shim whose every constant reads as 0. | bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes |
 | feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 | feature-port-rtl-over-libc | A | 55 | feature | RTL-over-libc lowering mode — route runtime primitives through a system C library instead of raw syscalls | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect. | bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert |
@@ -495,7 +494,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 88] [U] decide-how-a-compiled-def-carries-its-signature-when-boxed (unblocks 1)
-- [p 75] [N] bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes
+- [p 75] [N] bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes (unblocks 1)
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
 - [p 65] [P] feature-pascal-corpus-oop
@@ -718,6 +717,7 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
+- **1** — bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes
 - **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind

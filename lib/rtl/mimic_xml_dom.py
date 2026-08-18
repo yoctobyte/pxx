@@ -33,6 +33,17 @@ VALUES, not that the import resolves -- resolving is exactly what it did while
 answering zero. test/lib_mimic_xml_dom.npy asserts `TEXT_NODE == 3` against
 CPython for that reason, and its assertions are load-bearing.
 
+NOT YET GATED, AND NOT YET USABLE THROUGH ITS OWN SPELLING. As of pinned v349,
+`from xml.dom import Node` followed by `Node.TEXT_NODE` does not compile --
+`undefined variable (TEXT_NODE)` -- while the byte-identical file as a plain
+module, the same shim reached by its literal `mimic_xml_dom` name, and
+`import`-plus-qualified access all answer correctly. That is
+bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes (N, p75), and
+the failing spelling is html5lib's own, so there is nothing to rewrite here.
+test/lib_mimic_xml_dom.npy therefore is NOT wired into `make lib-test` yet: it
+passes under CPython and cannot pass under pxx until that lands. Wire it in and
+re-run the ladder then; the file is checked in so the work is not re-done.
+
 DELIBERATELY ABSENT: `minidom`. `html5lib/treebuilders/dom.py` wants a real DOM
 -- ~25 methods, document construction and mutation, plus a reach into minidom's
 PRIVATE `_child_node_types` to allow text nodes as children of the document.
