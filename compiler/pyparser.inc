@@ -1150,6 +1150,28 @@ var
     (feature-nilpy-function-values). -1 when the annotation was not Callable. }
   PyAnnLastProcSig: Integer;
   PyCountAlias: AnsiString;  { local name bound to itertools.count ('' = none) }
+  { `from sys import argv` — the bare name bound to a COMPILER-PROVIDED member.
+
+    The consumed-only roots (sys, os, textwrap, select, itertools, typing,
+    dataclasses, __future__, collections, random) publish no unit, so their
+    from-import parsed the names and DROPPED them: `sys.argv` worked and a bare
+    `argv` was `undefined variable`, i.e. the spelling CPython programs actually
+    write was the one that did not work. What the compiler provides for these
+    roots it provides through the QUALIFIED intercepts (PyIsSysStreamAhead for
+    values, PyStdlibCallProc for calls), so binding the name is a matter of
+    remembering which root it came from and asking those same intercepts —
+    not a second table of members, which would drift from the first
+    (devdocs/dev/normalise-dont-special-case.md).
+
+    Tagged with the IMPORTING module's unit index for the reason PyImpName is:
+    unit scope here is flat, and `from sys import exit` in one module must not
+    bind `exit` inside another.
+    bug-n-a-from-import-of-a-compiler-provided-module-binds-no-names }
+  PyStdAliasName: array[0..127] of Integer;  { interned lowercase bare name IN SCOPE }
+  PyStdAliasMember: array[0..127] of Integer;  { interned lowercase MEMBER name under the root }
+  PyStdAliasBase: array[0..127] of Integer;  { interned lowercase DOTTED root ('sys', 'os.path') }
+  PyStdAliasUnit: array[0..127] of Integer;  { CurrentUnitIdx of the importer }
+  PyStdAliasCount: Integer;
   { Names a module pulled in with `from X import name`, tagged with the
     IMPORTING module's unit index. Unit scope in this compiler is flat, so a
     name another module imported is findable from everywhere — which is wrong
@@ -10412,31 +10434,99 @@ end;
   statement parsing and was the one actually rejecting it — has to agree that
   `sys.stderr` resolves. Modelling it as an fd integer is what lets
   AN_WRITE/AN_WRITELN pick it up through their existing ival slot. }
-function PyIsSysStreamAhead: Boolean;
-var base, nm: AnsiString;
+{ The dotted root a bare name was `from`-imported from, or '' when it was not
+  one — the read side of PyStdAlias*. A name this module DECLARES wins: an
+  import binds a name and a later def or assignment rebinds it, exactly as
+  CPython scopes it. bug-n-a-from-import-of-a-compiler-provided-module-binds-no-names }
+function PyStdAliasLookup(const nm: AnsiString; var member: AnsiString): AnsiString;
+var i, ni, pi, si: Integer;
+begin
+  Result := '';
+  member := '';
+  if (nm = '') or (PyStdAliasCount = 0) then Exit;
+  ni := InternStr(LowerCase(nm));
+  for i := 0 to PyStdAliasCount - 1 do
+    if (PyStdAliasName[i] = ni) and (PyStdAliasUnit[i] = CurrentUnitIdx) then
+    begin
+      pi := FindProcInUnit(nm, CurrentUnitIdx);
+      if (pi >= 0) and PyDefBoundHere(pi) then Exit;
+      si := FindSym(nm);
+      if (si >= 0) and (SymUnitIdx[si] = CurrentUnitIdx) then Exit;
+      { The MEMBER, not the local name: `from sys import argv as av` puts `av`
+        in scope and still means sys.ARGV. Keeping only the local spelling made
+        the rename resolve nothing at all. }
+      member := Strs[PyStdAliasMember[i]].Text;
+      Result := Strs[PyStdAliasBase[i]].Text;
+      Exit;
+    end;
+end;
+
+function PyStdAliasRootOf(const nm: AnsiString): AnsiString;
+var member: AnsiString;
+begin
+  Result := PyStdAliasLookup(nm, member);
+end;
+
+{ Does `<base>.<nm>` name a compiler-provided VALUE? Split out of the token
+  predicate below so the bare-name form a from-import binds asks the SAME
+  question — one membership test, two spellings. }
+function PyIsStdlibMemberValue(const base, nm: AnsiString; anyAttr: Boolean): Boolean;
 begin
   Result := False;
-  if (TokPos < 1) or (TokPos + 1 >= TokCount) then Exit;
-  base := LowerCase(GetTokenStr(TokPos - 1));
-  if Tokens[TokPos].Kind <> tkDot then Exit;
-  nm := LowerCase(GetTokenStr(TokPos + 1));
   if base = 'sys' then
-    { ANY sys attribute: the four modelled ones below, and everything else as a
+  begin
+    { The MODELLED members — the ones PyParseSysStream builds a real value for. }
+    Result := (nm = 'argv') or (nm = 'platform') or (nm = 'executable') or
+              (nm = 'stdout') or (nm = 'stderr') or (nm = 'stdin');
+    { ...and, for the QUALIFIED spelling only, any other sys attribute as a
       runtime "not available here". `sys._MEIPASS` is the shape — PyInstaller
       sets it and CPython raises AttributeError when it is absent, which is
       exactly what the application's `try/except` around it expects. Reported
-      at run time, not silently zero. }
-    Result := True
+      at run time, not silently zero.
+      The BARE spelling deliberately does NOT take this arm: `from sys import
+      nosuch` must keep walling at COMPILE time as an undefined variable, which
+      is what the consumed-only policy is after — turning it into a runtime
+      raise would be a strictly weaker diagnostic for a name nothing provides. }
+    if (not Result) and anyAttr then Result := True;
+  end
   else if base = 'os' then
     { os.SEEK_SET/CUR/END — the whence CONSTANTS, bare values not calls. }
     Result := (nm = 'seek_set') or (nm = 'seek_cur') or (nm = 'seek_end');
 end;
 
+function PyIsSysStreamAhead: Boolean;
+var base, nm, aliasMem: AnsiString;
+begin
+  Result := False;
+  if TokPos < 1 then Exit;
+  { The BARE spelling first — `from sys import argv` then `argv`. It occupies
+    ONE token, so it is tested before the dotted form's TokPos+1 read. }
+  base := PyStdAliasLookup(GetTokenStr(TokPos - 1), aliasMem);
+  if (base <> '') and PyIsStdlibMemberValue(base, aliasMem, False) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  if TokPos + 1 >= TokCount then Exit;
+  if Tokens[TokPos].Kind <> tkDot then Exit;
+  base := LowerCase(GetTokenStr(TokPos - 1));
+  nm := LowerCase(GetTokenStr(TokPos + 1));
+  Result := PyIsStdlibMemberValue(base, nm, True);
+end;
+
 function PyParseSysStream: Integer;
 var nm: AnsiString; procIdx: Integer;
 begin
-  nm := LowerCase(GetTokenStr(TokPos + 1));
-  Next; Next; Next;              { base, '.', the member name }
+  { Either spelling arrives here: the dotted one spends three tokens, the bare
+    one (a from-imported name) spends one and takes its base from the alias. }
+  if (TokPos >= 1) and (PyStdAliasLookup(GetTokenStr(TokPos - 1), nm) <> '') and
+     ((TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkDot)) then
+    Next                         { the bare name; nm is its MEMBER }
+  else
+  begin
+    nm := LowerCase(GetTokenStr(TokPos + 1));
+    Next; Next; Next;            { base, '.', the member name }
+  end;
   if (nm = 'seek_set') or (nm = 'seek_cur') or (nm = 'seek_end') then
   begin
     Result := AllocNode(AN_INT_LIT);
@@ -10652,10 +10742,20 @@ end;
 { nTok = how many tokens the dotted name occupies, so the caller can skip to
   the '(' . CurTok is the leading `os`/`sys`. }
 function PyStdlibCallAhead(var pname: AnsiString; var nTok: Integer): Boolean;
-var base, d2, d3: AnsiString;
+var base, d2, d3, aliasMem: AnsiString;
 begin
   Result := False; pname := ''; nTok := 0;
   if TokPos < 1 then Exit;
+  { `from os import getenv` then `getenv(...)` — the bare spelling, ONE token
+    ahead of the '('. Same table, same shim: what the from-import binds is
+    exactly what the dotted form would have resolved to, so an entry can never
+    exist for one spelling and not the other. }
+  base := PyStdAliasLookup(GetTokenStr(TokPos - 1), aliasMem);
+  if (base <> '') and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+  begin
+    pname := PyStdlibCallProc(base + '.' + aliasMem);
+    if pname <> '' then begin nTok := 1; Result := True; Exit; end;
+  end;
   base := LowerCase(GetTokenStr(TokPos - 1));
   if (base <> 'os') and (base <> 'sys') and (base <> 'textwrap') and
      (base <> 'select') and (base <> 'dict') and (base <> 'math') and
@@ -31744,6 +31844,33 @@ end;
   whole of it. rootName gets the first segment, which is what the
   consume-and-defer stdlib checks are about (`import os.path` is as skipped as
   `import os`). feature-nilpy-dotted-package-imports. }
+{ Does the compiler PROVIDE `<dotted root>.<member>` — as a mapped call or as a
+  modelled value? The question both from-import arms ask before binding a bare
+  name, so the answer can never differ between the two spellings. }
+function PyStdProvidesMember(const dottedRoot, member: AnsiString): Boolean;
+begin
+  Result := (PyStdlibCallProc(LowerCase(dottedRoot) + '.' + LowerCase(member)) <> '') or
+            PyIsStdlibMemberValue(LowerCase(dottedRoot), LowerCase(member), False);
+end;
+
+{ Bind `alias` to `<dottedRoot>.<member>` for THIS module, if the compiler
+  provides it. Called from both from-import arms — the consumed-only one (sys,
+  os, textwrap, select) and the resolvable-unit one (random), because which arm
+  a root takes is about whether it has a backing UNIT and says nothing about
+  whether its members are compiler-provided. `from random import randint` proved
+  that: random takes the unit arm and its members live in the same call table
+  sys.exit does. }
+procedure PyStdAliasRecord(const dottedRoot, member, alias: AnsiString);
+begin
+  if PyStdAliasCount >= 128 then Exit;
+  if not PyStdProvidesMember(dottedRoot, member) then Exit;
+  PyStdAliasName[PyStdAliasCount] := InternStr(LowerCase(alias));
+  PyStdAliasMember[PyStdAliasCount] := InternStr(LowerCase(member));
+  PyStdAliasBase[PyStdAliasCount] := InternStr(LowerCase(dottedRoot));
+  PyStdAliasUnit[PyStdAliasCount] := CurrentUnitIdx;
+  Inc(PyStdAliasCount);
+end;
+
 function PyConsumeDottedModule(var rootName: AnsiString): AnsiString;
 var dotted: AnsiString;
 begin
@@ -31979,6 +32106,10 @@ end;
 
 procedure PyParseImportRun;
 var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
+    { The DOTTED module spelling, captured before ParseUsesUnit: PyDottedImport
+      is a global, and pulling a unit parses ITS imports and overwrites it. The
+      unit arm read it after the pull and bound nothing. }
+    impDotted: AnsiString;
     aStrIdx, realStrIdx, optSym, impLevel: Integer;
     aliasSym, aliasCi, aliasRealSym, aliasRealProc: Integer;
     aliasUnitTarget: Integer;   { the unit a from-imported SUBMODULE name really names }
@@ -32013,6 +32144,7 @@ begin
       if CurTok.Kind <> tkIdent then
         Error('Nil Python: expected a module name after from');
       impName := PyConsumeDottedModule(impRoot);
+      impDotted := PyDottedImport;
       if CurTok.Kind <> tkUses then
         Error('Nil Python: expected import after from ' + impName);
       Next;
@@ -32029,6 +32161,15 @@ begin
           isCount := CaseEqual(impRoot, 'itertools') and
                      CaseEqual(CurTok.SVal, 'count');
           if isCount then PyCountAlias := CurTok.SVal;
+          { The name the compiler DOES provide under this root, remembered
+            against the root it came from. Consuming the import used to drop it,
+            so `from sys import argv` bound nothing and a bare `argv` was
+            `undefined variable` while `sys.argv` worked — the spelling real
+            CPython programs use was the broken one.
+            `as` rebinds, so the record is written after the alias is known.
+            bug-n-a-from-import-of-a-compiler-provided-module-binds-no-names }
+          impReal := CurTok.SVal;
+          impAlias := impReal;
           Next;
           if PyIsIdent('as') then
           begin
@@ -32036,9 +32177,11 @@ begin
             if CurTok.Kind = tkIdent then
             begin
               if isCount then PyCountAlias := CurTok.SVal;
+              impAlias := CurTok.SVal;
               Next;
             end;
           end;
+          PyStdAliasRecord(impDotted, impReal, impAlias);
           if not Eat(tkComma) then Break;
         end;
       end
@@ -32110,6 +32253,11 @@ begin
             that shadows the flat-scope resolution every existing NilPy program
             already relies on. Widening it to the program is a change with a
             large blast radius and no measured demand. }
+          { Also bind it if the compiler PROVIDES this member — `from random
+            import randint`. random has a backing unit, so it takes this arm
+            rather than the consumed-only one, but its members are mapped by
+            the same table sys.exit uses and the unit alone does not bind them. }
+          PyStdAliasRecord(impDotted, impReal, impAlias);
           if (impAlias <> impReal) or (CurrentUnitIdx >= 0) then
           begin
             aliasCi := FindUClass(impReal);
@@ -33023,6 +33171,7 @@ begin
   end;
   PyCountAlias := '';
   PyImpNameCount := 0;
+  PyStdAliasCount := 0;
   PyOptMissingCount := 0;
   PyExprHadOptionalMissing := False;
   PyDcCount := 0;

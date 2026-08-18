@@ -1,0 +1,36 @@
+# `from sys import argv` resolved but bound NOTHING: a bare `argv` was
+# `undefined variable` while `sys.argv` worked, so the spelling CPython
+# programs actually write was the one that did not. The consumed-only roots
+# parse their imported names and drop them.
+# What the compiler provides for these roots it provides through the QUALIFIED
+# intercepts, so the from-spelling now remembers which root a name came from
+# and asks those same intercepts -- no second table of members to drift.
+# bug-n-a-from-import-of-a-compiler-provided-module-binds-no-names
+
+from sys import argv
+from sys import argv as av
+from os.path import join, basename
+from os.path import join as j
+from textwrap import dedent
+from random import seed, randint
+
+# a VALUE member (sys.argv), bare and renamed
+print(len(argv), len(av))
+
+# CALL members, from a dotted root, plus a rename
+print(join("a", "b"), basename("/x/y.txt"), j("c", "d"))
+
+# a root that takes the OTHER import arm (textwrap is consumed-only, random
+# has a backing unit) -- which arm a root takes says nothing about whether its
+# members are compiler-provided
+print(dedent("plain"))
+seed(1)
+print(randint(5, 5))
+
+
+def basename(p):
+    # a later def rebinds the name, exactly as CPython scopes it
+    return "shadowed"
+
+
+print(basename("/x/y.txt"))

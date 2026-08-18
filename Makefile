@@ -573,6 +573,17 @@ test-nilpy: $(COMPILER)
 	# a change to the lowering cannot drift between them. Covers the STATEMENT and
 	# the EXPRESSION parse site -- there are two, and the second lives in the shared
 	# parser.inc. bug-n-two-argument-super-does-not-parse
+	# `from sys import argv` resolved but bound NOTHING -- a bare `argv` was
+	# undefined while `sys.argv` worked, i.e. the spelling CPython programs write
+	# was the broken one. The from-spelling now remembers which root a name came
+	# from and asks the SAME qualified intercepts, so a member cannot exist for one
+	# spelling and not the other. Covers both import arms (textwrap is consumed-only,
+	# random has a backing unit), values and calls, `as` renames, and a later def
+	# rebinding the name the way CPython scopes it. A name the compiler does NOT
+	# provide still walls at compile time -- that row lives in the .npy's sibling
+	# check. bug-n-a-from-import-of-a-compiler-provided-module-binds-no-names
+	./$(COMPILER) test/test_nilpy_from_import_binds_provided_names.npy $(TESTTMP)/test_nilpy_fromimpbind26
+	test "$$($(TESTTMP)/test_nilpy_fromimpbind26)" = "$$(printf '1 1\na/b y.txt c/d\nplain\n5\nshadowed')"
 	./$(COMPILER) test/test_nilpy_two_argument_super.npy $(TESTTMP)/test_nilpy_super2arg26
 	test "$$($(TESTTMP)/test_nilpy_super2arg26)" = "$$(printf '3\n4 8\nTwo+Base\nstream')"
 	./$(COMPILER) test/test_nilpy_subscript_container_literal.npy $(TESTTMP)/test_nilpy_sublit26
@@ -6694,6 +6705,17 @@ test-core: $(COMPILER)
 	# a change to the lowering cannot drift between them. Covers the STATEMENT and
 	# the EXPRESSION parse site -- there are two, and the second lives in the shared
 	# parser.inc. bug-n-two-argument-super-does-not-parse
+	# `from sys import argv` resolved but bound NOTHING -- a bare `argv` was
+	# undefined while `sys.argv` worked, i.e. the spelling CPython programs write
+	# was the broken one. The from-spelling now remembers which root a name came
+	# from and asks the SAME qualified intercepts, so a member cannot exist for one
+	# spelling and not the other. Covers both import arms (textwrap is consumed-only,
+	# random has a backing unit), values and calls, `as` renames, and a later def
+	# rebinding the name the way CPython scopes it. A name the compiler does NOT
+	# provide still walls at compile time -- that row lives in the .npy's sibling
+	# check. bug-n-a-from-import-of-a-compiler-provided-module-binds-no-names
+	./$(COMPILER) test/test_nilpy_from_import_binds_provided_names.npy $(TESTTMP)/test_nilpy_fromimpbind26
+	test "$$($(TESTTMP)/test_nilpy_fromimpbind26)" = "$$(printf '1 1\na/b y.txt c/d\nplain\n5\nshadowed')"
 	./$(COMPILER) test/test_nilpy_two_argument_super.npy $(TESTTMP)/test_nilpy_super2arg26
 	test "$$($(TESTTMP)/test_nilpy_super2arg26)" = "$$(printf '3\n4 8\nTwo+Base\nstream')"
 	./$(COMPILER) test/test_nilpy_subscript_container_literal.npy $(TESTTMP)/test_nilpy_sublit26
