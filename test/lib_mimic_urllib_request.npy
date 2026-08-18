@@ -1,0 +1,145 @@
+"""lib/rtl/mimic_urllib_request.pas + mimic_urllib_error.pas, against CPython.
+
+Run by `make lib-test` twice — once under python3 and once compiled with pxx —
+against the SAME server (test/lib_mimic_urllib_request_server.pas), and the two
+outputs are diffed. Every line below therefore has CPython as its oracle rather
+than our own idea of what urllib does, which is the discipline
+devdocs/dev/python-compat-tiers.md sets for a shim.
+
+The port arrives in argv so the harness can pick a free one.
+
+WHAT IS DELIBERATELY NOT HERE: the refusals (timeout=, https with no TLS
+backend, unknown schemes, opener/handler machinery). CPython does those things
+rather than refusing, so their wording CANNOT match and diffing them would be
+comparing a shim's honest 'no' against the real thing's 'yes'. They are checked
+in test/lib_mimic_urllib_request_refusals.npy, which has no CPython oracle by
+construction.
+"""
+
+import sys
+from urllib.request import Request, urlopen, urlretrieve
+from urllib.error import HTTPError, URLError
+
+BASE = "http://127.0.0.1:" + sys.argv[1]
+
+
+def show(tag, value):
+    print(tag + ": " + str(value))
+
+
+# --- a plain GET, and the three spellings of the status ---------------------
+r = urlopen(BASE + "/hello")
+show("status", r.status)
+show("code", r.code)
+show("getcode", r.getcode())
+show("reason", r.reason)
+show("body", r.read().decode("utf-8"))
+show("geturl", r.geturl().replace(sys.argv[1], "PORT"))
+r.close()
+
+# --- read() with a length, then the rest -----------------------------------
+r = urlopen(BASE + "/hello")
+show("read5", r.read(5).decode("utf-8"))
+show("rest", r.read().decode("utf-8"))
+show("at-eof", r.read().decode("utf-8"))
+
+# --- readline / readlines ---------------------------------------------------
+r = urlopen(BASE + "/hello")
+show("line1", r.readline().decode("utf-8"))
+show("lines-left", [b.decode("utf-8") for b in r.readlines()])
+
+# --- headers ----------------------------------------------------------------
+r = urlopen(BASE + "/hello")
+show("ctype", r.headers.get("Content-Type"))
+show("ctype-ci", r.headers.get("content-type"))
+show("absent", r.headers.get("X-Missing"))
+show("absent-default", r.headers.get("X-Missing", "fallback"))
+show("getitem", r.headers["X-Note"])
+show("getheader", r.getheader("X-Note"))
+show("content-type-parsed", r.headers.get_content_type())
+show("info-is-headers", r.info().get("X-Note"))
+
+# --- a repeated header: get_all is why headers is not a dict ----------------
+r = urlopen(BASE + "/multi")
+show("get_all", r.headers.get_all("X-Note"))
+show("get_all-absent", r.headers.get_all("X-Nope"))
+
+# --- with-statement ---------------------------------------------------------
+with urlopen(BASE + "/hello") as resp:
+    show("with-status", resp.status)
+    show("with-body-head", resp.read(5).decode("utf-8"))
+
+# --- a redirect is followed, and geturl reports where we ENDED UP -----------
+r = urlopen(BASE + "/redirect")
+show("redirect-status", r.status)
+show("redirect-body", r.read().decode("utf-8"))
+show("redirect-geturl", r.geturl().replace(sys.argv[1], "PORT"))
+
+# --- a 4xx RAISES, and the error is also a response -------------------------
+try:
+    urlopen(BASE + "/notfound")
+    show("notfound", "NO RAISE")
+except HTTPError as e:
+    show("err-str", str(e))
+    show("err-code", e.code)
+    show("err-status", e.status)
+    show("err-reason", e.reason)
+    show("err-body", e.read().decode("utf-8"))
+    show("err-url", e.geturl().replace(sys.argv[1], "PORT"))
+    show("err-is-urlerror", isinstance(e, URLError))
+    show("err-is-oserror", isinstance(e, OSError))
+    show("err-header", e.headers.get("Content-Type"))
+
+# --- POST via the data argument, with CPython's default Content-Type --------
+r = urlopen(BASE + "/echo", data=b"a=1&b=2")
+show("post", r.read().decode("utf-8"))
+
+# --- POST via a Request, with the method and headers it carries -------------
+req = Request(BASE + "/echo", data=b"x=9", headers={"Content-Type": "application/json"})
+show("req-method", req.get_method())
+r = urlopen(req)
+show("req-post", r.read().decode("utf-8"))
+
+# --- an explicit method on a Request ----------------------------------------
+req = Request(BASE + "/echo", method="PUT", data=b"p=1")
+r = urlopen(req)
+show("put", r.read().decode("utf-8"))
+
+# --- Request: the header folding and the url pieces -------------------------
+req = Request(BASE + "/x?q=1#frag", headers={"CONTENT-TYPE": "text/plain"})
+show("hdr-folded", req.get_header("Content-type"))
+show("has-header", req.has_header("content-type"))
+show("selector", req.selector)
+show("fragment", req.fragment)
+show("type", req.type)
+req.add_header("X-Later", "v")
+show("header-items-count", len(req.header_items()))
+req.remove_header("X-Later")
+show("after-remove", req.has_header("X-Later"))
+show("get-header-default", req.get_header("X-Gone", "dflt"))
+
+# --- the error classes as VALUES: CPython's wording is part of the interface -
+ue = URLError("boom")
+show("urlerror-str", str(ue))
+show("urlerror-reason", ue.reason)
+show("urlerror-is-oserror", isinstance(ue, OSError))
+he = HTTPError(BASE + "/x", 404, "Not Found", None, None)
+show("httperror-str", str(he))
+show("httperror-reason", he.reason)
+show("httperror-is-urlerror", isinstance(he, URLError))
+
+# --- the defaults: no data means None and GET, not a sentinel ---------------
+plain = Request(BASE + "/hello")
+show("default-data", plain.data)
+show("default-method", plain.get_method())
+show("init-headers-folded", Request(BASE + "/x", headers={"CONTENT-TYPE": "a"}).headers)
+
+# --- urlretrieve writes the body to the named file --------------------------
+path = sys.argv[2]
+name, headers = urlretrieve(BASE + "/hello", path)
+show("retrieve-name", name == path)
+with open(path, "rb") as fh:
+    show("retrieve-bytes", fh.read().decode("utf-8"))
+show("retrieve-headers", headers.get("X-Note"))
+
+print("MIMIC-URLLIB-REQUEST OK")

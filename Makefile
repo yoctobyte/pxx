@@ -10175,6 +10175,42 @@ lib-test: pxx-stable-check
 	    && echo "  lib-test: mimic_codecs matches CPython" \
 	    || { echo "FAIL: mimic_codecs diverges from CPython"; diff $(TESTTMP)/lib_codecs_cpy.txt $(TESTTMP)/lib_codecs_pxx.txt | head -10; exit 1; }; \
 	else echo "  lib-test: python3 absent, skipping the codecs oracle diff"; fi
+	# mimic_urllib_request / mimic_urllib_error — `from urllib.request import
+	# urlopen` resolves to lib/rtl/mimic_urllib_request.pas, a Python face on
+	# lib/rtl/http.pas. Same CPython-as-oracle deal as mimic_codecs above, with
+	# one addition that matters: both clients are pointed at the SAME local
+	# server (test/lib_mimic_urllib_request_server.pas), so the diff compares our
+	# urlopen against the real one rather than against our own idea of what a
+	# server says. (feature-b-mimic-urllib-request-over-the-rtl-http-stack)
+	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_mimic_urllib_request_server.pas $(TESTTMP)/lib_urllib_server
+	$(PXX_STABLE) test/lib_mimic_urllib_request.npy $(TESTTMP)/lib_urllib_client
+	$(PXX_STABLE) test/lib_mimic_urllib_request_refusals.npy $(TESTTMP)/lib_urllib_refusals
+	# The refusals have no oracle by construction (CPython does these things
+	# rather than refusing), so they run on their own, with no server needed.
+	test "$$($(TESTTMP)/lib_urllib_refusals | tail -n 1)" = "MIMIC-URLLIB-REQUEST REFUSALS OK"
+	test "$$($(TESTTMP)/lib_urllib_refusals | grep -c '=ok')" = "8"
+	test "$$($(TESTTMP)/lib_urllib_refusals | grep -c 'FAIL')" = "0"
+	@set -e; \
+	  rm -f $(TESTTMP)/lib_urllib_srv.log; \
+	  $(TESTTMP)/lib_urllib_server 28901 > $(TESTTMP)/lib_urllib_srv.log 2>&1 & \
+	  srv=$$!; \
+	  trap "kill $$srv 2>/dev/null || true" EXIT; \
+	  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do \
+	    grep -q '^ready ' $(TESTTMP)/lib_urllib_srv.log && break; \
+	    sleep 0.25; \
+	  done; \
+	  grep -q '^ready ' $(TESTTMP)/lib_urllib_srv.log \
+	    || { echo "FAIL: urllib test server never came up"; cat $(TESTTMP)/lib_urllib_srv.log; exit 1; }; \
+	  $(TESTTMP)/lib_urllib_client 28901 $(TESTTMP)/lib_urllib_pxx.bin > $(TESTTMP)/lib_urllib_pxx.txt 2>&1; \
+	  test "$$(tail -n 1 $(TESTTMP)/lib_urllib_pxx.txt)" = "MIMIC-URLLIB-REQUEST OK" \
+	    || { echo "FAIL: mimic_urllib_request client did not finish"; tail -20 $(TESTTMP)/lib_urllib_pxx.txt; exit 1; }; \
+	  if command -v python3 >/dev/null 2>&1; then \
+	    python3 test/lib_mimic_urllib_request.npy 28901 $(TESTTMP)/lib_urllib_cpy.bin > $(TESTTMP)/lib_urllib_cpy.txt 2>&1; \
+	    diff $(TESTTMP)/lib_urllib_cpy.txt $(TESTTMP)/lib_urllib_pxx.txt >/dev/null \
+	      && echo "  lib-test: mimic_urllib_request matches CPython" \
+	      || { echo "FAIL: mimic_urllib_request diverges from CPython"; diff $(TESTTMP)/lib_urllib_cpy.txt $(TESTTMP)/lib_urllib_pxx.txt | head -20; exit 1; }; \
+	  else echo "  lib-test: python3 absent, skipping the urllib oracle diff"; fi; \
+	  kill $$srv 2>/dev/null || true
 	# lib/pcl/tkhtmlview is a NilPy library, so CPython is an oracle for it the
 	# way it is for nilsh above: the SAME source, on real tkinter, must render
 	# the same document. This is what would catch a renderer that is merely

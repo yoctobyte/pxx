@@ -1,0 +1,61 @@
+"""The REFUSALS of lib/rtl/mimic_urllib_request.pas — the half with no oracle.
+
+Deliberately separate from test/lib_mimic_urllib_request.npy, which is diffed
+against CPython line for line. These cases CANNOT be diffed, because CPython
+does the thing rather than refusing: it honours a timeout, opens https, speaks
+ftp:// and file://, and invents a temporary file for a one-argument
+urlretrieve. Running them under python3 would fail or reach the network.
+
+So this file asserts the SHAPE of each refusal instead — that it raises
+URLError (which a urlopen caller is already catching) rather than escaping as a
+Pascal exception, and that the message names what is missing. A shim that
+refuses is only as good as the explanation it refuses with; an unexplained
+raise is the thing this whole file exists to prevent.
+
+pxx-only. See the unit header for why each of these refuses rather than
+approximating.
+"""
+
+from urllib.request import urlopen, urlretrieve
+from urllib.error import URLError
+
+
+def refuses(tag, fn, must_mention):
+    try:
+        fn()
+        print(tag + "=FAIL (no raise)")
+        return
+    except URLError as e:
+        text = str(e)
+        if must_mention in text:
+            print(tag + "=ok")
+        else:
+            print(tag + "=FAIL (message missing " + repr(must_mention) + "): " + text)
+
+
+# A timeout cannot be honoured — http.pas has no request timeout — and ignoring
+# it would turn a bounded wait into an unbounded one.
+refuses("timeout", lambda: urlopen("http://127.0.0.1:9/", timeout=5), "timeout")
+
+# timeout=0 is a real CPython request ("non-blocking"), so it must reach the
+# refusal too rather than being read as "no timeout given".
+refuses("timeout-zero", lambda: urlopen("http://127.0.0.1:9/", timeout=0), "timeout")
+
+# Schemes this build does not speak. CPython opens all three.
+refuses("scheme-ftp", lambda: urlopen("ftp://example.com/x"), "unknown url type")
+refuses("scheme-file", lambda: urlopen("file:///etc/hostname"), "unknown url type")
+refuses("scheme-none", lambda: urlopen("example.com/x"), "unknown url type")
+
+# https with no TLS backend registered: lib/rtl ships two and neither installs
+# itself, so the refusal names them instead of picking one here.
+refuses("https-no-backend", lambda: urlopen("https://example.com/"), "TLS backend")
+
+# urlretrieve without a filename: CPython invents a temp file, which needs a
+# policy a shim should not choose for the program.
+refuses("retrieve-no-filename", lambda: urlretrieve("http://127.0.0.1:9/"), "filename")
+
+# A connection that cannot be made is a URLError, not a Pascal exception
+# escaping — port 9 (discard) is closed on a normal box.
+refuses("unreachable", lambda: urlopen("http://127.0.0.1:9/"), "could not reach")
+
+print("MIMIC-URLLIB-REQUEST REFUSALS OK")
