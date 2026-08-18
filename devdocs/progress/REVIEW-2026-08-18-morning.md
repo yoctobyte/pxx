@@ -742,3 +742,32 @@ already rejected. So each answer tomorrow should end with the re-file, not with 
 raised it explicitly and it is not a ticket. Flagging it here so it is not lost between
 sessions; it belongs alongside `ir-as-substrate.md` and `normalise-dont-special-case.md`
 rather than in the queue.
+
+### Agenda UPDATE (evening) — one new decision, and it jumped the queue
+
+**`decide-xml-etree-thin-tree-model-or-a-real-xml-library` (U, p62)** — filed by Track B
+after measuring the surface first, so it is decidable in **one read**. html5lib uses
+ElementTree as a **tree model, not an XML library**: 3 factories (`Element`, `Comment`,
+`ElementTree`) and 10 element members — no `parse`, no `fromstring`, no XPath, no
+serialiser (html5lib writes its own `tostring` at `treebuilders/etree.py:262`). One quirk
+must be exact: `Comment("x").tag` **is** the `Comment` function, and html5lib compares node
+tags against it.
+
+**The fork is not effort — it is whether a module named `xml.etree.ElementTree` may ship
+without being able to read XML.** Track B's recommendation is in the ticket: yes, thin,
+with the parser surface absent and loud, same call as `mimic_urllib_request`. ~60 lines
+plus a differential, ready to start within the hour of an answer.
+
+**Why it outranks its number:** it is 4 of the 8 remaining module-blocked files, it is the
+whole of Track B's corpus lever, and a worker is idle behind it with capacity.
+
+### The campaign's standing assumption INVERTED tonight
+
+The missing-module batch **had already shipped** — a re-measure at pinned v352 found 12
+`mimic_*` units on disk and gated by `lib-test`. What remains is **8 files, 4 behind the
+decision above**, while the **language** walls are **32**, of which **`yield` alone is
+18 — more than every missing-module row combined**. So *"Track N is no longer the
+bottleneck for this ladder"* was true when written and is now **superseded**: Track N is
+the bottleneck again, and Track B's corpus lever is one Track U decision wide.
+`feature-nilpy-yield-outside-a-for-loop` reranked 58 → **75** accordingly, with a banner
+saying it still must go to a **fresh** session rather than to whoever `next` hands it to.
