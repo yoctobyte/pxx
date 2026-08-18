@@ -833,3 +833,26 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   Worth keeping: the regressing commit is the **stack-overflow half** of
   `bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow` — the half that was
   correct to do first. So that ticket's ordering constraint is two-way, not one-way.
+
+- 2026-08-18 ~06:12 (human wake, out of band) — **the box REBOOTED at ~06:09; every
+  session died.** `uptime` said 3 minutes at 06:12 and the last commit on master is
+  `d90bc323a` at 06:03, so the window is 06:03-06:09. `ListAgents` reports nothing
+  reachable, no `twatch`/`testmgr` process is running, and only this coordinator pane
+  exists. **Track T is therefore DOWN by process, not by report** — its own `--status`
+  still reads UP because that reads the published `tstate/`, which is simply frozen at
+  `61e2448bac6d`. Restarting the watcher in `franktrackD` is the first thing to do.
+  **The native RED is still open at HEAD and is REPRODUCED**: all three of
+  `test_nested_class_type_b348`, `test_set_literal_element_types`, `test_set_runtime`
+  fail with `invalid optional IR node reference in block first` against a fixedpoint
+  build at `d90bc323a`.
+  **But frank2-f1 had already fixed it before the power went** — `/home/rene/frank2`
+  holds one uncommitted file, `compiler/ir.inc`, with the diagnosis written into the
+  comment: the iterative statement-list fold lost the `seqCur >= 0` test that the
+  recursive version got for free at the top of `IRLowerAST`, so an empty `-1` tail read
+  `ASTKind[-1]` and folded an `IR_BLOCK` over garbage. Set literals are where `-1` tails
+  are common, which is why those tests went first. Two `PXXDBG a.seq` probes ride along
+  in the same diff.
+  **That work is uncommitted and is the only copy** — it must not be duplicated from
+  here and must not be discarded. Landing it belongs to frank2-f1, which also still
+  holds `bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow` in `working/`.
+  Left with the human at wake.
