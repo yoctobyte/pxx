@@ -302,4 +302,4 @@ Question 2 only, split out as [[feature-b-a-real-minidom-is-an-implementation-no
 exactly where it was measured.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit ac136d7aa.
