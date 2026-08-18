@@ -32034,6 +32034,15 @@ begin
             chases the shim mapping (and the `as` chain) to the unit that
             actually declares things.
 
+            And impREAL, not impAlias: the name that might be a class is the
+            one the exporting module declares, not the new spelling. With the
+            alias, `from mod import Node as N2` asked whether the unit declares
+            a class called `N2` -- it declares `Node` -- so the guard missed,
+            `N2` registered as a module alias, and `N2.ELEMENT_NODE` was eaten
+            by ConsumeUnitQualifier exactly as the un-renamed shim case was.
+            Identical for the un-renamed spelling, where the two are the same
+            string. bug-n-a-renamed-class-loses-its-class-level-attributes
+
             Third instance today of one shape: a lookup done on the SPELLING
             where visibility and declarations live under the RESOLVED unit
             (bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim
@@ -32041,7 +32050,7 @@ begin
             bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes }
           if (UnitAliasCount < MAX_UNIT_ALIASES) and (not SoftUnitMissed) and
              (FindCompiledUnit(impAlias) < 0) and
-             (not UnitDeclaresClassExactly(impAlias, FindUnitOrAlias(impName))) then
+             (not UnitDeclaresClassExactly(impReal, FindUnitOrAlias(impName))) then
           begin
             { Point the alias at what the imported NAME resolves to, not at the
               module the import was written against. `from sm import

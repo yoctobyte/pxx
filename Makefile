@@ -579,6 +579,15 @@ test-nilpy: $(COMPILER)
 	# bug-n-from-import-with-an-as-rename-loses-what-it-renames
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_from_import_as_rename.npy $(TESTTMP)/test_nilpy_asrename26
 	test "$$($(TESTTMP)/test_nilpy_asrename26)" = "$$(printf 'parsed:x\nparsed:y\n7\n7\nQ\n7\nR')"
+	# a RENAMED class must not become a MODULE alias. The guard that skips the
+	# submodule-alias registration for a class asked whether the unit declares a
+	# class named the ALIAS, when the class is named the SOURCE name -- so with a
+	# rename it missed, and `C.somefunc()` called the MODULE's function and
+	# ANSWERED 7 where CPython raises AttributeError. Silently wrong, not a crash,
+	# which is why it is pinned as a refusal.
+	# bug-n-a-renamed-class-loses-its-class-level-attributes
+	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_renamed_class_is_not_a_module.npy $(TESTTMP)/test_nilpy_rencls26 > $(TESTTMP)/test_nilpy_rencls.log 2>&1
+	grep -q 'undefined variable' $(TESTTMP)/test_nilpy_rencls.log
 	# TWO imported bases have no answer and are REFUSED, not half-taken
 	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_two_imported_bases_fail.npy $(TESTTMP)/test_nilpy_twoimp26 > $(TESTTMP)/test_nilpy_twoimp.log 2>&1
 	grep -q 'names TWO base classes whose bodies are not in this file' $(TESTTMP)/test_nilpy_twoimp.log
@@ -6655,6 +6664,15 @@ test-core: $(COMPILER)
 	# bug-n-from-import-with-an-as-rename-loses-what-it-renames
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_from_import_as_rename.npy $(TESTTMP)/test_nilpy_asrename26
 	test "$$($(TESTTMP)/test_nilpy_asrename26)" = "$$(printf 'parsed:x\nparsed:y\n7\n7\nQ\n7\nR')"
+	# a RENAMED class must not become a MODULE alias. The guard that skips the
+	# submodule-alias registration for a class asked whether the unit declares a
+	# class named the ALIAS, when the class is named the SOURCE name -- so with a
+	# rename it missed, and `C.somefunc()` called the MODULE's function and
+	# ANSWERED 7 where CPython raises AttributeError. Silently wrong, not a crash,
+	# which is why it is pinned as a refusal.
+	# bug-n-a-renamed-class-loses-its-class-level-attributes
+	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_renamed_class_is_not_a_module.npy $(TESTTMP)/test_nilpy_rencls26 > $(TESTTMP)/test_nilpy_rencls.log 2>&1
+	grep -q 'undefined variable' $(TESTTMP)/test_nilpy_rencls.log
 	# TWO imported bases have no answer and are REFUSED, not half-taken
 	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_two_imported_bases_fail.npy $(TESTTMP)/test_nilpy_twoimp26 > $(TESTTMP)/test_nilpy_twoimp.log 2>&1
 	grep -q 'names TWO base classes whose bodies are not in this file' $(TESTTMP)/test_nilpy_twoimp.log

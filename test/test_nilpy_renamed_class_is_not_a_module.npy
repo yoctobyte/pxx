@@ -1,0 +1,18 @@
+# A RENAMED class must not become a MODULE alias.
+#
+# `from M import Cls as C` registers C so a qualifier resolves -- that machinery
+# exists for `from tkinter import ttk`, where the imported name really is a
+# submodule. A guard was meant to skip it for a class, but it asked whether the
+# unit declares a class named the ALIAS (`C`) when the class is named `Cls`. So
+# with a rename the guard missed and C became an alias for the whole MODULE:
+# `C.somefunc()` then called the module's function and ANSWERED 7, where CPython
+# raises AttributeError -- a silently wrong value, not a crash.
+#
+# The failure this pins is the SILENT one. Reading a genuine class attribute
+# through a renamed class is still unsupported and errors loudly; that is
+# bug-n-a-renamed-class-loses-its-class-level-attributes, and a loud error is
+# the correct behaviour to hold here until it lands.
+# bug-n-a-renamed-class-loses-its-class-level-attributes
+
+from renmod_cls import Node as N2
+print(N2.somefunc())
