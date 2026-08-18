@@ -5981,15 +5981,13 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-17T21:28:40Z",
+  "date": "2026-08-18T09:28:10Z",
   "red": [
-   "lib-test#36",
-   "lib-test#117",
-   "test-nilpy#12"
+   "lib-test#36"
   ],
-  "sha": "08bdf27290b79f9f40711b2051922e300df52208",
+  "sha": "695bbbb5007f3a8d818b8b0ea7a6ffd72687d75c",
   "tier": "full",
-  "ver": "v347",
+  "ver": "v349",
   "verdict": "RED"
  },
  "renamed_from": [
