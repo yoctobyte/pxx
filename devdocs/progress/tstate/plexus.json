@@ -5985,13 +5985,13 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-18T09:28:10Z",
+  "date": "2026-08-18T10:58:29Z",
   "red": [
    "lib-test#36"
   ],
-  "sha": "695bbbb5007f3a8d818b8b0ea7a6ffd72687d75c",
+  "sha": "675c66b42a10cee5ae114313efb5709a29d578f6",
   "tier": "full",
-  "ver": "v349",
+  "ver": "v351",
   "verdict": "RED"
  },
  "renamed_from": [
