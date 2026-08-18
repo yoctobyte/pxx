@@ -160,4 +160,4 @@ reason and must not be traded away for this. Plus `make test-nilpy` green +
 self-host fixedpoint.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit 49c451e97.
