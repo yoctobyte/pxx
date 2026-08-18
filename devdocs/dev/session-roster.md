@@ -1013,3 +1013,28 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   is part of the fix.
   Observation is frank3-fc's; recorded here because it belongs to whoever reads this next,
   not to the session that noticed it.
+
+- 2026-08-18 late — **a THIRD instance of one shape: a lookup done on the SPELLING where
+  declarations live under the RESOLVED unit.** Worth a deliberate grep pass by whoever
+  holds A next, rather than a fourth discovery.
+  - `b67db02bb` (morning): `ParseUsesUnit`'s already-compiled early exit recorded the uses
+    edge against the spelling (`codecs`), not `mimic_codecs`.
+  - `6cd63b836` (tonight): `ConsumeUnitQualifier`'s guard asked
+    `UnitDeclaresClassExactly(alias, FindCompiledUnit(impName))` — `impName` is what the
+    SOURCE wrote, so for a shim it searched the bare module name, found nothing, and the
+    guard stood down for EVERY shim. Fix was one identifier: `FindUnitOrAlias` instead of
+    `FindCompiledUnit`.
+  - The shim-mapping family generally.
+  frank2-7e, who fixed both, bets there is a fourth. **The grep is `FindCompiledUnit` and
+  friends against any name that came from source text.**
+  Pinned **v350** (`66f59112e1a9`, `46a6189a9`) immediately, because the worker NAMED THE
+  CONSUMER unprompted — "this needs a pin before frank3 can use it" — which is the habit
+  that came out of my v349 mistake. Verified the repro on the PINNED binary before
+  releasing anyone this time.
+  **`xml_dom` is finally unblocked after FIVE correct refusals.**
+  Also worth keeping: frank2-7e caught that its OWN evidence was contaminated — the alias
+  it chose to prove "no shim involved" was spelled `probe`, which is exactly the shim name
+  for `mimic_probe`, so the `as` line did nothing and its own isolation table had already
+  shown the no-`as` row failing identically. It then checked for a second producer, found
+  none, and corrected the ticket in full. Fourth confound of the day and the first caught
+  by its own author.
