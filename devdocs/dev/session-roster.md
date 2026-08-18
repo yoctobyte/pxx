@@ -1496,3 +1496,33 @@ Three lighthouses (FPC, Linux tinyconfig, MINIX — the last chunked into four s
 goals) and `refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files` (p60, prio is a
 *proposal*: it buys parallelism, not features, and grew a great deal after filing —
 rerank it deliberately rather than inheriting the number).
+
+- **frank3: strtofloat, and the biggest cost was not float work** (`df15ae3fe`, lib-test
+  green; pinned v352 `0d2087d629bf`, A/B with only `lib/rtl/sysutils.pas` differing, so
+  no pin artefact). **Verified here by reading the before/after, not relayed:**
+  `TryStrToFloat` called `StrToFloatDef` TWICE with different defaults and compared the
+  answers, using disagreement as the failure signal because the parser had no failure
+  channel. `StrToFloat` goes through it, so **the whole family parsed every input twice**
+  — 1.9-2.0x on every shape. Now one `ParseFloatCore` call.
+
+  Results: fast path **4.7x** (2823→597 ns), 17-digit **2.03x**, subnormal **2.05x**;
+  versus CPython the fast path goes 21x slower → 4.4x. **Ticket correctly stays OPEN and
+  went back to `backlog/`** — the gate wants an order of magnitude and Eisel-Lemire is
+  still the fix (`MulHiU64` already exists in `lib/rtl/wideint.pas`, so the 128-bit
+  multiply is not the obstacle).
+
+  **Three lessons, all recorded as a memory:** (1) when a whole family is uniformly slow
+  by the same factor across wildly different inputs, **suspect the wrapper, not the
+  algorithm** — four passes profiled the float code because that is where the ticket
+  pointed; (2) the quadratic append had a **sibling** frank3 did not grep for when it
+  fixed the first one in August, costing a second pass — exactly what
+  `normalise-dont-special-case` warns about; (3) the title named the wrong axis again
+  (not small exponents: `|expo| > 22` in **either** direction, and 16-17 digits falls off
+  at exponent **zero** — which is every value `FloatToStrExact(x, 17)` writes).
+
+  **My revision was the right call and worth stating as one:** I told frank3 two hours
+  earlier that nothing in B was worth its budget. Looking at the NUMBER (3600x) instead
+  of the RANK (p30) is what found a 2x on every `StrToFloat` in the RTL. The standing
+  "float bugs are low prio" rule is about *accuracy*, not three-order-of-magnitude
+  performance cliffs — and p30 is now *correct*, since the cross-cutting cost has been
+  extracted and the remainder genuinely is float work.
