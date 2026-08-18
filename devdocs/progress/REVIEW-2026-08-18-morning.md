@@ -614,3 +614,49 @@ has been reporting the same 17 pending sha citations for weeks while `sync.sh` r
 nothing to fill — both correct, anchored on different spellings of the field, so the
 count could never go down. Found because frank3 escalated a number that would not move
 instead of assuming it was leftovers.
+
+---
+
+# Evening addendum — the board has one dominant lever now
+
+`xml_dom` landed (`ac136d7aa`) after **five** substrate refusals, every one correct.
+Verified here by value, not by import: `from xml.dom import Node` reads
+`1 3 9 8` and CPython reads `1 3 9 8`.
+
+That verification style is the whole point of the ticket's history — **a test asserting
+only that the import resolved would have passed during BOTH compiler bugs while the shim
+answered zero.**
+
+## The board, and it is lopsided
+
+| row | files |
+| --- | ---: |
+| **`yield`** | **14** |
+| `six_moves` | 5 |
+| `xml_etree_elementtree` | 4 |
+| `Mapping` / `list` (builtin subclass) | 3 / 3 |
+
+**`feature-nilpy-yield-outside-a-for-loop` is now the single highest-yield item on the
+board by nearly 3x**, and it got there by absorbing everything else that was fixed today —
+CodecInfo's eight files, then three treewalkers. Every wall we cleared drained into it.
+
+Two things to know before it is scheduled:
+
+- **It needs the generator METHOD form** (`def __iter__` with `yield`, consumed as
+  `for t in filter_instance`). The module-level `for x in gen()` form appears NOWHERE in
+  these corpora and would move ZERO files. If a report says "yield landed", ask which
+  shape.
+- **Its step 4 may want the pending boxed-def decision.** Steps 1-3 are independent.
+
+## Compile count: still 6/48
+
+Today moved a great deal and the compile number did not. That is the expected shape and it
+is recorded so nobody reads it as failure: the corpus is a chain of walls, and clearing
+one moves files ONTO the next. Every worker reported past-vs-onto separately, unprompted,
+which is why this is legible at all.
+
+## Still with you
+
+`decide-how-a-compiled-def-carries-its-signature-when-boxed` (U, p88). Gates the
+procedural-value bug, the def-rebinding bug, and yield's step 4. Not urgent — both workers
+have landable work — but it is now upstream of the board's biggest row.
