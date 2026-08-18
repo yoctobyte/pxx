@@ -135,7 +135,7 @@ left is a Python face on an existing unit. The first draft of that ticket said
 "an HTTP client is a project" and would have mis-ranked it by an order of
 magnitude.
 
-**Moved ONTO the next wall — 8 files.** This is the outcome the ticket predicted;
+**Moved ONTO the next wall — 7 files.** This is the outcome the ticket predicted;
 recorded as progress, not as a compile-count claim:
 
 | file | was | now |
