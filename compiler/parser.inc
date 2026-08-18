@@ -908,6 +908,8 @@ function PyBareNoneHere: Boolean; forward;  { a `None` with nothing after it tha
 function PyNoneOperandHere: Boolean; forward;  { a `None` that is an OPERAND of the enclosing operator, whatever follows — pyparser.inc }
 function PyMakeSuperCall(const name: AnsiString): Integer; forward;  { `super().m(args)` as a value (pyparser.inc) }
 function PyRecIsCls(rec: Integer; const clsName: AnsiString): Boolean; forward;  { is this rec that pylib class, by identity OR inheritance? (pyparser.inc) }
+function PyRecOverridesDunder(rec: Integer; const dunder: AnsiString): Boolean; forward;  { does this rec's own class DECLARE this dunder — an override a container fast-path must not step over? (pyparser.inc) }
+function PySubscriptWantsDunder(mci, lbrackIdx: Integer): Boolean; forward;  { does this subscript belong to the class's own __getitem__/__setitem__ rather than to an INHERITED default property? (pyparser.inc) }
 procedure PySuperConsumeArgs; forward;  { `super()` / `super(Cls, self)` argument list, either spelling (pyparser.inc) }
 function PyDynAttrEverAssigned(const nm: AnsiString): Boolean; forward;  { is `.nm =` written anywhere? (pyparser.inc) }
 function PyIndexCoerce(n: Integer): Integer; forward;  { Python __index__: an object used where an integer is required (pyparser.inc) }
@@ -4922,7 +4924,25 @@ begin
             the receiver resolved. A no-op for a class that declares the name
             as written, which is every user class. }
           if PyExprMode then fieldName := PyMethNameFor(ci, fieldName);
-          mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
+          mmi := -1;
+          { Python's UNBOUND call passes the receiver POSITIONALLY, so `self` is
+            already inside CountCallArgsAhead and the arity the overload matcher
+            wants is one LOWER than the class-method convention it assumes.
+            Invisible while every name had a single overload — the name-only
+            FindUMeth below rescued it — and a silent wrong pick the moment one
+            did not: `list.__len__(self)` counted 1 argument, asked for a
+            2-slot `count`, and got TPyList.count(v) with `self` handed in as
+            the VALUE and no receiver at all. It SEGFAULTED.
+            A static reached this way takes no positional self, so a match that
+            turns out to be static is dropped and the ordinary convention below
+            answers instead. bug-n-a-builtin-subclass-subscript-operator-skips-
+            the-override (found landing it) }
+          if PyExprMode and (CountCallArgsAhead > 0) then
+          begin
+            mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead - 1);
+            if (mmi >= 0) and UMthIsStatic[mmi] then mmi := -1;
+          end;
+          if mmi < 0 then mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
           if mmi < 0 then mmi := FindUMeth(ci, fieldName);
 
           { NilPy `Base.__init__(self, n)` — the pre-super() spelling of a
@@ -5440,6 +5460,17 @@ begin
       begin
         mci := recName - REC_UCLASS_BASE;
         pri := FindDefaultProp(mci);
+        { …but a class's OWN __getitem__/__setitem__ beats a default property it
+          merely INHERITED. pylib's containers declare one (`Items[]`), and
+          since a subclass of them became a real container to the frontend it
+          inherited that property too — so `c[k] = v` on a dict subclass went
+          straight to pylib's store() and the __setitem__ written for it ran
+          zero times, silently. Dropping pri here hands the subscript to the
+          __getitem__/__setitem__ arm below, the same one a plain user class
+          takes, rather than growing a second dunder path beside it.
+          bug-n-a-builtin-subclass-subscript-operator-skips-the-override }
+        if (pri >= 0) and PyExprMode and PySubscriptWantsDunder(mci, TokPos - 1) then
+          pri := -1;
         if pri >= 0 then
         begin
           { peek past the [...] group for a trailing := (assignment context) }
@@ -11579,11 +11610,19 @@ begin
             len() overload, so it rewinds into the ordinary overload path like
             they do. Without it a range fell into the no-__len__ arm below and
             `len(range(3))` raised "not a container". }
+          { …unless the class OVERRIDES `__len__`, in which case it is that
+            method CPython calls and this one has to as well. The container
+            test above is by KIND, so a `dict` subclass matched it and went
+            straight to pylib's count() — `len(c)` was right by luck (the
+            override delegated) and would have been silently wrong for any
+            override that did anything else.
+            bug-n-a-builtin-subclass-subscript-operator-skips-the-override }
           if (atRecv >= REC_UCLASS_BASE) and
-             (not PyRecIsCls(atRecv, 'TPyList')) and
-             (not PyRecIsCls(atRecv, 'TPyDict')) and
-             (not PyRecIsCls(atRecv, 'TPyRange')) and
-             (not PyRecIsCls(atRecv, 'TPyBytes')) then
+             (PyRecOverridesDunder(atRecv, '__len__') or
+              ((not PyRecIsCls(atRecv, 'TPyList')) and
+               (not PyRecIsCls(atRecv, 'TPyDict')) and
+               (not PyRecIsCls(atRecv, 'TPyRange')) and
+               (not PyRecIsCls(atRecv, 'TPyBytes')))) then
           begin
             { a CURSOR: CPython answers `object of type 'map' has no len()`,
               not a generic "not a container". Same runtime-raise shape as the

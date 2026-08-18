@@ -605,6 +605,19 @@ test-nilpy: $(COMPILER)
 	# bug-n-a-builtin-types-method-cannot-be-called-unbound
 	./$(COMPILER) test/test_nilpy_unbound_builtin_method.npy $(TESTTMP)/test_nilpy_unbndbuiltin26
 	test "$$($(TESTTMP)/test_nilpy_unbndbuiltin26)" = "$$(printf '2 7 7 7\n2 1 2\n2\n1\n2\n[1, 2, 3] ['\''k'\''] 2')"
+	# A builtin subclass's OVERRIDE of a protocol member ran ZERO times: the
+	# identity->kind widening that made len/in/slice work on a subclass also
+	# handed those instances to the CONTAINER lowering, which goes straight to
+	# pylib and never asks the class anything, while the user-class arm that DOES
+	# consult the dunders no longer saw them. `c[k] = v` stored through store(),
+	# `"q" in c` answered False, all silently. Pins __getitem__/__setitem__/
+	# __delitem__/__len__/__contains__ on a dict AND a list subclass, a
+	# READ-ONLY override whose writes must still reach the base (dispatch is per
+	# operation, not per class), and the plain containers unchanged. Output is
+	# byte-identical to CPython's.
+	# bug-n-a-builtin-subclass-subscript-operator-skips-the-override
+	./$(COMPILER) test/test_nilpy_builtin_subclass_dunder_dispatch.npy $(TESTTMP)/test_nilpy_subdunder26
+	test "$$($(TESTTMP)/test_nilpy_subdunder26)" = "$$(printf 'D.set\nD.get\n1\nD.len\n1\nD.contains\nTrue\nD.del\n0\nL.get\n10\nL.set\n99\nL.len\n2\nL.contains\nTrue\nL.del\n1 99\nRO.get\n1 1\n[9, 3] 2 True 9\n['\''y'\''] 1 True 2')"
 	./$(COMPILER) test/test_nilpy_from_import_binds_provided_names.npy $(TESTTMP)/test_nilpy_fromimpbind26
 	test "$$($(TESTTMP)/test_nilpy_fromimpbind26)" = "$$(printf '1 1\na/b y.txt c/d\nplain\n5\nshadowed')"
 	./$(COMPILER) test/test_nilpy_two_argument_super.npy $(TESTTMP)/test_nilpy_super2arg26
@@ -6760,6 +6773,19 @@ test-core: $(COMPILER)
 	# bug-n-a-builtin-types-method-cannot-be-called-unbound
 	./$(COMPILER) test/test_nilpy_unbound_builtin_method.npy $(TESTTMP)/test_nilpy_unbndbuiltin26
 	test "$$($(TESTTMP)/test_nilpy_unbndbuiltin26)" = "$$(printf '2 7 7 7\n2 1 2\n2\n1\n2\n[1, 2, 3] ['\''k'\''] 2')"
+	# A builtin subclass's OVERRIDE of a protocol member ran ZERO times: the
+	# identity->kind widening that made len/in/slice work on a subclass also
+	# handed those instances to the CONTAINER lowering, which goes straight to
+	# pylib and never asks the class anything, while the user-class arm that DOES
+	# consult the dunders no longer saw them. `c[k] = v` stored through store(),
+	# `"q" in c` answered False, all silently. Pins __getitem__/__setitem__/
+	# __delitem__/__len__/__contains__ on a dict AND a list subclass, a
+	# READ-ONLY override whose writes must still reach the base (dispatch is per
+	# operation, not per class), and the plain containers unchanged. Output is
+	# byte-identical to CPython's.
+	# bug-n-a-builtin-subclass-subscript-operator-skips-the-override
+	./$(COMPILER) test/test_nilpy_builtin_subclass_dunder_dispatch.npy $(TESTTMP)/test_nilpy_subdunder26
+	test "$$($(TESTTMP)/test_nilpy_subdunder26)" = "$$(printf 'D.set\nD.get\n1\nD.len\n1\nD.contains\nTrue\nD.del\n0\nL.get\n10\nL.set\n99\nL.len\n2\nL.contains\nTrue\nL.del\n1 99\nRO.get\n1 1\n[9, 3] 2 True 9\n['\''y'\''] 1 True 2')"
 	./$(COMPILER) test/test_nilpy_from_import_binds_provided_names.npy $(TESTTMP)/test_nilpy_fromimpbind26
 	test "$$($(TESTTMP)/test_nilpy_fromimpbind26)" = "$$(printf '1 1\na/b y.txt c/d\nplain\n5\nshadowed')"
 	./$(COMPILER) test/test_nilpy_two_argument_super.npy $(TESTTMP)/test_nilpy_super2arg26

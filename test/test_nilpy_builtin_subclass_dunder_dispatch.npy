@@ -1,0 +1,107 @@
+# A subclass of a builtin container OVERRIDES a protocol member and the
+# override ran ZERO times: `c[k] = v` stored through pylib's own store(),
+# `"q" in c` answered False, `len(c)` counted through count(), `del c[k]`
+# removed directly -- all without ever entering the method written for them.
+# Silent wrong behaviour, no diagnostic.
+#
+# Same family as the feature that created it. Widening "is this a container?"
+# from identity to KIND is what made len/in/slice work on a subclass -- and it
+# also handed those instances to the CONTAINER lowering, which goes straight to
+# pylib and never asks the class anything, while the user-class arm that DOES
+# ask the dunders no longer saw them. Two mechanisms serving one concept, and
+# an instance that is BOTH got whichever was tested first.
+#
+# One predicate (PyRecOverridesDunder) now answers "is there an override here
+# that the fast path is about to step over", asked at every container site.
+# Dispatch is per OPERATION, not per class: RO below overrides the READ only
+# and its writes must still reach the base, exactly as CPython does it.
+# bug-n-a-builtin-subclass-subscript-operator-skips-the-override
+
+
+class D(dict):
+    def __getitem__(self, k):
+        print("D.get")
+        return dict.__getitem__(self, k)
+
+    def __setitem__(self, k, v):
+        print("D.set")
+        dict.__setitem__(self, k, v)
+
+    def __delitem__(self, k):
+        print("D.del")
+        dict.__delitem__(self, k)
+
+    def __len__(self):
+        print("D.len")
+        return dict.__len__(self)
+
+    def __contains__(self, k):
+        print("D.contains")
+        return True
+
+
+d = D()
+d["a"] = 1
+print(d["a"])
+print(len(d))
+print("q" in d)
+del d["a"]
+print(dict.__len__(d))
+
+
+class L(list):
+    def __getitem__(self, i):
+        print("L.get")
+        return list.__getitem__(self, i)
+
+    def __setitem__(self, i, v):
+        print("L.set")
+        list.__setitem__(self, i, v)
+
+    def __delitem__(self, i):
+        print("L.del")
+        list.__delitem__(self, i)
+
+    def __len__(self):
+        print("L.len")
+        return list.__len__(self)
+
+    def __contains__(self, v):
+        print("L.contains")
+        return True
+
+
+l = L()
+list.append(l, 10)
+list.append(l, 20)
+print(l[0])
+l[1] = 99
+print(list.__getitem__(l, 1))
+print(len(l))
+print(5 in l)
+del l[0]
+print(list.__len__(l), list.__getitem__(l, 0))
+
+
+# READ-ONLY override: html5lib's MethodDispatcher shape. The write must still
+# reach the base -- this is why the dispatch is decided per operation.
+class RO(dict):
+    def __getitem__(self, k):
+        print("RO.get")
+        return dict.__getitem__(self, k)
+
+
+r = RO()
+r["a"] = 1
+print(r["a"], len(r))
+
+
+# ...and the plain containers must be untouched by all of it
+p = [1, 2, 3]
+p[0] = 9
+del p[1]
+print(p, len(p), 3 in p, p[0])
+d2 = {"x": 1}
+d2["y"] = 2
+del d2["x"]
+print(sorted(d2.keys()), len(d2), "y" in d2, d2["y"])

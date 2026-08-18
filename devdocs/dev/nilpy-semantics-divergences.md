@@ -494,6 +494,38 @@ Same statement, no divergence, for the other three: `is_integer`, `hex` and
 `conjugate` are exact over every double including the infinities, NaN and the
 subnormals.
 
+## A SLICE of a builtin subclass does not call `__getitem__` (2026-08-18)
+
+A subclass of `list`/`dict` that overrides `__getitem__` gets the override for
+every scalar subscript — `c[k]`, `c[k] = v`, `del c[k]`, `len(c)`, `k in c` —
+but **not** for a slice:
+
+```python
+class L(list):
+    def __getitem__(self, i):
+        print("mine")
+        return list.__getitem__(self, i)
+
+l = L([1, 2, 3])
+l[0]      # CPython: "mine"   NilPy: "mine"
+l[0:2]    # CPython: "mine"   NilPy: silent, base slice
+```
+
+CPython passes a **slice object** to `__getitem__`; this frontend has no such
+value, so there is nothing to hand the method. The alternatives were to refuse
+slicing on any class with an override (breaking working code, including
+`test/test_nilpy_subclass_a_builtin_type.npy`) or to call the override with the
+start index alone (a wrong value dressed as a right one). Taking the base
+lowering means the slice does what the un-overridden container would — which is
+what a class overriding *scalar* indexing means anyway, and it is the answer
+that cannot be silently wrong about a value it invented.
+
+Direction: NilPy accepts and runs the program, and answers what the base class
+would. Observable by a CPython program whose override changes slice results, so
+it is a genuine divergence and not laxity — recorded here rather than filed
+because closing it needs a slice VALUE, which is a language-level addition.
+Landed with `bug-n-a-builtin-subclass-subscript-operator-skips-the-override`.
+
 ## `sys.path` cannot work, and that is PERMANENT — the answer is `-Fu` (2026-08-17)
 
 **Not a bug, and not fixable.** `sys.path.insert(0, "/path/to/pkg")` before an

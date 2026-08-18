@@ -1241,6 +1241,80 @@ begin
   Result := (ci = target) or IsSubclassOf(ci, target);
 end;
 
+{ Does this rec's class DECLARE `dunder` itself — i.e. is there a user override
+  that a container fast-path is about to step over?
+
+  The sibling of PyRecIsCls above, and the price of it. Widening "is this a
+  container?" from identity to kind was what made len/in/slice work on a
+  subclass — and it also handed those instances to the CONTAINER lowering,
+  which goes straight to pylib's fetch/store/count and never asks the class
+  anything. So a subclass that OVERRODE the protocol had its override called
+  zero times, silently: `c[k] = v` stored, `"q" in c` answered False, both
+  without ever entering the method written for them. Two mechanisms serving one
+  concept — a user-class arm that consults the dunders and a container arm that
+  does not — and an instance that is BOTH got whichever was tested first.
+
+  PyRecIsPylibOwnClass, not a name list: pylib's own TPyList/TPyDict declare no
+  dunders at all, so this is False for them by construction, but keying on the
+  declaring UNIT says what is meant and cannot rot as pylib grows a container.
+  bug-n-a-builtin-subclass-subscript-operator-skips-the-override }
+function PyRecOverridesDunder(rec: Integer; const dunder: AnsiString): Boolean;
+begin
+  Result := False;
+  if rec < REC_UCLASS_BASE then Exit;
+  if PyRecIsPylibOwnClass(rec) then Exit;
+  Result := FindUMeth(rec - REC_UCLASS_BASE, dunder) >= 0;
+end;
+
+{ Does `obj[...]` at this '[' belong to the class's OWN __getitem__/__setitem__
+  rather than to the default indexed property it INHERITS from a pylib
+  container? The subscript site tests the default property first, and a
+  subclass of TPyList/TPyDict inherits one — so the override was stepped over
+  on both arms of every subscript.
+
+  Asked per OPERATION, not per class: a subclass may override the read and
+  leave the write to the base (html5lib's MethodDispatcher overrides
+  __getitem__ only), and CPython dispatches each half independently. An
+  AUGMENTED form claims the dunder path when EITHER member is declared — that
+  path currently refuses `obj[k] += v` by name, and a named refusal is the
+  right answer where the alternative is silently calling the base while the
+  plain read calls the override. See
+  bug-n-an-augmented-subscript-on-a-dunder-class-is-refused.
+
+  Slices never reach here: PyIsSliceBase diverts them above this site, so a
+  slice on a subclass keeps the container lowering. CPython would call
+  __getitem__ with a slice OBJECT, which this frontend has no value for —
+  recorded in devdocs/dev/nilpy-semantics-divergences.md rather than guessed at.
+  bug-n-a-builtin-subclass-subscript-operator-skips-the-override }
+function PySubscriptWantsDunder(mci, lbrackIdx: Integer): Boolean;
+var i, w: Integer; aug: Boolean;
+begin
+  Result := False;
+  if mci < 0 then Exit;
+  if PyRecIsPylibOwnClass(REC_UCLASS_BASE + mci) then Exit;
+  { the token just past the matching ']' decides read vs write }
+  i := lbrackIdx; w := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkLBrack then Inc(w)
+    else if Tokens[i].Kind = tkRBrack then
+    begin
+      Dec(w);
+      if w = 0 then begin Inc(i); Break; end;
+    end;
+    Inc(i);
+  end;
+  if i >= TokCount then Exit;
+  aug := (Tokens[i].Kind = tkPowEq) or (PyAugBinTok(Tokens[i].Kind) <> tkEOF);
+  if aug then
+    Result := (FindUMeth(mci, '__getitem__') >= 0) or
+              (FindUMeth(mci, '__setitem__') >= 0)
+  else if Tokens[i].Kind = tkAssign then
+    Result := FindUMeth(mci, '__setitem__') >= 0
+  else
+    Result := FindUMeth(mci, '__getitem__') >= 0;
+end;
+
 
 { ONE annotation term. PyAnnTypeAt below layers PEP 604 unions (`int | None`)
   over this, so every caller gets union support for free. }
@@ -2650,7 +2724,7 @@ begin
 end;
 
 procedure PyParseIsCmp;
-var left, right, node, i, j, ucCi, ucMmi: Integer; neg, dunderBuilt: Boolean; rTk: TTypeKind;
+var left, right, node, i, j, ucCi, ucMmi: Integer; neg, dunderBuilt, ovrIn: Boolean; rTk: TTypeKind;
 begin
   PyParseBitOr;
   left := CurASTNode;
@@ -2751,6 +2825,12 @@ begin
           str    -> SUBSTRING containment, which is what `in` means in Python
           else   -> list element membership }
       dunderBuilt := False;
+      { A subclass that OVERRIDES `__contains__` must reach its own method, not
+        pylib's scan: `"q" in c` on a dict subclass answered False without ever
+        entering the override. Computed once and applied to every container arm
+        below, so the answer cannot differ between them.
+        bug-n-a-builtin-subclass-subscript-operator-skips-the-override }
+      ovrIn := PyRecOverridesDunder(ResolveNodeRec(right), '__contains__');
       rTk := IntToTypeKind(ASTTk[right]);
       if (rTk = tyString) or (rTk = tyAnsiString) then
         node := FindProc('pystr_contains')
@@ -2758,22 +2838,23 @@ begin
         { container type known only at run time (a dict/list slot value) —
           unbox and dispatch inside pyvar_contains. }
         node := FindProc('pyvar_contains')
-      else if PyRecIsCls(ResolveNodeRec(right), 'TPyDict') then
+      else if (not ovrIn) and PyRecIsCls(ResolveNodeRec(right), 'TPyDict') then
         node := FindProc('pydictcontains')
-      else if PyRecIsCls(ResolveNodeRec(right), 'TPyRange') then
+      else if (not ovrIn) and PyRecIsCls(ResolveNodeRec(right), 'TPyRange') then
         { `x in range(...)` is CONSTANT time in CPython — one modulo, not a
           scan — which is the whole reason a range is worth having as a value
           rather than as a materialised list. }
         node := FindProc('pyrange_contains')
-      else if PyRecIsCls(ResolveNodeRec(right), 'TPyBytes') then
+      else if (not ovrIn) and PyRecIsCls(ResolveNodeRec(right), 'TPyBytes') then
         { BYTES: a bytes subsequence or an integer byte value. Without its own
           arm this fell to pycontains below, which scans a TPyList — so it read
           a TPyBytes' header words as variant slots and answered False for every
           bytes needle (bug-nilpy-bytes-membership-always-false-for-a-bytes-needle) }
         node := FindProc('pybytes_contains')
-      else if (ResolveNodeRec(right) >= REC_UCLASS_BASE) and
-              (not PyRecIsCls(ResolveNodeRec(right), 'TPyList')) and
-              (not PyRecIsCls(ResolveNodeRec(right), 'TPyBytes')) then
+      else if ovrIn or
+              ((ResolveNodeRec(right) >= REC_UCLASS_BASE) and
+               (not PyRecIsCls(ResolveNodeRec(right), 'TPyList')) and
+               (not PyRecIsCls(ResolveNodeRec(right), 'TPyBytes'))) then
       begin
         { A USER class (not one of pylib's own containers): `x in obj` must
           call obj.__contains__(x) when it declares one -- the fallback below
@@ -13670,6 +13751,7 @@ begin
       bug-n-a-builtin-types-method-cannot-be-called-unbound }
     else if mname = '__getitem__' then Result := 'fetch'
     else if mname = '__setitem__' then Result := 'store'
+    else if mname = '__delitem__' then Result := 'remove'
     else if mname = '__len__' then Result := 'count';
     Exit;
   end;
@@ -13678,6 +13760,10 @@ begin
     { the list half of the same subscript pair — pylib spells it at/put }
     if mname = '__getitem__' then Result := 'at'
     else if mname = '__setitem__' then Result := 'put'
+    { by INDEX, which is what __delitem__ means — TPyList.remove takes a VALUE
+      and is `list.remove`'s own spelling, so aliasing to it would delete the
+      wrong element without a word }
+    else if mname = '__delitem__' then Result := 'pop_at'
     else if mname = '__len__' then Result := 'count'
     else if mname = 'update' then Result := 'setupdate'
     else if mname = 'intersection_update' then Result := 'setintersect'
