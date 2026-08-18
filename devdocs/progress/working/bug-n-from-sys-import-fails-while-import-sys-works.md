@@ -4,6 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "`import sys` works and `from sys import version_info` does not — `error: import: no unit named sys and no shim mimic_sys`. Same for `os`. The from-import path does not consult whatever table the plain-import path resolves builtin modules through; `math`, `time` and the mimic_ shims resolve either way, so it is these compiler-provided modules specifically. One corpus file (html5lib/_tokenizer.py) stops here."
+status: working
+owner: frank2-7e
 ---
 
 # `from sys import X` fails while `import sys` works

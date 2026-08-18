@@ -31647,11 +31647,48 @@ begin
   while CurTok.Kind = tkDot do begin Next; Inc(Result); end;
 end;
 
-function PyImportRootIsConsumedOnly(const root: AnsiString): Boolean;
+function PyImportRootHasNoBackingUnit(const root: AnsiString): Boolean;
+{ The roots with NO unit and NO mimic_ shim anywhere on disk: the compiler
+  either provides them directly (sys, os, textwrap, select) or they have no
+  run-time existence at all (typing, dataclasses, __future__, itertools for
+  now). Handing one of these to the unit resolver cannot do anything except
+  produce "no unit named X", so BOTH import spellings must consume them and let
+  an unsupported name wall visibly at its USE site instead.
+
+  This is the single source of truth, and it exists because there were three
+  hardcoded copies of this list — one here for `from X import a`, two inline in
+  the plain `import X` path — and they had drifted apart in BOTH directions:
+  `from sys import argv` / os / textwrap / select died on the resolver while
+  `import sys` was fine, and symmetrically `import dataclasses` / `__future__`
+  died while the from-spelling was fine. Two spellings of one concept, so the
+  membership test is one function; the ONE root each path legitimately treats
+  differently is named at that path, where the reason is visible.
+  bug-n-from-sys-import-fails-while-import-sys-works }
 begin
-  Result := CaseEqual(root, 'dataclasses') or CaseEqual(root, 'typing') or
-            CaseEqual(root, 'itertools') or CaseEqual(root, 'collections') or
-            CaseEqual(root, '__future__');
+  Result := CaseEqual(root, 'sys') or CaseEqual(root, 'os') or
+            CaseEqual(root, 'textwrap') or CaseEqual(root, 'select') or
+            CaseEqual(root, 'typing') or CaseEqual(root, 'itertools') or
+            CaseEqual(root, 'dataclasses') or CaseEqual(root, '__future__');
+end;
+
+function PyImportRootIsConsumedOnly(const root: AnsiString): Boolean;
+{ `from X import a, b`. Adds `collections`: it HAS a unit (lib/rtl/collections),
+  but the names it exports that we support are ordinary pylib symbols
+  (Counter -> pylib's TPyCounter constructors), so consuming the from-import is
+  enough and an unsupported name walls visibly at its use site. }
+begin
+  Result := PyImportRootHasNoBackingUnit(root) or
+            CaseEqual(root, 'collections');
+end;
+
+function PyImportRootPlainIsConsumedOnly(const root: AnsiString): Boolean;
+{ Plain `import X`. Adds `random`, which also has a unit (lib/rtl/random) whose
+  symbols arrive as pylib builtins anyway. `collections` is deliberately NOT
+  here, unlike the from-spelling above: `import collections` must keep reaching
+  the resolver so a `collections.Sym` qualifier has a unit to resolve against. }
+begin
+  Result := PyImportRootHasNoBackingUnit(root) or
+            CaseEqual(root, 'random');
 end;
 
 { A single `import X [as Y]` / `from X import a, b` statement, leaving the
@@ -31725,19 +31762,17 @@ begin
     begin
       impName := PyConsumeDottedModule(impRoot);
       { `import typing` joins the consumed roots. The from-import form was
-        already consumed (PyImportRootIsConsumedOnly); the PLAIN form was not,
-        so `import typing` died with "no unit named typing" — which matters now
-        that `@typing.overload` is a spelling this frontend accepts. typing has
-        no run-time existence at all, so consuming it drops nothing: a name from
-        it that IS called walls loudly at its use site, as the from-import path
-        already does. The other consumed-only roots are deliberately NOT widened
-        here — `import collections` then `collections.Counter(...)` is an
-        ordinary pylib symbol and must keep resolving.
+        already consumed; the PLAIN form was not, so `import typing` died with
+        "no unit named typing" — which matters now that `@typing.overload` is a
+        spelling this frontend accepts. typing has no run-time existence at all,
+        so consuming it drops nothing: a name from it that IS called walls
+        loudly at its use site, as the from-import path already does.
+        That fix has since been generalised — the two spellings now share
+        PyImportRootHasNoBackingUnit rather than each carrying its own list, so
+        the next root only has to be added once. `collections` is still NOT
+        consumed here; the reason lives on PyImportRootPlainIsConsumedOnly.
         bug-n-overload-decorator-is-refused }
-      if not (CaseEqual(impRoot, 'sys') or CaseEqual(impRoot, 'os') or
-              CaseEqual(impRoot, 'textwrap') or CaseEqual(impRoot, 'select') or
-              CaseEqual(impRoot, 'typing') or CaseEqual(impRoot, 'random') or
-              CaseEqual(impRoot, 'itertools')) then
+      if not PyImportRootPlainIsConsumedOnly(impRoot) then
       begin
         { A PLAIN `import X` binds one name. If X resolves to a PASCAL unit, its
           contents must NOT join the Python builtin namespace — see
@@ -32002,10 +32037,7 @@ begin
         impName := PyConsumeDottedModule(impRoot);
         { `typing` — see the twin list in PyParseOneImport for why only this
           root is added and the others are not. }
-        if CaseEqual(impRoot, 'sys') or CaseEqual(impRoot, 'os') or
-           CaseEqual(impRoot, 'textwrap') or CaseEqual(impRoot, 'select') or
-           CaseEqual(impRoot, 'typing') or CaseEqual(impRoot, 'random') or
-           CaseEqual(impRoot, 'itertools') then
+        if PyImportRootPlainIsConsumedOnly(impRoot) then
           { skip }
         else
         begin

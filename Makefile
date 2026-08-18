@@ -547,6 +547,16 @@ test-nilpy: $(COMPILER)
 	# bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_last_class_in_module_attrs.npy $(TESTTMP)/test_nilpy_lastcls26
 	test "$$($(TESTTMP)/test_nilpy_lastcls26)" = "$$(printf '1 2\n7\n1 3 9\nnode\n1')"
+	# both import spellings must resolve the SAME roots. One concept had three
+	# hardcoded copies -- a helper for `from X import a` and two inline lists in
+	# the plain `import X` path -- and they drifted apart in BOTH directions:
+	# `from sys import argv` (also os/textwrap/select) died on the unit resolver
+	# while `import sys` worked, and `import dataclasses` / `__future__` died
+	# while their from-spelling worked. Every root is imported both ways here, so
+	# adding a root to one path and forgetting the other fails HERE.
+	# bug-n-from-sys-import-fails-while-import-sys-works
+	./$(COMPILER) test/test_nilpy_import_spellings.npy $(TESTTMP)/test_nilpy_impspell26
+	test "$$($(TESTTMP)/test_nilpy_impspell26)" = "$$(printf 'both spellings resolve\nunits still resolve')"
 	# TWO imported bases have no answer and are REFUSED, not half-taken
 	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_two_imported_bases_fail.npy $(TESTTMP)/test_nilpy_twoimp26 > $(TESTTMP)/test_nilpy_twoimp.log 2>&1
 	grep -q 'names TWO base classes whose bodies are not in this file' $(TESTTMP)/test_nilpy_twoimp.log
@@ -6591,6 +6601,16 @@ test-core: $(COMPILER)
 	# Every value below is CPython 3's on the equivalent pure-Python hierarchy.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_multiple_inheritance_imported_base.npy $(TESTTMP)/test_nilpy_miimp26
 	test "$$($(TESTTMP)/test_nilpy_miimp26)" = "$$(printf 'before: mixin-wins local 10 plain\nafter:  proto local 12\nplain:  mixin-wins mixin-plain 14\nsolo:   solo plain 16')"
+	# both import spellings must resolve the SAME roots. One concept had three
+	# hardcoded copies -- a helper for `from X import a` and two inline lists in
+	# the plain `import X` path -- and they drifted apart in BOTH directions:
+	# `from sys import argv` (also os/textwrap/select) died on the unit resolver
+	# while `import sys` worked, and `import dataclasses` / `__future__` died
+	# while their from-spelling worked. Every root is imported both ways here, so
+	# adding a root to one path and forgetting the other fails HERE.
+	# bug-n-from-sys-import-fails-while-import-sys-works
+	./$(COMPILER) test/test_nilpy_import_spellings.npy $(TESTTMP)/test_nilpy_impspell26
+	test "$$($(TESTTMP)/test_nilpy_impspell26)" = "$$(printf 'both spellings resolve\nunits still resolve')"
 	# TWO imported bases have no answer and are REFUSED, not half-taken
 	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_two_imported_bases_fail.npy $(TESTTMP)/test_nilpy_twoimp26 > $(TESTTMP)/test_nilpy_twoimp.log 2>&1
 	grep -q 'names TWO base classes whose bodies are not in this file' $(TESTTMP)/test_nilpy_twoimp.log

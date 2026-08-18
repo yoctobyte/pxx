@@ -1,0 +1,41 @@
+# Both import spellings must resolve the SAME set of roots.
+#
+# The two spellings had drifted apart in BOTH directions: `from sys import argv`
+# (also os, textwrap, select) died on the unit resolver while `import sys` was
+# fine, and symmetrically `import dataclasses` / `__future__` died while the
+# from-spelling was fine. None of these roots has a unit or a mimic_ shim on
+# disk, so reaching the resolver at all could only ever produce "no unit named".
+#
+# The point of the test is the PAIRING: every root is imported both ways in one
+# file, so a future edit that adds a root to one path and forgets the other
+# fails here instead of in a corpus scan months later.
+# bug-n-from-sys-import-fails-while-import-sys-works
+
+import sys
+import os
+import textwrap
+import select
+import typing
+import random
+import itertools
+import dataclasses
+import collections
+import __future__
+
+from sys import argv
+from os import getcwd
+from textwrap import dedent
+from select import select
+from typing import List
+from random import random
+from itertools import chain
+from dataclasses import dataclass
+from collections import OrderedDict
+from __future__ import annotations
+
+print("both spellings resolve")
+
+# a root WITH a backing unit keeps working through both spellings too
+import math
+from math import pi
+print("units still resolve")
