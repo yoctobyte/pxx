@@ -856,3 +856,20 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   here and must not be discarded. Landing it belongs to frank2-f1, which also still
   holds `bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow` in `working/`.
   Left with the human at wake.
+
+- 2026-08-18 ~06:25 — **CORRECTION to the entry above: Track T is UP, and was never
+  down.** I checked `pgrep twatch` on THIS box and read the empty result as the daemon
+  being dead. **plexus is a different machine** — the roster's own Roles table says so
+  ("own clone, own box"), and the reboot here could not have touched it. `franktrackD`
+  in this checkout is a clone, not the running daemon. The frozen `tstate/` I saw was
+  simply the last publish before our reboot, not a stopped watcher.
+  It has since published through 06:23 and the full tier proves the point: the same
+  `seqCur >= 0` gap is **much wider than the native tier showed**. `test_set_runtime.pas`
+  is now RED on **aarch64, arm32, i386 and riscv32** as well as native, plus
+  `test-pascal-conformance` shards 4/6 and 5/6 — eleven open regressions where the
+  native tier saw three. All target-independent, as an IR-lowering bug should be, so
+  frank2-f1's one-line fix is expected to clear the whole set at once.
+  **The generalisable error: "is a process running" was the wrong question** — the right
+  one is "what has that host published lately", which `git fetch` answers for a watcher
+  that reports over git and is deliberately on another box. A local `pgrep` cannot see
+  a remote daemon and will always return the answer I wanted least.
