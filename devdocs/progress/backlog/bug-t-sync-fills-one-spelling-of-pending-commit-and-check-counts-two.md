@@ -3,7 +3,7 @@ track: T
 prio: 45
 type: bug
 blocked-by: []
-summary: "`check` has reported the same 17 PENDING-COMMIT tickets for weeks and `sync.sh` reports nothing to fill, because they anchor on DIFFERENT spellings of the field: check substring-matches the placeholder anywhere, sync greps only the Log form `commit PENDING-COMMIT` (space), and all 15 live instances are the frontmatter form `commit: PENDING-COMMIT` (colon). Both tools are behaving correctly and the count can never go down."
+summary: "`check` has reported the same 17 PENDING-COMMIT tickets for weeks and `sync.sh` reports nothing to fill, because they anchor on DIFFERENT spellings of the field: check substring-matches the placeholder anywhere, sync greps only the Log form `commit 4b8864737` (space), and all 15 live instances are the frontmatter form `commit: PENDING-COMMIT` (colon). Both tools are behaving correctly and the count can never go down."
 ---
 
 # `sync.sh` fills one spelling of PENDING-COMMIT; `check` counts two
@@ -32,16 +32,16 @@ agree on which is the citation:
 
 | | writes | reads |
 | --- | --- | --- |
-| `progress.py resolve` | a **Log line**: `- <date> — resolved, commit PENDING-COMMIT.` | — |
+| `progress.py resolve` | a **Log line**: `- <date> — resolved, commit 4b8864737.` | — |
 | a worker, by hand | **frontmatter**: `commit: PENDING-COMMIT` | — |
 | `progress.py check` (:961) | — | `if PENDING_COMMIT in t.text` — a bare substring test, so it counts **both** |
-| `sync.sh` (:122) | — | `git grep -l -- "commit PENDING-COMMIT"` — the space form **only** |
+| `sync.sh` (:122) | — | `git grep -l -- "commit 4b8864737"` — the space form **only** |
 
 Measured on master at `67a1ca4e1`:
 
 ```
 colon form (`commit: PENDING-COMMIT`):  15 files
-space form (`commit PENDING-COMMIT`):    0 files
+space form (`commit 4b8864737`):    0 files
 ```
 
 So `sync.sh`'s `fill_pending_commits()` is effectively dead code. Its grep cannot

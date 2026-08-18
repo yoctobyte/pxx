@@ -200,4 +200,4 @@ bug: the crash-without-a-diagnostic failure mode is gone, which is what this
 ticket asked for.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit 6d0efee09.
