@@ -2,8 +2,8 @@
 track: N
 prio: 65
 type: feature
-status: working
-owner: frank2-7e
+status: unfinished
+owner: unassigned
 ---
 
 # META: third-party Python libraries as pxx targets — classify, then compile
@@ -976,3 +976,42 @@ ticket cannot be its cause. Different mechanism — see the new ticket.
 **Do not read the next step out of the prose above this section** — every scan in
 this file has been superseded by the next one, including the recommendation that
 was current this morning.
+
+## PARKED 2026-08-18 — everything left belongs to another lane or to the human
+
+*(frank2-7e, Track N. Parked, not finished: the Makefile corpus targets — this
+ticket's actual deliverable — are still not wired.)*
+
+**The 2026-08-18 A/B section above is a SNAPSHOT, not a plan.** It was true at
+`c7974b6af` and the compiler moves daily. This file has now had a superseded scan
+read as current three times — the 2026-08-14 table, the 2026-08-17 ranking, and
+the parked recommendation that survived the same-day correction which contradicted
+it. Treat every scan here, including mine, as dated evidence.
+
+### Why parked rather than pushed further
+
+Nothing left on this ticket is Track N and unblocked:
+
+| wall | files | owner | state |
+| --- | ---: | --- | --- |
+| `CodecInfo` | 7 | **A** | [[bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim]] — filed, held by the coordinator pending a staffing call |
+| module shims | ~18 | **B** | [[feature-b-module-shims-for-the-html5lib-corpus]] — filed by the coordinator, dispatched |
+| `yield` | 14 library files | **N** | [[feature-nilpy-yield-outside-a-for-loop]] — dedicated pass, reranked to 58 |
+| builtin base classes | 4 | **N** | [[feature-nilpy-subclass-a-builtin-type]] — dedicated pass, reranked to 55 |
+| non-UTF8 fixtures | 2 | — | corpus data, not a wall to fix |
+
+The two N rows are real work but each is a dedicated-pass object-model feature
+with its own ticket, so they are tracked there rather than inside this META.
+
+### Sequencing — reversed from the 2026-08-17 park, and this is the operative note
+
+That park said the shims come first and Track N is not the lever. Measured: of
+the 14 library files that use `yield`, **11 stop on a module shim first**. So the
+two levers **compound** — if the shims land without `yield`, those 11 files move
+ONTO the yield wall rather than past it, and the compile count barely moves while
+looking like progress. They belong in the same window, not in sequence.
+
+**Resume condition:** the `CodecInfo` fix has landed AND the module shims have
+landed. Then re-run the A/B in this file — `tools/nilpy_ladder.py`, both roots,
+against a pin, naming the sha — and report files moved PAST a wall separately
+from files moved ONTO the next one. Only then choose the next rung.

@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:12 blocked:4 backlog:228 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2010 rejected:38`
+`unfinished:13 blocked:4 backlog:228 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2010 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-nilpy-thirdparty-libraries-as-targets` [N] — owner: frank2-7e
+_none — no lane is locked._
 
-## unfinished (12) — parked mid-flight; re-claim, do not duplicate
+## unfinished (13) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
@@ -22,6 +22,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-typeref-migrate-consumers` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
+- `feature-nilpy-thirdparty-libraries-as-targets` [N]
 - `feature-pascal-corpus-generics` [P]
 - `feature-port-rtl-over-libc` [A]
 - `feature-real-dynlib-loader` [B] — blocked-by: bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
