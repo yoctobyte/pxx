@@ -1315,3 +1315,33 @@ valuable review.
   false-positive red. Nothing to dispatch; day stays banked. *(Rolling one entry forward
   rather than appending an identical line per hour — a quiet check log should not outgrow
   the state it records.)*
+
+- **check 2026-08-18 (+6h) — user flagged both workers idle; unbanked and dispatched.**
+  Banking was my call and it was wrong to hold once the user was paying for idle capacity.
+  Reading the queues rather than my memory of them turned up a real defect:
+
+  **The corpus's largest lever had no ranked ticket.** The missing-module shim job was
+  measured across four ladder scans and lived only inside
+  `feature-nilpy-thirdparty-libraries-as-targets` — a META ticket parked in
+  `unfinished/`, which `ready`/`next` do not read. So `ready --track B` topped out at
+  **p30** (a float-ULP bug at p20 was in view) while that ticket's own conclusion said
+  *"Track N is no longer the bottleneck for this ladder; everything blocking is Track B
+  shim work."* The queue was not empty — it could not see its own top item. Third instance
+  of `feedback_measuring_a_thing_is_not_filing_it`, and the most expensive, because it
+  presented as *no work available*.
+
+  Filed `feature-b-the-module-shim-batch-blocking-the-python-corpus` (B, **p62**), now top
+  of B. Three guards written into it: (1) **re-measure first** — every count is a dated
+  snapshot from `c61b43390`, and four N fixes landed 2026-08-18 that can move files past
+  walls it still lists; the parent records two scans disagreeing because the pin moved
+  under one of them; (2) the `_utils.py` **sequencing trap** (a first-wall table cannot see
+  what is behind the wall — count users, not first walls); (3) the **XML scope fork is
+  fenced off** — thin shims only, and anything more is a `decide-*`, not an absorbed
+  assumption.
+
+  Dispatched frank3→shim batch (B), frank2→`bug-n-a-builtin-types-method-cannot-be-called-unbound`
+  (N, p55). **Explicitly withheld yield** despite it ranking higher at p58: both sessions
+  are 13h old and its failure mode is silent stack corruption, which is the worst thing to
+  chase on a tail-end context. Both told to decline if thin — a half-landed Track A change
+  is the one state that breaks the gate for everyone — and reminded that `working/` is the
+  lock, since a SendMessage dispatch does not claim.
