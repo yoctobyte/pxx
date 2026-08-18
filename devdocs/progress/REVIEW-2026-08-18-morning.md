@@ -771,3 +771,21 @@ bottleneck for this ladder"* was true when written and is now **superseded**: Tr
 the bottleneck again, and Track B's corpus lever is one Track U decision wide.
 `feature-nilpy-yield-outside-a-for-loop` reranked 58 → **75** accordingly, with a banner
 saying it still must go to a **fresh** session rather than to whoever `next` hands it to.
+
+### A third lighthouse arrived tonight — MINIX (user, 2026-08-18)
+
+Filed as [[goal-compile-minix]], with one decision in front of it:
+**`decide-which-minix-is-the-target` (U, p58)** — MINIX 2 / early 3.1.x versus
+MINIX 3.2+ (which imported the NetBSD userland and build system). Recommendation in
+the ticket is Option A, on the grounds that Option B trades away the bounded scope
+that is the entire reason to prefer MINIX over the Linux dot — and if the NetBSD
+userland is the prize, it is its own corpus ticket rather than something that must
+arrive attached to an OS boot goal.
+
+**Why the goal is worth the slot:** the Linux lighthouse's own analysis names the GNU
+inline-asm constraint engine as THE wall (weeks, one subsystem, currently zero
+support). MINIX was built for ACK and keeps assembly in **separate `.s` files**, so
+`CC=pxx` plus GNU `as` sidesteps it. Add a microkernel's natural ladder, a working
+i386 backend, and `--emit-obj` already gated by `make test-emit-obj`, and it is the
+rung below the kernel rather than a detour from it.
+
