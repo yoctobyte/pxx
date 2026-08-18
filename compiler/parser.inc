@@ -19153,6 +19153,26 @@ begin
   Result := an;
 end;
 
+{ Eight-argument twin of GenMakeCall6, for the stackless step call: the
+  instance pointer plus one pad per declared parameter (see SL_MAX_PARAMS). }
+function GenMakeCall8(procIdx: Integer; retTk: TTypeKind;
+                      a0, a1, a2, a3, a4, a5, a6, a7: Integer): Integer;
+var prev: Integer;
+begin
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := procIdx;
+  ASTTk[Result] := Ord(retTk);
+  prev := -1;
+  prev := GenAddArg(Result, prev, a0);
+  prev := GenAddArg(Result, prev, a1);
+  prev := GenAddArg(Result, prev, a2);
+  prev := GenAddArg(Result, prev, a3);
+  prev := GenAddArg(Result, prev, a4);
+  prev := GenAddArg(Result, prev, a5);
+  prev := GenAddArg(Result, prev, a6);
+  prev := GenAddArg(Result, prev, a7);
+end;
+
 function GenMakeCall6(procIdx: Integer; retTk: TTypeKind; a0, a1, a2, a3, a4, a5: Integer): Integer;
 var prev: Integer;
 begin
@@ -19259,10 +19279,10 @@ function ParseForInGeneratorAST(varIdx, gpi, recvNode, elemPrologue: Integer): I
 var
   savedHoist, argHoist, hoistSeq: Integer;
   bodyNode, nargs, gIdx: Integer;
-  a0, a1, a2, a3: Integer;
+  a0, a1, a2, a3, a4, a5: Integer;
   procAddr, nargsLit, callAlloc, callNext, callCur, callFree: Integer;
   assignG, assignX, whileNode, innerSeq, instLit: Integer;
-  sa1, sa2, sa3, sa4: Integer;
+  sa1, sa2, sa3, sa4, sa5, sa6: Integer;
   paCoAlloc, paCoNext, paCoCurrent, paCoFree: Integer;
   curDeref: Integer;
 begin
@@ -19280,6 +19300,7 @@ begin
   savedHoist := PyHoistPark;
   { unused args default to 0 (no local array — must cross-compile) }
   a0 := GenZeroLit; a1 := GenZeroLit; a2 := GenZeroLit; a3 := GenZeroLit;
+  a4 := GenZeroLit; a5 := GenZeroLit;
   nargs := 0;
   { A generator METHOD is an ordinary generator whose first declared parameter
     is `self`, so the receiver is simply argument 0 and the rest of this desugar
@@ -19321,7 +19342,14 @@ begin
           1: a1 := CurASTNode;
           2: a2 := CurASTNode;
           3: a3 := CurASTNode;
-          else Error('for-in generator: at most 4 arguments (v1)');
+          { …and two more for a STACKLESS generator only; the stackful CoAlloc
+            below packs its arguments into one call and still stops at four. }
+          4: if ProcIsStackless[gpi] then a4 := CurASTNode
+             else Error('for-in generator: at most 4 arguments (v1)');
+          5: if ProcIsStackless[gpi] then a5 := CurASTNode
+             else Error('for-in generator: at most 4 arguments (v1)');
+          else Error('for-in generator: at most ' + AIntToStr(SL_MAX_PARAMS)
+                     + ' arguments (v1)');
         end;
         Inc(nargs);
       until not Eat(tkComma);
@@ -19398,6 +19426,16 @@ begin
       if Procs[gpi].Params[4].IsRef then a3 := GenMakeVariantArgCell(a3, assignG);
       assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 24, a3), -1));
     end;
+    if nargs >= 5 then
+    begin
+      if Procs[gpi].Params[5].IsRef then a4 := GenMakeVariantArgCell(a4, assignG);
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 32, a4), -1));
+    end;
+    if nargs >= 6 then
+    begin
+      if Procs[gpi].Params[6].IsRef then a5 := GenMakeVariantArgCell(a5, assignG);
+      assignG := GenMakeSeq(assignG, GenMakeSeq(GenSlSetStmt2(gIdx, SL_OFF_SLOTS + 40, a5), -1));
+    end;
 
     { advance = a direct call to the step function with the instance pointer.
       The step proc's ABI is (self + the declared params); only self is real (the
@@ -19409,7 +19447,7 @@ begin
       literal has no address. Pad those with the (addressable) instance var —
       the callee never reads the incoming pad, its restore prologue overwrites
       every param slot from the instance. }
-    sa1 := -1; sa2 := -1; sa3 := -1; sa4 := -1;
+    sa1 := -1; sa2 := -1; sa3 := -1; sa4 := -1; sa5 := -1; sa6 := -1;
     if ProcGenParamCnt[gpi] >= 1 then
       if Procs[gpi].Params[1].IsRef then sa1 := GenMakeIdent(gIdx, tyPointer) else sa1 := GenZeroLit;
     if ProcGenParamCnt[gpi] >= 2 then
@@ -19418,7 +19456,12 @@ begin
       if Procs[gpi].Params[3].IsRef then sa3 := GenMakeIdent(gIdx, tyPointer) else sa3 := GenZeroLit;
     if ProcGenParamCnt[gpi] >= 4 then
       if Procs[gpi].Params[4].IsRef then sa4 := GenMakeIdent(gIdx, tyPointer) else sa4 := GenZeroLit;
-    callNext := GenMakeCall6(gpi, tyBoolean, GenMakeIdent(gIdx, tyPointer), sa1, sa2, sa3, sa4, -1);
+    if ProcGenParamCnt[gpi] >= 5 then
+      if Procs[gpi].Params[5].IsRef then sa5 := GenMakeIdent(gIdx, tyPointer) else sa5 := GenZeroLit;
+    if ProcGenParamCnt[gpi] >= 6 then
+      if Procs[gpi].Params[6].IsRef then sa6 := GenMakeIdent(gIdx, tyPointer) else sa6 := GenZeroLit;
+    callNext := GenMakeCall8(gpi, tyBoolean, GenMakeIdent(gIdx, tyPointer),
+                             sa1, sa2, sa3, sa4, sa5, sa6, -1);
     callCur := GenMakeCall6(FindProc('SlCurrent'), tyInt64, GenMakeIdent(gIdx, tyPointer), -1, -1, -1, -1, -1);
     if Syms[varIdx].TypeKind = tyRecord then
     begin
@@ -32026,8 +32069,10 @@ begin
     else
       ProcGenElemRec[procIdx] := REC_NONE;
     ProcGenParamCnt[procIdx] := nparams - 1;   { exclude the injected __genself }
-    if (nparams - 1) > CO_MAX_PARAMS then
-      Error('generator: at most 4 parameters in v1');
+    { STACKLESS: bounded by the step call's width, not by CoAlloc's packing }
+    if (nparams - 1) > SL_MAX_PARAMS then
+      Error('stackless generator: at most ' + AIntToStr(SL_MAX_PARAMS)
+            + ' parameters in v1');
   end
   else if isGenerator and (nparams > CO_MAX_PARAMS) then
     Error('generator: at most 4 parameters in v1');

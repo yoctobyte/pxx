@@ -602,6 +602,14 @@ const
   CO_HDR_BYTES     = 48;   { header size before params }
   CO_STACK_BYTES   = 65536;{ per-generator heap stack }
   CO_MAX_PARAMS    = 4;    { v1: generators take up to 4 (Int64-width) params }
+  { STACKLESS generators take more, because their step call is narrower than the
+    stackful spawn: `Gen(instance, pad...)` is 1 + SL_MAX_PARAMS argument words,
+    where the stackful CoAlloc packs the instance size, the count and the
+    arguments into one call. Seven words stays inside the riscv32 backend's
+    eight-word call limit, which is what bounds this rather than anything about
+    generators. 4 blocked a real corpus file at five parameters
+    (html5lib's treewalkers emptyTag). }
+  SL_MAX_PARAMS    = 6;
 
   { Stackless-generator instance layout (see lib/rtl/slgen.pas + the stackless
     state-machine transform in parser.inc). Shares CURRENT/DONE offsets with the

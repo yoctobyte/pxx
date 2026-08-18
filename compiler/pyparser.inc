@@ -27369,8 +27369,8 @@ var i: Integer;
 begin
   if PyHdrNParams >= 31 then
     Error('Nil Python: too many parameters for a generator');
-  if PyHdrNParams > CO_MAX_PARAMS then
-    Error('Nil Python: a generator takes at most ' + AIntToStr(CO_MAX_PARAMS) +
+  if PyHdrNParams > SL_MAX_PARAMS then
+    Error('Nil Python: a generator takes at most ' + AIntToStr(SL_MAX_PARAMS) +
           ' parameters (v1)');
   PyGenDeclParams := PyHdrNParams;
   { Nil Python's values are variants, so that is the element type regardless of
@@ -30302,8 +30302,8 @@ begin
       begin
         if nparams >= 15 then
           Error('Nil Python: too many parameters for a generator method');
-        if nparams > CO_MAX_PARAMS then
-          Error('Nil Python: a generator takes at most ' + AIntToStr(CO_MAX_PARAMS)
+        if nparams > SL_MAX_PARAMS then
+          Error('Nil Python: a generator takes at most ' + AIntToStr(SL_MAX_PARAMS)
                 + ' parameters including self (v1)');
         for k := nparams downto 1 do
         begin
@@ -31040,8 +31040,8 @@ begin
   begin
     if nparams >= 15 then
       Error('Nil Python: too many parameters for a generator method');
-    if nparams > CO_MAX_PARAMS then
-      Error('Nil Python: a generator takes at most ' + AIntToStr(CO_MAX_PARAMS)
+    if nparams > SL_MAX_PARAMS then
+      Error('Nil Python: a generator takes at most ' + AIntToStr(SL_MAX_PARAMS)
             + ' parameters including self (v1)');
     for i := nparams downto 1 do
     begin
