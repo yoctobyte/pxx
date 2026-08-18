@@ -4,7 +4,7 @@ prio: 75
 type: bug
 blocked-by: []
 summary: "`from <shim> import Class` then `Class.CONSTANT` is a compile error — `undefined variable (CONSTANT)` — while the SAME file imported as a plain module works, the same shim reached by its literal mimic_ filename works, and the qualified `import shim; shim.Class.CONSTANT` works. So the class object carries its attributes; only the binding produced by a from-import through the mimic_ mapping loses them. Blocks every shim that exports a constants class, mimic_xml_dom included, because the corpus spelling is exactly `from xml.dom import Node` then `Node.TEXT_NODE`."
-status: working
+status: done
 owner: frank2-7e
 ---
 
@@ -203,3 +203,84 @@ alias-triggered rather than shim-triggered, which is what puts it in that family
 binds nothing because the root is deliberately consumed-only; here the import
 binds fine and only `ClassName.member` breaks. Different mechanism, different
 fix. Resemblance is not evidence.
+
+## Log
+- 2026-08-18 — resolved, commit PENDING-COMMIT.
+
+## RESOLVED 2026-08-18 (frank2-7e) — the guard asked the SPELLING
+
+Found by probe bisection in `ParseFactorCore`, not by reading. Both the failing
+and working runs reached the identifier with *identical* state; the divergence
+was one call further on:
+
+```
+SHIM:    ConsumeUnitQualifier('Node')  ->  qUnit=613 (mimic_probe), name := 'ELEMENT_NODE'
+LITERAL: ConsumeUnitQualifier('Node')  ->  qUnit=-1,                name  = 'Node'
+```
+
+`Node` was being eaten as a **unit qualifier**. `ELEMENT_NODE` was then looked
+up as a bare symbol inside the module and reported undefined — which is why the
+error names the attribute and not the class, and why it looked like a
+class-attribute bug.
+
+### Root cause
+
+A from-import registers the imported NAME as a unit alias, because it may be a
+SUBMODULE — `from tkinter import ttk` has to let `ttk.Notebook()` resolve. A
+guard already existed to skip that for a class:
+
+```pascal
+(not UnitDeclaresClassExactly(impAlias, FindCompiledUnit(impName)))
+```
+
+`impName` is the name the SOURCE wrote. For a shim that is the bare module
+(`xml.dom`, `probe`) while the class lives in `mimic_xml_dom` / `mimic_probe`.
+Nothing is compiled under the bare name, so the lookup returned -1, the guard
+**stood down for every shim**, and the class name registered as a module alias.
+
+Fix: `FindUnitOrAlias` instead of `FindCompiledUnit` — it chases the shim
+mapping and the `as` chain to the unit that actually declares things. One
+identifier.
+
+**Third instance today of one shape**: a lookup done on the SPELLING where
+declarations and visibility live under the RESOLVED unit. The first was
+[[bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim]],
+the same mistake at `ParseUsesUnit`'s early exit.
+
+### Correction to my own diagnosis above
+
+The "PARKED" section claims a plain `as` alias reproduces it with no shim, and
+concludes the trigger is **any** unit alias. **That was wrong, and the evidence
+was contaminated**: the alias I chose was spelled `probe`, which is exactly the
+shim name for `mimic_probe`, so the failure came through the shim mapping and
+the `as` line did nothing. My own isolation table shows it — the row with no
+`as` at all fails identically — and I read the `as` as causal anyway.
+frankonpiler-bf caught it, and a check for a second producer confirms there is
+none: `import realmod as p` / `import pkga.sub as ps` do not register an alias a
+later from-import can use at all, failing earlier with "no unit named p".
+
+So the shim mapping is the ONLY producer, and the ticket's original framing was
+closer than my reframing. What survives from the parked diagnosis is the
+narrowing — only the bare `ClassName.member` form breaks, while globals,
+functions, construction and the qualified spelling all work — and the three
+killed hypotheses, which is what made the bisect cheap.
+
+### Test
+
+`test/test_nilpy_shim_from_import_class_attrs.npy` carries BOTH halves: the
+class-attribute rows and the **submodule row that is the guard's reason to
+exist**, so a future change that suppresses the alias outright fails here rather
+than silently breaking `from tkinter import ttk`. Green at HEAD, red on pinned
+v349. Wired by name into `test-nilpy` and `test-core`.
+
+`gate.sh quick` GREEN, self-host fixedpoint converged in 1 round. All probe
+scaffolding was in `parser.inc` (shared) and is fully reverted — `git checkout`,
+rebuilt, verified on the clean binary.
+
+### Unblocks / spawns
+
+- **Unblocks frank3's `mimic_xml_dom`** — but Track B builds on `$(PXX_STABLE)`,
+  so this needs a PIN before it is on B's ground. Flagged to the coordinator.
+- Spawned [[bug-n-a-renamed-class-loses-its-class-level-attributes]] (p70): the
+  `as`-rename row was in my test, went red, and is a DIFFERENT bug — no shim
+  needed, construction still works, only `ClassName.member` breaks.

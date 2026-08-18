@@ -5,17 +5,16 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:17 blocked:5 backlog:232 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2015 rejected:38`
+`unfinished:16 blocked:5 backlog:233 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2016 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (17) — parked mid-flight; re-claim, do not duplicate
+## unfinished (16) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults` [N]
-- `bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `bug-p-cannot-call-directly-through-a-procedural-type-cast` [P]
@@ -39,10 +38,11 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 218, ranked
+## Ready — top 30 of 219, ranked
 
 - `[p 88] [U]` decide-how-a-compiled-def-carries-its-signature-when-boxed (unblocks 1)
 - `[p 80] [N]` bug-n-from-import-with-an-as-rename-loses-what-it-renames (unblocks 1)
+- `[p 70] [N]` bug-n-a-renamed-class-loses-its-class-level-attributes
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
@@ -70,6 +70,5 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [E]` feature-demo-songformatter-pxx-target
-- `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
 
-_188 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_189 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
