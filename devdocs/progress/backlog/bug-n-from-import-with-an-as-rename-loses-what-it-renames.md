@@ -156,3 +156,61 @@ produced contradictory tables, both true, because each held the name fixed while
 what it suspected. Varying the axis nobody had thought to vary — the identifier itself —
 is what resolved it. See the standing habit: when a repro passes, vary the thing you held
 fixed.
+
+## frank3-fc, same day: the length rule is HALF the bug — there are two symptoms
+
+The section above is correct about the crash and I reproduce every one of its
+rows. It is wrong that it supersedes the earlier reading, and the correction
+matters because it would send a diagnosis down one path and leave the other
+symptom alive after the fix.
+
+**Crossing the two variables instead of walking either one** (pinned v349, one
+module, one variable per row):
+
+| source name | call | result |
+| --- | --- | --- |
+| `a` (len 1) | `al()` — no args | 7 ✅ |
+| `ab` (len 2) | `al()` — no args | **SEGFAULT** |
+| `abcd` (len 4) | `al()` — no args | **SEGFAULT** |
+| `z` (len 1) | `al("Q")` — one arg | Q ✅ |
+| `onearg` (len 6) | `al("Q")` — one arg | **Q ✅** |
+| `verylongname` (len 12) | `al("Q")` — one arg | **Q ✅** |
+
+So the length rule holds **only for the zero-argument call**. A long name with
+one argument passed is fine — `onearg` and `verylongname` are 6 and 12
+characters and both answer correctly. "Crashes whenever `<name>` is two or more
+characters" is therefore too strong: it needs the zero-argument call as well.
+The two variables interact; neither alone predicts the crash.
+
+### And the defaults symptom is real, length-independent, and rename-specific
+
+| source name | call | result | correct |
+| --- | --- | --- | --- |
+| `d` (len 1) | `al(1)` where `d(x, lo=7)` — default omitted | **empty** | 7 |
+| `defaulted` (len 9) | `al(1)` — default omitted | **empty** | 7 |
+| `d` (len 1) | `al(1, 7)` — default supplied | 7 ✅ | |
+| `defaulted` (len 9) | `al(1, 7)` — default supplied | 7 ✅ | |
+| **no rename**, `defaulted` | `defaulted(1)` — default omitted | 7 ✅ | |
+| **no rename**, `d` | `d(1)` — default omitted | 7 ✅ | |
+| `from M import ab` then `al = ab` then `al()` | assignment, not rename | 7 ✅ | |
+
+A one-character name loses its default exactly as a nine-character one does, so
+this symptom is **not** the length fault. And it disappears without the rename,
+so it is not the p90 cross-module-defaults bug either — that one fires on plain
+qualified calls with no rename anywhere.
+
+### What the two symptoms together say
+
+Under `from M import X as alias`, the alias is left standing for something that
+carries neither the callee's frame nor (past one character) its name:
+
+1. **zero arguments + source name ≥ 2 chars → crash.**
+2. **an omitted default → silently wrong, at any name length.**
+
+Both need the rename to be part of the *from-import*; a plain `alias = X`
+assignment afterwards is correct in both. A fix that closes (1) by finding the
+one-character truncation must be re-measured against (2) before the ticket
+closes — **(2) is the dangerous one**, because it answers rather than crashes.
+
+The open question about p88 / p90 stays open for symptom (2). It is settled for
+symptom (1) only: a no-argument call cannot be about defaults.
