@@ -1345,3 +1345,42 @@ valuable review.
   chase on a tail-end context. Both told to decline if thin — a half-landed Track A change
   is the one state that breaks the gate for everyone — and reminded that `working/` is the
   lock, since a SendMessage dispatch does not claim.
+
+- **check 2026-08-18 (+7h) — the shim dispatch died at step one, and that is the guard
+  working.** frank3 re-measured at pinned v352 (`0d2087d6…`) and **the batch does not
+  exist any more**: 12 `mimic_*` units are on disk under `lib/rtl` and gated by
+  `lib-test`. I filed p62 against a table describing a world that had already ended.
+  The ticket survived its own premise dying **only because step one was a re-measure
+  rather than a shim** — a guard I wrote in because the parent ticket recorded two scans
+  disagreeing over a moved pin. Paid for by an earlier mistake, repaid same day.
+
+  **Sharper than the staleness: the old counts could not be diffed against the run at
+  all.** They counted `six` at 13 and `webencodings` at 6, but the ladder scans
+  html5lib/tinycss2/webencodings = 48 files, and `reportlab` is present without being a
+  rung. Whatever produced those numbers was not this instrument, so frank3 **replaced**
+  the table instead of updating it. Reconciling two instruments yields a number
+  describing neither.
+
+  **THE CAMPAIGN'S STANDING ASSUMPTION IS INVERTED.** Remaining module-blocked files:
+  **8**, four of them behind one Track U decision. Remaining LANGUAGE walls: **32**, of
+  which **`yield` alone is 18 — more than every missing-module row combined.** So
+  *"Track N is no longer the bottleneck for this ladder"* was true when written and is now
+  **superseded**; Track B's corpus lever is one decision wide. Reranked
+  `feature-nilpy-yield-outside-a-for-loop` **58 → 75** with a banner carrying both the
+  measurement AND the dispatch constraint — raising the number is precisely what would
+  otherwise hand a silent-stack-corruption hunt to a tail-end session.
+
+  **frank3 caught a pin claim of mine, again.** The two-arg super fix `60d5a6c432` is NOT
+  an ancestor of pin `b14da0847` — verified here, not relayed. My ladder-facing wording
+  said "cleared" where it should have said "cleared **at HEAD**". Second instance today of
+  the same gap; frank3's two-claims framing is the fix and is now a memory.
+
+  frank3 filed `decide-xml-etree-thin-tree-model-or-a-real-xml-library` (U, p62) with the
+  surface measured FIRST, so it is answerable in one read: html5lib uses ElementTree as a
+  **tree model, not an XML library** (3 factories, 10 members, no parse/fromstring/XPath/
+  serialiser), plus one exact quirk — `Comment("x").tag` **is** the `Comment` function.
+  Told frank3 to stop: B's queue genuinely tops out at a p30 float-ULP bug, and confirming
+  that beats filling its capacity. **Loose end flagged, not resolved:**
+  `feature-b-mimic-urllib-request-over-the-rtl-http-stack` sits at p30 while
+  `lib/rtl/mimic_urllib_request.py` exists — stale ticket or means more than the file;
+  checked, not assumed.
