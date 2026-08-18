@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 35
+prio: 55
 type: chore
 blocked-by: []
 summary: "One lib-test job bundles several sources, so its tstate key names only the FIRST of them: `lib-test#src:test/crtl_exp2.c` is really `crtl_exp2.c examples/tk/hello.npy +5`, and a timeout in the tk step reads as a C-math regression. Split it so a job names what failed. Do it while lib-test is green — the baseline is recorded here."
@@ -101,3 +101,30 @@ the job list diffed by key so every changed key is accounted for as an
 intentional rename rather than discovered in tstate afterwards — the same
 before/after comparison the enrolment used
 ([[task-t-enroll-libtest-demos-watcher]]: 5528 -> 5700, 0 reclassified).
+
+## Recurrence 2 — 2026-08-18 (coordinator rerank 35 → 55)
+
+The same false red is open again: `lib-test#src:test/crtl_exp2.c`,
+`bad=eda43dea7629`, 16 in range. Proven innocent by the same arithmetic as the
+parent ticket, and re-proven rather than recalled because **the pin moved twice
+today** (v351 `a6d6dfb84`, v352 `b14da0847`), which is exactly the confound that
+would make "it's just the timeout again" a wrong dismissal:
+
+- `eda43dea7629` touches `Makefile`, `compiler/parser.inc`, one ticket, one test.
+  It does **not** touch `stable_linux_amd64/**` or `lib/**`.
+- Its Makefile hunk adds a **test-core** step (`./$(COMPILER) …`), not a lib-test one.
+- `lib-test` builds with the **pinned** compiler, and at `eda43dea7629`'s own sha
+  the pin was still pre-v351 — both pin commits are dated the following day.
+
+So a Track P parser fix cannot reach this job, and the bisect landed on it for the
+same reason as last time: **a timeout is a duration signal, so bisecting it
+converges on whichever commit straddled the budget.**
+
+**Why the rerank.** The parent ticket fixed the timeout half and this one was
+deliberately left as the naming half at low priority. Two recurrences later, the
+cost is not cosmetic: each one spends a coordinator's attention proving a green
+job innocent, and the *next* one is the real hazard — a genuine C-math regression
+under this key is now pre-discredited, because the standing prior is "that key
+lies". A misleading name that has cried wolf twice is a correctness problem for
+the reporting channel, not a tidiness chore. Still Track T, still "do it while
+lib-test is green", baseline unchanged.

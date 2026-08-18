@@ -50,6 +50,7 @@ _none — no lane is locked._
 - `[p 55] [N]` bug-n-a-builtin-types-method-cannot-be-called-unbound
 - `[p 55] [T]` bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 - `[p 55] [T]` bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label
+- `[p 55] [T]` chore-t-split-lib-test-into-jobs-that-name-what-failed
 - `[p 55] [U]` decide-what-an-unwired-test-may-assert
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
@@ -67,6 +68,5 @@ _none — no lane is locked._
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [E]` feature-demo-songformatter-pxx-target
 - `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
-- `[p 50] [A]` feature-nilpy-collections-and-string-methods
 
 _187 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -87,7 +87,7 @@ _none_
 | bug-t-split-jobs-misses-a-tmp-path-reached-through-a-shell-variable | T | 45 | bug | `split_jobs` keeps a producer with its consumer by union-find over literal /tmp paths, so a recipe that reaches its artifact through a shell variable (`$(TESTTMP)/$$bin` in a for-loop) exposes no shared token, is never merged, and runs under job isolation with a scratch dir where the artifact was never built. Third instance of the class the splitter's own comments describe. | — |
 | bug-t-sync-fills-one-spelling-of-pending-commit-and-check-counts-two | T | 45 | bug | `check` has reported the same 17 PENDING-COMMIT tickets for weeks and `sync.sh` reports nothing to fill, because they anchor on DIFFERENT spellings of the field: check substring-matches the placeholder anywhere, sync greps only the Log form `commit 4b8864737` (space), and all 15 live instances are the frontmatter form `commit: PENDING-COMMIT` (colon). Both tools are behaving correctly and the count can never go down. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
-| chore-t-split-lib-test-into-jobs-that-name-what-failed | T | 35 | chore | One lib-test job bundles several sources, so its tstate key names only the FIRST of them: `lib-test#src:test/crtl_exp2.c` is really `crtl_exp2.c examples/tk/hello.npy +5`, and a timeout in the tk step reads as a C-math regression. Split it so a job names what failed. Do it while lib-test is green — the baseline is recorded here. | — |
+| chore-t-split-lib-test-into-jobs-that-name-what-failed | T | 55 | chore | One lib-test job bundles several sources, so its tstate key names only the FIRST of them: `lib-test#src:test/crtl_exp2.c` is really `crtl_exp2.c examples/tk/hello.npy +5`, and a timeout in the tk step reads as a C-math regression. Split it so a job names what failed. Do it while lib-test is green — the baseline is recorded here. | — |
 | chore-t-test-binaries-hardcode-unsweepable-tmp-paths | T | 45 | chore | 60 /tmp paths are hardcoded in 37 COMPILED TEST SOURCES and written by the test binary at runtime, so no Makefile sweep can reach them and testmgr does not privatize them either. Two concurrent runs still share those files EVEN UNDER testmgr. Split out of chore-makefile-testtmp-parameterize, which closed the recipe half. | — |
 | chore-web-secrets-sops-age | W | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
 | compat-pascal-a-string-n-field-makes-a-record-a-different-size-than-fpc | P | 40 | compat | `string[N]` is a word-prefix tyFixedString, so any record holding one is a different SIZE and LAYOUT than FPC's: `record s: string[10] end` is 24 bytes where FPC says 11. Values are all right; the bytes are not. | — |
@@ -504,6 +504,7 @@ _none_
 - [p 55] [N] bug-n-a-builtin-types-method-cannot-be-called-unbound
 - [p 55] [T] bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 - [p 55] [T] bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label
+- [p 55] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 55] [U] decide-what-an-unwired-test-may-assert
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
@@ -604,7 +605,6 @@ _none_
 - [p 35] [N] bug-n-exec-ignores-a-caller-supplied-builtins-mapping
 - [p 35] [N] bug-n-name-on-a-builtin-type-is-unimplemented
 - [p 35] [N] bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
-- [p 35] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
 - [p 35] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
