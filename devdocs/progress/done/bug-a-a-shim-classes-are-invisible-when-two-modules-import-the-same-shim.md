@@ -223,4 +223,4 @@ stands. Verified both ways: **fails on pinned v348** with `undefined variable
 `compiler/builtin/**`.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit 68b67a53a.
