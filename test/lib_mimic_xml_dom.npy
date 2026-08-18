@@ -1,0 +1,77 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_xml_dom.py against CPython's real `xml.dom`.
+
+A DIFFERENTIAL: this file runs unmodified under CPython, where `from xml.dom
+import Node` finds the stdlib module, and every line was checked to produce
+identical output both ways.
+
+THIS TEST IS THE WHOLE POINT OF THE SHIM, not a formality around it. A
+constants-only class is the exact construct that
+bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero broke: the
+module imported cleanly and every constant read back as 0. A test asserting
+that the import resolves, or that Node exists, or that two constants are equal
+to each other, would have passed the entire time the shim was silently
+answering zero.
+
+So every assertion below is on a VALUE against the number CPython gives, and
+the values are deliberately distinct from each other and from zero. If this
+file is ever "simplified" to check presence instead of values, the coverage is
+gone and nothing will fail to say so.
+"""
+
+from xml.dom import Node
+from xml.dom import EMPTY_NAMESPACE, XML_NAMESPACE, XMLNS_NAMESPACE
+from xml.dom import XHTML_NAMESPACE
+
+fails = 0
+
+
+def check(name, got, want):
+    global fails
+    if got == want:
+        print(name + "=ok")
+    else:
+        fails = fails + 1
+        print(name + "=FAIL got " + repr(got) + " want " + repr(want))
+
+
+# All twelve, by value. The eight html5lib actually compares are not privileged
+# here: a shim that answered zero would do so for all of them, and the four the
+# corpus does not use are the ones nobody would notice were wrong.
+check("ELEMENT_NODE", Node.ELEMENT_NODE, 1)
+check("ATTRIBUTE_NODE", Node.ATTRIBUTE_NODE, 2)
+check("TEXT_NODE", Node.TEXT_NODE, 3)
+check("CDATA_SECTION_NODE", Node.CDATA_SECTION_NODE, 4)
+check("ENTITY_REFERENCE_NODE", Node.ENTITY_REFERENCE_NODE, 5)
+check("ENTITY_NODE", Node.ENTITY_NODE, 6)
+check("PROCESSING_INSTRUCTION_NODE", Node.PROCESSING_INSTRUCTION_NODE, 7)
+check("COMMENT_NODE", Node.COMMENT_NODE, 8)
+check("DOCUMENT_NODE", Node.DOCUMENT_NODE, 9)
+check("DOCUMENT_TYPE_NODE", Node.DOCUMENT_TYPE_NODE, 10)
+check("DOCUMENT_FRAGMENT_NODE", Node.DOCUMENT_FRAGMENT_NODE, 11)
+check("NOTATION_NODE", Node.NOTATION_NODE, 12)
+
+# The constants must also be DISTINCT, which is the property the treewalkers
+# actually depend on: they branch on nodeType, so an implementation where every
+# constant is 0 sends every node down the first branch. Asserting the values
+# above already implies this, but a reader of a failure needs to see it named.
+check("distinct_text_vs_element", Node.TEXT_NODE == Node.ELEMENT_NODE, False)
+check("distinct_doc_vs_zero", Node.DOCUMENT_NODE == 0, False)
+
+# A comparison in the shape html5lib's treewalkers use it, rather than a bare
+# attribute read -- the read could be right while the comparison lowered wrong.
+nodetype = 3
+check("compare_matches", nodetype == Node.TEXT_NODE, True)
+check("compare_rejects", nodetype == Node.ELEMENT_NODE, False)
+
+# The namespace URIs. EMPTY_NAMESPACE is None rather than "" in CPython, and
+# DOM code tests it with `is None`, so the distinction is observable.
+check("empty_ns_is_none", EMPTY_NAMESPACE is None, True)
+check("xml_ns", XML_NAMESPACE, "http://www.w3.org/XML/1998/namespace")
+check("xmlns_ns", XMLNS_NAMESPACE, "http://www.w3.org/2000/xmlns/")
+check("xhtml_ns", XHTML_NAMESPACE, "http://www.w3.org/1999/xhtml")
+
+if fails == 0:
+    print("MIMIC-XML-DOM OK")
+else:
+    print("MIMIC-XML-DOM FAIL " + str(fails))

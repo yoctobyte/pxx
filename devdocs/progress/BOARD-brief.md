@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:14 blocked:5 backlog:231 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2014 rejected:38`
+`working:1 unfinished:14 blocked:5 backlog:232 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2014 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -36,9 +36,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 216, ranked
+## Ready — top 30 of 217, ranked
 
 - `[p 88] [U]` decide-how-a-compiled-def-carries-its-signature-when-boxed (unblocks 1)
+- `[p 75] [N]` bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
@@ -67,6 +68,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [E]` feature-demo-songformatter-pxx-target
 - `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
-- `[p 50] [A]` feature-nilpy-collections-and-string-methods
 
-_186 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_187 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
