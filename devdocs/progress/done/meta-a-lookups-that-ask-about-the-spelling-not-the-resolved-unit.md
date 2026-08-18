@@ -118,4 +118,4 @@ of instance 3. That is a different question (which registry a NAME consults),
 not an alias-blind unit lookup, so it stays its own ticket.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit 9c1f3a50b.
