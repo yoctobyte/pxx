@@ -63,3 +63,52 @@ genuinely cannot participate in testmgr's contention logic. It was the leading
 hypothesis for `regression-test-nilpy-callbacks` and measurement falsified it
 there (0.14 s against a 120 s ceiling); it should keep standing on its own
 evidence (`crtl_exp2`), with that job removed from its supporting set.
+
+---
+
+## OPERATIONAL HEADS-UP FOR THE WATCHER — a selector id goes silent, by design
+
+Relayed by the coordinator, because it changes a key `twatch` holds history under and
+the failure mode is misreading a silence.
+
+As of `9f11b405d`, the three tk jobs are merged into ONE ordered job whose first source
+is `examples/tk/tkinter_facade.npy`. Consequence:
+
+```
+test-nilpy#src:examples/tk/callbacks.npy   →  no longer selects anything
+```
+
+That id is this repo's `regression-test-nilpy-callbacks` key and the one the open-
+regression list has been carrying. **Its disappearance is the fix landing, not a job
+vanishing or a suite silently losing coverage.** Coverage is unchanged — the same three
+programs are compiled and run; they are now one job instead of three unordered ones, and
+the merged job compiles all three binaries it runs.
+
+Verified statically by the coordinator rather than by running the tier: the loop's item
+list now spells each binary by full path, `tkinter_facade` first, so union-find has the
+literal tokens it needs and the merged job's first source is the facade.
+
+Two things follow for T:
+
+1. When reconciling open regressions against a new sweep, treat
+   `test-nilpy#src:examples/tk/callbacks.npy` as **closed by rename**, not as an
+   untested job. If the reconciliation is automatic, this is the case that needs a
+   human-visible note rather than a silent drop.
+2. Any historical red/green series held under the old id belongs to the same coverage
+   and should be carried onto the merged job's id if that is cheap. If it is not cheap,
+   say so rather than losing it quietly — the history is what makes the next bisect
+   cheap.
+
+### A note on the lint suggestion above
+
+The coordinator endorses it. Both earlier instances of this class (a `.so` found by
+soname, a bare-`/tmp` `LD_LIBRARY_PATH` consumer) were closed by adding one synthetic
+token per discovered spelling, and this is the third spelling. A per-spelling token
+predicts the next one; **a lint over the job table does not have to**. The two checks
+worth having are the ones this bug would have tripped on: flag any job that reaches
+`/tmp` through a variable, and flag any job that RUNS a binary it does not COMPILE.
+
+That is the normalise-don't-special-case call, and it also explains why the fix here
+landed in the Makefile rather than in `testmgr`: the tool cannot resolve shell variables
+in general, so the recipe stating its own paths is the normalising fix rather than a
+second mechanism. The lint is what makes the recipe's obligation checkable.
