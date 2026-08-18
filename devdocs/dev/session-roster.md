@@ -1633,3 +1633,28 @@ rerank it deliberately rather than inheriting the number).
   **Lesson for whoever maintains that prompt: a durable fact with a subject that can be
   COMPLETED is not durable.** Point at a file for anything that can finish; reserve the
   prompt for rules that stay true. Both workers idle/quiet, nothing blocked, no dispatch.
+
+- **check 2026-08-19 (+1h): both idle after landing, so both re-dispatched** — the user
+  cleared them explicitly to run overnight, and idling capacity the user is paying for was
+  the wrong call once already today. Read all four staffed lanes first, per the standing
+  rule.
+
+  **frank2 (A+N) → `feature-nilpy-a-generator-as-a-first-class-value` (p55).** It filed
+  this itself an hour ago as the gap yield does not cover (`g = gen()`, `list(gen())`,
+  `next(g)`, `__iter__`), so it holds maximum context. Told to preserve its own judgement
+  that these are compile errors today and **that is the right failure mode** — prefer the
+  compile error over an intermediate state that compiles and then yields nothing silently,
+  which is the shape the epilogue crash just demonstrated. The p40 leak ticket stays
+  parked unless it lands on the critical path; its recorded ordering constraint (a naive
+  fix re-creates the dangling pointer) is to be respected, not routed around.
+
+  **frank3 (B) → the Eisel-Lemire half of the strtofloat ticket (p30).** Its own parked
+  work, with its own datum: `MulHiU64` already exists in `lib/rtl/wideint.pas`, so the
+  128-bit multiply is not the obstacle and the job is the power-of-ten table plus
+  decline-and-defer. Told `lib_strtofloat_roundtrip` must stay green (it is the sweep
+  frank3 landed in August precisely so a perf change cannot silently trade away correct
+  rounding, and it caught something last pass), to measure on the PIN not HEAD, and to
+  bank-and-park rather than land a half-converted parser — a float parser fast on the
+  common path and subtly wrong on the decline path is worse than a slow correct one.
+  **Explicitly offered the option to decline** at this hour; below this, B is p20 ULP work
+  that is not worth a session, and a tired half-landing is worse than an idle night.
