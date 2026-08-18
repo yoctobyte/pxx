@@ -60,3 +60,6 @@ edited, since the ticket should be resolved outright once T's next run confirms 
 
 **Action: wait for Track T's next native run, or re-verify at HEAD, then resolve.** Not
 verified here to avoid a concurrent build while a worker holds the tree.
+
+## Log
+- 2026-08-18 — auto-closed by the plexus watcher: `test-core#src:test/test_stackless_gen.pas` passes at 18bcb92ffb8b (tier native); it was red at dfac1da00b04. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
