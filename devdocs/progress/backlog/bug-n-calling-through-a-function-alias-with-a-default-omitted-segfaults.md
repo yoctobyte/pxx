@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 65
+prio: 70
 type: bug
 blocked-by: []
 summary: "A call through a module-level function ALIAS that omits a defaulted parameter segfaults at runtime, with no diagnostic at compile time. `f = g` then `f(a, b)` where g is `def g(a, b, lo=0, hi=-1)` crashes; the same call with all four arguments supplied is fine, and calling `g` directly with the defaults omitted is fine. Six-line repro, no imports involved."
@@ -73,3 +73,53 @@ with all arguments supplied sees it work and concludes the alias is sound.
 `test/lib_mimic_bisect.npy` therefore exercises them only with every argument
 supplied, and says so at the call site. When this lands, drop that restriction
 and let the test call `bisect(r, 2)` the way a caller would.
+
+---
+
+## Coordinator verification 2026-08-18 — the segfault is the LUCKY case. Silent wrong values.
+
+Verified at **HEAD** (`bd047aba6`, self-host fixedpoint) as well as pinned v347, so this
+is not pin-only: the six-line repro segfaults on both. But varying the shape moved the
+boundary somewhere much worse than the title says.
+
+**The trigger is not "a default is omitted". It is "an omitted default is READ".**
+
+| shape (alias call, args omitted) | result |
+| --- | --- |
+| 1 default, omitted, **not used** in body | ok |
+| 2 defaults, omitted, **not used** in body | ok |
+| 1 default, omitted, **read** in body | **returns 3 where the direct call returns 1** |
+| 2 defaults, omitted, **read** in body | **SIGSEGV** |
+| all arguments supplied (alias) | ok |
+| defaults omitted, called **directly** (no alias) | ok |
+
+The third row is the important one and it is not in the ticket above:
+
+```python
+def r(a, x, lo=0):
+    return lo + 1
+
+ali = r
+print(ali([1, 2], 2))   # alias  -> 3      WRONG
+print(r([1, 2], 2))     # direct -> 1      correct (CPython: 1)
+```
+
+**Exit 0, no diagnostic, plausible number.** So the defaulted parameter's value is never
+materialised at the alias call site and the body reads whatever occupies the slot. With
+one default the garbage happens to be arithmetically usable and you get a wrong answer;
+with two, it is dereferenced and you get the crash. **The crash is the detectable case.**
+
+This is the failure mode this repo treats as the expensive one — a plausible wrong value
+far from the cause — so re-prioritised **65 → 70**. A segfault stops a build; this
+silently changes results. `bisect_left` vs `bisect_right` on a run of equal elements is
+exactly a "lo/hi defaulted and read" shape, and getting a wrong index back rather than a
+crash is how it would reach a caller.
+
+**Do not close this on the segfault alone.** The regression test must assert the
+RETURNED VALUE of an alias call that omits a read default, against the direct call's
+value — a test that only checks "does not crash" passes on the one-default shape while
+it is still wrong.
+
+Found by varying the shape after a simpler four-line version of the reported repro
+PASSED — worth recording, because that near-miss would have read as "cannot reproduce"
+and bounced the ticket.
