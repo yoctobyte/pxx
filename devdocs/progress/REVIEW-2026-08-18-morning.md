@@ -552,3 +552,65 @@ unsupervised is the kind of helpfulness that is hard to unpick.
   that import it — same shape as `six`. Now on the `string.digits` gap, the next
   wall on those files.
 - Pin at **v346**. Track T's agent is down; its watcher is up and files stubs itself.
+
+---
+
+# Morning close-out (written 2026-08-18 ~07:00, after you woke)
+
+**The overnight run ended with a reboot at ~06:09, not a clean stop.** Every session on
+borg died mid-flight. Nothing was lost: the one piece of uncommitted work — the
+in-progress fix for the night's red — survived in frank2's tree and has since landed.
+
+## What was decided since you woke
+
+- **Week theme — RULED.** Corpora AND finishing NilPy, as **one theme**, not two. The
+  measurement is what settled it: the corpus generating N's remaining work IS
+  third-party-libraries-as-targets, so the two are the same activity from opposite ends.
+  Resolved to `decided/` and, more importantly, **landed as ranking** — six corpus
+  tickets to prio 65, above the p60 queue-drain crowd. Esoteric frontends stay unranked
+  in `experimental/`: deferred, not rejected.
+  **Consequence to expect: the open-bug count will RISE this week. That is the plan.**
+- **Staffing — RULED.** frank2 → Track N (dispatched to `regression-test-nilpy-callbacks`,
+  p70, one-commit attribution range). frank3 stays Track B, deliberately idle, held for
+  the library bugs the corpora are expected to generate.
+
+## The night's red, and why it matters more than a fixed test
+
+`ce57db4cd` was routed as the regressor. **It was not the cause.** frank2 came up cold,
+rebuilt the inherited fix, found the three tests STILL failing, and probed instead of
+trusting the note. Two defects, and the handoff comment named only the lesser:
+
+1. a missing `seqCur >= 0` guard — real, kept, **insufficient**;
+2. `AN_SET_INCL`/`AN_SET_EXCL` call a **procedure** and never assigned `Result`.
+
+(2) is **latent and predates the commit** — verified independently here with
+`git show ce57db4cd^:compiler/ir.inc`, which shows the arm already had no `Result :=`.
+While the walk RECURSED, the leftover in the result slot was a live value from the frame
+just popped and happened to be a valid IR node index. Going iterative re-rolled the
+garbage to `16777218` and the fold built an `IR_BLOCK` over it.
+
+**The generalisable bit, and the reason to read this section:** a revert would have gone
+green, cleared eleven reds, and read as a clean success — while re-burying a live
+uninitialised-`Result` defect behind plausible stack leftovers. Leaving fix-vs-revert
+with the owner rather than mandating the revert is what avoided that. "The restructuring
+commit is the cause" is the wrong default when the restructuring touches stack layout,
+and checking the PARENT is one command.
+
+## Standing state
+
+Master green on the three tests, self-host fixedpoint converged at `9a40458bb`.
+`working/` held only by frank2's new claim. Track T is UP on plexus — it was never down;
+the reboot took only this box — and has not yet swept `5b43ad800`, so the eleven cross
+and conformance reds still LIST as open. They are expected to clear on its next pass,
+and nothing needs doing until they do or do not.
+
+Two open regressions are unrelated and predate all of this: `crtl_exp2.c` (16 in range)
+and the callbacks one frank2 is now on (1 in range).
+
+## One thing you may want to look at
+
+`bug-t-sync-fills-one-spelling-of-pending-commit-and-check-counts-two` (T, p45). `check`
+has been reporting the same 17 pending sha citations for weeks while `sync.sh` reported
+nothing to fill — both correct, anchored on different spellings of the field, so the
+count could never go down. Found because frank3 escalated a number that would not move
+instead of assuming it was leftovers.
