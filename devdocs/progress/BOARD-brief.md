@@ -54,6 +54,7 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [N]` feature-nilpy-subclass-a-builtin-type
+- `[p 55] [B]` feature-nilpy-xml-dom-is-two-questions-not-one
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [A]` feature-pascal-type-helpers
 - `[p 55] [A]` feature-signal-siginfo-ucontext
@@ -67,6 +68,5 @@ _none — no lane is locked._
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [E]` feature-demo-songformatter-pxx-target
 - `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
-- `[p 50] [A]` feature-nilpy-collections-and-string-methods
 
 _186 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

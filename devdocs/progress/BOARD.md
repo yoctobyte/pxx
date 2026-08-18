@@ -198,7 +198,7 @@ _none_
 | feature-nilpy-tkinter-surface-vs-a-real-application | N | 45 | feature | The tkinter façade is built and now genuinely gated (it runs under Xvfb), but its widget/option surface has never been proven against a real application. songformatter's GUI is the forcing target: tkinter.font metrics (descent/measure), Canvas.create_text anchoring, Notebook, PanedWindow. Measurable for the first time now that a running harness exists. | — |
 | feature-nilpy-user-defined-decorators | N | 30 | feature | A user-defined decorator — the ordinary `@wrap` over a `def`, not one of the four recognised names — is refused at parse time: \"unsupported decorator (only @dataclass and @overload)\". The decorator list is a NAME whitelist, so nothing a program declares itself can appear in it. | — |
 | feature-nilpy-walrus-operator | N | 30 | feature | `:=` (walrus) — the assignment expression is not parsed | — |
-| feature-nilpy-xml-dom-is-two-questions-not-one | B | 15 | feature | The xml_dom ladder row (4 files) is two unrelated questions. Three files need only `Node` — 12 integer constants, zero methods, closed by the DOM spec, trivially shimmable. One file needs a real DOM (~25 methods plus a private minidom internal) and is a project, not a shim. MEASURED CONCLUSION: do not write it — the shim unblocks ZERO files today, and writing it before the trailing-class initialiser bug lands would produce a shim whose every constant reads as 0. | bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails, bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero |
+| feature-nilpy-xml-dom-is-two-questions-not-one | B | 55 | feature | The xml_dom ladder row (4 files) is two unrelated questions. Three files need only `Node` — 12 integer constants, zero methods, closed by the DOM spec, trivially shimmable. One file needs a real DOM (~25 methods plus a private minidom internal) and is a project, not a shim. MEASURED CONCLUSION: do not write it — the shim unblocks ZERO files today, and writing it before the trailing-class initialiser bug lands would produce a shim whose every constant reads as 0. | bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails, bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero |
 | feature-nilpy-yield-outside-a-for-loop | N | 58 | feature | `yield` only works inside a `for` — a while-loop generator does not compile | — |
 | feature-opt-alloc-intent-hint | O | 25 | feature | Allocation-intent hint: tell the RTL growth policy how a buffer will be used | — |
 | feature-opt-arch-level-and-dispatch | O | 30 | feature | What x86-64 feature level does pxx emit for? Referenced as 'if raised' by two existing tickets and never filed; raised by the user 2026-08-15 when FMA came up. MEASURED: our own gate box plexus is a Xeon E5-2620 v2 (Ivy Bridge, 2013) with AVX but NO FMA and no AVX2 — x86-64-v2, not v3. So a v2 bump is safe and FMA would SIGILL on the machine that gates every push. Includes the answer to the 'dispatch defeats inlining' objection: multiversion whole FUNCTIONS, not instructions. | — |
@@ -507,6 +507,7 @@ _none_
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [N] feature-nilpy-subclass-a-builtin-type
+- [p 55] [B] feature-nilpy-xml-dom-is-two-questions-not-one
 - [p 55] [O] feature-opt-heap-per-thread-cache
 - [p 55] [A] feature-pascal-type-helpers
 - [p 55] [A] feature-signal-siginfo-ucontext
@@ -698,7 +699,6 @@ _none_
 - [p 15] [A] compat-pascal-binop-operand-eval-order
 - [p 15] [B] feature-lib-mimic-string-template
 - [p 15] [N] feature-nilpy-nested-def-as-value
-- [p 15] [B] feature-nilpy-xml-dom-is-two-questions-not-one
 - [p 15] [P] feature-pascal-corpus-expansion
 - [p 15] [A] idea-a-auto-enable-threadsafe-by-restarting-the-compile
 - [p 12] [P] task-pascal-conformance-long-tail

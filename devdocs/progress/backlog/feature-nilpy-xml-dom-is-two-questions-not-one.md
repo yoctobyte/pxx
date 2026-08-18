@@ -1,6 +1,6 @@
 ---
 track: B
-prio: 15
+prio: 55
 type: feature
 blocked-by: [bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero, bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails]
 summary: "The xml_dom ladder row (4 files) is two unrelated questions. Three files need only `Node` — 12 integer constants, zero methods, closed by the DOM spec, trivially shimmable. One file needs a real DOM (~25 methods plus a private minidom internal) and is a project, not a shim. MEASURED CONCLUSION: do not write it — the shim unblocks ZERO files today, and writing it before the trailing-class initialiser bug lands would produce a shim whose every constant reads as 0."
@@ -146,3 +146,35 @@ import resolves, since resolving is precisely what it does while returning zero.
 
 Question 2 should be re-filed as its own ranked item if a real DOM is ever
 wanted. Do not let it ride along with question 1 under one row.
+
+## Unblocked and reranked 15 -> 55 by the coordinator, 2026-08-18
+
+**Both blockers are now resolved**, and the more important one was fixed today:
+`bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero` (`12275b26f`) and
+`bug-n-assigning-to-a-name-that-collides-with-a-pascal-shim-attribute-fails` are both in
+`done/`.
+
+That first fix is why this ticket was correctly refused twice. **A constants class is
+exactly the shape that was broken** — a module whose trailing class carries only
+class-level attributes read every one of them back as **zero**, silently, with no
+diagnostic. `mimic_xml_dom` is precisely that shape: `xml.dom.Node` is twelve integer
+constants and no methods. Verified fixed here against CPython:
+
+```
+from nodemod import Node
+print(Node.ELEMENT_NODE, Node.TEXT_NODE, Node.DOCUMENT_NODE)
+   pxx 1 3 9   CPython 1 3 9      (was 0 0 0)
+```
+
+**Keep the campaign's scar attached to this ticket**, because this is the file it was
+written about: a ~20-line, spec-exact, COMPLETE `mimic_xml_dom` written before that fix
+would have compiled, imported cleanly, and made every `nodeType` comparison `0 == 0`, so
+every node takes the first branch and the walker emits structurally wrong output with no
+error anywhere. Completeness was never the protection — the substrate was. Re-run the
+ladder after it lands and check the VALUES, not just that it imports.
+
+Rerank rationale: p15 predates the corpus evidence. `xml_dom` is 4 files on the ladder
+and `xml_etree_elementtree` a further 4, which puts it just under
+[[feature-b-module-shims-for-the-html5lib-corpus]] (p60) rather than at the bottom of the
+board. The refusal recorded in that ticket ("my own earlier refusal, still correct on
+v347") was correct when written and is now spent.
