@@ -10280,6 +10280,28 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_warnings.npy $(TESTTMP)/lib_mimic_warnings
 	test "$$($(TESTTMP)/lib_mimic_warnings 2>/dev/null | grep -c '=ok')" = "9"
 	test "$$($(TESTTMP)/lib_mimic_warnings 2>/dev/null | tail -1)" = "MIMIC-WARNINGS OK"
+	# The five corpus module shims (feature-b-module-shims-for-the-html5lib-corpus).
+	# All five are DIFFERENTIALS in the same sense as lib_mimic_six above: each
+	# .npy runs unmodified under CPython against the real stdlib module, and
+	# every line was checked identical both ways. That matters more here than
+	# usual -- a shim's failure mode is a plausible wrong VALUE (an off-by-one
+	# bisect boundary, a colour space with one sector wrong, an escape() that
+	# also escapes quotes), none of which raises anything.
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_bisect.npy $(TESTTMP)/lib_mimic_bisect
+	test "$$($(TESTTMP)/lib_mimic_bisect | grep -c '=ok')" = "18"
+	test "$$($(TESTTMP)/lib_mimic_bisect | tail -1)" = "MIMIC-BISECT OK"
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_colorsys.npy $(TESTTMP)/lib_mimic_colorsys
+	test "$$($(TESTTMP)/lib_mimic_colorsys | grep -c '=ok')" = "20"
+	test "$$($(TESTTMP)/lib_mimic_colorsys | tail -1)" = "MIMIC-COLORSYS OK"
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_copy.npy $(TESTTMP)/lib_mimic_copy
+	test "$$($(TESTTMP)/lib_mimic_copy | grep -c '=ok')" = "13"
+	test "$$($(TESTTMP)/lib_mimic_copy | tail -1)" = "MIMIC-COPY OK"
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_sax_saxutils.npy $(TESTTMP)/lib_mimic_saxutils
+	test "$$($(TESTTMP)/lib_mimic_saxutils | grep -c '=ok')" = "18"
+	test "$$($(TESTTMP)/lib_mimic_saxutils | tail -1)" = "MIMIC-SAXUTILS OK"
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_sax_xmlreader.npy $(TESTTMP)/lib_mimic_xmlreader
+	test "$$($(TESTTMP)/lib_mimic_xmlreader | grep -c '=ok')" = "21"
+	test "$$($(TESTTMP)/lib_mimic_xmlreader | tail -1)" = "MIMIC-XMLREADER OK"
 	# DNS backend selection: the default (dns_wire) must be undisturbed by the
 	# new backend, and -dPXX_DNS_RESOLVED must agree with it. Both use only
 	# localhost, so neither needs the network; the resolved half skips itself

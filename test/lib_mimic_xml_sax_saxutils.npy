@@ -1,0 +1,67 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_xml_sax_saxutils.py against CPython's real xml.sax.saxutils.
+
+A DIFFERENTIAL: runs unmodified under CPython, and every line was checked to
+produce identical output both ways.
+
+The two properties worth asserting are the ones an obvious implementation gets
+wrong while still producing well-formed XML:
+
+  * `escape` does NOT touch quote characters -- escaping them is quoteattr's
+    job, and a shim that did it anyway would emit &quot; in text nodes.
+  * The replacement ORDER. `&` first when escaping, last when unescaping;
+    otherwise an already-escaped entity is escaped twice (`&lt;` -> `&amp;lt;`)
+    or an escaped literal is decoded twice (`&amp;lt;` -> `<`).
+
+Neither is visible from a single-character test, so both are exercised on text
+that contains an entity of its own.
+"""
+
+from xml.sax.saxutils import escape, unescape, quoteattr
+
+fails = 0
+
+
+def check(name, got, want):
+    global fails
+    if got == want:
+        print(name + "=ok")
+    else:
+        fails = fails + 1
+        print(name + "=FAIL got " + repr(got) + " want " + repr(want))
+
+
+# the three mandatory replacements, one at a time
+check("amp", escape("a & b"), "a &amp; b")
+check("lt", escape("a < b"), "a &lt; b")
+check("gt", escape("a > b"), "a &gt; b")
+
+# quotes are NOT escaped by escape()
+check("quote_kept", escape('say "hi"'), 'say "hi"')
+check("apos_kept", escape("it's"), "it's")
+
+# order: the & introduced by &lt; must not itself be escaped
+check("order", escape("<&>"), "&lt;&amp;&gt;")
+check("already", escape("&lt;"), "&amp;lt;")
+
+# the extra-entities argument, applied after the mandatory three
+check("entities", escape("a|b", {"|": "&#124;"}), "a&#124;b")
+
+# unescape, including the double-escaped case that order protects
+check("un_amp", unescape("a &amp; b"), "a & b")
+check("un_lt", unescape("a &lt; b"), "a < b")
+check("un_order", unescape("&lt;&amp;&gt;"), "<&>")
+check("un_already", unescape("&amp;lt;"), "&lt;")
+check("roundtrip", unescape(escape("<a href='x'>&</a>")), "<a href='x'>&</a>")
+
+# quoteattr picks its quote character by what the value contains
+check("qa_plain", quoteattr("plain"), '"plain"')
+check("qa_has_dq", quoteattr('say "hi"'), "'say \"hi\"'")
+check("qa_has_both", quoteattr("both \" and '"), '"both &quot; and \'"')
+check("qa_newline", quoteattr("a\nb"), '"a&#10;b"')
+check("qa_escapes", quoteattr("a<b"), '"a&lt;b"')
+
+if fails == 0:
+    print("MIMIC-SAXUTILS OK")
+else:
+    print("MIMIC-SAXUTILS FAIL " + str(fails))

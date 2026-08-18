@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:13 blocked:4 backlog:228 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2010 rejected:38`
+`unfinished:13 blocked:4 backlog:233 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2011 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -34,19 +34,20 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 213, ranked
+## Ready — top 30 of 217, ranked
 
 - `[p 65] [A]` bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim
+- `[p 65] [N]` bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
 - `[p 60] [N]` bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero (unblocks 1)
-- `[p 60] [B]` feature-b-module-shims-for-the-html5lib-corpus
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 58] [N]` feature-nilpy-yield-outside-a-for-loop
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [C]` bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
+- `[p 55] [N]` bug-n-from-sys-import-fails-while-import-sys-works
 - `[p 55] [T]` bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 - `[p 55] [T]` bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label
 - `[p 55] [U]` decide-what-an-unwired-test-may-assert
@@ -65,6 +66,5 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [E]` feature-demo-songformatter-pxx-target
-- `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
 
-_183 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_187 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

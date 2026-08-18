@@ -1,0 +1,76 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_copy.py against CPython's real `copy`.
+
+A DIFFERENTIAL for the supported cases: this file runs unmodified under
+CPython, where `import copy` finds the stdlib module, and every line was
+checked identical both ways.
+
+THE PROPERTY UNDER TEST IS SEPARATION, NOT EQUALITY. `copy(d) == d` is true of
+a shim that just returns its argument, which is the exact failure this module's
+docstring is about. So every container case here MUTATES the copy and then
+asserts the ORIGINAL is unchanged -- the only assertion that tells the two
+implementations apart.
+
+The unsupported-object case is deliberately not exercised: it raises here and
+succeeds on CPython, which is the documented difference rather than a bug, and
+a differential file must not contain a line whose two sides disagree.
+"""
+
+import copy
+from copy import copy as shallow
+
+fails = 0
+
+
+def check(name, got, want):
+    global fails
+    if got == want:
+        print(name + "=ok")
+    else:
+        fails = fails + 1
+        print(name + "=FAIL got " + repr(got) + " want " + repr(want))
+
+
+# dict: the corpus case (an element's attribute table)
+d = {"a": 1, "b": 2}
+dc = shallow(d)
+dc["c"] = 3
+check("dict_copy_grew", len(dc), 3)
+check("dict_orig_intact", len(d), 2)
+check("dict_values", dc["a"], 1)
+
+# list
+l = [1, 2]
+lc = shallow(l)
+lc.append(3)
+check("list_copy_grew", len(lc), 3)
+check("list_orig_intact", len(l), 2)
+
+# set
+s = {1, 2}
+sc = shallow(s)
+sc.add(3)
+check("set_copy_grew", len(sc), 3)
+check("set_orig_intact", len(s), 2)
+
+# the immutables: identity is the correct answer, and equality is what a
+# caller observes
+check("str", shallow("abc"), "abc")
+check("int", shallow(5), 5)
+check("tuple", shallow((1, 2)), (1, 2))
+check("none", shallow(None), None)
+
+# shallow means shallow: the nested list is SHARED, and a caller relying on
+# that (or surprised by it) is relying on the real semantics
+n = {"k": [1]}
+nc = shallow(n)
+nc["k"].append(2)
+check("shallow_shares_nested", len(n["k"]), 2)
+
+# the module-qualified spelling
+check("qualified", copy.copy([1, 2]), [1, 2])
+
+if fails == 0:
+    print("MIMIC-COPY OK")
+else:
+    print("MIMIC-COPY FAIL " + str(fails))

@@ -1,0 +1,92 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_bisect.py against CPython's real `bisect`.
+
+A DIFFERENTIAL, not a spec: this file runs unmodified under CPython, where
+`import bisect` finds the stdlib module, and every line below was checked to
+produce identical output both ways. That is the point -- a binary search's
+failure mode is an off-by-one at a boundary that still returns a plausible
+index, which a hand-typed expectation would encode wrongly just as easily as
+the implementation does.
+
+The boundaries are what is exercised: empty list, insertion before the first
+and after the last element, and the left/right split on a run of equal keys --
+which is the ONLY thing distinguishing bisect_left from bisect_right, and so
+the one property a wrong implementation would still pass a naive test on.
+"""
+
+from bisect import bisect_left, bisect_right, insort_left, insort_right
+from bisect import bisect, insort
+
+fails = 0
+
+
+def check(name, got, want):
+    global fails
+    if got == want:
+        print(name + "=ok")
+    else:
+        fails = fails + 1
+        print(name + "=FAIL got " + repr(got) + " want " + repr(want))
+
+
+a = [1, 3, 5, 7]
+
+# the ordinary interior case, and the two ends
+check("left_mid", bisect_left(a, 5), 2)
+check("left_before", bisect_left(a, 0), 0)
+check("left_after", bisect_left(a, 9), 4)
+check("right_mid", bisect_right(a, 5), 3)
+check("right_before", bisect_right(a, 0), 0)
+check("right_after", bisect_right(a, 9), 4)
+
+# a value BETWEEN two entries: left and right agree, since there is no run
+check("left_gap", bisect_left(a, 4), 2)
+check("right_gap", bisect_right(a, 4), 2)
+
+# the run of equals -- the whole difference between the two functions
+r = [1, 2, 2, 2, 3]
+check("run_left", bisect_left(r, 2), 1)
+check("run_right", bisect_right(r, 2), 4)
+
+# empty list: both ends of the loop degenerate
+check("empty_left", bisect_left([], 1), 0)
+check("empty_right", bisect_right([], 1), 0)
+
+# the lo/hi window: search a slice without copying it
+check("lo_hi", bisect_left(r, 2, 2, 5), 2)
+
+# The legacy unqualified spellings: `bisect` IS bisect_right and `insort` IS
+# insort_right, which is the entry a wrong alias table would get backwards.
+#
+# Both are called with every argument supplied, and the module-QUALIFIED forms
+# (`bisect.bisect_left(...)`) are not exercised at all. That is not shim scope,
+# it is two open frontend bugs, and writing around them here is deliberate --
+# the shim keeps the platonic `bisect = bisect_right` that CPython's own
+# Lib/bisect.py has:
+#   bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
+#   bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members
+check("alias_is_right", bisect(r, 2, 0, len(r)), 4)
+
+# insort mutates in place; check the resulting list, not a return value
+il = [1, 2, 2, 3]
+insort_left(il, 2)
+check("insort_left", il, [1, 2, 2, 2, 3])
+
+ir = [1, 2, 2, 3]
+insort_right(ir, 2)
+check("insort_right", ir, [1, 2, 2, 2, 3])
+
+ia = [1, 2, 2, 3]
+insort(ia, 2, 0, len(ia))
+check("insort_alias", ia, [1, 2, 2, 2, 3])
+
+# insort_left vs insort_right differ in WHERE among equals, which a list of
+# equal ints cannot show -- so place a distinguishable value at the boundary.
+lo = [0, 1, 1, 9]
+insort_left(lo, 1)
+check("insort_left_pos", bisect_left(lo, 1), 1)
+
+if fails == 0:
+    print("MIMIC-BISECT OK")
+else:
+    print("MIMIC-BISECT FAIL " + str(fails))

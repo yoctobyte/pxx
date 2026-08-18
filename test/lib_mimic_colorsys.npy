@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_colorsys.py against CPython's real `colorsys`.
+
+A DIFFERENTIAL: this file runs unmodified under CPython, where `import
+colorsys` finds the stdlib module, and every line was checked to produce
+identical output both ways.
+
+Floats are compared to 6 decimal places rather than exactly. That is not
+sloppiness about the arithmetic -- it is because the two runtimes format floats
+differently, so an equality on the printed form would test the formatter. Six
+places is far tighter than any conversion error this code could hide: a wrong
+sector or a swapped coefficient moves a channel by tenths, not by 1e-6.
+
+WHAT THIS IS ACTUALLY GUARDING. Hue is circular, so a wrong implementation
+still returns three plausible floats in [0, 1]. The sweep below therefore walks
+every 60-degree sector, where the sector arithmetic differs, instead of
+checking one colour and calling it a colour space.
+"""
+
+import colorsys
+from colorsys import hls_to_rgb, rgb_to_hls, hsv_to_rgb, rgb_to_hsv
+
+fails = 0
+
+
+def check(name, got, want):
+    global fails
+    if got == want:
+        print(name + "=ok")
+    else:
+        fails = fails + 1
+        print(name + "=FAIL got " + repr(got) + " want " + repr(want))
+
+
+def r3(t):
+    """Round a colour triple, so the comparison is on values not formatting."""
+    return (round(t[0], 6), round(t[1], 6), round(t[2], 6))
+
+
+# The six hue sectors of HLS, at full saturation and mid lightness. These are
+# the primaries and secondaries, and each one exercises a different branch of
+# the sector helper.
+check("hls_red", r3(hls_to_rgb(0.0, 0.5, 1.0)), (1.0, 0.0, 0.0))
+check("hls_yellow", r3(hls_to_rgb(1.0 / 6.0, 0.5, 1.0)), (1.0, 1.0, 0.0))
+check("hls_green", r3(hls_to_rgb(2.0 / 6.0, 0.5, 1.0)), (0.0, 1.0, 0.0))
+check("hls_cyan", r3(hls_to_rgb(3.0 / 6.0, 0.5, 1.0)), (0.0, 1.0, 1.0))
+check("hls_blue", r3(hls_to_rgb(4.0 / 6.0, 0.5, 1.0)), (0.0, 0.0, 1.0))
+check("hls_magenta", r3(hls_to_rgb(5.0 / 6.0, 0.5, 1.0)), (1.0, 0.0, 1.0))
+
+# Saturation zero is the early-out: every hue must give grey, and the grey must
+# be the lightness. A shim that forgot this returns a colour for grey input.
+check("hls_grey", r3(hls_to_rgb(0.3, 0.25, 0.0)), (0.25, 0.25, 0.25))
+
+# Lightness above and below 0.5 take different branches for m2.
+check("hls_dark", r3(hls_to_rgb(0.0, 0.25, 1.0)), (0.5, 0.0, 0.0))
+check("hls_light", r3(hls_to_rgb(0.0, 0.75, 1.0)), (1.0, 0.5, 0.5))
+
+# Round trips: the inverse must land back on the input, which catches a
+# consistent-but-wrong pair that each direction alone would not.
+check("rt_hls_1", r3(hls_to_rgb(*rgb_to_hls(0.2, 0.4, 0.6))), (0.2, 0.4, 0.6))
+check("rt_hls_2", r3(hls_to_rgb(*rgb_to_hls(0.9, 0.1, 0.3))), (0.9, 0.1, 0.3))
+check("rt_hsv_1", r3(hsv_to_rgb(*rgb_to_hsv(0.2, 0.4, 0.6))), (0.2, 0.4, 0.6))
+check("rt_hsv_2", r3(hsv_to_rgb(*rgb_to_hsv(0.9, 0.1, 0.3))), (0.9, 0.1, 0.3))
+
+# The forward HSV sectors, same reason as HLS.
+check("hsv_red", r3(hsv_to_rgb(0.0, 1.0, 1.0)), (1.0, 0.0, 0.0))
+check("hsv_green", r3(hsv_to_rgb(2.0 / 6.0, 1.0, 1.0)), (0.0, 1.0, 0.0))
+check("hsv_blue", r3(hsv_to_rgb(4.0 / 6.0, 1.0, 1.0)), (0.0, 0.0, 1.0))
+check("hsv_grey", r3(hsv_to_rgb(0.3, 0.0, 0.4)), (0.4, 0.4, 0.4))
+
+# The analysis direction on a known colour, not just via a round trip.
+check("rgb_to_hls_red", r3(rgb_to_hls(1.0, 0.0, 0.0)), (0.0, 0.5, 1.0))
+check("rgb_to_hsv_red", r3(rgb_to_hsv(1.0, 0.0, 0.0)), (0.0, 1.0, 1.0))
+
+# The module-qualified spelling, since a caller may use either.
+check("qualified", r3(colorsys.hls_to_rgb(0.0, 0.5, 1.0)), (1.0, 0.0, 0.0))
+
+if fails == 0:
+    print("MIMIC-COLORSYS OK")
+else:
+    print("MIMIC-COLORSYS FAIL " + str(fails))

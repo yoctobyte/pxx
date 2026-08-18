@@ -1,0 +1,82 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_xml_sax_xmlreader.py against CPython's real xml.sax.xmlreader.
+
+A DIFFERENTIAL: runs unmodified under CPython, where the import finds the
+stdlib module, and every line was checked identical both ways.
+
+WHY THE NAMESPACED CASE CARRIES THE TEST. An attribute container keyed on plain
+strings passes every unprefixed-attribute check and fails only on namespaced
+ones -- which is the only case the NS variant exists for. So the fixture below
+uses a `(uri, localname)` pair with a qname that differs from the localname
+(`xlink:href` vs `href`), and asserts the pair lookup, the qname lookup, and
+both directions of the qname/name mapping. A string-keyed shim would fail
+`by_qname` and `name_by_qname` while passing everything else.
+
+Ordering is not asserted: `getNames()` returns the dict's keys, and this
+compares as a set-like membership check rather than a list, so the file does
+not encode one runtime's iteration order as the expected answer.
+"""
+
+from xml.sax.xmlreader import AttributesNSImpl
+
+fails = 0
+
+
+def check(name, got, want):
+    global fails
+    if got == want:
+        print(name + "=ok")
+    else:
+        fails = fails + 1
+        print(name + "=FAIL got " + repr(got) + " want " + repr(want))
+
+
+XLINK = "http://www.w3.org/1999/xlink"
+
+# The shape html5lib/treeadapters/sax.py builds: an NS-keyed attribute table
+# plus the qname table that names the prefixed spellings.
+attrs = {(None, "class"): "hero", (XLINK, "href"): "http://example.org/"}
+qnames = {(None, "class"): "class", (XLINK, "href"): "xlink:href"}
+a = AttributesNSImpl(attrs, qnames)
+
+check("length", a.getLength(), 2)
+check("len", len(a), 2)
+
+# lookup by the (uri, localname) pair -- the primary key
+check("value_plain", a.getValue((None, "class")), "hero")
+check("value_ns", a.getValue((XLINK, "href")), "http://example.org/")
+check("getitem", a[(None, "class")], "hero")
+
+# lookup by qname -- the mapping that a string-keyed shim gets wrong
+check("by_qname", a.getValueByQName("xlink:href"), "http://example.org/")
+check("name_by_qname", a.getNameByQName("xlink:href"), (XLINK, "href"))
+check("qname_by_name", a.getQNameByName((XLINK, "href")), "xlink:href")
+
+# membership and the defaulted get
+check("contains", (XLINK, "href") in a, True)
+check("not_contains", (None, "id") in a, False)
+check("get_default", a.get((None, "id"), "none"), "none")
+check("get_present", a.get((None, "class"), "none"), "hero")
+
+# the collection views, order-independently
+names = a.getNames()
+check("names_len", len(names), 2)
+check("names_has_ns", (XLINK, "href") in names, True)
+qs = a.getQNames()
+check("qnames_len", len(qs), 2)
+check("qnames_has", "xlink:href" in qs, True)
+check("values_len", len(a.values()), 2)
+check("items_len", len(a.items()), 2)
+
+# every attribute is CDATA without a DTD, which is the whole answer here
+check("type", a.getType((None, "class")), "CDATA")
+
+# copy() must be a real copy, not the same object under another name
+b = a.copy()
+check("copy_len", b.getLength(), 2)
+check("copy_value", b.getValue((None, "class")), "hero")
+
+if fails == 0:
+    print("MIMIC-XMLREADER OK")
+else:
+    print("MIMIC-XMLREADER FAIL " + str(fails))
