@@ -785,3 +785,28 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   and then ask mid-edit.
   Otherwise quiet: no pending clears, `working/`+`urgent/` empty, nothing unpushed, no
   CRITICAL. frank3 idle by design (B queue still all float). Coordinator took no ticket.
+
+- 2026-08-18 hourly check #11 (cron) — **the #10 dispatch paid off, and the unsent-prompt
+  pattern RECURRED.** frank2-f1 took the qualified-base-class bug and landed it at 04:45
+  (`fix(N): a .py module's class no longer fills the program's same-named row`), with the
+  new test wired into **both** `test-nilpy` and `test-core` so the quick tier covers it
+  rather than only the nilpy suite — the right instinct, unprompted. The five html5lib
+  filters that reported self-inheritance now stop further along.
+  Then it went idle again with a **second unsent prompt** in its box (`take the module
+  locals cap ticket next`) while reporting "between tickets again, nothing blocked".
+  **So this is systematic, not a one-off** — something types into that pane without
+  submitting, and the worker never receives it. Two consequences for the protocol:
+  (a) it will keep looking assigned to anyone reading the pane, and (b) every dispatch
+  to it must go through `SendMessage`. Still did not type into the pane.
+  Dispatched frank2-f1 → `bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow`
+  (N, p50), the ticket that prompt names and the exact wall its own fix exposed.
+  **Emphasised the trap in it**, because it is the kind a green corpus number invites:
+  raising `PY_MAX_LOCALS` alone is NOT the fix — with the cap raised two html5lib files
+  SEGFAULT the compiler (exit 139, no diagnostic), and `ulimit -s unlimited` turns the
+  crash back into a diagnostic, so the cap has been masking a stack overflow. Raising it
+  first converts a clean refusal into a silent crash. Told it to keep the ordering
+  constraint it recorded itself, and that if the overflow lives in shared core it is a
+  Track A ticket even when self-resolved.
+  Clear decision left with the worker again (only its user can clear). Otherwise quiet:
+  no pending clears, `working/`+`urgent/` empty, nothing unpushed, no CRITICAL, frank3
+  idle by design. Coordinator took no ticket.
