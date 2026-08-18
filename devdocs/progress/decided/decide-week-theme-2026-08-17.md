@@ -105,4 +105,4 @@ quickjs). What this ruling changes is their PRIORITY relative to queue-drain wor
 the theme lands as ranking, not as prose here.
 
 ## Log
-- 2026-08-18 — decided, commit PENDING-COMMIT.
+- 2026-08-18 — decided, commit e252a17c7.

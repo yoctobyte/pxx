@@ -307,4 +307,4 @@ expressed through a shell variable. Two candidate mechanisms arrived in one
 commit; the convergence of two routes on the same line could not distinguish
 them, and reading agreement as confirmation is what made the timeout look
 settled. The duration was the cheap discriminator and it was one command away.
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit 9f11b405d.
