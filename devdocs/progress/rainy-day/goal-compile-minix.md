@@ -71,3 +71,63 @@ Freestanding discipline, no-SSE gating, named sections, reloc breadth, `.o`
 producer, boot-in-qemu tooling: every one is a Linux prerequisite, and MINIX
 forces them all **minus** the one subsystem that makes Linux expensive. Doing
 MINIX first means the kernel stops being a leap.
+
+## Chunked (user, 2026-08-18) — four separable goals, not one
+
+The user's decomposition, which matters because **chunk 1 delivers the stated value
+with none of the other chunks' cost**, and the chunks do not agree on which MINIX.
+
+### Chunk 1 — MINIX as a C CORPUS (Track C). The cheap one, start here.
+
+Compile MINIX sources. Do **not** link, do **not** boot, do **not** run. Pure
+C-frontend stress: pre-ANSI `_PROTOTYPE` / K&R definitions, an OS's worth of real
+1990s C, and a codebase written for a deliberately simple compiler.
+
+**Needs none of: a.out, PAL, link script, qemu, boot.** It is the same shape as the
+zlib / SQLite / tcc / QuickJS corpus rungs that have paid out every time, and it is
+the chunk that actually answers *"does this stress our C compiler."* Most
+version-tolerant of the four.
+
+### Chunk 2 — a SECOND OBJECT FORMAT (Track A; shared with Track M)
+
+Only needed for MINIX **2** (ACK-era a.out); MINIX 3 is ELF. a.out is genuinely small
+and well-specified.
+
+**The shared-cost observation is the useful part:** Windows needs the same thing in a
+bigger size — `feature-port-windows-pe` (Track M, **p25**, blocked-by
+`feature-port-rtl-over-libc`). What both share is not format code but **the seam**:
+`compiler/elfwriter.inc` is currently the only object writer, and nothing abstracts
+the target-format axis.
+
+**OPEN — do not file blind:** check whether `feature-port-windows-pe` already covers
+that seam before filing a separate Track A ticket for it. If it does not, it is real
+shared work serving PE, a.out, and anything after them.
+
+### Chunk 3 — pxx RUNS ON MINIX (platform axis)
+
+PAL over MINIX's POSIX surface, reusing the existing `--platform=posix` /
+`lib/rtl/platform/posix` split. POSIX.1 with **processes and no threads** maps cleanly.
+**Favours MINIX 3** — ELF, so chunk 2 is not required at all.
+
+Sequencing: `feature-port-freebsd-native` (Track A, **p55, unblocked, ready**) is the
+same axis on a real OS, and `feature-port-multi-os-abstraction` is the umbrella a
+second OS target forces into existence. A MINIX platform port should **reuse** that,
+not invent it.
+
+### Chunk 4 — BOOT a pxx-built MINIX. The trophy; everything else first.
+
+### Why the chunking changes the decision
+
+Chunks 1 and 2 want **MINIX 2** (plain C, separate `.s` files, bounded). Chunk 3 wants
+**MINIX 3** (ELF, no new object writer). So `decide-which-minix-is-the-target` should
+be answered **per chunk**, or chunk 1 should be started version-agnostically and the
+version decided when chunk 2 or 3 is actually reached.
+
+## Rejected sibling — GNU Hurd (considered and declined, 2026-08-18)
+
+Raised as a candidate and declined the same evening: **Hurd has MINIX's irrelevance AND
+Linux's GNU-extension burden.** It is a GNU project built by GCC, so it leans on the
+GNU C extensions that MINIX exists to avoid, and its glibc port is entangled enough
+that "compile Hurd" pulls in "compile glibc's Hurd port". Debian GNU/Hurd does boot
+(i386), so it is not vapour — it simply buys Linux's difficulty at MINIX's audience
+size. Recorded so the idea is not re-raised as fresh.
