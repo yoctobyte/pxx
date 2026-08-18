@@ -5,15 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:14 blocked:4 backlog:232 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2013 rejected:38`
+`unfinished:14 blocked:5 backlog:232 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2013 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
-
-## urgent (1) — jump the queue
-
-- `bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module` [N]
 
 ## unfinished (14) — parked mid-flight; re-claim, do not duplicate
 
@@ -32,17 +28,17 @@ _none — no lane is locked._
 - `feature-port-rtl-over-libc` [A]
 - `feature-real-dynlib-loader` [B] — blocked-by: bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
 
-## blocked (4) — has an unmet blocker; do not claim
+## blocked (5) — has an unmet blocker; do not claim
 
 - `bug-n-a-subpackage-directory-does-not-resolve-as-a-module` [N] — blocked-by: bug-a-a-python-module-s-identity-is-its-name-not-its-file
+- `bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module` [N] — blocked-by: decide-how-a-compiled-def-carries-its-signature-when-boxed
 - `bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity` [N] — blocked-by: feature-b-tkhtmlview-in-nilpy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 217, ranked
+## Ready — top 30 of 216, ranked
 
-- `[p 85] [N]` bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
-- `[p 88] [U]` decide-how-a-compiled-def-carries-its-signature-when-boxed
+- `[p 88] [U]` decide-how-a-compiled-def-carries-its-signature-when-boxed (unblocks 1)
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
@@ -71,5 +67,6 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [E]` feature-demo-songformatter-pxx-target
+- `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
 
-_187 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_186 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
