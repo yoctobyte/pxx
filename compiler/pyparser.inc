@@ -17,8 +17,25 @@ const
   { 128 was too small for a real module: songformatter's key_analysis.py plus a
     driver crosses it and the compile stops at "too many inferred module
     locals". The table is per-scope constraints, four words each — 512 costs
-    nothing and covers a file several times that size. }
-  PY_MAX_LOCALS = 512;
+    nothing and covers a file several times that size.
+
+    …and 512 was too small for html5lib's constants.py, which most of html5lib
+    imports. Bracketed by building the compiler at both: it fails at 512 and
+    compiles at 1024, so the requirement is somewhere in 513..1024. Raised to
+    4096 rather than to the measured bound, because the bound is a property of
+    one file and the next corpus will have a bigger one; five arrays are
+    dimensioned by this and 4096 of them costs a few hundred KB of BSS against a
+    compiler that already reserves 166 MB.
+
+    RAISING THIS WAS NOT SAFE UNTIL ce57db4cd. The low cap was masking a stack
+    overflow: it stopped the big files before IR lowering ran, and lowering
+    recursed once per statement, so the first thing a raised cap bought was
+    SIGSEGV with no diagnostic on two html5lib files. The recursion is iterative
+    now and those files report ordinary errors. If this constant is ever raised
+    again, the question to ask first is what the old value was preventing from
+    running — not whether the table itself is big enough.
+    bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow }
+  PY_MAX_LOCALS = 4096;
 
 type
   TPyLocalConstraint = record
