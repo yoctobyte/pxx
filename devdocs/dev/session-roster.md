@@ -1157,3 +1157,20 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   pushed pin commit to fix prose while two sessions pull from master; a gappy message is a
   far better outcome than rewritten history under a worker's feet. **Never put backticks
   in a bash-quoted commit message.**
+
+- 2026-08-18 hourly check (cron) — **quiet; nobody blocked, no dispatch.** frank2-7e BUSY
+  on `bug-n-a-from-import-of-a-compiler-provided-module-binds-no-names` (p55) — not pinged.
+  frank3-fc idle by design. `working/`+`urgent/` empty, nothing unpushed, no CRITICAL.
+  **Track T UP**, native GREEN through `2f4119b1f`; one open regression, the long-standing
+  `crtl_exp2.c`.
+  **Fixed the cron design rather than re-issuing it a third time.** The prompt had gone
+  stale within an hour on each of three versions — it still named yield as in-flight after
+  it was parked, and listed super and the subscript bug as unclaimed after both landed.
+  A stale snapshot is WORSE than none: it invites dispatching against a board that no
+  longer exists. The prompt now carries only DURABLE facts (lane rules, the pin/ground
+  distinction, the theme, the yield-is-scheduled-not-queued call, claims discipline) and
+  tells the check to read standing state from disk — `tail -120` this file, plus
+  `progress.sh ready` and `ls working/`. Job `9108876a`, was `11f6c03d`.
+  **Generalisable: a recurring prompt is CODE, and embedding mutable state in it is the
+  same mistake as a dated scan in a long-lived ticket.** Put the state where it is
+  maintained and have the prompt fetch it.
