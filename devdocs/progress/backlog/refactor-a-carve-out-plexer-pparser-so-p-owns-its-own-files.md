@@ -1,0 +1,78 @@
+---
+track: A
+prio: 60
+type: refactor
+owner: unassigned
+blocked-by: []
+summary: "parser.inc is 38% of all compiler work (216 of 566 commits in 14 days) and is the ONE file where two lanes must serialize — A and P cannot edit it concurrently. C and NilPy both got carved out into their own lexer/parser; Pascal never did, purely because it was the seed. CLAUDE.md has called this 'the clean long-term shape' in prose for months, where ready/next cannot see it. Prio is a PROPOSAL: the payoff is parallelism, not a feature."
+---
+
+# Carve out `plexer` / `pparser` so Track P owns its own files
+
+## The measurement that forced this ticket (2026-08-18, last 14 days)
+
+566 commits touched `compiler/`. By file:
+
+| file | commits | lane cost |
+| --- | --- | --- |
+| `pyparser.inc` | 259 | **none** — N owns it outright |
+| **`parser.inc`** | **216** | **A and P must serialize** |
+| `pylib.pas` | 155 | N/B |
+| `defs.inc` | 59 | shared |
+| `ir.inc` | 47 | A |
+
+**The busiest file in the repo costs nobody anything, and the second busiest
+serializes two lanes** — and the only difference between them is that NilPy got
+carved out and Pascal did not.
+
+## The finding underneath it: the IR is settled, the bottleneck moved
+
+The lane discipline was built when the IR and AST were being actively extended, so
+"everything routes through Track A" was correct. That is no longer what the commits
+say. Of 82 `ir*.inc` commits in the same window, essentially all are **bug fixes to
+lowerings inside a stable design** — `Include/Exclude lowering never assigned Result`,
+`a default argument was passed by value`, `a for loop evaluates its limit once`,
+`a struct assignment ran its RHS twice`. Almost none add an IR op or change the IR's
+shape. New frontend features now **compose from existing ops**, which is the
+`ir-as-substrate` bet paying off.
+
+**So the reason to keep strict serialization is no longer the IR — it is
+`parser.inc`.** The hazard did not shrink; it migrated, and it migrated to the file
+with the highest churn in the whole compiler.
+
+## Why it was never filed
+
+`CLAUDE.md` states the desired end state in prose: *"The clean long-term shape is to
+split out `plexer`/`pparser` so P owns files like C/Z do."* Prose in a guide is not a
+queue entry — `ready`/`next` read `track:` and `prio:`, nothing else. So the single
+highest-leverage structural item in the repo has been correctly diagnosed, written
+down, and invisible, for months. Fourth instance in one day of
+`feedback_measuring_a_thing_is_not_filing_it`; this is the most expensive.
+
+## What "done" means
+
+- Pascal-facing lexing/parsing lives in `plexer.inc` / `pparser.inc`, owned by Track P.
+- `parser.inc` retains only what is genuinely shared across frontends, owned by A.
+- **A and P can be staffed concurrently** without the coordinator holding a slot —
+  which is the actual deliverable. Everything else is a means to it.
+- C's carve-out is the worked precedent; NilPy's is the second. Follow whichever seam
+  those two agree on rather than inventing a third.
+
+## Risks, stated plainly
+
+- **Large diff in the file with the highest churn.** It will conflict with anything
+  in flight, so it wants a quiet A/P window, not a busy one.
+- The gate is unforgiving and that is the point: `make compiler/pascal26` IS the
+  byte-identical self-host fixedpoint, so a botched carve-out cannot leave the tree.
+- **Token/node numbering discipline** is the known landmine class here — the thing the
+  lane rules exist to protect.
+- This is a refactor with **no user-visible payoff**. Its return is coordination
+  throughput, which is real but only cashes out when two agents actually run on A and
+  P at once.
+
+## Prio is a proposal, not a decision
+
+Filed at 60 to sit at the top of Track A's ready queue, on the argument that it
+multiplies every future P and A ticket. But it buys **parallelism, not features**, and
+whether that outranks shipping work is the user's call — reranking it down is a
+legitimate answer, not a mistake.
