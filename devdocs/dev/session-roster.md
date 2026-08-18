@@ -1562,3 +1562,10 @@ rerank it deliberately rather than inheriting the number).
   ticket is worth fixing properly once the work settles — marking the superseded section
   as superseded, in place, the way Track T banner-corrected its own closed timeout ticket.
   Not doing it mid-flight while a worker is reading the file.
+
+- **check 2026-08-18 (+10h):** both workers BUSY on their dispatches (frank2 = yield,
+  frank3 = urlopen), no commits yet, nothing blocked, not pinged. T UP; full tier caught
+  up to `df15ae3fe1dc` with the same single documented `crtl_exp2` false positive as its
+  only red. `working/` still empty while both work — the claim reminder is deliberately
+  HELD for their next natural report rather than interrupting active work on the week's
+  highest-value ticket. No dispatch, nothing invented.
