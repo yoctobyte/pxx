@@ -3,9 +3,12 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `e0f6748717e6` | 2026-08-18T03:21:11Z | GREEN (opt) | 309.4s | `e0f6748717e6` RED |
+| plexus | `ce57db4cdda5` | 2026-08-18T03:58:55Z | RED (native) | 213.1s | `e0f6748717e6` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
 - **lib-test#src:test/crtl_exp2.c** — test/crtl_exp2.c examples/tk/hello.npy +5 (plexus): bad `eda43dea7629`, last good `d91b82d6516b`, 16 commit(s) in range
 - **test-nilpy#src:examples/tk/callbacks.npy** — examples/tk/callbacks.npy (plexus): bad `5215148bb454`, last good `5ee0de5ffca9`, 1 commit(s) in range
+- **test-core#src:test/test_nested_class_type_b348.pas** — test/test_nested_class_type_b348.pas (plexus): bad `ce57db4cdda5`, last good `e0f6748717e6`, 9 commit(s) in range
+- **test-core#src:test/test_set_literal_element_types.pas** — test/test_set_literal_element_types.pas test/test_set_literal_element_types.expected +5 (plexus): bad `ce57db4cdda5`, last good `e0f6748717e6`, 9 commit(s) in range
+- **test-core#src:test/test_set_runtime.pas** — test/test_set_runtime.pas (plexus): bad `ce57db4cdda5`, last good `e0f6748717e6`, 9 commit(s) in range
