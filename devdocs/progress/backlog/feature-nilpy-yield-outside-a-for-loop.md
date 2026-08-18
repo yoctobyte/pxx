@@ -279,3 +279,61 @@ covers the entire corpus.
 works — NilPy has no `yield` handling at all (0 hits in `pyparser.inc`, no lexer token).
 That title has now misdirected three separate reads and is worth a rename by whoever owns
 the campaign.
+
+## Coordinator re-estimate 2026-08-18 (human challenge) — the generator ENGINE is already built
+
+Rene asked whether yield was not already implemented for Pascal and therefore mostly
+mechanical. **Measured, and the answer is yes** — this ticket's framing as a
+"dedicated-pass feature" overstates the core.
+
+Verified end to end at HEAD, not read from a comment:
+
+```pascal
+function Count(n: Int64): Int64; generator; stackless;
+begin i := 0; while i < n do begin yield i; i := i + 1; end; end;
+for x in Count(4) do WriteLn(x);        ->  0 1 2 3
+```
+
+What already exists: the `yield` keyword, the `; generator;` / `stackless;` markers,
+`AN_YIELD` (defs.inc:279), `IR_YIELD` (defs.inc:554), **both** runtimes —
+`lib/rtl/coroutine.pas` (stackful, 64 KB heap stack per live generator) and
+`lib/rtl/slgen.pas` (stackless state machine, no context switch, no heap stack, every
+target, zero per-target asm) — and a shared CURRENT/DONE layout so for-in reads either
+strategy identically.
+
+What does NOT exist: **any NilPy side at all.** No lexer token, no parser handling. The
+earlier "0 hits" measurement was right.
+
+So the honest shape is **wiring a frontend to a working engine**, not building generators.
+Steps 1-3 (lexer token, marking a `def` that contains `yield` as a generator routine,
+lowering `yield` to `AN_YIELD`) are largely mechanical against machinery that is already
+proven, and the stackless strategy is already known to cover the whole corpus (19
+generator functions, 76 yield sites, zero inside try/with).
+
+### Where it is genuinely NOT mechanical
+
+The corpus needs the **iteration protocol**, not the function form:
+
+```python
+class Filter:
+    def __iter__(self):
+        for t in self.source: yield t
+for token in filter_instance: ...
+```
+
+Pascal's model is `for x in Gen(args)` — a generator FUNCTION called in a for-in. Python's
+is an OBJECT whose `__iter__` returns a generator. Bridging that is real work, but it is
+iteration-protocol plumbing over a finished engine, not generator implementation.
+
+### The boxed-def dependency should be RE-MEASURED before it is believed
+
+This ticket records that step 4 "may want a callable to carry state" and therefore waits
+on [[decide-how-a-compiled-def-carries-its-signature-when-boxed]]. **That deserves a
+check rather than inheritance:** a stackless generator's state lives in a HEAP RECORD
+(`SL_OFF_*`, slgen.pas), not in the callable, and `__iter__` returning that instance does
+not obviously require a boxed def to carry anything. If the dependency does not survive
+measurement, this ticket is not gated on the human at all — which matters, because it is
+the board's largest row at 14 files.
+
+Whoever takes it: measure that first, in an hour, before planning around a decision that
+may not apply.
