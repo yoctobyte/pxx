@@ -139,4 +139,4 @@ and `test-core`.
 declared to the coordinator and held for the whole job.
 
 ## Log
-- 2026-08-18 — resolved, commit PENDING-COMMIT.
+- 2026-08-18 — resolved, commit 60d5a6c43.
