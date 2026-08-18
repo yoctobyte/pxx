@@ -1299,3 +1299,14 @@ valuable review.
   carrying a correction banner at `d483dd50e`), not new breakage. Commits since T's last
   tested sha are docs/roster only. **No dispatch:** the ranked N remainder is p50/p45, and
   yield is scheduled work reserved for a fresh session per the user. Nothing invented.
+
+- **check 2026-08-18 (+1h):** still quiet, nobody blocked, no dispatch. `working/` and
+  `urgent/` empty; all three workers idle. **Real state change worth recording: the FULL
+  matrix caught up to today's head** — it had been trailing at `8a7418902cf4` and has now
+  run at `118c4c42a5b3`, alongside `slow` GREEN, `opt` GREEN and a bench run (30 rows, 550
+  conf). Verdict is RED, and I checked the run record rather than trusting the durable
+  fact: `new_red: []`, `still_red: ["lib-test#src:test/crtl_exp2.c"]`. So the ONLY red
+  across the whole matrix at today's head is the documented false positive — every real
+  job green on every tier. That is the strongest signal of the day and it arrived after
+  the bank: today's four N landings plus the P and A fixes hold up under the full
+  cross-target sweep, not just under `quick`.
