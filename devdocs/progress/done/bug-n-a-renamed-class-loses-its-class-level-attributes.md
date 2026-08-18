@@ -4,7 +4,7 @@ prio: 70
 type: bug
 blocked-by: []
 summary: "`from mod import Node as N` then `N.ELEMENT_NODE` is `undefined variable (ELEMENT_NODE)`, while the same import without the rename works and `N()` still constructs. Independent of shims and of dotted packages — a plain literal module reproduces it. The class-alias registry gives the new name the class ROW (construction works) but the ClassName.member read path does not follow it."
-status: working
+status: done
 owner: frank2-7e
 ---
 
@@ -108,3 +108,6 @@ error text in the title/summary above is the OLD one.
 Folds with [[bug-n-from-a-shim-import-a-class-loses-its-class-level-attributes]]
 (same guard). Does NOT fold with the p85 rebinding bug — that reproduces with no
 import and every argument supplied — nor with the callable-value defaults gap.
+
+## Log
+- 2026-08-18 — resolved, commit PENDING-COMMIT.

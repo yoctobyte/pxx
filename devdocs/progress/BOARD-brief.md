@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:14 blocked:5 backlog:235 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2020 rejected:38`
+`unfinished:14 blocked:5 backlog:235 experimental:20 rainy-day:40 done-followup:3 decided:82 done:2021 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -39,7 +39,6 @@ _none — no lane is locked._
 ## Ready — top 30 of 220, ranked
 
 - `[p 88] [U]` decide-how-a-compiled-def-carries-its-signature-when-boxed (unblocks 2)
-- `[p 70] [N]` bug-n-a-renamed-class-loses-its-class-level-attributes
 - `[p 65] [N]` bug-n-subscripting-a-container-literal-inside-a-function-segfaults
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
@@ -63,6 +62,7 @@ _none — no lane is locked._
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
+- `[p 50] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - `[p 50] [U]` decide-finalize-noop-vs-refusal
 - `[p 50] [U]` decide-staff-track-c-to-unblock-own-language-first
 - `[p 50] [D]` docs-cross-language-qualifier-note-is-wrong
