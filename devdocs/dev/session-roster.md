@@ -1110,3 +1110,19 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   which is exactly the re-measure frank3 demanded when it flagged that a crash fix must not
   close the dangerous symptom silently. **That hand-off worked across two sessions that
   never spoke to each other.**
+
+- 2026-08-18 hourly check (cron) — **quiet; nobody blocked, no dispatch.** frank2-7e BUSY
+  on yield (not pinged — it is working). frank3-fc idle by design; B's remaining corpus
+  work sits behind N in every direction and inventing work for it would cost tokens for
+  nothing. Nothing unpushed, `urgent/` empty, no CRITICAL.
+  **Track T UP**, native GREEN through `f0d24d39e`. One open regression, the long-standing
+  `lib-test#src:test/crtl_exp2.c` (16 in range).
+  `working/` empty again for the second check running while a worker is mid-ticket —
+  dispatches go by SendMessage and claims are being skipped. No collision risk while only
+  one worker is in N's files, so raising it at frank2's next natural report rather than
+  interrupting a busy session over a file move.
+  **Refreshed the cron prompt (job `11f6c03d`, was `90d95108`).** The old one still
+  described the rename cluster as in flight and yield as 14 files — both stale by hours,
+  and the next check would have dispatched against a board that no longer exists.
+  **A cron prompt is a snapshot that goes stale silently while the work moves; re-issue it
+  whenever the standing state changes materially, not just when the schedule does.**
