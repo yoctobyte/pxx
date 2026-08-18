@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:13 blocked:4 backlog:226 experimental:20 rainy-day:40 done-followup:3 decided:81 done:2001 rejected:38`
+`unfinished:13 blocked:4 backlog:226 experimental:20 rainy-day:40 done-followup:3 decided:81 done:2002 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -39,7 +39,6 @@ _none — no lane is locked._
 - `[p 70] [U]` decide-week-theme-2026-08-17
 - `[p 70] [N]` regression-test-nilpy-callbacks
 - `[p 60] [N]` bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero (unblocks 1)
-- `[p 60] [N]` bug-n-a-qualified-base-class-named-like-its-subclass-is-rejected-as-self-inheritance
 - `[p 60] [C]` feature-c-csmith-differential-fuzzing
 - `[p 60] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 60] [P]` feature-pascal-corpus-oop
@@ -59,6 +58,7 @@ _none — no lane is locked._
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
 - `[p 50] [N]` bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow
+- `[p 50] [U]` decide-finalize-noop-vs-refusal
 - `[p 50] [U]` decide-staff-track-c-to-unblock-own-language-first
 - `[p 50] [D]` docs-cross-language-qualifier-note-is-wrong
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit

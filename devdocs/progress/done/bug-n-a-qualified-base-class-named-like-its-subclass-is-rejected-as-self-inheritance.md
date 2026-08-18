@@ -4,7 +4,7 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "`class Filter(base.Filter)` is refused with \"class Filter cannot inherit from itself\" — a QUALIFIED base class is compared by its last component only, so a subclass that keeps its base's name is misread as its own descendant. CPython accepts and runs it. Now the wall on three html5lib files, and the most common non-import error left in that corpus."
-status: working
+status: done
 owner: frank2
 ---
 
@@ -158,3 +158,6 @@ The repro prints `derived`; `class Other(base.Filter)` keeps working; a genuine
 self-inheritance (`class F(F)`) is still refused — that diagnostic exists for a
 reason and must not be traded away for this. Plus `make test-nilpy` green +
 self-host fixedpoint.
+
+## Log
+- 2026-08-18 — resolved, commit PENDING-COMMIT.
