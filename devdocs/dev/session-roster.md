@@ -1038,3 +1038,22 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   shown the no-`as` row failing identically. It then checked for a second producer, found
   none, and corrected the ticket in full. Fourth confound of the day and the first caught
   by its own author.
+
+- 2026-08-18 hourly check (cron) — **quiet; nobody blocked, no dispatch made.** Both
+  workers BUSY mid-task: frank2-7e on the rename cluster (A+N, sole-A), frank3-fc landing
+  `xml_dom` now that v350 carries `6cd63b836`. Neither was messaged — they are working,
+  and an idle-check ping costs them a turn for nothing.
+  `working/` and `urgent/` are both EMPTY while two workers are mid-ticket. Noted, not
+  acted on: both were dispatched by SendMessage and are presumably pre-claim. If it is
+  still empty next check with the same two busy, ask — a lock nobody holds is how two
+  agents end up in one file.
+  **Track T UP**, native GREEN through `b45594911`. The `pin v349 ... RED (full)` commit
+  in the log looked alarming and is NOT new breakage — checked the run record:
+  `new_red: []`, and `--status` lists exactly one open regression,
+  `lib-test#src:test/crtl_exp2.c` (bad=`eda43dea7629`, 16 in range), which predates today.
+  The full tier reports RED because that one is still open, not because anything landed
+  broken.
+  Still with the human and still not urgent:
+  `decide-how-a-compiled-def-carries-its-signature-when-boxed` (U, p88). It may drop from
+  gating three items to two — if the rename cluster's fault turns out to be the rename
+  binding rather than the callable representation, the p85 comes back to ready.
