@@ -7,6 +7,33 @@ summary: "`lib-test#src:test/crtl_exp2.c` has been STILL-RED since 096da361dd93 
 status: done
 ---
 
+> ## ⚠ THE RULE IN THIS TICKET WAS NARROWED — read this first
+>
+> This ticket states, and its fix encodes, *"a timeout is a duration signal, so
+> bisecting it is not sound."* **That is too broad**, and it is the form a
+> searcher finds first, because this is the ticket that comes up for "timeout
+> bisect". It has already nearly caused one wrong dismissal (2026-08-18).
+>
+> The narrowed rule:
+>
+> | when | landing | refuse the bisect? |
+> | --- | --- | --- |
+> | the expensive step exists across the **whole** range | arbitrary — wherever load tipped it | **yes** (this ticket's case, `crtl_exp2`) |
+> | the range **spans** the commit that first made the step execute | **exact** | **no** — refusing suppresses a correct result |
+>
+> Counter-example: `callbacks.npy` bisected to `5215148bb`, the commit that first
+> made three tk tests *execute* under `timeout 120 xvfb-run`. Converged, exact,
+> and correct. It only ran because the inner timeout was invisible to testmgr and
+> was recorded as `fail` rather than `timeout` — so `bisect_step`'s refusal never
+> fired.
+>
+> **Consequence:** fixing
+> [[bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic]]
+> will start refusing bisects like that one unless the guard learns the
+> distinction. The two changes belong in one commit. Full table in
+> `devdocs/dev/track-t.md`.
+
+
 # A timeout bisects to an innocent commit, and the report does not say so
 
 Filed 2026-08-16 by the Track A+P session, from the monitor stream. **Not fixing
