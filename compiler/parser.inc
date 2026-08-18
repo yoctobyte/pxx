@@ -19241,7 +19241,21 @@ begin
   Result := GenMakeIdent(ps, tyPointer);
 end;
 
-function ParseForInGeneratorAST(varIdx, gpi: Integer): Integer;
+{ Concatenate two AN_SEQ statement chains, keeping `a` first (-1 = empty).
+  chainSeq does the same job but is declared with the stackless transform, far
+  below this desugar. }
+function chainSeqFwd(a, b: Integer): Integer;
+var t: Integer;
+begin
+  if a < 0 then begin Result := b; Exit; end;
+  if b < 0 then begin Result := a; Exit; end;
+  t := a;
+  while ASTRight[t] >= 0 do t := ASTRight[t];
+  ASTRight[t] := b;
+  Result := a;
+end;
+
+function ParseForInGeneratorAST(varIdx, gpi, recvNode, elemPrologue: Integer): Integer;
 var
   savedHoist, argHoist, hoistSeq: Integer;
   bodyNode, nargs, gIdx: Integer;
@@ -19267,6 +19281,15 @@ begin
   { unused args default to 0 (no local array — must cross-compile) }
   a0 := GenZeroLit; a1 := GenZeroLit; a2 := GenZeroLit; a3 := GenZeroLit;
   nargs := 0;
+  { A generator METHOD is an ordinary generator whose first declared parameter
+    is `self`, so the receiver is simply argument 0 and the rest of this desugar
+    is unchanged. The caller has already parsed it (it is an arbitrary
+    expression, and only the frontend knows how to read one). }
+  if recvNode >= 0 then
+  begin
+    a0 := recvNode;
+    nargs := 1;
+  end;
   if Eat(tkLParen) then
   begin
     if CurTok.Kind <> tkRParen then
@@ -19421,7 +19444,12 @@ begin
     else
       assignX := GenMakeAssign(GenMakeIdent(varIdx, Syms[varIdx].TypeKind), callCur);
 
-    innerSeq := GenMakeSeq(assignX, GenMakeSeq(bodyNode, -1));
+    { A TUPLE loop target — `for a, b, c in gen():` — binds the yielded element
+      to a hidden name and then unpacks it. The unpack statements are built by
+      the frontend (only it knows how to index a Python tuple) and run here,
+      between the element assignment and the body. }
+    innerSeq := GenMakeSeq(assignX,
+                  chainSeqFwd(elemPrologue, GenMakeSeq(bodyNode, -1)));
     whileNode := AllocNode(AN_WHILE);
     ASTLeft[whileNode] := callNext;
     ASTRight[whileNode] := innerSeq;
@@ -21257,7 +21285,7 @@ begin
     if (gpi >= 0) and ProcIsGenerator[gpi] then
     begin
       Next;
-      Result := ParseForInGeneratorAST(varIdx, gpi);
+      Result := ParseForInGeneratorAST(varIdx, gpi, -1, -1);
       Exit;
     end;
     { enum type name → iterate all ordinals }

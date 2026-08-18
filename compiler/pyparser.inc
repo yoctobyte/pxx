@@ -21087,8 +21087,71 @@ begin
   Result := PyHiddenName('nst');
 end;
 
+{ The class of this EXACT name, or -1.
+
+  FindUClass is case-INSENSITIVE — Pascal heritage, and correct there. Python is
+  not, and using it raw here was a real bug with a silent, layout-dependent
+  symptom: `w = W(...)` then `for a in w.slider():` matched the RECEIVER `w`
+  against the CLASS `W`, took the unbound `Cls.method(self)` route, and passed
+  no receiver at all, so the generator ran against a garbage `self` and crashed
+  inside the list it tried to walk. It only reproduced when a variable and a
+  class differed by case alone, which is why renaming either one made it
+  disappear. }
+function PyFindUClassExact(const nm: AnsiString): Integer;
+begin
+  Result := FindUClass(nm);
+  if (Result >= 0) and (PyRawName(UClsNOff[Result], UClsNLen[Result]) <> nm) then
+    Result := -1;
+end;
+
+{ `lhs := rhs` as a statement node. }
+function PyMakeAssignNode(lhs, rhs: Integer): Integer;
+begin
+  Result := AllocNode(AN_ASSIGN);
+  ASTLeft[Result] := lhs;
+  ASTRight[Result] := rhs;
+end;
+
+{ Bind the loop target of a GENERATOR for-in, and build the statements that
+  unpack a TUPLE target from the yielded element.
+
+  A single name binds the element directly, so the prologue is empty. Several
+  names — `for previous, token, next in self.slider():`, exactly how html5lib's
+  optionaltags filter reads its own generator — bind the element to a HIDDEN
+  name and then index it, which is the same PyPairItem walk the ordinary
+  container for-in already uses for a list of tuples. The prologue is returned
+  rather than emitted because the shared desugar owns where it goes: after the
+  element assignment, before the body. }
+function PyGenBindTarget(const name, name2: AnsiString; var prologue: Integer): Integer;
+var s0, si, xi: Integer;
+begin
+  prologue := -1;
+  if name2 = '' then
+  begin
+    Result := PyAssignTargetSym(name);
+    if Result < 0 then Result := AllocVar(name, tyVariant);
+    Exit;
+  end;
+  Result := AllocVar('', tyVariant);   { the hidden element }
+  s0 := PyAssignTargetSym(name);
+  if s0 < 0 then s0 := AllocVar(name, tyVariant);
+  prologue := PySeqAppend(prologue,
+                PyMakeAssignNode(PyMakeIdent(s0), PyPairItem(PyMakeIdent(Result), 0)));
+  si := PyAssignTargetSym(name2);
+  if si < 0 then si := AllocVar(name2, tyVariant);
+  prologue := PySeqAppend(prologue,
+                PyMakeAssignNode(PyMakeIdent(si), PyPairItem(PyMakeIdent(Result), 1)));
+  for xi := 0 to PyForExtraCount - 1 do
+  begin
+    si := PyAssignTargetSym(PyForExtraName[xi]);
+    if si < 0 then si := AllocVar(PyForExtraName[xi], tyVariant);
+    prologue := PySeqAppend(prologue,
+                  PyMakeAssignNode(PyMakeIdent(si), PyPairItem(PyMakeIdent(Result), xi + 2)));
+  end;
+end;
+
 function PyParseFor: Integer;
-var genPi: Integer;
+var genPi, genMi, genRecv, genRecvNode, genProl: Integer;
     name, name2: AnsiString;
     enumMode: Boolean; symIdx, node, lhsNode, startNode, stopNode, stepNode: Integer;
     pair1, pair2, pair3, bodyNode, oneNode, limitNode, compSaved: Integer;
@@ -21187,21 +21250,73 @@ begin
     A single plain name only: a tuple target, an extra name or a comprehension
     is not this shape, and a generator consumed any other way (`list(gen())`,
     a bare `iter`) falls through to the ordinary paths and reports itself. }
-  if (name2 = '') and (PyForExtraCount = 0) and (PyCompTarget < 0) and
-     (CurTok.Kind = tkIdent) and
+  if (PyCompTarget < 0) and (CurTok.Kind = tkIdent) and
      (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
   begin
     genPi := FindProcInUnit(CurTok.SVal, -1);
     if genPi < 0 then genPi := FindProc(CurTok.SVal);
     if (genPi >= 0) and ProcIsStackless[genPi] and ProcIsGenerator[genPi] then
     begin
-      { The same binder every other for-in target uses — at module level the
-        loop variable is a GLOBAL, which PyProgSym does not answer for. }
-      symIdx := PyAssignTargetSym(name);
-      if symIdx < 0 then symIdx := AllocVar(name, tyVariant);
+      symIdx := PyGenBindTarget(name, name2, genProl);
       Next;                                { past the generator's name }
-      Result := ParseForInGeneratorAST(symIdx, genPi);
+      Result := ParseForInGeneratorAST(symIdx, genPi, -1, genProl);
       Exit;
+    end;
+  end;
+  { `for t in Cls.gen(self, args):` — the UNBOUND spelling, which is how a
+    Python filter chains to the implementation it overrides
+    (`for token in base.Filter.__iter__(self)`). No receiver is injected here:
+    the receiver is written as the first ARGUMENT, so the ordinary argument
+    parse below already puts it in slot 0. }
+  if (PyCompTarget < 0) and (CurTok.Kind = tkIdent) and
+     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+     (TokPos + 2 < TokCount) and (Tokens[TokPos + 1].Kind = tkIdent) and
+     (Tokens[TokPos + 2].Kind = tkLParen) then
+  begin
+    { …and a VARIABLE of that name wins, whatever its case: `w.slider()` is a
+      method call on an object, never the unbound form. }
+    if PyProgSym(CurTok.SVal) >= 0 then genMi := -1
+    else genMi := PyFindUClassExact(CurTok.SVal);
+    if genMi >= 0 then
+    begin
+      genMi := FindUMeth(genMi, GetTokenStr(TokPos + 1));
+      if genMi >= 0 then genPi := UMthProc_[genMi] else genPi := -1;
+      if (genPi >= 0) and ProcIsStackless[genPi] and ProcIsGenerator[genPi] then
+      begin
+        symIdx := PyGenBindTarget(name, name2, genProl);
+        Next; Next; Next;               { past `Cls`, `.`, the method name }
+        Result := ParseForInGeneratorAST(symIdx, genPi, -1, genProl);
+        Exit;
+      end;
+    end;
+  end;
+  { `for t in obj.gen(args):` — a generator METHOD, which is what the html5lib
+    filter pipeline is made of. Same desugar; the receiver is simply the
+    method's first declared parameter, so it is parsed here and handed over as
+    argument 0. Restricted to a plain NAME receiver: an arbitrary expression
+    would have to be parsed before the method is known to be a generator, and
+    re-parsing it afterwards is what this deliberately does not do. }
+  if (PyCompTarget < 0) and (CurTok.Kind = tkIdent) and
+     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) then
+  begin
+    genRecv := PyProgSym(CurTok.SVal);
+    if (genRecv >= 0) and (Syms[genRecv].TypeKind = tyClass) and
+       (Syms[genRecv].RecName >= REC_UCLASS_BASE) and
+       (TokPos + 2 < TokCount) and (Tokens[TokPos + 1].Kind = tkIdent) and
+       (Tokens[TokPos + 2].Kind = tkLParen) then
+    begin
+      genMi := FindUMeth(Syms[genRecv].RecName - REC_UCLASS_BASE,
+                         GetTokenStr(TokPos + 1));
+      if genMi >= 0 then genPi := UMthProc_[genMi] else genPi := -1;
+      if (genPi >= 0) and ProcIsStackless[genPi] and ProcIsGenerator[genPi] then
+      begin
+        symIdx := PyGenBindTarget(name, name2, genProl);
+        genRecvNode := PyMakeIdent(genRecv);
+        Next; Next;                        { past the receiver and the `.` }
+        Next;                              { past the method name }
+        Result := ParseForInGeneratorAST(symIdx, genPi, genRecvNode, genProl);
+        Exit;
+      end;
     end;
   end;
   { THREE or more loop variables over a zip — `for row, label, value in zip(a,
@@ -24143,7 +24258,13 @@ begin
     else
     begin
       PyParseBoolExpr;
-      node := CurASTNode;
+      { `yield a, b, c` yields a TUPLE, exactly as `return a, b` returns one —
+        html5lib's optionaltags slider is written that way. The same builder, so
+        the two spellings cannot drift apart. }
+      if CurTok.Kind = tkComma then
+        node := PyMakeTupleFrom(CurASTNode)
+      else
+        node := CurASTNode;
     end;
     Result := AllocNode(AN_YIELD);
     ASTLeft[Result] := node;
@@ -27180,6 +27301,59 @@ begin
   end;
 end;
 
+{ Does the def/method whose `def` keyword sits at token `defTok` contain a
+  yield in its own body? PyDefBodyHasYield answers that from the body's first
+  token, which the two DEF paths already have in hand; the two METHOD paths do
+  not — they reach a method by its `def` token — so this walks the header first.
+
+  The walk stops at the `:` that closes the header at bracket depth zero, which
+  is why the depth counts braces as well as parens: a parameter default can be a
+  dict literal, and its colons are not the header's. }
+function PyDefAtHasYield(defTok: Integer): Boolean;
+var i, depth: Integer;
+begin
+  Result := False;
+  i := defTok;
+  depth := 0;
+  while i < TokCount do
+  begin
+    { `{` / `}` are tkBegin / tkEnd in the Nil Python token stream }
+    if (Tokens[i].Kind = tkLParen) or (Tokens[i].Kind = tkLBrack) or
+       (Tokens[i].Kind = tkBegin) then Inc(depth)
+    else if (Tokens[i].Kind = tkRParen) or (Tokens[i].Kind = tkRBrack) or
+            (Tokens[i].Kind = tkEnd) then Dec(depth)
+    else if (depth <= 0) and (Tokens[i].Kind = tkColon) then Break
+    else if (depth <= 0) and (Tokens[i].Kind = tkNewline) then Exit;  { not a def header }
+    Inc(i);
+  end;
+  if i >= TokCount then Exit;
+  Inc(i);
+  { A RUN of newlines, not one: a blank (or whitespace-only) line between the
+    header and the first statement emits another. Consuming exactly one left
+    this scan looking at a NEWLINE where it wanted the INDENT, so it fell
+    through to the inline-suite branch and answered "no yield" — while
+    PyParseMethod, which starts from the real body token, answered "yes". The
+    two passes then built a method with different arities and the program
+    segfaulted: precisely the silent ABI mismatch this file warns about
+    everywhere the pre-pass and the real parse both read a signature. }
+  while (i < TokCount) and (Tokens[i].Kind = tkNewline) do Inc(i);
+  if (i < TokCount) and (Tokens[i].Kind = tkIndent) then
+  begin
+    Result := PyDefBodyHasYield(i + 1);
+    Exit;
+  end;
+  { an INLINE suite — `def f(): yield 1` — is one line and has no INDENT }
+  while (i < TokCount) and (Tokens[i].Kind <> tkNewline) do
+  begin
+    if (Tokens[i].Kind = tkIdent) and (GetTokenStr(i) = 'yield') then
+    begin
+      Result := True;
+      Exit;
+    end;
+    Inc(i);
+  end;
+end;
+
 { Rewrite the parsed header onto the stackless step ABI:
   `function(__genself: Pointer): Boolean`. The DECLARED parameters describe the
   produced sequence and shift to 1..n, where they become persistent instance
@@ -29409,6 +29583,7 @@ var i, j, k, depth, methodStart, nparams, procIdx, mmi, inhMmi, slot, curOff, al
     caVal: Integer;   { class-attribute initialiser token, past any annotation }
     caClassW, caInstW: Boolean;   { how this attribute is written module-wide }
     mStarIdx, mKwIdx, starCi: Integer;   { `*args` / `**kwargs` parameter slots }
+    isGenM: Boolean;   { this method's body contains a yield — see PyDefAtHasYield }
     pnames: array[0..15] of AnsiString; ptypes: array[0..15] of TTypeKind;
     pdefHas: array[0..15] of Boolean; pdefIsStr: array[0..15] of Boolean;
     pdefIsNone: array[0..15] of Boolean; pdefIsFloat: array[0..15] of Boolean;
@@ -30117,10 +30292,49 @@ begin
                 + ', which is not supported yet '
                 + '(bug-nilpy-method-returning-str-garbage); '
                 + 'a top-level def returning it works, or return it through a field');
+      { A method whose body yields is a GENERATOR method, and its REGISTERED
+        signature must already be the stackless step ABI — this pre-pass and
+        PyParseMethod both build the parameter list, and the file's own comments
+        record what happens when the two disagree by one slot: a silent ABI
+        mismatch. So the shift happens in both, off the same scan. }
+      isGenM := (not fieldsOnly) and (not isCtor) and PyDefAtHasYield(methodStart);
+      if isGenM then
+      begin
+        if nparams >= 15 then
+          Error('Nil Python: too many parameters for a generator method');
+        if nparams > CO_MAX_PARAMS then
+          Error('Nil Python: a generator takes at most ' + AIntToStr(CO_MAX_PARAMS)
+                + ' parameters including self (v1)');
+        for k := nparams downto 1 do
+        begin
+          pnames[k]     := pnames[k - 1];
+          ptypes[k]     := ptypes[k - 1];
+          pdefHas[k]    := pdefHas[k - 1];
+          pdefIsStr[k]  := pdefIsStr[k - 1];
+          pdefIsNone[k] := pdefIsNone[k - 1];
+          pdefIsFloat[k]:= pdefIsFloat[k - 1];
+          pdefIsBool[k] := pdefIsBool[k - 1];
+          pdefVal[k]    := pdefVal[k - 1];
+          pdefSOff[k]   := pdefSOff[k - 1];
+          pdefSLen[k]   := pdefSLen[k - 1];
+        end;
+        if mStarIdx >= 0 then Inc(mStarIdx);
+        if mKwIdx >= 0 then Inc(mKwIdx);
+        pnames[0] := '__genself';  ptypes[0] := tyPointer;
+        pdefHas[0] := False;  pdefIsStr[0] := False;  pdefIsNone[0] := False;
+        pdefIsFloat[0] := False;  pdefIsBool[0] := False;
+        pdefVal[0] := 0;  pdefSOff[0] := 0;  pdefSLen[0] := 0;
+        PyGenDeclParams := nparams;   { self + the declared ones }
+        PyGenElemTk := tyVariant;
+        Inc(nparams);
+        mRet := tyBoolean;            { the step function returns has-next }
+        mRetRec := REC_NONE;
+      end;
       if fieldsOnly then procIdx := -1
       else
       begin
         procIdx := RegisterProc(fullName, not isCtor, mRet, nparams, pnames, ptypes);
+        if isGenM then PyMarkGeneratorProc(procIdx);
         if mRetRec >= REC_UCLASS_BASE then ProcRetRecId[procIdx] := mRetRec;
         { the call-site packing reads these two, and overload matching reads the
           parameter's class out of ProcParamRecId — same wiring the def path
@@ -30636,7 +30850,10 @@ begin
 end;
 
 procedure PyParseMethod(ci: Integer);
-var savedHoist: Integer; clsAttrSeq: Integer;
+var isGenDef: Boolean;
+    savedGenerator, savedGenStackless, savedGenSeen, savedGenIsVariant: Boolean;
+    savedGenStateCtr, savedGenSlotNext, savedGenScopeBase, savedGenElemOff: Integer;
+    savedHoist: Integer; clsAttrSeq: Integer;
     origName, name, fullName: AnsiString; procIdx, i, idx, nparams, savedSC, savedFS,
     savedSelf, patchPos, bodyNode, bodyStart, annIdx: Integer; pnames: array[0..15] of AnsiString;
     ptypes: array[0..15] of TTypeKind; pcis: array[0..15] of Integer;
@@ -30660,6 +30877,16 @@ begin
     PySkipOverloadStubDef;
     Exit;
   end;
+  { per-invocation, exactly as in PyParseDef: this routine re-enters itself
+    through the nested-def drain at the end. }
+  savedGenerator     := CurProcIsGenerator;
+  savedGenStackless  := CurProcIsStackless;
+  savedGenSeen       := CurGenSeenYield;
+  savedGenIsVariant  := CurGenElemIsVariant;
+  savedGenStateCtr   := CurGenStateCtr;
+  savedGenSlotNext   := CurGenSlotNext;
+  savedGenScopeBase  := CurGenScopeBase;
+  savedGenElemOff    := CurGenElemOff;
   savedHoist := PyHoistHead;
   { PARK the queue on a fresh chain rather than merely remembering its head.
     `PyHoistHead := savedHoist` at the end cannot UNLINK anything: PySeqAppend
@@ -30804,6 +31031,34 @@ begin
     signature. The requirement was a syntax rule with nothing behind it. }
   Expect(tkColon, ':'); Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
   bodyStart := TokPos - 1;
+  { The SAME rewrite the member pre-pass applied to this method's registered
+    signature (PyRegisterClassMembers) — off the same scan, so the frame this
+    body builds and the signature its callers use agree. A generator method is
+    otherwise an ordinary generator whose first declared parameter is `self`. }
+  isGenDef := PyDefBodyHasYield(bodyStart);
+  if isGenDef then
+  begin
+    if nparams >= 15 then
+      Error('Nil Python: too many parameters for a generator method');
+    if nparams > CO_MAX_PARAMS then
+      Error('Nil Python: a generator takes at most ' + AIntToStr(CO_MAX_PARAMS)
+            + ' parameters including self (v1)');
+    for i := nparams downto 1 do
+    begin
+      pnames[i] := pnames[i - 1];
+      ptypes[i] := ptypes[i - 1];
+      pcis[i]   := pcis[i - 1];
+      psigs[i]  := psigs[i - 1];
+    end;
+    pnames[0] := '__genself';  ptypes[0] := tyPointer;
+    pcis[0] := -1;  psigs[0] := -1;
+    Inc(nparams);
+    { …and the same ordering constraint as the def path: the local-typing
+      pre-pass trial-parses this body, so the context must be on before it. }
+    CurProcIsGenerator := True;
+    CurProcIsStackless := True;
+    CurGenSeenYield := False;
+  end;
   PyScanDefGlobals(bodyStart);
   fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]); AppendChar(fullName, '.');
   for i := 1 to Length(name) do AppendChar(fullName, name[i]);
@@ -30814,9 +31069,22 @@ begin
     Python overrides carry no annotations, so without this
     `def optionxform(self, s)` bound a variant parameter to an AnsiString slot
     and the inherited caller read the wrong kind. }
+  { The member pre-pass and this parse decide generator-ness independently, off
+    two different scans of the same body (PyDefAtHasYield there, from the `def`
+    token; PyDefBodyHasYield here, from the body token). If they ever disagree,
+    the signature callers use and the frame this body builds differ by exactly
+    one parameter slot, and the program SEGFAULTS with nothing to point at — the
+    file's standing warning about this pairing, made checkable. }
+  if (procIdx >= 0) and (ProcIsStackless[procIdx] <> isGenDef) then
+    Error('Nil Python: internal — the class-member pre-pass and the method '
+          + 'parse disagree about whether `' + fullName + '` is a generator; '
+          + 'this would build a frame that does not match its registered '
+          + 'signature');
   if procIdx >= 0 then
     for i := 1 to nparams - 1 do
-      if i < Procs[procIdx].ParamCount then ptypes[i] := Procs[procIdx].Params[i].TypeKind;
+      if (i < Procs[procIdx].ParamCount) and
+         ((not isGenDef) or (i > 1)) then   { 0 = __genself, 1 = self }
+        ptypes[i] := Procs[procIdx].Params[i].TypeKind;
   savedSC := SymCount; savedFS := FrameSize; savedSelf := CurSelfClass;
   FrameSize := 0; CurProc := procIdx; CurSelfClass := REC_UCLASS_BASE + ci;
   Procs[procIdx].ScopeBase := SymCount;
@@ -30930,7 +31198,18 @@ begin
     end;
   if pbInit >= 0 then bodyNode := PySeqAppend(pbInit, bodyNode);
   if cellInit >= 0 then bodyNode := PySeqAppend(cellInit, bodyNode);
-  bodyNode := PyPrependResultZero(procIdx, bodyNode);
+  if isGenDef then
+  begin
+    { the same state-machine transform the def path runs — see PyParseDef }
+    if not CurGenSeenYield then
+      Error('Nil Python: internal — a method marked generator has no yield');
+    SLCheckEligible(bodyNode);
+    AssignStacklessSlots(procIdx);
+    bodyNode := BuildStacklessStep(bodyNode, procIdx);
+    ProcGenInstSize[procIdx] := SL_OFF_SLOTS + 8 * CurGenSlotNext;
+  end
+  else
+    bodyNode := PyPrependResultZero(procIdx, bodyNode);
   { A CONSTRUCTOR applies the class attributes first — see PyClassAttrInitSeq.
     Prepended to the body so `__init__`'s own writes win, as in Python. }
   if isCtor and (nparams > 0) then
@@ -30950,6 +31229,14 @@ begin
     hoists are flushed by its statement loop; the rest is stale by
     construction. Same rule as PyParseDef. }
   PyHoistHead := savedHoist;
+  CurProcIsGenerator := savedGenerator;
+  CurProcIsStackless := savedGenStackless;
+  CurGenSeenYield    := savedGenSeen;
+  CurGenElemIsVariant := savedGenIsVariant;
+  CurGenStateCtr     := savedGenStateCtr;
+  CurGenSlotNext     := savedGenSlotNext;
+  CurGenScopeBase    := savedGenScopeBase;
+  CurGenElemOff      := savedGenElemOff;
   PyNestPrefix := savedPfx;
   { drain the nested-def bodies this method queued — each re-enters PyParseDef at
     its own `def` token under the qualifier it registered with. }
