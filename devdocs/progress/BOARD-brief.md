@@ -41,7 +41,7 @@ _none — no lane is locked._
 ## Ready — top 30 of 217, ranked
 
 - `[p 85] [N]` bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module
-- `[p 70] [N]` bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
+- `[p 88] [N]` bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop

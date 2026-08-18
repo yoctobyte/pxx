@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 70
+prio: 88
 type: bug
 blocked-by: []
 summary: "A call through a module-level function ALIAS that omits a defaulted parameter segfaults at runtime, with no diagnostic at compile time. `f = g` then `f(a, b)` where g is `def g(a, b, lo=0, hi=-1)` crashes; the same call with all four arguments supplied is fine, and calling `g` directly with the defaults omitted is fine. Six-line repro, no imports involved."
@@ -161,3 +161,35 @@ dereferenced dropped default.
 
 Three defects were entangled under this one ticket. Two are now separated and
 one (the cross-module default) is fixed; what remains here is the third.
+
+## Reranked 70 -> 88 by the coordinator, 2026-08-18 — the re-scope widened it past the p85
+
+Rank follows the measured scope, and the re-scope changed what this ticket IS. It was
+filed as an alias bug, then found to need neither an alias nor an import:
+
+```python
+def loc(a, lo=7):
+    return lo
+zz = loc
+print(zz(1))     # pxx: '' (empty/None)   CPython: 7
+```
+
+Verified by the coordinator at HEAD `8705aea7a`, after the cross-module fix landed. One
+file, no import, no alias syntax. **A call through a procedural VALUE does not consult
+the callee's defaults.**
+
+That is a broader population than
+[[bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module]] (p85), which
+needs an alias name that collides with a member of the source module. A procedural value
+is how Python spells callbacks, dispatch tables, sort keys, decorators and any
+`handlers[k](x)` — all of which are ordinary, and all of which silently lose their
+defaults here. So this outranks the collision on population even though the collision was
+found second and filed higher.
+
+Both are silent. Neither is retired by the cross-module fix
+(`bug-n-a-default-argument-is-dropped-on-every-cross-module-call`) — that was the
+coordinator's error, corrected on measurement rather than on argument.
+
+**Title is still the filed one and is now wrong twice over** — it names aliases and
+segfaults, and the defect is neither. Retitle left to whoever takes it, same convention
+as the yield ticket, but do not size this from its title.
