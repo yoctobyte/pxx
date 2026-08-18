@@ -2,7 +2,7 @@
 track: N
 prio: 75
 type: feature
-status: working
+status: done
 owner: frank2-7e
 ---
 
@@ -492,3 +492,99 @@ and the failure mode is silent stack corruption rather than a compile error.
 Returned to `backlog/`, not `unfinished/`: the tree is clean and nothing is
 half-applied, so the queue should rank this as available work rather than hold a
 lock on it. Same call the previous parking session made, for the same reason.
+
+## LANDED 2026-08-18 (Track A+N, sole-A confirmed) — generators work; four commits
+
+Built, not scoped. Four commits on master:
+
+| sha | what |
+| --- | --- |
+| `c59a57ff4` | `yield` in a def, consumed by `for x in gen(args)` |
+| `1d84a4bef` | generator METHODS + the three call spellings + tuple targets |
+| `78842fec8` | the parameter limit lifted 4 -> 6 (`SL_MAX_PARAMS`) |
+| `f132f1f7e` | fix: a Pascal `var` argument is not a Nil Python variant (a RED I caused) |
+
+**The banked analysis was right and saved the session.** The engine is built, the
+strategy question was settled, and the dependency on
+[[decide-how-a-compiled-def-carries-its-signature-when-boxed]] does **not** exist —
+re-measured, as the coordinator note asked. Nothing here needed a Track U ruling.
+
+### What works, verified against CPython
+
+31 differential probes, **30 byte-identical to CPython**, 1 a clean compile error
+(the unsupported value form below). Shapes covered: `while`-driven, `for`-over-list,
+`for`-over-range, string and integer elements, parameters, tuple `yield`, tuple loop
+targets, generators consuming generators, generator METHODS, and the full html5lib
+filter shape (a subclass whose `__iter__` yields, chaining to `Base.__iter__(self)`).
+
+Consumption spellings routed to the shared desugar: `gen(args)`, `obj.gen(args)`,
+`Cls.gen(self, args)`.
+
+**Corpus, stated honestly.** All three files whose first wall was `yield`
+(`filters/whitespace.py`, `optionaltags.py`, `inject_meta_charset.py`) now compile,
+and `yield` no longer appears as any file's wall. The html5lib non-test compile
+count is **7 of 33**; the parameter lift moved three treewalkers onto their NEXT
+wall (an open-ended slice `details[1:]`, a `*`-unpack, missing modules) without
+changing the count. That is progress-shaped without being progress, exactly as this
+ticket's own dispatch-trap note warns — recorded rather than reported as movement.
+
+### What it took that was NOT in the banked plan
+
+The banked "next thing to try" was `PyEmitParamSpills`. It was not the problem —
+the spills are correct, and the Pascal path spills a stackless generator's params
+too. Three other things were:
+
+1. **`EmitManagedLocalCleanup` releases the generator's live state.** A stackless
+   step returns at every yield through the ordinary epilogue, so a Nil Python
+   generator freed the very objects the instance still pointed at. Silent: a
+   generator walking `for t in xs` got a dangling list on its SECOND step and the
+   loop simply ENDED, one element in, with no error. Pascal never saw it because
+   its class locals are not refcounted. This is the crash the earlier session
+   localised to the prologue — the prologue was innocent, the EPILOGUE was not.
+2. **Variant and string LOCALS could not persist across a yield at all**
+   (`AssignStacklessSlots` refused them outright). They are what a Nil Python
+   generator body is MADE of, and it cannot be solved frontend-side: the ones that
+   trip it are hidden desugar temps minted mid-body, which no promotion pass can
+   see. They now persist by BLOB copy (variant, 16 bytes) or raw word (string) —
+   bitwise, which is what keeps them refcount-neutral.
+3. **The hoist queue is dropped by the desugar.** A list literal is built by hoisted
+   statements, so `g(["a"])` handed the generator None while `d = ["a"]; g(d)`
+   worked. Parked and spliced ahead of the instance setup now.
+
+### Two silent bugs found by measuring, both layout-dependent
+
+- `PyDefAtHasYield` consumed ONE newline after a header, not a run, so a BLANK LINE
+  between a method's `def` and its first statement made the member pre-pass and the
+  real parse disagree about generator-ness — the silent ABI mismatch `pyparser.inc`
+  warns about throughout. That warning is now **checked**: the two passes are
+  compared and a disagreement is a compile error, not a segfault.
+- **`FindUClass` is case-INSENSITIVE** (Pascal heritage, correct there; Python is
+  not). `w = W(...)` then `for a in w.slider():` matched the RECEIVER `w` against
+  the CLASS `W`, took the unbound `Cls.method(self)` route, and passed no receiver —
+  the generator ran against a garbage `self`. It reproduced only when a variable and
+  a class differed by case alone, so renaming either made it vanish. Worth grepping
+  for siblings: any other Nil Python path that resolves a name through `FindUClass`
+  has the same hazard.
+
+### What does NOT work — filed, not hidden
+
+- **A generator as a VALUE**: `g = gen()`, `list(gen())`, passing one as an argument,
+  `next(g)`, `for t in <object>` through the `__iter__` protocol. All are compile
+  ERRORS today, not wrong answers — the injected receiver makes every such call an
+  arity mismatch. Filed as [[feature-nilpy-a-generator-as-a-first-class-value]].
+- **`yield` inside `try` or `with`** — the stackless transform's own limit. Measured
+  as ZERO occurrences across the ladder corpora, so it blocks nothing today.
+- **More than 6 parameters** (`SL_MAX_PARAMS`), bounded by riscv32's eight-word call
+  limit rather than by anything about generators. The fix that removes the limit
+  entirely is to stop making the declared params PARAMETERS: they are already
+  persistent instance slots, so a step function taking only `__genself` needs no
+  pads at all. Noted in the follow-up ticket.
+- **A bounded LEAK, deliberate and recorded rather than papered over.** A generator's
+  managed locals are no longer released at step exit (that is fix 1 above), so they
+  are dropped only when the instance is — which today means never. Same for the heap
+  cell each variant argument travels in. One-off per generator instance, not per
+  yield or per step. Filed as
+  [[bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells]].
+
+## Log
+- 2026-08-18 — resolved, commit PENDING-COMMIT.
