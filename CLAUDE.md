@@ -268,6 +268,13 @@ a second path — because the second path is the one that stays broken. **If you
 fix a bug on one arm of a double case, grep for the sibling before closing the
 ticket.**
 
+Its **second** sibling **`devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md`**
+is the counterweight that keeps "push generality down" from being over-read: **share the
+AST and the IR; duplicate the parser, the lexer and their support functions per
+language.** Normalise *within* a language, duplicate *across* languages — a shared parser
+helper couples two specs and is wrong in both. (`parser.inc` was meant to be
+`pasparser.inc`; its generic name is an accident of Pascal being the seed, not a mandate.)
+
 **`devdocs/dev/root-cause-over-microfix.md`** is when to apply them. A ticket
 reports a SYMPTOM and usually names a plausible cause — and 9 times out of 10
 the real fix is deeper than the ticket says. So reproduce, **vary the shape** to
