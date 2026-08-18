@@ -228,6 +228,18 @@ from-import binding drops the attributes. Each was found by measuring the
 VALUES rather than the import — which is the discipline this ticket exists to
 record.
 
+### The score for this ticket, stated the way the campaign asks
+
+**Past the wall: 0. Onto the next wall: 4.** The three treewalker files moved
+from `missing module: xml_dom` to `undefined variable (DOCUMENT_NODE)` — the
+p75 blocker, where they now correctly attribute — and `treebuilders/dom.py`
+moved to `missing module: weakref`. Compile count unchanged.
+
+So this ticket bought **attribution and a verified shim, not a compile**. That
+is the honest reading and it should not be dressed as anything else: a reader
+of the board who sees the `xml_dom` row disappear must not conclude four files
+were unblocked.
+
 ### What remains, when the blocker lands
 
 1. Compile `test/lib_mimic_xml_dom.npy` on a pin carrying the fix; the 20
