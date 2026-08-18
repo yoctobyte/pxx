@@ -1,0 +1,27 @@
+# A shim's CLASS used from an IMPORTED module, while the entry module touches
+# only a shim PROC.
+#
+# bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim: the
+# uses edge was recorded against the SPELLING (`codecs`), and the shim branch
+# that records the real edge to `mimic_codecs` is only reached on the FIRST
+# import. The entry module below imports codecs first, so the sibling's import
+# hit `if isCompiled then Exit` and was left with an edge to a name nothing is
+# declared under -- `codecs.CodecInfo(...)` there reported
+# "undefined variable (CodecInfo)".
+#
+# THE SHAPE IS LOAD-BEARING, and a weaker one passes while the bug stands:
+#   - the class use must be in the IMPORTED module, not here;
+#   - this module must NOT use the class, only a proc (or nothing).
+# "both modules import the shim and the ENTRY uses the class" resolves either
+# way, because the entry module is where the real edge got recorded. That weaker
+# repro is what made this look non-reproducible when it was first checked.
+#
+# A qualified PROC names its unit and never consults the visibility-filtered
+# scan, which is why lookup() below kept working throughout and only the class
+# lookup noticed.
+import codecs
+
+import shimclassuser
+
+print(codecs.lookup('utf-8').name)
+print(shimclassuser.describe())

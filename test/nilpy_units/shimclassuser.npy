@@ -1,0 +1,16 @@
+# Imported sibling that USES a shim CLASS. The class use must live HERE, not in
+# the entry module: the entry module's own import is what marks the shim's
+# SPELLING compiled, and this module's import then hits the already-compiled
+# guard. See test_nilpy_shim_class_in_imported_module.npy.
+import codecs
+
+
+class MyCodec(codecs.Codec):
+    pass
+
+
+info = codecs.CodecInfo(name='x-regress', encode=None)
+
+
+def describe():
+    return info.name

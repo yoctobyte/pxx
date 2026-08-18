@@ -525,6 +525,12 @@ test-nilpy: $(COMPILER)
 	# Every value below is CPython 3's on the equivalent pure-Python hierarchy.
 	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_multiple_inheritance_imported_base.npy $(TESTTMP)/test_nilpy_miimp26
 	test "$$($(TESTTMP)/test_nilpy_miimp26)" = "$$(printf 'before: mixin-wins local 10 plain\nafter:  proto local 12\nplain:  mixin-wins mixin-plain 14\nsolo:   solo plain 16')"
+	# a shim's CLASS used from an IMPORTED module, while the entry module touches
+	# only a shim PROC. The shape is load-bearing and the weaker one (entry uses
+	# the class) passes while the bug stands -- see the test file's own note.
+	# bug-a-a-shim-classes-are-invisible-when-two-modules-import-the-same-shim
+	./$(COMPILER) -Futest/nilpy_units test/test_nilpy_shim_class_in_imported_module.npy $(TESTTMP)/test_nilpy_shimcls26
+	test "$$($(TESTTMP)/test_nilpy_shimcls26)" = "$$(printf 'utf-8\nx-regress')"
 	# TWO imported bases have no answer and are REFUSED, not half-taken
 	! ./$(COMPILER) -Futest/nilpy_units test/test_nilpy_two_imported_bases_fail.npy $(TESTTMP)/test_nilpy_twoimp26 > $(TESTTMP)/test_nilpy_twoimp.log 2>&1
 	grep -q 'names TWO base classes whose bodies are not in this file' $(TESTTMP)/test_nilpy_twoimp.log
