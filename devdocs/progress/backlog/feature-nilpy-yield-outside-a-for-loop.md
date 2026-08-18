@@ -83,11 +83,28 @@ Files that USE `yield`, in the ladder corpora (67 `.py` total):
 | webencodings | 5 | 1 |
 | **total** | **67** | **23** |
 
-**23 of 67.** html5lib is a streaming tokeniser/filter/serialiser pipeline, so
-generators are its spine rather than a convenience — `_tokenizer.py`,
-`serializer.py` and every `filters/*.py` are generator-based. No amount of shim
-work reaches those files; this feature is the gate on roughly a third of the
-corpus.
+**23 of 67 — but 9 of those are `html5lib/tests/**`.** Corrected after compiling
+each of the 23 and reading its first wall: the decision-relevant figure is
+**14 library files**, not 23. Stating both because the raw 23 was published first
+and is the more flattering number; the test files are real users of `yield` but
+nobody's build is gated on them.
+
+html5lib is a streaming tokeniser/filter/serialiser pipeline, so generators are
+its spine rather than a convenience — `_tokenizer.py`, `serializer.py` and every
+`filters/*.py` are generator-based. No amount of shim work reaches those files.
+
+The three whose FIRST wall is `yield` today, i.e. the files this feature alone
+would unblock:
+
+- `html5lib/filters/inject_meta_charset.py`
+- `html5lib/filters/optionaltags.py`
+- `html5lib/filters/whitespace.py`
+
+The other 11 library users sit behind a module shim first (`sys`, `xml_dom`,
+`xml_etree_elementtree`, `xml_sax_saxutils`, `genshi_core`) — so `yield` and the
+Track B shim work **compound**: neither alone opens the pipeline, and the shims
+landing without `yield` would move 11 files onto this wall rather than past it.
+That is the argument for ranking it alongside the shims rather than behind them.
 
 Recorded as evidence only. Ranking is the coordinator's and the user's call —
 `prio:` deliberately untouched.
