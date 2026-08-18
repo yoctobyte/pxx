@@ -1384,3 +1384,19 @@ valuable review.
   `feature-b-mimic-urllib-request-over-the-rtl-http-stack` sits at p30 while
   `lib/rtl/mimic_urllib_request.py` exists — stale ticket or means more than the file;
   checked, not assumed.
+
+  **Loose end closed (verified, one read):** `feature-b-mimic-urllib-request-over-the-rtl-http-stack`
+  is NOT stale. `lib/rtl/mimic_urllib_request.py` is a **present-and-refusing stub** —
+  it exists so importing code compiles; `urlopen`/`urlretrieve` raise `NotImplementedError`
+  (confirmed at lines 44-51); `Request` is real only because holding what it was handed is
+  side-effect free. The ticket is for the real `urlopen` over `lib/rtl/http.pas`. **The
+  file existing is the ticket's premise, not evidence against it**, and its summary line
+  already opens with "REFUSES". General shape recorded as a memory, because it will recur
+  as the shim set grows: **a board reader cannot distinguish a refusing stub from a working
+  module by looking at the tree** — never de-rank on "but the file is there". Convention
+  deliberately NOT adopted off one instance (frank3's call, and the right one): if a second
+  refusing shim appears, put REFUSING in the summary's first clause rather than inventing a
+  status field.
+
+  **frank3 stopped as agreed** — tree clean, nothing held, `working/` empty, last commit
+  `5d7894926`. frank2 still working Track N.
