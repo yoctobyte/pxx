@@ -734,3 +734,26 @@ already tagged rainy-day), `zengl`, `freebsd-regex`.
   it never appears in the idle list, and `working/` shows nothing because it never
   claimed. The cheap tell is **last-commit age against a clean tree**, which is two git
   commands and catches what `ListAgents` cannot see.
+
+- 2026-08-18 hourly check #9 (cron) — **frank2-f1 is fine; the check was blind, not
+  the worker.** It answered last hour's ping in its own pane and is working normally
+  (`take the qualified base class ticket next`). Its "no commits since 23:03 + clean
+  tree" reading was **not** a stall: it had pushed everything, which is the same
+  signature as being wedged. **So last-commit-age is a weaker tell than #8 claimed** —
+  a disciplined worker that pushes promptly looks exactly like a stopped one. The tell
+  that actually worked was `tmux capture-pane -p -t <pane>`: read-only, no interrupt,
+  and definitive in one command. Prefer it over another ping next time.
+  **Routed one item to Track U — this is the coordinator's actual job showing up.**
+  frank2 re-measured `feature-pascal-initialize-finalize-intrinsics` before starting
+  it, found the ticket's premise wrong, and escalated rather than picking a direction:
+  `Finalize()` is not missing, it is **accepted and does nothing**. Verified before
+  filing (`parser.inc:23122`) — and the comment there shows it was a **deliberate v1
+  shortcut** that names the leak it accepted, which turns it from a bug report into a
+  genuine decision. Filed `decide-finalize-noop-vs-refusal` (U, p50) with four options
+  rather than frank2's two: the middle path (**warn by default**, precedent = the bare
+  funcname read since 2026-08-03) ends the silence without spending a breakage budget
+  on a question we have no usage data for. Recommended it; the human decides.
+  Also flagged there: the existing feature ticket's premise is now known wrong for the
+  `Finalize` half and needs correcting either way.
+  Otherwise quiet — no pending clears, `working/`+`urgent/` empty, nothing unpushed,
+  no CRITICAL, frank3 and plexus-T unchanged. Coordinator took no ticket.
