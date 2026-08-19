@@ -44,7 +44,9 @@ def main():
     root = tempfile.mkdtemp(prefix="pin-shadow-")
     try:
         os.makedirs(os.path.join(root, tw.TSTATE_REL))
-        clone = types.SimpleNamespace(path=root)
+        # .branch too: pin_shadow reads the incumbent pin off
+        # origin/<branch>, so a stub without it is not a clone.
+        clone = types.SimpleNamespace(path=root, branch="master")
         with open(os.path.join(root, tw.PIN_ALLOWLIST_REL), "w") as f:
             f.write("# leading-hash comment\n\n"
                     "test-zlib#00\tbug-t-zlib-oracle\n"

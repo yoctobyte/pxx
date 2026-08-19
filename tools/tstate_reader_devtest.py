@@ -45,6 +45,10 @@ ALLOWED = {
     "uforth_bench.py":
         "a WRITER — appends bench rows, and runs from a dev checkout on a "
         "branch, never from the watcher clone",
+    "twatch_pin_baseline_devtest.py":
+        "joins TSTATE_REL onto a tempfile.mkdtemp() it just created, to give "
+        "the shadow somewhere to append pin-shadow.log; it never reads the "
+        "repo's tstate at all",
     "twatch_close_stubs_devtest.py":
         "builds its own throwaway clone as a fixture; the path it joins is the "
         "fixture's, not a live watcher's",

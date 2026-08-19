@@ -4,6 +4,7 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "pin_shadow answers `would_pin` from a raw red count, with no notion of a red whose CAUSE is already inside the current pin — so it is currently refusing every pin over 10 reds that were all red before the current pin too, six of them blocked on an unresolved Track U decision. A gate that cannot clear is not a gate."
+status: done
 ---
 
 # The pin shadow cannot clear while its reds are older than the pin
@@ -73,3 +74,45 @@ a red's cause partly because tstate stores a failed job as the bare string `"fai
 
 Track T tooling change — T's own lane gate applies, plus the shadow's verdict exercised
 against a recorded red set rather than argued.
+
+## Fix — option 1, as recommended
+
+`pin_shadow()` (`tools/twatch.py`) now carries `st["pin_baseline"]`: the red set
+as it stood under the **outgoing** pin. `unexpected` excludes anything in it, so
+the shadow answers "does this candidate have reds the incumbent does not have"
+rather than "are there reds". `inherited` is reported alongside, and the verdict
+line reads `N red(s) the current pin does not have, M inherited from the current
+pin` — the baseline is never silent.
+
+Four properties the fix had to keep, each guarded in
+`tools/twatch_pin_baseline_devtest.py` (12 checks):
+
+- **The baseline is taken from the PREVIOUS run, not the current one.** The first
+  run after a pin lands is the first evidence *about* that pin, so snapshotting
+  it would let a pin-caused regression forgive itself by the same act that
+  introduced it.
+- **It is re-snapshotted only when the pin actually moves**, so a regression
+  during a pin's life stays visible for that pin's whole life.
+- **A baselined red that goes green leaves the baseline for good**, so a later
+  re-break counts as new. The amnesty covers a red, never a job name.
+- **Self-host is never waivable**, baseline or not.
+
+### The bootstrap is an assumption, and is labelled as one
+
+There is no stored red set for pin v365, so the first run after this lands takes
+its baseline from the run in front of it and records
+`how: "BOOTSTRAP (assumed, not observed)"` in tstate, plus a line in the log.
+That is forgiveness on assumption rather than on evidence, and a reader must be
+able to tell the two apart.
+
+In this instance the assumption is independently known to be sound: the
+coordinator checked all ten reds after pinning v366 and every cause is an
+ancestor of v365 (table above). Every later baseline is carried from an observed
+run and needs no such note.
+
+## Log
+- 2026-08-19 — fixed; `twatch_pin_baseline_devtest.py` (12 checks) is the guard.
+  Non-vacuous by construction: run against the pre-fix `twatch.py` it does not
+  merely fail, it raises `KeyError: 'inherited'` — the old verdict has no notion
+  of an inherited red.
+- 2026-08-19 — resolved, commit PENDING-COMMIT.

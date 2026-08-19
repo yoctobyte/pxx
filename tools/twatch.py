@@ -1531,7 +1531,51 @@ def pin_shadow(clone, host, st, sha, report, authoritative, now=None):
             print("twatch: [pin shadow] ignoring %d stale red key(s) no run can "
                   "produce any more: %s" % (len(stale_red), ", ".join(stale_red[:3])),
                   flush=True)
-    unexpected = [j for j in reds if j not in allow]
+    # A red the INCUMBENT pin already has is not an argument against the pin that
+    # would replace it: every lane is living with it today, and blocking on it
+    # means the candidate is judged against a standard the thing in production
+    # does not meet. Worse, it cannot clear — six of the ten reds on 2026-08-19
+    # were blocked on a Track U decision only the owner can answer, so `would_pin`
+    # could never become true, every pin was taken over the shadow's objection,
+    # and a gate that is always overridden stops being read at all
+    # (bug-t-the-pin-shadow-cannot-clear-while-its-reds-are-older-than-the-pin).
+    #
+    # So carry a baseline: the red set as it stood under the OUTGOING pin. It is
+    # re-snapshotted only when the pin actually moves, and it is taken from the
+    # PREVIOUS run rather than this one -- this run is the first evidence about
+    # the new pin, and a red the new pin CAUSED must not be baselined away by the
+    # same act that introduced it.
+    prev = st.get("pin_shadow") or {}
+    base = dict(st.get("pin_baseline") or {})
+    pin = pinned_ref(clone)
+    pin_id = pin[0] if pin else None
+    if pin_id and base.get("pin") != pin_id:
+        carried = prev.get("red_set")
+        how = "carried from the outgoing pin"
+        if carried is None:
+            # No prior full tier recorded one. Bootstrapping from THIS run
+            # forgives the current reds on assumption rather than on evidence,
+            # so say so in the log and in tstate: a reader must be able to tell
+            # an observed baseline from an assumed one.
+            carried, how = reds, "BOOTSTRAP (assumed, not observed)"
+        base = {"pin": pin_id, "reds": sorted(carried), "at": utcnow(), "how": how}
+        print("twatch: [pin shadow] pin moved to %s — baseline of %d inherited "
+              "red(s), %s" % (pin_id, len(base["reds"]), how), flush=True)
+    # A baselined red that has since gone GREEN leaves the baseline for good, so
+    # a later re-break counts as new. Amnesty is for the reds that are still
+    # there, never a permanent pass for the job.
+    if base.get("reds"):
+        still = [j for j in base["reds"] if j in set(reds)]
+        if len(still) != len(base["reds"]):
+            healed = [j for j in base["reds"] if j not in still]
+            print("twatch: [pin shadow] %d baselined red(s) went green and leave "
+                  "the baseline: %s" % (len(healed), ", ".join(healed[:3])), flush=True)
+            base["reds"] = still
+    if base:
+        st["pin_baseline"] = base
+    baseline = set(base.get("reds") or ())
+    inherited = [j for j in reds if j in baseline and j not in allow]
+    unexpected = [j for j in reds if j not in allow and j not in baseline]
     # The one property that can never be waived: a compiler that cannot
     # reproduce itself must not become anyone's ground, allowlist or not.
     # Orphans are excluded here too — the stale
@@ -1554,15 +1598,21 @@ def pin_shadow(clone, host, st, sha, report, authoritative, now=None):
                if j.startswith(SELFHOST_SEL_PREFIX)}
     selfhost_ok = bool(live_sh) and all(s in PASSLIKE for s in live_sh.values())
     qualifies = not unexpected and selfhost_ok
-    prev = st.get("pin_shadow") or {}
     streak = (int(prev.get("streak") or 0) + 1) if qualifies else 0
     would = qualifies and streak >= PIN_STREAK_K
     st["pin_shadow"] = {"streak": streak, "sha": sha, "at": utcnow(),
                         "qualifies": qualifies, "would_pin": would,
-                        "unexpected": unexpected[:20], "reds": len(reds)}
+                        "unexpected": unexpected[:20], "reds": len(reds),
+                        "inherited": len(inherited),
+                        # The full set, so the NEXT pin change can baseline off
+                        # what was red under this one without re-running a tier.
+                        "red_set": reds[:400]}
+    carried_note = (", %d inherited from the current pin" % len(inherited)
+                    if inherited else "")
     if would:
-        why = "WOULD PIN %s — %d red(s), all allowlisted, self-host clean, " \
-              "streak %d/%d" % (sha[:12], len(reds), streak, PIN_STREAK_K)
+        why = "WOULD PIN %s — %d red(s), none new%s, self-host clean, " \
+              "streak %d/%d" % (sha[:12], len(reds), carried_note, streak,
+                                PIN_STREAK_K)
     elif qualifies:
         why = "would-pin PENDING %s — qualifies, streak %d/%d" \
               % (sha[:12], streak, PIN_STREAK_K)
@@ -1570,8 +1620,9 @@ def pin_shadow(clone, host, st, sha, report, authoritative, now=None):
         why = "would NOT pin %s — self-host is not clean (never waivable)" \
               % sha[:12]
     else:
-        why = "would NOT pin %s — %d red(s) not in the allowlist: %s" \
-              % (sha[:12], len(unexpected), ", ".join(unexpected[:5]))
+        why = "would NOT pin %s — %d red(s) the current pin does not have%s: %s" \
+              % (sha[:12], len(unexpected), carried_note,
+                 ", ".join(unexpected[:5]))
     print("twatch: [pin shadow] %s" % why, flush=True)
     try:
         with open(os.path.join(clone.path, PIN_SHADOW_REL), "a") as f:
