@@ -4324,3 +4324,34 @@ the value that waives nothing**, and **set-or-clear, never set-only**.
 Still unclaimed on T's list: rendering `pin_built` in cascade reports so a `$(PXX_STABLE)`-built job
 is visibly not evidence about the range. Already in the report JSON — a rendering change, not new
 plumbing. Worth doing; it is the straddle rule made automatic.
+
+## Check +28h — quiet, no pin needed, one lane dispatched
+
+**Pin: nothing to do.** `compiler/**` has moved **zero** commits since v366 (`cabb5d598`). First
+check tonight where the pin question answers itself.
+
+**T: UP**, native green through `a76c6712e3ce`, breadth 0h old / 5 behind. **Still no full tier at
+v366** — newest full remains `a15cb05fa9ce` RED with the ten inherited reds. That is the one
+outstanding measurement and it is on its own schedule; the revert plan is unchanged.
+
+**Nobody blocked.** frank3 down since the carve; T running its own lane.
+
+**Dispatched frank2 → `refactor-a-one-signature-record-for-every-callable-carrier` (A, p66), A slot
+granted.** Chosen by continuity — frank2 landed steps 1 and 2 as `9e711a681` — and because the
+ticket's reshape banner says step 3 is now a **port onto an existing structure, not a design**
+(PYSIG already carries `code`/`ReqN`/`TotN`/`Star`/`Dflts`/`Names`). It also stopped being a
+tidy-up: a carrier with no names currently gets a *named refusal*, so **a reachable diagnostic is
+standing in for a feature**, and finishing it turns that into a correct answer for every callable
+shape. **It is the root-cause candidate for `bug-n-a-callable-value-…-bound-method` (N, p70) sitting
+in `urgent/`** — asked frank2 to say either way, since "it is a separate mechanism" is also a
+useful answer.
+
+Told it: enumerate the callable tags **from `defs.inc`**, not from any count including mine (the
+"three tags" that were four, `VT_BOUNDMETHOD=8` being the one the headline repro takes); preserve
+`9e711a681`'s two ordering decisions rather than rediscover them; do not pin; bank and park if it
+turns out to be a design; and **say so and stay down if its context is too thin** — a refusal is a
+real answer for a signature mechanism.
+
+Queues unchanged from +27h. `urgent/` still holds the three tickets from the cascade triage, and
+`decide-nilpy-import-rule-vs-a-cpyext-extension-module` (U, p75) remains the morning headline — now
+doubly so, since it also gates the automated pin check until it is answered.
