@@ -4,7 +4,7 @@ prio: 68
 type: feature
 blocked-by: [bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view, feature-nilpy-for-loop-getitem-protocol-fallback]
 summary: "`unknown base class Mapping` is now the single biggest remaining wall on the third-party ladder — 7 html5lib files, up from 3, and all four etree files landed on it. No shim exists: lib/rtl has collections.pas (no Mapping) and no mimic_collections_abc.py. Needs Mapping / MutableMapping / MutableSet as ordinary classes. BLOCKED on two N bugs that break exactly the mixin methods an ABC is made of."
-status: working
+status: done
 owner: frankonpiler-etree
 ---
 
@@ -206,3 +206,6 @@ pattern is a base class calling *down*. Five filed, all measured on pinned v356:
 
 Four workarounds registered in `devdocs/dev/track-b-workarounds.md` with their
 revert conditions.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.

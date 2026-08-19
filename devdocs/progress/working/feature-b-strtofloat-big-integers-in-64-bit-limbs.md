@@ -4,7 +4,8 @@ prio: 25
 type: feature
 blocked-by: []
 summary: "ExBinNearest's big-integer primitives use 32-bit limbs because a limb times a sub-2^31 multiplier is the largest product that fits a signed Int64. MulHiU64 is already in lib/rtl/wideint.pas (intrinsic via IR_MULHI, already used by Eisel-Lemire in this same unit), so 64-bit limbs are available: half the limb count, BigFMulU64's five passes collapse to one, and the power-of-five chunk rises from 5^13 to 5^27. Expect ~4x, taking subnormal StrToFloat from ~8-11 us to ~2-3 us — inside CPython's range. A rewrite of six leaf routines with no change to the algorithm above them."
-owner: unassigned
+owner: frank3-etree
+status: working
 ---
 
 # `StrToFloat`'s big integers want 64-bit limbs
