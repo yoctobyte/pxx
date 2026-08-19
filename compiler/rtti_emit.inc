@@ -416,6 +416,14 @@ begin
   { Where an ORPHANED def-time store lands -- see PyDfltScratchOff in defs.inc.
     Emitted unconditionally so the address exists even in a module with no
     unbakeable defaults; 16 bytes is one variant. }
+  { PXXDBG=n.procs: the whole proc table, index -> name/arity/unit. The IR and
+    AST dumps print a callee as a bare `call a=1508`, and mapping that back by
+    hand is how an hour went into a dispatcher that turned out not to be the one
+    the call site used. }
+  if PxxDbgEnabled('n.procs') then
+    for pi := 0 to ProcCount - 1 do
+      WriteLn('PXXDBG n.procs pi=', pi, ' name=', Procs[pi].Name,
+              ' nparams=', Procs[pi].ParamCount, ' unit=', ProcUnitIdx[pi]);
   PyDfltScratchOff := DataLen;
   DataPutZeros(48);
   for pi := 0 to ProcCount - 1 do

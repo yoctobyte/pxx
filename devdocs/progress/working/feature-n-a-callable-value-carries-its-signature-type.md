@@ -540,3 +540,37 @@ the measured boundary.
 
 `compiler/builtin/pylib.pas` and `pyeval.pas` changed, so other lanes see none
 of this until `make stabilize-fast && make pin`. Coordinator-scheduled.
+
+
+## Scope, measured after the fact — this covers the tag-8 pair, and there are FOUR tags
+
+The feature is complete and correct for the **VT_BOUNDMETHOD pair** (tag 8),
+which is what `f = some_def`, `obj.method`, and the `map`/`filter`/`sorted(key=)`
+path all use. That is verified against CPython by the wired test.
+
+It does NOT cover the other callable-bearing tags. A module-level def reached
+through a **subscript** or a **parameter** — `fs = [g]; fs[0](1)`, or
+`take(g)` where `take` calls `fn(1)` — is boxed by `PyBoxCallableValue` on the
+**boundfn carrier, tag 12**, and `pyvar_callv1` routes only tag 8 into the new
+dispatcher. Those shapes still segfault when a defaulted parameter is omitted.
+
+That is pre-existing (identical on `PXX_STABLE`), not a regression, and it is
+filed with its full diagnosis as
+[[bug-n-a-module-level-def-taken-as-a-value-loses-its-defaults-on-the-boundfn-carrier]]
+(N, p65) — including the finding that the boundfn carrier has its OWN defaults
+mechanism (`pyboundfn_setdefaults`) which fires for the NESTED def form and not
+the module-level one.
+
+**Count the mechanisms before extending this.** There are now four dispatchers
+for one concept — `pybound_callv*`, `pycallback_call*`, `PyCallKey1`,
+`pyvar_callv*` — and two independent defaults mechanisms. The signature record
+this ticket built is the general one; the honest next step is to put `Sig` on
+the boundfn carrier too and DELETE `pyboundfn_setdefaults`, rather than teach a
+fifth path the same trick.
+
+## Tooling added
+
+`PXXDBG=n.procs` dumps the proc table (index, name, arity, unit). The IR and
+AST dumps print a callee as a bare `call a=1508`, and an hour went into the
+wrong dispatcher because that number was mapped back by assumption. It is what
+finally identified `pyvar_callv1` as the real call site.
