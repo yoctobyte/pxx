@@ -5,7 +5,7 @@ type: feature
 owner: frankonpiler-an
 blocked-by: []
 summary: "DECIDED 2026-08-19. A boxed callable's VT_CALLABLE_TAG payload becomes ONE pointer to a static signature record {code address, ReqN, TotN, per-param default descriptor}. Static, so the slot still owns nothing and no refcount behaviour changes. One call-site helper reads it: check arity, fill defaults, call. Unblocks three tickets whose symptoms are SIGSEGV and silent wrong values."
-status: working
+status: done
 ---
 
 # A callable value carries its signature type
@@ -574,3 +574,6 @@ fifth path the same trick.
 AST dumps print a callee as a bare `call a=1508`, and an hour went into the
 wrong dispatcher because that number was mapped back by assumption. It is what
 finally identified `pyvar_callv1` as the real call site.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.

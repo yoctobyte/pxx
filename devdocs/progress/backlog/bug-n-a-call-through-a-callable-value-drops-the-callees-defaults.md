@@ -83,3 +83,34 @@ not assume, since "subsumed" is a prediction until the fix exists.
 
 Ranked #1 in Track N at the time this was written, so without the edge the next worker to
 pull from `next --track N` would have re-derived work already underway in another lane.
+
+
+---
+
+## 2026-08-19 — MOSTLY FIXED by p88. One row remains, and it is re-filed.
+
+[[feature-n-a-callable-value-carries-its-signature-type]] landed
+(`e78cc5882`, `9bbbbef6c`, `d95ba7bc0`). Every row of the table above was
+re-measured against a self-hosted fixedpoint at that work:
+
+| binding | before | now |
+| --- | --- | --- |
+| `from M import g as al` | empty | **7** |
+| `from M import g` then `al = g` | empty | **7** |
+| same-file `def g` then `al = g` | empty | **7** |
+| same-file `def g`, DIRECT call | 7 | 7 |
+| `map(g, xs)` / `sorted(key=g)` | wrong | **correct** |
+| `obj.method` as a value | wrong | **correct** |
+| **`g` passed as an argument, called with fewer args** | SEGFAULT | **still SEGFAULT** |
+
+The last row is a DIFFERENT carrier, not a gap in the fix: those values ride
+tag 12 (the boundfn carrier), not the tag-8 pair the signature record hangs
+off. Measured with `PXXDBG=n.procs` — the call site is `pyvar_callv1`, which
+routes only tag 8 into the new dispatcher.
+
+Re-filed with the full diagnosis as
+[[bug-n-a-module-level-def-taken-as-a-value-loses-its-defaults-on-the-boundfn-carrier]]
+(N, p65). **Do not close this ticket on that row** — close it when the re-filed
+one lands, or close this now and let that one carry the remainder. Recommend
+the latter: everything this ticket described except one carrier is fixed and
+verified against CPython by `test/test_nilpy_callable_value_defaults.npy`.

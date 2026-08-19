@@ -1578,6 +1578,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-mode-delphi | A | 50 | feature | `{$mode delphi}` support — incl. the @-optional proc-pointer disambiguation | — |
 | feature-multidim-const-array | A | 50 | feature | feature: multidimensional typed-constant arrays | — |
 | feature-multidim-fixed-arrays | A | 50 | feature | Multidimensional fixed arrays | — |
+| feature-n-a-callable-value-carries-its-signature-type | A | 88 | feature | DECIDED 2026-08-19. A boxed callable's VT_CALLABLE_TAG payload becomes ONE pointer to a static signature record {code address, ReqN, TotN, per-param default descriptor}. Static, so the slot still owns nothing and no refcount behaviour changes. One call-site helper reads it: check arity, fill defaults, call. Unblocks three tickets whose symptoms are SIGSEGV and silent wrong values. | — |
 | feature-n-nilpy-ast-based-typing | N | 70 | feature | NilPy: type locals from the AST, like Rust and Zig already do | — |
 | feature-native-arch-binaries | A | 50 | feature | Distribute native per-arch stable binaries (no FPC/make on install) | — |
 | feature-nested-anonymous-fixed-array | A | 50 | feature | Anonymous nested fixed array `array[..] of array[..] of T` | — |

@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| feature-n-a-callable-value-carries-its-signature-type | A | 88 | feature | DECIDED 2026-08-19. A boxed callable's VT_CALLABLE_TAG payload becomes ONE pointer to a static signature record {code address, ReqN, TotN, per-param default descriptor}. Static, so the slot still owns nothing and no refcount behaviour changes. One call-site helper reads it: check arity, fill defaults, call. Unblocks three tickets whose symptoms are SIGSEGV and silent wrong values. | — |
+_none_
 
 ## unfinished (17)
 
@@ -46,7 +44,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (241)
+## backlog (242)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -65,6 +63,7 @@ _none_
 | bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function | N | 50 | bug | `g = f` BOXES the function on the heap; every other path (a dict value, a return value, the bare name) keeps the raw code pointer. So `g == f` and `g is f` are False, two assignments of the same function are unequal to each other, and `id(g)` is a heap address while `id(f)` is the code address. CPython answers True to all of it. | — |
 | bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through | N | 45 | bug | sys.version_info throws at RUNTIME with a message admitting its own guard failed: 'the code guarding that (the flag its except-branch sets) let this call through anyway'. Two defects — the member is missing, and the compile-time guard meant to catch that does not fire. A guard that reports its own failure and continues is worse than no guard. | — |
 | bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides | N | 55 | bug | A base class whose __iter__ only raises poisons every subclass override: `for k in self` inside a base method calls the BASE __iter__, and the subclass's real __iter__ is never reached — `iter() returned non-iterator of type 'Sub'`. This is the whole ABC mixin pattern. | — |
+| bug-n-a-module-level-def-taken-as-a-value-loses-its-defaults-on-the-boundfn-carrier | N | 65 | bug | A module-level def taken as a value through a SUBSCRIPT or a PARAMETER is boxed on the tag-12 boundfn carrier, not the tag-8 pair, and that carrier's defaults machinery does not fire for it: `fs = [g]; fs[0](1)` on `def g(x, lo=7)` segfaults. The nested-def form of the same shape is correct, so it is the module-level arm that was left behind. | — |
 | bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members | N | 40 | bug | A module that defines a name equal to its own module name makes every QUALIFIED access to the module's other members fail: `import bisect; bisect.bisect_left(...)` gives `no class declares a method or callable field .bisect_left()`, because `bisect` resolves to the module's member rather than the module. CPython's own Lib/bisect.py has `bisect = bisect_right`, so this is ordinary stdlib-shaped code. From-imports are unaffected. | — |
 | bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override | N | 55 | bug | `self[k]` written inside a base-class method binds to that class's own __getitem__ instead of the subclass override, so a mixin written the natural way raises the base's KeyError. Sibling arm of the already-fixed bug-n-a-builtin-subclass-subscript-operator-skips-the-override. | — |
 | bug-n-a-unicode-identifier-is-rejected-by-the-lexer | N | 25 | bug | `_κ = 5` is legal Python 3 and the NilPy lexer rejects it with `unexpected character`. Non-ASCII in a STRING literal already works, so this is the identifier path only. Two tinycss2 files (color4.py, color5.py) use Greek letters as names for colour-space constants. | — |
@@ -468,9 +467,9 @@ _none_
 | decide-what-synapse-actually-needs-vs-mimic-fpc | U | 20 | decide | Synapse builds under `--mimic-fpc`. What does it actually NEED? | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2050)
+## done (2051)
 
-2050 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2051 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (39)
 
@@ -518,6 +517,8 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 70] [N] bug-n-a-call-through-a-callable-value-drops-the-callees-defaults
+- [p 65] [N] bug-n-a-module-level-def-taken-as-a-value-loses-its-defaults-on-the-boundfn-carrier
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
 - [p 65] [P] feature-pascal-corpus-oop
@@ -758,7 +759,6 @@ _none_
 - **1** — feature-a-expose-rounding-mode-intrinsic-to-pascal
 - **1** — feature-a-own-language-first-symbol-resolution
 - **1** — feature-a-rdrand-cpuid-compiler-builtins
-- **1** — feature-n-a-callable-value-carries-its-signature-type
 - **1** — feature-nilpy-object-reclamation
 - **1** — feature-nilpy-parallel-for-in
 - **1** — feature-os-targets-bsd-mac
