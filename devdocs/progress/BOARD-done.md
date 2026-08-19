@@ -1942,13 +1942,16 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-c-preprocess | T | 70 | regression | regression: test-core#src:test/test_c_preprocess.pas@1 red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-core-test-c-struct-fields | T | 70 | regression | regression: test-core#src:test/test_c_struct_fields.pas red at 42786f141ea7 (auto-filed by twatch) | — |
 | regression-test-core-test-c-unit-globals | T | 70 | regression | regression: test-core#src:test/test_c_unit_globals.pas red at 60502ed0c353 (auto-filed by twatch) | — |
+| regression-test-core-test-call-result-member | P | 70 | regression | regression: test-core#src:test/test_call_result_member.pas red at a76303231306 (auto-filed by twatch) | — |
 | regression-test-core-test-conformance-1 | P | 70 | regression | test_conformance_1's expected output still encodes the OLD Variant-typecast behaviour: it asserts `v int=1` where `v := 123`. 24204e10d made `Integer(v)` convert rather than reinterpret, so the compiler is now right and the expectation is wrong — and it holds every full tier RED. | — |
+| regression-test-core-test-ctor-result-member | P | 70 | regression | regression: test-core#src:test/test_ctor_result_member.pas red at a76303231306 (auto-filed by twatch) | — |
 | regression-test-core-test-dynarray-params | T | 70 | regression | regression: test-core#src:test/test_dynarray_params.pas red at 34670fe9b872 (auto-filed by twatch) | — |
 | regression-test-core-test-exception-unhandled | T | 70 | regression | regression: test-core#src:test/test_exception_unhandled.pas@1 red at 899e51cda3ba (auto-filed by twatch) | — |
 | regression-test-core-test-float-write | T | 70 | regression | regression: test-core#src:test/test_float_write.pas@1 red at ad8e212cf739 (auto-filed by twatch) | — |
 | regression-test-core-test-fortran-skeleton | T | 70 | regression | regression: test-core#src:test/test_fortran_skeleton.f90 red at ad8e212cf739 (auto-filed by twatch) | — |
 | regression-test-core-test-fpc-compat-batch2 | T | 70 | regression | regression: test-core#src:test/test_fpc_compat_batch2.pas red at f6bcbe6c1237 (auto-filed by twatch) | — |
 | regression-test-core-test-interface-mainbody-ascast-temp | T | 70 | regression | regression: test-core#src:test/test_interface_mainbody_ascast_temp.pas red at daf8d692af04 (auto-filed by twatch) | — |
+| regression-test-core-test-isas-open-world-b325 | P | 70 | regression | regression: test-core#src:test/test_isas_open_world_b325.pas red at a76303231306 (auto-filed by twatch) | — |
 | regression-test-core-test-local-typed-const | P | 70 | regression | RESOLVED. A real regression from 3ed3e2653 (routine-local typed const made static): a SCALAR local const read in an expression stopped compiling — invalid IR symbol reference in load_sym — while the array shapes and the counter idiom the fix targeted both worked. Bisected by Track T; root cause was SymRollbackTo handing the index back and the -O2 inliner still loading it. Fixed in 467a4e5da, carried by pin v342. | — |
 | regression-test-core-test-managed-block-meta | T | 70 | regression | regression: test-core#src:test/test_managed_block_meta.pas red at 86da0606d916 (auto-filed by twatch) | — |
 | regression-test-core-test-nested-class-type-b348 | P | 70 | regression | regression: test-core#src:test/test_nested_class_type_b348.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
@@ -1969,6 +1972,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-nilpy-sorted-pairs | T | 70 | regression | regression: test-core#src:test/test_nilpy_sorted_pairs.npy red at bb845b13ceb3 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-star-methods-and-targets | T | 70 | regression | regression: test-core#src:test/test_nilpy_star_methods_and_targets.npy red at 89dae725b972 (auto-filed by twatch) | — |
 | regression-test-core-test-platform-defines | T | 70 | regression | regression: test-core#src:test/test_platform_defines.pas@2 red at 96147f570d29 (auto-filed by twatch) | — |
+| regression-test-core-test-procedure-as-value-ok | P | 70 | regression | regression: test-core#src:test/test_procedure_as_value_ok.pas red at a76303231306 (auto-filed by twatch) | — |
 | regression-test-core-test-procvar-value-context | P | 70 | regression | regression: test-core#src:test/test_procvar_value_context.pas red at 0e4ad46330ca (auto-filed by twatch) | — |
 | regression-test-core-test-relpath-uses | T | 70 | regression | regression: test-core#src:test/test_relpath_uses.pas red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-core-test-set-literal-element-types | P | 70 | regression | regression: test-core#src:test/test_set_literal_element_types.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
@@ -1977,6 +1981,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-sqlite-crud | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud.pas red at ff90643ef2a3 (auto-filed by twatch) | — |
 | regression-test-core-test-stackless-gen | P | 70 | regression | regression: test-core#src:test/test_stackless_gen.pas red at dfac1da00b04 (auto-filed by twatch) | — |
 | regression-test-core-test-static-array-length | T | 70 | regression | regression: test-core#src:test/test_static_array_length.pas red at fb9346bd4bce (auto-filed by twatch) | — |
+| regression-test-core-test-stmt-call-result-selector-b318-2 | P | 70 | regression | regression: test-core#src:test/test_stmt_call_result_selector_b318.pas red at a76303231306 (auto-filed by twatch) | — |
 | regression-test-core-test-stmt-call-result-selector-b318 | T | 70 | regression | regression: test-core#src:test/test_stmt_call_result_selector_b318.pas red at 33cd0117f9f9 (auto-filed by twatch) | — |
 | regression-test-core-test-strict-overload-width | P | 70 | regression | RESOLVED — not a defect. An intended EXPECTATION change: Integer and LongInt are one 4-byte signed type, so the LongInt overload is an exact match and the exact phase now sees it. Fixed forward in 58f5ef974; auto-closed by the watcher and independently verified GREEN at HEAD by Track T. | — |
 | regression-test-core-test-string-to-pchar-auto | A | 70 | regression | regression: test-core#src:test/test_string_to_pchar_auto.pas red at 8997639f144f (auto-filed by twatch) | — |
