@@ -102,7 +102,37 @@ filled in fails. There is nothing to fill from. So p70 needs no separate work �
 its table becomes this ticket's regression test, and N's queue should be ranked
 with p70 removed rather than sitting behind it.
 
-### There are TWO callable representations, and the plan as written names one
+### CORRECTION: there are FOUR callable-bearing tags, not two (and not three)
+
+My first pass said TWO. That was wrong — I collapsed the owned shapes together.
+A standing note in the repo says THREE (9 / 10 / 12). That is closer but also
+incomplete. Read off `defs.inc` directly:
+
+| tag | payload | built by |
+| --- | --- | --- |
+| `VT_BOUNDMETHOD` = **8** | `{code, recv}` pair pointer | `pybound_new` (pylib.pas:13626, stamps `VType := 8`) |
+| `VT_PYCLOSURE_TAG` = 9 | pyeval closure object (`PClosureObj`, RAW2 block) | pyeval |
+| `VT_BOUNDFN_TAG` = 10 | lifted bound-fn object (RAW2 block) | `pyboundfn_new` |
+| `VT_CALLABLE_TAG` = 12 | a callable the slot does NOT own — static code address, or a borrowed heap callable | backend variant-boxing, keyed on `IRSrcIsCallable` |
+
+Nothing was retired. 9 and 10 are deliberately distinct and `defs.inc` says why:
+*"A SEPARATE tag from 9 rather than a reuse of it: the tag-9 consumers read
+`PClosureObj(payload)^.Cidx`, which is a different record, so a bound-fn riding
+as a 9 would be interpreted at the wrong offsets."* The count that was missing
+from every version is **8**.
+
+(`VT_CLASSREF_TAG` = 11 is also invoked — `cls = A; cls(3)` — but its callee is a
+constructor, so it is a different signature question and is deliberately out of
+scope here. Worth naming so the next reader does not have to re-derive that it
+was considered.)
+
+**Why 8 is the one that matters:** `PyMakeFuncValueFor` — the ASSIGNMENT path,
+and the path this ticket's own headline repro `al = g` takes — calls
+`pybound_new`, which stamps tag **8**. So a design that changes only tag 12's
+payload, and adds the record to `TPyClosure` (tag 9), would still leave `al = g;
+al(1)` broken. The plan needs to name tag 8 explicitly.
+
+### The original two-way note, kept because it is still the operative split
 
 This is the thing to settle before writing code, because it changes the size.
 
