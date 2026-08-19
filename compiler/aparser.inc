@@ -16,22 +16,6 @@
 function ParseAStatement: Integer; forward;
 function ParseABlock: Integer; forward;
 
-function AIntToStr(n: Integer): AnsiString;
-var rev, res: AnsiString; i: Integer;
-begin
-  rev := '';
-  if n = 0 then AppendChar(rev, '0')
-  else
-    while n > 0 do
-    begin
-      AppendChar(rev, Chr(Ord('0') + (n mod 10)));
-      n := n div 10;
-    end;
-  res := '';
-  for i := Length(rev) downto 1 do AppendChar(res, rev[i]);
-  Result := res;
-end;
-
 { case-insensitive compare against the current token's text -- used for the
   handful of keywords left as plain tkIdent (is/elsif/when/Put_Line) rather
   than given their own reused token kind. }

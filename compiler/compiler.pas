@@ -54,16 +54,17 @@ procedure DbgMarkTokFile(startTok, fileId: Integer); forward;   { real body in p
 procedure CMarkTokModule(startTok: Integer; const path: AnsiString); forward;    { real body in parser.inc; clexer.inc/cparser.inc call it (bug-a-fpc-seed-drift-emitasmx64-forward) }
 function CPathIsCModule(const path: AnsiString): Boolean; forward;   { ditto }
 {$include lexer.inc}
+{$include util.inc}   { shared helpers owned by no frontend/backend — AIntToStr lived in aparser.inc until 2026-08-19. AFTER lexer.inc, not before: AppendChar is defined there. }
 {$ifndef PXX_NO_CFRONT}{$include clexer.inc}{$endif}
-{$include blexer.inc}
+{$ifndef PXX_NO_BASIC}{$include blexer.inc}{$endif}
 {$include pylexer.inc}
-{$include rlexer.inc}
-{$include alexer.inc}
+{$ifndef PXX_NO_RUST}{$include rlexer.inc}{$endif}
+{$ifndef PXX_NO_ADA}{$include alexer.inc}{$endif}
 {$ifndef PXX_NO_ZIG}{$include zlexer.inc}{$endif}
-{$include llexer.inc}
-{$include flexer.inc}
-{$include glexer.inc}
-{$include elexer.inc}
+{$ifndef PXX_NO_LOLCODE}{$include llexer.inc}{$endif}
+{$ifndef PXX_NO_FORTRAN}{$include flexer.inc}{$endif}
+{$ifndef PXX_NO_ALGOL}{$include glexer.inc}{$endif}
+{$ifndef PXX_NO_ERLANG}{$include elexer.inc}{$endif}
 {$include emit.inc}
 procedure AsmB(b: Integer); forward;
 procedure AsmI16(v: Int64); forward;
@@ -118,16 +119,16 @@ function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
   function; lib-test runs gen_crtl_map.py --check and fails when it is stale. }
 {$include crtl_names.inc}
 {$ifndef PXX_NO_CFRONT}{$include cparser.inc}{$endif}
-{$include bparser.inc}
+{$ifndef PXX_NO_BASIC}{$include bparser.inc}{$endif}
 {$include pyparser.inc}
-{$include rparser.inc}
-{$include aparser.inc}
+{$ifndef PXX_NO_RUST}{$include rparser.inc}{$endif}
+{$ifndef PXX_NO_ADA}{$include aparser.inc}{$endif}
 {$ifndef PXX_NO_ZIG}{$include zparser.inc}{$endif}
-{$include lparser.inc}
-{$include wparser.inc}
-{$include fparser.inc}
-{$include gparser.inc}
-{$include eparser.inc}
+{$ifndef PXX_NO_LOLCODE}{$include lparser.inc}{$endif}
+{$ifndef PXX_NO_WHITESPACE}{$include wparser.inc}{$endif}
+{$ifndef PXX_NO_FORTRAN}{$include fparser.inc}{$endif}
+{$ifndef PXX_NO_ALGOL}{$include gparser.inc}{$endif}
+{$ifndef PXX_NO_ERLANG}{$include eparser.inc}{$endif}
 {$include elfwriter.inc}
 {$include rtti_emit.inc}
 {$include resources_emit.inc}
@@ -1027,12 +1028,17 @@ begin
   end
   else if isBasic then
   begin
+{$ifdef PXX_NO_BASIC}
+    writeln(StdErr, 'this compiler was built without the BASIC frontend (built with PXX_NO_BASIC); rebuild without that define to compile BASIC sources');
+    Halt(1);
+{$else}
     BLexAll(True);
     MainProgramTokCount := TokCount;
     DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
     TokPos := 0;
     Next;
     ParseBProgram;
+{$endif}
   end
   else if isC then
   begin
@@ -1054,21 +1060,31 @@ begin
     ParseAsmProgram
   else if isRust then
   begin
+{$ifdef PXX_NO_RUST}
+    writeln(StdErr, 'this compiler was built without the Rust frontend (built with PXX_NO_RUST); rebuild without that define to compile Rust sources');
+    Halt(1);
+{$else}
     RLexAll;
     MainProgramTokCount := TokCount;
     DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
     TokPos := 0;
     Next;
     ParseRustProgram;
+{$endif}
   end
   else if isAda then
   begin
+{$ifdef PXX_NO_ADA}
+    writeln(StdErr, 'this compiler was built without the Ada frontend (built with PXX_NO_ADA); rebuild without that define to compile Ada sources');
+    Halt(1);
+{$else}
     ALexAll;
     MainProgramTokCount := TokCount;
     DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
     TokPos := 0;
     Next;
     ParseAProgram;
+{$endif}
   end
   else if isZig then
   begin
@@ -1086,43 +1102,70 @@ begin
   end
   else if isLol then
   begin
+{$ifdef PXX_NO_LOLCODE}
+    writeln(StdErr, 'this compiler was built without the LOLCODE frontend (built with PXX_NO_LOLCODE); rebuild without that define to compile LOLCODE sources');
+    Halt(1);
+{$else}
     LLexAll;
     MainProgramTokCount := TokCount;
     DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
     TokPos := 0;
     Next;
     ParseLProgram;
+{$endif}
   end
   else if isWs then
+  begin
+{$ifdef PXX_NO_WHITESPACE}
+    writeln(StdErr, 'this compiler was built without the Whitespace frontend (built with PXX_NO_WHITESPACE); rebuild without that define to compile Whitespace sources');
+    Halt(1);
+{$else}
     { Whitespace has NO token stream — the frontend reads Source directly
       (see wparser.inc's header for why that is the probe's point). }
-    ParseWsProgram
+    ParseWsProgram;
+{$endif}
+  end
   else if isF90 then
   begin
+{$ifdef PXX_NO_FORTRAN}
+    writeln(StdErr, 'this compiler was built without the Fortran frontend (built with PXX_NO_FORTRAN); rebuild without that define to compile Fortran sources');
+    Halt(1);
+{$else}
     FLexAll;
     MainProgramTokCount := TokCount;
     DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
     TokPos := 0;
     Next;
     ParseFProgram;
+{$endif}
   end
   else if isAlgol then
   begin
+{$ifdef PXX_NO_ALGOL}
+    writeln(StdErr, 'this compiler was built without the ALGOL frontend (built with PXX_NO_ALGOL); rebuild without that define to compile ALGOL sources');
+    Halt(1);
+{$else}
     GLexAll;
     MainProgramTokCount := TokCount;
     DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
     TokPos := 0;
     Next;
     ParseGProgram;
+{$endif}
   end
   else if isErl then
   begin
+{$ifdef PXX_NO_ERLANG}
+    writeln(StdErr, 'this compiler was built without the Erlang frontend (built with PXX_NO_ERLANG); rebuild without that define to compile Erlang sources');
+    Halt(1);
+{$else}
     ELexAll;
     MainProgramTokCount := TokCount;
     DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
     TokPos := 0;
     Next;
     ParseEProgram;
+{$endif}
   end
   else
   begin

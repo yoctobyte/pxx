@@ -567,3 +567,111 @@ For an omission define: *if two different backends produce the same error count,
 harness is lying.* Written down before the run, `60 / 60 / 60` fails that test
 instantly; discovered after, it took a second look to notice. Pre-registration costs one
 sentence and converts a lucky catch into a repeatable one.
+
+## The frontend axis — eight defines landed (2026-08-19)
+
+`PXX_NO_BASIC`, `PXX_NO_ADA`, `PXX_NO_LOLCODE`, `PXX_NO_FORTRAN`, `PXX_NO_ALGOL`,
+`PXX_NO_ERLANG`, `PXX_NO_WHITESPACE`, `PXX_NO_RUST` — joining the five already in
+(`NO_ZIG`, `NO_CFRONT`, `NO_I386`, `NO_ARM32`, `NO_AARCH64`). Thirteen.
+
+**There were more frontends than either the queue or I had counted.** `l` is
+LOLCODE, not Lua; and `f`/`g`/`e`/`w` are Fortran, ALGOL, Erlang and Whitespace —
+six esoteric probes, not one. `wparser.inc` has no lexer at all (Whitespace reads
+`Source` directly), so it needed a `begin`/`end` block built around its dispatch
+arm before it could be guarded like the others.
+
+### Cost, measured, per frontend omitted alone
+
+| define | errors alone | where |
+| --- | --- | --- |
+| BASIC / LOLCODE / FORTRAN / ALGOL / ERLANG / WHITESPACE | **2 each** | `compiler.pas` driver dispatch only |
+| ADA | 3 | dispatch + one unsolved forward (below) |
+| RUST | **198** | six *other* frontends' parsers |
+
+The six probes costing exactly two symbols each is the good news and it is
+structural, not luck: a frontend's whole coupling to the rest of the compiler is
+its `XLexAll` / `ParseXProgram` pair in the driver, which is a dispatcher naming
+its cases — the legitimate kind. Guarded with the existing `PXX_NO_ZIG` refusal
+shape, so an omitted language is refused at dispatch with a message naming the
+define, not by a mystery parse failure. Verified: all eight refuse correctly in a
+reduced build, all eight still compile and RUN in the default build.
+
+### Two findings, both filed
+
+**`AIntToStr` was living in the Ada frontend.** The `A` is for AnsiString, not
+Ada. It is the compiler's own `IntToStr`, called ~40 times from the Pascal parser,
+the NilPy parser, the C parser and the C preprocessor — with its body in
+`aparser.inc`, a 460-line skeleton. Every one of those frontends silently depended
+on Ada being compiled in. Moved verbatim to a new `compiler/util.inc`;
+[[bug-a-aintostr-returns-empty-for-negative-numbers]] files the defect I found
+while moving it and deliberately did not fix in the same change. `util.inc` sits
+*after* `lexer.inc`, not before, because `AppendChar` — an equally general string
+helper — is itself defined in `lexer.inc`. Same finding one level down, left alone.
+
+**Rust cannot be omitted alone.** Six later frontends were built on `rparser.inc`'s
+helpers; see [[refactor-a-seven-frontends-borrow-rust-parser-helpers]], which
+separates three layers wrongly wearing one `R` prefix — AST constructors (share,
+wrong file), `RWiden` (numeric *semantics*, should not be shared: Zig has no
+implicit widening yet calls Rust's), and `REmitParamRegSpill` (raw x86-64 inside a
+frontend). `PXX_NO_RUST` therefore requires `PXX_NO_ZIG` plus the six probe
+defines. Documented, **not** enforced by making one define imply the others —
+an implicit expansion would hide precisely the coupling worth removing.
+
+That is now the **third** frontend caught holding private target machinery
+(Pascal: the signal runtime; C: the `_start` stub; Zig-via-Rust: register spill).
+Three is the count this repo's own `root-cause-over-microfix` calls a design flaw
+rather than a smell: there is a missing layer between the frontends and the
+backends, and each frontend has independently grown its own copy of it.
+
+### Payoff, measured — and the frontend axis is the WEAKER one
+
+Same rig, same fpc `-O2`, one run each:
+
+| build | size | vs default |
+| --- | --- | --- |
+| default | 3,376,848 | — |
+| 9 frontends off | 3,228,480 | **−4.4 %** |
+| + C frontend + 3 host backends | 2,677,120 | **−20.7 %** |
+
+Stated plainly because it cuts against the redirect that brought me here:
+**omitting nine frontends buys 4.4 %, less than omitting three host backends.**
+The skeletons are small — a few hundred lines each; only Rust is 3,198. The weight
+is elsewhere, and the numbers say where: `pyparser.inc` is **35,682 lines**, an
+order of magnitude past every other frontend combined. Any real size win on this
+axis is `PXX_NO_NILPY`, and the symmetric one — a NilPy-only compiler — needs the
+Pascal frontend out of the *shared* `parser.inc`, i.e. the long-deferred
+`plexer`/`pparser` carve-out, not a define.
+
+### Acceptance test, re-run at 13 defines
+
+Required at each increment, not once. Reduced compiler = 6,047,965 B (**−21.2 %**
+off the self-hosted 7,679,385):
+
+```
+pascal26 --(13 defines)--> reduced --> full1 --> full2
+cmp full1 full2       BYTE-IDENTICAL
+cmp pascal26 full1    BYTE-IDENTICAL
+```
+
+The reduced compiler builds the full compiler, and what it builds is bit-for-bit
+the tree's own self-hosted binary — stronger than the test asks for. Gate:
+`make compiler/pascal26` converged in 1 round, `gate.sh quick` GREEN.
+
+### Pre-registration, used four times, paid twice
+
+Following the rule banked above, each measurement got a written-down implausible
+result first.
+- *"Six frontends should not produce equal counts"* → they produced 3, 3, 3, 3,
+  3, 3. **Investigated, and it was genuine** — two driver symbols each. The rule
+  does not only catch faults; it also converts a suspicious-looking result into a
+  checked one, which is how the "two symbols" finding got noticed at all.
+- *"`NO_RUST` + `NO_ZIG` should drop ~123 to about 77"* → 74. Held.
+- *"`NO_RUST` alone should still fail"* → 198. Held.
+- *"Size drop between 5 % and 10 %; a 0 % or a >40 % is the rig"* → 4.4 %, just
+  under the band. Re-checked the binary was the reduced one before believing it.
+
+Zero rig faults this increment, after four in the previous ones. One process note
+worth keeping: `pxx`'s output path is a **positional second argument**, not `-o`.
+Passing `-o` made it report `ok: -o` and write a file literally named `./-o` in the
+repo root — twice — while printing a success line with plausible code/data sizes.
+A tool that succeeds at the wrong thing, again.
