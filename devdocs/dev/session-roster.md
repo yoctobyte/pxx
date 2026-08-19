@@ -3193,3 +3193,72 @@ being bitten rather than after, on the reasoning that *a gate checking one of tw
 shas is worse than no gate* — it reports a green precondition for a run that cannot answer
 the question. That is the day's recurring failure (a check that can pass while the thing it
 protects is broken) closed structurally instead of by care.
+
+## Check +19h — the backlog-shrink push is staffed on three lanes
+
+**User set a new standing goal** (supersedes the corpus/NilPy theme for its duration):
+pause NilPy, work **A / C / P**, prefer IR/AST-touching tickets, and **deliberately skip
+high-ranked ones** because they cost more on average. Aim is *count down*. Reason given: at
+265 open the user has lost oversight and many reports look trivial. Then: **"also put track T
+to work, there are still open track T tickets."**
+
+Premise verified, not assumed — filed vs resolved: 08-17 **+19**, 08-18 **+16**, 08-19
+**+17**, after 08-15's -31. N is 77 of the 265, which is most of why pausing it works.
+Triage + clusters: `devdocs/progress/TRIAGE-backlog-shrink.md`.
+
+**Staffing.** frank2 = A/P slot, cluster 1 (indexing a call result), then 3 (directives),
+then 4 (calling convention). frank3 = cluster 5 (C, disjoint) then cluster 2 (Write-of-a-real).
+plexus-T = its own backlog, watcher confirmed UP first.
+
+**Watcher: UP.** plexus green through `066adaecdcdd`, full through `9bfb7fcfac03`.
+plexus-T confirmed the daemon survives this batch: none of its three tickets touch
+`twatch.py`, and a `testmgr.py`/`tools/*` change needs no restart because twatch spawns
+testmgr fresh per run. When a restart IS needed: ~2s, cooperative SIGTERM, one discarded
+backfill run that re-tests next cycle (measured twice). **Push per ticket, batch the
+RESTARTS** — different operations, only one costs the dev lanes anything.
+
+**Pin held deliberately.** One `compiler/**` commit outstanding (`e360f0c5c`); frank3's
+`make lib-test` was in flight at check time. Not urgent — take it when the tree is quiet.
+
+### TWO ASSERTED GROUPINGS, BOTH WRONG, BOTH CAUGHT BY THE WORKER
+
+Same failure twice in one hour, and worth stating as one rule rather than two anecdotes:
+**I verified the thing I happened to look at, then asserted its neighbour.**
+
+- **Cluster 2's file footprint.** Published as *"does not touch
+  `lexer.inc`/`parser.inc`/`ir*.inc`"*. I read the three tickets and confirmed they are one
+  code path — true — then inferred the *location* from the topic. frank3 traced it:
+  `EmitWriteFloat*` in `compiler/symtab.inc` ~6940-7479, dispatch at
+  `ir_codegen.inc:4708-4710`. Both shared core ground. Verifying one property does not
+  license asserting a second.
+- **The Track T "/tmp cluster".** Paired from slugs. plexus-T read them: one is a testmgr
+  lint it owns; the other is 60 paths across **37 sources owned by C, N and B**. Shared
+  concept, almost no shared work — and doing them "in one context" would have had T editing
+  three other lanes, **violating the boundary I restated in the same message**. An
+  instruction that breaks its own stated rule is worse than one that omits it: it reads as
+  an authorised exception.
+
+**The fix is not care, it is asking.** Both cost one message. The general form —
+**a file footprint or a work-grouping inferred from a ticket's TOPIC is a guess wearing the
+costume of a fact** — is the same class as inferring pin contents from timing, or a callee
+from an index number. Ask the worker who is in the code; it answers from `git diff --stat`.
+
+### Count discipline, stated to all three lanes
+
+The push optimises for **tickets closed, never tickets closed per minute**, and never for a
+number that goes down by burying things. Told frank3 not to bound the `utoa` loop if that
+hides the unnamed defect; told frank2 not to close cluster 1 on four matching rows while a
+frozen-string element still prints `3` where FPC prints `mid` (a *silent wrong value* is
+strictly worse than the parse error it replaced); told plexus-T to file whatever wiring the
+broken devtests exposes even though it makes its own number look worse.
+
+**Do not let the ranker fight the goal:** `next`/`ready` rank prio DESCENDING and will hand a
+worker exactly what this push says to skip. Take from the clusters. This is a **temporary
+inversion, not a re-rating** — when it ends, resume ranking or re-rank the survivors
+deliberately, because a prio field everyone ignores is worse than none.
+
+**Open for the user (Track U):** `decide-nilpy-imports-that-collide-with-a-pascal-rtl-unit`
+(p60) — eight `lib/rtl` units share a name with a Python stdlib module, so
+`from classes import Foo` fails with *"no overload of Delete matches these arguments"*,
+naming a unit the program never mentioned. frank2 filed options + a recommendation rather
+than guessing. Parked with N.
