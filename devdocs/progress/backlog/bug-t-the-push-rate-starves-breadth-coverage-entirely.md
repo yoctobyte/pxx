@@ -8,6 +8,14 @@ summary: "Zero full-tier runs on HEAD in the 5h13m between 9bfb7fcfac03 (10:31:5
 
 # The push rate starves breadth coverage entirely
 
+> **In one line: breadth was not starved by pushes — it was queued behind an
+> unfinishable item.** `pin_verify_due` never goes false because branch 2 wants
+> ~21 contiguous minutes, idle arrives in ~5-minute slices, and every abort
+> discards 100%. Pin verify retiring and breadth starting within minutes, at an
+> unchanged push rate, is what makes that a mechanism rather than a correlation.
+> The title is the symptom and is kept for continuity; it names the wrong cause.
+
+
 Measured 2026-08-19 by Track T (plexus-T), while answering two cross-sweep
 requests that turned out to be unanswerable.
 
@@ -129,10 +137,18 @@ flight.
 Sketching rather than prescribing, because the trade is real — the fast verdict
 is load-bearing and its latency IS the dev loop's latency:
 
-1. **Reserve breadth a slot.** After N fast verdicts, or T minutes since the last
-   completed `full`, run the full tier and let the fast verdicts queue behind it.
-   Simple, and it directly bounds the staleness. Costs fast-verdict latency
-   exactly when the repo is busiest.
+1. ~~**Reserve breadth a slot.**~~ **CLOSED 2026-08-19 — measured wrong.** The
+   proposal was to run the full tier after N fast verdicts and let pushes queue
+   behind it, accepting fast-verdict latency as the price. The re-measurement
+   above shows there is nothing to buy: the watcher was **idle 54% of the
+   window, ~2.8 hours, about 8x the 1256s one full tier needs.** Capacity was
+   never the constraint; contiguity was. This shape spends the one genuinely
+   scarce resource (fast-verdict latency, which IS the dev loop's latency) to
+   buy capacity already present eightfold.
+
+   Left visible rather than de-ranked, because the next person to notice zero
+   breadth will propose it again — it is the obvious fix, and it is wrong for a
+   reason nobody can see without the idle number.
 2. **Make the backfill resumable** rather than all-or-nothing, so a 21-minute
    run can complete across several idle slices instead of needing one contiguous
    window that never comes. More work; does not need to steal latency.
