@@ -117,7 +117,7 @@ rather than to pick a winner and re-create it.
 
 - `progress.py` owns the definition: `PENDING_RE`, anchored to **line start**,
   matching both `commit: PENDING-COMMIT` (frontmatter, hand-written) and
-  `- <date> — resolved, commit PENDING-COMMIT.` (the Log line `resolve` writes).
+  `- <date> — resolved, commit 65b2512ef.` (the Log line `resolve` writes).
 - New `progress.sh pending` prints `<path>\t<sha>` per ticket owing a citation.
 - `sync.sh` consumes that instead of carrying its own grep. One implementation,
   so drift is not possible rather than merely unlikely.
@@ -185,4 +185,4 @@ It runs in `make tools-devtest` (limited + full) as of `a1fd5715e`, so this
 cannot silently rot the way the five in that ticket did.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 65b2512ef.
