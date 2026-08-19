@@ -4244,3 +4244,38 @@ Also filed `bug-t-a-red-job-records-no-reason` (`8bbc98b7c`, p45): tstate stores
 bare string `"fail"`, so a red job that ran 46 guards names one of 46 without saying which, and a
 cause that was environmental or since-fixed is unrecoverable. Same defect as the empty FAIL line,
 one level up the stack.
+
+### The pin shadow is fixed (T, `ebacde6b8`) — and its one caveat can be REMOVED, with evidence
+
+Option 1 as recommended: `pin_shadow()` carries `st["pin_baseline"]`, the red set as it stood under
+the OUTGOING pin, and `unexpected` excludes it — so the question became "does this candidate have
+reds the incumbent does not have". Both numbers print, so the baseline is never silent. Four
+properties, each guarded (12 checks; 47 devtest guards green): inherited reds unstick the gate; an
+ADDED red still vetoes; **the baseline is snapshotted from the PREVIOUS run, not the current one**
+(otherwise a regression the new pin caused lands in its own baseline and forgives itself); and a
+baselined red that goes green LEAVES the baseline, so a re-break counts as new. Self-host is never
+waivable.
+
+**T flagged the first baseline as `BOOTSTRAP (assumed, not observed)` and said the property is only
+real from v367. I think that caveat is unnecessary, and the same fact makes it dangerous — checked
+before sending:**
+
+    v365 pinned          16:09:34Z
+    full tier RED (10)   19:34:58Z  at a15cb05fa9ce   <- ran under v365
+    v366 pinned          19:44:00Z  at cabb5d598
+    a15cb05fa9ce is an ancestor of cabb5d598
+
+So **an observed red set under the outgoing pin already exists** — `last_full` at `a15cb05fa9ce`,
+measured between the two pins, which is the definition of the baseline. Nothing needs assuming.
+
+**And the dangerous half:** `pin_baseline` is still `{}`, so the bootstrap fires on **the next full
+tier — which will be the first tier run under v366.** If it seeds from that tier's own reds, a carve
+regression introduced BY v366 lands in its own baseline and is permanently waived. That is exactly
+the failure property 3 exists to prevent, arriving through the one path property 3 does not cover.
+**Seed from `last_full` at `a15cb05fa9ce` instead** — observed, pre-v366, and it closes both issues
+at once. Sent to T.
+
+**Still no full tier at v366.** The watcher recorded `idle_yield: {aborts: 1, phase: "pin-verify",
+target: cabb5d598}` — it yielded the box mid-verify, so newest full remains `a15cb05fa9ce` RED with
+the ten. Breadth 0h old, 3 behind: **a yield, not a stall.** The response if it returns red on the
+carve shas is unchanged: `make revert`, flag, no debugging under a live pin.
