@@ -44,3 +44,23 @@ Note the ordering constraint that made this a trade in the first place: the
 frame copy and the instance copy of a value are bitwise duplicates, and exactly
 one of them is live at a time. Any release has to be at teardown, not at step
 exit, or it re-creates the dangling-pointer bug this replaced.
+
+## Narrowed 2026-08-19 — the instance BLOCK is now freed; the slot VALUES are not
+
+`feature-nilpy-a-generator-as-a-first-class-value` added a cursor
+(`PYITER_SLGEN`) that owns its generator instance and frees it at finalization,
+and the `for` desugar already freed its own. So the *block* is reclaimed on both
+paths and what remains is narrower than this ticket first described: the managed
+values sitting in the persistent slots are dropped without being released, and
+so is each variant argument's `pycell_new` cell.
+
+Measured over 20 000 generators: **2.5 MB** peak through the `for` desugar,
+**6.5 MB** as values. Flat rather than growing without bound, which is why this
+stays a p40 and not a correctness item.
+
+The fix is unchanged and is stated above: teardown needs a per-proc map of which
+persistent slots hold managed values. Both teardown points now exist and are the
+right place for it — `SlFree` in the desugar, and the `TPyIter` arm of
+`PyObjFinalize` for a cursor. The ordering constraint still stands: release at
+TEARDOWN, never at step exit, or it re-creates the dangling-pointer bug that
+made a generator's second step read a freed list.

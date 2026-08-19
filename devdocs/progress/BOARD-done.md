@@ -1572,6 +1572,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-net-lib-cross-target | A | 50 | feature | net lib cross-target build matrix — i386 + arm32 backend gaps | — |
 | feature-nil-python-frontend | A | 50 | feature | Nil Python frontend (`.npy`) | — |
 | feature-nilpy-a-callable-value-needs-its-own-variant-tag | A | 70 | feature | Give a callable value its own variant tag so `(3 + 4)(x)` can be refused. Track A, not N: the tag is defined in defs.inc and consumed by ir_codegen's clear/retain emitters, builtinheap and parser.inc. No decision needed — tag numbering is internal and renumberable. | — |
+| feature-nilpy-a-generator-as-a-first-class-value | N | 55 | feature | A Nil Python generator can only be consumed by a `for`, never held as a value | — |
 | feature-nilpy-aggregate-builtins | N | 50 | feature | nilpy: map/filter over an arbitrary callable value | — |
 | feature-nilpy-arithmetic-dunders-full-protocol | N | 40 | feature | Arithmetic dunders (`__add__`, `__sub__`, …) — full protocol | — |
 | feature-nilpy-arithmetic-ordering-dunders | N | 60 | feature | NilPy arithmetic/ordering dunders — umbrella | — |
