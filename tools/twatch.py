@@ -2322,7 +2322,28 @@ def range_note(reg):
             "current range." % (bad, good, n))
 
 
-def cascade_range_note(clone, reg):
+PIN_LOG_PATH = "stable_linux_amd64/default/pin.log"
+
+
+def pins_in_range(clone, reg):
+    """Shas in `reg["range"]` that MOVED THE PIN. One git call, not len(range).
+
+    A pin inside the range changes what "caused" means for any job built with
+    `$(PXX_STABLE)`: that job's compiler did not exist before the pin, so a
+    defect already in the source becomes visible the moment the pin catches up.
+    Exposed, not caused -- and the two are indistinguishable from the range
+    alone.
+    """
+    rng = set(reg.get("range") or [])
+    good, bad = reg.get("good"), reg.get("bad")
+    if not rng or not good or not bad:
+        return []
+    out = sh(["git", "log", "--format=%H", "%s..%s" % (good, bad), "--",
+              PIN_LOG_PATH], cwd=clone.path, check=False) or ""
+    return [c for c in out.split() if c in rng]
+
+
+def cascade_range_note(clone, reg, pin_jobs=()):
     """The Range section of a CASCADE ticket. Deliberately not range_note().
 
     Two things make a cascade different from a stub, and both mislead if the
@@ -2381,8 +2402,44 @@ def cascade_range_note(clone, reg):
         return head + ("\n\nNo commit in the range touches a buildable file "
                        "either, which points at flakiness, box load, or a "
                        "harness event rather than at any commit here.")
-    return head + "\n\n**Buildable commits in the range, newest first:**\n" \
+    body = head + "\n\n**Buildable commits in the range, newest first:**\n" \
         + "\n".join(lines) + more
+    return body + straddle_note(clone, reg, pin_jobs)
+
+
+def straddle_note(clone, reg, pin_jobs):
+    """The paragraph a cascade that straddles a pin needs, or "".
+
+    Written because a real cascade needed it and no tool said so: in
+    `regression-cascade-21f098e32a95` the `lib-test` job builds with
+    `$(PXX_STABLE)`, `cc20f7101` (pin v365) sat inside the range, and the
+    defect was ALREADY in the source at the range's own last-good sha. The pin
+    exposed it. Triage found that by hand and wrote "any future cascade that
+    straddles a pin needs this question asked before the range is read" -- which
+    is a note, i.e. a habit. This makes it a property of the ticket.
+
+    Deliberately a QUESTION, not a verdict. Whether the defect predates the pin
+    is settled by building at the last-good sha, which is work; all the watcher
+    knows is that the range makes both readings available, and saying which
+    jobs are affected is the part that saves the reader the search.
+    """
+    pins = pins_in_range(clone, reg)
+    if not pins or not pin_jobs:
+        return ""
+    return ("\n\n> **This range STRADDLES a pin, and %d of the red job(s) "
+            "build with `$(PXX_STABLE)`.** Pin move(s) in range: %s. Those jobs "
+            "do not compile anything from the range — they run the PINNED "
+            "binary, which the pin replaced. So a red there may be **exposed** "
+            "by the pin rather than **caused** by any commit in the range: a "
+            "defect already present in the source becomes visible the moment "
+            "the pin catches up to it. Settle it by building at the last good "
+            "sha `%s` and running the job against THAT, not by reading the "
+            "range. Affected: %s"
+            % (len(pin_jobs), ", ".join("`%s`" % c[:12] for c in pins),
+               (reg.get("good") or "?")[:12],
+               ", ".join("`%s`" % j for j in sorted(pin_jobs)[:6])
+               + (" (+%d more)" % (len(pin_jobs) - 6) if len(pin_jobs) > 6
+                  else "")))
 
 
 SRC_RE = re.compile(r"^- \*\*Test source:\*\* (.+)$", re.M)
@@ -2597,6 +2654,12 @@ def file_cascade_ticket(clone, host, st, sha, new_red, report, parent=None):
     # but at a priority that matches "probably already handled".
     stale = staleness_note(clone, sha, parent)
     prio = 25 if stale.startswith("> **LIKELY ALREADY FIXED") else 70
+    # Which of the newly-red jobs run the PINNED binary rather than one built
+    # from the range. testmgr is the only thing that holds the expanded recipe,
+    # so this is read off the report, never re-derived.
+    red = set(new_red)
+    pin_jobs = [job_key(j) for j in report["jobs"]
+                if j.get("pin_built") and job_key(j) in red]
     body = ("""---
 prio: %d
 ---
@@ -2630,7 +2693,7 @@ after the root is fixed.*
 """ % (len(new_red), span, host, len(new_red), utcnow(),
             ", ".join("`%s`" % r for r in roots) if roots
             else "none of the known root jobs — likely a broken build or harness event",
-            cascade_range_note(clone, reg),
+            cascade_range_note(clone, reg, pin_jobs),
             report["tier"], sha, joblist))
     write_ticket(os.path.join(clone.path, rel), body)
     clone.publish("tstate-ticket(%s): %s (cascade, %d jobs)" %
