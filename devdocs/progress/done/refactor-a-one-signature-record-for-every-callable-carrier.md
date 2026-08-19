@@ -220,4 +220,4 @@ Track N owns both; filed rather than fixed, per the lane rules.
 - 2026-08-19 — **resolved** (frank2-A). Tag 10 carries `Sig`; `pybound_pair_call_kw` and
   the new tag-10 dispatcher share `PySigFindParam`. `pyboundfn_setdefaults` KEPT — the
   reason is a language property, written up above. Pin deferred by owner's instruction.
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 186ac6f7d.
