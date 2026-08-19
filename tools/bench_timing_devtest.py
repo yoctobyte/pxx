@@ -78,10 +78,22 @@ def main():
     wakeup = next((g for g in GRID if g >= truth), None)
     print("  true duration ~%.1f ms; next poll wakeup at %.1f ms" % (truth, wakeup))
 
+    # This used to assert `max(old) - min(old) < 3.0` — a SPREAD, which measures
+    # the machine and not the code. Caught red on 2026-08-19 at load average 14
+    # (the watcher running a full tier on the same box): samples came back
+    # [117.4, 166.1, 115.8, 116.0, 116.0], one scheduling stall in five, and the
+    # guard failed while the claim it names was still true — min(old) was 2.3 ms
+    # from the grid point, exactly as the bug predicts.
+    #
+    # The grid claim does not need a spread. A stall can only push a sample to a
+    # LATER poll wakeup, never off the schedule, so "most samples sit on a grid
+    # point" is the same statement made about the code. A continuous clock puts
+    # none of them there (the new path scores 0/5), so it still discriminates.
+    on_grid = sum(1 for v in old if near_grid(v, 4.0))
     check("the old path snaps to ONE poll wakeup, not the duration",
-          max(old) - min(old) < 3.0 and abs(min(old) - wakeup) < 4.0,
-          "spread %.1f, distance from %.1f: %.1f"
-          % (max(old) - min(old), wakeup, min(old) - wakeup))
+          on_grid >= 4 and abs(min(old) - wakeup) < 4.0,
+          "%d/5 on the grid; min %.1f is %+.1f from %.1f"
+          % (on_grid, min(old), min(old) - wakeup, wakeup))
     check("the old path overstates the truth by most of a grid step",
           min(old) - truth > 8.0, round(min(old) - truth, 1))
     check("the new path is not pinned to that wakeup",
