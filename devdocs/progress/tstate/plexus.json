@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T06:40:24Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "c99f1569246dbaf20db4be9a92e574b15ca7af88",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T06:55:00Z",
    "fixed": [],
    "new_red": [],
@@ -442,6 +434,14 @@
     "test-core#src:test/test_nilpy_subclass_unit_base.npy"
    ],
    "sha": "4e27dc2be11471f92064756e17d426617d0d284b",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-19T14:48:41Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "721d1f27d25d168d642799919f27e665467c6cdf",
    "tier": "native",
    "verdict": "RED"
   }
@@ -6011,11 +6011,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-19T14:43:40Z",
-  "sha": "4e27dc2be11471f92064756e17d426617d0d284b",
+  "date": "2026-08-19T14:48:41Z",
+  "sha": "721d1f27d25d168d642799919f27e665467c6cdf",
   "tier": "native",
   "verdict": "RED",
-  "wall": 236.1
+  "wall": 225.0
  },
  "last_bench": {
   "conf_rows": 550,
