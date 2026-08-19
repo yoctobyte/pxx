@@ -47,3 +47,26 @@ calls and runs in `make lib-test`. The arm needs the same cases through the
 KEYWORD form — `read(f, c)` four times, `read` then `readln`, a
 `while not Eof(f)` loop — which is what `tools/fpc_diff_probe.sh` compares
 against FPC directly.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363)
+
+**Genuine feature, still wanted, still ready to do.** `read(f, c)` into a
+`Char` against the pinned compiler:
+
+```
+pascal26:5: error: read(Text): reading into a Char is not supported yet — read
+into a string and index it (bug-p-read-text-file-into-a-char-segfaults)
+```
+
+So the arm has not landed incidentally, and the RTL half it was waiting for
+(`TextReadChar`) is present — the ticket's premise holds unchanged.
+
+Not re-typed: FPC accepts what pxx refuses, which makes this **compat** surface,
+but the refusal is loud and names a workaround, so it is not the silent-wrong
+class that gets promoted to a bug.
+
+**No `_reject` / `_fail` test to re-point when this lands** — grepped for the
+error text across `Makefile` and `test/**` and the only related file is
+`test/lib_textreadchar.pas`, which exercises the RTL entry point directly and
+will keep passing. (Checked because a feature that relaxes a refusal otherwise
+reds a `test-core`-only negative test that `gate.sh quick` cannot see.)

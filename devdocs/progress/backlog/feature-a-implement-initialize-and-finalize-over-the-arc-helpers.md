@@ -1,10 +1,10 @@
 ---
 track: A
 prio: 50
-type: feature
+type: bug
 owner: unassigned
 blocked-by: []
-summary: "DECIDED 2026-08-19: implement Initialize()/Finalize() for real, mapping onto the ARC release helpers pxx already emits at scope exit. Finalize is currently PARSED AND DISCARDED (a silent no-op where FPC empties the value). Zero in-tree callers, so no regression risk; the helpers already exist, so this is a mapping, not new machinery. Supersedes feature-pascal-initialize-finalize-intrinsics, whose premise is wrong."
+summary: "RE-TYPED 2026-08-19 feature -> bug: MEASURED against FPC 3.x, `Finalize(s)` on an AnsiString leaves `len=5 [hello]` where FPC prints `len=0 []` — FPC-shaped code compiles, runs, and silently does not do what it says. The fix is unchanged: implement Initialize()/Finalize() over the ARC release helpers pxx already emits at scope exit. Zero in-tree callers, so no regression risk; the helpers already exist, so this is a mapping, not new machinery. Supersedes feature-pascal-initialize-finalize-intrinsics, whose premise is wrong."
 ---
 
 # Implement `Initialize()` / `Finalize()` over the ARC helpers
@@ -79,3 +79,24 @@ current no-op and nothing can regress from implementing it.
 Track A: `make compiler/pascal26` (the byte-identical self-host fixedpoint) + a repro that
 proves a `Finalize`d field is actually emptied and that a copy taken beforehand survives +
 `tools/gate.sh quick`.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363) — RE-TYPED feature -> bug
+
+Measured against the oracle rather than reasoned about:
+
+```pascal
+s := 'hello'; Finalize(s); WriteLn('len=', Length(s), ' [', s, ']');
+```
+
+| | output |
+| --- | --- |
+| pxx, pin v363 | `len=5 [hello]` |
+| FPC 3.x (`-Mobjfpc`) | `len=0 []` |
+
+The word in `type:` was the ranking error the re-triage mandate is about:
+"feature" reads as optional, and this is a **silent wrong result** in
+FPC-shaped code — the exact shape this repo's escape rule promotes to a bug
+regardless of how it was filed. Nothing about the *work* changes; only its
+class and how it ranks. The scope, the two load-bearing properties
+(idempotent, releases a reference not the object) and the zero-in-tree-callers
+argument all stand as written.
