@@ -119,26 +119,34 @@ fill_pending_commits() {
     # (devdocs/progress/README.md, which DOCUMENTS the placeholder by name, and
     # BOARD.md) out of reach. Widening this to the whole directory rewrote the
     # README's prose into a sha on 2026-08-03.
-    files=$(git grep -l -- "commit PENDING-COMMIT" -- 'devdocs/progress/*/*.md' 2>/dev/null || true)
-    [ -n "$files" ] || return 0
+    # ONE definition of "owes a citation", and it lives in progress.py. This
+    # used to be a grep literal here and a substring test there; the two drifted
+    # apart and neither tool could see the other disagreeing, so `check` reported
+    # 17 forever while this function filled nothing
+    # (bug-t-sync-fills-one-spelling-of-pending-commit-and-check-counts-two).
+    # `pending` prints "<path>\t<sha>" per ticket, sha empty if undeterminable.
+    pending=$(python3 "$(dirname "$0")/progress.py" pending 2>/dev/null || true)
+    [ -n "$pending" ] || return 0
 
     filled=""
-    for f in $files; do
-        # The commit that INTRODUCED the placeholder into this file is the
-        # resolve commit; -S finds it by the change in occurrence count and is
-        # path-limited, so an unrelated later edit cannot claim the citation.
-        sha=$(git log -1 --format=%h -S PENDING-COMMIT -- "$f")
+    while IFS="$(printf '\t')" read -r f sha; do
+        [ -n "$f" ] || continue
         if [ -z "$sha" ]; then
-            echo "sync: $f holds PENDING-COMMIT but no commit introduced it — left alone" >&2
+            echo "sync: $f owes a citation but its resolve commit could not be determined — left alone" >&2
             continue
         fi
-        # Anchored to the citation `resolve` writes. A ticket may legitimately
-        # DISCUSS the placeholder in prose; only "commit PENDING-COMMIT" is a
-        # citation waiting to be filled.
-        sed -i "s/commit PENDING-COMMIT/commit $sha/g" "$f"
+        # BOTH live spellings: the frontmatter field workers write by hand, and
+        # the Log line `resolve` writes. Filling one and counting two is the bug.
+        # Anchored to line start for the same reason progress.py's PENDING_RE is
+        # — a ticket that QUOTES the placeholder mid-line is prose, not a
+        # citation, and this bug's own ticket does exactly that.
+        sed -i -e "s/^commit:[[:space:]]\{1,\}PENDING-COMMIT/commit: $sha/" \
+               -e "s/^\(-[[:space:]].*commit\)[[:space:]]\{1,\}PENDING-COMMIT/\1 $sha/" "$f"
         git add "$f"
         filled="$filled $f"
-    done
+    done <<EOF
+$pending
+EOF
     [ -n "$filled" ] || return 0
 
     git commit -q -m "docs(progress): record the shas the resolves landed as

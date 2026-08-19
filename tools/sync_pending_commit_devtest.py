@@ -250,6 +250,96 @@ def case_check_flags_a_dead_citation(tmp):
     return "check --strict reports WARN-DEAD-COMMIT"
 
 
+def _pending(dev):
+    r = subprocess.run(["tools/progress.sh", "pending"], cwd=dev,
+                       capture_output=True, text=True)
+    return [l for l in r.stdout.splitlines() if l.strip()]
+
+
+def case_frontmatter_spelling_is_filled(tmp):
+    """The spelling that was NEVER filled.
+
+    `resolve` writes the Log form (`commit PENDING-COMMIT`); workers hand-write
+    the frontmatter form (`commit: PENDING-COMMIT`). sync grepped only the Log
+    form, and every worker-written instance has the colon — so the fill was
+    effectively dead code while `check`, testing by bare substring, counted both
+    and reported a number that could never go down.
+    """
+    origin, dev, daemon = build_scratch(tmp)
+    t = dev / "devdocs/progress/backlog" / f"{SLUG}.md"
+    t.write_text(t.read_text().replace("---\n\n# The widget",
+                                       "commit: PENDING-COMMIT\n---\n\n# The widget"))
+    git(dev, "add", "-A")
+    git(dev, "commit", "-qm", "worker writes the frontmatter placeholder by hand")
+    _, landed = resolve_and_sync(dev, daemon, commit_arg=None)
+    assert PLACEHOLDER not in landed, (
+        "the frontmatter spelling survived onto origin:\n" + landed)
+    m = re.search(r"^commit: ([0-9a-f]{7,40})", landed, re.M)
+    assert m, f"frontmatter field not filled:\n{landed}"
+    assert on_origin(dev, m.group(1)), f"cited {m.group(1)}, not on origin"
+    return f"frontmatter field cites {m.group(1)}"
+
+
+def case_check_and_sync_agree(tmp):
+    """The property that was never true: the number `check` prints and the work
+    `sync` can do are the same set. They were a Python substring test and a
+    shell grep literal, and nobody had put them side by side."""
+    origin, dev, daemon = build_scratch(tmp)
+    subprocess.run(["tools/progress.sh", "resolve", SLUG], cwd=dev, check=True,
+                   capture_output=True)
+    git(dev, "add", "-A"); git(dev, "commit", "-qm", f"fix(T): {SLUG}")
+    r = subprocess.run(["tools/progress.sh", "check"], cwd=dev,
+                       capture_output=True, text=True)
+    m = re.search(r"PENDING-COMMIT: (\d+) resolved", r.stdout + r.stderr)
+    counted = int(m.group(1)) if m else 0
+    listed = len(_pending(dev))
+    assert counted == listed == 1, (
+        f"check counted {counted}, pending listed {listed} — they must be one set")
+    return "check counts exactly what sync can fill (1 == 1)"
+
+
+def case_open_bucket_placeholder_is_not_owed_a_sha(tmp):
+    """A placeholder in backlog/ or working/ is NORMAL — the ticket has not
+    landed and there is no commit to cite. Filling it would invent a citation
+    for work that has not happened."""
+    origin, dev, daemon = build_scratch(tmp)
+    t = dev / "devdocs/progress/backlog" / f"{SLUG}.md"
+    t.write_text(t.read_text().replace("---\n\n# The widget",
+                                       "commit: PENDING-COMMIT\n---\n\n# The widget"))
+    git(dev, "add", "-A"); git(dev, "commit", "-qm", "still open, placeholder present")
+    assert _pending(dev) == [], "an unresolved ticket was reported as owing a sha"
+    r = subprocess.run(["tools/progress.sh", "check"], cwd=dev,
+                       capture_output=True, text=True)
+    assert "PENDING-COMMIT:" not in (r.stdout + r.stderr), \
+        "check counted a placeholder in an OPEN bucket"
+    return "an open ticket's placeholder is left alone by both tools"
+
+
+def case_refill_cites_the_resolve_not_the_previous_fill(tmp):
+    """The -S trap. sync used `git log -1 -S PENDING-COMMIT`, which finds where
+    the occurrence COUNT CHANGED — in either direction. On any ticket a previous
+    sync already filled, that is the FILL commit, so the ticket would cite the
+    tool that wrote the citation. Measured on the live repo: 3 of 4 sampled
+    tickets resolved to `docs(progress): record the shas the resolves landed as`.
+    """
+    origin, dev, daemon = build_scratch(tmp)
+    _, landed = resolve_and_sync(dev, daemon, commit_arg=None)
+    resolve_sha = cited_sha(landed)
+    t = dev / "devdocs/progress/done" / f"{SLUG}.md"
+    git(dev, "pull", "-q", "--rebase")
+    t.write_text(t.read_text() + "\n- 2026-08-19 — reopened, commit PENDING-COMMIT.\n")
+    git(dev, "add", "-A"); git(dev, "commit", "-qm", "docs: a second citation")
+    daemon_publishes(daemon, 2)   # a DIFFERENT publish: run 1 already landed
+    r = subprocess.run(["tools/sync.sh"], cwd=dev, text=True, capture_output=True)
+    assert r.returncode == 0, f"sync.sh failed: {r.stdout}{r.stderr}"
+    again = git(dev, "show", f"origin/master:devdocs/progress/done/{SLUG}.md").stdout
+    assert PLACEHOLDER not in again, "second placeholder not filled"
+    shas = set(re.findall(r"commit ([0-9a-f]{7,40})", again))
+    assert shas == {resolve_sha}, (
+        f"expected both citations to name the resolve {resolve_sha}, got {shas}")
+    return f"a refill still cites the resolve ({resolve_sha}), not the fill commit"
+
+
 CASES = [
     case_placeholder_is_filled_with_the_landed_sha,
     case_explicit_sha_still_honoured,
@@ -257,6 +347,10 @@ CASES = [
     case_prose_mention_is_not_rewritten,
     case_generated_boards_autoresolve,
     case_check_flags_a_dead_citation,
+    case_frontmatter_spelling_is_filled,
+    case_check_and_sync_agree,
+    case_open_bucket_placeholder_is_not_owed_a_sha,
+    case_refill_cites_the_resolve_not_the_previous_fill,
 ]
 
 

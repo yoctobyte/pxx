@@ -45,7 +45,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (242)
+## backlog (241)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -96,7 +96,6 @@ _none_
 | bug-p-a-parameterless-function-is-undefined-as-a-method-call-argument | P | 35 | bug | A parameterless function used as an ARGUMENT to a method call fails to resolve — `error: undefined variable (zero)` — while the identical argument to a free function compiles. Any argument position. Found writing lib/rtl/mimic_urllib_request.pas, where `headers.get(name, pynone)` would not compile but `HeaderFirst(raw, name, pynone)` did. | — |
 | bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits | P | 45 | bug | `-b shr 1` answers 2147483644 where FPC says 9223372036854775804, for Byte, Word and Cardinal — in BOTH the default dialect and --strict-fpc. FPC's unary minus yields a 64-bit value for EVERY integer operand type (SizeOf(-x) is 8 for all seven, measured); pxx's truncates an unsigned operand to 32 bits before any widening can run, so the sign is already gone. | — |
 | bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic | T | 55 | bug | Ten `timeout N` calls are hardcoded INSIDE Makefile recipes, so they fire within make and surface to testmgr as an ordinary `fail`. Every piece of testmgr's contention machinery — PEER_TIME_FACTOR budget stretching, co-tenant retry, the `timeout` status itself — is structurally unable to see them. That is why six separately-fixed timeout tickets did not stop the class recurring: all six fixed testmgr's OWN timeouts, and the inner ones were never in scope. | — |
-| bug-t-sync-fills-one-spelling-of-pending-commit-and-check-counts-two | T | 45 | bug | `check` has reported the same 17 PENDING-COMMIT tickets for weeks and `sync.sh` reports nothing to fill, because they anchor on DIFFERENT spellings of the field: check substring-matches the placeholder anywhere, sync greps only the Log form `commit 4b8864737` (space), and all 15 live instances are the frontmatter form `commit: PENDING-COMMIT` (colon). Both tools are behaving correctly and the count can never go down. | — |
 | chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments | A | 20 | chore | compiler/builtin/pylib.pas still carries a no-op `pyexec` stub, plus comments in pylib.pas and pyeval.pas saying things SEGFAULT 'because pyexec is a stub'. Engine 1 landed 2026-07-31 and `exec` lowers to pyeval's EvalPyStmts — nothing calls the stub. The stale prose is the cost: it reads as an unimplemented feature and made a reader doubt a done, gated one. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
 | chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile | T | 30 | chore | The second, weaker half of the split_jobs lint: flag any job that RUNS a /tmp binary no line in that job produces. Prototyped and deliberately NOT shipped — it yields 5-7 candidates depending on how recipe lines are segmented, and every one needs individual adjudication. Shipping it half-tuned would produce exactly the noisy guard that gets muted. | — |
@@ -469,9 +468,9 @@ _none_
 | decide-what-synapse-actually-needs-vs-mimic-fpc | U | 20 | decide | Synapse builds under `--mimic-fpc`. What does it actually NEED? | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2065)
+## done (2066)
 
-2065 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2066 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -578,7 +577,6 @@ _none_
 - [p 45] [N] bug-n-isinstance-does-not-accept-a-qualified-class-name
 - [p 45] [N] bug-n-self-class-cannot-be-called-as-a-constructor
 - [p 45] [P] bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits
-- [p 45] [T] bug-t-sync-fills-one-spelling-of-pending-commit-and-check-counts-two
 - [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
 - [p 45] [D] docs-name-collisions-and-the-as-escape
 - [p 45] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative

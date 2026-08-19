@@ -55,6 +55,54 @@ ARCHIVED_STATUSES = ["done"]
 # one session). Deferring the citation to after the push is the only ordering
 # that cannot be got wrong by forgetting it.
 PENDING_COMMIT = "PENDING-COMMIT"
+# THE definition of an unfilled citation, shared with tools/sync.sh via the
+# `pending` subcommand. Two spellings are live and both are real citations:
+# `resolve` writes the Log form (`commit PENDING-COMMIT`) and workers hand-write
+# the frontmatter form (`commit: PENDING-COMMIT`). check used a bare substring
+# test and counted both; sync grepped only the Log form and filled neither,
+# because every worker-written instance has the colon. The count could therefore
+# never go down, and each tool looked correct in isolation
+# (bug-t-sync-fills-one-spelling-of-pending-commit-and-check-counts-two).
+#
+# Anchored rather than a substring so a ticket that DISCUSSES the placeholder in
+# prose is not counted as owing one — this file's own ticket does exactly that.
+# Anchored to LINE START, which is what distinguishes a citation from prose that
+# quotes one. Both live spellings begin their line: the frontmatter field
+# (`commit: PENDING-COMMIT`) and the Log entry `resolve` writes
+# (`- <date> — resolved, commit PENDING-COMMIT.`). A ticket QUOTING the
+# placeholder does so mid-line, inside backticks or a table cell — and this
+# bug's own ticket does exactly that, so an unanchored pattern reports the
+# ticket about the bug as an instance of the bug.
+PENDING_RE = re.compile(
+    r"^(?:commit:[ \t]+" + PENDING_COMMIT
+    + r"|-[ \t].*\bcommit[ \t]+" + PENDING_COMMIT + r")", re.M)
+# Buckets where a citation is OWED. A placeholder in backlog/ or working/ is
+# normal — the ticket has not landed yet, and there is no commit to cite.
+RESOLVED_BUCKETS = ("done", "decided", "done-followup")
+
+
+def resolve_commit(path: Path) -> str:
+    """The sha a resolved ticket should cite: the commit that put it here.
+
+    NOT `git log -S PENDING-COMMIT`, which is what sync.sh used. -S finds
+    commits where the occurrence COUNT CHANGED, in either direction, so on any
+    file a previous sync already filled it returns the FILL commit — measured
+    2026-08-19, it returned `docs(progress): record the shas the resolves landed
+    as` for three of four sampled tickets. A citation pointing at the tool that
+    wrote the citation is worse than no citation.
+
+    The first commit to touch the ticket AT ITS RESOLVED PATH is the resolve
+    itself, and that is a structural fact about the file's history rather than a
+    match against its content — which matters, because matching a sha against
+    content is the failure already on record as
+    bug-t-resolve-cites-a-sha-the-rebase-then-rewrites. Measured on the same
+    four: it recovered the actual fix commit every time.
+    """
+    out = subprocess.run(
+        ["git", "log", "--diff-filter=AR", "--format=%h", "--", str(path)],
+        cwd=ROOT, capture_output=True, text=True)
+    shas = out.stdout.split()
+    return shas[-1] if shas else ""
 # `resolve` writes "commit <sha>"; hand-written log lines use the same shape.
 CITATION_RE = re.compile(r"\bcommits?\s+`?([0-9a-f]{7,40})`?", re.I)
 
@@ -957,9 +1005,16 @@ pre code{background:none;padding:0}
         # filed onward (done-followup/) in one commit. Dead-sha auditing stays
         # on the resolved buckets: an open ticket citing an old commit in prose
         # is discussion, not a claim about where the fix landed.
-        for t in self.tickets:
-            if PENDING_COMMIT in t.text:
-                pending.append(t.slug)
+        # Count exactly what sync.sh can FILL — same pattern, same buckets.
+        # This used to be a bare substring over every bucket while sync grepped
+        # one spelling over the resolved ones, so the number check printed and
+        # the work sync could do were different quantities that nobody had put
+        # side by side. A placeholder in backlog/ or working/ is not owed a sha:
+        # the ticket has not landed, and there is no commit to cite yet.
+        for st in RESOLVED_BUCKETS:
+            for t in self.by_status[st]:
+                if PENDING_RE.search(t.text):
+                    pending.append(t.slug)
         for st in ("done", "decided", "done-followup"):
             for t in self.by_status[st]:
                 for sha in CITATION_RE.findall(t.text):
@@ -1316,6 +1371,29 @@ def cmd_claim(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_pending(args: argparse.Namespace) -> int:
+    """`<path>\t<sha>` per ticket owing a citation — sync.sh's input.
+
+    Exists so "what counts as an unfilled citation" has ONE implementation. It
+    was duplicated as a Python substring test and a shell grep literal, the two
+    drifted, and neither tool could see that the other disagreed. That
+    duplication is the actual defect the ticket names.
+
+    A ticket whose sha cannot be determined prints an empty second field rather
+    than being dropped: sync must be able to report it, not silently skip it.
+    """
+    for bucket in RESOLVED_BUCKETS:
+        for path in sorted((PROG / bucket).glob("*.md")):
+            try:
+                text = path.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            if not PENDING_RE.search(text):
+                continue
+            print("%s\t%s" % (path.relative_to(ROOT), resolve_commit(path)))
+    return 0
+
+
 def cmd_resolve(args: argparse.Namespace) -> int:
     src = find_ticket(args.slug)
     # A decide- ticket resolves into decided/, not done/: a decision is a
@@ -1360,6 +1438,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     sp = sub.add_parser("claim")
     sp.add_argument("slug")
     sp.add_argument("owner")
+    sub.add_parser("pending")
     sp = sub.add_parser("resolve")
     sp.add_argument("slug")
     # Optional on purpose: the sha you can name here is the PRE-push one, and a
@@ -1375,6 +1454,8 @@ def main(argv: list[str]) -> int:
     args = parse_args(argv)
     if args.cmd == "claim":
         return cmd_claim(args)
+    if args.cmd == "pending":
+        return cmd_pending(args)
     if args.cmd == "resolve":
         return cmd_resolve(args)
 
