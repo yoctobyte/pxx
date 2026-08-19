@@ -1522,6 +1522,27 @@ exists, its banner says so and the banner outranks the queue order.
   never dispatch to fill capacity. But **do not bank a day while the user is paying for
   idle capacity** — that call was made once and was wrong.
 - **The coordinator writes no code.** Filing, ranking, routing and verifying only.
+- **GATE AGAINST THE NEW PIN, NOT BEFORE IT — demonstrated 2026-08-19, not argued.**
+  Track B ships on the pin, so the meaningful green is the one taken against the pin the
+  compiler commits produce. frank3 proposed this an hour before it mattered; it then caught
+  v357, which would otherwise have sat **blessed and red** while frank3 reported its ticket
+  green against v356. **Both reports would have been true and the ground broken.** Do not
+  accept pre-pin gating again without a specific reason.
+
+- **REVERTING A BAD PIN: `make revert` does NOT do it in this tree.** It restores
+  `compiler/pascal26` from a per-version `vN` binary and this tree keeps none — it fails
+  with "Binary … missing". **What works: `git revert <the pin commit>`.** Every stable file
+  is tracked, so that restores the previous pin byte-for-byte including `VERSION` and
+  `pin.log`. Verified 2026-08-19 on v357 → v356 (`5a0e894b3`): pinned md5 back to
+  `540956f1f071…`, VERSION 356, and the failing file compiles again. **The commits stay on
+  master; only the blessing is undone**, which is what the brake is for.
+
+- **A WRAPPER THAT APPENDS ANYTHING AFTER THE COMMAND UNDER TEST REPORTS THE WRAPPER'S
+  HEALTH, NOT THE TEST'S.** `; echo exit=$?`, `| tail`, `&& next` — all three, and all
+  three look like diligence. frank3 hit `make lib-test > log 2>&1; echo exit=$?` reporting
+  success while the suite was `Error 1`, **immediately after finding the same shape in the
+  coordinator's pin pipeline**, which says how well it hides. Read the log, or use
+  `set -o pipefail` and check the real status.
 - **SEVERAL IMPROVEMENTS THAT REDUCE THE SAME QUANTITY DO NOT MULTIPLY.** frank3's rule,
   from a prediction of ~4x that delivered 1.6-1.8x:
 
@@ -2771,3 +2792,30 @@ rerank it deliberately rather than inheriting the number).
   anyone chasing another 2x on subnormals should attack the SETUP, not the limbs.** Asked
   for that to go in the parent ticket body, since it is invisible to `ready`/`next`
   otherwise and would cost the next optimiser a whole ticket.
+
+- **INCIDENT: pin v357 was BAD and is REVERTED (`5a0e894b3`). Track B was blocked ~20 min.**
+  I pinned it; the fault is mine to own even though the defect is not.
+
+  v357 carried p88's `9c5148087` + `e78cc5882` and broke **compilation** of
+  `examples/tk/callbacks.npy:84` and `htmlview.npy:51` with *"callable value of a def with
+  no signature record"*. **Verified here both directions with the pinned binary before
+  acting** — v357 errors (`near: root update >>> unit builtinheap`), v356 gives
+  `ok, code=2530315B`, and `hello.npy` compiles on both, so it is not the whole Tk path.
+
+  Routed to frank2 as `urgent/bug-n-pin-v357-…` (N, **p90**), outranking its own p88 work,
+  carrying everything frank3 had already established so it is not redone: not frank3's
+  change (reproduced clean with its work stashed), **not minimisable** — `g = f; g()` and
+  `h = c.m; h()` both compile fine on v357 — so it needs something the pcl/Tk path does.
+
+  **frank3 stopped short of a minimal repro deliberately**, on the grounds that a blocked
+  lane is worth more than a tidy test case, and reported immediately. Correct call: the
+  lane was clear in twenty minutes and the minimisation would have bought the fixer little
+  that the bounds already give.
+
+  **It also refused to resolve its finished strtofloat work against a red gate** — held it
+  instead. Right, and worth naming: a green ticket landed against a broken ground is how a
+  false record gets written.
+
+  **What this incident actually proves is the gating order** (now a standing rule above):
+  gating post-pin is what surfaced it. Had frank3 gated before the pin, it would have had a
+  true green against v356 and the tree would have carried a blessed, broken pin.
