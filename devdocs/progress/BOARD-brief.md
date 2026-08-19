@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:17 blocked:5 backlog:237 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2035 rejected:38`
+`working:1 unfinished:17 blocked:5 backlog:238 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2035 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -49,7 +49,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 60] [A]` refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
 - `[p 58] [O]` feature-opt-o3-register-pressure
-- `[p 55] [C]` bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
+- `[p 55] [C]` bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 2)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [B]` bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable
 - `[p 55] [T]` bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic

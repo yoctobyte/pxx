@@ -114,3 +114,43 @@ C tests green + `make test` + self-host byte-identical. Add a positive test for
 all four rows of the table above (the two correct ones are the must-not-regress
 controls — they are what proves the fix did not disturb the deliberate
 declaration-side cross-bind that lua depends on).
+
+---
+
+## 2026-08-19 — this is now a PREREQUISITE, and the ":9448 must stay" quote is not settled
+
+Design conversation with the user filed as
+[[feature-c-import-a-pascal-unit-under-a-mangled-name]] (C, p50), which **blocks on this
+ticket**. Nothing in that design changes what to do here — the fix below is correct under
+every branch of it — but two notes for whoever takes it.
+
+### The fix is the declaration/definition split, and it is not in dispute
+
+`cparser.inc:9401` calls `FindProc(name)` for a C function **with a body** and `:9558`
+overwrites `BodyAddr` on whatever it finds. A **declaration** binding cross-namespace is a
+deliberate, documented behaviour. A **definition** is a different claim — *this translation
+unit provides the function* — and it should get its own proc in its own unit rather than
+seizing someone else's entry. Fix that asymmetry; the ticket's own Mechanism section says
+the same.
+
+### But do NOT treat `:9448`'s justification as load-bearing without checking
+
+The comment defends the cross-namespace bind with: *"lua's `<math.h>` `sqrt`/`exp`/`sin`/…
+resolve to the RTL math routines."* That may be **stale**. Measured 2026-08-19:
+`lib/crtl/src/math.c` DEFINES `exp` (:282), `log` (:341), `sin` (:644), `cos` (:656),
+`atan` (:724) and `sqrt` (:965) as correctly-rounded C, and `CPullCrtlForPrototypes` pulls
+that module when a C file declares those prototypes. So C may already have its own libm and
+the bind may be legacy from before it did.
+
+**This is flagged, not concluded.** Three stale "must stay" justifications turned up in one
+day (this, `stdarg.h`'s macro-reset story, `feature-mimic-fpc`'s scoped manifest), so the
+prior on a confident old comment is lower than it looks — but the way to settle it is the
+experiment written into the feature ticket (delete the declaration bind, build lua / tcc /
+quickjs / zlib), **not** to widen this fix on a hunch. Keep this ticket to the
+definition case.
+
+### Standing context
+
+Still the single unmet blocker on `feature-a-own-language-first-symbol-resolution`, which
+sits in `unfinished/` **and** carries a `blocked-by` — two independent switches, either of
+which alone hides it from `ready`/`next`. When this lands, clear both.

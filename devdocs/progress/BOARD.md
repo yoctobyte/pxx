@@ -46,7 +46,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (237)
+## backlog (238)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -146,6 +146,7 @@ _none_
 | feature-c-entry-stub-must-run-initializers-for-environ | C | 45 | feature | `char **envp = environ;` silently becomes NULL in a C program: environ is a VARIABLE read directly, with no call to trigger crtl's lazy /proc/self/environ load, and the C entry stub has no init phase. The fini half landed 2026-08-10; this is the init half | — |
 | feature-c-esp-conformance-coverage | S | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
 | feature-c-gtk3-header-final-wiring | C | 45 | feature | GTK3 header import final wiring | — |
+| feature-c-import-a-pascal-unit-under-a-mangled-name | C | 50 | feature | Give C an explicit import site for a Pascal unit: `#include \"math.pas\"` declares its routines under mangled C identifiers (`math_pas_Sqrt`), case preserved from the Pascal declaration, path-qualified on collision. Overloads resolve by the declared C signature. AnsiString-bearing signatures are refused by name. Design settled by the user 2026-08-19; this ticket is a SPEC, not a discussion. | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine |
 | feature-c-package-namespace-decision | A | 40 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
 | feature-c-vla-via-alloca | C | 50 | feature | C variable-length arrays, lowered through alloca | — |
 | feature-cdecl-bodied-sysv-prologue | A | 40 | feature | Bodied Pascal `cdecl` procs: genuine SysV prologue (float params, >6 args) | — |
@@ -521,7 +522,7 @@ _none_
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 60] [A] refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
 - [p 58] [O] feature-opt-o3-register-pressure
-- [p 55] [C] bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
+- [p 55] [C] bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 2)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [B] bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable
 - [p 55] [T] bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
@@ -741,9 +742,9 @@ _none_
 
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
+- **2** — bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
 - **2** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **2** — feature-web-track-w-bootstrap
-- **1** — bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
