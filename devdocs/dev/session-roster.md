@@ -4504,3 +4504,51 @@ started.
 Watcher restarted 23:35 CEST (pid 2214596 → 3171395), so the keyed resume store is live. Prior loss
 rate was **11 saved / 11 superseded — every partial evicted.** `carried_runs` leaving zero is the
 acceptance test and T has not observed it yet; that is an open measurement, not a result.
+
+## Check +30h — a REVERT ALARM that was a false positive; pin v367 STANDS
+
+**This check nearly reverted a good pin, and the sequence is worth reading before trusting the
+same signal again.** `twatch --status` headlined:
+
+    pin verify — v367 at d47acfee770c RED (full, 24m old), 20 red, 11 new vs the v367 baseline
+
+11 new reds at a pin I took an hour earlier is exactly the documented `make revert` case, and I
+had committed to acting on it without debugging. **I measured first, and it is a false positive.**
+
+Three independent confirmations, in the order I got them:
+
+1. **The one non-timing member of the new set passes locally.**
+   `test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy` — forced a full rebuild
+   (`make compiler/pascal26`, converged in 1 round, so the binary IS the fixedpoint at HEAD, and
+   `compiler/**` has not moved since `d47acfee7`) and it prints `True\n7`, which is what the
+   Makefile asserts. Green.
+2. **The next full tier, 22 minutes LATER, has 9 reds — the inherited set and nothing else.**
+   `last_full` at `2e8b284343a5` (22:29:45Z): **2779 pass, 9 fail.** All five uforth jobs, both
+   sqlite-threads jobs, `demos#00`, `test-c-conformance-riscv32#shard3/6`, `tools-devtest#00` and
+   the shadowing test are all GREEN there.
+3. **The new set's composition is load-shaped**: uforth x5, sqlite-threads x2 (thread timing),
+   c-conformance under qemu, demos. T reported box-measuring devtests flaking at load 14 earlier
+   tonight.
+
+**So `e6075649b` is not implicated and the pin stands.** Part of the gap is legitimate and T's own
+caveat line already explains it — `tools-devtest#00` is red at the frozen `d47acfee7` because its
+fix (`6bbb899b9`) landed after that sha. The rest was noise.
+
+**What this means for the signal, and it is the finding to carry:** `pin verify … N new vs the
+baseline` is the number I promised to act on, it fired at 11, and acting on it mechanically would
+have reverted a good pin at 00:30 with the owner asleep. **A pin verify is a single run of a
+timing-sensitive matrix on a shared box; its new-vs-baseline count is a HYPOTHESIS, not a verdict.**
+The cheap discriminator is the one that worked here: compare it against the next ordinary full tier,
+and reproduce one non-timing member locally. Flagged to T — and note the reasons map (`job_reason`,
+9 entries) covers only the LATEST run, so **a pin verify's reds carry no reasons at all**, which is
+precisely what would have made this un-triageable at 3am.
+
+**Everything else quiet.** No pin needed (`compiler/**` unmoved since v367). `urgent/` unchanged;
+the U decision at p75 is still the morning headline. Nobody blocked.
+
+**Deliberately NOT dispatching, and this is a stated call rather than banking capacity:** both local
+workers have been running ~24h on low autocompact thresholds and each landed three substantial
+pieces tonight. Starting a fresh Track A ticket at 00:35 with a nearly-compacted worker is how a
+half-applied compiler change happens, which is the one overnight failure that costs everyone. The
+queue is healthy and nothing in it is time-critical. **The next substantive dispatch should be with
+a fresh context and the owner awake.**
