@@ -304,4 +304,4 @@ bug: `PXXWriteFloatSci(p: Pointer)` takes no width or digit count while
 `PXXWriteFloatFixed(p, decimals, width)` takes both.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 682d64373.
