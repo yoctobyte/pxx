@@ -293,4 +293,4 @@ bound to — varying the thing that distinguishes the two candidates instead of
 examining the complaint.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 5fc7dc358.
