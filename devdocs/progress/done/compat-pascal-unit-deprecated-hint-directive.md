@@ -89,4 +89,4 @@ whole fix is one line rather than a new parser path.
 Gate: `make compiler/pascal26` fixedpoint + `tools/gate.sh quick`, green.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 76b6fb7f1.

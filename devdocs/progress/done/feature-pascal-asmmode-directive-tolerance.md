@@ -71,4 +71,4 @@ mean the next wall is far away — it means this one is gone.
 Gate: `make compiler/pascal26` fixedpoint + `tools/gate.sh quick`, green.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 76b6fb7f1.
