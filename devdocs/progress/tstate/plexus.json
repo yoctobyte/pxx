@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T09:48:33Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "9bfb7fcfac03a57516b6fe9a4d958526efab15c7",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T10:31:57Z",
    "fixed": [],
    "new_red": [],
@@ -465,6 +457,14 @@
    "new_red": [],
    "sha": "21f098e32a95be73bdeae3832aedfe65677292f7",
    "tier": "slow",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-19T17:38:55Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "21f098e32a95be73bdeae3832aedfe65677292f7",
+   "tier": "opt",
    "verdict": "GREEN"
   }
  ],
@@ -6059,11 +6059,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-19T17:33:30Z",
+  "date": "2026-08-19T17:38:55Z",
   "sha": "21f098e32a95be73bdeae3832aedfe65677292f7",
-  "tier": "slow",
+  "tier": "opt",
   "verdict": "GREEN",
-  "wall": 272.9
+  "wall": 313.9
  },
  "last_bench": {
   "conf_rows": 550,
