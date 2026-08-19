@@ -45,3 +45,12 @@ the smallest slice a profile actually demands; never top-down.
 `make test` + self-host byte-identical (touches shared RTL / alloc lowering) +
 cross where a target's growth policy differs (ESP wants a smaller cap). Land the
 Result-auto-slack part alone first; the explicit flag is a follow-on.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363)
+
+**Genuine feature, correctly parked — and deliberately unmeasurable.** There is
+no repro to compile: the ticket states its own gate as "no live profile is
+pulling this. Filed so the design is on record, not to schedule it." Nothing in
+the triage changes that. It should stay at its low prio until a profile names
+it, and the ticket's own advice — do the free Result-string 80% first, if
+anything — is still the right first slice.

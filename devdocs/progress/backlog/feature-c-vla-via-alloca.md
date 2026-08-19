@@ -55,3 +55,23 @@ tkLBrack` dimension loop):
 (that line names this ticket), plus a `test/` C program writing and reading a
 runtime-sized array in a loop and printing the values, diffed against gcc — the
 exact shape that used to stop after two iterations.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363)
+
+**Genuine feature, still wanted — measured, not read.** The refusal is intact:
+
+```c
+int n = 5; int arr[n];
+```
+```
+pascal26:4: error: C: variable-length array (a dimension that is not a
+compile-time constant) is not supported — use a fixed bound, malloc or alloca
+```
+
+gcc compiles and runs the same file (`30 20`), so this is code the reference
+implementation accepts and pxx refuses — squarely **compat** work (ISO C99
+surface), and worth carrying that tag. It is deliberately NOT re-typed as a
+bug: the refusal is loud and names the workarounds, and this repo's escape rule
+promotes a compat finding to a bug only when the divergence is a *silent wrong
+value*. The corruption that was silent is already fixed
+([[bug-cfront-vla-stack-corruption]]); what remains is the missing feature.

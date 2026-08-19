@@ -49,3 +49,10 @@ half the rule in the wrong repo layer.
 `make test` + self-host byte-identical; `--widgetset=gtk3` produces a binary
 byte-identical to `-dWIDGETSET_GTK3`, and `--widgetset=nonsense` is rejected by
 name.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363)
+
+**Genuine feature, still wanted, unchanged.** `pxx --widgetset=gtk3 …` against
+the pinned compiler still answers `unknown option: --widgetset=gtk3`, so the
+CLI half has not landed incidentally. Still small and still only a spelling —
+the `-dWIDGETSET_*` path it would sugar continues to work.
