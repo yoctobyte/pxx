@@ -1984,3 +1984,50 @@ rerank it deliberately rather than inheriting the number).
   **frank3 still `waiting` — third consecutive check.** Track B now has TWO ready items at
   p55+ (the new lib_tls bug, and the ElementTree shim at p62) and nobody able to take them.
   This is the one thing blocked on the user.
+
+- **PIN v353 (2026-08-19 08:29Z, coordinator).** `256183a5f52c` (was v352 `0d2087d629bf`)
+  at `8a16663c6ffe`, commit `0c189b6f0`. Ran on the user's word that frank2 was waiting on
+  it; announced the lock to frank2 first, held builds, released after.
+
+  **The pin was a full day stale** — v352 dated 2026-08-18 11:15 with twelve compiler/lib
+  commits on top. Worth noting as a coordinator failure mode: nothing surfaces pin
+  staleness. `working/`, `ready` and tstate all looked healthy while Track B's ground sat a
+  day behind HEAD, and it took the USER noticing a blocked worker. **Check `pin.log`'s
+  tail against `git log -- compiler lib` at each check** — it is two commands and nothing
+  else answers the question.
+
+  Blessed onto B's ground: the NilPy generator series, `6b2402b92` (code buffer off 88% of
+  cap at every -O level), `9ffc1637f` (backslash-newline continuation), `a4c1bf31d` +
+  `df15ae3fe` (StrToFloat: Eisel-Lemire and the double-parse fix), `5a900c598` (real
+  `urlopen`). Fixedpoint clean at all three rungs, 7415819B / 2899 procs — **default -O
+  level only**, as always.
+
+  Told frank2 explicitly that a pin blesses origin/master, so unpushed work is not in it,
+  and to say so immediately if it needed a re-run. p88 is NOT in this pin; frank2's last
+  commit is the reconnaissance.
+
+- **Track C now has a SPEC, not a discussion** (`40a0a9fb7`). The user designed
+  Pascal-into-C importing across a long exchange and it is filed as
+  `feature-c-import-a-pascal-unit-under-a-mangled-name` (C, p50), blocked-by the p55
+  definition-overwrite bug so the ordering is tooling-enforced rather than prose.
+
+  Settled: `#include "math.pas"` as the import site (fails loudly under gcc — a pragma
+  would be silently ignored, the worst shape); `math_pas_Sqrt` with **case preserved from
+  the Pascal declaration**, which is what makes the mangled name unable to collide with C's
+  `sqrt` and retires the documented infinite-recursion hazard structurally;
+  path-qualified on collision; **overloads resolved by the declared C prototype** — the
+  user dissolved that fork rather than answering it, since the C declaration already
+  carries unit, routine and signature; `AnsiString`-bearing signatures refused by name,
+  with `const AnsiString` recorded as a future opt-in and deliberately NOT built.
+
+  The user's hinge, kept verbatim in the ticket because the design is incoherent without
+  it: **case sensitivity gives distinguishability, mangling gives identity.**
+
+  Left as an EXPERIMENT rather than a decision: whether implicit cross-namespace binding
+  goes away. `cparser.inc:9448` defends it with lua's `<math.h>`, but `lib/crtl/src/math.c`
+  now DEFINES exp/log/sin/cos/atan/sqrt in C. Settle it by deleting the bind and building
+  lua/tcc/quickjs/zlib — the failures ARE the spec. **Flagged, not concluded.**
+
+  **Three stale "must stay" justifications surfaced in one day** — this one, `stdarg.h`'s
+  macro-reset story, and `feature-mimic-fpc`'s scoped manifest. The prior on a confident
+  old comment is lower than it looks; check the code it describes before building on it.
