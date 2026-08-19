@@ -1489,8 +1489,19 @@ def testable_behind(repo, sha, ref, cap=500):
 
 
 def fmt_age(secs):
+    """An age a reader can act on, at whatever scale it happens to be.
+
+    Under an hour this used to print "0h", which is not a rounding so much as a
+    refusal: every gap between one minute and fifty-nine read identically, and
+    the pin-verify line -- where the interesting ages are minutes, because that
+    is how long a pin is held -- was the case that made it visible.
+    """
     days, rem = divmod(int(secs), 86400)
-    return "%dd%dh" % (days, rem // 3600) if days else "%dh" % (rem // 3600)
+    if days:
+        return "%dd%dh" % (days, rem // 3600)
+    if rem >= 3600:
+        return "%dh" % (rem // 3600)
+    return "%dm" % (rem // 60)
 
 
 def regen_index(clone):
@@ -4502,6 +4513,57 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
                      "  [STALE — no cross-target verdict on this tree; native "
                      "GREEN does NOT cover i386/arm32/riscv32/aarch64]"
                      if stale else ""))
+        # PIN VERIFY — a different question from every line above it, which are
+        # all about `last_full`: the newest tier on the newest tree. "Is the
+        # binary every track is currently BUILDING on sound?" is answered by
+        # this key and by nothing else, and the two answers routinely disagree
+        # because a pin sits at a frozen sha while master runs ahead.
+        #
+        # Both were in this file on 2026-08-19 and a peer held pin v367 for 1.5
+        # hours on "there is still no full tier at v366" while a full tier at
+        # the pinned sha sat one key away with exactly the verdict it wanted.
+        # Same shape as the empty FAIL line one level up: the data existed and
+        # the summary implied its absence.
+        # Printed even for a QUIET host, unlike every other line in this block.
+        # Quietness invalidates a HEAD verdict, because HEAD moved on without
+        # anyone judging it; it does not invalidate this one. A pin verify is a
+        # statement about a FROZEN sha and stays true however long the box has
+        # been silent since -- and the host that has gone quiet may be the only
+        # one that ever judged the current pin. Suppressing it there would
+        # reproduce, in the quiet case, the exact defect this line exists to fix.
+        pv = st.get("pin_verify") or {}
+        if pv.get("sha"):
+            pv_age = secs_since(pv.get("date") or "", now)
+            pv_behind = testable_behind(repo, pv["sha"], ref)
+            pv_red = pv.get("red") or []
+            base = st.get("pin_baseline") or {}
+            # Only diffable when the baseline was taken under THIS pin. Saying
+            # "0 new" off a baseline belonging to the previous pin would be the
+            # most reassuring possible way to be wrong.
+            if base.get("reds") is not None and base.get("pin") == pv.get("ver"):
+                fresh = [j for j in pv_red if j not in set(base["reds"])]
+                vs = ", %d new vs the %s baseline" % (len(fresh), pv["ver"])
+            else:
+                vs = ", no baseline recorded for %s (new-vs-inherited unknown)" \
+                     % pv.get("ver", "?")
+            print("tstate:   pin verify — %s at %s %s (%s, %s old)%s%s"
+                  % (pv.get("ver", "?"), pv["sha"][:12], pv.get("verdict", "?"),
+                     pv.get("tier", "?"),
+                     fmt_age(pv_age) if pv_age is not None else "?",
+                     ", %d red" % len(pv_red) if pv_red else "",
+                     vs if pv_red else ""))
+            # The caveat that makes the reds readable. A pin is usually days
+            # behind HEAD, so "job X is red in pin verify" and "job X is fixed
+            # at HEAD" are both true and not in conflict -- they are statements
+            # about different trees. Measured 2026-08-19: tools-devtest#00 was
+            # red in the v366 verify at cabb5d598 and green at HEAD, and the
+            # fix (6bbb899b9) landed 27 commits after the verified sha. That
+            # cost a peer a round trip, so the tree is named where the reds are.
+            if pv_red and pv_behind:
+                print("tstate:            ...those reds are AT THE PINNED TREE, "
+                      "%d testable commit(s) behind %s — a job fixed since is "
+                      "still red here, and that is not a contradiction"
+                      % (pv_behind, ref))
         nskip = sum(1 for s in (st.get("jobs") or {}).values() if s == "skip")
         if nskip:
             print("tstate:   coverage — %d job(s) SKIPPED on %s (absent corpus "
