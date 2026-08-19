@@ -2935,3 +2935,36 @@ rerank it deliberately rather than inheriting the number).
   cases is a DISCRIMINATOR."* `hello.npy` passing was not "not the whole Tk path" — it was
   naming the module crossing as the boundary, and it was already in hand. Same shape as its
   dead-code find this morning: **the result read as uninformative was the informative one.**
+
+- **v357 GREEN on the full `lib-test`, strtofloat limb work landed (`1f97cbbdf`).** frank3
+  captured the pin hash before the run and re-checked it unchanged after, so the result
+  holds on its own evidence rather than on the coordinator's hold. `tk-nilpy: ok`,
+  `StrToFloat matches CPython on 112207 values`, zero failures.
+
+  **Headline recorded as UNMET**: predicted ~4x, delivered 1.6-1.8x. frank3 led the commit
+  message with the shortfall and the double-counting error rather than the gain, *"because
+  that is the part that transfers"* — second time today it chose the version of a result
+  that transfers over the version that flatters. What the change earns its place on
+  instead: 2.2x less limb work, `BigFMulU64` collapsed to a one-liner, `BigFAdd` deleted as
+  dead, and the **~2.8 µs fixed-setup floor written into the parent ticket where the next
+  optimiser will look**.
+
+- **TRACK B IS DRY — a staffing question is with the user.** `next --track B` is
+  `bug-nilpy-complex-pow-is-a-few-ulp-off-cpython` at effective prio **20**; everything
+  above it is done. frank3's own read, which I agree with: **B has no high-value work left
+  that is not downstream of N**, and a few-ulp `complex_pow` difference is not worth a
+  session while the corpus ladder is stalled on an import rule.
+
+  Routed frank3 to the one thing that is unambiguously its own: **re-run the corpus ladder
+  clean on v357.** Nobody currently holds a current ladder reading — the contaminated run
+  was binned unread and never replaced — so this re-baselines what the generator series
+  plus three pins actually bought, which is the mandate's headline number.
+
+  **What is NOT mine to settle:** frank3 offered to take
+  `bug-n-from-collections-abc-import-is-swallowed-by-the-collections-root-rule` (N, p62,
+  unclaimed in `backlog/`), having the whole diagnosis already loaded. frank2 holds A+N by
+  the user's assignment, still holds p88 in `working/` (on the last unfixed p70 row — a
+  callable through a subscript or parameter with fewer args than declared), and the import
+  blocker is queued to it next. **Handing it to frank3 is a lane-ownership change = the
+  user's call.** Deliberately not framed as a reassignment this time; the earlier version
+  of this manufactured a fork that dissolved once the framing changed.
