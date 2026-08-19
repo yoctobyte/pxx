@@ -905,6 +905,13 @@ const
     `EmitDataRef(IRIVal)` (or the target's EmitLoadDataRef*) on all five
     backends, which is byte-for-byte what the classref sentinel does, so a
     negative sentinel passes through untouched. No backend change, no new op. }
+  { Address of proc pi's DEFAULTS ARRAY: DataOff = -(PYSIGD_DATAREF_BASE + pi),
+    patched to ProcSigDfltOff[pi] after EmitPySignatures. Its own base rather
+    than loading the pointer out of the record at run time: the def-time store
+    then needs no pointer arithmetic through the record, just this address plus
+    k*16. MUST be tested before PYSIG_DATAREF_BASE -- it is more negative, and
+    every branch matches anything at least as negative as its own base. }
+  PYSIGD_DATAREF_BASE = 700000;
   PYSIG_DATAREF_BASE = 600000;
   TYPEINFO_REQ_DATAREF_BASE = 500000;
   { TypeInfoReq categories (see TypeInfoReqCat/Key/Off below) and cap. }
@@ -2144,6 +2151,8 @@ var
     every argument worked precisely because nothing had to be filled in.
     feature-n-a-callable-value-carries-its-signature-type }
   ProcSigOff    : array[0..MAX_PROCS-1] of Integer;
+  { Data[] offset of proc pi's defaults ARRAY (TotN variants), -1 = none. }
+  ProcSigDfltOff: array[0..MAX_PROCS-1] of Integer;
   { CLASS ATTRIBUTES: an unannotated class-level `name = <literal>` in a plain
     (non-dataclass) class. Python makes it a shared class attribute; NilPy holds
     it as a per-class COMPILE-TIME CONSTANT, which is exactly right for the

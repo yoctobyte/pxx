@@ -27357,6 +27357,10 @@ end;
 procedure PyApplyDefSignature(procIdx: Integer);
 var i: Integer;
 begin
+  if PxxDbgEnabled('n.sig') then
+    WriteLn('PXXDBG n.sig apply pi=', procIdx, ' name=', Procs[procIdx].Name,
+            ' hdrNParams=', PyHdrNParams, ' paramCount=', Procs[procIdx].ParamCount,
+            ' clsName=', PyDefaultClsName);
   { A class-returning def must record WHICH class, or the call site has a
     tyClass value with no identity and a later field access reads the object
     POINTER (test_nilpy_class_return). }

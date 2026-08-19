@@ -364,3 +364,52 @@ reads ReqN/TotN/defaults). Verify the p70 table against the result before
 resolving anything — "subsumed" stays a prediction until the fix exists.
 
 ## UNPARKED 2026-08-19 — resuming at 2b part 2 (pyparser.inc now uncontended)
+
+
+## 2b part 2 — infrastructure landed, and what the store still needs
+
+**Landed here:** the defaults ARRAY has its own dataref sentinel
+(`PYSIGD_DATAREF_BASE`, `ProcSigDfltOff[]`, resolver branch placed before the
+PYSIG one because it is more negative). So the array's address is a plain value
+in the AST and the def-time store needs no pointer arithmetic through the
+record — the slot is `AN_DEREF(sentinel + k*16)` typed `tyVariant`, which is
+exactly `GenMakeVariantAt`'s shape with the sentinel in place of an ident.
+Inert: nothing builds one of these yet.
+
+### Measured: there are THREE registration sites, not one
+
+`PyApplyDefSignature(procIdx)` looked like the single hook — procIdx known, every
+`ProcParamDefault*` written there, called during def parsing. It is not:
+`PXXDBG=n.sig` shows it firing for a plain `def g(x, lo=7)` and **not at all**
+for `class K: def m(self, a, b=5)`. Methods register through their own sites
+(pyparser.inc ~23267 and ~28080, which assign `ProcParamDefaultSym` directly).
+
+So the store must be queued at all three, and this is the fix-both-arms case
+again. For a plain def `hdrNParams = paramCount = 2` and `firstUser = 0`; the
+method sites need the `self` offset applied so the slot index stays USER-space,
+matching what `EmitPySignatures` computes.
+
+### The remaining work, concretely
+
+1. Queue, at each of the three sites, one `AN_ASSIGN` per unbaked defaulted
+   param: LHS `AN_DEREF(PYSIGD sentinel + (i - firstUser)*16)` typed
+   `tyVariant`, RHS the value.
+2. RHS for a NON-constant default is `PyMakeIdent(PyHdrDefSym[i])` — the hidden
+   global already holds the def-time value, so this copies rather than
+   re-evaluates and Python's evaluate-once semantics are preserved.
+3. RHS for a STRING constant has to be built from `PyHdrDefSOff/SLen`; the
+   direct-call path in `parser.inc` (~2962) already does this and is the shape
+   to copy.
+4. Ordering: the store must be queued AFTER the hidden global's own assignment
+   (`PyQueueDefInit` preserves queue order, so queueing later is enough).
+
+### Structural note that governs the whole series
+
+**Nothing in 2b is independently observable.** The array has no consumer until
+2d, so 2b/2c/2d form one observable unit; only their *infrastructure* can land
+separately, which is what 1, 2a and 2b-part-1 did. When 2d lands it must treat
+`PYSIG_DFLT_UNSET` as a hard, explicit error ("this default kind is not
+supported through a callable value yet") rather than a value — that keeps every
+intermediate state loud instead of silently wrong, and lets the UNSET set shrink
+to zero over the remaining increments instead of gating everything on
+completeness.

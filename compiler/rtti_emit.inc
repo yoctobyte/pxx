@@ -387,6 +387,7 @@ procedure EmitPySignatures;
 var pi, k, nUser, reqN, dfltOff, firstUser, slot: Integer;
 begin
   for pi := 0 to MAX_PROCS - 1 do ProcSigOff[pi] := -1;
+  for pi := 0 to MAX_PROCS - 1 do ProcSigDfltOff[pi] := -1;
   { NilPy compiles only. Without this a PASCAL program emits a record per
     main-program proc: measured +170 KB of .data on the compiler's own
     self-build, for records nothing can ever reach -- a callable value is a
@@ -440,6 +441,7 @@ begin
     if nUser > 0 then
     begin
       dfltOff := DataLen;
+      ProcSigDfltOff[pi] := dfltOff;
       { 16 bytes per slot: each is a VARIANT {VType, Payload}, not a pointer. }
       DataPutZeros(nUser * 16);
       AddDataPtrFix(ProcSigOff[pi] + PYSIG_OFF_DFLTS, dfltOff);

@@ -1153,6 +1153,16 @@ begin
         continue;
       end;
     end
+    else if Fixups[i].DataOff <= -PYSIGD_DATAREF_BASE then
+    begin
+      { A NilPy def's DEFAULTS ARRAY. Before the PYSIG branch below: more
+        negative base, and that branch matches everything this one does. }
+      j := -Fixups[i].DataOff - PYSIGD_DATAREF_BASE;
+      if (j >= 0) and (j < ProcCount) and (ProcSigDfltOff[j] >= 0) then
+        Fixups[i].DataOff := ProcSigDfltOff[j]
+      else
+        Error('a def-time default store for a def with no defaults array');
+    end
     else if Fixups[i].DataOff <= -PYSIG_DATAREF_BASE then
     begin
       { A NilPy def's signature record (EmitPySignatures). Tested FIRST because
