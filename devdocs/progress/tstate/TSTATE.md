@@ -3,8 +3,12 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `952aada2cb5d` | 2026-08-19T13:54:09Z | GREEN (native) | 239.1s | `9bfb7fcfac03` GREEN |
+| plexus | `a76303231306` | 2026-08-19T13:59:33Z | RED (native) | 244.0s | `9bfb7fcfac03` GREEN |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- none
+- **test-core#src:test/test_call_result_member.pas** — test/test_call_result_member.pas (plexus): bad `a76303231306`, last good `952aada2cb5d`, 6 commit(s) in range
+- **test-core#src:test/test_ctor_result_member.pas** — test/test_ctor_result_member.pas (plexus): bad `a76303231306`, last good `952aada2cb5d`, 6 commit(s) in range
+- **test-core#src:test/test_isas_open_world_b325.pas** — test/test_isas_open_world_b325.pas (plexus): bad `a76303231306`, last good `952aada2cb5d`, 6 commit(s) in range
+- **test-core#src:test/test_procedure_as_value_ok.pas** — test/test_procedure_as_value_ok.pas (plexus): bad `a76303231306`, last good `952aada2cb5d`, 6 commit(s) in range
+- **test-core#src:test/test_stmt_call_result_selector_b318.pas** — test/test_stmt_call_result_selector_b318.pas (plexus): bad `a76303231306`, last good `952aada2cb5d`, 6 commit(s) in range

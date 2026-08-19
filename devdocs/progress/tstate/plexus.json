@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T00:58:11Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "9cc61eee29c83dde8c53e74729b3cea57afa6c04",
-   "tier": "slow",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T01:03:31Z",
    "fixed": [],
    "new_red": [],
@@ -415,6 +407,20 @@
    "sha": "952aada2cb5d491ef3c58021ec18503ce56ae8f9",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-19T13:59:33Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_call_result_member.pas",
+    "test-core#src:test/test_ctor_result_member.pas",
+    "test-core#src:test/test_isas_open_world_b325.pas",
+    "test-core#src:test/test_procedure_as_value_ok.pas",
+    "test-core#src:test/test_stmt_call_result_selector_b318.pas"
+   ],
+   "sha": "a763032313063caaa4da3a0039d25959752c4b58",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -1600,6 +1606,7 @@
   "test-core#src:test/test_impl_static_and_pchar_index.pas": "native",
   "test-core#src:test/test_in_is_boolean_b301.pas": "native",
   "test-core#src:test/test_include_fi_search.pas": "native",
+  "test-core#src:test/test_index_a_call_result_directly.pas": "native",
   "test-core#src:test/test_index_getter_string_property.pas": "native",
   "test-core#src:test/test_indexed_proc_call.pas": "native",
   "test-core#src:test/test_indexed_property.pas": "native",
@@ -4163,7 +4170,7 @@
   "test-core#src:test/test_c_unit_globals.pas": "pass",
   "test-core#src:test/test_c_unit_pulled_via_pascal_unit.pas": "pass",
   "test-core#src:test/test_call_arg_marshalling_32bit.pas": "pass",
-  "test-core#src:test/test_call_result_member.pas": "pass",
+  "test-core#src:test/test_call_result_member.pas": "fail",
   "test-core#src:test/test_case_else_multistmt.pas": "pass",
   "test-core#src:test/test_case_insensitive.pas": "pass",
   "test-core#src:test/test_case_io.pas": "pass",
@@ -4251,7 +4258,7 @@
   "test-core#src:test/test_cross_typed_const.pas": "pass",
   "test-core#src:test/test_cross_write_pchar.pas": "pass",
   "test-core#src:test/test_ctor_arrayofconst_overload_b298.pas": "pass",
-  "test-core#src:test/test_ctor_result_member.pas": "pass",
+  "test-core#src:test/test_ctor_result_member.pas": "fail",
   "test-core#src:test/test_ctor_shadowing_signature.pas": "pass",
   "test-core#src:test/test_ctor_string_literal_arg.pas": "pass",
   "test-core#src:test/test_decl_order_global_error.pas@2": "pass",
@@ -4383,6 +4390,7 @@
   "test-core#src:test/test_impl_static_and_pchar_index.pas": "pass",
   "test-core#src:test/test_in_is_boolean_b301.pas": "pass",
   "test-core#src:test/test_include_fi_search.pas": "pass",
+  "test-core#src:test/test_index_a_call_result_directly.pas": "pass",
   "test-core#src:test/test_index_getter_string_property.pas": "pass",
   "test-core#src:test/test_indexed_proc_call.pas": "pass",
   "test-core#src:test/test_indexed_property.pas": "pass",
@@ -4431,7 +4439,7 @@
   "test-core#src:test/test_ir_virtual_call.pas": "pass",
   "test-core#src:test/test_ir_while.pas": "pass",
   "test-core#src:test/test_is_classref_b276.pas": "pass",
-  "test-core#src:test/test_isas_open_world_b325.pas": "pass",
+  "test-core#src:test/test_isas_open_world_b325.pas": "fail",
   "test-core#src:test/test_keyword_array_case.pas": "pass",
   "test-core#src:test/test_keyword_case.pas": "pass",
   "test-core#src:test/test_lazy_var.pas": "pass",
@@ -4680,7 +4688,7 @@
   "test-core#src:test/test_pointers.pas": "pass",
   "test-core#src:test/test_proc_const_record.pas": "pass",
   "test-core#src:test/test_procaddr.pas": "pass",
-  "test-core#src:test/test_procedure_as_value_ok.pas": "pass",
+  "test-core#src:test/test_procedure_as_value_ok.pas": "fail",
   "test-core#src:test/test_proctype.pas": "pass",
   "test-core#src:test/test_procvar_fpc_mode.pas": "pass",
   "test-core#src:test/test_procvar_value_context.pas": "pass",
@@ -4799,7 +4807,7 @@
   "test-core#src:test/test_static_methods.pas": "pass",
   "test-core#src:test/test_stderr_fd.pas": "pass",
   "test-core#src:test/test_stmt_call_result_deref_b387.pas": "pass",
-  "test-core#src:test/test_stmt_call_result_selector_b318.pas": "pass",
+  "test-core#src:test/test_stmt_call_result_selector_b318.pas": "fail",
   "test-core#src:test/test_str_float_fpc_default_b327.pas": "pass",
   "test-core#src:test/test_str_literal_concat_compare.pas": "pass",
   "test-core#src:test/test_str_val.pas": "pass",
@@ -5976,11 +5984,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-19T13:54:09Z",
-  "sha": "952aada2cb5d491ef3c58021ec18503ce56ae8f9",
+  "date": "2026-08-19T13:59:33Z",
+  "sha": "a763032313063caaa4da3a0039d25959752c4b58",
   "tier": "native",
-  "verdict": "GREEN",
-  "wall": 239.1
+  "verdict": "RED",
+  "wall": 244.0
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6009,7 +6017,98 @@
  "migrated_from": [
   "borg"
  ],
- "open_regressions": [],
+ "open_regressions": [
+  {
+   "bad": "a763032313063caaa4da3a0039d25959752c4b58",
+   "good": "952aada2cb5d491ef3c58021ec18503ce56ae8f9",
+   "job": "test-core#src:test/test_call_result_member.pas",
+   "name": "test-core#258",
+   "opened": "2026-08-19T13:59:33Z",
+   "pin_built": false,
+   "range": [
+    "20de759f08cd69ef64548c8c6eaae2f04551225b",
+    "1df7a1926a3add372fcd86532e0e78dafe8cd984",
+    "1cacae42b7b1a96318bd53cf97f7fdadc9ee6f58",
+    "354f734c1b1850cc9eaca62d2ca204d88b0d75ef",
+    "1a5e19d9017f86c300bb9d26e7d9f393985df728",
+    "a763032313063caaa4da3a0039d25959752c4b58"
+   ],
+   "src": "test/test_call_result_member.pas",
+   "status": "fail"
+  },
+  {
+   "bad": "a763032313063caaa4da3a0039d25959752c4b58",
+   "good": "952aada2cb5d491ef3c58021ec18503ce56ae8f9",
+   "job": "test-core#src:test/test_ctor_result_member.pas",
+   "name": "test-core#164",
+   "opened": "2026-08-19T13:59:33Z",
+   "pin_built": false,
+   "range": [
+    "20de759f08cd69ef64548c8c6eaae2f04551225b",
+    "1df7a1926a3add372fcd86532e0e78dafe8cd984",
+    "1cacae42b7b1a96318bd53cf97f7fdadc9ee6f58",
+    "354f734c1b1850cc9eaca62d2ca204d88b0d75ef",
+    "1a5e19d9017f86c300bb9d26e7d9f393985df728",
+    "a763032313063caaa4da3a0039d25959752c4b58"
+   ],
+   "src": "test/test_ctor_result_member.pas",
+   "status": "fail"
+  },
+  {
+   "bad": "a763032313063caaa4da3a0039d25959752c4b58",
+   "good": "952aada2cb5d491ef3c58021ec18503ce56ae8f9",
+   "job": "test-core#src:test/test_isas_open_world_b325.pas",
+   "name": "test-core#48",
+   "opened": "2026-08-19T13:59:33Z",
+   "pin_built": false,
+   "range": [
+    "20de759f08cd69ef64548c8c6eaae2f04551225b",
+    "1df7a1926a3add372fcd86532e0e78dafe8cd984",
+    "1cacae42b7b1a96318bd53cf97f7fdadc9ee6f58",
+    "354f734c1b1850cc9eaca62d2ca204d88b0d75ef",
+    "1a5e19d9017f86c300bb9d26e7d9f393985df728",
+    "a763032313063caaa4da3a0039d25959752c4b58"
+   ],
+   "src": "test/test_isas_open_world_b325.pas",
+   "status": "fail"
+  },
+  {
+   "bad": "a763032313063caaa4da3a0039d25959752c4b58",
+   "good": "952aada2cb5d491ef3c58021ec18503ce56ae8f9",
+   "job": "test-core#src:test/test_procedure_as_value_ok.pas",
+   "name": "test-core#163",
+   "opened": "2026-08-19T13:59:33Z",
+   "pin_built": false,
+   "range": [
+    "20de759f08cd69ef64548c8c6eaae2f04551225b",
+    "1df7a1926a3add372fcd86532e0e78dafe8cd984",
+    "1cacae42b7b1a96318bd53cf97f7fdadc9ee6f58",
+    "354f734c1b1850cc9eaca62d2ca204d88b0d75ef",
+    "1a5e19d9017f86c300bb9d26e7d9f393985df728",
+    "a763032313063caaa4da3a0039d25959752c4b58"
+   ],
+   "src": "test/test_procedure_as_value_ok.pas",
+   "status": "fail"
+  },
+  {
+   "bad": "a763032313063caaa4da3a0039d25959752c4b58",
+   "good": "952aada2cb5d491ef3c58021ec18503ce56ae8f9",
+   "job": "test-core#src:test/test_stmt_call_result_selector_b318.pas",
+   "name": "test-core#56",
+   "opened": "2026-08-19T13:59:33Z",
+   "pin_built": false,
+   "range": [
+    "20de759f08cd69ef64548c8c6eaae2f04551225b",
+    "1df7a1926a3add372fcd86532e0e78dafe8cd984",
+    "1cacae42b7b1a96318bd53cf97f7fdadc9ee6f58",
+    "354f734c1b1850cc9eaca62d2ca204d88b0d75ef",
+    "1a5e19d9017f86c300bb9d26e7d9f393985df728",
+    "a763032313063caaa4da3a0039d25959752c4b58"
+   ],
+   "src": "test/test_stmt_call_result_selector_b318.pas",
+   "status": "fail"
+  }
+ ],
  "pin_shadow": {
   "at": "2026-08-19T10:31:57Z",
   "qualifies": true,
