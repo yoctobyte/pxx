@@ -115,4 +115,4 @@ run and needs no such note.
   Non-vacuous by construction: run against the pre-fix `twatch.py` it does not
   merely fail, it raises `KeyError: 'inherited'` — the old verdict has no notion
   of an inherited red.
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit ebacde6b8.
