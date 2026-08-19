@@ -245,4 +245,4 @@ edge *and* sitting in `unfinished/`. Both need clearing now that this has
 landed; it needs the A slot, so it is flagged rather than done here.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit eb5c7be11.
