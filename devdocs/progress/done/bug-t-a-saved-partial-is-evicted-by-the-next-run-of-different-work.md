@@ -166,3 +166,43 @@ of other work, which is the defect this ticket names. It does **not** prove a
 carry: `carried_runs` is still absent from the stats file, and it can only leave
 zero when the live watcher completes a slice it actually resumed from. That
 number remains the acceptance test, unchanged.
+
+### The before/after is in one log file, 40 minutes apart
+
+`/home/neo/trackt-watch.log` happens to contain the same scenario twice — a full
+run preempted, its partial saved, then a *different* (sha, tier) starting — once
+under each code path. `twatch: bye` at line 712295 is the restart; everything
+above it is the old process, everything below the new one.
+
+**Before (line 700515), the defect in its own words:**
+
+```
+twatch: kept 312 decided job(s) from the aborted full run — the next slice resumes instead of restarting
+twatch: pin verify preempted by a push — will resume
+twatch: dropping a partial for cabb5d5989f3/full — this run is 9b6d2c982d93/native
+```
+
+Three consecutive lines: saved, promised a resume, deleted it. The run that
+deleted it was a `native` gate at an unrelated sha, which is exactly the "next
+run of different work" in this ticket's title.
+
+**After (lines 717757-717760), same shape, opposite outcome:**
+
+```
+twatch: kept 15 decided job(s) from the aborted full run — the next slice resumes instead of restarting
+twatch: pin verify preempted by a push — will resume
+twatch: 1 uncommitted tstate file(s) — ours by definition, publishing rather than pausing on them: plexus.json
+twatch: testing 2e8b284343a5 (native, fast)
+```
+
+Same preemption of a full pin verify, same different-work `native` run starting
+immediately after — and no dropping line, because `drop_partial()` is now only
+reachable from the run that owns the key. `.testmgr/resume/d47acfee770c-full.json`
+is still on disk while that native run executes.
+
+Same daemon, same log, same scenario, both verdicts. That is as controlled as a
+live-system measurement gets here, and it is why the counters separating
+(11→13 saved against a flat 11 superseded) is a fix and not a sampling artefact.
+
+**Still not a carry.** The ladder has to come back to `(d47acfee770c, full)` and
+finish it before `carried_runs` can leave zero. Unchanged as the acceptance test.
