@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 40
+prio: 25
 type: feature
 summary: "`{$DEFINEGLOBAL xyz}` — a conditional define that outlives the unit that sets it. Measured: pxx matches FPC today, a unit's {$DEFINE} does not reach the program, which is correct Pascal and is also why two units cannot coordinate. The motivating case is 'first implementation loaded claims the name, second skips itself' — the shape that would have dissolved the pylib/sysutils Exception problem."
 ---
@@ -51,6 +51,13 @@ That is the shape the user identified as dissolving the pylib/sysutils
 and [[decide-class-namespace-scoping]]. Whether it is the right answer *there*
 is settled separately (that case was closed as synthetic); the mechanism is
 useful regardless, and this ticket is the mechanism, not the application.
+
+> **BLOCKED on [[decide-a-cross-unit-define-name-and-semantics]] as of 2026-08-19, and
+> de-ranked 40 -> 25.** The four questions below are a Track U decision, not engineering:
+> an engineer taking this ticket would have to guess the directive's NAME, and the name is
+> the whole decision because the mechanism is order-dependent by construction. Nothing pulls
+> on this — the motivating case was closed as synthetic — so there is no cost to waiting and
+> a real cost to guessing a spelling we cannot rename later.
 
 ## Design questions to settle before building
 
