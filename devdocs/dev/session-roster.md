@@ -3907,7 +3907,8 @@ windows on its own, so the matrix keeps sweeping without a quiet period being ca
    in six hours and it found real breakage.
 2. **Pin state** — whether it was safe to pin by morning, and what v366 carries if taken.
 3. **The carve** — split 2 done or not, and the campaign's objective finish line
-   (176 symbols / 426 sites remaining; `PXX_NO_NILPY` compiling clean = carve complete).
+   (**183 Py* helper bodies / 504 sites remaining** — see the correction below; `PXX_NO_NILPY`
+   compiling clean = carve complete).
 4. **Breadth** — whether the full tier kept its cadence overnight, i.e. whether one window was
    a rate after all. T is holding resume-stats until there is one; do not pre-empt that.
 5. **Corrections owed** — every survey error count relayed as a figure is a FLOOR, not a count
@@ -3915,3 +3916,45 @@ windows on its own, so the matrix keeps sweeping without a quiet period being ca
    any number from today gets repeated.
 
 Keep it short and lead with what changed, not with what was busy.
+
+### Carve split 2 landed, and the finish line CHANGED SHAPE (2026-08-19, frank3)
+
+`fd6ec21a3` verbatim copy → `832a42d02` folds → `2730e6566` delete the dead arms →
+`86d2fe061` ticket resolved. `ParseLValueAST` in `parser.inc` 3145 → 2511 lines; the routine
+now lives as `PyParseLValueAST` in `pyparser.inc`, dispatched on `PyExprMode`, **no call site
+moved**. Fixedpoint converged in 1 round at every step, `make bootstrap` byte-identical,
+`gate.sh quick` green at each, seven NilPy repros picked to hit the folded arms.
+
+**The number I relayed as the finish line was wrong in the flattering direction, and frank3
+corrected it against its own earlier figure.** Measured with one script on both sides:
+
+    before the carve   183 Py* bodies, 569 sites
+    after split 2      183 Py* bodies, 504 sites
+
+**Moving the single most dialect-forked routine out of `parser.inc` removed ZERO Py* helper
+bodies** and 11% of the sites. So the remaining distance to `-dPXX_NO_NILPY` is **not more big
+forked routines — it is 183 Py\* helper bodies still sitting in `parser.inc`.** Split 3 must
+target helper bodies; another fork site will barely move the metric. (183/504 vs the opening
+176/426 is the same population under a different counting rule — the before/after PAIR is what
+is comparable, both from the same script. Do not mix the two figures.)
+
+Two things the three-commit shape exposed that a single commit would have hidden: a Pascal-only
+"a value of this type has no members" refusal that was dead in a NilPy-only copy, and
+`NilPyUserCode` reducing the **opposite** way on the two sides (to `isNilPy` under `PyExprMode`,
+to `isNilPy and CurrentUnitIdx < 0` without it). Every `isNilPy`/`NilPyUserCode` arm was left
+intact in the Pascal original.
+
+**Open gap, routed not closed:** the whole-suite `.npy` sweep that ticket's Gate line asks for
+was NOT run — the hook refuses it, CLAUDE.md supersedes ticket Gate lines naming long local
+suites, and only the owner can authorise `PXX_ALLOW_FULL_SUITE`. **A carve-out is a narrowing
+change, so NilPy breadth on these three commits rests entirely on Track T**, which is the
+normal division of labour and not an escalation — all four shas are on origin/master and T is
+UP (breadth 1h old, 3 behind). Raise it in the morning report as a thing the owner may want to
+sweep explicitly before a pin, not as a blocker.
+
+**riscv32 `test_cross_float.pas` — frank3 says NOT `da53bbd26`, and flags it as reasoning:**
+the eight defines are omission defines defaulting to OFF, nothing in the tree sets any
+`PXX_NO_*`, so a default cross build sees byte-identical source; the riscv32/xtensa increment
+was parked rather than landed, so no target-selection code changed. **That is an argument, not
+a measurement** — treat it as a prior for frank2's triage, and send it back to frank3 to bisect
+properly if the triage does point at a define.
