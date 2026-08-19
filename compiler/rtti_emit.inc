@@ -11,7 +11,7 @@
   proto-unit shape:
     needs:  UCls*/UFld*/UMth*/UProp* tables, UClsVMTOffset, UClsSize_,
             Find*/InternStr/Strs/DataPut*/AddDataPtrFix/MethodFixups
-    provides: EmitRTTI, DumpRTTITables
+    provides: EmitRTTI, EmitPySignatures, DumpRTTITables
 
   This file is included after elfwriter.inc (DataPut*/PatchDataU64 live there)
   and is driven once from the main program after parsing. }
@@ -362,6 +362,68 @@ begin
   flags := 0;
   if UFldPub[fi] = 1 then flags := flags or RTTI_FIELD_FLAG_PUBLISHED;
   PatchDataU64(fiPos + 32, flags);
+end;
+
+{ Emit one PYSIG_SIZE signature record per NilPy `def`, and record its Data[]
+  offset in ProcSigOff so a callable value can point at it.
+
+  Static data, deliberately: the record is never allocated and never freed, so a
+  variant slot holding its address still owns nothing and the non-owning lifetime
+  every callable-bearing tag already had is preserved BY CONSTRUCTION rather than
+  by remembering to. That property is why this shape was chosen; see
+  feature-n-a-callable-value-carries-its-signature-type.
+
+  Self is excluded from both counts because the user-space call site counts
+  user-space arguments -- a method's receiver is supplied by the dispatcher, and
+  a plain def has no Self at all. Params[0] is Self exactly when the proc is a
+  method, which ProcIsMethod_ answers.
+
+  The defaults array is RESERVED here and left zero. Populating it needs every
+  defaulted parameter to have a hidden global holding its def-time value, which
+  today exists only for NON-constant defaults (ProcParamDefaultSym); giving the
+  constant ones one too is the next increment. Reserved rather than omitted so
+  the record layout is final and no consumer has to cope with two shapes. }
+procedure EmitPySignatures;
+var pi, k, nUser, reqN, dfltOff, firstUser: Integer;
+begin
+  for pi := 0 to MAX_PROCS - 1 do ProcSigOff[pi] := -1;
+  for pi := 0 to ProcCount - 1 do
+  begin
+    { NilPy defs only. ProcPyDefTok is 0 for everything else -- a Pascal routine
+      is never reached through a NilPy callable value, and emitting a record for
+      all 2900 procs would be pure data bloat. }
+    if ProcPyDefTok[pi] = 0 then Continue;
+    { Is pi a METHOD (Params[0] = Self)? There is no per-proc flag: every other
+      site is handed `firstParam` by a caller that knows from context, and this
+      pass has no such caller. UMthProc_ is the post-parse source of truth, so
+      ask it. Scanned only for NilPy defs, so the cost is defs x methods once. }
+    firstUser := 0;
+    for k := 0 to UMthCount - 1 do
+      if UMthProc_[k] = pi then
+      begin
+        firstUser := 1;
+        Break;
+      end;
+    nUser := Procs[pi].ParamCount - firstUser;
+    if nUser < 0 then nUser := 0;
+    reqN := 0;
+    for k := firstUser to Procs[pi].ParamCount - 1 do
+      if not ProcParamHasDefault[pi * MAX_PROC_PARAMS + k] then Inc(reqN);
+
+    ProcSigOff[pi] := DataLen;
+    DataPutZeros(PYSIG_SIZE);
+    QueueMethCodeFixup(ProcSigOff[pi] + PYSIG_OFF_CODE, pi);
+    PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_REQN, reqN);
+    PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_TOTN, nUser);
+    if ProcPyStarIdx[pi] >= 0 then
+      PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_STAR, ProcPyStarIdx[pi] + 1);
+    if nUser > 0 then
+    begin
+      dfltOff := DataLen;
+      DataPutZeros(nUser * 8);
+      AddDataPtrFix(ProcSigOff[pi] + PYSIG_OFF_DFLTS, dfltOff);
+    end;
+  end;
 end;
 
 procedure EmitRTTI;

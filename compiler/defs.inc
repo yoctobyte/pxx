@@ -843,6 +843,28 @@ const
     DataOff = -(CLASSREF_DATAREF_BASE + ci) is patched to UClsRTTIOff[ci] after
     EmitRTTI, then resolved to a real address by writeELF. Must clear the -100
     (RTTI registry) / -101 (resource table) sentinels with room for every ci. }
+  { Callable-signature record, one per NilPy `def`, emitted STATICALLY (never
+    allocated, never freed) so a slot pointing at one still owns nothing and no
+    retain/release behaviour changes anywhere. That non-owning property is the
+    whole reason this shape was chosen over routing defs through the owned
+    callable path -- do not trade it away for convenience.
+
+    All fields 8 bytes, matching the RTTI blobs next door:
+      +0  code address        (patched by QueueMethCodeFixup, like RTTI_METH)
+      +8  ReqN                user-space params with NO default (Self excluded)
+      +16 TotN                user-space params in total (Self excluded)
+      +24 StarIdx PLUS ONE    0 = no `*args`; folded in here rather than left
+                              beside the pointer in TPyBound, so one concept
+                              keeps one mechanism
+      +32 defaults array ptr  TotN words, each the address of the hidden global
+                              holding that parameter's def-time value, or 0 }
+  PYSIG_SIZE       = 40;
+  PYSIG_OFF_CODE   = 0;
+  PYSIG_OFF_REQN   = 8;
+  PYSIG_OFF_TOTN   = 16;
+  PYSIG_OFF_STAR   = 24;
+  PYSIG_OFF_DFLTS  = 32;
+
   CLASSREF_DATAREF_BASE = 100000;
   RECORD_RTTI_DATAREF_BASE = 200000;
   SYM_RTTI_DATAREF_BASE = 300000;
@@ -2080,6 +2102,19 @@ var
     unmatched keyword arguments into the dict (PyPackStarArgs). }
   ProcPyStarIdx : array[0..MAX_PROCS-1] of Integer;
   ProcPyKwIdx   : array[0..MAX_PROCS-1] of Integer;
+  { Data[] offset of proc pi's SIGNATURE record (PYSIG_SIZE bytes), -1 = none.
+    Emitted by EmitPySignatures for every NilPy `def`, so a callable VALUE can
+    carry ONE pointer and still answer "how many parameters, which are required,
+    where is the *args slot, what are the defaults".
+
+    Why this exists: a boxed callable used to carry a bare code address and
+    nothing else, so a call through the value could not tell that a parameter
+    had been omitted, let alone what to put there. `al = g; al(1)` over
+    `def g(x, lo=7)` answered empty where CPython says 7 -- silently -- and
+    passing the def as an argument and calling it short SEGFAULTED. Supplying
+    every argument worked precisely because nothing had to be filled in.
+    feature-n-a-callable-value-carries-its-signature-type }
+  ProcSigOff    : array[0..MAX_PROCS-1] of Integer;
   { CLASS ATTRIBUTES: an unannotated class-level `name = <literal>` in a plain
     (non-dataclass) class. Python makes it a shared class attribute; NilPy holds
     it as a per-class COMPILE-TIME CONSTANT, which is exactly right for the

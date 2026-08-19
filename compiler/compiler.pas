@@ -1117,6 +1117,9 @@ begin
   if (not isC) and (not isBasic) and (not isAsm) and (not isRust) and (not isAda) and (not isZig) and (not isLol) and (not isWs) and (not isF90) and (not isAlgol) and (not isErl) then
   begin
     EmitRTTI;
+    { After EmitRTTI so it shares the same static-data region and the same
+      MethodFixups pass that patches code addresses into data. }
+    EmitPySignatures;
     EmitTypeInfoHeaders;
     if DumpRTTI then DumpRTTITables;
     EmitResources;
