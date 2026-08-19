@@ -1466,7 +1466,36 @@ with the shim moved aside AND back) before re-running on v353. Had it only measu
 the pin, the shim would have been credited with the generators' work. That is the
 past-a-wall discipline working, and it is worth imitating exactly.
 
-### The NEW bump: `unknown base class Mapping` — 7 files
+### CORRECTED 2026-08-19 (later): the bump is `decode(..., final=)` — 12 files
+
+**The section below named `Mapping` (7 files) as the new bump. It is second.** A clean
+ladder re-run on pin v357 (`ebcf15ccb1046b29353b3b85091a8cdc`, captured before and unchanged
+after) reads **10/48 — byte-identical to v353 across all 15 wall categories.** Nothing moved
+in that whole span, which covers the Mapping shim, the def-signature work and three pins.
+**Past a wall: zero. Onto the next wall: zero.**
+
+The ranked table names the real top lever:
+
+| files | wall |
+| --- | --- |
+| **12** | **`decode has no parameter named 'final'`** |
+| 7 | `unknown base class Mapping` |
+| 3 | `undefined variable (property)` |
+
+**Top two rows = 19 of the 38 non-compiling files**; the rest is a long tail of ones and
+twos. It **had no ticket** — the second time on this campaign a top lever was measured and
+unfiled. Now `bug-n-a-user-classs-decode-method-is-hijacked-losing-its-own-parameters`
+(N, p70), filed with the measurement that reframes it: **webencodings declares
+`def decode(self, input, final=False)` on its OWN class**, and `lib/rtl` has no
+`mimic_codecs.py` — so this is a call binding to the wrong `decode`, **not** a missing shim
+parameter. Suspected sibling arm of the fixed keys/items/values dict-view hijack; marked
+unverified in the ticket, with instructions to fix the predicate rather than the list.
+
+**Caveat carried honestly:** that run omitted `--files`, so "the same 12 files" is not yet
+established — identical histograms make a swap unlikely but cannot exclude one. Re-run in
+flight.
+
+### The previous bump (still real, now second): `unknown base class Mapping` — 7 files
 
 With `yield` gone, the top wall in html5lib is `collections.abc`:
 
