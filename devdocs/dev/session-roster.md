@@ -1489,6 +1489,31 @@ starts from it rather than rediscovering it. **First thing a fresh worker gets.*
   never dispatch to fill capacity. But **do not bank a day while the user is paying for
   idle capacity** — that call was made once and was wrong.
 - **The coordinator writes no code.** Filing, ranking, routing and verifying only.
+- **PIN AT EVERY CHECK IF `compiler/` OR `lib/` MOVED — pinning is the coordinator's job
+  and nothing else surfaces staleness.** Two commands answer it and nothing on the board
+  does:
+
+      tail -1 stable_linux_amd64/default/pin.log
+      git log --oneline -- compiler lib | head
+
+  If the second lists commits newer than the first, **pin** (`make stabilize-fast && make
+  pin`, ~35s, announce the lock to workers first — it covers BUILDS, not just pins).
+
+  **Why it is safe to do routinely:** every pushed commit already passed
+  `make compiler/pascal26`, which IS the byte-identical fixedpoint, so pushed master is
+  pinnable by construction. And `make revert` moves `pinned` back, so a bad pin is cheap.
+  There is no prudence in waiting.
+
+  **Why it must be routine and not on demand:** on 2026-08-19 the pin sat a full day stale
+  at v352 with twelve compiler/lib commits on top, while `working/`, every `ready` queue
+  and tstate all looked healthy — **pin staleness appears in none of them.** It surfaced
+  only because the USER noticed a blocked worker. A worker cannot see it either: Track B
+  builds with `$(PXX_STABLE)` and simply gets old behaviour, silently. The whole cost of
+  the miss lands on the lane least able to diagnose it.
+
+  Corollary already recorded elsewhere and worth repeating here: **a pin blesses
+  origin/master.** Unpushed work is not in it — say so when announcing, so a worker holding
+  something locally asks for a re-run instead of assuming.
 
 ### Open horizon items parked for the week
 
