@@ -113,7 +113,6 @@ _none_
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | compat-pascal-writeln-of-a-single-uses-double-width | A | 30 | compat | WriteLn/Str of a Single print the value's full Double expansion — 17 significant digits and a 3-digit exponent — where FPC prints 10 digits and a 2-digit exponent: pxx ' 1.0000000149011612E-001' vs FPC ' 1.000000015E-01'. Same class as the FloatToStr(Single) bug fixed in lib/rtl, but this path is the compiler's own float writer, so the RTL cannot reach it. Text-only divergence, no wrong value. | — |
-| decide-finalize-noop-vs-refusal | U | 50 | decide | `Finalize(x)` is accepted and does nothing — deliberately, as a documented v1 shortcut. FPC empties the string; pxx leaves it intact. Refusing it is separable from implementing it and far cheaper, but would break code that currently compiles. Fork: refuse now, implement now, or leave the silent no-op. | — |
 | decide-nilpy-exec-injects-a-builtins-key | U | 40 | decide | CPython's exec(src, g, l) injects a `__builtins__` key into the globals dict; NilPy does not, because it has no module object to put there. So sorted(d.keys()) after an exec differs. Three options: leave it out (today), inject the key with a placeholder value, or inject a real minimal namespace. The fork is what a program that ITERATES the dict should see. | — |
 | decide-one-answer-to-have-i-already-compiled-this-unit | U | 40 | decide | Three tickets in three lanes are all 'a compilation unit got processed twice', served by three unrelated mechanisms: unit-NAME keying (Pascal/NilPy), an @cpath: key space (path-form C units), and preprocessor include-guard visibility (C headers). Two is a smell, three is a design flaw. Question for the user: does 'have I already compiled this translation unit?' deserve ONE answer, or are three correct-in-their-own-lane answers the right shape? | — |
 | decide-staff-track-c-to-unblock-own-language-first | U | 50 | decide | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (C, p55) is the only thing blocking feature-a-own-language-first-symbol-resolution, and Track C is unstaffed. Staff it, fold it into an existing session, or leave the chain parked? | — |
@@ -130,6 +129,7 @@ _none_
 | feature-a-error-does-not-halt-so-a-parse-can-be-speculative | A | 45 | feature | `Error()` calls `Halt` directly, so nothing in the compiler can trial-parse and back out. That blocks NilPy's type inference (which needs to read an as-yet-unseen name speculatively), and it is also why the compiler stops at the FIRST error. Make the error path recoverable; several unrelated wants fall out of the same change. | — |
 | feature-a-expose-rounding-mode-intrinsic-to-pascal | A | 30→35 | feature | __pxx_fesetround/__pxx_fegetround exist and flip MXCSR, but only the C frontend can reach them, and off x86-64 they are an accepted no-op returning 0 — so Pascal cannot get a SetRoundMode that actually sets the mode | — |
 | feature-a-extended-is-an-alias-for-double | A | 25 | feature | `Extended` is silently an alias for `Double` | — |
+| feature-a-implement-initialize-and-finalize-over-the-arc-helpers | A | 50 | feature | DECIDED 2026-08-19: implement Initialize()/Finalize() for real, mapping onto the ARC release helpers pxx already emits at scope exit. Finalize is currently PARSED AND DISCARDED (a silent no-op where FPC empties the value). Zero in-tree callers, so no regression risk; the helpers already exist, so this is a mapping, not new machinery. Supersedes feature-pascal-initialize-finalize-intrinsics, whose premise is wrong. | — |
 | feature-a-index-an-array-returning-call-directly | A | 40 | feature | Index an array-returning call directly: `MkArr[i]`, `MkR2[i,j].field` | — |
 | feature-a-operator-table-keyed-on-both-operands | A | 40 | feature | Implement the 2026-08-10 decision: key the operator-overload table on BOTH operand types. Until then `operator + (a: Double; b: TCx)` stays refused ('cannot determine operand type' / 'predefined for built-in operand types') where FPC accepts it. Relaxing only the guard would MISCOMPILE plain `3 * 5`. | — |
 | feature-a-promoint-variant-esp-targets | S | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
@@ -367,7 +367,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (86)
+## decided (87)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -384,6 +384,7 @@ _none_
 | decide-env-write-side | U | 40 | decide | Policy: does pxx support WRITING the environment (setenv/putenv, os.environ[k]=v) — and does a write reach a child? | — |
 | decide-esp-single-depth-division-into-a-declared-double | S | 45 | decide | Decide: on ESP targets, should `x: Double; x := 1/3` compute at SINGLE depth? | — |
 | decide-esp-soc-axis-and-capability-table | S | 45 | decide | Decide: how does the compiler learn WHICH ESP chip, and what does it derive? | — |
+| decide-finalize-noop-vs-refusal | U | 50 | decide | `Finalize(x)` is accepted and does nothing — deliberately, as a documented v1 shortcut. FPC empties the string; pxx leaves it intact. Refusing it is separable from implementing it and far cheaper, but would break code that currently compiles. Fork: refuse now, implement now, or leave the silent no-op. | — |
 | decide-float-fixed-output-exact-or-fpc-17-digit-cap | U | 45 | decide | writeln(d:0:1) of a huge double: pxx and CPython print the EXACT value (18446744073709551616.0), FPC caps at 17 significant digits and zero-pads (18446744073709552000.0). Which is pxx's rule? | bug-a-write-fixed-emits-false-digits-past-1e22 |
 | decide-forin-mixed-int-float-ctor-vs-fpc | U | 20 | decide | `for d in [1, 2.5]` — FPC 3.2.2 prints `1.00 0.00`, dropping the 2.5; pxx prints `1.00 2.50`. Shipped as the correct answer rather than copied, because losing a written value is a defect and not a semantic choice. Confirm, or put FPC's answer behind --strict-fpc. | — |
 | decide-gate-line-convention | U | 60 | decide | Should ticket Gate: lines prescribe the long local suite, or the 40s native confirm plus Track T offload? Today they say the former while CLAUDE.md says the latter. | — |
@@ -531,9 +532,9 @@ _none_
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [N] bug-n-importing-both-f-and-F-from-one-module-loses-the-class
-- [p 50] [U] decide-finalize-noop-vs-refusal
 - [p 50] [U] decide-staff-track-c-to-unblock-own-language-first
 - [p 50] [D] docs-cross-language-qualifier-note-is-wrong
+- [p 50] [A] feature-a-implement-initialize-and-finalize-over-the-arc-helpers
 - [p 50] [A] feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - [p 50] [C] feature-c-vla-via-alloca
 - [p 50] [E] feature-demo-songformatter-pxx-target

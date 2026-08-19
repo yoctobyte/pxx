@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:16 blocked:5 backlog:237 experimental:20 rainy-day:42 done-followup:3 decided:86 done:2034 rejected:38`
+`working:1 unfinished:16 blocked:5 backlog:237 experimental:20 rainy-day:42 done-followup:3 decided:87 done:2034 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -64,9 +64,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
 - `[p 50] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
-- `[p 50] [U]` decide-finalize-noop-vs-refusal
 - `[p 50] [U]` decide-staff-track-c-to-unblock-own-language-first
 - `[p 50] [D]` docs-cross-language-qualifier-note-is-wrong
+- `[p 50] [A]` feature-a-implement-initialize-and-finalize-over-the-arc-helpers
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [E]` feature-demo-songformatter-pxx-target

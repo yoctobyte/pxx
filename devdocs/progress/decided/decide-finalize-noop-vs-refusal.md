@@ -79,3 +79,60 @@ from (3) is also how you'd measure the blast radius first.
 - `Initialize()` was not measured. Same question may apply; do not assume it matches.
 - Whichever option wins, this stops being a U item and re-files into Track A (or P for
   a dialect-level refusal) as ordinary work.
+
+---
+
+# DECIDED 2026-08-19 by the user — **implement it** (option 2)
+
+> "If a programmer wants to `Shoot.Foot()` it is able to. That is Pascal design in its
+> purest. So anyway, yes, Finalize should be implemented. Not sure why this even was a
+> question."
+
+## The governing principle, stated plainly
+
+**A Pascal programmer is allowed to shoot their own foot.** The dialect does not refuse a
+construct because it *can* be misused — that is the language's design, not a defect in it.
+So "this is dangerous if used carelessly" is **not** grounds for refusal; it is grounds for
+documentation. Refusal is for things that cannot be given a correct meaning, not for
+things that require care.
+
+This settles the tie the ticket could not: "refusal beats a wrong value" applies to a
+construct we **cannot** implement correctly. `Finalize` is not that — it has an exact,
+implementable meaning. So reference compatibility wins, and the silent no-op (which *is* a
+wrong value) goes away by implementation rather than by refusal.
+
+## Why it was a question, and the honest answer
+
+Because it was **priced wrong**. The fork was framed as "cheap refusal versus the whole
+feature", and two measurements taken while discussing it dissolved that:
+
+- **In-tree callers of `Finalize`: zero.** The single grep hit is the parser's own
+  definition. `Initialize`: zero. So there is no regression risk in implementing it and no
+  breakage budget being spent either way — the ticket's own note that this was "a question
+  we have no usage data for" no longer holds.
+- **The machinery already exists.** `Finalize` is "for each managed field: decrement, nil"
+  — the *same* operation pxx already emits at every scope exit, driven by a record layout
+  the compiler already knows. The parser comment says as much: *"until this maps onto the
+  ARC release helpers."* **The mapping is the work; the helpers are built.**
+
+Third time in two days a ticket's cost estimate did not survive being measured. Same
+family as a title naming the encounter rather than the boundary.
+
+## Also decided, and flagged as an EXTENSION of what was asked
+
+`Initialize()` was explicitly not measured by this ticket, which warned against assuming
+the same answer. **Implementing it too, on the same reasoning** — and stated here so it can
+be reversed if that overreaches:
+
+`Initialize` is the *more* necessary half. Omitting `Finalize` leaks; omitting
+`Initialize` makes garbage bytes be read as a refcounted pointer, which is the access
+violation. And our own RTL already hits exactly that case —
+`lib/rtl/typinfo.pas:315` does `obj := GetMem(sz)` and then **hand-zeroes the instance**
+with a comment explaining why, because the intrinsic was not available. Shipping half the
+pair would leave that workaround in place.
+
+## Re-filed as work
+
+See `feature-a-implement-initialize-and-finalize-over-the-arc-helpers`. The existing
+`feature-pascal-initialize-finalize-intrinsics` has a **wrong premise** (it asserts the
+intrinsics are missing; `Finalize` is parsed and discarded) and is superseded by it.
