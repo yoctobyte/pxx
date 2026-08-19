@@ -139,4 +139,4 @@ the live watcher completing a resumed slice. That number is the follow-up
 measurement, and it stays the acceptance test.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 3674a3a60.
