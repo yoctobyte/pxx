@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: P
+status: done
 ---
 
 > **Track guessed as P** from the test source. The ranker reads frontmatter, so an unset track parks a stub in Track T's queue regardless of what the body says -- correct the `track:` line if this is wrong.
@@ -59,3 +60,25 @@ ok: /tmp/testmgr-scratch-1799398/test_asm_ifdef_ma26  [code=55229B  data=1528B  
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Fixed 2026-08-19 — the test was re-pointed, the compiler was not touched
+
+`test/test_asm_att_reject.pas` now carries an actual AT&T `asm` block under
+`{$asmMode att}`, which is what the tolerance feature deliberately left
+refused, and the Makefile's log assertion greps for the message that refusal
+now prints:
+
+```
+pascal26:14: error: {$asmMode att} is accepted, but this asm block cannot be
+read: inline asm (asm...end) is Intel syntax only
+```
+
+Verified against the v363 pin: the program exits 1 (so the recipe's `!` holds)
+and the new `grep -q "asm block cannot be read"` matches. The bare directive
+stays accepted, which is the behaviour `76b6fb7f1` was for.
+
+**Class worth keeping:** a feature that relaxes a refusal makes its own
+`_reject` / `_fail` test compile, and `gate.sh quick` cannot see it — these
+negative tests live in `test-core`. Grep for the matching `_reject` test in the
+same commit that relaxes a refusal.
+- 2026-08-19 — resolved, commit PENDING-COMMIT.

@@ -5549,7 +5549,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_asm_ifdef_multiarch.pas $(TESTTMP)/test_asm_ifdef_ma26
 	test "$$($(TESTTMP)/test_asm_ifdef_ma26)" = "42"
 	! ./$(COMPILER) test/test_asm_att_reject.pas $(TESTTMP)/test_asm_att_reject26 > $(TESTTMP)/test_asm_att_reject.log 2>&1
-	grep -q "asmMode att.*not supported" $(TESTTMP)/test_asm_att_reject.log
+	grep -q "asm block cannot be read" $(TESTTMP)/test_asm_att_reject.log
 	./$(COMPILER) test/test_coswitch.pas $(TESTTMP)/test_coswitch26
 	test "$$($(TESTTMP)/test_coswitch26)" = "$$(printf 'main: 1\ngen: 1\nmain: 2\ngen: 2\nmain: 3\ngen: 3\nmain: 4\ngen: 4\nmain: 5\ngen: 5\ndone')"
 	./$(COMPILER) test/test_not.pas $(TESTTMP)/test_not26

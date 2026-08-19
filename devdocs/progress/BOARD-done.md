@@ -1937,6 +1937,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-facade-and-paths | T | 70 | regression | regression: test-core#src:examples/tk/facade_and_paths.npy red at d64a5d6a97b4 (auto-filed by twatch) | — |
 | regression-test-core-field-class-identity | N | 70 | regression | regression: test-core#src:examples/tk/field_class_identity.npy red at 9bbbbef6c055 (auto-filed by twatch) | — |
 | regression-test-core-test-algol-skeleton | T | 70 | regression | regression: test-core#src:test/test_algol_skeleton.alg red at ad8e212cf739 (auto-filed by twatch) | — |
+| regression-test-core-test-asm-ifdef-multiarch | P | 70 | regression | regression: test-core#src:test/test_asm_ifdef_multiarch.pas red at 498c6dea3f48 (auto-filed by twatch) | — |
 | regression-test-core-test-asyncecho | T | 70 | regression | regression: test-core#src:test/test_asyncecho.pas red at 60502ed0c353 (auto-filed by twatch) | — |
 | regression-test-core-test-basic-comprehensive | T | 70 | regression | regression: test-core#src:test/test_basic_comprehensive.bas red at 3f2828476c6c (auto-filed by twatch) | — |
 | regression-test-core-test-c-cross-ns-arity | T | 70 | regression | regression: test-core#src:test/test_c_cross_ns_arity.pas red at 60502ed0c353 (auto-filed by twatch) | — |
