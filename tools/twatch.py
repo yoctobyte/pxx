@@ -1506,6 +1506,42 @@ def load_pin_allowlist(clone):
     return out, bad
 
 
+def seed_baseline(clone, prev, pin_id, reds):
+    """The red set to inherit when the pin moves to `pin_id`. -> (reds, how).
+
+    The one thing this must never do is seed from a run that already ran UNDER
+    the incoming pin. Such a run is the first evidence *about* the new pin, so
+    folding it into that pin's own baseline lets a regression the pin caused
+    waive itself permanently -- the same failure pin_shadow takes its baseline
+    from the previous run to avoid, arriving through the other door. `reds` (this
+    run's own) is therefore never a seed, and an unknown baseline is EMPTY.
+
+    Empty is the conservative answer, not a degraded one: it waives nothing, so
+    the cost of not knowing is one strict pin transition, never a silent pass.
+    "We did not measure it" must not be recorded as "we measured it and it was
+    fine" -- that substitution is the defect class this whole gate exists to
+    catch, and it is the one an assumed bootstrap commits.
+    """
+    ran_under = prev.get("pin")
+    if ran_under and ran_under != pin_id and prev.get("red_set") is not None:
+        return prev["red_set"], "carried from %s, the outgoing pin" % ran_under
+    if ran_under is None and prev.get("at"):
+        # A record from before pin_shadow stamped the pin it ran under. pin.log
+        # dates the pin, so the question stays a measurement. This arm retires
+        # itself the moment one stamped record exists.
+        at = pin_epoch(clone, pin_id)
+        if at and prev["at"] < at:
+            got = prev.get("red_set")
+            if got is None:
+                # Pre-feature records kept only `unexpected` -- reds minus the
+                # allowlist. A subset is the safe direction: it waives less.
+                got = prev.get("unexpected")
+            if got is not None:
+                return got, "observed at %s (%s), before the pin moved at %s" % (
+                    (prev.get("sha") or "?")[:12], prev["at"], at)
+    return [], "no pre-pin red set observed — baseline EMPTY, nothing waived"
+
+
 def pin_shadow(clone, host, st, sha, report, authoritative, now=None):
     """Would this sha have qualified for an automatic pin? LOG ONLY.
 
@@ -1550,14 +1586,7 @@ def pin_shadow(clone, host, st, sha, report, authoritative, now=None):
     pin = pinned_ref(clone)
     pin_id = pin[0] if pin else None
     if pin_id and base.get("pin") != pin_id:
-        carried = prev.get("red_set")
-        how = "carried from the outgoing pin"
-        if carried is None:
-            # No prior full tier recorded one. Bootstrapping from THIS run
-            # forgives the current reds on assumption rather than on evidence,
-            # so say so in the log and in tstate: a reader must be able to tell
-            # an observed baseline from an assumed one.
-            carried, how = reds, "BOOTSTRAP (assumed, not observed)"
+        carried, how = seed_baseline(clone, prev, pin_id, reds)
         base = {"pin": pin_id, "reds": sorted(carried), "at": utcnow(), "how": how}
         print("twatch: [pin shadow] pin moved to %s — baseline of %d inherited "
               "red(s), %s" % (pin_id, len(base["reds"]), how), flush=True)
@@ -1601,6 +1630,11 @@ def pin_shadow(clone, host, st, sha, report, authoritative, now=None):
     streak = (int(prev.get("streak") or 0) + 1) if qualifies else 0
     would = qualifies and streak >= PIN_STREAK_K
     st["pin_shadow"] = {"streak": streak, "sha": sha, "at": utcnow(),
+                        # WHICH pin this run ran under. Without it the next
+                        # transition cannot tell a pre-pin observation from a
+                        # post-pin one, and seeding from the latter is how a
+                        # pin forgives its own regression (seed_baseline).
+                        "pin": pin_id,
                         "qualifies": qualifies, "would_pin": would,
                         "unexpected": unexpected[:20], "reds": len(reds),
                         "inherited": len(inherited),
@@ -3429,6 +3463,27 @@ def pinned_ref(clone):
         if len(w) >= 5 and w[1] == "pinned" and len(w[-1]) == 40:
             cur = (w[2], w[-1])
     return cur
+
+
+def pin_epoch(clone, version):
+    """The UTC timestamp pin.log records for `version`, or None.
+
+    Same file and same end-anchored parse as pinned_ref (older lines omit the
+    binary sha256, so only the FIRST and LAST fields are positionally stable).
+    The date is what lets a caller ask "was this observed before the pin moved"
+    as a measurement rather than an assumption.
+    """
+    try:
+        out = sh(["git", "show", "origin/%s:%s" % (clone.branch, PIN_LOG_REL)],
+                 cwd=clone.path)
+    except (RuntimeError, subprocess.SubprocessError, OSError):
+        return None
+    for ln in out.splitlines():
+        w = ln.split()
+        if (len(w) >= 5 and w[1] == "pinned" and w[2] == version
+                and len(w[-1]) == 40):
+            return w[0]
+    return None
 
 
 def judged_tiers(clone, host, sha):

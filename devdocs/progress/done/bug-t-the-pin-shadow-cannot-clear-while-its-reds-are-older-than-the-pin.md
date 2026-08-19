@@ -97,21 +97,48 @@ Four properties the fix had to keep, each guarded in
   re-break counts as new. The amnesty covers a red, never a job name.
 - **Self-host is never waivable**, baseline or not.
 
-### The bootstrap is an assumption, and is labelled as one
+### The bootstrap was an assumption — review removed it
 
-There is no stored red set for pin v365, so the first run after this lands takes
-its baseline from the run in front of it and records
-`how: "BOOTSTRAP (assumed, not observed)"` in tstate, plus a line in the log.
-That is forgiveness on assumption rather than on evidence, and a reader must be
-able to tell the two apart.
+The first cut seeded a fresh baseline from the run in front of it and labelled
+it `how: "BOOTSTRAP (assumed, not observed)"`, on the reasoning that no red set
+was stored for v365 and the coordinator had verified all ten causes to be
+ancestors of v365.
 
-In this instance the assumption is independently known to be sound: the
-coordinator checked all ten reds after pinning v366 and every cause is an
-ancestor of v365 (table above). Every later baseline is carried from an observed
-run and needs no such note.
+**Both halves of that were wrong, and the second half was dangerous** (found in
+review by the coordinator, same day):
+
+- An observed pre-v366 red set *did* exist. `last_full` ran at `a15cb05fa9ce`
+  at 19:34:58Z, between v365 (16:09:34Z) and v366 (19:44:00Z), i.e. with v365 as
+  `$(PXX_STABLE)`. That is the baseline by this ticket's own definition —
+  measured, not assumed.
+- The soundness argument covered the wrong set. "All ten causes are ancestors of
+  v365" is true and says nothing about an **eleventh** red the first v366 tier
+  might find. And the first tier after a pin lands is a run *under the new pin*,
+  so seeding from it waives exactly what that pin just broke — the same failure
+  the previous-run rule exists to prevent, arriving through the door that rule
+  does not cover. With the carve unswept, that was a live risk, not a theoretical
+  one.
+
+`seed_baseline()` now never accepts this run's own reds. It seeds, in order:
+
+1. the previous record's `red_set`, if that record **stamps a different pin**
+   than the incoming one (`pin_shadow` now records which pin it ran under);
+2. failing that, a record with no pin stamp whose `at` **predates the pin's own
+   pin.log timestamp** (`pin_epoch()`) — a measurement, not a guess, and an arm
+   that retires itself once one stamped record exists;
+3. otherwise **EMPTY**.
+
+Empty is the conservative answer, not a degraded one: it waives nothing, so not
+knowing costs one strict pin transition rather than a silent pass. Recording
+"we did not measure it" as "we measured it and it was fine" is the defect class
+this gate exists to catch; an assumed bootstrap commits it.
+
+On the live tstate, arm 2 fires and seeds the observed ten from `a15cb05fa9ce`
+— so there is no assumed baseline anywhere in this deployment, and the property
+is real from v366 rather than v367.
 
 ## Log
-- 2026-08-19 — fixed; `twatch_pin_baseline_devtest.py` (12 checks) is the guard.
+- 2026-08-19 — fixed; `twatch_pin_baseline_devtest.py` (20 checks) is the guard.
   Non-vacuous by construction: run against the pre-fix `twatch.py` it does not
   merely fail, it raises `KeyError: 'inherited'` — the old verdict has no notion
   of an inherited red.
