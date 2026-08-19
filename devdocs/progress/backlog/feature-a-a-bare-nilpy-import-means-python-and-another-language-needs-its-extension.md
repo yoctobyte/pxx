@@ -93,7 +93,34 @@ Pascal's RTL, i.e. exactly the legitimate case rule 2 is meant to serve. Note al
 `sysutils` is NOT one of the eight names in the decision ticket; the collision class is
 broader than the survey that found it.
 
-## SPELLING — worth one user decision before building, because precedent points elsewhere
+## SPELLING — SETTLED by the user, 2026-08-19
+
+> **"The dotted form is optional and only if we can do that safe. If quoted names are needed
+> it's not really an issue. This may be language dependent."**
+>
+> **So: the QUOTED form is the baseline and is sufficient.** `import './sysutils.pas' as su`
+> — matching the Pascal `uses './x.pas' as m` that already ships — satisfies the decided rule
+> on its own. Build that.
+>
+> **The dotted form (`import math.pas`) is OPTIONAL, and gated on being safe.** It is a
+> convenience on top, not the requirement. If making it unambiguous against Python's
+> package-submodule syntax costs a whitelist of language extensions that can misfire on a real
+> package with a submodule named `c` or `pas`, **that is a reason not to build it**, not a
+> problem to engineer around. Ship quoted; add dotted only if it falls out cleanly.
+>
+> **And the answer may differ per language** — the user said so explicitly. Do not force one
+> spelling across NilPy, Pascal and C for symmetry's sake. Pascal already has quoted+`as`; C
+> already has `#include "./x.c"`. NilPy matching the quoted convention is consistency with the
+> repo, not a compromise.
+>
+> **This removes the language-extension whitelist from the required work.** A quoted string
+> can never be confused with `import xml.dom`, so that half of "it's a matter of whitelisting"
+> is only needed *if* the optional dotted form is built. **The other whitelist — which
+> `lib/rtl` units ARE Python modules — is unaffected and still required.**
+
+### Original fork, kept for the reasoning (superseded by the above)
+
+#### SPELLING (as raised)
 
 The decision names the form `math.pas` (dotted). The **already-shipped** Pascal spelling is a
 **quoted path plus `as`** (`uses './mymod.pas' as m`). Mirroring that in NilPy —
