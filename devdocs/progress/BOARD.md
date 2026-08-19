@@ -42,7 +42,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (238)
+## backlog (239)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -50,6 +50,7 @@ _none_
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
 | bug-a-riscv32-softfloat-has-no-subnormals | A | 40 | bug | riscv32 flushes subnormals: (1e-320 * 0.5) * 2.0 <> 1e-320, Exp(-745) returns 0 where every other target gives a subnormal, and Ln(5e-324) answers -746.52 instead of -744.44. Identical in both float modes, so it is the target's soft-float runtime, not the math unit. i386, arm32, aarch64 and x86-64 are all correct. | — |
+| bug-a-self-compile-at-o0-overflows-the-code-buffer | A | 60 | bug | pxx cannot compile its own source at -O0: `error: code overflow` at compiler.pas:170295. The default level builds fine, so `make compiler/pascal26` and the self-host fixedpoint both pass — the per-fix gate is structurally blind to it. Surfaced by the bench's selfcompile row dropping 4 variants to 1. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents | B | 30 | bug | REMAINING WORK IS SUBNORMALS ONLY, and it is no longer Eisel-Lemire. Three passes have landed: no-double-parse + no-quadratic-append (4.7x on the fast path), and now Eisel-Lemire, which took every NORMAL value outside Clinger's window from 18-526 us to under 1 us (27x-1100x, 592,994 values diffed against CPython, 0 mismatches). The two rows this ticket named 'small' and 'subnormal' are BOTH subnormal and did not move: Lemire declines below the normal floor by construction, as Go and Rust do. They sit at ~535 us vs CPython's 0.72 us. The fix for them is a rewrite of ExDecNearest to compare in BINARY big-integer arithmetic instead of expanding each candidate to its exact ~765-digit decimal. The title's 3600x, its 63-step cause and its 'small exponents' boundary have each been measured wrong and corrected in the body — read the notes, not the title. | — |
 | bug-b-write-of-a-real-ignores-the-field-width-without-decimals | A | 20 | bug | write(r:W) with a width but no decimals ignores W entirely — pxx always prints the full 16-decimal scientific form where FPC sizes the mantissa to the field | — |
@@ -505,6 +506,7 @@ _none_
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
 - [p 65] [P] feature-pascal-corpus-oop
 - [p 62] [U] decide-xml-etree-thin-tree-model-or-a-real-xml-library (unblocks 1)
+- [p 60] [A] bug-a-self-compile-at-o0-overflows-the-code-buffer
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 60] [A] refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
 - [p 58] [U] decide-which-minix-is-the-target

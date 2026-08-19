@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:15 blocked:5 backlog:238 experimental:20 rainy-day:41 done-followup:3 decided:82 done:2031 rejected:38`
+`unfinished:15 blocked:5 backlog:239 experimental:20 rainy-day:41 done-followup:3 decided:82 done:2031 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -37,13 +37,14 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 223, ranked
+## Ready — top 30 of 224, ranked
 
 - `[p 88] [U]` decide-how-a-compiled-def-carries-its-signature-when-boxed (unblocks 2)
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
 - `[p 62] [U]` decide-xml-etree-thin-tree-model-or-a-real-xml-library (unblocks 1)
+- `[p 60] [A]` bug-a-self-compile-at-o0-overflows-the-code-buffer
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 60] [A]` refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
 - `[p 58] [U]` decide-which-minix-is-the-target
@@ -68,6 +69,5 @@ _none — no lane is locked._
 - `[p 50] [D]` docs-cross-language-qualifier-note-is-wrong
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [C]` feature-c-vla-via-alloca
-- `[p 50] [E]` feature-demo-songformatter-pxx-target
 
-_193 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_194 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
