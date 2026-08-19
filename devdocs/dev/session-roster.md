@@ -1522,6 +1522,32 @@ exists, its banner says so and the banner outranks the queue order.
   never dispatch to fill capacity. But **do not bank a day while the user is paying for
   idle capacity** — that call was made once and was wrong.
 - **The coordinator writes no code.** Filing, ranking, routing and verifying only.
+- **DISCARDING ON SUSPICION IS CORRECT; RECORDING THE SUSPICION AS A FINDING IS NOT.**
+  frank3's line, 2026-08-19, and the sharpest thing to come out of the v357 incident.
+
+  It binned a ten-minute `lib-test` believing a pin had swapped under it, wrote
+  "killed & log binned", and **had the disproof in its own scrollback** — a mid-suite hash
+  sample at 130 targets still reading `540956f1f071`/v356. The kill was right on the
+  information it had. What was wrong was promoting the suspicion to a fact: *"a half-swapped
+  suite has no interpretation at all"* was true of the hypothetical and never established of
+  that run.
+
+  **The coordinator then propagated it** — wrote the contamination into this roster as fact
+  and apologised for causing something that never happened. That is the cost: ten minutes is
+  cheap, a suspicion recorded as a finding travels.
+
+  **How to apply:** discard freely, but write "discarded — could not rule out X" rather than
+  "was contaminated by X", and before recording, check whether you already hold the evidence
+  that settles it. A suspicion strong enough to act on is not thereby strong enough to
+  publish.
+
+- **A STALE READ IS NOT A MISSING ARTIFACT.** Same day, the coordinator reported two of
+  frank3's artifacts as absent from origin and quoted a superseded line from a ticket; both
+  were present, and the pull had simply landed between frank3's message and its push.
+  **`git fetch` immediately before asserting anything about origin's state** — and prefer
+  `git cat-file -t origin/master:<path>` over reading the working tree, which answers a
+  different question. Third instance today of a true statement about the wrong subject, and
+  this one was made while correcting someone else for that exact class.
 - **THE WORKERS ARE IN SEPARATE CLONES — the pin lock is NOT what it was assumed to be.**
   Verified 2026-08-19: `/home/rene/frank2`, `/home/rene/frank3` and the coordinator's
   `/home/rene/frankonpiler` each have their own `.git`. (Note this differs from CLAUDE.md's
@@ -2891,10 +2917,12 @@ rerank it deliberately rather than inheriting the number).
   the bridge fills the callee's defaults, with `test_nilpy_callable_value_defaults.npy`
   wired into `test-nilpy` against a CPython-generated expectation.
 
-  **I swapped the pin under frank3's in-flight `lib-test`** — its hold request arrived after
-  the swap, because I announced and started in the same breath. Its run was discarded and
-  re-run. Rule recorded above; the fix is `pgrep` before the lock, not a politer
-  announcement.
+  **CORRECTED: I did NOT swap the pin under frank3's in-flight `lib-test`.** Both of us
+  believed I had; the trees are separate clones, and frank3 later confirmed by a mid-suite
+  hash sample at 130 targets that its `$(PXX_STABLE)` never changed. **A clean run was
+  binned on our shared wrong premise, and this roster recorded the contamination as fact
+  before anyone checked.** The protocol residue that survives is smaller: `pgrep` before a
+  lock is still right, but for CPU, not for a neighbour's files.
 
   **Two pre-existing holes, measured on `PXX_STABLE` too, so the pin neither opens nor
   closes them:** a callable reached through a *subscript or parameter* and called with fewer
