@@ -103,9 +103,19 @@ SLOW_MIN_SEC = 1.0
 # limit falls back to the FLAT --timeout -- which is exactly the failure mode this
 # harness was fixed for. qemu-user costs roughly an order of magnitude, so a flat
 # budget written for native execution has to be widened or every emulated run is a
-# "hang". This is an ALLOWANCE, not a measurement, and the PXX_TIMEOUT detail says
-# which of the two budgets was in force so the reader knows how much to trust it.
-EMU_TIMEOUT_FACTOR = 12
+# "hang". The PXX_TIMEOUT detail says which of the two budgets was in force so the
+# reader knows how much to trust it.
+#
+# The number is anchored on one measurement (seed 90044, 2026-08-19, plexus):
+#     gcc -O0 native        12.92s   <- the shape a 15s default budget assumes
+#     pxx -O0 native        46.27s   ( 3.6x the oracle )
+#     pxx -O0 qemu-aarch64 187.96s   ( 4.1x native, 14.5x the oracle )
+# So 12 was too small by measurement, not by taste: that legitimate run needs
+# 188s and the old floor killed it at 180s. 30 gives ~2.4x headroom over the only
+# sample we have -- one seed is not a distribution, and qemu variance plus a
+# heavier program eat headroom fast -- while still bounding a genuine hang at
+# 7.5 minutes rather than letting it run all night.
+EMU_TIMEOUT_FACTOR = 30
 
 # The data model decides whether a checksum is comparable at all; the ISA does
 # not. csmith programs are UB-free and deterministic, so two builds of one program

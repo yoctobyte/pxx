@@ -134,14 +134,17 @@ check(stub.oracle_run and stub.oracle_run[0].endswith("run_target.sh"),
 cfg, stub, f = fuzz(tmp, "aarch64", oc, pxx_sec=9.0, oracle_sec=1.0)
 check(f is not None and f.bucket == "PXX_SLOW",
       "9x an EMULATED oracle is PXX_SLOW — that ratio is qemu over qemu, so it means something")
-# A 1s oracle scales to 20s, under the 180s emulated floor, so the floor wins —
-# which is the point of having one. Give it an oracle slow enough to exceed the
-# floor and the scaling must take over, or the seed-90044 protection is dead
-# under emulation and nothing would have said so.
-cfg, stub, f = fuzz(tmp, "aarch64", oc, pxx_sec=1.0, oracle_sec=20.0)
-check(stub.limits and stub.limits[0] == C.TIMEOUT_FACTOR * 20.0,
+# A fast oracle scales to less than the emulated floor, so the floor wins — which
+# is the point of having one. Give it an oracle slow enough to exceed the floor and
+# the scaling must take over, or the seed-90044 protection is dead under emulation
+# and nothing would have said so. The oracle time is DERIVED from the two constants
+# (2x the crossover) rather than written down, so raising EMU_TIMEOUT_FACTOR cannot
+# quietly turn this check vacuous the way a hardcoded 20s would have.
+slow_oracle = 2.0 * (15 * C.EMU_TIMEOUT_FACTOR) / C.TIMEOUT_FACTOR
+cfg, stub, f = fuzz(tmp, "aarch64", oc, pxx_sec=1.0, oracle_sec=slow_oracle)
+check(stub.limits and stub.limits[0] == C.TIMEOUT_FACTOR * slow_oracle,
       "a slow oracle scales the budget past the emulated floor (%ds)"
-      % (C.TIMEOUT_FACTOR * 20))
+      % (C.TIMEOUT_FACTOR * slow_oracle))
 check(15 * C.EMU_TIMEOUT_FACTOR > C.TIMEOUT_FACTOR * 1.0,
       "...and below that, the floor is what protects a fast oracle from a tight budget")
 
