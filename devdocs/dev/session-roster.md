@@ -4080,3 +4080,18 @@ allowance**: seed 90044 under qemu-aarch64 takes 187.96s (gcc -O0 native 12.92s,
 
 **Pin status unchanged and now confirmed from T's side: the unswept carve through `2730e6566` is
 the only thing holding it.**
+
+**CONFIRMED by measurement, not by agreement (coordinator, this box):** `/proc/cpuinfo` here says
+`Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz` and `hostname` says **borg** — so T's sentinel-collision
+theory does cover the failure. Established both directions on this box: the pre-fix
+`twatch_host_epoch_devtest.py` (from `93db54159^`, run in a scratch copy) FAILs
+`changed-hardware-opens-a-new-epoch-and-closes-the-old`; at HEAD all cases pass. So the retired-host
+and two-reading mechanisms stay ruled out and `93db54159` closes it.
+
+**And the harness has a reportability defect that explains the bad relay better than carelessness
+does.** The failure prints as `FAIL changed-hardware-…:` with an **empty message**, and the very
+next line of output is `twatch: hardware fingerprint changed for xeon (08a191cf19ad -> a1302d0ee045)`.
+A reader who takes the line after the colon gets the wrong subject **and the format invited it** —
+the FAIL line offers nothing, so the nearest line is adopted. Worth T's attention: a FAIL with no
+message is what turned one relay into a wasted pass. The discipline (quote the FAIL line) stands;
+so does "and if it is empty, say so rather than substituting the next line".
