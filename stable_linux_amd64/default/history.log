@@ -359,3 +359,4 @@
 2026-08-19T12:45:16Z  v359  4168eb398c313ea998cbea34e7d9cd8a73640df37bb4b67bf3da01d5484363e5  c3f3b5b9349824247ba4332996580518df62de53  roster: a pin's contents are an ancestry question, and frank3's sharper form of the check rule
 2026-08-19T13:04:32Z  v360  74e1c5892d051e6c3d5b0d706be397f25b0568b945c69fbeec6be4c08ee04b6b  2f6d7331c23856651f588318fed7d96d8914814e  ticket(A): the carrier consolidation is unblocked, cheaper, and now closes a real gap
 2026-08-19T13:39:14Z  v361  d9abbb3161243bd0795ca7b065859b0623242935109fd995d81f4f7d3702b647  7ecde51d45774da45279f4fc36f1b469ee99ea77  docs(progress): record the shas the resolves landed as
+2026-08-19T13:56:10Z  v362  7cc1bfb591c698caf5268febb927b52ca5d93e783bab2a9e77dd26c002fea96a  b8099c676b0d49cf050bcb7fa3834a398a3ca581  ticket(P)+rerank: uses..in filed low, NilPy import raised to 78 (user: urgent)

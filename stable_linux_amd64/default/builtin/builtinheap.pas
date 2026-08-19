@@ -3928,15 +3928,35 @@ begin
   end;
 end;
 
-procedure PXXWriteFloatSci(p: Pointer);
-{ Pascal scientific notation <' '|'-'>d.<16 digits>E<'+'|'-'>ddd (17 significant
-  digits, 3-digit exponent), matching FPC's Str(Double) field width and the
-  x86-64 EmitWriteFloatSci. The mantissa is extracted MSD-first into a 17-digit
-  integer so each step only truncates a value in [0,10) — preserves ~17 accurate
-  digits, unlike one (x*1e16) multiply which overflows the 53-bit mantissa. One
-  guard digit rounds half-up. Includes the leading-space positive sign. }
-var x: Double; e, d, k: Integer; m, divisor: Int64; ch: Char;
+procedure PXXWriteFloatSci(p: Pointer; fracdigits: NativeInt; expdigits: NativeInt);
+{ Pascal scientific notation <' '|'-'>d.<frac digits>E<'+'|'-'><exp digits>.
+
+  `fracdigits` = digits after the point (16 -> FPC's 17-significant-digit Double
+  form); `expdigits` = 3 for Double, 2 for Single, matching FPC.
+
+  Both were HARDCODED at 16/3 until 2026-08-19, which made every "format this
+  differently" request unrepresentable and was one bug with two faces:
+  `write(d:W)` could not narrow the mantissa to the field, and a Single could not
+  ask for its own 10-significant-digit, 2-digit-exponent form. The sibling
+  PXXWriteFloatFixed already took (decimals, width); this one took neither, and
+  that asymmetry WAS the defect
+  ([[compat-pascal-writeln-of-a-single-uses-double-width]],
+  [[bug-b-write-of-a-real-ignores-the-field-width-without-decimals]]).
+
+  The mantissa is extracted MSD-first into a 17-digit integer so each step only
+  truncates a value in [0,10) — preserves ~17 accurate digits, unlike one
+  (x*1e16) multiply which overflows the 53-bit mantissa. One guard digit rounds
+  half-up. Includes the leading-space positive sign. }
+var x: Double; e, d, k, keep, drop: Integer; m, divisor, rem, limit: Int64; ch: Char;
 begin
+  { Clamp before use. FPC's own minimum is ONE fractional digit and it overflows
+    the field rather than dropping below that (write(d:8) prints ' 3.3E-001',
+    nine characters into a field of eight), so a narrow width widens the output
+    instead of truncating the number. }
+  if fracdigits < 1 then fracdigits := 1;
+  if fracdigits > 16 then fracdigits := 16;
+  if expdigits < 2 then expdigits := 2;
+  if expdigits > 3 then expdigits := 3;
   x := PDouble(p)^;
   { NON-FINITE first — the normalise loops below never terminate on one:
     `Inf / 10` is still Inf, and a NaN compares false against both bounds so it
@@ -3973,7 +3993,10 @@ begin
     write(' ');
   if x = 0 then
   begin
-    write('0.0000000000000000E+000');
+    write('0.');
+    for k := 1 to fracdigits do write('0');
+    write('E+');
+    for k := 1 to expdigits do write('0');
     Exit;
   end;
   { EXACT digits — see PxxSciDigits17. The normalise-by-repeated-division loop
@@ -3981,13 +4004,37 @@ begin
     iteration, ~100 of them for 1e100) and for 1e200 produced the wrong
     EXPONENT. }
   PxxSciDigits17(x, m, e);
-  for k := 16 downto 0 do
+  { Round the 17-digit mantissa to the requested significant-digit count. Done
+    on the INTEGER rather than by scaling x, for the same reason the extraction
+    is MSD-first: a second float rounding would lose the digits this routine
+    exists to preserve. }
+  keep := fracdigits + 1;
+  drop := 17 - keep;
+  if drop > 0 then
+  begin
+    divisor := 1;
+    for d := 1 to drop do divisor := divisor * 10;
+    rem := m mod divisor;
+    m := m div divisor;
+    if rem >= (divisor div 2) then m := m + 1;
+    { Half-up can carry out of the kept width (9.99 -> 10.0), which is one digit
+      too many AND one exponent too low; both must move together or the value
+      changes by a factor of ten. }
+    limit := 1;
+    for d := 1 to keep do limit := limit * 10;
+    if m >= limit then
+    begin
+      m := m div 10;
+      e := e + 1;
+    end;
+  end;
+  for k := keep - 1 downto 0 do
   begin
     divisor := 1;
     for d := 1 to k do divisor := divisor * 10;
     ch := Chr(48 + ((m div divisor) mod 10));
     write(ch);
-    if k = 16 then write('.');
+    if k = keep - 1 then write('.');
   end;
   write('E');
   if e < 0 then
@@ -3997,16 +4044,14 @@ begin
   end
   else
     write('+');
-  d := e div 100;
-  ch := Chr(48 + d);
-  write(ch);
-  e := e mod 100;
-  d := e div 10;
-  ch := Chr(48 + d);
-  write(ch);
-  d := e mod 10;
-  ch := Chr(48 + d);
-  write(ch);
+  divisor := 1;
+  for d := 1 to expdigits - 1 do divisor := divisor * 10;
+  while divisor > 0 do
+  begin
+    ch := Chr(48 + ((e div divisor) mod 10));
+    write(ch);
+    divisor := divisor div 10;
+  end;
 end;
 
 procedure PXXWriteVariant(v: Pointer);
