@@ -139,4 +139,4 @@ build rule names is green today and uncovered forever.
 the six probes above diffed against CPython, and `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 9ffc1637f.
