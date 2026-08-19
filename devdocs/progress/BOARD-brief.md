@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:17 blocked:5 backlog:244 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2045 rejected:39`
+`working:2 unfinished:17 blocked:5 backlog:245 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2045 rejected:39`
 
 ## Held now (working/ — do not touch these files)
 
@@ -40,7 +40,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 228, ranked
+## Ready — top 30 of 229, ranked
 
 - `[p 70] [N]` regression-test-core-callbacks-2
 - `[p 70] [N]` regression-test-core-field-class-identity
@@ -50,6 +50,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
 - `[p 62] [N]` bug-n-from-collections-abc-import-is-swallowed-by-the-collections-root-rule
+- `[p 60] [A]` bug-a-make-revert-the-documented-pin-brake-does-not-fire
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 60] [A]` refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
 - `[p 58] [O]` feature-opt-o3-register-pressure
@@ -71,6 +72,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
-- `[p 50] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 
-_198 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_199 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

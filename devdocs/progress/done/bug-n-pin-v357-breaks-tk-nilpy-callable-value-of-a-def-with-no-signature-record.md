@@ -64,10 +64,19 @@ stopped short of it to escalate, because the pin is blocking a lane.
 
 ## Recommendation
 
-**Revert the pin** (`make revert` moves `pinned` back to v356) unless the fix is
-immediate. v356 is known-green on the full `lib-test`. The commits themselves can
-stay on master; it is only the blessing that needs undoing, which is exactly the
-brake `make revert` exists to be.
+**Revert the pin** unless the fix is immediate. v356 is known-green on the full
+`lib-test`. The commits themselves can stay on master; it is only the blessing
+that needs undoing.
+
+**Correction to the line above (2026-08-19): `make revert` CANNOT do this, and
+recommending it was wrong.** It restores `compiler/pascal26` from a per-version
+`vN` binary and this tree keeps none, so it fails with "Binary ... missing". The
+recovery that worked was reverting the **pin commit** (`5a0e894b3`) — every file
+under `stable_linux_amd64/**` is tracked, so that restores the previous pin
+byte-for-byte, `VERSION` and `pin.log` included. Filed as
+[[bug-a-make-revert-the-documented-pin-brake-does-not-fire]], because the brake
+is only ever reached for during an incident, which is the worst moment to find
+out it does not fire.
 
 ---
 
