@@ -152,3 +152,58 @@ the follow-up it depended on stayed in the backlog?** `feature-mimic-fpc` is in
 `done/` describing a state that is not true — its own text says the global flag is
 a fallback. Whatever the answer, that ticket's text should not keep asserting a
 design that was never completed.
+
+---
+
+## RESOLVED 2026-08-19 (user) — nothing left to decide
+
+**User: "the synapse ticket looks as resolved to me."** Correct. Everything this ticket
+asked was already answered in it, by the owner, on 2026-08-17:
+
+| question | answer | where |
+| --- | --- | --- |
+| Narrow `--mimic-fpc` by hand for Synapse? | **No** — the define set is curated and correct | Recommendation |
+| Is this Pascal or NilPy? | **Pascal only**; NilPy importing Synapse is not a goal | Scope note |
+| How high a priority? | **20** — Synapse is a corpus, not a dependency | Deprioritisation note |
+| Wire the five smokes under `--mimic-fpc` meanwhile? | **Yes**, it is the supported path | Recommendation |
+
+The ticket stayed in `backlog/` after answering itself — the same rot that left
+`decide-unary-minus-widening-in-the-default-dialect` looking open for two days. Closing it.
+
+### The one thing that WAS still open — the secondary question
+
+> *"Should a closed ticket be reopened when the follow-up it depended on stayed in the
+> backlog?"*
+
+**No. Banner it, do not reopen.** Reopening rewrites the record of what a session actually
+shipped, and `done/` is a historical record. A closed ticket whose text asserts an
+incomplete design gets a correction banner **above its body**, naming the live ticket that
+carries the remainder — that is where a searcher lands, and nobody greps a convention doc
+when they have an answer on screen.
+
+Applied here to [[feature-mimic-fpc]], which says the global flag is *"a fallback; the
+scoped manifest is the primary mechanism"* — a design that never shipped.
+
+Second instance the same day: `bug-c-header-with-a-body-compiles-twice-across-the-macro-reset`,
+whose title asserts a root cause its own body disproves. Two instances is enough to state
+the convention, not enough to build process around it.
+
+### What survives, and what must NOT inherit Synapse's justification
+
+[[feature-dynamic-include-paths-config]] (backlog, p45) holds the real remaining work —
+directory-scoped `pxxlib.cfg` manifests. **Its Synapse justification is withdrawn**: per
+the owner's 2026-08-17 note, scoped manifests *"must be justified by a library we DO build
+on, or by the self-build safety argument, never by this one."*
+
+The self-build argument is live and is the stronger one anyway: `PasApplyMimicDefines`
+carries *"NEVER call during a self-build — the compiler's own `{$ifdef FPC}` means real
+FPC, not PXX."* That is a landmine enforced by remembering. Directory scoping makes it
+structural — the manifest reaches `external/synapse/**` and cannot reach `compiler/**` —
+so it stops being reachable rather than stopping being stepped on. Same shape as
+uses-never-leaks.
+
+Prio left at 45 deliberately: the justification changed, not the value. Whoever ranks it
+next should rank it on the self-build argument.
+
+## Log
+- 2026-08-19 — resolved by user (nothing left to decide), moved to `decided/`.

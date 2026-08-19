@@ -125,3 +125,28 @@ Medium, but it is the general solution for ALL third-party libs, not a one-off.
   `tools/pxx-scan` scanner, Pascal-unit (`uses`) search-path refactor, and
   dynamic system-library soname mapping. The `-I` plumbing + native gate are the
   shared foundation those build on.
+
+
+---
+
+## 2026-08-19 — the Synapse justification is WITHDRAWN; rank this on self-build safety
+
+[[decide-what-synapse-actually-needs-vs-mimic-fpc]] is closed, and with it the case this
+ticket was most often cited for. Owner, 2026-08-17: *"We already implemented our own TCP
+stack, including SSL. Synapse is a TEST library, not something we will build on in
+practice."* Scoped manifests **must be justified by a library we DO build on, or by the
+self-build safety argument, never by Synapse.**
+
+**Prio left at 45 on purpose — the justification changed, not the value.** The surviving
+argument is the stronger one:
+
+`PasApplyMimicDefines` (`compiler/lexer.inc:876`) carries the rule *"NEVER call during a
+self-build — the compiler's own `{$ifdef FPC}` means real FPC, not PXX."* That is a
+landmine enforced by remembering. Directory scoping makes it **structural**: a manifest
+under `external/synapse/**` cannot reach `compiler/**`, so the hazard stops being
+reachable rather than stopping being stepped on. Same shape as the uses-never-leaks
+principle.
+
+Other named manifest consumers from the original design — IDF, gtk, usr-include — are
+unaffected and are ordinary justifications. Synapse may still be listed as a *user*; it
+just cannot be the reason.

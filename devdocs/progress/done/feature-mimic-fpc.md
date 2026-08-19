@@ -48,6 +48,24 @@ grow only when a concrete library probes a define we lack.
 
 ### Required evaluator work (the hidden structural cost)
 
+
+> **CORRECTION 2026-08-19 — the scoped manifest never shipped; this ticket describes a
+> state that is not true.** The 2026-06-19 reframe below says the global `--mimic-FPC`
+> flag is *"a fallback; the scoped manifest is the primary mechanism"*. Only the fallback
+> exists. What shipped is `PasApplyMimicDefines` (`compiler/lexer.inc:876`) with two
+> delivery paths — the `--mimic-fpc` CLI flag and a `{$MIMIC FPC}` source directive — and
+> those remain the ONLY ways to apply the curated define set.
+>
+> Directory-scoped `pxxlib.cfg` manifests are still unbuilt and live in
+> [[feature-dynamic-include-paths-config]] (backlog). Note its justification changed:
+> Synapse is a corpus, not a dependency (owner, 2026-08-17), so the case for scoping is
+> the **self-build safety** one — `PasApplyMimicDefines` must never run during a
+> self-build, and directory scoping makes that structural instead of remembered.
+>
+> **Not reopened, deliberately.** `done/` records what a session shipped; rewriting it
+> falsifies history. The correction goes here, above the body, because this is the
+> artifact someone finds. See [[decide-what-synapse-actually-needs-vs-mimic-fpc]].
+
 jedi.inc's *active* FPC path immediately evaluates
 `{$IF defined(FPC_FULLVERSION) and (FPC_FULLVERSION >= 20400)}`. The current
 `EvalPasCondExprText` knows identifiers, `defined()`, `not/and/or`, parens —
