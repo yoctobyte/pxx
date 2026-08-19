@@ -343,3 +343,133 @@ The default build is untouched: self-host fixedpoint converges and `gate.sh quic
 compile is a trap for whoever tries it next, so the partial guards were reverted rather than
 shipped. Its 183 names are the next step and are mechanical but not trivial — each needs a
 correct signature and a decision about what an unreachable body should do.
+
+---
+
+## PROGRESS 2026-08-19 (frank3) — five omission defines, and the acceptance chain RUNS
+
+### Landed
+
+| define | commit | what it removes |
+| --- | --- | --- |
+| `PXX_NO_ZIG` | `ecbcfd9b3` | the Zig frontend |
+| `PXX_NO_CFRONT` | `ecbcfd9b3` | the C frontend (+ `frontend_stubs.inc`) |
+| `PXX_NO_I386` | `91ca417b3` | the i386 backend |
+| `PXX_NO_ARM32` | `ccef81c7c` | the arm32 backend |
+| `PXX_NO_AARCH64` | `bde028cbe` | the aarch64 backend |
+
+Every combination tried builds clean. The default build is unchanged throughout —
+self-host fixedpoint converged on every increment, `gate.sh quick` GREEN, and all
+five targets still emit and run.
+
+### THE USER'S ACCEPTANCE TEST RUNS CLEAN — with one honest caveat
+
+    FPC -O2 -dPXX_NO_ZIG -dPXX_NO_CFRONT
+            -dPXX_NO_I386 -dPXX_NO_ARM32 -dPXX_NO_AARCH64   ->  reduced   2,789,936 B
+    reduced   compiler/compiler.pas                          ->  full1     (7.2 s)
+    full1     compiler/compiler.pas                          ->  full2
+    cmp full1 full2                                          ->  BYTE-IDENTICAL
+    cmp compiler/pascal26 full1                              ->  BYTE-IDENTICAL
+
+Both properties the test was designed to catch hold: nothing outside the omitted
+frontends and backends depended on their presence, and the Pascal frontend is
+complete enough to compile the whole project. The stripped compiler's output is
+byte-identical to the repo's own self-hosted binary, not merely self-consistent —
+a stronger result than the chain required.
+
+**The caveat: this is not yet "one frontend and one platform".** NilPy, Rust, Basic,
+Ada and Lua are still compiled in, as are riscv32 and xtensa. So the chain is
+verified for the reduction that EXISTS, and the acceptance test will have to be
+re-run at each further omission. It is not a one-time clearance.
+
+### THE SIZE/SPEED MEASUREMENT — size drops, speed does NOT
+
+Recorded because the "smaller and hence faster" claim carries a measurement
+obligation, and the second half of it does not hold.
+
+FPC `-O2` seed builds, same tree, same flags:
+
+| configuration | size | vs default |
+| --- | --- | --- |
+| default (everything) | 3,376,608 | — |
+| `-dPXX_NO_ARM32` | 3,309,872 | −2.0% |
+| `-dPXX_NO_AARCH64` | 3,308,800 | −2.0% |
+| `-dPXX_NO_I386` | 3,184,576 | −5.7% |
+| three backends off | 3,055,792 | −9.5% |
+| zig + cfront off | 3,112,608 | −7.8% |
+| **all five off** | **2,789,936** | **−17.4%** |
+
+Wall-clock, same box, `hyperfine` 40+ runs each, compiling `test/hello.pas`:
+
+    full     66.1 ms ± 4.5     [User: 45.9 ms]
+    reduced  81.2 ms ± 24.0    [User: 46.0 ms]
+
+**User CPU time is identical to within 0.1 ms.** The wall-clock spread is this box's
+noise (other agents are running; a repeated A/B with `time` reversed its own verdict
+between rounds, and `reduced`'s 163 ms max is a single outlier against a 61.8 ms min).
+Compiling `compiler.pas` itself: 6.58 s full vs 6.77 s reduced, best-of-5 — same
+answer, no gain.
+
+**This is the expected result once stated plainly, and it should be stated plainly
+rather than left as an implication.** The omitted code was never *executed* in the
+full build either — it sits behind `if TargetArch = ...` arms that a host-target
+compile never takes. Removing it removes bytes, not work. **So the payoff of a
+reduced build is footprint — binary size, resident memory, and the amount of code
+shipped — not compile speed.** Anyone repeating the "smaller hence faster" reasoning
+should be pointed here.
+
+### WHAT THE DEFINES MEASURED — the coupling, which is half this ticket's point
+
+Each omission forces the couplings into the open as compile errors. Four found so
+far, all real:
+
+1. **`VariantTagForTk386`** — a target-INDEPENDENT `TTypeKind` → `VT_*` mapping living
+   in `ir_codegen386.inc`, called by `ir_codegen_arm32.inc` *across the backend
+   boundary by that name*. Moved to `ir.inc` as `VariantTagForTk` (`91ca417b3`).
+2. **The per-arch signal-runtime choice was inlined in the Pascal driver** — five
+   `if TargetArch = ...` tests in `parser.inc`, three lines above the comment
+   explaining that this exact shape is why "the other eight frontends shipped
+   without" the I/O lock. Normalised into `EmitSignalRuntimeForTarget`. The
+   consequence — only the Pascal frontend emits a signal runtime at all — is a
+   behaviour change and is filed separately as
+   [[bug-a-only-the-pascal-driver-emits-the-signal-runtime]].
+3. **The shared `-O` pipeline names one backend's passes.** `ir_codegen.inc` calls
+   `UnifiedResidencyAssignA64` and `FloatPoolBoundaryAssignA64` unconditionally; both
+   self-guard on `TargetArch` inside. Guarded, not moved.
+4. **`symtab.inc` — the shared symbol table — carries three full function epilogues
+   emitting raw machine code**: i386 (inline `EmitB($0F)` byte streams), arm32 (143
+   lines), aarch64 (173 lines), adjacent, each `Exit`-ing. Plus `asmenc.inc` holds
+   the per-arch inline-asm text routines for all five targets. **This is the largest
+   structural finding so far** and it is the reason a "backend" is not two files:
+   backend code lives in at least four shared files. Guarded here; a ticket for the
+   shape follows.
+
+### A MEASUREMENT FAULT IN MY OWN RIG, and what it cost
+
+`compiler.pas` carries `{$UNITPATH ../lib/asmcore}`, which FPC resolves **relative to
+the working directory**. My scratch tree held a `lib/` copied in an earlier session,
+so every trial build linked a stale snapshot instead of the tree under test. It
+produced working binaries and clean error lists, so nothing looked wrong. Found only
+when a second script with a different directory layout failed outright.
+
+The numbers above were all taken after the rig was fixed to symlink the real `lib/`.
+Cost: nothing this time (`lib/asmcore` is untouched by any omission define), but the
+same fault under a different change would have produced confident wrong results —
+the second measurement fault in this ticket, after the truncated FPC error lists.
+**Both had the same shape: the rig answered a slightly different question than the
+one asked, and answered it fluently.**
+
+### REVISED ORDER OF ATTACK
+
+1. ~~`omit-i386` / `omit-arm32` / `omit-aarch64`~~ — **done**.
+2. **`omit-riscv32` / `omit-xtensa`** — next. Bigger (800+ errors on the first
+   truncated run, and that figure is a LOWER BOUND, see the truncation note above),
+   because the ESP work put riscv32 and xtensa into the platform/PAL layer too.
+3. **`omit-rust`** — blocked on R/Z's shared parser helpers
+   ([[refactor-a-the-greenfield-frontends-share-each-others-parser-helpers]]).
+4. **`omit-nilpy`** — 183 distinct names, 177 of them forward declarations in
+   `parser.inc`. Deliberately unbuilt: a define that cannot compile is worse than no
+   define. It is the measurement, not the goal.
+
+Only after 2 and 4 is `only-nilpy + only-esp` — the configuration the user actually
+asked for — reachable.

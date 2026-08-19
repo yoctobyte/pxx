@@ -33836,9 +33836,19 @@ end;
 
   NOT ONLY lib/rtl, despite this function's name. `tkinter` is lib/pcl's, and it
   was missing from the first version of this list for no better reason than that
-  the list was built by sweeping lib/rtl — which broke six examples/tk jobs that
-  had done nothing wrong. Where the unit lives is not the question this list
+  the list was built by sweeping lib/rtl — which broke seven examples/tk jobs
+  that had done nothing wrong. Where the unit lives is not the question this list
   answers; what it is FOR is.
+
+  AND THE TEST IS PURPOSE, NOT INVENTORY. "Is there a Python module by this name"
+  does not work: `tk` is a real PyPI package, and `tkinter` itself needs a distro
+  package on most systems, so neither stdlib membership nor installability
+  separates anything — anything can be published to PyPI. Ask instead whether the
+  unit was WRITTEN TO BE that Python module; each unit's own header answers it.
+  lib/pcl/tk.pas is the counterexample that makes this concrete: it is a Tcl/Tk
+  embed, tkinter.pas is the Python module built on top of it, and listing `tk`
+  would silently bind a program's `import tk` — legal, resolvable, wrong — to our
+  binding instead of the package it installed.
 
   A CURATED LIST, and not a property read off the unit, because every derivable
   form of the question is wrong. The header prose is wrong in BOTH directions:

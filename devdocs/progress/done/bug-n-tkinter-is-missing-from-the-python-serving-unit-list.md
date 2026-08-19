@@ -108,10 +108,31 @@ were run directly):
 
 `examples/tk/hello.npy` and `examples/tk/widgets.npy` do `import tk`, which is
 `lib/pcl/tk.pas` — the thin Tcl/Tk binding that `tkinter.pas` is built ON TOP OF, not
-Python's module. **CPython has no `tk` module**, so no unmodified Python source can
-name it, and the argument that saved `tkinter` does not apply. These two are the
-genuine rewrite case (`import 'tk.pas' as tk`) and were left for the cascade cleanup.
+Python's module. These two are the genuine rewrite case (`import 'tk.pas' as tk`) and
+were left for the cascade cleanup.
 
-The pair is a good statement of where the line falls: same directory, same feature,
-opposite answers — because the question is whether a Python program could have
-written that import.
+**CORRECTED, same day.** I first justified this with *"CPython has no `tk` module, so
+no unmodified Python source can name it"* — i.e. stdlib membership. **That rule is
+wrong and must not be reused.** A PyPI package named `tk` exists and installs, so a
+Python program can `import tk`; and `tkinter` itself needs installing on most distros
+(`python3-tk`), so "needs installing" separates nothing either. Anything can be
+published to PyPI, so "could a Python program have written this import?" answers yes
+for essentially every identifier and classifies nothing. Measured and challenged by
+the owner via frankonpiler-bf.
+
+**The criterion is the one this ticket's own comment fix already states: is the unit
+written to BE that Python module?** Purpose, declared by the unit, not inventory.
+Both headers answer it outright — `tkinter.pas` says it is named `tkinter` precisely
+so `import tkinter` resolves through the unit resolver; `tk.pas` describes a Tcl/Tk
+embed and points at building a tkinter-shaped surface on top of it. Note the failure
+mode this is guarding against: I applied the strong criterion to the list's comment
+and then reached for the weak one when arguing a case, in the same session.
+
+**The conclusion survives and gets stronger under the correct rule.** Precisely
+*because* a PyPI `tk` exists, putting `tk` on the Python-serving list would mean a
+program that had installed it finds its bare `import tk` silently bound to our Tcl/Tk
+binding — the wrong module, quietly, which is the exact class of bug this list exists
+to prevent.
+
+The pair still states where the line falls: same directory, same feature, opposite
+answers.
