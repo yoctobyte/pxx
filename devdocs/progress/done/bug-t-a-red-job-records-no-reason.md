@@ -129,4 +129,4 @@ durable record).
 - 2026-08-19 — fixed. `tools/job_reason_devtest.py`, 20 checks; 4 go red against
   a neutered version (no noise strip, no scrub, no stale-clear).
   `PXX_TRACK=T make tools-devtest` → 48 guards green.
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 68a65fff0.
