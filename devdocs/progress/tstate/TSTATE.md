@@ -3,8 +3,8 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `c45ed0062491` | 2026-08-19T07:58:46Z | GREEN (native) | 244.5s | `6070883b46e7` RED |
+| plexus | `c45ed0062491` | 2026-08-19T08:19:24Z | GREEN (full) | 1226.6s | `c45ed0062491` GREEN |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **lib-test#src:test/lib_tls.pas** — test/lib_tls.pas (plexus): bad `6070883b46e7`, last good `185575980d53`, 31 commit(s) in range
+- none
