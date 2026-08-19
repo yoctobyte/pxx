@@ -5,16 +5,17 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:15 blocked:5 backlog:239 experimental:20 rainy-day:41 done-followup:3 decided:82 done:2032 rejected:38`
+`unfinished:16 blocked:5 backlog:239 experimental:20 rainy-day:41 done-followup:3 decided:82 done:2032 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-nilpy-a-callable-in-a-variable-loses-to-a-def-of-the-same-name` [N] — owner: unrecorded
+_none — no lane is locked._
 
-## unfinished (15) — parked mid-flight; re-claim, do not duplicate
+## unfinished (16) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults` [N]
+- `bug-nilpy-a-callable-in-a-variable-loses-to-a-def-of-the-same-name` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `bug-p-cannot-call-directly-through-a-procedural-type-cast` [P]
