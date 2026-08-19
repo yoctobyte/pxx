@@ -1767,3 +1767,36 @@ rerank it deliberately rather than inheriting the number).
   it reads.
 
   plexus-T's session is closed; Track T is unstaffed until the user restarts it.
+
+- **check 2026-08-19 (+4h): two landings, a proper claim, and the bench is green again.**
+  T reports `185575980d53` GREEN native/slow/opt and **bench back to ok (30 rows)** —
+  independent confirmation the selfcompile rows returned. `working/` now holds
+  `bug-nilpy-a-callable-in-a-variable-loses-to-a-def-of-the-same-name`, so frank2 is using
+  the lock; no reminder needed.
+
+  **The `-O0` fix (`6b2402b92`) was root-cause, not microfix, and the measurement inverts
+  the ticket.** It was never an `-O0` problem:
+
+  ```
+  -O2/default 7 415 348 B   -O1 7 458 182 B   -O3 7 561 519 B   -O0 8 394 698 B
+  ```
+
+  **All four levels sat at 88-90% of the 8 MB cap.** `-O0` was first across a line every
+  level was standing on, and **ordinary growth would have taken the DEFAULT build down
+  next.** Cap now 16 MB, default at 44%; cost is virtual BSS only. The error message now
+  names the cap and the inversion that made it confusing — **lower `-O` levels emit MORE
+  code, so a build that fits at `-O2` can still overflow at `-O0`.**
+
+  I updated `decide-should-the-gate-prove-self-compile-at-more-than-one-o-level` with this,
+  because it materially strengthens one side of a ticket I wrote: `-O0` was not merely
+  covering a blind spot, it was a **leading indicator** of a condition about to break the
+  level the gate does check. A check that fails first and cheaply on a shared underlying
+  condition is worth more than its own coverage. **Recommendation unchanged** (T tier, not
+  the per-fix loop) — a leading indicator works just as well run asynchronously.
+
+  **THE LADDER WAS RE-MEASURED — at `594bd3c8c`: 12 of the 38 remaining failures share ONE
+  root cause, and it is a silent-wrong-function bug, not a missing feature.** Filed and
+  claimed as `bug-nilpy-a-callable-in-a-variable-loses-to-a-def-of-the-same-name` — the
+  new top wall, and the same concentrated shape `yield` had. **Denominator caution: "38
+  remaining failures" is frank2's figure on the full ladder at that sha; do not reconcile
+  it against the older 6/48 or 7/33 by arithmetic — ask for the headline when it reports.**
