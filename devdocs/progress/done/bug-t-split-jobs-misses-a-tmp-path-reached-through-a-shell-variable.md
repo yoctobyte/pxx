@@ -4,7 +4,7 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`split_jobs` keeps a producer with its consumer by union-find over literal /tmp paths, so a recipe that reaches its artifact through a shell variable (`$(TESTTMP)/$$bin` in a for-loop) exposes no shared token, is never merged, and runs under job isolation with a scratch dir where the artifact was never built. Third instance of the class the splitter's own comments describe."
-status: backlog
+status: done
 owner: unassigned
 ---
 
@@ -112,3 +112,59 @@ That is the normalise-don't-special-case call, and it also explains why the fix 
 landed in the Makefile rather than in `testmgr`: the tool cannot resolve shell variables
 in general, so the recipe stating its own paths is the normalising fix rather than a
 second mechanism. The lint is what makes the recipe's obligation checkable.
+
+## Resolved 2026-08-19 by Track T (plexus-T) — the lint is shipped and enforced
+
+`tools/testmgr_tmp_var_devtest.py`, picked up automatically by the new
+`make tools-devtest` target (limited + full tiers), so it runs rather than
+waiting to be remembered.
+
+**It flags `/tmp/$` in executable recipe text** — the spelling `tmp_re` cannot
+match at all, since `$` is outside its character class, so the token is not
+merely wrong but absent. That is the property both mechanisms rest on: union-find
+merging (a producer with its consumer) and privatization (concurrent runs not
+sharing a file). This is why the lint is the right shape and a fourth synthetic
+token would not be: it does not have to predict the next spelling.
+
+**Comment lines are excluded, and that was not cosmetic.** The first draft
+flagged the very recipe that FIXED the callbacks case, because its explanatory
+comment quotes the old `/tmp/$bin` spelling. A guard that trips on prose gets
+muted, and a muted guard is not a guard — the rule `tstate_reader_devtest`
+states, hit here within a minute of writing the check.
+
+### It found a live instance on its first run
+
+[[bug-n-tk-got-files-are-invisible-to-testmgr-privatization]] — **in the same
+recipe whose earlier fix was believed complete.** `9f11b405d` spelled the
+BINARIES by full path, which fixed the merge and closed the callbacks red. The
+output capture files are still `$(TESTTMP)/$$src.got`, so the three `.got` files
+are never privatized and two concurrent runs share them. The merge half is fixed;
+the privatization half was never in scope and nobody noticed, which is precisely
+this ticket's thesis about per-spelling fixes.
+
+Filed for the owning lane rather than fixed here (T owns the tool, never the
+recipe), and carried in the devtest's `KNOWN` list so the guard stays green
+without the allowlist telling a lie — it prints the open instance on every run,
+and prints a "remove it from KNOWN and close its ticket" line the moment the
+recipe stops matching.
+
+### The second suggested check is split out, not silently dropped
+
+*"A job that RUNS a binary it does not COMPILE"* is prototyped and deliberately
+not shipped: it yields 5-7 candidates depending on how recipe lines are
+segmented, and segmenting made it WORSE, which is the tell that the rule is not
+yet well-defined. Candidates and the reason are recorded in
+[[chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile]] (p30) so the next
+attempt starts from data. The parent ticket calls it a "cheap corroborating
+signal"; the enforced half is the one that covers the spelling that has bitten
+twice.
+
+### On the operational heads-up above
+
+`test-nilpy#src:examples/tk/callbacks.npy` going silent is confirmed here as the
+fix landing: the merged job's first source is `examples/tk/tkinter_facade.npy`,
+which is the selector the job now carries, and the same three programs are still
+compiled and run.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.
