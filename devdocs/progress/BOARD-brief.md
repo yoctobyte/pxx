@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:17 blocked:6 backlog:236 experimental:20 rainy-day:43 done-followup:3 decided:91 done:2077 rejected:40`
+`working:1 unfinished:17 blocked:6 backlog:236 experimental:20 rainy-day:43 done-followup:3 decided:91 done:2077 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A] — owner: frank3
 
 ## unfinished (17) — parked mid-flight; re-claim, do not duplicate
 
@@ -62,7 +62,6 @@ _none — no lane is locked._
 - `[p 55] [N]` bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
 - `[p 55] [T]` bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 - `[p 55] [T]` chore-t-split-lib-test-into-jobs-that-name-what-failed
-- `[p 55] [A]` feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 55] [E]` feature-demo-portable-userland
@@ -72,5 +71,6 @@ _none — no lane is locked._
 - `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
+- `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
 
 _191 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
