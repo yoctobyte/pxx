@@ -21365,6 +21365,12 @@ begin
       symIdx := PyGenBindTarget(name, name2, genProl);
       Next;                                { past the generator's name }
       Result := ParseForInGeneratorAST(symIdx, genPi, -1, genProl);
+      { this desugar consumed its own indented block (PyParseSuite), and it
+        returns an AN_SEQ, which PyParseBlock does not recognise as one of
+        the block-consuming node kinds — so it must be told. Without this the
+        block was consumed a SECOND time, and any statement following the
+        loop inside a def or a while was rejected. }
+      PyStmtAteBlock := True;
       Exit;
     end;
   end;
@@ -21391,6 +21397,12 @@ begin
         symIdx := PyGenBindTarget(name, name2, genProl);
         Next; Next; Next;               { past `Cls`, `.`, the method name }
         Result := ParseForInGeneratorAST(symIdx, genPi, -1, genProl);
+        { this desugar consumed its own indented block (PyParseSuite), and it
+          returns an AN_SEQ, which PyParseBlock does not recognise as one of
+          the block-consuming node kinds — so it must be told. Without this the
+          block was consumed a SECOND time, and any statement following the
+          loop inside a def or a while was rejected. }
+        PyStmtAteBlock := True;
         Exit;
       end;
     end;
@@ -21420,6 +21432,12 @@ begin
         Next; Next;                        { past the receiver and the `.` }
         Next;                              { past the method name }
         Result := ParseForInGeneratorAST(symIdx, genPi, genRecvNode, genProl);
+        { this desugar consumed its own indented block (PyParseSuite), and it
+          returns an AN_SEQ, which PyParseBlock does not recognise as one of
+          the block-consuming node kinds — so it must be told. Without this the
+          block was consumed a SECOND time, and any statement following the
+          loop inside a def or a while was rejected. }
+        PyStmtAteBlock := True;
         Exit;
       end;
     end;

@@ -13595,6 +13595,26 @@ begin
     it.FObj := nil;
     it.FUp3 := nil; it.FUp4 := nil;
     it.FStr := '';
+    { A generator cursor OWNS its instance — pygen_iter_new is the only thing
+      that builds one, and the `for` desugar's instance belongs to that
+      statement and is freed there, so there is no second owner to double-free.
+      FreeMem rather than slgen's SlFree, which is the same call: pylib must not
+      depend on an RTL unit for a layout the compiler already guarantees.
+
+      This reclaims the INSTANCE. The managed values held in its persistent
+      slots are still dropped without being released — the deliberate trade
+      recorded in
+      bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells, whose
+      fix needs a per-proc map of which slots are managed. Freeing the block
+      here does not make that worse and does not conflict with it: the ordering
+      constraint that ticket records is about releasing at TEARDOWN rather than
+      at step exit, and teardown is exactly where this stands. }
+    if it.FGenInst <> nil then
+    begin
+      FreeMem(it.FGenInst);
+      it.FGenInst := nil;
+    end;
+    it.FGenStep := nil;
     Exit;
   end;
   { user class / anything else: release managed + variant fields via the
