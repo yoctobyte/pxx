@@ -173,7 +173,25 @@ the last step, not a judgement of worth. Two consequences:
 work. The older tail may be scruffier and should be sampled before assuming the whole 61
 follow the pattern.
 
-## Ownership — Track T, with a boundary and a known collision
+## Ownership — TRACK A (corrected by the user), and the lane choice IS the design
+
+**First recorded as Track T; the user rejected that.** *"It may lead to a waterfall of
+tickets. So if Track T is the wrong choice, make it Track A. And just sweep it — not a new
+ticket for everything that was already ticketed and fixed."*
+
+The reasoning generalises and is worth keeping: **T is bound by "T owns the tool, never the
+bug", so under T every red MUST become a ticket for another lane.** Across ~61 files that
+is a ticket factory whose handoff cost exceeds the work. **A can fix a red in place**, so
+the identical job becomes a *sweep*. The lane choice, not the method, decides whether this
+is one job or sixty-one.
+
+**And most reds need no ticket at all:** these files came from fix commits, so the bug
+already has a ticket **in `done/`**. A red is a regression of something recorded — a
+reference, not a filing.
+
+### Superseded: the Track T framing below
+
+
 
 **Track T owns it:** test infrastructure, T already owns `tools/check_test_wiring.py`, and
 T did the original triage of the 85.
@@ -193,4 +211,4 @@ rather than guess, keeping the batch mechanical and honest.
 
 ## Re-filed as work
 
-See `chore-t-triage-and-wire-the-unwired-tests`.
+See `chore-a-sweep-the-unwired-tests-into-the-suite` (Track A).

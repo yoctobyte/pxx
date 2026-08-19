@@ -53,8 +53,8 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [T]` bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 - `[p 55] [T]` bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label
+- `[p 55] [A]` chore-a-sweep-the-unwired-tests-into-the-suite
 - `[p 55] [T]` chore-t-split-lib-test-into-jobs-that-name-what-failed
-- `[p 55] [T]` chore-t-triage-and-wire-the-unwired-tests
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
