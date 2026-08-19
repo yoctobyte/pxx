@@ -40,6 +40,7 @@ _none — no lane is locked._
 
 ## Ready — top 30 of 230, ranked
 
+- `[p 66] [A]` refactor-a-one-signature-record-for-every-callable-carrier
 - `[p 65] [N]` bug-n-a-module-level-def-taken-as-a-value-loses-its-defaults-on-the-boundfn-carrier
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
@@ -48,7 +49,6 @@ _none — no lane is locked._
 - `[p 60] [A]` bug-a-make-revert-the-documented-pin-brake-does-not-fire
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 60] [A]` refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
-- `[p 60] [A]` refactor-a-one-signature-record-for-every-callable-carrier
 - `[p 58] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [C]` bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 2)
