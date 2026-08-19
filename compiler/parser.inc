@@ -20,8 +20,8 @@ procedure EmitPyBitFloatErrStub; forward;
 procedure EmitSignalRuntime; forward;
 procedure EmitIoLockStubs; forward;
 {$ifndef PXX_NO_I386}procedure EmitIoLockStubs386; forward;{$endif}
-procedure EmitIoLockStubsA64; forward;
-procedure EmitSignalRuntimeA64; forward;
+{$ifndef PXX_NO_AARCH64}procedure EmitIoLockStubsA64; forward;{$endif}
+{$ifndef PXX_NO_AARCH64}procedure EmitSignalRuntimeA64; forward;{$endif}
 procedure EmitSignalRuntimeRISCV32; forward;
 {$ifndef PXX_NO_ARM32}procedure EmitSignalRuntimeArm32; forward;{$endif}
 {$ifndef PXX_NO_I386}procedure EmitSignalRuntime386; forward;{$endif}

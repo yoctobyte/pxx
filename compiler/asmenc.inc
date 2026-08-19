@@ -1205,7 +1205,7 @@ end;
 function AsmRv32RegNum(const opIn: AnsiString; var reg: Integer): Boolean; forward;
 function AsmXtensaRegNum(const opIn: AnsiString; var reg: Integer): Boolean; forward;
 function AsmXtensaIsLoadStore(const mnem: AnsiString): Boolean; forward;
-function AsmA64RegNum(const opIn: AnsiString; var reg: Integer; var is64: Boolean): Boolean; forward;
+{$ifndef PXX_NO_AARCH64}function AsmA64RegNum(const opIn: AnsiString; var reg: Integer; var is64: Boolean): Boolean; forward;{$endif}
 {$ifndef PXX_NO_ARM32}function AsmArm32RegNum(const opIn: AnsiString; var reg: Integer): Boolean; forward;{$endif}
 {$ifndef PXX_NO_ARM32}function AsmArm32CondCode(const condStr: AnsiString; var cond: Integer): Boolean; forward;{$endif}
 function AsmTextJccCode(const m: AnsiString; var cc: Integer): Boolean; forward;
@@ -1276,6 +1276,7 @@ begin
   AppendString(line, AsmEncIntToStr(Syms[idx].Offset));
   AppendString(line, '(s0)');
 end;
+{$ifndef PXX_NO_AARCH64}
 
 function AsmA64IsBranchOrJump(const mn: AnsiString): Boolean;
 begin
@@ -1382,6 +1383,7 @@ begin
 
   len := InlineAsmLineCount - startOff;
 end;
+{$endif}
 
 {$ifndef PXX_NO_ARM32}
 function AsmArm32IsBranchOrJump(const mn: AnsiString): Boolean;
@@ -1829,11 +1831,13 @@ begin
     AsmParseBodyTextRv32(startOff, len);
     Exit;
   end;
+{$ifndef PXX_NO_AARCH64}
   if TargetArch = TARGET_AARCH64 then
   begin
     AsmParseBodyTextA64(startOff, len);
     Exit;
   end;
+{$endif}
 {$ifndef PXX_NO_ARM32}
   if TargetArch = TARGET_ARM32 then
   begin

@@ -61,9 +61,9 @@ procedure EmitVariantClear; forward;
 procedure EmitManagedRecordReleaseLocked(recId: Integer); forward;
 procedure EmitAcquireHeapLock; forward;
 procedure EmitReleaseHeapLock; forward;
-procedure EmitLoadVarA64(idx: Integer); forward;
-procedure EmitLoadDataRefA64(rd, dataOff: Integer); forward;
-procedure EmitA64CopyBytes(countReg, srcReg, dstReg: Integer); forward;
+{$ifndef PXX_NO_AARCH64}procedure EmitLoadVarA64(idx: Integer); forward;{$endif}
+{$ifndef PXX_NO_AARCH64}procedure EmitLoadDataRefA64(rd, dataOff: Integer); forward;{$endif}
+{$ifndef PXX_NO_AARCH64}procedure EmitA64CopyBytes(countReg, srcReg, dstReg: Integer); forward;{$endif}
 {$ifndef PXX_NO_ARM32}procedure EmitArm32CopyBytes(countReg, srcReg, dstReg: Integer); forward;{$endif}
 {$ifndef PXX_NO_ARM32}procedure EmitLoadVarArm32(idx: Integer); forward;{$endif}
 {$ifndef PXX_NO_ARM32}procedure EmitLoadVar64Arm32(idx: Integer); forward;{$endif}
@@ -8433,6 +8433,7 @@ begin
     Exit;
   end;
 {$endif}
+{$ifndef PXX_NO_AARCH64}
   if TargetArch = TARGET_AARCH64 then
   begin
     { Release local managed variables before returning (mirrors the arm32 arm
@@ -8606,6 +8607,7 @@ begin
     EmitI32($D65F03C0);  { ret }
     Exit;
   end;
+{$endif}
   if TargetArch = TARGET_XTENSA then
   begin
     { Release local managed strings before returning (ARC scope-exit DecRef).

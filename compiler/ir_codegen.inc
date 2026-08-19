@@ -633,7 +633,9 @@ procedure EmitSignalRuntimeForTarget;
 begin
   if NoSignals then Exit;
   if      TargetArch = TARGET_X86_64  then EmitSignalRuntime
+{$ifndef PXX_NO_AARCH64}
   else if TargetArch = TARGET_AARCH64 then EmitSignalRuntimeA64
+{$endif}
 {$ifndef PXX_NO_ARM32}
   else if TargetArch = TARGET_ARM32   then EmitSignalRuntimeArm32
 {$endif}
@@ -679,7 +681,9 @@ begin
 {$ifndef PXX_NO_I386}
   else if TargetArch = TARGET_I386    then EmitIoLockStubs386
 {$endif}
+{$ifndef PXX_NO_AARCH64}
   else if TargetArch = TARGET_AARCH64 then EmitIoLockStubsA64
+{$endif}
 {$ifndef PXX_NO_ARM32}
   else if TargetArch = TARGET_ARM32   then EmitIoLockStubsArm32;
 {$endif}
@@ -6942,11 +6946,13 @@ begin
     Exit;
   end;
 {$endif}
+{$ifndef PXX_NO_AARCH64}
   if TargetArch = TARGET_AARCH64 then
   begin
     IREmitMachineCodeAarch64;
     Exit;
   end;
+{$endif}
   if TargetArch = TARGET_RISCV32 then
   begin
     IREmitMachineCodeRISCV32;
@@ -7867,9 +7873,13 @@ begin
     land ahead of the body code. }
   PaScanCount := 0;   { per-body addr-taken verdict cache (regcall phase 3) }
   UnifiedResidencyAssign;
+{$ifndef PXX_NO_AARCH64}
   UnifiedResidencyAssignA64;
+{$endif}
   FloatPoolBoundaryAssign;
+{$ifndef PXX_NO_AARCH64}
   FloatPoolBoundaryAssignA64;
+{$endif}
   CalleeScratchAssign;
   { Last, because it MIRRORS the emitter's operand order and the residency
     passes above are what decide part of it: a resident sym is excluded, and

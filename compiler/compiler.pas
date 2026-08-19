@@ -94,7 +94,7 @@ procedure EmitAsmX64(const items: array of const); overload; forward;
 {$include asmtext.inc}
 {$ifndef PXX_NO_I386}{$include asmtext_386.inc}{$endif}
 {$include asmtext_rv32.inc}
-{$include asmtext_a64.inc}
+{$ifndef PXX_NO_AARCH64}{$include asmtext_a64.inc}{$endif}
 {$ifndef PXX_NO_ARM32}{$include asmtext_arm32.inc}{$endif}
 {$include asmtext_xtensa.inc}
 {$ifndef PXX_NO_CFRONT}procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;{$endif}
@@ -106,7 +106,7 @@ procedure AddDefaultCIncludeDirs; forward;   { the C unit pull in parser.inc nee
 function GetOrAllocSymRTTI(symIdx: Integer): Integer; forward;
 function GetOrAllocNodeDynDesc(node: Integer): Integer; forward;
 function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
-{$include ir_codegen_aarch64.inc}
+{$ifndef PXX_NO_AARCH64}{$include ir_codegen_aarch64.inc}{$endif}
 {$ifndef PXX_NO_I386}{$include ir_codegen386.inc}{$endif}
 {$ifndef PXX_NO_ARM32}{$include ir_codegen_arm32.inc}{$endif}
 {$include ir_codegen_riscv32.inc}
@@ -341,6 +341,9 @@ begin
     end
     else if option = '--target=aarch64' then
     begin
+{$ifdef PXX_NO_AARCH64}
+      Error('--target=aarch64: this compiler was built without the aarch64 backend (-dPXX_NO_AARCH64)');
+{$endif}
       TargetArch := TARGET_AARCH64;
       Inc(i);
     end

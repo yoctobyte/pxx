@@ -362,7 +362,9 @@ var noHoles: array[0..0] of Int64;
 begin
   noHoles[0] := 0;
   if TargetArch = TARGET_RISCV32 then AsmRv32ProcessLine(line, noHoles, 0)
+{$ifndef PXX_NO_AARCH64}
   else if TargetArch = TARGET_AARCH64 then AsmA64ProcessLine(line, noHoles, 0)
+{$endif}
 {$ifndef PXX_NO_ARM32}
   else if TargetArch = TARGET_ARM32 then AsmArm32ProcessLine(line, noHoles, 0)
 {$endif}
@@ -382,11 +384,13 @@ begin
     for k := 0 to AsmRvLblCount - 1 do
       if AsmRvLblName[k] = nm then begin off := AsmRvLblPos[k]; Result := True; end;
   end
+{$ifndef PXX_NO_AARCH64}
   else if TargetArch = TARGET_AARCH64 then
   begin
     for k := 0 to AsmA64LblCount - 1 do
       if AsmA64LblName[k] = nm then begin off := AsmA64LblPos[k]; Result := True; end;
   end
+{$endif}
 {$ifndef PXX_NO_ARM32}
   else if TargetArch = TARGET_ARM32 then
   begin
@@ -420,7 +424,9 @@ begin
 
   globalCount := 0;
   if TargetArch = TARGET_RISCV32 then AsmRv32BlockBegin
+{$ifndef PXX_NO_AARCH64}
   else if TargetArch = TARGET_AARCH64 then AsmA64BlockBegin
+{$endif}
 {$ifndef PXX_NO_ARM32}
   else if TargetArch = TARGET_ARM32 then AsmArm32BlockBegin
 {$endif}
@@ -513,7 +519,9 @@ begin
   end;
 
   if TargetArch = TARGET_RISCV32 then AsmRv32BlockResolve
+{$ifndef PXX_NO_AARCH64}
   else if TargetArch = TARGET_AARCH64 then AsmA64BlockResolve
+{$endif}
 {$ifndef PXX_NO_ARM32}
   else if TargetArch = TARGET_ARM32 then AsmArm32BlockResolve
 {$endif}
