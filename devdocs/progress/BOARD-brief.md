@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:16 blocked:5 backlog:236 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2034 rejected:38`
+`unfinished:17 blocked:5 backlog:236 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2034 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
-- `chore-a-sweep-the-unwired-tests-into-the-suite` [A] — owner: frankonpiler-an
+_none — no lane is locked._
 
-## unfinished (16) — parked mid-flight; re-claim, do not duplicate
+## unfinished (17) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults` [N]
@@ -19,6 +19,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `bug-p-cannot-call-directly-through-a-procedural-type-cast` [P]
+- `chore-a-sweep-the-unwired-tests-into-the-suite` [A]
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-own-language-first-symbol-resolution` [A] — blocked-by: bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
 - `feature-a-typeref-migrate-consumers` [A]

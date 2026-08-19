@@ -155,3 +155,19 @@ they cost sweep time:
 cannot build, so `fpc_diff_probe.sh` is not available as the oracle and each needs
 its adding commit read for what the right answer IS. That is the slower half and
 the one where step 4 (park rather than guess) will actually bite. Left claimed.
+
+
+## PARKED 2026-08-19 mid-sweep (frankonpiler-an)
+
+Batch 1 landed (`972162790`, 85 -> 61). Parking rather than holding the lock:
+switching to `feature-n-a-callable-value-carries-its-signature-type` (p88),
+which outranks this, and an idle worker sitting in `working/` misreports the
+claim.
+
+**Resumable with no re-derivation.** The remaining 61 (56 `.pas`, 5 `.c`) are the
+judgement half: mostly compiler-internal Pascal (`test_x64enc`, `test_asm_emit_*`,
+`test_pyeval_*`, `test_residency_*`) that FPC cannot build, so
+`fpc_diff_probe.sh` is NOT available as the oracle and each needs its adding
+commit read for what the right answer is. Expect step 4 (park the file, do not
+guess) to bite here in a way it never did in batch 1. Whoever resumes: the
+oracle-settled work is already done, so do not go looking for more of it.
