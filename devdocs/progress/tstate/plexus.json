@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T01:03:31Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "9cc61eee29c83dde8c53e74729b3cea57afa6c04",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T02:00:46Z",
    "fixed": [],
    "new_red": [],
@@ -419,6 +411,14 @@
     "test-core#src:test/test_stmt_call_result_selector_b318.pas"
    ],
    "sha": "a763032313063caaa4da3a0039d25959752c4b58",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-19T14:04:51Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "7364f6c5bdfe02f7c06bc2d48ff3dd1d45420a2a",
    "tier": "native",
    "verdict": "RED"
   }
@@ -5984,11 +5984,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-19T13:59:33Z",
-  "sha": "a763032313063caaa4da3a0039d25959752c4b58",
+  "date": "2026-08-19T14:04:51Z",
+  "sha": "7364f6c5bdfe02f7c06bc2d48ff3dd1d45420a2a",
   "tier": "native",
   "verdict": "RED",
-  "wall": 244.0
+  "wall": 232.6
  },
  "last_bench": {
   "conf_rows": 550,
