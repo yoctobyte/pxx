@@ -14,7 +14,7 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets | A | 55 | feature | Build-time selection of frontends and targets, so `only-pascal` + `only-esp-riscv` yields a small Pascal-for-ESP compiler instead of the megalith. The umbrella build stays the default. Filed with a measurement: C is nearly separable already (16 references in shared files), NilPy is NOT (1281) — so this doubles as a falsifiable test of the frontend-separation design, and NilPy already fails it. | — |
 
-## unfinished (17)
+## unfinished (15)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -26,8 +26,6 @@ _none_
 | bug-p-cannot-call-directly-through-a-procedural-type-cast | P | 35 | bug | `TFn(p)(args)` — calling straight through a procedural-type cast — is `unexpected token`, where FPC compiles and runs it. Assigning the cast to a variable first and calling that works, so the capability is present and only this spelling is refused. Hit twice while writing repros for the rtl-generics constant-initializer walls. | — |
 | chore-a-sweep-the-unwired-tests-into-the-suite | A | 55 | chore | DECIDED 2026-08-19: SWEEP the ~61 unwired test files into the suite — one job, not 61 tickets. Track A, not T, precisely because A can FIX a red in place; T would have had to file one per red. These are repro tests from fix commits that were never wired, so the bug already has a ticket in done/ — reference it, do not re-file. Never record current output as the expectation. | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
-| feature-a-own-language-first-symbol-resolution | A | 55 | feature | Own-language-first symbol resolution: the native language wins | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine |
-| feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-b-the-module-shim-batch-blocking-the-python-corpus | B | 62 | feature | RE-MEASURED on pinned v352: the batch this ticket was filed to attack no longer exists — six, warnings, codecs, colorsys, copy, bisect, xml.sax.*, urllib.parse, six.moves, urllib.request and xml.dom all shipped during 2026-08-18 and are gated by make lib-test. Eight missing-module files remain and none is a thin stdlib shim: xml.etree (4, now a Track U decision), genshi_core (2) and lxml (1) are third-party packages, weakref (1) is a runtime facility. The language walls are 32, with yield alone at 18 — Track N is the bottleneck for this ladder again. | decide-xml-etree-thin-tree-model-or-a-real-xml-library |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
@@ -36,7 +34,7 @@ _none_
 | feature-port-rtl-over-libc | A | 55 | feature | RTL-over-libc lowering mode — route runtime primitives through a system C library instead of raw syscalls | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect. | bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert |
 
-## blocked (5)
+## blocked (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -44,9 +42,10 @@ _none_
 | bug-n-a-subpackage-directory-does-not-resolve-as-a-module | N | 55 | bug | `from .inner import X` (RELATIVE) where `inner` is a subpackage directory fails with `no unit named inner`, while the absolute `from pkg.inner import X` works — so directory-as-module resolution exists and the relative form just hands the resolver a bare name instead of the package-qualified one. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung. | bug-a-a-python-module-s-identity-is-its-name-not-its-file |
 | bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module | N | 85 | bug | RE-SCOPED: not about import aliases. A name that names a `def` is resolved to that def at EVERY call site and any later rebinding is ignored — `def a…; def b…; b = a; b(1,5)` answers 18 (the original b) where CPython answers 5, with no import anywhere. The alias spelling is one way to rebind. Blocked: the correct destination is the dynamic call path, which cannot yet carry defaults (see the decision ticket). | decide-how-a-compiled-def-carries-its-signature-when-boxed |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
+| feature-a-own-language-first-symbol-resolution | A | 55 | feature | Own-language-first symbol resolution: the native language wins | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (239)
+## backlog (240)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -134,8 +133,9 @@ _none_
 | feature-a-operator-table-keyed-on-both-operands | A | 40 | feature | Implement the 2026-08-10 decision: key the operator-overload table on BOTH operand types. Until then `operator + (a: Double; b: TCx)` stays refused ('cannot determine operand type' / 'predefined for built-in operand types') where FPC accepts it. Relaxing only the guard would MISCOMPILE plain `3 * 5`. | — |
 | feature-a-promoint-variant-esp-targets | S | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
 | feature-a-rdrand-cpuid-compiler-builtins | A | 35→45 | feature | lib/rtl/random.pas cites `feature-rdrand-cpuid-compiler-builtins` in a source comment for its tier-1 hardware entropy path — and that ticket was never filed. Tiers 2 and 3 ship; tier 1 needs compiler intrinsics for CPUID + RDRAND (x86), MRS RNDR (aarch64) and the ESP RNG register, because the library's design mandate keeps per-arch instructions OUT of the .pas. | — |
-| feature-a-shrink-managed-header-on-32-bit | A | 25 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
+| feature-a-shrink-managed-header-on-32-bit | A | 15 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
 | feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit | A | 50 | feature | Strict flags currently exempt code by `CurrentUnitIdx < 0` — main program vs ANY unit — so `--strict-fpc` polices the one file that isn't FPC's and exempts Synapse entirely. The right axis is OURS vs THEIRS: our RTL is written in the pxx dialect and no command-line flag should re-judge it, while external units and the user's own program should be policed. Unblocks folding --strict-overload into the umbrella. | — |
+| feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise | B | 55 | feature | The ladder's three corpora are ONE FAMILY, not three samples — same domain, overlapping lineage, and tinycss2 literally imports webencodings. Two days of NilPy ranking rest on it. Measure an idiom-distant fourth corpus and report against the prediction: either the walls generalise, or some of what we rank at 70 is a webencodings-shaped preference. | — |
 | feature-b-a-real-minidom-is-an-implementation-not-a-shim | B | 15 | feature | Question 2 of the xml.dom row, re-filed on its own as that ticket said it should be. html5lib/treebuilders/dom.py wants a document you can build and mutate — ~25 DOM methods, getDOMImplementation().createDocument(), weakref.proxy(), and a reach into minidom's PRIVATE _child_node_types. That is a DOM implementation, not a compatibility alias. It unblocks exactly one corpus file and should be ranked as an implementation project, not alongside shims. | — |
@@ -624,6 +624,7 @@ _none_
 - [p 40] [D] docs-d-document-exec-eval-and-the-builtins-incompatibility
 - [p 40] [A] feature-a-operator-table-keyed-on-both-operands
 - [p 40] [S] feature-a-promoint-variant-esp-targets
+- [p 40] [A] feature-a-typeref-migrate-consumers
 - [p 40] [A] feature-c-package-namespace-decision
 - [p 40] [A] feature-cdecl-bodied-sysv-prologue
 - [p 40] [E] feature-demo-nilpy-ide
@@ -700,7 +701,6 @@ _none_
 - [p 25] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off
 - [p 25] [D] doc-n-fu-is-how-a-python-package-is-found
 - [p 25] [A] feature-a-extended-is-an-alias-for-double
-- [p 25] [A] feature-a-shrink-managed-header-on-32-bit
 - [p 25] [A] feature-n-a-quoted-from-import-reaches-another-language
 - [p 25] [N] feature-nilpy-a-genexpr-is-lazy-not-materialised
 - [p 25] [N] feature-nilpy-math-module-twelve-absent-names-measured
@@ -731,6 +731,7 @@ _none_
 - [p 20] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 15] [N] bug-nilpy-delattr-globals-and-locals-are-absent
 - [p 15] [A] compat-pascal-binop-operand-eval-order
+- [p 15] [A] feature-a-shrink-managed-header-on-32-bit
 - [p 15] [B] feature-b-a-real-minidom-is-an-implementation-not-a-shim
 - [p 15] [B] feature-lib-mimic-string-template
 - [p 15] [N] feature-nilpy-nested-def-as-value

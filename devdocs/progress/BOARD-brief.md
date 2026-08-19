@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:17 blocked:5 backlog:239 experimental:20 rainy-day:43 done-followup:3 decided:91 done:2077 rejected:40`
+`working:1 unfinished:15 blocked:6 backlog:240 experimental:20 rainy-day:43 done-followup:3 decided:91 done:2077 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A] — owner: frank3
 
-## unfinished (17) — parked mid-flight; re-claim, do not duplicate
+## unfinished (15) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name` [N]
@@ -21,8 +21,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-p-cannot-call-directly-through-a-procedural-type-cast` [P]
 - `chore-a-sweep-the-unwired-tests-into-the-suite` [A]
 - `docs-devnotes-ai-assisted-build` [D]
-- `feature-a-own-language-first-symbol-resolution` [A] — blocked-by: bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
-- `feature-a-typeref-migrate-consumers` [A]
 - `feature-b-the-module-shim-batch-blocking-the-python-corpus` [B] — blocked-by: decide-xml-etree-thin-tree-model-or-a-real-xml-library
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
@@ -31,15 +29,16 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-rtl-over-libc` [A]
 - `feature-real-dynlib-loader` [B] — blocked-by: bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
 
-## blocked (5) — has an unmet blocker; do not claim
+## blocked (6) — has an unmet blocker; do not claim
 
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `bug-n-a-subpackage-directory-does-not-resolve-as-a-module` [N] — blocked-by: bug-a-a-python-module-s-identity-is-its-name-not-its-file
 - `bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module` [N] — blocked-by: decide-how-a-compiled-def-carries-its-signature-when-boxed
 - `bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity` [N] — blocked-by: feature-b-tkhtmlview-in-nilpy
+- `feature-a-own-language-first-symbol-resolution` [A] — blocked-by: bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 224, ranked
+## Ready — top 30 of 225, ranked
 
 - `[p 70] [T]` regression-cascade-4e27dc2be114
 - `[p 66] [A]` refactor-a-one-signature-record-for-every-callable-carrier
@@ -72,4 +71,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 
-_194 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_195 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

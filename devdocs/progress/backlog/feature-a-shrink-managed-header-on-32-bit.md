@@ -1,11 +1,24 @@
 ---
 track: A
-prio: 25
+prio: 15
 type: feature
 summary: "On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits"
 ---
 
 # Shrink the managed-block header on 32-bit targets
+
+> **DE-RANKED 25 -> 15 on 2026-08-19: this ticket's deadline has passed, and was MET.**
+>
+> The entire argument for filing it early was *"if phase 2 spends the upper 32 bits this
+> becomes impossible."* Phase 2 (`feature-nilpy-text-string-kind`) is **done and obeyed the
+> constraint** — `builtinheap.pas:166` reserves bits 32-63, and line 210 stores the encoding
+> **enum** this ticket asked for rather than a codepage. So nothing can make it impossible
+> now.
+>
+> What remains is an optional ESP memory win with no urgency behind it. That is a genuine
+> change in how it should rank, in the direction of *lower* — recorded because a ticket
+> filed under a deadline keeps its urgency in the reader's mind long after the deadline is
+> gone. Found by frank2's feature triage.
 
 - **Type:** feature (memory) — **Track A**
 - **Design:** `devdocs/dev/managed-block-header.md`.
