@@ -8,6 +8,34 @@ summary: "A define that crosses unit boundaries is order-dependent BY CONSTRUCTI
 
 # What a cross-unit define is called, and what it means
 
+> **DECIDED by the user, 2026-08-19.**
+>
+> 1. **Name: `{$CLAIM}`.** `{$DEFINEGLOBAL}` is retired as a spelling — it named the wrong
+>    property. *"I think that's fair."*
+> 2. **Set-once, never cleared.** Not stated in as many words, but it follows directly from
+>    the semantics the user gave: *"if not defined, I define this and craft this code, and
+>    claim the directive, so no other unit will do."* A claim you can release is not a claim.
+>    **Flagged as DERIVED rather than quoted** — if the implementer finds a reason to want a
+>    release, that is a new question, not an implementation detail.
+> 3. **Scope: whole compilation.** Global, as recommended.
+> 4. **NOT retroactive.** *"Apart retro-actively applying, I think, not."* A unit already
+>    compiled does not see a later claim.
+>
+> **The rationale matters as much as the answers, because it settles what the
+> order-dependence IS.** The user: *"that's pretty much how C works. and the whole purpose of
+> this definition (was it already defined)."*
+>
+> So order-dependence is **not a defect to be documented around — it is the feature.** This is
+> the `#ifndef GUARD / #define GUARD` pattern: the first unit to arrive claims the name,
+> crafts its code, and every later unit sees the claim and stands down. The ticket worried
+> that order-dependence conflicts with
+> [[bug-p-uses-order-does-not-decide-which-unit-wins]], which worked to make resolution
+> deterministic. It does not conflict: that bug was about order deciding an outcome the
+> program **did not ask for**. `{$CLAIM}` is the program asking for it explicitly, at a
+> spelling that says so. **The name was the whole decision, exactly as the fork predicted.**
+>
+> Work re-filed into Track P — see below.
+
 **Split out of [[feature-p-defineglobal-a-define-that-crosses-unit-boundaries]] 2026-08-19,
 on frank2's triage recommendation.** That ticket is genuine work, but it is **blocked on
 judgement, not on engineering** — it carries four design questions and no way for an engineer

@@ -1,11 +1,29 @@
 ---
 track: P
-prio: 25
+prio: 40
 type: feature
 summary: "`{$DEFINEGLOBAL xyz}` — a conditional define that outlives the unit that sets it. Measured: pxx matches FPC today, a unit's {$DEFINE} does not reach the program, which is correct Pascal and is also why two units cannot coordinate. The motivating case is 'first implementation loaded claims the name, second skips itself' — the shape that would have dissolved the pylib/sysutils Exception problem."
 ---
 
 # `{$DEFINEGLOBAL xyz}` — a define that crosses unit boundaries
+
+> **UNBLOCKED 2026-08-19 — the decision landed. Build `{$CLAIM}`, not `{$DEFINEGLOBAL}`.**
+> See [[decide-a-cross-unit-define-name-and-semantics]] in `decided/` for the full rationale.
+>
+> - **`{$CLAIM}`** is the spelling. `{$DEFINEGLOBAL}` is retired.
+> - **Set-once, never cleared** (derived from the semantics, not quoted — see the decision).
+> - **Whole-compilation scope.**
+> - **Not retroactive**: a unit already compiled does not see a later claim.
+>
+> **Order-dependence is the FEATURE, not a wart to document around.** The user's framing:
+> this is how C works — `#ifndef GUARD / #define GUARD`. The first unit to arrive claims the
+> name and crafts its code; every later unit sees the claim and stands down. That is why the
+> tension with [[bug-p-uses-order-does-not-decide-which-unit-wins]] dissolves: that bug was
+> order deciding something the program did not ask for; this is the program asking, in a
+> spelling that says so.
+>
+> Restored to p40 (it had been de-ranked to 25 while blocked). The four design questions
+> below are ANSWERED — read the banner, not them.
 
 - **Type:** feature (dialect extension) — **Track P** (Pascal frontend; the
   implementation is in the shared `lexer.inc`, so it lands under Track A's
