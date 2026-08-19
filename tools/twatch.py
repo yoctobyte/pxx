@@ -3137,7 +3137,19 @@ def verify_pin(clone, host, st, ver, sha, tier, abort_check=None):
               "nothing, the pin stays unjudged", flush=True)
         return False
     verdict = report["verdict"]
-    reds = [j["name"] for j in report["jobs"]
+    # job_key, NOT j["name"]. `lib-test#117` is a positional index into the
+    # target's recipe, so it names a different file as soon as a test is
+    # inserted above it — and a pin is usually days behind HEAD, which is
+    # exactly the span in which the recipe moves. Measured 2026-08-17: of three
+    # reds recorded here, `lib-test#117` resolved to lib_tls13_keys.pas at the
+    # verified sha and to lib_tls.pas at HEAD, and nothing in the record said
+    # which to use. Two of the three could not be attributed AT ALL; the one
+    # that could, could only because it independently appears in
+    # open_regressions, where the stable selector IS stored.
+    # A red nobody can attribute is worse than a red nobody has read: it gets
+    # read, and it dispatches work — here, a hunt for a bad pin that was fine.
+    # (bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label)
+    reds = [job_key(j) for j in report["jobs"]
             if j["status"] not in ("pass", "skip")]
     st = load_state(clone, host)
     st["pin_verify"] = {"ver": ver, "sha": sha, "tier": tier,

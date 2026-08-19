@@ -87,14 +87,25 @@ mutate() {
 # agreeing "this hangs" is uninteresting), only a mismatched timeout is.
 RUN_TIMEOUT="${FUZZ_RUN_TIMEOUT:-5}"
 
+# stderr is captured to $4 and deliberately kept OUT of the comparison key.
+# On a crashing mutant the last line of stderr is not the program speaking, it
+# is whoever reaped it: `timeout` says "the monitored command dumped core",
+# qemu says "uncaught target signal 11". Folding that in made an identical
+# crash on all four targets report as three DIVERGENCEs — the strongest
+# available evidence of NO backend divergence, printed as its opposite — and it
+# fired on every crashing mutant, which a textual mutation set produces
+# constantly (bug-t-fuzz-sh-reports-an-identical-crash-as-a-divergence).
+# The header has always said this script "diffs stdout+exit code"; the `2>&1`
+# was the drift, not the contract.
 run_target_capture() {
-  local arch="$1" src="$2" outbin="$3"
+  local arch="$1" src="$2" outbin="$3" errf="$4"
+  : > "$errf"
   if [ "$arch" = "x86_64" ]; then
     "$PXX" -Fu"$ROOT/lib/rtl" "$src" "$outbin" >/dev/null 2>&1 || return 2
-    local out; out=$(timeout "$RUN_TIMEOUT" "$outbin" 2>&1); local code=$?
+    local out; out=$(timeout "$RUN_TIMEOUT" "$outbin" 2>"$errf"); local code=$?
   else
     "$PXX" -Fu"$ROOT/lib/rtl" --target="$arch" "$src" "$outbin" >/dev/null 2>&1 || return 2
-    local out; out=$(timeout "$RUN_TIMEOUT" "$ROOT/tools/run_target.sh" "$arch" "$outbin" 2>&1); local code=$?
+    local out; out=$(timeout "$RUN_TIMEOUT" "$ROOT/tools/run_target.sh" "$arch" "$outbin" 2>"$errf"); local code=$?
   fi
   if [ "$code" -eq 124 ]; then out="<TIMEOUT>"; fi
   printf 'EXIT:%d OUT:%s' "$code" "$out"
@@ -113,7 +124,8 @@ while :; do
   mutant="$SCRATCH/mutant_$TRIALS.pas"
   mutate "$ROOT/$seed" "$mutant"
 
-  native_res=$(run_target_capture x86_64 "$mutant" "$SCRATCH/m${TRIALS}_x86_64")
+  native_err="$SCRATCH/err_x86_64"
+  native_res=$(run_target_capture x86_64 "$mutant" "$SCRATCH/m${TRIALS}_x86_64" "$native_err")
   [ $? -eq 2 ] && continue   # mutant didn't even compile natively -- uninteresting, skip
   COMPILED=$(( COMPILED + 1 ))
   case "$native_res" in
@@ -122,7 +134,8 @@ while :; do
 
   bad=0
   for arch in i386 aarch64 arm32; do
-    res=$(run_target_capture "$arch" "$mutant" "$SCRATCH/m${TRIALS}_${arch}")
+    arch_err="$SCRATCH/err_${arch}"
+    res=$(run_target_capture "$arch" "$mutant" "$SCRATCH/m${TRIALS}_${arch}" "$arch_err")
     rc=$?
     if [ "$rc" -eq 2 ]; then
       continue   # cross-compile failed for this arch specifically -- log, not a divergence
@@ -137,6 +150,9 @@ while :; do
         echo "seed=$seed arch=$arch"
         echo "native: $native_res"
         echo "$arch: $res"
+        echo "--- stderr is NOT part of the comparison; shown for triage only"
+        echo "native stderr:"; tail -5 "$native_err" 2>/dev/null
+        echo "$arch stderr:";  tail -5 "$arch_err"   2>/dev/null
       } > "$FINDINGS_DIR/trial_${TRIALS}_${arch}.txt"
     fi
   done

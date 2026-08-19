@@ -4,6 +4,7 @@ prio: 30
 type: bug
 blocked-by: []
 summary: "`tools/fuzz.sh` compares the RUNNER's crash text along with the program's output, so a mutant that segfaults identically on all four targets is reported as three DIVERGENCEs — native says \"timeout: the monitored command dumped core\", qemu says \"uncaught target signal 11\". Same output, same exit code, different reporter."
+status: done
 ---
 
 # fuzz.sh reports an identical crash on every target as a divergence
@@ -60,3 +61,41 @@ Nothing — which is the useful half. 18 minutes of mutation + cross-target
 differential over the `test_cross_*` seed pool, against a compiler carrying
 that session's multi-dim array and pointer-stride changes, produced no real
 codegen divergence.
+
+## Fixed 2026-08-19 by Track T (plexus-T)
+
+Confirmed still live before touching it: `run_target_capture` captured with
+`2>&1` on both arms, so the reaper's words were in the comparison key.
+
+**The script's own header has always specified the right behaviour** — *"runs
+all four, and diffs stdout+exit code"*. The `2>&1` was drift from the documented
+contract, not a considered choice, which is why the fix needs no argument about
+what the key should be.
+
+- stderr is captured to a per-arch file and kept OUT of the key; the finding
+  write-up still carries it, explicitly labelled as triage-only.
+- The suggested extra treatment — skip a mutant that crashes on every target the
+  way a native `<TIMEOUT>` is skipped — was **deliberately not taken**. With
+  stdout-only comparison the uninteresting case already reports nothing, while a
+  native crash against a cross target that produces real output stays visible.
+  Skipping crashers wholesale would discard that, and it is a genuine divergence
+  shape.
+
+**Gate:** `tools/fuzz_compare_key_devtest.py` (new). It drives the real
+`fuzz.sh` against a fake ROOT — stub compiler, stub cross-runner, one seed — and
+asserts both halves:
+
+- identical stdout and exit, different reaper stderr → no divergence, nothing
+  saved;
+- genuinely different stdout → still reported, mutant still saved.
+
+The second is the one that matters: a false positive is trivial to "fix" by
+breaking detection. There is a third check for the same reason — the stub
+compiler counts its invocations, so a run that compiled nothing cannot pass the
+clean case vacuously.
+
+Verified the devtest FAILS on the unfixed script (3 checks) and passes on the
+fixed one.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.

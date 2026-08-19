@@ -408,6 +408,51 @@ were on a box simultaneously running a dev session's compiles and the watcher
 itself — so the property is "flaps under contention", and a harness that is part
 of the contention cannot measure it. One loaded day is a sample of one.
 
+## Triage rule: a FIXED PORT does not always fail as a hang — UDP answers wrongly
+
+The port-collision family (`bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable`,
+eleven files, fixed 2026-08-19) taught the obvious lesson: a hardcoded port plus
+an unchecked `bind` is a permanent hang under concurrency, and it surfaces as a
+testmgr TIMEOUT with a clean `ok:` compile line above it.
+
+**The UDP half of that family does not fail that way, and its failure is far more
+dangerous.** A UDP socket does not refuse a second binder the way a TCP listener
+does — it **splits the traffic**. Measured by Track B on two concurrent copies of
+the pre-fix `lib_dns_async`, both modes at once:
+
+| copy | outcome |
+| --- | --- |
+| 2 | exit 124, killed at 25s, zero output — the hang |
+| 1 | **exit 0, 17 `=ok`, 4 FAIL** — `chase-rcode`, `chase-count`, `chase-ip`, `cache-1query` |
+
+Copy 1 answered its neighbour's queries. So a port collision presented as **a
+regression in CNAME chasing and in the DNS cache — in the file whose entire
+subject is CNAME chasing and the DNS cache.** It arrives with a specific,
+plausible, and completely wrong diagnosis already attached, and it passes solo.
+
+For a differential harness that is worth more than the fix itself: **a red on a
+job that binds a fixed UDP port was never safe to read as a logic regression**,
+and nothing in the failure distinguishes it from one. The hang at least announces
+itself as a duration signal; this does not announce anything.
+
+Two corollaries worth keeping:
+
+- **"Hardcoded port" does not imply "can hang".** `lib_net6` keeps six fixed
+  ports (28850-28857) deliberately — it asserts the *sender's* port, so port 0
+  needs the read-back threaded through the assertions — but every bind is checked
+  and `Halt(1)`s with a named FAIL. Loud on failure, so it cannot contribute a
+  silent red. Audit for *unchecked* binds, not for literals.
+- **Port 0 is not always available as the fix.** The resolver falls back UDP→TCP
+  on the *same port number*, and the two protocols have separate port spaces, so
+  binding both to 0 independently yields two different numbers: the fallback
+  dials nothing and the test goes green **with its coverage silently removed**.
+  The UDP half binds 0 and publishes the number; the TCP half takes that number
+  in its own space.
+
+The general shape, and it is the one to carry: when a shared global is
+contended, ask what the loser of the race *does*, not only whether it stops.
+Stopping is the benign case.
+
 ## Triage rule: green on dev, red on the watcher ⇒ suspect HOST COUPLING first
 
 The boxes run different distros on purpose (dev Ubuntu 24.04, `xeon` 26.04,

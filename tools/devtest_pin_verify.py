@@ -203,6 +203,63 @@ def main():
     check(tw.judged_tiers(ch, "nosuchhost", head) == set(),
           "no run archive for a host -> empty, not a crash")
 
+    # ---- the recorded red list must survive a RENUMBERING -------------------
+    # `lib-test#117` is a positional index into the target's recipe, and a pin
+    # is usually days behind HEAD — exactly the span in which a test gets
+    # inserted and every #NN after it shifts. Measured 2026-08-17: of three reds
+    # recorded here, two resolved to a DIFFERENT file depending on which sha you
+    # resolved against, and nothing in the record said which to use.
+    # (bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label)
+    print("\nrecorded identity")
+    saved = (tw.run_gate, tw.set_phase, tw.clone_head_back, tw.regen_index)
+
+    def drive(jobs):
+        """verify_pin against a stubbed gate; returns the recorded red list."""
+        tw.run_gate = lambda *a, **k: ({"verdict": "RED", "wall": 1.0,
+                                        "jobs": jobs}, 0)
+        tw.set_phase = lambda *a, **k: None
+        tw.clone_head_back = lambda *a, **k: None
+        tw.regen_index = lambda *a, **k: None
+        tw.no_measurement = lambda r: False
+
+        class C:
+            path = clone_path
+            branch = "master"
+
+            def checkout(self, sha):
+                pass
+
+            def publish(self, msg):
+                pass
+
+            def remote_head(self):
+                return head
+        tw.verify_pin(C(), host, tw.load_state(C(), host), "v9", head, "full")
+        return tw.load_state(C(), host)["pin_verify"]["red"]
+
+    try:
+        # the SAME job, before and after a test is inserted above it: its
+        # positional name moves, its source does not.
+        before = drive([{"name": "lib-test#117", "sel": "lib-test#src:test/lib_tls13_keys.pas",
+                         "status": "fail"},
+                        {"name": "lib-test#36", "sel": "lib-test#src:test/crtl_exp2.c",
+                         "status": "pass"}])
+        after = drive([{"name": "lib-test#118", "sel": "lib-test#src:test/lib_tls13_keys.pas",
+                        "status": "fail"},
+                       {"name": "lib-test#37", "sel": "lib-test#src:test/crtl_exp2.c",
+                        "status": "pass"}])
+        check(before == after == ["lib-test#src:test/lib_tls13_keys.pas"],
+              "identity survives renumbering", "%s vs %s" % (before, after))
+        check(all("#src:" in r for r in before),
+              "the red names a SOURCE, so it resolves without knowing the sha")
+        # a report from an older testmgr has no "sel" — fall back, never crash
+        old_report = drive([{"name": "lib-test#117", "status": "fail"}])
+        check(old_report == ["lib-test#117"],
+              "a pre-`sel` report falls back to the positional name",
+              "bisect runs the CLONE's testmgr, at the commit under test")
+    finally:
+        tw.run_gate, tw.set_phase, tw.clone_head_back, tw.regen_index = saved
+
     print("\n%s" % ("FAILED: " + ", ".join(fails) if fails else "all pass"))
     return 1 if fails else 0
 
