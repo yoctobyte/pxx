@@ -3,7 +3,7 @@ track: T
 prio: 60
 type: bug
 blocked-by: []
-summary: "76 testable pushes in the four hours since the last full tier completed, median interval 1-4 minutes, against a ~4-minute native run — so the watcher never reaches idle and the full matrix has not run ONCE. Cross-target coverage is currently zero while every native verdict is green, and two agents are waiting on cross answers that cannot arrive. Pin verify has been preempted 33 times for the same reason."
+summary: "Zero full-tier runs on HEAD in the 5h13m between 9bfb7fcfac03 (10:31:57Z) and ~15:45Z, while cross-target coverage read as fine because every native verdict was green. RE-MEASURED: the watcher is idle 54% of that window (~2.8h, 8x what a full tier needs) — breadth is not starved by pushes, it is queued behind pin verify, which needs a contiguous 21 minutes, gets idle slices with a median of 299s, and discards 100% on every abort. Breadth ran within minutes of pin verify finally retiring. Fix is resumability plus bounding consecutive idle, NOT reserving a slot."
 ---
 
 # The push rate starves breadth coverage entirely
@@ -52,6 +52,77 @@ the greens as confirmation had it not been told otherwise.
 Pin verification is the second casualty and arguably the worse one: 33
 preemptions means `pinstatus` cannot name a freshly-verified pin, and the pin is
 what every other track builds against.
+
+## RE-MEASURED 2026-08-19 ~15:45Z — the headline held, the mechanism did not
+
+Re-measured at current HEAD rather than quoted, because the numbers above are
+five hours old. The window is the one that matters: from the last completed
+`full` tier to the next one starting.
+
+| | |
+| --- | --- |
+| last completed `full`-on-HEAD | `9bfb7fcfac03`, **10:31:57Z**, 1255.9s, GREEN |
+| next `full`-on-HEAD start | ~**15:45Z** — **5h 13m later** |
+| breadth starts in between | **0** |
+| pin-verify starts in between | **16** |
+| pin-verify *verdicts* in between | **1** (the last one, minutes ago) |
+| native runs | 37, mean **236s**, total **2.4h** |
+| aborted `full` runs | 13 — median **299s**, max **941s** |
+| wall clock discarded by those aborts | **1.4h** |
+| commits needing no gate (docs/tstate) | 18 |
+
+**The headline claim holds: zero breadth runs in five hours.** The stated
+mechanism above — *"the watcher is therefore never idle"* — is **wrong**, and
+the correction changes which fix is right.
+
+Native testing consumed 8740s of an 18900s window: the watcher was **idle 54%
+of the time, about 2.8 hours of it.** Idle capacity exceeded what one full tier
+needs (1256s) by roughly **8x**. Idle was never the scarce resource.
+
+What is scarce is a *contiguous* window, and breadth never gets one because it
+is not first in line for it:
+
+1. `pin_mid` (branch 2) sits **above** idle-depth-on-HEAD (branch 3) in the
+   ladder, deliberately — the pin is what B/C/D/E are building with right now.
+2. Under the shipped default `mid_tier == tier`, that branch asks for a **full**
+   tier on the pin: ~21 minutes.
+3. Idle arrives in slices — the 13 aborted runs have a **median of 299s** and a
+   max of 941s. A 21-minute job never fits, and every abort discards **100%** of
+   the work.
+4. So `pin_verify_due` never goes false, and **branch 3 is never reached.**
+   Breadth is not starved by pushes directly; it is queued behind an item that
+   cannot finish.
+
+The confirmation is clean: pin verify finally retired (one 20.5-minute window,
+`PIN v364 RED at full`) — and breadth started its first run in 5h13m **within
+minutes of that**, with the push rate unchanged.
+
+### What this does to the shapes below
+
+- **Shape 1 (reserve breadth a slot) is now the wrong fix.** It spends
+  fast-verdict latency to buy contiguity, when idle already supplies 8x the
+  capacity needed. It treats a scheduling-order problem as a capacity problem.
+- **Shape 2 (resumable) is the right one — and it must cover pin verify, not
+  just breadth.** A perfectly resumable breadth would still never run, because
+  branch 2 is ahead of it and unfinishable. Making *pin verify* resumable
+  retires it, and unblocks breadth as a side effect.
+- **New shape 4, cheaper than either: bound how much consecutive idle one
+  unfinishable phase may hold.** Alternate, or cap it, so breadth gets turns.
+  Costs fast-verdict latency exactly **nothing** — both phases are idle-only.
+  Alone it does not finish a 21-minute job in 5-minute slices; with shape 2 it
+  does.
+
+Recommendation: **2 + 4**, neither of which touches the fast verdict. Shape 1
+should be closed as measured-wrong rather than left open as an option.
+
+### Self-inflicted instance, recorded because it generalises
+
+`NOTEST_PREFIXES` is `("devdocs/", "docs/")`, so **`tools/**` is testable** —
+correctly, since testmgr changes can change results. The consequence is that
+**Track T's own tooling pushes preempt Track T's breadth run.** Pushing
+`8ec77190c` cost the in-flight breadth run its first ~200 jobs. Until shape 2
+lands, T tooling pushes should be batched, or held while a breadth run is in
+flight.
 
 ## Shape (T's call, not yet decided)
 
