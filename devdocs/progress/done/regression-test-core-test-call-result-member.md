@@ -31,3 +31,6 @@ pascal26:60: error: unexpected token
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-19 — auto-closed by the plexus watcher: `test-core#src:test/test_call_result_member.pas` passes at 71099dcb1104 (tier native); it was red at a76303231306. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
