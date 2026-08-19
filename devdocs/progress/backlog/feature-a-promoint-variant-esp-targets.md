@@ -52,3 +52,19 @@ feature, and likely much smaller than the error text suggests.
 (Recorded while assessing what genuinely blocks xtensa now that the user has
 made it the primary ESP target — see
 [[feature-xtensa-stack-args-over-6-words]].)
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363)
+
+**Genuine feature, still wanted — but the riscv32 half now fails DIFFERENTLY,
+so the ticket's quoted error is stale.** Re-measured by compiling
+`test/test_promoint.pas` with the pinned compiler:
+
+| target | ticket's error (2026-07-20) | v363 |
+| --- | --- | --- |
+| riscv32 | `write of this type not supported (hosted)` | `pascal26:1605: error: target riscv32: standard builtin calls not supported in bare-metal stage 1 (builtin id 999)` |
+| xtensa | `compiler error: __pxx_d2i not found (uses softfloat?)` | unchanged |
+
+The riscv32 wall has moved from the Variant *write* path to a builtin-call
+restriction, which is a different diagnosis from the one the ticket carries;
+re-diagnose before estimating it. The xtensa half stands exactly as the
+2026-08-02 note describes it — a unit-inclusion gap, not a missing helper.

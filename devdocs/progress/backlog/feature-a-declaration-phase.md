@@ -20,3 +20,12 @@ NilPy does.
 
 Pairs with [[feature-n-nilpy-ast-based-typing]]; doing that one first may
 subsume part of this.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363)
+
+**Genuine feature, still wanted — internal, no user-visible symptom.** The
+bolted-on `PyRegisterClassFieldsPrepass` this ticket calls "a patch, not the
+fix" is still in `compiler/pyparser.inc` and still load-bearing (three sites
+reference it, one of them documenting the dependency explicitly), so nothing
+here landed incidentally. Not a mis-typed bug: it describes an ordering
+hazard inside the compiler, not a program that misbehaves.

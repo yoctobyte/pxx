@@ -29,3 +29,18 @@ xmm0 and rax both set).
 Gate: cd8/cd11/cd12-style tests (8 int args, mixed float/int order, C-side
 callback via crtl calling a @PascalProc with double params) + make test +
 self-host byte-identical.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363)
+
+**Genuine feature, still wanted — unchanged, verified by compiling.**
+
+- `p := @MyCb` where `MyCb(a: Double; b: Integer): Integer; cdecl` still stops
+  at the loud AN_ASSIGN reject: *"a Pascal-bodied proc with a by-value float
+  parameter is not SysV-callable yet"*. The guard is intact, so the unsound
+  overlap is still closed rather than silently wrong.
+- A bodied 8-integer-argument `cdecl` function called directly from Pascal
+  compiles and prints the right answer (36), i.e. the internal convention
+  still agrees with itself. That is the ticket's stated state, unchanged.
+
+Not a bug under the mandate's test: nothing produces a wrong value and the
+unsupported shape is refused at compile time with a reason.
