@@ -2,7 +2,7 @@
 summary: "`(-8) ** (1/3)` answers a complex now, but its imaginary part is 5 ulp low: pylib cannot `uses math`, so complex pow rides hand-rolled sqrt/sin/cos beside PyMathLn/PyMathExp. Every other line of the complex oracle matches CPython exactly."
 type: bug
 prio: 20
-track: B
+track: B+F
 blocked-by: []
 ---
 

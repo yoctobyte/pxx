@@ -1,4 +1,5 @@
 ---
+track: O+F
 summary: "float kernels: -O3 now 1.97x vs FPC (was 4.2x); residual = the rax value model — multi-session xmm-resident rewrite"
 type: feature
 prio: 20  # user 2026-07-19: general code speed over float — parked lower

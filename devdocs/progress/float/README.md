@@ -1,4 +1,4 @@
-# `float/` — the float scope. Low prio, by definition.
+# `float/` — **Track F**. Low prio, by definition.
 
 Owner, 2026-08-19, after stating it three times already and being argued with twice:
 
@@ -10,7 +10,11 @@ Owner, 2026-08-19, after stating it three times already and being argued with tw
 
 > *"it are cherries on the cake."*
 
-**This folder is a scope, not a track letter.** `devdocs/dev/parallel-tracks.md` resists new
+**This folder is Track F's parking space.** The letter was assigned by the owner on
+2026-08-19 — *"track F is assigned to floating point. that's a clear marker and clean
+instruction"* — after the rule had been stated four times without a marker to carry it.
+
+**F is a work-tag, not a file-lane** — the same shape as O, E, S and M. `devdocs/dev/parallel-tracks.md` resists new
 letters and the rule holds: float accuracy is a *kind of work over existing files*, not a new
 place code lives. Every ticket here keeps its own `track:` for file ownership and its own gate.
 What the folder changes is **visibility**: `tools/progress.sh ready` and `next` scan only
@@ -21,16 +25,20 @@ in front of the owner.
 
 ## What belongs here
 
-Ulps, last-digit rounding, output formatting policy, subnormals, edge-of-range behaviour,
-correctly-rounded-vs-fast tiers, FPC/CPython numeric parity, and **performance work whose
-subject is float**. Including the standing policy question — it is parked with the rest, at the
+**Float math and float formatting alike** — owner, same day: *"this implies both floating
+point math and formatting issues."* So: ulps, rounding, subnormals, edge-of-range,
+correctly-rounded-vs-fast tiers, FPC/CPython numeric parity, the precision of a float TYPE —
+and the entire rendering side: `Write`/`Writeln` of a real, `FloatToStr`/`Str`, digit counts,
+exponent form, width and decimals. Plus **performance work whose subject is float**.
+
+The `WriteFloat` cluster worked on 2026-08-19 would have been F from end to end, including
+the bad pin it produced. That cluster is the drain this letter exists to stop. Including the standing policy question — it is parked with the rest, at the
 owner's explicit instruction, rather than kept visible as an exception.
 
 ## What does NOT belong here — rank the mechanism, never the datatype
 
 A ticket does not become float work by containing a `Double`. These stay in the active backlog:
 
-- a wrong value at scale, a saturation, a truncation (`writeln fixed saturates at Int64`)
 - a crash, a segfault, a hang
 - a wrong signature, or any control-flow bug that merely lives in float code
 - a **missing** function a working CPython/FPC program calls — that is a frontend/RTL gap
@@ -40,6 +48,12 @@ Left in `backlog/` deliberately, and named so the next person does not re-park t
 `feature-opt-inline-float-and-record-returning-leaves` (an inliner pass that also covers
 records), `feature-nilpy-math-module-twelve-absent-names-measured` (absent names, not
 inaccurate ones).
+
+**The line moved when the owner broadened F to formatting.** A badly *rendered* float is F
+even when the rendering is grossly wrong — a saturation or a truncation in a writer included —
+because the subject is rendering. What is never F is a defect whose subject is the MECHANISM
+and whose float content is incidental: the writer called with the wrong number of arguments
+was a signature bug that happened to live in float code, and it would still rank normally.
 
 **Closest call parked anyway:** `bug-a-riscv32-softfloat-has-no-subnormals` — absent subnormals
 is a range failure rather than a last-digit one. Un-park it only if something real meets it.

@@ -37,7 +37,8 @@ gate each must stay green** — it is NOT an ontology of the codebase. So:
   core, **B** libs/demos, **C/N/P/R/Z** frontends — these answer "who owns this
   file when two agents run at once." **Work-tags** (human grouping, compose
   freely, each *inherits* a file-lane): **O** optimization (owned by A), **E**
-  examples/apps (owned by B), **S** eSpressif/SoC (owned by A+B), **T**
+  examples/apps (owned by B), **F** floating point (owned by whoever owns the
+  file), **S** eSpressif/SoC (owned by A+B), **T**
   testing, **D** docs, **X** experimental. A
   tag is not a new file-lane — "Track O" work still lands under A's gate, "Track
   E" under B's. So pick a new letter on the right axis: a new *place code lives* →
@@ -181,6 +182,34 @@ frontend)"). **At session start, infer your track from the request:**
   target fits without renaming. `*-esp-*` / `*-xtensa-*` slugs auto-tag S.
   Works on `master`.
 
+- **Track F — floating point (a work-tag, owned by whoever owns the file).** The
+  owner assigned this letter on 2026-08-19, after stating the rule four times:
+  **float accuracy is LOW PRIO by definition.** *"compiler syntax, segfaults, etc,
+  all prio. floating point, especially when 'mostly ok' (apart performance or
+  insignificant digits), very low prio."* Same shape as O/S/M — **not a file-lane**:
+  an F ticket ALSO carries its A/B/C/N/P file ownership for collision rules and obeys
+  THAT lane's gate, so `track: B+F`, `track: P+F`, `track: A+F` are the normal
+  spellings, and `ready --track B` and `ready --track F` both match them.
+  **What is F — float MATH and float FORMATTING alike** (owner, same day: *"this
+  implies both floating point math and formatting issues"*): ulps, rounding,
+  subnormals, edge-of-range, correctly-rounded-vs-fast tiers, FPC/CPython numeric
+  parity, precision of a float TYPE — and the whole rendering side, `Write`/`Writeln`
+  of a real, `FloatToStr`/`Str`, digit counts, exponent form, and any *performance*
+  work whose subject is float. Today's `WriteFloat` cluster would have been F end to
+  end; it is the exact drain the letter exists to stop.
+  **What is NOT F — rank the mechanism, never the datatype.** A ticket does not
+  become F by containing a `Double`. A crash, a hang, a wrong signature, a
+  control-flow or codegen bug that merely lives in float code, or a **missing**
+  function a working CPython/FPC program calls — all stay ordinary bugs in their own
+  lane at their own prio. Note the line moved once the owner broadened F to
+  formatting: a badly RENDERED float is F even when the rendering is grossly wrong,
+  because rendering is the subject. What is never F is a defect whose subject is the
+  MECHANISM and whose float content is incidental. Mis-tagging in the F direction is how a
+  real bug disappears, so when it is a close call it is NOT F.
+  **Parking:** F tickets live in `devdocs/progress/float/`, which `ready`/`next`
+  never scan (they read only `urgent`/`working`/`unfinished`/`backlog`). Nothing
+  there is ranked or dispatched; it is picked up on explicit request, or for fun.
+  Charter and the escape rule: `devdocs/progress/float/README.md`.
 - **Track Z — Zig frontend (zfront).** The Zig-language frontend, greenfield:
   future `compiler/zlexer.inc`, `zparser.inc`, Zig-exclusive Zig→IR lowering,
   `lib/zrtl`, Zig tests. **Works on `master`**, under the same pin boundary as C.
@@ -249,7 +278,8 @@ frontend)"). **At session start, infer your track from the request:**
 
 If genuinely ambiguous, **ask: "Track A (core), B (libraries/demos), C (C
 frontend), D (docs; the website itself is W), N (Nil-Python frontend), P (Pascal frontend), R (Rust
-frontend), or Z (Zig frontend)?"** — don't guess; the tracks have opposite rules
+frontend), or Z (Zig frontend)?"** — and if it is float accuracy it is **F** on
+top of whichever of those owns the file. Don't guess; the tracks have opposite rules
 about rebuilding the compiler and where they work. (And remember one agent may legitimately hold
 several at once.) And whenever the fork is *what to build/decide* rather than
 *which lane owns it*, that's **Track U** — file `decide-*`, don't guess.
@@ -411,6 +441,17 @@ or B per ticket and gated by that lane. ESP is not a Unix: 33 PAL entries are
 unsupported even under IDF, so POSIX-shaped code meets `PAL_ERR_UNSUPPORTED`
 rather than a wrong answer, and that failure mode is deliberate. Primary target
 is **xtensa** (the user's S2/S3 hardware); riscv32 (C3) is what works today.
+
+### Track F in one line
+Floating point = **low prio by definition** (owner, stated four times). A work-tag,
+not a file-lane: carry the owning lane too (`B+F`, `P+F`, `A+F`) and obey that
+lane's gate. F = float MATH and float FORMATTING both: ulps, rounding,
+subnormals, edge-of-range, fast-vs-exact tiers, type precision, and the rendering
+side — Write/Writeln of a real, FloatToStr/Str, digit counts, exponent form — plus
+float-subject perf. **NOT F** = a crash, a hang, a wrong signature, a control-flow
+bug that merely lives in float code, or a missing function a working program calls.
+Rank the mechanism, never the datatype. Tickets park
+in `devdocs/progress/float/`, invisible to `ready`/`next`; picked up on request only.
 
 ### Track Z in one line
 Own the Zig-frontend files (`zlexer` / `zparser`, Zig→IR lowering, `lib/zrtl`,

@@ -1,5 +1,5 @@
 ---
-track: A
+track: A+F
 prio: 30
 type: compat
 blocked-by: []

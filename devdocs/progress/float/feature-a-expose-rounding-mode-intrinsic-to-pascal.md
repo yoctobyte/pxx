@@ -1,5 +1,5 @@
 ---
-track: A
+track: A+F
 prio: 30
 type: feature
 summary: "__pxx_fesetround/__pxx_fegetround exist and flip MXCSR, but only the C frontend can reach them, and off x86-64 they are an accepted no-op returning 0 — so Pascal cannot get a SetRoundMode that actually sets the mode"

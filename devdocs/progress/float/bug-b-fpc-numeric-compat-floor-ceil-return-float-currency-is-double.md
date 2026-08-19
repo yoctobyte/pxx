@@ -1,5 +1,5 @@
 ---
-track: B
+track: B+F
 prio: 25
 type: bug
 blocked-by: idea-cobol-frontend-feasibility-costing

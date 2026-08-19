@@ -2,7 +2,7 @@
 summary: "NilPy's `**` with a fractional exponent still uses exp(y*ln(x)), so 2**0.5 != math.sqrt(2); lib/rtl/math.pas's Power was fixed with a double-double kernel for exactly these cases and names 2^0.5 in its own comment"
 type: bug
 prio: 20
-track: B
+track: B+F
 ---
 
 # `2 ** 0.5` is a ulp off — and the RTL already fixed this exact case

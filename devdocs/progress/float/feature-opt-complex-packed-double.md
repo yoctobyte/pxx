@@ -1,4 +1,5 @@
 ---
+track: O+F
 prio: 35  # Track O — SIMD win for complex arithmetic, isolated (a type + a few lowerings)
 type: feature
 ---

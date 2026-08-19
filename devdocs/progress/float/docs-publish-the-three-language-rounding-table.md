@@ -1,5 +1,5 @@
 ---
-track: D
+track: D+F
 prio: 30
 type: docs
 summary: "One backend implements three different, correct rounding rules — Pascal ties-to-even, C half-away-from-zero, Python ties-to-even on the exact decimal — each verified against fpc/gcc/CPython. That is a differentiator and it is documented nowhere; it currently lives only inside a Track B ticket"
