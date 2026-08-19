@@ -21,6 +21,13 @@ below it, and the ladder restarts for the new sha):
   5. PIN, deep tier  -> platform breadth on the PIN
   6. opt / bench / bisect / fuzz                 in that order
 
+"Higher priority" here means it gets the slot FIRST, not that it gets every
+slot: after IDLE_YIELD_AFTER consecutive preemptions on one target, a phase
+yields a single turn to the phase below it. Without that, a phase too long to
+finish in the slices it is offered holds the slot permanently and everything
+under it is unreachable rather than merely slower — measured 2026-08-19, when
+step 4 did not run once in 5h13m while the box sat idle 54% of the time.
+
 Steps 2 and 5 exist because the pin is NOT reachable by deepening HEAD: a pin
 is whatever HEAD happened to be when a human ran `make pin`, so by the time the
 ladder climbs, the pin is history. Measured 2026-08-11: 18 of the last 25 pins
@@ -3228,6 +3235,55 @@ def judged_tiers(clone, host, sha):
     return got
 
 
+# How many times one idle phase may be preempted on the SAME target before the
+# idle slot passes to the phase BELOW it for a single turn.
+#
+# Shape 4 of bug-t-the-push-rate-starves-breadth-coverage-entirely. Measured
+# 2026-08-19: platform breadth on HEAD did not run ONCE in 5h13m, while the
+# watcher was idle 54% of that window. It was not starved of idle -- it was
+# queued behind pin verify, which outranks it deliberately, wants ~21 contiguous
+# minutes, got idle slices with a median of 299s, and discards 100% on every
+# abort. `pin_verify_due` therefore never went false and the branch below it was
+# never reached. An unfinishable phase must not be able to hold the slot
+# forever, or every phase under it is unreachable rather than merely slow.
+#
+# 3, not 1: pin verify outranks breadth for a real reason -- it is the binary
+# B/C/D/E are building with RIGHT NOW, where HEAD is a sha nobody has adopted.
+# Yielding every other turn would invert that. This yields roughly one slot in
+# four and only after the phase has proven it cannot use them.
+IDLE_YIELD_AFTER = 3
+
+
+def idle_aborts(st, phase, target):
+    """Consecutive preemptions of `phase` against `target`, 0 if either moved.
+
+    Keyed on the target too, so a NEW pin starts with a full budget rather than
+    inheriting the previous pin's exhaustion -- a fresh pin is fresh work and
+    has not yet failed to use anything.
+    """
+    y = st.get("idle_yield") or {}
+    if y.get("phase") != phase or y.get("target") != target:
+        return 0
+    return int(y.get("aborts") or 0)
+
+
+def note_idle_abort(clone, host, phase, target):
+    st = load_state(clone, host)
+    n = idle_aborts(st, phase, target) + 1
+    st["idle_yield"] = {"phase": phase, "target": target, "aborts": n}
+    save_state(clone, host, st)
+    return n
+
+
+def clear_idle_yield(clone, host):
+    """Spend the yield. It buys ONE turn, not a handover: without this the
+    phase that yielded would stay locked out for as long as the counter stood,
+    which is the same bug pointed the other way."""
+    st = load_state(clone, host)
+    if st.pop("idle_yield", None) is not None:
+        save_state(clone, host, st)
+
+
 def pin_verify_due(clone, host, st, tiers):
     """(ver, sha, tier) for the first of `tiers` the current pin still lacks.
 
@@ -4362,13 +4418,32 @@ def main():
                     # branch escalates to the full tier, which is the worst
                     # possible answer to "something else is already running".
                     did_work = r != "busy"
-            elif pin_mid:
+            elif pin_mid and idle_aborts(st, "pin-verify",
+                                          pin_mid[1]) < IDLE_YIELD_AFTER:
                 # AHEAD of idle depth on HEAD, and deliberately so: this is the
                 # binary Tracks B/C/D/E are building with *right now*, whereas
                 # HEAD is a sha nobody has adopted yet. Native depth only here —
                 # platform breadth on the pin is ordinary work and waits below.
-                verify_pin(clone, host, st, *pin_mid,
-                           abort_check=make_preempted(clone, tested))
+                #
+                # The guard is shape 4 (IDLE_YIELD_AFTER): "ahead of" must not
+                # mean "instead of". A phase that cannot finish in the slices it
+                # gets would otherwise hold this slot forever and make every
+                # branch below it unreachable, which is exactly what happened
+                # for 5h13m on 2026-08-19.
+                r = verify_pin(clone, host, st, *pin_mid,
+                               abort_check=make_preempted(clone, tested))
+                if r == "aborted":
+                    n = note_idle_abort(clone, host, "pin-verify", pin_mid[1])
+                    if n >= IDLE_YIELD_AFTER:
+                        print("twatch: pin verify preempted %d times running on "
+                              "%s — yielding the next idle slot to platform "
+                              "breadth, which is unreachable behind it" %
+                              (n, pin_mid[1][:12]), flush=True)
+                else:
+                    # Any outcome that is not a preemption means the phase used
+                    # its slot — including "no usable verdict". The counter is
+                    # about monopolising idle, not about succeeding.
+                    clear_idle_yield(clone, host)
                 did_work = True
             elif tested and fast and \
                     idle_phase(st, tested, args.mid_tier, args.tier):
@@ -4377,6 +4452,17 @@ def main():
                 # preempts either; the run is SIGINTed and discarded, no
                 # verdict recorded, and the ladder restarts for the new sha.
                 nxt = idle_phase(st, tested, args.mid_tier, args.tier)
+                # Spend the yield BEFORE the run, not after: this branch is
+                # reached either normally or because pin verify yielded, and in
+                # the second case the run below is very likely to be preempted
+                # too. Clearing afterwards would leave the yield standing
+                # through an abort and hand breadth the next slot as well,
+                # turning a one-turn loan into the inversion it exists to avoid.
+                if pin_mid:
+                    print("twatch: taking the yielded idle slot for %s on %s — "
+                          "pin verify keeps its priority from the next cycle"
+                          % (nxt, tested[:12]), flush=True)
+                    clear_idle_yield(clone, host)
                 r = test_sha(clone, host, st, tested, nxt,
                              full=True, abort_check=make_preempted(clone, tested))
                 did_work = r != "busy"      # see the note above: never spin
