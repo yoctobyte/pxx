@@ -292,3 +292,48 @@ mechanism `VT_CLASSREF_TAG` already uses — see `CLASSREF_DATAREF_BASE` and its
 `-(BASE + ci)` sentinel convention. A `PYSIG_DATAREF_BASE` follows that pattern;
 note the comment at `TYPEINFO_REQ_DATAREF_BASE` that the MOST negative base must
 be tested FIRST in the fixup branch chain, or a later branch swallows it.
+
+
+## Increment 2b findings (researched, not cut) — read before writing it
+
+### Trailing-defaults means NO has-default bitmask is needed
+
+Python requires defaults to be trailing, and NilPy matches —
+`ProcParamHasDefault`'s own comment says *"Trailing params only."* So `ReqN` and
+`TotN` fully determine which parameters have defaults: exactly the slots in
+`[ReqN, TotN)`. Do not add a mask field; the two counts already carry it.
+
+### ...which also means you CANNOT stage this by leaving slots empty
+
+There is no `VT_NONE`. None rides `VT_EMPTY` (tag 0), which is also
+*"unassigned slot"* (`defs.inc:661`). So an unpopulated array slot is
+indistinguishable from a legitimate `def g(x, lo=None)`, and the tempting
+staging plan — bake the easy kinds, leave the rest zero, let the dispatcher
+fall back — is NOT available. **Every slot in `[ReqN, TotN)` must be correctly
+populated before the dispatcher reads the array.** A half-populated array is a
+silent wrong-value bug, which is this repo's expensive failure class.
+
+### Consequence: 2b needs BOTH paths, and they are different mechanisms
+
+| default kind | how | where |
+| --- | --- | --- |
+| int / float / bool / None | **bake at emit time** — the slot is a 16-byte `{VType, Payload}`: `VT_INT64`+value, `VT_DOUBLE`+IEEE bits (`ProcParamDefaultVal` already holds the bits), `VT_BOOL`+0/1, `VT_EMPTY` for None | `EmitPySignatures`, pure `PatchDataU64`, no runtime code |
+| string | **def-time store** — `VT_STRING`'s payload is a MANAGED AnsiString ref; baking a static pointer into a managed slot is how refcount corruption starts | the def-init queue |
+| non-constant (`lo=[]`) | **def-time store** — must evaluate once, where the `def` stands | the def-init queue |
+
+The def-time half has its mechanism ready: `PyQueueDefInit` (pyparser.inc:688)
+already queues `$pdef.<proc>.<param> := <expr>` statements at def time for
+non-constant defaults, and `GenMakeVariantAt` (parser.inc) is the ARC-correct
+"store a variant at ptr+offset" shape — the generator work used it for exactly
+this kind of store. The address to store through comes from the 2a sentinel:
+`AN_SET_CONST_REF` with `ASTIVal = -(PYSIG_DATAREF_BASE + procIdx)`, then load
+the defaults pointer at `+PYSIG_OFF_DFLTS` and index by `k * 16`.
+
+### Layout note
+
+Keeping the defaults POINTER at +32 rather than inlining the array after the
+fixed fields costs one indirection and keeps `PYSIG_SIZE` fixed. Inlining would
+remove the field and the `AddDataPtrFix`, at the price of a variable-length
+record. Nothing needs an ARRAY of these records (each is reached by address), so
+inlining is defensible — but the pointer form is what is emitted and
+byte-verified today, so changing it is churn without a reason.
