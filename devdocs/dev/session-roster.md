@@ -4095,3 +4095,33 @@ A reader who takes the line after the colon gets the wrong subject **and the for
 the FAIL line offers nothing, so the nearest line is adopted. Worth T's attention: a FAIL with no
 message is what turned one relay into a wasted pass. The discipline (quote the FAIL line) stands;
 so does "and if it is empty, say so rather than substituting the next line".
+
+### The empty FAIL line is fixed structurally, not case by case (T, `4d6e626cb`)
+
+`tools/devtest_report.py:fail_detail(exc)` — an author's message wins; with none it reports
+`<file>:<line>: <the assert's own source>` from the **deepest** traceback frame (the assert, not
+the runner that caught it), prefixed "with no message" so the line states what it is instead of
+implying a reason. Wired into all six runners that printed a raw exception; all six green.
+
+    FAIL changed-hardware-…: AssertionError with no message —
+    twatch_host_epoch_devtest.py:120: assert twatch.record_host_epoch(clone, "xeon") is True
+
+**The design argument is the transferable part: a hand-written assert message can drift from the
+assert it describes; the assert's own source text cannot.** That is why this went in as a shared
+renderer rather than as a message written onto the one failing case.
+
+**And the guard is end-to-end, with its non-vacuity proven by removal.** `devtest_report_devtest.py`
+breaks the real changed-hardware case in a scratch copy, runs the harness as a subprocess, reads the
+FAIL line back, and asserts it carries the assert **and does not contain "hardware fingerprint
+changed"** — so the exact substitution my relay was forced into is now a red check. Neutering
+`fail_detail` to `str(exc)` turns 6 of 12 red, every end-to-end one among them. Same discipline as
+verify-by-removal on the alias fix: a guard nobody has seen fail is not yet a guard.
+
+**T's own correction, worth keeping because it is the harder kind:** it called the retired-host
+mechanism "ruled out by measurement", then noted it was never in contention for a reason readable in
+the case's first six lines — the case builds a fresh temp tree per run, so no stored fingerprint is
+reachable. Ruled out by measurement after spending a pass, where reading would have done it before.
+Right answer, more expensive method than needed, said out loud.
+
+Pushed and green tonight from T: `93db54159`, `f5cba8ad3`, `6edac13fd` and parent, `4d6e626cb`.
+Watcher is mid-tier and deliberately not starting a contending sweep.
