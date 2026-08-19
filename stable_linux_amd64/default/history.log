@@ -361,3 +361,4 @@
 2026-08-19T13:39:14Z  v361  d9abbb3161243bd0795ca7b065859b0623242935109fd995d81f4f7d3702b647  7ecde51d45774da45279f4fc36f1b469ee99ea77  docs(progress): record the shas the resolves landed as
 2026-08-19T13:56:10Z  v362  7cc1bfb591c698caf5268febb927b52ca5d93e783bab2a9e77dd26c002fea96a  b8099c676b0d49cf050bcb7fa3834a398a3ca581  ticket(P)+rerank: uses..in filed low, NilPy import raised to 78 (user: urgent)
 2026-08-19T14:09:58Z  v363  9603dc251fa266071f8a5182b413ead34c75bea7a756600fac97563de71bb6d0  7dabdd40ea41c39eef9d856589726fc49310cace  plan(A): record the measured plan for the NilPy bare-import rule
+2026-08-19T14:40:21Z  v364  f1806251f22592f0c63b785b1ac5bee07b4c9f1bc503b526e86c1ce22238a0f2  4e27dc2be11471f92064756e17d426617d0d284b  triage(A/P): re-type Initialize/Finalize as a bug (measured vs FPC); read-into-Char stands
