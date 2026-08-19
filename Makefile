@@ -836,6 +836,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_isnumtitle26 | diff -u test/test_nilpy_str_isnumeric_istitle.expected -
 	./$(COMPILER) test/test_nilpy_str_line_continuation.npy $(TESTTMP)/test_nilpy_linecont26
 	$(TESTTMP)/test_nilpy_linecont26 | diff -u test/test_nilpy_str_line_continuation.expected -
+	./$(COMPILER) test/test_nilpy_user_class_keys_items_values.npy $(TESTTMP)/test_nilpy_ukiv26
+	$(TESTTMP)/test_nilpy_ukiv26 | diff -u test/test_nilpy_user_class_keys_items_values.expected -
 	# RELATIVE imports (`from .mod import x`, `from . import mod`). The sibling
 	# helper modules resolve relative to the SOURCE file, so this needs no `cd`
 	# and is an ordinary one-line recipe like every other test here. CPython

@@ -14244,21 +14244,27 @@ begin
     class declaring `values`, and the call fell through to the pyeval dynamic
     dispatch, which has no TPyDict branch and jumped through a nil host-call
     slot. See bug-nilpy-dict-values-on-variant-receiver. }
-  if (mname = 'values') and (FindUClass('TPyDict') >= 0) then
-  begin
-    Result := PyParseVariantMethod(baseNode, 'vallist');
-    Exit;
-  end;
-  if (mname = 'keys') and (FindUClass('TPyDict') >= 0) then
-  begin
-    Result := PyParseVariantMethod(baseNode, 'keylist');
-    Exit;
-  end;
-  if (mname = 'items') and (FindUClass('TPyDict') >= 0) then
-  begin
-    Result := PyParseVariantMethod(baseNode, 'itemlist');
-    Exit;
-  end;
+  { NO early return for items/keys/values any more. These three used to jump
+    straight to pylib's itemlist/keylist/vallist whenever TPyDict existed --
+    which is ALWAYS, since pylib is always loaded -- so a USER class's own
+    `keys()` was hijacked and the call ran TPyDict.keylist over an instance that
+    was not a dict. It segfaulted before printing anything
+    (bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view).
+
+    The guard the sibling arms below have (`PyNoClassDeclares`) would have
+    stopped the crash, but a fourth special case is the wrong fix: the candidate
+    scan already handles EXACTLY this pair shape -- "the other candidate is a
+    pylib container, this one a USER class: hold the user class statically and
+    remember the container for a RUNTIME is-test branch" -- and it already
+    reaches TPyDict under these names, because PyMethNameFor maps them through
+    PyPylibMethodAlias to keylist/vallist/itemlist just as it maps TPyList's
+    `update` to setupdate.
+
+    So the three cases are DELETED rather than guarded, and one general
+    mechanism decides: a dict receiver still reaches keylist, a user instance
+    reaches its own method, and a receiver that could be either is settled at
+    run time instead of at compile time by a coin flip.
+    normalise-dont-special-case. }
   { `w.destroy()` on a dynamically-typed widget — see the typed path in
     parser.inc: Pascal reserves `destroy` for the destructor. }
   if mname = 'destroy' then

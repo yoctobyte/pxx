@@ -1,0 +1,48 @@
+# A user class's keys()/items()/values() must reach the USER method, not pylib's
+# dict view -- and a real dict must still reach the view. Both shapes at one
+# dynamic call site, so the runtime dispatch is exercised, not just the static pick.
+class C:
+    def keys(self):
+        return "USERKEYS"
+    def items(self):
+        return "USERITEMS"
+    def values(self):
+        return "USERVALUES"
+
+def call_keys(o):
+    return o.keys()
+
+def call_items(o):
+    return o.items()
+
+def call_values(o):
+    return o.values()
+
+# user instance through an untyped receiver -- segfaulted before the fix
+print(call_keys(C()))
+print(call_items(C()))
+print(call_values(C()))
+
+# a real dict through the SAME call sites; sorted() consumes the view, so this
+# does not depend on the separate dict_keys-repr divergence
+d = {"a": 1, "b": 2}
+print(sorted(call_keys(d)))
+print(sorted(call_items(d)))
+print(sorted(call_values(d)))
+
+# a dict subclass that overrides one of the three
+class M(dict):
+    def keys(self):
+        return "SUBKEYS"
+
+print(M().keys())
+
+# the control the ticket used: a name with no pylib collision
+class D:
+    def mykeys(self):
+        return "PLAIN"
+
+def call_mykeys(o):
+    return o.mykeys()
+
+print(call_mykeys(D()))
