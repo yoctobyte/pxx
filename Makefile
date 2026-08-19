@@ -10217,7 +10217,7 @@ lib-test: pxx-stable-check
 	test "$$($(TESTTMP)/lib_urllib_refusals | grep -c 'FAIL')" = "0"
 	@set -e; \
 	  rm -f $(TESTTMP)/lib_urllib_srv.log; \
-	  $(TESTTMP)/lib_urllib_server 28901 > $(TESTTMP)/lib_urllib_srv.log 2>&1 & \
+	  $(TESTTMP)/lib_urllib_server 0 > $(TESTTMP)/lib_urllib_srv.log 2>&1 & \
 	  srv=$$!; \
 	  trap "kill $$srv 2>/dev/null || true" EXIT; \
 	  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do \
@@ -10226,11 +10226,18 @@ lib-test: pxx-stable-check
 	  done; \
 	  grep -q '^ready ' $(TESTTMP)/lib_urllib_srv.log \
 	    || { echo "FAIL: urllib test server never came up"; cat $(TESTTMP)/lib_urllib_srv.log; exit 1; }; \
-	  $(TESTTMP)/lib_urllib_client 28901 $(TESTTMP)/lib_urllib_pxx.bin > $(TESTTMP)/lib_urllib_pxx.txt 2>&1; \
+	  : "the server is asked for port 0 and REPORTS the one it got — a hardcoded"; \
+	  : "28901 here made two concurrent lib-test runs fight over it, which is"; \
+	  : "what Track T's watcher host does by design; the ready line was already"; \
+	  : "being waited for, so reading the port off it costs nothing"; \
+	  uport=$$(sed -n 's/^ready //p' $(TESTTMP)/lib_urllib_srv.log | head -n 1); \
+	  test -n "$$uport" \
+	    || { echo "FAIL: urllib test server did not report its port"; cat $(TESTTMP)/lib_urllib_srv.log; exit 1; }; \
+	  $(TESTTMP)/lib_urllib_client $$uport $(TESTTMP)/lib_urllib_pxx.bin > $(TESTTMP)/lib_urllib_pxx.txt 2>&1; \
 	  test "$$(tail -n 1 $(TESTTMP)/lib_urllib_pxx.txt)" = "MIMIC-URLLIB-REQUEST OK" \
 	    || { echo "FAIL: mimic_urllib_request client did not finish"; tail -20 $(TESTTMP)/lib_urllib_pxx.txt; exit 1; }; \
 	  if command -v python3 >/dev/null 2>&1; then \
-	    python3 test/lib_mimic_urllib_request.npy 28901 $(TESTTMP)/lib_urllib_cpy.bin > $(TESTTMP)/lib_urllib_cpy.txt 2>&1; \
+	    python3 test/lib_mimic_urllib_request.npy $$uport $(TESTTMP)/lib_urllib_cpy.bin > $(TESTTMP)/lib_urllib_cpy.txt 2>&1; \
 	    diff $(TESTTMP)/lib_urllib_cpy.txt $(TESTTMP)/lib_urllib_pxx.txt >/dev/null \
 	      && echo "  lib-test: mimic_urllib_request matches CPython" \
 	      || { echo "FAIL: mimic_urllib_request diverges from CPython"; diff $(TESTTMP)/lib_urllib_cpy.txt $(TESTTMP)/lib_urllib_pxx.txt | head -20; exit 1; }; \
@@ -10505,39 +10512,66 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_x509.pas $(TESTTMP)/lib_x509
 	test "$$($(TESTTMP)/lib_x509 | grep -c '=ok')" = "17"
 	test "$$($(TESTTMP)/lib_x509 | grep -c 'FAIL')" = "0"
+	# 16, not 14: `fixture-listen` and `fixture-connect` were added when the
+	# hardcoded port 28755 became port 0
+	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable). The
+	# old version ignored every socket return, so a lost race for the port was
+	# not a failure but a permanent hang at 7 of 14 =ok, and the only symptom
+	# was a testmgr TIMEOUT under a clean compile line.
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_tls.pas $(TESTTMP)/lib_tls
-	test "$$($(TESTTMP)/lib_tls | grep -c '=ok')" = "14"
+	test "$$($(TESTTMP)/lib_tls | grep -c '=ok')" = "16"
 	test "$$($(TESTTMP)/lib_tls | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http.pas $(TESTTMP)/lib_http
 	test "$$($(TESTTMP)/lib_http | grep -c '=ok')" = "83"
 	test "$$($(TESTTMP)/lib_http | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_async.pas $(TESTTMP)/lib_http_async
-	test "$$($(TESTTMP)/lib_http_async)" = "$$(printf 'server-done=ok\nstatus=ok\nreason=ok\nbody=ok')"
+	# listen-port is new: the server listens on 0 and publishes the port it got
+	# instead of holding 28755, which lib_tls also held
+	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
+	test "$$($(TESTTMP)/lib_http_async)" = "$$(printf 'listen-port=ok\nserver-done=ok\nstatus=ok\nreason=ok\nbody=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_redirect.pas $(TESTTMP)/lib_http_redirect
-	test "$$($(TESTTMP)/lib_http_redirect)" = "$$(printf 'server-done=ok\nstatus=ok\nbody=ok')"
+	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
+	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
+	test "$$($(TESTTMP)/lib_http_redirect)" = "$$(printf 'listen-port=ok\nserver-done=ok\nstatus=ok\nbody=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_keepalive.pas $(TESTTMP)/lib_http_keepalive
-	test "$$($(TESTTMP)/lib_http_keepalive)" = "$$(printf 'server-done=ok\nbody1=ok\nalive-mid=ok\nbody2=ok')"
+	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
+	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
+	test "$$($(TESTTMP)/lib_http_keepalive)" = "$$(printf 'listen-port=ok\nserver-done=ok\nbody1=ok\nalive-mid=ok\nbody2=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_pool.pas $(TESTTMP)/lib_http_pool
-	test "$$($(TESTTMP)/lib_http_pool)" = "$$(printf 'server-done=ok\nbody1=ok\nbody2-reused=ok')"
+	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
+	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
+	test "$$($(TESTTMP)/lib_http_pool)" = "$$(printf 'listen-port=ok\nserver-done=ok\nbody1=ok\nbody2-reused=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_pool_concurrent.pas $(TESTTMP)/lib_http_pool_concurrent
-	test "$$($(TESTTMP)/lib_http_pool_concurrent | grep -c '=ok')" = "6"
+	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
+	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
+	test "$$($(TESTTMP)/lib_http_pool_concurrent | grep -c '=ok')" = "7"
 	test "$$($(TESTTMP)/lib_http_pool_concurrent | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_gzip.pas $(TESTTMP)/lib_http_gzip
-	test "$$($(TESTTMP)/lib_http_gzip | grep -c '=ok')" = "4"
+	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
+	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
+	test "$$($(TESTTMP)/lib_http_gzip | grep -c '=ok')" = "5"
 	test "$$($(TESTTMP)/lib_http_gzip | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_cookie.pas $(TESTTMP)/lib_http_cookie
-	test "$$($(TESTTMP)/lib_http_cookie | grep -c '=ok')" = "4"
+	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
+	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
+	test "$$($(TESTTMP)/lib_http_cookie | grep -c '=ok')" = "5"
 	test "$$($(TESTTMP)/lib_http_cookie | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_http_serve.pas $(TESTTMP)/lib_http_serve
-	test "$$($(TESTTMP)/lib_http_serve | grep -c '=ok')" = "3"
+	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
+	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
+	test "$$($(TESTTMP)/lib_http_serve | grep -c '=ok')" = "4"
 	test "$$($(TESTTMP)/lib_http_serve | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_httpjson.pas $(TESTTMP)/lib_httpjson
-	test "$$($(TESTTMP)/lib_httpjson | grep -c '=ok')" = "6"
+	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
+	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
+	test "$$($(TESTTMP)/lib_httpjson | grep -c '=ok')" = "7"
 	test "$$($(TESTTMP)/lib_httpjson | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix examples/net/httpdemo.pas /tmp/httpdemo
 	test "$$(/tmp/httpdemo | grep -c -e 'Welcome to frank2 net' -e 'cookie: sid=demo123' -e 'hello sid=demo123' -e 'body:   hello world' -e '^done')" = "5"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_https_mock.pas $(TESTTMP)/lib_https_mock
-	test "$$($(TESTTMP)/lib_https_mock | grep -c '=ok')" = "6"
+	# +1 =ok: `listen-port`, added when the hardcoded port became port 0
+	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
+	test "$$($(TESTTMP)/lib_https_mock | grep -c '=ok')" = "7"
 	test "$$($(TESTTMP)/lib_https_mock | grep -c 'FAIL')" = "0"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_async.pas $(TESTTMP)/lib_dns_async
 	test "$$($(TESTTMP)/lib_dns_async)" = "$$(printf 'server-done=ok\nrcode=ok\ncount=ok\nip=ok\nchase-server-done=ok\nchase-rcode=ok\nchase-count=ok\nchase-ip=ok\ntimeout=ok\nv6-server-done=ok\nv6-rcode=ok\nv6-count=ok\nv6-ip=ok\ncache-1st=ok\ncache-2nd=ok\ncache-1query=ok\ntc-udp-done=ok\ntc-tcp-done=ok\ntc-rcode=ok\ntc-count=ok\ntc-ips=ok')"

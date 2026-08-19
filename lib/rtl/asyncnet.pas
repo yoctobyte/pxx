@@ -7,6 +7,7 @@ unit asyncnet;
   IPv4 and IPv6 both.
 
   TcpListen(port)   -> a listening fd            TcpListen6(port)
+  TcpLocalPort(fd)  -> the port it actually bound (the point of listening on 0)
   TcpAccept(lfd)    -> a connected fd (blocks the coroutine, not the thread)
   TcpConnect(port)  -> a connected fd            TcpConnect6(port)
   TcpConnectAddr(host, port)                     TcpConnectAddr6(addr, port, scopeId)
@@ -22,6 +23,14 @@ interface
 uses scheduler, platform, platform_types;
 
 function TcpListen(port: Integer): Integer;
+{ The port `fd` is actually bound to, or <0 if it cannot be read. Exists so a
+  caller can listen on port 0 and then tell its client where to dial: a
+  HARDCODED port is a shared global, and two copies of the same test on one box
+  fight over it — which is exactly what Track T's watcher host does by design
+  (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable). Port 0
+  makes that collision unrepresentable rather than merely rare, but only if the
+  chosen port can be read back, so the two belong together. }
+function TcpLocalPort(fd: Integer): Integer;
 function TcpAccept(lfd: Integer): Integer;
 function TcpConnect(port: Integer): Integer;
 { Async connect to an arbitrary IPv4 host (host byte order) + port. Same
@@ -62,6 +71,15 @@ begin
     Exit;
   end;
   Result := fd;
+end;
+
+function TcpLocalPort(fd: Integer): Integer;
+var host: LongWord; port, rc: Integer;
+begin
+  host := 0;
+  port := 0;
+  rc := PalGetSockNameIpv4(fd, host, port);
+  if rc < 0 then Result := rc else Result := port;
 end;
 
 function TcpAccept(lfd: Integer): Integer;

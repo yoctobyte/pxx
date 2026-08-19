@@ -8,9 +8,8 @@ program lib_https_mock;
   TlsWrite/TlsRead. The server is plain (the mock is plaintext), so this tests the
   routing/plumbing end to end, no crypto. Also checks that with NO backend an
   https request fails cleanly (Ok=False), never crashes. }
-uses scheduler, asyncnet, http, tls, sockets;
+uses scheduler, asyncnet, http, tls, sockets, sysutils;
 
-const PORT = 28760;
 
 type
   TMockConn = record fd: cint; end;
@@ -64,6 +63,7 @@ end;
 var
   gStatus: Integer;
   gBody, gReason: AnsiString;
+  gPort: Integer;          { the ephemeral port the server actually got }
   gServerDone: Boolean;
   backend: TMockTls;
   noBackend: TTlsBackend;
@@ -72,7 +72,23 @@ var
 procedure ServerCo(arg: Pointer);
 var lfd, cfd: Integer; buf: array[0..2047] of Byte; n: Int64; resp: AnsiString;
 begin
-  lfd := TcpListen(PORT);
+  { Port 0: the kernel picks a free port and TcpLocalPort reads back which one,
+    published in gPort for the client coroutine. This used to hardcode 28760, and a
+    hardcoded port is a shared global -- two copies of lib-test on one box fight
+    over it, which is what Track T's watcher host does by design. With the
+    TcpListen return ignored the loser did not fail either, it PARKED on the
+    reactor forever
+    (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable). }
+  lfd := TcpListen(0);
+  if lfd < 0 then begin gPort := -1; writeln('listen-failed'); Exit; end;
+  gPort := TcpLocalPort(lfd);
+  if gPort <= 0 then
+  begin
+    gPort := -1;
+    writeln('listen-failed');
+    TcpClose(lfd);
+    Exit;
+  end;
   cfd := TcpAccept(lfd);
   n := TcpRecv(cfd, @buf[0], 2048);
   resp := 'HTTP/1.1 200 OK'#13#10 +
@@ -88,7 +104,7 @@ end;
 procedure ClientCo(arg: Pointer);
 var r: THttpResponse;
 begin
-  r := HttpGetAsync('https://127.0.0.1:28760/');   { isTls -> routed via the seam }
+  r := HttpGetAsync('https://127.0.0.1:' + IntToStr(gPort) + '/');   { isTls -> routed via the seam }
   gStatus := r.Status;
   gReason := r.Reason;
   gBody := r.Body;
@@ -111,11 +127,14 @@ begin
   TlsRegisterBackend(backend);
   SayBool('tls-available', TlsAvailable);
 
-  gStatus := -1; gBody := ''; gReason := ''; gServerDone := False;
+  gStatus := -1; gBody := ''; gReason := ''; gServerDone := False; gPort := 0;
   Spawn(@ServerCo, nil);
   Spawn(@ClientCo, nil);
   RunUntilDone;
 
+  { Named apart from server-done so a fixture failure reads as one -- the
+    whole point of the ticket is that a lost port race used to be invisible. }
+  SayBool('listen-port', gPort > 0);
   SayBool('server-done', gServerDone);
   SayBool('https-status', gStatus = 200);
   SayBool('https-reason', gReason = 'OK');

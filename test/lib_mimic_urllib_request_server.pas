@@ -21,7 +21,16 @@ program lib_mimic_urllib_request_server;
 uses scheduler, asyncnet, http, sysutils;
 
 const
-  DEFAULT_PORT = 28901;
+  { 0 = let the kernel pick a free port. It used to be 28901, and a hardcoded
+    port is a shared global: two copies of lib-test on one box fight over it,
+    which is exactly what Track T's watcher host does by design
+    (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable). This
+    server was already the well-behaved one — it checks the listen and announces
+    `ready <port>` on stdout instead of making the harness sleep — so the only
+    thing needed was to announce the port it ACTUALLY got and let the harness
+    read it from there. An explicit port on the command line still overrides,
+    for a caller that needs a known one. }
+  DEFAULT_PORT = 0;
 
 var
   gQuit: Boolean;
@@ -89,6 +98,15 @@ begin
   if lfd < 0 then
   begin
     writeln('listen-failed');
+    Exit;
+  end;
+  { With gPort = 0 the kernel chose; read back which one, because the harness and
+    both clients learn the port from the `ready` line below and nowhere else. }
+  gPort := TcpLocalPort(lfd);
+  if gPort <= 0 then
+  begin
+    writeln('listen-failed');
+    TcpClose(lfd);
     Exit;
   end;
   { Announce readiness on stdout so the harness can wait for the line instead

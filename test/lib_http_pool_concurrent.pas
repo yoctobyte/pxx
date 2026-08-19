@@ -11,20 +11,36 @@ program lib_http_pool_concurrent;
   server accepts twice), but as they release, the second conn over the cap is
   closed rather than pooled — so only ONE live conn remains. HttpPoolEvictIdle(0)
   then closes it; the count drops to 0. }
-uses scheduler, asyncnet, http;
+uses scheduler, asyncnet, http, sysutils;
 
-const PORT = 28811;
 
 var
   gAccepts: Integer;
   gBody1, gBody2: AnsiString;
+  gPort: Integer;          { the ephemeral port the server actually got }
   gServerDone: Boolean;
 
 procedure ServerCo(arg: Pointer);
 var lfd, c1, c2: Integer; buf: array[0..2047] of Byte; n: Int64; resp: AnsiString;
 begin
   resp := 'HTTP/1.1 200 OK'#13#10'Content-Length: 3'#13#10'Connection: keep-alive'#13#10#13#10'hey';
-  lfd := TcpListen(PORT);
+  { Port 0: the kernel picks a free port and TcpLocalPort reads back which one,
+    published in gPort for the client coroutine. This used to hardcode 28811, and a
+    hardcoded port is a shared global -- two copies of lib-test on one box fight
+    over it, which is what Track T's watcher host does by design. With the
+    TcpListen return ignored the loser did not fail either, it PARKED on the
+    reactor forever
+    (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable). }
+  lfd := TcpListen(0);
+  if lfd < 0 then begin gPort := -1; writeln('listen-failed'); Exit; end;
+  gPort := TcpLocalPort(lfd);
+  if gPort <= 0 then
+  begin
+    gPort := -1;
+    writeln('listen-failed');
+    TcpClose(lfd);
+    Exit;
+  end;
   c1 := TcpAccept(lfd);                   { first concurrent client }
   c2 := TcpAccept(lfd);                   { second — proves no socket sharing }
   gAccepts := 2;
@@ -37,14 +53,14 @@ end;
 procedure Client1Co(arg: Pointer);
 var r: THttpResponse;
 begin
-  r := HttpGetPooledAsync('http://127.0.0.1:28811/a');
+  r := HttpGetPooledAsync('http://127.0.0.1:' + IntToStr(gPort) + '/a');
   gBody1 := r.Body;
 end;
 
 procedure Client2Co(arg: Pointer);
 var r: THttpResponse;
 begin
-  r := HttpGetPooledAsync('http://127.0.0.1:28811/b');
+  r := HttpGetPooledAsync('http://127.0.0.1:' + IntToStr(gPort) + '/b');
   gBody2 := r.Body;
 end;
 
@@ -55,7 +71,7 @@ end;
 
 var countLive, countEvicted: Integer;
 begin
-  gAccepts := 0; gBody1 := ''; gBody2 := ''; gServerDone := False;
+  gAccepts := 0; gBody1 := ''; gBody2 := ''; gServerDone := False; gPort := 0;
   HttpPoolSetMaxPerHost(1);                { keep at most one idle conn per host }
   Spawn(@ServerCo, nil);
   Spawn(@Client1Co, nil);
@@ -67,6 +83,9 @@ begin
   countEvicted := HttpPoolCount;
   HttpPoolClose;
 
+  { Named apart from server-done so a fixture failure reads as one -- the
+    whole point of the ticket is that a lost port race used to be invisible. }
+  SayBool('listen-port', gPort > 0);
   SayBool('server-done', gServerDone);
   SayBool('two-accepts', gAccepts = 2);    { proves the two clients did NOT share }
   SayBool('body1', gBody1 = 'hey');
