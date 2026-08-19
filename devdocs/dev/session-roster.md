@@ -1522,6 +1522,34 @@ exists, its banner says so and the banner outranks the queue order.
   never dispatch to fill capacity. But **do not bank a day while the user is paying for
   idle capacity** — that call was made once and was wrong.
 - **The coordinator writes no code.** Filing, ranking, routing and verifying only.
+- **"A PIN IS DUE" AND "SOMEONE IS BLOCKED ON A PIN" ARE TWO DIFFERENT CLAIMS.** The
+  standing rule to pin whenever `compiler/**` moves makes it easy to read the first as the
+  second, and then to override a worker's measurement for a hygiene condition. Check who
+  actually asked — `working/`, and the messages — before treating a due pin as urgent.
+  2026-08-19: a worker offered to sacrifice a 10-minute benchmark because it believed
+  "other lanes are waiting on those compiler fixes"; nobody was, and the honest answer was
+  to decline the courtesy and correct the premise.
+
+- **CAPTURE THE IDENTITY OF WHAT YOU MEASURED, DO NOT RELY ON A PROMISE THAT IT DID NOT
+  CHANGE.** frank3's rule, adopted here and better than the coordination it replaced:
+
+  > A benchmark should record the identity of its toolchain rather than depend on a promise
+  > that nobody changed it.
+
+  It recorded `md5sum stable_linux_amd64/default/pinned` and VERSION **before** an A/B run
+  and re-checks them after — mismatch means discard, with no judgement call and no caveat.
+  A coordinator's hold protects one run because someone happened to be listening; a
+  recorded hash protects **every** run, including cron workers and unsupervised sessions.
+
+  **And the reframe that came with it: CLAUDE.md's "verify against a known sha" is about
+  CAPTURING before the fact, not reporting after.** The coordinator had been honouring it
+  as a reporting obligation — naming the sha in messages — which is the weaker half.
+  Capture makes a claim checkable by someone who was not there; reporting only makes it
+  attributable.
+
+  Applies to pins too: `stable_linux_amd64/**` changing mid-run breaks an A/B **regardless
+  of load management**, because both arms then use different compilers and the result looks
+  clean. Interleaving equalises CPU; it cannot equalise a toolchain swap.
 - **A MEASUREMENT IN FLIGHT IS A LOCK ON THE FILES IT READS.** Found 2026-08-19 when
   frank3 began editing `lib/rtl/sysutils.pas` while a ~20-minute ladder re-run was still
   running against the live tree — some corpus files may have compiled against a half-edited
