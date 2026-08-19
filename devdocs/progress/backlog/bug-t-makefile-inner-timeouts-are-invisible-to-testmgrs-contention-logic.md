@@ -5,7 +5,7 @@ type: bug
 prio: 55
 status: backlog
 blocked-by: []
-summary: "Ten `timeout N` calls are hardcoded INSIDE Makefile recipes, so they fire within make and surface to testmgr as an ordinary `fail`. Every piece of testmgr's contention machinery — PEER_TIME_FACTOR budget stretching, co-tenant retry, the `timeout` status itself — is structurally unable to see them. That is why six separately-fixed timeout tickets did not stop the class recurring: all six fixed testmgr's OWN timeouts, and the inner ones were never in scope."
+summary: "MEASURED 2026-08-19: option 2 (map exit 124) is unimplementable as written — zero of the ten sites propagate 124 to make, and the uforth corpus rows report a timeout as a false pxx-vs-CPython DIFF at recipe exit 0. Option 3 (record duration) rises to first; the recipe markers are not T's lane. Original: ten `timeout N` calls are hardcoded INSIDE Makefile recipes, so they fire within make and surface to testmgr as an ordinary `fail`. Every piece of testmgr's contention machinery — PEER_TIME_FACTOR budget stretching, co-tenant retry, the `timeout` status itself — is structurally unable to see them. That is why six separately-fixed timeout tickets did not stop the class recurring: all six fixed testmgr's OWN timeouts, and the inner ones were never in scope."
 ---
 
 # Makefile-inner timeouts are invisible to testmgr's contention logic
@@ -235,3 +235,99 @@ This is the SECOND time in one day that a commit was read as the cause when it w
 older or adjacent defect became visible. Worth a standing habit: when a range is one
 commit wide, ask what that commit made possible for the first time, not only what it
 changed.
+
+## Measurement 2026-08-19 (plexus-T): option 2's premise is false at every one of the ten sites
+
+Fix option 2 above says "map `timeout`'s exit 124 to a distinguishable marker". Before
+starting it I checked the cheapest possible version of that — **does the 124 already
+reach us?** — because if make surfaced it, the whole fix would be a log-reading rule in
+testmgr, needing no Makefile change and therefore no other lane.
+
+In a scratch Makefile it does:
+
+```
+slow:
+	timeout 1 sleep 5
+→ make: *** [Makefile:2: slow] Error 124
+```
+
+distinct from `Error 1` (plain fail) and `Error 127` (missing binary). **That fact is
+true and it is about the wrong subject.** It describes a recipe whose failing command IS
+the `timeout`. Not one of this ticket's ten sites has that shape. Every one of them
+swallows the 124 first, and they do it in four different ways. Measured, each as a
+scratch recipe reproducing the real line's shape:
+
+| site(s) | shape | what make reports | is the timeout recoverable? |
+| --- | --- | --- | --- |
+| 2408, 2541, 3538 | `test "$$(timeout N ...)" = "..."` | `Error 1` | **no** — command substitution discards the status; what fails is `test` |
+| 402 (tk) | `timeout 120 ... \|\| { echo "... EXITED NONZERO under Xvfb"; exit 1; }` | `Error 1` | **no** — but the log line is distinctive, yet conflates a timeout with any nonzero exit |
+| 8926 (lua cross) | `timeout 120 ...;` then `diff` | `Error 1` via `fail=1` | **no** — a truncated `got.txt` fails the diff; a timeout is indistinguishable from wrong output |
+| 9321 (uforth smoke) | `...; rc=$$?;` then `echo "FAIL (exit $$rc)"` | `Error 1` | **YES** — the log literally contains `(exit 124)` |
+| 9338/9339, 9357/9358 (uforth corpus) | backgrounded, `wait $$pp \|\| true`, then `diff` | **exit 0** | **no** — see below, and this one is worse than invisible |
+
+So: **zero of ten propagate 124 to make; one of ten leaves a readable marker in the
+log.** Option 2 cannot be implemented on testmgr's side alone. It needs an edit at each
+recipe — which is `Makefile`, i.e. **not Track T's push lane** (T touches
+`tools/testmgr.py` / `tools/twatch*` / `tools/fuzz.sh` / `tools/pasmith*` / `tstate/**`
+and nothing else). See the lane split at the end.
+
+### A third severity class this ticket did not have: a timeout wearing another lane's costume
+
+The uforth corpus rows are not merely invisible. Measured with a scratch recipe of
+exactly that shape (a producer truncated at 1s against a complete oracle):
+
+```
+	( timeout 1 sh -c 'echo a; sleep 5; echo b' ) > p.out 2>&1 & pp=$!; \
+	( sh -c 'echo a; echo b' )                    > c.out 2>&1 & cp=$!; \
+	wait $pp || true; wait $cp || true; \
+	if diff -q p.out c.out >/dev/null 2>&1; then echo "  same"; else echo "  DIFF f"; ...
+
+→   DIFF f
+    @@ -1,2 +1 @@
+      a
+    -b
+    (recipe exit status: 0)
+```
+
+`wait $$pp || true` discards the 124, the kill truncates `p.out` mid-stream, and the
+truncation is then reported as **`DIFF <file>` — a pxx-versus-CPython divergence** and
+counted into `bad`. The recipe exits 0, so testmgr does not even see a fail.
+
+That is a strictly worse failure than the two the ticket already describes. It does not
+lose a signal; it **manufactures a false one, in a lane that is not T's.** A NilPy
+divergence report against the CPython oracle is exactly the kind of finding T files to
+Track N, and whoever picks it up chases a frontend bug that is really a machine under
+load. Note the symmetry with the 2026-08-18 CORRECTION above: that one struck a *false
+timeout attribution*; this is the reverse, a real timeout disguised as a miscompile. The
+class is the same — **a red whose stated subject is not its actual cause** — and both
+directions are live in this one ticket.
+
+### What this changes about the fix
+
+- **Option 3 (record the duration) rises to first.** It is entirely inside testmgr, needs
+  no other lane, and it is the only one of the three that helps the `wait || true` rows —
+  a corpus job that normally takes 40s and took 361s is legible as contention even when
+  its own recipe insists it exited 0. It does not distinguish a timeout; it makes one
+  visible to a human reading the report, which is more than exists today.
+- **Option 2 splits by lane.** The marker has to be written where the `timeout` is:
+  `test/`-suite recipes and the uforth corpus → the lane owning those tests, tk → B, lua
+  cross → the target owner. T files these; T does not edit `Makefile`. The single
+  exception is 9321, whose `(exit 124)` is already in the log and could be read by a
+  testmgr rule today — but a rule that recognises exactly one of ten sites is worth less
+  than the duration, and risks reading as coverage it does not have.
+- **The `bisect_step` trap is unchanged and still gates option 2.** Nothing measured here
+  touches it.
+- **Recommended split before anyone starts:** keep this ticket for option 3 (T, testmgr,
+  self-contained), and file the recipe markers as a separate ticket per owning lane with
+  the table above as the work list. As written, this ticket cannot be completed by its
+  own track, which is why it has sat at p55 without being taken.
+
+### Method note
+
+The premise check cost two scratch Makefiles and about a minute, and it inverted the
+recommended fix order. The failure it avoided is the one this repo keeps paying for:
+`Error 124` was a true, verifiable, easily-measured fact that would have gone into this
+ticket as justification for a fix that could not have worked on a single real site.
+**Measure the subject, not a model of it** — a scratch reproduction is only evidence
+about the real code when it reproduces the real code's *shape*, and here four distinct
+shapes all needed reproducing separately.
