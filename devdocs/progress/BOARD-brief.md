@@ -5,16 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:2 unfinished:17 blocked:5 backlog:240 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2044 rejected:39`
+`working:2 unfinished:17 blocked:5 backlog:244 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2045 rejected:39`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-b-strtofloat-big-integers-in-64-bit-limbs` [B] — owner: frank3-etree
 - `feature-n-a-callable-value-carries-its-signature-type` [A] — owner: frankonpiler-an
-
-## urgent (1) — jump the queue
-
-- `bug-n-pin-v357-breaks-tk-nilpy-callable-value-of-a-def-with-no-signature-record` [N]
 
 ## unfinished (17) — parked mid-flight; re-claim, do not duplicate
 
@@ -44,9 +40,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 225, ranked
+## Ready — top 30 of 228, ranked
 
-- `[p 90] [N]` bug-n-pin-v357-breaks-tk-nilpy-callable-value-of-a-def-with-no-signature-record
+- `[p 70] [N]` regression-test-core-callbacks-2
+- `[p 70] [N]` regression-test-core-field-class-identity
+- `[p 70] [N]` regression-test-core-test-nilpy-bound-method-in-module
+- `[p 70] [N]` regression-test-core-test-nilpy-from-import-as-rename
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
@@ -73,8 +72,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
 - `[p 50] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
-- `[p 50] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
-- `[p 50] [U]` decide-staff-track-c-to-unblock-own-language-first
-- `[p 50] [D]` docs-cross-language-qualifier-note-is-wrong
 
-_195 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_198 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
