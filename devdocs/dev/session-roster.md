@@ -1489,6 +1489,23 @@ starts from it rather than rediscovering it. **First thing a fresh worker gets.*
   never dispatch to fill capacity. But **do not bank a day while the user is paying for
   idle capacity** — that call was made once and was wrong.
 - **The coordinator writes no code.** Filing, ranking, routing and verifying only.
+- **`ListAgents` status labels: `waiting` means WORKING, `idle` means IDLE. Do not invert
+  them.** A session shows `waiting` while it is waiting on something it started — a build,
+  a tool call — which is what a busy worker looks like most of the time. `idle` is the one
+  that means nothing is in flight.
+
+  Cost of getting this backwards on 2026-08-19: the coordinator reported frank3 as "stuck
+  on a permission prompt, only the user can clear it" across **four consecutive checks**
+  and escalated it to the user each time, while frank3 was working normally and landed
+  `7bebd63fa`. The genuinely idle worker (frank2, post-plan, `blocked-by: []`) was reported
+  as fine. Both errors in the same glance, in opposite directions.
+
+  **Never diagnose a worker from the status label alone.** It is one bit and it does not
+  distinguish "thinking" from "blocked on a prompt". Confirm against something that moves:
+  `git log` for its recent commits, `working/` for its lock, or the ticket body for a
+  written blocker. If those disagree with the label, believe them. And before escalating
+  anything to the user as "only you can clear this", check that it is not simply a worker
+  doing its job.
 - **PIN AT EVERY CHECK IF `compiler/` OR `lib/` MOVED — pinning is the coordinator's job
   and nothing else surfaces staleness.** Two commands answer it and nothing on the board
   does:
