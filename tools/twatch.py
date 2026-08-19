@@ -3817,8 +3817,15 @@ def record_host_epoch(clone, host):
     gets a `to`, so a step in the series can be shown as "new hardware here"
     instead of being read as a regression.
     """
+    # ONE reading, fingerprinted from itself. host_hardware() re-reads the
+    # governor and turbo on every call by design (they change at runtime), so
+    # calling it twice — once for the record, once via host_hardware_fp() for
+    # the hash — can store an epoch whose own fields do not produce its own
+    # fingerprint if the governor flips between the two lines. The next publish
+    # then recomputes a fp that matches neither, mints a spurious epoch, and
+    # announces "earlier rows are not comparable" over a governor tick.
     hw = host_hardware()
-    fp = host_hardware_fp()
+    fp = fp_of_hardware(hw)
     path = os.path.join(clone.path, HOSTS_REL)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     try:

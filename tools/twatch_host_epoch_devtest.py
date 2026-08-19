@@ -144,6 +144,44 @@ def case_governor_change_is_a_new_epoch():
     return "governor is identity-bearing"
 
 
+def case_an_epoch_fingerprints_its_own_fields():
+    """The stored record and the stored fp must be one reading of the box.
+
+    host_hardware() re-reads governor and turbo every call — deliberately, they
+    change at runtime — so a record built from one call and hashed from another
+    can disagree with itself when the governor ticks between the two. The stored
+    epoch would then fingerprint to something no future publish reproduces, and
+    every later publish mints a fresh epoch announcing "earlier rows are not
+    comparable" over a governor flip that already ended.
+    """
+    clone = scratch()
+    twatch.record_host_epoch(clone, "xeon")
+    ep = hosts_doc(clone)["xeon"][0]
+    assert twatch.fp_of_hardware(ep) == ep["fp"], (
+        "the stored epoch does not fingerprint to its own fp: "
+        f"{twatch.fp_of_hardware(ep)} != {ep['fp']}")
+    # ...and it survives the flip itself. A host_hardware() that answers
+    # differently on every call is exactly what a governor tick looks like from
+    # inside record_host_epoch; two calls per record made that observable, one
+    # call cannot. This fails deterministically against the two-call version.
+    real = twatch.host_hardware
+    seq = iter([dict(real(), governor="powersave"),
+                dict(real(), governor="performance"),
+                dict(real(), governor="schedutil")])
+    twatch.host_hardware = lambda: next(seq)
+    try:
+        clone2 = scratch()
+        twatch.record_host_epoch(clone2, "xeon")
+    finally:
+        twatch.host_hardware = real
+    ep2 = hosts_doc(clone2)["xeon"][0]
+    assert twatch.fp_of_hardware(ep2) == ep2["fp"], (
+        "a governor flip mid-record stored an epoch that does not fingerprint "
+        f"to its own fp ({twatch.fp_of_hardware(ep2)} != {ep2['fp']}) — the "
+        "record and the hash came from two different readings")
+    return "the record and its fp are one reading of the box, flip or no flip"
+
+
 def case_hosts_are_independent():
     clone = scratch()
     twatch.record_host_epoch(clone, "xeon")
@@ -159,6 +197,7 @@ CASES = [
     case_unchanged_box_appends_nothing,
     case_changed_hardware_opens_a_new_epoch_and_closes_the_old,
     case_governor_change_is_a_new_epoch,
+    case_an_epoch_fingerprints_its_own_fields,
     case_hosts_are_independent,
     case_side_file_is_not_in_the_host_state_directory,
     case_readers_skip_a_json_without_a_host_key,
