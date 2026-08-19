@@ -5,7 +5,7 @@ type: bug
 prio: 55
 status: backlog
 blocked-by: []
-summary: "MEASURED 2026-08-19: option 2 (map exit 124) is unimplementable as written — zero of the ten sites propagate 124 to make, and the uforth corpus rows report a timeout as a false pxx-vs-CPython DIFF at recipe exit 0. Option 3 (record duration) rises to first; the recipe markers are not T's lane. Original: ten `timeout N` calls are hardcoded INSIDE Makefile recipes, so they fire within make and surface to testmgr as an ordinary `fail`. Every piece of testmgr's contention machinery — PEER_TIME_FACTOR budget stretching, co-tenant retry, the `timeout` status itself — is structurally unable to see them. That is why six separately-fixed timeout tickets did not stop the class recurring: all six fixed testmgr's OWN timeouts, and the inner ones were never in scope."
+summary: "MEASURED 2026-08-19: option 2 (map exit 124) is unimplementable as written — zero of the ten sites propagate 124 to make, and the uforth corpus rows report a timeout as a false pxx-vs-CPython DIFF at recipe exit 0. Option 3 (record duration) was ALREADY DONE; the real gap is exp_dur missing from the report; the recipe markers are not T's lane. Original: ten `timeout N` calls are hardcoded INSIDE Makefile recipes, so they fire within make and surface to testmgr as an ordinary `fail`. Every piece of testmgr's contention machinery — PEER_TIME_FACTOR budget stretching, co-tenant retry, the `timeout` status itself — is structurally unable to see them. That is why six separately-fixed timeout tickets did not stop the class recurring: all six fixed testmgr's OWN timeouts, and the inner ones were never in scope."
 ---
 
 # Makefile-inner timeouts are invisible to testmgr's contention logic
@@ -304,11 +304,26 @@ directions are live in this one ticket.
 
 ### What this changes about the fix
 
-- **Option 3 (record the duration) rises to first.** It is entirely inside testmgr, needs
-  no other lane, and it is the only one of the three that helps the `wait || true` rows —
-  a corpus job that normally takes 40s and took 361s is legible as contention even when
-  its own recipe insists it exited 0. It does not distinguish a timeout; it makes one
-  visible to a human reading the report, which is more than exists today.
+- **Option 3 as written is ALREADY DONE — and the same premise check caught it, on the
+  second try.** `testmgr.py:4266` has put `"dur"` (plus `"cpu"` and `"mem"`) in every
+  report job dict all along. "At minimum, record the duration" needs no work.
+
+  What is missing is the **baseline beside it**. testmgr learns an EWMA expected duration
+  per job (`Job.exp_dur`, set at dispatch, `testmgr.py:2045`) and already uses it for a
+  console note — `SLOW (expected 40.0s)` at `:4109`, `expected %.0fs` on a fail at
+  `:4130`. Neither reaches the report. So the terminal in front of whoever launched the
+  run can say "361s, expected 40s", and every downstream consumer — twatch, a cascade
+  ticket, a human reading the JSON tomorrow — sees `"dur": 361.0` with nothing to compare
+  it against, and cannot distinguish contention from normal without rebuilding the
+  history testmgr already has.
+
+  So the revised first fix is **one field: put `exp_dur` in the report job dict** (T,
+  testmgr, self-contained, no Makefile). That is what makes the `wait || true` rows
+  legible: a corpus job that normally takes 40s and took 361s reads as contention even
+  though its own recipe insisted it exited 0. It still does not *distinguish* a timeout —
+  it makes one visible to anyone reading the report, which is more than exists today.
+  Note the published `tstate/*.json` is deliberately status-only, so this lands in the
+  report, not there.
 - **Option 2 splits by lane.** The marker has to be written where the `timeout` is:
   `test/`-suite recipes and the uforth corpus → the lane owning those tests, tk → B, lua
   cross → the target owner. T files these; T does not edit `Makefile`. The single
@@ -325,7 +340,11 @@ directions are live in this one ticket.
 ### Method note
 
 The premise check cost two scratch Makefiles and about a minute, and it inverted the
-recommended fix order. The failure it avoided is the one this repo keeps paying for:
+recommended fix order. Then it ran a second time, on my own replacement recommendation,
+and caught that too: I wrote "option 3 rises to first" without checking whether option 3
+was already implemented, and it was — one grep away, in the same file I had just been
+reading. Twice in one sitting, the same shape: a fix proposed against a remembered model
+of the code rather than the code. The failure it avoided is the one this repo keeps paying for:
 `Error 124` was a true, verifiable, easily-measured fact that would have gone into this
 ticket as justification for a fix that could not have worked on a single real site.
 **Measure the subject, not a model of it** — a scratch reproduction is only evidence
