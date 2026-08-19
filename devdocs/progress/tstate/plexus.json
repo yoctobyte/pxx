@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T09:40:33Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "4db36400bdd2e07e6d9bb5a1ad8d656f2b04144c",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T09:48:33Z",
    "fixed": [],
    "new_red": [],
@@ -466,6 +458,14 @@
    "sha": "21f098e32a95be73bdeae3832aedfe65677292f7",
    "tier": "full",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-19T17:33:30Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "21f098e32a95be73bdeae3832aedfe65677292f7",
+   "tier": "slow",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -6059,11 +6059,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-19T17:28:40Z",
+  "date": "2026-08-19T17:33:30Z",
   "sha": "21f098e32a95be73bdeae3832aedfe65677292f7",
-  "tier": "full",
-  "verdict": "RED",
-  "wall": 1230.0
+  "tier": "slow",
+  "verdict": "GREEN",
+  "wall": 272.9
  },
  "last_bench": {
   "conf_rows": 550,
