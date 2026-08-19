@@ -259,4 +259,4 @@ T's sweep rather than by reasoning, which is why this was pushed rather than
 held: unpushed work is work T cannot see.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit a54259aab.
