@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T02:00:46Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "185575980d53326b3c943921d5dd829c62b1a3a9",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T02:21:42Z",
    "fixed": [],
    "new_red": [],
@@ -419,6 +411,16 @@
    "fixed": [],
    "new_red": [],
    "sha": "7364f6c5bdfe02f7c06bc2d48ff3dd1d45420a2a",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-19T14:09:49Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_asm_ifdef_multiarch.pas"
+   ],
+   "sha": "498c6dea3f48816144fa8959a6534d131959a68c",
    "tier": "native",
    "verdict": "RED"
   }
@@ -1338,6 +1340,7 @@
   "test-core#src:test/test_asm_memr.pas": "native",
   "test-core#src:test/test_asm_sizekw.pas": "native",
   "test-core#src:test/test_asm_swap.pas": "native",
+  "test-core#src:test/test_asmmode_tolerance.pas": "native",
   "test-core#src:test/test_assert_raises_with_sysutils.pas": "native",
   "test-core#src:test/test_assert_sealed_final_b264.pas": "native",
   "test-core#src:test/test_assign_types.pas": "native",
@@ -2083,6 +2086,7 @@
   "test-core#src:test/test_unit_const_vs_field.pas": "native",
   "test-core#src:test/test_unit_finalization.pas": "native",
   "test-core#src:test/test_unit_finalization_halt.pas": "native",
+  "test-core#src:test/test_unit_hint_directive.pas": "native",
   "test-core#src:test/test_unit_impl_fwd.pas": "native",
   "test-core#src:test/test_unit_init_begin_form.pas": "native",
   "test-core#src:test/test_unitpath.pas@1": "native",
@@ -4118,11 +4122,12 @@
   "test-core#src:test/test_asm_emit.pas": "pass",
   "test-core#src:test/test_asm_func.pas": "pass",
   "test-core#src:test/test_asm_global.pas": "pass",
-  "test-core#src:test/test_asm_ifdef_multiarch.pas": "pass",
+  "test-core#src:test/test_asm_ifdef_multiarch.pas": "fail",
   "test-core#src:test/test_asm_keywords.pas": "pass",
   "test-core#src:test/test_asm_memr.pas": "pass",
   "test-core#src:test/test_asm_sizekw.pas": "pass",
   "test-core#src:test/test_asm_swap.pas": "pass",
+  "test-core#src:test/test_asmmode_tolerance.pas": "pass",
   "test-core#src:test/test_assert_raises_with_sysutils.pas": "pass",
   "test-core#src:test/test_assert_sealed_final_b264.pas": "pass",
   "test-core#src:test/test_assign_types.pas": "pass",
@@ -4866,6 +4871,7 @@
   "test-core#src:test/test_unit_const_vs_field.pas": "pass",
   "test-core#src:test/test_unit_finalization.pas": "pass",
   "test-core#src:test/test_unit_finalization_halt.pas": "pass",
+  "test-core#src:test/test_unit_hint_directive.pas": "pass",
   "test-core#src:test/test_unit_impl_fwd.pas": "pass",
   "test-core#src:test/test_unit_init_begin_form.pas": "pass",
   "test-core#src:test/test_unitpath.pas@1": "pass",
@@ -5984,11 +5990,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-19T14:04:51Z",
-  "sha": "7364f6c5bdfe02f7c06bc2d48ff3dd1d45420a2a",
+  "date": "2026-08-19T14:09:49Z",
+  "sha": "498c6dea3f48816144fa8959a6534d131959a68c",
   "tier": "native",
   "verdict": "RED",
-  "wall": 232.6
+  "wall": 227.1
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6106,6 +6112,22 @@
     "a763032313063caaa4da3a0039d25959752c4b58"
    ],
    "src": "test/test_stmt_call_result_selector_b318.pas",
+   "status": "fail"
+  },
+  {
+   "bad": "498c6dea3f48816144fa8959a6534d131959a68c",
+   "good": "7364f6c5bdfe02f7c06bc2d48ff3dd1d45420a2a",
+   "job": "test-core#src:test/test_asm_ifdef_multiarch.pas",
+   "name": "test-core#658",
+   "opened": "2026-08-19T14:09:49Z",
+   "pin_built": false,
+   "range": [
+    "76b6fb7f1d4085545d34bd69b47f0d6b2cd7fe1a",
+    "cc7550e180ad07238709256b46f3d607b8f745be",
+    "65b2512efc2fd7efb26b0cc0e325c5a8ac683118",
+    "498c6dea3f48816144fa8959a6534d131959a68c"
+   ],
+   "src": "test/test_asm_ifdef_multiarch.pas test/test_asm_att_reject.pas",
    "status": "fail"
   }
  ],
