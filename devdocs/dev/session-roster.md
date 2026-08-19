@@ -4403,3 +4403,16 @@ cannot tell v366's carve from v367's builtin change, and `make revert` stops bei
 instrument. Small pins are worth having *because* each is attributable; two unverified ones defeat
 the point. Nothing is blocked on it — no Track B worker is running, and `$(PXX_STABLE)` meeting the
 old refusal harms nobody tonight. **When the v366 tier lands green, pin v367 immediately.**
+
+**Sharpening on the v367 hold, from the person who rebuilt the brake:** `make revert` selects the
+newest commit whose VERSION is numerically lower, so repeated reverts stay monotonic — two stacked
+unverified pins would **not** break it, but they would leave you **reverting past a carve you wanted
+to keep**. That is a more precise statement of the cost than "attributability": the brake stays
+correct and stops being *selective*. All three workers are down; tree clean, nothing held.
+
+**Morning order, agreed with frank2:** (1) **pin v367** — `e6075649b`'s builtin change does not
+reach `$(PXX_STABLE)` without it, and it should go in as soon as the v366 full tier is green;
+(2) `decide-nilpy-import-rule-vs-a-cpyext-extension-module` (U, p75), which also unsticks the
+automated pin check; (3) `bug-nilpy-a-lambda-returned-directly-is-not-callable` — **p55 is light**,
+and note it is a compile-clean **runtime** TypeError far from the `return` that caused it, which is
+this repo's expensive shape rather than a crash with a location.
