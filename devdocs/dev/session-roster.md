@@ -1662,6 +1662,13 @@ exists, its banner says so and the banner outranks the queue order.
   running it is worth a round trip, and if it is not worth a round trip, delete it rather
   than keeping it as decoration.
 
+  **frank3's sharpening, which is the better statement of the rule and is kept in its
+  words:** *"the fix is structural rather than attentional: the check has to be able to
+  **stop** the thing it is checking, or it is a log line."* The version above still describes
+  an act of care. This one names the property, and it is testable — point at the check and
+  ask what it can halt. If the answer is nothing, it is telemetry, however conscientious it
+  looks in the transcript.
+
   *(Harm that time was bounded, and bounded for a reason worth remembering rather than a
   lucky one: workers run in SEPARATE CLONES, so a pin cannot swap `pinned` under a peer's
   run — only CPU crosses. The cost was that frank3's ladder measured v357 while wanting to
@@ -3111,3 +3118,40 @@ rerank it deliberately rather than inheriting the number).
   defaults-on-the-boundfn-carrier` (p65). Whether p70 is now a duplicate of that is frank2's
   call to make against a measurement, not mine to assume — it said it would verify the p70
   table before resolving anything.
+
+## A pin's CONTENTS are an ancestry question, never a timing one (2026-08-19)
+
+The coordinator told a worker that pin v358 was "the run that measures the shim and
+frank2's fix together", and it was not: frank2's `collections.abc` fix (`703701e00`)
+landed **after** the commit the pin was built from (`b54939cf3`). The worker started a
+~40-minute corpus ladder on that promise. The ladder reads
+`stable_linux_amd64/default/pinned`, so every file in it would have been compiled by a
+compiler predating the fix — and the `Mapping` row would have sat still, reading as
+*"frank2's fix did nothing"* about a fix that is measured-good.
+
+**Where the reasoning went wrong is worth more than the outcome.** The claim was made from
+*timing* — the fix and the pin happened in the same stretch of the afternoon, so the pin
+"obviously" had it. Ordering by recollection is not ordering. One command answers it:
+
+    git merge-base --is-ancestor <fix-sha> <pin-base-sha> && echo IN || echo NOT-IN
+
+**Rules:**
+
+- **The coordinator publishes what a pin CONTAINS, and that is a claim requiring
+  measurement.** Publish the pin base sha alongside the md5, and when telling a worker a
+  specific fix is in, show the ancestry check. Workers plan long runs on this; it is the one
+  coordinator statement with a multiplier on it.
+- **A resolve commit is not an implementation commit.** `b515f2842` "resolve(N): p88"
+  touches only `devdocs/progress/**`. Checking ancestry against *it* would have answered a
+  question about paperwork. Check the commits that touched `compiler/**`.
+- **"In flight" vs `done/` is one `ls` away, and the difference inverts the plan.** A worker
+  reported a wall as "downstream of work already in flight"; the ticket was in `done/` and
+  landed, so nothing was waiting on it. The coordinator let the framing stand without
+  checking the directory. Same family as *a file existing is not evidence about its state* —
+  here, a ticket's **location** is the cheap fact and it was not read.
+
+**And the thing that actually caught it:** the worker stated its intent back
+("this is the run that measures the shim and frank2's fix together") instead of just
+acking. That sentence is what made the wrong premise visible while it was still cheap.
+Encourage restating the purpose of a long run before starting it — it is the only
+cross-agent check that costs nothing.
