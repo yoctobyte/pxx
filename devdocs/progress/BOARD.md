@@ -44,7 +44,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (243)
+## backlog (244)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -69,10 +69,11 @@ _none_
 | bug-n-a-unicode-identifier-is-rejected-by-the-lexer | N | 25 | bug | `_κ = 5` is legal Python 3 and the NilPy lexer rejects it with `unexpected character`. Non-ASCII in a STRING literal already works, so this is the identifier path only. Two tinycss2 files (color4.py, color5.py) use Greek letters as names for colour-space constants. | — |
 | bug-n-a-user-classs-decode-method-is-hijacked-losing-its-own-parameters | N | 70 | bug | LARGEST wall on the third-party ladder — 12 of 38 non-compiling files. A KEYWORD ARGUMENT passed through a CALLABLE VALUE held in a variable (`decode = decoder.decode`, then `decode(b'', final=True)`) is not matched against the callee's declared parameters. NOT the method hijack this ticket was filed as — that premise is disconfirmed by measurement, see the banner. Original title kept for grep: 'a user class's decode method is hijacked, losing its own parameters'. | — |
 | bug-n-abs-of-a-complex-raises-typeerror | N | 35 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
+| bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name | N | 62 | bug | `X.attr` where X came from an import that did not resolve is compiled as the BARE NAME `attr`, so `ModuleType.__name__` fails with `undefined variable (__name__)` — a message naming the attribute and never the unresolved import that caused it. Now the first wall on 4 html5lib files. | — |
 | bug-n-an-augmented-subscript-on-a-dunder-class-is-refused | N | 45 | bug | `obj[k] += v` on any class that reaches subscripting through `__getitem__`/`__setitem__` is a named compile-time refusal — `augmented assignment to a __getitem__/__setitem__ subscript is not supported`. Ordinary Python, and the counting idiom (`counts[k] += 1`) is the single most common thing a dict-like class is written for. The default-indexed-property arm beside it already desugars the augmented form; only the dunder arm does not. | — |
 | bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program | N | 45 | bug | `class X(mod.X)` — a class whose qualified base shares its name — is refused with `class X cannot inherit from itself` when written in the MAIN PROGRAM. The identical code in a pulled `.py` module compiles and dispatches correctly, and renaming either class makes the program case work too, so the variable is the name collision on the program path. This is how all ~100 of CPython's `encodings/*.py` and html5lib's filters are written. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 35 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
-| bug-n-from-collections-abc-import-is-swallowed-by-the-collections-root-rule | N | 62 | bug | `from collections.abc import Mapping` binds NOTHING and reports `undefined variable (Mapping)` — PyImportRootIsConsumedOnly tests only the ROOT of a dotted from-import and has `collections` on its consume-and-ignore list, so the whole submodule is swallowed. This is what actually blocks the 7 corpus files on `unknown base class Mapping`; the shim alone cannot. | — |
+| bug-n-from-collections-import-counter-binds-something-that-always-answers-zero | N | 58 | bug | `from collections import Counter` binds a name that SILENTLY answers 0 for every key instead of counting — `Counter('aab')['a']` is 0, CPython says 2. And `OrderedDict` from the same import is `undefined variable`. The consume-and-ignore rule promises an unsupported name walls VISIBLY at its use site; Counter breaks that promise by answering wrongly instead. | — |
 | bug-n-hasattr-through-an-untyped-parameter-is-always-false | N | 55 | bug | `hasattr(x, name)` returns False for EVERYTHING when x is a parameter with no static type — `hasattr(a_dict, 'keys')` and `hasattr(a_list, 'append')` are both False. Silently wrong, never an error, and it is how CPython code dispatches on duck type. | — |
 | bug-n-importing-both-f-and-F-from-one-module-loses-the-class | N | 50 | bug | Importing a lowercase function and an uppercase class of the same letter from one module breaks the class: `from M import f` plus `from M import F` gives `undefined variable (VAL)` on `F.VAL`, in EITHER order, while importing F alone works. Pre-existing (fails on pinned v351). CPython keeps them apart because it is case-sensitive; the flat namespace here folds case. | — |
 | bug-n-isinstance-does-not-accept-a-qualified-class-name | N | 45 | bug | `isinstance(x, mod.Class)` is a compile error — `unknown type in isinstance: cabc` — so any code that imports a module and tests against one of its classes must first rebind the class to a bare name. | — |
@@ -468,9 +469,9 @@ _none_
 | decide-what-synapse-actually-needs-vs-mimic-fpc | U | 20 | decide | Synapse builds under `--mimic-fpc`. What does it actually NEED? | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2051)
+## done (2052)
 
-2051 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2052 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (39)
 
@@ -524,10 +525,11 @@ _none_
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
 - [p 65] [P] feature-pascal-corpus-oop
-- [p 62] [N] bug-n-from-collections-abc-import-is-swallowed-by-the-collections-root-rule
+- [p 62] [N] bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name
 - [p 60] [A] bug-a-make-revert-the-documented-pin-brake-does-not-fire
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 60] [A] refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
+- [p 58] [N] bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [C] bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 2)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)

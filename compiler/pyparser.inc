@@ -33089,14 +33089,30 @@ begin
             CaseEqual(root, 'dataclasses') or CaseEqual(root, '__future__');
 end;
 
-function PyImportRootIsConsumedOnly(const root: AnsiString): Boolean;
+function PyImportIsConsumedOnly(const root, dotted: AnsiString): Boolean;
 { `from X import a, b`. Adds `collections`: it HAS a unit (lib/rtl/collections),
   but the names it exports that we support are ordinary pylib symbols
   (Counter -> pylib's TPyCounter constructors), so consuming the from-import is
-  enough and an unsupported name walls visibly at its use site. }
+  enough and an unsupported name walls visibly at its use site.
+
+  NOTE the two arms test DIFFERENT things, and that is the point rather than an
+  inconsistency. PyImportRootHasNoBackingUnit is keyed on the ROOT because those
+  roots are absent as a whole SUBTREE — there is no `typing.io` unit either, so
+  every submodule is equally unresolvable and consuming the lot is right. The
+  `collections` rule is about what ONE MODULE EXPORTS, which says nothing at all
+  about its submodules, so it must match the full dotted path.
+
+  Testing only the root swallowed `collections.abc` whole: `from collections.abc
+  import Mapping` bound NOTHING while `import collections.abc as cabc` reached
+  mimic_collections_abc perfectly well, so the shim was correct and unreachable.
+  That walled 7 corpus files (html5lib's _utils, _trie/*, serializer,
+  treebuilders, treewalkers) at `unknown base class Mapping`, and the contrast
+  that proves it is `from xml.etree.ElementTree import Element` — which works,
+  because `xml` is not on either list.
+  bug-n-from-collections-abc-import-is-swallowed-by-the-collections-root-rule }
 begin
   Result := PyImportRootHasNoBackingUnit(root) or
-            CaseEqual(root, 'collections');
+            (CaseEqual(root, 'collections') and CaseEqual(dotted, 'collections'));
 end;
 
 function PyImportRootPlainIsConsumedOnly(const root: AnsiString): Boolean;
@@ -33157,7 +33173,7 @@ begin
     if CurTok.Kind <> tkUses then
       Error('Nil Python: expected import after from ' + impName);
     Next;
-    if not PyImportRootIsConsumedOnly(impRoot) then
+    if not PyImportIsConsumedOnly(impRoot, impName) then
     begin
       PyRelativeLevel := impLevel;
       ParseUsesUnit(impName);
@@ -33271,7 +33287,7 @@ begin
         ordinary pylib symbols (Counter -> pylib's TPyCounter constructors), so
         consuming the from-import is enough — an unsupported name from it walls
         visibly at its use site as an undefined variable, same as itertools. }
-      if PyImportRootIsConsumedOnly(impRoot) then
+      if PyImportIsConsumedOnly(impRoot, impName) then
       begin
         while CurTok.Kind = tkIdent do
         begin
