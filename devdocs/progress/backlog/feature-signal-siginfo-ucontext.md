@@ -366,3 +366,11 @@ Test `test/test_signal_pc_rewrite.pas`, wired into all five suites: it faults by
 CALLING $DEAD0000 (so the saved PC must BE that address — an exact check of the
 offset), rewrites the PC to a raising proc, and the fault is caught by the
 try/except the faulting code was already inside, with execution continuing after.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363)
+
+**Genuine feature, still wanted.** Measured rather than read: item 1 is indeed
+done, and the *consumer* path it was for is not. A `Low(Int64) div -1` inside a
+`try … except on E: Exception` still core-dumps with SIGFPE (exit 136) instead
+of reaching the handler, so nothing here has landed incidentally. Items 2-5
+stand as written.
