@@ -3529,3 +3529,59 @@ under one grouping, which is how it got worked.
    tickets as low-hanging fruit, and "cheap and related" beat "low prio". That cluster was
    built here. **When assembling a cluster, check no member is de-ranked by a standing rule** —
    a cluster is a scheduling decision that the ranker never sees.
+
+## Check +22h, part 2 — two workers disconfirmed the coordinator, both correctly
+
+Both corrections came from workers checking a claim I had asserted from something adjacent to
+it. Recording them together because it is one pattern, not two incidents.
+
+### frank2: half the import cascade was NOT a test bug
+
+I routed all 12 jobs as "rewrite the tests", from the diagnostic text. frank2 fixed six
+(`630dc7da5`, quoted spelling, each verified against its exact Makefile assertion) and
+**refused to rewrite the other six**: `lib/pcl/tkinter.pas` was written to BE Python's tkinter
+and says so in its own header, naming `lib/rtl/re.pas` and `configparser.pas` as precedent —
+both on the curated `PyRtlUnitServesPython` list. `tkinter` is absent only because the list was
+swept from `lib/rtl` and tkinter lives in `lib/pcl`. Rewriting the examples would show a
+spelling no Python source contains and put NilPy's GUI surface out of reach of unmodified
+CPython code. Filed `bug-n-tkinter-is-missing-from-the-python-serving-unit-list` (A, p70),
+**measured on a fixedpoint build then reverted** — routed to frank3, which holds the A/P slot.
+
+**The best finding in it:** `test_nilpy_two_imported_bases_fail` was satisfying its leading `!`
+at the *import wall* rather than at the refusal it exists to assert — one missing grep away
+from passing while asserting nothing. General shape: **a negative test with no paired grep
+asserts only "something went wrong".**
+
+Also: frank2 hit the no-full-suite hook and **did not ask me to launder it** — correct, since
+`PXX_ALLOW_FULL_SUITE=1` is gated on the user asking and a peer cannot supply that. It ran the
+Makefile recipe lines directly instead and said so.
+
+### plexus-T: "the watcher is never idle" was wrong by 8x, and I had carried it
+
+The roster's own +21h entry stated it. Re-measured at HEAD: **idle 54% of the window, ~2.8h,
+about 8x what one full tier needs.** Idle was never scarce; a *contiguous* window is.
+**Breadth was not starved by pushes — it was queued behind an unfinishable item:** branch 2
+(pin verify) sits above breadth deliberately and asks for ~21 contiguous minutes, idle arrives
+in ~5-minute slices, every abort discards 100%, so `pin_verify_due` never goes false.
+Confirmed cleanly — pin verify retired and breadth started within minutes, push rate unchanged.
+
+Approved shapes **2 + 4** (resumable phases incl. pin verify; bound how long one unfinishable
+phase may hold idle). **Shape 1 closed as measured-wrong**, with the number recorded so it is
+not re-proposed. Also shipped: `8ec77190c`, a cascade ticket now names its RANGE — structural,
+because `bisect_step` skips cascades by design, so a cascade's `bad` is *always* just the upper
+bound of an untested range (17 commits -> 3 on the live incident).
+
+**T's own pushes preempt T's own breadth** (`tools/**` is correctly testable) — it killed the
+first breadth run in 5h13m at 207/2765 jobs by pushing its own fix. Filed rather than left as
+a habit.
+
+### The pattern, and it is mine
+
+Three times today I verified one thing and asserted its neighbour: the cluster-2 file set, the
+/tmp grouping, and now the cascade routing. **The workers caught all three by checking what the
+artifact was written to BE before acting on what it looked like.** That order — read the
+target's own header, then edit — is the whole difference.
+
+**PIN: v364 is RED at full** (first pin verdict since v354), all deliberate import reds. Still
+held. Retake once frank3 lands the tkinter one-liner; three compiler commits already past
+v364's base fold into the same pin.
