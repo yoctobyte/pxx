@@ -44,7 +44,6 @@ A ticket does not become float work by containing a `Double`. These stay in the 
 - a **missing** function a working CPython/FPC program calls — that is a frontend/RTL gap
 
 Left in `backlog/` deliberately, and named so the next person does not re-park them:
-`feature-a-extended-is-an-alias-for-double` (type mapping),
 `feature-opt-inline-float-and-record-returning-leaves` (an inliner pass that also covers
 records), `feature-nilpy-math-module-twelve-absent-names-measured` (absent names, not
 inaccurate ones).
@@ -66,3 +65,18 @@ one-ulp move turns a job red no matter what this folder says. Parking the ticket
 that; only changing what the tests assert does. Filed as
 `bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio` so it is handled inside
 Track T without spending the owner's attention on it — which was the point of the folder.
+
+
+## Correction 2026-08-19 — `extended-is-an-alias-for-double` IS F
+
+This README shipped naming that ticket as deliberately left in `backlog/` **in the same commit
+that moved it into `float/`** (`abbb02b0f`). The move is the correct half and the sentence was
+the stale one: it was written while F meant accuracy only, and minutes later the owner broadened
+F to *"both floating point math and formatting issues."* Whether `Extended` aliases `Double` is
+a **precision** decision about a float type, which is squarely F. The list above no longer names
+it.
+
+Recording rather than silently deleting, because the failure is instructive: **a scope was
+broadened and the exclusion list written under the old scope was not re-read.** When a category
+widens, the things it now swallows are exactly the ones previously written down as excluded —
+so the exclusion list is the first artifact to re-check, not the last.

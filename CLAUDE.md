@@ -189,7 +189,11 @@ frontend)"). **At session start, infer your track from the request:**
   insignificant digits), very low prio."* Same shape as O/S/M — **not a file-lane**:
   an F ticket ALSO carries its A/B/C/N/P file ownership for collision rules and obeys
   THAT lane's gate, so `track: B+F`, `track: P+F`, `track: A+F` are the normal
-  spellings, and `ready --track B` and `ready --track F` both match them.
+  spellings, and the ranker resolves both letters (`normalize_track` accepts F, so a
+  `B+F` ticket is a B ticket that is also F). **But `ready --track F` correctly prints
+  nothing** — `ready`/`next` scan only `urgent`/`working`/`unfinished`/`backlog`, and F
+  tickets live in `float/`. **Parking and rankability are the same switch: you get the
+  invisibility or the filter, not both.** To see the F set, list `devdocs/progress/float/`.
   **What is F — float MATH and float FORMATTING alike** (owner, same day: *"this
   implies both floating point math and formatting issues"*): ulps, rounding,
   subnormals, edge-of-range, correctly-rounded-vs-fast tiers, FPC/CPython numeric
@@ -445,7 +449,8 @@ is **xtensa** (the user's S2/S3 hardware); riscv32 (C3) is what works today.
 ### Track F in one line
 Floating point = **low prio by definition** (owner, stated four times). A work-tag,
 not a file-lane: carry the owning lane too (`B+F`, `P+F`, `A+F`) and obey that
-lane's gate. F = float MATH and float FORMATTING both: ulps, rounding,
+lane's gate. `ready --track F` prints nothing by design — F lives in `float/`, which the
+ranker never scans; `ls devdocs/progress/float/` is how you see the set. F = float MATH and float FORMATTING both: ulps, rounding,
 subnormals, edge-of-range, fast-vs-exact tiers, type precision, and the rendering
 side — Write/Writeln of a real, FloatToStr/Str, digit counts, exponent form — plus
 float-subject perf. **NOT F** = a crash, a hang, a wrong signature, a control-flow
