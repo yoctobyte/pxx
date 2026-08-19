@@ -4025,3 +4025,9 @@ it exposes in one go and the more it looks like a catastrophe.
 - `feature-c-import-a-pascal-unit-under-a-mangled-name` core landed self-host green (`1b3ea136b`);
   ticket stays in `working/` with §3 path collisions, §6 the bare-name experiment and `test/` cases
   written down.
+
+**Refinement on the straddle rule (frank2, after the fact):** they are TWO questions and asking
+only one leaves you half-informed. *Which binary does the JOB build with* tells you whether the
+range is even relevant. *Where does the CAUSE sit relative to the pin* tells you whether holding
+the next pin buys anything. The first is the one people ask; the second is the one that decides
+a pin. Both workers stood down clean — tree clean, nothing unpushed, master level with origin.
