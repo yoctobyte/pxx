@@ -110,7 +110,12 @@ def case_changed_hardware_opens_a_new_epoch_and_closes_the_old():
     clone = scratch()
     twatch.record_host_epoch(clone, "xeon")
     old = hosts_doc(clone)["xeon"][0]["fp"]
-    twatch._HW_CACHE["cpu"] = "Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz"
+    # DERIVED from the live cpu, never a hardcoded model string. This case used to
+    # name a real i7-6700 as "the other machine", which is a change on every box
+    # except an i7-6700 -- there, record_host_epoch correctly returns False and the
+    # case fails for being run on the hardware it was pretending to move to. A
+    # host-dependent devtest is worse than none: it reports on the box, not the code.
+    twatch._HW_CACHE["cpu"] = "Not-" + twatch.host_hardware()["cpu"]
     try:
         assert twatch.record_host_epoch(clone, "xeon") is True
         epochs = hosts_doc(clone)["xeon"]
