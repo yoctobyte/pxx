@@ -67,4 +67,4 @@ tickets.
 - 2026-08-09 — filed. Two false claims corrected the same day
   (`docs(D): Nil Python targets CPython behaviour; correct the dunder claims`);
   this covers the rest of the page.
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 66bebdce5.

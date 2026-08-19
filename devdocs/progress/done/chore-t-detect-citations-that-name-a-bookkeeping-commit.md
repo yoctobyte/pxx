@@ -3,7 +3,7 @@ track: T
 prio: 30
 type: chore
 blocked-by: []
-commit: PENDING-COMMIT
+commit: e3eec52dd
 claimed-by: plexus-T
 status: done
 ---
@@ -79,4 +79,4 @@ lines. `tools/sync_pending_commit_devtest.py` green (10 cases), whole
 `make tools-devtest` family green (38 guards).
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit e3eec52dd.
