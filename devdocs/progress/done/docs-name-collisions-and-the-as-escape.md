@@ -111,4 +111,4 @@ it is a known gap and not their mistake. Filed as
 [[bug-a-the-import-escape-hatch-fails-on-classes-pas]].
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit d45d131ad.

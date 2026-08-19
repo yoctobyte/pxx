@@ -130,4 +130,4 @@ to the binary that produced it, **at the default optimisation level**" — so th
 glossary cannot become the place the qualifier gets dropped.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit d45d131ad.

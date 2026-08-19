@@ -99,4 +99,4 @@ compiler's own `usage:` output is a one-line Track A change and is not done
 here.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit d45d131ad.

@@ -188,4 +188,4 @@ rewritten around the semantics that landed in v364, and now links the new
 `docs/language/name-collisions.md` page.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit d45d131ad.
