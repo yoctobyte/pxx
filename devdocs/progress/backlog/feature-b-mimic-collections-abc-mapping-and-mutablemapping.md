@@ -80,6 +80,31 @@ differential rather than by reading. frank3's ElementTree write-up records two c
 the plausible reading was wrong and shipped, and only the differential caught it —
 `find("*")` matching comments, and `path.split("/")` shredding a `{http://…}` URI.
 
+## 2026-08-19 (frank3-etree) — both blockers are DONE and neither is in the PIN
+
+Not blocked on work any more; blocked on delivery. Measured, not inferred:
+
+| | landed | in pin v355 (`264489d47360`, 10:34)? |
+| --- | --- | --- |
+| [[bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view]] | `810f219c3`, 13:01 | **no** |
+| [[feature-nilpy-for-loop-getitem-protocol-fallback]] | `6905d6fd0`, 13:07 | **no** |
+
+`git merge-base --is-ancestor` says no for both, and the pinned binary confirms
+it rather than the git history alone: on v355 `for x in s` over a
+`__getitem__`+`__len__` class is still `pylib (count) not loaded`, and
+`keys()`/`items()`/`values()` through an untyped receiver still misbehave.
+
+Track B builds with `$(PXX_STABLE)`, so this cannot start until a pin carries
+both. Building it on v355 would not fail loudly — `Mapping` is an ABC whose whole
+value is the mixin methods derived from `__getitem__`/`__len__`/`__iter__`, i.e.
+exactly those two fixes, so the shim would compile and answer wrong. "Fixed at
+HEAD" and "unblocked for B" are two claims and only the second one starts this.
+
+Escalated to the coordinator, since a pin holds the repo-wide lock. Leave
+`blocked-by` as it is: the tickets named there are the right ones, they are just
+in `done/` ahead of the pin, and rewriting the field would hide why the ticket is
+waiting.
+
 ## Gate
 
 Track B's: build with `$(PXX_STABLE)`, `make lib-test`. Then **re-run
