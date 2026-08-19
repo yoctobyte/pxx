@@ -6,6 +6,12 @@ two-phase: a fast native verdict (--fast-tier, default `native`) lands
 within minutes of a push; the full matrix (--tier, default `full`: cross
 targets + corpus) backfills while the repo is idle and is ABORTED (SIGINT,
 verdict discarded) the moment a new push arrives — pushes always preempt.
+An aborted run still keeps the jobs it had already DECIDED, so it costs the
+work it had left rather than the work it had done: testmgr writes its report on
+SIGINT, twatch saves it as a partial keyed on (sha, tier), and the next slice
+of the same work carries those verdicts instead of restarting. The partial is
+discarded unless the compiler rebuilds byte-identical — see load_resume(). The
+verdict itself is never partial: an aborted run publishes nothing at all.
 Publishes sparse per-SHA regression reports to devdocs/progress/tstate/.
 No AI, no judgment: signal only.  Ticket crafting from these reports is
 the Track T agent's job (face 2).
@@ -26,7 +32,10 @@ slot: after IDLE_YIELD_AFTER consecutive preemptions on one target, a phase
 yields a single turn to the phase below it. Without that, a phase too long to
 finish in the slices it is offered holds the slot permanently and everything
 under it is unreachable rather than merely slower — measured 2026-08-19, when
-step 4 did not run once in 5h13m while the box sat idle 54% of the time.
+step 4 did not run once in 5h13m while the box sat idle 54% of the time. The
+yield makes the lower steps REACHABLE; the resume above is what makes their
+turns add up. Neither alone is enough, and neither costs the step-1 latency
+anything.
 
 Steps 2 and 5 exist because the pin is NOT reachable by deepening HEAD: a pin
 is whatever HEAD happened to be when a human ran `make pin`, so by the time the
@@ -75,6 +84,8 @@ TSTATE_REL = "devdocs/progress/tstate"
 INDEX_REL = TSTATE_REL + "/TSTATE.md"  # generated; the ONE co-written tstate file
 WATCH_REL = ".testmgr/watch.json"     # daemon phase heartbeat for frontends
 PUBHEALTH_REL = ".testmgr/pubhealth.json"  # publish outcome: quiet vs stuck
+RESUME_REL = ".testmgr/resume.json"        # partial results of an ABORTED run
+RESUME_STATS_REL = ".testmgr/resume-stats.json"   # how often resuming WORKS
 CONF_NAME = "twatch.conf"             # per-clone config (JSON, untracked)
 # mid_tier == tier COLLAPSES the escalation ladder to native -> full, and that
 # is the measured default now. `limited` was a cheap preview of `full` when it
@@ -576,12 +587,150 @@ class Clone:
 
 
 # ---------------------------------------------------------------- testing --
-def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False):
+def bump_resume_stats(clone, **kw):
+    """Count what the resume mechanism actually DID, in a file, per clone.
+
+    Not a log line and not an in-memory counter: a resume that degrades to
+    always-discard produces exactly the same fleet-visible behaviour as one
+    that works — full coverage, eventually — so the only thing separating them
+    is a number somebody can read afterwards. Making breadth staleness visible
+    rather than remembered is the same fix; this is that fix applied to its own
+    machinery.
+    """
+    path = os.path.join(clone.path, RESUME_STATS_REL)
+    try:
+        with open(path) as f:
+            st = json.load(f)
+    except (OSError, ValueError):
+        st = {}
+    for k, v in kw.items():
+        if k.startswith("last"):
+            st[k] = v
+        else:
+            st[k] = int(st.get(k) or 0) + v
+    st["last_ts"] = utcnow()
+    try:
+        write_json_atomic(path, st)
+    except OSError:
+        pass
+    return st
+
+
+def resume_health(st):
+    """One line of RATES, not events. `saved` partials that never become
+    `carried` runs is the exact silent-degradation shape: every individual log
+    line reads fine and the mechanism does nothing."""
+    saved = int(st.get("saved_partials") or 0)
+    carried = int(st.get("carried_runs") or 0)
+    disc = int(st.get("discarded") or 0)
+    lost = int(st.get("no_report_on_abort") or 0)
+    return ("resume health: %d partial(s) saved, %d carried into a later run, "
+            "%d discarded by testmgr, %d aborts left no report, %d superseded"
+            % (saved, carried, disc, lost,
+               int(st.get("superseded") or 0)))
+
+
+def save_partial(clone, key, report):
+    """Persist an aborted run's decided jobs so the next slice can carry them.
+
+    Keyed on (sha, tier) AND carrying the compiler's sha256, because those
+    answer two different questions: the key says "is this the same WORK", the
+    sha256 says "is this the same BINARY", and a partial needs both to be true.
+    testmgr enforces the second (it is the only thing that knows the bytes
+    before any job runs); twatch enforces the first.
+    """
+    sha, tier = key
+    jobs = (report or {}).get("jobs") or []
+    if not jobs:
+        return 0
+    write_json_atomic(os.path.join(clone.path, RESUME_REL),
+                      {"sha": sha, "tier": tier,
+                       "compiler_sha256": report.get("compiler_sha256"),
+                       "saved": utcnow(), "jobs": jobs})
+    return len(jobs)
+
+
+def drop_partial(clone):
+    try:
+        os.unlink(os.path.join(clone.path, RESUME_REL))
+    except OSError:
+        pass
+
+
+def keep_partial(clone, key, rep_path, tier):
+    """Abort path: testmgr wrote a report before dying — keep what it decided.
+
+    The report exists because kill_child() sends SIGINT first and testmgr
+    handles it: it tears its jobs down, marks the queue `skipped`, exits 130,
+    and STILL writes the report with verdict INTERRUPTED and every job it had
+    already finished. That report was being thrown away — run_gate returned
+    before reading it — which is the whole reason an aborted run cost 100% of
+    its work rather than the fraction it had left.
+
+    The caller's contract is unchanged: it still gets (None, "aborted") and
+    still records NO verdict. A partial is not a verdict, and nothing here
+    publishes one.
+    """
+    if not key:
+        return
+    try:
+        with open(rep_path) as f:
+            rep = json.load(f)
+    except (OSError, ValueError):
+        # SIGKILL after the grace, or a death before the report: nothing to
+        # keep. Counted, because "the grace is never long enough" is a real
+        # failure mode and it would otherwise look identical to success.
+        bump_resume_stats(clone, no_report_on_abort=1)
+        return
+    n = save_partial(clone, key, rep)
+    if n:
+        print("twatch: kept %d decided job(s) from the aborted %s run — the "
+              "next slice resumes instead of restarting" % (n, tier), flush=True)
+        bump_resume_stats(clone, saved_partials=1, saved_jobs=n)
+    else:
+        bump_resume_stats(clone, empty_partials=1)
+
+
+def resume_arg(clone, key):
+    """--resume path for this run, or None. Drops a partial from other work."""
+    if not key:
+        return None
+    path = os.path.join(clone.path, RESUME_REL)
+    try:
+        with open(path) as f:
+            part = json.load(f)
+    except (OSError, ValueError):
+        return None
+    if (part.get("sha"), part.get("tier")) != key:
+        # Not a mismatch to argue with: the watcher moved on to different work,
+        # and the old partial can never become valid again. Counted anyway --
+        # a rising superseded count is how "the ladder never returns to the
+        # same job twice" would show up as a number instead of a suspicion.
+        print("twatch: dropping a partial for %s/%s — this run is %s/%s"
+              % ((part.get("sha") or "?")[:12], part.get("tier"),
+                 key[0][:12], key[1]), flush=True)
+        bump_resume_stats(clone, superseded=1)
+        drop_partial(clone)
+        return None
+    return path
+
+
+def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False,
+             resume_key=None):
     """Run the CLONE's testmgr (self-versioned with the tested tree).
 
     abort_check: optional callable polled every ~30s; returning True SIGINTs
     the run (testmgr tears its jobs down) and run_gate returns (None,
-    "aborted") — the caller must record NO verdict for an aborted run."""
+    "aborted") — the caller must record NO verdict for an aborted run.
+
+    resume_key: (sha, tier) identifying the WORK, enabling partial-run carry-
+    over. An aborted run is not a wasted one: testmgr already writes a report
+    on SIGINT listing every job it decided, and this keeps that report so the
+    next slice can skip those jobs. Without it an idle phase that never gets a
+    contiguous window discards 100% of its work forever, which is exactly how
+    platform breadth went 5h13m without a single run while the box sat idle 54%
+    of the time. Pass None for runs where carrying over makes no sense (a
+    single-job bisect step is already short)."""
     # fresh clone has no compiler binary: seed from the committed stable.
     # CRITICAL: backdate the seeded binary — its copy-time mtime would beat
     # every source file and make would never self-host HEAD's compiler, so
@@ -600,6 +749,9 @@ def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False):
            "--tier", tier, "--report-json", rep_path]
     if job_glob:
         cmd += ["--job", job_glob]
+    res_path = resume_arg(clone, resume_key)
+    if res_path:
+        cmd += ["--resume", res_path]
     # resource ceilings (limited/restricted profiles). Concurrency is a testmgr
     # CLI arg; the mem cap is an env override read by reexec_scoped().
     env = dict(os.environ)
@@ -629,6 +781,7 @@ def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False):
             print("twatch: stopping — tearing down the running %s gate" % tier,
                   flush=True)
             kill_child(proc)
+            keep_partial(clone, resume_key, rep_path, tier)
             return None, "aborted"
         if time.monotonic() - last_check >= 30:
             last_check = time.monotonic()
@@ -643,12 +796,28 @@ def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False):
                 print("twatch: aborting %s run (new work preempts it)" % tier,
                       flush=True)
                 kill_child(proc)
+                keep_partial(clone, resume_key, rep_path, tier)
                 return None, "aborted"
     _GATE_PROC = None          # reaped: nothing left for the handler to kill
     report = None
     if os.path.exists(rep_path):
         with open(rep_path) as f:
             report = json.load(f)
+    if resume_key:
+        # The run ENDED — whatever its verdict, this work is not going to be
+        # resumed, so the partial must go. Leaving it would be worse than
+        # useless: it would be offered to the next run of the same (sha, tier),
+        # which is precisely a retry after an INFRA/busy failure, i.e. the case
+        # where the compiler is most likely to have been reseeded underneath it.
+        drop_partial(clone)
+        rz = (report or {}).get("resume")
+        if rz:
+            stats = bump_resume_stats(
+                clone, last_note=rz.get("note") or "",
+                **({"carried_runs": 1, "carried_jobs": int(rz.get("carried") or 0)}
+                   if rz.get("carried") else {"discarded": 1}))
+            print("twatch: %s\ntwatch: %s" % (rz.get("note") or "",
+                                              resume_health(stats)), flush=True)
 
     # Two shapes of the SAME condition — this box cannot produce a measurement:
     #
@@ -703,7 +872,8 @@ def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False):
                 print("twatch: reseed failed (%s)" % e, flush=True)
                 return report, proc.returncode
             return run_gate(clone, tier, job_glob=job_glob,
-                            abort_check=abort_check, _reseeded=True)
+                            abort_check=abort_check, _reseeded=True,
+                            resume_key=resume_key)
         # Reseeding already happened and it STILL cannot build: a real box
         # fault. Hand the INFRA report up so test_sha can mark the host
         # degraded instead of silently treating it as "nothing happened".
@@ -1470,7 +1640,8 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                                          "" if full else ", fast"), flush=True)
     set_phase(clone, host, "testing", sha=sha, tier=tier, fast=not full)
     clone.checkout(sha)
-    report, rc = run_gate(clone, tier, abort_check=abort_check)
+    report, rc = run_gate(clone, tier, abort_check=abort_check,
+                          resume_key=(sha, tier))
     clone_head_back(clone)
     if rc == "aborted":
         return "aborted"
@@ -3326,9 +3497,13 @@ def verify_pin(clone, host, st, ver, sha, tier, abort_check=None):
           "builds on" % (ver, sha[:12], tier), flush=True)
     set_phase(clone, host, "pin-verify", sha=sha[:12], tier=tier, pin=ver)
     clone.checkout(sha)
-    report, rc = run_gate(clone, tier, abort_check=abort_check)
+    report, rc = run_gate(clone, tier, abort_check=abort_check,
+                          resume_key=(sha, tier))
     clone_head_back(clone)
     if rc == "aborted":
+        # "will resume" was aspirational until shape 2: the run was torn down
+        # and every finished job discarded, so the next attempt started from
+        # zero. The resume_key above is what makes the sentence true.
         print("twatch: pin verify preempted by a push — will resume", flush=True)
         return "aborted"
     if rc == "busy":

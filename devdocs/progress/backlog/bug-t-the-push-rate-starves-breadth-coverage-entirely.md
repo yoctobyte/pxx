@@ -222,3 +222,85 @@ on a malformed timestamp (0 would render "0h old" and mean the opposite).
 **Still open:** shape 1 (reserve breadth a slot) and shape 2 (resumable
 backfill). Both trade against fast-verdict latency, which is the dev loop's
 latency, and neither should be decided from one busy afternoon.
+
+## 2026-08-19 — shapes 4 and 2 SHIPPED. Every open shape is now closed or landed.
+
+Approved by the coordinator on the reasoning rather than the authority
+("neither shape touches fast-verdict latency"), which is the right test: step 1
+of the ladder is the dev loop's latency and nothing here may spend it.
+
+**Shape 4 — an unfinishable idle phase yields the slot instead of holding it**
+(`546771cbe`). After `IDLE_YIELD_AFTER` (3) consecutive preemptions on one
+target, a phase yields a single turn to the phase below it.
+
+- *Three, not one.* Yielding every other turn would invert a priority that
+  exists for a real reason — pin verify is the binary B/C/D/E are building with
+  right now, while HEAD is a sha nobody has adopted yet.
+- *Keyed on target as well as phase*, so a new pin starts with a full budget
+  rather than inheriting the previous pin's exhaustion.
+- *The yield is spent BEFORE the run it enables.* Clearing it afterwards would
+  leave it standing through an abort — the likely outcome, since the same push
+  rate is what earned it — and hand breadth the next slot too, turning a
+  one-turn loan into the inversion this is careful to avoid.
+
+**Shape 2 — an aborted run costs the work it had LEFT, not the work it had
+done.** The expensive half turned out to be already built: testmgr handles
+SIGINT, tears its jobs down, and **still writes its report**, verdict
+`INTERRUPTED`, listing every job it had finished. `run_gate` returned before
+reading it. So the fix is a carry-over, not a checkpointing engine:
+
+- twatch saves that report as a partial keyed on `(sha, tier)`
+  (`.testmgr/resume.json`, untracked);
+- the next slice of the same work passes it to testmgr as `--resume`;
+- testmgr skips the jobs it already decided and merges their verdicts into the
+  report it finally publishes.
+
+Three ways that could be wrong, each pinned by a check:
+
+1. **Results not attributable to this binary.** A partial is only valid against
+   a byte-identical compiler, so the partial carries the compiler's `sha256` and
+   testmgr — the only thing that knows the bytes *before* any job runs —
+   discards on mismatch. The invariant is real (the compiler is built through
+   the self-host fixedpoint at the tested sha) but holds **at the default `-O`
+   level**, which is the only level anything compiles `compiler.pas` at today; a
+   tier that ever built it at another level would break it quietly, and
+   comparing bytes is what turns that into a discarded partial instead of a
+   wrong verdict. That assumption is stated at the check site, not just here.
+2. **Carrying a job whose artifacts are gone.** The aborted slice ran in its own
+   `RUN_TMP` and dropped it at exit, so anything a still-to-run job depends on
+   must be re-run — transitively. This would not have failed loudly: it would
+   have run a dependent against a missing artifact and reported an ordinary red.
+3. **Laundering a carried RED into a GREEN.** The failure was decided in an
+   earlier process, so this run's `rc` knows nothing about it. `carried_red()`
+   is what stops the report carrying a red job while announcing green.
+
+**The verdict is never partial.** An aborted run still publishes nothing at all
+— `run_gate` still returns `(None, "aborted")` and the caller still records no
+verdict. A partial is an input to the next run, not an output to the fleet.
+
+### Counted, because the failure mode here is silence
+
+A resume that always discards is **indistinguishable from one that works**: both
+eventually produce full coverage, and the broken one merely costs what today
+already costs. So `.testmgr/resume-stats.json` counts partials saved, runs
+carried, testmgr-side discards, aborts that left no report (SIGKILL after the
+30s grace), and supersedes; `resume_health()` prints the rates, not the events.
+Same fix as the breadth banner, applied to its own machinery — *a property that
+holds only because somebody remembered is a habit, not a property.*
+
+### What shape 4 must not be credited with
+
+It makes the lower branches **reachable, not fast**. It does not finish a
+21-minute job in 5-minute slices; shape 2 is what makes the turns add up.
+A metric will move when the daemon restarts and it will be tempting to read that
+as the fix landing. **If breadth's first post-restart run is still an abort,
+that is expected, not a regression** — the push rate has not changed.
+
+**Gate:** `tools/twatch_idle_yield_devtest.py` (shape 4; pins both opposite
+failure directions — yielding too eagerly and yielding permanently) and
+`tools/twatch_resume_devtest.py` (shape 2; the three wrong-carry modes above
+plus the counting), both in `make tools-devtest`.
+
+**Status: all four shapes resolved** — 1 closed as measured-wrong, 3 shipped
+(visibility), 4 and 2 shipped. What remains is watching the numbers rather than
+writing code, which is what the stats file is for.

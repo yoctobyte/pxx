@@ -1364,6 +1364,120 @@ def job_selected(job, sel):
     return fnmatch.fnmatch(job.name, sel)
 
 
+def load_resume(path, tier, compiler_sha):
+    """Read a partial job set left by an ABORTED earlier slice of this run.
+
+    Returns (jobs, note): `jobs` are report-shaped dicts whose verdicts may be
+    carried into this run, and `note` is a one-line explanation the caller
+    PRINTS -- always, including when nothing was carried.
+
+    Saying so out loud is the point. A resume that silently discards every time
+    is indistinguishable, from outside, from a resume that works: both end up
+    producing a full report eventually, and the broken one merely costs what
+    today already costs. That is a mechanism reporting success while doing
+    nothing, and the only thing that separates the two cases is a number
+    somebody can look at.
+
+    The validity test is the compiler's sha256, not the git sha. Byte-identity
+    is a real invariant here rather than a hope -- the compiler is built through
+    the self-host fixedpoint at the tested sha before any job runs -- but it
+    holds **at the DEFAULT -O level, which is the only level anything builds
+    compiler.pas at today**. A tier that ever compiled the compiler at another
+    optimisation level would break the invariant quietly, and comparing the
+    bytes is what turns that into a discarded partial instead of a wrong
+    verdict.
+    """
+    if not os.path.exists(path):
+        return [], "resume: no partial from an earlier slice — running the full tier"
+    try:
+        with open(path) as f:
+            part = json.load(f)
+    except (OSError, ValueError) as e:
+        return [], "resume: DISCARDED — partial unreadable (%s)" % e
+    if part.get("tier") != tier:
+        return [], ("resume: DISCARDED — partial is tier %s, this run is %s"
+                    % (part.get("tier"), tier))
+    was = part.get("compiler_sha256")
+    if not was or not compiler_sha:
+        return [], ("resume: DISCARDED — no compiler sha256 to compare "
+                    "(partial %s, now %s)" % (was and was[:12],
+                                              compiler_sha and compiler_sha[:12]))
+    if was != compiler_sha:
+        return [], ("resume: DISCARDED — compiler rebuilt to different bytes "
+                    "(%s -> %s); the partial's results are not attributable "
+                    "to this binary" % (was[:12], compiler_sha[:12]))
+    jobs = [j for j in (part.get("jobs") or [])
+            if j.get("status") in ("pass", "fail", "timeout", "skip")]
+    if not jobs:
+        return [], "resume: partial carried no decided job — running the full tier"
+    return jobs, ("resume: partial accepted — %d job(s) already decided against "
+                  "this exact binary (%s)" % (len(jobs), compiler_sha[:12]))
+
+
+def apply_resume(jobs, carried):
+    """Mark resumable jobs `skipped` and return the carried dicts actually used.
+
+    A carried job's ARTIFACTS are gone -- the aborted slice ran in its own
+    RUN_TMP and dropped it at exit -- so anything a still-to-run job DEPENDS on
+    must be re-run rather than carried, transitively. Getting this wrong would
+    not fail loudly; it would run a dependent job against a missing artifact and
+    report the result as a normal test failure.
+    """
+    by_sel = {c.get("sel") or c.get("name"): c for c in carried}
+    must_run = {j.name for j in jobs if (j.sel or j.name) not in by_sel}
+    grew = True
+    while grew:
+        grew = False
+        for j in jobs:
+            if j.name in must_run:
+                for d in j.deps:
+                    if d.name not in must_run:
+                        must_run.add(d.name)
+                        grew = True
+    used = []
+    for j in jobs:
+        c = by_sel.get(j.sel or j.name)
+        if c is not None and j.name not in must_run and j.status != "skip":
+            # NOT "skipped": that status already carries two other meanings --
+            # never launched because a dep failed, and torn down by an abort --
+            # and both are counted and PRINTED under those names. Reusing it
+            # would have made the summary say a carried job was "not run (a job
+            # they depend on failed)", which is a true-sounding sentence about
+            # the wrong subject.
+            j.status = "carried"     # omitted from the report; the carried
+            used.append(c)           # dict supplies this job's real verdict
+    return used
+
+
+def live_progress(jobs):
+    """(decided, total, pct) for the run's final progress record.
+
+    NOT done_count(): teardown() marks every un-launched job "skipped" and
+    done_count() counts those, so an INTERRUPTED run published `done == total`
+    at `pct: 100` — a frontend reading progress saw a finished run, and the only
+    thing contradicting it was a `verdict` field it had no reason to read.
+    Measured 2026-08-19: a full tier preempted after 108 of 2765 jobs reported
+    2765/2765. The teardown is right to mark them skipped; counting a job that
+    never launched as progress is what is wrong.
+    """
+    total = len(jobs)
+    decided = sum(1 for j in jobs if j.status in ("pass", "fail", "timeout"))
+    pct = 100.0 if decided >= total else round(100.0 * decided / (total or 1), 1)
+    return decided, total, pct
+
+
+def carried_red(carried):
+    """A carried RED is still a RED.
+
+    The verdict covers the whole TIER, not the slice that happened to run last.
+    Without this, resuming would be a way to launder a failure into a green:
+    the job that failed was decided in an EARLIER process, so this run's rc
+    knows nothing about it, and the report would carry the red job while
+    announcing GREEN.
+    """
+    return any(c.get("status") in ("fail", "timeout") for c in carried)
+
+
 def classify(lines):
     text = "\n".join(lines)
     if "optdiff.sh" in text:
@@ -3684,6 +3798,11 @@ def main():
                          "one failing job in isolation")
     ap.add_argument("--report-json", metavar="PATH",
                     help="write machine-readable per-job results (twatch)")
+    ap.add_argument("--resume", metavar="PATH",
+                    help="carry the results of an ABORTED earlier slice of this "
+                         "same tier (a partial report written by twatch); jobs "
+                         "already decided there are not re-run. Discarded "
+                         "unless the compiler rebuilds byte-identical")
     ap.add_argument("--inject-hang", action="store_true",
                     help="add a sleep-loop job to prove hang handling")
     ap.add_argument("--force", action="store_true",
@@ -3866,12 +3985,29 @@ def main():
     if snap_path:
         print("testmgr: compiler snapshot %s (sha256 %s)"
               % (snap_path, (snap_sha or "?")[:12]), flush=True)
+    # Resume AFTER the compiler exists and its bytes are known: the whole
+    # validity question is "is this the same binary", and it cannot be asked
+    # before build_compiler() has run.
+    carried, resume_note = [], None
+    if args.resume:
+        carried, resume_note = load_resume(args.resume, args.tier,
+                                           snap_sha or repo_sha0)
+        print("testmgr: %s" % resume_note, flush=True)
+        carried = apply_resume(jobs, carried) if carried else []
+        if carried:
+            print("testmgr: resume — carrying %d job(s), running %d"
+                  % (len(carried),
+                     len([j for j in jobs
+                          if j.status not in ("skip", "carried")])), flush=True)
     scale = calibrate()
     # propagate to child scripts with their own inner `timeout` calls
     os.environ["TESTMGR_TIME_SCALE"] = "%.2f" % scale
     os.environ["TESTMGR_TMP"] = RUN_TMP     # for tool scripts' own scratch
     logdir = tempfile.mkdtemp(prefix="testmgr-")
-    run_jobs = [j for j in jobs if j.status != "skip"]
+    # "carried" as well as "skip": a job resumed from an aborted earlier slice
+    # is already decided, and handing it to the Manager would re-run the very
+    # work the resume exists to save.
+    run_jobs = [j for j in jobs if j.status not in ("skip", "carried")]
     mgr = Manager(run_jobs, args, scale, logdir)
     # Live-concurrency factor for scripts whose INNER per-item timeouts starve
     # under the full parallel matrix (qemu-user conformance shards especially:
@@ -3882,10 +4018,12 @@ def main():
     # ever extends a budget, never shortens it).
     os.environ["TESTMGR_LOAD_SCALE"] = "%.2f" % max(
         1.0, mgr.hard_cap / float(os.cpu_count() or 1))
-    nskip = len(jobs) - len(run_jobs)
-    print("testmgr: tier=%s jobs=%d%s cap=%d scale=%.2f logs=%s"
+    nskip = sum(1 for j in jobs if j.status == "skip")
+    ncarried = sum(1 for j in jobs if j.status == "carried")
+    print("testmgr: tier=%s jobs=%d%s%s cap=%d scale=%.2f logs=%s"
           % (args.tier, len(run_jobs),
              " skip=%d(corpus-absent)" % nskip if nskip else "",
+             " carried=%d(resumed)" % ncarried if ncarried else "",
              mgr.hard_cap, scale, logdir), flush=True)
     report_mem_floor()
     if any(j.target in PIN_BUILT_TARGETS for j in run_jobs):
@@ -3894,9 +4032,10 @@ def main():
     rc = mgr.run()
     wall = time.monotonic() - t0
     save_metrics(mgr.metrics)
+    ldone, ltotal, lpct = live_progress(mgr.jobs)
     write_json_atomic(LIVE_PATH, {
-        "ts": time.time(), "tier": args.tier, "pct": 100.0,
-        "done": mgr.done_count(), "total": len(mgr.jobs),
+        "ts": time.time(), "tier": args.tier, "pct": lpct,
+        "done": ldone, "total": ltotal,
         "elapsed": round(wall, 1), "eta": 0, "running": [],
         "red": [j.name for j in jobs if j.status in ("fail", "timeout")],
         "verdict": "GREEN" if rc == 0 else
@@ -3954,11 +4093,13 @@ def main():
     # deps:lib-test#00. The per-job lines already said SKIPPED; only the
     # headline lied by omission.
     nblocked = sum(1 for j in jobs if j.status == "skipped")
-    print("  %d/%d pass%s%s%s" % (npass, len(jobs) - nskip,
-                                  ", %d skip (corpus absent)" % nskip if nskip else "",
-                                  ", %d not run (a job they depend on failed)"
-                                  % nblocked if nblocked else "",
-                                  ", %d flaky (passed on retry)" % len(flaky) if flaky else ""))
+    print("  %d/%d pass%s%s%s%s" % (npass, len(jobs) - nskip - ncarried,
+                                    ", %d skip (corpus absent)" % nskip if nskip else "",
+                                    ", %d carried from an aborted earlier slice"
+                                    % ncarried if ncarried else "",
+                                    ", %d not run (a job they depend on failed)"
+                                    % nblocked if nblocked else "",
+                                    ", %d flaky (passed on retry)" % len(flaky) if flaky else ""))
     if flaky:
         print("  flaky (recovered on retry, NOT red): %s" % " ".join(flaky))
     print_est_mem_accuracy(jobs)
@@ -4012,6 +4153,8 @@ def main():
               "(%s -> %s)%s" % (repo_sha0[:12], repo_sha1[:12],
                                 " — jobs ran against the snapshot, results stand"
                                 if snap_path else ""), flush=True)
+    if rc == 0 and carried_red(carried):
+        rc = 1
     verdict = ("INVALID" if invalid else
                "GREEN" if rc == 0 else
                "INTERRUPTED" if rc == 130 else "RED")
@@ -4034,6 +4177,11 @@ def main():
                # bisects and files tickets on it).  j.name is a positional
                # index that renumbers whenever a test is inserted above it.
                "selfhost_red": mgr.selfhost_red,
+               # What the resume did, ALWAYS present when --resume was passed,
+               # including the do-nothing case: a discard rate is only visible
+               # if the discards are recorded where a consumer already looks.
+               "resume": ({"carried": len(carried), "note": resume_note}
+                          if args.resume else None),
                # Only jobs that actually RAN. A self-host abort leaves the rest
                # "skipped" (never launched) — distinct from "skip" (corpus
                # absent, a real pass-equivalent outcome). Emitting them would be
@@ -4061,7 +4209,8 @@ def main():
                          "mem": j.peak_rss, "cpu": round(j.cpu_sec, 1),
                          "log": j.logpath}
                         for j in jobs
-                        if j.status not in ("queued", "skipped")]}
+                        if j.status not in ("queued", "skipped",
+                                            "carried")] + carried}
         with open(args.report_json, "w") as f:
             json.dump(rep, f, indent=1)
     return rc
