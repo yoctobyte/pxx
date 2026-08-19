@@ -112,12 +112,41 @@ def case_the_shared_helper_exists_and_is_whole():
 
 
 def case_detachment_is_detected():
-    """The whole rule turns on this predicate, and it must not report a normal
-    branch checkout as detached — that would send every reader through git for
-    no reason."""
-    assert twatch.head_detached(str(TOOLS.parent)) is False, \
-        "a checkout on a branch was reported as detached"
-    return "branch checkout -> not detached"
+    """The whole rule turns on this predicate, so pin BOTH directions.
+
+    This used to assert `head_detached(this repo) is False` — a true fact about
+    the wrong subject. It measured "the checkout I happen to be running in is on
+    a branch", not "the predicate distinguishes the two states", and the one
+    environment where it matters is a WATCHER CLONE, which is detached at the
+    sha under test by design. So the full tier failed `tools-devtest` every time
+    it ran, on a test whose subject was the runner rather than the code, while
+    passing in every dev checkout. It also never exercised the True direction at
+    all, which is the direction the entire rule is built on.
+
+    A scratch repo answers the actual question and answers it anywhere.
+    """
+    import subprocess
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="tstate-detach-") as d:
+        def git(*a):
+            subprocess.run(("git",) + a, cwd=d, check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        git("init", "-q", "-b", "main")
+        git("config", "user.email", "t@example.invalid")
+        git("config", "user.name", "t")
+        pathlib.Path(d, "f").write_text("x\n")
+        git("add", "f")
+        git("commit", "-qm", "one")
+        assert twatch.head_detached(d) is False, \
+            "a checkout on a branch was reported as detached"
+        sha = subprocess.run(["git", "rev-parse", "HEAD"], cwd=d, check=True,
+                             capture_output=True, text=True).stdout.strip()
+        git("checkout", "-q", sha)
+        assert twatch.head_detached(d) is True, \
+            "a DETACHED checkout was reported as on a branch — the rule this "\
+            "whole file enforces would then never fire in a watcher clone"
+    return "branch -> False, detached -> True (scratch repo, not this checkout)"
 
 
 def case_helper_falls_back_rather_than_raising():
