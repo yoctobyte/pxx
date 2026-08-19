@@ -1206,8 +1206,8 @@ function AsmRv32RegNum(const opIn: AnsiString; var reg: Integer): Boolean; forwa
 function AsmXtensaRegNum(const opIn: AnsiString; var reg: Integer): Boolean; forward;
 function AsmXtensaIsLoadStore(const mnem: AnsiString): Boolean; forward;
 function AsmA64RegNum(const opIn: AnsiString; var reg: Integer; var is64: Boolean): Boolean; forward;
-function AsmArm32RegNum(const opIn: AnsiString; var reg: Integer): Boolean; forward;
-function AsmArm32CondCode(const condStr: AnsiString; var cond: Integer): Boolean; forward;
+{$ifndef PXX_NO_ARM32}function AsmArm32RegNum(const opIn: AnsiString; var reg: Integer): Boolean; forward;{$endif}
+{$ifndef PXX_NO_ARM32}function AsmArm32CondCode(const condStr: AnsiString; var cond: Integer): Boolean; forward;{$endif}
 function AsmTextJccCode(const m: AnsiString; var cc: Integer): Boolean; forward;
 
 function AsmEncIntToStr(v: Int64): AnsiString;
@@ -1383,6 +1383,7 @@ begin
   len := InlineAsmLineCount - startOff;
 end;
 
+{$ifndef PXX_NO_ARM32}
 function AsmArm32IsBranchOrJump(const mn: AnsiString): Boolean;
 var cond, i: Integer; head: AnsiString;
 begin
@@ -1483,7 +1484,9 @@ begin
 
   len := InlineAsmLineCount - startOff;
 end;
+{$endif}
 
+{$ifndef PXX_NO_I386}
 function Asm386IsBranchOrJump(const mn: AnsiString): Boolean;
 var cc: Integer;
 begin
@@ -1585,6 +1588,7 @@ begin
 
   len := InlineAsmLineCount - startOff;
 end;
+{$endif}
 
 { Append one operand-position identifier for the xtensa text path. Registers
   and branch-line labels pass through. A Pascal variable is legal only as the
@@ -1830,16 +1834,20 @@ begin
     AsmParseBodyTextA64(startOff, len);
     Exit;
   end;
+{$ifndef PXX_NO_ARM32}
   if TargetArch = TARGET_ARM32 then
   begin
     AsmParseBodyTextArm32(startOff, len);
     Exit;
   end;
+{$endif}
+{$ifndef PXX_NO_I386}
   if TargetArch = TARGET_I386 then
   begin
     AsmParseBodyText386(startOff, len);
     Exit;
   end;
+{$endif}
   if TargetArch = TARGET_XTENSA then
   begin
     AsmParseBodyTextXtensa(startOff, len);

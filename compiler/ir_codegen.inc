@@ -634,7 +634,9 @@ begin
   if NoSignals then Exit;
   if      TargetArch = TARGET_X86_64  then EmitSignalRuntime
   else if TargetArch = TARGET_AARCH64 then EmitSignalRuntimeA64
+{$ifndef PXX_NO_ARM32}
   else if TargetArch = TARGET_ARM32   then EmitSignalRuntimeArm32
+{$endif}
 {$ifndef PXX_NO_I386}
   else if TargetArch = TARGET_I386    then EmitSignalRuntime386
 {$endif}
@@ -678,7 +680,9 @@ begin
   else if TargetArch = TARGET_I386    then EmitIoLockStubs386
 {$endif}
   else if TargetArch = TARGET_AARCH64 then EmitIoLockStubsA64
+{$ifndef PXX_NO_ARM32}
   else if TargetArch = TARGET_ARM32   then EmitIoLockStubsArm32;
+{$endif}
   { riscv32/xtensa deliberately absent: --threadsafe atomics are not ported
     there, and the AN_WRITE lowering does not emit IR_IO_LOCK for them either
     (see the arch test at the emission site in ir.inc), so there is nothing to
@@ -6931,11 +6935,13 @@ begin
     Exit;
   end;
 {$endif}
+{$ifndef PXX_NO_ARM32}
   if TargetArch = TARGET_ARM32 then
   begin
     IREmitMachineCodeArm32;
     Exit;
   end;
+{$endif}
   if TargetArch = TARGET_AARCH64 then
   begin
     IREmitMachineCodeAarch64;

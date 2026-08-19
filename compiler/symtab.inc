@@ -64,11 +64,11 @@ procedure EmitReleaseHeapLock; forward;
 procedure EmitLoadVarA64(idx: Integer); forward;
 procedure EmitLoadDataRefA64(rd, dataOff: Integer); forward;
 procedure EmitA64CopyBytes(countReg, srcReg, dstReg: Integer); forward;
-procedure EmitArm32CopyBytes(countReg, srcReg, dstReg: Integer); forward;
-procedure EmitLoadVarArm32(idx: Integer); forward;
-procedure EmitLoadVar64Arm32(idx: Integer); forward;
-procedure EmitLoadVarAddrArm32(idx: Integer); forward;
-procedure EmitLoadDataRefArm32(rd, dataOff: Integer); forward;
+{$ifndef PXX_NO_ARM32}procedure EmitArm32CopyBytes(countReg, srcReg, dstReg: Integer); forward;{$endif}
+{$ifndef PXX_NO_ARM32}procedure EmitLoadVarArm32(idx: Integer); forward;{$endif}
+{$ifndef PXX_NO_ARM32}procedure EmitLoadVar64Arm32(idx: Integer); forward;{$endif}
+{$ifndef PXX_NO_ARM32}procedure EmitLoadVarAddrArm32(idx: Integer); forward;{$endif}
+{$ifndef PXX_NO_ARM32}procedure EmitLoadDataRefArm32(rd, dataOff: Integer); forward;{$endif}
 procedure EmitLoadVarXtensa(idx: Integer); forward;
 procedure EmitLoadVar64Xtensa(idx: Integer); forward;
 procedure EmitLoadVarRISCV32(idx: Integer); forward;
@@ -8287,6 +8287,7 @@ begin
     EmitB($C9); EmitB($C3);                                    { leave; ret }
     Exit;
   end;
+{$ifndef PXX_NO_ARM32}
   if TargetArch = TARGET_ARM32 then
   begin
     { Release local managed variables before returning. }
@@ -8431,6 +8432,7 @@ begin
     EmitI32($E8BD8800);  { pop {fp, pc} }
     Exit;
   end;
+{$endif}
   if TargetArch = TARGET_AARCH64 then
   begin
     { Release local managed variables before returning (mirrors the arm32 arm

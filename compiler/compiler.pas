@@ -95,7 +95,7 @@ procedure EmitAsmX64(const items: array of const); overload; forward;
 {$ifndef PXX_NO_I386}{$include asmtext_386.inc}{$endif}
 {$include asmtext_rv32.inc}
 {$include asmtext_a64.inc}
-{$include asmtext_arm32.inc}
+{$ifndef PXX_NO_ARM32}{$include asmtext_arm32.inc}{$endif}
 {$include asmtext_xtensa.inc}
 {$ifndef PXX_NO_CFRONT}procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;{$endif}
 procedure AddDefaultCIncludeDirs; forward;   { the C unit pull in parser.inc needs it too }
@@ -108,7 +108,7 @@ function GetOrAllocNodeDynDesc(node: Integer): Integer; forward;
 function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
 {$include ir_codegen_aarch64.inc}
 {$ifndef PXX_NO_I386}{$include ir_codegen386.inc}{$endif}
-{$include ir_codegen_arm32.inc}
+{$ifndef PXX_NO_ARM32}{$include ir_codegen_arm32.inc}{$endif}
 {$include ir_codegen_riscv32.inc}
 {$include ir_codegen_xtensa.inc}
 {$include ir_codegen.inc}
@@ -346,6 +346,9 @@ begin
     end
     else if option = '--target=arm32' then
     begin
+{$ifdef PXX_NO_ARM32}
+      Error('--target=arm32: this compiler was built without the arm32 backend (-dPXX_NO_ARM32)');
+{$endif}
       TargetArch := TARGET_ARM32;
       Inc(i);
     end

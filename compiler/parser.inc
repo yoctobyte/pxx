@@ -23,9 +23,11 @@ procedure EmitIoLockStubs; forward;
 procedure EmitIoLockStubsA64; forward;
 procedure EmitSignalRuntimeA64; forward;
 procedure EmitSignalRuntimeRISCV32; forward;
-procedure EmitSignalRuntimeArm32; forward;
+{$ifndef PXX_NO_ARM32}procedure EmitSignalRuntimeArm32; forward;{$endif}
 {$ifndef PXX_NO_I386}procedure EmitSignalRuntime386; forward;{$endif}
+{$ifndef PXX_NO_ARM32}
 procedure EmitIoLockStubsArm32; forward;
+{$endif}
 { The per-arch dispatcher every frontend driver must call instead of picking a
   stub itself — see its body in ir_codegen.inc for why that is not optional. }
 procedure EmitIoLockStubsForTarget; forward;
