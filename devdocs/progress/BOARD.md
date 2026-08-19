@@ -45,7 +45,7 @@ _none_
 | feature-a-own-language-first-symbol-resolution | A | 55 | feature | Own-language-first symbol resolution: the native language wins | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (241)
+## backlog (240)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -119,7 +119,6 @@ _none_
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | decide-reduced-compiler-switch-spelling | U | 55 | decide | How does a reduced build get selected — subtractive (`omit-c`), positive-list (`only-pascal`), or a named-configuration file? And do frontend and target selection compose freely or only in blessed combinations? The user flagged the names in the parent ticket as placeholders. Recommendation: subtractive defines as the mechanism, named configurations as the tested surface. | — |
 | decide-staff-track-c-to-unblock-own-language-first | U | 50 | decide | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (C, p55) is the only thing blocking feature-a-own-language-first-symbol-resolution, and Track C is unstaffed. Staff it, fold it into an existing session, or leave the chain parked? | — |
-| decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | docs-d-document-exec-eval-and-the-builtins-incompatibility | D | 40 | docs | docs/targets/nil-python.md tells the public `eval`/`exec` do not exist (\"No eval of runtime-constructed code\") — but the explicit-dict form has worked since 2026-07-31 via pyeval's tree-walker. Document what exec/eval DO support, the refused ambient form, and the decided __builtins__ incompatibility (decided 2026-08-19, permanent for now). | — |
 | docs-publish-the-three-language-rounding-table | D | 30 | docs | One backend implements three different, correct rounding rules — Pascal ties-to-even, C half-away-from-zero, Python ties-to-even on the exact decimal — each verified against fpc/gcc/CPython. That is a differentiator and it is documented nowhere; it currently lives only inside a Track B ticket | — |
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
@@ -207,7 +206,7 @@ _none_
 | feature-nilpy-user-defined-decorators | N | 30 | feature | A user-defined decorator — the ordinary `@wrap` over a `def`, not one of the four recognised names — is refused at parse time: \"unsupported decorator (only @dataclass and @overload)\". The decorator list is a NAME whitelist, so nothing a program declares itself can appear in it. | — |
 | feature-nilpy-walrus-operator | N | 30 | feature | `:=` (walrus) — the assignment expression is not parsed | — |
 | feature-opt-alloc-intent-hint | O | 25 | feature | Allocation-intent hint: tell the RTL growth policy how a buffer will be used | — |
-| feature-opt-arch-level-and-dispatch | O | 30 | feature | What x86-64 feature level does pxx emit for? Referenced as 'if raised' by two existing tickets and never filed; raised by the user 2026-08-15 when FMA came up. MEASURED: our own gate box plexus is a Xeon E5-2620 v2 (Ivy Bridge, 2013) with AVX but NO FMA and no AVX2 — x86-64-v2, not v3. So a v2 bump is safe and FMA would SIGILL on the machine that gates every push. Includes the answer to the 'dispatch defeats inlining' objection: multiversion whole FUNCTIONS, not instructions. | decide-x86-64-baseline-for-arch-level-dispatch |
+| feature-opt-arch-level-and-dispatch | O | 30 | feature | What x86-64 feature level does pxx emit for? Referenced as 'if raised' by two existing tickets and never filed; raised by the user 2026-08-15 when FMA came up. MEASURED: our own gate box plexus is a Xeon E5-2620 v2 (Ivy Bridge, 2013) with AVX but NO FMA and no AVX2 — x86-64-v2, not v3. So a v2 bump is safe and FMA would SIGILL on the machine that gates every push. Includes the answer to the 'dispatch defeats inlining' objection: multiversion whole FUNCTIONS, not instructions. | — |
 | feature-opt-bulk-copy-is-byte-at-a-time | O | 45 | feature | The runtime's bulk-copy primitives move ONE BYTE per iteration. Copy() on a 64-element array is ~23x slower than FPC's (2.54s vs 0.11s over 3M copies). A word-at-a-time loop -- ~10 lines, portable, no backend work -- was prototyped and measured at 3.3x of that back. | — |
 | feature-opt-complex-packed-double | O | 35 | feature | Complex as a packed-double XMM value (SSE2/SSE3) | — |
 | feature-opt-float-format-fast-path | O | 30 | feature | Fixed-point float formatting is 4.7x slower since it started taking its digits from the double's exact decimal expansion (8.8us vs 1.85us per %.2f, measured over 200k). Correct now, and worth a fast path for the values that provably cannot sit near a midpoint. | — |
@@ -372,7 +371,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (92)
+## decided (93)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -467,6 +466,7 @@ _none_
 | decide-week-theme-2026-08-17 | U | 70 | decide | What should the next week of work aim at? Measured: the bug backlog already peaked (61 on 08-03 -> 32 now) and 65% of open tickets are features, so this is no longer a burn-down question. Three candidate themes with the numbers behind each. | — |
 | decide-what-an-unwired-test-may-assert | U | 55 | decide | May we record our own output as the expectation? | — |
 | decide-what-synapse-actually-needs-vs-mimic-fpc | U | 20 | decide | Synapse builds under `--mimic-fpc`. What does it actually NEED? | — |
+| decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
 ## done (2082)
@@ -612,7 +612,6 @@ _none_
 - [p 45] [A] refactor-centralize-managed-string-pchar-conversion
 - [p 45] [A] task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc
 - [p 42] [A] feature-pascal-builtin-tobject-class
-- [p 40] [U] decide-x86-64-baseline-for-arch-level-dispatch (unblocks 1)
 - [p 40] [A] bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data
 - [p 40] [A] bug-a-nilpy-leading-double-star-in-a-call-is-not-detected
 - [p 40] [A] bug-a-riscv32-softfloat-has-no-subnormals
@@ -686,6 +685,7 @@ _none_
 - [p 30] [N] feature-nilpy-threadsafe-containers
 - [p 30] [N] feature-nilpy-user-defined-decorators
 - [p 30] [N] feature-nilpy-walrus-operator
+- [p 30] [O] feature-opt-arch-level-and-dispatch
 - [p 30] [O] feature-opt-float-format-fast-path
 - [p 30] [P] feature-p-uses-a-unit-in-an-explicit-file
 - [p 30] [S] feature-pal-esp-posix-fd-semantics
@@ -757,7 +757,6 @@ _none_
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
-- **1** — decide-x86-64-baseline-for-arch-level-dispatch
 - **1** — decide-xml-etree-thin-tree-model-or-a-real-xml-library
 - **1** — feature-a-expose-rounding-mode-intrinsic-to-pascal
 - **1** — feature-a-own-language-first-symbol-resolution

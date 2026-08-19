@@ -8,6 +8,29 @@ summary: "What x86-64 baseline does pxx target? The ticket says outright that th
 
 # What x86-64 baseline does pxx target?
 
+> **DECIDED by the user, 2026-08-19: x86-64-v2.**
+>
+> *"For purely pragmatic reasons I say V2. Having V1 is maybe a future compiler target but
+> it's like 0.001% of active CPUs, whereas V2 is real and active. No-one uses that 1GHz
+> first-generation AMD box."*
+>
+> **What this settles:**
+> - **v2 is the compiled baseline.** SSE4.2/popcnt may be assumed.
+> - **v1 is not ruled out forever — it is demoted to a possible future TARGET, not the
+>   baseline.** Recorded that way deliberately: "we chose v2" and "v1 is impossible" are
+>   different claims, and the second would be wrong. If a v1 build is ever wanted it becomes
+>   a reduced/alternate target, which composes with
+>   [[feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets]].
+> - **Anything above v2 is runtime dispatch, not a baseline bump** — which keeps the one-way
+>   door shut, since raising a compiled baseline later breaks every user below it.
+>
+> **And it keeps the gate executable, which was the hard constraint:** plexus, the box that
+> gates every push, is Ivy Bridge — AVX but no FMA, i.e. exactly v2. A v3 baseline would
+> SIGILL on the machine that verifies every commit. The pragmatic answer and the
+> infrastructure answer coincide here, which is worth noting because they often do not.
+>
+> Work re-filed into Track A (the O lane) — the feature ticket is unblocked.
+
 **Split out of [[feature-opt-arch-level-and-dispatch]] 2026-08-19**, second use of the
 "blocked on judgement, not on engineering" outcome from the A/P/C feature triage. The feature
 ticket says it in its own words: *"The baseline row is the user's call, not an engineering

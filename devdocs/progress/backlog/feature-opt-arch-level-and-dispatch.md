@@ -2,11 +2,26 @@
 track: A
 prio: 30
 type: feature
-blocked-by: [decide-x86-64-baseline-for-arch-level-dispatch]
+blocked-by: []
 summary: "What x86-64 feature level does pxx emit for? Referenced as 'if raised' by two existing tickets and never filed; raised by the user 2026-08-15 when FMA came up. MEASURED: our own gate box plexus is a Xeon E5-2620 v2 (Ivy Bridge, 2013) with AVX but NO FMA and no AVX2 — x86-64-v2, not v3. So a v2 bump is safe and FMA would SIGILL on the machine that gates every push. Includes the answer to the 'dispatch defeats inlining' objection: multiversion whole FUNCTIONS, not instructions."
 ---
 
 # x86-64 feature level, and how (or whether) to dispatch
+
+> **UNBLOCKED 2026-08-19 — the baseline is DECIDED: x86-64-v2.** Full rationale in
+> [[decide-x86-64-baseline-for-arch-level-dispatch]] (`decided/`).
+>
+> - **Compile to v2.** SSE4.2/popcnt assumed.
+> - **Above v2 = runtime dispatch**, never a baseline bump. Raising a compiled baseline later
+>   breaks every user below it — a one-way door, deliberately kept shut.
+> - **v1 is a possible future TARGET, not the baseline.** Do not read the decision as "v1 is
+>   impossible"; if wanted it becomes a reduced/alternate target.
+>
+> **Do not raise the baseline above v2 without a plan for the gate box:** plexus is Ivy Bridge
+> (AVX, no FMA) = v2, so v3 code would SIGILL on the machine that verifies every commit.
+> "It works on my desktop" is not evidence here.
+>
+> The baseline row in the table below is now answered; the dispatch design is the remaining work.
 
 > **BLOCKED on [[decide-x86-64-baseline-for-arch-level-dispatch]] as of 2026-08-19.** This
 > ticket states the reason itself — *"The baseline row is the user's call, not an engineering
