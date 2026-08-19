@@ -110,6 +110,16 @@ const
     pair still yields a PAIR, and the common case pays nothing for this.
     bug-nilpy-star-unpack-into-a-fixed-arity-builtin }
   PYITER_ZIPN   = 10;
+  { a STACKLESS GENERATOR instance — what `gen()` evaluates to when it is not
+    consumed on the spot by a `for`. FGenInst is the slgen heap instance and
+    FGenStep its step function; advancing is one indirect call, and the yielded
+    variant lives in the instance's CURRENT region.
+
+    A cursor KIND rather than a class of its own, because every consumer a
+    generator value needs — `for x in g`, `next(g)`, `list(g)`, unpacking —
+    already works on a cursor. Adding the kind is the whole feature on this
+    side. See feature-nilpy-a-generator-as-a-first-class-value. }
+  PYITER_SLGEN  = 11;
 
 type
   TPyVarRec = record
@@ -123,7 +133,14 @@ type
   { pyeval's PyCallKey1, installed into PyIterCallHook: the one entry point
     that knows all four callable representations. See that variable. }
   TPyIterCall = function(key: Pointer; const a0: Variant): Variant;
+  { A stackless generator's step function: `function(instance): Boolean`,
+    has-next. See PYITER_SLGEN. }
+  TPyGenStep = function(inst: Pointer): Boolean;
   PInt64 = ^Int64;
+  { pylib's own name for a variant pointer — pyeval declares one too, but this
+    unit is compiled before it. Used to read a generator's yielded element out
+    of its instance (PYITER_SLGEN). }
+  PPyVariant = ^Variant;
   PPyAnsiString = ^AnsiString;
   PPyDouble = ^Double;
 
@@ -785,6 +802,12 @@ type
       every site that tests FKind, and the one that got missed is where the bug
       would live. }
     FIsGen: Boolean;
+    { PYITER_SLGEN: the stackless generator instance and its step function.
+      Kept as raw words rather than typed fields because pylib must not depend
+      on lib/rtl/slgen — the layout it needs is two offsets, and the compiler
+      is what guarantees they agree. }
+    FGenInst: Pointer;
+    FGenStep: Pointer;
     constructor Create;
   end;
 
@@ -12205,6 +12228,25 @@ begin
   FHas := False;
   FEnd := False;
   FIsGen := False;
+  FGenInst := nil;
+  FGenStep := nil;
+end;
+
+{ A stackless GENERATOR as a first-class value: wrap its heap instance and step
+  function in a cursor, so every consumer that already works on a cursor —
+  `for x in g`, `next(g)`, `list(g)`, tuple unpacking — works on it unchanged.
+  The compiler allocates and seeds the instance (it knows the size and the
+  argument slots) and hands both words over here.
+
+  FIsGen is set so `type(g).__name__` and the error messages call this a
+  generator rather than an iterator, which is what CPython prints. }
+function pygen_iter_new(inst: Pointer; step: Pointer): TPyIter;
+begin
+  Result := TPyIter.Create;
+  Result.FKind := PYITER_SLGEN;
+  Result.FGenInst := inst;
+  Result.FGenStep := step;
+  Result.FIsGen := True;
 end;
 
 function pyiter_of_list(l: TPyList): TPyIter;
@@ -12426,7 +12468,8 @@ end;
   CONDITION. Every source is consulted LIVE — a list that grows during the
   loop is seen, exactly as the eager index loop saw it. }
 function pyiter_has(it: TPyIter): Boolean;
-var l: TPyList; pair: TPyList; ev, mv: Variant; pv: Variant; kept: Boolean;
+var genStep: TPyGenStep; genCur: Pointer;   { PYITER_SLGEN }
+    l: TPyList; pair: TPyList; ev, mv: Variant; pv: Variant; kept: Boolean;
     zc: TPyIter; zi, zn: Integer;   { the N-way zip's cursor walk }
     b0, b1: Integer;                { the str cursors' UTF-8 character span }
 begin
@@ -12436,6 +12479,28 @@ begin
   { exhaustion is PERMANENT — a CPython iterator never restarts, and this is
     what makes a second pass over a bound cursor yield the remainder }
   if it.FEnd then Exit;
+  if it.FKind = PYITER_SLGEN then
+  begin
+    { One indirect call to the step function. It returns has-next and, when
+      True, has published the yielded value's ADDRESS in the instance's CURRENT
+      word — a Nil Python element is a 16-byte variant and does not fit that
+      word, so CURRENT points at the instance's own element region.
+
+      The two offsets are SL_OFF_STATE-relative and fixed by defs.inc
+      (CURRENT = 16); pylib deliberately does not `uses slgen` for them, since
+      that would make the runtime depend on an RTL unit the compiler already
+      guarantees the layout of. }
+    if (it.FGenInst = nil) or (it.FGenStep = nil) then
+      begin it.FEnd := True; Exit; end;
+    genStep := TPyGenStep(it.FGenStep);
+    if not genStep(it.FGenInst) then begin it.FEnd := True; Exit; end;
+    genCur := Pointer(PInt64(Pointer(Int64(it.FGenInst) + 16))^);
+    if genCur = nil then begin it.FEnd := True; Exit; end;
+    it.FBox.put(0, PPyVariant(genCur)^);
+    it.FHas := True;
+    Result := True;
+    Exit;
+  end;
   if it.FKind = PYITER_LIST then
   begin
     l := it.FSrc;
@@ -13256,7 +13321,17 @@ function pyiter_of_userobj(o: TObject): TPyIter;
 var itv: Variant; ito: TObject;
 begin
   ito := o;
+  { A class whose `__iter__` is a GENERATOR carries a compiler-generated
+    `__pxx_gen_iter__` that hands back a cursor over a fresh generator instance
+    — asked FIRST, because `__iter__` itself is then the state-machine step
+    function, whose ABI is (instance, self) -> Boolean. Nothing here could call
+    that, and nothing tried: the arity check below is what kept it safe, and
+    the object was simply reported as not iterable. See
+    PyEmitGeneratorIterCursor (pyparser.inc). }
   if o <> nil then
+    if PyUserObjNoArgDunder(o, '__pxx_gen_iter__', itv) then
+      if pyvartag(itv) = 7 then ito := TObject(pyvarobj(itv));
+  if (ito = o) and (o <> nil) then
     if PyUserObjNoArgDunder(o, '__iter__', itv) then
     begin
       if pyvartag(itv) = 7 then ito := TObject(pyvarobj(itv));
@@ -13520,6 +13595,26 @@ begin
     it.FObj := nil;
     it.FUp3 := nil; it.FUp4 := nil;
     it.FStr := '';
+    { A generator cursor OWNS its instance — pygen_iter_new is the only thing
+      that builds one, and the `for` desugar's instance belongs to that
+      statement and is freed there, so there is no second owner to double-free.
+      FreeMem rather than slgen's SlFree, which is the same call: pylib must not
+      depend on an RTL unit for a layout the compiler already guarantees.
+
+      This reclaims the INSTANCE. The managed values held in its persistent
+      slots are still dropped without being released — the deliberate trade
+      recorded in
+      bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells, whose
+      fix needs a per-proc map of which slots are managed. Freeing the block
+      here does not make that worse and does not conflict with it: the ordering
+      constraint that ticket records is about releasing at TEARDOWN rather than
+      at step exit, and teardown is exactly where this stands. }
+    if it.FGenInst <> nil then
+    begin
+      FreeMem(it.FGenInst);
+      it.FGenInst := nil;
+    end;
+    it.FGenStep := nil;
     Exit;
   end;
   { user class / anything else: release managed + variant fields via the
