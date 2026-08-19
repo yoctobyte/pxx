@@ -9,6 +9,27 @@ prio: 65
   Resume by running the one command below; nothing needs rebuilding or rediscovering.
 - **Origin:** step 4 of [[feature-c-corpus-expansion]] ("csmith differential fuzzing").
 
+## Read this before you touch the ownership — the shape of this ticket is unusual
+
+**It is a standing campaign log, not an open task.** `status: done`, parked in
+`backlog/`, resumed by the one command below across six sittings now. Do not
+"fix" it into `working/` and do not close it: `working/` is a live lock and this
+holds no lock between sittings, and there is nothing to close because the
+campaign has no end state — it has a ratio.
+
+**It is a Track C ticket whose remaining moves fall on both sides of the
+file-lane boundary, and that is not a mis-filing.** Running the harness,
+triaging what it finds, and fixing cfront is C's; each bug it finds is filed
+into whichever lane owns it (that is the ordinary rule, not a special case).
+But axis 2 below needs a `--target` pass-through added to
+`tools/csmith_fuzz.py`, which is Track T's file lane. A campaign ticket like
+this does not want SPLITTING — it wants each move routed as it comes up, when
+it comes up. Report which side a move falls on and let the coordinator route
+it; do not re-litigate the ownership of the whole ticket from scratch. (Axis 2
+was routed to T on 2026-08-19, bundled with
+[[bug-t-csmith-harness-reports-slow-as-a-timeout]] so T visits the file once
+rather than twice.)
+
 ## Resume in one line
 
 ```sh
@@ -301,3 +322,81 @@ same oracle at four backends that have never seen a random program.
 
 ## Log
 - 2026-08-16 — resolved, commit e9262d5db.
+
+## 2026-08-19 — axis 3 opened: two flag sets, two findings, both real
+
+Axis 3 is "csmith flags the defaults leave off", picked on the ticket's own
+principle that **coverage thins where the GENERATOR is shy, not where the corpus
+is**. Two batches, 150 seeds each, against a HEAD fixedpoint at `cc20f7101`.
+
+### Batch A — `--paranoid --max-pointer-depth 4 --max-struct-fields 15 --max-union-fields 8 --max-array-dim 3`
+
+Seeds 200000-200149. **125 agreed with the gcc oracle, 24 skipped, 1 finding, no
+miscompiles.**
+
+- **seed 200056 — `PXX_COMPILE_FAIL`, a capacity ceiling.** "string table
+  overflow" on a 14125-line program with **9426 distinct string literals**
+  against `MAX_STRS = 8192`. Filed
+  [[bug-a-string-table-cap-refuses-a-14k-line-c-program]] (Track A — `defs.inc`
+  / `emit.inc` are core, so C found it and A owns it). Measured there: raising
+  the cap makes the program compile in 2.7s and agree with gcc, but
+  `VisCacheVis` is *sized* by `MAX_STRS` while being *indexed* by unit, and its
+  full-array clear sits on the name-lookup path — so the naive one-line raise
+  buys a quiet slowdown. The ticket says fix that coupling first.
+- What the flag bought: `--paranoid` emits a pointer assertion with its own
+  message text at every pointer op, so literal count scales with program size
+  instead of staying flat the way hand-written C's does. That is the whole
+  reason this ceiling had never been hit — no corpus program is literal-dense.
+
+### Batch B — `--builtins --builtin-function-prob 40 --max-funcs 3`
+
+Seeds 210000-210149. **48 agreed, 46 skipped, 56 hits deduping to 11 distinct —
+and all 11 were one gap**, not eleven.
+
+Every one was `call to undeclared function: __builtin_<X>`. cfront renamed six
+gcc bit builtins onto crtl helpers and was missing the rest:
+
+- the **`l` row of families it already had** — `__builtin_clzl`, `ctzl`,
+  `popcountl`. `clz`/`clzll` were both there and `clzl` was not, on all three
+  families. This is the double-case shape `normalise-dont-special-case.md`
+  warns about, caught by the generator rather than by a reader.
+- `__builtin_ffs` / `ffsl` / `ffsll`, `__builtin_parity` / `parityl` /
+  `parityll`, `__builtin_bswap16` / `32` / `64` — absent entirely.
+
+Fixed under Track C (cfront + `lib/crtl`, both C's own files, no core change).
+The `l` row resolves through `CLongWidthSuffix`, which reads `TARGET_PTR_SIZE`
+— C `long` is machine-word-sized, so `__builtin_clzl` is the 64-bit helper on
+LP64 and the 32-bit one on ILP32, exactly the rule `ParseCDeclType` already
+applies to `long` itself. A hard-coded 64 would have been silently wrong on
+i386/arm32/riscv32; verified under qemu on all four cross targets, where the
+`l` rows correctly read 24/32/31 against x86-64's 56/64/63. `ffs` and `parity`
+are DEFINED at zero in gcc, so they are written to answer it rather than routed
+through `ctz`/`popcount`.
+
+**All 11 seeds now compile AND agree with gcc's checksum** — the builtins are
+not merely accepted, they are right on real generated programs.
+`test/c_builtin_bits.c` pins the family against gcc.
+
+### Reading the two batches
+
+Batch B's ratio looks alarming (56 hits in 150 seeds) and is the opposite of
+alarming: it is ONE missing table row family, found instantly because the
+generator was finally allowed to emit the construct. Batch A's ratio looks
+clean (1 in 150) and found the more serious thing. **Hit count is not severity**
+— dedup count is closer, and neither is a substitute for reading the bucket.
+
+Neither batch produced a `MISCOMPILE_VS_GCC`. The default-shape space has now
+gone 1000 seeds without one and these 300 did not change that; what axis 3
+bought was a capacity ceiling and a coverage gap, both invisible to a checksum
+oracle because both fail LOUDLY. Worth saying plainly: **axis 3's yield so far
+is compile-fails, not miscompiles.** If the next flag set is also loud-only,
+that is evidence the remaining silent bugs need axis 2 (cross targets) rather
+than more generator flags.
+
+Flag sets tried and spent, so nobody repeats them: `--paranoid` + deep
+aggregates (1 finding), `--builtins` (1 finding, 11 buckets). **Not yet tried:
+`--float`** — deliberately deferred, because csmith checksums floats by hashing
+the bits, so any ulp difference reads as a full divergence and the bucket cannot
+distinguish a codegen bug from an fp-contraction difference against gcc. That
+needs `-ffp-contract=off` on the gcc side before it is worth a sweep, and the
+findings would need the float-scope rules applied by hand.

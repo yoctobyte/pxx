@@ -81,13 +81,23 @@ int atexit(void (*func)(void));
 
 /* gcc bit-scan builtins, renamed by the C frontend (__builtin_clz ->
  * __pxx_builtin_clz32, ...): cfront has no intrinsic lowering for them yet, so
- * they resolve to these plain-C loops via the normal crtl auto-pull. Undefined
- * for a zero argument, exactly like the gcc builtins. */
+ * they resolve to these plain-C loops via the normal crtl auto-pull.
+ *
+ * clz/ctz/popcount are undefined for a zero argument, exactly like the gcc
+ * builtins. ffs and parity are NOT -- gcc defines both at zero (0 and 0), so
+ * they are written to answer it rather than routed through ctz/popcount. */
 int __pxx_builtin_clz32(unsigned int x);
 int __pxx_builtin_clz64(unsigned long long x);
 int __pxx_builtin_ctz32(unsigned int x);
 int __pxx_builtin_ctz64(unsigned long long x);
 int __pxx_builtin_popcount32(unsigned int x);
 int __pxx_builtin_popcount64(unsigned long long x);
+int __pxx_builtin_ffs32(unsigned int x);
+int __pxx_builtin_ffs64(unsigned long long x);
+int __pxx_builtin_parity32(unsigned int x);
+int __pxx_builtin_parity64(unsigned long long x);
+unsigned short __pxx_builtin_bswap16(unsigned short x);
+unsigned int __pxx_builtin_bswap32(unsigned int x);
+unsigned long long __pxx_builtin_bswap64(unsigned long long x);
 
 #endif

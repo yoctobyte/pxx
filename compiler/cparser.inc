@@ -300,6 +300,17 @@ end;
   expression (lvalue conversion only, 6.5.1.1p2), sizeof, and the & operand.
   On unsigned-char targets it is identity, so every call site is unconditional.
   bug-cfront-plain-char-is-unsigned-and-folds-inconsistently }
+{ '64' on an LP64 target, '32' on ILP32 — the width C `long` has here. Used to
+  pick the helper for the `l` row of the gcc bit builtins (__builtin_clzl and
+  friends), which is a machine-word width, not a third size. Kept beside the
+  rule it mirrors rather than inlined at the call site, because there are six
+  call sites and a hard-coded 64 in any one of them is wrong on four targets. }
+function CLongWidthSuffix: AnsiString;
+begin
+  if TARGET_PTR_SIZE = 8 then CLongWidthSuffix := '64'
+  else CLongWidthSuffix := '32';
+end;
+
 function CPromoteChar(e: Integer): Integer;
 var lit, n1: Integer;
 begin
@@ -1442,12 +1453,31 @@ begin
           stdlib.h, bodies auto-pulled from crtl/src/stdlib.c). No intrinsic
           lowering yet; first consumer: QuickJS cutils.h clz/ctz wrappers
           (feature-c-corpus-quickjs). }
+        { The `l` row is NOT a third width: C `long` is machine-word-sized, so
+          `__builtin_clzl` is the 64-bit helper on an LP64 target and the
+          32-bit one on ILP32 — the same rule ParseCDeclType applies to `long`
+          itself (TARGET_PTR_SIZE = 8). Getting this from the target rather
+          than hard-coding 64 is what keeps the cross targets right; the whole
+          family was missing its `l` row until a csmith --builtins sweep asked
+          for it. }
         if name = '__builtin_clz' then name := '__pxx_builtin_clz32'
         else if name = '__builtin_clzll' then name := '__pxx_builtin_clz64'
+        else if name = '__builtin_clzl' then name := '__pxx_builtin_clz' + CLongWidthSuffix
         else if name = '__builtin_ctz' then name := '__pxx_builtin_ctz32'
         else if name = '__builtin_ctzll' then name := '__pxx_builtin_ctz64'
+        else if name = '__builtin_ctzl' then name := '__pxx_builtin_ctz' + CLongWidthSuffix
         else if name = '__builtin_popcount' then name := '__pxx_builtin_popcount32'
-        else if name = '__builtin_popcountll' then name := '__pxx_builtin_popcount64';
+        else if name = '__builtin_popcountll' then name := '__pxx_builtin_popcount64'
+        else if name = '__builtin_popcountl' then name := '__pxx_builtin_popcount' + CLongWidthSuffix
+        else if name = '__builtin_ffs' then name := '__pxx_builtin_ffs32'
+        else if name = '__builtin_ffsll' then name := '__pxx_builtin_ffs64'
+        else if name = '__builtin_ffsl' then name := '__pxx_builtin_ffs' + CLongWidthSuffix
+        else if name = '__builtin_parity' then name := '__pxx_builtin_parity32'
+        else if name = '__builtin_parityll' then name := '__pxx_builtin_parity64'
+        else if name = '__builtin_parityl' then name := '__pxx_builtin_parity' + CLongWidthSuffix
+        else if name = '__builtin_bswap16' then name := '__pxx_builtin_bswap16'
+        else if name = '__builtin_bswap32' then name := '__pxx_builtin_bswap32'
+        else if name = '__builtin_bswap64' then name := '__pxx_builtin_bswap64';
         procIdx := FindProc(name);
         { An UNDECLARED C call landing on a Pascal routine of another arity —
           `time(&now)` with no <time.h> against sysutils' parameterless `Time`.

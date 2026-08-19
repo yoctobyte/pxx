@@ -6150,6 +6150,13 @@ test-core: $(COMPILER)
 	@./$(COMPILER) test/c_vla_const_fail.c $(TESTTMP)/c_vla_const_fail26 2>&1 \
 	  | grep -q "sizeof of a variable-length array is not a constant expression" \
 	  || { echo 'c_vla_const_fail: FAIL - sizeof on a VLA must be refused in a constant expression, not answer a symbol index'; exit 1; }
+	# gcc bit builtins. The `l` row is the point: C long is machine-word-sized,
+	# so __builtin_clzl is the 64-bit helper here and the 32-bit one on
+	# i386/arm32/riscv32 -- rows 3 and 4 read 24/32/31 there, and a hard-coded
+	# 64 would have been wrong on three targets. ffs and parity are DEFINED at
+	# zero, so they are not routed through ctz/popcount. Matches gcc.
+	./$(COMPILER) test/c_builtin_bits.c $(TESTTMP)/c_builtin_bits26
+	test "$$($(TESTTMP)/c_builtin_bits26)" = "$$(printf '8 20 4\n16 44 4\n56 7 1\n64 63\n0 1 9 0\n33 8\n0 1 0 1\n3412 44332211 8877665544332211')"
 	@./$(COMPILER) -Futest test/test_c_cross_ns_arity_fail.pas $(TESTTMP)/c_cross_ns_arity_fail26 2>&1 \
 	  | grep -q "call to undeclared function 'time' would bind to the Pascal routine 'Time'" \
 	  || { echo 'c_cross_ns_arity_fail: FAIL - an undeclared C call must not bind to a Pascal routine of another arity'; exit 1; }

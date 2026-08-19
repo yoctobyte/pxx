@@ -553,6 +553,52 @@ int __pxx_builtin_popcount64(unsigned long long x) {
   return n;
 }
 
+/* ffs: 1 + index of the least significant set bit, 0 for a zero argument.
+   Unlike clz/ctz, ffs is DEFINED at zero -- do not route it through ctz. */
+int __pxx_builtin_ffs32(unsigned int x) {
+  int n = 1;
+  if (x == 0u) return 0;
+  while (!(x & 1u)) { x >>= 1; n++; }
+  return n;
+}
+
+int __pxx_builtin_ffs64(unsigned long long x) {
+  int n = 1;
+  if (x == 0ull) return 0;
+  while (!(x & 1ull)) { x >>= 1; n++; }
+  return n;
+}
+
+/* parity: number of set bits mod 2. Defined at zero (answers 0). */
+int __pxx_builtin_parity32(unsigned int x) {
+  int n = 0;
+  while (x) { n ^= (int)(x & 1u); x >>= 1; }
+  return n;
+}
+
+int __pxx_builtin_parity64(unsigned long long x) {
+  int n = 0;
+  while (x) { n ^= (int)(x & 1ull); x >>= 1; }
+  return n;
+}
+
+/* bswap: reverse the byte order. Returns the same width it took. */
+unsigned short __pxx_builtin_bswap16(unsigned short x) {
+  return (unsigned short)(((x & 0x00FFu) << 8) | ((x & 0xFF00u) >> 8));
+}
+
+unsigned int __pxx_builtin_bswap32(unsigned int x) {
+  return ((x & 0x000000FFu) << 24) | ((x & 0x0000FF00u) << 8) |
+         ((x & 0x00FF0000u) >> 8)  | ((x & 0xFF000000u) >> 24);
+}
+
+unsigned long long __pxx_builtin_bswap64(unsigned long long x) {
+  return ((x & 0x00000000000000FFull) << 56) | ((x & 0x000000000000FF00ull) << 40) |
+         ((x & 0x0000000000FF0000ull) << 24) | ((x & 0x00000000FF000000ull) << 8)  |
+         ((x & 0x000000FF00000000ull) >> 8)  | ((x & 0x0000FF0000000000ull) >> 24) |
+         ((x & 0x00FF000000000000ull) >> 40) | ((x & 0xFF00000000000000ull) >> 56);
+}
+
 long long llabs(long long n)
 {
     return n < 0 ? -n : n;
