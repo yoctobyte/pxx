@@ -3507,3 +3507,25 @@ schedule a full tier this hour** — 12 jobs are red on purpose, so a 21-minute 
 itself confirming a known headline. **Call the quiet period once frank2 reports green**; cross
 targets have seen nothing since `9bfb7fcfac03` (10:31Z) and that backfill is the real coverage
 event of the day.
+
+## STANDING RULE (owner, 2026-08-19, third restatement) — float accuracy is low prio BY DEFINITION
+
+*"compiler syntax, segfaults, etc, all prio. floating point, especially when 'mostly ok'
+(apart performance or insignificant digits), very low prio. by definition."*
+
+**Rank the mechanism, never the datatype.** A wrong-value-at-scale, a saturation, a segfault,
+a wrong signature or a control-flow bug is a normal bug at its normal prio even when every
+variable in it is a `Double`. Only *accuracy* — ulps, rounding, last-digit formatting,
+subnormals, range at the edges — is de-ranked. Today's writer cluster contained both kinds
+under one grouping, which is how it got worked.
+
+**Two doors bypass the prio field, and both are the coordinator's to close:**
+
+1. **A red job is worked at the priority of being red**, not of its subject. NilPy's
+   `.expected` files are generated from CPython, so an ulp move is a CI red. Until
+   `meta-float-accuracy-policy` (Track U, raised to p60) is decided, de-ranking cannot stop
+   the flow — the tests can re-summon it at any prio.
+2. **Cluster grouping.** `TRIAGE-backlog-shrink.md` cluster 2 bundled three float writer
+   tickets as low-hanging fruit, and "cheap and related" beat "low prio". That cluster was
+   built here. **When assembling a cluster, check no member is de-ranked by a standing rule** —
+   a cluster is a scheduling decision that the ranker never sees.
