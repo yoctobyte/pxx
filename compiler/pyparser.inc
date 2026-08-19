@@ -35705,7 +35705,7 @@ var
   cpName: AnsiString;
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
   derefNode: Integer;   { NilPy frame-cell read: `hidden^` (SymCellPtr) }
-  baseNode, baseRec, fIdx, aliasIdx, firstIdxNode: Integer;
+  baseNode, baseRec, fIdx, aliasIdx: Integer;
   remDepth, ptrBaseTk, ptrBaseRec: Integer;
   isND: Boolean; nIdx: Integer; alreadyResolved: Boolean;
   tk: TTypeKind;
@@ -35719,7 +35719,6 @@ var
   w, withNode, recId: Integer;
   propFOff, propFLen: Integer;
   propRecvNode, propRecvCi: Integer;   { NilPy @property on a VARIANT receiver }
-  mcRec, mcFi: Integer;   { metaclass-typed FIELD as a receiver }
   withResolved: Boolean;
   fldSigPi, callIndNode, argsHead2, lastArg2, argSeq2, baseRecFld: Integer;
   isMethodPtr: Boolean;
