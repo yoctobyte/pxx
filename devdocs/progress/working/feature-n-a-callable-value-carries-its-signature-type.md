@@ -362,3 +362,5 @@ Order from there: 2b part 2 (def-time store, `pyparser.inc`) -> 2c (`TPyBound`
 carries the record, `pylib.pas` + `pyeval.pas`, NEEDS A PIN) -> 2d (dispatcher
 reads ReqN/TotN/defaults). Verify the p70 table against the result before
 resolving anything — "subsumed" stays a prediction until the fix exists.
+
+## UNPARKED 2026-08-19 — resuming at 2b part 2 (pyparser.inc now uncontended)

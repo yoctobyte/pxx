@@ -8,11 +8,13 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| feature-n-a-callable-value-carries-its-signature-type | A | 88 | feature | DECIDED 2026-08-19. A boxed callable's VT_CALLABLE_TAG payload becomes ONE pointer to a static signature record {code address, ReqN, TotN, per-param default descriptor}. Static, so the slot still owns nothing and no refcount behaviour changes. One call-site helper reads it: check arity, fill defaults, call. Unblocks three tickets whose symptoms are SIGSEGV and silent wrong values. | — |
 
-## unfinished (18)
+## unfinished (17)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -27,7 +29,6 @@ _none_
 | feature-a-own-language-first-symbol-resolution | A | 55 | feature | Own-language-first symbol resolution: the native language wins | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-b-the-module-shim-batch-blocking-the-python-corpus | B | 62 | feature | RE-MEASURED on pinned v352: the batch this ticket was filed to attack no longer exists — six, warnings, codecs, colorsys, copy, bisect, xml.sax.*, urllib.parse, six.moves, urllib.request and xml.dom all shipped during 2026-08-18 and are gated by make lib-test. Eight missing-module files remain and none is a thin stdlib shim: xml.etree (4, now a Track U decision), genshi_core (2) and lxml (1) are third-party packages, weakref (1) is a runtime facility. The language walls are 32, with yield alone at 18 — Track N is the bottleneck for this ladder again. | decide-xml-etree-thin-tree-model-or-a-real-xml-library |
-| feature-n-a-callable-value-carries-its-signature-type | A | 88 | feature | DECIDED 2026-08-19. A boxed callable's VT_CALLABLE_TAG payload becomes ONE pointer to a static signature record {code address, ReqN, TotN, per-param default descriptor}. Static, so the slot still owns nothing and no refcount behaviour changes. One call-site helper reads it: check arity, fill defaults, call. Unblocks three tickets whose symptoms are SIGSEGV and silent wrong values. | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |

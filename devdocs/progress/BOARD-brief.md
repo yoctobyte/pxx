@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:18 blocked:5 backlog:236 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2043 rejected:39`
+`working:1 unfinished:17 blocked:5 backlog:236 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2043 rejected:39`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-n-a-callable-value-carries-its-signature-type` [A] — owner: frankonpiler-an
 
-## unfinished (18) — parked mid-flight; re-claim, do not duplicate
+## unfinished (17) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults` [N]
@@ -24,7 +24,6 @@ _none — no lane is locked._
 - `feature-a-own-language-first-symbol-resolution` [A] — blocked-by: bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
 - `feature-a-typeref-migrate-consumers` [A]
 - `feature-b-the-module-shim-batch-blocking-the-python-corpus` [B] — blocked-by: decide-xml-etree-thin-tree-model-or-a-real-xml-library
-- `feature-n-a-callable-value-carries-its-signature-type` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
