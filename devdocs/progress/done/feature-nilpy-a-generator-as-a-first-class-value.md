@@ -149,4 +149,4 @@ corpora; all are compile errors rather than wrong answers.
 not see `pygen_iter_new` or the cursor kind until a pin. Verified at HEAD only.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit c29df36b1.
