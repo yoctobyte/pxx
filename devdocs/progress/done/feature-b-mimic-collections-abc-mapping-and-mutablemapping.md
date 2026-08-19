@@ -208,4 +208,4 @@ Four workarounds registered in `devdocs/dev/track-b-workarounds.md` with their
 revert conditions.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit a3eaec78b.
