@@ -1485,6 +1485,19 @@ function pybound_new(code, recv: Pointer; isFunc: Boolean): Variant;
   (bug-nilpy-a-star-args-def-taken-as-a-value-is-called-with-loose-arguments). }
 function pybound_new_star(code, recv: Pointer; isFunc: Boolean;
                           starIdx: Int64): Variant;
+{ ...and the same pair carrying the callee's SIGNATURE, so a call made THROUGH
+  the value can fill parameters the caller omitted. sig points at the record
+  EmitPySignatures put in .data; nil means "not known", and then everything
+  below behaves as it did before signatures existed. }
+function pybound_new_sig(code, recv: Pointer; isFunc: Boolean;
+                         starIdx: Int64; sig: Pointer): Variant;
+{ Invoke a bound PAIR given its raw pointer rather than the variant that holds
+  it -- the shape pyeval's PyCallKey1 has, since map/filter/sorted(key=) carry
+  the callable as a Pointer. Same dispatcher, so the defaults a call through a
+  function value fills are the same ones `key=` fills; it exists so pyeval does
+  not need its own copy of the record layout or the fill rule. }
+function pybound_pair_call(pair: Pointer; nargs: Integer;
+                           const a0, a1, a2, a3: Variant): Variant;
 function pybound_code(const v: Variant): Pointer;
 function pybound_recv(const v: Variant): Pointer;
 { True when Code is a genuine Variant-returning FUNCTION (NilPy's default def
@@ -13513,8 +13526,26 @@ begin
 end;
 
 type
-  TPyBoundRec = record Code, Recv: Pointer; IsFunc: Boolean; StarIdx: Integer; end;
+  TPyBoundRec = record Code, Recv: Pointer; IsFunc: Boolean; StarIdx: Integer;
+                       Sig: Pointer; end;
   PPyBoundRec = ^TPyBoundRec;
+  { The callee's SIGNATURE, emitted into .data by the compiler's
+    EmitPySignatures -- see PYSIG_OFF_* in compiler/defs.inc, which this must
+    stay in step with. nil when the producer could not supply one (a method
+    reached through runtime RTTI lookup), and then the bridge behaves exactly as
+    it did before signatures existed.
+      ReqN  parameters with NO default, Self excluded
+      TotN  declared parameters,        Self excluded
+      Star  the *args position PLUS ONE, 0 = none
+      Dflts TotN variants, 16 bytes each, one per declared parameter; a slot
+            whose VType is PYSIG_DFLT_UNSET (-1, an illegal tag) was never
+            filled, which is a compiler bug and not a value. }
+  TPySigRec = record
+    Code: Pointer;
+    ReqN, TotN, Star: Int64;
+    Dflts: Pointer;
+  end;
+  PPySigRec = ^TPySigRec;
 
 procedure PyObjFinalize(objp: Pointer; rawKind: NativeInt);
 var
@@ -13630,6 +13661,12 @@ end;
 
 function pybound_new_star(code, recv: Pointer; isFunc: Boolean;
                           starIdx: Int64): Variant;
+begin
+  pybound_new_star := pybound_new_sig(code, recv, isFunc, starIdx, nil);
+end;
+
+function pybound_new_sig(code, recv: Pointer; isFunc: Boolean;
+                         starIdx: Int64; sig: Pointer): Variant;
 var b: PPyBoundRec; r: PPyVarRec;
 begin
   { RAW refcounted block (no VMT): rc at [b-16], PXX_OBJ_MAGIC_RAW at [b-8].
@@ -13641,6 +13678,7 @@ begin
   b^.Recv := recv;
   b^.IsFunc := isFunc;
   b^.StarIdx := Integer(starIdx);
+  b^.Sig := sig;   { static .data, never refcounted }
   PXXObjRetain(code);   { a closure-obj code is refcounted; plain addresses no-op }
   PXXObjRetain(recv);
   r := PPyVarRec(@Result);
@@ -13784,6 +13822,11 @@ begin
   pybound_star := PPyBoundRec(NativeInt(PPyVarRec(@v)^.Payload))^.StarIdx;
 end;
 
+function pybound_sig(const v: Variant): Pointer;
+begin
+  pybound_sig := PPyBoundRec(NativeInt(PPyVarRec(@v)^.Payload))^.Sig;
+end;
+
 function PyBoundCallStar(code, recv: Pointer; isFn: Boolean;
                          si, nargs: Integer;
                          const a0, a1, a2, a3: Variant): Variant;
@@ -13852,116 +13895,142 @@ end;
   receiver goes in as the hidden first argument. Every callee reached this way
   uses NilPy's function-object ABI (variant params, variant result — see
   PyDefUsedAsValue), which is exactly what these signatures declare. }
-function pybound_callv0(const cb: Variant): Variant;
-var code, recv: Pointer; m0: TPyCbM0; f0: TPyCbF0; mp0: TPyCbMP0; fp0: TPyCbFP0;
-    isFn: Boolean;
+function PyBoundCallV(const cb: Variant; nargs: Integer;
+                     const a0, a1, a2, a3: Variant): Variant;
 begin
   Result := pynone;
   if not pycallback_is(cb) then Exit;
-  code := pybound_code(cb);
+  Result := pybound_pair_call(Pointer(NativeInt(PPyVarRec(@cb)^.Payload)),
+                              nargs, a0, a1, a2, a3);
+end;
+
+function pybound_pair_call(pair: Pointer; nargs: Integer;
+                           const a0, a1, a2, a3: Variant): Variant;
+{ The ONE dynamic-call bridge behind pybound_callv0..4.
+
+  A call made THROUGH a function value knows only how many arguments the CALLER
+  wrote; the callee's own arity is compiled in. Before signatures existed the
+  bridge simply called the arity the caller used, so 'def q(a, i=7)' invoked as
+  'f(1)' entered a two-parameter body through a one-parameter pointer and read
+  whatever the previous call had left where 'i' lives -- a plausible wrong
+  value, never a crash. The signature record closes exactly that gap: fill
+  nargs..TotN-1 from the callee's own def-time defaults, then dispatch at the
+  arity the body was compiled for.
+
+  Sig nil = producer could not supply one; behave exactly as before. }
+var code, recv, sg, dp: Pointer; isFn: Boolean;
+    av: array[0..3] of Variant; i, want, totN, reqN: Integer;
+    sr: PPySigRec; b: PPyBoundRec;
+    m0: TPyCbM0; m1: TPyCbM1; m2: TPyCbM2; m3: TPyCbM3; m4: TPyCbM4;
+    f0: TPyCbF0; f1: TPyCbF1; f2: TPyCbF2; f3: TPyCbF3; f4: TPyCbF4;
+    mp0: TPyCbMP0; mp1: TPyCbMP1; mp2: TPyCbMP2; mp3: TPyCbMP3; mp4: TPyCbMP4;
+    fp0: TPyCbFP0; fp1: TPyCbFP1; fp2: TPyCbFP2; fp3: TPyCbFP3; fp4: TPyCbFP4;
+begin
+  Result := pynone;
+  if pair = nil then Exit;
+  b := PPyBoundRec(pair);
+  code := b^.Code;
   if code = nil then Exit;
-  recv := pybound_recv(cb);
-  isFn := pybound_isfunc(cb);
-  if pybound_star(cb) >= 0 then
+  recv := b^.Recv;
+  isFn := b^.IsFunc;
+  av[0] := a0; av[1] := a1; av[2] := a2; av[3] := a3;
+  for i := nargs to 3 do av[i] := pynone;
+  { a COLLECTING callee packs its own surplus and has no omitted parameters to
+    fill -- that path predates this one and stays exactly as it was }
+  if b^.StarIdx >= 0 then
   begin
-    Result := PyBoundCallStar(code, recv, isFn, pybound_star(cb), 0,
-                              pynone, pynone, pynone, pynone);
+    Result := PyBoundCallStar(code, recv, isFn, b^.StarIdx, nargs,
+                              av[0], av[1], av[2], av[3]);
     Exit;
+  end;
+  want := nargs;
+  sg := b^.Sig;
+  if sg <> nil then
+  begin
+    sr := PPySigRec(sg);
+    reqN := Integer(sr^.ReqN);
+    totN := Integer(sr^.TotN);
+    if nargs < reqN then
+    begin
+      raise TypeError.Create('missing ' + pystr_of(Int64(reqN - nargs))
+              + ' required positional argument(s)');
+    end;
+    if (totN > nargs) and (totN <= 4) and (sr^.Dflts <> nil) then
+    begin
+      dp := sr^.Dflts;
+      for i := nargs to totN - 1 do
+      begin
+        if PPyVarRec(NativeInt(dp) + i * 16)^.VType = -1 then
+        begin
+          { PYSIG_DFLT_UNSET: the slot was never filled. That is a compiler bug
+            (an orphaned def-time store), not a value -- say so rather than
+            handing the body an illegal variant tag. }
+          raise TypeError.Create('parameter ' + pystr_of(Int64(i))
+                  + ' has no recorded default (signature slot never filled)');
+        end;
+        av[i] := PVariant(NativeInt(dp) + i * 16)^;
+      end;
+      want := totN;
+    end;
   end;
   if recv = nil then
   begin
-    if isFn then begin f0 := TPyCbF0(code); Result := f0(); end
-    else begin fp0 := TPyCbFP0(code); fp0(); Result := pynone; end;
+    if isFn then
+      case want of
+        0: begin f0 := TPyCbF0(code); Result := f0(); end;
+        1: begin f1 := TPyCbF1(code); Result := f1(av[0]); end;
+        2: begin f2 := TPyCbF2(code); Result := f2(av[0], av[1]); end;
+        3: begin f3 := TPyCbF3(code); Result := f3(av[0], av[1], av[2]); end;
+      else  begin f4 := TPyCbF4(code); Result := f4(av[0], av[1], av[2], av[3]); end;
+      end
+    else
+      case want of
+        0: begin fp0 := TPyCbFP0(code); fp0(); end;
+        1: begin fp1 := TPyCbFP1(code); fp1(av[0]); end;
+        2: begin fp2 := TPyCbFP2(code); fp2(av[0], av[1]); end;
+        3: begin fp3 := TPyCbFP3(code); fp3(av[0], av[1], av[2]); end;
+      else  begin fp4 := TPyCbFP4(code); fp4(av[0], av[1], av[2], av[3]); end;
+      end;
   end
   else
   begin
-    if isFn then begin m0 := TPyCbM0(code); Result := m0(recv); end
-    else begin mp0 := TPyCbMP0(code); mp0(recv); Result := pynone; end;
+    if isFn then
+      case want of
+        0: begin m0 := TPyCbM0(code); Result := m0(recv); end;
+        1: begin m1 := TPyCbM1(code); Result := m1(recv, av[0]); end;
+        2: begin m2 := TPyCbM2(code); Result := m2(recv, av[0], av[1]); end;
+        3: begin m3 := TPyCbM3(code); Result := m3(recv, av[0], av[1], av[2]); end;
+      else  begin m4 := TPyCbM4(code); Result := m4(recv, av[0], av[1], av[2], av[3]); end;
+      end
+    else
+      case want of
+        0: begin mp0 := TPyCbMP0(code); mp0(recv); end;
+        1: begin mp1 := TPyCbMP1(code); mp1(recv, av[0]); end;
+        2: begin mp2 := TPyCbMP2(code); mp2(recv, av[0], av[1]); end;
+        3: begin mp3 := TPyCbMP3(code); mp3(recv, av[0], av[1], av[2]); end;
+      else  begin mp4 := TPyCbMP4(code); mp4(recv, av[0], av[1], av[2], av[3]); end;
+      end;
   end;
+end;
+
+function pybound_callv0(const cb: Variant): Variant;
+begin
+  Result := PyBoundCallV(cb, 0, pynone, pynone, pynone, pynone);
 end;
 
 function pybound_callv1(const cb: Variant; const a0: Variant): Variant;
-var code, recv: Pointer; m1: TPyCbM1; f1: TPyCbF1; mp1: TPyCbMP1; fp1: TPyCbFP1;
-    isFn: Boolean;
 begin
-  Result := pynone;
-  if not pycallback_is(cb) then Exit;
-  code := pybound_code(cb);
-  if code = nil then Exit;
-  recv := pybound_recv(cb);
-  isFn := pybound_isfunc(cb);
-  if pybound_star(cb) >= 0 then
-  begin
-    Result := PyBoundCallStar(code, recv, isFn, pybound_star(cb), 1,
-                              a0, pynone, pynone, pynone);
-    Exit;
-  end;
-  if recv = nil then
-  begin
-    if isFn then begin f1 := TPyCbF1(code); Result := f1(a0); end
-    else begin fp1 := TPyCbFP1(code); fp1(a0); Result := pynone; end;
-  end
-  else
-  begin
-    if isFn then begin m1 := TPyCbM1(code); Result := m1(recv, a0); end
-    else begin mp1 := TPyCbMP1(code); mp1(recv, a0); Result := pynone; end;
-  end;
+  Result := PyBoundCallV(cb, 1, a0, pynone, pynone, pynone);
 end;
 
 function pybound_callv2(const cb: Variant; const a0, a1: Variant): Variant;
-var code, recv: Pointer; m2: TPyCbM2; f2: TPyCbF2; mp2: TPyCbMP2; fp2: TPyCbFP2;
-    isFn: Boolean;
 begin
-  Result := pynone;
-  if not pycallback_is(cb) then Exit;
-  code := pybound_code(cb);
-  if code = nil then Exit;
-  recv := pybound_recv(cb);
-  isFn := pybound_isfunc(cb);
-  if pybound_star(cb) >= 0 then
-  begin
-    Result := PyBoundCallStar(code, recv, isFn, pybound_star(cb), 2,
-                              a0, a1, pynone, pynone);
-    Exit;
-  end;
-  if recv = nil then
-  begin
-    if isFn then begin f2 := TPyCbF2(code); Result := f2(a0, a1); end
-    else begin fp2 := TPyCbFP2(code); fp2(a0, a1); Result := pynone; end;
-  end
-  else
-  begin
-    if isFn then begin m2 := TPyCbM2(code); Result := m2(recv, a0, a1); end
-    else begin mp2 := TPyCbMP2(code); mp2(recv, a0, a1); Result := pynone; end;
-  end;
+  Result := PyBoundCallV(cb, 2, a0, a1, pynone, pynone);
 end;
 
 function pybound_callv3(const cb: Variant; const a0, a1, a2: Variant): Variant;
-var code, recv: Pointer; m3: TPyCbM3; f3: TPyCbF3; mp3: TPyCbMP3; fp3: TPyCbFP3;
-    isFn: Boolean;
 begin
-  Result := pynone;
-  if not pycallback_is(cb) then Exit;
-  code := pybound_code(cb);
-  if code = nil then Exit;
-  recv := pybound_recv(cb);
-  isFn := pybound_isfunc(cb);
-  if pybound_star(cb) >= 0 then
-  begin
-    Result := PyBoundCallStar(code, recv, isFn, pybound_star(cb), 3,
-                              a0, a1, a2, pynone);
-    Exit;
-  end;
-  if recv = nil then
-  begin
-    if isFn then begin f3 := TPyCbF3(code); Result := f3(a0, a1, a2); end
-    else begin fp3 := TPyCbFP3(code); fp3(a0, a1, a2); Result := pynone; end;
-  end
-  else
-  begin
-    if isFn then begin m3 := TPyCbM3(code); Result := m3(recv, a0, a1, a2); end
-    else begin mp3 := TPyCbMP3(code); mp3(recv, a0, a1, a2); Result := pynone; end;
-  end;
+  Result := PyBoundCallV(cb, 3, a0, a1, a2, pynone);
 end;
 
 function pybound_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Variant;
@@ -13970,30 +14039,8 @@ function pybound_callv4(const cb: Variant; const a0, a1, a2, a3: Variant): Varia
   through here — and there was no arity-4 member, which is why the arity-4
   dispatcher had to exist at all.
   bug-nilpy-a-four-parameter-lambda-segfaults-when-called }
-var code, recv: Pointer; m4: TPyCbM4; f4: TPyCbF4; mp4: TPyCbMP4; fp4: TPyCbFP4;
-    isFn: Boolean;
 begin
-  Result := pynone;
-  if not pycallback_is(cb) then Exit;
-  code := pybound_code(cb);
-  if code = nil then Exit;
-  recv := pybound_recv(cb);
-  isFn := pybound_isfunc(cb);
-  if pybound_star(cb) >= 0 then
-  begin
-    Result := PyBoundCallStar(code, recv, isFn, pybound_star(cb), 4, a0, a1, a2, a3);
-    Exit;
-  end;
-  if recv = nil then
-  begin
-    if isFn then begin f4 := TPyCbF4(code); Result := f4(a0, a1, a2, a3); end
-    else begin fp4 := TPyCbFP4(code); fp4(a0, a1, a2, a3); Result := pynone; end;
-  end
-  else
-  begin
-    if isFn then begin m4 := TPyCbM4(code); Result := m4(recv, a0, a1, a2, a3); end
-    else begin mp4 := TPyCbMP4(code); mp4(recv, a0, a1, a2, a3); Result := pynone; end;
-  end;
+  Result := PyBoundCallV(cb, 4, a0, a1, a2, a3);
 end;
 
 { input(): read one line from stdin and drop the trailing newline, as Python's

@@ -354,3 +354,4 @@
 2026-08-19T09:28:30Z  v354  1fffc8cf5c3e73dc41e0ee5edcd234cf632ee18ad41620536bf7b8591ff0988b  19d5d9c7876bd0eb7f80c0deda77f891bb71706f  roster: reporting mode — surface only what needs the user
 2026-08-19T10:34:27Z  v355  739dfeb2d0e811d3e03ece35219b1912bc610ef91221d00b4cccfdb625bad557  264489d4736059269e8e3227748e89d3a9f2b45b  tstate(plexus): 9bfb7fcfac03 GREEN (full)
 2026-08-19T11:24:10Z  v356  2bb09afb0cff28098655eed327e2c6153b8aa34488228f4fd19e277841baa71f  5b93f1155a7b9e9cf227a3c5e03d91dc4e66401d  docs(progress): close bug-n-the-sequence-protocol as a duplicate
+2026-08-19T12:03:54Z  v357  2165452af3334f5871016e3f32cde97f640edae7d1893b24a76cb232221c947a  ad71a374989787905f4a71fb9dabafa4cded56c3  roster: capture the toolchain identity, and don't confuse a due pin with a blocked worker
