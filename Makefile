@@ -5432,6 +5432,29 @@ test-core: $(COMPILER)
 	$(TESTTMP)/csizeof_array_field_b11926; test "$$?" = "42"
 	./$(COMPILER) test/carray_field_decay_nested_item_b120.c $(TESTTMP)/carray_field_decay_nested_item_b12026
 	$(TESTTMP)/carray_field_decay_nested_item_b12026; test "$$?" = "42"
+	# Swept in by chore-a-sweep-the-unwired-tests-into-the-suite: repro tests
+	# added by their fix commits and never wired. Each ASSERTS ITS OWN result
+	# (exit 42 on success, a distinct code per failed check) and each was
+	# confirmed against gcc before wiring -- the expectation is the file's, not
+	# a recording of what pxx happens to print today.
+	./$(COMPILER) test/carray_field_decay_ptr_b120.c $(TESTTMP)/carray_field_decay_ptr_b12026
+	$(TESTTMP)/carray_field_decay_ptr_b12026; test "$$?" = "42"
+	./$(COMPILER) test/cbitfield_longlong_b359.c $(TESTTMP)/cbitfield_longlong_b35926
+	$(TESTTMP)/cbitfield_longlong_b35926; test "$$?" = "42"
+	./$(COMPILER) test/cbitfield_promotion_b358.c $(TESTTMP)/cbitfield_promotion_b35826
+	$(TESTTMP)/cbitfield_promotion_b35826; test "$$?" = "42"
+	./$(COMPILER) test/cfloat_global_array_implicit_len_b386.c $(TESTTMP)/cfloat_global_array_implicit_len_b38626
+	$(TESTTMP)/cfloat_global_array_implicit_len_b38626; test "$$?" = "42"
+	./$(COMPILER) test/cglobal_double_init_arith_b353.c $(TESTTMP)/cglobal_double_init_arith_b35326
+	$(TESTTMP)/cglobal_double_init_arith_b35326; test "$$?" = "42"
+	./$(COMPILER) test/cint_mod_unsigned_b360.c $(TESTTMP)/cint_mod_unsigned_b36026
+	$(TESTTMP)/cint_mod_unsigned_b36026; test "$$?" = "42"
+	./$(COMPILER) test/cnested_struct_deep_redef_b354.c $(TESTTMP)/cnested_struct_deep_redef_b35426
+	$(TESTTMP)/cnested_struct_deep_redef_b35426; test "$$?" = "42"
+	./$(COMPILER) test/cptr_field_index_stride_b121.c $(TESTTMP)/cptr_field_index_stride_b12126
+	$(TESTTMP)/cptr_field_index_stride_b12126; test "$$?" = "42"
+	./$(COMPILER) test/cptr_field_typedef_forward_stride_b121.c $(TESTTMP)/cptr_field_typedef_forward_stride_b12126
+	$(TESTTMP)/cptr_field_typedef_forward_stride_b12126; test "$$?" = "42"
 	./$(COMPILER) test/csizeof_ptr_field_index_b122.c $(TESTTMP)/csizeof_ptr_field_index_b12226
 	$(TESTTMP)/csizeof_ptr_field_index_b12226; test "$$?" = "42"
 	./$(COMPILER) test/cswitch_nested_case_block_b127.c $(TESTTMP)/cswitch_nested_case_block_b12726

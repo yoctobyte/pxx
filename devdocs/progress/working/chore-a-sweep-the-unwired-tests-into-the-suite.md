@@ -2,9 +2,10 @@
 track: A
 prio: 55
 type: chore
-owner: unassigned
+owner: frankonpiler-an
 blocked-by: []
 summary: "DECIDED 2026-08-19: SWEEP the ~61 unwired test files into the suite — one job, not 61 tickets. Track A, not T, precisely because A can FIX a red in place; T would have had to file one per red. These are repro tests from fix commits that were never wired, so the bug already has a ticket in done/ — reference it, do not re-file. Never record current output as the expectation."
+status: working
 ---
 
 # Sweep the unwired tests into the suite
@@ -87,3 +88,70 @@ front of it is not.
   pushed sha onward, which is the actual payoff.
 - **Sample caveat:** the 30 sampled additions are recent work. Sample the older tail
   first — if those are scruffier, step 3 (delete) applies more often than assumed.
+
+
+---
+
+## Batch 1 — 2026-08-19 (frankonpiler-an). 85 -> 61 unwired.
+
+Sweep in progress, not finished. This batch is deliberately the part that could
+be settled by an ORACLE rather than by judgement.
+
+### Measured first: the ticket's sample caveat was right
+
+The ticket sampled the 30 most recent additions and found every one a
+`fix`/`feat`. Over the WHOLE set: 65 of 85 are `fix`/`feat`, and the other 20 are
+older and scruffier — helper units, manual inventories, external-dependency
+probes. So the "sample the older tail first" caveat held, and that tail is where
+the non-tests live.
+
+### 15 exemptions (test/UNWIRED.txt), each verified
+
+- **8 consumed by a WIRED test** — helper units and included C files. Verified in
+  both directions: the file really is named by the consumer, and the consumer
+  really is in the Makefile.
+- **4 `test/manual/**`** — a Synapse compile inventory driven by
+  `test/manual/try_synapse_compile.sh`, needing a checkout this repo does not vendor.
+- **3 `test/gamelib/*_probe.*`** — need cglm / enet / ZenGL headers.
+
+### 9 wired (C)
+
+`carray_field_decay_ptr_b120`, `cbitfield_longlong_b359`,
+`cbitfield_promotion_b358`, `cfloat_global_array_implicit_len_b386`,
+`cglobal_double_init_arith_b353`, `cint_mod_unsigned_b360`,
+`cnested_struct_deep_redef_b354`, `cptr_field_index_stride_b121`,
+`cptr_field_typedef_forward_stride_b121`.
+
+These are the ideal shape: **self-asserting** (`return 42` on success, a distinct
+code per failed check), so the expectation lives in the file rather than in a
+recording. Each was additionally **built and run under gcc** before wiring — all
+nine return 42 under both. That satisfies the rule that does not bend, and it is
+step 5's dual-runnable form: the oracle is a property of the file, not a step
+that expires.
+
+Wiring verified by `make -n compiler/pascal26` (Makefile parses, without going
+near the suite) plus running all nine wired lines verbatim.
+
+## Two findings for Track T — the checker, not the bug
+
+`tools/check_test_wiring.py` is T's file so I did not touch it. Both are
+false-POSITIVE directions (it over-reports), which is the safe direction, but
+they cost sweep time:
+
+1. **A bare name in a Makefile `for` list is not seen.** `test_exc_resident_param.pas`
+   is reported unwired, but the Makefile runs it at all four `-O` levels via
+   `test/$$t.pas` inside a `for t in ...` list. The checker's `test/[A-Za-z0-9_./+-]+`
+   pattern cannot match a name that is only concatenated at expansion time. It is
+   the ONLY file in the 85 affected, so the real backlog was 84.
+2. **`consumed_by` matches a `uses` clause by STEM, so the path form is missed.**
+   `test/test_relpath_uses.pas` says `uses './relpath/sub/relmath', './relpath/relstr'`,
+   and its three helpers were all reported unwired. Ironic given the test's own
+   subject is path-form uses. Exempted here instead.
+
+## What is left: 61, and they need judgement, not an oracle
+
+56 `.pas` + 5 `.c`. The remaining Pascal ones are largely compiler-internal
+(`test_x64enc`, `test_asm_emit_*`, `test_pyeval_*`, `test_residency_*`) which FPC
+cannot build, so `fpc_diff_probe.sh` is not available as the oracle and each needs
+its adding commit read for what the right answer IS. That is the slower half and
+the one where step 4 (park rather than guess) will actually bite. Left claimed.

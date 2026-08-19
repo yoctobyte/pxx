@@ -7,3 +7,29 @@
 # Empty on purpose right now: the 98 currently-unwired files are NOT exemptions,
 # they are the backlog this checker was written to surface. Exempt a file only
 # when "nothing runs it" is the correct end state and you can say why.
+
+# --- consumed by a WIRED test, so "nothing runs it directly" is correct ---
+# check_test_wiring already reaches helpers through a wired subject's `uses` /
+# `#include`, but it matches by STEM and test_relpath_uses.pas writes the
+# path form (`uses './relpath/relstr'`), which that match cannot see. Listed
+# here rather than patched into the checker: tools/check_test_wiring.py is
+# Track T's file and T owns the tool.
+test/relpath/relext.pas  helper unit for test/test_relpath_uses.pas (wired); named there in path form, which the checker's stem match misses
+test/relpath/relstr.pas  helper unit for test/test_relpath_uses.pas (wired); also used by relpath/sub/relmath.pas
+test/relpath/sub/relmath.pas  helper unit for test/test_relpath_uses.pas (wired); exercises the `uses '../relstr'` relative form
+test/my_pas_lib.pas  helper library compiled by test/test_basic_comprehensive.bas (wired)
+test/test_pal_signal.pas  helper unit for test/test_signal_handler_callback_b336.pas (wired)
+test/carray_field_decay_exprlist_b120.c  included by test/carray_field_decay_nested_item_b120.c (wired)
+test/cbridge_via_unit.c  pulled in by test/unit_c_bridge.pas via `uses './cbridge_via_unit.c'`
+test/csqlite_file_probe.c  used by test/csqlite_parity_selfcompiled.c (wired)
+
+# --- deliberately manual: needs a checkout this repo does not vendor ---
+test/manual/synapse_smoke_blcksock.pas  Synapse compile inventory; run by hand via test/manual/try_synapse_compile.sh, needs a Synapse checkout
+test/manual/synapse_smoke_synaip.pas  Synapse compile inventory; run by hand via test/manual/try_synapse_compile.sh, needs a Synapse checkout
+test/manual/synapse_smoke_synautil.pas  Synapse compile inventory; run by hand via test/manual/try_synapse_compile.sh, needs a Synapse checkout
+test/manual/synapse_smoke_synsock.pas  Synapse compile inventory; run by hand via test/manual/try_synapse_compile.sh, needs a Synapse checkout
+
+# --- external-dependency probes: no header in this repo, so CI cannot build them ---
+test/gamelib/cglm_probe.c  game-library ladder probe; needs a cglm checkout (#include <cglm/cglm.h>)
+test/gamelib/enet_probe.c  game-library ladder probe; needs an enet checkout
+test/gamelib/zengl_probe1.pas  game-library ladder probe; needs a ZenGL checkout
