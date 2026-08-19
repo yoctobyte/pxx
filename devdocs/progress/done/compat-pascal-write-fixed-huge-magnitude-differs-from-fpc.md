@@ -4,7 +4,7 @@ prio: 40
 type: bug
 blocked-by: []   # decided 2026-08-08: KEEP EXACT
 summary: "write(v:w:d) with |v| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form)"
-status: open
+status: done
 
 ---
 
@@ -241,3 +241,67 @@ KEEP EXACT decision made that divergence correct) and re-scope to
 "`Str(v:w:d)` falls back to exponent form where `WriteLn` prints the exact
 expansion", with the buffer-producing refactor named as the work and the pin
 called out up front.
+
+
+## 2026-08-19 — RESOLVED. The defect is gone; the table above is stale.
+
+Re-measured on pin **v361** (`d1fc7394d348b14866e60cd458044121`) against FPC
+3.2.2, running **all five backends** (native x86-64/i386, qemu for
+aarch64/arm32/riscv32) rather than reasoning from the codegen.
+
+### The defect this ticket names no longer reproduces
+
+```pascal
+d := one * 1e300;  writeln('V[', d:0:5, ']');
+d := (one/z)*z;    writeln('W[', d:0:3, ']');   { NaN }
+```
+
+| target | `1e300:0:5` | NaN `:0:3` |
+| --- | --- | --- |
+| x86-64 | exact 301-digit expansion | ` Nan` |
+| i386 | identical | ` Nan` |
+| aarch64 | identical | ` Nan` |
+| arm32 | identical | ` Nan` |
+| riscv32 | identical | ` Nan` |
+
+`md5sum` of the five captured outputs collapses to **one hash**. The
+Int64-saturation debris (`9223372036854775809.00000`) and the `-9223372036854775809.000`
+NaN are both gone from x86-64, which has converged with the runtime-helper
+targets rather than diverging from them.
+
+This ticket said the part that mattered most was *"three backends printing three
+different texts for one program"*, more than which matched FPC. **That is
+fixed.** It was fixed by other work — the `PxxSciDigits17`/exact-expansion route
+and the non-finite guards, landed under the tickets those changes belonged to —
+which is why nothing here records a fix commit.
+
+### The remaining FPC divergence is DECIDED, not defective
+
+pxx prints the exact expansion; FPC prints ` 1.0E+300`. That fork was resolved in
+[[decide-float-fixed-output-exact-or-fpc-17-digit-cap]]:
+
+> **pxx prints the exact decimal expansion of the double in the fixed form.** It
+> does not adopt FPC's 17-significant-digit cap.
+
+with the user's own reasoning that we are not crippling something we do
+correctly and FPC does not. The `# decided 2026-08-08: KEEP EXACT` note in this
+ticket's own frontmatter refers to that.
+
+One measurement worth recording against the oracle: on `NaN:0:3` **FPC aborts**
+with `Runtime error 207`, where pxx prints ` Nan`. FPC has no answer here at all,
+so "differs from FPC" was never the same claim as "wrong".
+
+### Not carried forward
+
+The "real fix" sketched above — routing x86-64/aarch64 through
+`PXXWriteFloatFixed` to collapse three implementations into one — is **not**
+needed for this ticket any more, since the three now agree. It survives as a
+separate simplification argument, and the closely related parameterisation gap
+in the *scientific* writer is being fixed under
+[[compat-pascal-writeln-of-a-single-uses-double-width]] /
+[[bug-b-write-of-a-real-ignores-the-field-width-without-decimals]], which are one
+bug: `PXXWriteFloatSci(p: Pointer)` takes no width or digit count while
+`PXXWriteFloatFixed(p, decimals, width)` takes both.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.
