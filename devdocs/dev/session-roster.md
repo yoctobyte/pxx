@@ -1658,3 +1658,42 @@ rerank it deliberately rather than inheriting the number).
   common path and subtly wrong on the decline path is worse than a slow correct one.
   **Explicitly offered the option to decline** at this hour; below this, B is p20 ULP work
   that is not worth a session, and a tired half-landing is worse than an idle night.
+
+- **check 2026-08-19 (+2h) — a very productive hour; both landed, both re-dispatched.**
+  T confirms GREEN native through `9cc61eee29c8`.
+
+  **frank2 (N/A), three commits:** `091728229` a generator is a first-class value,
+  `8e540be59` an object whose `__iter__` yields is iterable, `9cc61eee2` **a generator
+  for-in inside a block swallowed the statement after it** — that last one silent, and the
+  kind that gets blamed on anything but the loop. Ticket resolved to `done/`; it also
+  banked "the two wrong designs" it tried, which is the expensive half of a write-up and
+  usually the half that gets dropped.
+
+  **frank3 (B): Eisel-Lemire landed** (`a4c1bf31d`) — **27x to 1118x** outside Clinger's
+  window, over a 696-entry truncated-powers-of-ten table, with `MulHiU64` supplying the
+  high half exactly as its own previous pass predicted. The safety argument is the
+  load-bearing part: **Lemire DECLINES rather than guesses**, `ExDecNearest` is untouched
+  and still answers everything Lemire will not, so the residue is correctly rounded *by
+  construction* — which is what makes it safe to bolt a fast path in front of an exact
+  parser.
+
+  **The honest half, and it is the reusable lesson: the two rows the ticket NAMED did not
+  move.** "small" (1e-310) and "subnormal" (1e-320) are both subnormal, where Lemire
+  declines below the normal floor by construction — Go and Rust decline there too. A less
+  careful pass would have led with 1118x and let the headline rows quietly stay slow.
+  frank3 rescoped the remainder as **a rewrite of `ExDecNearest` in binary big-integer
+  arithmetic, not an extension of Lemire**, which saves the next person from stretching
+  Lemire somewhere it cannot go. Third or fourth instance in two days of *a title naming
+  the encounter, not the boundary*. Also kept visible rather than rounded away: the
+  Clinger fast path came out **5% slower** on code layout, and that is the path most
+  inputs take.
+
+  **Dispatched frank2 → RE-MEASURE THE LADDER** (`tools/nilpy_ladder.py`), because that is
+  the standing mandate's own question and tonight's four generator commits are exactly
+  what should move it. Told to name the sha, split past-a-wall from onto-the-next-wall,
+  keep the 7/33 (html5lib) and 6/48 (full ladder) denominators distinct, quote no earlier
+  scan, and then **follow the measurement rather than the backlog ranking** — including
+  "the walls are diffuse" as a legitimate finding to report and stop on.
+  **frank3 → offered the rescoped ExDecNearest rewrite or a clean stop, its call**; a
+  big-integer comparison rewrite is not obviously a small-hours job and two landings is a
+  good night.
