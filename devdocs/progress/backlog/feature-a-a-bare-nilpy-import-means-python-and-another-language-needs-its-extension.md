@@ -211,3 +211,37 @@ That two-places-must-agree pattern is not hypothetical here: the float fix
 needed `PXXWriteFloatSci`'s definition **and** its pre-registration in
 `parser.inc` to change together, and either alone fails — the emitter half
 looks like the whole story until the other half bites.
+
+## THE FAILURE MODE TO EXPECT HERE — an import resolver is made of proxies
+
+Added 2026-08-19 from frank3's closing note, because it is aimed at *this* ticket rather than
+at the day it came from. Six failures in one session reduced to one shape:
+
+> **Every failure was a mechanism reporting on something ADJACENT to what was actually asked.**
+> `; echo` reported the echo, not the suite. `grep FAIL` matched the assertions that check for
+> FAIL. `pgrep -f` matched its own command line and killed the run it had just launched.
+> `git add <paths>` reported intent while the index held a peer's changes. `git rebase`
+> reported text placement, not behaviour. `decs >= 0` reported a coincidence, not a fact.
+
+**An import resolver is made almost entirely of predicates like these**, so this is the
+*default* failure mode in this ticket, not an exotic one. Live instances already in this lane:
+
+- `PyImportRootIsConsumedOnly` tested only the **root** of a dotted path, so `collections` on
+  a list swallowed `from collections.abc import Mapping`. Fixed by testing the full path.
+- The eight `lib/rtl` collisions exist because "a unit with this name exists" was standing in
+  for "this unit IS the Python module" — the whole reason this ticket exists.
+- `ProcUnitIdx[mpi] >= 0` ("lives in a unit") once stood in for "is a Pascal library facade",
+  silently substituting `None` for declared defaults across every cross-module call.
+
+**So when adding the whitelists, prefer a RECORDED fact over a derived one.** The whitelist is
+itself the recorded form — that is its main virtue, more than the behaviour it selects. A
+derived predicate that is correct today is indistinguishable from one correct by construction,
+right up until its premise changes.
+
+**And one mechanical hazard specific to this change**, hit by the float-writer fix earlier the
+same day: **a signature and its pre-registration can live in different files, textually distant
+enough to merge cleanly and then not work.** `PXXWriteFloatSci` was pre-registered in
+`parser.inc` with one parameter while the emitter passed three. A clean rebase means git placed
+the hunks — not that the result compiles or behaves. Rebuild and re-run the probe after any
+rebase in this area.
+
