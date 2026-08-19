@@ -1048,6 +1048,22 @@ function PyIsIntMethodName(const nm: AnsiString): Boolean; forward; { Nil Python
 function PyIsIntMethodSuffixAhead: Boolean; forward; { Nil Python: at an intercepted int-method suffix? (pyparser.inc) }
 function PyParseVariantMethod(baseNode: Integer; const mname: AnsiString): Integer; forward; { Nil Python obj.meth() on a VARIANT receiver (pyparser.inc) }
 function PyMakeFuncValue: Integer; forward; { Nil Python bare def NAME as a value (pyparser.inc) }
+
+{ Does proc pi declare any parameter with a DEFAULT? What decides whether a
+  callable value has to carry a signature record rather than a bare code
+  address -- see the call site in ParseFactorCore. }
+function PyProcHasDefaultParam(pi: Integer): Boolean;
+var k: Integer;
+begin
+  Result := False;
+  if (pi < 0) or (pi >= ProcCount) then Exit;
+  for k := 0 to Procs[pi].ParamCount - 1 do
+    if (k < MAX_PROC_PARAMS) and ProcParamHasDefault[pi * MAX_PROC_PARAMS + k] then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
 function PyMakeFuncValueFor(pi: Integer; const nm: AnsiString): Integer; forward; { the same pair for a KNOWN proc (pyparser.inc) }
 function PyFindVariantParamOverload(const nm: AnsiString; wantArity: Integer): Integer; forward; { Nil Python: same-arity all-Variant-param overload of nm (pyparser.inc) }
 function PyGetOrMakeCallableWrapper(realPi: Integer): Integer; forward; { Nil Python: Variant-ABI wrapper around realPi, cached by name (pyparser.inc) }
@@ -11421,7 +11437,26 @@ begin
             `return wrapper` over `def wrapper(*args)` (the shape every Python
             decorator has) otherwise called the body with loose Variants where
             it declares a list. }
-          if (idx >= 0) and (idx < ProcCount) and (ProcPyStarIdx[idx] >= 0) then
+          { ...and NEITHER CAN A CALLEE WITH DEFAULTS, for exactly the same
+            reason one word later. The star case above was written when the
+            pair's only extra cargo was the star position; the pair now also
+            carries the SIGNATURE record -- ReqN/TotN, the def-time default
+            values and the parameter names -- and a bare address carries none
+            of it. So a def with any defaulted parameter must take the same
+            road, or `fs = [g]` / `take(g)` on `def g(a, b=7)` enters a
+            two-parameter body through a one-parameter pointer and reads
+            whatever the previous call left where `b` lives.
+
+            This is the sibling-arm shape from
+            devdocs/dev/normalise-dont-special-case.md: one concept ("this
+            callee cannot travel as a bare address") served by a condition
+            listing the reasons, and only the first reason was listed. Measured
+            rather than reasoned -- `f = g` went through PyMakeFuncValueFor and
+            worked while `fs = [g]` did not reach it at all, which is what
+            pointed here.
+            bug-n-a-module-level-def-taken-as-a-value-loses-its-defaults }
+          if (idx >= 0) and (idx < ProcCount) and
+             ((ProcPyStarIdx[idx] >= 0) or PyProcHasDefaultParam(idx)) then
             node := PyMakeFuncValueFor(idx, name);
           if node >= 0 then
           begin

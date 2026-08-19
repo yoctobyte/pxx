@@ -254,6 +254,10 @@ var
     and these are produced by the HEADER and must survive that. }
   PyDefInitHead: Integer;
   PyHdrDefSym: array[0..31] of Integer;
+  { the interned NAME of PyHdrDefSym's global -- the key that survives a
+    rolled-back trial parse recycling the symbol index (see
+    ProcParamDefaultGName in defs.inc) }
+  PyHdrDefGName: array[0..31] of Integer;
   PyHdrDefVal: array[0..31] of Int64;
   PyHdrDefSOff: array[0..31] of Integer;
   PyHdrDefSLen: array[0..31] of Integer;
@@ -5768,11 +5772,25 @@ end;
   entry per (def, param), because the `$pdef.*` name is fully qualified -- a def
   re-parsed on a later pass finds its own entry again rather than adding a
   second one that could never be resolved. }
-function PyDfltPendFor(gsym: Integer): Integer;
+function PyDfltPendFor(key: Integer): Integer;
 var i: Integer;
 begin
+  { Keyed on the hidden global's NAME, not its symbol INDEX. A trial parse that
+    is rolled back re-allocates the symbol at whatever index is free next, so
+    the def-time store (built during the header parse) and EmitPySignatures
+    (which reads ProcParamDefaultSym after every registration site has settled)
+    can hold two different indices for one parameter. Keyed on the index they
+    then missed each other, the store went to the bit bucket, and the slot kept
+    PYSIG_DFLT_UNSET -- which surfaced as "parameter 2 has no recorded default"
+    on a perfectly ordinary `def r(a, i=7, s="hi", L=None)` as soon as a second
+    def in the same file had a default too. The `$pdef.<cls>.<nest>.<def>.<param>`
+    NAME is stable across the re-allocation, which is the whole reason it is
+    fully qualified. Same recycled-index hazard as
+    bug-nilpy-a-nested-defs-default-parameter-is-read-from-a-rolled-back-symbol,
+    one level up. }
+  if key < 0 then begin Result := 0; Exit; end;
   for i := 0 to PyDfltPendCount - 1 do
-    if PyDfltPendSym[i] = gsym then begin Result := i; Exit; end;
+    if PyDfltPendSym[i] = key then begin Result := i; Exit; end;
   if PyDfltPendCount >= PY_MAX_DFLT_PEND then
   begin
     Error('too many non-constant parameter defaults in one module '
@@ -5781,7 +5799,7 @@ begin
     Exit;
   end;
   Result := PyDfltPendCount;
-  PyDfltPendSym[Result] := gsym;
+  PyDfltPendSym[Result] := key;
   PyDfltPendOff[Result] := -1;
   Inc(PyDfltPendCount);
 end;
@@ -5876,7 +5894,7 @@ begin
     The slot address is a pending sentinel: the Proc does not exist yet.
     feature-n-a-callable-value-carries-its-signature-type }
   slotAddr := AllocNode(AN_PYSIGDSLOT);
-  ASTIVal[slotAddr] := PyDfltPendFor(gsym);
+  ASTIVal[slotAddr] := PyDfltPendFor(InternStr(gname));
   ASTTk[slotAddr] := Ord(tyPointer);
   slot := AllocNode(AN_DEREF);
   ASTLeft[slot] := slotAddr;
@@ -9012,6 +9030,10 @@ begin
   for j := 0 to nP - 1 do
     if pDefS[j] >= 0 then Inc(nDef) else Inc(nOwn);
   anyBind := (nDef > 0) or (PyCapCount[procIdx] > 0);
+  if PxxDbgEnabled('n.bfn') then
+    WriteLn('PXXDBG n.bfn ', Procs[procIdx].Name, ' nP=', nP, ' nDef=', nDef,
+            ' nOwn=', nOwn, ' caps=', PyCapCount[procIdx],
+            ' defTok=', PyDefTokOf[procIdx], ' params=', Procs[procIdx].ParamCount);
   { An UNANNOTATED single param compiled as a VARIANT also forces the bound-fn
     wrapper even with nothing to bind: the raw-address fallback lets the
     call bridge marshal per the FIELD's Callable annotation (vm: VM -> raw
@@ -11789,6 +11811,8 @@ begin
      (nm <> 'pyboundfn_setstar') and
      (nm <> 'pyboundfn_bind_var') and (nm <> 'pyboundfn_bind_obj') and
      (nm <> 'pyboundfn_bind_cell') then Exit;
+  if PxxDbgEnabled('n.bfn') then
+    WriteLn('PXXDBG n.bfn box via ', nm);
   boxPi := FindProc('pyvar_of_callable');
   if boxPi < 0 then Exit;
   pi := AllocNode(AN_ARG);
@@ -12778,6 +12802,8 @@ begin
     function returns — the bind chain hands back a pointer, and a pointer-typed
     local never reaches the dynamic-call path
     (bug-nilpy-an-escaped-nonlocal-cell-is-not-shared-with-the-enclosing-frame). }
+  if PxxDbgEnabled('n.bfn') then
+    WriteLn('PXXDBG n.bfn funcvalue for ', nm, ' pi=', pi);
   Result := PyNestedDefClosureValue(pi);
   if Result >= 0 then
   begin
@@ -23495,6 +23521,7 @@ begin
       if (j < MAX_PROC_PARAMS) and PyHdrDefHas[j] and (PyHdrDefSym[j] >= 0) then
       begin
         ProcParamDefaultSym[procIdx * MAX_PROC_PARAMS + j] := PyHdrDefSym[j];
+        ProcParamDefaultGName[procIdx * MAX_PROC_PARAMS + j] := PyHdrDefGName[j];
         ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + j] := True;
         ProcParamDefaultIsNone[procIdx * MAX_PROC_PARAMS + j] := False;
       end;
@@ -27380,6 +27407,7 @@ begin
     end;
     PyHdrDefHas[PyHdrNParams] := False;
     PyHdrDefSym[PyHdrNParams] := -1;
+    PyHdrDefGName[PyHdrNParams] := -1;
     if CurTok.Kind = tkAssign then
     begin
       annIdx := TokPos;
@@ -27393,6 +27421,9 @@ begin
       PyHdrDefIsFloat[PyHdrNParams] := PyDefaultWasFloat;
       PyHdrDefIsBool[PyHdrNParams] := PyDefaultWasBool;
       PyHdrDefSym[PyHdrNParams] := PyDefaultSym;
+      if PyDefaultSym >= 0 then
+        PyHdrDefGName[PyHdrNParams] := InternStr(Syms[PyDefaultSym].Name)
+      else PyHdrDefGName[PyHdrNParams] := -1;
       TokPos := annIdx;
       Next;
     end;
@@ -27557,6 +27588,7 @@ begin
         pre-pass leaves it -1, and the REAL parse must not be left holding the
         pre-pass's answer, so this is written unconditionally with the rest. }
       ProcParamDefaultSym[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefSym[i];
+      ProcParamDefaultGName[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefGName[i];
     end;
 end;
 
@@ -27743,6 +27775,7 @@ begin
     PyHdrDefIsFloat[i] := PyHdrDefIsFloat[i - 1];
     PyHdrDefIsBool[i]  := PyHdrDefIsBool[i - 1];
     PyHdrDefSym[i]     := PyHdrDefSym[i - 1];
+    PyHdrDefGName[i]   := PyHdrDefGName[i - 1];
     PyHdrDefVal[i]     := PyHdrDefVal[i - 1];
     PyHdrDefSOff[i]    := PyHdrDefSOff[i - 1];
     PyHdrDefSLen[i]    := PyHdrDefSLen[i - 1];
@@ -27759,6 +27792,7 @@ begin
   PyHdrDefIsFloat[0] := False;
   PyHdrDefIsBool[0]  := False;
   PyHdrDefSym[0]     := -1;
+  PyHdrDefGName[0]   := -1;
   PyHdrDefVal[0]     := 0;
   PyHdrDefSOff[0]    := 0;
   PyHdrDefSLen[0]    := 0;
@@ -28308,6 +28342,7 @@ begin
       if (i < MAX_PROC_PARAMS) and PyHdrDefHas[i] and (PyHdrDefSym[i] >= 0) then
       begin
         ProcParamDefaultSym[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefSym[i];
+        ProcParamDefaultGName[procIdx * MAX_PROC_PARAMS + i] := PyHdrDefGName[i];
         ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] := True;
         ProcParamDefaultIsNone[procIdx * MAX_PROC_PARAMS + i] := False;
       end;
@@ -32463,6 +32498,8 @@ begin
           if PyDefaultSym >= 0 then
           begin
             ProcParamDefaultSym[mpi * MAX_PROC_PARAMS + pIdx] := PyDefaultSym;
+            ProcParamDefaultGName[mpi * MAX_PROC_PARAMS + pIdx] :=
+              InternStr(Syms[PyDefaultSym].Name);
             ProcParamHasDefault[mpi * MAX_PROC_PARAMS + pIdx] := True;
             { the pre-pass left this True for every non-constant default, and
               the consumers check it before the symbol on some paths }

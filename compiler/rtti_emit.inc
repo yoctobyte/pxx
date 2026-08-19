@@ -497,12 +497,12 @@ begin
             slot. The store was built while the header was parsed, before this
             Proc existed, so it names the hidden global instead and the pairing
             is made here -- after every registration site has settled. }
-          pend := PyDfltPendFor(ProcParamDefaultSym[pi * MAX_PROC_PARAMS + k]);
+          pend := PyDfltPendFor(ProcParamDefaultGName[pi * MAX_PROC_PARAMS + k]);
           PyDfltPendOff[pend] := slot;
           if PxxDbgEnabled('n.sig') then
             WriteLn('PXXDBG n.sig dflt ', Procs[pi].Name, '.',
                     Procs[pi].Params[k].Name, ' pend=', pend,
-                    ' gsym=', ProcParamDefaultSym[pi * MAX_PROC_PARAMS + k],
+                    ' gname=', ProcParamDefaultGName[pi * MAX_PROC_PARAMS + k],
                     ' slot=', slot);
           Continue;
         end;

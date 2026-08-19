@@ -71,3 +71,28 @@ def outer():
 
 i = outer()
 print(i(1), i(1, 100))
+
+# ...and the same, reached NOT through a plain name but through a list element
+# and through a parameter. Those positions used to lower a bare def name to a
+# raw code address, which carries no signature at all -- so the defaults were
+# not merely dropped, the body was entered at the wrong arity and segfaulted.
+def r(a, i=7, s="hi", L=None):
+    return (a, i, s, L)
+
+fs = [r]
+print(fs[0](1))
+print(fs[0](1, 2))
+print(fs[0](1, 2, "z"))
+
+def via_param(fn):
+    return fn(1)
+
+print(via_param(r))
+print(list(map(r, [1, 2])))
+
+def acc2(v, bucket=[]):
+    bucket.append(v)
+    return len(bucket)
+
+gs = [acc2]
+print(gs[0](1), gs[0](2), acc2(3))

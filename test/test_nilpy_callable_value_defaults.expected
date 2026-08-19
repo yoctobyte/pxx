@@ -11,3 +11,9 @@ TypeError
 [7, 8, 9]
 [3, 2, 1]
 6 101
+(1, 7, 'hi', None)
+(1, 2, 'hi', None)
+(1, 2, 'z', None)
+(1, 7, 'hi', None)
+[(1, 7, 'hi', None), (2, 7, 'hi', None)]
+1 2 3

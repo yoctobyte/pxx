@@ -1909,6 +1909,17 @@ var
   ProcParamDefaultIsFloat: array[0..MAX_PARAM_DEPTHS-1] of Boolean; { the default is a FLOAT; DefaultVal holds its IEEE 754 bits, as a float TOKEN does. } { NilPy `= None` (or a non-constant default, which is treated as one) — distinct from the ordinal 0 a False/absent default records. }
   ProcParamDefaultIsBool : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { NilPy: default is a BOOLEAN (`b=True`), not the ordinal 1 it is recorded as — a variant parameter must be boxed tyBoolean or `print(b)` says 1. }
   ProcParamDefaultSym : array[0..MAX_PARAM_DEPTHS-1] of Integer;  { NilPy: symbol of the hidden global holding a NON-CONSTANT default's def-time value (-1 = none). Python evaluates such a default ONCE, where the def stands, which is what makes the shared-mutable-default idiom observable; the call site therefore reads this global rather than rebuilding a value. A PARALLEL ARRAY, not a TSymbol/Proc field — see project_tsymbol_field_landmine. }
+  { NilPy: the interned NAME of that hidden global, captured where it is
+    AUTHORITATIVE -- at the header parse, before any rollback can recycle the
+    symbol index. ProcParamDefaultSym alone is not a safe key for anything
+    outside the parse that wrote it: a rolled-back trial parse frees the index
+    and a LATER def's parameter gets it, so two unrelated parameters end up
+    naming the same symbol. Measured: `r.s` and `outer.inner.b` in one file both
+    answered symbol 451, so the second overwrote the first's signature-defaults
+    slot and the first reported "no recorded default" for an ordinary
+    `s="hi"`. Same recycled-index landmine as
+    project_tsymbol_field_landmine, one level up. }
+  ProcParamDefaultGName : array[0..MAX_PARAM_DEPTHS-1] of Integer;
   ProcParamDefaultIsSet : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { default is a SET (`opts: TOpts = []` / `= DefaultFormat`), not an ordinal: ProcParamDefaultVal holds the Data[] OFFSET of the baked 32-byte mask, and the call rebuilds an AN_SET_CONST_REF from it. }
   ProcParamDefaultSOff  : array[0..MAX_PARAM_DEPTHS-1] of Integer; { char-pool offset of the string default's text. }
   ProcParamDefaultSLen  : array[0..MAX_PARAM_DEPTHS-1] of Integer; { its length. }
@@ -2181,9 +2192,11 @@ var
   ProcSigDfltOff: array[0..MAX_PROCS-1] of Integer;
   { One entry per default that cannot be baked into .data as a constant: a
     string (its payload is a managed AnsiString ref, built at run time) or any
-    non-constant expression. PyDfltPendSym is the hidden `$pdef.*` global that
+    non-constant expression. PyDfltPendSym is the interned NAME of the hidden `$pdef.*` global that
     identifies the (def, param) pair -- unique, because the name is fully
-    qualified by class, nesting prefix, def and param. PyDfltPendOff is the data
+    qualified by class, nesting prefix, def and param. Keyed on the NAME rather
+    than the symbol INDEX because a rolled-back trial parse re-allocates the
+    symbol at a different index -- see PyDfltPendFor. PyDfltPendOff is the data
     offset EmitPySignatures resolves it to, or -1 while unresolved. }
   PyDfltPendSym : array[0..PY_MAX_DFLT_PEND-1] of Integer;
   PyDfltPendOff : array[0..PY_MAX_DFLT_PEND-1] of Integer;
