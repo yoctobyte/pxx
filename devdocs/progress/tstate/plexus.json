@@ -6095,12 +6095,33 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-08-19T10:10:13Z",
-  "red": [],
-  "sha": "19d5d9c7876bd0eb7f80c0deda77f891bb71706f",
+  "date": "2026-08-19T15:40:45Z",
+  "red": [
+   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy",
+   "test-core#src:examples/tk/tkinter_facade.npy",
+   "test-core#src:examples/tk/field_class_identity.npy",
+   "test-core#src:examples/tk/callbacks.npy",
+   "test-core#src:test/test_nilpy_subclass_unit_base.npy",
+   "test-core#src:test/test_nilpy_array_of_const_unit.npy",
+   "test-core#src:test/test_nilpy_multiple_inheritance_imported_base.npy",
+   "test-core#src:test/test_nilpy_renamed_class_attrs.npy",
+   "test-core#src:test/test_nilpy_class_named_after_its_imported_base.npy",
+   "test-core#src:examples/tk/import_in_body.npy",
+   "test-core#src:examples/tk/shadow_format_except.npy",
+   "test-core#src:examples/tk/facade_and_paths.npy",
+   "test-core#src:test/test_nilpy_qualifier_vs_cproc.npy",
+   "test-nilpy#src:examples/tk/tkinter_facade.npy",
+   "test-nilpy#src:test/test_nilpy_subclass_unit_base.npy",
+   "test-nilpy#src:test/test_nilpy_array_of_const_unit.npy",
+   "test-nilpy#src:test/test_nilpy_multiple_inheritance_imported_base.npy",
+   "test-nilpy#src:test/test_nilpy_renamed_class_attrs.npy",
+   "test-nilpy#src:test/test_nilpy_class_named_after_its_imported_base.npy",
+   "test-nilpy#src:examples/tk/import_in_body.npy"
+  ],
+  "sha": "4e27dc2be11471f92064756e17d426617d0d284b",
   "tier": "full",
-  "ver": "v354",
-  "verdict": "GREEN"
+  "ver": "v364",
+  "verdict": "RED"
  },
  "renamed_from": [
   "xeon"
