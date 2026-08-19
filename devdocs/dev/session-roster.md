@@ -2960,11 +2960,44 @@ rerank it deliberately rather than inheriting the number).
   was binned unread and never replaced — so this re-baselines what the generator series
   plus three pins actually bought, which is the mandate's headline number.
 
-  **What is NOT mine to settle:** frank3 offered to take
-  `bug-n-from-collections-abc-import-is-swallowed-by-the-collections-root-rule` (N, p62,
-  unclaimed in `backlog/`), having the whole diagnosis already loaded. frank2 holds A+N by
-  the user's assignment, still holds p88 in `working/` (on the last unfixed p70 row — a
-  callable through a subscript or parameter with fewer args than declared), and the import
-  blocker is queued to it next. **Handing it to frank3 is a lane-ownership change = the
-  user's call.** Deliberately not framed as a reassignment this time; the earlier version
-  of this manufactured a fork that dissolved once the framing changed.
+  **The ownership fork DISSOLVED before it reached the user.** frank3 offered to take
+  `bug-n-from-collections-abc-import-…` (N, p62) with the diagnosis loaded; minutes later
+  frank2 resolved p88 (`b515f2842`) and **took the import blocker itself**, as queued. So
+  there was nothing to decide — again. That is twice today a lane-ownership question
+  evaporated within the hour simply by waiting for the lane's owner to finish. **Worth
+  making a habit of: before escalating an ownership fork, check whether the owner is about
+  to be free.**
+
+  **What remains for the user is narrower and real: frank3 has nothing above p20 after the
+  ladder re-run**, and every high-value item left is in a lane it does not own.
+
+- **p88 RESOLVED (`b515f2842`), and frank2's correction is the model.** It had told me the
+  segfault it was chasing "does reach my dispatcher". **It does not.** It had been mapping
+  the IR's bare `call a=1508` back to a callee **by assumption**; it built
+  `PXXDBG=n.procs` (`b54939cf3`) to print the proc table instead, and the real site is
+  `pyvar_callv1` carrying **tag 12** (the boundfn carrier), not the tag-8 pair the signature
+  record hangs off — a path its code never touched. An hour lost to reasoning about a
+  number instead of printing it, the tool now in the tree so nobody repeats it, and the
+  correction published against its own earlier claim.
+
+  **p88's scope is therefore MEASURED, not claimed:** correct for the tag-8 pair
+  (`f = some_def`, `obj.method`, `map`/`filter`/`sorted(key=)`, byte-identical to CPython in
+  the wired test); **not** covering a def reached through a subscript or parameter
+  (`fs = [g]; fs[0](1)`), which rides tag 12. Pre-existing, identical on `PXX_STABLE`, filed
+  as `bug-n-a-module-level-def-taken-as-a-value-loses-its-defaults-on-the-boundfn-carrier`
+  (N, p65).
+
+- **DESIGN FINDING BANKED, NOT MICROFIXED — four dispatchers, two defaults mechanisms.**
+  frank2 counted: **four** dynamic-call dispatchers (`pybound_callv*`, `pycallback_call*`,
+  `PyCallKey1`, `pyvar_callv*`) and **two** independent defaults mechanisms for one
+  concept — the new signature record (tag 8) and `pyboundfn_setdefaults` (tag 12), the
+  latter already firing for the NESTED def form and not the module-level one, which is the
+  sibling-arm-left-behind shape that site's own comment records about the lambda lifter.
+
+  Its call, and it is the right one: **put `Sig` on the boundfn carrier and DELETE
+  `pyboundfn_setdefaults` — one mechanism, fewer cases — rather than teach a fifth path the
+  same trick.** `root-cause-over-microfix.md` says three is a design flaw; four and two is
+  past arguing. **Routed SECOND**, after the `collections.abc` import blocker, because the
+  import bug is the only one with a queue behind it: frank3's Mapping shim landed inert and
+  7 corpus files start moving the moment the import reaches it. Ordering, not ownership, so
+  mine to set.
