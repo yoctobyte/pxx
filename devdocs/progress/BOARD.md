@@ -8,11 +8,10 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| feature-b-strtofloat-big-integers-in-64-bit-limbs | B | 25 | feature | ExBinNearest's big-integer primitives use 32-bit limbs because a limb times a sub-2^31 multiplier is the largest product that fits a signed Int64. MulHiU64 is already in lib/rtl/wideint.pas (intrinsic via IR_MULHI, already used by Eisel-Lemire in this same unit), so 64-bit limbs are available: half the limb count, BigFMulU64's five passes collapse to one, and the power-of-five chunk rises from 5^13 to 5^27. Expect ~4x, taking subnormal StrToFloat from ~8-11 us to ~2-3 us — inside CPython's range. A rewrite of six leaf routines with no change to the algorithm above them. | — |
 | feature-n-a-callable-value-carries-its-signature-type | A | 88 | feature | DECIDED 2026-08-19. A boxed callable's VT_CALLABLE_TAG payload becomes ONE pointer to a static signature record {code address, ReqN, TotN, per-param default descriptor}. Static, so the slot still owns nothing and no refcount behaviour changes. One call-site helper reads it: check arity, fill defaults, call. Unblocks three tickets whose symptoms are SIGSEGV and silent wrong values. | — |
 
 ## unfinished (17)
@@ -473,9 +472,9 @@ _none_
 | decide-what-synapse-actually-needs-vs-mimic-fpc | U | 20 | decide | Synapse builds under `--mimic-fpc`. What does it actually NEED? | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2045)
+## done (2046)
 
-2045 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2046 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (39)
 

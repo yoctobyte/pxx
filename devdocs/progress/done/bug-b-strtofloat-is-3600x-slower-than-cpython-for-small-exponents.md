@@ -613,5 +613,38 @@ own ticket rather than a sixth pass here.
 **Resolved.** The gate this ticket has carried since 2026-08-15 is met on every
 row it names.
 
+## 2026-08-19 (later) — the follow-up landed, and it re-answers "where does the time go"
+
+[[feature-b-strtofloat-big-integers-in-64-bit-limbs]] rewrote the `BigF*`
+primitives to base 2^64. It predicted ~4x and **delivered 1.6-1.8x** on the heavy
+rows; subnormals sit at 6.6-7.0 us, not the predicted 2-3 us. Recorded here
+because this ticket is where the next optimiser will look.
+
+**The prediction was a counting error, and it is the kind this ticket kept
+making.** It listed three effects — half the limbs, `BigFMulU64`'s five passes
+collapsing to one, 5^27 halving the setup rounds — and multiplied them. They are
+not three effects; they are three *descriptions of one quantity*, limb
+operations, which an instrumented counter says fell **2.2x**, not 4x. Each
+individual claim was true, which is exactly what made the compounded prediction
+persuasive.
+
+> When several improvements all reduce the same underlying quantity, they do not
+> multiply. Count the quantity; do not enumerate the reasons it should drop.
+
+**The finding that matters for anyone continuing this work:** fitting the two
+heavy rows gives ~9.2 ns per limb operation and a **fixed ~2.8 us per parse**.
+That number independently reproduces the 2.5-3.5 us of setup measured *a
+different way* in the "where the time goes" table above — corroborated, not
+fitted to itself. It is why the two smallest-operand rows barely moved at all
+(1.02x and 1.07x): their limb work is already small enough that the fixed cost
+dominates.
+
+So: **the limbs are close to done. Anyone chasing another 2x on subnormals should
+attack the ~2.8 us of setup, not the limb width.** A third limb ticket would
+spend its budget on the 2.2x that has already been taken.
+
 ## Log
 - 2026-08-19 — resolved, commit cc50090c2.
+- 2026-08-19 — follow-up [[feature-b-strtofloat-big-integers-in-64-bit-limbs]]
+  landed: 2.2x less limb work, 1.6-1.8x wall-clock, ~2.8 us fixed setup
+  identified as the remaining floor.

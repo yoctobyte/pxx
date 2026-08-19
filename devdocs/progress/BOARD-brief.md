@@ -5,11 +5,10 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:17 blocked:5 backlog:245 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2045 rejected:39`
+`working:1 unfinished:17 blocked:5 backlog:245 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2046 rejected:39`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-b-strtofloat-big-integers-in-64-bit-limbs` [B] — owner: frank3-etree
 - `feature-n-a-callable-value-carries-its-signature-type` [A] — owner: frankonpiler-an
 
 ## unfinished (17) — parked mid-flight; re-claim, do not duplicate

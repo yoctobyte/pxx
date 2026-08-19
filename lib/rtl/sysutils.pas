@@ -1785,15 +1785,21 @@ end;
   untouched and has no size limit. A buffer that turned out too small is
   therefore a slower answer, never a wrong one.
 
-  Base 2^32 in Int64 limbs: a limb times any multiplier under 2^31, plus carry,
-  stays inside a signed 64-bit product — which is what lets every routine here
-  be plain Pascal with no 128-bit intermediate, on 32-bit targets too. }
+  Base 2^64 in UInt64 limbs. The carry out of a limb multiply is the HIGH half
+  of the 128-bit product, which MulHiU64 (lib/rtl/wideint.pas) supplies —
+  intrinsic via IR_MULHI on 64-bit targets, Pascal fallback on 32-bit — and
+  which EiselLemire already uses in this same unit. Nothing here needs a
+  128-bit type: the low half wraps naturally and a carry is detected by the
+  sum coming out smaller than an addend, which is why every limb is UNSIGNED.
+  That last point is load-bearing rather than stylistic — the same code over
+  Int64 limbs would compare and shift signed, and a limb with its top bit set
+  is the common case, not the corner. }
 const
-  PXX_BIGF_LIMBS = 224;              { 7168 bits — see the bound in ExBinNearest }
-  PXX_BIGF_MASK  = Int64($FFFFFFFF);
-  PXX_BIGF_P5_13 = 1220703125;       { 5^13, the largest power of five under 2^31 }
+  PXX_BIGF_LIMBS = 112;              { 7168 bits — see the bound in ExBinNearest }
+  PXX_BIGF_P5_27 = UInt64(7450580596923828125);
+                                     { 5^27, the largest power of five under 2^64 }
 type
-  TBigF = array[0..PXX_BIGF_LIMBS - 1] of Int64;
+  TBigF = array[0..PXX_BIGF_LIMBS - 1] of UInt64;
 
 procedure BigFNorm(var a: TBigF; var n: Integer);
 begin
@@ -1807,86 +1813,66 @@ begin
   dn := sn;
 end;
 
-{ a := a * f. f must be under 2^31 so limb*f + carry cannot leave Int64. }
-function BigFMulSmall(var a: TBigF; var n: Integer; f: Int64): Boolean;
-var i: Integer; t, carry: Int64;
+{ a := a * f, for any f. An n-limb number times one limb is at most n+1 limbs,
+  so the carry out of the loop is a single limb and needs no loop of its own —
+  hi <= 2^64-2 always, since (2^64-1)^2 + (2^64-1) = (2^64-1)*2^64. }
+function BigFMulSmall(var a: TBigF; var n: Integer; f: UInt64): Boolean;
+var i: Integer; lo, t, carry: UInt64;
 begin
   carry := 0;
   for i := 0 to n - 1 do
   begin
-    t := a[i] * f + carry;
-    a[i] := t and PXX_BIGF_MASK;
-    carry := t shr 32;
+    lo := a[i] * f;
+    t := lo + carry;
+    carry := MulHiU64(a[i], f);
+    if t < lo then carry := carry + 1;
+    a[i] := t;
   end;
-  while carry > 0 do
+  if carry <> 0 then
   begin
     if n >= PXX_BIGF_LIMBS then begin BigFMulSmall := False; Exit; end;
-    a[n] := carry and PXX_BIGF_MASK;
-    carry := carry shr 32;
+    a[n] := carry;
     n := n + 1;
   end;
   BigFNorm(a, n);                     { f = 0 leaves every limb zero }
   BigFMulSmall := True;
 end;
 
-function BigFAddSmall(var a: TBigF; var n: Integer; v: Int64): Boolean;
-var i: Integer; t: Int64;
+function BigFAddSmall(var a: TBigF; var n: Integer; v: UInt64): Boolean;
+var i: Integer; t: UInt64;
 begin
   i := 0;
-  while v > 0 do
+  while v <> 0 do
   begin
     if i >= PXX_BIGF_LIMBS then begin BigFAddSmall := False; Exit; end;
     if i >= n then begin a[i] := 0; n := i + 1; end;
     t := a[i] + v;
-    a[i] := t and PXX_BIGF_MASK;
-    v := t shr 32;
+    if t < v then v := 1 else v := 0;   { wrapped == carry out }
+    a[i] := t;
     i := i + 1;
   end;
   BigFAddSmall := True;
 end;
 
-function BigFAdd(var a: TBigF; var na: Integer; const b: TBigF; nb: Integer): Boolean;
-var i: Integer; t, carry: Int64;
-begin
-  BigFAdd := False;
-  if nb > na then
-  begin
-    if nb > PXX_BIGF_LIMBS then Exit;
-    for i := na to nb - 1 do a[i] := 0;
-    na := nb;
-  end;
-  carry := 0;
-  for i := 0 to na - 1 do
-  begin
-    t := a[i] + carry;
-    if i < nb then t := t + b[i];
-    a[i] := t and PXX_BIGF_MASK;
-    carry := t shr 32;
-  end;
-  if carry > 0 then
-  begin
-    if na >= PXX_BIGF_LIMBS then Exit;
-    a[na] := carry; na := na + 1;
-  end;
-  BigFAdd := True;
-end;
-
+{ The `b > 0` guard is not an optimisation: `x shr (64 - b)` with b = 0 is a
+  shift by the full width, which is undefined rather than zero, so the carry
+  must be read out of the original limb only when there is one. }
 function BigFShl(var a: TBigF; var n: Integer; bits: Integer): Boolean;
-var words, b, i: Integer; t, carry: Int64;
+var words, b, i: Integer; cur, carry: UInt64;
 begin
   BigFShl := False;
   if bits < 0 then Exit;
   if (n = 1) and (a[0] = 0) then begin BigFShl := True; Exit; end;
-  b := bits mod 32;
-  words := bits div 32;
+  b := bits mod 64;
+  words := bits div 64;
   if b > 0 then
   begin
     carry := 0;
     for i := 0 to n - 1 do
     begin
-      t := (a[i] shl b) or carry;
-      a[i] := t and PXX_BIGF_MASK;
-      carry := t shr 32;
+      cur := a[i];
+      a[i] := (cur shl b) or carry;
+      carry := cur shr (64 - b);
     end;
     if carry > 0 then
     begin
@@ -1904,33 +1890,26 @@ begin
   BigFShl := True;
 end;
 
-{ a := a * v for v under 2^55 — the largest operand here is a midpoint's
-  2*mant+1. Split into two sub-2^31 halves rather than reaching for a 128-bit
-  product, so the same code serves 32-bit targets. }
-function BigFMulU64(var a: TBigF; var n: Integer; v: Int64): Boolean;
-var t: TBigF; tn: Integer; hi, lo: Int64;
+{ a := a * v. Base 2^64 leaves nothing for this to do beyond BigFMulSmall —
+  the split-into-two-halves-and-add dance it used to perform was entirely an
+  artifact of the sub-2^31 cap on a base-2^32 multiplier. Kept as a named
+  routine so the call sites still read as "multiply by a full-width value". }
+function BigFMulU64(var a: TBigF; var n: Integer; v: UInt64): Boolean;
 begin
-  BigFMulU64 := False;
-  lo := v and ((Int64(1) shl 27) - 1);
-  hi := v shr 27;
-  if hi = 0 then begin BigFMulU64 := BigFMulSmall(a, n, lo); Exit; end;
-  BigFCopy(a, n, t, tn);
-  if not BigFMulSmall(a, n, lo) then Exit;
-  if not BigFMulSmall(t, tn, hi) then Exit;
-  if not BigFShl(t, tn, 27) then Exit;
-  BigFMulU64 := BigFAdd(a, n, t, tn);
+  BigFMulU64 := BigFMulSmall(a, n, v);
 end;
 
-{ a := a * 5^k, in place. Thirteen at a time: 5^13 is the largest power of five
-  under 2^31, which is the cap BigFMulSmall's carry arithmetic needs. }
+{ a := a * 5^k, in place. Twenty-seven at a time: 5^27 is the largest power of
+  five under 2^64, and any multiplier fits now, so this is simply the biggest
+  chunk the base allows. }
 function BigFMulPow5(var a: TBigF; var n: Integer; k: Integer): Boolean;
 begin
   BigFMulPow5 := False;
   if k < 0 then Exit;
-  while k >= 13 do
+  while k >= 27 do
   begin
-    if not BigFMulSmall(a, n, PXX_BIGF_P5_13) then Exit;
-    k := k - 13;
+    if not BigFMulSmall(a, n, PXX_BIGF_P5_27) then Exit;
+    k := k - 27;
   end;
   while k > 0 do
   begin
@@ -1946,10 +1925,10 @@ begin
   BigFPow5 := BigFMulPow5(a, n, k);
 end;
 
-{ Nine digits at a time: 10^9 is the largest power of ten under 2^31. }
+{ Eighteen digits at a time: 10^18 is the largest power of ten under 2^64. }
 function BigFFromDigits(const ds: AnsiString; nd: Integer;
                         var a: TBigF; var n: Integer): Boolean;
-var i, j, chunk: Integer; v, p: Int64;
+var i, j, chunk: Integer; v, p: UInt64;
 begin
   BigFFromDigits := False;
   a[0] := 0; n := 1;
@@ -1957,11 +1936,11 @@ begin
   while i <= nd do
   begin
     chunk := nd - i + 1;
-    if chunk > 9 then chunk := 9;
+    if chunk > 18 then chunk := 18;
     v := 0; p := 1;
     for j := 0 to chunk - 1 do
     begin
-      v := v * 10 + Int64(Ord(ds[i + j]) - Ord('0'));
+      v := v * 10 + UInt64(Ord(ds[i + j]) - Ord('0'));
       p := p * 10;
     end;
     if not BigFMulSmall(a, n, p) then Exit;
