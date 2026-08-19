@@ -94,6 +94,7 @@ effect where one exists.
 | `--no-default-rtl` | Do not pull the default standard-unit surface (textfile + builtin). Used by the compiler self-build. |
 | `--no-div-check` | Opt out of the integer div/mod pre-divide zero check (default on: divide by zero raises a clean runtime error rather than a raw `SIGFPE`). |
 | `--no-signals` | Opt out of the default signal runtime (graceful `SIGINT`/`SIGTERM` dispatch + `SetSignalHandler`). PC targets only. |
+| `--fpc-float-errors` | Emulate FPC's float error behaviour: unmask invalid / zero-divide / overflow at entry (the set FPC itself unmasks) and report a trap as FPC's runtime error — 208 float division by zero, 205 overflow, 207 invalid. Off by default; see below. x86-64 only, and it needs the signal runtime (so not with `--no-signals`). |
 | `--no-unhandled-handler` | Do not install the default unhandled-exception handler. |
 | `--no-strict-ir` | Opt out of the self-host IR guard (the hard error on any unlowered IR node). For an in-development frontend only. |
 | `--strict-ir` | Accepted no-op: the IR guard is the default now. Kept so existing invocations keep working. |
@@ -105,6 +106,34 @@ effect where one exists.
 
 `--experimental-ir-codegen` is accepted as a deprecated no-op (IR is the only
 backend).
+
+### Float errors are quiet by default
+
+The default is the part a Pascal reader will not expect, and it is a decision
+rather than an omission: PXX leaves the float exceptions masked, so `1.0/0.0`
+evaluates to `+Inf`, `0.0/0.0` to `NaN`, and the program keeps running. FPC
+unmasks at startup and aborts; PXX does not. The reasoning is that measurement
+and streaming data with out-of-bounds inputs is better served by `Inf`/`NaN`
+propagating through a computation than by an abort partway into it.
+
+`--fpc-float-errors` is how a program asks for FPC's behaviour instead. The same
+program compiled with and without it:
+
+```console
+$ pxx --fpc-float-errors trap.pas trap && ./trap div
+Runtime error 208 (division by zero)          # exit status 208
+
+$ pxx trap.pas trap && ./trap div
+no trap, r= Inf                               # exit status 0
+```
+
+Overflow (`1e308 * 10`) reports 205 and invalid (`0.0/0.0`) reports 207 under
+the flag. Underflow and inexact stay masked, exactly as they do under FPC, so
+runtime error 206 is decoded but never armed by the flag alone.
+
+The flag is program-wide and set at compile time. To change the mask for one
+region at runtime, use `GetExceptionMask` / `SetExceptionMask` from the `math`
+unit, which take and return an FPC-compatible `TFPUExceptionMask`.
 
 ## Diagnostics and internal flags
 

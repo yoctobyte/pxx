@@ -4,6 +4,8 @@ prio: 40
 type: docs
 blocked-by: []
 summary: "One row in docs/reference/cli.md for --fpc-float-errors (landed 2026-08-13): opt-in FPC float-error emulation. The default — quiet IEEE, inf/NaN propagate — is worth a sentence there too, since it is a deliberate divergence from FPC that a Pascal reader will not expect."
+status: done
+owner: frank2-D
 ---
 
 # Document `--fpc-float-errors` in the CLI reference
@@ -30,3 +32,6 @@ program asks for FPC's behaviour.
 Verify the numbers by compiling the examples rather than copying them —
 `test/test_fpc_float_errors.pas` is the source of truth and they were measured
 against FPC 3.x.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.
