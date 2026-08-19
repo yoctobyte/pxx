@@ -152,3 +152,132 @@ feature — code size is a legitimate goal on its own for an embedded toolchain.
 
 ## Log
 - 2026-08-19 — filed with the coupling measurement above.
+
+---
+
+## MEASURED BY OMISSION (frank3, 2026-08-19) — the suggested order is inverted
+
+The filing measurement counted **references to frontend-specific identifiers** and said so
+honestly ("an order-of-magnitude signal, not a work estimate"). It is worth replacing,
+because the reference count and the thing it stands in for disagree by two orders of
+magnitude in one direction and one in the other.
+
+**Method — the compiler is the oracle, not a grep.** Comment out a component's `{$include}`
+lines in `compiler.pas`, compile with FPC (`-Se999`, so it reports everything instead of
+stopping at 50), count what breaks. A scratch copy of `compiler/` plus `lib/asmcore`
+compiles clean in **4 seconds**, so the whole matrix is a couple of minutes. Nothing here is
+inferred.
+
+| omit | errors | files | where the coupling is |
+| --- | --- | --- | --- |
+| **zig** | **3** | 1 | compiler.pas |
+| **nilpy** | **7** | 3 | compiler.pas:6, parser.inc:1, rtti_emit.inc:1 |
+| **arm32** | **8** | 3 | asmfront.inc:6, ir_codegen.inc:1 |
+| **i386** | **10** | 4 | asmfront.inc:6, ir_codegen_arm32.inc:2 |
+| **aarch64** | **10** | 3 | asmfront.inc:6, ir_codegen.inc:3 |
+| **cfront** | **11** | 2 | compiler.pas:10, parser.inc:1 |
+| rust | 200 | 7 | zparser.inc:123, gparser.inc:23, eparser.inc:23, fparser.inc:19 |
+| **xtensa** | **288** | 5 | symtab.inc:179, parser.inc:62, exception_emit.inc:45 |
+| **riscv32** | **518** | 7 | symtab.inc:222, cparser.inc:123, exception_emit.inc:91, parser.inc:74 |
+
+(Errors, not edit sites: one guard can silence several, and a few are cascades. Read it as an
+upper bound with a reliable ORDER.)
+
+### What this changes
+
+**1. NilPy is the CHEAPEST frontend to omit — 7 errors, fewer than C's 11.** The ticket puts
+it last, on the strength of 1281 references of which 909 are in `parser.inc`. Both figures are
+real; they just do not measure separability. Those 909 are NilPy-aware *behaviour* inside the
+shared parser (`if isNilPy then ...`), which stays compiled and inert when `pyparser.inc` is
+gone. The compile-time surface is seven names:
+
+    PyLexAppend  PyDfltPendFor  PyDcEqProc  PyDcReprProc  PyExpandFStrings
+    PyLexAll  ParsePyProgram
+
+**So the design claim in `the-substrate-is-ast-and-ir-not-the-parser.md` HOLDS for N**, and
+the correction the ticket makes to CLAUDE.md ("N's parser is not carved out") is itself half
+right: N's parser *file* is carved out cleanly — what is not carved out is the shared parser's
+knowledge of N, which is a different property and does not block reduction.
+
+**2. Targets are the bear, not the cheap first step.** `riscv32` (518) and `xtensa` (288) are
+20-70x the cost of any frontend. The cause is not dispatch — it is that shared code **emits
+instructions inline**: `symtab.inc`, `exception_emit.inc` and `parser.inc` reference
+`reg_t0` (81), `reg_sp` (62), `rv32_sw` (49), `rv32_lw` (38) and friends directly, and
+`cparser.inc` carries 123 of them. x86-64 has no `ir_codegen_x64.inc` at all — it lives
+inside the shared `ir_codegen.inc`, so **the default target is not omittable by this
+mechanism** and would need a different one.
+
+**3. The flagship configuration dodges the expensive work entirely.** The user's stated
+payoff is *"a python compiler for esp at reduced code size"* = keep NilPy, keep xtensa and
+riscv32, drop the rest. The costly omissions are exactly the two targets that configuration
+KEEPS. `only-nilpy + only-esp` needs: omit cfront (11), rust (200 — see below), zig (3),
+i386 (10), arm32 (8), aarch64 (10). **Do the cheap six and the headline configuration exists.**
+
+**4. R and Z share helpers, which is a genuine finding against the design rule.** Omitting
+`rparser.inc` breaks `zparser.inc` in 123 places, plus `gparser`/`eparser`/`fparser` — the
+greenfield frontends call each other's support functions, which is the exact thing
+`the-substrate-is-ast-and-ir-not-the-parser.md` says not to do ("duplicate the parser, the
+lexer and their support functions per language"). Worth its own ticket; it makes R and Z
+individually unomittable while costing nothing today.
+
+**5. One misplacement, cheap to fix.** 6 of `cfront`'s 11 errors are `AddPasUnitDir` /
+`AddPasIncDir` — generic search-path functions that happen to live in `cpreproc.inc`. Moving
+them to a shared file drops `omit-c` from 11 to ~4. Not coupling; filing.
+
+### Revised order of attack
+
+1. **`omit-zig`, `omit-nilpy`, `omit-cfront`** (3, 7, 11) — cheapest, and they prove the
+   mechanism end to end. Move `AddPasUnitDir` out of `cpreproc.inc` first.
+2. **`omit-i386` / `omit-arm32` / `omit-aarch64`** (8-10 each, nearly all in `asmfront.inc`).
+   After 1 and 2, `only-nilpy + only-esp` is reachable.
+3. **`omit-rust`** — blocked on untangling R/Z's shared helpers; file separately.
+4. **`omit-riscv32` / `omit-xtensa`** last, and only if wanted: 800 errors between them,
+   caused by inline instruction emission in shared files. This is the real design debt the
+   ticket hoped to surface, and the flagship configuration does not need it.
+
+### Escalated, not guessed
+
+Both open questions are filed to Track U rather than settled here:
+[[decide-reduced-compiler-switch-spelling]] and
+[[decide-what-a-reduced-compiler-must-still-self-host]].
+
+### The acceptance test and the measurement above INTERACT — read them together
+
+The structural test is **Pascal frontend + host target**. Against the omission table that is
+not the cheap corner of the matrix, and it is worth knowing before picking a first
+configuration:
+
+- **Frontend side: cheap.** Pascal-only means omitting cfront (11), nilpy (7), zig (3) and
+  rust (200, blocked on R/Z's shared helpers) — plus the small frontends (`b`, `l`, `f`, `g`,
+  `e`, `w`, `a`), unmeasured but each a few hundred lines.
+- **Target side: this is where the bear lives.** "One platform" = host = x86-64, so it means
+  omitting **riscv32 (518) and xtensa (288)** — the two most entangled components in the
+  tree. The structural test therefore *requires* the expensive omissions, while the product
+  configuration (`only-nilpy + only-esp`) *keeps* them. The cheap path does not reach the
+  test.
+
+**So split the two rather than blocking one on the other:**
+
+1. **Frontend reduction first, all targets kept.** `pascal-only`, host build, still emitting
+   every target. That is ~220 errors' worth of guards (200 of them rust's tangle) and it
+   already proves most of the acceptance test's claim: a compiler with ONE frontend rebuilds
+   the megalith, so nothing outside the frontends depended on their presence. **Cheapest run
+   at the real property.**
+2. **Target reduction second**, which is where `riscv32`/`xtensa`'s 800 inline-emission
+   references have to be untangled, and which completes "one frontend, one platform".
+3. The **product** (`only-nilpy + only-esp`) needs neither of those two omissions and is
+   reachable from step 1's mechanism alone.
+
+Stating it because "one frontend, one platform" reads as a single step and is two, with the
+expensive half not on the path to the user's stated payoff.
+
+### The speed claim carries a measurement obligation
+
+The second motivation is a smaller *"and hence faster"* compiler. Smaller text is a fair
+reason to EXPECT better i-cache behaviour and shorter dispatch, but **faster is a wall-clock
+claim and bytes are not**. Whoever lands a configuration reports both: the size delta and a
+compile-time measurement on a fixed workload, on the same pin (see
+[[measure-before-and-after-on-the-same-pin]]'s hazard — a mid-session pin bump steals the
+credit). **If size drops and time does not, say so** — code size is a legitimate goal on its
+own for an embedded toolchain, and an unmeasured speed claim is exactly the kind that gets
+quoted back at us.

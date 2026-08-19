@@ -45,7 +45,7 @@ _none_
 | feature-a-own-language-first-symbol-resolution | A | 55 | feature | Own-language-first symbol resolution: the native language wins | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (241)
+## backlog (244)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -118,6 +118,7 @@ _none_
 | compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags | A | 30 | compat | FPC unmasks the FP exceptions every ISA leaves masked: 1/0 is a runtime error there and Inf here, and Floor(1e30) raises EInvalidOp where pxx now saturates. Decided that pxx keeps IEEE masked semantics by default and FPC's behaviour goes behind opt-in flags — TWO of them, because div-by-zero -> runtime error 208 is nearly free (an FPU control word bit) while Floor raising EInvalidOp costs sysutils, +127 KB code and +33 KB bss on every `uses math` program. | — |
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | decide-a-cross-unit-define-name-and-semantics | U | 40 | decide | A define that crosses unit boundaries is order-dependent BY CONSTRUCTION — `{$DEFINEGLOBAL}` reads as 'global' while the mechanism is claim-and-skip. Four questions (name, undefinability, scope, visibility to earlier units) must be settled before anyone builds it, and nothing currently pulls on the feature: its motivating case was closed as synthetic. | — |
+| decide-reduced-compiler-switch-spelling | U | 55 | decide | How does a reduced build get selected — subtractive (`omit-c`), positive-list (`only-pascal`), or a named-configuration file? And do frontend and target selection compose freely or only in blessed combinations? The user flagged the names in the parent ticket as placeholders. Recommendation: subtractive defines as the mechanism, named configurations as the tested surface. | — |
 | decide-staff-track-c-to-unblock-own-language-first | U | 50 | decide | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (C, p55) is the only thing blocking feature-a-own-language-first-symbol-resolution, and Track C is unstaffed. Staff it, fold it into an existing session, or leave the chain parked? | — |
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | doc-glossary-of-cross-language-slang | D | 40 | doc | pxx accepts Pascal, C and Python, so its docs mix three vocabularies and define none of them. A reader fluent in one hits the others' slang unexplained — `cls`, `self`, dunder, repr-vs-str going one way; unit, uses, RTL, pinned, fixedpoint going the other. Wanted: a glossary with a Python-to-Pascal equivalence table, since most terms have a counterpart the reader already knows. | — |
@@ -280,6 +281,8 @@ _none_
 | refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files | A | 60 | refactor | parser.inc is 38% of all compiler work (216 of 566 commits in 14 days) and is the ONE file where two lanes must serialize — A and P cannot edit it concurrently. C and NilPy both got carved out into their own lexer/parser; Pascal never did, purely because it was the seed. CLAUDE.md has called this 'the clean long-term shape' in prose for months, where ready/next cannot see it. Prio is a PROPOSAL: the payoff is parallelism, not a feature. | — |
 | refactor-a-one-resolved-file-identity-for-a-translation-unit | A | 45 | refactor | Generalise CompiledUnitFile[] from the .py arm to every load: one resolved-file identity answers 'have I already compiled this unit?', retiring the @cpath: key space. Decided 2026-08-19 (option B). The mechanism already exists — option A built it for one arm in 030ce07ea — so this is promoting a built thing to the general rule, not new machinery. Hazard: CompiledUnitFile is -1 when unresolved and -1 = -1, so a naive compare makes every unresolved unit identical. | — |
 | refactor-a-one-signature-record-for-every-callable-carrier | A | 66 | refactor | Four dispatchers and TWO independent defaults mechanisms serve one concept. Put the PySig record on the boundfn carrier and DELETE pyboundfn_setdefaults, so every callable shape answers signature questions from one place. Filed as work because it was banked as a note at the bottom of a resolved ticket, where ready/next cannot see it. | — |
+| refactor-a-search-path-helpers-live-in-the-c-preprocessor | A | 25 | refactor | AddPasUnitDir / AddPasIncDir / AddCIncludeDir are generic search-path functions that live in cpreproc.inc, so compiler.pas's own -Fu/-I handling depends on the C frontend. Six of the eleven errors from omitting the C frontend are this misplacement, not coupling: moving them drops omit-c from 11 sites to about 4. | — |
+| refactor-a-the-greenfield-frontends-share-each-others-parser-helpers | A | 30 | refactor | Omitting rparser.inc breaks zparser.inc in 123 places, plus gparser/eparser/fparser — the greenfield frontends call each other's support functions, which is exactly what the-substrate-is-ast-and-ir-not-the-parser.md says not to do. Costs nothing today; makes R and Z individually unomittable and couples two language specs. | — |
 | refactor-a-variant-object-tag-list-lives-in-four-places | A | 45 | refactor | The set of variant tags whose payload is a refcounted object is written out in FOUR independent places; a tag added to some and not others leaks silently, with RSS as the only symptom. One of them also just zeroes object payloads outright. | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-n-two-import-handlers-are-twins | N | 30 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
@@ -541,6 +544,7 @@ _none_
 - [p 55] [N] bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
 - [p 55] [T] bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 - [p 55] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
+- [p 55] [U] decide-reduced-compiler-switch-spelling
 - [p 55] [A] feature-a-declaration-phase
 - [p 55] [B] feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - [p 55] [E] feature-demo-portable-userland
@@ -691,6 +695,7 @@ _none_
 - [p 30] [D] idea-public-status-page
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 30] [N] perf-nilpy-remaining-perbyte-string-builders
+- [p 30] [A] refactor-a-the-greenfield-frontends-share-each-others-parser-helpers
 - [p 30] [N] refactor-n-two-import-handlers-are-twins
 - [p 30] [D] task-d-document-warn-ignored-directives
 - [p 25] [N] bug-n-a-unicode-identifier-is-rejected-by-the-lexer
@@ -715,6 +720,7 @@ _none_
 - [p 25] [T] feature-t-uforth-bench-restore-the-elfhash-outlier
 - [p 25] [M] feature-t-windows-wine-harness
 - [p 25] [C] idea-c-realworld-test-targets
+- [p 25] [A] refactor-a-search-path-helpers-live-in-the-c-preprocessor
 - [p 20] [N] bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds
 - [p 20] [B] bug-nilpy-complex-pow-is-a-few-ulp-off-cpython
 - [p 20] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only
