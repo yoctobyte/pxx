@@ -1498,6 +1498,15 @@ function pybound_new_sig(code, recv: Pointer; isFunc: Boolean;
   not need its own copy of the record layout or the fill rule. }
 function pybound_pair_call(pair: Pointer; nargs: Integer;
                            const a0, a1, a2, a3: Variant): Variant;
+{ ...and the same call carrying KEYWORD arguments, as two parallel lists of
+  names and values. They are matched against the callee's own parameter names
+  out of the signature record, which is the only thing that can turn
+  `f(x, final=True)` into a position when the box carries a code address and
+  nothing else. nil/nil is the positional call above.
+  bug-n-a-keyword-argument-through-a-callable-value-is-undefined }
+function pybound_pair_call_kw(pair: Pointer; nPos: Integer;
+                              const a0, a1, a2, a3: Variant;
+                              kwNames, kwVals: TPyList): Variant;
 function pybound_code(const v: Variant): Pointer;
 function pybound_recv(const v: Variant): Pointer;
 { True when Code is a genuine Variant-returning FUNCTION (NilPy's default def
@@ -13539,13 +13548,19 @@ type
       Star  the *args position PLUS ONE, 0 = none
       Dflts TotN variants, 16 bytes each, one per declared parameter; a slot
             whose VType is PYSIG_DFLT_UNSET (-1, an illegal tag) was never
-            filled, which is a compiler bug and not a value. }
+            filled, which is a compiler bug and not a value.
+      Names TotN pointers to NUL-terminated parameter names -- what a KEYWORD
+            argument through a callable value matches against. }
   TPySigRec = record
     Code: Pointer;
     ReqN, TotN, Star: Int64;
     Dflts: Pointer;
+    { TotN pointers to NUL-terminated parameter names. nil when unknown, which
+      the dispatcher treats exactly as it did before names existed. }
+    Names: Pointer;
   end;
   PPySigRec = ^TPySigRec;
+  PPointer = ^Pointer;
 
 procedure PyObjFinalize(objp: Pointer; rawKind: NativeInt);
 var
@@ -13904,8 +13919,39 @@ begin
                               nargs, a0, a1, a2, a3);
 end;
 
+function PySigNameEq(np: Pointer; const nm: AnsiString): Boolean;
+{ Does the NUL-terminated parameter name at np equal nm? Compared in place
+  rather than converted to an AnsiString first: this runs once per keyword per
+  candidate parameter, and the whole point of putting the names in .data was to
+  avoid allocating to answer a question about a name. }
+var pc: PChar; i: Integer;
+begin
+  PySigNameEq := False;
+  if np = nil then Exit;
+  pc := PChar(np);
+  for i := 1 to Length(nm) do
+  begin
+    if pc[i - 1] = #0 then Exit;
+    if pc[i - 1] <> nm[i] then Exit;
+  end;
+  PySigNameEq := pc[Length(nm)] = #0;
+end;
+
 function pybound_pair_call(pair: Pointer; nargs: Integer;
                            const a0, a1, a2, a3: Variant): Variant;
+var noNames, noVals: TPyList;
+begin
+  { typed nils: an untyped `nil` cannot pick between the class-typed
+    parameters at the call site }
+  noNames := nil;
+  noVals := nil;
+  pybound_pair_call := pybound_pair_call_kw(pair, nargs, a0, a1, a2, a3,
+                                            noNames, noVals);
+end;
+
+function pybound_pair_call_kw(pair: Pointer; nPos: Integer;
+                              const a0, a1, a2, a3: Variant;
+                              kwNames, kwVals: TPyList): Variant;
 { The ONE dynamic-call bridge behind pybound_callv0..4.
 
   A call made THROUGH a function value knows only how many arguments the CALLER
@@ -13920,6 +13966,8 @@ function pybound_pair_call(pair: Pointer; nargs: Integer;
   Sig nil = producer could not supply one; behave exactly as before. }
 var code, recv, sg, dp: Pointer; isFn: Boolean;
     av: array[0..3] of Variant; i, want, totN, reqN: Integer;
+    bound: array[0..3] of Boolean; j, hit, nkw: Integer; kn: AnsiString;
+    np: PPointer;
     sr: PPySigRec; b: PPyBoundRec;
     m0: TPyCbM0; m1: TPyCbM1; m2: TPyCbM2; m3: TPyCbM3; m4: TPyCbM4;
     f0: TPyCbF0; f1: TPyCbF1; f2: TPyCbF2; f3: TPyCbF3; f4: TPyCbF4;
@@ -13934,32 +13982,79 @@ begin
   recv := b^.Recv;
   isFn := b^.IsFunc;
   av[0] := a0; av[1] := a1; av[2] := a2; av[3] := a3;
-  for i := nargs to 3 do av[i] := pynone;
+  for i := nPos to 3 do av[i] := pynone;
+  for i := 0 to 3 do bound[i] := i < nPos;
+  nkw := 0;
+  if kwNames <> nil then nkw := kwNames.count;
   { a COLLECTING callee packs its own surplus and has no omitted parameters to
     fill -- that path predates this one and stays exactly as it was }
   if b^.StarIdx >= 0 then
   begin
-    Result := PyBoundCallStar(code, recv, isFn, b^.StarIdx, nargs,
+    if nkw > 0 then
+      raise TypeError.Create('a keyword argument through a callable value is '
+              + 'not supported yet for a callee that collects *args');
+    Result := PyBoundCallStar(code, recv, isFn, b^.StarIdx, nPos,
                               av[0], av[1], av[2], av[3]);
     Exit;
   end;
-  want := nargs;
+  want := nPos;
   sg := b^.Sig;
-  if sg <> nil then
+  if sg = nil then
+  begin
+    if nkw > 0 then
+      raise TypeError.Create('this callable value carries no parameter names, '
+              + 'so a keyword argument cannot be matched to a parameter');
+  end
+  else
   begin
     sr := PPySigRec(sg);
     reqN := Integer(sr^.ReqN);
     totN := Integer(sr^.TotN);
-    if nargs < reqN then
+    { KEYWORDS FIRST: each name is matched against the callee's own parameter
+      names, which is the only thing that can turn `final=True` into a
+      position. Done before the defaults so a supplied keyword WINS over the
+      default, which is the whole reason a caller writes one. }
+    if nkw > 0 then
     begin
-      raise TypeError.Create('missing ' + pystr_of(Int64(reqN - nargs))
-              + ' required positional argument(s)');
+      if (sr^.Names = nil) or (totN > 4) then
+        raise TypeError.Create('this callable value carries no parameter names, '
+                + 'so a keyword argument cannot be matched to a parameter');
+      for j := 0 to nkw - 1 do
+      begin
+        kn := pystr_of(kwNames.at(j));
+        hit := -1;
+        for i := 0 to totN - 1 do
+        begin
+          np := PPointer(NativeInt(sr^.Names) + i * 8);
+          if PySigNameEq(np^, kn) then begin hit := i; Break; end;
+        end;
+        if hit < 0 then
+          raise TypeError.Create('unexpected keyword argument ''' + kn + '''');
+        if bound[hit] then
+          raise TypeError.Create('got multiple values for argument ''' + kn + '''');
+        av[hit] := kwVals.at(j);
+        bound[hit] := True;
+        if hit + 1 > want then want := hit + 1;
+      end;
     end;
-    if (totN > nargs) and (totN <= 4) and (sr^.Dflts <> nil) then
+    if nPos < reqN then
+    begin
+      { a keyword may have supplied a required parameter, so count what is
+        actually still unbound rather than trusting the positional count }
+      hit := 0;
+      for i := 0 to reqN - 1 do
+        if (i > 3) or (not bound[i]) then Inc(hit);
+      if hit > 0 then
+        raise TypeError.Create('missing ' + pystr_of(Int64(hit))
+                + ' required positional argument(s)');
+    end;
+    if (totN > want) and (totN <= 4) then want := totN;
+    if (want > nPos) and (sr^.Dflts <> nil) and (want <= 4) then
     begin
       dp := sr^.Dflts;
-      for i := nargs to totN - 1 do
+      for i := nPos to want - 1 do
       begin
+        if bound[i] then Continue;
         if PPyVarRec(NativeInt(dp) + i * 16)^.VType = -1 then
         begin
           { PYSIG_DFLT_UNSET: the slot was never filled. That is a compiler bug
@@ -13970,7 +14065,6 @@ begin
         end;
         av[i] := PVariant(NativeInt(dp) + i * 16)^;
       end;
-      want := totN;
     end;
   end;
   if recv = nil then

@@ -403,7 +403,7 @@ begin
 end;
 
 procedure EmitPySignatures;
-var pi, k, nUser, reqN, dfltOff, firstUser, slot, pend: Integer;
+var pi, k, nUser, reqN, dfltOff, firstUser, slot, pend, namesOff: Integer;
 begin
   for pi := 0 to MAX_PROCS - 1 do ProcSigOff[pi] := -1;
   for pi := 0 to MAX_PROCS - 1 do ProcSigDfltOff[pi] := -1;
@@ -526,6 +526,25 @@ begin
           PatchDataU64(slot, VT_INT64);
           PatchDataU64(slot + 8, ProcParamDefaultVal[pi * MAX_PROC_PARAMS + k]);
         end;
+      end;
+    end;
+    { The PARAMETER NAMES, in the same record rather than a second mechanism:
+      TotN pointers, then the NUL-terminated names themselves. A keyword
+      argument arriving through a callable value has nothing else to match
+      against -- the box carries a code address, and the names are the only
+      thing that turns `final=True` into a parameter position at run time.
+      Emitted here so a proc with nUser = 0 simply leaves the field nil, which
+      the dispatcher reads as "no names known" and treats exactly as it did
+      before they existed. }
+    if nUser > 0 then
+    begin
+      namesOff := DataLen;
+      DataPutZeros(nUser * 8);
+      AddDataPtrFix(ProcSigOff[pi] + PYSIG_OFF_NAMES, namesOff);
+      for k := firstUser to Procs[pi].ParamCount - 1 do
+      begin
+        AddDataPtrFix(namesOff + (k - firstUser) * 8, DataLen);
+        DataPutZ(Procs[pi].Params[k].Name);
       end;
     end;
   end;

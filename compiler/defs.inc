@@ -885,7 +885,7 @@ const
     expensive failure shape (a plausible wrong value far from the cause), so the
     unfilled state gets a tag no variant can legally wear and any consumer must
     treat it as a hard error rather than a value. }
-  PYSIG_SIZE       = 40;
+  PYSIG_SIZE       = 48;
   { An illegal variant tag, so "never filled in" cannot be mistaken for a value.
     Deliberately NOT 0: see the layout note above -- 0 is VT_EMPTY is None. }
   PYSIG_DFLT_UNSET = -1;
@@ -894,6 +894,14 @@ const
   PYSIG_OFF_TOTN   = 16;
   PYSIG_OFF_STAR   = 24;
   PYSIG_OFF_DFLTS  = 32;
+  { +40: TotN POINTERS, one per declared parameter, each to a NUL-terminated
+    name in .data. What a KEYWORD argument passed through a callable value
+    matches against -- the box carries a code address, so without the names
+    there is nothing for `f(x, final=True)` to bind `final` to and it failed as
+    `undefined variable (final)`. Same record as the defaults rather than a
+    second mechanism: one carrier answers every signature question.
+    bug-n-a-keyword-argument-through-a-callable-value-is-undefined }
+  PYSIG_OFF_NAMES  = 40;
 
   CLASSREF_DATAREF_BASE = 100000;
   RECORD_RTTI_DATAREF_BASE = 200000;

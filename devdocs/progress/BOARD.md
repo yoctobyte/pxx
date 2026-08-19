@@ -43,7 +43,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (246)
+## backlog (245)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -60,7 +60,6 @@ _none_
 | bug-n-a-class-base-that-is-an-expression-does-not-compile | N | 45 | bug | A class base which is a NAME bound to a type, or a call, does not compile: `B = object; class P(B)` fails where `class P(object)` and `class P(SomeClass)` both work. Blocks six.with_metaclass, which html5lib's parser spells as `class Phase(with_metaclass(...))` — the single remaining wall on html5parser.py. | — |
 | bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function | N | 50 | bug | `g = f` BOXES the function on the heap; every other path (a dict value, a return value, the bare name) keeps the raw code pointer. So `g == f` and `g is f` are False, two assignments of the same function are unequal to each other, and `id(g)` is a heap address while `id(f)` is the code address. CPython answers True to all of it. | — |
 | bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through | N | 45 | bug | sys.version_info throws at RUNTIME with a message admitting its own guard failed: 'the code guarding that (the flag its except-branch sets) let this call through anyway'. Two defects — the member is missing, and the compile-time guard meant to catch that does not fire. A guard that reports its own failure and continues is worse than no guard. | — |
-| bug-n-a-keyword-argument-through-a-callable-value-is-undefined | N | 72 | bug | `d = obj.meth; d('x', flag=True)` fails with `undefined variable (flag)` — a callable value carries no parameter NAMES, so a keyword argument has nothing to match against. No name collision anywhere; the sibling of the already-known defaults gap on the same carrier. Distinct from the shadowing bug that produces the corpus's `decode has no parameter named 'final'`. | — |
 | bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides | N | 55 | bug | A base class whose __iter__ only raises poisons every subclass override: `for k in self` inside a base method calls the BASE __iter__, and the subclass's real __iter__ is never reached — `iter() returned non-iterator of type 'Sub'`. This is the whole ABC mixin pattern. | — |
 | bug-n-a-module-level-def-taken-as-a-value-loses-its-defaults-on-the-boundfn-carrier | N | 65 | bug | A module-level def taken as a value through a SUBSCRIPT or a PARAMETER is boxed on the tag-12 boundfn carrier, not the tag-8 pair, and that carrier's defaults machinery does not fire for it: `fs = [g]; fs[0](1)` on `def g(x, lo=7)` segfaults. The nested-def form of the same shape is correct, so it is the module-level arm that was left behind. | — |
 | bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name | N | 45 | bug | The MODULE-level arm of the local-binding-beats-a-def fix: `f = o.f` written after `def f` still calls the def. The local/parameter arm is fixed and gated; this one needs module-level bindings to carry a token position, which is a mechanism rather than a patch, so it was split out rather than guessed at. | — |
@@ -470,9 +469,9 @@ _none_
 | decide-what-synapse-actually-needs-vs-mimic-fpc | U | 20 | decide | Synapse builds under `--mimic-fpc`. What does it actually NEED? | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2054)
+## done (2055)
 
-2054 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2055 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -521,7 +520,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 72] [N] bug-n-a-keyword-argument-through-a-callable-value-is-undefined (unblocks 1)
 - [p 65] [N] bug-n-a-module-level-def-taken-as-a-value-loses-its-defaults-on-the-boundfn-carrier
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
@@ -530,6 +528,7 @@ _none_
 - [p 60] [A] bug-a-make-revert-the-documented-pin-brake-does-not-fire
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 60] [A] refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
+- [p 60] [A] refactor-a-one-signature-record-for-every-callable-carrier
 - [p 58] [N] bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [C] bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 2)
@@ -758,7 +757,6 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
 - **2** — feature-web-track-w-bootstrap
-- **1** — bug-n-a-keyword-argument-through-a-callable-value-is-undefined
 - **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind

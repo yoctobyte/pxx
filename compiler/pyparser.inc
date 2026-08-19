@@ -12048,6 +12048,8 @@ function PyMakeDynCall(baseNode: Integer): Integer;
 var unboxArg, unboxCall, argsHead, lastArg, argNode, n, sigPi: Integer;
     starSym, starN: Integer;
     nmArg, nmLit, dispPi, dispArg: Integer; calleeNm: AnsiString;
+    kwNamesSym, kwValsSym, kwLit, kwCnt, kwTail, kwN, kwPad, kwNone: Integer;
+    kwName: AnsiString;
 begin
   { the callee code address = the variant's payload as a pointer }
   unboxArg := AllocNode(AN_ARG);
@@ -12088,6 +12090,7 @@ begin
   Expect(tkLParen, '(');
   argsHead := -1; lastArg := -1; n := 0;
   starSym := -1;
+  kwNamesSym := -1; kwValsSym := -1;
   while CurTok.Kind <> tkRParen do
   begin
     { `fn(*xs)` through a callable VALUE. There is no signature here to expand
@@ -12114,6 +12117,35 @@ begin
       PyContainerCall1(starSym, 'TPyList', 'extend',
                        PyStarOperandAsList(CurASTNode, FindUClass('TPyList')), -1);
       Inc(n);
+      if CurTok.Kind = tkComma then Next else Break;
+      Continue;
+    end;
+    { `f(x, final=True)` through a callable VALUE. There is no callee here to
+      resolve the name against at COMPILE time -- that is the whole difficulty,
+      and it is why this used to fail as `undefined variable (final)`: the name
+      was parsed as an ordinary expression because nothing had told the parser
+      it was a parameter. So the name TRAVELS to run time, as a string, beside
+      its value, and the dispatcher matches it against the callee's own
+      parameter names out of the signature record.
+      bug-n-a-keyword-argument-through-a-callable-value-is-undefined }
+    if isNilPy and (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+       (Tokens[TokPos].Kind = tkAssign) and (starSym < 0) then
+    begin
+      kwName := CurTok.SVal;
+      Next;                              { the name }
+      Next;                              { the '=' }
+      PyParseBoolExpr;
+      if kwNamesSym < 0 then
+      begin
+        kwNamesSym := PyNewContainerTemp('TPyList', 'dynkwn');
+        kwValsSym := PyNewContainerTemp('TPyList', 'dynkwv');
+      end;
+      kwLit := AllocNode(AN_STR_LIT);
+      ASTSOffset[kwLit] := PyStoredName(kwName);
+      ASTSLen[kwLit] := Length(kwName);
+      ASTTk[kwLit] := Ord(tyString);
+      PyContainerCall1(kwNamesSym, 'TPyList', 'append', kwLit, -1);
+      PyContainerCall1(kwValsSym, 'TPyList', 'append', CurASTNode, -1);
       if CurTok.Kind = tkComma then Next else Break;
       Continue;
     end;
@@ -12146,6 +12178,54 @@ begin
     plus a stack of compile-time tag guesses. It is also what makes a LAMBDA
     bound to a name callable: a lambda's value is a closure or bound-fn OBJECT,
     which no tag guard recognised. Arities past 3 keep the old lowering. }
+  { KEYWORDS: one dispatcher, fixed arity, positional slots padded with None so
+    the callee's own arity decides how many are read. }
+  if kwNamesSym >= 0 then
+  begin
+    dispPi := FindProc('pyvar_callv_kw');
+    if (dispPi < 0) or (n > 4) then
+      Error('Nil Python: a keyword argument through a callable value needs '
+            + 'pyvar_callv_kw (pyeval) and at most 4 positional arguments');
+    dispArg := AllocNode(AN_ARG);
+    ASTLeft[dispArg] := baseNode;
+    kwLit := AllocNode(AN_ARG);
+    kwCnt := AllocNode(AN_INT_LIT);
+    ASTIVal[kwCnt] := n; ASTTk[kwCnt] := Ord(tyInt64);
+    ASTLeft[kwLit] := kwCnt;
+    ASTRight[dispArg] := kwLit;
+    kwTail := kwLit;
+    kwN := argsHead;
+    while kwN >= 0 do
+    begin
+      ASTRight[kwTail] := kwN;
+      kwTail := kwN;
+      kwN := ASTRight[kwN];
+    end;
+    for kwPad := n to 3 do
+    begin
+      kwNone := AllocNode(AN_CALL);
+      ASTIVal[kwNone] := FindProc('pynone');
+      ASTLeft[kwNone] := -1;
+      ASTTk[kwNone] := Ord(tyVariant);
+      kwN := AllocNode(AN_ARG);
+      ASTLeft[kwN] := kwNone;
+      ASTRight[kwTail] := kwN;
+      kwTail := kwN;
+    end;
+    kwN := AllocNode(AN_ARG);
+    ASTLeft[kwN] := PyMakeIdent(kwNamesSym);
+    ASTRight[kwTail] := kwN; kwTail := kwN;
+    kwN := AllocNode(AN_ARG);
+    ASTLeft[kwN] := PyMakeIdent(kwValsSym);
+    ASTRight[kwN] := -1;
+    ASTRight[kwTail] := kwN;
+    Result := AllocNode(AN_CALL);
+    ASTIVal[Result] := dispPi;
+    ASTLeft[Result] := dispArg;
+    ASTTk[Result] := Ord(tyVariant);
+    Exit;
+  end;
+
   dispPi := -1;
   if n = 0 then dispPi := FindProc('pyvar_callv0')
   else if n = 1 then dispPi := FindProc('pyvar_callv1')

@@ -4,6 +4,9 @@ prio: 72
 type: bug
 blocked-by: []
 summary: "`d = obj.meth; d('x', flag=True)` fails with `undefined variable (flag)` — a callable value carries no parameter NAMES, so a keyword argument has nothing to match against. No name collision anywhere; the sibling of the already-known defaults gap on the same carrier. Distinct from the shadowing bug that produces the corpus's `decode has no parameter named 'final'`."
+commit: PENDING-COMMIT
+claimed-by: frankonpiler-an
+status: done
 ---
 
 # A keyword argument through a callable value is `undefined variable`
@@ -90,3 +93,65 @@ one that stays broken.
 **Not merged with the defaults ticket** — frank2's call, on the grounds that it
 is the same carrier but a different missing field and that ticket is nearly
 closed. Cross-referenced instead.
+
+---
+
+## FIXED. The signature record was extended, not duplicated.
+
+Three pieces, in the order frank2 recommended when it declined to merge this
+with the defaults ticket.
+
+**1. PYSIG grows a NAMES field** (`PYSIG_OFF_NAMES = 40`, `PYSIG_SIZE` 40 → 48).
+`EmitPySignatures` emits `TotN` pointers followed by the NUL-terminated names
+themselves, in the SAME record as the defaults rather than beside it — one
+carrier answers every signature question. A proc with no user parameters leaves
+the field nil, which the dispatcher reads as "no names known" and treats exactly
+as it did before names existed.
+
+**2. The call site sends the name to run time.** There is no callee to resolve
+`final` against at compile time — that is the entire difficulty, and it is why
+this failed as `undefined variable (final)`: the name was parsed as an ordinary
+expression because nothing had told the parser it was a parameter. `PyMakeDynCall`
+now recognises `ident =` in a dynamic call's argument list and appends the name
+(as a string) and its value to two parallel `TPyList`s, exactly the way the
+existing `*args` arm builds its list.
+
+**3. The dispatcher matches them.** `pyvar_callv_kw` → `pybound_pair_call_kw`,
+which reads `Names` and binds each keyword to a position, THEN fills the
+remaining holes from the defaults — that order is what makes a supplied keyword
+win over a default, which is the only reason a caller writes one. `PySigNameEq`
+compares in place rather than converting to an AnsiString: putting the names in
+`.data` was pointless if answering a question about one allocated.
+
+Errors are Python's, not silence: unknown keyword, multiple values for one
+argument, and missing required arguments each raise `TypeError`, and the
+required-argument count is recomputed after keyword binding rather than trusting
+the positional count — a keyword can supply a required parameter.
+
+**A shape that does NOT carry names gets a named refusal**, not a wrong answer.
+Only the tag-8 pair has a signature today; a keyword through any other callable
+carrier raises rather than silently dropping the keyword and binding the
+default, which would return something plausible. That is the failure mode most
+worth avoiding, and the refusal names why.
+
+### Verified
+
+`test/test_nilpy_keyword_arg_through_a_callable_value.npy`, wired into
+`test-nilpy`, expectation generated from CPython, byte-identical. Covers the
+ticket's own repro, keywords out of declaration order, all-defaulted callees,
+a keyword supplying a REQUIRED parameter, and all three TypeError cases.
+
+### The corpus
+
+**`webencodings/__init__.py` COMPILES** — the file behind all 12. Sampled
+dependents move past the `decode` wall too: `tinycss2/__init__.py` and
+`tinycss2/parser.py` both go from `decode has no parameter named 'final'` to
+`undefined variable (MULTILINE)` (`re.MULTILINE`), a new and unrelated wall.
+
+So the `decode` row is **cleared** from the ladder. Whether the 12 files now
+COMPILE is per-file and is the ladder's to report — the ones sampled advance
+rather than finish, which is the ordinary shape of corpus progress and should
+be read as such.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.

@@ -834,6 +834,8 @@ test-nilpy: $(COMPILER)
 	# str.isnumeric()/istitle(), with their five neighbouring predicates.
 	./$(COMPILER) test/test_nilpy_str_isnumeric_istitle.npy $(TESTTMP)/test_nilpy_isnumtitle26
 	$(TESTTMP)/test_nilpy_isnumtitle26 | diff -u test/test_nilpy_str_isnumeric_istitle.expected -
+	./$(COMPILER) test/test_nilpy_keyword_arg_through_a_callable_value.npy $(TESTTMP)/test_nilpy_kwval26
+	$(TESTTMP)/test_nilpy_kwval26 | diff -u test/test_nilpy_keyword_arg_through_a_callable_value.expected -
 	./$(COMPILER) test/test_nilpy_local_binding_beats_a_def.npy $(TESTTMP)/test_nilpy_locbind26
 	$(TESTTMP)/test_nilpy_locbind26 | diff -u test/test_nilpy_local_binding_beats_a_def.expected -
 	./$(COMPILER) test/test_nilpy_callable_value_defaults.npy $(TESTTMP)/test_nilpy_cvdflt26

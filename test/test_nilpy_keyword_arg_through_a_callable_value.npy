@@ -1,0 +1,56 @@
+# A keyword argument passed through a CALLABLE VALUE. There is no callee to
+# resolve the name against at compile time, so the name travels to run time as
+# a string and is matched against the callee's own parameter names out of its
+# signature record.
+# bug-n-a-keyword-argument-through-a-callable-value-is-undefined
+class D:
+    def decode(self, a, final=False):
+        return "d:" + str(a) + ":" + str(final)
+
+d = D()
+f = d.decode
+print(d.decode("x", final=True))   # direct call, the control
+print(f("y", final=True))          # through the value
+
+def g(a, b=2, c=3):
+    return (a, b, c)
+
+h = g
+print(h(1))
+print(h(1, c=9))
+print(h(1, c=9, b=8))              # out of declaration order
+print(h(1, 5))
+print(h(1, 5, c=7))
+
+def alldef(a=1, b=2, c=3):
+    return (a, b, c)
+
+k = alldef
+print(k(), k(c=9), k(9), k(9, c=7))
+
+# a keyword may supply a REQUIRED parameter
+def req(a, b):
+    return (a, b)
+
+r = req
+print(r(1, b=2))
+print(r(a=1, b=2))
+
+try:
+    r(1, zz=9)
+    print("no error")
+except TypeError:
+    print("TypeError unknown keyword")
+
+try:
+    g2 = g
+    g2(1, 5, a=9)
+    print("no error")
+except TypeError:
+    print("TypeError duplicate")
+
+try:
+    r(1)
+    print("no error")
+except TypeError:
+    print("TypeError missing")

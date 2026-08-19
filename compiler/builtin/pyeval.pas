@@ -256,6 +256,9 @@ procedure pycall_value(const cb: Variant; const arg: Variant; withArg: Boolean);
   unit can recognise — and pyeval is always loaded for a .npy program. }
 function pyvar_callv0(const cb: Variant): Variant;
 function pyvar_callv1(const cb: Variant; const a0: Variant): Variant;
+function pyvar_callv_kw(const cb: Variant; nPos: Integer;
+                       const a0, a1, a2, a3: Variant;
+                       kwNames, kwVals: TPyList): Variant;
 function pyvar_callv2(const cb: Variant; const a0, a1: Variant): Variant;
 { The four-argument dispatcher. Past arity 3 the old lowering calls through the
   callee's payload as a code ADDRESS — a segfault for a lambda, whose value is
@@ -4863,6 +4866,31 @@ begin
   end;
   f0 := TPyCallFn0(Pointer(NativeInt(PPyRec(@cb)^.Payload)));
   Result := f0();
+end;
+
+function pyvar_callv_kw(const cb: Variant; nPos: Integer;
+                       const a0, a1, a2, a3: Variant;
+                       kwNames, kwVals: TPyList): Variant;
+{ A call carrying KEYWORD arguments through a callable value. The names could
+  not be resolved at compile time -- that is the whole difficulty and why the
+  call site sends them as strings -- so they are matched here against the
+  callee's own parameter names out of its signature record.
+
+  Only the tag-8 pair carries a signature today. The other callable shapes get a
+  NAMED refusal rather than a wrong answer: a keyword silently dropped would
+  bind the default and return something plausible, which is the failure mode
+  worth avoiding most. }
+begin
+  Result := pynone;
+  if pycallback_is(cb) then
+  begin
+    Result := pybound_pair_call_kw(Pointer(NativeInt(PPyRec(@cb)^.Payload)),
+                                   nPos, a0, a1, a2, a3, kwNames, kwVals);
+    Exit;
+  end;
+  raise TypeError.Create('a keyword argument through this kind of callable '
+          + 'value is not supported yet (only a def or bound method taken as '
+          + 'a value carries its parameter names)');
 end;
 
 function pyvar_callv1(const cb: Variant; const a0: Variant): Variant;
