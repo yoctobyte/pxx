@@ -356,3 +356,4 @@
 2026-08-19T11:24:10Z  v356  2bb09afb0cff28098655eed327e2c6153b8aa34488228f4fd19e277841baa71f  5b93f1155a7b9e9cf227a3c5e03d91dc4e66401d  docs(progress): close bug-n-the-sequence-protocol as a duplicate
 2026-08-19T12:14:30Z  v357  5d23a95544675eb22948d2269347e29344f12d803a5de16031e919ea25eea2a8  21c051b97d805065cba0428dae5075b3d71f66b1  resolve(N): pin v357 tk breakage -- imported .npy defs got no signature record
 2026-08-19T12:36:11Z  v358  afd31bf0306717c13b47d8092a8444928eb661c4135580f88b82e2a94294e790  5fcdbe6c3e48e022ed398fc652ddb0f1dec7d0be  roster: check +17h — pin due but held, and two clones are running the same ladder
+2026-08-19T12:45:16Z  v359  4168eb398c313ea998cbea34e7d9cd8a73640df37bb4b67bf3da01d5484363e5  c3f3b5b9349824247ba4332996580518df62de53  roster: a pin's contents are an ancestry question, and frank3's sharper form of the check rule
