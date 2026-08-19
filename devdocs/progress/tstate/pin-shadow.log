@@ -111,3 +111,4 @@
 2026-08-18T19:59:43Z	plexus	df15ae3fe1dcc21de6db6634f2a271b61aa24764	would NOT pin df15ae3fe1dc — 1 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c
 2026-08-18T22:04:25Z	plexus	18bcb92ffb8b191e969ab5456eefc49d9abcb1e5	would NOT pin 18bcb92ffb8b — 1 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c
 2026-08-19T00:53:31Z	plexus	9cc61eee29c83dde8c53e74729b3cea57afa6c04	would NOT pin 9cc61eee29c8 — 1 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c
+2026-08-19T02:21:42Z	plexus	185575980d53326b3c943921d5dd829c62b1a3a9	would NOT pin 185575980d53 — 1 red(s) not in the allowlist: lib-test#src:test/crtl_exp2.c
