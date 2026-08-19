@@ -3,9 +3,7 @@ track: B
 prio: 30
 type: bug
 blocked-by: []
-summary: "StrToFloat costs 2.6-2.9 ms per value for small-exponent input ('1.2e-320') against 0.72 us in CPython — a ~3600x gap — and 116 us even mid-range. The answer is right; the slow path is a 63-step bit-pattern search whose every step expands a candidate to its EXACT ~1080-digit decimal. Correct by construction and priced accordingly. Found timing a float differential harness, where parsing 121k values took ~60 s and the arithmetic under test took none of it."
-status: working
-owner: frank3-fc
+summary: "REMAINING WORK IS SUBNORMALS ONLY, and it is no longer Eisel-Lemire. Three passes have landed: no-double-parse + no-quadratic-append (4.7x on the fast path), and now Eisel-Lemire, which took every NORMAL value outside Clinger's window from 18-526 us to under 1 us (27x-1100x, 592,994 values diffed against CPython, 0 mismatches). The two rows this ticket named 'small' and 'subnormal' are BOTH subnormal and did not move: Lemire declines below the normal floor by construction, as Go and Rust do. They sit at ~535 us vs CPython's 0.72 us. The fix for them is a rewrite of ExDecNearest to compare in BINARY big-integer arithmetic instead of expanding each candidate to its exact ~765-digit decimal. The title's 3600x, its 63-step cause and its 'small exponents' boundary have each been measured wrong and corrected in the body — read the notes, not the title."
 ---
 
 # `StrToFloat` is milliseconds per value for small exponents
@@ -283,3 +281,147 @@ multiply is not an obstacle; the work is the power-of-ten table and the
 decline-and-defer logic.
 
 Left in `working/` → returned to `backlog/`: not blocked, just unfinished.
+
+
+## 2026-08-19 (frank3-b) — Eisel-Lemire landed. 27x-1100x in the normal range;
+## the two SUBNORMAL rows are unchanged, by construction, and the gate is still open
+
+**Compiler binary: `stable_linux_amd64/default/pinned` v352, `-O2`, repo HEAD
+`5a900c598`.** Every A/B below is that same compiler with only
+`lib/rtl/sysutils.pas` differing, so nothing here is a pin artefact.
+
+### What landed
+
+`EiselLemire` in `lib/rtl/sysutils.pas`, between the Clinger fast path and
+`ExDecNearest`, over a generated 696-entry table of 128-bit truncated powers of
+ten (q = -348..347, Go's range). `MulHiU64` from `lib/rtl/wideint.pas` supplies
+the 128x64 high half, exactly as the previous note predicted — it was not an
+obstacle.
+
+The composition is what makes it safe: Lemire **declines** rather than guesses,
+so `ExDecNearest` is untouched and still answers every case Lemire will not.
+Nothing about the correct-by-construction path changed.
+
+### Results — ns per parse, same harness, before/after
+
+| shape | before | after | gain |
+| --- | --- | --- | --- |
+| nd=15 expo=0 (Clinger fast path) | 635 | 680 | **0.93x — 5% SLOWER** |
+| nd=15 expo=22 | 2037 | 687 | 3.0x |
+| nd=15 expo=23 (the edge) | 17925 | 662 | **27x** |
+| nd=15 expo=100 | 76800 | 650 | 118x |
+| nd=15 expo=-100 | 115500 | 650 | 178x |
+| nd=15 expo=200 | 87050 | 700 | 124x |
+| nd=15 expo=-200 | 272625 | 750 | 364x |
+| nd=15 expo=-300 | 526000 | 500 | **1052x** |
+| nd=17 expo=0 | 9650 | 1562 | 6.2x |
+| nd=17 expo=-300 | 515250 | 750 | 687x |
+| nd=19 expo=0 | 9875 | 750 | 13x |
+| value ~1e-296 (NORMAL) | 559000 | 500 | **1118x** |
+| value ~1e-310 (**subnormal**) | 549000 | 547750 | **1.00x** |
+| value ~1e-320 (**subnormal**) | 539750 | 535250 | **1.01x** |
+| value ~1e-323 (**subnormal**) | 535750 | 528500 | **1.01x** |
+
+The `expo=22` row moving at all is not a mistake: with random 15-digit
+significands about 10% of values end in a zero, which the parser strips into the
+exponent and pushes to 23 — so that row was always ~10% slow-path, and
+0.1x17925 + 0.9x572 = 2307 predicts the 2037 measured.
+
+### The title names the wrong axis for the THIRD time — and this one is load-bearing
+
+Earlier notes corrected the stated *cause* ("63 steps" was 4) and the stated
+*boundary* ("small exponents" was `|expo| > 22` either way, or `nd > 15`). The
+remaining mis-framing is in the ticket's own measured rows: **"small (~1e-310)"
+and "subnormal (~1e-320)" are BOTH subnormal**, and Eisel-Lemire declines every
+subnormal by construction. So those two rows could never have been fixed by the
+fix this ticket asks for.
+
+That is easy to get wrong in the other direction too, and I did: the first cut
+of the benchmark built an nd-digit *significand* and appended `e-310`, giving a
+value near **1e-296** — normal, not subnormal — while labelling it subnormal.
+It is the row that improved 1118x. The corrected row needs `e-324`. Anyone
+re-measuring this should check with CPython which side of
+`sys.float_info.min` (2.2250738585072014e-308) the row actually lands on before
+believing its label.
+
+### Correctness — the part that was not negotiable
+
+- **592,994 values diffed against CPython's `float()`, 0 mismatches.** Random
+  1-19 digit significands across q = -350..350; the normal/subnormal boundary;
+  20-45 digit significands (past the u64 cap, where Lemire must not be reached);
+  halfway `...5` shapes; overflow to infinity and underflow to zero from both
+  sides; and the named boundaries including `2.2250738585072011e-308`, the
+  decimal that famously hung PHP's parser.
+- **The oracle was proved able to FAIL before its zero was believed.** Flipping
+  one bit in every one of the 696 table high words produces 191 mismatches.
+  (A single perturbed *low* word produces none — that word only participates in
+  the rare refinement branch, which is itself worth knowing.)
+- `test/lib_strtofloat_roundtrip.pas` green, 6846 values.
+- `make lib-test` **green** (exit 0, against stable v352).
+
+### Landed as a gated test, because the round-trip sweep cannot see this
+
+`test/lib_strtofloat_lemire.pas` + `test/lib_strtofloat_lemire_check.py`, in
+`make lib-test` (~2.8 s, 73,195 values, python3-optional like the mimic_codecs
+oracle diff). The existing round-trip test only ever feeds the parser 17-digit
+spellings of real doubles; those are not the strings that break a float parser.
+A single wrong digit in a generated 696-entry table is invisible to any
+self-consistent check — the parser would just return a plausible neighbour —
+so the guard has to be a second correctly-rounded implementation.
+
+### How often Lemire actually answers
+
+| input | Clinger | reaches Lemire | accepted | declined |
+| --- | --- | --- | --- | --- |
+| exponents -30..30 (realistic) | 58.6% | 41.4% | **99.75%** | 0.25% |
+| exponents -350..350 (adversarial) | 5.2% | 94.8% | 87.4% | 12.6% |
+
+The declines in the adversarial row are almost entirely the subnormal and
+overflow tails, which a uniform draw over the whole exponent range
+over-represents enormously.
+
+### What it costs, stated because every binary pays it
+
++42 KB of code, +11 KB of bss, +22 us of startup, in **every** binary that
+links `sysutils` — including ones that never parse a float. Only ~11 KB is the
+table's own bytes; the other ~31 KB is
+[[bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data]],
+filed from here: the compiler emits a typed const array as fill-it-at-startup
+code (~29 bytes per element) rather than as initialised data. Re-encoding the
+table as a string blob dodges that completely (measured: +13 bytes of code
+instead of +20 KB) and was **deliberately not done** — it would hide the
+compiler bug and make the table unauditable. When that bug is fixed this unit
+gets ~31 KB smaller with no edit to it.
+
+The 5% fast-path regression is code layout, not added work: adding the same
+local to the OLD parser without the table changed nothing measurable. Measured
+interleaved, 8 samples each, because three noisy samples had suggested 10%.
+
+### The gate is STILL not met — subnormals — and the remaining work is a
+### different fix from the one this ticket has been asking for
+
+> "The mid-range and small-exponent rows above drop by at least an order of
+> magnitude"
+
+Cumulatively since filing: mid-range 116 us → ~0.6 us (**~190x**, met);
+every NORMAL small-exponent value → under 1 us (met, by a wide margin);
+but **small (2.9 ms → 548 us) and subnormal (2.6 ms → 535 us) are ~5x, not 10x**,
+and did not move at all in this pass.
+
+**Eisel-Lemire is now done and is not the answer to those rows.** Nor is
+"extend Lemire to subnormals": below the normal floor the truncated 128-bit
+product no longer carries enough bits to settle the rounding, which is exactly
+why Go and Rust decline there too. Guessing there is the one change that would
+make this parser fast and subtly wrong.
+
+The real remaining fix is in **`ExDecNearest` itself**, and it is tractable:
+its cost is that every comparison expands a candidate double to its EXACT
+DECIMAL (~765 digits for a subnormal, ~82 rounds of big-decimal multiply). The
+standard approach compares in **binary** big-integer arithmetic instead
+(AlgorithmM / Simple Decimal Conversion, what CPython's dtoa does — and CPython
+parses 1e-320 in 0.72 us, so this is a known-achievable target, not a limit).
+That is a rewrite of the exact path, independent of everything landed here.
+
+Scoped that way, it is worth its own ticket rather than a fourth pass on this
+one. Returned to `backlog/`: not blocked, just unfinished — same as the two
+passes before it.

@@ -10569,6 +10569,16 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_strtofloat_roundtrip.pas $(TESTTMP)/lib_strtofloat_roundtrip
 	test "$$($(TESTTMP)/lib_strtofloat_roundtrip | grep -c '=ok')" = "6"
 	test "$$($(TESTTMP)/lib_strtofloat_roundtrip | tail -1)" = "STRTOFLOAT-ROUNDTRIP OK"
+	# Eisel-Lemire's ACCEPT decisions, against CPython as the oracle. The
+	# roundtrip test above only ever feeds the parser 17-digit spellings of real
+	# doubles; this one feeds arbitrary decimals near rounding boundaries, which
+	# is what a wrong entry in the generated power-of-ten table would show up on.
+	# python3-optional, same deal as the mimic_codecs oracle diff.
+	$(PXX_STABLE) -Fulib/rtl test/lib_strtofloat_lemire.pas $(TESTTMP)/lib_strtofloat_lemire
+	@if command -v python3 >/dev/null 2>&1; then \
+	  $(TESTTMP)/lib_strtofloat_lemire | python3 test/lib_strtofloat_lemire_check.py \
+	    || { echo "FAIL: StrToFloat diverges from CPython"; exit 1; }; \
+	else echo "  lib-test: python3 absent, skipping the StrToFloat oracle diff"; fi
 	# The `six` shim (feature-nilpy-six-and-warnings-shims). A DIFFERENTIAL:
 	# the same .npy runs under CPython with the real six, and every line was
 	# checked identical both ways -- an alias table's failure mode is a
@@ -10998,7 +11008,7 @@ endif
 	@rc=0; tools/reportlab_diff.py || rc=$$?; \
 	 if [ $$rc = 77 ]; then echo "SKIP reportlab_diff -- prerequisite absent (see line above)"; \
 	 elif [ $$rc != 0 ]; then echo "reportlab_diff: the mimic diverged from the oracle"; exit 1; fi
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + strtofloat-roundtrip + mimic-six + mimic-warnings + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff + synapse-ssl) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + strtofloat-roundtrip + strtofloat-lemire + mimic-six + mimic-warnings + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff + synapse-ssl) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check

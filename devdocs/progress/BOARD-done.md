@@ -1939,6 +1939,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-set-runtime | P | 70 | regression | regression: test-core#src:test/test_set_runtime.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
 | regression-test-core-test-sqlite-crud-lazy | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud_lazy.pas red at f913bd22ae30 (auto-filed by twatch) | — |
 | regression-test-core-test-sqlite-crud | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud.pas red at ff90643ef2a3 (auto-filed by twatch) | — |
+| regression-test-core-test-stackless-gen | P | 70 | regression | regression: test-core#src:test/test_stackless_gen.pas red at dfac1da00b04 (auto-filed by twatch) | — |
 | regression-test-core-test-static-array-length | T | 70 | regression | regression: test-core#src:test/test_static_array_length.pas red at fb9346bd4bce (auto-filed by twatch) | — |
 | regression-test-core-test-stmt-call-result-selector-b318 | T | 70 | regression | regression: test-core#src:test/test_stmt_call_result_selector_b318.pas red at 33cd0117f9f9 (auto-filed by twatch) | — |
 | regression-test-core-test-strict-overload-width | P | 70 | regression | RESOLVED — not a defect. An intended EXPECTATION change: Integer and LongInt are one 4-byte signed type, so the LongInt overload is an exact match and the exact phase now sees it. Fixed forward in 58f5ef974; auto-closed by the watcher and independently verified GREEN at HEAD by Track T. | — |
