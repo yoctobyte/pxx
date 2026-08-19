@@ -1,11 +1,29 @@
 ---
-summary: "A crtl header that carries a BODY (stdarg.h's static __pxx_va_* helpers) is compiled twice — its include guard is invisible to the late crtl pull because a THIRD CPreprocess invocation in between clears the macro table"
+summary: "SUPERSEDED TITLE — do not size from it. `lib/crtl/include/stdarg.h` carries six static function BODIES, and the crtl auto-pull for a hand-declared prototype must include that header, so the bodies are emitted twice (+2204 bytes). The macro-reset framing in the title is PROVED DEAD (2026-08-16): carrying the macro table leaves output byte-identical, and forcing the guard on breaks the pull. Fix is Track C library work — move the bodies to lib/crtl/src/stdarg.c."
 type: bug
 track: C
 prio: 25
 ---
 
 # A header carrying a body compiles twice across the macro-table reset
+
+> **THE TITLE IS WRONG AND THE FIRST TWO SECTIONS ARE SUPERSEDED.** Read
+> "2026-08-16 — the WARNING is gone" below before acting on anything above it.
+> The macro-table reset is NOT the cause: carrying the table leaves the output
+> byte-identical, and forcing the guard on makes the pull fail to compile. The
+> cause is that `stdarg.h` carries function BODIES and the pull must include it.
+> The fix is **Track C library work** (move the bodies to
+> `lib/crtl/src/stdarg.c`), not the A-gated `parser.inc` edit the original
+> "The fix" section proposes. Title kept so existing search terms still land.
+>
+> **Not a regression, checked 2026-08-19:** `CPMCount := 0` has been at the top
+> of `CPreprocess` since `4c21e86eb` (2026-05-26), the commit that introduced
+> the C preprocessing stage — together with the Pascal-`uses`-a-`.c` invocation
+> site. No later change to Pascal define scoping narrowed anything for C. What
+> changed was the invocation COUNT: `147087b0c` (2026-07-07) added
+> `CPullCrtlForPrototypes`, a third invocation, turning a day-one latent bug
+> visible. Moot now that the macro avenue is dead, but recorded because the
+> question recurs.
 
 - **Type:** bug — Track C (C frontend, preprocessor TU state)
 - **Status:** backlog

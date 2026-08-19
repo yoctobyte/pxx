@@ -23,7 +23,7 @@ two of them are the same question and unify:
 | --- | --- | --- |
 | `CompiledUnits[]` / `guardIdx` | the unit **NAME** | absorbed by this ticket |
 | `@cpath:` key space | the path **TEXT** | absorbed by this ticket |
-| preprocessor include guards | macro-table **visibility** | **NOT this concept** — see below |
+| a crtl header carrying function BODIES | not identity at all | **NOT this concept** — see below |
 
 `@cpath:` exists because unit-NAME keying collided for path-form C units
 (`uses './x.c'`); `CompiledUnitFile[]` exists because it collided again for `.py` modules
@@ -59,10 +59,16 @@ later as a builtin silently not loading, far from the commit that caused it.
 ## Explicitly OUT of scope — the C preprocessor half
 
 [[bug-c-header-with-a-body-compiles-twice-across-the-macro-reset]] (and the resolved
-`bug-c-string-h-compiles-stdlib-c-twice`) look like this and are a **different root**:
-include-guard visibility lost across a macro-table reset. The guard is present and correct
-in the source; pxx drops the macro that implements it. That is preprocessor state
-lifetime, not unit identity.
+`bug-c-string-h-compiles-stdlib-c-twice`) look like this and are a **different root** —
+and note that ticket's TITLE is superseded by its own body. Measured 2026-08-16: carrying
+the macro table changes nothing (byte-identical output), and forcing the guard on makes
+the pull fail to compile, because the pulled region needs stdarg.h's declarations and a
+guard is all-or-nothing.
+
+The actual cause is that `lib/crtl/include/stdarg.h` carries six `static` function
+**BODIES** and the crtl auto-pull must include it. The fix is moving them to
+`lib/crtl/src/stdarg.c` — **Track C library work**, nothing to do with unit identity or
+the preprocessor.
 
 Do not pull them in. The decision recorded this as option C precisely so the resemblance
 stops costing people time — the symptom is shared, the root is not, and that was checked

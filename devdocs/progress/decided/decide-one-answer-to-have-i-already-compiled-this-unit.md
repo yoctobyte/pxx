@@ -110,10 +110,23 @@ mechanisms is absorbed by it.
 ### C — the preprocessor guards are NOT this concept, recorded so it stays settled
 
 [[bug-c-header-with-a-body-compiles-twice-across-the-macro-reset]] and
-[[bug-c-string-h-compiles-stdlib-c-twice]] are include-guard **visibility lost across a
-macro-table reset**. The guard is present and correct in the source; pxx drops the macro
-that implements it. That is a preprocessor-state-lifetime bug, not unit identity wearing
-a similar symptom. They stay in their lane, fixed on their own terms.
+[[bug-c-string-h-compiles-stdlib-c-twice]] are **not** unit identity.
+
+**CORRECTED 2026-08-19** — the first version of this section said "include-guard
+visibility lost across a macro-table reset", which is that ticket's TITLE and opening
+section, and is superseded by its own 2026-08-16 measurement. The macro avenue is proved
+dead: carrying the macro table leaves the output byte-identical (209991 bytes), and
+FORCING the guard on makes the pull fail to compile, because the pulled region genuinely
+needs stdarg.h's declarations and a guard is all-or-nothing.
+
+The real cause is that `lib/crtl/include/stdarg.h` carries six `static` function
+**BODIES**, and the crtl auto-pull must include that header. The fix is to move the bodies
+into `lib/crtl/src/stdarg.c` — a **Track C library** change, not a preprocessor or
+`parser.inc` change at all.
+
+Which makes the exclusion STRONGER than the original wording claimed, not weaker: this is
+further from "have I already compiled this unit?" than a preprocessor-state bug would
+have been. It is a header hygiene bug. They stay in their lane, fixed on their own terms.
 
 **Recorded once, deliberately, per option C's purpose:** the next person who notices that
 "header compiles twice" and "module compiles twice" look alike should read this section
