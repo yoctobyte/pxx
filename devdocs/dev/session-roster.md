@@ -3667,3 +3667,34 @@ normalised. The consequence — only the Pascal driver emits a signal runtime at
 `bug-a-only-the-pascal-driver-emits-the-signal-runtime` (p45) rather than fixed inline, since
 it changes behaviour on every non-Pascal target. **This is the structural answer the owner said
 the exercise was for**, not a side effect of it.
+
+### CORRECTION (owner, +23h): the `tk` criterion was wrong — right answer, unsound reasoning
+
+The owner challenged frank3's argument that *"CPython has no `tk` module"*. Measured rather
+than adjudicated:
+
+    python3 -c "import tkinter"       -> OK, /usr/lib/python3.12/tkinter/__init__.py
+    python3 -c "import tk"            -> ModuleNotFoundError
+    python3 -m pip index versions tk  -> tk (0.1.0)
+
+**A PyPI package named `tk` exists.** A Python program can `pip install tk` and `import tk`.
+And the owner's sharper form: `tkinter` needs installing on most distros (`python3-tk`), so
+"needs installing" separates nothing either. Therefore **"could a Python program have written
+that import?" answers YES for essentially any identifier** — anything can be published to
+PyPI. The test classifies nothing. **I relayed it to both workers as reusable beyond this
+case**, which is how a bad rule spreads faster than the fix it came with.
+
+**The criterion that holds was already in frank3's own doc-comment fix**, one paragraph away:
+**is this unit written to BE that Python module?** Each header answers it outright —
+`tkinter.pas`: *"Named `tkinter` so `import tkinter` resolves through the unit resolver, like
+lib/rtl/re.pas and configparser.pas."* `tk.pas`: *"Build a tkinter-shaped surface on top of
+`TkEval` if you want familiar Python idioms."* Purpose stated by the unit, not inventory
+claimed about CPython. Two standards in one session, and the weaker one travelled.
+
+**The conclusion survives and gets STRONGER.** Because a PyPI `tk` exists, putting `tk` on the
+Python-serving list would silently bind a real installed module's name to our Tcl/Tk binding —
+exactly the failure the list exists to prevent. `hello.npy` / `widgets.npy` still get rewritten.
+
+**The lesson is not "verify claims" — it is that a right answer teaches nothing about whether
+the method was sound, and the method is what gets reused.** This one was reused within the
+hour, by me, in writing, to two workers.
