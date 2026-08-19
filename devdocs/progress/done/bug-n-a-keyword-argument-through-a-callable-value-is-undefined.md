@@ -154,4 +154,4 @@ rather than finish, which is the ordinary shape of corpus progress and should
 be read as such.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 9e711a681.
