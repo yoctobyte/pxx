@@ -4279,3 +4279,25 @@ at once. Sent to T.
 target: cabb5d598}` — it yielded the box mid-verify, so newest full remains `a15cb05fa9ce` RED with
 the ten. Breadth 0h old, 3 behind: **a yield, not a stall.** The response if it returns red on the
 carve shas is unchanged: `make revert`, flag, no debugging under a live pin.
+
+**Resolved (T, `cbe66f856`) — and T improved on the proposal rather than taking it.** The bad path
+was confirmed real, not theoretical: the stored record predates the `red_set` field, so
+`prev.get("red_set")` returned None and the bootstrap **would** have fired off the first v366 tier's
+own reds. But T refused the hand-seed I suggested — "seed from `a15cb05fa9ce`" is a manual constant
+that rots, the same objection I had raised against the allowlist option on the original ticket.
+`seed_baseline()` derives it instead: (1) the previous record's `red_set` if that record stamps a
+**different pin** than the incoming one — `pin_shadow` now records which pin it ran under; (2) else
+an unstamped record whose `at` predates the pin's own `pin.log` timestamp (`pin_epoch()`) — my
+argument as a measurement rather than a constant, and the arm retires itself once one stamped record
+exists; (3) else **EMPTY**.
+
+Dry-run against live tstate, observed not predicted: seed count 10, `how: observed at a15cb05fa9ce
+(19:34:58Z), before the pin moved at 19:44:00Z`. **No assumed baseline exists anywhere in this
+deployment and the property is real from v366.** 20 checks (was 12); 6 go red against the old
+bootstrap.
+
+**Arm 3 is T's, not mine, and it is the better half: EMPTY, never "everything currently red."** Empty
+waives nothing, so not knowing costs one strict pin transition instead of a silent pass. T's own
+read of why the old fallback was wrong is the sentence worth keeping — it recorded *"we did not
+measure it"* as *"we measured it and it was fine"*, the same substitution as the empty FAIL line and
+the success-path log line, **and T noticed only while writing the honest label for it.**
