@@ -164,6 +164,40 @@ row is worth re-running then, because "fixed at HEAD" and "unblocked for B" are
 two different claims. Pins hold the repo-wide lock and belong to whoever holds
 that slot, so this ticket does not run one.
 
+### Re-run on pin v353, which landed mid-session — 6/48 to 10/48
+
+Pin **v353** (`256183a5f52c` at `8a16663c6ffe`) landed at 08:29 while this was in
+flight, so the re-run above became available immediately. Measured, not inferred:
+`class X(dict)` / `(list)` / `(str)` now compile AND run on v353. The shim's
+differential is still byte-identical against CPython on v353 (56 `=ok`).
+
+| | v352 no shim | v352 + shim | **v353 + shim** |
+| --- | --- | --- | --- |
+| compile | 6/48 | 6/48 | **10/48** |
+| `undefined variable (yield)` | 18 | 18 | **0** |
+| `missing module: xml_etree_elementtree` | 4 | 0 | 0 |
+| `unknown base class dict` | 0 | 4 | 0 |
+| `unknown base class Mapping` | 3 | 3 | 7 |
+
+**The 6→10 is v353's, not this shim's** — v353 carries the NilPy generator series,
+which removed the 18-file `yield` wall outright, and that is the largest single
+lever the ladder has ever recorded. The clean attribution for this ticket is the
+middle column: same pin, shim in and out, 6/48 both ways, four files one wall
+further along. Two measurements were needed to say that, because a single
+after-the-pin run credits the shim with the generators' work.
+
+The four etree files (`_utils.py`, `serializer.py`, `treebuilders/__init__.py`,
+`treewalkers/__init__.py`) are now all on `unknown base class Mapping` — past
+`dict`, which v353 fixed, and onto the `collections.abc` one, which is
+[[feature-nilpy-subclass-a-builtin-type]]'s unfinished neighbour and the top wall
+in html5lib now that `yield` is gone.
+
+Worth relaying: `treewalkers/etree.py`, the file that actually consumes this shim,
+finally moved off `yield` and now stops at `*unpacking into TreeWalker.doctype`,
+and `treebuilders/etree.py` at `undefined variable (property)`. Neither is a shim
+gap. This tree model has still never been asked for anything by the code that
+wants it — the honest reading of "unblocks 4 files".
+
 ### Gate
 
 `make lib-test` green (Track B), built with `$(PXX_STABLE)`; the compiler was not
