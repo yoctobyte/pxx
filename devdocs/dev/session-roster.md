@@ -2308,3 +2308,48 @@ rerank it deliberately rather than inheriting the number).
   signal, and T said as much. But a false idle reading is how a restart lands mid-test, and
   T priced that at **11 hours**. Do not spend that on a signal that was never about the
   subject.
+
+- **frank3: dns_async landed (`6c89e9cc0`), and UDP fails DIFFERENTLY — the finding is
+  bigger than the fix.** Verified here: 213 lines in `test/lib_dns_async.pas`,
+  `BindEphemeralUdp` at one site feeding three call sites, lib-test green on v354.
+
+  **The warning I passed on ("a UDP/PAL shape may not wedge the same way TCP did") was the
+  whole ticket**, and frank3 says verifying against "does it wedge?" would have passed a
+  test that proved nothing. Two concurrent copies of the PRE-fix binary gave **both**
+  failure modes at once:
+
+  - copy 2: exit 124, killed at 25s, zero output — the predicted hang;
+  - copy 1: **exit 0, 17 `=ok`, 4 FAIL** — `chase-rcode`, `chase-count`, `chase-ip`,
+    `cache-1query`.
+
+  **Copy 1 is the one that matters.** A UDP socket does not refuse a second binder the way
+  a TCP listener does — **it splits the traffic**, so copy 1 answered its neighbour's
+  queries. The collision therefore presents as *a regression in CNAME chasing and in the
+  DNS cache, in the file whose entire subject is CNAME chasing and the DNS cache.* One turn
+  worse than lib_tls: there a port fight looked like a TLS timeout; **here it looks like a
+  DNS logic bug and hands you the wrong suspect.** Solo it passes — it passed for T too.
+
+  **The trap that would have "fixed" the file into uselessness:** the truncation pair could
+  not take port 0. The resolver falls back UDP→TCP **on the same port number**, and the two
+  protocols have separate port spaces — binding both to 0 independently gives two different
+  numbers, the fallback dials nothing, and **the test goes green with its coverage silently
+  removed.** UDP binds 0 and publishes; TCP takes that number in its own space.
+
+  Shape notes worth keeping: **one `BindEphemeralUdp` rather than six patches** — six bind
+  sites was six chances to fix five of them. `CacheServerCo` already had a deadline and was
+  the one correct site *for a reason*: there "no second query arrived" IS the assertion, so
+  it had to have a timeout to mean anything. Verified at 2, 6, 10 concurrent plus 3×4;
+  every copy 22/22.
+
+  **frank3 corrected its own earlier ticket and I had relayed my version of it to T.**
+  `lib_net6` is not merely "warty": every `NetTcpListen`/`NetUdpBind` is checked and
+  `Halt(1)`s with a named FAIL, so a collision there is **loud, not a timeout, and cannot
+  be contributing to T's EWMA.** Its six hardcoded ports stay deliberately — the test
+  asserts the *sender's* port (`if src.Port <> 28853`), so port 0 needs the read-back
+  threaded through the assertions. Recorded in the ticket so the next auditor does not read
+  "hardcoded" as "hangs".
+
+  **T's falsification horizon is now sharper, and this was relayed:** dns_async was the
+  LAST hang-capable file in lib-test. Remaining candidates are all loud-on-failure, so if
+  the EWMA misses under-2s after ~6 more full runs, the cause is **outside the port class**
+  and **a timeout from here is new information rather than more of this.**
