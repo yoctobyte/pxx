@@ -3958,3 +3958,70 @@ the eight defines are omission defines defaulting to OFF, nothing in the tree se
 was parked rather than landed, so no target-selection code changed. **That is an argument, not
 a measurement** — treat it as a prior for frank2's triage, and send it back to frank3 to bisect
 properly if the triage does point at a define.
+
+### The 13-job cascade is EXPLAINED — four causes, and all four predate the pin (frank2, `7daee90ac`)
+
+The "one root cause until proven otherwise" heuristic held for nine jobs and then broke. Every
+job reproduced by hand at HEAD. Breakdown: **6** cpyext jobs = the import rule colliding with a
+real C extension module, filed to **Track U** and deliberately NOT fixed; **3** = ordinary
+missed migration to the quoted import spelling, fixed green; **2** = the callable family, bisected
+to `9bbbbef6c`; **1** = riscv32 float rendering, filed `A+F` with options; **1** = `tools-devtest#00`,
+handed back to T.
+
+**The coordination fact I checked and frank2 did not state: every one of those causes is already
+INSIDE pin v365.** `9bbbbef6c`, `9bfb7fcfac03`, `7bebd63fa` and `354f734c1` are all ancestors of
+`cc20f7101`. The five held commits — `da53bbd26`, `e6a14039a`, `fd6ec21a3`, `832a42d02`,
+`2730e6566` — caused **none** of the 13.
+
+**So the reason I was holding the pin has dissolved, and I am holding it anyway for a different
+and better one.** "Nothing gets blessed over an unexplained cascade" no longer applies: the
+cascade is explained, and explained as *already-blessed ground*. Withholding v366 protects
+nobody from these four causes, because every lane is building on them right now. What still
+argues for waiting is narrower and real: **the carve is a narrowing change and its NilPy breadth
+is unswept** (T's full tier had not reached `2730e6566`), and `quick` structurally cannot see it.
+That is the whole remaining case for waiting, it is about the carve and not about the cascade,
+and it expires the moment T sweeps those shas. **Do not carry "the cascade" into the morning as a
+pin blocker — it is not one.**
+
+### Make this standard: when a cascade straddles a pin, ask which side each job builds with FIRST
+
+frank2's most valuable finding, and it inverts the obvious reading. The `lib-test` job is **not a
+regression in the range at all**. It builds with `$(PXX_STABLE)`. The pre-range pinned binary runs
+it GREEN; a compiler built from source at the range's own **last-good** sha `9bfb7fcfac03` fails
+it, and so does one built at `7bebd63fa`, the commit that ADDED the test. The defect was in the
+source the whole time and the pin was lagging behind it — **`cc20f7101` EXPOSED it, it did not
+cause it.**
+
+**So a pin commit will always look like a mass regressor and never be one.** It changes which
+binary the B/C/D-lane jobs build with, so it converts a backlog of already-present source defects
+into simultaneous red. Reading a range across a pin boundary without asking which side each job
+builds with attributes a pile of old bugs to whoever happened to pin.
+
+The corollary is worth the owner's attention in the morning: this is an argument for pinning
+**sooner and smaller**, not for pinning carefully. The longer a pin lags, the larger the tranche
+it exposes in one go and the more it looks like a catastrophe.
+
+### Open after the triage — ten of 13 filed, three green
+
+- `decide-nilpy-import-rule-vs-a-cpyext-extension-module` (**U, prio 75**) — the headline. The six
+  cpyext tests import `hello_ext`, which is CPython's own spelling for a C extension, and
+  `test/nilpy_units/hello_ext.pas` IS the extension module (it pulls `./hello_ext.c` with its
+  PyMethodDef table and `PyInit_hello_ext`). Rewriting them to the quoted spelling would make them
+  green **by deleting their subject**, in the exact tests whose subject is CPython compatibility.
+  frank2 recommends keying bare-importability on `PyInit_<name>`. **This one needs the owner.**
+- `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` (N, 70) — bisected
+  to `9bbbbef6c`; `f(c.m)` where `f(s: str)` was a compile error and now prints
+  `<bound method at 0x…>`. Five builds in a throwaway clone seeded from the pinned binary, never
+  in the shared checkout — correct method.
+- `bug-a-riscv32-cross-float-output-no-longer-matches-x86-64` (**A+F**, 60) — riscv32 reduces float
+  depth, so those Doubles are Singles and render in the Single form. The values agree, the widths
+  do not, and the one line exact in both still matches. **The new rendering may be the correct one
+  and the defect may be the test's assumption** that a depth-reduced target is byte-comparable
+  with x86-64. Filed with options rather than fixed, which is right.
+- `bug-a-c-driver-omits-rtl-stubs-for-an-imported-pascal-unit` (A, 55) — any Pascal unit whose body
+  touches a managed string dies at import from C with "call to a runtime stub that was never
+  emitted"; also why the AnsiString-result refusal is landed but not exercisable.
+- `tools-devtest#00` → plexus-T (`twatch_host_epoch_devtest.py`, one case, 44 others pass).
+- `feature-c-import-a-pascal-unit-under-a-mangled-name` core landed self-host green (`1b3ea136b`);
+  ticket stays in `working/` with §3 path collisions, §6 the bare-name experiment and `test/` cases
+  written down.
