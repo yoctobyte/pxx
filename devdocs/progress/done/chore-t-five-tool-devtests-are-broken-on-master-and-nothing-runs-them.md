@@ -116,4 +116,4 @@ real bug found (`autotriage`) is T's own tool and was fixed inline rather than
 routed.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit a1fd5715e.

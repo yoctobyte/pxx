@@ -167,4 +167,4 @@ which is the selector the job now carries, and the same three programs are still
 compiled and run.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 20de759f0.

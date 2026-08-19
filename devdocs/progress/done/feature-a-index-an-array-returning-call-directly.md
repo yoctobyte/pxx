@@ -127,4 +127,4 @@ fixed, and a case deleted rather than added (`normalise-dont-special-case`).
 Gate: `make compiler/pascal26` fixedpoint + `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 1df7a1926.
