@@ -1606,8 +1606,22 @@ exists, its banner says so and the banner outranks the queue order.
       tail -1 stable_linux_amd64/default/pin.log
       git log --oneline <that-sha>..HEAD -- compiler
 
-  If that lists anything, **pin** (`make stabilize-fast && make pin`, ~35s, announce the
-  lock to workers first — it covers BUILDS, not just pins).
+  If that lists anything, **pin** (~35s, announce the lock to workers first — it covers
+  BUILDS, not just pins). **Use this exact form:**
+
+      set -o pipefail
+      make stabilize-fast 2>&1 | tail -5 && make pin 2>&1 | tail -3
+
+  **`set -o pipefail` is LOAD-BEARING, not tidiness.** Without it a pipeline's exit status
+  is the LAST command's, so `make stabilize-fast 2>&1 | tail -5 && make pin` runs `make
+  pin` even when the build FAILED — `tail` exits 0 regardless. Verified 2026-08-19:
+  `false | tail -2 && echo RAN` prints RAN. The coordinator ran that unsound form for
+  four pins in one day. It never bit (every run printed `STABLE vNNN OK`), but the failure
+  it exposes is **pinning a binary whose self-host fixedpoint did not pass** — the one
+  property a bad pin can poison for everyone, and the entire reason the gate exists.
+
+  Caught by frank3, which hit the same chained-exit-status bug in a benchmark harness and
+  reported the shape rather than its own instance.
 
   **Scope, refined 2026-08-19 after the rule cried wolf on its first run:** only
   `compiler/**` matters. `lib/**` alone does NOT need a pin — lib units are compiled from
@@ -2649,3 +2663,39 @@ rerank it deliberately rather than inheriting the number).
   sha** (`PENDING-COMMIT`, `tools/sync.sh`). Both workers are busy, and racing them for the
   generated board files is how the rebase conflicts happen. Run it in a genuinely quiet
   window.
+
+- **TWO MEASUREMENT HAZARDS FROM frank3, and one of them was live in the coordinator's own
+  pin procedure.**
+
+  **1. A measurement in flight is also a lock on the CPU — and a benchmark is the
+  measurement most likely to be SILENTLY wrong rather than visibly broken.** frank3 ran a
+  before/after benchmark with three perturbation compiles still on the box (load 2.3), got
+  ~1.6-1.9x against a predicted ~4x, and caught itself *starting to explain the shortfall*.
+  Its own framing: **a contaminated correctness run usually errors; a contaminated
+  benchmark just returns a plausible number** — so it would have shipped a wrong ratio with
+  a story attached. Discarded, not caveated, per the rule from the previous check.
+
+  This is the second half of "a measurement in flight is a lock on the files it reads",
+  and it widens the coordinator's obligation: **a pin is a CPU event as much as a tree
+  event.** Do not pin while a benchmark is running, even though a pin cannot corrupt its
+  files.
+
+  **2. A stale binary of unknown provenance in the scratchpad.** frank3 nearly reported
+  numbers from a `bench_new` left by an earlier session: the compile that was supposed to
+  produce it had **failed**, the stale binary ran anyway and printed sensible-looking rows.
+  Caught only because the row labels did not match the source just written. CLAUDE.md's
+  "verify against a known sha" is usually read as being about the *compiler* binary — **it
+  applies to the harness too.**
+
+  **And the mechanism behind it was live HERE.** `make x 2>&1 | tail && make y` runs `y`
+  even when `x` failed, because a pipeline's status is the last command's and `tail` always
+  succeeds. **That is exactly the form the coordinator used for all four of today's pins**
+  — so a failed `stabilize-fast` would have been followed by `make pin` regardless, pinning
+  a binary whose fixedpoint never passed. Verified with `false | tail -2 && echo RAN`.
+  Never bit, because every run printed `STABLE vNNN OK`; the pin command in the standing
+  rules above now carries `set -o pipefail` and says why.
+
+  **Worth naming: a worker reporting the SHAPE of its own mistake rather than just its
+  instance is what let this be caught in the coordinator's procedure.** frank3 had no
+  reason to think the pin loop had the same bug, and did not go looking — describing the
+  mechanism was enough.
