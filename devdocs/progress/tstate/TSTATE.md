@@ -3,8 +3,11 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `fbf06b40826c` | 2026-08-19T11:59:09Z | GREEN (native) | 224.9s | `9bfb7fcfac03` GREEN |
+| plexus | `9bbbbef6c055` | 2026-08-19T12:04:30Z | RED (native) | 222.6s | `9bfb7fcfac03` GREEN |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- none
+- **test-core#src:examples/tk/callbacks.npy** — examples/tk/callbacks.npy test/test_nilpy_kwargs_by_name.npy (plexus): bad `9bbbbef6c055`, last good `fbf06b40826c`, 3 commit(s) in range
+- **test-core#src:examples/tk/field_class_identity.npy** — examples/tk/field_class_identity.npy (plexus): bad `9bbbbef6c055`, last good `fbf06b40826c`, 3 commit(s) in range
+- **test-core#src:test/test_nilpy_bound_method_in_module.npy** — test/test_nilpy_bound_method_in_module.npy (plexus): bad `9bbbbef6c055`, last good `fbf06b40826c`, 3 commit(s) in range
+- **test-core#src:test/test_nilpy_from_import_as_rename.npy** — test/test_nilpy_from_import_as_rename.npy test/test_nilpy_renamed_class_is_not_a_module.npy (plexus): bad `9bbbbef6c055`, last good `fbf06b40826c`, 3 commit(s) in range

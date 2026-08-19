@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-18T19:59:43Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "df15ae3fe1dcc21de6db6634f2a271b61aa24764",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-18T20:04:22Z",
    "fixed": [],
    "new_red": [],
@@ -409,6 +401,19 @@
    "sha": "fbf06b40826ca6843b5413d9924b5f2290ee2af5",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-19T12:04:30Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:examples/tk/callbacks.npy",
+    "test-core#src:examples/tk/field_class_identity.npy",
+    "test-core#src:test/test_nilpy_bound_method_in_module.npy",
+    "test-core#src:test/test_nilpy_from_import_as_rename.npy"
+   ],
+   "sha": "9bbbbef6c055ea4c823867de7960f4ac05d93348",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -3713,9 +3718,9 @@
   "test-core#140": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
-  "test-core#src:examples/tk/callbacks.npy": "pass",
+  "test-core#src:examples/tk/callbacks.npy": "fail",
   "test-core#src:examples/tk/facade_and_paths.npy": "pass",
-  "test-core#src:examples/tk/field_class_identity.npy": "pass",
+  "test-core#src:examples/tk/field_class_identity.npy": "fail",
   "test-core#src:examples/tk/import_in_body.npy": "pass",
   "test-core#src:examples/tk/shadow_format_except.npy": "pass",
   "test-core#src:examples/tk/tkinter_facade.npy": "pass",
@@ -4523,7 +4528,7 @@
   "test-core#src:test/test_nilpy_bitwise_on_booleans.npy": "pass",
   "test-core#src:test/test_nilpy_bool.npy": "pass",
   "test-core#src:test/test_nilpy_bool_is_an_int_not_ole_minus_one.npy": "pass",
-  "test-core#src:test/test_nilpy_bound_method_in_module.npy": "pass",
+  "test-core#src:test/test_nilpy_bound_method_in_module.npy": "fail",
   "test-core#src:test/test_nilpy_builtin_shadow_slice.npy": "pass",
   "test-core#src:test/test_nilpy_builtin_subclass_dunder_dispatch.npy": "pass",
   "test-core#src:test/test_nilpy_bytes_methods.npy": "pass",
@@ -4557,7 +4562,7 @@
   "test-core#src:test/test_nilpy_float_repr_roundtrip.npy": "pass",
   "test-core#src:test/test_nilpy_fnvalue_abi.npy": "pass",
   "test-core#src:test/test_nilpy_forward_module_global.npy": "pass",
-  "test-core#src:test/test_nilpy_from_import_as_rename.npy": "pass",
+  "test-core#src:test/test_nilpy_from_import_as_rename.npy": "fail",
   "test-core#src:test/test_nilpy_from_import_binds_provided_names.npy": "pass",
   "test-core#src:test/test_nilpy_genexp_isinstance_star.npy": "pass",
   "test-core#src:test/test_nilpy_html_tempfile.npy": "pass",
@@ -5970,11 +5975,11 @@
   "test-zlib#src:tools/install_lib_candidates.sh": "pass"
  },
  "last": {
-  "date": "2026-08-19T11:59:09Z",
-  "sha": "fbf06b40826ca6843b5413d9924b5f2290ee2af5",
+  "date": "2026-08-19T12:04:30Z",
+  "sha": "9bbbbef6c055ea4c823867de7960f4ac05d93348",
   "tier": "native",
-  "verdict": "GREEN",
-  "wall": 224.9
+  "verdict": "RED",
+  "wall": 222.6
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6003,7 +6008,68 @@
  "migrated_from": [
   "borg"
  ],
- "open_regressions": [],
+ "open_regressions": [
+  {
+   "bad": "9bbbbef6c055ea4c823867de7960f4ac05d93348",
+   "good": "fbf06b40826ca6843b5413d9924b5f2290ee2af5",
+   "job": "test-core#src:examples/tk/callbacks.npy",
+   "name": "test-core#1087",
+   "opened": "2026-08-19T12:04:30Z",
+   "pin_built": false,
+   "range": [
+    "9cac6a4e7a8ce5673d39c5e838f2f1c9a422f492",
+    "a4b39833d56833620ce00b3e263fabc2a59db05e",
+    "9bbbbef6c055ea4c823867de7960f4ac05d93348"
+   ],
+   "src": "examples/tk/callbacks.npy test/test_nilpy_kwargs_by_name.npy",
+   "status": "fail"
+  },
+  {
+   "bad": "9bbbbef6c055ea4c823867de7960f4ac05d93348",
+   "good": "fbf06b40826ca6843b5413d9924b5f2290ee2af5",
+   "job": "test-core#src:examples/tk/field_class_identity.npy",
+   "name": "test-core#1086",
+   "opened": "2026-08-19T12:04:30Z",
+   "pin_built": false,
+   "range": [
+    "9cac6a4e7a8ce5673d39c5e838f2f1c9a422f492",
+    "a4b39833d56833620ce00b3e263fabc2a59db05e",
+    "9bbbbef6c055ea4c823867de7960f4ac05d93348"
+   ],
+   "src": "examples/tk/field_class_identity.npy",
+   "status": "fail"
+  },
+  {
+   "bad": "9bbbbef6c055ea4c823867de7960f4ac05d93348",
+   "good": "fbf06b40826ca6843b5413d9924b5f2290ee2af5",
+   "job": "test-core#src:test/test_nilpy_bound_method_in_module.npy",
+   "name": "test-core#1181",
+   "opened": "2026-08-19T12:04:30Z",
+   "pin_built": false,
+   "range": [
+    "9cac6a4e7a8ce5673d39c5e838f2f1c9a422f492",
+    "a4b39833d56833620ce00b3e263fabc2a59db05e",
+    "9bbbbef6c055ea4c823867de7960f4ac05d93348"
+   ],
+   "src": "test/test_nilpy_bound_method_in_module.npy",
+   "status": "fail"
+  },
+  {
+   "bad": "9bbbbef6c055ea4c823867de7960f4ac05d93348",
+   "good": "fbf06b40826ca6843b5413d9924b5f2290ee2af5",
+   "job": "test-core#src:test/test_nilpy_from_import_as_rename.npy",
+   "name": "test-core#1131",
+   "opened": "2026-08-19T12:04:30Z",
+   "pin_built": false,
+   "range": [
+    "9cac6a4e7a8ce5673d39c5e838f2f1c9a422f492",
+    "a4b39833d56833620ce00b3e263fabc2a59db05e",
+    "9bbbbef6c055ea4c823867de7960f4ac05d93348"
+   ],
+   "src": "test/test_nilpy_from_import_as_rename.npy test/test_nilpy_renamed_class_is_not_a_module.npy",
+   "status": "fail"
+  }
+ ],
  "pin_shadow": {
   "at": "2026-08-19T10:31:57Z",
   "qualifies": true,
