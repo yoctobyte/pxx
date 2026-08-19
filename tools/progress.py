@@ -105,6 +105,40 @@ def resolve_commit(path: Path) -> str:
     return shas[-1] if shas else ""
 # `resolve` writes "commit <sha>"; hand-written log lines use the same shape.
 CITATION_RE = re.compile(r"\bcommits?\s+`?([0-9a-f]{7,40})`?", re.I)
+# A citation resolving to a commit with one of these subjects is worth a HUMAN
+# look. It is not by itself an error, and the difference matters:
+#
+#   * a ticket closed as a DUPLICATE, or as already-fixed-elsewhere, has no fix
+#     commit — the docs commit IS its resolution, and the citation is correct;
+#   * a ticket whose fix and resolve landed as SEPARATE commits, filled by the
+#     old `git log -S` path in sync.sh, cites the fill or the resolve instead of
+#     the fix. Verified instance: bug-a-virtual-method-int64-in-and-out-32bit
+#     cites fd99c8836 (docs) where the fix is 77d32b346, "fix(A): 32-bit virtual
+#     calls dropped the high half of a 64-bit argument".
+#
+# Nothing in the sha distinguishes those two, so this REPORTS and never repairs.
+# Matching a citation against `git log` to "correct" it is the operation already
+# on record as wrong (~82% of bad citations look fixable that way and are not),
+# and a confidently wrong citation is worse than a missing one because it reads
+# as authoritative. Strict-only, so it surfaces when someone audits rather than
+# on every run.
+# Deliberately NARROW: subjects a TOOL wrote, not ones an agent wrote. The first
+# draft matched any `tstate(...)` and reported 65, most of them legitimate —
+# `tstate(A): close aarch64 large-double formatting` is an agent closing a ticket
+# and is a perfectly good citation. The watcher's own publishes follow a rigid
+# format (`tstate(<host>): <12-hex> <VERDICT>`, or `opt|slow|bench|pin <sha>`),
+# and the sync fill has one exact subject. A ticket citing one of THOSE is
+# citing a machine that never fixed anything.
+#
+# 65 findings, most of them fine, is how a guard gets muted — the failure this
+# repo has recorded more than once. Narrow beats complete here.
+BOOKKEEPING_SUBJECT = re.compile(
+    r"^(?:"
+    r"docs\(progress\): record the shas the resolves landed as"
+    r"|tstate\([^)]+\):\s+(?:[0-9a-f]{12}\b|(?:opt|slow|bench|pin|full|native)\b)"
+    r"|board: regenerate"
+    r")", re.I)
+SELF_RESOLVE = re.compile(r"^docs\(progress\):\s*resolve\b", re.I)
 
 
 def ensure_dirs() -> None:
@@ -990,17 +1024,26 @@ pre code{background:none;padding:0}
         ~9k commits costs ~0.2s, so the whole audit is a single subprocess.
         """
         try:
+            # subjects come from the SAME pass: the bookkeeping-citation arms
+            # below need one per cited sha, and doing that as 1400 `git log -1`
+            # calls cost 17s where this costs the same ~0.2s as before.
             out = subprocess.run(
-                ["git", "rev-list", "origin/master"], cwd=ROOT, text=True,
-                capture_output=True, check=True, timeout=60).stdout
+                ["git", "log", "--format=%H%x00%s", "origin/master"], cwd=ROOT,
+                text=True, capture_output=True, check=True, timeout=60).stdout
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
-            return [], []          # no origin (fresh clone, scratch repo) — skip
+            return [], [], []      # no origin (fresh clone, scratch repo) — skip
         by_prefix: dict[str, list[str]] = defaultdict(list)
-        for sha in out.split():
+        subjects: dict[str, str] = {}
+        for line in out.splitlines():
+            sha, _, subj = line.partition("\0")
+            if not sha:
+                continue
             by_prefix[sha[:7]].append(sha)
+            subjects[sha] = subj
 
         pending: list[str] = []
         dead: list[tuple[str, str]] = []
+        bookkeeping: list[tuple[str, str, str]] = []
         # A placeholder is wrong in ANY bucket — a ticket can be resolved and
         # filed onward (done-followup/) in one commit. Dead-sha auditing stays
         # on the resolved buckets: an open ticket citing an old commit in prose
@@ -1015,13 +1058,31 @@ pre code{background:none;padding:0}
             for t in self.by_status[st]:
                 if PENDING_RE.search(t.text):
                     pending.append(t.slug)
-        for st in ("done", "decided", "done-followup"):
+        for st in RESOLVED_BUCKETS:
             for t in self.by_status[st]:
                 for sha in CITATION_RE.findall(t.text):
                     if not any(full.startswith(sha)
                                for full in by_prefix.get(sha[:7], ())):
                         dead.append((t.slug, sha))
-        return pending, dead
+                        continue
+                    full = next((f for f in by_prefix.get(sha[:7], ())
+                                 if f.startswith(sha)), None)
+                    subj = subjects.get(full, "") if full else ""
+                    if not subj:
+                        continue
+                    # Arm 1: a WATCHER publish. That process never fixed
+                    # anything, so a ticket citing one is citing an observation.
+                    if BOOKKEEPING_SUBJECT.match(subj):
+                        bookkeeping.append((t.slug, sha, subj))
+                    # Arm 2: SELF-REFERENTIAL — the ticket cites the commit
+                    # whose whole content is resolving that same ticket. Perfect
+                    # precision on the one instance anybody has verified
+                    # (bug-a-virtual-method-int64-in-and-out-32bit cites
+                    # fd99c8836 where the fix is 77d32b346), and it finds
+                    # exactly that one across all 1424 cited shas.
+                    elif SELF_RESOLVE.match(subj) and t.slug in subj:
+                        bookkeeping.append((t.slug, sha, subj))
+        return pending, dead, bookkeeping
 
     def check(self, strict: bool = False) -> tuple[int, str]:
         problems = 0
@@ -1215,7 +1276,7 @@ pre code{background:none;padding:0}
                 f"(check does not rewrite prose)"
             )
 
-        pending, dead = self._audit_citations()
+        pending, dead, bookkeeping = self._audit_citations()
         for slug in pending:
             warning_count += 1
             if strict:
@@ -1228,6 +1289,20 @@ pre code{background:none;padding:0}
             if strict:
                 lines.append(
                     f"WARN-DEAD-COMMIT: {slug} cites {sha}, which is on no branch of origin/master"
+                )
+        # Reported one per line WITH the cited subject, because the subject is
+        # what a reader judges on — "close the duplicate ..." is a correct
+        # citation, "record the shas the resolves landed as" is not. Deliberately
+        # not counted as a problem and never repaired; see BOOKKEEPING_SUBJECT.
+        for slug, sha, subj in bookkeeping:
+            warning_count += 1
+            if strict:
+                lines.append(
+                    f"WARN-BOOKKEEPING-CITATION: {slug} cites {sha} "
+                    f"\u2014 {subj!r}. If that commit IS the resolution (a duplicate "
+                    f"close, or already fixed elsewhere) this is correct; if the fix "
+                    f"landed separately, the citation names the wrong commit. Fix by "
+                    f"hand with the ticket open \u2014 do not bulk-match against git log."
                 )
         if not strict and (pending or dead):
             if pending:

@@ -1313,6 +1313,7 @@ should not read it to find out what to do. Grep it freely._
 | chore-repin-new-intrinsics | A | 50 | chore | chore: re-pin stable to expose the new System intrinsics to Track B | — |
 | chore-sqlite-static-capacity-bumps | A | 30 | chore | sqlite arc — interim static capacity bumps | — |
 | chore-stable-binary-single-file-no-version-churn | A | 50 | chore | Stable binary: fixed-name overwrite (kill `vN` churn + the dangling-symlink trap) | — |
+| chore-t-detect-citations-that-name-a-bookkeeping-commit | T | 30 | chore | Detect citations that name a bookkeeping commit, never repair them | — |
 | chore-t-five-tool-devtests-are-broken-on-master-and-nothing-runs-them | T | 45 | chore | Five of the 33 `tools/*devtest*.py` guards fail on a clean master, and one of them is a real discipline violation rather than test rot: `tstate_reader_devtest` names five tools reading tstate by filesystem path that are not in ALLOWED. Nothing runs any of them — they are in no Makefile target — so they have been rotting unobserved. | — |
 | chore-twatch-run-from-clone | T | 50 | chore | The watcher daemon executes the DEV CHECKOUT's twatch.py while testing the clone | — |
 | compat-c-zlib-oracle-breaks-on-gcc14plus | C | 45 | compat | test-zlib's gcc oracle fails to build on gcc >= 14 (implicit-function-declaration is now an error), so the job reds on any modern host | — |

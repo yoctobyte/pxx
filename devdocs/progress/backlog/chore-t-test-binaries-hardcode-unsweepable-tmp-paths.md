@@ -128,3 +128,77 @@ than working around it here.
 No `/tmp` path hardcoded in a compiled test source outside the agreed pinned
 set; a suite run with a non-default `TESTTMP` leaves `/tmp` untouched; two
 concurrent runs with different `TESTTMP` values share no file.
+
+## 2026-08-19, Track T — the guard is built; here is the per-lane split
+
+T's half is done: `tools/testmgr_hardcoded_tmp_devtest.py`, in `make tools-devtest`
+(limited + full), so the class is **detectable** instead of rediscovered. The
+per-source work stays with the owning lanes, as this ticket's Ownership section
+says and as T's boundary requires.
+
+It is a **RATCHET**: the 61 existing pairs sit in `KNOWN` and the guard is green
+on them; anything not listed FAILS. Verified by adding a probe source with a
+hardcoded path — it failed, naming the file and the path — and green again once
+removed. When a lane fixes a file, the guard prints
+`… no longer hardcodes … — remove it from KNOWN`, so the list tightens rather
+than drifting into a permanent allowlist.
+
+**The ratchet is the right shape because the class is still GROWING.** This
+ticket recorded 37 files at its landing commit; there are **40** today. `/tmp/x`
+went away and `/tmp/b` arrived
+(`test/test_nilpy_oserror_class_and_message.npy`), along with
+`test_nilpy_bare_genexpr_arguments.npy`, `test_nilpy_file_writelines.npy` and
+`test_nilpy_sqlite_crud.npy`. Fixing 60 while the 61st is being written is not
+progress.
+
+### Two corrections to the counts above
+
+Both come from scanning **string literals** rather than raw text, which is the
+right measure for "a path the binary writes at runtime":
+
+- **`/tmp/httpdemo` is a comment**, not a runtime path — `examples/net/httpdemo.pas`
+  line 13 shows the build command. It is in the "pinned" set above on the
+  strength of the Makefile also naming it, but the SOURCE never opens it.
+- **`/tmp/x` is a comment too**, in both `test/csqlite_thread_test.c` and
+  `test/csqlite_parity_selfcompiled.c`. The ticket calls it *"the single most
+  likely name in the repo to be clobbered from outside"* — and at runtime
+  neither test opens it at all. That collision does not exist.
+
+A path a binary never writes cannot collide, so the residue is **61 pairs across
+39 files**, not 60 across 37, and it is differently distributed than the table
+suggests.
+
+### The split, ready to route
+
+| lane | files | paths | what they are |
+| --- | --- | --- | --- |
+| **C** | 12 | 21 | the `.c` fixtures plus `test/lua/files.lua` |
+| **N** | 14 | 18 | the `.npy` tests, mostly one path each |
+| **B** | 6 | 17 | `test/lib_*.pas` — directory, textfile, platform, fpc-surface |
+| **P** | 5 | 5 | the remaining `test/*.pas` — sysopen, sqlite_crud, textfile, writeln |
+
+N is the largest by file count and the cheapest per file (14 files, 18 paths,
+almost all a single scratch file honouring `$TESTTMP` with a getenv). C is the
+largest by path count and holds both load-bearing cases. **B and P are small
+enough to be one sitting each.**
+
+### Load-bearing — these are NOT sweepable, and the guard says so in its header
+
+Recorded here because a future sweeper will otherwise "fix" both and break them
+silently, and until now the only place this was written down was a chat message:
+
+- **`test/lib_platform_esp.pas`** — `/tmp/no-host-fallback`,
+  `-2`, `-dir` exist to prove the ESP PAL **refuses** them. Any path proves it;
+  one that silently succeeds does not.
+- **`test/crtl_stat_errno_enoent_b235.c`** —
+  `/tmp/pxx_b235_no_such_dir_zzz/nope.file` depends on **not existing**.
+  Relocating it under a fresh scratch dir is fine; creating it is not.
+
+`test/lib_directory.pas`, `cfileops.c` and `cstat_fields.c` create directory
+TREES rather than single files, so they want reading before rewriting too — they
+are not one-line getenv changes.
+
+### What T is not doing
+
+Not editing the 39 sources (three other lanes own them), and not filing the four
+lane tickets — routing is the coordinator's. This section is the proposal.
