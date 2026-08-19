@@ -3834,3 +3834,48 @@ than broken; T said plainly they make lower branches reachable, not fast.
 
 Coverage risk is real and accumulating (62 commits with no cross verdict), so this is a bounded
 wait, not a bet. `a54259aab`, `354f734c1` and everything since remain native-only.
+
+## Check +26h — the breadth fix WORKED, and it immediately found 13 reds
+
+**The bounded wait paid off and no quiet period was needed.**
+
+    before (check +25h):  newest full tier 6h old, 62 testable commits behind
+    now   (check +26h):   newest full tier 1h old,  2 testable commits behind
+
+Track T's shapes 4 and 2 (18:07:41 and 18:19:32) reached a window on their own, which is the
+claim they made. **Not over-credited: one window is not a rate**, and T is deliberately holding
+its resume-stats reporting until there is one.
+
+### And the first full tier in six hours came back RED — 13 jobs, four lanes
+
+`regression-cascade-21f098e32a95`, full tier 17:28Z, wall 1230s. **`parent_tested == sha`, so
+nothing was bisected: the "bad" commit is only the upper bound of a 261-COMMIT untested
+range.** This is exactly the shape T's cascade-range fix was built for, on a range 15x longer
+than the incident that motivated it.
+
+    lib-test#…lib_mimic_xml_etree_elementtree.npy   Track B ground
+    test-nilpy#… 10 jobs, seven of them cpyext      N
+    test-riscv32#…test_cross_float.pas              A (cross; names tools/run_target.sh)
+    tools-devtest#00                                T (T's own — hand over, do not fix)
+
+**Routed to frank2 with the mandate question answered explicitly**, because it will come up
+again: the standing mandate defers Track N *features and bugs*; a **regression is worked at the
+priority of being red regardless of subject** — the same rule we settled for float. Triage all
+13; fix where the cause is in A/P/C ground; if the cause is genuinely an N defect, **file it and
+stop**. That is the line between honouring the mandate and letting a red rot.
+
+**The first failure is not import-shaped**, which is worth saying because the last two cascades
+were: the ElementTree job **compiles** (`ok:` line, 1758 procs) and then dies at runtime with
+*"can only concatenate str (not \"method\") to str"* — a method-vs-bound-method distinction,
+which smells like the callable-representation family. Whether all ten NilPy jobs share that
+shape or split into two causes is the first question, and 13-in-one-sweep is ONE root cause
+until triage proves otherwise.
+
+**PIN HELD — and this time for a stronger reason than churn.** Four `compiler/**` commits sit
+past v365's base (`da53bbd26`, `e6a14039a`, and carve steps `fd6ec21a3` + `832a42d02`).
+**Nothing gets blessed over an unexplained 13-job cascade**, because a pin puts every lane on
+that ground. Reassess when frank2 has attribution and frank3 lands carve step 3/3.
+
+**Both workers were idle** (owner set a low autocompact threshold on both) and are now
+dispatched: frank2 on the cascade, frank3 finishing the carve. frank3's `working/` lock is
+correctly held on `task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc`.
