@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 summary: "A backslash immediately before a newline INSIDE a string literal is emitted as a literal backslash plus newline instead of being consumed as a line continuation. Affects ordinary and triple-quoted literals alike. Silent wrong VALUE — found because webencodings/mklabels.py generated a file with a stray leading backslash line."
 status: done
-commit: PENDING-COMMIT
+commit: 9ffc1637f
 ---
 
 # `\` before a newline inside a string literal is not a line continuation

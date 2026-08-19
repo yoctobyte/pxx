@@ -3,7 +3,7 @@ track: N
 prio: 45
 type: bug
 blocked-by: []
-commit: PENDING-COMMIT
+commit: 5a81d19aa
 summary: "`sorted(xs, key=str)` SEGFAULTED — a builtin type held as a value is a VT_BTYPE variant, the key slot is a raw code Pointer, and the coercion passed the variant's TAG WORD as a code address, so the program jumped to address 13. Fixed with the second half it exposed: str() of a container through the dynamic path answered the empty string."
 ---
 

@@ -2,7 +2,7 @@
 track: N
 prio: 45
 type: bug
-commit: PENDING-COMMIT
+commit: d4909f095
 summary: "Calling through a Callable FIELD segfaults when the field belongs to a @dataclass (or is typed only by a ctor parameter). The same field on a plain class with a class-level annotation works. This is what makes uforth segfault at run time."
 ---
 

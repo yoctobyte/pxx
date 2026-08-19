@@ -3,7 +3,7 @@ track: T
 prio: 60
 type: bug
 blocked-by: []
-commit: PENDING-COMMIT
+commit: c99f15692
 claimed-by: plexus-T
 summary: "A job's class timeout is the budget for an UNMEASURED job, and `min(cls_to * scale, ...)` kept it as a ceiling over a MEASURED one. A job whose own EWMA passes its class budget is then killed at that ceiling on every run forever, and `learn_timeout` cannot rescue it because the same `min()` clamps the raise it just stored. Measured on `lib-test#src:test/crtl_exp2.c`: EWMA 107.5s under a 90s `unit` budget — RED in every full tier for three days while passing standalone in 73.5s."
 status: done

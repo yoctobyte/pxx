@@ -3,7 +3,7 @@ track: N
 prio: 30
 type: bug
 blocked-by: []
-commit: PENDING-COMMIT
+commit: 4ce56f1a9
 summary: "`f(1, *xs)` — a star anywhere but the first argument of a plain function — reported \"expected expression\" pointing at the operand, while the identical `obj.m(1, *xs)` worked. One construct, two spellings, one of them wired. The ticket's own table was measured wrong: bound methods were never broken; the remaining gaps are the fixed-arity builtins, re-filed."
 status: done
 ---

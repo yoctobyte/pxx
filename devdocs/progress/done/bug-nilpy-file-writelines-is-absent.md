@@ -3,7 +3,7 @@ track: N
 prio: 30
 type: bug
 blocked-by: []
-commit: PENDING-COMMIT
+commit: 89021e5c5
 summary: "`f.writelines(lines)` raised 'TPyFile has no method writelines' — the ordinary way to write a list of lines. Added, taking any iterable through pyseq_of_obj and adding no separator, as CPython does."
 ---
 

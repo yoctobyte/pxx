@@ -3,7 +3,7 @@ track: N
 prio: 35
 type: bug
 blocked-by: []
-commit: PENDING-COMMIT
+commit: 9496262c9
 summary: "Assigning a nested def's value to an OUTER name of the same spelling — `g = make()` over a `def g` inside make — bound None: the def is a LOCAL of the enclosing scope and must shadow the module global, but three gates asked only whether a symbol of that name existed at all."
 status: done
 ---

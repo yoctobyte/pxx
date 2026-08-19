@@ -3,7 +3,7 @@ track: T
 prio: 60
 type: bug
 blocked-by: []
-commit: PENDING-COMMIT
+commit: c45ed0062
 claimed-by: plexus-T
 summary: "`already_filed` scans every bucket including `done/` and `rejected/`, so once a job's regression ticket is RESOLVED that job can never auto-file a stub again — silently, because the filing loop just `continue`s and prints nothing. 182 resolved `regression-*` slugs on this repo are in that state. Caught when `lib-test#src:test/lib_tls.pas` went NEW-RED and no stub appeared, its predecessor having closed with the words 'reopening is by a fresh NEW-RED stub'."
 status: done

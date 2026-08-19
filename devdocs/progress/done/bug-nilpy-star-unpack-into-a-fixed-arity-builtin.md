@@ -3,7 +3,7 @@ track: N
 prio: 30
 type: bug
 blocked-by: []
-commit: PENDING-COMMIT
+commit: b5beb1cea
 summary: "`zip(*rows)` — the transpose idiom — did not parse, `zip` of five streams was refused outright, and `max(*xs)` compiled and then raised at run time. One cause: the arity was settled while PARSING. pyiter_zip_n over a LIST of iterables replaces the fixed chain and deletes the four-stream ceiling with it. `sum(*xs)` re-filed."
 status: done
 ---

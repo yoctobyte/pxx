@@ -3,7 +3,7 @@ track: N
 prio: 35
 type: bug
 blocked-by: []
-commit: PENDING-COMMIT
+commit: 60d4e9799
 summary: "`lambda a, b=2:` was a parse error — the frontend read every `name=value` in a lambda header as the `key=key` CAPTURE idiom and demanded a bare name. There is no such thing as a capture in Python: it is a default argument evaluated at definition time, which is now the one path all of them take."
 ---
 

@@ -3,7 +3,7 @@ track: N
 prio: 45
 type: bug
 blocked-by: []
-commit: PENDING-COMMIT
+commit: 17c01ba0a
 summary: "A NESTED def with a defaulted parameter ignored the caller's value for it: `def inc(by=1)` inside a function answered inc(2) as if it were inc(). The call bridge clips arguments past the non-defaulted count, and only the LAMBDA lifter ever told it which bound slots are defaults."
 ---
 

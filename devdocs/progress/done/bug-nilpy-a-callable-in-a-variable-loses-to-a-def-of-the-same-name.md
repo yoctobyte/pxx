@@ -3,7 +3,7 @@ track: N
 prio: 70
 type: bug
 blocked-by: []
-commit: PENDING-COMMIT
+commit: 5fc7dc358
 claimed-by: frankonpiler-an
 summary: "A variable holding a callable (a bound method, a lambda) loses to a module-level `def` of the same name: the call silently runs the WRONG function. Top wall of the third-party ladder — one root cause behind 12 of the 38 remaining failures."
 status: done

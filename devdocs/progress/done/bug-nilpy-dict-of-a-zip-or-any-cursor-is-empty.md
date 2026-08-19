@@ -3,7 +3,7 @@ track: N
 prio: 40
 type: bug
 blocked-by: []
-commit: PENDING-COMMIT
+commit: 3b11c7e30
 summary: "`dict(zip(names, values))` — the commonest way to build a dict — answered {} silently: zip hands back a cursor, the call boxed it, and dict's only variant arm asked 'is it a TPyDict'. Every non-dict iterable of pairs answered empty."
 ---
 

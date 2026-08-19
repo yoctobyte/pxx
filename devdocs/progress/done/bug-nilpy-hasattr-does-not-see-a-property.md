@@ -3,7 +3,7 @@ track: N
 prio: 35
 type: bug
 blocked-by: []
-commit: PENDING-COMMIT
+commit: d9d3f39f1
 summary: "`hasattr(e, \"args\")` answered False about a property the next line reads fine — hasattr consulted fields and methods but not PROPERTIES. Fixing it alone made getattr RAISE for a name hasattr had just approved, so getattr learned to build the property read too."
 ---
 

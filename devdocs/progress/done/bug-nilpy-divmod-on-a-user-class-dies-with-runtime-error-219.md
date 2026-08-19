@@ -3,7 +3,7 @@ track: N
 prio: 25
 type: bug
 blocked-by: []
-commit: PENDING-COMMIT
+commit: 250cbc198
 summary: "`divmod(obj, n)` on a class declaring __divmod__ died with a bare 'Runtime error 219'. TWO gates were wrong: the caller demanded that BOTH operands be objects, so the dunder was never reached at all; and the dispatcher behind it demanded RetKind 6 while an unannotated def returning a tuple returns a Variant."
 status: done
 ---

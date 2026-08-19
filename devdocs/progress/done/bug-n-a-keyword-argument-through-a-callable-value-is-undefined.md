@@ -4,7 +4,7 @@ prio: 72
 type: bug
 blocked-by: []
 summary: "`d = obj.meth; d('x', flag=True)` fails with `undefined variable (flag)` — a callable value carries no parameter NAMES, so a keyword argument has nothing to match against. No name collision anywhere; the sibling of the already-known defaults gap on the same carrier. Distinct from the shadowing bug that produces the corpus's `decode has no parameter named 'final'`."
-commit: PENDING-COMMIT
+commit: 9e711a681
 claimed-by: frankonpiler-an
 status: done
 ---

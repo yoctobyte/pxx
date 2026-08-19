@@ -3,7 +3,7 @@ track: N
 prio: 45
 type: bug
 summary: "`.to_bytes()` on a VARIANT receiver failed at COMPILE time with 'no class declares a method or callable field .to_bytes()' — the intrinsic was gated on a statically int receiver. It is what stopped the uforth corpus compiling at all."
-commit: PENDING-COMMIT
+commit: e0c18f95a
 ---
 
 # `.to_bytes()` on a variant receiver does not compile

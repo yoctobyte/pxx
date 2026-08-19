@@ -4,7 +4,7 @@ prio: 90
 type: bug
 blocked-by: []
 summary: "Pin v357 breaks `make lib-test`: examples/tk/callbacks.npy and htmlview.npy stop compiling with `callable value of a def with no signature record`. Green on v356, red on v357, clean tree. Track B's gate is red on the pin it is required to build with, so B is blocked outright until this is fixed or the pin reverted."
-commit: PENDING-COMMIT
+commit: 21c051b97
 status: done
 ---
 

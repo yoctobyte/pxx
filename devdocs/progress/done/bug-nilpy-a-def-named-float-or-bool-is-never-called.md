@@ -3,7 +3,7 @@ track: N
 prio: 40
 type: bug
 status: done
-commit: PENDING-COMMIT
+commit: 422334d1c
 summary: "NilPy: `def float(x)` / `def bool(x)` were never called — their NilPy arms in ParseFactorCore claimed the name unconditionally, with none of the `not PyUserShadowsProc(name)` guard `int` and `str` beside them carry. Silent, on both sides of the def."
 ---
 

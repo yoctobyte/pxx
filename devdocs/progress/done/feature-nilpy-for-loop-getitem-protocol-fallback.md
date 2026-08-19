@@ -4,7 +4,7 @@ prio: 25
 type: feature
 blocked-by: []
 status: done
-commit: PENDING-COMMIT
+commit: 6905d6fd0
 ---
 
 # `for x in obj:` doesn't fall back to `__getitem__`/`__len__` for a custom container

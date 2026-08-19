@@ -3,7 +3,7 @@ track: N
 prio: 45
 type: bug
 summary: "`input()` never reached a call lowering — `Input` is a standard Pascal identifier (the text file), so `line = input()` bound the file variable and the failure surfaced later and unrecognisably at the first USE of the result"
-commit: PENDING-COMMIT
+commit: 744fb89bb
 ---
 
 # `input()` is shadowed by Pascal's standard `Input` text file

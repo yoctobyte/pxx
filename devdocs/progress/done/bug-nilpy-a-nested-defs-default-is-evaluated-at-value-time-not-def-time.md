@@ -3,7 +3,7 @@ track: N
 prio: 30
 type: bug
 blocked-by: []
-commit: PENDING-COMMIT
+commit: c582d219c
 summary: "A nested def's default was bound where the def was taken as a VALUE, not at the `def` statement, so reassigning the name in between changed it. The def-time value already existed in a hidden global — and a SECOND bug meant that global's symbol index was the trial parse's rolled-back one, so `r = h()` answered None where `return h()` was right."
 status: done
 ---
