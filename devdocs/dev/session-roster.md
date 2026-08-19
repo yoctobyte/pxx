@@ -4596,3 +4596,23 @@ logged, so the identity check was exercised rather than bypassed**, and `superse
 pre-fix 11 throughout. Before: 9/9, 10/10, 11/11 — every partial evicted. Only 15 jobs recovered
 because the abort landed 40s into a 21-minute run; **the number is not the point, the point is it is
 now whatever the abort left instead of always zero.**
+
+## Check +31h — quiet, nothing blocked, nothing dispatched
+
+Pin v367 stands, `compiler/**` unmoved since `d47acfee7`. Newest full tier `49a511e43271`
+(23:23:18Z, 9m old at check time): **2779 pass / 9 fail**, and the nine are exactly the inherited
+set — six cpyext, the callable `_fails` refusal test, `lib_mimic_xml_etree_elementtree.npy`,
+`test_cross_float.pas`. Nothing new since the last check.
+
+**The corroboration line is working as intended and re-refuted itself against a NEWER tier:** it now
+names `49a511e43271, 1h later` rather than the tier it was built against, so the refutation tracks
+breadth instead of being frozen at the moment it was written.
+
+**The cascade line shrank on its own** — `9 of 13 swept job(s) still red` (was 13), which is
+frank2's three migration fixes showing up in the sweep rather than anything new happening. Reads
+correctly now: the remaining nine are the six awaiting the U decision plus the three filed bugs.
+
+Both local workers idle and deliberately left down — same reason as +30h, unchanged: ~24h of
+context each on low autocompact thresholds, three substantial landings apiece, and nothing in any
+queue is time-critical. Track T continues unattended on plexus. **Next substantive dispatch belongs
+to a fresh context with the owner awake.**
