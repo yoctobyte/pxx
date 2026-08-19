@@ -2482,3 +2482,52 @@ rerank it deliberately rather than inheriting the number).
   those tickets are in its own lane; the real question was ordering, which is mine. It only
   looked like an ownership question because I framed it as reassigning them to frank3.
   Rule recorded above.
+
+- **PIN v356 (11:24Z) — the corpus's top lever is unblocked.** `2bb09afb0cff` (was
+  `739dfeb2d0e8`) at `5b93f1155a7b`. frank3 raised it as the one blocker it could not
+  route, and it was right: `feature-b-mimic-collections-abc-…` showed **READY** because
+  both blockers were in `done/`, while neither was in the pin — `810f219c3` 13:01 and
+  `6905d6fd0` 13:07 against v355 at 10:34. Verified independently here with
+  `merge-base --is-ancestor` (NO for both), and frank3 had already confirmed **by running
+  the pinned binary** rather than inferring from commit order.
+
+  **`ready` does not know about the pin.** A Track B ticket can rank READY on `done/`
+  blockers that Track B's ground cannot yet see. That is the "fixed at HEAD" vs "unblocked
+  for B" split wearing a new hat — the queue itself will tell you to start work that cannot
+  work. Worth watching for whenever a B ticket depends on compiler-side fixes.
+
+- **frank3: StrToFloat landed (`cc50090c2`), gate met first time in five passes.**
+  Subnormals 47-70x; cumulative from the filing rows ~184x mid-range, 259x small, 317x
+  subnormal, for +11.8 KB code and no table (Lemire's is +42 KB). ExBinNearest compares
+  `m·2^k` against `d·10^expo` in binary big integers — every power of two is a shift, and
+  `5^|expo|` is built once per parse rather than once per comparison. The Lemire-style
+  decline is **live, not dead code**: 43,528 values answered by the fast path, 800 still by
+  ExDecNearest on the gated test.
+
+  **The finding is about testing, and it came from the oracle instruction:** inverting
+  round-to-even changed **NOTHING** across 125,609 values, because random decimals
+  essentially never land exactly halfway between two doubles — **the tie branch had zero
+  coverage while looking thoroughly covered.** Twelve exact midpoints from CPython's
+  `Fraction` are now gated. The perturbation table is the right way to prove a suite has
+  teeth: 5^13 off-by-one → 23,272 mismatches; midpoint 2m+1→2m → 21,183; flipped tie rule
+  → 60; **dropped 2-power cancellation → 0**, which is the correct answer for a
+  semantically neutral change and is what makes the other three trustworthy.
+
+  **Two numbers withdrawn: CPython does NOT parse `1e-320` in 0.72 µs** — that target had
+  been in the ticket for two passes and does not reproduce; the real gap is **3-6x, not
+  15x**, and pxx is now **2.1x faster than CPython** for normals past Clinger's window.
+  frank3's own note: that is the **fourth** number in this ticket's history to need
+  re-measuring, "which is starting to look like a property of the ticket rather than of the
+  measurers." Same class as the three stale justifications found earlier today.
+
+  Second-order win worth noting: the gated test got **stronger because the fix made
+  coverage affordable** — its boundary blocks had been capped at 1500 values because each
+  cost ~500 µs; now 112,207 values in 1.8 s where it was 73,195 in 2.8 s. Next lever filed
+  (`feature-b-strtofloat-big-integers-in-64-bit-limbs`, p25), residue established by
+  **counting** (6 comparisons, not "many") and by ruling out copies with a 3.5x smaller
+  buffer that moved the row only 13%.
+
+  Also closed `bug-n-the-sequence-protocol-does-not-yield-iteration` as a duplicate to
+  **`rejected/` rather than `done/`** — the fix did not land under it, and the point of the
+  move is that it cannot dispatch a third agent onto finished work. The reasoning is better
+  than the convention.
