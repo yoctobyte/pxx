@@ -33829,10 +33829,16 @@ end;
   is still reachable from NilPy — with an explicit extension, `import
   'classes.pas' as c`.
 
-  ADDING A UNIT TO THIS LIST IS PART OF WRITING ONE. When a new lib/rtl unit is
-  written to serve a Python module, it does not resolve by bare name until its
-  name is here, and the failure lands at the import of a unit that plainly
-  exists — far from the omission that caused it.
+  ADDING A UNIT TO THIS LIST IS PART OF WRITING ONE. When a new unit is written
+  to serve a Python module, it does not resolve by bare name until its name is
+  here, and the failure lands at the import of a unit that plainly exists — far
+  from the omission that caused it.
+
+  NOT ONLY lib/rtl, despite this function's name. `tkinter` is lib/pcl's, and it
+  was missing from the first version of this list for no better reason than that
+  the list was built by sweeping lib/rtl — which broke six examples/tk jobs that
+  had done nothing wrong. Where the unit lives is not the question this list
+  answers; what it is FOR is.
 
   A CURATED LIST, and not a property read off the unit, because every derivable
   form of the question is wrong. The header prose is wrong in BOTH directions:
@@ -33874,7 +33880,8 @@ begin
             (lo = 'collections') or (lo = 'configparser') or (lo = 'html') or
             (lo = 'io') or (lo = 'json') or (lo = 'markdown') or
             (lo = 'math') or (lo = 'pathlib') or (lo = 'random') or
-            (lo = 're') or (lo = 'subprocess') or (lo = 'tempfile');
+            (lo = 're') or (lo = 'subprocess') or (lo = 'tempfile') or
+            (lo = 'tkinter');
 end;
 
 { `mypkg.core.bus` -> `mypkg/core/bus`. A dotted absolute import names a
