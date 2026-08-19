@@ -3400,3 +3400,61 @@ file. A fix found by triage DOES need the slot; queue it rather than taking it.
 **Never re-type or close from the title.** A title names the reporter's encounter, not the
 boundary; several here have been wrong twice. Re-measure, then edit the body AND the
 frontmatter `summary`, since the summary is what the board renders.
+
+## Check +21h — one red triaged, pin deliberately held, all three lanes running
+
+**Nobody blocked.** frank3 has the A/P slot and the import ticket in `working/` (two commits
+landed: `3284c881d` record which language an import was written in, `6fba42d69` an import can
+name another language by extension). frank2 on the A/P/C feature triage. plexus-T shipped both
+guards (`e3eec52dd`) and is on the coverage-visibility fix.
+
+**Watcher UP**, tested through `6fba42d69830`.
+
+**PIN HELD, deliberately.** Two `compiler/**` commits sit past v363's base, both frank3's
+in-flight refactor. Pinning mid-refactor is churn — nothing is blocked on the pin, no lane
+builds on it right now (frank2's triage compiles repros, and it should use a HEAD build for
+"is it already solved"), and frank3 will land more within the hour. **Pin at its next
+milestone, together with whatever the red fix brings.**
+
+### The red, triaged — and the stub's title named the wrong test
+
+`regression-test-core-test-asm-ifdef-multiarch`: the job covers **two** sources.
+`test_asm_ifdef_multiarch.pas` is FINE — compiles and runs clean (42, exit 0) on both v363 and
+a fixedpoint build at HEAD, and **its success line is what the stub captured as the "log
+tail"**, which is what makes the stub read as if that were the failure.
+
+The real failure is `test/test_asm_att_reject.pas`, a **compile-time negative test** the
+Makefile asserts with `!`. frank2's `76b6fb7f1` made `{$asmMode att}` accepted on purpose,
+moving the refusal to an actual `asm` block — so the negative test now compiles and the
+assertion fails. **Fix belongs in the test** (re-point at an AT&T `asm` block, still refused),
+not the compiler. Routed to frank2; it is a `test/**` edit and needs no A/P slot.
+
+**Recurring class, second instance today of the same surface:** a feature makes its own
+refusal test compile, and `gate.sh quick` cannot see it because these live in `test-core`.
+**When a feature relaxes a refusal, grep for the `_reject`/`_fail` test naming it and
+re-point the recipe in the SAME commit.** Both of today's `test-core`-only catches were the
+gate working as designed, not a gate that needs widening.
+
+### From Track T, and it changes what a green means
+
+**Zero full-tier runs in four hours; cross coverage is currently nil.** 76 testable pushes
+since the last full tier (`9bfb7fcfac03`, 10:31Z), median interval 1-4 min, native run ~4 min,
+full run ~21 min. Pushes arrive faster than a fast verdict completes, so the watcher is never
+idle and every idle-only phase (full matrix, pin verify, fuzz) is **never scheduled** — not
+aborted. `--status` says UP and is CORRECT: it measures whether commits were tested, and they
+were, at native. **So the fleet reads as covered while no cross target has seen the tree since
+10:31Z.** `a54259aab` and `354f734c1` both have native GREEN and neither has been near
+i386/arm32/riscv32.
+
+Approved T's separable fix: make `--status` and the tstate report say *"no full-tier verdict
+for N hours"*. T's own argument is the durable one — *a property that holds only because one
+agent remembered to warn another is a habit, not a property.* Scheduling trade filed
+separately (`bug-t-the-push-rate-starves-breadth-coverage-entirely`, p60).
+
+**No quiet period called** — the refactor and the triage outrank closing the gap this hour, and
+the triage pushes little so the backfill should get a window on its own. Call one if a full
+tier has not run by end of day.
+
+**`/tmp` guard split routed:** C (12) and P (5) now; **N (14) and B (6) parked with the reason
+written in** — N on the user's deferral, B unstaffed. An unrouted item with no stated reason
+reads as an oversight.
