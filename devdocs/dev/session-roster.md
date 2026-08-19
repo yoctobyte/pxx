@@ -4459,3 +4459,48 @@ same job that was unexplainable in the cascade, and it now has a reason field to
 
 **Everything else quiet.** All three workers down, nobody blocked, `urgent/` unchanged, the U
 decision at p75 still the morning headline. Track B/C/D/E ground moved again at 21:34:49Z.
+
+### The `tools-devtest#00` "discrepancy" was MY error, not T's — verified
+
+I named `93db54159` as the fix for the devtest that was red in `pin_verify`. It is not.
+Confirmed here rather than taken on report:
+
+    93db54159  touches tools/twatch_host_epoch_devtest.py   IS an ancestor of cabb5d598
+    6bbb899b9  touches tools/tstate_reader_devtest.py       NOT an ancestor (27 commits after)
+    git show cabb5d598:tools/tstate_reader_devtest.py | grep -c "scratch repo, not this checkout" -> 0
+
+**Two different guards.** `tools-devtest#00` runs ~50 guard files and **stops at the first
+failure**, so the job name names one of fifty without saying which. I collapsed it into "the one
+case T told me about" and asserted the fix's identity from recollection — the exact thing the
+durable facts say not to do. `git show --stat <sha>` would have settled it in one command.
+
+**So there is no contradiction: red at the frozen `cabb5d598` and green at HEAD are both correct.**
+A pin verify runs at the *pinned* sha; a job fixed since is still red there, and that is the verify
+working. T also re-measured its own green claim after finding the first sweep ran in a checkout that
+was **on a branch** while the fleet runs detached — redone detached at HEAD under load: **50/50
+green.** Both halves of the exchange were re-measured rather than argued.
+
+**T shipped the `--status` gap (`24bf831ef`, live on the CLI path, no daemon restart):** a
+`pin verify` line with sha, version, verdict, age and red count, **plus a caveat line saying those
+reds are at the pinned tree and a job fixed since is still red there** — the general form of my
+error, so the next reader skips the round trip. Four decisions worth knowing: the new-vs-baseline
+count prints **only** when `pin_baseline.pin` matches the verify's `ver`, because *"0 new" computed
+off the previous pin's baseline is the most reassuring possible way to be wrong*; it prints for a
+**quiet** host, unlike every other line in that block, since quietness invalidates a HEAD verdict but
+not a verdict about a frozen sha; and `fmt_age` gained minute granularity because a pin is held in
+minutes and it was rendering every sub-hour gap as `0h`. 19 guards, 13 red when the block is deleted,
+one asserting the pin line does not echo `last_full`'s sha.
+
+**Two flaky devtests that MEASURE THE BOX, filed:** `bench_timing_devtest.py` asserted a *spread*
+over five subprocess runs (`max-min < 3.0`) — at load 14 one sample stalled and it went red while
+the claim it names was true; fixed to an on-grid count, but it has been excluded from
+`tools-devtest` by a Makefile `case ... continue` since `a1fd5715e`, so re-arming it is one line in
+**Track A's** file → `chore-a-re-include-bench-timing-in-tools-devtest` (p30). And
+`twatch_bench_quiet_devtest.py` flaked red once at load 14 → `bug-t-two-devtests-measure-the-box-and-flake-the-fleet-job`
+(p45). **Both matter more than their prio suggests because `tools-devtest#00` stops at the first
+failure — one load flake hides the other 49 guards**, which is precisely how tonight's confusion
+started.
+
+Watcher restarted 23:35 CEST (pid 2214596 → 3171395), so the keyed resume store is live. Prior loss
+rate was **11 saved / 11 superseded — every partial evicted.** `carried_runs` leaving zero is the
+acceptance test and T has not observed it yet; that is an open measurement, not a result.
