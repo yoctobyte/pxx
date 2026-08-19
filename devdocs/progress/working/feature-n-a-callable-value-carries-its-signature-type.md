@@ -473,3 +473,70 @@ other four are baked statically as before.
 **Still no consumer** — 2c/2d. The array is now fully filled for every default
 kind, so 2d's `PYSIG_DFLT_UNSET` check should never fire in practice; it stays
 as the loud guard for the orphan case above.
+
+
+## 2c + 2d — LANDED: the value carries the signature, and the bridge uses it
+
+**2c.** `TPyBoundRec` gains `Sig: Pointer` (static `.data`, never refcounted)
+and a `pybound_new_sig` constructor; `pybound_new` and `pybound_new_star`
+become one-liners onto it. `TPySigRec` in `pylib.pas` mirrors the `PYSIG_OFF_*`
+layout in `defs.inc` and has to stay in step with it. `Sig = nil` means "the
+producer could not supply one", and every path then behaves exactly as it did
+before signatures existed.
+
+Compiler side: `AN_PYSIGREF` (IVal = a proc index, unlike `AN_PYSIGDSLOT`'s
+pending index — by the time a def is taken as a VALUE its Proc exists) lowers to
+`IR_CONST_DATA` with the PYSIG sentinel. Both producers pass it:
+`PyMakeFuncValueFor` for a plain def and `PyMakeBoundMethod` for `obj.method`.
+
+**One trap worth naming:** `PyMakeFuncValueFor` may replace `pi` with
+`PyGetOrMakeCallableWrapper(pi)`, a synthesized Proc that adapts the RETURN
+side. The signature must name the ORIGINAL — the wrapper has no recorded
+defaults, so carrying its index would hand the dispatcher an empty array and
+silently undo the whole feature. The overload pick just above it is different:
+that one IS the real callee, so it keeps the signature.
+
+**2d.** `pybound_callv0..4` collapse onto ONE dispatcher. It reads `TotN`, fills
+`nargs..TotN-1` from the defaults array, and calls at the arity the body was
+actually compiled for. Before this, `f(1)` on `def q(a, i=7)` entered a
+two-parameter body through a one-parameter pointer and `i` read whatever the
+previous call had left there — a plausible wrong value, never a crash, which is
+the expensive shape `devdocs/dev/debugging-playbook.md` opens with.
+
+`nargs < ReqN` now raises TypeError instead of calling anyway. A COLLECTING
+callee (`*args`) keeps its existing path untouched — it packs its own surplus
+and has no omitted parameters to fill.
+
+**The `key=` path had to be fixed too, and pointed at the same code.**
+`map`/`filter`/`sorted(key=)` carry the callable as a raw PAIR POINTER, so they
+reach `pyeval`'s `PyCallKey1`, which had its own truncated copy of the record
+layout (`TPyKeyBoundRec = record Code, Recv: Pointer; end`) and called through a
+one-parameter pointer regardless of arity. Rather than duplicate the fill rule
+there, the dispatcher was split into a pointer-taking core `pybound_pair_call`
+that both entry points call — so the defaults `map` fills are the same ones a
+direct call fills, by construction, and the duplicated layout is gone.
+
+### Verified — full CPython parity
+
+`test/test_nilpy_callable_value_defaults.npy` (wired into `make test-nilpy`),
+expectation generated from CPython, covers: int/str/None defaults through a
+value; the shared-mutable-default accumulator through a value AND through the
+name; a bound method with Self excluded; a `*args` callee unchanged; every
+arity 0..4; a lambda default; too-few-arguments raising TypeError; `map` and
+`sorted(key=)`; and a nested def whose default reads the enclosing scope at def
+time. pxx output is byte-identical to CPython's.
+
+This resolves the p70 headline repro. Confirm the rest of that ticket's table
+before closing `bug-n-a-call-through-a-callable-value-drops-the-callees-defaults`.
+
+### Found while widening, NOT mine
+
+`sorted(l, key=f)` segfaults when `f` returns a tuple containing a string —
+reproduced identically on `PXX_STABLE`, so pre-existing. Filed as
+`bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults` (N, p55) with
+the measured boundary.
+
+### Needs a PIN
+
+`compiler/builtin/pylib.pas` and `pyeval.pas` changed, so other lanes see none
+of this until `make stabilize-fast && make pin`. Coordinator-scheduled.

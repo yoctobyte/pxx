@@ -421,6 +421,11 @@ const
                            no backend op and all six backends carry it unchanged. Reserved-prefix
                            names, so they cannot collide with user routines.
                            feature-signal-siginfo-ucontext }
+  AN_PYSIGREF      = 95; { NilPy: the ADDRESS of proc ASTIVal's SIGNATURE RECORD (EmitPySignatures).
+                           What a callable value carries so a call made THROUGH it can fill the
+                           parameters the caller omitted. Lowers to IR_CONST_DATA with the PYSIG
+                           sentinel; unlike AN_PYSIGDSLOT the index IS a proc index, because by the
+                           time a def is taken as a VALUE its Proc exists. }
   AN_PYSIGDSLOT    = 94; { NilPy: the ADDRESS of one slot of a def's SIGNATURE DEFAULTS array.
                            ASTIVal = a PENDING-SLOT index, not a proc index -- the store is built
                            while the def's HEADER is parsed, which is before the Proc exists at

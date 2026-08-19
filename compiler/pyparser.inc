@@ -12254,7 +12254,7 @@ end;
   selfNode supplies the receiver. }
 function PyMakeBoundMethod(mpi, selfNode: Integer): Integer;
 var procAddr, recvArg, selfArg, callNode, boundPi, isFuncNode, isFuncArg: Integer;
-    starIdx, starNode, starArg: Integer;
+    starIdx, starNode, starArg, sigNode, sigArg: Integer;
 begin
   { `*args` on a METHOD is recorded in SIGNATURE space (Self at 0); the runtime
     bridge is handed the receiver separately, so it wants the callee's own
@@ -12262,8 +12262,12 @@ begin
   starIdx := -1;
   if (mpi >= 0) and (mpi < ProcCount) and (ProcPyStarIdx[mpi] > 0) then
     starIdx := ProcPyStarIdx[mpi] - 1;
-  if starIdx >= 0 then boundPi := FindProc('pybound_new_star')
-  else boundPi := FindProc('pybound_new');
+  boundPi := FindProc('pybound_new_sig');
+  if boundPi < 0 then
+  begin
+    if starIdx >= 0 then boundPi := FindProc('pybound_new_star')
+    else boundPi := FindProc('pybound_new');
+  end;
   if boundPi < 0 then Error('Nil Python: pylib (pybound_new) not loaded');
   procAddr := AllocNode(AN_PROCADDR);
   ASTIVal[procAddr] := mpi;
@@ -12283,7 +12287,7 @@ begin
   isFuncArg := AllocNode(AN_ARG); ASTLeft[isFuncArg] := isFuncNode;
   ASTRight[selfArg] := recvArg;  ASTRight[recvArg] := isFuncArg;
   ASTRight[isFuncArg] := -1;
-  if starIdx >= 0 then
+  if (starIdx >= 0) or (Procs[boundPi].ParamCount = 5) then
   begin
     starNode := AllocNode(AN_INT_LIT);
     ASTIVal[starNode] := starIdx;
@@ -12291,6 +12295,19 @@ begin
     starArg := AllocNode(AN_ARG); ASTLeft[starArg] := starNode;
     ASTRight[starArg] := -1;
     ASTRight[isFuncArg] := starArg;
+  end;
+  { ...and the callee's SIGNATURE, so `h = k.m; h(10)` can fill `b=5` the way
+    `k.m(10)` does. EmitPySignatures already excludes Self from the record, so
+    the receiver being passed separately needs no adjustment here.
+    feature-n-a-callable-value-carries-its-signature-type }
+  if Procs[boundPi].ParamCount = 5 then
+  begin
+    sigNode := AllocNode(AN_PYSIGREF);
+    ASTIVal[sigNode] := mpi;
+    ASTTk[sigNode]   := Ord(tyPointer);
+    sigArg := AllocNode(AN_ARG); ASTLeft[sigArg] := sigNode;
+    ASTRight[sigArg] := -1;
+    ASTRight[starArg] := sigArg;
   end;
   ASTLeft[callNode] := selfArg;
   Result := callNode;
@@ -12655,8 +12672,8 @@ end;
   the `from mod import f as g` alias desugar — builds the identical value
   instead of growing a second copy that can drift from this one. }
 function PyMakeFuncValueFor(pi: Integer; const nm: AnsiString): Integer;
-var procAddr, argA, argB, argC, argD, callNode, nilNode, isFuncNode, boundPi,
-    altPi, wpj, starIdx, starNode: Integer;
+var procAddr, argA, argB, argC, argD, argE, callNode, nilNode, isFuncNode, boundPi,
+    altPi, wpj, starIdx, starNode, sigNode, origPi: Integer;
     paramsAllVariant: Boolean;
 begin
   Result := -1;
@@ -12703,6 +12720,10 @@ begin
     feature-nilpy-callable-value-unified-dispatch }
   altPi := PyFindVariantParamOverload(nm, Procs[pi].ParamCount);
   if altPi >= 0 then pi := altPi;
+  { The overload pick above IS the real callee, so it keeps the signature; the
+    RETURN-side wrapper below does not -- see the note at the pybound_new_sig
+    call. }
+  origPi := pi;
   if Procs[pi].RetType <> tyVariant then
   begin
     paramsAllVariant := True;
@@ -12732,8 +12753,18 @@ begin
     knows how many arrive through a function value. See pybound_new_star. }
   starIdx := -1;
   if (pi >= 0) and (pi < ProcCount) then starIdx := ProcPyStarIdx[pi];
-  if starIdx >= 0 then boundPi := FindProc('pybound_new_star')
-  else boundPi := FindProc('pybound_new');
+  { The SIGNATURE goes on the ORIGINAL proc, never on the wrapper above: the
+    wrapper exists only to adapt the RETURN side and declares the same
+    parameters, but it is a synthesized Proc and EmitPySignatures records
+    defaults against the def the user wrote. Carrying the wrapper's index here
+    would hand the dispatcher an empty defaults array and quietly undo the whole
+    point. feature-n-a-callable-value-carries-its-signature-type }
+  boundPi := FindProc('pybound_new_sig');
+  if boundPi < 0 then
+  begin
+    if starIdx >= 0 then boundPi := FindProc('pybound_new_star')
+    else boundPi := FindProc('pybound_new');
+  end;
   if boundPi < 0 then Exit;
   procAddr := AllocNode(AN_PROCADDR);
   ASTIVal[procAddr] := pi;
@@ -12753,13 +12784,21 @@ begin
   argC := AllocNode(AN_ARG); ASTLeft[argC] := isFuncNode; ASTRight[argC] := -1;
   ASTRight[argB] := argC;
   ASTRight[argA] := argB;
-  if starIdx >= 0 then
+  if (starIdx >= 0) or (Procs[boundPi].ParamCount = 5) then
   begin
     starNode := AllocNode(AN_INT_LIT);
     ASTIVal[starNode] := starIdx;
     ASTTk[starNode]   := Ord(tyInt64);
     argD := AllocNode(AN_ARG); ASTLeft[argD] := starNode; ASTRight[argD] := -1;
     ASTRight[argC] := argD;
+  end;
+  if Procs[boundPi].ParamCount = 5 then
+  begin
+    sigNode := AllocNode(AN_PYSIGREF);
+    ASTIVal[sigNode] := origPi;
+    ASTTk[sigNode]   := Ord(tyPointer);
+    argE := AllocNode(AN_ARG); ASTLeft[argE] := sigNode; ASTRight[argE] := -1;
+    ASTRight[argD] := argE;
   end;
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := boundPi;

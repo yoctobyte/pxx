@@ -1,0 +1,73 @@
+# A call made THROUGH a function value must fill the parameters the caller
+# omitted from the CALLEE's own def-time defaults -- the same values a direct
+# call fills. feature-n-a-callable-value-carries-its-signature-type
+def q(a, i=7, s="hi", L=None):
+    return (a, i, s, L)
+
+f = q
+print(f(1))
+print(f(1, 2))
+print(f(1, 2, "z"))
+print(f(1, 2, "z", 3))
+
+# a default is evaluated ONCE, at def time: the accumulator idiom must
+# accumulate through the value exactly as it does through the name
+def acc(v, bucket=[]):
+    bucket.append(v)
+    return len(bucket)
+
+g = acc
+print(g(1), g(2), g(3), acc(4))
+
+# a BOUND METHOD carries its signature too, with Self excluded from the
+# parameter numbering
+class K:
+    def m(self, a, b=5):
+        return a + b
+
+k = K()
+h = k.m
+print(h(10), h(10, 1), k.m(10))
+
+# a COLLECTING callee has no omitted parameters to fill: unchanged
+def star(a, *rest):
+    return (a, rest)
+
+s = star
+print(s(1), s(1, 2, 3))
+
+# every arity through the bridge
+def four(a, b=1, c=2, d=3):
+    return a + b + c + d
+
+qq = four
+print(qq(10), qq(10, 20), qq(10, 20, 30), qq(10, 20, 30, 40))
+
+lam = lambda x, y=9: x * y
+print(lam(3), lam(3, 2))
+
+# too FEW arguments is still an error, not a filled-with-garbage call
+def nodef(a, b):
+    return a + b
+
+n = nodef
+try:
+    n(1)
+    print("no error")
+except TypeError:
+    print("TypeError")
+
+# map/filter/sorted(key=) carry the callable as a raw pair pointer and must
+# fill defaults through the same dispatcher
+print(list(map(qq, [1, 2, 3])))
+print(sorted([3, 1, 2], key=lambda v, m=-1: v * m))
+
+# a nested def's default reads the enclosing scope at DEF time
+def outer():
+    w = 5
+    def inner(a, b=w):
+        return a + b
+    return inner
+
+i = outer()
+print(i(1), i(1, 100))

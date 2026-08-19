@@ -6294,6 +6294,11 @@ begin
                     Ord(tkPlus), 0, Ord(tyPointer));
     end;
 
+    AN_PYSIGREF:
+      { the address of a def's signature record; resolved post-EmitPySignatures }
+      Result := IRAppend(IR_CONST_DATA, -1, -1, -1,
+                  -(PYSIG_DATAREF_BASE + Integer(ASTIVal[node])), Ord(tyPointer));
+
     AN_PYSIGDSLOT:
       { the address of one defaults slot; the pending index resolves after every
         registration site has settled -- see AN_PYSIGDSLOT in defs.inc }
