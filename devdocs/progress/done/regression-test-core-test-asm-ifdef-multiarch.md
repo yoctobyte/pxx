@@ -81,4 +81,4 @@ stays accepted, which is the behaviour `76b6fb7f1` was for.
 `_reject` / `_fail` test compile, and `gate.sh quick` cannot see it — these
 negative tests live in `test-core`. Grep for the matching `_reject` test in the
 same commit that relaxes a refusal.
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 155b32957.
