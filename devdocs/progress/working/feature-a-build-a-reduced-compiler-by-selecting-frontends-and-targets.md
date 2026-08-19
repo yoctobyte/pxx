@@ -497,3 +497,39 @@ Filed rather than folded in, because neither blocks the omission work — they a
 
 Only after 2 and 4 is `only-nilpy + only-esp` — the configuration the user actually
 asked for — reachable.
+
+## Make that four — and the fourth was caught, which is the point
+
+The riscv32/xtensa survey opened with `try.sh` reporting exactly **60** errors for
+`PXX_NO_RISCV32`, exactly 60 for `PXX_NO_XTENSA`, and exactly 60 for both together.
+The script ended in `| head -60`. Three configurations agreeing to the digit is not a
+finding, it is a pipe.
+
+This is the same fault as the truncated FPC error lists, the `{$UNITPATH}` stale-`lib/`
+snapshot, and the relayed job count — no error, plausible output — but it is the first
+one caught **before** it reached a ticket, and it was caught by the shape of the number
+rather than by a second tool disagreeing. The habit that did it is cheap enough to
+state as a rule:
+
+> **A measurement that comes out the same across configurations you expected to differ
+> is a measurement of the harness.** Check the harness before checking the theory.
+
+The real figures, after removing the `head`: `PXX_NO_RISCV32` 518 errors (symtab 222,
+cparser 123, exception_emit 91, parser 74, asmfront 6, ir_codegen 1); `PXX_NO_XTENSA`
+288 (symtab 179, parser 62, exception_emit 45, ir_codegen 1); both, 805. The earlier
+"800+ lower bound" was accurate — and was a bound on the *pair*, not on either alone.
+
+Two files the earlier increments never touched fell out of this, and one of them is
+another lane's: see
+[[refactor-a-backend-machine-code-lives-in-six-shared-files]] (renamed from `-four-`).
+`cparser.inc` — the C frontend — emits the C `_start` stub as raw riscv32 machine code,
+so omitting riscv32 cannot be done without editing a Track C file. That, plus the fact
+that riscv32 is dual-role (bare ESP32-C3 *and* hosted linux/qemu-user) while xtensa has
+no hosted leg, means "omit the backend" and "omit the ESP platform" are not the same
+switch. Both forks are escalated, not settled here; the second one lands on top of
+[[decide-reduced-compiler-switch-spelling]].
+
+Worth recording against the goal: this increment does **not** advance
+`only-nilpy + only-esp`, the configuration actually asked for — that one *keeps*
+riscv32 and xtensa. Its value is the inverse config (host-only) and the coupling it
+exposed. The frontend axis, not the target axis, is the path to the stated goal.
