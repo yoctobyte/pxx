@@ -1522,6 +1522,34 @@ exists, its banner says so and the banner outranks the queue order.
   never dispatch to fill capacity. But **do not bank a day while the user is paying for
   idle capacity** — that call was made once and was wrong.
 - **The coordinator writes no code.** Filing, ranking, routing and verifying only.
+- **DISPATCH GOALS, NOT TICKETS — the coordinator is not the queue.** (user, 2026-08-19:
+  *"it seems to me the old fashioned way of setting a goal kept agents busier"*, after a
+  third check found both workers idle.)
+
+  Handing out one ticket at a time makes every completion park a worker until the next
+  hourly check — up to an hour of idle per item, and the coordinator becomes the
+  bottleneck. CLAUDE.md already has the self-serve loop (`tools/progress.sh next --track X`
+  → claim → do → `resolve` → repeat); inserting a human-speed relay into it is a
+  regression, not supervision.
+
+  **Give each worker a standing goal plus the self-dispatch loop, and name the three things
+  worth interrupting for: a pin, a genuine fork for the human, a blocker they cannot
+  route.** Keep `working/` honest so the lock stays visible. Sequencing *within* lanes a
+  worker already holds is the coordinator's to set and should be set once, as an ordering,
+  not doled out.
+
+- **BEFORE ESCALATING A FORK, CHECK WHETHER YOU MANUFACTURED IT.** Same day, the
+  coordinator raised an ownership fork to the user — should frank3 take two Track N bugs so
+  the corpus lever unblocks? — and it was **not a fork at all**: frank2 already held N, the
+  tickets were in its own lane, and the real question was only work ORDERING inside lanes it
+  already had. The fork existed solely because the question had been framed as "hand them
+  to frank3".
+
+  **A fork that dissolves when you change the framing was never the user's to answer.** Ask
+  what the decision actually is before asking who owns it: an ownership question that only
+  appears because of *your* proposed reassignment is a question about your proposal, not
+  about ownership. Escalating it spends the user's attention on a problem you created — and
+  the standing reporting mode says their attention is for what genuinely needs them.
 - **REPORTING MODE (user, 2026-08-19): surface only what needs the USER.** *"Just tell me
   when a track wants a fresh clear."* So the escalation bar is: a worker needs a fresh
   session, a restart, a permission cleared, or a decision only the human can make (Track U,
@@ -2436,3 +2464,21 @@ rerank it deliberately rather than inheriting the number).
   frank2 told to keep going on p88 but **not** to start 2b's `pyparser.inc` edits until the
   user rules — pressing on loses nothing if they agree (2a is already the stopping point)
   and avoids a burned increment if they do not.
+
+- **DISPATCH MODEL CHANGED (user, 2026-08-19): standing goals, workers self-dispatch.**
+  Both workers idle for the third check running is what prompted it. Goals set:
+
+  - **frank2 (A+N, sole-A):** land the two N p68 bugs FIRST — `…keys-items-values…` then
+    `…for-loop-getitem-protocol-fallback` — because they unblock the corpus lever; p88
+    stays parked at **2a** (its own clean self-contained point, 2b/2c/2d banked); then
+    resume p88; then self-dispatch `next --track A|N`.
+  - **frank3 (B):** drive B's queue to dry, self-dispatching from `next --track B`. Head is
+    the p30 strtofloat perf item, then the p20 ULP pair. **Standing override: when the two
+    N bugs land, drop everything and take
+    `feature-b-mimic-collections-abc-mapping-and-mutablemapping` (p68)** — worth more than
+    the rest of B's queue combined.
+
+  **The ownership fork I raised is WITHDRAWN — I manufactured it.** frank2 already holds N;
+  those tickets are in its own lane; the real question was ordering, which is mine. It only
+  looked like an ownership question because I framed it as reassigning them to frank3.
+  Rule recorded above.
