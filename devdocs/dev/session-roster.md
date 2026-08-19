@@ -1800,3 +1800,9 @@ rerank it deliberately rather than inheriting the number).
   new top wall, and the same concentrated shape `yield` had. **Denominator caution: "38
   remaining failures" is frank2's figure on the full ladder at that sha; do not reconcile
   it against the older 6/48 or 7/33 by arithmetic — ask for the headline when it reports.**
+- **checks 2026-08-19 (+5h, +6h):** quiet, nobody blocked, no commits. frank2 still holds
+  `bug-nilpy-a-callable-in-a-variable-loses-to-a-def-of-the-same-name` in `working/` and is
+  busy — ~2h without a commit is unremarkable for a root-cause hunt on a silent
+  wrong-function bug spanning 12 files, and it is not pinged. frank3 stopped on the offer
+  made at 01:30. T UP, same documented false positive. Track T remains UNSTAFFED since
+  plexus-T closed.
