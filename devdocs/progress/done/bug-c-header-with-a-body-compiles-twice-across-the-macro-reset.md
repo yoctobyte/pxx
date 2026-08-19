@@ -26,7 +26,7 @@ prio: 25
 > question recurs.
 
 - **Type:** bug — Track C (C frontend, preprocessor TU state)
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** the C duplicate-definition warning, after
   [[bug-c-string-h-compiles-stdlib-c-twice]] was fixed. It is the last file in
@@ -209,3 +209,54 @@ have 32-bit cross variants, and the local gate covers x86-64 only. Moving them
 wants a session that can wait for Track T's cross sweep. Re-prioritised 35 → 25:
 with the warning gone the residual cost is ~2.2KB of dead code in one call
 shape, which is a size nit, not a correctness bug.
+
+
+## 2026-08-19 — FIXED, and the byte count corroborates the superseded-title diagnosis
+
+Bodies moved out of `lib/crtl/include/stdarg.h` into a new
+`lib/crtl/src/stdarg.c`, auto-pulled as the header's sibling. Header 146 -> 51
+lines: structs, macros and prototypes only.
+
+```
+test/cvariadic_struct_b208.c    code=214325B  ->  212121B     -2204 bytes
+```
+
+**Exactly the 2204 predicted from the double-emit theory.** That is the part
+worth keeping: the number was derived from a diagnosis, and removing the double
+emit reproduced it to the byte. This ticket's own TITLE still names the macro
+reset, which was proved dead on 2026-08-16 — so if that framing is ever proposed
+again, this figure is the answer. A macro-table change left the output
+*byte-identical*; removing the duplicated bodies moved it by the predicted
+amount.
+
+**The helpers must NOT go back to `static`, and not for style reasons.**
+`cparser.inc` resolves them by name (`FindProc('__pxx_va_arg_gp')`,
+`FindProc('__pxx_va_start_impl')`, `FindProc('__pxx_va_arg_cross32')`) when
+lowering `__builtin_va_start` / `__builtin_va_arg`. Internal linkage there breaks
+`va_arg` lowering outright rather than merely re-bloating it. Recorded as a
+comment at the declaration site as well as here, because "why is this not
+static?" is a question asked while editing the header, not while reading a
+ticket.
+
+### Verified
+
+- `test/cvariadic_struct_b208.c` output identical, exit 42 both before and after.
+- `cfnptr_variadic_call_b170`, `cimplicit_printf_varargs_b195`,
+  `cprintf_exact_digits_b376`, `cprintf_ll_b252`, `cvariadic_macro_b157` all
+  exit 42.
+- `cprintf_hexfloat` matches its **gcc oracle**.
+- `make lib-test` green.
+
+### Residual risk, stated rather than assumed away
+
+This ticket asked for "a session that can wait for Track T's cross sweep",
+because `__pxx_va_start_impl32` / `__pxx_va_arg_cross32` are on every C
+program's formatting path on i386/arm32/riscv32 and the local gate is x86-64
+only. **What changed is linkage, not logic** — the bodies moved verbatim and
+were diffed to confirm it — so the open question is narrow: do 32-bit targets
+resolve these symbols differently now they are external? That is answerable by
+T's sweep rather than by reasoning, which is why this was pushed rather than
+held: unpushed work is work T cannot see.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.

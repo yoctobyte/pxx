@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:17 blocked:5 backlog:244 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2056 rejected:40`
+`unfinished:17 blocked:6 backlog:242 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2057 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -31,15 +31,16 @@ _none — no lane is locked._
 - `feature-port-rtl-over-libc` [A]
 - `feature-real-dynlib-loader` [B] — blocked-by: bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
 
-## blocked (5) — has an unmet blocker; do not claim
+## blocked (6) — has an unmet blocker; do not claim
 
+- `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `bug-n-a-subpackage-directory-does-not-resolve-as-a-module` [N] — blocked-by: bug-a-a-python-module-s-identity-is-its-name-not-its-file
 - `bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module` [N] — blocked-by: decide-how-a-compiled-def-carries-its-signature-when-boxed
 - `bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity` [N] — blocked-by: feature-b-tkhtmlview-in-nilpy
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 229, ranked
+## Ready — top 30 of 227, ranked
 
 - `[p 66] [A]` refactor-a-one-signature-record-for-every-callable-carrier
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
@@ -72,4 +73,4 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
 - `[p 50] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 
-_199 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_197 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
