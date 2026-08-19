@@ -1522,6 +1522,31 @@ exists, its banner says so and the banner outranks the queue order.
   never dispatch to fill capacity. But **do not bank a day while the user is paying for
   idle capacity** — that call was made once and was wrong.
 - **The coordinator writes no code.** Filing, ranking, routing and verifying only.
+- **ASK BEFORE TAKING THE LOCK, DO NOT ANNOUNCE AS YOU TAKE IT — and check yourself so it
+  does not depend on anyone replying.** Learned the hard way 2026-08-19: the coordinator
+  messaged "hold builds" and started `stabilize-fast` in the same breath. frank3's
+  "hold, my `lib-test` is in flight" arrived **after** the pin had already swapped
+  `stable_linux_amd64/default/pinned`. By construction the reply could not have arrived in
+  time. **Announcement is not coordination.**
+
+  **Before every lock:**
+
+      pgrep -f 'make (lib-test|test|demos|test-nilpy)'
+
+  One command, no round trip, and it does not require the other agent to be awake. Then ask
+  and *wait* if anything is known to be running.
+
+  **Why a half-swapped suite is worse than a half-swapped A/B:** an A/B at least compares
+  two things you chose; a suite built half on one compiler and half on another **has no
+  interpretation at all**, and it will very likely still print green. A worker's
+  before/after hash check cannot save it either — a suite is not a comparison, so the hash
+  only says "discard", ten minutes late.
+
+- **A PIN THAT FIXES A KNOWN RED MUST BE CHECKED AGAINST THAT RED BEFORE THE PIN COMMIT
+  LANDS.** `stabilize-fast` proves the fixedpoint; it says nothing about the defect you are
+  pinning to fix. Run the failing repro against the new `pinned` binary first, and commit
+  only on that. Earned by the first v357; applied on the second (callbacks/htmlview/hello
+  all `ok` before the commit).
 - **GATE AGAINST THE NEW PIN, NOT BEFORE IT — demonstrated 2026-08-19, not argued.**
   Track B ships on the pin, so the meaningful green is the one taken against the pin the
   compiler commits produce. frank3 proposed this an hour before it mattered; it then caught
@@ -2819,3 +2844,40 @@ rerank it deliberately rather than inheriting the number).
   **What this incident actually proves is the gating order** (now a standing rule above):
   gating post-pin is what surfaced it. Had frank3 gated before the pin, it would have had a
   true green against v356 and the tree would have carried a blessed, broken pin.
+
+- **PIN v357 (second attempt) IS IN — `5d23a9554467` at `21c051b97d80`, md5
+  `ebcf15ccb1046b29353b3b85091a8cdc`.** Verified against the known-failing repro BEFORE the
+  commit landed: `callbacks.npy` ok 2520362B, `htmlview.npy` ok 2608593B, `hello.npy` ok
+  2356393B. That check is the procedure change the first v357 earned.
+
+  **Root cause was one thing with two arms, and it was never Tk.** `EmitPySignatures`
+  skipped any def with `ProcUnitIdx >= 0` — a guard to keep Pascal RTL routines out (+170 KB
+  of `.data` on the self-build without it) that **also excluded defs in imported `.npy`
+  modules**. Every Tk app hands a callback across a module boundary; `g = f; g()` never
+  crosses one. Predicate is now `PyProcIsNilPyDef` — *"did the NilPy frontend parse this"*
+  rather than *"is it local"*, which is what the guard meant all along. **Second arm:** the
+  sentinel resolver raised a hard `Error` on a missing record; it now degrades to a zeroed
+  scratch record (`TotN = 0`), so a future gap of this shape is a silent no-op rather than a
+  blocked lane. My hypothesis (2b part 2 introduced a consumer) was **wrong** — `PYSIGD`
+  already bit-bucketed its misses; it was 2c's `PYSIG` sentinel with the hard error.
+
+  Also carried: 2b part 2, **2c and 2d** — the callable value now carries its signature and
+  the bridge fills the callee's defaults, with `test_nilpy_callable_value_defaults.npy`
+  wired into `test-nilpy` against a CPython-generated expectation.
+
+  **I swapped the pin under frank3's in-flight `lib-test`** — its hold request arrived after
+  the swap, because I announced and started in the same breath. Its run was discarded and
+  re-run. Rule recorded above; the fix is `pgrep` before the lock, not a politer
+  announcement.
+
+  **Two pre-existing holes, measured on `PXX_STABLE` too, so the pin neither opens nor
+  closes them:** a callable reached through a *subscript or parameter* and called with fewer
+  args than declared still segfaults (`fs = [g]; fs[0](1)`) — the last unfixed row of p70's
+  table, frank2 staying on it; and `bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults`
+  (N, p55), filed with its boundary.
+
+  **frank3's self-correction, worth as much as the fix:** *"I treated a passing sibling as
+  noise bounding the blast radius, when a passing sibling in a family of near-identical
+  cases is a DISCRIMINATOR."* `hello.npy` passing was not "not the whole Tk path" — it was
+  naming the module crossing as the boundary, and it was already in hand. Same shape as its
+  dead-code find this morning: **the result read as uninformative was the informative one.**
