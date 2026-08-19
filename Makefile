@@ -10653,6 +10653,21 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_dom.npy $(TESTTMP)/lib_mimic_xml_dom
 	test "$$($(TESTTMP)/lib_mimic_xml_dom | grep -c '=ok')" = "20"
 	test "$$($(TESTTMP)/lib_mimic_xml_dom | tail -1)" = "MIMIC-XML-DOM OK"
+	# xml.etree.ElementTree as a TREE MODEL with no XML reader
+	# (feature-b-mimic-xml-etree-elementtree-tree-model). html5lib hands the
+	# module to its treebuilder/treewalker as somewhere to hang a tree and
+	# parses the HTML itself, so there is no XML text on either side of this
+	# interface. The load-bearing assertion is the COMMENT SENTINEL:
+	# `Comment("x").tag` IS the Comment factory, html5lib captures it once and
+	# compares every node's tag against it, and getting it wrong raises nothing
+	# — comments are silently never recognised. Second in line is that `len(elem)`
+	# counts CHILDREN and not attributes, which the checks here make differ on
+	# purpose. Runs unmodified under CPython and was diffed against it byte for
+	# byte; that diff is what caught `find("*")` matching a comment, which the
+	# plausible reading gets backwards.
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_etree_elementtree.npy $(TESTTMP)/lib_mimic_xml_etree
+	test "$$($(TESTTMP)/lib_mimic_xml_etree | grep -c '=ok')" = "56"
+	test "$$($(TESTTMP)/lib_mimic_xml_etree | tail -1)" = "MIMIC-XML-ETREE OK"
 	# urllib.parse, reached the way the corpus reaches it: `from six.moves
 	# import urllib_parse as urlparse`, a RENAMED re-export through two shims
 	# (feature-b-mimic-six-moves-needs-http-client-and-urllib). Testing

@@ -27,6 +27,31 @@ before assuming the workaround is still needed.
 
 ### Coding-pattern landmines (no single site — avoid in new Track B code)
 
+- **A user class's `keys()` / `items()` / `values()` through a dynamically-typed
+  receiver** (an unannotated parameter) segfaults, or answers a garbage list when
+  the result is consumed — the call is dispatched as a dict view instead of the
+  method ([[bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view]]).
+  Exactly those three names; `get`/`append`/`insert`/`remove`/`clear`/`find`/`set`/
+  `extend`/`pop` all dispatch correctly, and a *statically* typed receiver is fine.
+  So a shim may still DEFINE them (`mimic_xml_etree_elementtree.Element` does) —
+  do not CALL them through an untyped parameter. In library and test code reach the
+  dict directly (`node.attrib.items()`), which is what html5lib does anyway.
+
+- **`list(obj)` over an object with `__len__`/`__getitem__` and no `__iter__`
+  returns `[]`**, silently, and `for x in obj` is a compile error naming an
+  unrelated internal ([[bug-n-the-sequence-protocol-does-not-yield-iteration]]).
+  Give any sequence-like NilPy class an explicit `__iter__` — that is exact rather
+  than a workaround (CPython's C types carry `tp_iter` too), but it is not
+  optional.
+
+- **A function stored in a variable is not equal to the function.** `g = f` boxes
+  it on the heap, so `g == f`, `g is f` and `h = f; g == h` are all False, and
+  `id(g)` is a heap address where `id(f)` is the code address
+  ([[bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function]]). A
+  function used as a sentinel (CPython's `ElementTree.Comment` is its own tag)
+  still works as long as both sides of the comparison come from a call result or
+  the bare name — never from a variable holding it.
+
 - **Long command-line arguments in a large program.** Reading a long `ParamStr`
   (~hundreds of chars) into an AnsiString and then doing more heap work corrupted
   memory and crashed later in `test/devtest_tls13_handshake.pas` (a big multi-unit

@@ -46,7 +46,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (238)
+## backlog (240)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -63,9 +63,11 @@ _none_
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 25 | bug | SUPERSEDED TITLE — do not size from it. `lib/crtl/include/stdarg.h` carries six static function BODIES, and the crtl auto-pull for a hand-declared prototype must include that header, so the bodies are emitted twice (+2204 bytes). The macro-reset framing in the title is PROVED DEAD (2026-08-16): carrying the macro table leaves output byte-identical, and forcing the guard on breaks the pull. Fix is Track C library work — move the bodies to lib/crtl/src/stdarg.c. | — |
 | bug-n-a-call-through-a-callable-value-drops-the-callees-defaults | N | 70 | bug | A def called through a callable value ignores its own default arguments — `al = g; al(1)` where `g(x, lo=7)` answers empty instead of 7, and passing the def as an argument and calling it with fewer args SEGFAULTS. Not rename-specific and not import-specific: a same-file assignment reproduces it, and only a DIRECT call applies defaults. The box carries a code address and no signature, which is exactly the open decision. | decide-how-a-compiled-def-carries-its-signature-when-boxed |
 | bug-n-a-class-base-that-is-an-expression-does-not-compile | N | 45 | bug | A class base which is a NAME bound to a type, or a call, does not compile: `B = object; class P(B)` fails where `class P(object)` and `class P(SomeClass)` both work. Blocks six.with_metaclass, which html5lib's parser spells as `class Phase(with_metaclass(...))` — the single remaining wall on html5parser.py. | — |
+| bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function | N | 50 | bug | `g = f` BOXES the function on the heap; every other path (a dict value, a return value, the bare name) keeps the raw code pointer. So `g == f` and `g is f` are False, two assignments of the same function are unequal to each other, and `id(g)` is a heap address while `id(f)` is the code address. CPython answers True to all of it. | — |
 | bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through | N | 45 | bug | sys.version_info throws at RUNTIME with a message admitting its own guard failed: 'the code guarding that (the flag its except-branch sets) let this call through anyway'. Two defects — the member is missing, and the compile-time guard meant to catch that does not fire. A guard that reports its own failure and continues is worse than no guard. | — |
 | bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members | N | 40 | bug | A module that defines a name equal to its own module name makes every QUALIFIED access to the module's other members fail: `import bisect; bisect.bisect_left(...)` gives `no class declares a method or callable field .bisect_left()`, because `bisect` resolves to the module's member rather than the module. CPython's own Lib/bisect.py has `bisect = bisect_right`, so this is ordinary stdlib-shaped code. From-imports are unaffected. | — |
 | bug-n-a-unicode-identifier-is-rejected-by-the-lexer | N | 25 | bug | `_κ = 5` is legal Python 3 and the NilPy lexer rejects it with `unexpected character`. Non-ASCII in a STRING literal already works, so this is the identifier path only. Two tinycss2 files (color4.py, color5.py) use Greek letters as names for colour-space constants. | — |
+| bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view | N | 55 | bug | A user class's `keys()`/`items()`/`values()` called through an untyped (dynamic) receiver is dispatched as a DICT VIEW instead of the method: segfault, or a garbage list of empty strings and None when the result is consumed. Exactly three names; every other colliding name (`get`, `append`, `insert`, `remove`, `clear`, `find`, `set`, `extend`, `pop`) dispatches correctly. | — |
 | bug-n-abs-of-a-complex-raises-typeerror | N | 35 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
 | bug-n-an-augmented-subscript-on-a-dunder-class-is-refused | N | 45 | bug | `obj[k] += v` on any class that reaches subscripting through `__getitem__`/`__setitem__` is a named compile-time refusal — `augmented assignment to a __getitem__/__setitem__ subscript is not supported`. Ordinary Python, and the counting idiom (`counts[k] += 1`) is the single most common thing a dict-like class is written for. The default-indexed-property arm beside it already desugars the augmented form; only the dunder arm does not. | — |
 | bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program | N | 45 | bug | `class X(mod.X)` — a class whose qualified base shares its name — is refused with `class X cannot inherit from itself` when written in the MAIN PROGRAM. The identical code in a pulled `.py` module compiles and dispatches correctly, and renaming either class makes the program case work too, so the variable is the name collision on the program path. This is how all ~100 of CPython's `encodings/*.py` and html5lib's filters are written. | — |
@@ -76,6 +78,7 @@ _none_
 | bug-n-pylib-cannot-reach-the-rtl-power-so-complex-magnitude-loses-ulps | N | 25 | bug | `pycomplex_pow` computes \|z\|**b as exp(b*ln\|z\|) — two roundings — where CPython calls pow() directly, so `(-8.0) ** 0.5` gives an imaginary part of 2.8284271247461894 against CPython's 2.8284271247461903 (~4 ulp). The cause is structural: pylib lives in compiler/builtin and cannot reach the RTL's correctly-rounded Power, which is why it carries its own series ln/exp in the first place. | — |
 | bug-n-self-class-cannot-be-called-as-a-constructor | N | 45 | bug | `self.__class__(args)` does not compile — `error: A has no method __class__` — while `self.__class__.__name__` reads fine and `type(a).__name__` works. Calling the class object is the standard Python idiom for 'construct another one of my own type', and it is what CPython's own xml.sax AttributesImpl.copy() does; lib/rtl/mimic_xml_sax_xmlreader.py names its class explicitly instead, registered in track-b-workarounds.md. | — |
 | bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base | N | 40 | bug | str(e) on an exception class declared in a Pascal unit dispatches __str__ by the STATIC type of the except clause, not the runtime type: `except URLError as e` gives '<urlopen error boom>' and `except Exception as e` gives 'boom' for the same object. CPython gives the same string either way. Pure-NilPy classes are NOT affected. | — |
+| bug-n-the-sequence-protocol-does-not-yield-iteration | N | 48 | bug | A class with `__len__` + `__getitem__` and no `__iter__` is iterable in CPython. In NilPy `for x in obj` is a compile error whose diagnostic names an unrelated internal (`pylib (count) not loaded`), and `list(obj)` compiles and returns an EMPTY list — a silent wrong answer, which is the worse half. | — |
 | bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells | N | 40 | bug | A Nil Python generator instance leaks its locals and its argument cells | — |
 | bug-nilpy-an-extended-slice-cannot-be-assigned | N | 30 | bug | `l[::2] = [7, 8]` is a parse error. The READ form `l[::2]` works, and the plain-slice ASSIGN `l[1:3] = [9]` works; only the strided assignment is missing. | — |
 | bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds | N | 20 | bug | A dict VALUE as the `*=` target still rebinds, so an alias of it keeps the old contents. The parameter half landed 2026-08-15 (pymul_v_inplace); this is the residue, and `+=` has the same split. | — |
@@ -140,7 +143,6 @@ _none_
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-b-a-real-minidom-is-an-implementation-not-a-shim | B | 15 | feature | Question 2 of the xml.dom row, re-filed on its own as that ticket said it should be. html5lib/treebuilders/dom.py wants a document you can build and mutate — ~25 DOM methods, getDOMImplementation().createDocument(), weakref.proxy(), and a reach into minidom's PRIVATE _child_node_types. That is a DOM implementation, not a compatibility alias. It unblocks exactly one corpus file and should be ranked as an implementation project, not alongside shims. | — |
 | feature-b-hardware-sqrt-on-aarch64-and-arm32 | B | 20 | feature | Sqrt is one `sqrtsd` on x86-64 (15x faster than the software path and correctly rounded by IEEE mandate). aarch64 `fsqrt` and arm32 `vsqrt` are the same one-instruction win and both run here under qemu, so the change is verifiable on this box. The portable SqrtSoft stays as the fallback for riscv32/xtensa. | — |
-| feature-b-mimic-xml-etree-elementtree-tree-model | B | 62 | feature | DECIDED 2026-08-19: ship xml.etree.ElementTree as a TREE MODEL only (Element, Comment, ElementTree + 10 members), no XML reader. ~60 lines plus a differential; unblocks the last 4 shim-blocked corpus files. The Comment-factory-is-its-own-tag identity must be exact or html5lib silently stops recognising comments. | — |
 | feature-b-rtl-lnxp1-fpc-compat | B | 20 | feature | FPC's math unit exports LnXP1(x) = ln(1+x) and pxx does not. The implementation already exists as of 2026-08-15 — LnP1, added as an internal helper for the hyperbolic family — so this is an interface line and a name, not an algorithm. Note WHY the name matters: `Log1p` would hijack libc's through pxxcio, `LnXP1` does not. | — |
 | feature-c-csmith-differential-fuzzing | C | 65 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-entry-stub-must-run-initializers-for-environ | C | 45 | feature | `char **envp = environ;` silently becomes NULL in a C program: environ is a VARIABLE read directly, with no call to trigger crtl's lazy /proc/self/environ load, and the C entry stub has no init phase. The fini half landed 2026-08-10; this is the init half | — |
@@ -465,9 +467,9 @@ _none_
 | decide-what-synapse-actually-needs-vs-mimic-fpc | U | 20 | decide | Synapse builds under `--mimic-fpc`. What does it actually NEED? | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2035)
+## done (2036)
 
-2035 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2036 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -518,13 +520,13 @@ _none_
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
 - [p 65] [P] feature-pascal-corpus-oop
-- [p 62] [B] feature-b-mimic-xml-etree-elementtree-tree-model
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 60] [A] refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [C] bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 2)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [B] bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable
+- [p 55] [N] bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view
 - [p 55] [T] bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 - [p 55] [T] bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label
 - [p 55] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
@@ -537,6 +539,7 @@ _none_
 - [p 53] [S] feature-esp-peripheral-callback-api
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
+- [p 50] [N] bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - [p 50] [N] bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - [p 50] [U] decide-staff-track-c-to-unblock-own-language-first
 - [p 50] [D] docs-cross-language-qualifier-note-is-wrong
@@ -550,6 +553,7 @@ _none_
 - [p 50] [A] feature-pascal-asmmode-directive-tolerance
 - [p 50] [A] feature-pascal-initialize-finalize-intrinsics
 - [p 50] [A] feature-release-checksums-repro
+- [p 48] [N] bug-n-the-sequence-protocol-does-not-yield-iteration
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)

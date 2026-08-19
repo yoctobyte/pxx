@@ -1,0 +1,288 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_xml_etree_elementtree.py against CPython's real ElementTree.
+
+A DIFFERENTIAL: this file runs unmodified under CPython, where `import
+xml.etree.ElementTree` finds the stdlib module, and every line below was checked
+to produce identical output both ways.
+
+WHAT IT IS GUARDING. The shim is a tree model with no parser, so nothing here
+feeds it XML; it exercises the operations html5lib's treebuilder and treewalker
+actually perform on the tree they build. Two of those are silent when wrong:
+
+  * `Comment("x").tag IS the Comment factory`. html5lib captures it once and
+    compares every node's tag against it; a shim that used a string sentinel, or
+    a fresh object per comment, produces no error at all -- comments are simply
+    never recognised. Asserted directly (COMMENT SENTINEL below) rather than
+    trusted to fall out of the constructor.
+  * `len(elem)` counts CHILDREN, not attributes. Confusing the two gives a
+    plausible number for every element that happens to have as many attributes
+    as children, i.e. nearly every empty one.
+
+Assertions are on VALUES, never on presence: `hasattr(ET, "Element")` would have
+passed throughout every way this shim could have been wrong.
+"""
+
+import xml.etree.ElementTree as ET
+
+fails = 0
+
+
+def check(name, got, want):
+    global fails
+    if got == want:
+        print(name + "=ok")
+    else:
+        fails = fails + 1
+        print(name + "=FAIL got " + repr(got) + " want " + repr(want))
+
+
+# --- a bare element: the four attributes, by value ---
+# `.text`/`.tail` are None and not "" on a fresh element. html5lib tests them
+# with `if not element.tail` and then assigns "" to start accumulating, so the
+# two states are distinguishable upstream and have to be here.
+e = ET.Element("div")
+check("tag", e.tag, "div")
+check("text_is_none", e.text is None, True)
+check("tail_is_none", e.tail is None, True)
+check("attrib_empty", len(e.attrib), 0)
+check("len_of_childless", len(e), 0)
+
+# --- attributes: get/set, and the default that is not a KeyError ---
+e.set("id", "main")
+e.set("class", "wide")
+check("get_present", e.get("id"), "main")
+check("get_absent_default_none", e.get("nope") is None, True)
+check("get_absent_explicit_default", e.get("nope", ""), "")
+check("attrib_len_after_two_sets", len(e.attrib), 2)
+check("attrib_direct", e.attrib["class"], "wide")
+check("keys_sorted", sorted(e.keys()), ["class", "id"])
+check("items_sorted", sorted(e.items()), [("class", "wide"), ("id", "main")])
+# The attrib dict is LIVE: html5lib's _setAttributes mutates it in place
+# (`el_attrib.clear()` then item assignment) and expects the element to see it.
+live = e.attrib
+live["data-x"] = "1"
+check("attrib_is_live", e.get("data-x"), "1")
+live.clear()
+check("attrib_clear_is_live", len(e.attrib), 0)
+
+# --- the attrib= constructor argument, and that it does not alias ---
+# CPython copies the dict it is handed, so a later mutation of the caller's dict
+# must not reach the element. A shim that stored the reference would pass every
+# read-back check and diverge only when the caller reused its dict -- which
+# html5lib's token dicts do.
+seed = {"href": "/a", "rel": "next"}
+linked = ET.Element("a", seed)
+check("ctor_attrib_href", linked.get("href"), "/a")
+check("ctor_attrib_count", len(linked.attrib), 2)
+seed["href"] = "/mutated"
+check("ctor_attrib_is_a_copy", linked.get("href"), "/a")
+
+# --- children: append/insert/remove, len, indexing, iteration ---
+root = ET.Element("html")
+head = ET.Element("head")
+body = ET.Element("body")
+root.append(head)
+root.append(body)
+check("len_counts_children", len(root), 2)
+check("index_0", root[0].tag, "head")
+check("index_negative", root[-1].tag, "body")
+# len() must not follow attributes: give the root two of those as well and
+# recount. A shim measuring the wrong dict would still say 2 here, so the counts
+# are deliberately made to differ.
+root.set("lang", "en")
+check("len_ignores_attributes", len(root), 2)
+
+title = ET.Element("title")
+root.insert(1, title)
+check("insert_position", root[1].tag, "title")
+check("len_after_insert", len(root), 3)
+
+tags = []
+for child in root:
+    tags.append(child.tag)
+check("iteration_order", tags, ["head", "title", "body"])
+check("list_of_element", [c.tag for c in list(root)], ["head", "title", "body"])
+
+root.remove(title)
+check("len_after_remove", len(root), 2)
+check("remove_took_the_right_one", [c.tag for c in root], ["head", "body"])
+
+# `list(elem).index(child)` is how html5lib finds an insertion point
+# (treebuilders/etree.py insertBefore); it needs child identity, not equality by
+# tag, so two same-tagged children must stay distinguishable.
+a1 = ET.Element("p")
+a2 = ET.Element("p")
+holder = ET.Element("div")
+holder.append(a1)
+holder.append(a2)
+check("identity_index_first", list(holder).index(a1), 0)
+check("identity_index_second", list(holder).index(a2), 1)
+
+# --- text and tail carry content, and accumulate ---
+p = ET.Element("p")
+p.text = "hello"
+p.text += " world"
+check("text_accumulates", p.text, "hello world")
+span = ET.Element("span")
+p.append(span)
+p[-1].tail = ""
+p[-1].tail += "after"
+check("tail_accumulates_on_last_child", p[0].tail, "after")
+
+# --- clear() resets children, attributes, text AND tail ---
+# The tail is the surprising one: upstream clears it, so a shim that tidily
+# preserves it diverges.
+c = ET.Element("x")
+c.set("k", "v")
+c.text = "t"
+c.tail = "l"
+c.append(ET.Element("y"))
+c.clear()
+check("clear_children", len(c), 0)
+check("clear_attrib", len(c.attrib), 0)
+check("clear_text", c.text is None, True)
+check("clear_tail", c.tail is None, True)
+
+# --- COMMENT SENTINEL: the identity that fails silently ---
+# This is what html5lib does, verbatim (treewalkers/etree.py:16).
+ElementTreeCommentType = ET.Comment("asd").tag
+com = ET.Comment("a remark")
+check("comment_text", com.text, "a remark")
+check("comment_tag_is_the_sentinel", com.tag == ElementTreeCommentType, True)
+# A second, independently created comment must answer to the same sentinel --
+# this is the assertion a fresh-object-per-comment shim fails.
+check("second_comment_same_sentinel",
+      ET.Comment("other").tag == ElementTreeCommentType, True)
+# And an ordinary element must NOT. A string sentinel would pass the two checks
+# above and fail here only for an element whose tag happened to collide; this
+# one uses a tag no document has.
+check("element_is_not_a_comment",
+      ET.Element("div").tag == ElementTreeCommentType, False)
+# A comment's tag is not a string, which is how html5lib's `*`-matching and its
+# `assert isinstance(node.tag, string_types)` tell the two apart.
+check("comment_tag_is_not_a_string",
+      isinstance(ElementTreeCommentType, str), False)
+# Comments nest in a tree like any node, and iteration yields them.
+doc = ET.Element("html")
+doc.append(ET.Comment("before body"))
+doc.append(ET.Element("body"))
+kinds = []
+for child in doc:
+    if child.tag == ElementTreeCommentType:
+        kinds.append("comment")
+    else:
+        kinds.append(child.tag)
+check("comments_walk_as_comments", kinds, ["comment", "body"])
+
+# --- find(): the one path query html5lib uses ---
+# treebuilders/etree.py:332 asks for exactly these two spellings.
+tree_root = ET.Element("DOCUMENT_ROOT")
+html = ET.Element("html")
+tree_root.append(html)
+found = tree_root.find("html")
+check("find_plain_tag", found is html, True)
+check("find_absent_is_none", tree_root.find("nothing") is None, True)
+
+ns_root = ET.Element("DOCUMENT_ROOT")
+ns_html = ET.Element("{http://www.w3.org/1999/xhtml}html")
+ns_root.append(ns_html)
+check("find_qualified_tag",
+      ns_root.find("{http://www.w3.org/1999/xhtml}html") is ns_html, True)
+check("find_plain_misses_qualified", ns_root.find("html") is None, True)
+
+nested = ET.Element("a")
+mid = ET.Element("b")
+leaf = ET.Element("c")
+nested.append(mid)
+mid.append(leaf)
+check("find_path_descends", nested.find("b/c") is leaf, True)
+check("find_path_missing_step", nested.find("b/zz") is None, True)
+check("find_star", nested.find("*") is mid, True)
+check("find_dot_is_self", nested.find(".") is nested, True)
+# find returns the FIRST match, not the last.
+multi = ET.Element("ul")
+first_li = ET.Element("li")
+multi.append(first_li)
+multi.append(ET.Element("li"))
+check("find_returns_first", multi.find("li") is first_li, True)
+# `*` matches ANY child, comments INCLUDED. This is the one place the plausible
+# reading ("any element") is wrong, and it was wrong in this shim until CPython
+# said otherwise -- which is the whole argument for running the file both ways
+# rather than reading the docs.
+with_comment = ET.Element("div")
+lead_comment = ET.Comment("me first")
+with_comment.append(lead_comment)
+with_comment.append(ET.Element("p"))
+check("find_star_takes_a_comment", with_comment.find("*") is lead_comment, True)
+
+# --- ElementTree: the root holder ---
+holder_tree = ET.ElementTree(html)
+check("getroot", holder_tree.getroot() is html, True)
+check("tree_find_delegates", holder_tree.find("nothing") is None, True)
+# The treewalker distinguishes a tree from an element with hasattr(node, "tag")
+# and calls getroot() when it is absent. A tree that grew a `.tag` would be
+# walked as a tagless element, silently.
+check("tree_has_no_tag", hasattr(holder_tree, "tag"), False)
+check("element_has_a_tag", hasattr(html, "tag"), True)
+
+# --- a tree the shape html5lib builds, walked end to end ---
+# One pass over a real document shape: the per-operation checks above can all
+# pass while the composition is wrong.
+document = ET.Element("DOCUMENT_ROOT")
+doc_html = ET.Element("html")
+document.append(doc_html)
+doc_head = ET.Element("head")
+doc_body = ET.Element("body")
+doc_html.append(doc_head)
+doc_html.append(doc_body)
+doc_title = ET.Element("title")
+doc_title.text = "Hi"
+doc_head.append(doc_title)
+para = ET.Element("p")
+para.set("class", "lead")
+para.text = "one "
+em = ET.Element("em")
+em.text = "two"
+em.tail = " three"
+para.append(em)
+doc_body.append(ET.Comment("a note"))
+doc_body.append(para)
+
+pieces = []
+
+
+def walk(node, comment_type):
+    if node.tag == comment_type:
+        pieces.append("<!--" + node.text + "-->")
+        if node.tail:
+            pieces.append(node.tail)
+        return
+    attrs = ""
+    # Reaching the attributes through `.attrib` rather than `node.keys()` is
+    # what html5lib itself does (`for name, value in node.attrib.items()`,
+    # treewalkers/etree.py:63), so the walk stays faithful. It also sidesteps
+    # bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view, which
+    # segfaults on `node.keys()` when `node` is an untyped parameter -- the
+    # statically-typed spelling is asserted above and does work.
+    for key in sorted(node.attrib.keys()):
+        attrs += " " + key + '="' + node.attrib[key] + '"'
+    pieces.append("<" + node.tag + attrs + ">")
+    if node.text:
+        pieces.append(node.text)
+    for kid in node:
+        walk(kid, comment_type)
+    pieces.append("</" + node.tag + ">")
+    if node.tail:
+        pieces.append(node.tail)
+
+
+walk(document, ElementTreeCommentType)
+check("full_walk", "".join(pieces),
+      '<DOCUMENT_ROOT><html><head><title>Hi</title></head><body>'
+      '<!--a note--><p class="lead">one <em>two</em> three</p>'
+      '</body></html></DOCUMENT_ROOT>')
+
+if fails == 0:
+    print("MIMIC-XML-ETREE OK")
+else:
+    print("MIMIC-XML-ETREE FAIL " + str(fails))
