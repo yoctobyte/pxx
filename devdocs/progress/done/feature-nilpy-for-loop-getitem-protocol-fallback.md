@@ -139,4 +139,4 @@ running the wired lines verbatim plus `make -n compiler/pascal26`.
 `make compiler/pascal26` (self-host fixedpoint, 1 round) + `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 6905d6fd0.
