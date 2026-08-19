@@ -46,7 +46,10 @@ print(m.floor(2.7))
 #
 # sysutils is the stand-in here because it needs no display: `Trim` is a routine
 # it declares, nothing on the Python side declares it, so a bare call must work.
-import sysutils as su
+# `'sysutils.pas'`, quoted: a bare NilPy import means PYTHON, and sysutils is a
+# genuinely Pascal unit, so it is reached by naming its extension. Unchanged in
+# every other respect -- the alias still keys on the basename.
+import 'sysutils.pas' as su
 
 print(Trim("  padded  "))
 print(su.Trim("  padded  "))

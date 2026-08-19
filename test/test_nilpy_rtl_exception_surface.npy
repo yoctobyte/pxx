@@ -8,7 +8,10 @@
 #      imported — the earlier attempt at this printed it EMPTY, which is the
 #      regression to watch for. `msg` is the one storage; Message/FMessage are
 #      properties over it.
-import sysutils as su
+# `'sysutils.pas'`, quoted: a bare NilPy import means PYTHON, and sysutils is a
+# genuinely Pascal unit, so it is reached by naming its extension. Unchanged in
+# every other respect -- the alias still keys on the basename.
+import 'sysutils.pas' as su
 
 try:
     raise ValueError("mine")

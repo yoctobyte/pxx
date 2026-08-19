@@ -34075,6 +34075,10 @@ var
     'pas'/'c' for the explicit quoted spelling. See PyImportLang in defs.inc. }
   pyImportLang: AnsiString;
   pasLookupOK, pyLookupOK: Boolean;   { which chains this import may use }
+  { The Pascal source a BARE NilPy import was refused, kept for the diagnostic:
+    the name resolves, just not to a Python module, and saying so is the whole
+    point of the rule. Empty when nothing was refused. }
+  pasRefusedPath: AnsiString;
   isPyUnit, savedPyExprMode: Boolean;
   { The dotted module path this import was written with, claimed from the global
     on entry so a nested unit parse cannot see a stale one. Empty unless it
@@ -34129,7 +34133,15 @@ begin
     `import 'classes.pas'` that fell through to a same-named .py would be a
     wrong answer, not a miss. Both default to open, so every non-NilPy `uses`
     and every bare import behaves exactly as before. }
-  pasLookupOK := pyImportLang <> 'c';
+  { A BARE NilPy import means PYTHON — .py/.npy, a mimic_ shim, or a C header
+    the frontend has always reached — so the Pascal chain is closed to it,
+    EXCEPT for the lib/rtl units that ARE the Python module of that name.
+    `from classes import Foo` used to bind lib/rtl/classes.pas and fail with
+    "no overload of Delete matches these arguments", naming a symbol inside a
+    unit the program never mentioned, with no path back to the import.
+    decide-nilpy-imports-that-collide-with-a-pascal-rtl-unit, user 2026-08-19. }
+  pasLookupOK := (pyImportLang <> 'c') and
+                 ((pyImportLang <> 'py') or PyRtlUnitServesPython(lo));
   pyLookupOK := (pyImportLang <> 'pas') and (pyImportLang <> 'c');
   pyDottedIsPath := False;
   for i := 1 to Length(pyDotted) do
@@ -34710,8 +34722,10 @@ begin
     predicate repeated at eight sites is eight chances for one of them to drift.
     Probes only read files, so dropping the content here is the same as never
     having run them. }
+  pasRefusedPath := '';
   if (Length(UnitContent) > 0) and (not pasLookupOK) and PathIsPascalSource(path) then
   begin
+    if pyImportLang = 'py' then pasRefusedPath := path;
     UnitContent := '';
     path := '';
   end;
@@ -34793,6 +34807,25 @@ begin
   if (Length(UnitContent) = 0) and isNilPy and (pyImportLang <> 'pas') and
      (not PyMimicShimExists(lo, rtldir, lcldir)) then
     PyTryHostHeader(cName, path, UnitContent, isCUnit, isCHeader);
+
+  { THE COLLISION, NAMED. A bare import found a Pascal unit of that name and was
+    refused it, and nothing Python-shaped answered either — so the honest
+    failure says which unit it declined and how to ask for it on purpose,
+    instead of "no unit named classes and no shim mimic_classes", which denies
+    the existence of a file the resolver just read.
+
+    After the .py/.npy and host-header probes and before the shim mapping: a
+    mimic_ shim IS the Python module of that name, so if one exists it answers
+    and there is no collision to report. }
+  if (Length(UnitContent) = 0) and isNilPy and (pasRefusedPath <> '') and
+     (not PyMimicShimExists(lo, rtldir, lcldir)) then
+  begin
+    emsg := 'import: ' + lo + ' is the Pascal unit ' + pasRefusedPath +
+            ', not a Python module — a bare NilPy import resolves to Python '
+            + '(.py/.npy) only. To reach the Pascal unit, name it with its '
+            + 'extension: import ''' + lo + '.pas'' as ' + lo;
+    Error(emsg);
+  end;
 
   { NilPy SHIM MAPPING. A Python module we implement ourselves lives under OUR
     name — `mimic_<module>` — so no file in the tree carries an upstream package

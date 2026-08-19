@@ -1,0 +1,14 @@
+# A BARE NilPy import resolves to PYTHON only -- .py/.npy, a mimic_ shim, or a
+# C header. `classes` is lib/rtl/classes.pas, an ordinary Pascal unit that
+# happens to share a name with nothing in Python, so this must be REFUSED.
+#
+# The refusal is the feature. Before it, this line bound the Pascal unit and
+# failed one token later with "no overload of Delete matches these arguments"
+# -- a symbol inside a unit the program never mentioned, with no path back to
+# the import that pulled it in.
+#
+# What must NOT change: `re`, `io`, `math`, `json`, `random` and the other
+# lib/rtl units that ARE the Python module of their name keep resolving by bare
+# name (PyRtlUnitServesPython). This test is the population that must stop.
+# The Pascal unit stays reachable on purpose: import 'classes.pas' as classes.
+from classes import Foo

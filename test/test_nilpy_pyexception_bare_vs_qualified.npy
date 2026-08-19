@@ -18,7 +18,10 @@
 # is the ordinary rule rather than a special case. This file is the regression
 # test that the observable contract survived swapping the mechanism underneath
 # it: every line below asserts exactly what it did before.
-import sysutils as su
+# `'sysutils.pas'`, quoted: a bare NilPy import means PYTHON, and sysutils is a
+# genuinely Pascal unit, so it is reached by naming its extension. Unchanged in
+# every other respect -- the alias still keys on the basename.
+import 'sysutils.pas' as su
 
 
 class MyErr(Exception):

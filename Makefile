@@ -282,14 +282,27 @@ test-nilpy: $(COMPILER)
 	# is exactly that shape. The isinstance line catches a partial fix that
 	# dedupes the body but not the class rows.
 	# bug-a-a-python-module-s-identity-is-its-name-not-its-file
+	./$(COMPILER) test/test_nilpy_module_identity.npy $(TESTTMP)/test_nilpy_module_identity26
+	test "$$($(TESTTMP)/test_nilpy_module_identity26)" = "$$(printf 'body-ran\nTrue')"
 	# A quoted import names another language by extension -- the escape hatch
 	# that makes "a bare import means Python" affordable. Both shapes: a
 	# searched unit name ('sysutils.pas') and an authoritative path
 	# ('./relpath/relstr.pas').
 	./$(COMPILER) test/test_nilpy_quoted_import.npy $(TESTTMP)/test_nilpy_quoted_import26
 	test "$$($(TESTTMP)/test_nilpy_quoted_import26)" = "$$(printf '42\n42')"
-	./$(COMPILER) test/test_nilpy_module_identity.npy $(TESTTMP)/test_nilpy_module_identity26
-	test "$$($(TESTTMP)/test_nilpy_module_identity26)" = "$$(printf 'body-ran\nTrue')"
+	# A BARE import means Python, so a genuinely-Pascal unit is refused BY NAME
+	# rather than bound and failed one token later: `from classes import Foo`
+	# used to die inside lib/rtl/classes.pas with "no overload of Delete
+	# matches these arguments", naming a symbol in a unit the program never
+	# mentioned. The assertion is on the MESSAGE, since the failure is the
+	# feature -- and it must name the spelling that does reach the unit.
+	if ./$(COMPILER) test/test_nilpy_bare_import_is_python.npy $(TESTTMP)/test_nilpy_bare_import26 >/dev/null 2>&1; then \
+	  echo "FAIL: a bare NilPy import still resolved a Pascal-only unit"; exit 1; \
+	fi
+	./$(COMPILER) test/test_nilpy_bare_import_is_python.npy $(TESTTMP)/test_nilpy_bare_import26 2>&1 \
+	  | grep -q "classes is the Pascal unit"
+	./$(COMPILER) test/test_nilpy_bare_import_is_python.npy $(TESTTMP)/test_nilpy_bare_import26 2>&1 \
+	  | grep -q "import 'classes.pas' as classes"
 	# A relative import's DOT LEVEL decides which package it resolves against:
 	# `from ..constants import TOP` climbs to the parent, `from .peer` does not.
 	# Both spellings are in the one file, so ignoring the level fails this
