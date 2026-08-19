@@ -245,3 +245,50 @@ make the descriptor one word — that global's address, or 0 for no default.
 quick`. Touches `defs.inc` and `compiler/builtin/pylib.pas`, so it needs a PIN
 before any other lane sees it. Land nothing half-applied: a Track A ticket in
 `unfinished/` fails `progress.sh check` for good reason.
+
+
+## Increment 2 design, settled during the v354 pin window (read-only probing)
+
+The plan above said "descriptor = the address of the hidden global holding the
+default". **Probing the fixup path showed that route is far more expensive than
+it looks, and that a better one exists.**
+
+### Why "store the global's address" is the wrong route
+
+`Syms[].Offset` for an `skGlobal` is a **BSS** offset (`defs.inc:1246`), and the
+existing static-data relocation `AddDataPtrFix` resolves `dataBase + targetOff`
+— data to DATA. There is no data-to-BSS fixup. `GlobFix` does resolve
+`bssBase + BSSoff`, but it patches a **code** position, 4 bytes, not a data one.
+
+Adding one would mean touching **five** application sites in `elfwriter.inc`
+(three `PatchDataU64` at 1614/1753/1918 and two `writeRela32` at 2241/2425), and
+the two `writeRela32` ones emit **object-file relocations**, where a BSS target
+needs a different section symbol than the `.data` one they pass today. That is a
+real ELF-writer change riding on what is supposed to be a NilPy defaults fix.
+
+### The better route: the defaults array is WRITABLE, filled at def time
+
+Keep the defaults array in `.data` as `TotN` **Variants** (16 bytes each), and
+have the `def` statement's own execution write each default's value into it.
+
+- **No new fixup kind.** The record's pointer to the array stays an ordinary
+  data-to-data `AddDataPtrFix`. Nothing in `elfwriter.inc` changes.
+- **It is writable.** Verified: the emitted image has a single `PT_LOAD` with
+  flags **7 = RWX** (`elfwriter.inc`, the 64-bit writer), so `.data` is
+  writable at run time. This is the assumption the whole approach rests on, so
+  it was checked rather than assumed.
+- **It puts def-time evaluation where Python says it happens** — at the `def`
+  statement, once. The existing non-constant-default machinery already evaluates
+  there; this changes *where the value is stored*, not when it is computed.
+- **It collapses the two default representations** without needing to mint a
+  hidden global for every constant default: the array slot IS the storage, so
+  constant and non-constant defaults become one path. That is a stronger version
+  of the recommendation above and reaches the same goal with less machinery.
+- **`def f(a=[])` stays observable by construction**: one Variant, written once,
+  copied (not rebuilt) at each call.
+
+Code needs the array's address to write into it, which is the same data-ref
+mechanism `VT_CLASSREF_TAG` already uses — see `CLASSREF_DATAREF_BASE` and its
+`-(BASE + ci)` sentinel convention. A `PYSIG_DATAREF_BASE` follows that pattern;
+note the comment at `TYPEINFO_REQ_DATAREF_BASE` that the MOST negative base must
+be tested FIRST in the fixup branch chain, or a later branch swallows it.
