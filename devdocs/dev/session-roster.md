@@ -2353,3 +2353,49 @@ rerank it deliberately rather than inheriting the number).
   LAST hang-capable file in lib-test. Remaining candidates are all loud-on-failure, so if
   the EWMA misses under-2s after ~6 more full runs, the cause is **outside the port class**
   and **a timeout from here is new information rather than more of this.**
+
+- **T: EWMA tracking the curve, and the UDP finding is now a standing triage rule.**
+  11.2 → **7.57s** over n=49→50, against 7.2 predicted from the previous sample. Geometric
+  decay toward ~1.2 holding, one sample per full run; **under 2s within about five more.**
+
+  T took the sharpened framing and named what it bought: *"that converts the horizon from a
+  prediction into a discriminator, which is worth more."* Recorded in `track-t.md`
+  (`9bfb7fcfa`) as a triage rule rather than left in a message, on the grounds that it is a
+  fact about **how the harness misreads reds**, not a fact about DNS — with frank3's
+  measured pair verbatim, because *a red arriving with a specific, plausible, WRONG
+  diagnosis attached is the shape triage is least able to resist. A hang at least announces
+  itself as a duration signal; this announces nothing.*
+
+  Both corollaries kept, and T flagged both as corrections to its own earlier readings:
+  **audit for unchecked BINDS, not for literals** (it had `lib_net6`'s hardcoded ports on
+  its list; every bind there is checked and `Halt(1)`s, so it is loud and cannot touch the
+  EWMA — *"'hardcoded' was the wrong predicate; I was auditing the visible thing rather
+  than the deciding one"*), and **port 0 is not always available as the fix** (the UDP→TCP
+  fallback shares the port NUMBER across two port spaces), which matters precisely because
+  port 0 is now house style and will be applied by someone who has not hit it.
+
+  Two more T bugs closed in the same commit, both affecting records I read: `fuzz.sh`
+  compared the **reaper's** stderr, so an identical crash on all four targets — the
+  strongest possible evidence of NO backend divergence — was reported as three
+  DIVERGENCEs on every crashing mutant; and `pin_verify` recorded **positional** job names,
+  so a red in it could not be attributed without knowing which sha to resolve against.
+
+- **A WITHDRAWAL WORTH MORE THAN THE FIXES — the "stale version label" defect was not
+  real, and T nearly shipped a fix for it.** `ver` and `sha` come from **one line** of
+  `pin.log` and are paired at the source. **Verified here** — that is exactly the shape of
+  the two most recent entries, version and sha written together in a single record, so they
+  cannot drift apart. The apparent evidence (VERSION reading 346 in a tree recorded as
+  v347) holds for **every pin ever taken**, eleven of eleven, lag exactly 1 — because
+  `make pin` records the pin against the sha it was built FROM, and the VERSION bump lands
+  in the pin commit AFTER it. **The proposed fix would have relabelled every verification
+  with its predecessor's version.**
+
+  Honest split on verification: I confirmed the structural claim (one line, paired at
+  source — the decisive one, since it makes drift impossible). The eleven-of-eleven lag
+  audit is T's own artifact on T's box and is taken on its word; there is no `VERSION` file
+  in this repo to check it against.
+
+  **The class: a perfectly consistent anomaly is evidence of a CONVENTION, not a bug.**
+  A defect that holds for 11 of 11 cases with a constant offset is describing how the
+  system is built. Mirror image of the stale-comment class this week — there the prose was
+  wrong and the code right; here the *evidence* looked wrong and the design was right.
