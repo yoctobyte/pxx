@@ -98,3 +98,79 @@ struck from that ticket.
 
 The second was confirmed independently from the other side by the worker that hit the
 same wall while fixing the rename cluster, rather than inherited from this ticket.
+
+---
+
+# DECIDED 2026-08-19 by the user — **Option D: the signature becomes a TYPE**
+
+Neither A nor B as written. The user's framing, which is better than both and is what
+gets built:
+
+> "We know the type information. We just could make that function definition a **type**,
+> and store the type ID alongside the pointer. The caller may need some (one-time
+> written) helper to call that type."
+
+## The design
+
+The `VT_CALLABLE_TAG` payload becomes **one pointer to a static signature record**:
+
+```
+{ code address, ReqN, TotN, per-parameter default descriptor[] }
+```
+
+**A variant is 16 bytes — 8-byte tag + 8-byte payload — so there is exactly ONE payload
+word.** That is why the code address moves *inside* the record rather than sitting beside
+a type ID: "type ID alongside the pointer" collapses into "the payload IS the signature,
+and the code address lives in it."
+
+**The record is emitted at compile time and never allocated, so the slot still owns
+nothing.** The lifetime property `defs.inc` protects deliberately — *"the slot does NOT
+own it… that is the lifetime these values already had while they wore VT_INT64"* — is
+preserved **by construction**, not by care. That is the whole reason this beats Option A:
+no retain/release change for a value class that currently has none, so neither of A's
+silent failure modes (leak, double-free) is reachable.
+
+The call site gets **one helper, written once**, against the signature type: read
+`ReqN`/`TotN`, check the actual argument count, fill missing defaults from the record,
+call the code address.
+
+## Two findings that made the decision safe, both from reading rather than assuming
+
+**1. The "second shape" objection was already overstated.** `VT_CALLABLE_TAG`'s own
+comment says the payload is *"USUALLY a static code address; it may also be a BORROWED
+heap callable"*, and that *"run-time dispatch never keys on this tag — `PyCallableObj`
+tells the shapes apart by the object's magic."* So the tag **already** carries two payload
+kinds and a discrimination mechanism **already** exists. This adds a payload kind to a
+tag that has them; it does not invent a third convention.
+
+**2. Non-constant defaults are ALREADY solved, which was the one real risk.** Python
+evaluates defaults once at `def` time, so a default need not be a compile-time constant
+(`def f(a=[])` — the shared-mutable-default idiom is observable). A purely static record
+could not hold such a value. But `ProcParamDefaultSym` already exists: *"symbol of the
+hidden global holding a NON-CONSTANT default's def-time value… the call site therefore
+reads this global rather than rebuilding a value."*
+
+So each per-parameter descriptor holds **either** the constant-folded value **or** the
+address of that hidden global. Both are compile-time known and static. **The hard case was
+built before this decision was taken.**
+
+## The synthesis that recovers most of what Option A wanted
+
+Because the signature is a real interned **type**, `TPyClosure` can carry **the same
+signature type**. The two callable shapes then disagree only about **ownership**, never
+about *what a signature is*, and the call-site helper is written once against the type
+rather than once per shape. Option A's actual goal — one notion of a signature, one call
+path — is obtained without touching lifetimes.
+
+## Accepted limitation, stated so it is not later read as a regression
+
+Signatures are fixed at compile time, so a callable synthesized at run time the way
+CPython can (dynamic module load, runtime class synthesis) is not covered. **This is not
+a new constraint** — NilPy is a compiler, not an interpreter, and already accepts it
+everywhere. The user's note on the escape hatch: the **eval library** (`pyeval`) is where
+genuinely dynamic Python is expected to be served, partly or wholly.
+
+## Re-filed as work (a decided ticket that is never re-filed is invisible)
+
+See `feature-n-a-callable-value-carries-its-signature-type`. Do **not** leave this in
+`decided/` as the only record — `ready`/`next` do not read decisions.

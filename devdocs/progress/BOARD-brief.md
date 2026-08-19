@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:16 blocked:5 backlog:239 experimental:20 rainy-day:41 done-followup:3 decided:82 done:2032 rejected:38`
+`unfinished:16 blocked:5 backlog:239 experimental:20 rainy-day:41 done-followup:3 decided:83 done:2032 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -38,9 +38,10 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 224, ranked
+## Ready — top 30 of 225, ranked
 
-- `[p 88] [U]` decide-how-a-compiled-def-carries-its-signature-when-boxed (unblocks 2)
+- `[p 88] [A]` feature-n-a-callable-value-carries-its-signature-type
+- `[p 70] [N]` bug-n-a-call-through-a-callable-value-drops-the-callees-defaults
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
@@ -69,6 +70,5 @@ _none — no lane is locked._
 - `[p 50] [U]` decide-staff-track-c-to-unblock-own-language-first
 - `[p 50] [D]` docs-cross-language-qualifier-note-is-wrong
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
-- `[p 50] [C]` feature-c-vla-via-alloca
 
-_194 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_195 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
