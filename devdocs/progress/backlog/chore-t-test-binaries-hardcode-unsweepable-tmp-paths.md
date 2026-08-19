@@ -202,3 +202,19 @@ are not one-line getenv changes.
 
 Not editing the 39 sources (three other lanes own them), and not filing the four
 lane tickets — routing is the coordinator's. This section is the proposal.
+
+### Routing, decided by the coordinator 2026-08-19
+
+| lane | files | state |
+| --- | --- | --- |
+| **C** | 12 | **ROUTED** — active lane under the current mandate |
+| **P** | 5 | **ROUTED** — same |
+| **N** | 14 | **HELD on the Track N deferral.** Not unowned and not an oversight: the user has deferred Track N entirely, and A/P/C outranks everything N including N bugs. These are the cheapest of the four groups (14 files, 18 paths, almost all one scratch file honouring `$TESTTMP` via getenv), so they will close quickly whenever N resumes |
+| **B** | 6 | **PARKED — no worker.** frank2 is on A/P/C triage. Not deferred by policy, just unstaffed |
+
+Recorded per lane because an unrouted item with no reason reads as an oversight,
+and the next reader would otherwise spend the time re-deriving why 20 of the 37
+files have nobody on them.
+
+The ratchet means none of this is urgent: nothing new can be added while the
+groups wait, which is the property a cleanup would not have had.
