@@ -5,12 +5,16 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:2 unfinished:17 blocked:5 backlog:239 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2044 rejected:39`
+`urgent:1 working:2 unfinished:17 blocked:5 backlog:240 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2044 rejected:39`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-b-strtofloat-big-integers-in-64-bit-limbs` [B] — owner: frank3-etree
 - `feature-n-a-callable-value-carries-its-signature-type` [A] — owner: frankonpiler-an
+
+## urgent (1) — jump the queue
+
+- `bug-n-pin-v357-breaks-tk-nilpy-callable-value-of-a-def-with-no-signature-record` [N]
 
 ## unfinished (17) — parked mid-flight; re-claim, do not duplicate
 
@@ -40,8 +44,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 223, ranked
+## Ready — top 30 of 225, ranked
 
+- `[p 90] [N]` bug-n-pin-v357-breaks-tk-nilpy-callable-value-of-a-def-with-no-signature-record
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
@@ -54,6 +59,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - `[p 55] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
 - `[p 55] [N]` bug-n-hasattr-through-an-untyped-parameter-is-always-false
+- `[p 55] [N]` bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
 - `[p 55] [N]` bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
 - `[p 55] [T]` bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 - `[p 55] [T]` chore-t-split-lib-test-into-jobs-that-name-what-failed
@@ -70,7 +76,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 50] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - `[p 50] [U]` decide-staff-track-c-to-unblock-own-language-first
 - `[p 50] [D]` docs-cross-language-qualifier-note-is-wrong
-- `[p 50] [A]` feature-a-implement-initialize-and-finalize-over-the-arc-helpers
-- `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 
-_193 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_195 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
