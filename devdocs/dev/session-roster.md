@@ -3807,3 +3807,30 @@ one landed **between** two messages in which I told workers to watch for exactly
 advance what a DISAGREEING result would look like, and notice when you never see one.** Two
 independent compilers agreeing to the digit on a mixed float/int SysV boundary is a suspiciously
 clean result; that suspicion is the tell, and it is available before the command is written.
+
+## Check +25h — all three lanes running, nobody blocked, first GREEN since the import window
+
+**Nobody blocked; no dispatch made.** frank3 busy (A/P slot, reduced compiler — `PXX_NO_NILPY`
+next, the only frontend omission that moves size). frank2 busy (Track C, csmith axis 3).
+plexus-T running (csmith `--target` + the timeout bug, bundled).
+
+**Watcher: `d4b4e7e53104` GREEN (native)** — the first green since the import window, which
+confirms pin v365 did what it was taken for. Predicted and now measured, rather than assumed.
+
+**PIN HELD, deliberately.** One `compiler/**` commit past v365's base — `da53bbd26`, frank3's
+eight frontend-omission defines. Nothing is blocked on it: the defines are inert in a default
+build (fixedpoint converged in 1 round, default binary byte-count unchanged), Track B/E build
+against v365, and frank3 lands `NO_NILPY` within the hour. Fold both into one pin.
+
+### Breadth: the fix is live but has not yet had a window, and I am NOT calling a quiet period
+
+    breadth — newest full tier is 6h old, 62 testable commit(s) behind  [STALE]
+
+Shapes 4 and 2 both went live today (18:07:41 and 18:19:32). **Calling a quiet period now would
+confound the only test that matters** — whether breadth reaches a window on its own, which is
+the entire claim of the two shapes. So: give it one more check cycle. **If the next check still
+shows zero full tiers, call the quiet period** and treat the shapes as not-yet-sufficient rather
+than broken; T said plainly they make lower branches reachable, not fast.
+
+Coverage risk is real and accumulating (62 commits with no cross verdict), so this is a bounded
+wait, not a bet. `a54259aab`, `354f734c1` and everything since remain native-only.
