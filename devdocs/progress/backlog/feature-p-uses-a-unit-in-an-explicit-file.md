@@ -52,3 +52,20 @@ lives in the shared `lexer.inc`/`parser.inc`, so it obeys A's no-concurrent-edit
 
 ## Log
 - 2026-08-19 — filed, deliberately low prio per the user.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin **v364** — after the import/uses refactor landed)
+
+**Genuine feature, still wanted — and specifically NOT settled by the refactor
+it sits next to.** Re-measured against v364 rather than the v361 the ticket
+quotes, because that work changed how units are named:
+
+```
+uses mymod in 'mymod.pas';   ->  pascal26:2: error: unexpected token  (near `in`)
+uses './mymod.pas' as m;     ->  works, m.Twice(21) = 42
+```
+
+Unchanged on both rows. The quoted-path form still works and the standard
+Delphi/FPC spelling still does not parse, so the compat gap the ticket
+describes survived the refactor intact. Its central design point stands too:
+`in` must bind the unit under **its declared name**, not as an alias, so the
+existing alias machinery is not automatically the implementation.

@@ -150,3 +150,23 @@ recollection. The coordinator raised overloads as a fork (it is not) and initial
 the implicit bind should simply be deleted (premature — Pascal-into-C is intended and
 works; it is the naming that is missing). Both corrections are the user's and are why the
 spec has the shape it has.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin **v364**)
+
+**Genuine feature, still wanted, unchanged — and still correctly blocked.**
+Measured against v364, after the import/uses work landed:
+
+```c
+#include "mymod.pas"
+int main(void){ printf("%d\n", mymod_pas_Twice(21)); }
+```
+```
+pascal26:1: error: stray token at top level (not a declaration): 'unit'
+```
+
+So `#include` of a `.pas` is still plain textual inclusion — the import site
+this ticket specifies does not exist, and nothing about it landed incidentally.
+Its `blocked-by`
+(`bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine`) is
+still open in `backlog/`, so the edge is live and the ticket is correctly out
+of `ready`.

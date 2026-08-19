@@ -422,3 +422,17 @@ lane: filed as
    `working/` — `working/` is a live lock.
 
 Nothing is half-applied: no code was written this session for this ticket.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v364)
+
+**Genuine feature, still wanted — the rule is decided, the work is not done.**
+
+**Queue hygiene, two things.** It sits in `unfinished/` while carrying an open
+`blocked-by`
+(`bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine`, still
+in `backlog/`). Those say different things: `unfinished/` means an agent
+stopped mid-work, `blocked/` means it cannot start. If no partial edit exists —
+and nothing in the ticket records one — this belongs in `blocked/`, where the
+open edge is visible. A Track A ticket parked in `unfinished/` is the shape
+`tools/progress.sh check` is meant to escalate, so a wrong folder here is not
+cosmetic. Not moved by this read-only pass; flagged for the A slot.

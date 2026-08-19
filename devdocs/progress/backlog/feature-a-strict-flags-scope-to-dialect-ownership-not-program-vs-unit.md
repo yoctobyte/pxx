@@ -94,3 +94,26 @@ declares its dialect, and the user's code and external units get the rule.
 `--strict-overload` folded into `EnableStrictFpc`, and fpjson / Synapse / fgl
 still compile — which is the exact corpus its exclusion note names. Plus a unit
 marked `{$MODE PXX}` demonstrably exempt while an unmarked one beside it is not.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v364)
+
+**Genuine feature, still wanted, unchanged** — `compiler/parser.inc:32241` is
+still literally
+
+```pascal
+if StrictOverload and (FindProc(name) >= 0) and (CurrentUnitIdx < 0) then
+```
+
+with the comment beneath it still explaining the program-vs-unit axis, so the
+scoping this ticket calls backwards is intact.
+
+**Prior art worth knowing before starting, found while measuring.** The
+compiler already has an "ours vs theirs"-shaped predicate for a different
+purpose: `NilPyUserCode` (`symtab.inc`), introduced because
+`CurrentUnitIdx < 0` was *also* the wrong axis there — it meant "main program
+only" where the intent was "NilPy user code, main program **or** an imported
+`.py` module", and the mismatch segfaulted a bound-method field
+(`compiler/parser.inc:6928-6936`). Same wrong axis, same shape of fix, already
+landed once. Read that predicate before writing a second one; whether dialect
+ownership can share it or needs its own is exactly the question to answer
+first.

@@ -107,3 +107,18 @@ fixedpoint has been rebuilt many times since against it. What remains is the
 ~68 read sites and the old-field deletion, which is why this is `unfinished/`
 rather than `done/`. Re-claim it to continue.
 
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v364)
+
+**Genuine feature, still wanted — no lane migrated, and no partial state.**
+Measured by counting consumers rather than reading the ticket: `TTypeRef`
+appears 4 times in `compiler/defs.inc` (the additive declaration its parent
+landed) and **zero** times in `compiler/symtab.inc` and `compiler/ir.inc`. So
+lane 1 has not started, and nothing is half-applied.
+
+**Queue hygiene: this is in `unfinished/`, and it should not be.** That folder
+means work halted with the ticket incomplete, and a Track A ticket there is
+flagged CRITICAL precisely because a half-applied compiler change can break the
+self-host gate. Nothing is half-applied here — the parent landed cleanly and
+this is untouched follow-up work. It belongs in `backlog/`. Not moved by this
+read-only triage pass; flagged for whoever holds the A slot.
