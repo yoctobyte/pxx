@@ -234,4 +234,4 @@ rebuilt. Plus the 11×4 concurrency check above, which is the part that actually
 constrains the fix.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 7447bb59a.
