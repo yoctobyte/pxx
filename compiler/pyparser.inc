@@ -36295,7 +36295,7 @@ begin
           Third site of one family, after PyIsClassTypeExact (typing) and
           PyIsExactCtorName (construction)
           (bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class). }
-        if (ci >= 0) and PyExprMode and (not PyIsClassTypeExact(fieldName)) then
+        if (ci >= 0) and (not PyIsClassTypeExact(fieldName)) then
           ci := -1;
         { A BUILTIN type name as a RECEIVER — `list.append(self, x)`,
           `dict.__getitem__(self, k)`: how a subclass of a builtin reaches the
@@ -36307,7 +36307,7 @@ begin
           Only ahead of a '.': a bare `list(x)` / `dict()` is the CONVERSION
           builtin and has its own path, which this must not intercept. Exact
           lowercase, because Python is case-sensitive and `List` is not `list`. }
-        if (ci < 0) and PyExprMode and (CurTok.Kind = tkDot) and
+        if (ci < 0) and (CurTok.Kind = tkDot) and
            (fieldName = LowerCase(fieldName)) then
           ci := PyBuiltinBaseCi(fieldName);
         if ci >= 0 then
@@ -36346,17 +36346,9 @@ begin
               need. feature-nilpy-class-as-a-value }
             node := AllocNode(AN_CLASSREF);
             ASTIVal[node] := ci;
-            if PyExprMode then
-            begin
-              ASTRight[node] := 1;
-              ASTTk[node] := Ord(tyVariant);
-              tk := tyVariant;
-              recName := REC_NONE;
-              Result := node;
-              Exit;
-            end;
-            ASTTk[node] := Ord(tyPointer);
-            tk := tyPointer;
+            ASTRight[node] := 1;
+            ASTTk[node] := Ord(tyVariant);
+            tk := tyVariant;
             recName := REC_NONE;
             Result := node;
             Exit;
@@ -36392,7 +36384,7 @@ begin
             `dict.__getitem__(self, k)` said 'class method not found' even once
             the receiver resolved. A no-op for a class that declares the name
             as written, which is every user class. }
-          if PyExprMode then fieldName := PyMethNameFor(ci, fieldName);
+          fieldName := PyMethNameFor(ci, fieldName);
           mmi := -1;
           { Python's UNBOUND call passes the receiver POSITIONALLY, so `self` is
             already inside CountCallArgsAhead and the arity the overload matcher
@@ -36406,7 +36398,7 @@ begin
             turns out to be static is dropped and the ordinary convention below
             answers instead. bug-n-a-builtin-subclass-subscript-operator-skips-
             the-override (found landing it) }
-          if PyExprMode and (CountCallArgsAhead > 0) then
+          if (CountCallArgsAhead > 0) then
           begin
             mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead - 1);
             if (mmi >= 0) and UMthIsStatic[mmi] then mmi := -1;
@@ -36430,7 +36422,7 @@ begin
             ctor BODY with the caller's self as receiver — exactly what
             `super().__init__` already lowers to. }
           pyInitCall := False;
-          if PyExprMode and (mmi < 0) and (fieldName = '__init__') then
+          if (mmi < 0) and (fieldName = '__init__') then
           begin
             mmi := FindUMethOverloadAhead(ci, 'create', CountCallArgsAhead);
             if mmi < 0 then mmi := FindUMeth(ci, 'create');
@@ -36605,7 +36597,7 @@ begin
             method (super() is the other), and it was rejected outright.
             Direct, non-virtual: naming the class is what says "this body, not
             the override" (bug-nilpy-super-and-unbound-parent-method-calls). }
-          if PyExprMode and (not UMthIsStatic[mmi]) and (CurTok.Kind = tkLParen) then
+          if (not UMthIsStatic[mmi]) and (CurTok.Kind = tkLParen) then
           begin
             Next;
             margSeq := -1; mlastArg := -1;
@@ -36715,7 +36707,7 @@ begin
       closure over this frame, so reading it is `hidden^`. Same rewrite
       PyMakeIdent does for the paths that build the node themselves; this is the
       one the ordinary expression grammar takes (see SymCellPtr). }
-    if PyExprMode and (SymCellPtr[idx] >= 0) then
+    if (SymCellPtr[idx] >= 0) then
     begin
       ASTIVal[node] := SymCellPtr[idx];   { the CELL, not the name's dead slot }
       ASTTk[node] := Ord(tyPointer);
@@ -36836,7 +36828,7 @@ begin
       { `v[key]` / `v[key] = val` on a VARIANT base — dispatched to pyvar_getitem
         / pyvar_setitem at run time (dict by key, list by int). A variant that
         holds a container reaches here as an ordinary ident subscript. }
-      if PyExprMode and (tk = tyVariant) then
+      if (tk = tyVariant) then
       begin
         Next;                     { consume '[' }
         { a `:` in the group makes it a SLICE — `token[:n]` on a variant. }
@@ -36886,7 +36878,7 @@ begin
           accepted trade, invisible for the pure index expressions this reaches
           (bug-nilpy-augmented-assign-through-a-variant-subscript-is-dropped). }
         augTk2 := PyAugBinTok(CurTok.Kind);
-        if PyExprMode and (augTk2 <> tkEOF) then
+        if (augTk2 <> tkEOF) then
         begin
           Next;
           PyParseBoolExpr;
@@ -36909,7 +36901,7 @@ begin
         consumes the bracket itself — so the decision has to be made by
         lookahead (a depth-1 ':' in the group). A plain `[i]` still falls
         through to the property machinery unchanged. }
-      if PyExprMode and PyIsSliceBase(node) and PySliceBracketAt(TokPos - 1) then
+      if PyIsSliceBase(node) and PySliceBracketAt(TokPos - 1) then
       begin
         Next;                     { consume '[' }
         if CurTok.Kind = tkColon then
@@ -36938,7 +36930,7 @@ begin
           __getitem__/__setitem__ arm below, the same one a plain user class
           takes, rather than growing a second dunder path beside it.
           bug-n-a-builtin-subclass-subscript-operator-skips-the-override }
-        if (pri >= 0) and PyExprMode and PySubscriptWantsDunder(mci, TokPos - 1) then
+        if (pri >= 0) and PySubscriptWantsDunder(mci, TokPos - 1) then
           pri := -1;
         if pri >= 0 then
         begin
@@ -36963,7 +36955,7 @@ begin
             (feature-nilpy-augmented-subscript-assign) }
           augBin := tkEOF;
           augPow := False;
-          if PyExprMode and (i < TokCount) then
+          if (i < TokCount) then
           begin
             augBin := PyAugBinTok(Tokens[i].Kind);
             if augBin <> tkEOF then isAssign := True
@@ -36990,7 +36982,7 @@ begin
             dict KEY is the object itself. Coercing it collapsed an object key
             onto its __index__ value — measured, `d[K(1)]` and `d[1]` became one
             entry (bug-nilpy-unary-numeric-dunders-return-raw-handle). }
-          if PyExprMode and PyClassWantsIntIndex(mci) then
+          if PyClassWantsIntIndex(mci) then
           begin
             { ...and an object with NO `__index__` raises TypeError rather than
               reaching the getter with its handle — the same substitution the
@@ -37023,12 +37015,9 @@ begin
                 below harmless: cloning an IDENT duplicates a read of a temp,
                 not the expression that produced it.
                 bug-nilpy-augmented-subscript-evaluates-its-index-twice }
-              if PyExprMode then
-              begin
-                node := PyEvalOnce(node);
-                if margIdx >= 0 then
-                  ASTLeft[margIdx] := PyEvalOnce(ASTLeft[margIdx]);
-              end;
+              node := PyEvalOnce(node);
+              if margIdx >= 0 then
+                ASTLeft[margIdx] := PyEvalOnce(ASTLeft[margIdx]);
               { the read is built HERE, over a CLONE of the index arguments: the
                 setter appends its value to margIdx's chain, and sharing that
                 chain with the reader made the value an argument of the read —
@@ -37047,18 +37036,13 @@ begin
               ParseExpr STOPPED before them — `m[addr] = len(b) & 0xFF`
               silently stored only `len(b)`'s lowering with `& 0xFF` dangling
               (uforth C" wrote a zero length byte; FIND then matched nothing). }
-            if PyExprMode then
+            if CurTok.Kind = tkNil then
             begin
-              if CurTok.Kind = tkNil then
-              begin
-                Next;
-                CurASTNode := PyMakeNone;
-              end
-              else
-                PyParseBoolExpr;
+              Next;
+              CurASTNode := PyMakeNone;
             end
             else
-              ParseExpr;
+              PyParseBoolExpr;
             if augPow then
               { value := <current element> ** <rhs> — PyMakePow, not AN_BINOP,
                 and it carries the __pow__/__rpow__ dispatch with it. }
@@ -37077,38 +37061,32 @@ begin
             else mcallNode := AllocNode(AN_CALL);
             ASTIVal[mcallNode] := mpi; ASTTk[mcallNode] := Ord(Procs[mpi].RetType);
             mselfArg := AllocNode(AN_ARG); ASTLeft[mselfArg] := node; ASTLeft[mcallNode] := mselfArg;
-            if PyExprMode then
-            begin
-              { The setter is an ordinary Pascal PROCEDURE (no result) — store
-                the value into a hidden temp FIRST, pass THAT as the setter's
-                argument, then yield the temp as this store's own "value".
-                Returning the void setter-call node directly silently dropped
-                the value whenever this store nested inside another
-                assignment's RHS (`xs[0] = xs[1] = 3`, right-associative);
-                this gives Python's actual chained-assignment semantics
-                instead. NilPy only: Pascal has no chained assignment and its
-                own statement-level caller expects the plain call node below
-                (bug-nilpy-chained-subscript-assignment-writes-only-the-last-target). }
-              tk := IntToTypeKind(UPropTk[pri]);
-              setTmpSym := AllocVar(PyHiddenName('setval'), tk);
-              setTmpAssign := AllocNode(AN_ASSIGN);
-              ASTLeft[setTmpAssign] := PyMakeIdent(setTmpSym);
-              ASTRight[setTmpAssign] := CurASTNode;
-              margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := PyMakeIdent(setTmpSym);
-              ASTRight[mselfArg] := margIdx; ASTRight[mlastArg] := margSeq;
-              setInnerComma := AllocNode(AN_COMMA);
-              ASTLeft[setInnerComma] := mcallNode;
-              ASTRight[setInnerComma] := PyMakeIdent(setTmpSym);
-              ASTTk[setInnerComma] := Ord(tk);
-              node := AllocNode(AN_COMMA);
-              ASTLeft[node] := setTmpAssign;
-              ASTRight[node] := setInnerComma;
-              ASTTk[node] := Ord(tk);
-              Result := node; Exit;
-            end;
-            margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := CurASTNode;  { value }
+            { The setter is an ordinary Pascal PROCEDURE (no result) — store
+              the value into a hidden temp FIRST, pass THAT as the setter's
+              argument, then yield the temp as this store's own "value".
+              Returning the void setter-call node directly silently dropped
+              the value whenever this store nested inside another
+              assignment's RHS (`xs[0] = xs[1] = 3`, right-associative);
+              this gives Python's actual chained-assignment semantics
+              instead. NilPy only: Pascal has no chained assignment and its
+              own statement-level caller expects the plain call node below
+              (bug-nilpy-chained-subscript-assignment-writes-only-the-last-target). }
+            tk := IntToTypeKind(UPropTk[pri]);
+            setTmpSym := AllocVar(PyHiddenName('setval'), tk);
+            setTmpAssign := AllocNode(AN_ASSIGN);
+            ASTLeft[setTmpAssign] := PyMakeIdent(setTmpSym);
+            ASTRight[setTmpAssign] := CurASTNode;
+            margSeq := AllocNode(AN_ARG); ASTLeft[margSeq] := PyMakeIdent(setTmpSym);
             ASTRight[mselfArg] := margIdx; ASTRight[mlastArg] := margSeq;
-            node := mcallNode; Result := node; Exit;
+            setInnerComma := AllocNode(AN_COMMA);
+            ASTLeft[setInnerComma] := mcallNode;
+            ASTRight[setInnerComma] := PyMakeIdent(setTmpSym);
+            ASTTk[setInnerComma] := Ord(tk);
+            node := AllocNode(AN_COMMA);
+            ASTLeft[node] := setTmpAssign;
+            ASTRight[node] := setInnerComma;
+            ASTTk[node] := Ord(tk);
+            Result := node; Exit;
           end
           else
           begin
@@ -37129,7 +37107,7 @@ begin
             continue;   { allow further postfix on the getter result }
           end;
         end
-        else if PyExprMode and (mci >= 0) and (not PyInDelTarget) and
+        else if (mci >= 0) and (not PyInDelTarget) and
                 (FindUMeth(mci, '__getitem__') < 0) and
                 (FindUMeth(mci, '__setitem__') < 0) and
                 (not PyRecIsPylibOwnClass(REC_UCLASS_BASE + mci)) and
@@ -37183,7 +37161,7 @@ begin
             (Python's left-to-right order) and raise the same runtime error the
             getter-bearing arm raises for a missing setter. }
           Expect(tkAssign, ':=');
-          if PyExprMode then PyParseBoolExpr else ParseExpr;
+          PyParseBoolExpr;
           node := PyClassErrCallNode('PyNoSetitemError', mci);
           if node < 0 then Error('Nil Python: pylib (PyNoSetitemError) not loaded');
           Result := node; Exit;
@@ -37227,7 +37205,7 @@ begin
           if isAssign then
           begin
             Expect(tkAssign, ':=');
-            if PyExprMode then PyParseBoolExpr else ParseExpr;
+            PyParseBoolExpr;
             if FindUMeth(mci, '__setitem__') < 0 then
             begin
               { A genuine runtime error (a `try/except` around this must
@@ -37364,11 +37342,8 @@ begin
           RESULT is a 1-character str, not a Char — Python has no char type, and
           a Char cannot hold a multi-byte character
           (feature-nilpy-text-string-kind). Pascal's own `s[i]` stays tyChar. }
-        if PyExprMode then
-        begin
-          indexNode := PyMakeStrIndex(ASTLeft[indexNode], ASTRight[indexNode]);
-          tk := tyAnsiString;
-        end;
+        indexNode := PyMakeStrIndex(ASTLeft[indexNode], ASTRight[indexNode]);
+        tk := tyAnsiString;
       end
       else if (tk = tyPointer) and (ASTKind[node] = AN_IDENT) then
       begin
@@ -37469,53 +37444,6 @@ begin
          Syms[ASTIVal[node]].IsArray and
          not (Syms[ASTIVal[node]].TypeKind in [tyRecord, tyClass]) then
         Error('an array variable has no members (use SetLength / index it)');
-      { …and the same refusal for every other memberless SCALAR, which the array
-        check's own note assumed was already covered ("strings take Length()
-        style intrinsics") and which nothing actually checked. The fall-through
-        built a field access at offset 0 and READ THE VALUE'S OWN BYTES: on a
-        string, `s.Length` for s='Hello' printed 1819043144 — the four bytes of
-        'Hell' as an Int32 — and so did `s.NoSuchMember`, with no diagnostic
-        either way. Ints, floats and booleans answered with themselves.
-
-        Delphi's TStringHelper surface (`s.Length`, `s.ToUpper`, `s.Trim`,
-        `s.Substring`) is exactly what modern Pascal writes, and FPC compiles it
-        under {$modeswitch typehelpers}; we do not implement it yet. Refusing is
-        the honest answer until we do, and the message says which it is so the
-        reader is not left hunting a wrong number. Arrays and pointers already
-        errored here — those are the shape this follows.
-
-        NilPy is excluded: `s.upper()`, `n.bit_length()` and the dynamic-attribute
-        fallback below are the ordinary Python spelling and resolve further down.
-        tyRecord / tyClass / tyInterface / tyVariant / tyPointer / tyAuto /
-        tyUnknown and the promotable-int family are all absent from the set on
-        purpose — each has a real member path.
-
-        Keyed on the RECEIVER SYMBOL's declared type, exactly like the array
-        check above it, and NOT on the expression's `tk`. `tk` is wrong for a
-        cast-then-deref receiver: `PPyVarRec(@v)^.Payload` (lib/rtl/atexit, ast,
-        configparser) arrives here as a scalar with no record id, and a `tk`-keyed
-        version of this check refused three working example programs. Requiring a
-        plain declared variable keeps the refusal to the shape actually proved
-        broken and leaves every computed receiver on its existing path.
-        bug-p-a-member-on-a-scalar-silently-reads-the-values-own-bytes }
-      if (not isNilPy) and (recName = REC_NONE) and
-         (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
-         not Syms[ASTIVal[node]].IsArray and
-         (Syms[ASTIVal[node]].TypeKind in
-                [tyInteger, tyBoolean, tyChar, tyString, tyInt8, tyUInt8,
-                 tyInt16, tyUInt16, tyInt32, tyUInt32, tyInt64, tyUInt64,
-                 tyNativeInt, tyNativeUInt, tySingle, tyDouble, tyExtended,
-                 tySet, tyAnsiString, tyShortString, tyFixedString]) then
-      begin
-        if Syms[ASTIVal[node]].TypeKind in
-             [tyString, tyAnsiString, tyShortString, tyFixedString] then
-          Error('a string has no members here: pxx does not implement Delphi''s ' +
-                'string helpers (s.Length, s.ToUpper, s.Trim, s.Substring) — ' +
-                'use the intrinsics Length(s), UpperCase(s), Trim(s), Copy(s, i, n)')
-        else
-          Error('a value of this type has no members (only records, classes, ' +
-                'interfaces and variants do)');
-      end;
       Next;
       if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then Error('expected field name');
       prevTok := TokPos - 1;
@@ -37548,7 +37476,7 @@ begin
         `d.values()` used to become a dynamic attribute read of a name no object
         has, and CALLING that None-valued attribute jumped to address 0
         (bug-nilpy-dict-values-method-missing). }
-      if isNilPy and (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
+      if (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
          (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
          (Tokens[TokPos + 1].Kind = tkRParen) then
       begin
@@ -37569,7 +37497,7 @@ begin
         trailing underscore (`set_`, `destroy_`), and `cfg.set(section, key,
         value)` (configparser's own spelling) must reach it. Any argument list,
         unlike the view methods above, so this guard is only "a call follows". }
-      if isNilPy and (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
+      if (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         if (FindUMeth(recName - REC_UCLASS_BASE, fieldName) < 0) and
@@ -37584,7 +37512,7 @@ begin
         resolution (bug-nilpy-set-update-method-is-not-mapped). Guarded to
         names the class does NOT declare as written, so nothing that resolves
         today moves. }
-      if isNilPy and (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
+      if (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
         fieldName := PyMethNameFor(recName - REC_UCLASS_BASE, fieldName);
       { A class attribute written BOTH through its class name and through an
@@ -37595,7 +37523,7 @@ begin
         reads. The `pydynattr` store is the same machinery an undeclared dynamic
         attribute uses — in Python `self.x = ...` and `obj.x = ...` really are
         the same operation, whether or not the class declares `x`. }
-      if NilPyUserCode and (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
+      if (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
          (FindUField(recName - REC_UCLASS_BASE, fieldName) < 0) and
          (FindUMeth(recName - REC_UCLASS_BASE, fieldName) < 0) and
          (PyClsAttrOvrSlot(recName - REC_UCLASS_BASE, fieldName) >= 0) then
@@ -37636,7 +37564,7 @@ begin
         different SHAPE, same type — resolved to the RTTI call and worked
         (bug-classname-on-a-tobject-local-compiles-to-a-dynamic-attr-fetch).
         Same predicate that gates every other NilPy-only rule. }
-      if NilPyUserCode and (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
+      if (tk = tyClass) and (recName >= REC_UCLASS_BASE) and
          (FindUField(recName - REC_UCLASS_BASE, fieldName) < 0) and
          (FindUMeth(recName - REC_UCLASS_BASE, fieldName) < 0) and
          (FindUProp(recName - REC_UCLASS_BASE, fieldName) < 0) and
@@ -37717,7 +37645,7 @@ begin
         know WHERE the form is legal, not what the method set is. `tk` is updated
         from the call's return type so the suffix loop keeps chaining
         (`s.strip().upper()`). }
-      if PyExprMode and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+      if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
          PyIsStrBaseTk(tk) then
       begin
         Next;   { consume the method name; CurTok is now the '(' }
@@ -37743,7 +37671,7 @@ begin
         here by the lvalue path and never reaches ParseFactor's suffix loop,
         which only ever sees non-lvalue bases like `(10).to_bytes(...)`. Both
         routes land in pyparser's one dispatcher. }
-      if PyExprMode and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+      if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
          PyIsIntMethodName(LowerCase(fieldName)) and
          PyIsIntMethodBaseTk(tk, LowerCase(fieldName)) then
       begin
@@ -37758,7 +37686,7 @@ begin
         a STATICALLY float base. Claimed only where the receiver's type is
         known — see PyIsFloatMethodName for why a name-only test would break
         bytes.hex(). bug-a-bytes-has-almost-none-of-its-python-methods }
-      if PyExprMode and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+      if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
          PyIsFloatMethodName(LowerCase(fieldName)) and
          PyIsFloatMethodBaseTk(tk, LowerCase(fieldName)) then
       begin
@@ -37775,7 +37703,7 @@ begin
         METHOD NAME across the declared classes and the object pointer is
         unboxed from the slot — see PyParseVariantMethod
         (bug-a-nilpy-method-call-on-variant-receiver). }
-      if PyExprMode and (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+      if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
          (tk = tyVariant) then
       begin
         Next;   { consume the method name; CurTok is now the '(' }
@@ -37807,7 +37735,7 @@ begin
         Ordered after the variant METHOD branch (so `v.m()` stays a method) and
         before the variant FIELD branch (so a real field of that name still
         wins, matching the field-then-dynattr precedence everywhere else). }
-      if PyExprMode and (tk = tyVariant) then
+      if (tk = tyVariant) then
       begin
         propRecvNode := PyMakeVariantPropRecv(node, fieldName, propRecvCi);
         if propRecvNode >= 0 then
@@ -37825,7 +37753,7 @@ begin
         (feature-nilpy-function-values found it via `w.name` in a dispatch
         table). Resolved by field NAME across the declared classes, like the
         method case. }
-      if PyExprMode and (tk = tyVariant) then
+      if (tk = tyVariant) then
       begin
         Next;   { consume the field name, as the call branch above does }
         indexNode := PyMakeVariantField(node, fieldName, tk, recName);
@@ -38017,7 +37945,7 @@ begin
           resolved to the property and the following `(` was a parse error. A
           CALL is unambiguous: `d.items()` can only mean the method. Mapped onto
           `itemlist`, the same way keylist/vallist are named to stay clear of it. }
-        if isNilPy and CaseEqual(fieldName, 'items') and
+        if CaseEqual(fieldName, 'items') and
            (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
            (Tokens[TokPos + 1].Kind = tkRParen) and
            (FindUMeth(mci, 'itemlist') >= 0) then
@@ -38026,7 +37954,7 @@ begin
           map onto keylist/vallist. Unmapped, they fell through to the dynamic
           method dispatch and produced a garbage receiver — `max(d.values())`
           segfaulted (bug-nilpy-dict-values-method-missing). }
-        if isNilPy and (TokPos + 1 < TokCount) and
+        if (TokPos + 1 < TokCount) and
            (Tokens[TokPos].Kind = tkLParen) and (Tokens[TokPos + 1].Kind = tkRParen) then
         begin
           if CaseEqual(fieldName, 'keys') and (FindUMeth(mci, 'keylist') >= 0) then
@@ -38282,7 +38210,7 @@ begin
         { …and re-target by KEYWORD name too — arity alone still picks the
           first same-arity overload, which need not be the one declaring the
           name a `key=expr` argument uses (bug-nilpy-keyword-arg-vs-overload-set) }
-        if isNilPy and (mmi >= 0) then
+        if (mmi >= 0) then
           mmi := PyPromoteOverloadByKwAt(mci, mmi, PyKwNamesTokPos, fieldName);
       end;
 
@@ -38384,8 +38312,7 @@ begin
           (bug-nilpy-settings-editor-segfaults-on-bound-method-field).
           NilPyUserCode (symtab.inc) is that predicate — the whole NilPy-only
           rule set now shares it. }
-        if NilPyUserCode and
-           (CurTok.Kind <> tkLParen) and
+        if (CurTok.Kind <> tkLParen) and
            (mci >= 0) and not UClsIsInterface[mci] then
         begin
           node := PyMakeBoundMethod(mpi, node);
@@ -38456,7 +38383,7 @@ begin
               parameters; the star is on the CALL). A star is not an expression, so
               the arity loop below cannot parse it: hand the whole argument list to
               the NilPy path, which expands the list across the remaining slots. }
-            if isNilPy and (mai <= Procs[mpi].ParamCount-1) and PyStarArgAhead then
+            if (mai <= Procs[mpi].ParamCount-1) and PyStarArgAhead then
               PyStarUnpackMethodArgs(mpi, mcallNode, mlastArg, mai);
             while mai <= Procs[mpi].ParamCount-1 do
             begin
@@ -38490,7 +38417,7 @@ begin
                 mai := Procs[mpi].ParamCount-1;
               end
               else if mai < Procs[mpi].ParamCount-1 then Expect(tkComma, ',')
-              else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
+              else if (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
               Inc(mai);
             end;
             Expect(tkRParen, ')');
@@ -38581,14 +38508,14 @@ begin
             { A method with `*args` / `**kwargs` has no fixed arity, so the
               arity-driven loop below cannot parse its call. Hand the whole
               argument list to the NilPy path, which packs the surplus. }
-            if isNilPy and (mai <= Procs[mpi].ParamCount-1) and
+            if (mai <= Procs[mpi].ParamCount-1) and
                ((ProcPyStarIdx[mpi] >= 0) or (ProcPyKwIdx[mpi] >= 0)) then
               PyParseStarMethodArgs(mpi, mcallNode, mlastArg, mai);
             { `obj.m(*xs)` — a call-site UNPACK (the callee declares ordinary
               parameters; the star is on the CALL). A star is not an expression, so
               the arity loop below cannot parse it: hand the whole argument list to
               the NilPy path, which expands the list across the remaining slots. }
-            if isNilPy and (mai <= Procs[mpi].ParamCount-1) and PyStarArgAhead then
+            if (mai <= Procs[mpi].ParamCount-1) and PyStarArgAhead then
               PyStarUnpackMethodArgs(mpi, mcallNode, mlastArg, mai);
             while mai <= Procs[mpi].ParamCount-1 do
             begin
@@ -38668,14 +38595,14 @@ begin
                   The loop would go round once more and demand another argument.
                   Stop here instead and let the omitted parameters take their
                   defaults, exactly as an argument list that simply ended. }
-                if isNilPy and (CurTok.Kind = tkRParen) then
+                if (CurTok.Kind = tkRParen) then
                 begin
                   if CanFillDefaultsFrom(mpi, mai+1) then
                     FillDefaultArgs(mpi, mai+1, mcallNode, mlastArg);
                   Break;
                 end;
               end
-              else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
+              else if (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
               Inc(mai);
             end;
             Expect(tkRParen, ')');
@@ -38697,7 +38624,7 @@ begin
             5: silent, and worse the longer the chain. Bind it once.
             PyExprMode-only, so Pascal's codegen (and the self-host binary) is
             untouched (bug-nilpy-method-chaining-on-a-call-result). }
-          if PyExprMode and (CurTok.Kind in [tkDot, tkLBrack]) then
+          if (CurTok.Kind in [tkDot, tkLBrack]) then
             node := PyEvalOnce(node);
           Continue;
         end;
@@ -38719,7 +38646,7 @@ begin
             read becomes one (PyExprMode only; Pascal's own class vars keep the
             static resolution FPC gives them).
             bug-nilpy-self-class-attribute-in-an-inherited-method-reads-the-base-value }
-          if PyExprMode and (CurTok.Kind <> tkAssign) and
+          if (CurTok.Kind <> tkAssign) and
              (PyAugBinTok(CurTok.Kind) = tkEOF) and
              PyClsAttrRedeclaredCi(recName - REC_UCLASS_BASE, fieldName) then
           begin
@@ -38831,7 +38758,7 @@ begin
           than a compiled function address (uforth's VARIABLE/CONSTANT words).
           Branch at runtime on the 1-arg `-> None` shape. Pascal is unaffected
           (gated on isNilPy). }
-        if isNilPy and (not isMethodPtr) and (argsHead2 >= 0) and
+        if (not isMethodPtr) and (argsHead2 >= 0) and
            (ASTRight[argsHead2] = -1) and (Procs[fldSigPi].RetType = tyInteger) then
           node := PyWrapClosureFieldCall(fieldNode, ASTLeft[argsHead2], callIndNode);
       end;
