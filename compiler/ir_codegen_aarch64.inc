@@ -448,15 +448,18 @@ end;
   numbers rather than a hang, which is the worse half of the same defect.
   Shimming them matches what arm32/i386/riscv32 already do.
   bug-a-writeln-nonfinite-float-aarch64-emitters-unchecked }
-procedure EmitFloatCallWriterA64(const name: AnsiString; decs: Integer; wid: Integer);
+procedure EmitFloatCallWriterA64(const name: AnsiString; a1: Integer; a2: Integer; passArgs: Boolean);
+{ Fixed takes (p, decimals, width), Sci takes (p, fracdigits, expdigits), Nat
+  takes p alone. `passArgs` says which explicitly — it used to be inferred from
+  `decs >= 0`, which held only while Nat and Sci both passed -1. }
 var procIdx: Integer;
 begin
   EmitI32($F81F0FE0);        { str x0, [sp, #-16]!  — the double bits }
   EmitI32($910003E0);        { mov x0, sp           — arg0 = &value   }
-  if decs >= 0 then
+  if passArgs then
   begin
-    EmitLoadImmA64(1, decs); { arg1 = decimals }
-    EmitLoadImmA64(2, wid);  { arg2 = field width }
+    EmitLoadImmA64(1, a1);   { arg1 }
+    EmitLoadImmA64(2, a2);   { arg2 }
   end;
   procIdx := FindProc(name);
   if procIdx < 0 then Error('compiler error: float writer helper not found');
@@ -466,32 +469,27 @@ end;
 
 procedure EmitWriteFloatNatA64;
 begin
-  EmitFloatCallWriterA64('PXXWriteFloatNat', -1, 0);
+  EmitFloatCallWriterA64('PXXWriteFloatNat', 0, 0, False);
 end;
 
 procedure EmitWriteFloatFixedA64(width, decimals: Integer);
 begin
-  EmitFloatCallWriterA64('PXXWriteFloatFixed', decimals, width);
+  EmitFloatCallWriterA64('PXXWriteFloatFixed', decimals, width, True);
 end;
 
-procedure EmitWriteFloatSciA64;
-{ Double BITS in x0. Prints <' '|'-'>d.<16 digits>E<'+'|'-'>ddd (17 significant
-  digits, 3-digit exponent), matching FPC's Str(Double).
+procedure EmitWriteFloatSciA64(fracdigits, expdigits: Integer);
+{ Double BITS in x0 -> <' '|'-'>d.<frac>E<'+'|'-'><exp>, via PXXWriteFloatSci.
 
   Was ~180 lines of hand-written aarch64 carrying the same normalise-by-repeated-
   division loop as the x86-64 emitter, and wrong the same way: adrift from the
-  16th digit, and the wrong EXPONENT for 1e200. Now a shim onto
-  PXXWriteFloatSci, which does the exact decimal expansion — one implementation
-  instead of four.
-  bug-a-writeln-float-exponent-form-not-correctly-rounded }
-var procIdx: Integer;
+  16th digit, and the wrong EXPONENT for 1e200. Shimmed onto the runtime helper
+  (bug-a-writeln-float-exponent-form-not-correctly-rounded), and as of
+  2026-08-19 it also goes through the SHARED EmitFloatCallWriterA64 rather than
+  repeating that helper's spill/call/restore inline — the duplication was
+  invisible while the sci path passed no arguments and would have had to be
+  fixed twice the moment it did. }
 begin
-  EmitI32($F81F0FE0);        { str x0, [sp, #-16]!  — the double bits }
-  EmitI32($910003E0);        { mov x0, sp           — arg0 = &value   }
-  procIdx := FindProc('PXXWriteFloatSci');
-  if procIdx < 0 then Error('compiler error: PXXWriteFloatSci not found');
-  EmitCallProc(procIdx);
-  EmitI32($910043FF);        { add sp, sp, #16 }
+  EmitFloatCallWriterA64('PXXWriteFloatSci', fracdigits, expdigits, True);
 end;
 
 procedure EmitVariantClearA64;
@@ -1018,6 +1016,7 @@ end;
 procedure IREmitNodeAarch64(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, sz, wid: Integer;
+  scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
   classIdx, elemSize, lo, hi, decs, specialId, jnsOff, jmpDone, j, itemNode, p1, p2: Integer;
   pNilPos, pDonePos: Integer;
   sVal: AnsiString;
@@ -3107,7 +3106,11 @@ begin
           IREmitNodeAarch64(valNode);
           if decs = -2 then EmitWriteFloatNatA64
           else if decs >= 0 then EmitWriteFloatFixedA64(wid, decs)
-          else EmitWriteFloatSciA64;
+          else
+          begin
+            SciFormatFor(wid, IRTk[node], scFrac, scExp);
+            EmitWriteFloatSciA64(scFrac, scExp);
+          end;
         end
         else if decs = -3 then
         begin

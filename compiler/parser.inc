@@ -36152,10 +36152,16 @@ begin
 
     dummyNames[0] := 'p';         dummyTypes[0] := tyPointer;
     i := RegisterProc('PXXWriteFloatNat', False, tyPointer, 1, dummyNames, dummyTypes);
-    i := RegisterProc('PXXWriteFloatSci', False, tyPointer, 1, dummyNames, dummyTypes);
     dummyNames[1] := 'decimals';  dummyTypes[1] := tyNativeInt;
     dummyNames[2] := 'width';     dummyTypes[2] := tyNativeInt;
     i := RegisterProc('PXXWriteFloatFixed', False, tyPointer, 3, dummyNames, dummyTypes);
+    { Sci takes (p, fracdigits, expdigits) — the SAME three-slot shape as Fixed.
+      It was registered with one parameter until 2026-08-19, which is the other
+      half of why write(d:W) could not narrow the mantissa: even had the emitter
+      passed a width, the pre-registration here declared no slot to receive it. }
+    dummyNames[1] := 'fracdigits'; dummyTypes[1] := tyNativeInt;
+    dummyNames[2] := 'expdigits';  dummyTypes[2] := tyNativeInt;
+    i := RegisterProc('PXXWriteFloatSci', False, tyPointer, 3, dummyNames, dummyTypes);
   end;
 
     CurrentUnitIdx := savedUnitIdx;

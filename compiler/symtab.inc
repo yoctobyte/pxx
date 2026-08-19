@@ -7479,11 +7479,53 @@ begin
   EmitB($41); EmitB($5C);                                       { pop r12 }
 end;
 
-procedure EmitWriteFloatSci;
-{ Double value in xmm0 -> Pascal scientific notation, 17 significant digits.
+procedure SciFormatFor(wid: Integer; tk: Integer; var fracdigits, expdigits: Integer);
+{ The (fracdigits, expdigits) a scientific write should use, from the field
+  width and the value's STATIC type. One function because five backends ask the
+  same question, and five copies of a clamp is where an off-by-one hides.
+
+  Measured against FPC 3.2.2 (2026-08-19), not derived from its docs:
+
+    d           ->  3.3333333333333331E-001    16 frac, 3 exp   (Double default)
+    d:12        ->  3.3333E-001                 4 frac
+    d:20        ->  3.333333333333E-001        12 frac
+    d:8         ->  3.3E-001                    1 frac  (clamped; 9 chars > 8)
+    s           ->  3.333333433E-01             9 frac, 2 exp   (Single default)
+    s:14        ->  3.3333334E-01               7 frac
+
+  So: total width = sign(1) + lead(1) + point(1) + frac + 'E'(1) + expsign(1) +
+  expdigits, giving frac = wid - 5 - expdigits. FPC's floor is ONE fractional
+  digit and it overflows the field rather than going below it, which is why the
+  clamp widens the output instead of truncating the number. }
+begin
+  if tk = Ord(tySingle) then expdigits := 2 else expdigits := 3;
+  if wid > 0 then
+  begin
+    fracdigits := wid - 5 - expdigits;
+    if fracdigits < 1 then fracdigits := 1;
+    if fracdigits > 16 then fracdigits := 16;
+  end
+  else if tk = Ord(tySingle) then
+    fracdigits := 9
+  else
+    fracdigits := 16;
+end;
+
+procedure EmitWriteFloatSci(fracdigits, expdigits: Integer);
+{ Double value in xmm0 -> Pascal scientific notation with `fracdigits` digits
+  after the point and an `expdigits`-digit exponent.
+
+  Took NO parameters until 2026-08-19, which is why write(d:W) could not narrow
+  the mantissa to the field and a Single could not ask for its 10-digit,
+  2-digit-exponent form. It now takes the same shape as its sibling
+  EmitWriteFloatFixed(width, decimals) — one calling convention for both float
+  writers rather than one that formats and one that cannot.
+
   Shims onto PXXWriteFloatSci (exact decimal expansion) when the RTL is linked,
   which is the case for every ordinary program; falls back to the old
-  self-contained emitter for the RTL-less probe frontends. }
+  self-contained emitter for the RTL-less probe frontends. That fallback is
+  fixed at 16/3 and cannot honour a request — acceptable because it serves only
+  frontends with no RTL, where writeln formatting is not under test. }
 var procIdx: Integer;
 begin
   procIdx := FindProc('PXXWriteFloatSci');
@@ -7495,7 +7537,9 @@ begin
   EmitAsmX64([
     'sub rsp, 16',
     'movsd [rsp], xmm0',
-    'mov rdi, rsp'
+    'mov rdi, rsp',
+    'mov rsi, %', fracdigits,
+    'mov rdx, %', expdigits
   ]);
   EmitCallProc(procIdx);
   EmitAsmX64(['add rsp, 16']);

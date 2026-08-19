@@ -2599,6 +2599,7 @@ end;
 
 procedure IREmitNode(node: Integer);
 var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
+    scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
     op: TTokenKind;
     cmpUnsigned, isAnsiStr, savedLValueWrite, skipLastArg, skipAllArgs: Boolean;
     sVal: AnsiString;
@@ -4707,7 +4708,11 @@ begin
           EmitB($66); EmitB($48); EmitB($0F); EmitB($6E); EmitB($C0); { movq xmm0, rax }
           if decs = -2 then EmitWriteFloatNat
           else if decs >= 0 then EmitWriteFloatFixed(wid, decs)
-          else EmitWriteFloatSci;
+          else
+          begin
+            SciFormatFor(wid, IRTk[node], scFrac, scExp);
+            EmitWriteFloatSci(scFrac, scExp);
+          end;
         end
         else if decs = -3 then
         begin

@@ -551,7 +551,7 @@ begin
   EmitB($83); EmitB($C4); EmitB($08);
 end;
 
-procedure EmitFloatCallWriter386(const name: AnsiString; decs: Integer; wid: Integer);
+procedure EmitFloatCallWriter386(const name: AnsiString; a1: Integer; a2: Integer; passArgs: Boolean);
 { Value in xmm0. Spill to a stack slot, pass its address (plus decimals and the
   field WIDTH for the fixed writer) to the builtinheap float writer. }
 var procIdx: Integer;
@@ -559,15 +559,21 @@ begin
   EmitFloatSpill386;
   EmitB($89); EmitB($E0);                       { mov eax, esp (slot addr) }
   EmitB($50);                                   { push eax = arg0 (p) }
-  if decs >= 0 then
+  { Fixed takes (p, decimals, width) and Sci now takes (p, fracdigits,
+    expdigits); Nat takes p alone. `passArgs` says which, EXPLICITLY — this used
+    to be inferred from `decs >= 0`, which happened to work only because Nat and
+    Sci were both called with -1. Once Sci carries real arguments that inference
+    is wrong, and it is wrong identically in five backends, so the flag is
+    named rather than derived. }
+  if passArgs then
   begin
-    EmitB($68); EmitI32(decs);                  { push decimals = arg1 }
-    EmitB($68); EmitI32(wid);                   { push width    = arg2 }
+    EmitB($68); EmitI32(a1);                    { push arg1 }
+    EmitB($68); EmitI32(a2);                    { push arg2 }
   end;
   procIdx := FindProc(name);
   if procIdx < 0 then Error('compiler error: float writer helper not found');
   EmitCallProc(procIdx);
-  if decs >= 0 then
+  if passArgs then
     begin EmitB($81); EmitB($C4); EmitI32(20); end  { 3 args + slot }
   else
     begin EmitB($81); EmitB($C4); EmitI32(12); end;
@@ -1249,6 +1255,7 @@ end;
 procedure IREmitNode386(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, argBytes, wid, sz, i, j, base: Integer;
+  scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
   argCls: Integer;   { Arg32Class of the argument being marshalled (A32_*) }
   classIdx, elemSize, lo, hi, itemNode, p1, p2, pNil386, pDone386: Integer;
   vaNvw, vaK, vaO1, vaO2: Integer;
@@ -4266,9 +4273,13 @@ begin
           begin
             IREmitNode386(valNode);                      { value -> xmm0 }
             j := IRC[node];                              { decimals }
-            if j = -2 then EmitFloatCallWriter386('PXXWriteFloatNat', -1, 0)
-            else if j >= 0 then EmitFloatCallWriter386('PXXWriteFloatFixed', j, wid)
-            else EmitFloatCallWriter386('PXXWriteFloatSci', -1, 0);
+            if j = -2 then EmitFloatCallWriter386('PXXWriteFloatNat', 0, 0, False)
+            else if j >= 0 then EmitFloatCallWriter386('PXXWriteFloatFixed', j, wid, True)
+            else
+            begin
+              SciFormatFor(wid, Ord(tk), scFrac, scExp);
+              EmitFloatCallWriter386('PXXWriteFloatSci', scFrac, scExp, True);
+            end;
           end
           else if tk = tyChar then
           begin

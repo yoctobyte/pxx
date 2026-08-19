@@ -45,7 +45,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (240)
+## backlog (238)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -55,7 +55,6 @@ _none_
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
 | bug-a-riscv32-softfloat-has-no-subnormals | A | 40 | bug | riscv32 flushes subnormals: (1e-320 * 0.5) * 2.0 <> 1e-320, Exp(-745) returns 0 where every other target gives a subnormal, and Ln(5e-324) answers -746.52 instead of -744.44. Identical in both float modes, so it is the target's soft-float runtime, not the math unit. i386, arm32, aarch64 and x86-64 are all correct. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
-| bug-b-write-of-a-real-ignores-the-field-width-without-decimals | A | 20 | bug | write(r:W) with a width but no decimals ignores W entirely — pxx always prints the full 16-decimal scientific form where FPC sizes the mantissa to the field | — |
 | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine | C | 55 | bug | A C function DEFINITION whose name matches a Pascal intrinsic (`sqrt` `exp` `ln` `sin` `cos` `arctan`) binds to the Pascal proc entry via case-insensitive FindProc and overwrites its BodyAddr. The Pascal implementation then becomes unreachable by ANY spelling — bare `Sqrt`, `math.Sqrt` and `cmath.sqrt` all return the C body — so a C file silently replaces the RTL's math for the whole program. This is what the ten `__crtl_*` prefixes in lib/crtl exist to dodge. | — |
 | bug-n-a-class-base-that-is-an-expression-does-not-compile | N | 45 | bug | A class base which is a NAME bound to a type, or a call, does not compile: `B = object; class P(B)` fails where `class P(object)` and `class P(SomeClass)` both work. Blocks six.with_metaclass, which html5lib's parser spells as `class Phase(with_metaclass(...))` — the single remaining wall on html5parser.py. | — |
 | bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function | N | 50 | bug | `g = f` BOXES the function on the heap; every other path (a dict value, a return value, the bare name) keeps the raw code pointer. So `g == f` and `g is f` are False, two assignments of the same function are unequal to each other, and `id(g)` is a heap address while `id(f)` is the code address. CPython answers True to all of it. | — |
@@ -117,7 +116,6 @@ _none_
 | compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags | A | 30 | compat | FPC unmasks the FP exceptions every ISA leaves masked: 1/0 is a runtime error there and Inf here, and Floor(1e30) raises EInvalidOp where pxx now saturates. Decided that pxx keeps IEEE masked semantics by default and FPC's behaviour goes behind opt-in flags — TWO of them, because div-by-zero -> runtime error 208 is nearly free (an FPU control word bit) while Floor raising EInvalidOp costs sysutils, +127 KB code and +33 KB bss on every `uses math` program. | — |
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
-| compat-pascal-writeln-of-a-single-uses-double-width | A | 30 | compat | WriteLn/Str of a Single print the value's full Double expansion — 17 significant digits and a 3-digit exponent — where FPC prints 10 digits and a 2-digit exponent: pxx ' 1.0000000149011612E-001' vs FPC ' 1.000000015E-01'. Same class as the FloatToStr(Single) bug fixed in lib/rtl, but this path is the compiler's own float writer, so the RTL cannot reach it. Text-only divergence, no wrong value. | — |
 | decide-staff-track-c-to-unblock-own-language-first | U | 50 | decide | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (C, p55) is the only thing blocking feature-a-own-language-first-symbol-resolution, and Track C is unstaffed. Staff it, fold it into an existing session, or leave the chain parked? | — |
 | doc-glossary-of-cross-language-slang | D | 40 | doc | pxx accepts Pascal, C and Python, so its docs mix three vocabularies and define none of them. A reader fluent in one hits the others' slang unexplained — `cls`, `self`, dunder, repr-vs-str going one way; unit, uses, RTL, pinned, fixedpoint going the other. Wanted: a glossary with a Python-to-Pascal equivalence table, since most terms have a counterpart the reader already knows. | — |
 | doc-n-fu-is-how-a-python-package-is-found | D | 25 | doc | `-Fu<dir>` is how NilPy finds a third-party Python package, and it is absent from the compiler's usage line. Its absence misdiagnoses as `import: no unit named X` — a 'feature missing' message for a feature that exists. Cost a wrong first diagnosis on the first corpus attempt; will bite the next person wiring one. | — |
@@ -467,9 +465,9 @@ _none_
 | decide-what-synapse-actually-needs-vs-mimic-fpc | U | 20 | decide | Synapse builds under `--mimic-fpc`. What does it actually NEED? | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2061)
+## done (2063)
 
-2061 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2063 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -673,7 +671,6 @@ _none_
 - [p 30] [T] chore-t-unit-class-est-mem-is-below-what-lib-test-00-actually-peaks-at
 - [p 30] [A] compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
-- [p 30] [A] compat-pascal-writeln-of-a-single-uses-double-width
 - [p 30] [D] docs-publish-the-three-language-rounding-table
 - [p 30] [N] feature-nilpy-fstring-nested-spec-and-nested-fstring
 - [p 30] [N] feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition
@@ -714,7 +711,6 @@ _none_
 - [p 25] [T] feature-t-uforth-bench-restore-the-elfhash-outlier
 - [p 25] [M] feature-t-windows-wine-harness
 - [p 25] [C] idea-c-realworld-test-targets
-- [p 20] [A] bug-b-write-of-a-real-ignores-the-field-width-without-decimals
 - [p 20] [N] bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds
 - [p 20] [B] bug-nilpy-complex-pow-is-a-few-ulp-off-cpython
 - [p 20] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only

@@ -991,17 +991,20 @@ begin
   EmitI32($EF000000);   { svc #0 }
 end;
 
-procedure EmitFloatCallWriterArm32(const name: AnsiString; decs: Integer; wid: Integer);
+procedure EmitFloatCallWriterArm32(const name: AnsiString; a1: Integer; a2: Integer; passArgs: Boolean);
 { d0 = value. Spill to a stack slot, pass its address (plus decimals and the
   field WIDTH for the fixed writer) to the builtinheap float writer. }
 var procIdx: Integer;
 begin
   EmitI32($ED2D0B02);            { vpush {d0} }
   EmitI32($E1A0000D);            { mov r0, sp (slot addr) }
-  if decs >= 0 then
+  { Fixed takes (p, decimals, width), Sci now takes (p, fracdigits, expdigits),
+    Nat takes p alone. `passArgs` says which explicitly — inferring it from
+    `decs >= 0` worked only while Nat and Sci were both called with -1. }
+  if passArgs then
   begin
-    EmitLoadImmArm32(1, decs);   { r1 = decimals }
-    EmitLoadImmArm32(2, wid);    { r2 = width }
+    EmitLoadImmArm32(1, a1);     { r1 = arg1 }
+    EmitLoadImmArm32(2, a2);     { r2 = arg2 }
   end;
   procIdx := FindProc(name);
   if procIdx < 0 then Error('compiler error: float writer helper not found');
@@ -1177,6 +1180,7 @@ end;
 procedure IREmitNodeArm32(node: Integer);
 var
   valNode, si, left, right, op, procIdx, argNode, nArgs, i, j, wid, sz: Integer;
+  scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
   argCls: Integer;   { Arg32Class of the argument being marshalled (A32_*) }
   classIdx, elemSize, lo, nBlock: Integer;
   vaRevM, vaRevP, vaRevO1, vaRevO2: Integer;
@@ -3733,9 +3737,13 @@ begin
           begin
             IREmitNodeArm32(valNode);             { value -> d0 }
             j := IRC[node];                       { decimals }
-            if j = -2 then EmitFloatCallWriterArm32('PXXWriteFloatNat', -1, 0)
-            else if j >= 0 then EmitFloatCallWriterArm32('PXXWriteFloatFixed', j, wid)
-            else EmitFloatCallWriterArm32('PXXWriteFloatSci', -1, 0);
+            if j = -2 then EmitFloatCallWriterArm32('PXXWriteFloatNat', 0, 0, False)
+            else if j >= 0 then EmitFloatCallWriterArm32('PXXWriteFloatFixed', j, wid, True)
+            else
+            begin
+              SciFormatFor(wid, Ord(tk), scFrac, scExp);
+              EmitFloatCallWriterArm32('PXXWriteFloatSci', scFrac, scExp, True);
+            end;
           end
           else if tk = tyChar then
           begin

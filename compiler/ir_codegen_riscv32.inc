@@ -1038,6 +1038,7 @@ end;
 procedure IREmitNodeRISCV32(node: Integer);
 var
   left, right, op, si, procIdx, nArgs, i, lo, elemSize, sz, argNode, valNode, j: Integer;
+  scFrac, scExp: Integer;   { scientific-write format, from SciFormatFor }
   tk: TTypeKind;
   sgn, savedLVW: Boolean;
   sVal: AnsiString;
@@ -2578,7 +2579,14 @@ begin
               else if i = -2 then
                 procIdx := FindProc('PXXWriteFloatNat')
               else
+              begin
+                { Sci now takes (fracdigits, expdigits) in the same two argument
+                  registers the fixed form uses for (decimals, width). }
+                SciFormatFor(j, Ord(tk), scFrac, scExp);
+                EmitLoadImmRISCV32(reg_a1, scFrac);
+                EmitLoadImmRISCV32(reg_a2, scExp);
                 procIdx := FindProc('PXXWriteFloatSci');
+              end;
               if procIdx < 0 then Error('compiler error: float writer not found');
               EmitCallProc(procIdx);
               rv32_addi(reg_sp, reg_sp, 8);
