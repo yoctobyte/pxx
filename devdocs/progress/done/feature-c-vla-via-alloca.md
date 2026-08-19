@@ -140,4 +140,4 @@ Makefile's own two assertions run by hand (`gate.sh quick` cannot see
 `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit d7969b0f2.
