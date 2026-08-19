@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:17 blocked:5 backlog:235 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2034 rejected:38`
+`working:1 unfinished:17 blocked:5 backlog:237 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2035 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -39,7 +39,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 221, ranked
+## Ready — top 30 of 223, ranked
 
 - `[p 70] [N]` bug-n-a-call-through-a-callable-value-drops-the-callees-defaults
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
@@ -51,6 +51,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [C]` bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
+- `[p 55] [B]` bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable
 - `[p 55] [T]` bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 - `[p 55] [T]` bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label
 - `[p 55] [T]` chore-t-split-lib-test-into-jobs-that-name-what-failed
@@ -70,6 +71,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [E]` feature-demo-songformatter-pxx-target
-- `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
 
-_191 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_193 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -1900,7 +1900,7 @@ def stub_sources(pdir):
     # "some other job once had trouble with this file". Found 2026-08-09: the
     # optdiff dedupe was matching `regression-optdiff-shard4-6`, resolved days
     # earlier and sitting in done/.
-    for b in ("urgent", "working", "unfinished", "backlog", "blocked"):
+    for b in OPEN_BUCKETS:
         d = os.path.join(pdir, b)
         try:
             names = os.listdir(d)
@@ -1925,6 +1925,85 @@ def stub_sources(pdir):
                 tgt = jm.group(1).split("#")[0] if jm else ""
                 out.setdefault(m.group(1).strip(), (fn[:-3], tgt))
     return out
+
+
+# Buckets that mean "somebody still owes this work". A ticket in done/ or
+# rejected/ is a FINISHED argument about a PREVIOUS red.
+OPEN_BUCKETS = ("urgent", "working", "unfinished", "backlog", "blocked")
+STUB_VARIANT_MAX = 20    # runaway guard; a job red 20 separate times is a story
+
+
+def ticket_bucket(pdir, slug):
+    """Which bucket holds a REAL (non-empty) ticket for `slug`, or None.
+
+    Zero-byte debris does not count, for the reason already_filed spells out.
+    """
+    for b in PROGRESS_BUCKETS:
+        p = os.path.join(pdir, b, slug + ".md")
+        try:
+            if os.path.getsize(p) > 0:
+                return b
+        except OSError:                    # absent, or unreadable
+            continue
+    return None
+
+
+def slug_variants(base):
+    """`base`, then `base-2`, `base-3`, ... — a recurrence needs its OWN slug."""
+    yield base
+    for i in range(2, STUB_VARIANT_MAX + 1):
+        yield "%s-%d" % (base, i)
+
+
+def stub_slug_for_filing(pdir, base):
+    """The slug to file this red under, or None to suppress.
+
+    `already_filed` scans every bucket so one job never holds two tickets at
+    once, and that much is right. What it did NOT distinguish is WHY a ticket
+    exists: one in an open bucket means the work is still owed, but one in
+    `done/` means a PREVIOUS red was already answered — and a job going red
+    again is a second finding, with its own range and its own repro.
+
+    Scanning done/ for suppression therefore made a job unticketable FOREVER
+    after its first ticket resolved. Measured 2026-08-19: 182 resolved
+    `regression-*` slugs on this repo, i.e. 182 jobs that could no longer file,
+    silently — `already_filed` returned True and the loop just `continue`d, so
+    the run printed nothing at all. `lib-test#src:test/lib_tls.pas` went NEW-RED
+    at 6070883b46e7 and no stub appeared; its predecessor closed on 2026-08-16
+    saying, in as many words, "reopening is by a fresh NEW-RED stub".
+
+    So: suppress on an OPEN ticket, and on a resolved one file the next free
+    variant instead. Never silently.
+    """
+    for slug in slug_variants(base):
+        b = ticket_bucket(pdir, slug)
+        if b is None:
+            if slug != base:
+                print("twatch: %s is resolved — filing this red as %s, since a "
+                      "second red is a second finding with its own range"
+                      % (base, slug), flush=True)
+            return slug
+        if b in OPEN_BUCKETS:
+            return None                    # still owed; one ticket is enough
+    print("twatch: %s has been red %d separate times — not filing another stub"
+          % (base, STUB_VARIANT_MAX), flush=True)
+    return None
+
+
+def live_stub_slug(pdir, base):
+    """The variant of `base` currently sitting in backlog/, if any.
+
+    The mirror of stub_slug_for_filing: what filing may open as `<base>-3`,
+    closing has to be able to find.
+    """
+    for slug in slug_variants(base):
+        p = os.path.join(pdir, "backlog", slug + ".md")
+        try:
+            if os.path.getsize(p) > 0:
+                return slug
+        except OSError:
+            continue
+    return None
 
 
 def already_filed(pdir, slug):
@@ -2039,8 +2118,8 @@ def file_stub_tickets(clone, host, st, sha, new_red, report, parent=None):
     pdir = os.path.join(clone.path, "devdocs/progress")
     by_src = stub_sources(pdir)      # one scan, then updated as we file
     for job in new_red:
-        slug = reg_slug(job)
-        if already_filed(pdir, slug):
+        slug = stub_slug_for_filing(pdir, reg_slug(job))
+        if slug is None:
             continue
         j = next((x for x in report["jobs"] if job_key(x) == job), {})
         # DEDUPE BY TEST SOURCE. The slug is the job selector, so the same
@@ -2282,8 +2361,12 @@ def close_stub_tickets(clone, host, closed, sha, report):
     red_srcs.discard("")
     paths, slugs = [], []
     for r in closed:
-        slug = ("regression-cascade-" + (r.get("bad") or "")[:12]
+        base = ("regression-cascade-" + (r.get("bad") or "")[:12]
                 if r.get("cascade") else reg_slug(r["job"]))
+        # filing may have opened this as `<base>-2` (see stub_slug_for_filing),
+        # so closing must look for the variant that is actually live rather
+        # than for the bare slug, whose file is the RESOLVED predecessor.
+        slug = live_stub_slug(pdir, base) or base
         src = os.path.join(pdir, "backlog", slug + ".md")
         if not os.path.exists(src):
             held = next((b for b in PROGRESS_BUCKETS
