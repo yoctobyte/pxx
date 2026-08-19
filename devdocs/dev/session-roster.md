@@ -1522,6 +1522,32 @@ exists, its banner says so and the banner outranks the queue order.
   never dispatch to fill capacity. But **do not bank a day while the user is paying for
   idle capacity** — that call was made once and was wrong.
 - **The coordinator writes no code.** Filing, ranking, routing and verifying only.
+- **THE WORKERS ARE IN SEPARATE CLONES — the pin lock is NOT what it was assumed to be.**
+  Verified 2026-08-19: `/home/rene/frank2`, `/home/rene/frank3` and the coordinator's
+  `/home/rene/frankonpiler` each have their own `.git`. (Note this differs from CLAUDE.md's
+  "no worktrees/clones" line; reality, not the doc, is what the lock has to model.)
+
+  **So `make pin` in the coordinator's clone CANNOT swap `$(PXX_STABLE)` underneath a suite
+  or benchmark running in a worker's clone.** A worker's tree changes only when **it**
+  pulls. The mixed-compiler hazard is real but its trigger is *the worker pulling
+  mid-measurement*, not the coordinator pinning.
+
+  **What actually crosses clone boundaries: the CPU, and nothing else.** One box, so a
+  `stabilize-fast` is heavy load on a neighbour's benchmark — the interleave-and-take-min
+  reasoning stands. File-level hazards do not cross.
+
+  **Therefore:** still `pgrep` and hold before a lock (CPU is a real reason), but do not
+  tell a worker its files are at risk from a pin — they are not. The protection a worker
+  actually needs is its own: *do not `git pull` while a measurement is in flight*, plus the
+  before/after toolchain-hash capture, which detects it without needing anyone to
+  coordinate.
+
+  **How this was got wrong:** the coordinator and frank3 independently reasoned about a
+  shared working tree, agreed with each other, and one apologised for a contamination that
+  may never have happened — a worker binned a possibly-good ten-minute run on that basis.
+  **Two agents agreeing is not corroboration when both inherit the same unexamined
+  premise.** Same family as reading three "idle" signals that were all about the wrong
+  subject.
 - **ASK BEFORE TAKING THE LOCK, DO NOT ANNOUNCE AS YOU TAKE IT — and check yourself so it
   does not depend on anyone replying.** Learned the hard way 2026-08-19: the coordinator
   messaged "hold builds" and started `stabilize-fast` in the same breath. frank3's
