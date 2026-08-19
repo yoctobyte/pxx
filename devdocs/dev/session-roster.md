@@ -3585,3 +3585,38 @@ target's own header, then edit — is the whole difference.
 **PIN: v364 is RED at full** (first pin verdict since v354), all deliberate import reds. Still
 held. Retake once frank3 lands the tkinter one-liner; three compiler commits already past
 v364's base fold into the same pin.
+
+## STANDING: Track F = floating point (owner, 2026-08-19)
+
+The owner assigned the letter after stating the rule four times without a marker to carry it:
+*"track F is assigned to floating point. that's a clear marker and clean instruction."* Then
+broadened it the same hour: *"this implies both floating point math and formatting issues."*
+
+**F is a work-tag, not a file-lane** — O/E/S/M's shape. Tickets carry both letters (`B+F`,
+`P+F`, `A+F`, `N+F`, `O+F`, `U+F`); the file-lane still decides who edits what and which gate
+applies. `track_matches` is a substring test with `A+B` as precedent, so a `B+F` ticket answers
+both `--track B` and `--track F` — the multi-track spelling the owner asked about already
+worked and needed nothing.
+
+**Scope:** ulps, rounding, subnormals, edge-of-range, fast-vs-exact tiers, float type
+precision, the whole rendering side (`Write` of a real, `FloatToStr`, digit counts, exponent
+form), and float-subject perf. Today's `WriteFloat` cluster would have been F end to end,
+including the bad pin it produced — it is the drain the letter exists to stop.
+
+**Escape rule, and it MOVED when the owner broadened F:** a badly *rendered* float is F even
+when grossly wrong, because rendering is the subject. What is never F is a defect whose subject
+is the MECHANISM and whose float content is incidental — a crash, a hang, a wrong signature, a
+control-flow bug living in float code, or a **missing** function a working program calls. When
+it is a close call it is NOT F: this folder is invisible by design, so mis-tagging toward F is
+how a real bug disappears.
+
+19 tickets in `devdocs/progress/float/`, unscanned by `ready`/`next`. Verified zero genuine F
+items remain visible in any lane's queue (three near-misses checked by hand and correctly left:
+methods on int and float, an extended *slice*, an inliner pass covering floats and records).
+
+**Parking is not self-sufficient** — `bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio`
+(T, p45) stays in the ACTIVE backlog and is deliberately **not** F: its subject is the
+scheduler, not the arithmetic. A red job is worked at the priority of being red.
+
+Tooling gap routed to T: `--track F` is not yet an argparse choice and `float` is not in
+STATUSES. Addressability only; the parking already works.
