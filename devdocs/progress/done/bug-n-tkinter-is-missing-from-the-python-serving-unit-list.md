@@ -4,6 +4,8 @@ prio: 70
 type: bug
 blocked-by: []
 summary: "lib/pcl/tkinter.pas was written so that `import tkinter` resolves by bare name -- its own header says so -- but PyRtlUnitServesPython does not list it, so every real tkinter program is refused at its first line. Six examples/tk/*.npy went red at e1109d7bc. Verified fix: one name added to the list; no test or example edit."
+status: done
+owner: frank3
 ---
 
 # `tkinter` is missing from the Python-serving unit list
@@ -75,3 +77,41 @@ import ConfigBase` is refused with *expected a module name after from*. That cos
 `test/test_nilpy_subclass_unit_base.npy` one of its three assertions (recorded in
 that file's header). Whether the quoted form should be accepted after `from` is a
 Track U call, filed as `decide-should-from-accept-a-quoted-foreign-file`.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.
+
+## RESOLVED 2026-08-19 by frank3 (A/P slot holder)
+
+One name added to `PyRtlUnitServesPython` (`compiler/parser.inc`), plus an amendment
+to the list's own doc comment.
+
+**Why the comment needed changing too.** It read *"When a new **lib/rtl** unit is
+written to serve a Python module…"* — describing the sweep that caused this omission
+rather than the question the list answers. `tkinter` is `lib/pcl`'s. Where a unit
+lives is not the criterion; what it is FOR is. The comment now says so, so the next
+`lib/pcl` or `lib/*` unit written to serve a Python module is not missed the same way.
+
+**Verified** (`gate.sh quick` cannot see `test-core`, so the Makefile recipe lines
+were run directly):
+
+- all seven `examples/tk` compile jobs — `tkinter_facade`, `uses_tkinter_and_configparser`,
+  `field_class_identity`, `callbacks`, `import_in_body`, `shadow_format_except`,
+  `facade_and_paths` (frank2 reported six; there are seven)
+- the three Xvfb run-and-diff jobs — output identical to `.expected`
+- both `test/` jobs naming tkinter, including
+  `test_nilpy_renamed_class_is_not_a_module`, whose point is a *refusal* and which
+  therefore had to be checked for the right failure rather than for success
+- self-host fixedpoint converged; `gate.sh quick` GREEN
+
+### Still refused, and correctly — NOT part of this bug
+
+`examples/tk/hello.npy` and `examples/tk/widgets.npy` do `import tk`, which is
+`lib/pcl/tk.pas` — the thin Tcl/Tk binding that `tkinter.pas` is built ON TOP OF, not
+Python's module. **CPython has no `tk` module**, so no unmodified Python source can
+name it, and the argument that saved `tkinter` does not apply. These two are the
+genuine rewrite case (`import 'tk.pas' as tk`) and were left for the cascade cleanup.
+
+The pair is a good statement of where the line falls: same directory, same feature,
+opposite answers — because the question is whether a Python program could have
+written that import.

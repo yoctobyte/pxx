@@ -45,7 +45,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (225)
+## backlog (227)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -53,6 +53,7 @@ _none_
 | bug-a-make-revert-the-documented-pin-brake-does-not-fire | A | 60 | bug | `make revert` is documented as the brake for a bad pin, and it cannot revert a pin in this tree — it restores compiler/pascal26 from a per-version `vN` binary and no `vN` binaries are kept, so it fails with 'Binary ... missing'. Found during a live bad-pin incident (v357), when the brake was reached for and did not fire. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
+| bug-a-only-the-pascal-driver-emits-the-signal-runtime | A | 45 | bug | The signal runtime (SIGSEGV/SIGFPE hook, restorer, sethook, install stubs) is emitted only by the Pascal driver in parser.inc. Every other frontend -- C, NilPy, Rust, Zig, Basic, Ada, Lua, the asm frontend -- produces a binary with no signal runtime, so a hardware fault there is an unhandled signal instead of a runtime error. Same shape as the I/O-lock gap that was already found and fixed. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-n-a-class-base-that-is-an-expression-does-not-compile | N | 45 | bug | A class base which is a NAME bound to a type, or a call, does not compile: `B = object; class P(B)` fails where `class P(object)` and `class P(SomeClass)` both work. Blocks six.with_metaclass, which html5lib's parser spells as `class Phase(with_metaclass(...))` — the single remaining wall on html5parser.py. | — |
 | bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function | N | 50 | bug | `g = f` BOXES the function on the heap; every other path (a dict value, a return value, the bare name) keeps the raw code pointer. So `g == f` and `g is f` are False, two assignments of the same function are unequal to each other, and `id(g)` is a heap address while `id(f)` is the code address. CPython answers True to all of it. | — |
@@ -79,7 +80,6 @@ _none_
 | bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic | N | 25 | bug | `return super().hi()` (super() in expression position, documented as unsupported) is refused with `error: Nil Python: annotate the type / too dynamic [a=22 b=8]` reported at line 1 — a diagnostic that names neither the construct nor the right line. Also: `B.__init__(self)` for a second base is `class method not found`. | — |
 | bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop | N | 55 | bug | A class with __getitem__/__len__ now iterates with `for`, but every OTHER consumer of iteration still refuses it — and `list(b)` returns [] SILENTLY. Found while fixing feature-nilpy-for-loop-getitem-protocol-fallback; the for-loop was one path of several serving one concept. | — |
 | bug-n-tk-got-files-are-invisible-to-testmgr-privatization | N | 40 | bug | The tk loop in `test-nilpy` spells its BINARIES by full path — that was the callbacks fix — but still captures output to `$(TESTTMP)/$$src.got`. `make -n` yields `/tmp/$src.got`, which testmgr's filename scan cannot match, so those three files are never privatized and two concurrent runs share them. Found by T's new lint, in the recipe whose earlier fix was believed complete. | — |
-| bug-n-tkinter-is-missing-from-the-python-serving-unit-list | A | 70 | bug | lib/pcl/tkinter.pas was written so that `import tkinter` resolves by bare name -- its own header says so -- but PyRtlUnitServesPython does not list it, so every real tkinter program is refused at its first line. Six examples/tk/*.npy went red at e1109d7bc. Verified fix: one name added to the list; no test or example edit. | — |
 | bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells | N | 40 | bug | A Nil Python generator instance leaks its locals and its argument cells | — |
 | bug-nilpy-an-extended-slice-cannot-be-assigned | N | 30 | bug | `l[::2] = [7, 8]` is a parse error. The READ form `l[::2]` works, and the plain-slice ASSIGN `l[1:3] = [9]` works; only the strided assignment is missing. | — |
 | bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds | N | 20 | bug | A dict VALUE as the `*=` target still rebinds, so an alias of it keeps the old contents. The parameter half landed 2026-08-15 (pymul_v_inplace); this is the residue, and `+=` has the same split. | — |
@@ -92,9 +92,11 @@ _none_
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
 | bug-p-a-parameterless-function-is-undefined-as-a-method-call-argument | P | 35 | bug | A parameterless function used as an ARGUMENT to a method call fails to resolve — `error: undefined variable (zero)` — while the identical argument to a free function compiles. Any argument position. Found writing lib/rtl/mimic_urllib_request.pas, where `headers.get(name, pynone)` would not compile but `HeaderFirst(raw, name, pynone)` did. | — |
 | bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits | P | 45 | bug | `-b shr 1` answers 2147483644 where FPC says 9223372036854775804, for Byte, Word and Cardinal — in BOTH the default dialect and --strict-fpc. FPC's unary minus yields a 64-bit value for EVERY integer operand type (SizeOf(-x) is 8 for all seven, measured); pxx's truncates an unsigned operand to 32 bits before any widening can run, so the sign is already gone. | — |
+| bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence | T | 45 | bug | file_cascade_ticket's Root-cause-suspects line falls back to 'likely a broken build or harness event' whenever no CASCADE_ROOT_JOBS entry is in the red set. That is a conclusion drawn from the absence of one narrow signal, printed with no hedge, and it is now directly contradicted by the Range section shipped in 8ec77190c — which on the live incident named the actual cause. Same defect class the Range work fixed for the sha: an auto-filed ticket asserting something it has no evidence for. | — |
 | bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio | T | 45 | bug | Float-accuracy assertions in the gated suites make a one-ulp move a CI RED, and a red job is worked at the priority of BEING RED - which overrides the owner's standing rule that float accuracy is low prio. Parking the tickets in float/ does not close this door; only the tests can. | — |
 | bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic | T | 55 | bug | Ten `timeout N` calls are hardcoded INSIDE Makefile recipes, so they fire within make and surface to testmgr as an ordinary `fail`. Every piece of testmgr's contention machinery — PEER_TIME_FACTOR budget stretching, co-tenant retry, the `timeout` status itself — is structurally unable to see them. That is why six separately-fixed timeout tickets did not stop the class recurring: all six fixed testmgr's OWN timeouts, and the inner ones were never in scope. | — |
 | bug-t-the-push-rate-starves-breadth-coverage-entirely | T | 60 | bug | Zero full-tier runs on HEAD in the 5h13m between 9bfb7fcfac03 (10:31:57Z) and ~15:45Z, while cross-target coverage read as fine because every native verdict was green. RE-MEASURED: the watcher is idle 54% of that window (~2.8h, 8x what a full tier needs) — breadth is not starved by pushes, it is queued behind pin verify, which needs a contiguous 21 minutes, gets idle slices with a median of 299s, and discards 100% on every abort. Breadth ran within minutes of pin verify finally retiring. Fix is resumability plus bounding consecutive idle, NOT reserving a slot. | — |
+| bug-t-track-ts-own-pushes-destroy-track-ts-own-breadth-coverage | T | 50 | bug | NOTEST_PREFIXES is ('devdocs/', 'docs/'), so tools/** is testable — correct, since a testmgr change can change results. The consequence is that Track T is the only lane whose ordinary work systematically destroys its own coverage: any T tooling push aborts an in-flight idle-phase full tier and discards 100% of it. Measured 2026-08-19: one twatch push killed the first breadth run in 5h13m at ~207/2765 jobs. Batching by hand is a habit, not a property. | — |
 | chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments | A | 20 | chore | compiler/builtin/pylib.pas still carries a no-op `pyexec` stub, plus comments in pylib.pas and pyeval.pas saying things SEGFAULT 'because pyexec is a stub'. Engine 1 landed 2026-07-31 and `exec` lowers to pyeval's EvalPyStmts — nothing calls the stub. The stale prose is the cost: it reads as an unimplemented feature and made a reader doubt a done, gated one. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
 | chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile | T | 30 | chore | The second, weaker half of the split_jobs lint: flag any job that RUNS a /tmp binary no line in that job produces. Prototyped and deliberately NOT shipped — it yields 5-7 candidates depending on how recipe lines are segmented, and every one needs individual adjudication. Shipping it half-tuned would produce exactly the noisy guard that gets muted. | — |
@@ -452,9 +454,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2083)
+## done (2084)
 
-2083 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2084 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -503,7 +505,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [A] bug-n-tkinter-is-missing-from-the-python-serving-unit-list (unblocks 1)
 - [p 66] [A] refactor-a-one-signature-record-for-every-callable-carrier
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
@@ -538,6 +539,7 @@ _none_
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
 - [p 50] [N] bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - [p 50] [N] bug-n-importing-both-f-and-F-from-one-module-loses-the-class
+- [p 50] [T] bug-t-track-ts-own-pushes-destroy-track-ts-own-breadth-coverage
 - [p 50] [A] feature-a-implement-initialize-and-finalize-over-the-arc-helpers
 - [p 50] [A] feature-a-riscv64-as-a-hosted-first-class-target
 - [p 50] [A] feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
@@ -552,6 +554,7 @@ _none_
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
+- [p 45] [A] bug-a-only-the-pascal-driver-emits-the-signal-runtime
 - [p 45] [N] bug-n-a-class-base-that-is-an-expression-does-not-compile
 - [p 45] [N] bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through
 - [p 45] [N] bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name
@@ -560,6 +563,7 @@ _none_
 - [p 45] [N] bug-n-isinstance-does-not-accept-a-qualified-class-name
 - [p 45] [N] bug-n-self-class-cannot-be-called-as-a-constructor
 - [p 45] [P] bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits
+- [p 45] [T] bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence
 - [p 45] [T] bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio
 - [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
 - [p 45] [U] decide-should-from-accept-a-quoted-foreign-file
@@ -721,7 +725,6 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
-- **1** — bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 - **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind
