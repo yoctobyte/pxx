@@ -6012,15 +6012,12 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-18T12:32:09Z",
-  "red": [
-   "lib-test#36",
-   "lib-test#117"
-  ],
-  "sha": "0e5039b0178dfacdfe9b402e2b1c8d1525f8180e",
+  "date": "2026-08-19T09:10:52Z",
+  "red": [],
+  "sha": "8a16663c6ffe35eb02944a5306afe7a23485d5a0",
   "tier": "full",
-  "ver": "v352",
-  "verdict": "RED"
+  "ver": "v353",
+  "verdict": "GREEN"
  },
  "renamed_from": [
   "xeon"
