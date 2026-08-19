@@ -117,6 +117,15 @@ TIERS = {
         # the real-program corpus, native only — the cross variants stay in full
         "test-lua", "test-cjson", "test-zlib",
         "test-sqlite-threads-x86_64",
+        # T's own guards (tools/*devtest*.py, ~30s). They were in no target at
+        # all, so nothing ran them and five had rotted into failure on master
+        # while still looking like coverage
+        # (chore-t-five-tool-devtests-are-broken-on-master-and-nothing-runs-them).
+        # limited+full, NOT native, for the same reason test-nilpy and
+        # test-uforth sit here: native is the tier dev boxes gate their pushes
+        # on, and these protect the HARNESS rather than the product — so they
+        # must not buy their coverage with the one number T must not inflate.
+        "tools-devtest",
     ],
     # TIER 2 — everything in tier 1, PLUS platform breadth under qemu. An order
     # of magnitude slower, so it runs less often; a cross-only red is an
@@ -161,6 +170,7 @@ TIERS = {
         "test-lua", "test-cjson", "test-zlib",
         "test-sqlite-threads-x86_64", "test-sqlite-threads-i386",
         "test-sqlite-threads-aarch64", "test-sqlite-threads-arm32",
+        "tools-devtest",        # T's own guards; see the note in `limited`
     ],
     # slow: shards demoted OUT of the per-sha tiers because one job was setting
     # the whole tier's wall. Disjoint from the nesting chain, like `opt`, so a

@@ -298,17 +298,28 @@ def main():
     ap.add_argument("--dry-run", action="store_true",
                     help="print what would be written, change nothing")
     ap.add_argument("--rev",
-                    help="read tstate from this git rev (e.g. origin/master) "
-                         "instead of the working tree — lets a timer see what "
+                    help="read tstate from this git rev (default origin/master; "
+                         "pass '' for the working tree) — lets a timer see what "
                          "the watcher published without pulling into a tree "
                          "somebody may be working in")
     ap.add_argument("--job", help="only this job")
     a = ap.parse_args()
 
-    if a.rev:
-        raw = git("show", "%s:devdocs/progress/tstate/%s.json" % (a.rev, a.host))
+    # Read tstate off the REF, not the worktree. A watcher clone stands detached
+    # at the sha under test for most of every cycle, so its devdocs/progress/
+    # tstate is a point-in-time snapshot of an older commit — and triaging open
+    # regressions inside that clone is a normal thing to do, which is exactly
+    # when the worktree read is wrong. Four separate bugs in one day came from
+    # this class ("a watcher clone's worktree is HISTORY", devdocs/dev/track-t.md),
+    # and tools/tstate_reader_devtest.py is the guard that flagged this one.
+    # The worktree stays reachable via --rev "" for a dev checkout with tstate
+    # that has not been pushed yet.
+    rev = "origin/master" if a.rev is None else a.rev
+    if rev:
+        raw = git("show", "%s:devdocs/progress/tstate/%s.json" % (rev, a.host))
         if not raw:
-            sys.exit("autotriage: no tstate for %s at %s" % (a.host, a.rev))
+            sys.exit("autotriage: no tstate for %s at %s (pass --rev '' to read "
+                     "the working tree instead)" % (a.host, rev))
         state = json.loads(raw)
     else:
         path = os.path.join(TSTATE, "%s.json" % a.host)

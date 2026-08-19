@@ -113,7 +113,12 @@ def main():
         {"job": "test-core#src:test/gamma.pas", "bad": "cccccccccccc3333"},
         {"job": "test-core#src:test/never-filed.pas", "bad": "dddddddddddd4444"},
     ]
-    report = {"tier": "full"}
+    # A production report always carries "jobs" (testmgr writes it, run_gate
+    # passes it straight through), and close_stub_tickets came to depend on it
+    # for the "this source is still red in ANOTHER job" branch. The fixture did
+    # not follow, so this devtest has been dying on a KeyError rather than
+    # testing anything. Keep the fixture's keys matched to the real contract.
+    report = {"tier": "full", "jobs": []}
     print("case 1-3: close_stub_tickets")
     twatch.close_stub_tickets(FakeClone(), "xeon", closed, "ffff5555ffff6666",
                               report)
@@ -172,10 +177,16 @@ def main():
     casc = {"job": "cascade@abc", "cascade": ["j1", "j2"], "bad": "abc"}
     one_green = {"j1": "pass", "j2": "fail"}
     all_green = {"j1": "pass", "j2": "pass"}
+    # reg_open dropped its `fixed` parameter — the merged status map answers the
+    # question on its own, and `fixed` (red->pass transitions THIS host saw)
+    # could never close an entry migrated from a retired host. These calls were
+    # still passing it POSITIONALLY, so the list landed in `authoritative` and
+    # the status map in `gone`: every job read as gone, the generator emptied,
+    # and the cascade closed for a reason that had nothing to do with the test.
     check("4. one lucky job green keeps the cascade OPEN",
-          twatch.reg_open(casc, ["j1"], one_green) is True)
+          twatch.reg_open(casc, one_green) is True)
     check("4. every job green closes it",
-          twatch.reg_open(casc, ["j1", "j2"], all_green) is False)
+          twatch.reg_open(casc, all_green) is False)
 
     print()
     if fails:

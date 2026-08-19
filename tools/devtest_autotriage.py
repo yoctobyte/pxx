@@ -82,9 +82,24 @@ with open(os.path.join(tmp, "backlog",
                        "regression-test-core-test-uses-order-pylib-exception-a.md"), "w") as f:
     f.write("stub\n")
 
+# The test SOURCES live in the fixture too. This used to point A.PROGRESS at a
+# temp dir while cited_tickets read the REAL repo file — so the expectation here
+# depended on the current header of an unrelated test, and duly broke when that
+# test was rewritten to cite a different ticket. Worse, "no citation for a test
+# that names no ticket" was passing because the file was ABSENT rather than
+# because it named nothing. Both are now explicit.
+os.makedirs(os.path.join(tmp, "test"))
+with open(os.path.join(tmp, "test", "test_uses_order_pylib_exception_a.pas"), "w") as f:
+    f.write("program T;\n{ bug-pascal-uses-order-breaks-pylib-exception: the "
+            "ticket this test was written for. }\nbegin end.\n")
+with open(os.path.join(tmp, "test", "test_totally_new_thing.pas"), "w") as f:
+    f.write("program T;\n{ a test that cites no ticket at all. }\nbegin end.\n")
+
 JOB = "test-core#src:test/test_uses_order_pylib_exception_a.pas"
 orig = A.PROGRESS
+orig_repo = A.REPO
 A.PROGRESS = tmp
+A.REPO = tmp
 try:
     # the stub name combines the make TARGET and the source; matching on the
     # test stem is what makes it findable (rebuilding the whole slug did not)
@@ -111,6 +126,7 @@ try:
           A.cited_tickets("test-core#src:test/test_totally_new_thing.pas"), [])
 finally:
     A.PROGRESS = orig
+    A.REPO = orig_repo
 
 print()
 if fails:

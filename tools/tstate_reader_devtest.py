@@ -48,6 +48,23 @@ ALLOWED = {
     "twatch_close_stubs_devtest.py":
         "builds its own throwaway clone as a fixture; the path it joins is the "
         "fixture's, not a live watcher's",
+    # Same case as the line above, verified one at a time rather than waved
+    # through as a group: each of these joins tstate onto a root/clone/path IT
+    # JUST CREATED under tempfile, so there is no live watcher tree to be stale
+    # about. A devtest that could not build its own tstate fixture could not
+    # test the readers at all.
+    "devtest_pin_shadow.py":
+        "joins TSTATE_REL onto the throwaway root it makes at line 46",
+    "devtest_pin_verify.py":
+        "joins TSTATE_REL onto its own fixture clone (make_repo/FakeClone)",
+    "devtest_pinstatus.py":
+        "os.makedirs on its own tempdir's devdocs/progress/tstate",
+    "devtest_wedge_on_own_writes.py":
+        "joins TSTATE_REL onto the fixture clone it creates at line 66",
+    "autotriage.py":
+        "reads tstate off the REF by default (git show origin/master:...) — the "
+        "path join remains only for the explicit `--rev ''` worktree opt-in, "
+        "which a dev checkout needs for tstate it has not pushed yet",
 }
 
 # Only real path CONSTRUCTION counts. Prose matters — testmgr.py discusses

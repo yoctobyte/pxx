@@ -44,7 +44,7 @@ def case_vanished_key_is_gone():
     st = state([entry(JOB)], {JOB: "full"})
     gone = twatch.gone_keys(st, now={LIVE: "pass"}, tier="full")
     assert JOB in gone, gone
-    assert not twatch.reg_open(entry(JOB), fixed=[], authoritative={}, gone=gone), \
+    assert not twatch.reg_open(entry(JOB), authoritative={}, gone=gone), \
         "an entry naming a job no tier has any more stayed open"
     return "absent from a covering run -> closed as GONE"
 
@@ -55,7 +55,7 @@ def case_other_tier_is_not_gone():
     st = state([entry(JOB)], {JOB: "full"})
     gone = twatch.gone_keys(st, now={LIVE: "pass"}, tier="native")
     assert JOB not in gone, "a full-tier key was declared gone by a native run"
-    assert twatch.reg_open(entry(JOB), fixed=[], authoritative={}, gone=gone)
+    assert twatch.reg_open(entry(JOB), authoritative={}, gone=gone)
     return "full-tier key survives a native run"
 
 
@@ -73,7 +73,7 @@ def case_present_and_red_stays_open():
     st = state([entry(JOB)], {JOB: "full"})
     gone = twatch.gone_keys(st, now={JOB: "fail"}, tier="full")
     assert not gone, gone
-    assert twatch.reg_open(entry(JOB), fixed=[], authoritative={JOB: "fail"},
+    assert twatch.reg_open(entry(JOB), authoritative={JOB: "fail"},
                            gone=gone), "a still-red job was closed"
     return "reported and red -> still open"
 
@@ -83,7 +83,7 @@ def case_present_and_fixed_closes_normally():
     st = state([entry(JOB)], {JOB: "full"})
     gone = twatch.gone_keys(st, now={JOB: "pass"}, tier="full")
     assert not gone
-    assert not twatch.reg_open(entry(JOB), fixed=[JOB], authoritative={JOB: "pass"},
+    assert not twatch.reg_open(entry(JOB), authoritative={JOB: "pass"},
                                gone=gone)
     return "reported and passing -> closed as FIXED"
 
@@ -98,10 +98,10 @@ def case_cascade_ignores_gone_members():
     # `a` still red, `b` vanished -> stays open because of `a`
     gone = twatch.gone_keys(st, now={a: "fail"}, tier="full")
     assert b in gone and a not in gone, gone
-    assert twatch.reg_open(casc, fixed=[], authoritative={a: "fail"}, gone=gone)
+    assert twatch.reg_open(casc, authoritative={a: "fail"}, gone=gone)
     # both vanished -> closes
     gone_all = twatch.gone_keys(st, now={LIVE: "pass"}, tier="full")
-    assert not twatch.reg_open(casc, fixed=[], authoritative={}, gone=gone_all), \
+    assert not twatch.reg_open(casc, authoritative={}, gone=gone_all), \
         "a cascade naming only vanished jobs stayed open forever"
     return "gone members neither pin nor hide the rest"
 

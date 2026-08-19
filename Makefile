@@ -75,7 +75,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
 .PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
-        pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos c-interop-devtest tls-openssl-devtest tls13-handshake-devtest truststore-devtest tls-native-seam-devtest \
+        pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos tools-devtest c-interop-devtest tls-openssl-devtest tls13-handshake-devtest truststore-devtest tls-native-seam-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
 
 all: $(COMPILER)
@@ -11160,6 +11160,30 @@ demos: pxx-stable-check
 
 # C interop discovery dashboard for Track B. This intentionally exits 0 for
 # candidate-library gaps; keep `lib-test` as the green gate.
+# The tool guards themselves: tools/*devtest*.py, ~30s for the whole family.
+# They were in NO target, so nothing ran them, and five had rotted into failure
+# on master while still LOOKING like coverage — broken and unreachable at once
+# (chore-t-five-tool-devtests-are-broken-on-master-and-nothing-runs-them).
+# Each is self-contained: its own tempdir fixtures, no network, no long runs.
+#
+# bench_timing_devtest.py is deliberately EXCLUDED from the gate. Its subject is
+# timing precision — it measures a 50 ms polling-grid artifact — so it is
+# load-sensitive by construction, and this box runs the watcher by design.
+# Observed failing once in ~7 runs at load 13 and 6/6 at load 6. A flaky gate on
+# a shared box manufactures exactly the false reds Track T exists to remove, so
+# it stays runnable by hand (`python3 tools/bench_timing_devtest.py`) and out of
+# the tier.
+tools-devtest:
+	@set -e; n=0; \
+	for f in tools/*devtest*.py; do \
+	  case "$$f" in *bench_timing_devtest.py) continue ;; esac; \
+	  printf '  tools-devtest: %s\n' "$$f"; \
+	  python3 "$$f" > $(TESTTMP)/tools_devtest.log 2>&1 \
+	    || { echo "FAIL: $$f"; tail -25 $(TESTTMP)/tools_devtest.log; exit 1; }; \
+	  n=$$((n+1)); \
+	done; \
+	echo "  tools-devtest: $$n guard(s) green"
+
 c-interop-devtest: pxx-stable-check
 	tools/c_interop_devtest.sh
 

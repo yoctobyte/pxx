@@ -61,7 +61,10 @@ def main():
     old = [old_style_run(argv, 30) for _ in range(5)]
     new = []
     for _ in range(5):
-        wall, cpu, rc, rss = testmgr._timed_run(argv, 30)
+        # _timed_run grew a fifth field (task_mhz) — unpack by slice so the
+        # next addition does not break this test again for a reason that has
+        # nothing to do with what it measures.
+        wall, cpu, rc, rss = testmgr._timed_run(argv, 30)[:4]
         new.append(wall * 1000.0)
     print("  target %.1f ms" % TARGET_MS)
     print("  old (subprocess.run timeout=): %s" % [round(v, 1) for v in old])
@@ -86,7 +89,7 @@ def main():
     check("the new path varies continuously (a clock, not a grid)",
           len({round(v) for v in new}) > 1, [round(v, 1) for v in new])
 
-    wall, cpu, rc, rss = testmgr._timed_run(argv, 30)
+    wall, cpu, rc, rss = testmgr._timed_run(argv, 30)[:4]
     check("rusage comes back with it: cpu ~= wall for a busy loop",
           cpu is not None and 0.5 < cpu / wall < 1.5, "cpu=%s wall=%s" % (cpu, wall))
     check("rusage comes back with it: peak RSS is plausible",
