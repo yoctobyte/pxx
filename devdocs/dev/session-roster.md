@@ -2558,3 +2558,52 @@ rerank it deliberately rather than inheriting the number).
   mid-work — `sync.sh` commits and pushes, and racing a busy worker for board files is how
   a rebase conflict on generated BOARD files happens. Run it in a quiet window. This is the
   coordinator's housekeeping, not a worker's.
+
+- **Mapping shim landed and the ladder DID NOT MOVE — the honest headline, and the blocker
+  is one line up the stack.** frank3 reported "past a wall: ZERO files" as its own headline
+  immediately after landing the thing, which is the discipline the mandate asks for.
+
+  **Root cause verified here, not relayed:** `PyImportRootIsConsumedOnly`
+  (`compiler/pyparser.inc:33007`) tests only the ROOT of a dotted from-import and has
+  `collections` on its consume-and-ignore list, so `from collections.abc import Mapping` is
+  swallowed whole and binds nothing. The function's own comment states the assumption that
+  broke: `collections` is listed because *"the names it exports that we support are
+  ordinary pylib symbols … and an unsupported name walls visibly at its use site"* — true
+  before a real submodule shim existed. `import collections.abc as cabc` reaches the shim;
+  `from xml.etree.ElementTree import Element` works because `xml` is not on the list.
+
+  **The shim is correct and load-bearing, and frank3 proved it rather than asserting it:**
+  mechanically rewriting the 7 files' import spelling puts `_trie/_base.py` clean through
+  and four more onto a later unrelated `undefined variable (__name__)`. It also perturbed
+  the shim five ways before believing a zero-diff 47-assertion differential. **`MutableSet`
+  omitted after checking the actual corpus imports** — only Mapping, MutableMapping,
+  OrderedDict, deque, namedtuple are ever asked for.
+
+  **Routing: the blocker is Track N and goes to frank2** (`bug-n-from-collections-abc-…`,
+  p62) — its lane, it is active in it, no ownership change needed. Queued to it directly so
+  it does not have to come back for the next item.
+
+- **UNPUSHED WORK, caught by verification: `348f56dc7` does not exist in this repo.**
+  frank3 reported the shim as LANDED and five tickets as FILED; `git cat-file -t` says
+  "Not a valid object name" and `origin/master` has none of it. So Track T cannot test it,
+  `ready`/`next` cannot see the five N bugs — **including the p62 corpus blocker** — and
+  nothing can be ranked. Asked for an immediate push.
+
+  **Worth keeping as a check: "landed" from a worker means landed in ITS tree.** Verify a
+  reported sha exists on origin before ranking, routing or relaying it. Cheap
+  (`git cat-file -t <sha>`), and a filed-but-unpushed ticket is measured-but-not-filed —
+  the exact failure this repo keeps recording, one step upstream of where it usually
+  appears.
+
+- **A THIRD sighting of one root cause, flagged by frank3:**
+  `bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override` is the sibling arm of
+  the already-resolved `bug-n-a-builtin-subclass-subscript-operator-skips-the-override`
+  (confirmed in `done/`), which fixed only the builtin-base half. Per
+  `root-cause-over-microfix.md` that is a design flaw, not three bugs. Asked frank3 to put
+  the three-arm framing **in the ticket body**, not only in its report — otherwise whoever
+  takes it fixes the third arm and leaves the fourth.
+
+- **Track B is thinning** — after the shim resolves, its queue is
+  `feature-b-strtofloat-big-integers-in-64-bit-limbs` (p25) and two p20 ULP items. frank3
+  is on the p25. Noted for the user as a heads-up; not raised as a fork, since B still has
+  its own work and the leverage sitting in N is being routed to N's owner.
