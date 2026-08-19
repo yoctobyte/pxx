@@ -902,6 +902,8 @@ end;
 procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 function PyMakeNone: Integer; forward;  { the None VALUE (a VT_EMPTY variant) — pyparser.inc }
+function PyBuildGeneratorValue(gpi: Integer): Integer; forward;  { a generator CALL in value position becomes a cursor object (pyparser.inc) }
+function PyProgSym(const name: AnsiString): Integer; forward;  { a name in the Nil Python PROGRAM's own scope, never a unit's (pyparser.inc) }
 function PyParseSuite: Integer; forward;  { a Nil Python `: <suite>` block — the frontend tail of a for-in header (pyparser.inc) }
 function PyNodeIsCallableValue(n: Integer): Boolean; forward;  { a bound method / lambda / function value — pyparser.inc }
 function PyWrapHeapCallableCall(calleeNode, argsHead, n, defCall: Integer): Integer; forward;  { Callable-param call through a heap callable — pyparser.inc }
@@ -11301,6 +11303,33 @@ begin
     tkIdent:
     begin
       name := CurTok.SVal;
+      { A GENERATOR called in VALUE position — `g = gen()`, `list(gen())`,
+        `next(gen())`. The `for` header has its own desugar and never reaches
+        here; everything else becomes a cursor object (PyBuildGeneratorValue,
+        pyparser.inc). Ahead of every other arm because the name resolves to an
+        ordinary proc and would otherwise be CALLED — which, with the injected
+        instance parameter, is a step function invoked with the user's
+        arguments. That is why this used to be an arity error rather than a
+        wrong answer, and the arm must keep it from becoming one. }
+      { PyProgSym, not FindSym: FindSym also answers for a PARAMETER symbol left
+        behind by some RTL unit's routine, so a user generator named `src` — a
+        parameter name in json.pas and ed25519.pas — was refused here and fell
+        through to be CALLED, while the same generator named `gen` worked. The
+        question this guard asks is whether the PROGRAM binds the name to
+        something else, and only the program's own scope can answer it. }
+      if PyExprMode and (Tokens[TokPos].Kind = tkLParen) and
+         (PyProgSym(name) < 0) then
+      begin
+        procIdx := FindProcInUnit(name, -1);
+        if procIdx < 0 then procIdx := FindProc(name);
+        if (procIdx >= 0) and ProcIsStackless[procIdx] and
+           ProcIsGenerator[procIdx] then
+        begin
+          CurASTNode := PyBuildGeneratorValue(procIdx);
+          LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+          Exit;
+        end;
+      end;
       { A bare def NAME in a value position is that function's ADDRESS. Python
         has no paramless call without parentheses — `f` is the function, `f()`
         calls it — so unlike Pascal there is nothing to disambiguate, and

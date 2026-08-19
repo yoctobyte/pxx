@@ -21112,6 +21112,110 @@ begin
   ASTRight[Result] := rhs;
 end;
 
+{ The value-position twin of GenMakeVariantArgCell (parser.inc): a variant
+  argument to a generator needs a heap cell whose address the instance slot can
+  hold, because the callee reads it again at every resume, long after the
+  expression that produced the argument is gone. The only difference is where
+  the two setup statements go — HOISTED here, appended to the desugar's own
+  init sequence there. }
+function PyGenValueArgCell(argNode: Integer): Integer;
+var ps, newPi, callNode, derefNode: Integer;
+begin
+  newPi := FindProc('pycell_new');
+  if newPi < 0 then
+    Error('Nil Python: a generator variant argument needs pylib (pycell_new)');
+  ps := AllocVar('', tyPointer);
+  Syms[ps].PtrElemTk := tyVariant;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := newPi;
+  ASTLeft[callNode] := -1;
+  ASTTk[callNode] := Ord(tyPointer);
+  PyHoistStmt(PyMakeAssignNode(GenMakeIdent(ps, tyPointer), callNode));
+  derefNode := AllocNode(AN_DEREF);
+  ASTLeft[derefNode] := GenMakeIdent(ps, tyPointer);
+  ASTTk[derefNode] := Ord(tyVariant);
+  PyHoistStmt(PyMakeAssignNode(derefNode, argNode));
+  Result := GenMakeIdent(ps, tyPointer);
+end;
+
+{ A generator CALL in value position — `g = gen(args)`, `list(gen())`,
+  `next(gen())`, a generator handed to another function.
+
+  The `for` header consumes a generator without materialising anything
+  (ParseForInGeneratorAST): it allocates the instance, drives the step function
+  and frees it, all inside the one statement. A VALUE cannot do that — it has to
+  outlive the expression that made it — so it becomes a CURSOR
+  (PYITER_SLGEN, pylib), which is the same object `map`, `filter`, `zip` and a
+  generator EXPRESSION already produce. Every consumer of a generator value is
+  therefore already written: `for x in g`, `next(g)`, `list(g)`, unpacking.
+
+  The instance allocation and the argument stores are HOISTED, because they are
+  statements and this is an expression. That is exactly what the hoist queue is
+  for, and it is why this reads more simply than the `for` desugar, which had to
+  park the queue instead of using it.
+
+  Enters with the cursor on the generator's NAME. }
+function PyBuildGeneratorValue(gpi: Integer): Integer;
+var gIdx, nargs, argNode, slotOff, k: Integer;
+    instLit, allocCall, stepNode, a0, a1: Integer;
+begin
+  if (FindProc('SlNew') < 0) or (FindProc('SlSet') < 0) then
+    Error('Nil Python: a generator value needs lib/rtl/slgen in scope');
+  if FindProc('pygen_iter_new') < 0 then
+    Error('Nil Python: pylib (pygen_iter_new) not loaded');
+  Next;                                { past the generator's name }
+  Expect(tkLParen, '(');
+
+  gIdx := AllocVar('', tyPointer);
+  instLit := AllocNode(AN_INT_LIT);
+  ASTIVal[instLit] := ProcGenInstSize[gpi];
+  ASTTk[instLit] := Ord(tyInt64);
+  allocCall := GenMakeCall6(FindProc('SlNew'), tyPointer, instLit, -1, -1, -1, -1, -1);
+  PyHoistStmt(PyMakeAssignNode(GenMakeIdent(gIdx, tyPointer), allocCall));
+
+  { Each declared parameter is seeded into its persistent slot, in declaration
+    order — slot k at SL_OFF_SLOTS + 8*k, the numbering the state-machine
+    transform assigns and the `for` desugar already relies on. }
+  nargs := 0;
+  if CurTok.Kind <> tkRParen then
+    repeat
+      PyParseBoolExpr;
+      argNode := CurASTNode;
+      if nargs >= ProcGenParamCnt[gpi] then
+        Error('Nil Python: too many arguments to generator `'
+              + Procs[gpi].Name + '`');
+      { a variant parameter is by-ref, so its slot holds a heap cell that
+        outlives the call — the same cell the `for` desugar builds }
+      if PyGenArgNeedsCell(gpi, nargs + 1) then
+        argNode := PyGenValueArgCell(argNode);
+      slotOff := SL_OFF_SLOTS + 8 * nargs;
+      PyHoistStmt(GenMakeCall6(FindProc('SlSet'), tyInt64,
+        GenMakeIdent(gIdx, tyPointer), GenMakeIntLit(slotOff), argNode, -1, -1, -1));
+      Inc(nargs);
+    until not Eat(tkComma);
+  Expect(tkRParen, ')');
+  if nargs < ProcGenParamCnt[gpi] then
+    Error('Nil Python: generator `' + Procs[gpi].Name + '` needs '
+          + AIntToStr(ProcGenParamCnt[gpi]) + ' argument(s), got '
+          + AIntToStr(nargs));
+
+  stepNode := AllocNode(AN_PROCADDR);
+  ASTIVal[stepNode] := gpi;
+  ASTTk[stepNode] := Ord(tyPointer);
+
+  k := FindProc('pygen_iter_new');
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := stepNode; ASTRight[a1] := -1;
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := GenMakeIdent(gIdx, tyPointer); ASTRight[a0] := a1;
+  Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := k;
+  ASTTk[Result] := Ord(Procs[k].RetType);
+  ASTLeft[Result] := a0;
+  { the cursor's class identity, so every consumer that dispatches on the
+    receiver's class sees a TPyIter rather than an untyped node — see
+    PyCallProc1, which carries it for the same reason }
+  if Procs[k].RetType = tyClass then ASTRight[Result] := ProcRetRecId[k];
+end;
+
 { Bind the loop target of a GENERATOR for-in, and build the statements that
   unpack a TUPLE target from the yielded element.
 
