@@ -4,7 +4,7 @@ prio: 48
 type: bug
 owner: unassigned
 blocked-by: []
-summary: "A class with `__len__` + `__getitem__` and no `__iter__` is iterable in CPython. In NilPy `for x in obj` is a compile error whose diagnostic names an unrelated internal (`pylib (count) not loaded`), and `list(obj)` compiles and returns an EMPTY list — a silent wrong answer, which is the worse half."
+summary: "SUPERSEDED 2026-08-19 — split and fixed under two other tickets before this one was ever dispatched. A class with `__len__` + `__getitem__` and no `__iter__` is iterable in CPython. In NilPy `for x in obj` is a compile error whose diagnostic names an unrelated internal (`pylib (count) not loaded`), and `list(obj)` compiles and returns an EMPTY list — a silent wrong answer, which is the worse half."
 ---
 
 # The sequence protocol does not yield iteration
@@ -86,3 +86,29 @@ Track N: the repro's `for` loop and `list()` both give `a b c` /
 regression test must assert the **contents** of `list(s)`, not just that it
 compiles — a test checking only compilation passed the entire time the answer was
 `[]`.
+
+
+---
+
+## Superseded 2026-08-19 — closed as a duplicate, not as work
+
+Filed from Track B while writing the ElementTree shim. Track N had reached the
+same ground independently and split it in two, and both halves were resolved the
+same day, before this ticket was ever dispatched:
+
+- the `for` loop half → [[feature-nilpy-for-loop-getitem-protocol-fallback]],
+  resolved in `6905d6fd0`. It also replaced the `pylib (count) not loaded`
+  diagnostic this ticket complained about with one that names the method a
+  reader would actually add, and it carried comprehensions along for free (same
+  lowering).
+- the SILENT half — `list(obj)` compiling and answering `[]` for a three-element
+  sequence, which this ticket argued was the worse of the two symptoms →
+  [[bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop]], which
+  also names `sum(b)`, `2 in b` and `p, q, r = b` as the sibling consumers that
+  each test for a container their own way. That is the wider sweep this ticket
+  asked for under "the double case to check before closing", done properly.
+
+So nothing here is unfixed and nothing is lost — this file is moved out of the
+queue only so it cannot dispatch a third agent onto work that is already done.
+Closed as a duplicate rather than resolved, because the fix did not land under
+this ticket and the record should say who did it.

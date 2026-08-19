@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:18 blocked:5 backlog:237 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2043 rejected:38`
+`unfinished:18 blocked:5 backlog:236 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2043 rejected:39`
 
 ## Held now (working/ — do not touch these files)
 
@@ -40,7 +40,7 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 221, ranked
+## Ready — top 30 of 220, ranked
 
 - `[p 68] [B]` feature-b-mimic-collections-abc-mapping-and-mutablemapping
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
@@ -73,4 +73,4 @@ _none — no lane is locked._
 - `[p 50] [E]` feature-demo-songformatter-pxx-target
 - `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
 
-_191 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_190 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

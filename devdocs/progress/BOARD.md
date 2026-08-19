@@ -45,7 +45,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (237)
+## backlog (236)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -75,7 +75,6 @@ _none_
 | bug-n-self-class-cannot-be-called-as-a-constructor | N | 45 | bug | `self.__class__(args)` does not compile — `error: A has no method __class__` — while `self.__class__.__name__` reads fine and `type(a).__name__` works. Calling the class object is the standard Python idiom for 'construct another one of my own type', and it is what CPython's own xml.sax AttributesImpl.copy() does; lib/rtl/mimic_xml_sax_xmlreader.py names its class explicitly instead, registered in track-b-workarounds.md. | — |
 | bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base | N | 40 | bug | str(e) on an exception class declared in a Pascal unit dispatches __str__ by the STATIC type of the except clause, not the runtime type: `except URLError as e` gives '<urlopen error boom>' and `except Exception as e` gives 'boom' for the same object. CPython gives the same string either way. Pure-NilPy classes are NOT affected. | — |
 | bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop | N | 55 | bug | A class with __getitem__/__len__ now iterates with `for`, but every OTHER consumer of iteration still refuses it — and `list(b)` returns [] SILENTLY. Found while fixing feature-nilpy-for-loop-getitem-protocol-fallback; the for-loop was one path of several serving one concept. | — |
-| bug-n-the-sequence-protocol-does-not-yield-iteration | N | 48 | bug | A class with `__len__` + `__getitem__` and no `__iter__` is iterable in CPython. In NilPy `for x in obj` is a compile error whose diagnostic names an unrelated internal (`pylib (count) not loaded`), and `list(obj)` compiles and returns an EMPTY list — a silent wrong answer, which is the worse half. | — |
 | bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells | N | 40 | bug | A Nil Python generator instance leaks its locals and its argument cells | — |
 | bug-nilpy-an-extended-slice-cannot-be-assigned | N | 30 | bug | `l[::2] = [7, 8]` is a parse error. The READ form `l[::2]` works, and the plain-slice ASSIGN `l[1:3] = [9]` works; only the strided assignment is missing. | — |
 | bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds | N | 20 | bug | A dict VALUE as the `*=` target still rebinds, so an alias of it keeps the old contents. The parameter half landed 2026-08-15 (pymul_v_inplace); this is the residue, and `+=` has the same split. | — |
@@ -467,7 +466,7 @@ _none_
 
 2043 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (38)
+## rejected (39)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -480,6 +479,7 @@ _none_
 | bug-compiler-uses-unit-interactions | A | 50 | bug | Compiler self-build: two rough edges when `uses`-ing a real unit | — |
 | bug-frozen-self-build-unreliable | A | 50 | bug | Frozen-string compiler self-build (`bootstrap-frozen` / `stabilize-frozen`) is unreliable | — |
 | bug-lexer-identifier-ends-with-keyword | A | 50 | bug | Bug — Lexer misidentifies identifiers ending with keyword names (e.g. 'Class') | — |
+| bug-n-the-sequence-protocol-does-not-yield-iteration | N | 48 | bug | SUPERSEDED 2026-08-19 — split and fixed under two other tickets before this one was ever dispatched. A class with `__len__` + `__getitem__` and no `__iter__` is iterable in CPython. In NilPy `for x in obj` is a compile error whose diagnostic names an unrelated internal (`pylib (count) not loaded`), and `list(obj)` compiles and returns an EMPTY list — a silent wrong answer, which is the worse half. | — |
 | bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error | N | 50 | bug | `xs.sort(key=..., reverse=...)` fails with a bare "unexpected token" | — |
 | bug-nilpy-uforth-rc4-corpus-stack-underflow | N | 45 | bug | WITHDRAWN — not a pxx bug. `ERROR: Stack underflow` came from MY harness invoking `INCLUDE testje.for`; uforth's INCLUDE POPS a string, so the correct form is `\"testje.for\" INCLUDE`. With that, all four RC4 corpora are byte-identical to CPython. | — |
 | bug-nonreproducible-miscompile-2026-06-02 | A | 50 | bug | Non-reproducible one-off miscompile (2026-06-02) | — |
@@ -547,7 +547,6 @@ _none_
 - [p 50] [A] feature-pascal-asmmode-directive-tolerance
 - [p 50] [A] feature-pascal-initialize-finalize-intrinsics
 - [p 50] [A] feature-release-checksums-repro
-- [p 48] [N] bug-n-the-sequence-protocol-does-not-yield-iteration
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
