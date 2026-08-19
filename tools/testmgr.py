@@ -1255,6 +1255,64 @@ SRC_RE = re.compile(r"\b(?:test|lib|examples|tools|compiler)/[A-Za-z0-9_./+-]*"
                     r"\.[A-Za-z0-9]+\b")
 
 
+# --- why a red job is red -------------------------------------------------
+#
+# bug-t-a-red-job-records-no-reason. tstate records a failed job as the bare
+# string "fail" -- and `tools-devtest#00` alone runs 46 guard scripts, so "fail"
+# names one of 46 without saying which. Triaging a cascade then means re-running
+# the job, and if the cause was environmental or has since been fixed, the
+# re-run answers a different question than the one that was asked.
+REASON_MAX = 400          # chars kept per red job. tstate is committed to git.
+REASON_TAIL_BYTES = 8192  # of the log read to find them
+REASON_LINES = 6          # substantive lines, at most
+
+# The run's scratch dir is pid-keyed (RUN_TMP), so an unscrubbed path changes on
+# every run and dirties tstate even when nothing else moved. Same literal /tmp
+# prefix the four regexes in make_dry_run() key off -- see the note there.
+_REASON_TMP_RE = re.compile(r"/tmp/[A-Za-z0-9_./+-]+")
+# The last line of nearly every failing log, and it carries nothing the job's
+# status and name do not already say. Keeping it would give every job the same
+# reason, which is the current defect wearing a longer string.
+_REASON_NOISE_RE = re.compile(
+    r"^(?:make(?:\[\d+\])?: (?:\*\*\*|Leaving directory|Entering directory)"
+    r"|Makefile:\d+: recipe for target\b)")
+
+
+def job_reason(job):
+    """A bounded, git-stable account of what a red job printed. "" if unknown.
+
+    Deliberately the log TAIL rather than a pattern match: a signature list goes
+    stale silently and then reports nothing for the failure shapes it has not met
+    yet, which is the same "records that it failed, discards why" this exists to
+    end. What the job printed last is true for every shape, including the ones
+    nobody has seen.
+
+    An empty return means the log is gone or unreadable, and reads that way --
+    it is never a claim that the job failed for no reason.
+    """
+    if not job.logpath:
+        return ""
+    try:
+        with open(job.logpath, "rb") as f:
+            try:
+                f.seek(-REASON_TAIL_BYTES, os.SEEK_END)
+            except OSError:               # log shorter than the tail window
+                f.seek(0)
+            tail = f.read().decode(errors="replace")
+    except OSError:
+        return ""
+    lines = [ln.rstrip() for ln in tail.splitlines()]
+    # Drop noise from the END only. The same text mid-log can be a sub-make that
+    # failed and recovered, and dropping it there would rewrite the story.
+    while lines and (not lines[-1].strip() or _REASON_NOISE_RE.match(lines[-1])):
+        lines.pop()
+    lines = [ln for ln in lines[-REASON_LINES:] if ln.strip()]
+    if not lines:
+        return ""
+    out = _REASON_TMP_RE.sub("$TMP", " | ".join(ln.strip() for ln in lines))
+    return out[:REASON_MAX - 1] + "\u2026" if len(out) > REASON_MAX else out
+
+
 def extract_src(lines):
     seen = []
     for m in SRC_RE.finditer("\n".join(lines)):
@@ -4207,6 +4265,10 @@ def main():
                          "attempts": j.attempts,
                          "dur": round((j.t1 - j.t0), 1) if j.t0 and j.t1 else 0.0,
                          "mem": j.peak_rss, "cpu": round(j.cpu_sec, 1),
+                         # `log` is a path on THIS box in a temp dir the OS
+                         # reaps; a consumer that keeps the report cannot read
+                         # it later. `reason` is the part that has to survive.
+                         "reason": job_reason(j) if j.status not in ("pass", "skip") else "",
                          "log": j.logpath}
                         for j in jobs
                         if j.status not in ("queued", "skipped",

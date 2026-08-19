@@ -1162,6 +1162,58 @@ def diff_jobs(prev_jobs, report):
 
 
 # ---------------------------------------------------------------- reports --
+# How many red jobs may carry a reason. tstate is committed to git, so this is
+# a repo-size bound, not a memory one: a mass red must not commit a novel.
+JOB_REASON_CAP = 60
+
+
+def update_job_reasons(st, report, jobs):
+    """Keep a bounded account of WHY next to each red job. -> None (mutates st).
+
+    bug-t-a-red-job-records-no-reason: `st["jobs"]` holds bare status strings, so
+    a red job in a cascade cannot be triaged without re-running it -- and a
+    re-run at a later sha answers a different question than the one asked.
+
+    A SIBLING map rather than widening `st["jobs"]`, whose values several tools
+    read as plain strings. That is the cheaper change, and the only one that
+    cannot break a reader not updated in the same commit.
+
+    Three rules, and the third is the one with teeth:
+
+      * a job that is no longer red loses its reason -- a stale `why` hanging off
+        a green job is worse than no reason at all;
+      * a job the prune dropped from `st["jobs"]` loses it too, so this map can
+        never outlive the map it annotates;
+      * **a job THIS RUN produced sets or CLEARS its reason.** If the run had the
+        job red but recovered no log, the old reason is deleted rather than left
+        in place: keeping it would attach a previous run's explanation to this
+        run's failure, which is a true sentence about the wrong subject and
+        exactly the class of defect this ticket is part of.
+    """
+    fresh = {job_key(j): (j.get("reason") or "") for j in report["jobs"]}
+    out = dict(st.get("job_reason") or {})
+    for k, why in fresh.items():
+        if why:
+            out[k] = why
+        else:
+            out.pop(k, None)
+    out = {k: v for k, v in out.items()
+           if k in jobs and jobs[k] not in PASSLIKE}
+    if len(out) > JOB_REASON_CAP:
+        # Sorted, so which ones survive is reproducible rather than dict-order
+        # luck -- and SAY what went, because a cap that trims silently turns
+        # "we kept 60 of 300" into "there were 60".
+        keep = sorted(out)[:JOB_REASON_CAP]
+        print("twatch: %d red job(s) carry a reason; keeping the first %d by "
+              "name, %d dropped" % (len(out), JOB_REASON_CAP,
+                                    len(out) - JOB_REASON_CAP), flush=True)
+        out = {k: out[k] for k in keep}
+    if out:
+        st["job_reason"] = out
+    else:
+        st.pop("job_reason", None)
+
+
 def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
                     st=None):
     ts = utcnow().replace(":", "").replace("-", "")
@@ -1208,6 +1260,7 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
     # mapping job numbers back to Makefile lines (numbers shift with edits)
     srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
     statmap = {job_key(j): j["status"] for j in report["jobs"]}
+    reasonmap = {job_key(j): j.get("reason", "") for j in report["jobs"]}
     def label(n):
         return "%s — %s" % (n, srcmap[n]) if srcmap.get(n) else n
 
@@ -1222,8 +1275,15 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
         line already prints the status in its own parenthetical, and would
         otherwise read "**TIMED OUT** (timeout)".
         """
-        return (label(n) + "  **TIMED OUT**"
-                if statmap.get(n) == "timeout" else label(n))
+        out = (label(n) + "  **TIMED OUT**"
+               if statmap.get(n) == "timeout" else label(n))
+        # ...and WHY, for every red in the list rather than only the first.
+        # The `first failure:` block below dumps one log; a 13-job cascade left
+        # the other twelve as bare names, which is the markdown half of
+        # bug-t-a-red-job-records-no-reason. Trimmed harder than tstate's copy
+        # because this is a scannable list, not the durable record.
+        why = (reasonmap.get(n) or "").strip()
+        return "%s\n  - `%s`" % (out, why[:160]) if why else out
     for title, names in (("NEW-RED", new_red), ("FIXED", fixed),
                          ("STILL-RED", still_red)):
         if names:
@@ -1949,6 +2009,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
         st["job_tier"] = {k: v for k, v in (st.get("job_tier") or {}).items()
                           if k not in dead}
         authoritative = {k: v for k, v in authoritative.items() if k not in dead}
+    update_job_reasons(st, report, st["jobs"])
     # Shadow only — records the pin it WOULD have made, moves nothing.
     pin_shadow(clone, host, st, sha, report, authoritative, now)
     save_state(clone, host, st)

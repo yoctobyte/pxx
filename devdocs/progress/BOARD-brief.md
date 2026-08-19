@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:3 working:2 unfinished:15 blocked:6 backlog:232 experimental:20 rainy-day:40 float:19 done-followup:3 decided:94 done:2089 rejected:40`
+`urgent:3 working:2 unfinished:15 blocked:6 backlog:231 experimental:20 rainy-day:40 float:19 done-followup:3 decided:94 done:2090 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -45,7 +45,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 221, ranked
+## Ready — top 30 of 220, ranked
 
 - `[p 75] [U]` decide-nilpy-import-rule-vs-a-cpyext-extension-module
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
@@ -78,4 +78,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 
-_191 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_190 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
