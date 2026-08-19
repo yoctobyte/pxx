@@ -337,3 +337,28 @@ remove the field and the `AddDataPtrFix`, at the price of a variable-length
 record. Nothing needs an ARRAY of these records (each is reached by address), so
 inlining is defensible — but the pointer form is what is emitted and
 byte-verified today, so changing it is churn without a reason.
+
+
+## PARKED 2026-08-19 after increment 2b part 1 (frankonpiler-an)
+
+Parked to let the corpus lever through: the two head-of-N bugs unblock
+`feature-b-mimic-collections-abc-mapping-and-mutablemapping`, which has a queue
+behind it, while this feature currently unblocks nothing that is moving.
+
+**Landed and green:** increment 1 (`e605d2e96`), 2a (`580e6d1ba`), 2b part 1
+(`1aed59155`). All emission-side — `defs.inc`, `rtti_emit.inc`, `compiler.pas`.
+Nothing in `pyparser.inc` or `compiler/builtin/**`, so this parks with zero
+contention against N frontend work.
+
+**RESUME AT: increment 2b part 2 — the def-time store.** Everything else is
+banked above. The one thing that must not be forgotten:
+
+> **Nothing may consume the defaults array until 2b part 2 lands.** Slots for
+> string and non-constant defaults currently hold `PYSIG_DFLT_UNSET`. That is a
+> loud sentinel by design, but a consumer written before the store exists would
+> meet it on every such default.
+
+Order from there: 2b part 2 (def-time store, `pyparser.inc`) -> 2c (`TPyBound`
+carries the record, `pylib.pas` + `pyeval.pas`, NEEDS A PIN) -> 2d (dispatcher
+reads ReqN/TotN/defaults). Verify the p70 table against the result before
+resolving anything — "subsumed" stays a prediction until the fix exists.

@@ -2,9 +2,10 @@
 track: N
 prio: 55
 type: bug
-owner: unassigned
+owner: frankonpiler-an
 blocked-by: []
 summary: "A user class's `keys()`/`items()`/`values()` called through an untyped (dynamic) receiver is dispatched as a DICT VIEW instead of the method: segfault, or a garbage list of empty strings and None when the result is consumed. Exactly three names; every other colliding name (`get`, `append`, `insert`, `remove`, `clear`, `find`, `set`, `extend`, `pop`) dispatches correctly."
+status: working
 ---
 
 # A user class's `keys()`/`items()`/`values()` is dispatched as a dict view

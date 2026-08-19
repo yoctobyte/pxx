@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:17 blocked:5 backlog:238 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2040 rejected:38`
+`working:1 unfinished:18 blocked:5 backlog:237 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2040 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-n-a-callable-value-carries-its-signature-type` [A] — owner: frankonpiler-an
+- `bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view` [N] — owner: frankonpiler-an
 
-## unfinished (17) — parked mid-flight; re-claim, do not duplicate
+## unfinished (18) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults` [N]
@@ -24,6 +24,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-own-language-first-symbol-resolution` [A] — blocked-by: bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
 - `feature-a-typeref-migrate-consumers` [A]
 - `feature-b-the-module-shim-batch-blocking-the-python-corpus` [B] — blocked-by: decide-xml-etree-thin-tree-model-or-a-real-xml-library
+- `feature-n-a-callable-value-carries-its-signature-type` [A]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
@@ -39,9 +40,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 221, ranked
+## Ready — top 30 of 220, ranked
 
-- `[p 68] [N]` bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view (unblocks 1)
 - `[p 68] [N]` feature-nilpy-for-loop-getitem-protocol-fallback (unblocks 1)
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
@@ -71,5 +71,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 50] [C]` feature-c-vla-via-alloca
 - `[p 50] [E]` feature-demo-songformatter-pxx-target
 - `[p 50] [A]` feature-mimic-fpc-compiler-define-profile
+- `[p 50] [A]` feature-nilpy-collections-and-string-methods
 
-_191 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_190 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
