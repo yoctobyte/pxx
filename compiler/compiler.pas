@@ -54,12 +54,12 @@ procedure DbgMarkTokFile(startTok, fileId: Integer); forward;   { real body in p
 procedure CMarkTokModule(startTok: Integer; const path: AnsiString); forward;    { real body in parser.inc; clexer.inc/cparser.inc call it (bug-a-fpc-seed-drift-emitasmx64-forward) }
 function CPathIsCModule(const path: AnsiString): Boolean; forward;   { ditto }
 {$include lexer.inc}
-{$include clexer.inc}
+{$ifndef PXX_NO_CFRONT}{$include clexer.inc}{$endif}
 {$include blexer.inc}
 {$include pylexer.inc}
 {$include rlexer.inc}
 {$include alexer.inc}
-{$include zlexer.inc}
+{$ifndef PXX_NO_ZIG}{$include zlexer.inc}{$endif}
 {$include llexer.inc}
 {$include flexer.inc}
 {$include glexer.inc}
@@ -97,8 +97,10 @@ procedure EmitAsmX64(const items: array of const); overload; forward;
 {$include asmtext_a64.inc}
 {$include asmtext_arm32.inc}
 {$include asmtext_xtensa.inc}
-procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;
+{$ifndef PXX_NO_CFRONT}procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;{$endif}
 procedure AddDefaultCIncludeDirs; forward;   { the C unit pull in parser.inc needs it too }
+{ stubs for any frontend omitted from this build; no-op in the default }
+{$include frontend_stubs.inc}
 {$include parser.inc}
 {$include ir.inc}
 function GetOrAllocSymRTTI(symIdx: Integer): Integer; forward;
@@ -115,12 +117,12 @@ function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
   cparser.inc, whose CCrtlHeaderForName reads it. Regenerate after adding a crtl
   function; lib-test runs gen_crtl_map.py --check and fails when it is stale. }
 {$include crtl_names.inc}
-{$include cparser.inc}
+{$ifndef PXX_NO_CFRONT}{$include cparser.inc}{$endif}
 {$include bparser.inc}
 {$include pyparser.inc}
 {$include rparser.inc}
 {$include aparser.inc}
-{$include zparser.inc}
+{$ifndef PXX_NO_ZIG}{$include zparser.inc}{$endif}
 {$include lparser.inc}
 {$include wparser.inc}
 {$include fparser.inc}
@@ -129,7 +131,7 @@ function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
 {$include elfwriter.inc}
 {$include rtti_emit.inc}
 {$include resources_emit.inc}
-{$include cpreproc.inc}
+{$ifndef PXX_NO_CFRONT}{$include cpreproc.inc}{$endif}
 {$include asmfront.inc}
 
 { ===== Main ===== }
@@ -733,7 +735,10 @@ begin
     begin
       { -I<dir>: add a search root for BOTH C `#include` and Pascal `uses`
         (project / library dir), per feature-dynamic-include-paths-config. }
+{$ifndef PXX_NO_CFRONT}
       AddCIncludeDir(PasOptionTail(option, 3));
+{$endif}
+      { the Pascal half of -I runs in every configuration }
       AddPasUnitDir(PasOptionTail(option, 3));
       Inc(i);
     end
@@ -1019,6 +1024,10 @@ begin
   end
   else if isC then
   begin
+{$ifdef PXX_NO_CFRONT}
+    writeln(StdErr, 'this compiler was built without the C frontend (built with PXX_NO_CFRONT); rebuild without that define to compile C sources');
+    Halt(1);
+{$else}
     AddDefaultCIncludeDirs;   { pxx's crtl headers on the default <> path (unless -nostdinc) }
     CPreprocess(Source, SourceFileDir);
     if DumpCpp then begin write(Source); Halt(0); end;
@@ -1027,6 +1036,7 @@ begin
     TokPos := 0;
     Next;
     ParseCProgram;
+{$endif}
   end
   else if isAsm then
     ParseAsmProgram
@@ -1050,12 +1060,17 @@ begin
   end
   else if isZig then
   begin
+{$ifdef PXX_NO_ZIG}
+    writeln(StdErr, 'this compiler was built without the Zig frontend (built with PXX_NO_ZIG); rebuild without that define to compile Zig sources');
+    Halt(1);
+{$else}
     ZLexAll;
     MainProgramTokCount := TokCount;
     DbgMainTokEnd := TokCount;   { -g: see the NilPy branch above }
     TokPos := 0;
     Next;
     ParseZigProgram;
+{$endif}
   end
   else if isLol then
   begin

@@ -8,8 +8,10 @@ function GetFileBaseName(const path: AnsiString): AnsiString; forward;
 procedure NormalizePath(var p: AnsiString); forward;
 procedure ExpandIncludes(var src: AnsiString; const baseDir, selfPath: AnsiString); forward;
 procedure ExpandPasMacros(var src: AnsiString); forward;
+{$ifndef PXX_NO_CFRONT}
 procedure ParseCUnit; forward;
 procedure RegisterCMacroConsts; forward;
+{$endif}
 procedure EmitAnsiStringRuntime; forward;
 procedure EmitDiv0Stub; forward;
 procedure EmitFpcFloatErrStub; forward;
@@ -35073,10 +35075,16 @@ begin
       ParseUsesUnitAmbient('pxxcio');
       UnitContent := savedUnitContent;
     end;
+{$ifdef PXX_NO_CFRONT}
+    Error('this compiler was built without the C frontend (PXX_NO_CFRONT), '
+          + 'so it cannot load the C source ' + path);
+    startPos := 0;
+{$else}
     CPreprocess(UnitContent, GetFilePath(path));
 
     { Append preprocessed tokens using C Lexer }
     startPos := CLexAppend(UnitContent);
+{$endif}
 
     TokPos := startPos;
     Next;

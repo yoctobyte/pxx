@@ -13,11 +13,11 @@
 function TypeSize(tk: TTypeKind): Integer; forward;
 function RegcallScalarType(tk: TTypeKind): Boolean; forward;
 function GenMakeSeq(stmt, next: Integer): Integer; forward;
-function CNodeDecaysToPointer(node: Integer): Boolean; forward;
+{$ifndef PXX_NO_CFRONT}function CNodeDecaysToPointer(node: Integer): Boolean; forward;{$endif}
 function IRLowerAddress(node: Integer): Integer; forward;
 function IRNodePointerBase(node: Integer): Boolean; forward;
 function IRPointerStride(node: Integer): Integer; forward;
-function FindCTypedef(const name: AnsiString): Integer; forward;
+{$ifndef PXX_NO_CFRONT}function FindCTypedef(const name: AnsiString): Integer; forward;{$endif}
 procedure EnableExceptionRuntime; forward;
 function IsASTLValue(node: Integer): Boolean; forward;
 procedure EmitOvfCheckX64(uns: Boolean); forward;

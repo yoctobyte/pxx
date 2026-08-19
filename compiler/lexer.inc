@@ -17,6 +17,7 @@ begin
   Halt(1);
 end;
 
+
 { Fatal error for a site the CURRENT TOKEN is nowhere near — an IR-lowering check,
   which runs long after the parser reached EOF, so Error's CurTok.Line and its
   `near:` token window would both point at the end of the program and actively
@@ -2526,4 +2527,40 @@ begin
     Error('unexpected token');
   end;
   Next;
+end;
+
+{ THE PASCAL SEARCH PATHS -- `-Fu` unit roots and `-Fi` include roots.
+
+  Here rather than in cpreproc.inc, where they used to live: they are generic,
+  compiler.pas calls them straight from ordinary option handling, and a build
+  with the C frontend omitted must still resolve its own units. Their old home
+  made `-Fu` depend on the C preprocessor, which is the kind of dependency that
+  is invisible until something tries to remove a component
+  (refactor-a-search-path-helpers-live-in-the-c-preprocessor). }
+procedure AddPasUnitDir(const dir: AnsiString);
+var s: AnsiString; j: Integer;
+begin
+  s := '';
+  for j := 1 to Length(dir) do AppendChar(s, dir[j]);
+  if (Length(s) > 0) and (s[Length(s)] <> '/') then AppendChar(s, '/');
+  for j := 0 to PasUnitDirCount - 1 do
+    if PasUnitDirs[j] = s then Exit;
+  if PasUnitDirCount >= MAX_PAS_UNIT_DIRS then Error('too many -Fu/-I unit directories');
+  PasUnitDirs[PasUnitDirCount] := s;
+  Inc(PasUnitDirCount);
+end;
+
+procedure AddPasIncDir(const dir: AnsiString);
+{ -Fi<dir>: a {$I file} include search root (FPC parity;
+  bug-pascal-include-search-silent-miss). }
+var s: AnsiString; j: Integer;
+begin
+  s := '';
+  for j := 1 to Length(dir) do AppendChar(s, dir[j]);
+  if (Length(s) > 0) and (s[Length(s)] <> '/') then AppendChar(s, '/');
+  for j := 0 to PasIncDirCount - 1 do
+    if PasIncDirs[j] = s then Exit;
+  if PasIncDirCount >= MAX_PAS_UNIT_DIRS then Error('too many -Fi include directories');
+  PasIncDirs[PasIncDirCount] := s;
+  Inc(PasIncDirCount);
 end;

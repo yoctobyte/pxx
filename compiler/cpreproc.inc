@@ -2006,33 +2006,14 @@ end;
 { Register a Pascal-unit (`uses`) search root (`-Fu`, also fed by `-I`).
   Normalised to a trailing '/'. Deduped so `-I` + `-Fu` of the same dir, or a
   repeated flag, do not bloat the list. }
-procedure AddPasUnitDir(const dir: AnsiString);
-var s: AnsiString; j: Integer;
-begin
-  s := '';
-  for j := 1 to Length(dir) do AppendChar(s, dir[j]);
-  if (Length(s) > 0) and (s[Length(s)] <> '/') then AppendChar(s, '/');
-  for j := 0 to PasUnitDirCount - 1 do
-    if PasUnitDirs[j] = s then Exit;
-  if PasUnitDirCount >= MAX_PAS_UNIT_DIRS then Error('too many -Fu/-I unit directories');
-  PasUnitDirs[PasUnitDirCount] := s;
-  Inc(PasUnitDirCount);
-end;
+{ AddPasUnitDir / AddPasIncDir used to live HERE. They are generic Pascal
+  search-path helpers -- `-Fu` and `-Fi` -- and nothing about them belongs to
+  the C preprocessor; they sat here only because the C include-path code needed
+  a directory list first. Moved to lexer.inc so a compiler built without the C
+  frontend still handles its own unit search path
+  (refactor-a-search-path-helpers-live-in-the-c-preprocessor). AddCIncludeDir
+  and AddDefaultCIncludeDirs stay: those really are the C include path. }
 
-procedure AddPasIncDir(const dir: AnsiString);
-{ -Fi<dir>: a {$I file} include search root (FPC parity;
-  bug-pascal-include-search-silent-miss). }
-var s: AnsiString; j: Integer;
-begin
-  s := '';
-  for j := 1 to Length(dir) do AppendChar(s, dir[j]);
-  if (Length(s) > 0) and (s[Length(s)] <> '/') then AppendChar(s, '/');
-  for j := 0 to PasIncDirCount - 1 do
-    if PasIncDirs[j] = s then Exit;
-  if PasIncDirCount >= MAX_PAS_UNIT_DIRS then Error('too many -Fi include directories');
-  PasIncDirs[PasIncDirCount] := s;
-  Inc(PasIncDirCount);
-end;
 
 { 1-based index of the first occurrence of `sub` in `s`, else 0. }
 function CPFindSub(const s, sub: AnsiString): Integer;

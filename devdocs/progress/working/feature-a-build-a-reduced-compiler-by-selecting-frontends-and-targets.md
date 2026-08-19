@@ -281,3 +281,65 @@ compile-time measurement on a fixed workload, on the same pin (see
 credit). **If size drops and time does not, say so** — code size is a legitimate goal on its
 own for an embedded toolchain, and an unmeasured speed claim is exactly the kind that gets
 quoted back at us.
+
+---
+
+## CORRECTION TO MY OWN MEASUREMENT — and the mechanism, landed for Zig and C
+
+**The omission counts above were TRUNCATED, and the NilPy conclusion drawn from them was
+wrong.** FPC stops at the first fatal ("There were 7 errors compiling module, stopping"), so
+each run reported only the first layer and hid every later one — forward-declaration
+resolution in particular. I read a truncated list as a complete one and concluded NilPy was
+the cheapest frontend to omit. It is the most expensive.
+
+**This is the same failure the previous ticket in this lane was about**: a mechanism reporting
+on something adjacent to what was asked. `grep` counted references, which is not
+separability, so I replaced it with the compiler — and then read the compiler's *first
+layer* as its whole answer. The fix each round was to guard what it named, recompile, and see
+what appeared underneath; four rounds, ~4 seconds each.
+
+**True compile-time surface, distinct names:**
+
+| omit | distinct names | verdict |
+| --- | --- | --- |
+| **zig** | **0** | clean the moment the includes are guarded |
+| **cfront** | **9** | `CLexAppend` `CLexAll` `ParseCProgram` `CPreprocess` `AddDefaultCIncludeDirs` `ParseCUnit` `RegisterCMacroConsts` `CNodeDecaysToPointer` `FindCTypedef` |
+| **nilpy** | **183** | 177 forward declarations in `parser.inc` + 6 helper calls |
+
+A forward declaration in `parser.inc` means the shared parser CALLS that body, so those 177
+are real coupling, not bookkeeping. **The ticket's original 909-reference figure was
+directionally right about NilPy after all, and my first correction of it was wrong.** The
+useful part of my revision survives: the 909 are not 909 edit sites, they are 183 names —
+one order of magnitude down, not two.
+
+**The target numbers (riscv32 518, xtensa 288) are from the same truncated runs and are
+therefore LOWER bounds.** They stay last in the order for the same reason as before.
+
+### What landed
+
+`PXX_NO_ZIG` and `PXX_NO_CFRONT`, both building clean, plus the mechanism the rest will use:
+
+    default                          3,376,496 bytes   (FPC seed build)
+    -dPXX_NO_ZIG                     3,336,832
+    -dPXX_NO_CFRONT                  3,153,568
+    -dPXX_NO_ZIG -dPXX_NO_CFRONT     3,112,496        -7.8%
+
+**`compiler/frontend_stubs.inc`** holds one stub per shared-code entry point of an omitted
+frontend, rather than a guard at each of its ~40 call sites: one place that records the fact
+beats forty that re-derive it, and a guard forgotten at one site is a compile error in a
+configuration nobody builds that day. **Every stub raises rather than returning a plausible
+value** — each is unreachable by construction (its call site sits behind `if isNilPy` or the
+C dispatch arm, and a compiler without the frontend refuses that source at dispatch), so a
+stub that quietly returned 0 would convert "this build has no C frontend" into a wrong answer
+far away.
+
+`AddPasUnitDir` / `AddPasIncDir` moved out of `cpreproc.inc` into `lexer.inc`
+([[refactor-a-search-path-helpers-live-in-the-c-preprocessor]], now done as part of this —
+it was a blocker, not a cleanup: `-Fu` cannot be guarded out, it must work in a C-less build).
+
+The default build is untouched: self-host fixedpoint converges and `gate.sh quick` is GREEN.
+
+**`PXX_NO_NILPY` was deliberately NOT landed.** A half-implemented define that fails to
+compile is a trap for whoever tries it next, so the partial guards were reverted rather than
+shipped. Its 183 names are the next step and are mechanical but not trivial — each needs a
+correct signature and a decision about what an unreachable body should do.
