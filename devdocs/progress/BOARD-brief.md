@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:16 blocked:5 backlog:245 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2053 rejected:40`
+`unfinished:16 blocked:5 backlog:244 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2054 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -38,9 +38,8 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 230, ranked
+## Ready — top 30 of 229, ranked
 
-- `[p 70] [N]` bug-n-a-call-through-a-callable-value-drops-the-callees-defaults
 - `[p 65] [N]` bug-n-a-keyword-argument-through-a-callable-value-is-undefined
 - `[p 65] [N]` bug-n-a-module-level-def-taken-as-a-value-loses-its-defaults-on-the-boundfn-carrier
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
@@ -70,5 +69,6 @@ _none — no lane is locked._
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
+- `[p 50] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 
-_200 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_199 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

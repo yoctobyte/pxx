@@ -4,6 +4,7 @@ prio: 70
 type: bug
 blocked-by: [feature-n-a-callable-value-carries-its-signature-type]
 summary: "A def called through a callable value ignores its own default arguments — `al = g; al(1)` where `g(x, lo=7)` answers empty instead of 7, and passing the def as an argument and calling it with fewer args SEGFAULTS. Not rename-specific and not import-specific: a same-file assignment reproduces it, and only a DIRECT call applies defaults. The box carries a code address and no signature, which is exactly the open decision."
+status: done
 ---
 
 ## Possible duplicate — the 12-file corpus wall may be this same bug
@@ -156,3 +157,30 @@ Re-filed with the full diagnosis as
 one lands, or close this now and let that one carry the remainder. Recommend
 the latter: everything this ticket described except one carrier is fixed and
 verified against CPython by `test/test_nilpy_callable_value_defaults.npy`.
+
+
+---
+
+## CLOSED 2026-08-19. Everything here is fixed except one carrier, which is re-filed.
+
+Taking the recommendation written two sections above, now that the ranker has
+surfaced this as the top of Track N: closing rather than leaving it open on one
+row. Every shape this ticket describes is fixed and verified against CPython by
+`test/test_nilpy_callable_value_defaults.npy`, wired into `test-nilpy`.
+
+The one remaining shape — a def reached through a SUBSCRIPT or a PARAMETER —
+is not a gap in the fix but a **different carrier**: those values ride tag 12
+(the boundfn carrier), not the tag-8 pair the signature record hangs off.
+Measured with `PXXDBG=n.procs`; the call site is `pyvar_callv1`, which routes
+only tag 8 into the new dispatcher. It carries on as
+[[bug-n-a-module-level-def-taken-as-a-value-loses-its-defaults-on-the-boundfn-carrier]]
+(N, p65), with the full diagnosis and the recommended fix (put `Sig` on the
+boundfn carrier and DELETE `pyboundfn_setdefaults`, rather than teach a fifth
+path the same trick).
+
+Leaving this open on that row would keep re-surfacing a ticket whose work is
+done, which is the failure mode the resolved-decide-still-cited note at the top
+of this file is about — an edge outliving the thing it pointed at.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.
