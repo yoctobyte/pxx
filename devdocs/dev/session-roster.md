@@ -4200,3 +4200,47 @@ and commit; do not debug it under a live pin.** That is the whole reason the bra
 
 Lock is clear; both workers told. Track B/C/D/E ground moved — anything measured against
 `$(PXX_STABLE)` before 19:44Z was measured on v365 and does not carry over.
+
+### PROCESS FAILURE, mine: I pinned without consulting T's `pin_shadow`, which said NO
+
+T reported it and was right to. `plexus.json:pin_shadow` at 19:34:58Z on `a15cb05fa9ce`:
+`qualifies: false`, `would_pin: false`, `reds: 10`, `streak: 0`; newest full tier RED at 1242.8s;
+and **`cabb5d598`, the sha I blessed, has had no full tier at all.** I ran the pre-lock checks
+CLAUDE.md names — tree quiet, HEAD == origin, no builds — and never looked at the one signal built
+specifically to answer "should we pin?". Nothing in the documented procedure names it, which is
+worth fixing, but that is an explanation and not an excuse: T publishes it and I read `twatch
+--status` four times tonight without opening the file underneath it.
+
+**Checked afterwards, the pin stands — and I want the order of those two facts preserved.** All ten
+reds have causes that are **ancestors of pin v365**: `9bfb7fcfac03` (the lib-test job, proven
+pre-existing), the six cpyext jobs (the U decision), `9bbbbef6c` (the callable bug), `354f734c1`
+(riscv32 float). The tenth, `tools-devtest#00`, is **fixed in `93db54159`, which is inside v366** —
+so v366 is strictly better than v365 on that job and no worse on the other nine. The shadow was
+refusing v366 for a red set that was equally red under v365.
+
+**That is a correct outcome reached by an incomplete method, which is exactly the thing T named
+earlier tonight: right answer, survived by luck of the red set rather than by the argument.** If
+even one of the ten had had a cause after v365, I would have blessed a fresh regression onto every
+lane with the owner asleep. **Add the shadow to the pin checklist: `pin_shadow.would_pin`, and if
+false, `merge-base --is-ancestor` each red's cause against the CURRENT pin before overriding.**
+
+**Filed `bug-t-the-pin-shadow-cannot-clear-while-its-reds-are-older-than-the-pin` (T, p55),** because
+the deeper problem is structural: the shadow counts reds with no notion of a red whose cause is
+already inside the current pin, and **six of the ten are blocked on a Track U decision only the
+owner can make** — so `would_pin` can never become true, and a gate that is always overridden stops
+being read. Recommended fix is to baseline the candidate's red set against the incumbent's. Noted
+the consequence on the U ticket too, with the warning that this must NOT rush the decision: the
+green route there deletes the tests' subject.
+
+**T's own discipline in that report, worth recording:** it had a plausible story for the other nine
+(the cpyext jobs need CPython headers, the riscv32 job needs a cross toolchain under qemu) and
+refused to hand it over — *"plausibly is all I have, and I am not going to hand you a story with an
+environment hypothesis dressed as a conclusion."* It also discarded its own first reproduction of
+`tools-devtest#00` after finding the scratch tree had no `pin.log` and no `tstate/`, so the devtest
+was failing on missing data rather than on code — and named the rig fault that made the first two
+attempts look conclusive: **`git archive` silently drops `stable_linux_amd64/`, which is
+`export-ignore` in `.gitattributes`.** Worth knowing before anyone reconstructs a snapshot that way.
+Also filed `bug-t-a-red-job-records-no-reason` (`8bbc98b7c`, p45): tstate stores a failed job as the
+bare string `"fail"`, so a red job that ran 46 guards names one of 46 without saying which, and a
+cause that was environmental or since-fixed is unrecoverable. Same defect as the empty FAIL line,
+one level up the stack.
