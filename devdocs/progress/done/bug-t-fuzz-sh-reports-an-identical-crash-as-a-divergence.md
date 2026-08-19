@@ -98,4 +98,4 @@ Verified the devtest FAILS on the unfixed script (3 checks) and passes on the
 fixed one.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 9bfb7fcfa.

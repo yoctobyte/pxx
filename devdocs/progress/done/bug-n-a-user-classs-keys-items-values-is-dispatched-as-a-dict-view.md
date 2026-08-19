@@ -207,4 +207,4 @@ compiler/pascal26` to prove the Makefile still parses).
 `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 810f219c3.

@@ -203,4 +203,4 @@ The slug keeps the old name so existing links resolve; the summary is left
 intact above for the same reason, with this section as the correction.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 9bfb7fcfa.
