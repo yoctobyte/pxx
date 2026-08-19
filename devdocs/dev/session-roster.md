@@ -3698,3 +3698,69 @@ exactly the failure the list exists to prevent. `hello.npy` / `widgets.npy` stil
 **The lesson is not "verify claims" — it is that a right answer teaches nothing about whether
 the method was sound, and the method is what gets reused.** This one was reused within the
 hour, by me, in writing, to two workers.
+
+## Check +24h — pin v365 taken, csmith routed by move rather than by ticket
+
+**Pin v365** (`cc20f7101`, base `9ea01645c`, sha256 `92a0997001…`). Clears every deliberate
+import red v364 carried — frank3's tkinter list fix, frank2's fixture rewrite and the genuine
+`import tk` rewrite — and lands the C intrinsic fix, the classes.pas shadowing fix, VLA via
+alloca and five reduced-compiler omission defines on Track B/E's ground. Pre-lock check clean,
+lock held ~40s, announced and released.
+
+### A campaign ticket routed per MOVE, not per ticket
+
+`feature-c-csmith-differential-fuzzing` looked half-owned. frank2 read it instead of guessing:
+it is **correctly filed as C** — a standing campaign log (`status: done`, parked in `backlog/`
+because it resumes by one command; 15 bugs found over five sittings, each filed into its owning
+lane). What made it look ambiguous is that its two REMAINING moves fall on opposite sides of
+the file-lane boundary:
+
+- **axis 2** (cross targets under qemu) needs a `--target` pass-through in
+  `tools/csmith_fuzz.py` — checked, the script has six flags and no `--target`. **T's file
+  lane.** Routed to T, bundled with `bug-t-csmith-harness-reports-slow-as-a-timeout`, which is
+  open against the same file: one visit instead of two.
+- **axis 3** (csmith flags the defaults leave off) is `--csmith-args` on the existing script,
+  zero T edits. **frank2's**, already running.
+
+**The general rule, worth keeping:** a correctly-filed campaign ticket whose remaining moves
+straddle a lane boundary does not want splitting — it wants each move routed as it comes up.
+Splitting it is how two lanes end up editing one runner.
+
+### Two findings banked from it
+
+- **"Coverage thins where the generator is shy, not where the corpus is."** Both August
+  findings were *a struct assignment used as a value*, a form hand-written C has no reason to
+  produce, found from two angles. So the productive csmith flags are the ones emitting shapes
+  hand-written code avoids, not more code.
+- **Seed 90044 was filed `PXX_TIMEOUT` while both binaries finished and agreed** — pxx 18.2s to
+  gcc's 6.9s, the wall-clock limit sitting between them. The report is the bug, but **fixing it
+  buries a 2.6x ratio**: the case stops being reported at all. Asked T to record the ratio
+  rather than only the pass. One seed is weak evidence; the point is a pattern cannot accumulate
+  if each instance is discarded as a non-event.
+
+### The reduced compiler: the SPEED half of the premise is false
+
+frank3 measured what the owner assumed. Size −17.4% (2,789,936 B). **CPU time 45.9 ms vs
+46.0 ms over 40+ hyperfine runs — identical**, and the wall-clock A/B reversed its own verdict
+between rounds, i.e. noise reported as noise. Reason: the omitted code was never *executed* in
+the full build either, it sits behind `TargetArch` arms a host compile never takes. **Removing
+it removes bytes, not work. Footprint, not compile speed.** Relayed to the owner, since they
+asked for the feature partly on "hence faster".
+
+Acceptance chain runs clean (reduced -> full1 -> full2 byte-identical, and full1 byte-identical
+to the repo's own self-hosted binary — stronger than asked). **frank3 itself refused to let it
+be pinned as "acceptance passed"**: NilPy/Rust/Basic/Ada/Lua and riscv32/xtensa are still
+compiled in, so it is a milestone, not a clearance, and must be re-run at each omission.
+
+**Largest structural finding so far:** a backend is not two files. The shared `-O` pipeline in
+`ir_codegen.inc` calls `UnifiedResidencyAssignA64` and `FloatPoolBoundaryAssignA64` by name,
+and `symtab.inc` carries three full function epilogues emitting raw machine code side by side
+(i386 as inline `EmitB($0F)` streams, arm32 143 lines, aarch64 173). Guarded, not moved; shape
+ticket to follow. This is the answer the owner said the exercise was for.
+
+**Third measurement fault of the session, same shape:** `{$UNITPATH ../lib/asmcore}` resolves
+against the *working directory*, and frank3's scratch tree held a stale `lib/` — every trial
+build linked a snapshot instead of the tree under test, producing working binaries and clean
+error lists throughout. With the truncated FPC error lists and my own relayed job count, that is
+three instances of **the rig answering a slightly different question, fluently**. Fluency is the
+common factor: none produced an error, all produced plausible output.
