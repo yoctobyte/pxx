@@ -52,3 +52,33 @@ everyone can see what went quiet.
 
 Do **not** fix any float ticket while doing this; they live in `float/` and are picked up on
 request, not on rank.
+
+## DECIDED by the owner's ground-truth principle (2026-08-19)
+
+> *"our ground truth is projects that provably work under CPython or C or Pascal. and yes, it
+> needs dark magic at times."*
+
+This settles the shape choice, which was previously an open trade. **A generated `.expected`
+holding a float rendering is not ground truth** — it is our own output frozen at a moment, or
+CPython's output for a program nobody runs. Ground truth is a real project that *provably
+works*: zlib's compressed stream matching a gcc-built zlib's, a Python package importing and
+running, an FPC program producing the same answer.
+
+So the ranking of the shapes changes on principle, not on taste:
+
+- **Shape 2 (off the gating tiers) is right**, because a synthetic bit-exactness assertion was
+  never the oracle. It gates on something that is not the truth criterion.
+- **Shape 1 (tolerance) is acceptable** where the assertion is genuinely about a rendering
+  someone depends on.
+- **Shape 3 (regenerate from pxx) stays the worst**, and the principle says why sharply: it
+  replaces an oracle with a mirror. A test that asserts what we currently do cannot tell us a
+  real project broke.
+
+**What must NOT be de-gated, under the same principle:** any assertion whose subject is a real
+project working — a corpus program that fails to build or produces different output, a
+round-trip that stops round-tripping. Those ARE ground truth even when the differing bytes are
+float digits. The line is *what is being asserted*, not *what type the bytes are*.
+
+And the second half of the owner's sentence is licence, not apology: **"it needs dark magic at
+times"** — shims, mimics and facades are how a real project is made to work, so a shim existing
+is evidence of the strategy running correctly, never a smell.
