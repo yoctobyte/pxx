@@ -118,3 +118,79 @@ a test that silently stops emitting half its assertions still passes.
   expectations recorded.
 - **1:** all 61 wired this week, and an unknown number of bugs permanently
   blessed with a passing test in front of them.
+
+---
+
+# DECIDED 2026-08-19 by the user — **triage them, and it is Track T work**
+
+> "Triaging it is. And I think this is Track T work, right?"
+
+**Never option 1.** Recording our own output as truth is ruled out explicitly, for the
+reason in this ticket: such a test cannot fail for the reason tests exist, and nothing in
+the file afterwards records that its expectation was never checked.
+
+## A cheaper path than any of the three options, found by measuring
+
+The ticket framed this as "61 files x decide what each should assert", which is why it
+looked like days of oracle work. **That over-costs it, because the files are not what the
+options assumed.**
+
+The user's question — *"whoever wrote them didn't think they were worthy?"* — was checked
+against git rather than answered from the ticket. Every one of the **30 most recent
+commits that added a file under `test/`** is a `fix(...)` or `feat(...)`:
+
+```
+fix(N): a backslash before a newline in a string literal is a line continuation
+fix(N/A): a builtin type's method, called unbound
+fix(A): a default argument was passed by value into a by-reference parameter
+fix(A): @procvar is the pointer it HOLDS in delphi mode, not the variable's address
+```
+
+**These are repro tests written alongside real bug fixes, and never wired.** An omission at
+the last step, not a judgement of worth. Two consequences:
+
+1. **Deleting them is the WORST option, not the cheap one.** A repro for a *fixed* bug
+   guards a failure that demonstrably happened once, in the exact shape that produced it.
+2. **The expectation usually does not need deriving from an oracle — it is in the commit
+   that added the file.** Minutes per file, not an oracle run.
+
+## The procedure
+
+1. For each unwired file, find the adding commit (`git log --diff-filter=A`).
+2. **Fix/feat commit** → read what the bug was, wire the test to assert *that*, and
+   **record the commit sha in the expected file** so the provenance is visible instead of
+   lost. (This is the ticket's own objection to option 1 answered: the file now says where
+   its expectation came from.)
+3. **No fix commit, no ticket, no discernible intent** → that is the genuine leftover;
+   deleting it is fine.
+4. **Commit does not say what the right output is** → fall back to the oracle (option 2),
+   or **park it and ask the owning lane** rather than guessing.
+5. Where the source is legal input to the reference implementation, prefer the
+   **dual-runnable** form documented above — the oracle becomes a property of the file
+   instead of a step that expires. And **assert a COUNT as well as the content.**
+
+**Caveat, stated because the sample was narrow:** the 30 sampled additions are recent
+work. The older tail may be scruffier and should be sampled before assuming the whole 61
+follow the pattern.
+
+## Ownership — Track T, with a boundary and a known collision
+
+**Track T owns it:** test infrastructure, T already owns `tools/check_test_wiring.py`, and
+T did the original triage of the 85.
+
+**But "T owns the TOOL, never the bug" applies in full.** Some of these WILL go red when
+wired — that is the point. A red goes to the owning lane as a ticket (IR/codegen → A,
+dialect → P, NilPy → N, RTL → B). **T must never adjust an expectation to make a red test
+pass** — that is option 1 arriving through the back door.
+
+**Collision note:** wiring means editing the **Makefile**, which is NOT in T's file list
+(`testmgr.py`, `twatch.py`, `tstate/**`, the fuzzers) and is shared with A. T should
+announce the batch rather than sprinkling Makefile edits across days.
+
+**Judgement note:** deciding what a *Pascal* test should assert when its commit does not
+say needs dialect knowledge, not test-infra knowledge. T should park those with a note
+rather than guess, keeping the batch mechanical and honest.
+
+## Re-filed as work
+
+See `chore-t-triage-and-wire-the-unwired-tests`.

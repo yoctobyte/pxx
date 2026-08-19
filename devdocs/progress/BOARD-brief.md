@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:16 blocked:5 backlog:237 experimental:20 rainy-day:42 done-followup:3 decided:85 done:2033 rejected:38`
+`unfinished:16 blocked:5 backlog:237 experimental:20 rainy-day:42 done-followup:3 decided:86 done:2033 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -54,7 +54,7 @@ _none — no lane is locked._
 - `[p 55] [T]` bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 - `[p 55] [T]` bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label
 - `[p 55] [T]` chore-t-split-lib-test-into-jobs-that-name-what-failed
-- `[p 55] [U]` decide-what-an-unwired-test-may-assert
+- `[p 55] [T]` chore-t-triage-and-wire-the-unwired-tests
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
