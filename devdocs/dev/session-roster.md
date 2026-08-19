@@ -4301,3 +4301,26 @@ waives nothing, so not knowing costs one strict pin transition instead of a sile
 read of why the old fallback was wrong is the sentence worth keeping — it recorded *"we did not
 measure it"* as *"we measured it and it was fine"*, the same substitution as the empty FAIL line and
 the success-path log line, **and T noticed only while writing the honest label for it.**
+
+### Red jobs now record a reason (T, `68a65fff0`) — and the class has a name now
+
+`testmgr.job_reason()` stores the log tail (capped 400, `/tmp` scrubbed since tstate is committed,
+trailing `make: *** Error 1` dropped), kept in a sibling map so readers taking `st["jobs"]` values
+as bare strings don't break. `write_report_md` previously dumped one log for the **first** failure
+only — the 13-job cascade left twelve as bare names; every red in NEW-RED/STILL-RED now carries its
+reason. **Not retroactive:** the open cascade's reds stay unexplained.
+
+**The rule T adopted is the general one: a run that produced a job SETS or CLEARS its reason.** Red
+with no recoverable log deletes the stored reason, because keeping it attaches a previous run's
+explanation to this run's failure.
+
+**That is the fourth instance tonight of one class, and T went looking for this one rather than
+tripping over it:** an empty FAIL message → a success-path log line adopted as the reason → a pin
+baseline seeded from "everything currently red" → a stale reason kept across runs. All four store
+*"we did not measure it"* in the slot that means *"we measured it and it was fine"*. Written up in
+working memory as its own entry; the practical rules are **emit the absence explicitly**, **prefer
+the value that waives nothing**, and **set-or-clear, never set-only**.
+
+Still unclaimed on T's list: rendering `pin_built` in cascade reports so a `$(PXX_STABLE)`-built job
+is visibly not evidence about the range. Already in the report JSON — a rendering change, not new
+plumbing. Worth doing; it is the straddle rule made automatic.
