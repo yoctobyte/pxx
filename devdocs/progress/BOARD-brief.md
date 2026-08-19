@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:15 blocked:6 backlog:225 experimental:20 rainy-day:40 done-followup:3 decided:94 done:2083 rejected:40`
+`working:1 unfinished:15 blocked:6 backlog:226 experimental:20 rainy-day:40 done-followup:3 decided:94 done:2083 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -38,7 +38,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 211, ranked
+## Ready — top 30 of 212, ranked
 
 - `[p 70] [A]` bug-n-tkinter-is-missing-from-the-python-serving-unit-list (unblocks 1)
 - `[p 66] [A]` refactor-a-one-signature-record-for-every-callable-carrier
@@ -71,4 +71,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
 
-_181 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_182 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

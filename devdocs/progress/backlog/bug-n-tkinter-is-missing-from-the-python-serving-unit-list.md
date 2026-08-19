@@ -74,4 +74,4 @@ There is no spelling for a from-import of a Pascal unit: `from 'basehook.pas'
 import ConfigBase` is refused with *expected a module name after from*. That cost
 `test/test_nilpy_subclass_unit_base.npy` one of its three assertions (recorded in
 that file's header). Whether the quoted form should be accepted after `from` is a
-Track U call.
+Track U call, filed as `decide-should-from-accept-a-quoted-foreign-file`.

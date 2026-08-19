@@ -77,6 +77,14 @@ caught it. That grep is the only thing standing between this shape and a test
 that passes while asserting nothing. After the rewrite it reaches the real
 refusal at line 18 and the grep matches.
 
+**The shape to check for, generally.** A negative test whose only assertion is a
+leading `!` asserts *"something went wrong"*, not *"the right thing went wrong"* —
+so any rule change upstream of it can move the failure to a new wall and the test
+stays green while asserting nothing. Whenever a refusal test sits downstream of a
+changed rule, check that it still dies at ITS OWN message; the paired `grep -q` is
+what makes that checkable, and a `_fail`/`_reject` test without one cannot be
+checked at all. Third instance of this family on 2026-08-19.
+
 **Two jobs in the red set needed no edit at all** and were failing as
 recipe-block collateral:
 - `test_nilpy_renamed_class_attrs.npy` — imports `renclsmod`, which is a `.py`,
