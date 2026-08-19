@@ -2550,6 +2550,14 @@ function pystr_expandtabs(const s: AnsiString): AnsiString;
 function pystr_expandtabs_n(const s: AnsiString; tabsize: Int64): AnsiString;
 function pystr_removeprefix(const s: AnsiString; const pre: AnsiString): AnsiString;
 function pystr_removesuffix(const s: AnsiString; const suf: AnsiString): AnsiString;
+{ Which DECLARED parameter of the signature record `sig` is named `nm`? -1 when
+  the record is nil, carries no names, or has no such parameter. Exported so the
+  OTHER callable carrier -- pyeval's lifted bound-fn -- answers a keyword name
+  from the same record and the same comparison as the tag-8 pair, rather than
+  growing a second name lookup beside it. The record's layout stays private to
+  this unit, which is the point of exporting the question instead of the type.
+  refactor-a-one-signature-record-for-every-callable-carrier }
+function PySigFindParam(sig: Pointer; const nm: AnsiString): Integer;
 
 implementation
 
@@ -13937,6 +13945,21 @@ begin
   PySigNameEq := pc[Length(nm)] = #0;
 end;
 
+function PySigFindParam(sig: Pointer; const nm: AnsiString): Integer;
+var sr: PPySigRec; np: PPointer; i: Integer;
+begin
+  PySigFindParam := -1;
+  if sig = nil then Exit;
+  sr := PPySigRec(sig);
+  if sr^.Names = nil then Exit;
+  np := PPointer(sr^.Names);
+  for i := 0 to sr^.TotN - 1 do
+  begin
+    if PySigNameEq(np^, nm) then begin PySigFindParam := i; Exit; end;
+    np := PPointer(NativeInt(np) + 8);
+  end;
+end;
+
 function pybound_pair_call(pair: Pointer; nargs: Integer;
                            const a0, a1, a2, a3: Variant): Variant;
 var noNames, noVals: TPyList;
@@ -13967,7 +13990,6 @@ function pybound_pair_call_kw(pair: Pointer; nPos: Integer;
 var code, recv, sg, dp: Pointer; isFn: Boolean;
     av: array[0..3] of Variant; i, want, totN, reqN: Integer;
     bound: array[0..3] of Boolean; j, hit, nkw: Integer; kn: AnsiString;
-    np: PPointer;
     sr: PPySigRec; b: PPyBoundRec;
     m0: TPyCbM0; m1: TPyCbM1; m2: TPyCbM2; m3: TPyCbM3; m4: TPyCbM4;
     f0: TPyCbF0; f1: TPyCbF1; f2: TPyCbF2; f3: TPyCbF3; f4: TPyCbF4;
@@ -14022,12 +14044,12 @@ begin
       for j := 0 to nkw - 1 do
       begin
         kn := pystr_of(kwNames.at(j));
-        hit := -1;
-        for i := 0 to totN - 1 do
-        begin
-          np := PPointer(NativeInt(sr^.Names) + i * 8);
-          if PySigNameEq(np^, kn) then begin hit := i; Break; end;
-        end;
+        { the SAME lookup the lifted bound-fn dispatcher uses -- one record,
+          one way to ask it a name (PySigFindParam). This was a second copy of
+          the walk until refactor-a-one-signature-record-for-every-callable-
+          carrier gave tag 10 a record too and the copy would have become a
+          third. }
+        hit := PySigFindParam(sg, kn);
         if hit < 0 then
           raise TypeError.Create('unexpected keyword argument ''' + kn + '''');
         if bound[hit] then

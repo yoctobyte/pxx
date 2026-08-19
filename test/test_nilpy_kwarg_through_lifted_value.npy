@@ -1,0 +1,54 @@
+# A KEYWORD argument through a callable VALUE whose callee is a LIFTED lambda or
+# nested def (variant tag 10). The dispatcher matches the name against the
+# callee's own signature record -- the same static record a bound-method pair
+# (tag 8) carries -- so both carriers answer a keyword the one way
+# (refactor-a-one-signature-record-for-every-callable-carrier). Before it, every
+# line below raised "a keyword argument through this kind of callable value is
+# not supported yet".
+#
+# `use`/`use2` take the callee as a PARAMETER on purpose: that is the shape the
+# frontend cannot resolve statically, so the call really goes through the
+# runtime dispatcher rather than being lowered to a direct call.
+
+def use_kwonly(g):
+    return g(y=5, x=6)
+
+def use_hole(g):
+    return g(1, c=9)          # b is a HOLE -- it must keep its own default
+
+def use_mixed(g):
+    return g(1, w=9)
+
+f = lambda x, y=2: x * 10 + y
+print(use_kwonly(f))
+
+t = lambda a, b=20, c=300: a * 10000 + b * 100 + c
+print(use_hole(t))
+
+def make():
+    def h(v=5, w=2):
+        return v * 100 + w
+    return h
+
+print(use_mixed(make()))
+
+# The default VALUE stays per INSTANCE while the NAMES are per proc: `mk(1)` and
+# `mk(7)` build lambdas whose `y` differs, and a keyword still binds `x` by name
+# in both. This is the line between the signature record (names, static) and the
+# bound slots (values, captured) -- deleting either mechanism regresses one half.
+def mk(k):
+    g = lambda x, y=k: x * 100 + y
+    return g
+
+a = mk(1)
+b = mk(7)
+print(a(x=5), b(x=5), b(5, y=9))
+
+# a keyword through the tag-8 pair, unchanged -- both carriers, one lookup
+class C:
+    def m(self, p, q=4):
+        return p * 10 + q
+
+c = C()
+bm = c.m
+print(bm(1), bm(1, q=8), bm(q=7, p=2))

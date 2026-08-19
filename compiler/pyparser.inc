@@ -8225,6 +8225,7 @@ var depth, bStart, bEnd, i, j, pi, capPi, symIdx: Integer;
     newPi, bindPi, varBindPi: Integer;
     lamManagedCap: Boolean;   { a capture the lifter cannot take -> do not lift }
     lamStarIdx, starPend, starCi, starPi: Integer;   { `lambda *a:` }
+    sigPi: Integer;                  { pyboundfn_setsig — the parameter NAMES }
 begin
   Next;                                { consume `lambda` }
   params := '';
@@ -8622,6 +8623,33 @@ begin
         ASTIVal[node] := defPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
       end;
 
+      { …and hand it the lifted proc's own SIGNATURE RECORD, so a keyword
+        argument through this value matches a parameter NAME instead of meeting
+        the "carries no parameter names" refusal — `f = lambda x, y=2: x*y;
+        f(y=3, x=4)`. The record is the same one a tag-8 pair carries; sharing
+        it is the whole point of the refactor
+        (refactor-a-one-signature-record-for-every-callable-carrier).
+        NAMES only: a lambda's default VALUE is captured per INSTANCE, while the
+        record holds one static array per proc, so the bound slots stay the
+        source of the values and setdefaults above stays.
+        The record's names cover the CAPTURES too (they are real parameters of
+        the lifted proc); the dispatcher clamps the visible window to
+        NDefBase + NDef, so a keyword naming a capture is an unexpected keyword,
+        which is what CPython answers. }
+      sigPi := FindProc('pyboundfn_setsig');
+      if sigPi >= 0 then
+      begin
+        argA := AllocNode(AN_ARG);
+        ASTLeft[argA] := node;
+        argB := AllocNode(AN_ARG);
+        vNode := AllocNode(AN_PYSIGREF);
+        ASTIVal[vNode] := lamProc; ASTTk[vNode] := Ord(tyPointer);
+        ASTLeft[argB] := vNode; ASTRight[argB] := -1;
+        ASTRight[argA] := argB;
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := sigPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+      end;
+
       { bind each captured value, in parameter order. Captures start AFTER the
         lambda's own parameters — `lamOwn`, not a hardcoded 1: with two own
         parameters the old bound slot 0 was the lambda's own `b`, whose lamSyms
@@ -8876,6 +8904,7 @@ var defTok, i, j, k, depth: Integer;
     starPi: Integer;
     node, argA, argB, argC, argD, vNode, newPi, bindPi, varBindPi, symIdx: Integer;
     objBindPi, cellBindPi, defPi, varMask: Integer;
+    sigPi: Integer;                  { pyboundfn_setsig — the parameter NAMES }
     nm: AnsiString;
     anyBind: Boolean;
 
@@ -9202,6 +9231,30 @@ begin
     ASTRight[argC] := argD;
     node := AllocNode(AN_CALL);
     ASTIVal[node] := defPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
+  end;
+
+  { ...and the def's own SIGNATURE RECORD, so a keyword argument through this
+    value binds by NAME — `h = make(); h(v=3)` — instead of meeting the
+    "carries no parameter names" refusal. Same record a tag-8 pair carries, read
+    through the same lookup; that sharing is the refactor
+    (refactor-a-one-signature-record-for-every-callable-carrier).
+    NAMES only, exactly as at the lambda site: the default VALUES stay in the
+    bound slots because they are captured per INSTANCE of the closure, while the
+    record is one static array per proc. The record also names the CAPTURES,
+    which are real parameters of the lifted proc; the dispatcher clamps the
+    visible window to NDefBase + NDef so naming one is an unexpected keyword. }
+  sigPi := FindProc('pyboundfn_setsig');
+  if sigPi >= 0 then
+  begin
+    argA := AllocNode(AN_ARG);
+    ASTLeft[argA] := node;
+    argB := AllocNode(AN_ARG);
+    vNode := AllocNode(AN_PYSIGREF);
+    ASTIVal[vNode] := procIdx; ASTTk[vNode] := Ord(tyPointer);
+    ASTLeft[argB] := vNode; ASTRight[argB] := -1;
+    ASTRight[argA] := argB;
+    node := AllocNode(AN_CALL);
+    ASTIVal[node] := sigPi; ASTLeft[node] := argA; ASTTk[node] := Ord(tyPointer);
   end;
   bindIdx := 0;
 
@@ -11808,7 +11861,7 @@ begin
      (nm <> 'pyclosure_setarity') and
      (nm <> 'pyboundfn_new') and (nm <> 'pyboundfn_bind') and
      (nm <> 'pyboundfn_setown') and (nm <> 'pyboundfn_setdefaults') and
-     (nm <> 'pyboundfn_setstar') and
+     (nm <> 'pyboundfn_setstar') and (nm <> 'pyboundfn_setsig') and
      (nm <> 'pyboundfn_bind_var') and (nm <> 'pyboundfn_bind_obj') and
      (nm <> 'pyboundfn_bind_cell') then Exit;
   if PxxDbgEnabled('n.bfn') then
@@ -15711,7 +15764,7 @@ begin
     (nm = 'pyclosure_setarity') or
     (nm = 'pyboundfn_new') or (nm = 'pyboundfn_bind') or
     (nm = 'pyboundfn_setown') or (nm = 'pyboundfn_setdefaults') or
-    (nm = 'pyboundfn_setstar') or
+    (nm = 'pyboundfn_setstar') or (nm = 'pyboundfn_setsig') or
     (nm = 'pyboundfn_bind_var') or (nm = 'pyboundfn_bind_obj') or
     (nm = 'pyboundfn_bind_cell');
 end;

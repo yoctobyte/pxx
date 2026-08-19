@@ -465,6 +465,12 @@ test-nilpy: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_accfloat26)" = "$$(printf '%b' '3.5\n3.5 3 3.5\n51090942171709440000\n20000000000000000000\n20000000000000000000\n4000000000\n[1, 2, 3]\n3.5')"
 	./$(COMPILER) test/test_nilpy_lambda_container_result.npy $(TESTTMP)/test_nilpy_lamctr26
 	test "$$($(TESTTMP)/test_nilpy_lamctr26)" = "$$(printf '%b' '(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\na-b-c\n[2, 3, 1] 3\nc-a-b 3\nx-y 2\n6\n2 7')"
+	# a KEYWORD argument through a callable VALUE whose callee is a lifted
+	# lambda or nested def (tag 10) -- matched against the SAME signature
+	# record a bound-method pair carries, so a hole keeps its own default and
+	# a per-instance captured default still wins over the record's names
+	./$(COMPILER) test/test_nilpy_kwarg_through_lifted_value.npy $(TESTTMP)/test_nilpy_kwlifted26
+	test "$$($(TESTTMP)/test_nilpy_kwlifted26)" = "$$(printf '%b' '65\n12009\n109\n501 507 509\n14 18 27')"
 	./$(COMPILER) test/test_nilpy_fnvalue_abi.npy $(TESTTMP)/test_nilpy_fnvalue26
 	test "$$($(TESTTMP)/test_nilpy_fnvalue26)" = "$$(printf '%b' '3\n5\n2\n2 3.0 2\n3.0\n1.0\nC\nG\n2\n4.0\n3.14 3    3.142 3.1     | 2.0')"
 	# range is a VALUE — a lazy SEQUENCE: re-iterable, indexable, len-able,
@@ -6718,6 +6724,12 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_accfloat26)" = "$$(printf '%b' '3.5\n3.5 3 3.5\n51090942171709440000\n20000000000000000000\n20000000000000000000\n4000000000\n[1, 2, 3]\n3.5')"
 	./$(COMPILER) test/test_nilpy_lambda_container_result.npy $(TESTTMP)/test_nilpy_lamctr26
 	test "$$($(TESTTMP)/test_nilpy_lamctr26)" = "$$(printf '%b' '(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\n[3, 4] list\n(3, 4) tuple\na-b-c\n[2, 3, 1] 3\nc-a-b 3\nx-y 2\n6\n2 7')"
+	# a KEYWORD argument through a callable VALUE whose callee is a lifted
+	# lambda or nested def (tag 10) -- matched against the SAME signature
+	# record a bound-method pair carries, so a hole keeps its own default and
+	# a per-instance captured default still wins over the record's names
+	./$(COMPILER) test/test_nilpy_kwarg_through_lifted_value.npy $(TESTTMP)/test_nilpy_kwlifted26
+	test "$$($(TESTTMP)/test_nilpy_kwlifted26)" = "$$(printf '%b' '65\n12009\n109\n501 507 509\n14 18 27')"
 	./$(COMPILER) test/test_nilpy_fnvalue_abi.npy $(TESTTMP)/test_nilpy_fnvalue26
 	test "$$($(TESTTMP)/test_nilpy_fnvalue26)" = "$$(printf '%b' '3\n5\n2\n2 3.0 2\n3.0\n1.0\nC\nG\n2\n4.0\n3.14 3    3.142 3.1     | 2.0')"
 	# range is a VALUE — a lazy SEQUENCE: re-iterable, indexable, len-able,
