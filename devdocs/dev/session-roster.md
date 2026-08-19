@@ -3030,3 +3030,33 @@ rerank it deliberately rather than inheriting the number).
   import bug is the only one with a queue behind it: frank3's Mapping shim landed inert and
   7 corpus files start moving the moment the import reaches it. Ordering, not ownership, so
   mine to set.
+
+- **check 2026-08-19 (+17h): T green, nobody blocked, PIN DUE BUT HELD.** `b54939cf3`
+  (`PXXDBG=n.procs`) is past v357, so a pin is due — **held** because the pre-lock `pgrep`
+  found two `nilpy_ladder.py` runs on the box. That check is now earning its keep: under
+  the old habit I would have announced and started, exactly as I did an hour ago.
+
+  T UP, native GREEN through `44da14d4ff76`, full GREEN through `9bfb7fcfac03`, no reds.
+  `working/` is empty while both workers are mid-measurement — the locks are genuinely
+  free, not misreported.
+
+  **Coordination note: BOTH workers are running the ladder simultaneously, from separate
+  clones.** frank2 bare, frank3 with `--files`. Two hazards, neither severe: they contend
+  for CPU (making both slower), and **two independent clones may sit at different shas, so
+  the two runs can produce two legitimately different numbers that a later reader compares
+  as one measurement.** Told frank2 to name its pin sha + md5 if it publishes, and that
+  frank3's `--files` run supersedes a bare one. Did not ask it to kill anything.
+
+  **Generalisable: a shared measurement should be run ONCE and shared, not re-derived per
+  clone.** Nothing surfaces "someone else is already measuring this" — same blind spot as
+  pin staleness, and the coordinator is the only one positioned to see it.
+
+  Queue state: A's head is now `bug-a-make-revert-the-documented-pin-brake-does-not-fire`
+  (p60, filed by frank3 off today's incident — the documented brake does not fire, which
+  cost a real incident's worth of confusion). N's head is `bug-n-a-call-through-a-callable-
+  value-drops-the-callees-defaults` (p70), READY again now that p88 resolved and cleared its
+  blocker — **but frank2's tag-12 finding means it is NOT fully subsumed after all**, and its
+  residue is filed separately as `bug-n-a-module-level-def-taken-as-a-value-loses-its-
+  defaults-on-the-boundfn-carrier` (p65). Whether p70 is now a duplicate of that is frank2's
+  call to make against a measurement, not mine to assume — it said it would verify the p70
+  table before resolving anything.
