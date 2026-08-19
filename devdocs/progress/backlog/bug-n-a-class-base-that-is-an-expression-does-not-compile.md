@@ -4,6 +4,7 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "A class base which is a NAME bound to a type, or a call, does not compile: `B = object; class P(B)` fails where `class P(object)` and `class P(SomeClass)` both work. Blocks six.with_metaclass, which html5lib's parser spells as `class Phase(with_metaclass(...))` — the single remaining wall on html5parser.py."
+status: backlog
 ---
 
 # A class base that is an expression does not compile
@@ -85,3 +86,67 @@ The third and fourth cells above compile and print `hi`. Then `mimic_six`'s
 `with_metaclass` can return `object` for `meta is type` (and keep refusing
 anything else, which genuinely does need metaclasses), and `html5parser.py`
 advances past line 426.
+
+
+---
+
+## RE-MEASURED at HEAD 2026-08-19 — not fruit, and the ticket's own repro misdiagnoses it
+
+Re-measured because the ticket said "Measured against pinned v345, not
+re-checked at HEAD". Still reproduces, but it is **three separate defects**, and
+the headline repro is not an instance of the bug the title names.
+
+| shape | result | what it actually is |
+| --- | --- | --- |
+| `B = object` then `class P(B)` | `undefined variable (object)` **at line 1** | fails in the ASSIGNMENT — `object` is not a first-class value. Nothing to do with the base position. |
+| `B = A` then `class P(B)` | `unknown base class B` | the real base-position bug |
+| `class P(pick())` | `unknown base class pick` | base is an arbitrary call |
+| `class P(A)` | OK | control |
+
+Two controls that decide the sizing:
+
+```python
+B = A ; print(B().hi())                       # WORKS
+B = A if len(sys.argv) > 99 else C            # a RUNTIME-chosen alias
+print(B().hi())                               # WORKS -- prints C, like CPython
+```
+
+A class held in a variable is a genuine **run-time** value (a metaclass blob),
+resolved when it is called. There is therefore **no compile-time record that
+`B` means class `A`** — and a base class is needed at compile time, because it
+determines the layout and the vtable.
+
+So the fix is not an extra arm in the base-name chain
+(`pyparser.inc:32370-32403`, which is pure name lookup: Exception, qualified,
+FindUClassNonRecord, PyBuiltinBaseCi, error). It is either:
+
+- **(a)** a new compile-time constant-alias analysis — "this module-level name is
+  bound once, to a class literal, and never rebound"; or
+- **(b)** run-time class creation, for the general case.
+
+Both are mechanisms. Parking rather than starting one.
+
+## The corpus argument in the summary does not hold
+
+The frontmatter says this "blocks six.with_metaclass, which html5lib's parser
+spells as `class Phase(with_metaclass(...))` — the single remaining wall on
+html5parser.py". Checked:
+
+```python
+# html5lib/html5parser.py:426
+class Phase(with_metaclass(getMetaclass(debug, log))):
+```
+
+That is the **call** shape, and its argument depends on a run-time flag, so it
+needs (b) — the harder half. Option (a), the tractable half, would not move
+html5parser.py at all. `lib/rtl/mimic_six.py:97` already reaches the same
+conclusion and deliberately raises rather than pretending.
+
+Also worth recording so it is not re-derived: **html5parser.py's current first
+wall is not this at all.** At HEAD it stops on `decode has no parameter named
+'final'` ([[bug-nilpy-a-callable-in-a-variable-loses-to-a-def-of-the-same-name]]),
+which is upstream of the base-class question. So even (b) would not make
+html5parser.py compile today, and the "single remaining wall" claim is stale.
+
+Leaving prio at 45. Suggest splitting out the `object`-as-a-value defect, which
+is unrelated to this title and may be much cheaper.
