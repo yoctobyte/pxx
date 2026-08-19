@@ -3764,3 +3764,46 @@ build linked a snapshot instead of the tree under test, producing working binari
 error lists throughout. With the truncated FPC error lists and my own relayed job count, that is
 three instances of **the rig answering a slightly different question, fluently**. Fluency is the
 common factor: none produced an error, all produced plausible output.
+
+## Triage pass by the coordinator (read-only, pin v365) — and my own fifth rig fault
+
+Ran the mandate's question 1 (*is it already solved?*) against `stable_pinned` v365. Read-only,
+no `make`, no slot — compiling a repro with the pinned binary collides with nobody.
+
+**Seven A/P/C feature repros compiled. None stale, none already solved.** All four of the
+headline refusals are intact and LOUD, with a diagnostic naming the missing feature:
+
+    file of TRec            -> "file types are not supported (use TextFile for text I/O)"
+    Copy(nested dyn array)  -> "nested element type not yet supported for dynamic-array Copy"
+    operator +(Double,TCx)  -> "operator: cannot determine operand type"
+    s.Trim                  -> "pxx does not implement Delphi's string helpers"
+    read(TextFile, Char)    -> "reading into a Char is not supported yet"
+
+**That is itself the triage answer to the owner's grey-zone question.** All five refuse a
+construct FPC accepts, so by the "what does a user experience" test they are gaps — but they
+refuse **loudly**, produce no wrong value, and name their own remedy. **A loud refusal of an
+FPC-accepted construct is a feature gap; a silent wrong value is a bug.** That line is what
+separates the 33 features from the ones that should be re-typed, and by it these five are
+correctly typed as features. Nested-array indexing and bodied `cdecl` both RUN and print
+correct answers, so nothing here is silently wrong.
+
+`feature-cdecl-bodied-sysv-prologue` was already re-triaged today at v363 and its ticket is
+accurate: direct Pascal calls agree with the internal prologue, which is why my repros printed
+right answers; the real gap is `@PascalProc` into a cdecl proc-type with a float param, still
+behind a loud `AN_ASSIGN` reject.
+
+### My own rig fault — the fifth of the session, and I made it while warning others about it
+
+I ran `fpc … -ot_fpc && ./t_cdecl2` and reported "FPC oracle agrees". **`./t_cdecl2` is the pxx
+binary.** The FPC binary was built and never executed; I compared pxx against pxx and called it
+an oracle comparison. Re-run properly, FPC does print the same values — so the conclusion
+survives and the method did not. It was unearned when I stated it.
+
+Same species as the other four today (`| head -60` capping an error count; `{$UNITPATH}`
+resolving against a stale `lib/`; truncated FPC error lists; my relayed job count), and this
+one landed **between** two messages in which I told workers to watch for exactly it.
+
+**The countermeasure that would have caught it is not "check your commands" — it is: decide in
+advance what a DISAGREEING result would look like, and notice when you never see one.** Two
+independent compilers agreeing to the digit on a mixed float/int SysV boundary is a suspiciously
+clean result; that suspicion is the tell, and it is available before the command is written.
