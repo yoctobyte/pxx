@@ -3458,3 +3458,52 @@ tier has not run by end of day.
 **`/tmp` guard split routed:** C (12) and P (5) now; **N (14) and B (6) parked with the reason
 written in** — N on the user's deferral, B unstaffed. An unrouted item with no stated reason
 reads as an oversight.
+
+## Check +22h — the import cascade routed, both idle workers dispatched, pin held again
+
+**Nobody blocked.** frank3 holds the A/P slot, still on the reduced compiler
+(`working/feature-a-build-a-reduced-compiler-...`). frank2 and plexus-T were both idle and
+are now dispatched. Watcher UP, tested through `b26e49830a73`.
+
+### The 12-job cascade, and the auto-filed ticket named the wrong commit
+
+`regression-cascade-4e27dc2be114` (p70): 12 `test-core` jobs red since 14:43Z, STILL-RED at
+`b26e49830` (15:19Z) — six tk examples and six nilpy tests, all NilPy sources. One cause, and
+it is **intended behaviour**: frank3's `e1109d7bc` made a bare NilPy import resolve to Python
+only, so every test still spelling `import tkinter as tk` now fails with the compiler's own
+remedy printed in the diagnostic.
+
+**The ticket's bad sha is wrong and its cause line is wrong.** It names `4e27dc2be1`, which is
+**docs-only** (three markdown files) and cannot break a build, and guesses "likely a broken
+build or harness event". The bisect attributed to the wrong end of the untested range
+`48a60d096..4e27dc2be1`. *A cascade whose bad sha touches no buildable file is a strong tell,
+and it is cheap to check with one `git show --stat`* — flagged to T as a possible guard.
+
+**Routed to frank2 under Track P, re-tracked off T.** The watcher files cascades under T;
+T owns the tool, never the bug. The fix is in the tests, not the compiler — the user
+pre-approved this exact cleanup when taking the decision (*"there may be tests relying on
+this, in which case we should rewrite the test"*). Told frank2 not to weaken the rule to make
+them pass, to verify per job rather than sed the set, and that the two-imported-bases
+negative test may have had its assertion changed by the new rule — third instance today of
+"a change makes its own refusal test compile".
+
+### Pin v364 was taken on the red tree
+
+`pin.log` v364, base `4e27dc2be1` — inside the red range. Not bad in v362's sense (nothing
+miscompiles; the semantics are the intended ones) but **`$(PXX_STABLE)` now carries the new
+import rule with the tests un-updated**, so anything measuring against the pin rather than a
+HEAD fixedpoint is standing on that. Both workers told. Not taken by me.
+
+**PIN HELD again, deliberately** — pinning while 12 jobs are red buys nothing, and frank3 will
+land more of the refactor. Fold frank2's green and frank3's next milestone into one pin.
+
+### Breadth: the gap is now the tool's own line, not a person's
+
+    breadth — newest full tier is 5h old, 46 testable commit(s) behind
+
+That is T's `8af5acb7f` reporting the thing it was built to report. Dispatched T to
+`bug-t-the-push-rate-starves-breadth-coverage-entirely` (p60) with one instruction: **do not
+schedule a full tier this hour** — 12 jobs are red on purpose, so a 21-minute run would spend
+itself confirming a known headline. **Call the quiet period once frank2 reports green**; cross
+targets have seen nothing since `9bfb7fcfac03` (10:31Z) and that backfill is the real coverage
+event of the day.
