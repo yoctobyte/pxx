@@ -161,3 +161,87 @@ in from the start.
 `compiler/builtin/pylib.pas` will change, so nothing here reaches another lane
 until `make stabilize-fast && make pin`. That holds the repo-wide lock and is the
 coordinator's to schedule, not mine to take.
+
+
+## Implementation plan (frankonpiler-an, 2026-08-19) — researched, not yet cut
+
+Recorded at this level of detail because the research below is most of the risk,
+and re-deriving it costs more than the cutting does.
+
+### Nothing needs inventing: the static-emission API already exists
+
+`compiler/rtti_emit.inc` has the whole mechanism, used today for class RTTI:
+
+| need | existing call |
+| --- | --- |
+| reserve N bytes of static data | `DataPutZeros(n)` |
+| write a word | `PatchDataU64(off, v)` |
+| data -> data pointer relocation | `AddDataPtrFix(off, targetOff)` |
+| **patch a CODE address into DATA** | `QueueMethCodeFixup(off, procIdx)` |
+
+That last one is exactly the signature record's `code` field, already solved.
+The classref payload proves the whole shape works: `VT_CLASSREF_TAG`'s payload is
+a static blob address reached by `DataOff = -(CLASSREF_DATAREF_BASE + ci)`
+patched to `UClsRTTIOff[ci]`. **The signature record should follow that pattern
+exactly**, with its own DATAREF base, rather than a new convention.
+
+### A signature record ALREADY half-exists — do not build a second one
+
+`RTTI_METH_SIZE = 48` is `{name, code, arity, retKind, paramKindsPtr, flags}`,
+its param block carries per-parameter **names** as well as kinds, and **flags
+bits 8..15 already hold the NilPy `*args` index plus one**. So per-CLASS-METHOD
+signatures largely exist. What does not exist is any per-PROC record for a plain
+module-level `def` — and that is what a boxed def needs.
+
+Two consequences:
+1. `starIdx` must fold INTO the new record, not sit beside it in `TPyBound` as it
+   does today, or one concept keeps two mechanisms from day one.
+2. Whoever cuts this should check whether the new record can *replace* the
+   `RTTI_METH` signature fields rather than duplicate them. I did not settle
+   that; it is the difference between deleting a case and adding one.
+
+### The defaults design — one mechanism, not two
+
+Today a default is stored TWO ways in the header arrays: a constant-folded value
+(`PyHdrDefVal` plus `PyHdrDefIsStr/IsNone/IsFloat/IsBool` and `SOff/SLen`), or a
+hidden global symbol for a non-constant one (`PyHdrDefSym` ->
+`ProcParamDefaultSym`, pyparser.inc:27152-27166).
+
+**Recommendation: give EVERY defaulted parameter a hidden global Variant**, and
+make the descriptor one word — that global's address, or 0 for no default.
+
+- It deletes a case rather than adding one: no constant-vs-indirect split in the
+  record, and the call-site helper is a plain variant assignment.
+- It gets refcounting right for free. A packed immediate would have to carry a
+  static string/list pointer into a managed slot, which is where this would
+  otherwise go wrong quietly.
+- **It is what Python actually specifies** — a default is evaluated ONCE, where
+  the `def` stands. `ProcParamDefaultSym`'s own comment already says this is why
+  the mechanism exists. Extending it to constants makes `def f(a=[])` observable
+  through a callable value by construction rather than by care.
+
+### Proposed record
+
+```
++0   code address           (QueueMethCodeFixup)
++8   ReqN                   user-space params with no default (Self excluded)
++16  TotN                   user-space params total
++24  StarIdx + 1            0 = no *args   (folded in from TPyBound.StarIdx)
++32  defaults array pointer TotN words, each a hidden-global address or 0
+```
+
+### Order of work, each increment green on its own
+
+1. Emit the record per NilPy def; nothing reads it yet.
+2. Point **tag 8** (`pybound_new`) at it and route the call helper through
+   `ReqN`/`TotN`/defaults. **This is the increment that fixes the headline
+   repro** and the SIGSEGV row — do it before tag 12, not after.
+3. Tag 12 (`VT_CALLABLE_TAG`) payload becomes the record pointer.
+4. Tags 9/10 carry the same record; delete `TPyBound.StarIdx`.
+
+### Gate and blast radius
+
+`make compiler/pascal26` + the p70 table diffed against CPython + `gate.sh
+quick`. Touches `defs.inc` and `compiler/builtin/pylib.pas`, so it needs a PIN
+before any other lane sees it. Land nothing half-applied: a Track A ticket in
+`unfinished/` fails `progress.sh check` for good reason.
