@@ -262,4 +262,4 @@ here — it is the number that redirects the next optimiser, and it is invisible
 sitting only in a resolved follow-up.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 39b2caa9e.
