@@ -4,6 +4,8 @@ prio: 30
 type: bug
 blocked-by: []
 summary: "REMAINING WORK IS SUBNORMALS ONLY, and it is no longer Eisel-Lemire. Three passes have landed: no-double-parse + no-quadratic-append (4.7x on the fast path), and now Eisel-Lemire, which took every NORMAL value outside Clinger's window from 18-526 us to under 1 us (27x-1100x, 592,994 values diffed against CPython, 0 mismatches). The two rows this ticket named 'small' and 'subnormal' are BOTH subnormal and did not move: Lemire declines below the normal floor by construction, as Go and Rust do. They sit at ~535 us vs CPython's 0.72 us. The fix for them is a rewrite of ExDecNearest to compare in BINARY big-integer arithmetic instead of expanding each candidate to its exact ~765-digit decimal. The title's 3600x, its 63-step cause and its 'small exponents' boundary have each been measured wrong and corrected in the body — read the notes, not the title."
+status: done
+owner: frankonpiler-etree
 ---
 
 # `StrToFloat` is milliseconds per value for small exponents
@@ -425,3 +427,191 @@ That is a rewrite of the exact path, independent of everything landed here.
 Scoped that way, it is worth its own ticket rather than a fourth pass on this
 one. Returned to `backlog/`: not blocked, just unfinished — same as the two
 passes before it.
+
+## 2026-08-19 (frank3-etree) — the subnormals: 47x-70x, and THE GATE IS MET
+
+**Compiler binary: `stable_linux_amd64/default/pinned` v355 (`739dfeb2d0e8` at
+`264489d47360`), `-O2`.** Every A/B below is that same compiler with only
+`lib/rtl/sysutils.pas` differing, so nothing here is a pin artefact.
+
+### What landed — the fix the previous pass scoped, done
+
+`ExBinNearest` in `lib/rtl/sysutils.pas`, between Eisel-Lemire and
+`ExDecNearest`. Same question, same correct-by-construction guarantee, compared
+in **binary big integers** instead of by expanding each candidate to its exact
+decimal.
+
+The comparison `m * 2^k ? d * 10^expo` becomes, with `10^expo = 2^expo * 5^expo`
+and every negative power moved to the other side:
+
+```
+    m * 5^ta * 2^(SB+ta)   ?   int(ds) * 5^tb * 2^(SA+tb)
+```
+
+so **every power of two is a shift and only the power of five is a multiply** —
+and `d` and `expo` are fixed for the whole search while only the candidate's `m`
+and `k` move, so `5^|expo|` is built ONCE per parse instead of once per
+comparison. The 2-power common factor is then cancelled from both sides, which
+cuts a subnormal's operands by about a third (its `k` is -1074, so that shift
+alone is 1074 bits).
+
+It **declines** rather than guesses, exactly as `EiselLemire` does: every
+capacity check returns False and falls through to `ExDecNearest`, which is
+untouched, has no size limit, and still answers everything. Measured on the
+gated test: `ExBinNearest` answers 43,528 values and `ExDecNearest` still
+answers 800, so the fallback is live rather than dead code.
+
+### Results — ns per parse, same harness, auto-scaled to >=300 ms per row
+
+| shape | before | after | gain |
+| --- | --- | --- | --- |
+| fast nd=15 expo=0 (Clinger) | 614 | 631 | 0.97x |
+| nd=15 expo=23 | 738 | 708 | 1.04x |
+| nd=17 expo=0 | 736 | 708 | 1.04x |
+| nd=15 expo=-100 | 764 | 721 | 1.06x |
+| nd=15 expo=-300 | 756 | 726 | 1.04x |
+| normal ~1e-296 (Lemire) | 796 | 753 | 1.06x |
+| **SUBNORMAL ~1e-310** | 586000 | **11203** | **52x** |
+| **SUBNORMAL ~1e-320** | 577000 | **8187** | **70x** |
+| **SUBNORMAL ~1e-323** | 384000 | **6125** | **63x** |
+| **SUBNORMAL min (4.94e-324)** | 378000 | **6031** | **63x** |
+| nd=25 expo=-330 | 287000 | **5593** | **51x** |
+| nd=40 expo=-340 | 293500 | **6203** | **47x** |
+
+Nothing on the fast, Lemire or Clinger paths moved — this sits strictly behind
+Lemire's decline, and the +/-5% either way on those rows is the same code-layout
+noise the previous pass measured.
+
+### THE GATE IS MET, for the first time in five passes
+
+> "The mid-range and small-exponent rows above drop by at least an order of
+> magnitude"
+
+Cumulatively, against the rows this ticket was filed with:
+
+| this ticket's own row | filed | now | cumulative |
+| --- | --- | --- | --- |
+| mid-range (`1..1000`) | 116 us | ~0.63 us | **~184x** |
+| small (`~1e-310`) | 2.9 ms | 11.2 us | **259x** |
+| subnormal (`~1e-320`) | 2.6 ms | 8.2 us | **317x** |
+
+All three are well past an order of magnitude. The two rows that had never moved
+in four passes are the two that moved most here.
+
+### A number in this ticket that does not reproduce — CPython is not 0.72 us
+
+The previous note set the target from "CPython parses 1e-320 in 0.72 us". On this
+box, `timeit` over 200,000 calls to `float()` on the identical strings:
+
+| shape | CPython | pxx now | ratio |
+| --- | --- | --- | --- |
+| fast nd=15 expo=0 | 218 ns | 631 | 2.9x slower |
+| nd=17 expo=0 | 486 ns | 708 | 1.5x slower |
+| normal ~1e-296 | 1573 ns | 753 | **2.1x FASTER** |
+| SUBNORMAL ~1e-310 | 2607 ns | 11203 | 4.3x slower |
+| SUBNORMAL ~1e-320 | 1673 ns | 8187 | 4.9x slower |
+| SUBNORMAL min | 1062 ns | 6031 | 5.7x slower |
+| nd=40 expo=-340 | 2141 ns | 6203 | 2.9x slower |
+
+(timeit's lambda adds ~60 ns, negligible at these magnitudes.) So the standing
+gap on subnormals is **3-6x, not 15x**, and on normal values past Clinger's
+window pxx is now the faster of the two. The 0.72 us figure is not reproducible
+here and should not be quoted again without a fresh measurement — the fourth
+number in this ticket's history to need that correction.
+
+### Correctness — the part that is not negotiable
+
+- **125,609 values diffed against CPython's `float()` ad hoc, 0 mismatches** —
+  40k across the subnormal band, 40k with 20-79 digit significands over
+  q = -400..360, 5k with **100-600 digit** significands, 20k subnormal halfway
+  shapes, 20k at the normal/subnormal boundary, and 600 with exponents out to
+  +/-1,000,000 that must decline to `ExDecNearest`.
+- **9,078 EXACT MIDPOINTS diffed, 0 mismatches** — generated from CPython's
+  `Fraction`, covering subnormals, both boundaries, powers of two and random
+  normals.
+- **The oracle was proved able to FAIL before its zero was believed.** Four
+  perturbations of the new code:
+
+  | perturbation | ad-hoc sweep | gated test |
+  | --- | --- | --- |
+  | `5^13` constant off by one | 57,733 mismatches | 23,272 |
+  | midpoint `2*mant+1` -> `2*mant` | 50,638 | 21,183 |
+  | tie rule `= 0` -> `= 1` | **0 — a coverage GAP** | 60 (after the fix below) |
+  | drop the 2-power cancellation | 0 | 0 |
+
+  The third row is why the tie corpus exists: **random decimals essentially
+  never land exactly halfway between two doubles**, so inverting round-to-even
+  changed nothing in a 125,609-value sweep. That is exactly the shape this
+  repo pays most for, and it was found by trying to break the code rather than
+  by reading it.
+
+  The fourth row passing is the intended result, not a gap: the 2-power
+  cancellation is a pure size optimisation, and a perturbation that is supposed
+  to be semantically neutral proving neutral is the check working.
+- `test/lib_strtofloat_roundtrip.pas` green — and **2.7 s -> 0.20 s**, because
+  its own subnormal sweep was paying the old cost.
+- `test/lib_floattostr.pas` green. `ExDecOfMant` and the whole formatter side are
+  untouched by this change; only the decimal->double direction has a second
+  implementation.
+- `make lib-test` **green** (exit 0) against stable v355.
+
+### The gated test got STRONGER, because the coverage it skipped is now affordable
+
+`test/lib_strtofloat_lemire.pas` said, in as many words, that its
+boundary and long-significand blocks were held at 1500 values each *because each
+one cost ~500 us*. That reason is gone, so the coverage is taken:
+
+| block | was | now |
+| --- | --- | --- |
+| normal/subnormal boundary | 1500 | **20000** |
+| significands past a u64 (20-45 digits) | 1500 | **20000** |
+| significands of 100-600 digits | — | **2000** (new) |
+| exact midpoints | — | **12** (new) |
+| total values | 73,195 | **112,207** |
+| runtime | ~2.8 s | **1.8 s** |
+
+More coverage, less time. The twelve midpoints are stated per line with which
+neighbour is even, and they alternate, so a rule that always rounded one way
+fails half of them; they are generated from CPython's `Fraction` while the
+checker derives the expected bits independently, so a wrong constant fails
+loudly rather than quietly agreeing with itself.
+
+### What it costs
+
+**+11.8 KB of code, +0 data, +0 bss, no startup cost.** Contrast the previous
+pass's Eisel-Lemire: +42 KB, +11 KB bss and +22 us of startup in every binary
+that links `sysutils`, because it carries a 696-entry table. There is no table
+here — the powers of five are computed per parse, on the path that already costs
+microseconds — so the footprint is code only.
+
+### The next lever, measured rather than guessed
+
+The remaining cost is **~8 ns per 32-bit limb operation**, and everything follows
+from that:
+
+- setup (`5^ta` for ta~326, ~25 multiplies over a growing 24-limb array) is
+  2.5-3.5 us of the 11.2 us, measured by returning early from `ExBinNearest`
+  after the setup;
+- the search itself is **6 comparisons** for a subnormal (counted, not
+  estimated — same instrumentation that corrected "63 steps" to 4 two passes
+  ago), at ~1.3 us each over ~26-limb operands.
+
+So it is neither the step count nor the operand size that is left — it is the
+per-limb cost, and the lever is **64-bit limbs via `MulHiU64`** (already in
+`lib/rtl/wideint.pas`, intrinsic on 64-bit via `IR_MULHI`, and already used by
+Eisel-Lemire here). That halves the limb count AND collapses `BigFMulU64`'s five
+passes into one, and it raises the power-of-five chunk from 5^13 to 5^27. Rough
+expectation ~4x, which would put subnormals at 2-3 us and inside CPython's range.
+Ruled out as a smaller lever first, by measurement: shrinking the limb array from
+224 to 64 changed the subnormal row by only 13%, so neither the buffer nor its
+copies dominate.
+
+That is a self-contained rewrite of the six `BigF*` primitives with no change to
+the algorithm above them, and this ticket's gate is now met, so it belongs in its
+own ticket rather than a sixth pass here.
+
+**Resolved.** The gate this ticket has carried since 2026-08-15 is met on every
+row it names.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.

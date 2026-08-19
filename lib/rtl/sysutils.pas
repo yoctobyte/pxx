@@ -1754,6 +1754,440 @@ begin
   else Result := ExDecBitsToDouble(lo + 1);
 end;
 
+{ ---- decimal -> double, correctly rounded, compared in BINARY --------------
+
+  The same question ExDecNearest answers, with the same guarantee — correctly
+  rounded by construction, never an estimate that could be off by an unknown
+  number of ULP — but comparing in binary big-integer arithmetic instead of
+  expanding every candidate to its exact DECIMAL.
+
+  WHY, AND WHY IT SITS BESIDE ExDecNearest RATHER THAN REPLACING IT.
+  ExDecNearest's cost is not the number of comparisons (measured at ~4 per
+  parse, not the 63 its header's worst case suggests) — it is the price of ONE.
+  Each comparison expands a candidate double to its exact decimal, which for a
+  subnormal is ~765 digits reached by ~82 rounds of big-decimal multiply, every
+  round two 64-bit DIVISIONS per limb. Eisel-Lemire removed that cost for
+  normal values but declines below the normal floor by construction, as Go and
+  Rust do, so the subnormal rows of
+  bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents never moved.
+
+  In binary the same comparison is
+
+      m * 2^k   ?   d * 10^expo
+
+  and 10^expo = 2^expo * 5^expo, so every power of two becomes a SHIFT and only
+  the power of five is a multiply. Better: d and expo are fixed for the whole
+  search while only the candidate's m and k move, so 5^|expo| is built ONCE per
+  parse instead of once per comparison.
+
+  It DECLINES rather than guesses — the same composition as EiselLemire above.
+  Every capacity check returns False and falls through to ExDecNearest, which is
+  untouched and has no size limit. A buffer that turned out too small is
+  therefore a slower answer, never a wrong one.
+
+  Base 2^32 in Int64 limbs: a limb times any multiplier under 2^31, plus carry,
+  stays inside a signed 64-bit product — which is what lets every routine here
+  be plain Pascal with no 128-bit intermediate, on 32-bit targets too. }
+const
+  PXX_BIGF_LIMBS = 224;              { 7168 bits — see the bound in ExBinNearest }
+  PXX_BIGF_MASK  = Int64($FFFFFFFF);
+  PXX_BIGF_P5_13 = 1220703125;       { 5^13, the largest power of five under 2^31 }
+type
+  TBigF = array[0..PXX_BIGF_LIMBS - 1] of Int64;
+
+procedure BigFNorm(var a: TBigF; var n: Integer);
+begin
+  while (n > 1) and (a[n - 1] = 0) do n := n - 1;
+end;
+
+procedure BigFCopy(const src: TBigF; sn: Integer; var dst: TBigF; var dn: Integer);
+var i: Integer;
+begin
+  for i := 0 to sn - 1 do dst[i] := src[i];
+  dn := sn;
+end;
+
+{ a := a * f. f must be under 2^31 so limb*f + carry cannot leave Int64. }
+function BigFMulSmall(var a: TBigF; var n: Integer; f: Int64): Boolean;
+var i: Integer; t, carry: Int64;
+begin
+  carry := 0;
+  for i := 0 to n - 1 do
+  begin
+    t := a[i] * f + carry;
+    a[i] := t and PXX_BIGF_MASK;
+    carry := t shr 32;
+  end;
+  while carry > 0 do
+  begin
+    if n >= PXX_BIGF_LIMBS then begin BigFMulSmall := False; Exit; end;
+    a[n] := carry and PXX_BIGF_MASK;
+    carry := carry shr 32;
+    n := n + 1;
+  end;
+  BigFNorm(a, n);                     { f = 0 leaves every limb zero }
+  BigFMulSmall := True;
+end;
+
+function BigFAddSmall(var a: TBigF; var n: Integer; v: Int64): Boolean;
+var i: Integer; t: Int64;
+begin
+  i := 0;
+  while v > 0 do
+  begin
+    if i >= PXX_BIGF_LIMBS then begin BigFAddSmall := False; Exit; end;
+    if i >= n then begin a[i] := 0; n := i + 1; end;
+    t := a[i] + v;
+    a[i] := t and PXX_BIGF_MASK;
+    v := t shr 32;
+    i := i + 1;
+  end;
+  BigFAddSmall := True;
+end;
+
+function BigFAdd(var a: TBigF; var na: Integer; const b: TBigF; nb: Integer): Boolean;
+var i: Integer; t, carry: Int64;
+begin
+  BigFAdd := False;
+  if nb > na then
+  begin
+    if nb > PXX_BIGF_LIMBS then Exit;
+    for i := na to nb - 1 do a[i] := 0;
+    na := nb;
+  end;
+  carry := 0;
+  for i := 0 to na - 1 do
+  begin
+    t := a[i] + carry;
+    if i < nb then t := t + b[i];
+    a[i] := t and PXX_BIGF_MASK;
+    carry := t shr 32;
+  end;
+  if carry > 0 then
+  begin
+    if na >= PXX_BIGF_LIMBS then Exit;
+    a[na] := carry; na := na + 1;
+  end;
+  BigFAdd := True;
+end;
+
+function BigFShl(var a: TBigF; var n: Integer; bits: Integer): Boolean;
+var words, b, i: Integer; t, carry: Int64;
+begin
+  BigFShl := False;
+  if bits < 0 then Exit;
+  if (n = 1) and (a[0] = 0) then begin BigFShl := True; Exit; end;
+  b := bits mod 32;
+  words := bits div 32;
+  if b > 0 then
+  begin
+    carry := 0;
+    for i := 0 to n - 1 do
+    begin
+      t := (a[i] shl b) or carry;
+      a[i] := t and PXX_BIGF_MASK;
+      carry := t shr 32;
+    end;
+    if carry > 0 then
+    begin
+      if n >= PXX_BIGF_LIMBS then Exit;
+      a[n] := carry; n := n + 1;
+    end;
+  end;
+  if words > 0 then
+  begin
+    if n + words > PXX_BIGF_LIMBS then Exit;
+    for i := n - 1 downto 0 do a[i + words] := a[i];
+    for i := 0 to words - 1 do a[i] := 0;
+    n := n + words;
+  end;
+  BigFShl := True;
+end;
+
+{ a := a * v for v under 2^55 — the largest operand here is a midpoint's
+  2*mant+1. Split into two sub-2^31 halves rather than reaching for a 128-bit
+  product, so the same code serves 32-bit targets. }
+function BigFMulU64(var a: TBigF; var n: Integer; v: Int64): Boolean;
+var t: TBigF; tn: Integer; hi, lo: Int64;
+begin
+  BigFMulU64 := False;
+  lo := v and ((Int64(1) shl 27) - 1);
+  hi := v shr 27;
+  if hi = 0 then begin BigFMulU64 := BigFMulSmall(a, n, lo); Exit; end;
+  BigFCopy(a, n, t, tn);
+  if not BigFMulSmall(a, n, lo) then Exit;
+  if not BigFMulSmall(t, tn, hi) then Exit;
+  if not BigFShl(t, tn, 27) then Exit;
+  BigFMulU64 := BigFAdd(a, n, t, tn);
+end;
+
+{ a := a * 5^k, in place. Thirteen at a time: 5^13 is the largest power of five
+  under 2^31, which is the cap BigFMulSmall's carry arithmetic needs. }
+function BigFMulPow5(var a: TBigF; var n: Integer; k: Integer): Boolean;
+begin
+  BigFMulPow5 := False;
+  if k < 0 then Exit;
+  while k >= 13 do
+  begin
+    if not BigFMulSmall(a, n, PXX_BIGF_P5_13) then Exit;
+    k := k - 13;
+  end;
+  while k > 0 do
+  begin
+    if not BigFMulSmall(a, n, 5) then Exit;
+    k := k - 1;
+  end;
+  BigFMulPow5 := True;
+end;
+
+function BigFPow5(k: Integer; var a: TBigF; var n: Integer): Boolean;
+begin
+  a[0] := 1; n := 1;
+  BigFPow5 := BigFMulPow5(a, n, k);
+end;
+
+{ Nine digits at a time: 10^9 is the largest power of ten under 2^31. }
+function BigFFromDigits(const ds: AnsiString; nd: Integer;
+                        var a: TBigF; var n: Integer): Boolean;
+var i, j, chunk: Integer; v, p: Int64;
+begin
+  BigFFromDigits := False;
+  a[0] := 0; n := 1;
+  i := 1;
+  while i <= nd do
+  begin
+    chunk := nd - i + 1;
+    if chunk > 9 then chunk := 9;
+    v := 0; p := 1;
+    for j := 0 to chunk - 1 do
+    begin
+      v := v * 10 + Int64(Ord(ds[i + j]) - Ord('0'));
+      p := p * 10;
+    end;
+    if not BigFMulSmall(a, n, p) then Exit;
+    if not BigFAddSmall(a, n, v) then Exit;
+    i := i + chunk;
+  end;
+  BigFFromDigits := True;
+end;
+
+function BigFCmp(const a: TBigF; na: Integer; const b: TBigF; nb: Integer): Integer;
+var i: Integer;
+begin
+  if na <> nb then
+  begin
+    if na < nb then BigFCmp := -1 else BigFCmp := 1;
+    Exit;
+  end;
+  for i := na - 1 downto 0 do
+    if a[i] <> b[i] then
+    begin
+      if a[i] < b[i] then BigFCmp := -1 else BigFCmp := 1;
+      Exit;
+    end;
+  BigFCmp := 0;
+end;
+
+{ Sign of (mv * 2^ev) - D, where D = int(ds) * 10^expo is carried in the two
+  candidate-independent operands the caller built once:
+
+    p5ta    = 5^ta                with ta = max(0, -expo)
+    rhsBase = int(ds) * 5^tb      with tb = max(0,  expo)
+
+  so the comparison is
+
+      mv * 5^ta * 2^(SB+ta)   ?   int(ds) * 5^tb * 2^(SA+tb)
+
+  with SA = max(0,-ev), SB = max(0,ev), after cancelling 2^min from both sides —
+  free, and worth about a third of a subnormal's operand size, since its ev is
+  -1074 and that shift alone is 1074 bits.
+
+  `ok` is cleared if either operand would not fit, and the caller then declines
+  to ExDecNearest. Top-level rather than nested inside ExBinNearest because a
+  nested routine cannot capture a fixed-size array yet
+  (feature-nested-routine-fixed-array-capture) — and both callers wanted the
+  same body regardless. }
+function BigFCmpValue(const p5ta: TBigF; p5n: Integer;
+                      const rhsBase: TBigF; rhsn: Integer;
+                      ta, tb: Integer; mv: Int64; ev: Integer;
+                      var ok: Boolean): Integer;
+var
+  lhs, rhs: TBigF;
+  ln, rn, sa, sb, e2l, e2r, cc: Integer;
+begin
+  BigFCmpValue := 0;
+  if ev >= 0 then begin sa := 0; sb := ev; end
+  else begin sa := -ev; sb := 0; end;
+  e2l := sb + ta;
+  e2r := sa + tb;
+  if e2l < e2r then cc := e2l else cc := e2r;
+  e2l := e2l - cc;
+  e2r := e2r - cc;
+  BigFCopy(p5ta, p5n, lhs, ln);
+  if not BigFMulU64(lhs, ln, mv) then begin ok := False; Exit; end;
+  if not BigFShl(lhs, ln, e2l) then begin ok := False; Exit; end;
+  BigFCopy(rhsBase, rhsn, rhs, rn);
+  if not BigFShl(rhs, rn, e2r) then begin ok := False; Exit; end;
+  BigFCmpValue := BigFCmp(lhs, ln, rhs, rn);
+end;
+
+{ Sign of exact(bits) - D for a positive-double bit pattern. }
+function BigFCmpBits(const p5ta: TBigF; p5n: Integer;
+                     const rhsBase: TBigF; rhsn: Integer;
+                     ta, tb: Integer; b: Int64; var ok: Boolean): Integer;
+var mm: Int64; ex2: Integer;
+begin
+  if b = 0 then begin BigFCmpBits := -1; Exit; end;   { 0 < D, D is positive }
+  ExDecSplit(ExDecBitsToDouble(b), mm, ex2);
+  if mm = 0 then begin BigFCmpBits := -1; Exit; end;
+  BigFCmpBits := BigFCmpValue(p5ta, p5n, rhsBase, rhsn, ta, tb, mm, ex2, ok);
+end;
+
+{ The double nearest the positive decimal int(ds) * 10^expo, correctly rounded,
+  ties to even. False = declined; the caller must fall back to ExDecNearest.
+
+  The search is ExDecNearest's, unchanged and for the same reason: for positive
+  doubles the IEEE bit pattern rises monotonically with the value, so "largest
+  double <= D" is an ordered search, seeded by a float estimate that is never
+  trusted — only used to start the bracket, which then proves itself. What is
+  different is the comparator, and only the comparator.
+
+  The midpoint between a double and the next one up is exactly
+  (2*mant + 1) * 2^(exp2 - 1) — one formula that holds across a power-of-two
+  boundary and across the denormal/normal boundary alike, because incrementing
+  the bit pattern is exactly what both of those transitions are.
+
+  Out-of-range inputs fall out rather than needing a guard: below the smallest
+  denormal the search settles on bits 0 and the midpoint test rounds to zero;
+  above DBL_MAX it settles on DBL_MAX, whose next-up bit pattern is +Inf. }
+function ExBinNearest(const ds: AnsiString; decExp, nd, expo: Integer;
+                      var value: Double): Boolean;
+var
+  lo, hi, mid, mant, maxbits, step, eb: Int64;
+  exp2, cmp, ta, tb: Integer;
+  p5ta, rhsBase: TBigF;
+  p5n, rhsn: Integer;
+  cd, est: Double;
+  ok: Boolean;
+begin
+  ExBinNearest := False;
+
+  { Decline outside a few decades of the double range. Not a correctness guard
+    — ExDecNearest answers those — but a SIZE one: an exponent like 1e-999999
+    would ask for 5^999999, while the old path settles such a value in one or
+    two comparisons anyway, because its estimate clamps straight to 0 or DBL_MAX
+    and the bracket closes immediately. With decExp bounded here and nd bounded
+    by the parser's 1200-digit cap, the largest operand either side can reach is
+    about 6500 bits, inside the 7168 the limb array holds. Every routine above
+    still range-checks, so an error in that bound costs a decline, not a wrong
+    answer. }
+  if (decExp > 400) or (decExp < -450) then Exit;
+  if (nd < 1) or (nd > 1201) then Exit;
+
+  if expo >= 0 then begin ta := 0; tb := expo; end
+  else begin ta := -expo; tb := 0; end;
+
+  { The two candidate-independent operands, built once for the whole search.
+    int(ds) * 5^tb needs no big-by-big multiply — 5^tb is applied to the digits
+    in place in sub-2^31 chunks, which is why only BigFMulSmall exists here. }
+  if not BigFFromDigits(ds, nd, rhsBase, rhsn) then Exit;
+  if not BigFMulPow5(rhsBase, rhsn, tb) then Exit;
+  if not BigFPow5(ta, p5ta, p5n) then Exit;
+
+  ok := True;
+  { DBL_MAX = biased exponent 2046, mantissa all ones }
+  maxbits := (Int64(2046) shl 52) or ((Int64(1) shl 52) - 1);
+
+  est := ExDecEstimate(ds, nd, expo);
+  if (est <> est) or (est >= 1.7976931348623157e308) then eb := maxbits
+  else if est <= 0.0 then
+  begin
+    { The float estimate underflowed to zero — which happens for EVERY value
+      below ~1e-308, i.e. exactly the subnormals this path exists for, so
+      seeding at zero would be the common case and not the rare one. From zero
+      the doubling walk climbs to the answer one power of two at a time (about
+      44 steps for 1e-310) and the binary search then comes back down: ~90
+      comparisons where a good seed needs a handful. Measured, before and after:
+      1e-310 went 11.5 us -> 1.5 us on this line alone.
+
+      So estimate it SCALED. A subnormal's bit pattern IS value * 2^1074, and
+      2^1074 / 10^350 is itself an ordinary double (~2.02e-27), so
+
+          bits ~ (d * 10^(expo+350)) * (2^1074 / 10^350)
+
+      keeps both factors in the normal range. Still only a seed — nothing below
+      trusts it, the bracket proves itself either way — so a value genuinely
+      below the smallest subnormal simply underflows again and seeds 0, which is
+      then correct rather than merely close. }
+    est := ExDecEstimate(ds, nd, expo + 350) * 2.0240225330731063e-27;
+    if (est <> est) or (est <= 0.0) then eb := 0
+    else if est >= 4.5035996273704960e15 then eb := maxbits   { 2^52, past subnormal }
+    else eb := Trunc(est);
+  end
+  else
+  begin
+    eb := ExDecDoubleToBits(est);
+    if eb < 0 then eb := 0;
+    if eb > maxbits then eb := maxbits;
+  end;
+
+  lo := eb;
+  step := 1;
+  while (lo > 0) and
+        (BigFCmpBits(p5ta, p5n, rhsBase, rhsn, ta, tb, lo, ok) > 0) do
+  begin
+    if not ok then Exit;
+    lo := lo - step;
+    if lo < 0 then lo := 0;
+    step := step * 2;
+  end;
+  if not ok then Exit;
+
+  hi := eb;
+  step := 1;
+  while (hi < maxbits) and
+        (BigFCmpBits(p5ta, p5n, rhsBase, rhsn, ta, tb, hi, ok) < 0) do
+  begin
+    if not ok then Exit;
+    hi := hi + step;
+    if hi > maxbits then hi := maxbits;
+    step := step * 2;
+  end;
+  if not ok then Exit;
+
+  { largest bit pattern whose exact value is <= D }
+  while lo < hi do
+  begin
+    mid := lo + (hi - lo + 1) div 2;
+    if BigFCmpBits(p5ta, p5n, rhsBase, rhsn, ta, tb, mid, ok) <= 0 then lo := mid
+    else hi := mid - 1;
+    if not ok then Exit;
+  end;
+
+  cd := ExDecBitsToDouble(lo);
+  if lo <> 0 then
+  begin
+    cmp := BigFCmpBits(p5ta, p5n, rhsBase, rhsn, ta, tb, lo, ok);
+    if not ok then Exit;
+    if cmp = 0 then
+    begin
+      value := cd;
+      ExBinNearest := True;
+      Exit;
+    end;
+  end;
+
+  ExDecSplit(cd, mant, exp2);
+  { BigFCmpValue gives midpoint - D; the decision below wants D - midpoint }
+  cmp := -BigFCmpValue(p5ta, p5n, rhsBase, rhsn, ta, tb, 2 * mant + 1, exp2 - 1, ok);
+  if not ok then Exit;
+  if cmp > 0 then value := ExDecBitsToDouble(lo + 1)
+  else if cmp < 0 then value := cd
+  else if (mant mod 2) = 0 then value := cd          { exact tie -> even }
+  else value := ExDecBitsToDouble(lo + 1);
+  ExBinNearest := True;
+end;
+
 function StrToFloatDef(const s: AnsiString; def: Double): Double;
 begin
   if not ParseFloatCore(s, Result) then Result := def;
@@ -2435,10 +2869,19 @@ begin
     end;
   end;
 
-  { Slow path: exact reconstruction. decExp is the power of ten the first digit
-    stands for. }
+  { Exact reconstruction. decExp is the power of ten the first digit stands for.
+
+    Two implementations of the same correctly-rounded answer. ExBinNearest
+    compares in binary big integers and is what Eisel-Lemire's declines land on
+    — chiefly the subnormals, which Lemire refuses by construction. It declines
+    in turn for anything whose operands would not fit its limb array, and
+    ExDecNearest — which compares by expanding each candidate to its exact
+    decimal, and has no size limit — answers those. Each layer declines rather
+    than guesses, so the composition cannot produce a wrong value, only a slower
+    right one. }
   lead := nd - 1 + expo;
-  w := ExDecNearest(ds, lead, nd, expo);
+  if not ExBinNearest(ds, lead, nd, expo, w) then
+    w := ExDecNearest(ds, lead, nd, expo);
   if neg then w := -w;
   value := w;
   Result := True;

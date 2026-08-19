@@ -54,7 +54,6 @@ _none_
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
 | bug-a-riscv32-softfloat-has-no-subnormals | A | 40 | bug | riscv32 flushes subnormals: (1e-320 * 0.5) * 2.0 <> 1e-320, Exp(-745) returns 0 where every other target gives a subnormal, and Ln(5e-324) answers -746.52 instead of -744.44. Identical in both float modes, so it is the target's soft-float runtime, not the math unit. i386, arm32, aarch64 and x86-64 are all correct. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
-| bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents | B | 30 | bug | REMAINING WORK IS SUBNORMALS ONLY, and it is no longer Eisel-Lemire. Three passes have landed: no-double-parse + no-quadratic-append (4.7x on the fast path), and now Eisel-Lemire, which took every NORMAL value outside Clinger's window from 18-526 us to under 1 us (27x-1100x, 592,994 values diffed against CPython, 0 mismatches). The two rows this ticket named 'small' and 'subnormal' are BOTH subnormal and did not move: Lemire declines below the normal floor by construction, as Go and Rust do. They sit at ~535 us vs CPython's 0.72 us. The fix for them is a rewrite of ExDecNearest to compare in BINARY big-integer arithmetic instead of expanding each candidate to its exact ~765-digit decimal. The title's 3600x, its 63-step cause and its 'small exponents' boundary have each been measured wrong and corrected in the body — read the notes, not the title. | — |
 | bug-b-write-of-a-real-ignores-the-field-width-without-decimals | A | 20 | bug | write(r:W) with a width but no decimals ignores W entirely — pxx always prints the full 16-decimal scientific form where FPC sizes the mantissa to the field | — |
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | — |
 | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine | C | 55 | bug | A C function DEFINITION whose name matches a Pascal intrinsic (`sqrt` `exp` `ln` `sin` `cos` `arctan`) binds to the Pascal proc entry via case-insensitive FindProc and overwrites its BodyAddr. The Pascal implementation then becomes unreachable by ANY spelling — bare `Sqrt`, `math.Sqrt` and `cmath.sqrt` all return the C body — so a C file silently replaces the RTL's math for the whole program. This is what the ten `__crtl_*` prefixes in lib/crtl exist to dodge. | — |
@@ -141,6 +140,7 @@ _none_
 | feature-b-hardware-sqrt-on-aarch64-and-arm32 | B | 20 | feature | Sqrt is one `sqrtsd` on x86-64 (15x faster than the software path and correctly rounded by IEEE mandate). aarch64 `fsqrt` and arm32 `vsqrt` are the same one-instruction win and both run here under qemu, so the change is verifiable on this box. The portable SqrtSoft stays as the fallback for riscv32/xtensa. | — |
 | feature-b-mimic-collections-abc-mapping-and-mutablemapping | B | 68 | feature | `unknown base class Mapping` is now the single biggest remaining wall on the third-party ladder — 7 html5lib files, up from 3, and all four etree files landed on it. No shim exists: lib/rtl has collections.pas (no Mapping) and no mimic_collections_abc.py. Needs Mapping / MutableMapping / MutableSet as ordinary classes. BLOCKED on two N bugs that break exactly the mixin methods an ABC is made of. | bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view, feature-nilpy-for-loop-getitem-protocol-fallback |
 | feature-b-rtl-lnxp1-fpc-compat | B | 20 | feature | FPC's math unit exports LnXP1(x) = ln(1+x) and pxx does not. The implementation already exists as of 2026-08-15 — LnP1, added as an internal helper for the hyperbolic family — so this is an interface line and a name, not an algorithm. Note WHY the name matters: `Log1p` would hijack libc's through pxxcio, `LnXP1` does not. | — |
+| feature-b-strtofloat-big-integers-in-64-bit-limbs | B | 25 | feature | ExBinNearest's big-integer primitives use 32-bit limbs because a limb times a sub-2^31 multiplier is the largest product that fits a signed Int64. MulHiU64 is already in lib/rtl/wideint.pas (intrinsic via IR_MULHI, already used by Eisel-Lemire in this same unit), so 64-bit limbs are available: half the limb count, BigFMulU64's five passes collapse to one, and the power-of-five chunk rises from 5^13 to 5^27. Expect ~4x, taking subnormal StrToFloat from ~8-11 us to ~2-3 us — inside CPython's range. A rewrite of six leaf routines with no change to the algorithm above them. | — |
 | feature-c-csmith-differential-fuzzing | C | 65 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-entry-stub-must-run-initializers-for-environ | C | 45 | feature | `char **envp = environ;` silently becomes NULL in a C program: environ is a VARIABLE read directly, with no call to trigger crtl's lazy /proc/self/environ load, and the C entry stub has no init phase. The fini half landed 2026-08-10; this is the init half | — |
 | feature-c-esp-conformance-coverage | S | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
@@ -463,9 +463,9 @@ _none_
 | decide-what-synapse-actually-needs-vs-mimic-fpc | U | 20 | decide | Synapse builds under `--mimic-fpc`. What does it actually NEED? | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2042)
+## done (2043)
 
-2042 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2043 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (38)
 
@@ -654,7 +654,6 @@ _none_
 - [p 35] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
 - [p 35] [D] task-d-document-the-strict-overload-width-flag
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
-- [p 30] [B] bug-b-strtofloat-is-3600x-slower-than-cpython-for-small-exponents
 - [p 30] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder
 - [p 30] [N] bug-nilpy-an-extended-slice-cannot-be-assigned
 - [p 30] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
@@ -693,6 +692,7 @@ _none_
 - [p 25] [D] doc-n-fu-is-how-a-python-package-is-found
 - [p 25] [A] feature-a-extended-is-an-alias-for-double
 - [p 25] [A] feature-a-shrink-managed-header-on-32-bit
+- [p 25] [B] feature-b-strtofloat-big-integers-in-64-bit-limbs
 - [p 25] [N] feature-nilpy-a-genexpr-is-lazy-not-materialised
 - [p 25] [N] feature-nilpy-math-module-twelve-absent-names-measured
 - [p 25] [N] feature-nilpy-str-format-named-keyword-fields
