@@ -1,0 +1,1 @@
+00207.c	VLA needs IR_ALLOCA codegen, which is x86-64 only by design (feature-c-alloca-dynamic-stack scoped it that way); the other backends refuse LOUDLY with "IR op not yet supported: alloca". feature-c-vla-via-alloca

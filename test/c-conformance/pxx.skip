@@ -5,4 +5,3 @@
 # tickets: bug-c-ptrdiff-of-addr-elem, bug-c-string-literal-binop-decay,
 # feature-c-crtl-bind-hand-declared-prototypes).
 # Remove the line when the ticket is fixed — the runner then enforces the pass.
-00207.c	VLA (int a[n], runtime bound) — refused loudly since the silent-zero sizing corrupted the frame; feature-c-vla-via-alloca

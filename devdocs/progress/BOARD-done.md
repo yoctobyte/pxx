@@ -1429,6 +1429,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-c-varargs-design | C | 50 | feature | C varargs (va_list / va_start / va_arg) — implementation design | — |
 | feature-c-variadic-macros | C | 45 | feature | C preprocessor: __VA_ARGS__ variadic macros | — |
 | feature-c-vla-and-label-in-if | C | 45 | feature | C VLA `char test[argc]` + label as sole statement of braceless if | — |
+| feature-c-vla-via-alloca | C | 50 | feature | C variable-length arrays, lowered through alloca | — |
 | feature-c-wide-string-literals | C | 28 | feature | C wide string literals L"..." / wchar_t | — |
 | feature-callconv-register-args | O | 45 | feature | Register-based internal calling convention (args in registers, not stack slots) | — |
 | feature-cdecl-indirect-cross-targets | A | 60 | feature | Port cdecl indirect calls (dynamic library loading) to the other targets | — |

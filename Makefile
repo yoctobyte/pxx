@@ -6141,6 +6141,15 @@ test-core: $(COMPILER)
 	# The tanh/cube rows are the controls that were always correct.
 	./$(COMPILER) -Futest test/test_c_def_hijack.pas $(TESTTMP)/c_def_hijack26
 	test "$$($(TESTTMP)/c_def_hijack26)" = "$$(printf 'sqrt=4.0000\nqsqrt=4.0000\nexp=1.0000\ncxsqrt=42.0000\ntanh=0.7616\ncxtanh=55.0000\ncxcube=999\nsoft=4.0000')"
+	# feature-c-vla-via-alloca: `int arr[n]` with a runtime n, lowered through
+	# alloca. Every number is gcc's own answer on the same source. The sizeof
+	# rows are the ones that used to print the POINTER size (8) - C evaluates
+	# sizeof on a VLA at RUN TIME, so a silent 8 was a wrong value, not a gap.
+	./$(COMPILER) test/c_vla.c $(TESTTMP)/c_vla26
+	test "$$($(TESTTMP)/c_vla26)" = "$$(printf '30 108\n6 11\n20 40\n36\n36\n10\n24')"
+	@./$(COMPILER) test/c_vla_const_fail.c $(TESTTMP)/c_vla_const_fail26 2>&1 \
+	  | grep -q "sizeof of a variable-length array is not a constant expression" \
+	  || { echo 'c_vla_const_fail: FAIL - sizeof on a VLA must be refused in a constant expression, not answer a symbol index'; exit 1; }
 	@./$(COMPILER) -Futest test/test_c_cross_ns_arity_fail.pas $(TESTTMP)/c_cross_ns_arity_fail26 2>&1 \
 	  | grep -q "call to undeclared function 'time' would bind to the Pascal routine 'Time'" \
 	  || { echo 'c_cross_ns_arity_fail: FAIL - an undeclared C call must not bind to a Pascal routine of another arity'; exit 1; }

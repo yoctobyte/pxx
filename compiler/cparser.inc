@@ -2056,11 +2056,13 @@ function CIsCastAhead: Boolean; forward;
 function ParseCSizeof: Integer;
 var node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen: Integer;
     cNDims, cDim, cSpanSym: Integer;
+    vlaSz: Integer;   { VLA operand: its `$vlasz$` companion local, else -1 }
     tk, elemTk, cTk, cPtrTk: TTypeKind; fieldName: AnsiString; cOK: Boolean;
 begin
   Next; { sizeof }
   sz := TARGET_PTR_SIZE;
   node := -1;
+  vlaSz := -1;
   if CurTok.Kind = tkLParen then
   begin
     Next;
@@ -2206,6 +2208,13 @@ begin
     else if (CurTok.Kind = tkIdent) and CSizeofIdentOperandIsWhole then
     begin
       si := FindSym(CurTok.SVal);
+      { A VARIABLE-LENGTH array. C evaluates sizeof on a VLA at RUN TIME, and
+        the declaration parked that byte count in a `$vlasz$` companion local
+        precisely so this can read it. Without this the symbol is an ordinary
+        pointer local and answers the POINTER size — 8 where gcc says 20 — with
+        no diagnostic. feature-c-vla-via-alloca. }
+      if (si >= 0) and (Syms[si].TypeKind = tyPointer) then
+        vlaSz := FindSym('$vlasz$' + CurTok.SVal);
       if si >= 0 then
       begin
         Next;
@@ -2546,11 +2555,25 @@ begin
       `sizeof !a`. Parse the operand at unary precedence (so `sizeof 0 < 2` is
       `(sizeof 0) < 2`) and size it by its result type. A bare integer constant
       is int (4). }
+    if CurTok.Kind = tkIdent then
+    begin
+      si := FindSym(CurTok.SVal);
+      if (si >= 0) and (Syms[si].TypeKind = tyPointer) then
+        vlaSz := FindSym('$vlasz$' + CurTok.SVal);
+    end;
     node := ParseCUnary;
     tk := IntToTypeKind(ASTTk[node]);
     if tk = tyRecord then sz := RecSize(ResolveNodeRec(node))
     else if (tk = tyUnknown) or (tk = tyInteger) then sz := 4
     else sz := TypeSize(tk);
+  end;
+  if vlaSz >= 0 then
+  begin
+    node := AllocNode(AN_IDENT);
+    ASTIVal[node] := vlaSz;
+    ASTTk[node] := Ord(tyInt64);
+    Result := node;
+    Exit;
   end;
   node := AllocNode(AN_INT_LIT);
   ASTIVal[node] := sz;
@@ -4526,6 +4549,7 @@ var baseTk, declTk, scalarTk: TTypeKind;
     arrElems: array[0..255] of Integer;
     arrElemIdx: array[0..255] of Integer;
     dimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
+    vlaDim, vlaPos, vlaElemSz, vlaSzSym, vlaAlloc, vlaMul, vlaSzLit: Integer;
 begin
   baseTk := ParseCDeclType;   { specifiers + first declarator's pointer suffix }
   tdArrLen := CTypeTypedefArrLen;  { array-typedef inherent dim (`v4 r` -> [4]), else -1 }
@@ -4776,26 +4800,36 @@ begin
         unsized 1-D `[]` (arrLen=-1) is sized from the initializer below. }
       dimCount := 0;
       flatLen := 1;
+      vlaDim := -1;
       while CurTok.Kind = tkLBrack do
       begin
         Next;
         if CurTok.Kind = tkRBrack then dimVal := -1
         else
         begin
-          { A VARIABLE-LENGTH array. The evaluator contributes 0 for a name that
-            is not a compile-time constant, so `int arr[n]` used to be sized at
-            NOTHING and sat on top of the next stack slot: a loop over it
-            clobbered its own counter and stopped after two iterations, with
-            correct-looking output for the first ones and no diagnostic at all.
-            Refuse it — the subset does not implement VLAs, and a gap fails
-            loudly here rather than corrupting the frame
-            (bug-cfront-vla-stack-corruption). }
           CConstExprSawNonConst := False;
+          vlaPos := TokPos;
           dimVal := CEvalConstExpr;
           if CConstExprSawNonConst then
-            Error('C: variable-length array (a dimension that is not a compile-'
-                  + 'time constant) is not supported — use a fixed bound, malloc'
-                  + ' or alloca');
+          begin
+            { A VARIABLE-LENGTH array — `int arr[n]` with a runtime n. Rewind and
+              re-read the bracket as an EXPRESSION: the constant folder has
+              already consumed the tokens and contributed 0 for the name it
+              could not fold, and only the expression form survives to code
+              generation. The declaration below allocates a POINTER local and
+              fills it from alloca, which is exactly the lowering `int *p =
+              alloca(n * sizeof(int))` already gets; an array name decays to a
+              pointer for indexing, so `arr[i]` needs nothing new.
+
+              This used to be sized at NOTHING by that silent 0 and sat on top of
+              the next stack slot, so a loop over it clobbered its own counter and
+              stopped after two iterations with no diagnostic
+              (bug-cfront-vla-stack-corruption); then it was refused outright,
+              which was honest but not finished. feature-c-vla-via-alloca. }
+            TokPos := vlaPos - 1; Next;
+            vlaDim := ParseCExpr;
+            dimVal := 1;
+          end;
         end;
         Expect(tkRBrack, ']');
         if dimCount >= MAX_ARR_DIMS then Error('too many C array dimensions');
@@ -5091,6 +5125,71 @@ begin
       else if (dimCount <= 1) and (not hadArrDesig) and (nArrElems > arrLen) then
         arrLen := nArrElems;
       if (dimCount <= 1) and (recArrInitCount > arrLen) then arrLen := recArrInitCount;
+      { VARIABLE-LENGTH ARRAY. The symbol becomes a POINTER local filled from
+        alloca at the declaration point, because that is what the object is:
+        runtime-sized storage in this frame, released by the epilogue. Indexing
+        needs nothing new — a C array name decays to a pointer, so `arr[i]`
+        takes the path every `T *p` local already takes.
+
+        A companion local `$vlasz$<name>` holds the byte count, and sizeof(arr)
+        reads it (ParseCSizeof). That is not bookkeeping for its own sake: C says
+        sizeof on a VLA is evaluated at RUN TIME, so a runtime variable is the
+        honest representation of it. Without the companion the pointer symbol
+        would answer the POINTER size, which is a silently wrong value — the one
+        outcome worse than refusing the feature.
+
+        1-D only. A multi-dimensional VLA needs the row stride at run time, and
+        the flat row-major layout the fixed path uses assumes constant dims;
+        anything else keeps the old refusal rather than guessing a stride.
+        feature-c-vla-via-alloca. }
+      if vlaDim >= 0 then
+      begin
+        if (dimCount <> 1) or (tdArrLen >= 1) then
+          Error('C: a multi-dimensional variable-length array is not supported'
+                + ' — only the first dimension may be a runtime value');
+        if CurTok.Kind = tkAssign then
+          Error('C: a variable-length array may not have an initializer (C99'
+                + ' 6.7.8p3)');
+        if declTk = tyRecord then vlaElemSz := RecSize(scalarRec)
+        else if declPtrDepth > 0 then vlaElemSz := TARGET_PTR_SIZE
+        else vlaElemSz := TypeSize(declTk);
+        if vlaElemSz < 1 then vlaElemSz := 1;
+        if declTk = tyRecord then LastTypeRecId := scalarRec;
+        idx := CAllocDeclVar(name, tyPointer);
+        Syms[idx].PtrElemTk := declTk;
+        Syms[idx].PtrElemRec := scalarRec;
+        SymPtrDepth[idx] := declPtrDepth + 1;
+        SymPtrBaseTk[idx] := declBaseTk;
+        SymPtrBaseRec[idx] := declBaseRec;
+        SymSyncTypeRef(idx);
+        { $vlasz$name := <dim> * sizeof(elem) }
+        vlaSzSym := CAllocDeclVar('$vlasz$' + name, tyInt64);
+        vlaSzLit := AllocNode(AN_INT_LIT); ASTIVal[vlaSzLit] := vlaElemSz;
+        ASTTk[vlaSzLit] := Ord(tyInt64);
+        vlaMul := AllocNode(AN_BINOP); ASTIVal[vlaMul] := Ord(tkStar);
+        ASTLeft[vlaMul] := vlaDim; ASTRight[vlaMul] := vlaSzLit;
+        ASTTk[vlaMul] := Ord(tyInt64);
+        idn := AllocNode(AN_IDENT); ASTIVal[idn] := vlaSzSym;
+        ASTTk[idn] := Ord(tyInt64);
+        asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := idn; ASTRight[asn] := vlaMul;
+        ASTTk[asn] := Ord(tyInt64);
+        seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
+        if head = -1 then head := seq else ASTRight[tail] := seq;
+        tail := seq;
+        { name := alloca($vlasz$name) }
+        idn := AllocNode(AN_IDENT); ASTIVal[idn] := vlaSzSym;
+        ASTTk[idn] := Ord(tyInt64);
+        vlaAlloc := AllocNode(AN_ALLOCA); ASTLeft[vlaAlloc] := idn;
+        ASTTk[vlaAlloc] := Ord(tyPointer);
+        idn := AllocNode(AN_IDENT); ASTIVal[idn] := idx;
+        ASTTk[idn] := Ord(tyPointer);
+        asn := AllocNode(AN_ASSIGN); ASTLeft[asn] := idn; ASTRight[asn] := vlaAlloc;
+        ASTTk[asn] := Ord(tyPointer);
+        seq := AllocNode(AN_SEQ); ASTLeft[seq] := asn; ASTRight[seq] := -1;
+        ASTRight[tail] := seq; tail := seq;
+        if CurTok.Kind = tkComma then begin Next; Continue; end;
+        Break;
+      end;
       idx := CAllocDeclArray(name, declTk, 0, arrLen - 1);
       if dimCount >= 2 then
       begin
@@ -10391,9 +10490,19 @@ begin
   else if CurTok.Kind = tkAmp then begin Next; Result := CEvalConstOffsetofAddress(); end
   else if CurTok.Kind = tkInteger then begin Result := CurTok.IVal; Next; end
   else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then
+  begin
     { `sizeof(type|expr)` in a constant expression (e.g. array dimension
-      `char b[3 * sizeof(size_t)]`). Reuse the value-form folder. }
-    Result := ASTIVal[ParseCSizeof]
+      `char b[3 * sizeof(size_t)]`). Reuse the value-form folder — but only
+      when it really folded. sizeof on a VLA is a RUNTIME value and comes back
+      as an AN_IDENT, whose ASTIVal is a SYMBOL INDEX; taking it as the size
+      would put an arbitrary small integer into a constant with no diagnostic
+      anywhere. feature-c-vla-via-alloca. }
+    Result := ParseCSizeof;
+    if ASTKind[Result] <> AN_INT_LIT then
+      Error('C: sizeof of a variable-length array is not a constant expression'
+            + ' — its value is only known at run time');
+    Result := ASTIVal[Result];
+  end
   else if CurTok.Kind = tkIdent then
   begin
     idx := FindSym(CurTok.SVal);
