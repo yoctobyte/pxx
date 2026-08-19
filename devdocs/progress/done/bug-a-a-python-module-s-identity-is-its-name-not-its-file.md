@@ -237,3 +237,12 @@ the decision only governs whether the fix stays narrow or begins a unification.
 
 ## Log
 - 2026-08-17 — resolved, commit 030ce07ea.
+
+---
+
+> **FOLLOW-UP 2026-08-19 — this fix was option A, and option B has since been decided.**
+> The `CompiledUnitFile[]` dedupe added here serves the `.py` arm only.
+> [[decide-one-answer-to-have-i-already-compiled-this-unit]] settled (user) that it should
+> be the GENERAL rule for every load, retiring the `@cpath:` key space with it. That work
+> is [[refactor-a-one-resolved-file-identity-for-a-translation-unit]]. Nothing here is
+> wrong or needs reverting — this ticket stays resolved.
