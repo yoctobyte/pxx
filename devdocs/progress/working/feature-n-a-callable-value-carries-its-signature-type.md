@@ -2,9 +2,10 @@
 track: A
 prio: 88
 type: feature
-owner: unassigned
+owner: frankonpiler-an
 blocked-by: []
 summary: "DECIDED 2026-08-19. A boxed callable's VT_CALLABLE_TAG payload becomes ONE pointer to a static signature record {code address, ReqN, TotN, per-param default descriptor}. Static, so the slot still owns nothing and no refcount behaviour changes. One call-site helper reads it: check arity, fill defaults, call. Unblocks three tickets whose symptoms are SIGSEGV and silent wrong values."
+status: working
 ---
 
 # A callable value carries its signature type
@@ -79,3 +80,54 @@ is where genuinely dynamic Python is expected to be served.
 
 Track A: `make compiler/pascal26` (the byte-identical self-host fixedpoint) + repro +
 `tools/gate.sh quick`. Land green.
+
+
+## Reconnaissance 2026-08-19 (frankonpiler-an) — before cutting
+
+### The p70 IS this ticket, confirmed by measurement not by reading
+
+`bug-n-a-call-through-a-callable-value-drops-the-callees-defaults` (Track N, p70)
+is the same gap. Measured at HEAD:
+
+| shape | pxx | CPython |
+| --- | --- | --- |
+| `al = g; al(1)` (a default must be filled) | **empty**, rc 0 — silent wrong value | `7` |
+| `g(1)` direct | `7` | `7` |
+| `g` passed as an argument, called with fewer args | **rc 139 (SIGSEGV)** | `7` |
+| `al(1, 9)` — every argument supplied | `9` | `9` |
+
+The last row is what makes it causal rather than plausible: through the **same
+value**, a fully-supplied call is correct and only a call that needs something
+filled in fails. There is nothing to fill from. So p70 needs no separate work —
+its table becomes this ticket's regression test, and N's queue should be ranked
+with p70 removed rather than sitting behind it.
+
+### There are TWO callable representations, and the plan as written names one
+
+This is the thing to settle before writing code, because it changes the size.
+
+1. **`VT_CALLABLE_TAG` (defs.inc:747)** — payload is a static code address, the
+   slot owns nothing. This is the one the plan describes.
+2. **`TPyBound`, built by `pybound_new(code, recv, isFunc)`** (pylib.pas:13626),
+   a refcounted heap object wearing `VT_BOUNDFN_TAG` / `VT_PYCLOSURE_TAG`.
+
+`PyMakeFuncValueFor` — the function the ASSIGNMENT path uses, i.e. the one my
+`al = g` repro goes through — builds **the second**. So changing only
+`VT_CALLABLE_TAG`'s payload would leave the ticket's own headline repro
+untouched. The instruction "give TPyClosure the same signature type" is
+therefore not a nice-to-have that recovers half a win; **it is load-bearing for
+the primary repro**, and should be read as such rather than as a follow-up.
+
+**Encouraging precedent, and it validates the shape:** `pybound_new_star` already
+carries `starIdx` — a piece of *signature* — beside the code pointer, and
+`TPyBound` already has a `StarIdx` field. So adding a signature-record pointer to
+this object is an established move in this file, not a new convention. `starIdx`
+should fold INTO the signature record rather than sitting beside it, or the
+"one concept, two mechanisms" smell the repo's own guidance warns about is baked
+in from the start.
+
+### Pin boundary
+
+`compiler/builtin/pylib.pas` will change, so nothing here reaches another lane
+until `make stabilize-fast && make pin`. That holds the repo-wide lock and is the
+coordinator's to schedule, not mine to take.
