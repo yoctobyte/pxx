@@ -5,8 +5,14 @@
 # second would make the second's members silently go missing at run time, which
 # is the one outcome worse than not supporting the shape.
 # bug-nilpy-multiple-inheritance-from-an-imported-base-is-refused
-import mixinproto
-import mixinproto2
+# mixinproto is a PASCAL unit, so it is named with its extension: a bare NilPy
+# import resolves to Python (.py/.npy) only
+# (decide-nilpy-imports-that-collide-with-a-pascal-rtl-unit, user 2026-08-19).
+import 'mixinproto.pas' as mixinproto
+# mixinproto2 is a PASCAL unit, so it is named with its extension: a bare NilPy
+# import resolves to Python (.py/.npy) only
+# (decide-nilpy-imports-that-collide-with-a-pascal-rtl-unit, user 2026-08-19).
+import 'mixinproto2.pas' as mixinproto2
 
 
 class Two(mixinproto.Protocol, mixinproto2.Protocol2):

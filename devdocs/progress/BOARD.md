@@ -34,7 +34,7 @@ _none_
 | feature-port-rtl-over-libc | A | 55 | feature | RTL-over-libc lowering mode — route runtime primitives through a system C library instead of raw syscalls | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect. | bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert |
 
-## blocked (5)
+## blocked (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -43,6 +43,7 @@ _none_
 | bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module | N | 85 | bug | RE-SCOPED: not about import aliases. A name that names a `def` is resolved to that def at EVERY call site and any later rebinding is ignored — `def a…; def b…; b = a; b(1,5)` answers 18 (the original b) where CPython answers 5, with no import anywhere. The alias spelling is one way to rebind. Blocked: the correct destination is the dynamic call path, which cannot yet carry defaults (see the decision ticket). | decide-how-a-compiled-def-carries-its-signature-when-boxed |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
+| regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
 ## backlog (225)
 
@@ -78,6 +79,7 @@ _none_
 | bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic | N | 25 | bug | `return super().hi()` (super() in expression position, documented as unsupported) is refused with `error: Nil Python: annotate the type / too dynamic [a=22 b=8]` reported at line 1 — a diagnostic that names neither the construct nor the right line. Also: `B.__init__(self)` for a second base is `class method not found`. | — |
 | bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop | N | 55 | bug | A class with __getitem__/__len__ now iterates with `for`, but every OTHER consumer of iteration still refuses it — and `list(b)` returns [] SILENTLY. Found while fixing feature-nilpy-for-loop-getitem-protocol-fallback; the for-loop was one path of several serving one concept. | — |
 | bug-n-tk-got-files-are-invisible-to-testmgr-privatization | N | 40 | bug | The tk loop in `test-nilpy` spells its BINARIES by full path — that was the callbacks fix — but still captures output to `$(TESTTMP)/$$src.got`. `make -n` yields `/tmp/$src.got`, which testmgr's filename scan cannot match, so those three files are never privatized and two concurrent runs share them. Found by T's new lint, in the recipe whose earlier fix was believed complete. | — |
+| bug-n-tkinter-is-missing-from-the-python-serving-unit-list | A | 70 | bug | lib/pcl/tkinter.pas was written so that `import tkinter` resolves by bare name -- its own header says so -- but PyRtlUnitServesPython does not list it, so every real tkinter program is refused at its first line. Six examples/tk/*.npy went red at e1109d7bc. Verified fix: one name added to the list; no test or example edit. | — |
 | bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells | N | 40 | bug | A Nil Python generator instance leaks its locals and its argument cells | — |
 | bug-nilpy-an-extended-slice-cannot-be-assigned | N | 30 | bug | `l[::2] = [7, 8]` is a parse error. The READ form `l[::2]` works, and the plain-slice ASSIGN `l[1:3] = [9]` works; only the strided assignment is missing. | — |
 | bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds | N | 20 | bug | A dict VALUE as the `*=` target still rebinds, so an alias of it keeps the old contents. The parameter half landed 2026-08-15 (pymul_v_inplace); this is the residue, and `+=` has the same split. | — |
@@ -266,7 +268,6 @@ _none_
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-n-two-import-handlers-are-twins | N | 30 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
-| regression-cascade-4e27dc2be114 | T | 70 | regression | regression CASCADE: 12 jobs newly red at 4e27dc2be114 (auto-filed by twatch) | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 25 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 40 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
@@ -519,7 +520,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [T] regression-cascade-4e27dc2be114
+- [p 70] [A] bug-n-tkinter-is-missing-from-the-python-serving-unit-list (unblocks 1)
 - [p 66] [A] refactor-a-one-signature-record-for-every-callable-carrier
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
@@ -737,6 +738,7 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
+- **1** — bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 - **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind

@@ -8,7 +8,10 @@
 #     pre-pass had registered for the program's own class, merging the two into
 #     one row — so the class really was its own parent;
 #   * nothing checked for that cycle, so the ancestor walk spun forever.
-import samenamebase
+# samenamebase is a PASCAL unit, so it is named with its extension: a bare NilPy
+# import resolves to Python (.py/.npy) only
+# (decide-nilpy-imports-that-collide-with-a-pascal-rtl-unit, user 2026-08-19).
+import 'samenamebase.pas' as samenamebase
 
 
 class Widget(samenamebase.Widget):

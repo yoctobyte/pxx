@@ -3,6 +3,9 @@
 # TVarRecId stayed REC_NONE and any such unit was rejected with "array of const
 # requires the builtinheap unit" - while builtinheap was in fact loaded. A .npy
 # program has no uses clause, so it could not work around it.
-import fmtprobe
+# fmtprobe is a PASCAL unit, and a bare NilPy import resolves to Python only
+# (decide-nilpy-imports-that-collide-with-a-pascal-rtl-unit, user 2026-08-19),
+# so the quoted spelling with the extension is how a .npy names one.
+import 'fmtprobe.pas' as fmtprobe
 
 print(fmtprobe.describe("x", 2))

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:15 blocked:5 backlog:225 experimental:20 rainy-day:57 done-followup:3 decided:94 done:2083 rejected:40`
+`working:1 unfinished:15 blocked:6 backlog:225 experimental:20 rainy-day:57 done-followup:3 decided:94 done:2083 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -29,17 +29,18 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-port-rtl-over-libc` [A]
 - `feature-real-dynlib-loader` [B] — blocked-by: bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
 
-## blocked (5) — has an unmet blocker; do not claim
+## blocked (6) — has an unmet blocker; do not claim
 
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `bug-n-a-subpackage-directory-does-not-resolve-as-a-module` [N] — blocked-by: bug-a-a-python-module-s-identity-is-its-name-not-its-file
 - `bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module` [N] — blocked-by: decide-how-a-compiled-def-carries-its-signature-when-boxed
 - `bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity` [N] — blocked-by: feature-b-tkhtmlview-in-nilpy
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
+- `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
 ## Ready — top 30 of 211, ranked
 
-- `[p 70] [T]` regression-cascade-4e27dc2be114
+- `[p 70] [A]` bug-n-tkinter-is-missing-from-the-python-serving-unit-list (unblocks 1)
 - `[p 66] [A]` refactor-a-one-signature-record-for-every-callable-carrier
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite

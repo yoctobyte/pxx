@@ -17,7 +17,10 @@
 #
 # Every expected value here is CPython 3's on the equivalent pure-Python
 # hierarchy (Protocol/Local/Before/After with the same method names).
-import mixinproto
+# mixinproto is a PASCAL unit, so it is named with its extension: a bare NilPy
+# import resolves to Python (.py/.npy) only
+# (decide-nilpy-imports-that-collide-with-a-pascal-rtl-unit, user 2026-08-19).
+import 'mixinproto.pas' as mixinproto
 
 
 class Local:

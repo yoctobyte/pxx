@@ -2,7 +2,10 @@
 # <stdlib.h> declares `atexit`, so pulling ANY C unit used to make the bare-name
 # function-value branch eat `atexit` in `atexit.register(fn)`, leaving the parser
 # on the dot. bug-nilpy-import-lost-after-a-fallback-import-block.
-import cprobe_unit
+# cprobe_unit is a PASCAL unit, so it is named with its extension: a bare NilPy
+# import resolves to Python (.py/.npy) only
+# (decide-nilpy-imports-that-collide-with-a-pascal-rtl-unit, user 2026-08-19).
+import 'cprobe_unit.pas' as cprobe_unit
 import atexit
 
 

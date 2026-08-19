@@ -1,12 +1,20 @@
 # Subclassing a class that came from an imported unit, three things at once:
 #   * a DOTTED base name, `class C(basehook.ConfigBase)` - the qualifier is
 #     consumed and the last segment is the class (unit scope is flat here)
-#   * `from basehook import ConfigBase`, which pulls the unit and lets the name
-#     resolve unqualified
+#   * the UNQUALIFIED base name, `class C(ConfigBase)` - importing the unit
+#     opens its namespace, so the bare class name resolves too
 #   * the override actually DISPATCHING through the base's own call site, which
 #     needs the base method to be `virtual`
-import basehook
-from basehook import ConfigBase
+#
+# basehook is a PASCAL unit, so it is named with its extension: a bare NilPy
+# import resolves to Python (.py/.npy) only
+# (decide-nilpy-imports-that-collide-with-a-pascal-rtl-unit, user 2026-08-19).
+# This file used to spell the second bullet `from basehook import ConfigBase`.
+# There is no quoted form of THAT statement -- `from 'basehook.pas' import X` is
+# refused with "expected a module name after from" -- so the from-import of a
+# Pascal unit is a spelling NilPy no longer has, and what survives here is the
+# unqualified resolution it was standing in for.
+import 'basehook.pas' as basehook
 
 class KeepCase(basehook.ConfigBase):
     def optionxform(self, s: str) -> str:
