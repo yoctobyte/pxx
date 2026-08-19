@@ -61,3 +61,34 @@ twice, and written into `CLAUDE.md` as the single source of truth on gating.
   means *at the default level* — worth doing **regardless of the outcome**, since the
   phrase is used as evidence of general soundness and is scoped more narrowly than it
   reads. See `project_the_self_host_gate_proves_one_optimisation_level`.
+
+## MATERIAL UPDATE 2026-08-19 — `-O0` was a LEADING INDICATOR, not just extra coverage
+
+The fix (`6b2402b92`) measured what the ticket had only framed, and it changes the
+argument above. **It was never an `-O0` problem.** Emitted code size for `compiler.pas`:
+
+```
+-O2 / default   7 415 348 B      -O1  7 458 182 B
+-O3             7 561 519 B      -O0  8 394 698 B   <- over the 8 388 608 cap by 0.07%
+```
+
+**All four levels sat at 88-90% of the cap.** `-O0` was simply first across a line every
+level was standing on, and ordinary growth would have taken the **default** build down
+next. `MAX_CODE` is now 16 MB and the default build sits at 44%.
+
+**So the `-O0` self-compile was not merely covering an invisible class — it was an early
+warning of a condition about to break the level the gate DOES check.** That is a
+materially stronger argument for Option B than the one I wrote above, which only claimed
+it closed a blind spot. A check that fails first, cheaply, on a shared underlying
+condition is worth more than its own coverage.
+
+**The counter-argument does not move, though, and should not be lost:** this still says
+nothing about *where* the check belongs. A Track T tier catches a leading indicator just
+as well as the per-fix loop does, days earlier than the thing it predicts, and costs no
+agent anything per fix. The recommendation stands: **Option B, in a T tier, not in the
+loop.**
+
+**Also worth folding in wherever this lands:** the failure was confusing because of an
+inversion now named in the error text — **lower `-O` levels emit MORE code, so a build
+that fits at `-O2` can still overflow at `-O0`.** Anyone reasoning about "does it build"
+from the default level alone will get that backwards.
