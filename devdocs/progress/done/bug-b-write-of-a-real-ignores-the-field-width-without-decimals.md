@@ -239,4 +239,4 @@ constants reads as a pxx bug for an hour. Compute the value from runtime
 variables. Caught here only because the digits were recognisably float32's.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 354f734c1.
