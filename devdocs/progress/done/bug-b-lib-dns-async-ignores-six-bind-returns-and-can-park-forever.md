@@ -204,4 +204,4 @@ which is the part that constrains the fix — and the pre-fix two-copy run, whic
 the part that proves the matrix is testing something.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 6c89e9cc0.
