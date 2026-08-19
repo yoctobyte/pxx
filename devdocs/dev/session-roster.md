@@ -1591,6 +1591,29 @@ exists, its banner says so and the banner outranks the queue order.
   `stabilize-fast` is heavy load on a neighbour's benchmark — the interleave-and-take-min
   reasoning stands. File-level hazards do not cross.
 
+  **Correction, and it is a sharp one: the PROCESS TABLE crosses too, and that makes
+  `pkill -f` a cross-clone weapon.** Found 2026-08-19 the expensive way. frank2 was told
+  its ladder run was redundant, ran `pkill -f "nilpy_ladder.py"`, and killed **frank3's**
+  run in another clone — a pattern match on a command line has no idea which checkout the
+  process was launched from. frank3's output file was left at **0 bytes**, and the loss was
+  not noticed until the coordinator went looking for the results.
+
+  So the clone boundary protects **files** and nothing else. Anything keyed on a
+  process name, a port, a `/tmp` path, or a lockfile is shared ground for every agent on
+  this box.
+
+  **Rules, all three learned from that one incident:**
+
+  - **Kill by PID, never by pattern.** You launched it, so you have the PID; `pkill -f` is
+    only ever right when you are certain you are the sole user of the box, and on this box
+    you never are.
+  - **`setsid` long runs** so a stray pattern kill cannot take them with a sibling's, and
+    write output to a path carrying your agent name.
+  - **When you tell a worker its work is redundant, say what to kill.** The coordinator's
+    share here is real: "your run is redundant" without "kill only your own PID" is an
+    instruction to stop, and pattern-killing is the obvious way to obey it. An instruction
+    that leaves the dangerous method as the obvious one is an incomplete instruction.
+
   **Therefore:** still `pgrep` and hold before a lock (CPU is a real reason), but do not
   tell a worker its files are at risk from a pin — they are not. The protection a worker
   actually needs is its own: *do not `git pull` while a measurement is in flight*, plus the
@@ -1616,6 +1639,34 @@ exists, its banner says so and the banner outranks the queue order.
 
   One command, no round trip, and it does not require the other agent to be awake. Then ask
   and *wait* if anything is known to be running.
+
+  **RUN IT AS ITS OWN COMMAND. Do not chain it to the build.** Second failure of the same
+  lock, 2026-08-19, and the rule above did not prevent it because it says *what* to run and
+  not *how*. The coordinator ran
+
+      pgrep -f 'make (lib-test|...)'; set -o pipefail; make stabilize-fast ... && make pin
+
+  in **one shell invocation**. The pgrep did its job — it printed frank3's two live ladder
+  PIDs — but its output and the pin's output arrived together, after the pin was done. So
+  the check ran, produced the right answer, and had **no effect whatsoever** on the
+  decision it existed to inform.
+
+  **A check whose output you do not read before acting is not a check.** It is a record,
+  written after the fact, that you had the information and did not use it — which is worse
+  than not checking, because the transcript now shows diligence that never occurred. The
+  same shape as `pgrep`-matching-its-own-waiter elsewhere in this file: the command was
+  correct and the *wiring around it* was what lied.
+
+  **Therefore: separate tool call, read the result, then decide.** No `;`, no `&&`, no
+  chaining a check to the thing it gates — anywhere, not just here. If a check is worth
+  running it is worth a round trip, and if it is not worth a round trip, delete it rather
+  than keeping it as decoration.
+
+  *(Harm that time was bounded, and bounded for a reason worth remembering rather than a
+  lucky one: workers run in SEPARATE CLONES, so a pin cannot swap `pinned` under a peer's
+  run — only CPU crosses. The cost was that frank3's ladder measured v357 while wanting to
+  measure v358, i.e. a wasted run, not a corrupt one. Do not generalise the safety: it
+  holds because of the clone boundary, and would not hold for two agents in one checkout.)*
 
   **Why a half-swapped suite is worse than a half-swapped A/B:** an A/B at least compares
   two things you chose; a suite built half on one compiler and half on another **has no
