@@ -2251,3 +2251,17 @@ rerank it deliberately rather than inheriting the number).
   ports and would have logged `lib_http_async`'s 28755 as one more instance of the pattern,
   not as a collision with `lib_tls` INSIDE one recipe block."* And on where it belongs:
   **a comment at the constant is checkable, where a ticket is not.**
+
+- **check 2026-08-19 (+13h): quiet. Both workers busy, T green, pin current, nobody
+  blocked.** frank2 on p88 (increment 2 designed, `829335fc7` — fill the defaults array at
+  def time rather than storing global addresses); frank3 on the dns_async p45. Pin check
+  ran and correctly said no: nothing under `compiler/**` since v354. T UP, native GREEN
+  through `ebb7784692fb`, full GREEN through `c45ed0062491`, `open_regressions` still
+  empty. Every staffed lane has a ranked head and no lane is starved.
+
+  Only action: flagged to plexus-T that its stated "idle window" for the `twatch.py`
+  stub-refile restart (`c45ed0062`) appears to be NOW — it is idle, the board is clear and
+  the last tier finished. Framed as flagging the window, not requesting the restart; it is
+  T's tool and T's call. **The caveat stands until it lands: "no ticket appeared" is not
+  "no finding", and that is costlier now than this morning because a clear board makes the
+  next red likelier to be real.**
