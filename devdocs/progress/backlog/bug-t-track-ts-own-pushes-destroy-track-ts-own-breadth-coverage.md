@@ -72,3 +72,28 @@ is a guard rather than a note.
 
 *Filed by Track T (plexus-T) 2026-08-19, after doing exactly this to itself and
 predicting it in the ticket before confirming it.*
+
+---
+
+## Update 2026-08-19 (plexus-T): option 2's premise was false, and is now repaired
+
+This ticket says *"if shape 2 lands, close this as fixed-by."* Shape 2 **had**
+landed — `e2449adc5`, before this ticket was even filed — and it did nothing.
+Over its entire life the watcher saved 9 partials worth 1520 jobs and carried
+**zero**. There was one partial slot, and `resume_arg()` deleted a partial
+belonging to other work instead of declining it, so the very push this ticket is
+about destroyed the partial as well as the run.
+
+So the fix-by condition was never met, and reading "shape 2 shipped" as "option 2
+is available" would have closed this ticket on a mechanism that did not exist —
+the same substitution of *code landed* for *effect measured* the breadth ticket
+made. Root cause and fix:
+`bug-t-a-saved-partial-is-evicted-by-the-next-run-of-different-work`.
+
+**What is true now:** partials live in a keyed store and provably survive an
+interleaved run of different work (devtest). **What is not yet true:** that a
+resumed slice has actually carried anything on the live watcher. That is one
+number — `carried_runs` leaving zero — and it is this ticket's fix-by condition
+as much as the other's. Until then option 1 (warn on a T push while a full tier
+is in flight) is still worth its low cost, because it is the only one of the
+three that does not depend on a measurement nobody has taken yet.
