@@ -121,4 +121,4 @@ that "`make revert` moves `pinned` back" is now true and unchanged.
 coordinator's morning call.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 0cc6e6cf5.
