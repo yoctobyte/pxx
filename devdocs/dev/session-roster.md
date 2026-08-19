@@ -4355,3 +4355,51 @@ real answer for a signature mechanism.
 Queues unchanged from +27h. `urgent/` still holds the three tickets from the cascade triage, and
 `decide-nilpy-import-rule-vs-a-cpyext-extension-module` (U, p75) remains the morning headline — now
 doubly so, since it also gates the automated pin check until it is answered.
+
+### Callable-carrier port DONE (`e6075649b`, ticket `186ac6f7d`) — and it contradicted its own ticket
+
+Landed, `gate.sh quick` green, fixedpoint 1 round, not pinned. Verified on disk: both new tickets
+exist, `test/test_nilpy_kwarg_through_lifted_value.npy` is enumerated at **two** Makefile sites
+(test-core AND test-nilpy), ticket in `done/`.
+
+**Tags enumerated from `defs.inc`: FOUR carriers, not three** — 8 `VT_BOUNDMETHOD` (the
+`{code,recv}` pair, already had `Sig`), 9 `VT_PYCLOSURE` (interpreted, no compiled proc to take a
+record from), 10 `VT_BOUNDFN` (lifted lambda / nested def — **this is the one that got `Sig`**),
+plus static-address arms 11/12/13. **The count-from-memory answer drops tag 8, which is the side
+that already had the record** — it would have sent frank2 to migrate the wrong carrier. Telling it
+to enumerate from source rather than take my count is the only reason that did not happen.
+
+**The deliberate departure, and it contradicts the ticket's stated success measure:
+`pyboundfn_setdefaults` STAYS.** The PYSIG record is one static array per proc; a lambda's default
+is captured **per instance** — `mk(1)` and `mk(7)` build closures whose `y` differs, and `Dflts`
+cannot express that. So "two mechanisms for one concept" was really **two concepts nobody had named
+apart**: parameter NAMES are compile-time, these DEFAULTS are run-time. The consolidation that was
+available is the one that landed (`pybound_pair_call_kw`'s open-coded name walk deleted in favour of
+the shared `PySigFindParam`); the one the ticket asked for is not available at all. Written up in
+the ticket rather than half-done. **This is the counterweight to count-the-mechanisms and it is now
+in working memory: the count is a smell, not a verdict — check each mechanism's LIFETIME first.**
+
+**The cross-reference came back NO, measured:** it does **not** close
+`bug-n-a-callable-value-…-bound-method` (N, p70). frank2 ran that exact repro at its HEAD — still
+compiles clean, still prints `<bound method at 0x…>`. That one is a **type-check** regression on an
+argument against a declared `str` parameter (bisected `9bbbbef6c`); this was **keyword-name lookup**
+at a dynamic call site. No overlap; it stays in `urgent/`. Asking for either answer is what made
+this useful — a "probably fixed" would have quietly closed a live bug.
+
+**Two Track N bugs filed while probing, both live on pinned, both unrelated to the refactor:**
+- `bug-nilpy-a-lambda-returned-directly-is-not-callable` (p55) — `return lambda x: ...` yields a
+  value that is **not callable at all**, while `g = lambda ...; return g` works. **The most
+  idiomatic closure-factory spelling in Python, failing while its two-line form works.** Worth the
+  owner's eye; this is upward-compat territory, not an edge case.
+- `bug-nilpy-a-keyword-call-through-a-statically-unknown-callee-does-not-compile` (p45) —
+  `a = mk(1); a(x=5)` is a **compile** error, because the keyword lowering is gated on the frontend
+  resolving a candidate callee. The runtime side just built handles it; some sites never reach it.
+  **Inverts the usual expectation — the case the frontend knows LESS about is the one that works.**
+
+**PIN: `compiler/builtin/**` moved (`e6075649b`), so step 2 says pin — and I am holding until the
+v366 full tier lands.** New reason, not a moved goalpost: **there is still no full tier at v366**,
+and stacking a second unverified pin destroys attributability. If a tier then comes back red I
+cannot tell v366's carve from v367's builtin change, and `make revert` stops being a precise
+instrument. Small pins are worth having *because* each is attributable; two unverified ones defeat
+the point. Nothing is blocked on it — no Track B worker is running, and `$(PXX_STABLE)` meeting the
+old refusal harms nobody tonight. **When the v366 tier lands green, pin v367 immediately.**
