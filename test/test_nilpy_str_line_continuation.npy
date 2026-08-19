@@ -1,0 +1,17 @@
+# `\` before a newline is a line continuation inside every literal form, and is
+# NOT one inside a raw literal -- CPython keeps the backslash and newline there.
+s = '''\
+AB
+CD'''
+print(repr(s))
+t = "x\
+y"
+print(repr(t))
+print(repr(r"a\
+cd"))
+print(repr(b'a\
+cd'))
+v = 5
+print(repr(f"a\
+{v}"))
+print(repr("a\\nb"))

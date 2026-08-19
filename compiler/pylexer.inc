@@ -1126,6 +1126,30 @@ begin
                 '\': AppendChar(s, '\');
                 '''': AppendChar(s, '''');
                 '"': AppendChar(s, '"');
+                { A backslash immediately before a NEWLINE is a line
+                  continuation: CPython consumes both and emits nothing. With no
+                  arm here it fell to the lax `else` below and emitted a literal
+                  backslash AND the newline, so a wrapped literal silently
+                  gained two characters -- webencodings/mklabels.py generated a
+                  file with a stray leading backslash line
+                  (bug-n-backslash-newline-in-a-string-literal-is-not-a-line-continuation).
+
+                  SrcLine still has to move: this arm consumes the newline
+                  instead of the ordinary body arm below, and this scanner's
+                  header comment is explicit that a swallowed newline drifts
+                  every later line number. CRLF is ONE line ending, so eat the
+                  #10 of a #13#10 pair before the shared Inc(P) past it.
+
+                  RAW literals are deliberately NOT affected: Python keeps
+                  backslash-newline verbatim in an r-string, which the rawStr
+                  arm above already does. }
+                #10: Inc(SrcLine);
+                #13:
+                  begin
+                    if (P + 1 <= Length(Source)) and (Source[P+1] = #10) then
+                      Inc(P);
+                    Inc(SrcLine);
+                  end;
                 'x':
                   begin
                     { \xHH — two hex digits, CPython's numeric byte escape
