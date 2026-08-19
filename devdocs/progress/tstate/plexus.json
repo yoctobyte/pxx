@@ -6402,7 +6402,7 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-19T21:19:50Z",
+  "date": "2026-08-19T22:07:53Z",
   "red": [
    "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy",
    "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy",
@@ -6413,11 +6413,21 @@
    "test-nilpy#src:test/test_cpyext_errformat.npy",
    "test-nilpy#src:test/test_cpyext_cython.npy",
    "test-riscv32#src:test/test_cross_float.pas",
-   "tools-devtest#00"
+   "test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy",
+   "test-uforth#corpus",
+   "test-uforth#core",
+   "test-uforth#coreplustest",
+   "test-uforth#memorytest",
+   "test-uforth#searchordertest",
+   "test-c-conformance-riscv32#shard3/6",
+   "test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh",
+   "test-sqlite-threads-arm32#src:tools/run_sqlite_thread_test.sh",
+   "tools-devtest#00",
+   "demos#00"
   ],
-  "sha": "cabb5d5989f3b4fbcc1897da094f9ad2b9a1d645",
+  "sha": "d47acfee770cf057000fa49861c3d04b46bc51a1",
   "tier": "full",
-  "ver": "v366",
+  "ver": "v367",
   "verdict": "RED"
  },
  "renamed_from": [
