@@ -125,10 +125,18 @@ overwhelmingly common string without a wider representation, and lets a Pascal
 
 | kind | `KindData0` | `KindData1` |
 | --- | --- | --- |
-| ByteString | codepage (`CP_UTF8`=65001 fits a Word — FPC-exact) | elemsize (1) |
+| ByteString | encoding enum, same values as TextString (`0` bytes / `1` UTF-8 / …) | elemsize (1) |
 | TextString | encoding | bytes/char: 1, 2 or 4 (PEP 393's width) |
 | DynArray | element `TTypeKind` | element size |
 | Object | *(free — kind 4 replaces `PXX_OBJ_MAGIC`)* | |
+
+`KindData0` is **8 bits, so it cannot hold a raw codepage** — that is the point
+of the prose above, and the shipped constants agree:
+`compiler/builtin/builtinheap.pas:210-216` defines `PXX_ENC_BYTES=0`,
+`PXX_ENC_UTF8=1`, `PXX_ENC_UCS2=2`, `PXX_ENC_UCS4=3` at `PXX_ENC_SHIFT=16`,
+under a comment reading *"A small enum, NOT a codepage — CP_UTF8 (65001) would
+not fit"*. (Corrected 2026-08-19: this row used to claim the field held a
+codepage "FPC-exact", contradicting both the paragraph above it and the code.)
 
 ## The three rules that keep this from being refactored
 
