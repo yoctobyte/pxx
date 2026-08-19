@@ -1511,10 +1511,18 @@ starts from it rather than rediscovering it. **First thing a fresh worker gets.*
   does:
 
       tail -1 stable_linux_amd64/default/pin.log
-      git log --oneline -- compiler lib | head
+      git log --oneline <that-sha>..HEAD -- compiler
 
-  If the second lists commits newer than the first, **pin** (`make stabilize-fast && make
-  pin`, ~35s, announce the lock to workers first — it covers BUILDS, not just pins).
+  If that lists anything, **pin** (`make stabilize-fast && make pin`, ~35s, announce the
+  lock to workers first — it covers BUILDS, not just pins).
+
+  **Scope, refined 2026-08-19 after the rule cried wolf on its first run:** only
+  `compiler/**` matters. `lib/**` alone does NOT need a pin — lib units are compiled from
+  source with `-Fu`, so a new `lib/rtl/mimic_*.py` is usable the moment it lands. Only
+  `compiler/**` becomes the binary, and only `compiler/builtin/**` is frozen into the pin.
+  A rule that fires on `lib/` would hold the repo-wide lock for changes that do not need
+  it, which is its own failure — the first check after writing it flagged `7bebd63fa`
+  (ElementTree, pure `lib/rtl` + Makefile + docs) as needing a pin. It did not.
 
   **Why it is safe to do routinely:** every pushed commit already passed
   `make compiler/pascal26`, which IS the byte-identical fixedpoint, so pushed master is
@@ -2073,3 +2081,34 @@ rerank it deliberately rather than inheriting the number).
   **Three stale "must stay" justifications surfaced in one day** — this one, `stdarg.h`'s
   macro-reset story, and `feature-mimic-fpc`'s scoped manifest. The prior on a confident
   old comment is lower than it looks; check the code it describes before building on it.
+
+- **check 2026-08-19 (+11h): both workers busy, nothing blocked, T green, no pin needed.**
+  frank2 on p88 (`working/` holds it), frank3 on the lib_tls p55 after landing
+  `7bebd63fa`. T UP: native GREEN through `6d95bd731bce`, full GREEN through
+  `c45ed0062491` — **no open regressions at all**, and `crtl_exp2` is genuinely fixed
+  (`c99f15692`) rather than merely quiet. Pin check ran and correctly said no: the only
+  post-pin commit is `lib/rtl` + Makefile + docs.
+
+  **frank2 corrected my count and it matters** (`70f7070ba`). I told it there were THREE
+  callable representations, citing a standing memory (9/10/12). `defs.inc` says **FOUR** —
+  `VT_BOUNDMETHOD` = 8 is missing from the memory AND from frank2's own first answer of
+  two, **and it is the tag `PyMakeFuncValueFor` stamps via `pybound_new`, i.e. the path
+  this ticket's own headline repro takes.** A design changing only tag 12 and TPyClosure
+  would have left the primary repro broken. It also scoped out `VT_CLASSREF` = 11
+  (invoked, but its callee is a ctor) by NAME rather than leaving it to be re-derived, and
+  confirmed nothing was retired — 9 and 10 are deliberately distinct and `defs.inc` states
+  why.
+
+  **The lesson is about me, not the number: I handed a worker a count from recollection.**
+  A count is exactly the kind of fact that goes stale silently, and the memory that carried
+  it was written when three was right. Now a durable rule in the check prompt: never hand a
+  worker a count from memory — tell it to enumerate from the source. The worker doing that
+  unprompted, and publishing the correction against its own earlier number, is the reason
+  this cost nothing.
+
+  **Check prompt rebuilt** (`a442fa26` → `5126e982`), for the third time and the same
+  class of reason: it still carried *"a worker showing waiting may be stuck on a permission
+  prompt only the USER can clear"* — the inverted rule that produced four bad escalations
+  an hour earlier. Also folded in: the pin check as step 2 (scoped to `compiler/**`), the
+  read-the-last-dated-section-first rule, the corrected `crtl_exp2` status (fixed, so a new
+  red there is real and not the old ghost), and the counts-go-stale rule above.
