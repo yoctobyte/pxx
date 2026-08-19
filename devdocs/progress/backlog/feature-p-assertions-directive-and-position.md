@@ -1,6 +1,6 @@
 ---
-summary: "Implement FPC assertion parity: {$ASSERTIONS ON/OFF} and -Sa gating (Assert compiled OUT when off, so its side effects do not run), plus the '(file, line N)' suffix FPC appends to the message"
-type: feature
+summary: "RE-TYPED 2026-08-19 feature -> bug for half 1: `{$ASSERTIONS OFF}` is ACCEPTED AND IGNORED — measured on v363, an Assert whose condition has a side effect still runs it (n=1 where FPC gives n=0), so the two dialects take different paths with no diagnostic. Implement FPC assertion parity: {$ASSERTIONS ON/OFF} and -Sa gating (Assert compiled OUT when off, so its side effects do not run), plus the '(file, line N)' suffix FPC appends to the message"
+type: bug
 track: P
 prio: 40
 ---
@@ -55,3 +55,27 @@ the bare printer, which is backwards.
 condition does **not** run, not merely that nothing prints); `-Sa` matches;
 the default is unchanged for existing sources; the failure message matches
 FPC's text including position; `test_assert_raises_with_sysutils` still passes.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363) — RE-TYPED feature -> bug
+
+```pascal
+function Bump: Boolean; begin n := n + 1; Bump := True; end;
+...
+n := 0;
+{$ASSERTIONS OFF}
+Assert(Bump, 'never');
+WriteLn('n=', n);        { pxx v363: n=1   FPC: n=0 }
+```
+
+The directive is **accepted and silently ignored** — it does not even warn.
+That is this repo's named promotion case: an ignored directive that changes the
+values a program computes is a bug, not a parity nicety. Half 1 (gating) is
+therefore the bug; half 2 (the `(file, line N)` suffix) remains cosmetic and is
+still just parity work.
+
+Also measured, for whoever takes half 2: pxx's failure message today is
+`Assertion failed: boom` with exit status 227 — so the suffix is missing, and
+the whole line shape differs from FPC's, not only the position.
+
+Everything else in the ticket stands, including the deliberate choice to keep
+the default **on**.

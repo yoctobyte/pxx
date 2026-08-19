@@ -45,7 +45,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (237)
+## backlog (236)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -216,7 +216,7 @@ _none_
 | feature-opt-inline-float-and-record-returning-leaves | O | 35 | feature | The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers. | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-opt-rtti-emit-on-use | O | 40 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
-| feature-p-assertions-directive-and-position | P | 40 | feature | Implement FPC assertion parity: {$ASSERTIONS ON/OFF} and -Sa gating (Assert compiled OUT when off, so its side effects do not run), plus the '(file, line N)' suffix FPC appends to the message | — |
+| feature-p-assertions-directive-and-position | P | 40 | feature | RE-TYPED 2026-08-19 feature -> bug for half 1: `{$ASSERTIONS OFF}` is ACCEPTED AND IGNORED — measured on v363, an Assert whose condition has a side effect still runs it (n=1 where FPC gives n=0), so the two dialects take different paths with no diagnostic. Implement FPC assertion parity: {$ASSERTIONS ON/OFF} and -Sa gating (Assert compiled OUT when off, so its side effects do not run), plus the '(file, line N)' suffix FPC appends to the message | — |
 | feature-p-defineglobal-a-define-that-crosses-unit-boundaries | P | 40 | feature | `{$DEFINEGLOBAL xyz}` — a conditional define that outlives the unit that sets it. Measured: pxx matches FPC today, a unit's {$DEFINE} does not reach the program, which is correct Pascal and is also why two units cannot coordinate. The motivating case is 'first implementation loaded claims the name, second skips itself' — the shape that would have dissolved the pylib/sysutils Exception problem. | — |
 | feature-p-delphi-string-helpers | P | 45 | feature | feature(P): Delphi's TStringHelper surface — `s.Length`, `s.ToUpper`, `s.Trim`, `s.Substring` | — |
 | feature-p-read-text-into-a-char-arm | P | 50 | feature | the RTL half (textfile.TextReadChar) has landed, so ParseTextReadRest can now route read(f, c) to it and drop the 'not supported yet' error | — |
@@ -231,7 +231,6 @@ _none_
 | feature-pascal-corpus-passrc | P | 45 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
 | feature-pascal-exitcode-finalization-halt | A | 45 | feature | ExitCode global + unit finalization execution + FPC Halt semantics (Halt sets ExitCode, runs finalizations, exits with ExitCode) | — |
 | feature-pascal-initialize-finalize-intrinsics | A | 50 | feature | `Initialize()` / `Finalize()` standard procedures (managed-type intrinsics) | — |
-| feature-pascal-set-symmetric-difference-operator | P | 35 | feature | The set symmetric-difference operator `><` is not parsed | — |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
 | feature-pascal-typed-and-untyped-files | P | 35 | feature | `file of T` and untyped `file` are refused outright — only TextFile works. Blocks the classic Pascal record-file idiom (Assign/Rewrite/Write/Seek/FileSize/BlockRead). | — |
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
@@ -464,9 +463,9 @@ _none_
 | decide-what-synapse-actually-needs-vs-mimic-fpc | U | 20 | decide | Synapse builds under `--mimic-fpc`. What does it actually NEED? | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2076)
+## done (2077)
 
-2076 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2077 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -654,7 +653,6 @@ _none_
 - [p 35] [N] feature-nilpy-staticmethod-and-classmethod
 - [p 35] [O] feature-opt-complex-packed-double
 - [p 35] [O] feature-opt-inline-float-and-record-returning-leaves
-- [p 35] [P] feature-pascal-set-symmetric-difference-operator
 - [p 35] [P] feature-pascal-typed-and-untyped-files
 - [p 35] [T] feature-t-pasmith-rung-selftest
 - [p 35] [T] feature-t-uforth-bench-on-the-watcher-idle-phase

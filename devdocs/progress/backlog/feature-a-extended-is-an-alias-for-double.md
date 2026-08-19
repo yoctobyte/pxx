@@ -66,3 +66,16 @@ FPC-compatible offsets; `make test` + self-host byte-identical + cross.
 <!-- float category -->
 Indexed on [[meta-float-accuracy-policy]] — the standing float-accuracy index.
 Collect, do not fix piecemeal; see the working rule there.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363)
+
+**Genuine feature, still wanted, numbers unchanged.** Re-measured rather than
+copied — `SizeOf(Extended)` is 8 under pxx and 10 under FPC 3.x, and
+`1.0/3.0` prints `3.3333333333333331E-001` against FPC's
+`3.33333333333333333342E-0001`. Identical to the table filed on 2026-08-10.
+
+Deliberately **not** re-typed as a bug despite being silent: the repo's float
+policy is fast-by-default, and this is a type that is not implemented rather
+than an arithmetic result that drifted. The scope note is what matters here —
+x86-64-only, x87 rather than SSE, 10-byte storage with 16-byte padding — and it
+is why the low prio is right.

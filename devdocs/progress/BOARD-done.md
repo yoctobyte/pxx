@@ -1728,6 +1728,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-pascal-overflow-checks-q-plus | A | 45 | feature | {$Q+} overflow-checked integer arithmetic (Runtime error 215 / EIntOverflow) — the sole tint642 residual, also gates tint643 | — |
 | feature-pascal-range-checks-r-plus | A | 55 | feature | {$R+} range checks (RE 201 / ERangeError): narrowing assignments + array index bounds — the counterpart to the landed {$Q+} | — |
 | feature-pascal-record-constructors | P | 50 | feature | Advanced records: constructors + `class operator` — DONE | — |
+| feature-pascal-set-symmetric-difference-operator | P | 35 | feature | ALREADY SOLVED — measured 2026-08-19 against pin v363: `><` parses, lowers, and matches FPC (`s1 >< s2` over [1,3,5] and [3,5,7] yields {1,7} under both). The ticket's quoted parse error no longer reproduces. | — |
 | feature-pascal-str-variable-width | A | 35 | feature | Str builtin: variable width/precision expressions (`Str(x:len:dec, s)`) | — |
 | feature-pascal-tthread | A | 50 | feature | Native Pascal TThread class (M3) | — |
 | feature-pascal-typed-metaclass | P | 45 | feature | Typed metaclasses: `class of TFoo`, so a TClass variable can call the class's methods | — |
