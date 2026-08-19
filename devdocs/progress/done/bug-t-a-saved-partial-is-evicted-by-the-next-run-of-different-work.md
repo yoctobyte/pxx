@@ -140,3 +140,29 @@ measurement, and it stays the acceptance test.
 
 ## Log
 - 2026-08-19 — resolved, commit 3674a3a60.
+
+## First live measurement, 2026-08-19 23:42 CEST — the eviction has stopped
+
+The watcher restarted at 23:35 (pid 2214596 → 3171395), which is when the fix
+stopped being inert. Seven minutes later:
+
+```
+$ ls /home/neo/trackt-watch/.testmgr/resume/
+d47acfee770c-full.json          # the keyed store EXISTS, one file per (sha, tier)
+
+$ cat .testmgr/resume-stats.json
+{"saved_partials": 13, "saved_jobs": 2600, "superseded": 11, ...}
+```
+
+Against the last pre-restart reading — `{"saved_partials": 11, "saved_jobs": 1832,
+"superseded": 11}` — **two partials were saved and `superseded` did not move.**
+
+That is the fix, observed directly. Under the single slot every save was followed
+by the next run of different work deleting it, and the two counters climbed
+together: 9/9, 10/10, 11/11. They have now separated for the first time.
+
+**What this proves and what it does not.** It proves partials survive the arrival
+of other work, which is the defect this ticket names. It does **not** prove a
+carry: `carried_runs` is still absent from the stats file, and it can only leave
+zero when the live watcher completes a slice it actually resumed from. That
+number remains the acceptance test, unchanged.
