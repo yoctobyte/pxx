@@ -206,3 +206,46 @@ live-system measurement gets here, and it is why the counters separating
 
 **Still not a carry.** The ladder has to come back to `(d47acfee770c, full)` and
 finish it before `carried_runs` can leave zero. Unchanged as the acceptance test.
+
+## ACCEPTANCE TEST MET, 2026-08-19 22:07Z — `carried_runs` is 1
+
+```
+{"saved_partials": 13, "saved_jobs": 2600, "superseded": 11,
+ "carried_runs": 1, "carried_jobs": 15,
+ "last_note": "resume: partial accepted — 15 job(s) already decided against this exact binary (1479b663dd15)"}
+```
+
+The whole loop, in one night, in the log:
+
+| line | event |
+| --- | --- |
+| 714940 | `verifying PIN v367 (d47acfee770c) at full` — snapshot `sha256 1479b663dd15` |
+| 714950 | `aborting full run (new work preempts it)` — a push |
+| 717757 | `kept 15 decided job(s)` → `resume/d47acfee770c-full.json` |
+| 717760 | `testing 2e8b284343a5 (native, fast)` — **different work, no eviction** |
+| 720404 | the ladder returns: `verifying PIN v367 (d47acfee770c) at full` |
+| 720408 | `resume: partial accepted — 15 job(s) already decided against this exact binary (1479b663dd15)` |
+| 720411 | `tier=full jobs=2755 carried=15(resumed)` |
+| 725942 | `2746/2755 pass, 15 carried from an aborted earlier slice` |
+
+Saved, survived the arrival of unrelated work, carried, consumed. The store is
+empty again afterwards, which is `drop_partial()` on the owning key doing its
+job — the one deletion path this fix left reachable.
+
+Two details worth keeping:
+
+**The binary identity check earned its place.** The partial was accepted against
+`1479b663dd15`, the same compiler snapshot sha256 the aborted run logged at line
+714946. Had anything rebuilt in between, the 15 decided jobs would have been
+decisions about a different binary, and the resume would have silently imported
+them. It refused nothing here because there was nothing to refuse — but that is
+the check being *exercised*, not the check being unnecessary.
+
+**Cost recovered is small and that is expected.** 15 jobs of 2770. The abort
+landed 40 seconds into a run that takes ~21 minutes, so there was almost nothing
+to keep. The mechanism's value is not this number: it is that the fraction is now
+whatever the abort happened to leave, instead of always zero.
+
+`superseded` stayed at 11 across the entire sequence — its pre-fix value, unmoved
+since. Closing the measurement: **9/9, 10/10, 11/11 before; 13 saved, 1 carried,
+11 superseded after.**
