@@ -151,4 +151,4 @@ human's call, and Track T's to implement either way. I have deliberately not
 acted on it.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 6b2402b92.
