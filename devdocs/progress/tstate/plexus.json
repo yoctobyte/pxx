@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T12:14:47Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "f2f8e19eb0823053be7c3d4bcca1fa167f609260",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-19T12:20:25Z",
    "fixed": [
     "test-core#src:examples/tk/callbacks.npy",
@@ -463,6 +455,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "abbff610e9dc912272fcd6643370c8c97a8f7689",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-19T20:18:42Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "a5c25e4b9620e4ad6151777f16658441c00720c5",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -6063,11 +6063,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-19T20:08:20Z",
-  "sha": "abbff610e9dc912272fcd6643370c8c97a8f7689",
+  "date": "2026-08-19T20:18:42Z",
+  "sha": "a5c25e4b9620e4ad6151777f16658441c00720c5",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 234.8
+  "wall": 237.6
  },
  "last_bench": {
   "conf_rows": 550,
