@@ -60,4 +60,4 @@ operator/set work since 2026-08-09; no separate implementation is needed.
 Closed as already solved, not as rejected.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 0da3e73ce.
