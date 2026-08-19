@@ -107,4 +107,4 @@ Found alongside: [[chore-t-five-tool-devtests-are-broken-on-master-and-nothing-r
 The red that exposed it: [[bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable]].
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit c45ed0062.

@@ -171,4 +171,4 @@ rebuilt. Plus the CPython differential above, which is the part that actually
 constrains the shim.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 7bebd63fa.
