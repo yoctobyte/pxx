@@ -4169,3 +4169,34 @@ p75, the callable bug at p70, the riscv32 float at 60 (`A+F`).
 
 **T: UP, native green through `a15cb05fa`. Breadth reads 2h old / 10 behind — that is a full tier
 in progress, not a slip; do not read it as a regression.**
+
+## PIN v366 TAKEN — `0f9f11565`, blessing origin/master at `cabb5d598`
+
+Held all night through **three successively better reasons**, and taken the moment the last one
+expired rather than a fourth being invented. Worth keeping as a record of how the reason improved:
+*unexplained cascade* (dissolved — all four causes were already inside v365) → *unswept carve*
+(real but a judgement call) → **`make revert` does not fire, so a bad pin is not recoverable with
+the owner asleep** (checkable by anyone, and it named its own expiry).
+
+frank2 fixed the brake (`0cc6e6cf5`) and **I verified it myself in a scratch clone rather than
+taking the report**: 365→364→363→362 with a commit between each, monotonic under repetition, every
+restored `pinned` executes, and the shas cross-check against `pin.log`'s own "was f1806251f225".
+
+`make stabilize-fast` converged — self→next→fixedpoint `cmp` clean — then `make pin`:
+
+    STABLE v366  5e48116ee780…  (was 92a09970011a)  @ cabb5d5989f3
+    froze 8 builtin RTL source(s)
+
+Smoke after pinning: the new `pinned` compiles and runs `test/bootstrap_features.pas` correctly.
+
+**What v366 carries:** the three ParseLValueAST carve steps, `da53bbd26` (eight more frontend-omit
+defines), `e6a14039a` (the rest of the gcc bit builtins), `5da541ca8` (import a Pascal unit into C
+under a mangled name), and the brake fix itself.
+
+**The one accepted risk, stated plainly:** the carve is a *narrowing* change to `parser.inc` and
+**Track T has not swept those shas yet**. Accepted because the brake now makes it one command to
+undo — not because the risk went away. **If T's matrix returns red on the carve shas, `make revert`
+and commit; do not debug it under a live pin.** That is the whole reason the brake mattered.
+
+Lock is clear; both workers told. Track B/C/D/E ground moved — anything measured against
+`$(PXX_STABLE)` before 19:44Z was measured on v365 and does not carry over.
