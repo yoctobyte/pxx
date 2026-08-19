@@ -4,7 +4,7 @@
 # pinned here: a Pascal unit compiled INTO a NilPy program still resolves Pascal
 # members the Pascal way. The NilPy dynamic-attribute fallback belongs to the
 # user's Python code, and it must not reach into the units loaded alongside it.
-import tobjprobe
+import 'tobjprobe.pas' as tobjprobe
 
 class Dog:
     pass

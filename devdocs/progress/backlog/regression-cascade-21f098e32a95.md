@@ -58,3 +58,55 @@ and blaming are different questions and this line answers the first.)
 *Cascade stub: one signal for one event. Track T agent (face 2) or the owning
 dev track triages the root; individual tickets only for whatever remains red
 after the root is fixed.*
+
+---
+
+## TRIAGED 2026-08-19 by frank2-C — **four causes, not one**
+
+Every one of the 13 was reproduced by hand at HEAD (`gate.sh quick` cannot see
+any of them). The "one root cause until triage proves otherwise" rule held for
+the first nine and then broke: it is four.
+
+| # jobs | cause | routed to |
+| --- | --- | --- |
+| 6 | the NilPy import rule vs a **cpyext extension module** — `import hello_ext` is CPython's own spelling and is now refused | `decide-nilpy-import-rule-vs-a-cpyext-extension-module` (Track U) |
+| 3 | ordinary bare-import migration missed when the rule landed | **fixed here** |
+| 2 | a **callable value** silently reaching a `str` parameter, and no longer comparing equal to itself | `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` (N) |
+| 1 | riscv32 float **formatting** width vs x86-64 | `bug-a-riscv32-cross-float-output-no-longer-matches-x86-64` (A+F) |
+| 1 | `twatch_host_epoch_devtest.py`, one case | Track T — its own tooling, handed back |
+
+### The three that are fixed
+
+`test_nilpy_kwarg_overload_set`, `test_nilpy_qualified_proc_omitted_default`,
+`test_nilpy_tobject_member_via_local` each imported a genuine Pascal unit by
+bare name; migrated to the quoted spelling the rule prescribes, each verified
+against its own Makefile expectation. Green.
+
+### The six that are NOT fixed, deliberately
+
+The cpyext tests import a **C extension module** by its bare module name —
+which is what a CPython program writes, and what the whole cpyext campaign
+exists to make work. Rewriting them to `import 'hello_ext.pas' as hello_ext`
+would turn them green by deleting their subject. Filed as a Track U decision
+instead; see the ticket for the three options.
+
+### Two corrections to this ticket's own framing
+
+1. **The lib-test job is not a regression in this range at all.** It builds with
+   `$(PXX_STABLE)`. The pre-range pinned binary runs it GREEN; a compiler built
+   from source at the range's own last-good sha `9bfb7fcfac03` fails it, and so
+   does one built at `7bebd63fa`, the commit that ADDED the test. The defect was
+   already in the source and the pin was lagging behind it. **`cc20f7101`
+   (pin v365) EXPOSED it; nothing in the range caused it.** Any future cascade
+   that straddles a pin needs this question asked before the range is read.
+2. **`test_cross_float` is not `da53bbd26`.** frank3's prior was right — those
+   are omission defines defaulting to OFF. The suspect is `354f734c1` (the sci
+   float writer learning Single widths), argued from the shape of the change.
+
+### The one that was bisected
+
+The `str`-parameter refusal loss: GOOD at `9c5148087` and `e78cc5882`, BAD at
+`9bbbbef6c` — five builds in a throwaway clone seeded from the pinned binary,
+never in the shared checkout. Recipe is in the N ticket.
+
+**Nothing here justifies a pin.** Three jobs are green, ten are filed and open.

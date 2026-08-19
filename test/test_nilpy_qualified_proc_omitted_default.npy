@@ -4,7 +4,7 @@
 # filled its defaults. Fixed alongside TryFillTrailingDefaults.
 # bug-nilpy-qualified-proc-omitted-default
 
-import qualified_default_unit
+import 'qualified_default_unit.pas' as qualified_default_unit
 
 qualified_default_unit.show("a")
 qualified_default_unit.show("b", 5)

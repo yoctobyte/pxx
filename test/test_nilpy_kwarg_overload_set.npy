@@ -5,7 +5,7 @@
 # hit this from opposite directions. Fixed by pre-scanning the call's `ident=`
 # pairs and letting them steer OVERLOAD SELECTION, before argument parsing.
 # bug-nilpy-keyword-arg-vs-overload-set
-import kwarg_overload_unit as ko
+import 'kwarg_overload_unit.pas' as ko
 
 # unit-qualified free-function overload set (the html.escape shape)
 print(ko.render("hi", False))

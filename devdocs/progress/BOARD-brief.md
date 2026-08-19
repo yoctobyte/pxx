@@ -5,11 +5,18 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:15 blocked:6 backlog:232 experimental:20 rainy-day:40 float:19 done-followup:3 decided:94 done:2087 rejected:40`
+`urgent:3 working:2 unfinished:15 blocked:6 backlog:232 experimental:20 rainy-day:40 float:19 done-followup:3 decided:94 done:2087 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A] — owner: frank3
+- `feature-c-import-a-pascal-unit-under-a-mangled-name` [C] — owner: frank2-C
+
+## urgent (3) — jump the queue
+
+- `bug-a-riscv32-cross-float-output-no-longer-matches-x86-64` [A+F]
+- `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
+- `decide-nilpy-import-rule-vs-a-cpyext-extension-module` [U]
 
 ## unfinished (15) — parked mid-flight; re-claim, do not duplicate
 
@@ -38,8 +45,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 218, ranked
+## Ready — top 30 of 221, ranked
 
+- `[p 75] [U]` decide-nilpy-import-rule-vs-a-cpyext-extension-module
+- `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
+- `[p 60] [A+F]` bug-a-riscv32-cross-float-output-no-longer-matches-x86-64
 - `[p 70] [T]` regression-cascade-21f098e32a95
 - `[p 66] [A]` refactor-a-one-signature-record-for-every-callable-carrier
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
@@ -55,6 +65,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-a-own-language-first-symbol-resolution (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
+- `[p 55] [A]` bug-a-c-driver-omits-rtl-stubs-for-an-imported-pascal-unit
 - `[p 55] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - `[p 55] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
 - `[p 55] [N]` bug-n-hasattr-through-an-untyped-parameter-is-always-false
@@ -66,9 +77,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 55] [E]` feature-demo-portable-userland
-- `[p 55] [O]` feature-opt-heap-per-thread-cache
-- `[p 55] [A]` feature-pascal-type-helpers
-- `[p 55] [A]` feature-signal-siginfo-ucontext
-- `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
 
-_188 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_191 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
