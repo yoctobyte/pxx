@@ -1939,6 +1939,69 @@ def range_note(reg):
             "current range." % (bad, good, n))
 
 
+def cascade_range_note(clone, reg):
+    """The Range section of a CASCADE ticket. Deliberately not range_note().
+
+    Two things make a cascade different from a stub, and both mislead if the
+    stub wording is reused:
+
+    1. `range_note` promises "the watcher narrows this by idle bisect".
+       `bisect_step` SKIPS cascades on purpose -- "cascade@<sha>" is a synthetic
+       key matching no job, so a midpoint gate would select nothing and read as
+       a pass. Reusing that wording would promise a bisect that cannot happen,
+       which is the precise defect range_note's own docstring exists to record.
+
+    2. `bad` is the sha that was TESTED -- the upper bound of an untested range,
+       not a culprit. Every other line of the ticket names it, so a reader takes
+       it as the accusation. When that sha touches no buildable file it cannot
+       be the cause at all, and saying so is free: `needs_test` already answers
+       it, and the answer points at the commits actually worth looking at.
+
+    Measured 2026-08-19: regression-cascade-4e27dc2be114 named a docs-only
+    commit (three files, all under devdocs/progress/) while the actual cause --
+    a deliberate NilPy import-resolution change -- sat six commits back inside
+    the same recorded 17-commit range, unnamed anywhere in the ticket. The
+    watcher HAD the range; only the ticket dropped it.
+    """
+    rng = reg.get("range") or []
+    bad = (reg.get("bad") or "")[:12] or "unknown"
+    good = (reg.get("good") or "")[:12] or "unknown"
+    if not rng:
+        return ("bad `%s`, range **unknown** — no earlier sha covering these "
+                "jobs, so there is nothing to bound the cause. Hand-triage."
+                % bad)
+    # Cap the listing, but never silently: a truncated list that looks complete
+    # is how "the cause is not in the range" gets concluded from a partial one.
+    testable = [c for c in rng if needs_test(clone.path, c)]
+    lines = []
+    shown = testable[-CASCADE_SUSPECTS:]
+    for c in reversed(shown):
+        subj = sh(["git", "log", "-1", "--format=%s", c],
+                  cwd=clone.path, check=False) or ""
+        lines.append("- `%s` %s" % (c[:12], subj.strip().split("\n")[0][:90]))
+    more = ("\n- ...and %d earlier commit(s) in the range, not listed"
+            % (len(testable) - len(shown))) if len(testable) > len(shown) else ""
+
+    head = ("bad `%s`, last good `%s`, **%d commit(s) in range** (%d of them "
+            "buildable). **No idle bisect will happen** — the watcher skips "
+            "cascades deliberately (one synthetic key matches no job), so this "
+            "range is narrowed by hand or not at all."
+            % (bad, good, len(rng), len(testable)))
+
+    if not needs_test(clone.path, reg.get("bad") or bad):
+        head = ("> **The named sha `%s` CANNOT be the cause** — it touches no "
+                "buildable file (docs/tickets/tstate only). It is the sha that "
+                "was TESTED, i.e. the upper bound of an untested range, and the "
+                "cause is somewhere below it.\n\n" % bad) + head
+
+    if not testable:
+        return head + ("\n\nNo commit in the range touches a buildable file "
+                       "either, which points at flakiness, box load, or a "
+                       "harness event rather than at any commit here.")
+    return head + "\n\n**Buildable commits in the range, newest first:**\n" \
+        + "\n".join(lines) + more
+
+
 SRC_RE = re.compile(r"^- \*\*Test source:\*\* (.+)$", re.M)
 # the stub's repro line names the job selector it was filed for
 JOB_RE = re.compile(r"--job '([^']+)'")
@@ -2115,6 +2178,12 @@ def write_ticket(path, text):
         raise
 
 
+# How many buildable commits a cascade ticket lists as suspects. The range
+# can be dozens on a busy afternoon; the newest few are where a regression
+# introduced between two tested shas almost always is.
+CASCADE_SUSPECTS = 12
+
+
 def file_cascade_ticket(clone, host, st, sha, new_red, report, parent=None):
     """One ticket for a mass NEW-RED sweep.  Slug keyed on the bad sha, so a
     re-test of the same sha never files twice; a DIFFERENT sha cascading
@@ -2126,6 +2195,18 @@ def file_cascade_ticket(clone, host, st, sha, new_red, report, parent=None):
     roots = [j for j in new_red
              if any(j.startswith(r) for r in CASCADE_ROOT_JOBS)]
     joblist = "\n".join("- `%s`" % j for j in sorted(new_red))
+    # The ledger entry this filing corresponds to — it is the only thing that
+    # carries good/range, and the cascade branch in test_sha appended it just
+    # above. Looked up rather than passed so the signature (shared with
+    # file_stub_tickets) stays as it is.
+    reg = next((r for r in st.get("open_regressions", [])
+                if r.get("job") == "cascade@" + sha[:12]), {})
+    # Headline names the RANGE, not the tested sha. The sha alone reads as an
+    # accusation against whatever happened to be HEAD when the sweep ran, and on
+    # a busy afternoon that is routinely a docs commit (see cascade_range_note).
+    span = ("%s..%s (%d commits)"
+            % ((reg.get("good") or "")[:9], sha[:9], len(reg.get("range") or []))
+            if reg.get("range") else sha[:12])
     rel = os.path.join("devdocs/progress/backlog", slug + ".md")
     # A cascade whose cause is already reverted on origin/master is not an
     # emergency, and filing it at 70 is how one cost two agents a triage cycle
@@ -2139,7 +2220,7 @@ prio: %d
 
 %s""" % (prio, stale) + """
 
-# regression CASCADE: %d jobs newly red at %s (auto-filed by twatch)
+# regression CASCADE: %d jobs newly red in %s — auto-filed by twatch
 
 - **Type:** regression cascade (auto-filed by Track T watcher, host %s).
   Untriaged. %d jobs went red in ONE sweep — treat as ONE root cause until
@@ -2147,8 +2228,15 @@ prio: %d
 - **Found:** %s
 - **Root-cause suspects in the red set:** %s
 
+## Range
+%s
+
 ## Repro (start with a suspect, or any listed job)
 `tools/testmgr.py --tier %s --job '<job>'` at %s
+
+(The sha above is the right one to REPRODUCE at — the jobs really are red
+there — even when the Range section says it cannot be the CAUSE. Reproducing
+and blaming are different questions and this line answers the first.)
 
 ## Newly red jobs
 %s
@@ -2156,9 +2244,10 @@ prio: %d
 *Cascade stub: one signal for one event. Track T agent (face 2) or the owning
 dev track triages the root; individual tickets only for whatever remains red
 after the root is fixed.*
-""" % (len(new_red), sha[:12], host, len(new_red), utcnow(),
+""" % (len(new_red), span, host, len(new_red), utcnow(),
             ", ".join("`%s`" % r for r in roots) if roots
             else "none of the known root jobs — likely a broken build or harness event",
+            cascade_range_note(clone, reg),
             report["tier"], sha, joblist))
     write_ticket(os.path.join(clone.path, rel), body)
     clone.publish("tstate-ticket(%s): %s (cascade, %d jobs)" %
