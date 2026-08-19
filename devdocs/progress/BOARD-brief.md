@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:17 blocked:5 backlog:244 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2052 rejected:39`
+`unfinished:17 blocked:5 backlog:244 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2052 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -42,7 +42,7 @@ _none — no lane is locked._
 ## Ready — top 30 of 229, ranked
 
 - `[p 70] [N]` bug-n-a-call-through-a-callable-value-drops-the-callees-defaults
-- `[p 70] [N]` bug-n-a-user-classs-decode-method-is-hijacked-losing-its-own-parameters
+- `[p 65] [N]` bug-n-a-keyword-argument-through-a-callable-value-is-undefined
 - `[p 65] [N]` bug-n-a-module-level-def-taken-as-a-value-loses-its-defaults-on-the-boundfn-carrier
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite

@@ -2,8 +2,39 @@
 track: N
 prio: 70
 type: bug
+status: rejected
 blocked-by: []
-summary: "LARGEST wall on the third-party ladder — 12 of 38 non-compiling files. A KEYWORD ARGUMENT passed through a CALLABLE VALUE held in a variable (`decode = decoder.decode`, then `decode(b'', final=True)`) is not matched against the callee's declared parameters. NOT the method hijack this ticket was filed as — that premise is disconfirmed by measurement, see the banner. Original title kept for grep: 'a user class's decode method is hijacked, losing its own parameters'."
+summary: "DUPLICATE of bug-nilpy-a-callable-in-a-variable-loses-to-a-def-of-the-same-name (frank2, unfinished/), which reproduces the corpus diagnostic character for character. Kept as a record of a disconfirmed premise: filed as a `decode` method-name hijack, measured not to be one. The separate `undefined variable (final)` shape it turned up is filed as bug-n-a-keyword-argument-through-a-callable-value-is-undefined."
+---
+
+# DUPLICATE — folded into frank2's ticket
+
+**Closed 2026-08-19 as a duplicate of
+[[bug-nilpy-a-callable-in-a-variable-loses-to-a-def-of-the-same-name]]** (N,
+`unfinished/`, p70 — the same 12-file wall), which reproduces the corpus's
+`decode has no parameter named 'final'` character for character and identifies
+the mechanism: a local `decode = decoder.decode` loses to a **module-level**
+`def decode`, the call binds to the module function, and that function really
+has no `final`. The diagnostic is *correct about the wrong callee*.
+
+Kept rather than deleted, because the useful content is the **disconfirmation**,
+and deleting it would leave the dead premise recoverable only from a commit log:
+
+- Filed as a `decode` **method-name hijack**, a fourth sibling of the fixed
+  `keys`/`items`/`values` dict-view bug. **Measured not to be one** — 20 builtin
+  method names on a user class, called with a keyword argument through both a
+  direct receiver and an untyped parameter, all 20 dispatch correctly.
+- The body's "lib/rtl has no codecs shim" is wrong about the shim being out of
+  play: `lib/rtl/mimic_codecs.pas` exists and is bound (the compile prints its
+  resolution note).
+- The minimal repro taken while investigating produced a **different**
+  diagnostic (`undefined variable (final)`) from the corpus, and that refusal to
+  equate them is what separated two bugs. The other one is
+  [[bug-n-a-keyword-argument-through-a-callable-value-is-undefined]] — real,
+  distinct, and explicitly not to be closed as noise.
+
+Nothing here is to be worked. Work frank2's ticket.
+
 ---
 
 # A keyword argument through a callable value is not matched to the callee

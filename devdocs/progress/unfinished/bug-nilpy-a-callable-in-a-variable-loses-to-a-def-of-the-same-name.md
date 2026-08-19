@@ -9,6 +9,35 @@ summary: "A variable holding a callable (a bound method, a lambda) loses to a mo
 status: unfinished
 ---
 
+## 2026-08-19 — a duplicate folded in here, plus one disconfirmation worth keeping
+
+Added by frank3-etree (Track B). **Not an edit to the diagnosis — frank2 owns
+this ticket and reproduced the corpus diagnostic; this only carries in evidence
+from a duplicate so it is not lost.**
+
+[[bug-n-a-user-classs-decode-method-is-hijacked-losing-its-own-parameters]] was
+filed separately against this same 12-file wall, as a `decode` **method-name
+hijack** (a fourth sibling of the fixed `keys`/`items`/`values` dict-view bug).
+It is now in `rejected/` as a duplicate of this ticket. The measurement that
+killed that premise, in case it is ever proposed again:
+
+- **20 builtin method names** — `decode encode keys items values append count
+  index split join strip upper lower read write close get pop update copy` —
+  declared on a user class and called with a keyword argument, through **both** a
+  direct receiver and an untyped parameter: **all 20 dispatch correctly** on
+  pinned v357. Nothing about the *name* `decode` is involved.
+- `lib/rtl/mimic_codecs.pas` **does** exist and **is** bound (the compile prints
+  `note: codecs -> mimic_codecs (shim, subset)`), so "nothing of ours supplies a
+  competing signature" was not a safe assumption.
+
+**And a separate real bug came out of it, which should not be closed with this
+one:** [[bug-n-a-keyword-argument-through-a-callable-value-is-undefined]] —
+`d = obj.meth; d("x", flag=True)` gives `undefined variable (flag)` with **no
+name collision anywhere**. Different diagnostic, different cause. The two were
+conflated for most of a day; what separated them was that the minimal repro
+produced a different message from the corpus, and a different diagnostic means a
+neighbour rather than the thing.
+
 # A callable in a variable loses to a `def` of the same name
 
 ```python

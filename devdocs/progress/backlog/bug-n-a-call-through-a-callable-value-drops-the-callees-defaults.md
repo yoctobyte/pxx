@@ -27,11 +27,19 @@ value loses part of the callee's declared signature — **defaults** here,
 mechanism that would explain both: *"the box carries a code address and no
 signature."*
 
-If that is right, both are downstream of
-[[feature-n-a-callable-value-carries-its-signature-type]], which this ticket is
-already `blocked-by` — meaning **the biggest single wall on the corpus may be
-unblocked by work already in flight** rather than needing its own fix. Worth
-checking before anyone opens a second front.
+**Correction (same day, frank3-etree): I got the disposition wrong here.**
+[[feature-n-a-callable-value-carries-its-signature-type]] is in **`done/`** and
+landed — its implementation is inside pin v358 — so it is **not** "work already
+in flight" and this wall is **not** waiting on it. I wrote that without checking
+which directory the ticket was in, which is the `an-artifact's-existence-says-
+nothing-about-its-state` failure in its plainest form: I read a `blocked-by`
+edge and inferred a live blocker.
+
+What survives the correction is narrower and still useful: the **carrier** is
+shared — a callable value that does not carry the callee's signature — and the
+missing field differs (defaults here, parameter *names* in the sibling). frank2
+(who owns N) has ruled **do not merge**: same carrier, different missing field,
+and this ticket is nearly closed. Cross-reference only.
 
 **Not merged by the reporter.** Track B does not own N, and the adjacent p88
 signature-record work is frank2's; the merge call is its to make with this
