@@ -5,15 +5,16 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:16 blocked:5 backlog:244 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2056 rejected:40`
+`unfinished:17 blocked:5 backlog:244 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2056 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (16) — parked mid-flight; re-claim, do not duplicate
+## unfinished (17) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
+- `bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name` [N]
 - `bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
@@ -44,8 +45,8 @@ _none — no lane is locked._
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
-- `[p 62] [N]` bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name
 - `[p 60] [A]` bug-a-make-revert-the-documented-pin-brake-does-not-fire
+- `[p 60] [U]` decide-nilpy-imports-that-collide-with-a-pascal-rtl-unit
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 60] [A]` refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
 - `[p 58] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
