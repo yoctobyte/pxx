@@ -34,4 +34,4 @@ Verify the numbers by compiling the examples rather than copying them —
 against FPC 3.x.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit f8f734001.
