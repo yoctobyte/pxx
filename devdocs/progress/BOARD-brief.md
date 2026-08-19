@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:15 blocked:6 backlog:225 experimental:20 rainy-day:57 done-followup:3 decided:94 done:2083 rejected:40`
+`working:1 unfinished:15 blocked:6 backlog:225 experimental:20 rainy-day:40 done-followup:3 decided:94 done:2083 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -50,7 +50,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [T]` bug-t-the-push-rate-starves-breadth-coverage-entirely
 - `[p 60] [O]` feature-opt-store-reload-elimination
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
-- `[p 60] [U]` meta-float-accuracy-policy
 - `[p 60] [A]` refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
 - `[p 58] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - `[p 58] [O]` feature-opt-o3-register-pressure
@@ -70,5 +69,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [A]` feature-pascal-type-helpers
 - `[p 55] [A]` feature-signal-siginfo-ucontext
+- `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
 
 _181 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
