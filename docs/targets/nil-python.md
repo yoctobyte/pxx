@@ -49,7 +49,18 @@ no third-party test corpus had to be dragged into Pascal or C to find them.
 
 ## Language Surface
 
-Nil Python uses standard Python indentation syntax to define blocks. It requires explicit type annotations on function parameters and return types, while local variables are automatically inferred.
+Nil Python uses standard Python indentation syntax to define blocks. Type
+annotations on parameters and return types are **optional but recommended**: an
+unannotated parameter becomes a dynamically-typed (variant) slot that accepts an
+int, a float, a string or a list, while an annotated one compiles to a native
+typed slot. Local variables are always inferred.
+
+Annotate the **return type** in particular where the value matters. Inference
+of an omitted return type is currently wrong for true division — `def half(x):
+return x / 2` yields `2` rather than `2.5`, and with an annotated parameter it
+yields the double's raw bit pattern as an integer. Writing `-> float` is a
+complete workaround. This is a tracked defect, listed under
+[known gotchas](#known-gotchas) below.
 
 ### Supported Statements
 
@@ -77,7 +88,10 @@ while active:
 ### Syntax Rules
 - **Indentation**: Indentation defines blocks. Mixing tabs and spaces in the same file is forbidden and triggers a compile error.
 - **Parenthesis Suspension**: Indentation rules are suspended inside parentheses (`()`, `[]`, `{}`), allowing clean multi-line function calls or literal declarations.
-- **Explicit Signatures**: Parameter and return annotations are mandatory for functions. This maintains a fixed native ABI for recursion and cross-calling before a function body has been fully parsed.
+- **Signatures**: Annotations are optional. An annotated signature gives the
+  function a fixed native ABI, which is what lets recursion and cross-calling
+  resolve before a body has been fully parsed; an unannotated one is dynamic
+  and slower.
 
 ---
 
@@ -87,7 +101,10 @@ Nil Python is statically typed under the hood. The compiler performs local type 
 
 1. **Numeric Widening**: Assigning compatible numeric types keeps the variable unboxed and fast (e.g., assigning an `int` and later a `float` to the same variable resolves the slot to a standard 64-bit float).
 2. **Variant Promotion**: If a variable is rebound to incompatible types across different control paths (e.g., an integer on one path, and a string on another), the compiler **retroactively promotes** the variable to a 16-byte `tyVariant` stack slot at the entry of the function.
-3. **Static Rejection**: Incompatible assignments involving records, classes, or dynamic arrays cannot be promoted to Variant and are rejected at compile time with a clear diagnostic.
+3. **Promotion covers containers and objects too**: rebinding a list-valued or
+   class-valued variable to an incompatible type promotes it to Variant the same
+   way rather than being refused. (An earlier compiler rejected these at compile
+   time; verified against the pinned compiler that it no longer does.)
 
 ---
 
@@ -122,21 +139,22 @@ Preprocessor integer `#define` macros in the C header (such as `SQLITE_ROW` or `
 
 ## Classes
 
-Single inheritance only — `class C(A, B):` (multiple bases) is not accepted.
-The compiler refuses it outright rather than ignoring the second base, and says
-why: Python resolves multiple bases by C3 linearisation and the object model
-here is single-inheritance. Compose instead — hold the would-be second base as
-a field and forward to it.
+Multiple bases — `class C(A, B):` — are accepted, and methods from both bases
+are callable on the subclass. Where two bases declare the same method the first
+base wins, which is what C3 linearisation gives for a flat hierarchy. Calling a
+base constructor explicitly as `B.__init__(self)` is refused, so a two-base
+class cannot chain both initialisers; `super().__init__(...)` reaches the first
+base only.
 
 Dunder methods dispatch. Verified against the pinned compiler:
 `__init__`, `__str__`, `__repr__`, `__eq__`, `__len__`, `__getitem__`,
-`__call__`, and `__enter__`/`__exit__` (so `with` works on your own classes)
-all resolve to the method you defined.
+`__call__`, `__enter__`/`__exit__` (so `with` works on your own classes), and
+`__iter__`/`__next__` (so a class of your own is usable as the subject of a
+`for` loop) all resolve to the method you defined.
 
-The gap is **iteration**: a class implementing `__iter__`/`__next__` is not yet
-usable as the subject of a `for` loop. A related sharp edge on the way there —
-`raise StopIteration` must be written `raise StopIteration()`, because an
-exception class is not usable as a bare value.
+One sharp edge in an iterator: `raise StopIteration` must be written
+`raise StopIteration()`, because an exception class is not usable as a bare
+value.
 
 `super().method(args)` is recognized specifically as its own call
 **statement** — most commonly `super().__init__(...)` chaining a parent
@@ -181,7 +199,9 @@ class Point:
     y: int
 ```
 
-There is no `@staticmethod` or `@classmethod`.
+`@staticmethod` works. `@classmethod` is refused with a diagnostic saying why:
+its `cls` receiver is not modelled, and binding it to the declaring class would
+be silently wrong in a subclass.
 
 ## Functions: defaults, `*args`, `**kwargs`, lambdas
 
@@ -200,18 +220,19 @@ def opts(a, **kw):
         print(k, kw[k])
 ```
 
-`lambda` is a real, compiled closure (not restricted to trivial expressions),
-though the language has no `yield`/generators — a generator expression like
-`(x for x in it)` is accepted as sugar but desugars eagerly into a list, not a
-lazy iterator.
+`lambda` is a real, compiled closure (not restricted to trivial expressions).
+`yield` works and gives a genuinely lazy generator — a `for` loop over an
+infinite generator that `break`s runs the body only as far as it consumed. A
+generator *expression* like `(x for x in it)` is the exception: it is accepted
+as sugar but desugars eagerly into a list, so its elements are all computed
+before the loop starts.
 
 ## Control flow
 
 `if`/`elif`/`else`, `while`, `for … in`, `break`/`continue`/`pass`, and
 `try`/`except (A, B):`/`finally` (including multiple `except` clauses) all
-work as expected. `with` is parsed as scoping sugar only — it does **not**
-call `__enter__`/`__exit__`, so it does not guarantee cleanup on an exception;
-use `try`/`finally` where that matters.
+work as expected, and so does `assert`. `with` calls `__enter__`/`__exit__` on
+a class of your own (an earlier compiler treated it as scoping sugar only).
 
 List/dict/set comprehensions, including nested and filtered (`if`) forms, are
 supported and compile down to an imperative build:
@@ -220,7 +241,7 @@ supported and compile down to an imperative build:
 squares = [x * x for x in range(10) if x % 2 == 0]
 ```
 
-Not present: `match`/`case`, `assert`, `async`/`await`.
+Not present: `match`/`case` and `async`/`await`.
 
 ## f-strings
 
@@ -231,11 +252,12 @@ supported. Triple-quoted f-strings are not.
 
 `import` resolves against a real backing Pascal unit for a growing list of
 module names: `re`, `json`, `math`, `random`, `collections`, `configparser`,
-`base64`, `pathlib`, `subprocess`. `sys`, `os`, `textwrap`, `select`, and
-`itertools` are recognized and partially supported without a dedicated shim
-unit. `tkinter` has its own facade (`lib/pcl/tkinter.pas`) for GUI programs.
-Not yet present: `socket`, `threading`, `struct`, `enum`, `csv`, `pickle`,
-`logging`, `hashlib`, `uuid`, `datetime`.
+`base64`, `pathlib`, `subprocess`, `time`, `typing`, `dataclasses`. `sys`, `os`,
+`textwrap`, `select`, and `itertools` are recognized and partially supported
+without a dedicated shim unit. `tkinter` has its own facade
+(`lib/pcl/tkinter.pas`) for GUI programs. Not yet present: `socket`,
+`threading`, `struct`, `enum`, `csv`, `pickle`, `logging`, `hashlib`, `uuid`,
+`datetime`.
 
 ## Shims: standing in for a Python package
 
@@ -343,25 +365,29 @@ Two things follow that are worth knowing before you meet them:
 These are open, tracked issues — real-world `.py`/`.npy` programs can still
 hit them:
 
-- A `def`/`lambda` stored in a plain variable and then called through that
-  variable can silently do nothing instead of running the function, or
-  segfault.
-- Calling a method that doesn't exist on an object compiles clean and
-  segfaults at runtime instead of raising `AttributeError`.
-- `int("abc")` halts the program rather than raising a catchable
-  `ValueError`.
-- `"%d" % value`-style printf formatting on a string can yield garbage.
-- `str()` of a tuple/list can print the container's pointer instead of its
-  contents.
-- `not some_object` can evaluate `True` for every live object.
-- `str.encode`/`bytes.decode` currently ignore the codec argument.
+- The inferred return type of a bare `return x / 2` is an integer: the value
+  is truncated, or — with an annotated parameter — handed back as the double's
+  raw bit pattern. Annotate the return type as `-> float`.
+- Calling a method no class declares is a **compile error**, not a runtime
+  `AttributeError`, so a program that catches `AttributeError` around a
+  deliberately-missing attribute does not build.
+- `super().method()` is a statement form only. Using it as an expression
+  (`return super().hi()`) fails to compile, with a diagnostic that names
+  neither the construct nor the right line. `Parent.method(self)` works and is
+  the usable spelling.
 - A keyword argument resolves against only one overload of an overload set —
   it can fail on a sibling overload that has the same parameter name.
-- `super().method()` / `Parent.method(self)` do not currently reach an
-  overridden method in all shapes.
 - Object reclamation (reference counting) is disabled inside an imported
   `.py` module specifically — a module compiled as the main program does not
   have this restriction.
+- ~~A `def`/`lambda` in a plain variable can silently do nothing or segfault
+  when called.~~ ~~Missing methods segfault.~~ ~~`int("abc")` halts instead of
+  raising a catchable `ValueError`.~~ ~~`"%d" % value` yields garbage.~~
+  ~~`str()` of a tuple/list prints a pointer.~~ ~~`not some_object` is always
+  `True`.~~ ~~`str.encode`/`bytes.decode` ignore the codec.~~ ~~`super()` /
+  `Parent.method(self)` miss an override.~~ **Fixed** — each re-tested against
+  the pinned compiler on 2026-08-19. What survived of them is listed above in
+  its current, narrower form.
 - ~~A **typed** constant in a Pascal unit reads as the zero value of its type in
   a Nil Python build.~~ **Fixed** — verified against the pinned compiler:
   `from reportlab.lib.units import mm` now yields `2.834645669291339`, and a

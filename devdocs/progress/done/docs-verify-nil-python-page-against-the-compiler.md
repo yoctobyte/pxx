@@ -8,9 +8,9 @@ summary: "docs/targets/nil-python.md has produced two provably stale claims in o
 # Verify every claim on the Nil Python page by compiling it
 
 - **Type:** docs (Track D — prose only, no compiler or `lib/**` changes)
-- **Status:** backlog — filed 2026-08-09 after two claims on this page were
+- **Status:** done
   found false in a single pass.
-- **Owner:** —
+- **Owner:** frank2-D
 
 ## Why this page specifically
 
@@ -67,3 +67,4 @@ tickets.
 - 2026-08-09 — filed. Two false claims corrected the same day
   (`docs(D): Nil Python targets CPython behaviour; correct the dunder claims`);
   this covers the rest of the page.
+- 2026-08-19 — resolved, commit PENDING-COMMIT.

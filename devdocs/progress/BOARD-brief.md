@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:17 blocked:6 backlog:236 experimental:20 rainy-day:43 done-followup:3 decided:91 done:2073 rejected:40`
+`working:1 unfinished:17 blocked:6 backlog:237 experimental:20 rainy-day:43 done-followup:3 decided:91 done:2074 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -40,7 +40,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 221, ranked
+## Ready — top 30 of 222, ranked
 
 - `[p 70] [P]` regression-test-core-test-asm-ifdef-multiarch
 - `[p 66] [A]` refactor-a-one-signature-record-for-every-callable-carrier
@@ -48,6 +48,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
 - `[p 60] [A]` bug-a-make-revert-the-documented-pin-brake-does-not-fire
+- `[p 60] [N]` bug-n-inferred-return-type-of-true-division-is-int
 - `[p 60] [T]` bug-t-the-push-rate-starves-breadth-coverage-entirely
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 60] [A]` refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
@@ -71,6 +72,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
-- `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
 
-_191 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_192 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
