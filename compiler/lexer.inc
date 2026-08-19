@@ -647,6 +647,8 @@ begin
   ThreadSafeMode := False;
   MatchQuiet := False;
   MimicFpc := False;
+  PasAsmModeNonIntel := False;
+  PasAsmModeName := 'intel';
   NoShims := False;
   DefaultCIncludeDirsAdded := False;
   CRuntimeStubsEmitted := False;
@@ -1775,11 +1777,25 @@ begin
         (AT&T operand order, no explicit "reg,mem" direction) instead of
         erroring. feature-inline-asm-depth TODO #6: commit to Intel-only,
         reject att explicitly rather than leave the trap in place. }
-      if CaseEqual(name, 'intel') then { no-op, the only supported mode }
-      else if CaseEqual(name, 'att') then
-        Error('{$asmMode att} not supported -- inline asm (asm...end) is Intel syntax only')
+      { Refusing a NON-intel value AT THE DIRECTIVE is pure conformance loss when
+        the unit contains no asm at all -- and that is the common case, because
+        the directive is written defensively at the top of a file. FPC's own
+        compiler sources open `cutils.pas` with `{$asmMode default}` and never
+        assemble a line, which is why this was the first wall in
+        goal-compile-fpc-compiler.
+        So: accept every value FPC accepts, and refuse only when an `asm` block
+        actually arrives under a syntax we cannot read (below, where tkAsm is
+        produced). intel and default read as Intel; att and direct do not.
+        Checked in the LEXER rather than the parser because the mode is
+        per-file and the directive takes effect at the point it is scanned --
+        a parser-time global would hold whichever file was lexed last. }
+      if CaseEqual(name, 'intel') or CaseEqual(name, 'default') then
+      begin PasAsmModeNonIntel := False; PasAsmModeName := name; end
+      else if CaseEqual(name, 'att') or CaseEqual(name, 'direct') then
+      begin PasAsmModeNonIntel := True; PasAsmModeName := name; end
       else
-        Error('unknown {$asmMode} value (intel is the only supported mode): ' + name);
+        Error('unknown {$asmMode} value (intel, default, att and direct are the '
+              + 'FPC set): ' + name);
     end;
     { Unsupported compatibility directives remain accepted comments. }
   end;
@@ -1907,7 +1923,12 @@ begin
                 { Nest on an inner open-brace under NestedComments, and always on
                   a directive-looking open-brace-dollar so its close-brace does
                   not prematurely end the comment (lets prose mention conditional
-                  directives inside comments safely). }
+                  directives inside comments safely). Do NOT narrow this to
+                  match FPC's delphi-mode behaviour: 69 comments in this
+                  compiler's own source are a brace comment that opens by
+                  quoting a directive, and the self-build stops on the first of
+                  them (ir.inc's range-check note).
+                  compat-pascal-directive-in-comment-ignores-nested-comments-off }
                 Inc(commentDepth)
               else if Source[SrcPos] = '}' then Dec(commentDepth);
               Inc(SrcPos);
@@ -2094,6 +2115,12 @@ begin
     end;
     if DebugTrace then writeln('Scanned token s: ', s, ' len: ', Length(s));
     CurTok.Kind := Keyword(s);
+    { An asm block under a mode whose syntax we cannot read. Deferred to here
+      from the {$asmMode} directive above, so a defensive directive over a unit
+      with no asm costs nothing. }
+    if (CurTok.Kind = tkAsm) and PasAsmModeNonIntel then
+      Error('{$asmMode ' + PasAsmModeName + '} is accepted, but this asm block '
+            + 'cannot be read: inline asm (asm...end) is Intel syntax only');
     if DebugTrace then writeln('Keyword returned kind: ', Ord(CurTok.Kind));
     CurTok.SVal := s; Exit;
   end;

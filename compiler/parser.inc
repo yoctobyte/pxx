@@ -35344,6 +35344,14 @@ begin
   Expect(tkUnit, 'unit');
   if CurTok.Kind <> tkIdent then Error('expected unit name');
   uname := ReadDottedUsesName;   { accept dotted `unit Posix.SysSocket;` headers }
+  { `unit X deprecated 'use Y instead';` -- FPC and Delphi both accept a hint
+    directive on the unit declaration, and a DEPRECATED unit is exactly the kind
+    a real codebase keeps around for compatibility, so refusing it means the
+    unit cannot be compiled at all. Synapse's ssl_openssl.pas ends with one.
+    Same soft-identifier run every other declaration site already skips; the
+    directive is advisory, so parse-and-ignore is the whole behaviour.
+    compat-pascal-unit-deprecated-hint-directive }
+  SkipHintDirectives;
   Expect(tkSemicolon, ';');
 
   if CurTok.Kind <> tkIdent then Error('expected interface section');

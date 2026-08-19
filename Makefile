@@ -4602,6 +4602,10 @@ test-core: $(COMPILER)
 	$(TESTTMP)/test_method_shadows_builtin26 | diff -u test/test_method_shadows_builtin.expected -
 	./$(COMPILER) test/test_index_a_call_result_directly.pas $(TESTTMP)/test_index_a_call_result26
 	$(TESTTMP)/test_index_a_call_result26 | diff -u test/test_index_a_call_result_directly.expected -
+	./$(COMPILER) test/test_asmmode_tolerance.pas $(TESTTMP)/test_asmmode_tolerance26
+	test "$$($(TESTTMP)/test_asmmode_tolerance26)" = "asmmode ok"
+	./$(COMPILER) -Futest test/test_unit_hint_directive.pas $(TESTTMP)/test_unit_hint_directive26
+	test "$$($(TESTTMP)/test_unit_hint_directive26)" = "hint 2"
 	./$(COMPILER) test/test_managed_var_param.pas $(TESTTMP)/test_managed_var_param26
 	test "$$($(TESTTMP)/test_managed_var_param26)" = "$$(printf '1\n1\n1\n1\n1\n6')"
 	./$(COMPILER) test/test_managed_setlength_var.pas $(TESTTMP)/test_managed_setlength_var26

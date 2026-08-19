@@ -8,6 +8,23 @@ owner:
 
 # `f(...)[i]` — indexing a call result
 
+> **READ THIS FIRST (2026-08-19).** Scope is now **dynamic-array results only** —
+> the fixed-array, array-of-record and `Copy(s,i,n)[k]` spellings all match FPC
+> and are covered by `test/test_index_a_call_result_directly.pas`.
+>
+> **And this ticket's baseline below is WRONG.** It says *"`b.Arr[1]` — a
+> paramless method returning a dynamic array — works and gives the right value.
+> That is the shape to follow."* The PINNED compiler answers `IR_UNSUPPORTED
+> (kind 8)` for it. Nothing gives that call a temp; the mechanism the ticket
+> tells you to copy **does not exist**. The 2026-08-05 measurement was of a
+> dyn-array class FIELD, not of a method result, and it has been steering this
+> ticket ever since.
+>
+> The section at the bottom, *"what the dynamic half actually needs"*, is the
+> current diagnosis — the hidden temp is not the hard part, `IRLowerAddress` is,
+> and the fix is one materialisation point rather than twenty. Start there, not
+> from the prose immediately below.
+
 - **Type:** compat (Pascal frontend parity) — Track P
 - **Status:** working
 - **Opened:** 2026-08-05

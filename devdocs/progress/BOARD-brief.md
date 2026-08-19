@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:17 blocked:6 backlog:239 experimental:20 rainy-day:43 done-followup:3 decided:91 done:2063 rejected:40`
+`unfinished:17 blocked:6 backlog:242 experimental:20 rainy-day:43 done-followup:3 decided:91 done:2065 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -40,9 +40,14 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 224, ranked
+## Ready — top 30 of 227, ranked
 
 - `[p 78] [A]` feature-a-a-bare-nilpy-import-means-python-and-another-language-needs-its-extension
+- `[p 70] [P]` regression-test-core-test-call-result-member
+- `[p 70] [P]` regression-test-core-test-ctor-result-member
+- `[p 70] [P]` regression-test-core-test-isas-open-world-b325
+- `[p 70] [P]` regression-test-core-test-procedure-as-value-ok
+- `[p 70] [P]` regression-test-core-test-stmt-call-result-selector-b318-2
 - `[p 66] [A]` refactor-a-one-signature-record-for-every-callable-carrier
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
@@ -67,10 +72,5 @@ _none — no lane is locked._
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [A]` feature-pascal-type-helpers
 - `[p 55] [A]` feature-signal-siginfo-ucontext
-- `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
-- `[p 53] [S]` feature-esp-peripheral-callback-api
-- `[p 53] [A]` feature-threadsafe-heap-optimize
-- `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
-- `[p 50] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 
-_194 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_197 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

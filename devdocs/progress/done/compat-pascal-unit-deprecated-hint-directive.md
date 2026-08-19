@@ -2,6 +2,7 @@
 track: P
 prio: 25
 type: bug
+status: done
 ---
 
 # `unit X deprecated 'msg';` — a unit hint directive is a parse error
@@ -54,3 +55,38 @@ the same pass rather than fixing one spelling.
 `unit X experimental;` all compile; a program using the unit still builds and
 runs. `external/synapse/ssl_openssl.pas` reaching the same wall the
 OpenSSL-3 unit does rather than a parse error is the real-world check.
+
+---
+
+## RESOLVED 2026-08-19 — `frankonpiler-an` (Track A/P, sole-A confirmed)
+
+One line: the unit header now calls `SkipHintDirectives` before its semicolon.
+All five FPC hint directives are accepted on a unit declaration, with or
+without a message, and the unit still compiles and runs:
+
+```
+unit hintu deprecated 'use hintu3 instead';   -> 2
+unit hintu deprecated;                        -> 2
+unit hintu platform;                          -> 2
+unit hintu experimental;                      -> 2
+unit hintu library;                           -> 2
+unit hintu unimplemented;                     -> 2
+```
+
+Regression: `test/test_unit_hint_directive.pas` + its unit, in `test-core`,
+differential against FPC (which also emits its advisory warning; pxx does not
+warn, which is the same parse-and-ignore treatment every other declaration site
+already gives these).
+
+Worth noting for its own sake: **the machinery already existed and the unit
+header simply never called it.** `SkipHintDirectives` has been handling the
+same run of soft identifiers after a const value, a type declaration and a
+routine header since [[feature-hint-directives-deprecated-platform]]. This was
+not a missing feature but a missing call site — which is what made a hard parse
+error out of a directive the compiler already knew how to ignore, and why the
+whole fix is one line rather than a new parser path.
+
+Gate: `make compiler/pascal26` fixedpoint + `tools/gate.sh quick`, green.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.

@@ -1662,6 +1662,8 @@ var
   MatchArgScalarValid : Boolean;
   BuiltinUnitIdxCache : Integer;  { cached InternStr('builtin') idx; the builtin intrinsic unit is fallback-only in MatchProcCall (see BuiltinUnitIdx). }
   BuiltinUnitIdxSet   : Boolean;  { BSS -> False: the cache above is computed lazily once per process. }
+  PasAsmModeNonIntel : Boolean;  { {$asmMode att|direct} is in force: tolerated until an actual asm block needs reading (feature-pascal-asmmode-directive-tolerance) }
+  PasAsmModeName : AnsiString;   { …the value as written, so the refusal can name it }
   MimicFpc : Boolean;  { --mimic-fpc / {$MIMIC FPC}: install a curated FPC 3.2.2 define set so identity-probing library headers pick their FPC path. Opt-in only, NEVER default (the compiler's own {$ifdef FPC} means real FPC; mimic during self-build = broken bootstrap). }
   PyCtorQualUnit : Integer;  { the unit named by a QUALIFIED NilPy construction (`canvas.Canvas(...)`), so the class resolves in that unit rather than by first match; -1 when unqualified. }
   PyStarSpliceDepth : Integer;  { open `f(*[...])` argument splices: the elements are parsed as ordinary comma-separated arguments and the closing ']' is consumed by the ParseExpr call that lands on it. }
