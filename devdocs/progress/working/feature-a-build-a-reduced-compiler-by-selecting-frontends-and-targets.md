@@ -20,6 +20,44 @@ The payoff the user named: *"we get the 'python compiler for esp at reduced code
 for free."* Names above are deliberately verbose placeholders — **the switch spelling is
 still open**, see below.
 
+## THE ACCEPTANCE TEST, from the user 2026-08-19 — and it settles the open question below
+
+**A reduced compiler — one frontend, one platform — must be able to build the FULL compiler
+from our source.**
+
+That is the whole test, and it is far stronger than "the reduced build passes its own tests".
+It works because `compiler.pas` and every `*.inc` it pulls in — `cparser.inc`,
+`pyparser.inc`, all five backends — are **Pascal text**. A Pascal-frontend-only compiler can
+therefore consume the entire megalith source and emit the megalith binary:
+
+    reduced (pascal frontend, host target)  --builds-->  full compiler
+    full compiler                           --self-->    byte-identical fixedpoint
+
+**Two properties fall out of one run.** If a stripped compiler rebuilds the unstripped one,
+then the frontends and targets really are optional at build time — nothing outside them
+depended on their presence — **and** the Pascal frontend is complete enough to compile the
+whole project. A failure anywhere in that chain is a structural finding, which is the point:
+the user's stated reason is *"to make sure we have a proper structure"*, explicitly **not** to
+generate more work for Track T.
+
+### This answers "what must a reduced compiler still self-host?"
+
+Resolved, and more cleanly than the question was posed:
+
+- **The Pascal frontend is what makes a build a bootstrap candidate**, because the compiler is
+  written in Pascal. Any configuration including it can rebuild the full compiler.
+- **A configuration WITHOUT it — a C-only or NilPy-only build — is not a self-host candidate
+  at all, and that is fine rather than a problem.** It is a consumer artifact, gated on its
+  own frontend's tests. The fixedpoint gate does not apply.
+
+### One precision the phrase "single frontend and platform" needs
+
+**The target must be the HOST platform for this test to mean anything.** A Pascal-only build
+restricted to `esp-riscv` can only emit esp-riscv binaries — it would produce an esp-riscv
+"full compiler" that does not run here. True, and useless as a check. **The structural test is
+Pascal frontend + host target → full compiler → fixedpoint.** Reductions to a cross target are
+the *product*, not the test.
+
 ## Why this is worth doing beyond the binary size
 
 **It is a falsifiable test of a design claim we make constantly.**
@@ -100,6 +138,17 @@ Track A's: `make compiler/pascal26` (fixedpoint) + `tools/gate.sh quick` for the
 build, which must stay byte-identical — **a reduction feature that perturbs the default build
 has failed.** Each named reduced configuration additionally needs to build and pass its own
 frontend's tests.
+
+**Plus the structural test above**, which is the one that earns the ticket: a Pascal-only,
+host-target build produces the full compiler, and that binary reaches its own byte-identical
+fixedpoint.
+
+**And measure the second payoff rather than asserting it.** The other motivation is a smaller
+and *therefore faster* compiler — "we only do Python, on ESP". Smaller text is a good reason to
+expect better instruction-cache behaviour and shorter dispatch, but **faster is a claim about
+wall-clock, not about bytes**. Report the size delta AND a compile-time measurement on a fixed
+workload. If size drops and time does not, that is worth knowing and does not invalidate the
+feature — code size is a legitimate goal on its own for an embedded toolchain.
 
 ## Log
 - 2026-08-19 — filed with the coupling measurement above.
