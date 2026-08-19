@@ -165,3 +165,49 @@ reaches it — the decision is recorded either way.
 
 ## Log
 - 2026-08-19 — filed from the user's decision.
+
+## 2026-08-19 (frank3-etree, before standing down) — two hazards banked for this refactor
+
+Not about import spelling; about the *shape* of resolution code. Both were paid
+for elsewhere today and import resolution is dense in exactly these.
+
+### 1. A derived discriminator is correct only while a coincidence holds
+
+Fixing the scientific float writer (`354f734c1`), five backends decided *"does
+this writer take arguments?"* by testing `decs >= 0`. That was exact **only
+because** two different writers happened to be called with `-1`. The moment one
+of them carried real arguments the inference was wrong — and wrong *identically
+in all five backends*, from one shared assumption. The first attempted fix
+(`decs <> -2`) would have shipped it.
+
+> **A derived discriminator that happens to be correct is indistinguishable from
+> one that is correct by construction, until the thing it was derived from
+> changes.**
+
+The fix was an explicit flag that **records** the fact rather than re-deriving
+it. Import resolution is full of this shape: "is this a Python module?" derived
+from the absence of an extension, "is this ours?" derived from a path prefix,
+"is this already pulled?" derived from a name match. Each is a proxy standing in
+for the real question, correct until a new spelling makes the proxy and the
+question disagree. Prefer a recorded fact.
+
+`PyImportRootIsConsumedOnly` is already a live instance —
+[[bug-n-from-collections-abc-import-is-swallowed-by-the-collections-root-rule]]:
+it tests the **root** of a dotted from-import as a proxy for "do we support this
+module", which was fine until a real submodule shim existed. Its own comment
+states the assumption that broke (*"an unsupported name walls visibly at its use
+site"*), and the failure is now silent instead.
+
+### 2. A clean rebase is not a working build
+
+`git rebase` reports that it placed the hunks. It does not report that the
+result compiles or behaves — and a sibling's change can be textually distant
+from yours while being semantically entangled (a signature, a registration
+table, a shared predicate). Rebuild and re-run one probe after every rebase in
+this refactor; a signature change plus a pre-registration in a second file is
+exactly the pattern that merges cleanly and then does not work.
+
+That two-places-must-agree pattern is not hypothetical here: the float fix
+needed `PXXWriteFloatSci`'s definition **and** its pre-registration in
+`parser.inc` to change together, and either alone fails — the emitter half
+looks like the whole story until the other half bites.
