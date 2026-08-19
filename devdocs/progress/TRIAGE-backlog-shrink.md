@@ -61,8 +61,23 @@ the silent half and left these refused with a diagnostic. pxx accepts exactly on
 All three are the real->text formatter: huge magnitudes print debris, a `Single` prints its
 full `Double` expansion, and `write(r:W)` ignores the width. Mechanical, oracle-checkable
 against FPC, three tickets from one code path — the best count-down-per-change in the tail.
-**Does not touch `lexer.inc`/`parser.inc`/`ir*.inc`**, so it is safe to run concurrently
-with cluster 1.
+
+> **CORRECTION 2026-08-19, and it was my error.** This cluster was published as *"does not
+> touch `lexer.inc`/`parser.inc`/`ir*.inc`, so it is safe to run concurrently"*. **That was
+> asserted from the tickets' topic, not measured.** frank3 traced the code before touching
+> it and it is **Track A**: the formatters are `EmitWriteFloatNat` /
+> `EmitWriteFloatFixed` / `EmitWriteFloatFixedNative` / `EmitWriteFloatSci` in
+> **`compiler/symtab.inc`** (~6940-7479), and the width/decimals dispatch that selects
+> between them is **`compiler/ir_codegen.inc:4708-4710`**. `symtab.inc` is shared A/P
+> ground and `ir_codegen.inc` is the IR — the literal trigger in this document's own
+> coordination rule.
+>
+> Same failure I have been naming in others all day: I verified the *cluster* by reading
+> the tickets (that part held — it is one code path) and then inferred the *file location*
+> from plausibility. Verifying one property does not license asserting a second one.
+>
+> **Consequence:** cluster 2 is NOT concurrency-safe with cluster 1, whose IR lowering
+> reaches the same ground. It is sequenced, not parallel — see the coordination rule below.
 
 ### 3. Pascal directives (lexer / directive parser)
 - `feature-p-assertions-directive-and-position` (p40)
@@ -99,10 +114,24 @@ function bodies, not the macro reset the title names — read the ticket's LAST 
 
 ## The one hard coordination rule for this push
 
-**A and P share `lexer.inc` / `parser.inc`** — they must never be edited concurrently. So
-**one agent holds the A/P slot** (clusters 1, 3, 4) and the other takes file-disjoint work
-(clusters 2 and 5). If cluster 2 turns out to reach into the parser or IR after all, that
-worker **stops and hands it to the A/P holder** rather than editing across the line.
+**A and P share `lexer.inc` / `parser.inc`, and `symtab.inc` / `ir*.inc` are shared core
+ground** — none may be edited by two agents at once. The original split assumed cluster 2
+was disjoint; it is not (see the correction above), so the rule is now **sequencing, not
+partition**:
+
+- **Cluster 5 (C: `clexer`/`cparser`/`lib/crtl`) is genuinely disjoint** and runs
+  concurrently with anything.
+- **Clusters 1, 3, 4 and 2 all reach shared A/P ground** and are ordered, not parallel.
+  Cluster 3 (directives) is `lexer.inc`-only, so it is the safest thing to run alongside
+  cluster 2's `symtab.inc`/`ir_codegen.inc` work — but that pairing needs the A/P holder to
+  confirm its actual file footprint first, not to be assumed. **Assuming a footprint is what
+  produced the correction above.**
+
+**The stop-and-hand-off rule worked and is why this was caught.** A worker traced the code
+before editing, found it landed in shared ground, and escalated rather than proceeding on
+its own reading of a rule written to prevent exactly that. That is the behaviour to keep:
+when a lane boundary is ambiguous, the cost of asking is one message and the cost of
+guessing is a corrupted shared file.
 
 ## Gate — unchanged
 

@@ -4,7 +4,7 @@ prio: 40
 type: bug
 blocked-by: []   # decided 2026-08-08: KEEP EXACT
 summary: "write(v:w:d) with |v| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form)"
-status: working
+status: open
 
 ---
 
