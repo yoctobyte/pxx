@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:16 blocked:5 backlog:245 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2054 rejected:40`
+`unfinished:16 blocked:5 backlog:246 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2054 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -38,7 +38,7 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 229, ranked
+## Ready — top 30 of 230, ranked
 
 - `[p 72] [N]` bug-n-a-keyword-argument-through-a-callable-value-is-undefined (unblocks 1)
 - `[p 65] [N]` bug-n-a-module-level-def-taken-as-a-value-loses-its-defaults-on-the-boundfn-carrier
@@ -61,6 +61,7 @@ _none — no lane is locked._
 - `[p 55] [T]` bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 - `[p 55] [T]` chore-t-split-lib-test-into-jobs-that-name-what-failed
 - `[p 55] [A]` feature-a-declaration-phase
+- `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [A]` feature-pascal-type-helpers
@@ -69,6 +70,5 @@ _none — no lane is locked._
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
-- `[p 50] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 
-_199 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_200 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

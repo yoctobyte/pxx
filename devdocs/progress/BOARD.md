@@ -43,7 +43,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (245)
+## backlog (246)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -143,6 +143,7 @@ _none_
 | feature-a-shrink-managed-header-on-32-bit | A | 25 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
 | feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit | A | 50 | feature | Strict flags currently exempt code by `CurrentUnitIdx < 0` — main program vs ANY unit — so `--strict-fpc` polices the one file that isn't FPC's and exempts Synapse entirely. The right axis is OURS vs THEIRS: our RTL is written in the pxx dialect and no command-line flag should re-judge it, while external units and the user's own program should be policed. Unblocks folding --strict-overload into the umbrella. | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
+| feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise | B | 55 | feature | The ladder's three corpora are ONE FAMILY, not three samples — same domain, overlapping lineage, and tinycss2 literally imports webencodings. Two days of NilPy ranking rest on it. Measure an idiom-distant fourth corpus and report against the prediction: either the walls generalise, or some of what we rank at 70 is a webencodings-shaped preference. | — |
 | feature-b-a-real-minidom-is-an-implementation-not-a-shim | B | 15 | feature | Question 2 of the xml.dom row, re-filed on its own as that ticket said it should be. html5lib/treebuilders/dom.py wants a document you can build and mutate — ~25 DOM methods, getDOMImplementation().createDocument(), weakref.proxy(), and a reach into minidom's PRIVATE _child_node_types. That is a DOM implementation, not a compatibility alias. It unblocks exactly one corpus file and should be ranked as an implementation project, not alongside shims. | — |
 | feature-b-hardware-sqrt-on-aarch64-and-arm32 | B | 20 | feature | Sqrt is one `sqrtsd` on x86-64 (15x faster than the software path and correctly rounded by IEEE mandate). aarch64 `fsqrt` and arm32 `vsqrt` are the same one-instruction win and both run here under qemu, so the change is verifiable on this box. The portable SqrtSoft stays as the fallback for riscv32/xtensa. | — |
 | feature-b-rtl-lnxp1-fpc-compat | B | 20 | feature | FPC's math unit exports LnXP1(x) = ln(1+x) and pxx does not. The implementation already exists as of 2026-08-15 — LnP1, added as an internal helper for the hyperbolic family — so this is an interface line and a name, not an algorithm. Note WHY the name matters: `Log1p` would hijack libc's through pxxcio, `LnXP1` does not. | — |
@@ -541,6 +542,7 @@ _none_
 - [p 55] [T] bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 - [p 55] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 55] [A] feature-a-declaration-phase
+- [p 55] [B] feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [O] feature-opt-heap-per-thread-cache
 - [p 55] [A] feature-pascal-type-helpers
