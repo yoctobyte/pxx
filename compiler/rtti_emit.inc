@@ -384,7 +384,7 @@ end;
   constant ones one too is the next increment. Reserved rather than omitted so
   the record layout is final and no consumer has to cope with two shapes. }
 procedure EmitPySignatures;
-var pi, k, nUser, reqN, dfltOff, firstUser, slot: Integer;
+var pi, k, nUser, reqN, dfltOff, firstUser, slot, pend: Integer;
 begin
   for pi := 0 to MAX_PROCS - 1 do ProcSigOff[pi] := -1;
   for pi := 0 to MAX_PROCS - 1 do ProcSigDfltOff[pi] := -1;
@@ -394,6 +394,11 @@ begin
     NilPy construct. The caller's guard excludes C/BASIC/Rust/... but NOT
     Pascal, so the test has to be here. }
   if not isNilPy then Exit;
+  { Where an ORPHANED def-time store lands -- see PyDfltScratchOff in defs.inc.
+    Emitted unconditionally so the address exists even in a module with no
+    unbakeable defaults; 16 bytes is one variant. }
+  PyDfltScratchOff := DataLen;
+  DataPutZeros(16);
   for pi := 0 to ProcCount - 1 do
   begin
     { NilPy defs only: a routine declared by the MAIN PROGRAM of a NilPy
@@ -459,7 +464,21 @@ begin
           UNSET for the def-time store to fill. Same for a STRING: VT_STRING's
           payload is a MANAGED AnsiString ref, and baking a static pointer into
           a managed slot is how refcount corruption starts. }
-        if ProcParamDefaultSym[pi * MAX_PROC_PARAMS + k] >= 0 then Continue;
+        if ProcParamDefaultSym[pi * MAX_PROC_PARAMS + k] >= 0 then
+        begin
+          { Point the def-time store that PyEvalParamDefault queued at THIS
+            slot. The store was built while the header was parsed, before this
+            Proc existed, so it names the hidden global instead and the pairing
+            is made here -- after every registration site has settled. }
+          pend := PyDfltPendFor(ProcParamDefaultSym[pi * MAX_PROC_PARAMS + k]);
+          PyDfltPendOff[pend] := slot;
+          if PxxDbgEnabled('n.sig') then
+            WriteLn('PXXDBG n.sig dflt ', Procs[pi].Name, '.',
+                    Procs[pi].Params[k].Name, ' pend=', pend,
+                    ' gsym=', ProcParamDefaultSym[pi * MAX_PROC_PARAMS + k],
+                    ' slot=', slot);
+          Continue;
+        end;
         if ProcParamDefaultIsStr[pi * MAX_PROC_PARAMS + k] then Continue;
         if ProcParamDefaultIsSet[pi * MAX_PROC_PARAMS + k] then Continue;
         if ProcParamDefaultIsNone[pi * MAX_PROC_PARAMS + k] then

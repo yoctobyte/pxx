@@ -1158,10 +1158,13 @@ begin
       { A NilPy def's DEFAULTS ARRAY. Before the PYSIG branch below: more
         negative base, and that branch matches everything this one does. }
       j := -Fixups[i].DataOff - PYSIGD_DATAREF_BASE;
-      if (j >= 0) and (j < ProcCount) and (ProcSigDfltOff[j] >= 0) then
-        Fixups[i].DataOff := ProcSigDfltOff[j]
+      if (j >= 0) and (j < PyDfltPendCount) and (PyDfltPendOff[j] >= 0) then
+        Fixups[i].DataOff := PyDfltPendOff[j]
       else
-        Error('a def-time default store for a def with no defaults array');
+        { orphaned by a rolled-back trial parse: write it to the bit bucket. The
+          array slot stays PYSIG_DFLT_UNSET and the consumer complains, where the
+          param name is known. See PyDfltScratchOff in defs.inc. }
+        Fixups[i].DataOff := PyDfltScratchOff;
     end
     else if Fixups[i].DataOff <= -PYSIG_DATAREF_BASE then
     begin

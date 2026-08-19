@@ -5764,6 +5764,28 @@ end;
   list) is a clean error rather than a guess: Python evaluates it ONCE at
   definition time, and quietly picking either "once" or "per call" would be a
   silent semantic difference. }
+{ The pending-slot index for a default identified by its hidden global. One
+  entry per (def, param), because the `$pdef.*` name is fully qualified -- a def
+  re-parsed on a later pass finds its own entry again rather than adding a
+  second one that could never be resolved. }
+function PyDfltPendFor(gsym: Integer): Integer;
+var i: Integer;
+begin
+  for i := 0 to PyDfltPendCount - 1 do
+    if PyDfltPendSym[i] = gsym then begin Result := i; Exit; end;
+  if PyDfltPendCount >= PY_MAX_DFLT_PEND then
+  begin
+    Error('too many non-constant parameter defaults in one module '
+          + '(see PY_MAX_DFLT_PEND in compiler/defs.inc)');
+    Result := 0;
+    Exit;
+  end;
+  Result := PyDfltPendCount;
+  PyDfltPendSym[Result] := gsym;
+  PyDfltPendOff[Result] := -1;
+  Inc(PyDfltPendCount);
+end;
+
 function PyEvalParamDefault(var j: Integer; const pname: AnsiString): Integer;
 { Evaluate a NON-CONSTANT parameter default into a hidden global and return that
   global's symbol (-1 if the expression could not be parsed as a value).
@@ -5782,6 +5804,7 @@ function PyEvalParamDefault(var j: Integer; const pname: AnsiString): Integer;
   symbol while ProcParamDefaultSym still pointed at one the pre-pass rolled
   back — a recycled index, i.e. a plausible wrong value. }
 var gname: AnsiString; gsym, valNode, asgn, savedTok, savedHoist, h: Integer;
+    slot, slotAddr, sigAsgn: Integer;
     savedCurProc: Integer;
 begin
   Result := -1;
@@ -5844,6 +5867,24 @@ begin
   ASTLeft[asgn] := PyMakeIdent(gsym);
   ASTRight[asgn] := valNode;
   PyQueueDefInit(asgn);
+  { ...and copy it into this def's SIGNATURE defaults array, so a call made
+    THROUGH A CALLABLE VALUE can fill an omitted parameter the same way a direct
+    call does. Queued after the store above and so ordered behind it, which is
+    what makes this a COPY of the def-time value rather than a second
+    evaluation -- Python evaluates a default exactly once, and re-evaluating is
+    how the shared-mutable-default idiom stops accumulating.
+    The slot address is a pending sentinel: the Proc does not exist yet.
+    feature-n-a-callable-value-carries-its-signature-type }
+  slotAddr := AllocNode(AN_PYSIGDSLOT);
+  ASTIVal[slotAddr] := PyDfltPendFor(gsym);
+  ASTTk[slotAddr] := Ord(tyPointer);
+  slot := AllocNode(AN_DEREF);
+  ASTLeft[slot] := slotAddr;
+  ASTTk[slot] := Ord(tyVariant);
+  sigAsgn := AllocNode(AN_ASSIGN);
+  ASTLeft[sigAsgn] := slot;
+  ASTRight[sigAsgn] := PyMakeIdent(gsym);
+  PyQueueDefInit(sigAsgn);
   TokPos := savedTok - 1;
   Next;
   Result := gsym;
@@ -5894,7 +5935,16 @@ begin
         PyDefaultWasNone := False;
         sOff := Tokens[j].SOffset;
         sLen := Tokens[j].SLen;
-        Inc(j);
+        { A string default ALSO gets the hidden global, unlike the other
+          constants. It is not bakeable -- VT_STRING's payload is a MANAGED
+          AnsiString ref, so the signature defaults array can only be filled at
+          run time -- and the global is what the def-time store copies from, and
+          what pairs the store with its slot. The direct-call path is untouched:
+          it still has sOff/sLen and builds the literal itself. }
+        if PyDefaultEvalMode then
+          PyDefaultSym := PyEvalParamDefault(j, pname)
+        else
+          Inc(j);
         Exit;
       end;
     tkMinus:
@@ -27357,10 +27407,6 @@ end;
 procedure PyApplyDefSignature(procIdx: Integer);
 var i: Integer;
 begin
-  if PxxDbgEnabled('n.sig') then
-    WriteLn('PXXDBG n.sig apply pi=', procIdx, ' name=', Procs[procIdx].Name,
-            ' hdrNParams=', PyHdrNParams, ' paramCount=', Procs[procIdx].ParamCount,
-            ' clsName=', PyDefaultClsName);
   { A class-returning def must record WHICH class, or the call site has a
     tyClass value with no identity and a later field access reads the object
     POINTER (test_nilpy_class_return). }

@@ -421,6 +421,15 @@ const
                            no backend op and all six backends carry it unchanged. Reserved-prefix
                            names, so they cannot collide with user routines.
                            feature-signal-siginfo-ucontext }
+  AN_PYSIGDSLOT    = 94; { NilPy: the ADDRESS of one slot of a def's SIGNATURE DEFAULTS array.
+                           ASTIVal = a PENDING-SLOT index, not a proc index -- the store is built
+                           while the def's HEADER is parsed, which is before the Proc exists at
+                           all, so it cannot name one. PyDfltPend* carries the hidden global that
+                           identifies the (def, param) pair, and EmitPySignatures resolves the
+                           pending index to a data offset once every registration site has
+                           settled. Lowers to IR_CONST_DATA with the PYSIGD sentinel; wrap it in
+                           an AN_DEREF typed tyVariant to get the slot itself -- GenMakeVariantAt's
+                           shape with this in place of the ident. }
   AN_FPUMASK       = 93; { __pxxGetFPUMask / __pxxSetFPUMask(m): the float-exception MASK, as a
                            6-bit set in FPC's TFPUException order with 1 = masked (quiet).
                            ASTIVal selects the direction: 0 = get, 1 = set (Left = the new mask)
@@ -912,6 +921,10 @@ const
     k*16. MUST be tested before PYSIG_DATAREF_BASE -- it is more negative, and
     every branch matches anything at least as negative as its own base. }
   PYSIGD_DATAREF_BASE = 700000;
+  { The sentinel's index is a PENDING-SLOT index (see AN_PYSIGDSLOT), because a
+    def's header is parsed before its Proc exists. PY_MAX_DFLT_PEND bounds the
+    number of unbakeable defaults in one module. }
+  PY_MAX_DFLT_PEND = 8192;
   PYSIG_DATAREF_BASE = 600000;
   TYPEINFO_REQ_DATAREF_BASE = 500000;
   { TypeInfoReq categories (see TypeInfoReqCat/Key/Off below) and cap. }
@@ -2153,6 +2166,22 @@ var
   ProcSigOff    : array[0..MAX_PROCS-1] of Integer;
   { Data[] offset of proc pi's defaults ARRAY (TotN variants), -1 = none. }
   ProcSigDfltOff: array[0..MAX_PROCS-1] of Integer;
+  { One entry per default that cannot be baked into .data as a constant: a
+    string (its payload is a managed AnsiString ref, built at run time) or any
+    non-constant expression. PyDfltPendSym is the hidden `$pdef.*` global that
+    identifies the (def, param) pair -- unique, because the name is fully
+    qualified by class, nesting prefix, def and param. PyDfltPendOff is the data
+    offset EmitPySignatures resolves it to, or -1 while unresolved. }
+  PyDfltPendSym : array[0..PY_MAX_DFLT_PEND-1] of Integer;
+  PyDfltPendOff : array[0..PY_MAX_DFLT_PEND-1] of Integer;
+  PyDfltPendCount : Integer;
+  { 16 bytes of scratch .data that orphaned def-time stores write into. A trial
+    parse that is rolled back leaves pending entries naming symbols the real
+    parse then re-allocates, so an unresolved store is EXPECTED and must not be
+    an error here. Sending it to a bit bucket keeps the array slot at
+    PYSIG_DFLT_UNSET, which is where the loud complaint belongs -- at the
+    consumer, which knows the param name. }
+  PyDfltScratchOff : Integer;
   { CLASS ATTRIBUTES: an unannotated class-level `name = <literal>` in a plain
     (non-dataclass) class. Python makes it a shared class attribute; NilPy holds
     it as a per-class COMPILE-TIME CONSTANT, which is exactly right for the

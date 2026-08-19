@@ -413,3 +413,63 @@ supported through a callable value yet") rather than a value — that keeps ever
 intermediate state loud instead of silently wrong, and lets the UNSET set shrink
 to zero over the remaining increments instead of gating everything on
 completeness.
+
+
+## 2b part 2 — LANDED: the def-time store
+
+The three-hook plan above was wrong, and measuring it is what showed why. Four
+sites write `ProcParamDefaultSym`, not three — and that count is the tell
+(`root-cause-over-microfix`: two mechanisms is a smell, three is a design flaw).
+Hooking each of them would have made it five.
+
+They all converge on one thing: the hidden `$pdef.<cls>.<nest>.<def>.<param>`
+global, created in exactly ONE place, `PyEvalParamDefault`. So the store is
+queued there, and the four registration sites are irrelevant to it.
+
+**The problem that forced the design:** the store is built while the def's
+HEADER is parsed, which is before the Proc exists, so it cannot name a proc or
+a slot. **The fix:** `AN_PYSIGDSLOT` carries a PENDING-SLOT index instead. The
+pend table is keyed by the hidden global — unique per (def, param) because the
+name is fully qualified — and `EmitPySignatures` pairs pending index to data
+offset once every registration site has settled. Node → `IR_CONST_DATA` with
+the PYSIGD sentinel; the store itself is `AN_DEREF(that) typed tyVariant :=
+AN_IDENT(global)`, i.e. `GenMakeVariantAt`'s shape, so it is ARC-correct for
+free and needed no new IR op and no backend change.
+
+**String defaults now get a hidden global too.** They are not bakeable —
+`VT_STRING`'s payload is a managed AnsiString ref — so they need the def-time
+store, and the store needs the global as its key. The direct-call path is
+untouched: it still has `sOff`/`sLen` and builds the literal itself.
+
+**Ordering is what makes it a COPY.** The slot store is queued AFTER the
+global's own assignment, so it copies the def-time value rather than
+re-evaluating the expression. Re-evaluating would get the common case right and
+silently break the shared-mutable-default idiom, which is the whole reason the
+global exists.
+
+**Orphaned stores go to a bit bucket, not an error.** A rolled-back trial parse
+leaves pending entries naming symbols the real parse re-allocates, so an
+unresolved sentinel is EXPECTED. It resolves to `PyDfltScratchOff`, 16 bytes of
+scratch `.data`; the array slot then stays `PYSIG_DFLT_UNSET` and the complaint
+lands at the consumer, which knows the parameter's name.
+
+### Verified
+
+`def q(a, i=7, f=1.5, b=True, n=None, s="hi", L=[])` plus `class K: def m(self,
+a, b=5, t="zz")`, with `PXXDBG=n.sig`:
+
+```
+n.sig pi=1724 name=K.m paramCount=4 firstUser=1 nUser=3 reqN=1
+n.sig pi=1725 name=q   paramCount=7 firstUser=0 nUser=7 reqN=1
+n.sig dflt K.m.t pend=2 slot=+32     (k=3, firstUser=1 -> user index 2)
+n.sig dflt q.s   pend=0 slot=+80     (user index 5)
+n.sig dflt q.L   pend=1 slot=+96     (user index 6)
+```
+
+Three unbakeable defaults, three pends, no orphans, and the method's `self` is
+excluded from the slot index exactly as `EmitPySignatures` computes it. The
+other four are baked statically as before.
+
+**Still no consumer** — 2c/2d. The array is now fully filled for every default
+kind, so 2d's `PYSIG_DFLT_UNSET` check should never fire in practice; it stays
+as the loud guard for the orphan case above.

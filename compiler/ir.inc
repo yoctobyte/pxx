@@ -6294,6 +6294,12 @@ begin
                     Ord(tkPlus), 0, Ord(tyPointer));
     end;
 
+    AN_PYSIGDSLOT:
+      { the address of one defaults slot; the pending index resolves after every
+        registration site has settled -- see AN_PYSIGDSLOT in defs.inc }
+      Result := IRAppend(IR_CONST_DATA, -1, -1, -1,
+                  -(PYSIGD_DATAREF_BASE + Integer(ASTIVal[node])), Ord(tyPointer));
+
     AN_TYPEINFO:
       if ASTLeft[node] = 1 then
         { Widened TypeInfo(T): scalar/string/class/record, ASTIVal = the deduped
