@@ -4125,3 +4125,42 @@ Right answer, more expensive method than needed, said out loud.
 
 Pushed and green tonight from T: `93db54159`, `f5cba8ad3`, `6edac13fd` and parent, `4d6e626cb`.
 Watcher is mid-tier and deliberately not starting a contending sweep.
+
+## Check +27h — pin held on a MEASURABLE reason now, one worker dispatched
+
+**Pin: 6 `compiler/**` commits past v365 (`9ea01645c`) — `da53bbd26`, `e6a14039a`, the three carve
+steps, `5da541ca8`. Step 2's mechanical rule says pin. I am not pinning, and the reason upgraded
+from a judgement call to a fact:** `bug-a-make-revert-the-documented-pin-brake-does-not-fire`
+(A, p60). `make revert` restores from per-version `vN` binaries this tree stopped keeping at
+`929fa707c`, so it fails with `Binary ... missing`. **The documented recovery from a bad pin does
+not work**, and the v357 incident recovered only because the operator knew the commit-revert route.
+With the owner asleep, "recoverable" is doing all the work in "pin now, revert if wrong" — and it
+is false. Six commits is a small tranche; it keeps until morning.
+
+Note this reason is strictly better than the two before it (unexplained cascade → unswept carve →
+this): it is checkable by anyone, and it names its own expiry. **When the brake fires, pin.**
+
+**Dispatched frank2 → that ticket, with the A slot granted** (frank3 is off A since the carve, so
+sole-A holds; the ticket touches the Makefile and `stable_linux_amd64/**`, not `lexer.inc`/
+`parser.inc`). Asked for three things beyond the fix: exercise the brake in a scratch clone rather
+than argue it, grep for other emergency-only consumers assuming `vN` exists, and **do not pin** —
+the pin is the coordinator's and it is a morning decision. Told it to bank and stop if it grows.
+
+One lane running is the correct overnight level, not zero — the owner's position is that the
+coordinator/worker split exists so work continues while they sleep. frank3 stays down (its status
+reads `shell`, i.e. working/not idle — do not ping). frank2's `feature-c-import…` lock stays in
+`working/` untouched.
+
+**Queues, all six lanes read:** every lane has ready work; nothing is blocked anywhere. Heads —
+A `refactor-a-one-signature-record-for-every-callable-carrier` p66 (the callable-carrier root-cause
+refactor, and tonight's `bug-n-…bound-method` p70 is another instance of exactly that family — worth
+the owner's attention as a root-cause candidate rather than fixing the N symptom); P
+`feature-pascal-corpus-fpc-testsuite` p65; N the callable bug p70; B `feature-b-a-fourth-corpus…`
+p55; C `feature-c-csmith-differential-fuzzing` p65; T `regression-cascade-21f098e32a95` p70 (now
+triaged and mostly filed out — that entry should shrink).
+
+**`urgent/` holds exactly the three tickets frank2 filed tonight**, correctly: the U decision at
+p75, the callable bug at p70, the riscv32 float at 60 (`A+F`).
+
+**T: UP, native green through `a15cb05fa`. Breadth reads 2h old / 10 behind — that is a full tier
+in progress, not a slip; do not read it as a regression.**
