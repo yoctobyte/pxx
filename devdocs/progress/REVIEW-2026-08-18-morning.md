@@ -789,3 +789,89 @@ support). MINIX was built for ACK and keeps assembly in **separate `.s` files**,
 i386 backend, and `--emit-obj` already gated by `make test-emit-obj`, and it is the
 rung below the kernel rather than a detour from it.
 
+
+---
+
+# OVERNIGHT 2026-08-18 → 19 — what landed while you slept
+
+Both workers were cleared around 20:00 and run overnight. Track T confirms green through
+`185575980d53` (native, slow, opt, and bench back to 30 rows).
+
+## The bump: `yield` is gone as a wall
+
+**`feature-nilpy-yield-outside-a-for-loop` is DONE** — four commits: generators consumed
+by `for`-in, then **generator METHODS** ("the shape the html5lib filters are made of"),
+a parameter-count fix, and a Pascal `var` fix. It then cleared the **full cross-target
+matrix**, not just `quick`.
+
+Then `feature-nilpy-a-generator-as-a-first-class-value` **also** landed (`g = gen()`,
+`list(gen())`, `next(g)`, `__iter__`), plus a fix for **a generator `for`-in inside a
+block swallowing the statement after it** — silent, and the kind normally blamed on
+anything but the loop.
+
+**Scored honestly by the worker, and this is the number to trust over any headline:**
+`yield` is no longer any file's wall, but the html5lib count did not move at the time —
+its phrase was *"progress-shaped without being progress."* The parameter lift pushed
+three treewalkers onto their NEXT wall.
+
+## The new top wall, from a re-measure rather than a guess
+
+Ladder re-run at `594bd3c8c`: **12 of the 38 remaining failures share ONE root cause, and
+it is a silent-wrong-function bug, not a missing feature** —
+`bug-nilpy-a-callable-in-a-variable-loses-to-a-def-of-the-same-name`, now claimed and in
+progress. Same concentrated shape `yield` had, which is the encouraging part: the tail
+keeps resolving into single levers instead of fragmenting.
+
+*(Denominator caution: "38 remaining" is the full ladder at that sha. Do not reconcile it
+against the older 6/48 or 7/33 by arithmetic — those were different scopes.)*
+
+## Track B: a float parser that is now 27x-1118x faster
+
+`StrToFloat` got **two** independent wins. First, `TryStrToFloat` was calling the parser
+**twice** with different defaults and comparing the answers, because the parser had no
+failure channel — a flat **2x on the entire family**, nothing to do with floats. Then
+**Eisel-Lemire** landed: **27x to 1118x** outside Clinger's window, safe because Lemire
+*declines* rather than guesses, so the exact path still answers everything it will not.
+
+Reported honestly again: the two rows the ticket **named** ("small" 1e-310, "subnormal"
+1e-320) did **not** move — both are subnormal, where Lemire declines by construction, as
+Go and Rust do. Remainder rescoped as a big-integer rewrite of `ExDecNearest`. Also kept
+visible: the Clinger fast path came out **5% slower** on code layout.
+
+## A real compiler bug you would not otherwise have seen
+
+A Track T **bench row-count drop** (27 rows where 30 were expected) turned out not to be
+harness noise: **pxx could not compile its own source at `-O0`** — `error: code overflow`.
+
+And the fix inverted the ticket. Measured, all four levels sat at **88-90% of the 8 MB
+cap** (`-O0` 8 394 698 B vs a 8 388 608 cap — over by 0.07%). **`-O0` was simply first
+across a line every level was standing on, and ordinary growth would have taken the
+DEFAULT build down next.** Cap now 16 MB, default at 44%.
+
+**The uncomfortable part, which is now recorded:** "it passes the self-host gate" is
+evidence the compiler compiles itself **at one optimisation level**, not that it compiles
+itself. I used that reasoning to argue the bench red could not be a compiler problem. It
+was true and could not speak to the case.
+
+## Decisions waiting for you — now TEN, three of them new
+
+| prio | ticket |
+| --- | --- |
+| 88 | `decide-how-a-compiled-def-carries-its-signature-when-boxed` |
+| 62 | `decide-xml-etree-thin-tree-model-or-a-real-xml-library` |
+| 58 | `decide-which-minix-is-the-target` |
+| **55** | **`decide-should-the-gate-prove-self-compile-at-more-than-one-o-level`** (new) |
+| 55 | `decide-what-an-unwired-test-may-assert` |
+| 50 | `decide-staff-track-c-to-unblock-own-language-first` — a **staffing** fork, yours alone |
+| 50 | `decide-finalize-noop-vs-refusal` |
+| 45 | `decide-unary-minus-widening-in-the-default-dialect` |
+| 40 | `decide-one-answer-to-have-i-already-compiled-this-unit` |
+| 40 | `decide-nilpy-exec-injects-a-builtins-key` |
+
+## State on waking
+
+- **frank2** is on the new top wall (claimed in `working/`).
+- **frank3** stopped after two landings, on an offer I made it — B's queue below the
+  rescoped float work is p20 ULP items.
+- **Track T is UNSTAFFED** — plexus-T closed its session after handing off the `-O0` bug.
+  Nothing is watching the matrix until you restart it.
