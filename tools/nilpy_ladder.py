@@ -114,37 +114,52 @@ def pin_provenance():
     return md5, base
 
 
-def require_ancestor(fix, base):
-    """Refuse to run when the pin cannot contain the commit being measured.
+def require_ancestors(fixes, base):
+    """Refuse to run unless the pin contains EVERY commit being measured.
 
     Deliberately a REFUSAL and not a warning: a caveat on a forty-minute run is
     a log line, and the whole point is a check that can stop the thing it
     checks.
+
+    Takes a LIST because fixes land in pairs here -- a two-part change where the
+    pin carries only the first still walls, one step further along, and a gate
+    that checked a single sha would report a green precondition for a run that
+    cannot answer the question. That is worse than no gate: it launders the
+    assumption instead of testing it. Every missing sha is named, not just the
+    first, so one re-pin clears all of them.
     """
     import subprocess
-    try:
-        rc = subprocess.call(["git", "merge-base", "--is-ancestor", fix, base],
-                             cwd=ROOT,
-                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    except OSError:
-        print("--require-fix: git unavailable; refusing rather than guessing")
-        return False
-    if rc != 0:
-        print("--require-fix %s: NOT an ancestor of pin base %s" % (fix, base))
-        print("  the pinned compiler predates that commit, so this run cannot")
-        print("  measure it. Refusing to start. Re-pin, or drop --require-fix.")
+    missing = []
+    for fix in fixes:
+        try:
+            rc = subprocess.call(["git", "merge-base", "--is-ancestor", fix, base],
+                                 cwd=ROOT,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except OSError:
+            print("--require-fix: git unavailable; refusing rather than guessing")
+            return False
+        if rc != 0:
+            missing.append(fix)
+    if missing:
+        print("--require-fix: %d of %d commit(s) NOT in pin base %s"
+              % (len(missing), len(fixes), base))
+        for fix in missing:
+            print("    missing: %s" % fix)
+        print("  the pinned compiler predates the above, so this run cannot")
+        print("  measure them. Refusing to start. Re-pin, or drop --require-fix.")
         return False
     return True
 
 
 def main():
     show_files = "--files" in sys.argv
-    fix = None
+    fixes = []
     for a in sys.argv[1:]:
         if a.startswith("--require-fix="):
-            fix = a.split("=", 1)[1]
+            # accumulates: repeat the flag, or comma-separate
+            fixes += [x for x in a.split("=", 1)[1].split(",") if x]
     md5, base = pin_provenance()
-    if fix and not require_ancestor(fix, base):
+    if fixes and not require_ancestors(fixes, base):
         return 2
     corp = corpora()
     if not corp:
