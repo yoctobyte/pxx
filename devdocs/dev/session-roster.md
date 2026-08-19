@@ -2183,3 +2183,46 @@ rerank it deliberately rather than inheriting the number).
   the idiom came from), so nobody re-audits eight files to learn nothing. Relayed to
   plexus-T with a falsifiable prediction: the watcher's 45.4s EWMA on this job should
   converge toward ~1s, and if it does not, `lib_dns_async` is next.
+
+- **check 2026-08-19 (+12h): ZERO open regressions, and v353 qualifies as a fully-green
+  pin — the first in a while.** plexus-T confirmed the EWMA prediction *with a rate*, which
+  is the part that makes it falsifiable: 45.37s over n=46 → **11.2s over n=49** on the
+  watcher clone, matching the 0.4-alpha curve from 45.4 toward ~1.2 almost exactly
+  (predicted 27.7 → 17.1 → 10.7; measured 11.2). Dev clone independently 2.42s over n=16 →
+  1.14s over n=21, so the ~1.1-1.2s asymptote is confirmed from two stores sharing nothing
+  but the box.
+
+  **The horizon T volunteered, and it is the right way to hand over a prediction:** each
+  further full-tier run multiplies the gap to ~1.2 by 0.6 — expect ~7.2, ~4.8, ~3.3, ~2.4,
+  ~1.9. **If it is not under 2s after roughly six more full runs, the prediction has
+  FAILED and `lib_dns_async` is where to look.** A prediction without a horizon cannot
+  falsify anything; hold T to this one.
+
+  **Metric-trust note worth keeping:** `n` increments only on a **PASS**, while
+  `learn_timeout` can raise `dur` WITHOUT incrementing `n`. So "n went 46→49" is three
+  genuine passes, not three kills laundered into the average. **A `dur` that moves while
+  `n` stands still is the shape to distrust.**
+
+  **`full` at `c45ed0062` GREEN, 1226.6s, zero reds, no co-tenant** — the run this
+  morning's could not be. `crtl_exp2`'s watcher EWMA is now 125.66s and T's fix gave it
+  251s; under the old ceiling it would have been killed at 90s again. **`open_regressions`
+  is EMPTY.**
+
+  **A cost of the timeout bug nobody had priced:** the standing `crtl_exp2` red was the
+  SOLE entry in the not-in-allowlist list keeping `would_pin` false. So it was not merely
+  noise on the board — **it was blocking pin qualification outright.** `pin_verify v353
+  8a16663c6ffe` is GREEN (full), `red: []`, and `pin_shadow` has flipped to
+  `qualifies: true, reds 0, streak 1`, so `trackt pinstatus` can name a last-fully-green
+  pin again.
+
+  **STILL CARRIED, second check running (T's, and T's call): the `twatch.py` stub-refile
+  fix (`c45ed0062`) has NOT had its daemon restart.** The clone has pulled it; the watcher
+  has been in back-to-back full/pin/native runs and T will not restart mid-test, which is
+  correct. **So the NEXT new red still will not auto-file.** Do not read "no ticket
+  appeared" as "no finding" until a restart is confirmed — and the risk is now sharper, not
+  softer, because with the board clear the next red is likelier to be a real one.
+
+  T on the duplicate-port find: *"the one I would have missed — I audited for hardcoded
+  ports and would have logged `lib_http_async`'s 28755 as one more instance of the pattern,
+  not as a collision with `lib_tls` INSIDE one recipe block."* And on where it belongs:
+  **a comment at the constant is checkable, where a ticket is not.**
