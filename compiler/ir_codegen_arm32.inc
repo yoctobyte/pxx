@@ -3882,7 +3882,7 @@ begin
         end
         else
         begin
-          j := VariantTagForTk386(tk, 'Variant :=');
+          j := VariantTagForTk(tk, 'Variant :=');
           if (tk = tyString) or (tk = tyAnsiString) then
           begin
             if tk = tyString then
@@ -3917,7 +3917,7 @@ begin
       begin
         { Box a scalar into a temp variant (IRA = temp addr); addr -> r0. }
         tk := IntToTypeKind(IRC[node]);
-        j := VariantTagForTk386(tk, 'Variant operand');
+        j := VariantTagForTk(tk, 'Variant operand');
         if (tk = tyString) or (tk = tyAnsiString) then
         begin
           if tk = tyString then

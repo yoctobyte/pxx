@@ -19,16 +19,17 @@ procedure EmitCodeAbsToRdx(targetOff: Integer); forward;   { ir_codegen.inc is i
 procedure EmitPyBitFloatErrStub; forward;
 procedure EmitSignalRuntime; forward;
 procedure EmitIoLockStubs; forward;
-procedure EmitIoLockStubs386; forward;
+{$ifndef PXX_NO_I386}procedure EmitIoLockStubs386; forward;{$endif}
 procedure EmitIoLockStubsA64; forward;
 procedure EmitSignalRuntimeA64; forward;
 procedure EmitSignalRuntimeRISCV32; forward;
 procedure EmitSignalRuntimeArm32; forward;
-procedure EmitSignalRuntime386; forward;
+{$ifndef PXX_NO_I386}procedure EmitSignalRuntime386; forward;{$endif}
 procedure EmitIoLockStubsArm32; forward;
 { The per-arch dispatcher every frontend driver must call instead of picking a
   stub itself — see its body in ir_codegen.inc for why that is not optional. }
 procedure EmitIoLockStubsForTarget; forward;
+procedure EmitSignalRuntimeForTarget; forward;   { its sibling: the one place the per-arch signal runtime is chosen }
 
 { pxx pre-scans declarations, so a routine may be CALLED above its definition; FPC
   cannot, and the cold-bootstrap seed is built by FPC. Anything defined later in this
@@ -36661,7 +36662,7 @@ begin
     the PC target, --no-signals opts out (user decision: no auto-detection —
     predictable process behavior beats size sniffing; the whole runtime is
     ~200 bytes). See feature-signal-handlers. }
-  if (TargetArch = TARGET_X86_64) and not NoSignals then EmitSignalRuntime;
+  EmitSignalRuntimeForTarget;
   { --fpc-float-errors decoder stub (feature-float-exception-mask-control):
     emitted next to the signal runtime because it IS a signal hook. }
   if FpcFloatErrors then
@@ -36674,10 +36675,6 @@ begin
             + 'that turns the trap into a runtime error (drop --no-signals)');
     EmitFpcFloatErrStub;
   end;
-  if (TargetArch = TARGET_AARCH64) and not NoSignals then EmitSignalRuntimeA64;
-  if (TargetArch = TARGET_RISCV32) and not NoSignals and (not EspBareBoot) then EmitSignalRuntimeRISCV32;
-  if (TargetArch = TARGET_ARM32) and not NoSignals then EmitSignalRuntimeArm32;
-  if (TargetArch = TARGET_I386) and not NoSignals then EmitSignalRuntime386;
   { --threadsafe statement-atomic I/O lock stubs. The per-arch choice used to be
     spelled out here, in the Pascal driver only, which is precisely why the
     other eight frontends shipped without it. }

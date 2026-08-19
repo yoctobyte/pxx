@@ -364,7 +364,10 @@ begin
   if TargetArch = TARGET_RISCV32 then AsmRv32ProcessLine(line, noHoles, 0)
   else if TargetArch = TARGET_AARCH64 then AsmA64ProcessLine(line, noHoles, 0)
   else if TargetArch = TARGET_ARM32 then AsmArm32ProcessLine(line, noHoles, 0)
-  else Asm386ProcessLine(line, noHoles, 0);
+{$ifndef PXX_NO_I386}
+  else if TargetArch = TARGET_I386 then Asm386ProcessLine(line, noHoles, 0)
+{$endif}
+  else Error('asm frontend: no engine for this target in this build');
 end;
 
 { Find a code label recorded by the active target's engine (post-resolve). }
@@ -387,11 +390,14 @@ begin
     for k := 0 to AsmArm32LblCount - 1 do
       if AsmArm32LblName[k] = nm then begin off := AsmArm32LblPos[k]; Result := True; end;
   end
-  else
+{$ifndef PXX_NO_I386}
+  else if TargetArch = TARGET_I386 then
   begin
     for k := 0 to Asm386LblCount - 1 do
       if Asm386LblName[k] = nm then begin off := Asm386LblPos[k]; Result := True; end;
-  end;
+  end
+{$endif}
+  else Error('asm frontend: no engine for this target in this build');
 end;
 
 procedure ParseAsmProgramEngine;
@@ -412,7 +418,10 @@ begin
   if TargetArch = TARGET_RISCV32 then AsmRv32BlockBegin
   else if TargetArch = TARGET_AARCH64 then AsmA64BlockBegin
   else if TargetArch = TARGET_ARM32 then AsmArm32BlockBegin
-  else Asm386BlockBegin;
+{$ifndef PXX_NO_I386}
+  else if TargetArch = TARGET_I386 then Asm386BlockBegin
+{$endif}
+  else Error('asm frontend: no engine for this target in this build');
 
   n := Length(Source);
   i := 1;
@@ -500,7 +509,10 @@ begin
   if TargetArch = TARGET_RISCV32 then AsmRv32BlockResolve
   else if TargetArch = TARGET_AARCH64 then AsmA64BlockResolve
   else if TargetArch = TARGET_ARM32 then AsmArm32BlockResolve
-  else Asm386BlockResolve;
+{$ifndef PXX_NO_I386}
+  else if TargetArch = TARGET_I386 then Asm386BlockResolve
+{$endif}
+  else Error('asm frontend: no engine for this target in this build');
 
   { first `global` naming a known code label overrides the ELF entry point }
   entrySet := False;

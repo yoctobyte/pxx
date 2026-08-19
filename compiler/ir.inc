@@ -11343,3 +11343,30 @@ begin
     (feature-revive-const-fold-identity-pass). }
   if WarnMissedFold then IROptWarnMissedFold;
 end;
+
+{ TTypeKind -> VT_* variant tag. Target-independent, and shared on purpose: it
+  lived in ir_codegen386.inc until 2026-08-19, where the arm32 backend was
+  already calling it by its `...386` name — a cross-backend reference that only
+  became visible when PXX_NO_I386 stopped compiling that file. The mapping is
+  about the variant representation, not about any instruction set, so it belongs
+  here where every backend can reach it. }
+function VariantTagForTk(tk: TTypeKind; const what: AnsiString): Integer;
+begin
+  case tk of
+    tyInteger, tyInt8, tyInt16, tyInt32: Result := VT_INT;
+    tyInt64, tyNativeInt:                Result := VT_INT64;
+    tyUInt8, tyUInt16, tyUInt32, tyUInt64,
+    tyNativeUInt, tyPointer:             Result := VT_INT64;
+    tyBoolean:                           Result := VT_BOOL;
+    tyChar:                              Result := VT_CHAR;
+    tyDouble, tySingle, tyExtended:      Result := VT_DOUBLE;
+    tyString, tyAnsiString:              Result := VT_STRING;
+    { A CLASS boxes as VT_OBJECT, the representation container slots and
+      isinstance already use — the x86-64 arm has had it; i386 had not, so
+      `v := someObject` (examples/net/httpdemo.pas) failed to build for this
+      target only. Retained at the store, so the slot's release balances. }
+    tyClass:                             Result := VT_OBJECT;
+  else
+    Error(what + ': this scalar type not yet supported');
+  end;
+end;

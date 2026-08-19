@@ -611,26 +611,9 @@ begin
     IREmitNode386(node);
 end;
 
-function VariantTagForTk386(tk: TTypeKind; const what: AnsiString): Integer;
-begin
-  case tk of
-    tyInteger, tyInt8, tyInt16, tyInt32: Result := VT_INT;
-    tyInt64, tyNativeInt:                Result := VT_INT64;
-    tyUInt8, tyUInt16, tyUInt32, tyUInt64,
-    tyNativeUInt, tyPointer:             Result := VT_INT64;
-    tyBoolean:                           Result := VT_BOOL;
-    tyChar:                              Result := VT_CHAR;
-    tyDouble, tySingle, tyExtended:      Result := VT_DOUBLE;
-    tyString, tyAnsiString:              Result := VT_STRING;
-    { A CLASS boxes as VT_OBJECT, the representation container slots and
-      isinstance already use — the x86-64 arm has had it; i386 had not, so
-      `v := someObject` (examples/net/httpdemo.pas) failed to build for this
-      target only. Retained at the store, so the slot's release balances. }
-    tyClass:                             Result := VT_OBJECT;
-  else
-    Error(what + ': this scalar type not yet supported');
-  end;
-end;
+{ VariantTagForTk lives in ir.inc — it is target-independent (a TTypeKind ->
+  VT_* mapping) and arm32 was already calling this file's copy across the
+  backend boundary. See the note at its definition. }
 
 procedure EmitVariantFill386(tag: Integer; payloadTk: TTypeKind);
 { eax = variant slot address; payload pushed on the stack: 8 bytes for a
@@ -4436,7 +4419,7 @@ begin
         end
         else
         begin
-          j := VariantTagForTk386(tk, 'Variant :=');
+          j := VariantTagForTk(tk, 'Variant :=');
           { A CODE ADDRESS overrides the type-kind answer — defs.inc's
             VT_CALLABLE_TAG; the x86-64 arm carries the full note. }
           if IRSrcIsCallable(IRB[node]) then j := VT_CALLABLE_TAG;
@@ -4502,7 +4485,7 @@ begin
       begin
         { Box a scalar into a temp variant (IRA = temp addr); addr -> eax. }
         tk := IntToTypeKind(IRC[node]);
-        j := VariantTagForTk386(tk, 'Variant operand');
+        j := VariantTagForTk(tk, 'Variant operand');
         { see the IR_VAR_STORE arm above and defs.inc's VT_CALLABLE_TAG }
         if IRSrcIsCallable(IRB[node]) then j := VT_CALLABLE_TAG;
         if tk = tyString then

@@ -614,6 +614,36 @@ begin
   ]);
 end;
 
+procedure EmitSignalRuntimeForTarget;
+{ THE one place that decides which signal runtime a build needs — the sibling of
+  EmitIoLockStubsForTarget below, and added for the same reason: the per-arch
+  choice used to be spelled out in the Pascal driver (parser.inc), which is both
+  how a backend name leaked into a shared file and how a per-arch decision ends
+  up made in one frontend only.
+
+  NOTE, deliberately unchanged here: only the Pascal driver calls this at all, so
+  the other frontends still ship without a signal runtime — the same gap the I/O
+  lock had. Moving the choice is a pure refactor; making every frontend call it
+  is a behaviour change, filed separately as
+  bug-a-only-the-pascal-driver-emits-the-signal-runtime.
+
+  xtensa has no sibling stub on purpose (see parser.inc's note at the AN_WRITE
+  lowering); riscv32 skips it under --esp-profile=bare, where there is no OS to
+  deliver a signal. }
+begin
+  if NoSignals then Exit;
+  if      TargetArch = TARGET_X86_64  then EmitSignalRuntime
+  else if TargetArch = TARGET_AARCH64 then EmitSignalRuntimeA64
+  else if TargetArch = TARGET_ARM32   then EmitSignalRuntimeArm32
+{$ifndef PXX_NO_I386}
+  else if TargetArch = TARGET_I386    then EmitSignalRuntime386
+{$endif}
+  else if TargetArch = TARGET_RISCV32 then
+  begin
+    if not EspBareBoot then EmitSignalRuntimeRISCV32;
+  end;
+end;
+
 procedure EmitIoLockStubsForTarget;
 { THE one place that decides which I/O-lock stubs a build needs. Every frontend
   driver calls this; none of them may spell out the per-arch choice itself.
@@ -644,7 +674,9 @@ begin
   BSS_IO_OWNER := BSSSize; Inc(BSSSize, 8);
   BSS_IO_DEPTH := BSSSize; Inc(BSSSize, 8);
   if      TargetArch = TARGET_X86_64  then EmitIoLockStubs
+{$ifndef PXX_NO_I386}
   else if TargetArch = TARGET_I386    then EmitIoLockStubs386
+{$endif}
   else if TargetArch = TARGET_AARCH64 then EmitIoLockStubsA64
   else if TargetArch = TARGET_ARM32   then EmitIoLockStubsArm32;
   { riscv32/xtensa deliberately absent: --threadsafe atomics are not ported
@@ -6892,11 +6924,13 @@ begin
     calls DbgRecordRow in its statement loop). }
   DwarfLastLine := 0;
   DwarfProcFirstRow := True;
+{$ifndef PXX_NO_I386}
   if TargetArch = TARGET_I386 then
   begin
     IREmitMachineCode386;
     Exit;
   end;
+{$endif}
   if TargetArch = TARGET_ARM32 then
   begin
     IREmitMachineCodeArm32;
