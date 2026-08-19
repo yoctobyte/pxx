@@ -985,7 +985,8 @@ def diff_jobs(prev_jobs, report):
 
 
 # ---------------------------------------------------------------- reports --
-def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red):
+def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
+                    st=None):
     ts = utcnow().replace(":", "").replace("-", "")
     rel = os.path.join(TSTATE_REL, "reports",
                        "%s-%s-%s.md" % (ts, sha[:7], host))
@@ -1006,6 +1007,26 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red)
              # does not name the binary (task-t-seed-from-stable-defeats-rebuild).
              "compiler_sha256: %s" % (report.get("compiler_sha256") or "unknown"),
              "---", ""]
+    # How stale BREADTH was when this verdict was published. A native report is
+    # the document a reader reaches for days later, and "GREEN" on it says
+    # nothing about the cross targets — which run in `full` and nowhere else.
+    # On 2026-08-19 breadth went four hours and 76 pushes without a single full
+    # run while every native report said GREEN, and the only thing standing
+    # between that and a wrong conclusion was one agent warning another by hand
+    # (bug-t-the-push-rate-starves-breadth-coverage-entirely).
+    if st is not None and report["tier"] != "full":
+        age = secs_since(((st.get("last_full") or {}).get("date")) or "")
+        if age is None:
+            lines += ["> **BREADTH: this host has never completed a `full` "
+                      "tier.** Nothing here covers i386/arm32/riscv32/aarch64.",
+                      ""]
+        elif age > BREADTH_STALE_SECS:
+            lines += ["> **BREADTH IS %s STALE.** The newest `full` tier on "
+                      "this host is %s old, so no cross target has seen this "
+                      "tree. A `%s` verdict covers x86-64 only — do not read it "
+                      "as matrix coverage."
+                      % (fmt_age(age), fmt_age(age), report["tier"]), ""]
+
     # stable key -> source file(s), so a reader sees WHICH test without
     # mapping job numbers back to Makefile lines (numbers shift with edits)
     srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
@@ -1126,6 +1147,49 @@ def host_quiet_secs(st, now=None):
         return None
     age = (now if now is not None else time.time()) - seen
     return age if age > QUIET_HOST_SECS else None
+
+
+# A full tier is the ONLY thing that runs the cross targets, and the ladder
+# reaches it only when the box is idle. When pushes arrive faster than a fast
+# verdict completes, idle never happens and breadth silently stops.
+#
+# Measured 2026-08-19: 76 testable pushes, 30 native runs and ZERO full runs in
+# the four hours after the last one completed — while `--status` said UP and
+# every verdict was GREEN. Both statements were TRUE. Neither answered "has any
+# cross target seen this tree?", which is what a reader takes from them, and the
+# whole repo's push discipline ("confirm native, offload the matrix") rests on
+# that answer (bug-t-the-push-rate-starves-breadth-coverage-entirely).
+#
+# So the age is printed ALWAYS, not only past the threshold: a number a reader
+# can see is what makes the boundary of the claim checkable, and the thing that
+# failed here was a correctness property depending on one agent remembering to
+# warn another.
+BREADTH_STALE_SECS = 6 * 3600
+
+
+def secs_since(iso, now=None):
+    """Seconds since an ISO-8601 Z timestamp, or None if unparseable."""
+    try:
+        seen = calendar.timegm(time.strptime((iso or "").strip(),
+                                             "%Y-%m-%dT%H:%M:%SZ"))
+    except (ValueError, TypeError):
+        return None
+    return max(0.0, (time.time() if now is None else now) - seen)
+
+
+def testable_behind(repo, sha, ref, cap=500):
+    """Testable commits on `ref` that are newer than `sha`.
+
+    Counts what a gate OWES, not raw commits: docs/tstate-only movement needs no
+    run, and on this repo the watcher's own publishes are most of the log — so a
+    raw count would read as alarming on a quiet day and hide the signal.
+    """
+    try:
+        out = sh(["git", "log", "--format=%H", "-n", str(cap),
+                  "%s..%s" % (sha, ref)], cwd=repo)
+    except (RuntimeError, subprocess.SubprocessError, OSError):
+        return None
+    return sum(1 for ln in out.split() if needs_test(repo, ln))
 
 
 def fmt_age(secs):
@@ -1563,7 +1627,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     rel = None
     if changed or report["verdict"] == "RED":
         rel = write_report_md(clone, host, sha, parent, report,
-                              new_red, fixed, still_red)
+                              new_red, fixed, still_red, st)
 
     # A run that measured something proves the box works again — drop any
     # degraded marker, so the host stops reporting DOWN on its own the moment
@@ -3806,6 +3870,22 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
         # place that difference is visible without diffing two json files —
         # which matters most at cutover, when the fleet decides whose green to
         # trust. Silent while a host skips nothing.
+        # BREADTH. The line above says "full through <sha> GREEN" and stops
+        # there, so a reader cannot tell whether that sha is ten minutes or ten
+        # hours behind — and the cross targets run nowhere else. Always printed
+        # when the host has ever run one, because the age is the boundary of the
+        # claim and a boundary nobody can see is not checked.
+        if lf.get("date") and not quiet:
+            age = secs_since(lf["date"], now)
+            behind = testable_behind(repo, lf.get("sha", ""), ref)
+            stale = age is not None and age > BREADTH_STALE_SECS
+            print("tstate:   breadth — newest full tier is %s old%s%s"
+                  % (fmt_age(age) if age is not None else "?",
+                     ", %d testable commit(s) behind" % behind
+                     if behind else "",
+                     "  [STALE — no cross-target verdict on this tree; native "
+                     "GREEN does NOT cover i386/arm32/riscv32/aarch64]"
+                     if stale else ""))
         nskip = sum(1 for s in (st.get("jobs") or {}).values() if s == "skip")
         if nskip:
             print("tstate:   coverage — %d job(s) SKIPPED on %s (absent corpus "

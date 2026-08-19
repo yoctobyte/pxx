@@ -77,3 +77,61 @@ Not caused by the two-phase design being wrong — the design says the fast verd
 wins and a backfill is discardable, which is right. What has changed is the
 arrival rate crossing the point where "idle" stops occurring at all. A rate
 threshold nobody set explicitly is worth naming before it is tuned.
+
+## 2026-08-19 — shape 3 SHIPPED (the visibility half). 1 and 2 remain open.
+
+The scheduling trade is untouched and still undecided; what is fixed is that the
+hole is no longer silent.
+
+**`--status` now prints a breadth line whenever a host has ever run a full
+tier** — always, not only past the threshold, because the age IS the boundary of
+the claim and a boundary nobody can see does not get checked:
+
+```
+tstate: host plexus  last 6fba42d69830 RED (native, ...); full through 9bfb7fcfac03 GREEN
+tstate:   breadth — newest full tier is 4h old, 39 testable commit(s) behind
+```
+
+Past `BREADTH_STALE_SECS` (6h) it adds
+`[STALE — no cross-target verdict on this tree; native GREEN does NOT cover
+i386/arm32/riscv32/aarch64]`.
+
+"Testable commits behind" counts what a gate OWES (`needs_test`), not raw
+commits: on this repo the watcher's own publishes are most of the log, so a raw
+count would read as alarming on a quiet day and bury the signal on a busy one.
+
+**Published reports carry it too**, which is the half that matters days later —
+a `native` report is what a reader reaches for, and GREEN on it says nothing
+about the cross targets:
+
+> **BREADTH IS 7h STALE.** The newest `full` tier on this host is 7h old, so no
+> cross target has seen this tree. A `native` verdict covers x86-64 only — do
+> not read it as matrix coverage.
+
+A host that has **never** completed a full tier gets its own wording, because an
+undefined age must not render as fine. A `full` report gets no banner — it *is*
+the breadth run.
+
+### The framing worth keeping, and why this was worth doing before the hard part
+
+`--status` said UP and **was correct**: it measures whether commits were tested,
+and they were. Every verdict said GREEN and each was true of the tier that
+produced it. **The defect was never a wrong answer — it was a true answer to a
+narrower question than the reader believes it is answering**, and this is that
+shape at its most load-bearing, because CLAUDE.md tells every lane to run
+`quick` + self-host and offload the matrix, and for four hours there was no
+matrix.
+
+The only thing standing between that and a wrong conclusion was one agent
+warning another by hand. **A correctness property that depends on somebody
+remembering is a habit, not a property**, and habits do not survive a context
+clear.
+
+**Gate:** `tools/twatch_breadth_visibility_devtest.py` (new, in
+`make tools-devtest`) — the stale banner and its age, the never-ran wording, the
+fresh case, the full-tier case, and that `secs_since` returns None rather than 0
+on a malformed timestamp (0 would render "0h old" and mean the opposite).
+
+**Still open:** shape 1 (reserve breadth a slot) and shape 2 (resumable
+backfill). Both trade against fast-verdict latency, which is the dev loop's
+latency, and neither should be decided from one busy afternoon.
