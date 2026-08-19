@@ -180,12 +180,30 @@ def main():
               "the next slice of the same work is offered them")
         check(twatch.resume_arg(clone, (SHA_A, "native")) is None,
               "a different TIER is not")
-        check(not os.path.exists(os.path.join(tmp, twatch.RESUME_REL)),
-              "...the superseded partial is deleted, not left to rot")
-        twatch.save_partial(clone, (SHA_A, "full"), rep)
         check(twatch.resume_arg(clone, (SHA_B, "full")) is None,
               "and neither is a different SHA")
-        twatch.drop_partial(clone)
+
+        # THE BUG THIS FILE NOW GUARDS. Under the single slot, the two lines
+        # above did not merely decline the partial -- they DELETED it, so the
+        # fast native verdict that ends an idle slice destroyed the pin-verify
+        # work that had just been preempted. Measured over the feature's entire
+        # life: 9 saved, 1420 jobs, 0 carried. The read must be READ-ONLY.
+        check(twatch.resume_arg(clone, (SHA_A, "full")) is not None,
+              "A RUN OF DIFFERENT WORK DOES NOT EVICT IT — it is still there")
+
+        check(twatch.save_partial(clone, (SHA_B, "quick"), rep) == 2,
+              "a second, unrelated partial can be saved at the same time")
+        check(twatch.resume_arg(clone, (SHA_A, "full")) is not None
+              and twatch.resume_arg(clone, (SHA_B, "quick")) is not None,
+              "...and BOTH are readable — the store is keyed, not a slot")
+
+        twatch.drop_partial(clone, (SHA_B, "quick"))
+        check(twatch.resume_arg(clone, (SHA_B, "quick")) is None,
+              "a run that ENDED drops its own partial")
+        check(twatch.resume_arg(clone, (SHA_A, "full")) is not None,
+              "...and only its own")
+
+        twatch.drop_partial(clone, (SHA_A, "full"))
         check(twatch.save_partial(clone, (SHA_A, "full"), {"jobs": []}) == 0,
               "an abort that decided nothing writes no partial")
         check(twatch.resume_arg(clone, (SHA_A, "full")) is None,
@@ -193,11 +211,49 @@ def main():
         check(twatch.resume_arg(clone, None) is None,
               "a run that opted out of resuming is never offered one")
 
-        print("...and every outcome is COUNTED, including the do-nothing ones")
+        # The name is a convenience; the PAYLOAD is the authority. A truncated
+        # or hand-edited file whose contents disagree with its filename is
+        # declined rather than resumed against the wrong work.
+        bad = twatch.partial_path(clone, (SHA_A, "full"))
+        os.makedirs(os.path.dirname(bad), exist_ok=True)
+        with open(bad, "w") as f:
+            json.dump({"sha": SHA_B, "tier": "full", "jobs": []}, f)
+        check(twatch.resume_arg(clone, (SHA_A, "full")) is None,
+              "a partial whose contents disagree with its filename is declined")
+        os.unlink(bad)
+
+    print("the store is BOUNDED — and says what it dropped")
+    with tempfile.TemporaryDirectory() as tmp:
+        clone = FakeClone(tmp)
+        rep = {"compiler_sha256": BIN_1, "jobs": [decided("t#src:a.pas")]}
+        # Distinct in the FIRST 12 chars, because that is the slice the
+        # filename is built from. "%040d" would have made every key collide on
+        # a run of zeros and turned the whole cap test vacuous.
+        keys = [(("%d%s" % (i + 1, "a" * 40))[:40], "full")
+                for i in range(twatch.PARTIAL_CAP + 2)]
+        for n, k in enumerate(keys):
+            twatch.save_partial(clone, k, rep)
+            # mtime, not write order, is what the GC sorts on, and a same-second
+            # filesystem would otherwise make this test a coin flip.
+            os.utime(twatch.partial_path(clone, k), (n * 100.0, n * 100.0))
+        live = [k for k in keys if twatch.resume_arg(clone, k)]
+        check(len(live) <= twatch.PARTIAL_CAP,
+              "the store never exceeds PARTIAL_CAP=%d (got %d)"
+              % (twatch.PARTIAL_CAP, len(live)))
+        check(keys[-1] in live and keys[0] not in live,
+              "the NEWEST survive and the oldest are evicted, not the reverse")
         with open(os.path.join(tmp, twatch.RESUME_STATS_REL)) as f:
             stats = json.load(f)
-        check(stats.get("superseded") == 2,
-              "each supersede counted once (got %r)" % stats.get("superseded"))
+        # An aged-out partial is lost work exactly like an evicted one was, so
+        # it stays on the same counter. Dropping it silently would hide a
+        # regression behind a healthy-looking saved count.
+        check(int(stats.get("superseded") or 0) >= 1,
+              "an aged-out partial is still counted as lost work (got %r)"
+              % stats.get("superseded"))
+
+    print("...and every outcome is COUNTED, including the do-nothing ones")
+    with tempfile.TemporaryDirectory() as tmp:
+        clone = FakeClone(tmp)
         st = twatch.bump_resume_stats(clone, discarded=1)
         check(st.get("discarded") == 1, "a testmgr-side discard is counted")
         st = twatch.bump_resume_stats(clone, discarded=1)

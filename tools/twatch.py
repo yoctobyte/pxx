@@ -84,7 +84,12 @@ TSTATE_REL = "devdocs/progress/tstate"
 INDEX_REL = TSTATE_REL + "/TSTATE.md"  # generated; the ONE co-written tstate file
 WATCH_REL = ".testmgr/watch.json"     # daemon phase heartbeat for frontends
 PUBHEALTH_REL = ".testmgr/pubhealth.json"  # publish outcome: quiet vs stuck
-RESUME_REL = ".testmgr/resume.json"        # partial results of an ABORTED run
+RESUME_REL = ".testmgr/resume.json"        # LEGACY single slot; migrated away from
+RESUME_DIR_REL = ".testmgr/resume"         # partial results of ABORTED runs, per (sha, tier)
+# How many partials may coexist. Each holds every decided job's dict, so this
+# is a disk bound. Four covers the live interleave (a pin verify, a breadth
+# backfill, and the fast verdicts that land between their slices) with room.
+PARTIAL_CAP = 4
 RESUME_STATS_REL = ".testmgr/resume-stats.json"   # how often resuming WORKS
 CONF_NAME = "twatch.conf"             # per-clone config (JSON, untracked)
 # mid_tier == tier COLLAPSES the escalation ladder to native -> full, and that
@@ -643,16 +648,72 @@ def save_partial(clone, key, report):
     jobs = (report or {}).get("jobs") or []
     if not jobs:
         return 0
-    write_json_atomic(os.path.join(clone.path, RESUME_REL),
-                      {"sha": sha, "tier": tier,
-                       "compiler_sha256": report.get("compiler_sha256"),
-                       "saved": utcnow(), "jobs": jobs})
+    path = partial_path(clone, key)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    write_json_atomic(path, {"sha": sha, "tier": tier,
+                             "compiler_sha256": report.get("compiler_sha256"),
+                             "saved": utcnow(), "jobs": jobs})
+    # The legacy single slot, if this clone still has one. It can only ever
+    # shadow the keyed store now.
+    try:
+        os.unlink(os.path.join(clone.path, RESUME_REL))
+    except OSError:
+        pass
+    gc_partials(clone)
     return len(jobs)
 
 
-def drop_partial(clone):
+def partial_path(clone, key):
+    """Where the partial for (sha, tier) lives. One file per key, NOT one slot.
+
+    A single slot meant every gate run claimed the same file, so the fast verdict
+    that ends an idle slice deleted the partial belonging to the phase that had
+    just been preempted -- and that phase is the only one a partial was ever for.
+    Measured over the feature's whole life: 9 saved, 1420 jobs, 0 carried, 9
+    superseded (bug-t-a-saved-partial-is-evicted-by-the-next-run-of-different-work).
+    """
+    sha, tier = key
+    return os.path.join(clone.path, RESUME_DIR_REL,
+                        "%s-%s.json" % (sha[:12], re.sub(r"[^A-Za-z0-9]", "", tier)))
+
+
+def gc_partials(clone):
+    """Bound the store by count, newest kept. -> number evicted.
+
+    Eviction is by CAPACITY and age, never by "some other run started" -- that
+    was the bug. A partial whose work the ladder never returns to does need to
+    go, but it goes because it is old, not because a fast verdict wanted the
+    slot it was sitting in.
+    """
+    d = os.path.join(clone.path, RESUME_DIR_REL)
     try:
-        os.unlink(os.path.join(clone.path, RESUME_REL))
+        files = [os.path.join(d, f) for f in os.listdir(d) if f.endswith(".json")]
+    except OSError:
+        return 0
+    if len(files) <= PARTIAL_CAP:
+        return 0
+    files.sort(key=lambda f: os.path.getmtime(f), reverse=True)
+    for f in files[PARTIAL_CAP:]:
+        try:
+            os.unlink(f)
+        except OSError:
+            continue
+        # Still counted as superseded: a partial that aged out unused is the
+        # same lost work as one that was evicted, and the rate is what
+        # resume_health() reports. A silent GC would hide the regression.
+        bump_resume_stats(clone, superseded=1)
+    print("twatch: partial store over %d — evicted %d oldest: %s"
+          % (PARTIAL_CAP, len(files) - PARTIAL_CAP,
+             ", ".join(os.path.basename(f) for f in files[PARTIAL_CAP:][:3])),
+          flush=True)
+    return len(files) - PARTIAL_CAP
+
+
+def drop_partial(clone, key=None):
+    """Delete the partial for `key` (or the legacy slot when key is None)."""
+    path = partial_path(clone, key) if key else os.path.join(clone.path, RESUME_REL)
+    try:
+        os.unlink(path)
     except OSError:
         pass
 
@@ -692,26 +753,24 @@ def keep_partial(clone, key, rep_path, tier):
 
 
 def resume_arg(clone, key):
-    """--resume path for this run, or None. Drops a partial from other work."""
+    """--resume path for THIS run's own (sha, tier), or None.
+
+    What it deliberately does not do any more: touch anybody else's partial.
+    """
     if not key:
         return None
-    path = os.path.join(clone.path, RESUME_REL)
+    path = partial_path(clone, key)
     try:
         with open(path) as f:
             part = json.load(f)
     except (OSError, ValueError):
         return None
     if (part.get("sha"), part.get("tier")) != key:
-        # Not a mismatch to argue with: the watcher moved on to different work,
-        # and the old partial can never become valid again. Counted anyway --
-        # a rising superseded count is how "the ladder never returns to the
-        # same job twice" would show up as a number instead of a suspicion.
-        print("twatch: dropping a partial for %s/%s — this run is %s/%s"
-              % ((part.get("sha") or "?")[:12], part.get("tier"),
-                 key[0][:12], key[1]), flush=True)
-        bump_resume_stats(clone, superseded=1)
-        drop_partial(clone)
+        # The filename says one thing and the contents another: a truncated or
+        # hand-edited file. Decline it; do not trust the name over the payload.
         return None
+    # NOTE what this no longer does: evict partials belonging to OTHER work.
+    # This run reads its own and leaves the rest alone, which is the entire fix.
     return path
 
 
@@ -809,7 +868,7 @@ def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False,
         # useless: it would be offered to the next run of the same (sha, tier),
         # which is precisely a retry after an INFRA/busy failure, i.e. the case
         # where the compiler is most likely to have been reseeded underneath it.
-        drop_partial(clone)
+        drop_partial(clone, resume_key)
         rz = (report or {}).get("resume")
         if rz:
             stats = bump_resume_stats(

@@ -3,7 +3,7 @@ track: T
 prio: 60
 type: bug
 blocked-by: []
-summary: "Zero full-tier runs on HEAD in the 5h13m between 9bfb7fcfac03 (10:31:57Z) and ~15:45Z, while cross-target coverage read as fine because every native verdict was green. RE-MEASURED: the watcher is idle 54% of that window (~2.8h, 8x what a full tier needs) — breadth is not starved by pushes, it is queued behind pin verify, which needs a contiguous 21 minutes, gets idle slices with a median of 299s, and discards 100% on every abort. Breadth ran within minutes of pin verify finally retiring. Fix is resumability plus bounding consecutive idle, NOT reserving a slot."
+summary: "SHAPE 2 SHIPPED AND DID NOTHING (see the 2026-08-19 correction: 9 saved, 0 carried, 100% loss — fixed under bug-t-a-saved-partial-is-evicted-by-the-next-run-of-different-work); this closes on carried_runs leaving zero, not on more code. Zero full-tier runs on HEAD in the 5h13m between 9bfb7fcfac03 (10:31:57Z) and ~15:45Z, while cross-target coverage read as fine because every native verdict was green. RE-MEASURED: the watcher is idle 54% of that window (~2.8h, 8x what a full tier needs) — breadth is not starved by pushes, it is queued behind pin verify, which needs a contiguous 21 minutes, gets idle slices with a median of 299s, and discards 100% on every abort. Breadth ran within minutes of pin verify finally retiring. Fix is resumability plus bounding consecutive idle, NOT reserving a slot."
 ---
 
 # The push rate starves breadth coverage entirely
@@ -301,6 +301,32 @@ failure directions — yielding too eagerly and yielding permanently) and
 `tools/twatch_resume_devtest.py` (shape 2; the three wrong-carry modes above
 plus the counting), both in `make tools-devtest`.
 
-**Status: all four shapes resolved** — 1 closed as measured-wrong, 3 shipped
-(visibility), 4 and 2 shipped. What remains is watching the numbers rather than
-writing code, which is what the stats file is for.
+**Status: shapes 1/3/4 done; shape 2 shipped, then measurably did nothing.**
+1 closed as measured-wrong, 3 shipped (visibility), 4 shipped and working
+(`idle_yield` counts on the live tstate). Shape 2 shipped as `e2449adc5` and
+**delivered nothing at all** — see the correction below.
+
+## Correction, 2026-08-19: shape 2 had a 100% loss rate
+
+The line above once read "all four shapes resolved". That was written from the
+code landing, not from the numbers, and the numbers say otherwise. From the
+watcher clone at 20:23:12Z, over the feature's entire life:
+
+    saved_partials 9 · saved_jobs 1420 · carried_runs 0 · superseded 9
+
+Nine saves, nine supersedes, **zero carries.** Root cause: `.testmgr/resume.json`
+was a single slot every gate run claimed, and `resume_arg()` deleted a partial
+belonging to other work rather than declining it — so the push-driven native
+verdict that *ends* an idle slice destroyed the pin-verify partial saved when
+that slice was preempted. Filed and fixed as
+`bug-t-a-saved-partial-is-evicted-by-the-next-run-of-different-work` (keyed
+partial store, `PARTIAL_CAP`, read-only `resume_arg`).
+
+So this ticket's own conclusion — "shape 2 is what makes the turns add up" — was
+never in force. A 21-minute pin verify still could not complete in 5-minute
+slices, for the whole period the fix was believed to be deployed.
+
+**This ticket stays open on a NUMBER, not on code.** It closes when
+`carried_runs` on the live clone leaves zero and a full tier lands off resumed
+slices. Watching the stats file is the remaining work — which is what the stats
+file was built for, and this correction is the first time it earned its keep.
