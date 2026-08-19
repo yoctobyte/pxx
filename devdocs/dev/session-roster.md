@@ -3340,3 +3340,63 @@ dyn-array arm banked), and T's 37-source `/tmp` chore (belongs to C/N/B, not T).
   making the call itself and will escalate only if it is a genuine fork. **~24 resolved
   tickets still await landed shas** and must NOT be auto-filled by pattern-matching
   `git log` — that is `bug-t-resolve-cites-a-sha-the-rebase-then-rewrites` at scale.
+
+## MANDATE CHANGE 2026-08-19 — A/P/C over everything N, and re-triage the 33 "features"
+
+**User, verbatim in substance:** defer Track N *"since it is a neverending story"*. **Track
+A + P + C priority above anything Track N, even Track N bugs.** And: many A/P tickets typed
+`feature` *"may well be bugs, it's a grey zone"* — plus, after weeks of bugfixing, *"some
+features may be stale or already solved."*
+
+**This supersedes the backlog-shrink push's specifics** (skip high-prio, work the p<=40 tail).
+The count-down instinct still applies where it is free, but **lane priority now beats prio
+number**: an A/P/C item outranks an N item regardless of the two `prio:` fields. Do not let
+`next --track N` pull anyone back in.
+
+### The population, measured
+
+Open A/P/C by type: **33 feature**, 11 bug, 8 compat, 5 untyped, 4 refactor, 3 idea,
+2 chore, 1 each task/meta/investigation.
+
+The 33 features by filing date — oldest first, and age is the staleness proxy:
+
+    2026-07-16 p55 A feature-signal-siginfo-ucontext
+    2026-07-19 p55 A feature-a-declaration-phase
+    2026-07-20 p40 A feature-a-promoint-variant-esp-targets
+    2026-07-22 p40 A feature-cdecl-bodied-sysv-prologue
+    2026-07-23 p25 A feature-opt-alloc-intent-hint
+    2026-07-23 p35 A feature-nilpy-arc-cross-parity
+    2026-07-30 p50 C feature-c-vla-via-alloca
+    2026-07-31 p20 A feature-cli-widgetset-flag
+    2026-08-02 p55 A feature-nilpy-object-reclamation
+    2026-08-03 p40 A feature-a-typeref-migrate-consumers
+    2026-08-03 p60 A feature-opt-store-reload-elimination
+    ... 22 more, 2026-08-06 onward
+
+**Three are NilPy-motivated but filed under A** — `feature-nilpy-arc-cross-parity`,
+`feature-nilpy-object-reclamation`, `feature-nilpy-cycle-collector`. They are core ARC/GC
+machinery, so the FILES are A, but the motivation is N. **Rank them as N under this mandate**
+unless something else needs them; the letter is about file ownership, not about what the work
+is for.
+
+### The triage, and what makes it worth doing rather than just re-reading
+
+Three questions per ticket, in this order, because the first two can close it outright:
+
+1. **Is it already solved?** Weeks of bugfixing may have landed it incidentally. **Compile the
+   ticket's repro against the current pin.** This is the cheap, high-yield question and it is
+   a MEASUREMENT, not a reading — a ticket's prose is a snapshot from its filing date.
+2. **Is it stale?** Superseded by a decision, a redesign, or a different mechanism that made
+   it moot. Close with the reason, not silently.
+3. **Is it actually a BUG?** This is the user's grey zone. The distinction that matters is not
+   the word in `type:` — it is **what a user experiences**. If FPC/CPython/gcc accepts
+   something pxx refuses, or pxx produces a wrong value, that is a **bug** however it was
+   filed. "Feature" reads as optional and gets deferred forever; a mis-typed bug is therefore
+   a ranking error that compounds. **Re-type it and say why in the ticket.**
+
+**Triage is READ-ONLY and does not need the A/P slot** — compiling a repro touches no shared
+file. A fix found by triage DOES need the slot; queue it rather than taking it.
+
+**Never re-type or close from the title.** A title names the reporter's encounter, not the
+boundary; several here have been wrong twice. Re-measure, then edit the body AND the
+frontmatter `summary`, since the summary is what the board renders.
