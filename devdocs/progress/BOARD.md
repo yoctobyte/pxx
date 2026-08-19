@@ -119,7 +119,6 @@ _none_
 | decide-what-an-unwired-test-may-assert | U | 55 | decide | May we record our own output as the expectation? | — |
 | decide-what-synapse-actually-needs-vs-mimic-fpc | U | 20 | decide | Synapse builds under `--mimic-fpc`. What does it actually NEED? | — |
 | decide-which-minix-is-the-target | U | 58 | decide | MINIX 2 / early 3.1.x (small, plain, ACK-era C) versus MINIX 3.2+ (which imported the NetBSD userland and build system). These are close to different projects for our purposes, and the choice dominates the cost of the whole lighthouse. Recommendation: MINIX 2 / early 3.1.x. | — |
-| decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 | doc-glossary-of-cross-language-slang | D | 40 | doc | pxx accepts Pascal, C and Python, so its docs mix three vocabularies and define none of them. A reader fluent in one hits the others' slang unexplained — `cls`, `self`, dunder, repr-vs-str going one way; unit, uses, RTL, pinned, fixedpoint going the other. Wanted: a glossary with a Python-to-Pascal equivalence table, since most terms have a counterpart the reader already knows. | — |
 | doc-n-fu-is-how-a-python-package-is-found | D | 25 | doc | `-Fu<dir>` is how NilPy finds a third-party Python package, and it is absent from the compiler's usage line. Its absence misdiagnoses as `import: no unit named X` — a 'feature missing' message for a feature that exists. Cost a wrong first diagnosis on the first corpus attempt; will bite the next person wiring one. | — |
 | docs-cli-fpc-float-errors-flag | D | 40 | docs | One row in docs/reference/cli.md for --fpc-float-errors (landed 2026-08-13): opt-in FPC float-error emulation. The default — quiet IEEE, inf/NaN propagate — is worth a sentence there too, since it is a deliberate divergence from FPC that a Pascal reader will not expect. | — |
@@ -140,6 +139,7 @@ _none_
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-b-a-real-minidom-is-an-implementation-not-a-shim | B | 15 | feature | Question 2 of the xml.dom row, re-filed on its own as that ticket said it should be. html5lib/treebuilders/dom.py wants a document you can build and mutate — ~25 DOM methods, getDOMImplementation().createDocument(), weakref.proxy(), and a reach into minidom's PRIVATE _child_node_types. That is a DOM implementation, not a compatibility alias. It unblocks exactly one corpus file and should be ranked as an implementation project, not alongside shims. | — |
 | feature-b-hardware-sqrt-on-aarch64-and-arm32 | B | 20 | feature | Sqrt is one `sqrtsd` on x86-64 (15x faster than the software path and correctly rounded by IEEE mandate). aarch64 `fsqrt` and arm32 `vsqrt` are the same one-instruction win and both run here under qemu, so the change is verifiable on this box. The portable SqrtSoft stays as the fallback for riscv32/xtensa. | — |
+| feature-b-mimic-xml-etree-elementtree-tree-model | B | 62 | feature | DECIDED 2026-08-19: ship xml.etree.ElementTree as a TREE MODEL only (Element, Comment, ElementTree + 10 members), no XML reader. ~60 lines plus a differential; unblocks the last 4 shim-blocked corpus files. The Comment-factory-is-its-own-tag identity must be exact or html5lib silently stops recognising comments. | — |
 | feature-b-rtl-lnxp1-fpc-compat | B | 20 | feature | FPC's math unit exports LnXP1(x) = ln(1+x) and pxx does not. The implementation already exists as of 2026-08-15 — LnP1, added as an internal helper for the hyperbolic family — so this is an interface line and a name, not an algorithm. Note WHY the name matters: `Log1p` would hijack libc's through pxxcio, `LnXP1` does not. | — |
 | feature-c-csmith-differential-fuzzing | C | 65 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-entry-stub-must-run-initializers-for-environ | C | 45 | feature | `char **envp = environ;` silently becomes NULL in a C program: environ is a VARIABLE read directly, with no call to trigger crtl's lazy /proc/self/environ load, and the C entry stub has no init phase. The fini half landed 2026-08-10; this is the init half | — |
@@ -365,7 +365,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (83)
+## decided (84)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -452,6 +452,7 @@ _none_
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 | decide-week-theme-2026-08-17 | U | 70 | decide | What should the next week of work aim at? Measured: the bug backlog already peaked (61 on 08-03 -> 32 now) and 65% of open tickets are features, so this is no longer a burn-down question. Three candidate themes with the numbers behind each. | — |
+| decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
 ## done (2033)
 
@@ -507,7 +508,7 @@ _none_
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
 - [p 65] [P] feature-pascal-corpus-oop
-- [p 62] [U] decide-xml-etree-thin-tree-model-or-a-real-xml-library (unblocks 1)
+- [p 62] [B] feature-b-mimic-xml-etree-elementtree-tree-model
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 60] [A] refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
 - [p 58] [U] decide-which-minix-is-the-target

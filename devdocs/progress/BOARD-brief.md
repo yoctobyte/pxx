@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:16 blocked:5 backlog:238 experimental:20 rainy-day:41 done-followup:3 decided:83 done:2033 rejected:38`
+`unfinished:16 blocked:5 backlog:238 experimental:20 rainy-day:41 done-followup:3 decided:84 done:2033 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -45,7 +45,7 @@ _none — no lane is locked._
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
-- `[p 62] [U]` decide-xml-etree-thin-tree-model-or-a-real-xml-library (unblocks 1)
+- `[p 62] [B]` feature-b-mimic-xml-etree-elementtree-tree-model
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 60] [A]` refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
 - `[p 58] [U]` decide-which-minix-is-the-target

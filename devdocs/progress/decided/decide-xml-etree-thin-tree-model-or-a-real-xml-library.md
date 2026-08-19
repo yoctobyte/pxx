@@ -99,3 +99,45 @@ foreclose it.
 If A is chosen, the work is ready to start immediately and is measured: ~60
 lines plus a differential test against CPython's real `xml.etree.ElementTree`,
 in the shape of the eight `mimic_*` shims already gated by `make lib-test`.
+
+---
+
+# DECIDED 2026-08-19 by the user — **Option A: the minimal shim**
+
+> "For now the minimal shim; if we want to extend it we can write the XML importer later."
+
+Ship `mimic_xml_etree_elementtree.py` as the **tree model only**: `Element`, `Comment`,
+`ElementTree`, and the ten members the corpus actually touches. The XML *reader* is a
+separate, later, optional piece of work — **chosen on its own merits if it is ever
+wanted, not smuggled in as a side quest attached to a corpus goal.**
+
+## The sub-question was NOT decided, and does not need to be
+
+*How should a shim declare its own incompleteness — omit the missing entry point (compile
+error), or include it and refuse (runtime error)?* The repo has one of each today:
+`mimic_urllib_request` includes `urlopen` and raises; this ticket proposed omitting
+`parse`. Asked, and the user did not settle it — **so do not write a general rule.**
+
+**Turn it into a measurement instead of a decision.** The distinction that matters is
+whether anything **imports the missing entry point without calling it** — that is the only
+reason present-and-refusing exists (`mimic_urllib_request` is a refusing stub precisely so
+importing code still compiles). So:
+
+- Grep the corpus for speculative references to `parse` / `fromstring` / `iterparse`.
+- **Nothing imports them speculatively → omit them**, and the error is loud and early.
+- **Something does → include and refuse**, naming this ticket in the message.
+
+If a second case ever needs a judgement call rather than a measurement, *then* file the
+general rule as its own decision.
+
+## Must be exact, or comments silently stop working
+
+`ElementTree.Comment("x").tag` **is the `Comment` function itself** — CPython uses the
+factory as its own sentinel tag, and html5lib depends on the identity:
+`ElementTreeCommentType = ElementTree.Comment("asd").tag`, then
+`node.tag == ElementTreeCommentType`.
+
+## Re-filed as work
+
+See `feature-b-mimic-xml-etree-elementtree-tree-model`. A decided ticket that is never
+re-filed is invisible to `ready`/`next`.
