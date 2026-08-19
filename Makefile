@@ -9915,16 +9915,56 @@ check-stable-managed:
 	  echo "Stable managed v$$(cat $(STABLE_MANAGED_DIR)/VERSION) OK: $$(cat $(STABLE_MANAGED_DIR)/last.sha256)" || \
 	  (echo "MISMATCH: stable managed binary does not match last.sha256"; exit 1)
 
+# THE PIN BRAKE. Undoes a blessing; the compiler commits themselves stay on
+# master, only `pinned` moves back.
+#
+#   make revert            undo the most recent pin
+#   make revert VERSION=N  restore the pin that stood at v N
+#
+# It does NOT copy a per-version `vN` binary: the default stable dir moved to a
+# fixed-name overwrite scheme (929fa707c) and keeps none, which is exactly how
+# this target came to be broken -- a consumer that only runs in an emergency,
+# invalidated by a good change nobody re-tested against it. Every file under
+# $(STABLE_DEFAULT_DIR) is TRACKED instead, so the previous pin is recovered
+# byte-for-byte -- binary, VERSION, pin.log, the frozen builtin/ -- by restoring
+# those paths from the newest commit whose VERSION is LOWER than the current one.
+# Selecting by version rather than by "the parent of the last commit that touched
+# the dir" is what makes repeated reverts monotonic: once a revert is committed it
+# is itself the last commit touching the dir, and the parent rule then walks
+# FORWARD into the bad pin it just undid (observed while testing this).
+# (`revert-managed` below still copies a vN, and correctly so: stabilize-managed
+# still writes per-version binaries. Do not "fix" it to match.)
+#
+# Leaves the result staged and uncommitted, the same contract as `pin`: the
+# commit is the operator's. Undo the undo with `git checkout HEAD -- <dir>`.
 revert:
-	@V=$$(cat $(STABLE_DEFAULT_DIR)/VERSION); \
-	 TV=$${VERSION:-$$((V-1))}; \
-	 test "$$TV" -ge 1 2>/dev/null || (echo "Usage: make revert VERSION=N"; exit 1); \
-	 test "$$TV" -le "$$V" || (echo "v$$TV does not exist (current is v$$V)"; exit 1); \
-	 test -f $(STABLE_DEFAULT_DIR)/v$$TV || \
-	   (echo "Binary $(STABLE_DEFAULT_DIR)/v$$TV missing — may need to rebuild from that commit"; exit 1); \
-	 cp $(STABLE_DEFAULT_DIR)/v$$TV $(COMPILER); \
-	 echo "Reverted $(COMPILER) to stable v$$TV (was v$$V)"; \
-	 echo "Run 'make test' to verify, or 'make stabilize' to record as new stable."
+	@set -e; \
+	 D=$(STABLE_DEFAULT_DIR); \
+	 test -e $$D/VERSION || (echo "no stable dir at $$D"; exit 1); \
+	 V=$$(cat $$D/VERSION); \
+	 git diff --quiet -- $$D && git diff --cached --quiet -- $$D || \
+	   (echo "$$D has uncommitted changes -- commit or discard them first"; exit 1); \
+	 SRC=$$(for s in $$(git log --format=%H -- $$D/VERSION); do \
+	          CV=$$(git show $$s:$$D/VERSION 2>/dev/null); \
+	          if [ -n "$(VERSION)" ]; then \
+	            if [ "$$CV" = "$(VERSION)" ]; then echo $$s; break; fi; \
+	          else \
+	            if [ "$$CV" -lt "$$V" ] 2>/dev/null; then echo $$s; break; fi; \
+	          fi; \
+	        done); \
+	 test -n "$$SRC" || \
+	   (echo "no commit in history has $$D/VERSION $${VERSION:+= $(VERSION)}$${VERSION:-< $$V}"; exit 1); \
+	 ADDED=$$(git diff --diff-filter=A --name-only $$SRC HEAD -- $$D); \
+	 git checkout $$SRC -- $$D; \
+	 for f in $$ADDED; do git rm -q -f "$$f"; done; \
+	 git add -A -- $$D; \
+	 NV=$$(cat $$D/VERSION); \
+	 SHA=$$(sha256sum $$D/pinned | awk '{print substr($$1,1,12)}'); \
+	 echo "reverted pin: v$$V -> v$$NV  (pinned $$SHA)"; \
+	 echo "restored $$D from $$(git log -n 1 --format='%h %s' $$SRC)"; \
+	 echo "STAGED, not committed. Commit with:"; \
+	 echo "  git commit -m 'chore(stable): revert pin to v$$NV' -- $$D"; \
+	 echo "Changed your mind:  git checkout HEAD -- $$D"
 
 revert-managed:
 	@V=$$(cat $(STABLE_MANAGED_DIR)/VERSION); \

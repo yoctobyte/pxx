@@ -92,8 +92,11 @@ git add stable_linux_amd64 && git commit -m "chore(stable): record vN, pin for B
 `make stabilize` only records a checkpoint (moves `latest`); it does **not**
 touch `pinned`, so B is unaffected until you `make pin`. Bless deliberately when
 a feature B is waiting on has landed. `history.log` is the checkpoint changelog;
-`pin.log` records each blessing. Roll back the working compiler with `make revert
-VERSION=N`; move B back with `make pin VERSION=N`.
+`pin.log` records each blessing. Undo a blessing with `make revert` (steps back
+one pin; `make revert VERSION=N` goes straight to a named one). It restores every
+tracked file under the stable dir from the commit that pinned that version, so
+`pinned`, `VERSION` and `pin.log` come back byte-for-byte, and it leaves the
+result staged for you to commit. `make pin` takes no `VERSION=`.
 
 The **authoritative gate is unchanged**: `make test` + self-host fixedpoint.
 A feature is not "done" until it passes that. `make stabilize` will not record a

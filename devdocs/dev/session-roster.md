@@ -1693,13 +1693,18 @@ exists, its banner says so and the banner outranks the queue order.
   green against v356. **Both reports would have been true and the ground broken.** Do not
   accept pre-pin gating again without a specific reason.
 
-- **REVERTING A BAD PIN: `make revert` does NOT do it in this tree.** It restores
-  `compiler/pascal26` from a per-version `vN` binary and this tree keeps none — it fails
-  with "Binary … missing". **What works: `git revert <the pin commit>`.** Every stable file
-  is tracked, so that restores the previous pin byte-for-byte including `VERSION` and
-  `pin.log`. Verified 2026-08-19 on v357 → v356 (`5a0e894b3`): pinned md5 back to
-  `540956f1f071…`, VERSION 356, and the failing file compiles again. **The commits stay on
-  master; only the blessing is undone**, which is what the brake is for.
+- **REVERTING A BAD PIN: `make revert`** — fixed 2026-08-19
+  (`bug-a-make-revert-the-documented-pin-brake-does-not-fire`). It used to copy a
+  per-version `vN` binary this tree stopped keeping and died with "Binary … missing";
+  it now restores every tracked file under the stable dir from the commit that pinned
+  the previous version, so `pinned`, `VERSION`, `pin.log` and the frozen `builtin/`
+  come back byte-for-byte. Bare `make revert` steps back one pin, repeatably;
+  `make revert VERSION=N` goes straight to a named one. It leaves the result **staged,
+  not committed** — same contract as `pin` — and `git checkout HEAD -- <the dir>` undoes
+  the undo. Exercised against real v365→v364→v363→v362 pins in a scratch clone.
+  Hand-reverting the pin commit still works and is what recovered v357 → v356
+  (`5a0e894b3`). **The commits stay on master; only the blessing is undone**, which is
+  what the brake is for.
 
 - **A WRAPPER THAT APPENDS ANYTHING AFTER THE COMMAND UNDER TEST REPORTS THE WRAPPER'S
   HEALTH, NOT THE TEST'S.** `; echo exit=$?`, `| tail`, `&& next` — all three, and all
