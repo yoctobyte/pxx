@@ -1278,6 +1278,55 @@ _REASON_NOISE_RE = re.compile(
     r"|Makefile:\d+: recipe for target\b)")
 
 
+def report_job(j):
+    """One job's entry in the report JSON.
+
+    Extracted from main() so it can be guarded directly; the report is the only
+    thing about a run that OUTLIVES the run, so its shape deserves a test that
+    does not need a full tier to reach it.
+    """
+    return {"name": j.name, "cls": j.cls, "src": j.src,
+            "sel": j.sel or j.name,
+            # Does this job build EXCLUSIVELY with the pinned binary? testmgr is
+            # the only thing that knows -- it has the expanded recipe -- and a
+            # consumer that has to re-derive it would have to re-run `make -n`.
+            # twatch uses it to refute a bisect: a pin-built job cannot be
+            # broken by a commit that only touches compiler/** or tools/**,
+            # because the bytes that compiled it did not move.
+            "pin_built": j.pin_built,
+            "advisory": j.advisory,
+            "status": j.status,
+            "flaky": j.flaky,
+            "attempts": j.attempts,
+            # `is not None`, not truthiness: the unset sentinel is None
+            # (Job.__init__), and a monotonic clock reading of exactly 0.0 is a
+            # legal timestamp that the truthy test silently reported as a
+            # zero-duration job. Unreachable in practice -- time.monotonic() is
+            # uptime -- which is precisely why it would have survived to bite
+            # someone who reused this on a clock that does start at zero.
+            "dur": round((j.t1 - j.t0), 1) if j.t0 is not None and j.t1 is not None else 0.0,
+            # The BASELINE the duration is meaningless without. testmgr learns
+            # this EWMA per job and has always used it for the console notes
+            # ("SLOW (expected 40.0s)"), but it never left the terminal -- so a
+            # consumer reading the report saw "dur": 361.0 with nothing to
+            # compare it against and could not tell contention from normal.
+            # That is how a Makefile-inner timeout stays invisible even when its
+            # cost is right there in the JSON
+            # (bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic).
+            #
+            # None, never 0.0, when the job has no learned duration yet: "we
+            # have not measured this job before" and "we expect it to take no
+            # time" are opposite claims, and a consumer computing dur/exp_dur
+            # must be made to handle the first rather than silently divide.
+            "exp_dur": round(j.exp_dur, 1) if j.exp_dur else None,
+            "mem": j.peak_rss, "cpu": round(j.cpu_sec, 1),
+            # `log` is a path on THIS box in a temp dir the OS reaps; a consumer
+            # that keeps the report cannot read it later. `reason` is the part
+            # that has to survive.
+            "reason": job_reason(j) if j.status not in ("pass", "skip") else "",
+            "log": j.logpath}
+
+
 def job_reason(job):
     """A bounded, git-stable account of what a red job printed. "" if unknown.
 
@@ -4248,28 +4297,7 @@ def main():
                # read as a mass RED. Omitting them lets twatch's merge keep each
                # job's previous verdict, which is the honest answer for a job
                # this run never attempted.
-               "jobs": [{"name": j.name, "cls": j.cls, "src": j.src,
-                         "sel": j.sel or j.name,
-                         # Does this job build EXCLUSIVELY with the pinned
-                         # binary? testmgr is the only thing that knows -- it
-                         # has the expanded recipe -- and a consumer that has
-                         # to re-derive it would have to re-run `make -n`.
-                         # twatch uses it to refute a bisect: a pin-built job
-                         # cannot be broken by a commit that only touches
-                         # compiler/** or tools/**, because the bytes that
-                         # compiled it did not move.
-                         "pin_built": j.pin_built,
-                         "advisory": j.advisory,
-                         "status": j.status,
-                         "flaky": j.flaky,
-                         "attempts": j.attempts,
-                         "dur": round((j.t1 - j.t0), 1) if j.t0 and j.t1 else 0.0,
-                         "mem": j.peak_rss, "cpu": round(j.cpu_sec, 1),
-                         # `log` is a path on THIS box in a temp dir the OS
-                         # reaps; a consumer that keeps the report cannot read
-                         # it later. `reason` is the part that has to survive.
-                         "reason": job_reason(j) if j.status not in ("pass", "skip") else "",
-                         "log": j.logpath}
+               "jobs": [report_job(j)
                         for j in jobs
                         if j.status not in ("queued", "skipped",
                                             "carried")] + carried}

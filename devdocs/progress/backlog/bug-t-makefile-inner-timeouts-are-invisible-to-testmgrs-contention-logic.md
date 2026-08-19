@@ -350,3 +350,42 @@ ticket as justification for a fix that could not have worked on a single real si
 **Measure the subject, not a model of it** — a scratch reproduction is only evidence
 about the real code when it reproduces the real code's *shape*, and here four distinct
 shapes all needed reproducing separately.
+
+## Landed 2026-08-19 (plexus-T): the baseline is in the report
+
+The revised first fix from the section above, implemented. Track T's own tooling, so no
+ticket claim was needed — but it is recorded here because it is this ticket's option 3,
+and because what it does NOT do matters as much as what it does.
+
+- **`report_job()` extracted** from the inline dict comprehension in `main()`. The report
+  is the only part of a run that outlives the run, and until now its shape could not be
+  exercised without a full tier. Pure extraction, no behaviour change.
+- **`exp_dur` added** to every job entry: testmgr's learned EWMA, the number it has been
+  printing to the console as `SLOW (expected 40.0s)` and throwing away. `None` when the
+  job has no learned duration, never `0.0` — "we have never measured this job" and "we
+  expect it to take no time" are opposite claims, and a consumer computing `dur/exp_dur`
+  must be made to handle the first rather than silently divide.
+- **`tools/report_exp_dur_devtest.py`** — 14 guards. Non-vacuity checked by deleting the
+  field in a scratch copy: **10 of 14 go red, all by name.** The first version failed the
+  neuter with a `KeyError` traceback instead of named FAILs, which reports where it broke
+  but not what; reading the field through `.get()` fixed that. One check was dropped
+  during the same pass for restating its predecessor — a guard that repeats the one above
+  it inflates the count and covers nothing.
+- **Incidental defect found by the guard, fixed:** `"dur"` was computed under
+  `if j.t0 and j.t1`, but the unset sentinel is `None` (`Job.__init__`), so a timestamp of
+  exactly `0.0` was reported as a zero-duration job. Unreachable today —
+  `time.monotonic()` is uptime — which is exactly why it would have survived to bite
+  whoever reused this on a clock that does start at zero. Now `is not None`.
+
+### What this does and does not buy
+
+It makes a Makefile-inner timeout **legible**, not **detectable**. A uforth corpus row
+that normally takes 40s and took 361s now says so in the JSON, so a human or a triage
+pass can see contention where the recipe insisted it exited 0. Nothing yet *acts* on the
+ratio: `PEER_TIME_FACTOR` stretching, `_retriable_contention()` and the `timeout` status
+are still structurally unable to reach inside a recipe, exactly as the top of this ticket
+describes. That gap needs the recipe-side markers, which are `Makefile` edits and so not
+Track T's push lane.
+
+**This ticket stays open** for that half. What is left is the table in the measurement
+section above, split per owning lane.
