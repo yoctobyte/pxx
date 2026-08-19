@@ -19715,6 +19715,35 @@ begin
   end;
 end;
 
+{ The length / element-fetch methods a for-in INDEX LOOP should call on class
+  ci. pylib's containers spell them `count` and `at`; a USER container spells
+  them `__len__` and `__getitem__`.
+
+  Without this, `for x in b` over a class defining `__getitem__`/`__len__` asked
+  for `count`, found nothing, and died with "pylib (count) not loaded" -- an
+  error naming a pylib routine for a program that never mentioned pylib, on a
+  class whose `b[0]`, `b[0] = v` and `len(b)` all already worked. Only the
+  ITERATION spelling was missing (feature-nilpy-for-loop-getitem-protocol-fallback).
+
+  Kept as two tiny functions rather than folded into PyMethNameFor because that
+  one maps the other direction -- a PYTHON name onto a class's spelling -- and
+  here we hold the pylib name and want the Python one. }
+function PySeqLenMethod(ci: Integer): AnsiString;
+begin
+  if (ci >= 0) and (FindUMeth(ci, '__len__') >= 0) then
+    Result := '__len__'
+  else
+    Result := 'count';
+end;
+
+function PySeqAtMethod(ci: Integer): AnsiString;
+begin
+  if (ci >= 0) and (FindUMeth(ci, '__getitem__') >= 0) then
+    Result := '__getitem__'
+  else
+    Result := 'at';
+end;
+
 function PyParseForIn(const name: AnsiString; const name2: AnsiString; enumMode: Boolean;
                        forTokIdx: Integer): Integer;
 var contNode, ci, dictCi, listCi, fileCi, iterCi, rangeCi, symIdx, cSym, iSym, nSym: Integer;
@@ -20189,8 +20218,21 @@ begin
   end
   else if not isIter then
   begin
-    lenNode := PyCallMeth1(ci, 'count', PyMakeIdent(cSym), -1);
-    if lenNode < 0 then Error('Nil Python: pylib (count) not loaded');
+    lenNode := PyCallMeth1(ci, PySeqLenMethod(ci), PyMakeIdent(cSym), -1);
+    if lenNode < 0 then
+    begin
+      { Name the method the READER would add. A class with __getitem__ and no
+        __len__ is CPython-iterable (it walks 0.. and stops on IndexError), so
+        the honest message is which of the two we still require -- not the
+        pylib spelling, which a NilPy program never mentions. }
+      if (ci >= 0) and (FindUMeth(ci, '__getitem__') >= 0) then
+        Error('Nil Python: `for` over this object needs `__len__` as well as '
+              + '`__getitem__` — iterating by __getitem__ alone (stopping on '
+              + 'IndexError) is not supported yet')
+      else
+        Error('Nil Python: `for` over this object needs `__iter__`, or '
+              + '`__getitem__` with `__len__`');
+    end;
   end;
   { a cursor has no length to snapshot — and asking for one is the whole point
     of it being a cursor }
@@ -20241,7 +20283,7 @@ begin
     elemNode := PyCallProc1('pyiter_take', PyMakeIdent(cSym))
   else
   begin
-    elemNode := PyCallMeth1(ci, 'at', PyMakeIdent(cSym), PyMakeIdent(iSym));
+    elemNode := PyCallMeth1(ci, PySeqAtMethod(ci), PyMakeIdent(cSym), PyMakeIdent(iSym));
     if elemNode < 0 then Error('Nil Python: pylib (get) not loaded');
   end;
   if enumMode then
@@ -20503,8 +20545,21 @@ begin
     ASTRight[cmpNode] := PyMakeIdent(nSym)
   else if not isIter then
   begin
-    lenNode := PyCallMeth1(ci, 'count', PyMakeIdent(cSym), -1);
-    if lenNode < 0 then Error('Nil Python: pylib (count) not loaded');
+    lenNode := PyCallMeth1(ci, PySeqLenMethod(ci), PyMakeIdent(cSym), -1);
+    if lenNode < 0 then
+    begin
+      { Name the method the READER would add. A class with __getitem__ and no
+        __len__ is CPython-iterable (it walks 0.. and stops on IndexError), so
+        the honest message is which of the two we still require -- not the
+        pylib spelling, which a NilPy program never mentions. }
+      if (ci >= 0) and (FindUMeth(ci, '__getitem__') >= 0) then
+        Error('Nil Python: `for` over this object needs `__len__` as well as '
+              + '`__getitem__` — iterating by __getitem__ alone (stopping on '
+              + 'IndexError) is not supported yet')
+      else
+        Error('Nil Python: `for` over this object needs `__iter__`, or '
+              + '`__getitem__` with `__len__`');
+    end;
     ASTRight[cmpNode] := lenNode;
   end;
   ASTTk[cmpNode] := Ord(tyBoolean);
