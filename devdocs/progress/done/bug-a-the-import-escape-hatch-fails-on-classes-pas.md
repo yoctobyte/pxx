@@ -158,4 +158,4 @@ come from an import statement"), but the stated reason was half wrong and is cor
 ## Gate
 
 `make compiler/pascal26` (fixedpoint, converged) + `tools/gate.sh quick` GREEN.
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit cc95bf083.
