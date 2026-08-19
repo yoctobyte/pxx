@@ -6722,6 +6722,9 @@ begin
   ProcRetRecId[ProcCount]     := REC_NONE;
   ProcAggregateDestSym[ProcCount] := -1;
   ProcRetIsDynArray[ProcCount] := False;
+  { -1, not 0: zero is a VALID ArrType index, so a proc that never sets this
+    would claim to return the FIRST array type declared in the program. }
+  ProcRetArrAi[ProcCount] := -1;
   ProcRetElemTk[ProcCount]     := tyUnknown;
   ProcRetElemRec[ProcCount]    := REC_NONE;
   ProcRetPtrElemTk[ProcCount]  := Ord(tyUnknown);

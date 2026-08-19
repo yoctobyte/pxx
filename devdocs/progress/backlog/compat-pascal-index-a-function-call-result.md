@@ -1,14 +1,15 @@
 ---
-summary: "Indexing a function call's result — `Copy(s,2,3)[1]`, `Make[0]`, `b.ArrP(3)[0]` — either fails to parse or reaches IR lowering as an un-lowerable AN_CALL; FPC accepts all three"
+summary: "Indexing a call result: the FIXED-array, array-of-record and Copy-intrinsic spellings now match FPC; DYNAMIC-array results remain refused, and the fix needs one materialisation point rather than 20"
 type: compat
 track: P
 prio: 40
+owner: 
 ---
 
 # `f(...)[i]` — indexing a call result
 
 - **Type:** compat (Pascal frontend parity) — Track P
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-08-05
 - **Found by:** `tools/fpc_diff_probe.sh`, dynamic-array case batch
   (`dynarray-copy-and-alias`, now tagged `[known]`).
@@ -149,3 +150,73 @@ would have read a register holding element 0.
 Found while running a dynamic-array/pointer FPC differential for Track A; the
 rest of that surface (SetLength, Copy detaching, alias semantics, 2-D dyn,
 records, New/Dispose, nil, empty) matches FPC exactly.
+
+## 2026-08-19 — the FIXED-array and INTRINSIC halves are done; the DYNAMIC half is not, and the ticket's own baseline was wrong
+
+Landed under [[feature-a-index-an-array-returning-call-directly]] plus the Copy
+fix below. Covered by `test/test_index_a_call_result_directly.pas`, whose
+`.expected` is FPC's output for that same file, wired into `test-core`.
+
+| form | before | now |
+| --- | --- | --- |
+| `MkS[2]` — string result | works | works |
+| `MkArr[1]`, `MkArr2[i,j]`, `MkArr2[i][j]` — FIXED array | parse error | **= FPC** |
+| `MkStr[1]` — `array[0..2] of string[8]` | parse error | **= FPC** |
+| `MkR[1].a`, `MkR2[i,j].a`, `MkR2[i][j].a` — array of record | 1-D only | **= FPC** |
+| `Copy(s, 2, 3)[1]` — BUILTIN intrinsic | parse error | **= FPC** |
+| `Make[1]` — dynamic result | parse error | refused, clear message |
+| `b.ArrP(3)[0]`, `b.Arr[1]`, `TBag.Create.Arr[0]` — qualified, dyn | see below | unchanged |
+
+**Gap 2 was a routing bug, not an intrinsic-specific one.** `Copy`'s branch in
+`ParseFactorCore` builds an ordinary `AN_CALL` (onto `__pxxStrCopy`) and then
+`Exit`s, straight past the postfix chain — so the trailing `[` reached the
+statement parser as a stray token. It now calls `ApplyCallResultPtrSuffix` like
+every user call does. That is the whole of the intrinsic half: one shared walk,
+no second path.
+
+### Correction to this ticket's own baseline
+
+> **`b.Arr[1]` — a paramless method returning a dynamic array — works and gives
+> the right value.** That is the shape to follow.
+
+**It does not, and it did not.** The PINNED compiler — which predates all of
+this work — answers `IR_UNSUPPORTED ... (kind 8)` for both `b.Arr[1]` and
+`TBag.Create.Arr[0]`. The 2026-08-05 measurement was of a `TArr = array of
+Integer` *class field*, not of the method result, and it has been steering the
+ticket ever since: "whatever gives the paramless qualified call its temp is what
+the other three need" describes a mechanism that does not exist. Nothing gives
+it a temp. (`frank2-a-scan-in-a-ticket-reads-as-current`.)
+
+### What the dynamic half actually needs — measured, not assumed
+
+The hidden temp is **not** the hard part, which is what this ticket and the
+Track A one both assumed. A dyn-array temp allocated with `AllocDynArray` in the
+enclosing routine's scope gets the ordinary dyn-array release: 200 000
+iterations of `acc := acc + Make[1]` hold RSS flat at 264 kB, and the sum is
+right. The lifetime story already exists.
+
+The hard part is the other end. `IRLowerAddress` must answer the address of a
+SLOT HOLDING the handle; a dyn-array call's IR value **is** the handle. Adding
+dyn-array calls to that procedure's aggregate arm (`ir.inc` ~1733, next to the
+managed-string case whose rationale reads as if it covers this) makes the index
+path read the handle as though it were the slot:
+
+```
+TBag.Create.Arr[0]   FPC 5   pxx 25769803781 = 0x600000005
+```
+
+— elements 0 and 1 as one 8-byte word. **A silent wrong value where there had
+been a loud refusal**, which is strictly worse, so it was reverted rather than
+landed. Materialising the temp inside `IRLowerAddress` instead fixes both
+spellings and leaks one array per call, because that temp has no owner and no
+scope: a silent leak for a silent wrong value is not a trade.
+
+The shape that works is **routing every call-result suffix through
+`ApplyCallResultPtrSuffix`**, so there is one materialisation point with one
+lifetime story. Today the ~20 `mcallNode` sites in `ParseFactorCore` each index
+a call node on their own, which is exactly why the unqualified spelling could be
+fixed in one arm and the qualified ones could not. That is a real refactor and
+its own sitting; the diagnosis above is what it needs to start, and the refusal
+in the meantime is loud.
+
+**Remaining scope: dynamic-array results only, qualified and unqualified.**

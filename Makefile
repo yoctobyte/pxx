@@ -4600,6 +4600,8 @@ test-core: $(COMPILER)
 	$(TESTTMP)/test_system_qualified_intrinsic26 | diff -u test/test_system_qualified_intrinsic.expected -
 	./$(COMPILER) test/test_method_shadows_builtin.pas $(TESTTMP)/test_method_shadows_builtin26
 	$(TESTTMP)/test_method_shadows_builtin26 | diff -u test/test_method_shadows_builtin.expected -
+	./$(COMPILER) test/test_index_a_call_result_directly.pas $(TESTTMP)/test_index_a_call_result26
+	$(TESTTMP)/test_index_a_call_result26 | diff -u test/test_index_a_call_result_directly.expected -
 	./$(COMPILER) test/test_managed_var_param.pas $(TESTTMP)/test_managed_var_param26
 	test "$$($(TESTTMP)/test_managed_var_param26)" = "$$(printf '1\n1\n1\n1\n1\n6')"
 	./$(COMPILER) test/test_managed_setlength_var.pas $(TESTTMP)/test_managed_setlength_var26

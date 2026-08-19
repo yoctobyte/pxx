@@ -8772,6 +8772,7 @@ end;
 procedure ApplyCallResultPtrSuffix(node, procIdx: Integer);
 var tk: TTypeKind; elemTk, elemRec, recId, sub, prevTok, tmpN: Integer; fieldName: AnsiString;
     mcCi, mmi, mpi, mcallNode: Integer;
+    arrAi, tmpSym, ndD, nIdx: Integer; isND: Boolean;
 begin
   tk := Procs[procIdx].RetType;
   recId := REC_NONE;
@@ -8957,9 +8958,17 @@ begin
     node := prevTok;
     tk := tyChar;
   end
-  else if ((tk = tyClass) or (tk = tyRecord)) and (CurTok.Kind in [tkDot, tkLBrack]) then
-    { Member access on a class/record-returning call result: f(args).field[…]. }
-    node := ParseClassRecordSelectors(node, ProcRetRecId[procIdx], tk)
+  else if ((tk = tyClass) or (tk = tyRecord)) and (CurTok.Kind in [tkDot, tkLBrack]) and
+          not ((CurTok.Kind = tkLBrack) and
+               (ProcRetIsDynArray[procIdx] or (ProcRetFixedArrBytes[procIdx] > 0))) then
+    { Member access on a class/record-returning call result: f(args).field[…].
+      An ARRAY-of-record result reaching a `[` is NOT this case and is excluded:
+      Procs[].RetType carries the ELEMENT kind, so `MkR[1].a` used to read as a
+      record here by accident. It happened to work 1-D and could not work N-D --
+      this arm consumes one subscript, so `MkR2[i,j].a` died as `unexpected
+      token`. What decides the arm is whether the RESULT is an array, not what
+      its elements happen to be; the element kind is then just the tail the
+      shared arm hands back to these same selectors. }
   else if ((ProcRetFixedArrBytes[procIdx] > 0) or ProcRetIsDynArray[procIdx]) and
           (CurTok.Kind = tkLBrack) then
     { Indexing an ARRAY-returning call directly, `MkArr[1]`, when the element is
@@ -8974,8 +8983,143 @@ begin
       AN_COMMA — which also brings the N-D spelling `MkArr2[i,j]` with it,
       since a shaped temp carries the dim spans.
       bug-a-indexing-a-function-call-result-drops-the-field-selector }
-    Error('cannot index the result of an array-returning function directly — '
-          + 'assign it to a variable first');
+  begin
+    { Index a FIXED-array-returning call directly: `MkArr[i]`, `MkArr2[i,j]`.
+      Same move as the AnsiString arm above -- AN_INDEX needs an ADDRESSABLE
+      base, so materialise the result into a hidden temp and yield
+      `(tmp := call, tmp[i])` via AN_COMMA, which also evaluates the call
+      exactly once.
+
+      The temp is SHAPED like the array rather than merely sized like it:
+      AllocArray over the type's flattened bounds plus the SymArrNDims /
+      SymArrDimLo / SymArrDimSpan stamp, exactly as the callee's own Result
+      slot is built. That is what makes NodeArrNDInfo recognise it below, so
+      the N-D spelling comes for free instead of needing an arm of its own --
+      and it is why this needed ProcRetArrAi: ProcRetFixedArrBytes is a byte
+      count, which can size a temp but cannot shape one.
+
+      DYNAMIC-array results are still refused. The ticket's open question: a dyn
+      result is a heap handle with an ownership story, not a value copied into a
+      temp, so the temp would have to own its reference and release at scope
+      exit. Refusing beats guessing at a lifetime.
+      feature-a-index-an-array-returning-call-directly
+      compat-pascal-index-a-function-call-result }
+    { A DYNAMIC-array result is still refused, and the reason is now MEASURED
+      rather than assumed. The temp itself is fine: AllocDynArray in the
+      enclosing scope gets the ordinary dyn-array release (200k iterations of
+      `acc := acc + Make[1]` hold RSS flat at 264kB). What is not fine is the
+      OTHER end -- IRLowerAddress must answer the address of a SLOT HOLDING the
+      handle, and a dyn-array call's IR value is the handle itself. Letting that
+      call through the aggregate arm there makes the index path read the handle
+      as if it were the slot: `TBag.Create.Arr[0]` printed 25769803781, which is
+      0x600000005 -- elements 0 and 1 as one 8-byte word. A SILENT wrong value
+      where there had been a loud refusal.
+      Materialising a temp inside IRLowerAddress fixes both spellings and leaks
+      one array per call, because that temp has no owner and no scope. The real
+      shape is to route every call-result suffix through THIS procedure so there
+      is one materialisation point with one lifetime story -- the ~20 mcallNode
+      sites in ParseFactorCore each index a call node on their own today, which
+      is also why `b.Arr[1]` is refused by the PINNED compiler despite the
+      ticket recording it as working.
+      Banked in compat-pascal-index-a-function-call-result with the measurement. }
+    if ProcRetIsDynArray[procIdx] or (ProcRetArrAi[procIdx] < 0) then
+      Error('cannot index the result of an array-returning function directly — '
+            + 'assign it to a variable first');
+    arrAi := ProcRetArrAi[procIdx];
+    { Take the element type from the ArrType entry, NOT from Procs[].RetType.
+      They usually agree -- RetType IS the element kind for an array result --
+      but the alias is the authority on a FROZEN-STRING element's width, and
+      going through RetType lost it: `array[0..2] of string[8]` indexed off the
+      call printed 3, the length byte, where FPC prints `mid`. Same source the
+      variable-declaration path reads for exactly this reason. }
+    tk := IntToTypeKind(ArrTypeElemTk[arrAi]);
+    LastTypeRecId := ArrTypeElemRec[arrAi];
+    LastTypePointerElemRec := ArrTypePtrElemRec[arrAi];
+    if (tk = tyFixedString) or (tk = tyShortString) then
+      LastTypeStrCap := ArrTypeElemStrCap[arrAi];
+    tmpSym := AllocArray('', tk, ArrTypeLo[arrAi], ArrTypeHi[arrAi]);
+    if ArrTypeNDims[arrAi] >= 2 then
+    begin
+      SymArrNDims[tmpSym] := ArrTypeNDims[arrAi];
+      for ndD := 0 to ArrTypeNDims[arrAi] - 1 do
+      begin
+        SymArrDimLo[tmpSym * MAX_ARR_DIMS + ndD]   := ArrTypeDimLo[arrAi * MAX_ARR_DIMS + ndD];
+        SymArrDimSpan[tmpSym * MAX_ARR_DIMS + ndD] := ArrTypeDimSpan[arrAi * MAX_ARR_DIMS + ndD];
+      end;
+    end;
+    SymSyncTypeRef(tmpSym);
+    { the side-effect leg: tmp := call }
+    tmpN := AllocNode(AN_IDENT);
+    ASTIVal[tmpN] := tmpSym;
+    ASTTk[tmpN] := Ord(tk);
+    sub := AllocNode(AN_ASSIGN);
+    ASTLeft[sub] := tmpN;
+    ASTRight[sub] := node;
+    node := sub;
+    { the value leg: tmp[i] / tmp[i,j] / tmp[i][j] }
+    tmpN := AllocNode(AN_IDENT);
+    ASTIVal[tmpN] := tmpSym;
+    ASTTk[tmpN] := Ord(tk);
+    sub := AllocNode(AN_INDEX);
+    ASTLeft[sub] := tmpN;
+    Next;                                   { the '[' }
+    ParseExpr;
+    isND := NodeArrNDInfo(tmpN);
+    if isND and (CurTok.Kind = tkComma) then
+    begin
+      NDIdxNode[0] := CurASTNode; nIdx := 1;
+      while Eat(tkComma) do
+      begin
+        if nIdx >= NDInfoNDims then Error('too many subscripts for array');
+        ParseExpr; NDIdxNode[nIdx] := CurASTNode; Inc(nIdx);
+      end;
+      if nIdx <> NDInfoNDims then Error('wrong number of array subscripts');
+      ASTRight[sub] := BuildFlatNDIndex(nIdx);
+      Expect(tkRBrack, ']');
+    end
+    else if isND and (CurTok.Kind = tkRBrack) and (Tokens[TokPos].Kind = tkLBrack) then
+    begin
+      NDIdxNode[0] := CurASTNode; nIdx := 1;
+      Expect(tkRBrack, ']');
+      while (CurTok.Kind = tkLBrack) and (nIdx < NDInfoNDims) do
+      begin
+        Expect(tkLBrack, '[');
+        ParseExpr; NDIdxNode[nIdx] := CurASTNode; Inc(nIdx);
+        Expect(tkRBrack, ']');
+      end;
+      if nIdx <> NDInfoNDims then Error('wrong number of array subscripts');
+      ASTRight[sub] := BuildFlatNDIndex(nIdx);
+    end
+    else
+    begin
+      ASTRight[sub] := CurASTNode;
+      Expect(tkRBrack, ']');
+    end;
+    { StrValTk, not Ord: a frozen string's STORAGE kind is tyFixedString and its
+      VALUE kind is tyString -- the layouts are identical and only the slot size
+      differs, so every `= tyString` value check downstream keys on the latter.
+      Tagged with the storage kind, `MkStr[1]` on an `array[0..2] of string[8]`
+      printed 3, its length word, where FPC prints `mid`: a SILENT wrong value,
+      strictly worse than the refusal this arm replaced. }
+    ASTTk[sub] := StrValTk(tk);
+    { A RECORD/CLASS element continues into the ordinary selector walk --
+      `MkR[1].a`, `MkR2[i,j].a.b`. On `sub` and not on the AN_COMMA below,
+      because a field selector needs an ADDRESSABLE base and `tmp[i]` is one
+      while the comma's yielded value is not. This is the whole reason the
+      record spelling gets no arm of its own any more. }
+    if ((tk = tyRecord) or (tk = tyClass)) and (CurTok.Kind in [tkDot, tkLBrack]) then
+    begin
+      nIdx := ArrTypeElemRec[arrAi];
+      if nIdx = REC_NONE then nIdx := ProcRetRecId[procIdx];
+      sub := ParseClassRecordSelectors(sub, nIdx, tk);
+    end;
+    prevTok := AllocNode(AN_COMMA);
+    ASTLeft[prevTok] := node;
+    ASTRight[prevTok] := sub;
+    ASTTk[prevTok] := StrValTk(tk);
+    node := prevTok;
+    tk := IntToTypeKind(StrValTk(tk));
+  end;
   CurASTNode := node;
   LastExprTk := tk;
 end;
@@ -10022,6 +10166,7 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec: Integer; szElemTk: TTypeKind;
     seEtid, seOrd: Integer;
     lenFieldRec, lenFieldIdx: Integer;   { Length() of a static-array record field }
+    cpyPi: Integer;   { Copy(s,i,n)[k]: the __pxxStrCopy proc index, kept past ci's reuse }
     ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { bare class-const in a method body }
     mapProc, mapConv: Integer; mapKind: AnsiString;   { NilPy map(<type>, xs) }
     rndArg: Integer;   { first operand of NilPy round(x, n) }
@@ -15024,6 +15169,7 @@ begin
           clamped to the end by the helper). The lib `sysutils.Copy` keeps the
           explicit-uses overload path. }
         ci := FindProc('__pxxStrCopy');
+        cpyPi := ci;
         if (ci >= 0) and (IntToTypeKind(ASTTk[exprNode]) in [tyString, tyAnsiString, tyFixedString]) then
         begin
           if addrNode = -1 then
@@ -15040,6 +15186,18 @@ begin
           ASTRight[lastArg] := ci;
           lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := addrNode;       { count }
           ASTRight[ci] := lastArg;
+          { `Copy(s, 2, 3)[1]` -- the postfix chain, which this branch used to
+            Exit straight past. A builtin's branch returns an ordinary AN_CALL,
+            so it wants the SAME suffix walk a user call gets; without the call
+            the trailing `[` reached the statement parser as a stray token and
+            reported `unexpected token` pointing at the wrong place. This is why
+            `Nm()[1]` and `Copy(s,2,3)[1]` disagreed despite both being a string
+            indexed off a call. compat-pascal-index-a-function-call-result }
+          if CurTok.Kind in [tkLBrack, tkCaret, tkDot] then
+          begin
+            ApplyCallResultPtrSuffix(argSeq, cpyPi);
+            Exit;
+          end;
           CurASTNode := argSeq;
           LastExprTk := tyAnsiString;
           Exit;
@@ -31830,6 +31988,7 @@ begin
       header). See bug-pascal-ansistring-cast-of-cdecl-call-result. }
     ProcRetIsDynArray[procIdx] := retIsDynArr;
   ProcRetFixedArrBytes[procIdx] := retFixedArrBytes;
+  ProcRetArrAi[procIdx] := retArrAi;
     ProcRetElemTk[procIdx] := retElemTk;
     ProcRetElemRec[procIdx] := retElemRec;
     ProcRetPtrElemTk[procIdx] := retPtrElemTk;
@@ -32137,6 +32296,7 @@ begin
       ProcRetRecId[procIdx] := retRecId;
       ProcRetIsDynArray[procIdx] := retIsDynArr;
   ProcRetFixedArrBytes[procIdx] := retFixedArrBytes;
+  ProcRetArrAi[procIdx] := retArrAi;
       ProcRetElemTk[procIdx] := retElemTk;
       ProcRetElemRec[procIdx] := retElemRec;
       ProcRetPtrElemTk[procIdx] := retPtrElemTk;
@@ -32165,6 +32325,7 @@ begin
   ProcRetRecId[procIdx] := retRecId;
   ProcRetIsDynArray[procIdx] := retIsDynArr;
   ProcRetFixedArrBytes[procIdx] := retFixedArrBytes;
+  ProcRetArrAi[procIdx] := retArrAi;
   ProcRetElemTk[procIdx] := retElemTk;
   ProcRetElemRec[procIdx] := retElemRec;
   ProcRetPtrElemTk[procIdx] := retPtrElemTk;
@@ -32582,6 +32743,7 @@ begin
         sz := TypeSize(retType);
       retFixedArrBytes := Syms[idx].ArrLen * sz;
       ProcRetFixedArrBytes[procIdx] := retFixedArrBytes;
+      ProcRetArrAi[procIdx] := retArrAi;
     end
     else
     begin
