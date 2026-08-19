@@ -1576,6 +1576,17 @@ exists, its banner says so and the banner outranks the queue order.
   pinnable by construction. And `make revert` moves `pinned` back, so a bad pin is cheap.
   There is no prudence in waiting.
 
+  **Pin when the workers are IDLE — that is the cheapest window and it is free to spot.**
+  The lock's whole cost is contention, so a pin taken while everyone is between items costs
+  nobody anything. Corollary: **an idle fleet is a pin opportunity, not just a dispatch
+  problem.** Check the pin the moment you notice idleness, before dispatching them back
+  into work that will make the lock expensive again. v354 was taken exactly this way.
+
+  **Pinning per-INCREMENT is not churn.** A partially-implemented feature is still a
+  gated, self-hosting compiler — increment 1 of p88 passed the fixedpoint like anything
+  else. The alternative is B building against a compiler that predates the work, which is
+  the failure that actually happened.
+
   **Why it must be routine and not on demand:** on 2026-08-19 the pin sat a full day stale
   at v352 with twelve compiler/lib commits on top, while `working/`, every `ready` queue
   and tstate all looked healthy — **pin staleness appears in none of them.** It surfaced
