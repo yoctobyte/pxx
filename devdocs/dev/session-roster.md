@@ -1850,3 +1850,71 @@ rerank it deliberately rather than inheriting the number).
   its own tooling (`c99f15692` a job whose measured duration passed its class budget could
   never pass; `e96a60c07` est_mem below what lib-test#00 actually peaks at). T green
   through `c99f1569246d`.
+
+- **check 2026-08-19 (+9h): U queue emptied, a new red routed, frank3 still stuck.**
+
+  **Track U is now EMPTY.** The last four went today, and three of them had already
+  answered themselves and were sitting in `backlog/` looking open — `decide-unary-minus`
+  (user caught it), `decide-what-synapse-actually-needs-vs-mimic-fpc` (user caught it),
+  and `decide-nilpy-exec-injects-a-builtins-key` (partly). All recorded, moved to
+  `decided/`, and **re-filed as work**: unary-minus → `bug-p-unary-minus-…` (P, 30→45);
+  identity → `refactor-a-one-resolved-file-identity-for-a-translation-unit` (A, p45);
+  `__builtins__` → parked in `rainy-day/` + a Track D docs ticket (p40).
+
+  **My self-amendment grep missed two of the three.** I searched for phrases ("already
+  settles this", "is a confirmation"); Synapse announces itself with a `DEPRIORITISED`
+  blockquote instead. The pattern is not a phrase — it is **a decision recorded inside a
+  ticket that stayed in the ready queue** — and I have no reliable detector for it. Worth
+  a Track T tooling idea if one ever wants filing hygiene automated; not filed, because it
+  is my failure mode and not obviously anyone's ticket.
+
+  **A superseded root cause propagated into a DECIDED ticket, same day, and the user's
+  unrelated question is what caught it.** I described the C double-compile bugs as
+  "include-guard visibility lost across a macro-table reset" — that ticket's TITLE and
+  opening section, superseded by its own 2026-08-16 measurement (carrying the macro table
+  leaves output byte-identical; forcing the guard on breaks the pull). Real cause:
+  `stdarg.h` carries six `static` function BODIES and the crtl auto-pull must include it —
+  **Track C library work**, not preprocessor or `parser.inc`. Corrected in three places
+  plus the ticket's frontmatter `summary`, since that is what the board renders, and a
+  banner above its body where a searcher lands. Title kept so search terms still work.
+  **On a long-lived ticket the title and summary are the OLDEST prose in the file and the
+  only parts rendered — read the LAST dated section first.**
+
+  Also settled while there, since it recurs: the C reset is **not a regression**.
+  `CPMCount := 0` shipped in `4c21e86eb` (2026-05-26), the commit that introduced the C
+  preprocessor, alongside the Pascal-`uses`-a-`.c` invocation site. Pascal define scoping
+  never narrowed anything for C; `147087b0c` (2026-07-07) added a third invocation and
+  made a day-one latent bug visible. "Was it always broken?" is answered by `git log -S`
+  on the line, not by narrative.
+
+  **Convention stated (2 instances, not enough for process):** a closed ticket whose text
+  asserts an incomplete design gets a **correction banner above its body naming the live
+  ticket** — never reopened. `done/` records what a session shipped and rewriting it
+  falsifies history. Applied to `feature-mimic-fpc` (claims the scoped manifest is primary;
+  only the fallback shipped → `feature-dynamic-include-paths-config`, whose **Synapse
+  justification is now withdrawn** — rank it on self-build safety instead).
+
+  **T: NEW-RED `lib-test#src:test/lib_tls.pas`** at `6070883b46e7` (31 in range), and
+  `crtl_exp2.c` FIXED — the documented false positive is off the board. Routed to plexus-T
+  rather than bisected: the job does a **real loopback socket round-trip**, its 2026-08-16
+  instance was not reproducible natively and auto-closed green, and the open question from
+  that triage — transient vs host-specific — is answerable only on plexus. Asked it to
+  hold the 31-commit bisect until that fork is settled, and flagged that no NEW-RED stub
+  appears to have been filed.
+
+  **Dispatch:** frank2 idle → `feature-n-a-callable-value-carries-its-signature-type`
+  (A, p88, the settled boxed-def design), with the observation that N's top item
+  `bug-n-a-call-through-a-callable-value-drops-the-callees-defaults` (p70) is probably the
+  **same gap** and may be subsumed — asked it to check the relationship before cutting,
+  since it changes how N ranks behind it. Told it to make `working/` say whether the
+  unwired-test sweep is active or parked. Deliberately did NOT also hand it Track C's p55.
+
+  **frank3 has shown "waiting" since the morning check — that is USER-CLEARABLE only**
+  (likely a permission prompt), and Track B has ready work at the top (`feature-b-mimic-xml-
+  etree-elementtree-tree-model`, p62). Surfaced again; this is the second check in a row.
+
+  **Track C staffing (`decide-staff-track-c-…`, the last U item) is with the user.** My
+  recommendation: no standing 4th checkout — three sessions is the compile-stream limit on
+  an 8-core box and C's queue does not justify a permanent seat; dispatch its p55 per-ticket
+  to whichever frontend session frees up. Not settled here — staffing is never the
+  coordinator's call.
