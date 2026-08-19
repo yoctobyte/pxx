@@ -61,7 +61,7 @@ _none_
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | — |
 | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine | C | 55 | bug | A C function DEFINITION whose name matches a Pascal intrinsic (`sqrt` `exp` `ln` `sin` `cos` `arctan`) binds to the Pascal proc entry via case-insensitive FindProc and overwrites its BodyAddr. The Pascal implementation then becomes unreachable by ANY spelling — bare `Sqrt`, `math.Sqrt` and `cmath.sqrt` all return the C body — so a C file silently replaces the RTL's math for the whole program. This is what the ten `__crtl_*` prefixes in lib/crtl exist to dodge. | — |
 | bug-c-header-with-a-body-compiles-twice-across-the-macro-reset | C | 25 | bug | SUPERSEDED TITLE — do not size from it. `lib/crtl/include/stdarg.h` carries six static function BODIES, and the crtl auto-pull for a hand-declared prototype must include that header, so the bodies are emitted twice (+2204 bytes). The macro-reset framing in the title is PROVED DEAD (2026-08-16): carrying the macro table leaves output byte-identical, and forcing the guard on breaks the pull. Fix is Track C library work — move the bodies to lib/crtl/src/stdarg.c. | — |
-| bug-n-a-call-through-a-callable-value-drops-the-callees-defaults | N | 70 | bug | A def called through a callable value ignores its own default arguments — `al = g; al(1)` where `g(x, lo=7)` answers empty instead of 7, and passing the def as an argument and calling it with fewer args SEGFAULTS. Not rename-specific and not import-specific: a same-file assignment reproduces it, and only a DIRECT call applies defaults. The box carries a code address and no signature, which is exactly the open decision. | decide-how-a-compiled-def-carries-its-signature-when-boxed |
+| bug-n-a-call-through-a-callable-value-drops-the-callees-defaults | N | 70 | bug | A def called through a callable value ignores its own default arguments — `al = g; al(1)` where `g(x, lo=7)` answers empty instead of 7, and passing the def as an argument and calling it with fewer args SEGFAULTS. Not rename-specific and not import-specific: a same-file assignment reproduces it, and only a DIRECT call applies defaults. The box carries a code address and no signature, which is exactly the open decision. | feature-n-a-callable-value-carries-its-signature-type |
 | bug-n-a-class-base-that-is-an-expression-does-not-compile | N | 45 | bug | A class base which is a NAME bound to a type, or a call, does not compile: `B = object; class P(B)` fails where `class P(object)` and `class P(SomeClass)` both work. Blocks six.with_metaclass, which html5lib's parser spells as `class Phase(with_metaclass(...))` — the single remaining wall on html5parser.py. | — |
 | bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function | N | 50 | bug | `g = f` BOXES the function on the heap; every other path (a dict value, a return value, the bare name) keeps the raw code pointer. So `g == f` and `g is f` are False, two assignments of the same function are unequal to each other, and `id(g)` is a heap address while `id(f)` is the code address. CPython answers True to all of it. | — |
 | bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through | N | 45 | bug | sys.version_info throws at RUNTIME with a message admitting its own guard failed: 'the code guarding that (the flag its except-branch sets) let this call through anyway'. Two defects — the member is missing, and the compile-time guard meant to catch that does not fire. A guard that reports its own failure and continues is worse than no guard. | — |
@@ -517,7 +517,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 70] [N] bug-n-a-call-through-a-callable-value-drops-the-callees-defaults
 - [p 68] [N] bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view (unblocks 1)
 - [p 68] [N] feature-nilpy-for-loop-getitem-protocol-fallback (unblocks 1)
 - [p 65] [C] feature-c-csmith-differential-fuzzing
@@ -748,9 +747,9 @@ _none_
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
 - **2** — bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
-- **2** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view
+- **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
@@ -758,6 +757,7 @@ _none_
 - **1** — feature-a-expose-rounding-mode-intrinsic-to-pascal
 - **1** — feature-a-own-language-first-symbol-resolution
 - **1** — feature-a-rdrand-cpuid-compiler-builtins
+- **1** — feature-n-a-callable-value-carries-its-signature-type
 - **1** — feature-nilpy-for-loop-getitem-protocol-fallback
 - **1** — feature-nilpy-object-reclamation
 - **1** — feature-nilpy-parallel-for-in

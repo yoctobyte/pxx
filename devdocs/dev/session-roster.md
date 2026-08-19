@@ -1447,32 +1447,65 @@ between — it outlives any one context, so read it before the check log.
 
 ### What "NilPy over the bump" means concretely
 
-Not a vibe — a measurement, and the bump has a name. As of tonight the third-party
-ladder stands at **6/48 compiled**, with the remaining blockers split:
+**THE ORIGINAL BUMP IS CLEARED (2026-08-19).** This section is rewritten rather than
+appended to, because its old text — *"`yield` IS the bump"* — was a durable fact with a
+finishable subject, and it finished.
 
-| blocker class | files |
+`feature-nilpy-yield-outside-a-for-loop` is in `done/`. The generator series landed and
+**removed the 18-file `yield` wall outright**, the largest single lever the ladder has ever
+recorded. Measured by frank3 at pin **v353** (`256183a5f52c`):
+
+| | compiled |
 | --- | --- |
-| missing module | **8** (4 behind `decide-xml-etree-…`) |
-| **language** | **32** |
-| — of which **`yield`** | **18** |
+| at v352 | 6/48 |
+| at v353 | **10/48** |
 
-**`yield` IS the bump.** It is more than every missing-module row combined, it is not
-blocked on the boxed-def decision, and the generator engine is already built and proven
-for Pascal (`slgen.pas`, stackless, working). Landing it is the single highest-value
-thing that can happen this week.
+**All four of that gain belong to the generator series, not to the ElementTree shim that
+landed beside it** — frank3 proved the attribution by running a same-pin A/B first (6/48
+with the shim moved aside AND back) before re-running on v353. Had it only measured after
+the pin, the shim would have been credited with the generators' work. That is the
+past-a-wall discipline working, and it is worth imitating exactly.
 
-**How to report it, every time:** re-run `tools/nilpy_ladder.py`, **name the sha of the
-compiler binary used**, and report **past-a-wall separately from onto-the-next-wall**.
-The headline count can sit still while a great deal moves — it did all of 2026-08-18.
-Never quote an earlier scan as current; every table is a snapshot.
+### The NEW bump: `unknown base class Mapping` — 7 files
 
-### The one dispatch rule that must not be broken
+With `yield` gone, the top wall in html5lib is `collections.abc`:
 
-**`feature-nilpy-yield-outside-a-for-loop` (p75, top of N) goes to a FRESH session only.**
-Its failure mode is **silent stack corruption** in `PyEmitParamSpills`, not a compile
-error. Handing it to a long-running session because `next` ranks it first is precisely
-what the ticket's banner exists to prevent. The diagnosis is banked so a fresh session
-starts from it rather than rediscovering it. **First thing a fresh worker gets.**
+    unknown base class Mapping     7 files (was 3)
+
+All four `xml.etree` files are on it, having moved past `unknown base class dict` (fixed
+by `feature-nilpy-subclass-a-builtin-type`, now `done/`). Nothing else is close in size.
+
+**It had NO TICKET** until the coordinator filed one on 2026-08-19 —
+`feature-b-mimic-collections-abc-mapping-and-mutablemapping` (B, p68). Measured, not
+assumed: `lib/rtl/collections.pas` exports no `Mapping`, there is no
+`mimic_collections_abc.py`, and each of the four importers wraps the import in
+`try/except ImportError` with the pre-3.3 `from collections import Mapping` fallback, so
+**both spellings must resolve** or the fallback masks the real error.
+
+**It is genuinely blocked, and the two blockers did not look like blockers.** A `Mapping`
+ABC exists to supply mixin methods derived from `__getitem__`/`__len__`/`__iter__`, and
+two bugs frank3 filed the same session hit exactly that surface:
+
+- `bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view` — three of the seven
+  methods `Mapping` provides, segfaulting or answering garbage through an untyped receiver;
+- `feature-nilpy-for-loop-getitem-protocol-fallback` — the iteration half; `list(obj)`
+  compiles and returns `[]`, which is the worse failure.
+
+Neither ticket's own framing showed it was load-bearing for 7 corpus files (the second was
+filed at p25). **Prio propagation down the new dependency edges reranked both to p68
+automatically** — no manual rerank was needed, which is the ranker working as designed.
+
+### The dispatch rule that must not be broken
+
+**RETIRED AS WRITTEN 2026-08-19** — it named `feature-nilpy-yield-outside-a-for-loop`
+(p75, "fresh session only, its failure mode is silent stack corruption in
+`PyEmitParamSpills`"). That ticket is `done/`. Same finishable-subject trap as the section
+above; the rule is kept in its general form because the reasoning outlives the ticket:
+
+**A ticket whose failure mode is SILENT CORRUPTION rather than a compile error goes to a
+fresh session, regardless of what `next` ranks first.** A long-running context is exactly
+where a silent wrong value gets rationalised instead of measured. When such a ticket
+exists, its banner says so and the banner outranks the queue order.
 
 ### Standing coordinator rules for the week
 

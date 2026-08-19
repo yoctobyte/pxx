@@ -39,9 +39,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 225, ranked
+## Ready — top 30 of 224, ranked
 
-- `[p 70] [N]` bug-n-a-call-through-a-callable-value-drops-the-callees-defaults
 - `[p 68] [N]` bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view (unblocks 1)
 - `[p 68] [N]` feature-nilpy-for-loop-getitem-protocol-fallback (unblocks 1)
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
@@ -71,5 +70,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 50] [D]` docs-cross-language-qualifier-note-is-wrong
 - `[p 50] [A]` feature-a-implement-initialize-and-finalize-over-the-arc-helpers
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
+- `[p 50] [C]` feature-c-vla-via-alloca
 
-_195 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_194 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

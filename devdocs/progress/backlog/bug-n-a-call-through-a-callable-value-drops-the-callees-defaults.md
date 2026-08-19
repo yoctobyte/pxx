@@ -2,7 +2,7 @@
 track: N
 prio: 70
 type: bug
-blocked-by: [decide-how-a-compiled-def-carries-its-signature-when-boxed]
+blocked-by: [feature-n-a-callable-value-carries-its-signature-type]
 summary: "A def called through a callable value ignores its own default arguments — `al = g; al(1)` where `g(x, lo=7)` answers empty instead of 7, and passing the def as an argument and calling it with fewer args SEGFAULTS. Not rename-specific and not import-specific: a same-file assignment reproduces it, and only a DIRECT call applies defaults. The box carries a code address and no signature, which is exactly the open decision."
 ---
 
@@ -57,3 +57,29 @@ while the others keep failing — the "two paths for one construct" trap.
   that is static rebinding and reproduces with **every argument supplied**.
 - **Same blocker** as that ticket and as the boxed-procedural-value crash,
   which makes the pending decision gate **three** items.
+
+---
+
+## 2026-08-19 — SUBSUMED by p88. Do not claim this separately.
+
+frank2 measured the relationship while planning
+[[feature-n-a-callable-value-carries-its-signature-type]] (A, p88) and reported:
+*"p70 IS this ticket, confirmed by measurement not by reading."* A call through a callable
+value cannot honour the callee's defaults because **the value does not carry its
+signature** — there is nothing to fill defaults from. Fixing the carrier fixes this; there
+is no separate work here.
+
+**`blocked-by` REPOINTED to p88 by the coordinator.** It previously named
+[[decide-how-a-compiled-def-carries-its-signature-when-boxed]] — which is RESOLVED, so the
+ranker read the blocker as met and surfaced this at the top of Track N as claimable. That
+is the resolved-decide-still-cited hazard in its exact form: the decision was correctly
+re-filed as p88, but the edge pointing at it was not moved with it. **When a `decide-*` is
+re-filed into a lane, repoint every `blocked-by` that names it.**
+
+The edge, so it stops surfacing as claimable at the
+top of Track N. That is a routing action, not a judgement on the finding: the bug is real
+and the repro stays valid. When p88 lands, verify this repro against it and resolve — do
+not assume, since "subsumed" is a prediction until the fix exists.
+
+Ranked #1 in Track N at the time this was written, so without the edge the next worker to
+pull from `next --track N` would have re-derived work already underway in another lane.
