@@ -8,9 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| feature-a-a-bare-nilpy-import-means-python-and-another-language-needs-its-extension | A | 78 | feature | DECIDED 2026-08-19. A bare NilPy import resolves to Python only (.py/.npy); another language needs an explicit extension (math.pas, math.c); a residual collision is solved by `import ... as ...`. Two whitelists carry it: the language-extension set, and the lib/rtl units that ARE a Python module (re, io, math, json, random). Fixes `from classes import Foo` failing with a message about `Delete` inside a Pascal unit the program never mentioned. | — |
 
 ## unfinished (17)
 
@@ -45,7 +47,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (241)
+## backlog (240)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -123,7 +125,6 @@ _none_
 | docs-name-collisions-and-the-as-escape | D | 45 | docs | The user-facing 'how do I deal with a name collision' page. Two languages in one program will both declare `cube`, and the answer — `uses './mymath.c' as cmath;` then `cmath.cube(...)`, or `import mymath as cmath` from NilPy — is true TODAY and documented nowhere. Not blocked, unlike the own-language-first doc ticket: this describes behaviour that already ships. | — |
 | docs-publish-the-three-language-rounding-table | D | 30 | docs | One backend implements three different, correct rounding rules — Pascal ties-to-even, C half-away-from-zero, Python ties-to-even on the exact decimal — each verified against fpc/gcc/CPython. That is a differentiator and it is documented nowhere; it currently lives only inside a Track B ticket | — |
 | docs-verify-nil-python-page-against-the-compiler | D | 40 | docs | docs/targets/nil-python.md has produced two provably stale claims in one sitting (a four-parameter limit that does not exist, and a dunder list that is wrong) — every remaining behavioural claim on that page needs testing against the pinned compiler, starting with mandatory annotations | — |
-| feature-a-a-bare-nilpy-import-means-python-and-another-language-needs-its-extension | A | 78 | feature | DECIDED 2026-08-19. A bare NilPy import resolves to Python only (.py/.npy); another language needs an explicit extension (math.pas, math.c); a residual collision is solved by `import ... as ...`. Two whitelists carry it: the language-extension set, and the lib/rtl units that ARE a Python module (re, io, math, json, random). Fixes `from classes import Foo` failing with a message about `Delete` inside a Pascal unit the program never mentioned. | — |
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
 | feature-a-error-does-not-halt-so-a-parse-can-be-speculative | A | 45 | feature | `Error()` calls `Halt` directly, so nothing in the compiler can trial-parse and back out. That blocks NilPy's type inference (which needs to read an as-yet-unseen name speculatively), and it is also why the compiler stops at the FIRST error. Make the error path recoverable; several unrelated wants fall out of the same change. | — |
 | feature-a-expose-rounding-mode-intrinsic-to-pascal | A | 30→35 | feature | __pxx_fesetround/__pxx_fegetround exist and flip MXCSR, but only the C frontend can reach them, and off x86-64 they are an accepted no-op returning 0 — so Pascal cannot get a SetRoundMode that actually sets the mode | — |
@@ -519,7 +520,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 78] [A] feature-a-a-bare-nilpy-import-means-python-and-another-language-needs-its-extension
 - [p 70] [P] regression-test-core-test-call-result-member
 - [p 70] [P] regression-test-core-test-ctor-result-member
 - [p 70] [P] regression-test-core-test-isas-open-world-b325

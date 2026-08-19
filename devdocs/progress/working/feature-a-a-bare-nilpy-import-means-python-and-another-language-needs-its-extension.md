@@ -4,6 +4,8 @@ prio: 78
 type: feature
 blocked-by: []
 summary: "DECIDED 2026-08-19. A bare NilPy import resolves to Python only (.py/.npy); another language needs an explicit extension (math.pas, math.c); a residual collision is solved by `import ... as ...`. Two whitelists carry it: the language-extension set, and the lib/rtl units that ARE a Python module (re, io, math, json, random). Fixes `from classes import Foo` failing with a message about `Delete` inside a Pascal unit the program never mentioned."
+status: working
+owner: frank3
 ---
 
 # A bare NilPy import means Python; another language needs its extension
@@ -272,3 +274,149 @@ enough to merge cleanly and then not work.** `PXXWriteFloatSci` was pre-register
 the hunks — not that the result compiles or behaves. Rebuild and re-run the probe after any
 rebase in this area.
 
+
+---
+
+## PLAN (frank3, 2026-08-19) — measured before writing, parser.inc not yet touched
+
+Written while frank2 holds the A/P slot. Everything below is read/measure only; no
+`lexer.inc` / `parser.inc` edit has been made.
+
+### FINDING 1 — the Python-serving whitelist is ~15 units, not the decision's five
+
+The decision names `re io math json random` as the units that ARE the Python module. That
+list is **illustrative, not complete**, and shipping it verbatim would silently break six
+imports that work today. Measured by intersecting every `lib/rtl/*.pas` unit name (109) with
+every bare `import`/`from` root across `test/`, `lib/`, `examples/`:
+
+    ast  atexit  collections  configparser  html  io  json  math  pathlib  random  re  sysutils  tempfile
+
+and by scanning all 109 unit headers for a Python-serving claim, which adds three more that
+nothing in-tree imports yet — `base64`, `markdown`, `subprocess` — each stating *"named so
+that Python's `import X` resolves here"*.
+
+**Header prose is NOT the discriminator** — it is wrong in both directions, which is the
+whole reason this has to be a recorded list:
+
+| unit | header says | truth |
+| --- | --- | --- |
+| `math`, `json`, `random` | a Pascal math / JSON-tree / entropy library | **serves Python** (decision) |
+| `sysutils` | mentions NilPy exception roots | **genuinely Pascal** — population 2 |
+| `collections` | "a generic growable list backed by `array of T`" | must **keep resolving** — see below |
+
+`collections` is the subtle one. `from collections import Counter` never reaches the resolver
+(`PyImportIsConsumedOnly`), but **plain `import collections` deliberately does** — the comment
+on `PyImportRootPlainIsConsumedOnly` says so in as many words: *"`import collections` must keep
+reaching the resolver so a `collections.Sym` qualifier has a unit to resolve against"*, and
+`test_nilpy_import_spellings.npy:22` exercises it. So it goes on the list even though its
+header is pure Pascal.
+
+**Proposed list** (bare NilPy import keeps reaching the Pascal unit):
+
+    ast atexit base64 collections configparser html io json markdown math pathlib random re subprocess tempfile
+
+**Population 2, bare import stops resolving:** `classes`, `types`, `strings`, `sysutils`, and
+the other ~90 `lib/rtl` units. Of these only `sysutils` is imported by any test — the three
+already-aliased ones the survey found — and they are the rewrite.
+
+### FINDING 2 — `isNilPy` is the WRONG discriminator, and this is the ticket's own failure mode
+
+The obvious guard is "if this is a NilPy compilation, skip the `.pas` lookups". It is wrong,
+and wrong in the silent direction: **`isNilPy` is true for the WHOLE compilation**, including
+the nested `uses` of every Pascal RTL unit dragged in behind a NilPy program. `lib/rtl/re.pas`'s
+own `uses sysutils` would be blocked by rule 1 and the failure would land nowhere near an
+import statement. (`compiler/parser.inc:12507` and `:6180` both carry this warning already.)
+
+`NilPyUserCode` (`symtab.inc:25`, `isNilPy and ((CurrentUnitIdx < 0) or PyExprMode)`) is also
+wrong, in the other direction: it is false while parsing an imported `.py` module, whose own
+imports are just as Python as the main program's.
+
+Neither predicate answers the question actually being asked, which is **"did this `uses` come
+from a NilPy `import` statement?"** That is a fact about the call site, so it gets **recorded
+at the call site**, exactly as `PyDottedImport` already is — this is the ticket's own
+prefer-a-recorded-fact rule applied to its first design decision.
+
+### THE DESIGN — one recorded discriminator, three arms
+
+A new global `PyImportLang` (defs.inc), set by the NilPy import parser and **claimed-and-cleared**
+at the top of `ParseUsesUnitBody` exactly like `PyDottedImport`, so a nested unit parse cannot
+inherit it:
+
+| value | set by | resolution |
+| --- | --- | --- |
+| `''` | anything that is not a NilPy `import` statement (Pascal `uses`, C `#include`, the ambient/auto uses, the `mimic_` re-entry) | **unchanged, byte for byte** |
+| `'py'` | a bare NilPy `import X` | `.py`/`.npy` + host headers + `mimic_` only. The `.pas`/`.pp` chain runs **only if `PyRtlUnitServesPython(lo)`** |
+| `'pas'` / `'c'` | a quoted NilPy `import 'x.pas'` | that language's chain only; the Python probes are skipped |
+
+All six user-import call sites in `pyparser.inc` (33276, 33296, 33334, 33382, 33446, 33669) go
+through one thin wrapper that sets the flag, so the fact is recorded in one place rather than
+six. The internal `ParseUsesUnit('math')` at `pyparser.inc:34552` and the two
+`ParseUsesUnitAmbient` calls deliberately do **not** set it.
+
+**Deliberate narrowing, stated so it is not mistaken for an oversight: rule 1 blocks the
+`.pas`/`.pp` chain only, NOT the host C headers.** `import sqlite3` / `import stdlib` reaching
+`/usr/include` is a designed, tested NilPy feature (`test_nilpy_import_sqlite`,
+`test_nilpy_c_pointer`) and its probe already runs last, after everything Python-shaped. Rule 1
+is about the collision the ticket names; widening it to C headers is a separate change nobody
+asked for.
+
+### THE QUOTED FORM — and the one detail the settled spelling leaves open
+
+`import './mymod.pas' as m` maps onto the `isPath` branch that already exists and is what
+Pascal's shipped form uses. But **`isPath` is keyed on containing a `/`**
+(`parser.inc:34027`), and a path is resolved authoritatively against `CurUnitDir` with **no
+search chain** — so the quoted form alone cannot reach `lib/rtl/sysutils.pas`, which is
+precisely what the three tests needing the escape hatch have to reach. `import
+'../lib/rtl/sysutils.pas' as su` would be CWD-fragile nonsense.
+
+So the quoted form gets two shapes, split on the slash — a distinction the resolver already
+draws:
+
+- **with a slash** → today's authoritative path, unchanged: `import './mymod.pas' as m`
+- **without a slash** → a *unit name carrying an explicit extension*, resolved through the
+  normal search chain with the language pinned: `import 'sysutils.pas' as su`
+
+The second is what makes the escape hatch usable, and it stays unambiguous for the same reason
+the whole quoted form does — it is a string literal, so it can never collide with
+`import xml.dom`. Default binding is the base name (`sysutils`); `as` overrides. Noting rather
+than asking: Pascal's *unquoted* `uses 'x.pas'` is unbound by design, but that is about
+Pascal's `uses`, and the user has said the answer may be language-dependent.
+
+**The dotted form is NOT being built.** It is optional and gated on being safe, and the only
+way to make it safe is the language-extension whitelist that can misfire on a real package with
+a submodule named `c` or `pas` — which the user named as a reason not to build it. Nothing is
+lost: the quoted form satisfies the decided rule on its own.
+
+### ORDER OF WORK — each piece lands and pushes on its own
+
+1. **`PyRtlUnitServesPython` + the flag plumbing, behaviour unchanged.** The whitelist function
+   with its definition-site rule (*adding a new Python-serving `lib/rtl` unit to this list is
+   part of writing it — otherwise a bare import silently stops resolving, far from the cause*),
+   the `PyImportLang` global, the claim-and-clear, the pyparser wrapper. Nothing reads the flag
+   to change resolution yet. Provable no-op: fixedpoint + quick.
+2. **The quoted form** (`'x.pas'` / `'./x.pas'` / `'x.c'`), with a new test. This is the escape
+   hatch and must exist before rule 1 can take anything away.
+3. **Rule 1** — the `.pas` chain gated on the whitelist for `PyImportLang='py'`, with a
+   diagnostic that names the collision *and* the quoted spelling that reaches the Pascal unit.
+4. **Rewrite the three `sysutils` tests** to `import 'sysutils.pas' as su`, plus a new test for
+   the `classes`/`types`/`strings` refusal.
+
+Step 1 is the risky-looking one and is a provable no-op; step 3 is the only step that changes
+an existing resolution, and by then the escape hatch is in and tested.
+
+### RISKS I am carrying deliberately
+
+- **The whitelist is a judgement call about ~15 units.** Measured, not derived — but a unit
+  nobody imports in-tree (`base64`, `markdown`, `subprocess`) is on it on the strength of its
+  header alone. Wrong inclusion is invisible (status quo); wrong *omission* is a silent
+  resolution failure, so the list errs inclusive.
+- **`math` is auto-used by the NilPy driver** (`pyparser.inc:34552`) through a call that does
+  not set the flag, so it is unaffected either way — but it is on the list regardless, because
+  a user's `import math` must keep working.
+- Rebuild and re-run one probe after every rebase in this area, per the hazard banked above.
+
+### Gate
+
+`make compiler/pascal26` (the fixedpoint) + the repro + `tools/gate.sh quick`. Push each step.
+Track T sweeps the matrix. The three `sysutils` tests and the new ones get run individually —
+not as a suite.

@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:17 blocked:6 backlog:241 experimental:20 rainy-day:43 done-followup:3 decided:91 done:2066 rejected:40`
+`working:1 unfinished:17 blocked:6 backlog:240 experimental:20 rainy-day:43 done-followup:3 decided:91 done:2066 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-a-a-bare-nilpy-import-means-python-and-another-language-needs-its-extension` [A] — owner: frank3
 
 ## unfinished (17) — parked mid-flight; re-claim, do not duplicate
 
@@ -40,9 +40,8 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 226, ranked
+## Ready — top 30 of 225, ranked
 
-- `[p 78] [A]` feature-a-a-bare-nilpy-import-means-python-and-another-language-needs-its-extension
 - `[p 70] [P]` regression-test-core-test-call-result-member
 - `[p 70] [P]` regression-test-core-test-ctor-result-member
 - `[p 70] [P]` regression-test-core-test-isas-open-world-b325
@@ -72,5 +71,6 @@ _none — no lane is locked._
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [A]` feature-pascal-type-helpers
 - `[p 55] [A]` feature-signal-siginfo-ucontext
+- `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
 
-_196 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_195 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
