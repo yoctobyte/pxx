@@ -4031,3 +4031,52 @@ only one leaves you half-informed. *Which binary does the JOB build with* tells 
 range is even relevant. *Where does the CAUSE sit relative to the pin* tells you whether holding
 the next pin buys anything. The first is the one people ask; the second is the one that decides
 a pin. Both workers stood down clean — tree clean, nothing unpushed, master level with origin.
+
+### `tools-devtest#00` fixed by T (`93db54159`) — and BOTH hypotheses I attached were wrong
+
+The case `changed-hardware-opens-a-new-epoch-and-closes-the-old` assigned a **literal**
+`"Intel(R) Core(TM) i7-6700 CPU @ 3.40GHz"` as "the other machine" and asserted
+`record_host_epoch(...) is True`. That is a hardware change on every box **except** an
+i7-6700 — and borg, which the case's own docstring names as the `from` side, is one. Run
+there, `record_host_epoch` correctly returns False and the case fails while the code under
+test behaves exactly right. Sentinel is now `"Not-" + host_hardware()["cpu"]`, different by
+construction on every host. Reproduced by pinning the live cpu, not argued.
+
+**So it was neither "a defect in the epoch logic" nor "xeon being retired".** My retired-host
+hypothesis was the right *question* and the answer was no: the case builds a fresh temp tree
+per run and `"xeon"` there is a bare string label — no fleet history is in reach. What it
+reads is the **live box**, which is where the host-dependence entered.
+
+**And I cost T a pass by relaying the wrong line.** The fingerprints I quoted
+(`hardware fingerprint changed for xeon A -> B`) are what `record_host_epoch` prints on its
+**success** path; they cannot identify the failing assertion. **Relay the
+`FAIL <case>: <message>` line, not the output near the failure.** Third instance this session
+of forwarding surrounding output as if it were the finding — written up in working memory.
+
+**A real adjacent defect, found on the same look and fixed (`f5cba8ad3`):** `record_host_epoch`
+took **two independent readings** — `host_hardware()` for the stored fields, `host_hardware_fp()`
+for the fp. `host_hardware()` re-reads governor and turbo on every call by design while caching
+the rest, so a **governor tick between those two lines** stored an epoch whose own fields do not
+produce its own fp. Every later publish then compared live hardware against a fingerprint no
+reading could reproduce, and minted a spurious "earlier rows are not comparable" epoch **over a
+cpufreq transition**. One reading now, guarded by a case that returns a different governor on
+each call. T is explicit that it has **no evidence this is what the devtest hit** — two real
+defects, one look, kept separate. It would have corrupted the epoch series in the field.
+
+**Operational trap worth remembering:** T reverted the fix, saw the guard fail, restored the fix
+— and it still failed. Stale `tools/__pycache__/*.pyc`: **the traceback displayed the current
+source line while executing the old bytecode.** If a result contradicts the source in front of
+you, `find tools -name __pycache__ -prune -exec rm -rf {} +` before believing it. Not live in the
+watcher clone (pycs timestamp-invalidated and matching) — it bites when a file is rewritten twice
+in quick succession.
+
+**Also landed, green and pushed:** csmith `--target` (`6edac13fd` and parent). A cross run now
+**refuses to report a comparison it did not make** — with no data-model-matching gcc it prints
+`NOT CHECKED: agreement with gcc, and the slow ratio` instead of an N/M-agreed line counting
+comparisons nobody ran, and `PXX_SLOW` returns early because a ratio against a native oracle
+measures qemu rather than the compiler. `EMU_TIMEOUT_FACTOR` **12 → 30, as a measurement not an
+allowance**: seed 90044 under qemu-aarch64 takes 187.96s (gcc -O0 native 12.92s, pxx -O0 native
+46.27s), so the old 180s floor was killing a legitimate run as a hang.
+
+**Pin status unchanged and now confirmed from T's side: the unswept carve through `2730e6566` is
+the only thing holding it.**
