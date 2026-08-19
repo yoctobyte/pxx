@@ -3620,3 +3620,50 @@ scheduler, not the arithmetic. A red job is worked at the priority of being red.
 
 Tooling gap routed to T: `--track F` is not yet an argparse choice and `float` is not in
 STATUSES. Addressability only; the parking already works.
+
+## Check +23h — tkinter landed, the cascade split in two, pin sequencing set
+
+frank3 landed the tkinter list fix (`047bb8cc3` + `b47ab6f3f`, ticket in `done/`, fixedpoint
+converged, quick green) and is back on the reduced compiler. frank2 interrupted for the second
+half. plexus-T on breadth shapes 2+4 plus registering Track F.
+
+### The cascade was TWO opposite answers in one directory
+
+`examples/tk` holds seven jobs that must **not** be rewritten and two that **must**.
+`hello.npy` and `widgets.npy` say `import tk` — that is `lib/pcl/tk.pas`, the Tcl/Tk binding
+`tkinter.pas` is built on, and **CPython has no `tk` module**, so the argument that saved the
+tkinter examples does not apply. frank3's test is the reusable one: **could a Python program
+have written that import?** `tkinter` yes, `tk` no. Routed to frank2 with that framing, because
+"examples/tk is red" reads as one cascade and is not.
+
+**It was seven jobs, not six — and I had propagated the six.** Two sat in later Makefile blocks
+(~1032, ~1036) than the tkinter block. Relayed a count without re-deriving it, which is the
+exact thing the durable-facts list says not to do. Fourth instance today of asserting the
+neighbour of something verified.
+
+### Pin sequencing: TWO pins, against frank3's advice
+
+frank3 proposed pinning only at the reduced-compiler acceptance milestone. Declined: **v364 is
+RED at full**, and the two `tk` jobs also appear in Track B's `lib-test` (Makefile ~10222)
+against `$(PXX_STABLE)`, so B's ground is red and **B is unstaffed to notice**. Pin once
+frank2's rewrite lands, again at frank3's milestone. A pin is ~35s; leaving every lane on a red
+pin for hours to save one is the wrong trade.
+
+### The durable part of frank3's fix was the doc comment
+
+It amended the list's **criterion**, not just the list: "when a new *lib/rtl* unit is written to
+serve a Python module" described the sweep that caused the omission rather than the rule —
+where a unit lives is not the question, what it is FOR is. Without that, the next `lib/pcl`
+unit is missed identically. Fixing the instance leaves the class.
+
+### Reduced compiler — the coupling findings are the valuable half
+
+`PXX_NO_I386` (`91ca417b3`) and `PXX_NO_ARM32` (`ccef81c7c` -> `a771ff824`); four backends
+omissible with the default build's fixedpoint intact. Both turned up real coupling: a
+target-independent helper living in `ir_codegen386.inc` and called by arm32 across the backend
+boundary, and the per-arch signal-runtime choice inlined three lines above the comment
+explaining that this exact shape is why the other frontends shipped without the I/O lock. Both
+normalised. The consequence — only the Pascal driver emits a signal runtime at all — filed as
+`bug-a-only-the-pascal-driver-emits-the-signal-runtime` (p45) rather than fixed inline, since
+it changes behaviour on every non-Pascal target. **This is the structural answer the owner said
+the exercise was for**, not a side effect of it.
