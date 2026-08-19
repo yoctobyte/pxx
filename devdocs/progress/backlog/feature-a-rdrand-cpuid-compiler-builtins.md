@@ -65,3 +65,12 @@ that HAS the instruction and on one that does not (qemu can model both); and
 `test/lib_random.pas` still producing its byte-identical seeded stream on every
 target — tier 1 must not perturb the deterministic path, which is seeded and by
 definition does not use hardware entropy.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363)
+
+**Genuine feature, still wanted, unchanged.** `lib/rtl/random.pas` still
+carries the tier-1 stub and still names this ticket in the comment
+(`STUB: requires __rdrand/__cpuid compiler builtins … Falls to tier 2`), so
+the library is still running one tier below its design. The dangling-reference
+problem the ticket was filed to fix is resolved — the ticket exists now — and
+the work behind it has not landed.

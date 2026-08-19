@@ -70,3 +70,12 @@ would otherwise pass while doing nothing.
 <!-- float category -->
 Indexed on [[meta-float-accuracy-policy]] — the standing float-accuracy index.
 Collect, do not fix piecemeal; see the working rule there.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363)
+
+**Genuine feature, still wanted, unchanged.** Measured: a Pascal program that
+`uses math` and calls `SetRoundMode(rmDown)` fails with
+`undefined variable (SetRoundMode)` — the entry point is still absent from
+`lib/rtl/math.pas`, because the intrinsic it would need is still C-frontend
+only. Gap 1 stands exactly as filed; nothing about gap 2 (the off-x86-64
+no-op) is contradicted by this.

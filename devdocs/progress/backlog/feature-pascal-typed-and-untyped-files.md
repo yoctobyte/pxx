@@ -57,3 +57,17 @@ An FPC-differential test writing and re-reading a `file of Integer` and a
 `file of TRec` (Write/Read/Seek/FileSize/Truncate/Eof), diffed against
 `fpc -O- -Mobjfpc`, plus a byte-for-byte comparison of the two written files;
 `gate.sh quick`; self-host fixedpoint.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363)
+
+**Genuine feature, still wanted, unchanged.** `var fi: file of Integer;` still
+stops at `error: file types are not supported (use TextFile for text I/O)`, and
+the untyped `file` form with it. Compat surface — FPC accepts the classic
+record-file idiom — but the refusal is loud, so it stays a feature rather than
+being promoted to a bug.
+
+**Landmine confirmed, not merely suspected:** `Makefile:3991-3992` runs a
+negative test under `!` and greps for `file types are not supported`.
+Implementing typed files makes that program compile and reds `test-core` —
+which `gate.sh quick` does not run, so it would surface only via Track T.
+Re-point or retire that test in the same commit.

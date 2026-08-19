@@ -89,3 +89,24 @@ A unit setting `{$DEFINEGLOBAL X}` is visible to `{$IFDEF X}` in the program and
 in units compiled after it; a plain `{$DEFINE X}` in a unit still is **not**
 (the FPC-parity test above, which must keep passing); and two units guarding the
 same capability with claim-and-skip compile with exactly one of them active.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363)
+
+**Genuine feature — but not buildable as it stands: it is gated on a Track U
+decision, not on engineering.** Its own "Design questions to settle before
+building" lists four open forks, and the first is a naming/semantics call the
+user should make (`{$DEFINEGLOBAL}` reads as "global" while the mechanism is
+order-dependent; the ticket itself floats `{$CLAIM}` as more honest).
+Meanwhile its motivating application was closed as synthetic, so nothing is
+pulling on it.
+
+Re-measured the FPC-parity half that the ticket rests on and it still holds: a
+unit's plain `{$DEFINE}` does not reach the program under either compiler, so
+the constraint this feature works around is real and unchanged.
+
+**Recommendation: split the four design questions into a `decide-` ticket
+rather than leaving them inside a `feature-`, or drop the prio to match "no
+live caller".** Filing one would need the user, so it is queued, not taken.
+Whoever picks this up should also re-read it after the current import/uses
+spelling work lands — that work is settling adjacent questions about how a unit
+declares something the rest of the compilation must respect.
