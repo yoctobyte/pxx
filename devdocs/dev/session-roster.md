@@ -3879,3 +3879,39 @@ that ground. Reassess when frank2 has attribution and frank3 lands carve step 3/
 **Both workers were idle** (owner set a low autocompact threshold on both) and are now
 dispatched: frank2 on the cascade, frank3 finishing the carve. frank3's `working/` lock is
 correctly held on `task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc`.
+
+## OVERNIGHT 2026-08-19 — owner asleep, report due in the morning
+
+Owner went to bed ~19:00 local and asked for a **report in the morning**. Standing plan, so it
+survives a context loss:
+
+**Wind down to a quiet cadence rather than stopping or fanning out.** Let the two in-flight
+items finish — frank2's cascade triage and frank3's carve step 3/3 — then **do not dispatch
+fresh parallel work**. The owner's stated position (2026-08-19, token budget): *"the overnight
+stuff will also be a single track working. dual track all day will spend my tokens."* So after
+the current items land, keep at most ONE lane moving and let the others idle. Idle is correct
+here and costs nothing.
+
+**Do not take a pin overnight unless a lane is blocked on one.** The pin is currently held over
+the open 13-job cascade and that is the right state; blessing an unexplained red while nobody
+is awake to catch a bad pin is the one thing that could poison every lane by morning. v362 is
+the precedent.
+
+**Track T runs unattended on plexus and needs nothing** — its breadth scheduling now reaches
+windows on its own, so the matrix keeps sweeping without a quiet period being called.
+
+### What the morning report must cover, in this order
+
+1. **The 13-job cascade** — attribution over the 261-commit range, what it was, which lanes it
+   touched, what is fixed vs filed. This is the headline; it is the first cross-target verdict
+   in six hours and it found real breakage.
+2. **Pin state** — whether it was safe to pin by morning, and what v366 carries if taken.
+3. **The carve** — split 2 done or not, and the campaign's objective finish line
+   (176 symbols / 426 sites remaining; `PXX_NO_NILPY` compiling clean = carve complete).
+4. **Breadth** — whether the full tier kept its cadence overnight, i.e. whether one window was
+   a rate after all. T is holding resume-stats until there is one; do not pre-empt that.
+5. **Corrections owed** — every survey error count relayed as a figure is a FLOOR, not a count
+   (FPC skips its unsolved-forward pass when the module already has errors). Say so plainly if
+   any number from today gets repeated.
+
+Keep it short and lead with what changed, not with what was busy.
