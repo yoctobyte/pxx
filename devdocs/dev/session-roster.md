@@ -1815,3 +1815,38 @@ rerank it deliberately rather than inheriting the number).
   `-O0` self-compile failure was already FIXED (`6b2402b92`, ticket in `done/`, T's bench
   back to 4 `selfcompile` rows at `185575980d53`), and it was never an `-O0` problem: all
   four levels sat at 88-90% of the cap and the DEFAULT build was next.
+
+- **check 2026-08-19 (morning, +8h): decisions worked, and the check prompt fixed AGAIN
+  for the same reason.**
+
+  **Six decisions answered by the user this morning, all recorded, moved to `decided/`,
+  and — critically — RE-FILED as work**, since `ready`/`next` do not read decisions:
+  boxed-def → `feature-n-a-callable-value-carries-its-signature-type` (A, **p88**, top of
+  A); ElementTree → `feature-b-mimic-xml-etree-elementtree-tree-model` (B, p62);
+  `-O` differential → `feature-t-tier-job-self-compile-differential-across-o-levels`
+  (T, p55); unwired tests → `chore-a-sweep-the-unwired-tests-into-the-suite` (A, p55);
+  MINIX → **deferred to `rainy-day/`** with its version fork withdrawn alongside it.
+
+  **The user corrected me on the unwired-test sweep and the correction generalises:** I
+  filed it under Track T, and T is bound by *"T owns the tool, never the bug"* — so under
+  T **every red must become a ticket for another lane**, which across ~61 files is a
+  ticket factory. Under A, which can fix a red in place, the identical job is a **sweep**.
+  **The lane choice, not the method, decides whether something is one job or sixty-one.**
+  Now a durable fact in the check prompt.
+
+  **Stale durable fact, second instance, same class.** The prompt still said the boxed-def
+  decision "is with the human, do not decide it" — hours after the user decided it. I had
+  already recorded the lesson (*a durable fact whose subject can COMPLETE is not durable*)
+  and then left exactly such an item in. Prompt rebuilt (`acbdd5c1` → `a442fa26`): the
+  boxed-def entry is gone, and the rule about finishable subjects is now stated **in** the
+  prompt so the next rebuild does not repeat it. Also added: re-file decided work, the
+  lane-choice rule, the default-`-O`-only scope of the fixedpoint claim, and that a worker
+  showing **"waiting"** may be stuck on a permission prompt only the USER can clear.
+
+  **State:** frank2 landed `9ffc1637f` (backslash-newline line continuation) and is
+  between items — nudged back to the fruit list, and told the p88 now outranks it with the
+  settled design summarised so it needs no re-deriving. **frank3 shows "waiting", which is
+  NOT idle — surfaced to the user as possibly a permission prompt.** Track T is active on
+  its own tooling (`c99f15692` a job whose measured duration passed its class budget could
+  never pass; `e96a60c07` est_mem below what lib-test#00 actually peaks at). T green
+  through `c99f1569246d`.
