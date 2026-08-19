@@ -2,12 +2,21 @@
 track: A
 prio: 55
 type: feature
-blocked-by: [bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine]
+blocked-by: []
 status: unfinished
 owner: —
 ---
 
 # Own-language-first symbol resolution: the native language wins
+
+> **UNBLOCKED 2026-08-19.** Its only blocker,
+> [[bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine]], is fixed
+> (`eb5c7be11`) and in `done/`. Moved `blocked/` -> `backlog/`, p55.
+>
+> **Its acceptance test is runnable for the first time**, and that is the news: de-prefix the
+> ten `__crtl_*` names in `lib/crtl/src/math.c` and delete the `#define`s — those existed
+> **solely** as the workaround for the bug now fixed. So the test is "remove the workaround
+> and see if it still works", which is the strongest form available.
 
 **Decided by the user, 2026-08-10.** Re-filed from
 `decide-own-language-first-name-resolution` (Track U) — the rule is settled, so
