@@ -183,4 +183,4 @@ done, which is the failure mode the resolved-decide-still-cited note at the top
 of this file is about — an edge outliving the thing it pointed at.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit c2e375aca.
