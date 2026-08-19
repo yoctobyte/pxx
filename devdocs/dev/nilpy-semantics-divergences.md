@@ -353,7 +353,30 @@ NilPy does not, having no module object to put there.
 | `d["x"]` | `1` | `1` |
 
 Only a program that ENUMERATES the namespace can see it; reading a bound name
-agrees. Open as [[decide-nilpy-exec-injects-a-builtins-key]].
+agrees.
+
+**DECIDED 2026-08-19 (user): leave it out, permanently for now.** Not because
+the key is hard to produce — CPython's value is `builtins.__dict__`, a plain
+dict by identity, and pxx could hand back a populated copy cheaply. Because
+neither shape is honest:
+
+- **A copy** is inert. `d["__builtins__"]["len"] = f` mutates a snapshot and
+  changes nothing, where CPython would have rebound `len` program-wide.
+- **A live pointer** is worse, because it half-works. pxx has TWO name
+  resolution paths where CPython has one: compiled NilPy resolves `len` at
+  COMPILE time into a direct call and consults no dict at run time, while only
+  code inside the `pyeval` tree-walker resolves against `g`/`l`. So a mutation
+  through a live builtins dict would be honoured by exec'd source and silently
+  ignored by every compiled call site — a divergence that LOOKS like CPython
+  semantics, which is the expensive kind.
+
+Making it genuinely live means routing every compiled builtin call through a
+run-time dict lookup — turning `len(x)` into a hash probe across the whole
+language, for a feature no corpus file has asked for.
+
+So: a documented incompatibility beats silently wrong behaviour. Revisit only
+if a real consumer needs it AND someone has a third shape; the ticket is parked
+in `rainy-day/`, not rejected.
 
 **Not a divergence — a refusal.** The AMBIENT form `exec(src)` with no
 namespace, which writes into the caller's own locals, is a COMPILE ERROR here

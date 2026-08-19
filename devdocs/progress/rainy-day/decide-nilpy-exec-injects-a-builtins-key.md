@@ -157,3 +157,56 @@ half's cost.
 
 Reclassify this ticket accordingly: it stays open only as the record of the
 cosmetic call, and `decide-` overstates what is left in it.
+
+---
+
+## DECIDED 2026-08-19 (user) — leave it out, document it, park the ticket
+
+**Decision: do not inject `__builtins__` at all. Document the difference as a
+known incompatibility and defer.** Option 1 stands; option 2 stays refused;
+option 3 is deferred rather than rejected.
+
+The user's framing, and it is the right one: *we cannot do it right either way,
+so a documented incompatibility beats silently wrong behaviour.*
+
+### What settled it: pxx has TWO name-resolution paths, CPython has one
+
+The last open question was the user's — *"why not just insert a pointer to the
+real dict instead of a copy, so it stays mutable?"* Measured rather than
+argued, and the answer is not about the dict:
+
+- CPython resolves EVERY name miss through `builtins.__dict__` at run time.
+  One path, so mutating it propagates program-wide. That is why it is live.
+- pxx resolves builtin names in compiled NilPy at **compile time** — `len(x)`
+  becomes a direct call and consults no dict at run time. Only source running
+  inside the `pyeval` tree-walker (`EvalPyStmts` / `pyeval_expr`) resolves
+  dynamically against `g`/`l`.
+
+So a live pointer would be honoured by exec'd source and inert for every
+compiled call site: **half-working, while looking exactly like CPython
+semantics.** That is a worse failure shape than a copy, which at least fails
+honestly as a snapshot. Making it genuinely live means routing every compiled
+builtin call through a run-time dict lookup — a whole-language performance
+change for a feature with no measured consumer.
+
+### Where the record lives
+
+`devdocs/dev/nilpy-semantics-divergences.md` §`exec binds, but injects no
+__builtins__ key` carries the decision and the two-paths reason. That is where
+a searcher lands; this ticket is the audit trail.
+
+### Reopen condition
+
+A real corpus consumer that enumerates or mutates an exec'd namespace, AND a
+third shape that is not "inert copy" or "half-live pointer". Absent both, this
+stays parked.
+
+### Unaffected
+
+[[bug-n-exec-ignores-a-caller-supplied-builtins-mapping]] — the behavioural
+half — is NOT covered by this decision and remains live Track N work. Honouring
+a builtins mapping the caller DID supply needs no builtins table and is where
+the real defect is.
+
+## Log
+- 2026-08-19 — decided by user, moved to `rainy-day/`.

@@ -94,6 +94,7 @@ _none_
 | bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label | T | 55 | bug | The pin_verify record is unattributable and mislabelled. Its `red` list stores POSITIONAL job names (`lib-test#117`), which name a different file as soon as the job list changes — resolved at HEAD, lib-test#117 is lib_tls.pas; resolved at the verified sha it is lib_tls13_keys.pas. And its `ver` said v347 while the verified tree carried pin 346. Neither unattributed red reproduces under either pin. | — |
 | bug-t-split-jobs-misses-a-tmp-path-reached-through-a-shell-variable | T | 45 | bug | `split_jobs` keeps a producer with its consumer by union-find over literal /tmp paths, so a recipe that reaches its artifact through a shell variable (`$(TESTTMP)/$$bin` in a for-loop) exposes no shared token, is never merged, and runs under job isolation with a scratch dir where the artifact was never built. Third instance of the class the splitter's own comments describe. | — |
 | bug-t-sync-fills-one-spelling-of-pending-commit-and-check-counts-two | T | 45 | bug | `check` has reported the same 17 PENDING-COMMIT tickets for weeks and `sync.sh` reports nothing to fill, because they anchor on DIFFERENT spellings of the field: check substring-matches the placeholder anywhere, sync greps only the Log form `commit 4b8864737` (space), and all 15 live instances are the frontmatter form `commit: PENDING-COMMIT` (colon). Both tools are behaving correctly and the count can never go down. | — |
+| chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments | A | 20 | chore | compiler/builtin/pylib.pas still carries a no-op `pyexec` stub, plus comments in pylib.pas and pyeval.pas saying things SEGFAULT 'because pyexec is a stub'. Engine 1 landed 2026-07-31 and `exec` lowers to pyeval's EvalPyStmts — nothing calls the stub. The stale prose is the cost: it reads as an unimplemented feature and made a reader doubt a done, gated one. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
 | chore-t-split-lib-test-into-jobs-that-name-what-failed | T | 55 | chore | One lib-test job bundles several sources, so its tstate key names only the FIRST of them: `lib-test#src:test/crtl_exp2.c` is really `crtl_exp2.c examples/tk/hello.npy +5`, and a timeout in the tk step reads as a C-math regression. Split it so a job names what failed. Do it while lib-test is green — the baseline is recorded here. | — |
 | chore-t-test-binaries-hardcode-unsweepable-tmp-paths | T | 45 | chore | 60 /tmp paths are hardcoded in 37 COMPILED TEST SOURCES and written by the test binary at runtime, so no Makefile sweep can reach them and testmgr does not privatize them either. Two concurrent runs still share those files EVEN UNDER testmgr. Split out of chore-makefile-testtmp-parameterize, which closed the recipe half. | — |
@@ -113,7 +114,6 @@ _none_
 | compat-pascal-unit-deprecated-hint-directive | P | 25 | compat | `unit X deprecated 'msg';` — a unit hint directive is a parse error | — |
 | compat-pascal-write-fixed-huge-magnitude-differs-from-fpc | A | 40 | compat | write(v:w:d) with \|v\| >= 2^63, or a NaN/Inf, still prints debris on x86-64 (9223372036854775809.00000) and diverges from FPC on i386/arm32/riscv32 (full 301-digit expansion vs FPC's exponent form) | — |
 | compat-pascal-writeln-of-a-single-uses-double-width | A | 30 | compat | WriteLn/Str of a Single print the value's full Double expansion — 17 significant digits and a 3-digit exponent — where FPC prints 10 digits and a 2-digit exponent: pxx ' 1.0000000149011612E-001' vs FPC ' 1.000000015E-01'. Same class as the FloatToStr(Single) bug fixed in lib/rtl, but this path is the compiler's own float writer, so the RTL cannot reach it. Text-only divergence, no wrong value. | — |
-| decide-nilpy-exec-injects-a-builtins-key | U | 40 | decide | CPython's exec(src, g, l) injects a `__builtins__` key into the globals dict; NilPy does not, because it has no module object to put there. So sorted(d.keys()) after an exec differs. Three options: leave it out (today), inject the key with a placeholder value, or inject a real minimal namespace. The fork is what a program that ITERATES the dict should see. | — |
 | decide-one-answer-to-have-i-already-compiled-this-unit | U | 40 | decide | Three tickets in three lanes are all 'a compilation unit got processed twice', served by three unrelated mechanisms: unit-NAME keying (Pascal/NilPy), an @cpath: key space (path-form C units), and preprocessor include-guard visibility (C headers). Two is a smell, three is a design flaw. Question for the user: does 'have I already compiled this translation unit?' deserve ONE answer, or are three correct-in-their-own-lane answers the right shape? | — |
 | decide-staff-track-c-to-unblock-own-language-first | U | 50 | decide | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (C, p55) is the only thing blocking feature-a-own-language-first-symbol-resolution, and Track C is unstaffed. Staff it, fold it into an existing session, or leave the chain parked? | — |
 | decide-unary-minus-widening-in-the-default-dialect | U | 45 | decide | FPC widens unary minus to 64-bit for EVERY integer type; pxx truncates an UNSIGNED operand to 32 bits first, so `-b shr 1` answers 2147483644 where FPC says 9223372036854775804 — in the DEFAULT dialect, not behind a flag. Adopt FPC's rule as the default, or keep ours and document the divergence? | — |
@@ -312,7 +312,7 @@ _none_
 | feature-wasm-frontend | A | 45 | feature | WebAssembly frontend — statically typed, IR-shaped; experimental | — |
 | feature-zig-frontend | Z | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
 
-## rainy-day (42)
+## rainy-day (43)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -323,6 +323,7 @@ _none_
 | decide-abi-portable-vs-target-split | U | 60 | decide |  | — |
 | decide-default-float-output-format-and-constant-precision | U | 10 | decide | decide: should WriteLn's default float format follow the STATIC type, and should untyped float constants evaluate at Single precision? | — |
 | decide-ilja-tui-render-model | U | 45 | decide | Track U: four render/input questions Ilja (TUI IDE face) must answer before any code | — |
+| decide-nilpy-exec-injects-a-builtins-key | U | 40 | decide | CPython's exec(src, g, l) injects a `__builtins__` key into the globals dict; NilPy does not, because it has no module object to put there. So sorted(d.keys()) after an exec differs. Three options: leave it out (today), inject the key with a placeholder value, or inject a real minimal namespace. The fork is what a program that ITERATES the dict should see. | — |
 | decide-which-minix-is-the-target | U | 58 | decide | MINIX 2 / early 3.1.x (small, plain, ACK-era C) versus MINIX 3.2+ (which imported the NetBSD userland and build system). These are close to different projects for our purposes, and the choice dominates the cost of the whole lighthouse. Recommendation: MINIX 2 / early 3.1.x. | — |
 | design-overloadable-intrinsics | A | 50 | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
 | design-record-copy-dynarray-field-semantics | A | 50 | design | Record copy with a dynamic-array field: PXX deep-copies, FPC shares (reference) | — |
@@ -599,7 +600,6 @@ _none_
 - [p 40] [P] compat-pascal-a-string-n-field-makes-a-record-a-different-size-than-fpc
 - [p 40] [P] compat-pascal-index-a-function-call-result
 - [p 40] [A] compat-pascal-write-fixed-huge-magnitude-differs-from-fpc
-- [p 40] [U] decide-nilpy-exec-injects-a-builtins-key
 - [p 40] [U] decide-one-answer-to-have-i-already-compiled-this-unit
 - [p 40] [D] doc-glossary-of-cross-language-slang
 - [p 40] [D] docs-cli-fpc-float-errors-flag
@@ -709,6 +709,7 @@ _none_
 - [p 20] [N] bug-nilpy-float-pow-loses-a-ulp-vs-libm
 - [p 20] [B] bug-nilpy-float-power-is-a-ulp-off-the-rtl-already-has-the-fix
 - [p 20] [N] bug-nilpy-four-remaining-absent-builtins
+- [p 20] [A] chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments
 - [p 20] [P] compat-pascal-method-impl-without-declaration
 - [p 20] [A] compat-pascal-strict-fpc-should-reject-a-duplicate-identifier-in-one-scope
 - [p 20] [U] decide-what-synapse-actually-needs-vs-mimic-fpc
