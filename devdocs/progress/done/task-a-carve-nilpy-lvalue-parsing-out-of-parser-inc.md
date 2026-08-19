@@ -164,4 +164,4 @@ is UP and now running full tiers ~1h behind HEAD; step 2 already came back
 GREEN native (`tstate/832a42d026cd`).
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit 86d2fe061.
