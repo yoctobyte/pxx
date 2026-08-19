@@ -4,7 +4,7 @@ prio: 78
 type: feature
 blocked-by: []
 summary: "DECIDED 2026-08-19. A bare NilPy import resolves to Python only (.py/.npy); another language needs an explicit extension (math.pas, math.c); a residual collision is solved by `import ... as ...`. Two whitelists carry it: the language-extension set, and the lib/rtl units that ARE a Python module (re, io, math, json, random). Fixes `from classes import Foo` failing with a message about `Delete` inside a Pascal unit the program never mentioned."
-status: working
+status: done
 owner: frank3
 ---
 
@@ -436,3 +436,81 @@ an existing resolution, and by then the escape hatch is in and tested.
 `make compiler/pascal26` (the fixedpoint) + the repro + `tools/gate.sh quick`. Push each step.
 Track T sweeps the matrix. The three `sysutils` tests and the new ones get run individually —
 not as a suite.
+
+---
+
+## DONE (frank3, 2026-08-19) — three commits, each gated and pushed on its own
+
+| step | commit | what |
+| --- | --- | --- |
+| 1 | `3284c881d` | `PyRtlUnitServesPython` + `PyImportLang`, behaviour unchanged |
+| 2 | `6fba42d69` | the quoted form — the escape hatch |
+| 3+4 | `e1109d7bc` | rule 1, the diagnostic, and the test rewrites |
+
+Steps 3 and 4 are one commit because they cannot land apart: the moment rule 1 exists the
+three `sysutils` tests need the new spelling, so splitting them means pushing a red tree.
+
+### What it does now
+
+    from classes import Foo
+    -> import: classes is the Pascal unit ./compiler/../lib/rtl/classes.pas, not a Python
+       module — a bare NilPy import resolves to Python (.py/.npy) only. To reach the Pascal
+       unit, name it with its extension: import 'classes.pas' as classes
+
+    import 'sysutils.pas' as su   ->  su.IntToStr(42)  = 42     (searched, reaches lib/rtl)
+    import './mymod.pas'  as m    ->  m.Twice(21)      = 42     (authoritative path)
+    import './lib2.c'     as c    ->  c.twice_c(21)    = 42     (cross-language)
+    import math / re / json / collections / ...        unchanged
+
+### How "unchanged" was established, since that is the acceptance criterion
+
+Not by running the suite — by **A/B against the v363 pinned binary**, which predates every
+line of this change: compile and run the same test with both compilers and compare output.
+Ten tests across the population-1 names, plus the two host-header tests (`import sqlite3`,
+`import stdlib`), plus the three rewritten `sysutils` tests compared against *their own
+pre-change source* — byte-identical in every case. Plus the self-host fixedpoint and
+`gate.sh quick` on each of the three commits.
+
+And a completeness sweep rather than a sample: every `import`/`from` root in `test/`, `lib/`
+and `examples/` intersected against all 109 `lib/rtl` unit names leaves **exactly one**
+collision — the refusal test added by this ticket.
+
+### Departures from the plan, both deliberate
+
+**1. `import strings` does NOT refuse, and this is the one acceptance item not met as
+written.** It reaches `/usr/include/strings.h` through the host-header route. That route is
+the designed, tested feature behind `import sqlite3` / `import stdlib`, it already runs LAST
+(after everything Python-shaped, per `bug-nilpy-python-import-resolves-against-c-headers`),
+and rule 1 closes the `.pas` chain, not that one. `classes` and `types` have no host header
+and refuse exactly as specified. So `strings` moved from binding a Pascal unit to binding a C
+header; neither is Python, and no test covers it either way. **Widening rule 1 to host
+headers is a separate change nobody has asked for** — flagged here rather than done.
+
+**2. The quoted form is the PLAIN import only.** `from 'sysutils.pas' import Trim` is not
+built: the from-arms thread `impName`/`impRoot` through member binding, alias recording and
+`PyStdAliasRecord`, so widening them is a real change rather than the same three lines, and
+nothing needs it — the diagnostic's advice (`import 'classes.pas' as classes`) works, and
+that is the spelling the refusal points every user at. Worth a follow-up ticket if a corpus
+file wants it; not worth inventing demand for.
+
+### The design, in one line each
+
+- **`PyImportLang`, set at the call site.** The two predicates that look like they answer
+  "is this a Python import?" are wrong in opposite directions, so the fact is recorded where
+  it is known instead of re-derived where it is needed.
+- **One discard, not eight guards.** A pinned language drops a Pascal find by testing the
+  path a probe actually loaded, once, rather than guarding each of the eight `.pas`/`.pp`
+  probes — the question is what was resolved, and a predicate repeated at eight sites is
+  eight chances for one to drift. Probes only read files, so the discard is equivalent.
+- **The whitelist is the record.** Its definition site carries why it cannot be read off the
+  units (header prose is wrong in both directions) and the rule that adding a unit to it is
+  part of writing one.
+
+### One mechanical note worth keeping
+
+The Makefile insertion for the new test landed **between a comment block and the command it
+documents**, orphaning the comment onto the wrong assertion — the same three-part-block shape
+that broke five core tests in v362 earlier the same day, arriving within an hour of being
+warned about it. Caught by reading the result back rather than by anything failing: a
+misfiled comment compiles, passes, and is only ever wrong to a human.
+- 2026-08-19 — resolved, commit PENDING-COMMIT.
