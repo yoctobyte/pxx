@@ -32,6 +32,10 @@ STATUSES = [
     "backlog",
     "experimental",
     "rainy-day",
+    # Track F parks here. Listed so the folder is LOADED (board, check, blocker
+    # resolution see it) — NOT so it is ranked: ready/next read only
+    # urgent/working/unfinished/backlog, which is the whole point of the lane.
+    "float",
     "done-followup",
     "decided",
     "done",
@@ -170,11 +174,11 @@ def normalize_track(value: str) -> str:
                          ("WEBSITE", "W")):
         if name in t:
             return letter
-    t = re.sub(r"[^ABCDEMNOPRSTUWZ+/]", "", t)
+    t = re.sub(r"[^ABCDEFMNOPRSTUWZ+/]", "", t)
     t = t.replace("/", "+")
     # strict: only clean single-letter combos survive; anything else (e.g.
     # letter-soup from a prose value) falls through to the Type-line detection
-    if not re.fullmatch(r"[ABCDEMNOPRSTUWZ](\+[ABCDEMNOPRSTUWZ])*", t):
+    if not re.fullmatch(r"[ABCDEFMNOPRSTUWZ](\+[ABCDEFMNOPRSTUWZ])*", t):
         return ""
     return t
 
@@ -285,6 +289,27 @@ class Ticket:
 
     @property
     def track(self) -> str:
+        """The lane(s) this ticket is surfaced under. File ownership first, then
+        the F work-tag if it is parked in float/."""
+        base = self._track_base()
+        # Track F (floating point) — a work-tag, not a file-lane, so it is
+        # APPENDED to the owning lane rather than replacing it: a ticket in
+        # float/ declaring `track: B` surfaces as B+F, and --track B and
+        # --track F both find it. `track: B+F` written by hand already carries
+        # the letter and is left alone.
+        #
+        # The trigger is MEMBERSHIP OF float/, nothing else. No slug arm and no
+        # decl-line arm: F's own charter is "rank the mechanism, never the
+        # datatype", and every cheap textual signal for float (a slug with
+        # -float-/-ulp-/-round- in it, a "Track F" mention in prose) keys on the
+        # datatype. Mis-tagging toward F is how a real bug disappears from the
+        # ranked backlog, so where an arm cannot draw that line there is no arm.
+        # The folder is a human decision that has already drawn it.
+        if self.status == "float" and "F" not in base.split("+"):
+            return f"{base}+F" if base else "F"
+        return base
+
+    def _track_base(self) -> str:
         # Track R = the Rust frontend. Its tickets declare "Track A (working
         # name: Track R, Rust frontend)" on the Type/Track line so they still
         # obey Track A's file-ownership rules, but the user wants them surfaced
@@ -556,8 +581,15 @@ class Board:
         of the high-value work it gates — you rate the goal, the chain follows.
         Only OPEN dependents pull a blocker up (a done/rejected dependent no
         longer needs it). The graph is a DAG (check() enforces); a stray cycle
-        is guarded so this can't recurse forever."""
-        terminal = {"done", "rejected", "decided"}
+        is guarded so this can't recurse forever.
+
+        "float" counts as terminal for PROPAGATION (not as a target): parked
+        Track F work must not raise the priority of the active ticket it happens
+        to depend on — `idea-cobol-frontend-feasibility-costing` went 20 -> 25 on
+        the strength of a parked F bug the moment float/ was loaded. A float
+        ticket still INHERITS from its own open dependents, which is the signal
+        that something real is waiting on it and it should be un-parked."""
+        terminal = {"done", "rejected", "decided", "float"}
         dependents: dict[str, list[str]] = defaultdict(list)
         for t in self.tickets:
             if t.status in terminal:
@@ -667,7 +699,11 @@ class Board:
         done = self.done_slugs
         c: Counter[str] = Counter()
         for t in self.tickets:
-            if t.status in {"done", "rejected", "decided"}:
+            # "float" belongs here for the same reason as done/rejected: a
+            # parked F ticket is not work anyone is waiting on, so it must not
+            # push its blocker up the autorate ranking. Nothing in float/ ranks,
+            # and nothing in float/ ranks anything ELSE either.
+            if t.status in {"done", "rejected", "decided", "float"}:
                 continue
             for b in t.blockers:
                 if b not in done:
@@ -1501,13 +1537,13 @@ def cmd_resolve(args: argparse.Namespace) -> int:
 def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="progress.sh",
-        usage="%(prog)s [next|ready|leverage|autorate|board|board-md|check|all] [--track A|B|C|D|E|M|N|O|P|R|S|T|U|W|Z]\n"
+        usage="%(prog)s [next|ready|leverage|autorate|board|board-md|check|all] [--track A|B|C|D|E|F|M|N|O|P|R|S|T|U|W|Z]\n"
         "       %(prog)s autorate [--write] | claim <slug> <owner> | resolve <slug> [<commit>]",
     )
     sub = p.add_subparsers(dest="cmd")
     for name in ["next", "ready", "leverage", "autorate", "board", "board-md", "check", "all"]:
         sp = sub.add_parser(name)
-        sp.add_argument("--track", choices=["A", "B", "C", "D", "E", "M", "N", "O", "P", "R", "S", "T", "U", "W", "Z"], default="")
+        sp.add_argument("--track", choices=["A", "B", "C", "D", "E", "F", "M", "N", "O", "P", "R", "S", "T", "U", "W", "Z"], default="")
         sp.add_argument("--strict", action="store_true")
         sp.add_argument("--write", action="store_true")
     sp = sub.add_parser("claim")
