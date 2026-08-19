@@ -74,3 +74,36 @@ Track B: build with `$(PXX_STABLE)`, never rebuild the compiler. No `make
 lib-test` impact expected (nothing wired into the gate). Name the pin md5 and
 base — `nilpy_ladder.py` now prints both in its header — and use
 `--require-fix=<sha>` when the run is meant to measure a specific fix.
+
+
+## 2026-08-19 — PARKED (goal change), with the thesis partly CONFIRMED before it was
+
+Parked at a clean point when the user changed the goal to backlog-shrink and
+NilPy was paused. Nothing was in flight; the v360 ladder run was stopped
+deliberately rather than left to finish, because a measurement whose consumer is
+paused is the definition of work that does not matter — and it was competing for
+CPU with work that does.
+
+**The thesis is already confirmed on at least one rung**, which is why this is
+worth resuming rather than re-deriving. frank2 established that `re.MULTILINE`
+— a wall reached by tinycss2 the moment the callable-value fixes landed — is a
+**Track B library-surface gap and not a mechanism bug**: `lib/rtl/re.pas` says in
+its own header that it *is* NilPy's `re`, and simply does not define
+`MULTILINE`.
+
+That is exactly the distinction this ticket was filed to test. Two days of walls
+were all one mechanism (callables, signatures, dispatch); the first wall past
+them is a missing constant in a library. If the remaining distance is largely
+library-surface rather than semantics, then **what gets ranked next depends
+heavily on which libraries we happen to have fetched** — and a corpus of three
+packages from one family is choosing those priorities for us.
+
+Related, same shape, also from frank2 and also parked: eight `lib/rtl` units
+share a name with a Python stdlib module (`classes io json math random re
+strings types`), so `from classes import Foo` fails naming a symbol in a Pascal
+unit the program never mentions. Filed as a Track U decision rather than guessed
+at.
+
+**Resume condition:** NilPy unpaused. Start with reportlab as a separate probe
+(already fetched, 421 pure-Python files, zero C), and do not touch the ladder's
+tracked roots — the `compile: N/48` series must stay comparable.
