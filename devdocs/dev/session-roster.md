@@ -3155,3 +3155,41 @@ compiler predating the fix — and the `Mapping` row would have sat still, readi
 acking. That sentence is what made the wrong premise visible while it was still cheap.
 Encourage restating the purpose of a long run before starting it — it is the only
 cross-agent check that costs nothing.
+
+## Killing a healthy run: progress is about cost, value is about the answer (2026-08-19)
+
+A worker had a ~40-minute corpus ladder 833s in. Two fixes had landed that the run could
+not see, so the pin was held on it, and the pin held the repo-wide lock. The coordinator
+offered the choice and asked **"how far along is it?"** — and that question was the error,
+even though the worker answered it correctly.
+
+**The worker's substitution, kept in its words because it is the general rule:**
+
+> *"How far along is it?" is the wrong question when the output is already known — the
+> right one is "what does finishing tell me that I do not have?" Progress is about cost;
+> value is about the answer.*
+
+Here finishing would have produced a corpus-level confirmation of a fix already established
+at file level (7 files moved, 3 compiling clean). A second measurement of a settled fact,
+bought with a lock held across every lane. **Even at 95% done that trade is bad** — and
+"it's nearly finished, let it run" is sunk-cost reasoning wearing the clothes of thrift.
+
+**Three things to take from it:**
+
+- **The coordinator asking "how far along" is worse than a worker answering it**, because
+  the question sets what gets weighed. Ask what the remaining time BUYS. If the answer is
+  a fact you already have, the percentage is irrelevant.
+- **The reflex is trained on failing runs and is hardest to invoke on a HEALTHY one.** The
+  worker had spent the day discarding runs on stale ground and still nearly kept this one
+  because it was succeeding. Discarding a working run on value grounds is the case worth
+  rehearsing; discarding a broken one is easy.
+- **Cost check, measured:** the kill released the lock in under a minute and the pin took
+  about four. The whole cycle cost less than the run's remaining time almost certainly
+  would have — and the worker then got a run that could answer everything instead of one
+  that could answer a third of it.
+
+**Sibling, same day, same worker:** `--require-fix` was generalised to accept a LIST before
+being bitten rather than after, on the reasoning that *a gate checking one of two required
+shas is worse than no gate* — it reports a green precondition for a run that cannot answer
+the question. That is the day's recurring failure (a check that can pass while the thing it
+protects is broken) closed structurally instead of by care.
