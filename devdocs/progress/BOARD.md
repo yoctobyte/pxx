@@ -45,7 +45,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (238)
+## backlog (237)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -88,7 +88,7 @@ _none_
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
 | bug-p-a-parameterless-function-is-undefined-as-a-method-call-argument | P | 35 | bug | A parameterless function used as an ARGUMENT to a method call fails to resolve — `error: undefined variable (zero)` — while the identical argument to a free function compiles. Any argument position. Found writing lib/rtl/mimic_urllib_request.pas, where `headers.get(name, pynone)` would not compile but `HeaderFirst(raw, name, pynone)` did. | — |
-| bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits | P | 30 | bug | `-b shr 1` answers 2147483644 where FPC says 9223372036854775804, for Byte, Word and Cardinal — in BOTH the default dialect and --strict-fpc. FPC's unary minus yields a 64-bit value for EVERY integer operand type (SizeOf(-x) is 8 for all seven, measured); pxx's truncates an unsigned operand to 32 bits before any widening can run, so the sign is already gone. | — |
+| bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits | P | 45 | bug | `-b shr 1` answers 2147483644 where FPC says 9223372036854775804, for Byte, Word and Cardinal — in BOTH the default dialect and --strict-fpc. FPC's unary minus yields a 64-bit value for EVERY integer operand type (SizeOf(-x) is 8 for all seven, measured); pxx's truncates an unsigned operand to 32 bits before any widening can run, so the sign is already gone. | — |
 | bug-t-fuzz-sh-reports-an-identical-crash-as-a-divergence | T | 30 | bug | `tools/fuzz.sh` compares the RUNNER's crash text along with the program's output, so a mutant that segfaults identically on all four targets is reported as three DIVERGENCEs — native says \"timeout: the monitored command dumped core\", qemu says \"uncaught target signal 11\". Same output, same exit code, different reporter. | — |
 | bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic | T | 55 | bug | Ten `timeout N` calls are hardcoded INSIDE Makefile recipes, so they fire within make and surface to testmgr as an ordinary `fail`. Every piece of testmgr's contention machinery — PEER_TIME_FACTOR budget stretching, co-tenant retry, the `timeout` status itself — is structurally unable to see them. That is why six separately-fixed timeout tickets did not stop the class recurring: all six fixed testmgr's OWN timeouts, and the inner ones were never in scope. | — |
 | bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label | T | 55 | bug | The pin_verify record is unattributable and mislabelled. Its `red` list stores POSITIONAL job names (`lib-test#117`), which name a different file as soon as the job list changes — resolved at HEAD, lib-test#117 is lib_tls.pas; resolved at the verified sha it is lib_tls13_keys.pas. And its `ver` said v347 while the verified tree carried pin 346. Neither unattributed red reproduces under either pin. | — |
@@ -116,7 +116,6 @@ _none_
 | compat-pascal-writeln-of-a-single-uses-double-width | A | 30 | compat | WriteLn/Str of a Single print the value's full Double expansion — 17 significant digits and a 3-digit exponent — where FPC prints 10 digits and a 2-digit exponent: pxx ' 1.0000000149011612E-001' vs FPC ' 1.000000015E-01'. Same class as the FloatToStr(Single) bug fixed in lib/rtl, but this path is the compiler's own float writer, so the RTL cannot reach it. Text-only divergence, no wrong value. | — |
 | decide-one-answer-to-have-i-already-compiled-this-unit | U | 40 | decide | Three tickets in three lanes are all 'a compilation unit got processed twice', served by three unrelated mechanisms: unit-NAME keying (Pascal/NilPy), an @cpath: key space (path-form C units), and preprocessor include-guard visibility (C headers). Two is a smell, three is a design flaw. Question for the user: does 'have I already compiled this translation unit?' deserve ONE answer, or are three correct-in-their-own-lane answers the right shape? | — |
 | decide-staff-track-c-to-unblock-own-language-first | U | 50 | decide | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (C, p55) is the only thing blocking feature-a-own-language-first-symbol-resolution, and Track C is unstaffed. Staff it, fold it into an existing session, or leave the chain parked? | — |
-| decide-unary-minus-widening-in-the-default-dialect | U | 45 | decide | FPC widens unary minus to 64-bit for EVERY integer type; pxx truncates an UNSIGNED operand to 32 bits first, so `-b shr 1` answers 2147483644 where FPC says 9223372036854775804 — in the DEFAULT dialect, not behind a flag. Adopt FPC's rule as the default, or keep ours and document the divergence? | — |
 | decide-what-synapse-actually-needs-vs-mimic-fpc | U | 20 | decide | Synapse builds under `--mimic-fpc`. What does it actually NEED? | — |
 | doc-glossary-of-cross-language-slang | D | 40 | doc | pxx accepts Pascal, C and Python, so its docs mix three vocabularies and define none of them. A reader fluent in one hits the others' slang unexplained — `cls`, `self`, dunder, repr-vs-str going one way; unit, uses, RTL, pinned, fixedpoint going the other. Wanted: a glossary with a Python-to-Pascal equivalence table, since most terms have a counterpart the reader already knows. | — |
 | doc-n-fu-is-how-a-python-package-is-found | D | 25 | doc | `-Fu<dir>` is how NilPy finds a third-party Python package, and it is absent from the compiler's usage line. Its absence misdiagnoses as `import: no unit named X` — a 'feature missing' message for a feature that exists. Cost a wrong first diagnosis on the first corpus attempt; will bite the next person wiring one. | — |
@@ -369,7 +368,7 @@ _none_
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (87)
+## decided (88)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -455,6 +454,7 @@ _none_
 | decide-track-t-autopin-criteria | U | 55 | decide | What criteria justify Track T auto-pinning a stable binary? | — |
 | decide-two-track-model-dev-and-regression-testing | T | 60 | decide | DECIDED: two operational tracks — development, and regression testing | — |
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
+| decide-unary-minus-widening-in-the-default-dialect | U | 45 | decide | FPC widens unary minus to 64-bit for EVERY integer type; pxx truncates an UNSIGNED operand to 32 bits first, so `-b shr 1` answers 2147483644 where FPC says 9223372036854775804 — in the DEFAULT dialect, not behind a flag. Adopt FPC's rule as the default, or keep ours and document the divergence? | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 | decide-week-theme-2026-08-17 | U | 70 | decide | What should the next week of work aim at? Measured: the bug backlog already peaked (61 on 08-03 -> 32 now) and 65% of open tickets are features, so this is no longer a burn-down question. Three candidate themes with the numbers behind each. | — |
@@ -554,10 +554,10 @@ _none_
 - [p 45] [N] bug-n-an-augmented-subscript-on-a-dunder-class-is-refused
 - [p 45] [N] bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program
 - [p 45] [N] bug-n-self-class-cannot-be-called-as-a-constructor
+- [p 45] [P] bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits
 - [p 45] [T] bug-t-split-jobs-misses-a-tmp-path-reached-through-a-shell-variable
 - [p 45] [T] bug-t-sync-fills-one-spelling-of-pending-commit-and-check-counts-two
 - [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
-- [p 45] [U] decide-unary-minus-widening-in-the-default-dialect
 - [p 45] [D] docs-name-collisions-and-the-as-escape
 - [p 45] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 45] [C] feature-c-entry-stub-must-run-initializers-for-environ
@@ -655,7 +655,6 @@ _none_
 - [p 30] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder
 - [p 30] [N] bug-nilpy-an-extended-slice-cannot-be-assigned
 - [p 30] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
-- [p 30] [P] bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits
 - [p 30] [T] bug-t-fuzz-sh-reports-an-identical-crash-as-a-divergence
 - [p 30] [T] chore-t-unit-class-est-mem-is-below-what-lib-test-00-actually-peaks-at
 - [p 30] [A] compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags

@@ -89,3 +89,29 @@ it — the ticket this came from established exactly that.
 silent wrong VALUE rather than a laxness, and options 2 and 3 both preserve a
 known-wrong answer in the mode everyone uses. Worth doing deliberately with the
 overload-resolution and overflow tests in front of us.
+
+---
+
+## CONFIRMED 2026-08-19 (user) — option (1), as a plain bug fix
+
+User read the 2026-08-17 amendment and agreed it was already decided: *"decide-unary-minus
+looks already decided to me."*
+
+**Adopt FPC's widening in the default dialect.** `-x` yields a 64-bit value for every
+integer operand type, matching `SizeOf(-x) = 8` across all seven, as measured.
+
+The amendment left exactly one thing open — *"overrule if you want it staged behind a
+flag first; otherwise it proceeds as a bug fix"* — and it was NOT overruled. So it lands
+as a bug fix in the default dialect, no flag, no staging.
+
+The blast radius stands as stated and is the implementer's problem, not a reopened
+direction question: widening `-x` changes the static TYPE of every unary-minus
+expression, so **overload resolution and `{$Q+}` overflow behaviour move with it**. Land
+it with those tests in front of you, per the original recommendation.
+
+Re-filed into its lane as [[bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits]],
+reranked 30 -> 45 to inherit this ticket's priority. A decision that is not re-filed is
+invisible to `ready`/`next` and gets rediscovered.
+
+## Log
+- 2026-08-19 — confirmed by user, moved to `decided/`.

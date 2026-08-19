@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 30
+prio: 45
 type: bug
 blocked-by: []
 summary: "`-b shr 1` answers 2147483644 where FPC says 9223372036854775804, for Byte, Word and Cardinal — in BOTH the default dialect and --strict-fpc. FPC's unary minus yields a 64-bit value for EVERY integer operand type (SizeOf(-x) is 8 for all seven, measured); pxx's truncates an unsigned operand to 32 bits before any widening can run, so the sign is already gone."
@@ -69,3 +69,29 @@ measured (under FPC). Still not filed on its own; still not part of this bug.
 The table above matching `fpc -O1` row for row in whichever mode the decision
 picks, with `test/test_strict_fpc_shift_widths.pas` staying green in BOTH modes;
 `gate.sh quick`; self-host fixedpoint.
+
+---
+
+## DECIDED 2026-08-19 (user) — fix it, in the DEFAULT dialect, no flag
+
+[[decide-unary-minus-widening-in-the-default-dialect]] is confirmed and closed. The
+direction is settled; this ticket is now ordinary Track P work.
+
+**Adopt FPC's rule: unary minus yields a 64-bit value for EVERY integer operand type.**
+Not behind `--strict-fpc`, not staged — the default dialect, as a bug fix. The reasoning
+is in the decided ticket: the reference implementation sets the default, and
+`-b shr 1` answering 2147483644 is a silent wrong VALUE, which the compat escape rule
+promotes to a bug rather than parity work.
+
+**Reranked 30 -> 45**, inheriting the decision's priority.
+
+### The one thing to carry into the work
+
+Widening `-x` changes the **static type of every unary-minus expression** in the
+language, so two things move with it and neither is optional:
+
+- **overload resolution** — `-x` now selects Int64-taking candidates it previously did not;
+- **`{$Q+}` overflow behaviour** — the check now runs at a different width.
+
+Land with those tests in front of you. If either turns out to force a staged rollout
+after all, that is a finding worth reporting back, not a reason to re-open the direction.
