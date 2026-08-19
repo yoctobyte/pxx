@@ -4340,6 +4340,73 @@ def retire_host(repo, old, into=None, tdir=None, renamed=False):
 STATUS_UP, STATUS_DOWN, STATUS_UNKNOWN = 0, 1, 2
 
 
+def adj(what):
+    """`what` as it appears before the noun: "new " or nothing at all."""
+    return what + " " if what else ""
+
+
+def pin_verify_corroboration(pv, st, now):
+    """How much weight a pin verify's red count actually carries. -> dict|None.
+
+    A pin verify is ONE run of a timing-sensitive matrix on a box that may be
+    running something else at the time, and the "N new" count it produces reads
+    like a verdict. On 2026-08-19 it read `20 red, 11 new vs the v367 baseline`
+    -- above a coordinator's documented `make revert` trigger -- and all eleven
+    passed in an ordinary full tier twenty-two minutes later. The eleven were
+    uforth x5, sqlite-threads x2, c-conformance under qemu, demos, tools-devtest
+    and one nilpy job: the load-shaped family, not a regression. Nothing had
+    moved in compiler/**.
+
+    The peer who received that number got it right, by hand, with six commands,
+    at midnight, on the strength of choosing to measure rather than act on their
+    own stated trigger. That is not a control. The discriminator they ran is two
+    keys in this same file, so it runs here instead: a red that PASSES in a full
+    tier that ran AFTER the verify has been refuted by a later and equally wide
+    observation of the same job.
+
+    Soundness of reading it out of `jobs`: that map is the newest status per
+    job, so a `pass` there is only newer than the verify if some run since the
+    verify actually attempted the job. `last_full` completing after the verify
+    is what supplies that -- a full tier runs every job -- which is why the
+    later run must be a FULL one and why its sha and the gap are returned, to be
+    named in the output. A quick tier passing 200 jobs would refute nothing
+    about the 2500 it never touched.
+
+    `sha` is None when no full tier has run since the verify. That is NOT the
+    same as corroborated and the caller must not print it as such -- it means
+    the count still rests on a single run -- which is why the subject is
+    described either way and only the verdict on it is optional.
+    """
+    lf = st.get("last_full") or {}
+    pv_age = secs_since(pv.get("date") or "", now)
+    lf_age = secs_since(lf.get("date") or "", now)
+    # Strictly LATER, and strictly a full tier. `jobs` holds the newest status
+    # per job, so a `pass` there is only evidence about the verify's claim if
+    # some run since the verify actually attempted that job -- and only a full
+    # tier attempts all of them.
+    fresher = (pv_age is not None and lf_age is not None and lf_age < pv_age)
+    later = st.get("jobs") or {} if fresher else {}
+    red = pv.get("red") or []
+    base = st.get("pin_baseline") or {}
+    # Corroborate the count the reader is about to act on. When a baseline is
+    # attributable to THIS pin that count is the NEW reds, not all of them --
+    # the inherited ones were never the alarm.
+    # `what` is the ADJECTIVE, empty when the subject is every red -- "2 red
+    # reds" is what a semantic tag renders as when it reaches a sentence.
+    if base.get("reds") is not None and base.get("pin") == pv.get("ver"):
+        subject, what = [j for j in red if j not in set(base["reds"])], "new"
+    else:
+        subject, what = red, ""
+    return {"what": what, "n": len(subject),
+            "refuted": [j for j in subject if later.get(j) == "pass"],
+            # Not merely "not refuted": a job that fails in BOTH runs is the
+            # case where the count deserves its weight, and it must be counted
+            # separately from one the later tier never reported on.
+            "confirmed": [j for j in subject if later.get(j) == "fail"],
+            "sha": lf.get("sha") if fresher else None,
+            "gap": (pv_age - lf_age) if fresher else None}
+
+
 def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
     """Is Track T covering this repo?  No ping, no network: a watcher is
     considered UP iff every commit older than the grace window is tested by
@@ -4564,6 +4631,42 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
                       "%d testable commit(s) behind %s — a job fixed since is "
                       "still red here, and that is not a contradiction"
                       % (pv_behind, ref))
+            # CORROBORATION — the count above is one run, and it was being
+            # read as a verdict. It is a HYPOTHESIS about the pinned tree, and
+            # the cheapest test of it is a later full tier's opinion of the same
+            # jobs. Printed in both directions on purpose: "refuted" and "not
+            # yet checked" are different states, and collapsing them is how a
+            # single noisy run becomes a revert.
+            if pv_red:
+                co = pin_verify_corroboration(pv, st, now)
+                if co["sha"] is None:
+                    print("tstate:            ...SINGLE RUN, uncorroborated: no "
+                          "full tier has run since this verify, so those %d "
+                          "%sreds rest on one pass of a timing-sensitive matrix. "
+                          "Compare against the next full tier before acting"
+                          % (co["n"], adj(co["what"])))
+                elif co["refuted"] and not co["confirmed"]:
+                    print("tstate:            ...NOT CORROBORATED: all %d of "
+                          "those %d %sreds PASS in the full tier at %s, %s "
+                          "later — a load-shaped flake, not a regression. Do "
+                          "NOT revert on this count alone"
+                          % (len(co["refuted"]), co["n"], adj(co["what"]),
+                             co["sha"][:12], fmt_age(co["gap"])))
+                elif co["confirmed"]:
+                    print("tstate:            ...corroborated in part: %d of %d "
+                          "%sreds ALSO fail in the full tier at %s (%s later)%s"
+                          % (len(co["confirmed"]), co["n"], adj(co["what"]),
+                             co["sha"][:12], fmt_age(co["gap"]),
+                             "; the other %d pass there and are noise"
+                             % len(co["refuted"]) if co["refuted"] else ""))
+                else:
+                    # Neither refuted nor confirmed: the later tier reported on
+                    # none of them. Saying nothing here would read as agreement.
+                    print("tstate:            ...the full tier at %s (%s later) "
+                          "reported on none of those %d %sreds — still a "
+                          "single run"
+                          % (co["sha"][:12], fmt_age(co["gap"]), co["n"],
+                             adj(co["what"])))
         nskip = sum(1 for s in (st.get("jobs") or {}).values() if s == "skip")
         if nskip:
             print("tstate:   coverage — %d job(s) SKIPPED on %s (absent corpus "
