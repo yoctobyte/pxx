@@ -363,3 +363,4 @@
 2026-08-19T14:09:58Z  v363  9603dc251fa266071f8a5182b413ead34c75bea7a756600fac97563de71bb6d0  7dabdd40ea41c39eef9d856589726fc49310cace  plan(A): record the measured plan for the NilPy bare-import rule
 2026-08-19T14:40:21Z  v364  f1806251f22592f0c63b785b1ac5bee07b4c9f1bc503b526e86c1ce22238a0f2  4e27dc2be11471f92064756e17d426617d0d284b  triage(A/P): re-type Initialize/Finalize as a bug (measured vs FPC); read-into-Char stands
 2026-08-19T16:09:34Z  v365  92a09970011ab49f6c4481f577a810f09231d2658aa0a5faa18a203b33de20f5  9ea01645c159de63d2d040a9dabcfc6242517d61  decide(T): ground truth is projects that provably work, not generated float expectations
+2026-08-19T19:44:00Z  v366  5e48116ee780ae551d51f27d512fbd67a7eaa245e973009aa44d019ce93f7611  cabb5d5989f3b4fbcc1897da094f9ad2b9a1d645  docs(progress): record the shas the resolves landed as
