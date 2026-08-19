@@ -179,4 +179,4 @@ mechanisms is still the count, and `pyboundfn_setdefaults` is still the
 duplicate to delete. This bug simply was not an instance of it.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit e360f0c5c.
