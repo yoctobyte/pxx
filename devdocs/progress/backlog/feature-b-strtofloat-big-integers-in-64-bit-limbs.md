@@ -2,9 +2,9 @@
 track: B
 prio: 25
 type: feature
-owner: unassigned
 blocked-by: []
 summary: "ExBinNearest's big-integer primitives use 32-bit limbs because a limb times a sub-2^31 multiplier is the largest product that fits a signed Int64. MulHiU64 is already in lib/rtl/wideint.pas (intrinsic via IR_MULHI, already used by Eisel-Lemire in this same unit), so 64-bit limbs are available: half the limb count, BigFMulU64's five passes collapse to one, and the power-of-five chunk rises from 5^13 to 5^27. Expect ~4x, taking subnormal StrToFloat from ~8-11 us to ~2-3 us — inside CPython's range. A rewrite of six leaf routines with no change to the algorithm above them."
+owner: unassigned
 ---
 
 # `StrToFloat`'s big integers want 64-bit limbs
@@ -70,6 +70,27 @@ Rough expectation **~4x**: subnormals at 2-3 us, which is inside the range
 CPython measures on the same box (1.06-2.61 us; note that the parent ticket's
 often-quoted 0.72 us does **not** reproduce and should not be used as the
 target).
+
+## The UInt64 arithmetic this needs was PROBED before the ticket was believed
+
+Checked on pinned v355, so nobody has to find out mid-rewrite that the dialect
+will not carry it. All eight answers correct:
+
+| shape | pxx |
+| --- | --- |
+| `a[0] > a[1]` on a `UInt64` array, $FFFF... vs 1 | TRUE — unsigned, as needed |
+| `$FFFFFFFFFFFFFFFF + 2` | 1 — wraps, does not trap |
+| carry detect `t < x` after that add | TRUE |
+| `MulHiU64($FFFF..., 2)` | 1 |
+| `x * y` low half | 18446744073709551614 |
+| `x shr 60` | 15 |
+| `(UInt64(1) shl 63) shr 63` | 1 |
+| `7450580596923828125` as a literal (5^27) | exact |
+
+So `array[..] of UInt64` with wrapping add, unsigned compare and `MulHiU64` all
+behave, and 5^27 fits a plain literal (it is under 2^63, so no `UInt64`-only
+constant is needed anywhere). Digit chunks should stay at 18 (10^18 < 2^63) for
+the same reason.
 
 ## Scope
 

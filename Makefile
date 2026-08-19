@@ -10711,6 +10711,23 @@ endif
 	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_xml_etree_elementtree.npy $(TESTTMP)/lib_mimic_xml_etree
 	test "$$($(TESTTMP)/lib_mimic_xml_etree | grep -c '=ok')" = "56"
 	test "$$($(TESTTMP)/lib_mimic_xml_etree | tail -1)" = "MIMIC-XML-ETREE OK"
+	# collections.abc's Mapping / MutableMapping, the ABC MIXIN pattern
+	# (feature-b-mimic-collections-abc-mapping-and-mutablemapping). The shim
+	# stores nothing: its whole value is mixins that dispatch DOWN into a
+	# subclass's __getitem__/__len__/__iter__, which is the one property worth
+	# testing and the one three separate NilPy dispatch bugs each broke. So the
+	# classes here are deliberately subclasses -- RO(Mapping), RW(MutableMapping),
+	# and an Overrider whose own get() must win while its SIBLING mixins keep
+	# working (an override that silently disables the rest is the failure this
+	# catches). MutableSet is absent on purpose: nothing in the corpus imports it.
+	# Runs unmodified under CPython and was diffed against it byte for byte; five
+	# deliberate perturbations of the shim were each caught, so the zero means
+	# something. Note the shim currently unblocks NO corpus file -- the corpus
+	# writes `from collections.abc import Mapping`, which is swallowed before it
+	# reaches here (bug-n-from-collections-abc-import-is-swallowed-by-the-collections-root-rule).
+	$(PXX_STABLE) -Fulib/rtl test/lib_mimic_collections_abc.npy $(TESTTMP)/lib_mimic_collections_abc
+	test "$$($(TESTTMP)/lib_mimic_collections_abc | grep -c '=ok')" = "47"
+	test "$$($(TESTTMP)/lib_mimic_collections_abc | tail -1)" = "MIMIC-COLLECTIONS-ABC OK"
 	# urllib.parse, reached the way the corpus reaches it: `from six.moves
 	# import urllib_parse as urlparse`, a RENAMED re-export through two shims
 	# (feature-b-mimic-six-moves-needs-http-client-and-urllib). Testing
@@ -11091,7 +11108,7 @@ endif
 	@rc=0; tools/reportlab_diff.py || rc=$$?; \
 	 if [ $$rc = 77 ]; then echo "SKIP reportlab_diff -- prerequisite absent (see line above)"; \
 	 elif [ $$rc != 0 ]; then echo "reportlab_diff: the mimic diverged from the oracle"; exit 1; fi
-	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + strtofloat-roundtrip + strtofloat-lemire + mimic-six + mimic-warnings + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff + synapse-ssl) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
+	@echo "lib-test ok (sudoku exact + collections + math + sysutils + random + randomstate + ipv6 + net6 + asyncnet6 + crtl-inttypes + crtl-trig-huge + crtl-exp2 + crtl-oracle + crtl-setjmp + tk-nilpy + wideint + p256field + bitset + ucomplex + vecmath + bignum-ops + platform + directory + bignum + json + calc + sat + mathf + vm + mandelbrot + raytracer + chess-perft + lisp + zlib + base64 + png smoke + ansiterm + ansirender + process + process-multi + dynlibs + unixshims + strpchar + sockets + sha256-hmac-hkdf + sha512 + tls13-keysched + tls13-record + tls13-hs + chacha20-poly1305 + x25519 + aes-gcm + rsa-verify + rsa-pss + ed25519-verify + ecdsa-p256-verify + x509 + tls-seam + http + http-async + http-redirect + http-keepalive + http-pool + http-pool-concurrent + http-gzip + http-cookie + http-serve + http-json + net-demo + https-mock-seam + dns-async + dns-cache + classes + strutil + streams + format + paths + floattostr + strtofloat-roundtrip + strtofloat-lemire + mimic-six + mimic-warnings + mimic-xml-etree + mimic-collections-abc + pyexec + format-ge + namevalue + markdown + inttohex + reportlab-diff + synapse-ssl) against stable v$$(cat $(STABLE_DEFAULT_DIR)/VERSION 2>/dev/null || echo '?')"
 
 # Full Track-B library suite, distinct from compiler `make test`.
 library-suite-green: pxx-stable-check

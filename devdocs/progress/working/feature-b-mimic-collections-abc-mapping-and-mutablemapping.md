@@ -4,6 +4,8 @@ prio: 68
 type: feature
 blocked-by: [bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view, feature-nilpy-for-loop-getitem-protocol-fallback]
 summary: "`unknown base class Mapping` is now the single biggest remaining wall on the third-party ladder — 7 html5lib files, up from 3, and all four etree files landed on it. No shim exists: lib/rtl has collections.pas (no Mapping) and no mimic_collections_abc.py. Needs Mapping / MutableMapping / MutableSet as ordinary classes. BLOCKED on two N bugs that break exactly the mixin methods an ABC is made of."
+status: working
+owner: frankonpiler-etree
 ---
 
 # `collections.abc`: Mapping and MutableMapping as a shim
@@ -111,3 +113,96 @@ Track B's: build with `$(PXX_STABLE)`, `make lib-test`. Then **re-run
 `tools/nilpy_ladder.py` and report past-a-wall separately from onto-the-next-wall, naming
 the pin sha** — a single after-the-fact run would credit this shim with whatever else
 landed, which is the trap frank3 avoided by measuring the same-pin pair first.
+
+## 2026-08-19 (frank3-etree) — DONE, and it moves zero corpus files. Both facts matter.
+
+Built on pin **v356** (`2bb09afb0cff` at `5b93f1155a7b`), which carries both
+blockers — verified on the pinned binary itself, not from git history: `for x in
+s` iterates, and `keys()`/`items()`/`values()` through an untyped receiver
+dispatch correctly.
+
+### Shipped
+
+- `lib/rtl/mimic_collections_abc.py` — `Mapping` (`get`, `__contains__`, `keys`,
+  `items`, `values` as mixins over an abstract `__getitem__`/`__len__`/`__iter__`)
+  and `MutableMapping` (`__setitem__`, `__delitem__`, `pop`, `popitem`, `clear`,
+  `update`, `setdefault`).
+- `test/lib_mimic_collections_abc.npy` — 47 assertions, wired into `make lib-test`.
+
+**`MutableSet` omitted, by measurement.** Every `collections` import across
+html5lib / tinycss2 / webencodings / reportlab asks only for `Mapping`,
+`MutableMapping`, `OrderedDict`, `deque`, `namedtuple`. Following the ElementTree
+precedent: omit what nothing imports rather than ship a refusing stub.
+
+`__eq__`/`__ne__` are also omitted, and that one is **named in the shim's
+docstring** rather than silently dropped, because their absence is the kind that
+answers wrong instead of failing — two equal mappings compare unequal by identity.
+
+### The differential is falsifiable
+
+Byte-identical output under CPython and pxx. Before believing that zero, five
+deliberate perturbations of the shim were each caught:
+
+| perturbation | caught as |
+| --- | --- |
+| `items()` uses `self[k]` instead of `self.__getitem__(k)` | `KeyError: 'a'` |
+| drop the dead `return iter([])` after the abstract `raise` | `TypeError: iter() returned non-iterator` |
+| `get` always returns the default | 4 assertions fail |
+| `pop` returns `None` where it should raise | 2 fail |
+| `clear` returns without draining | 3 fail |
+
+### Past-a-wall vs onto-the-next-wall — reported separately, as asked
+
+**Past a wall: ZERO files. The ladder does not move at all on pin v356.** All 7
+files on `unknown base class Mapping` still stop there, re-measured file by file
+with the shim in place.
+
+The reason is a *different* bug, and it is the one that actually blocks the
+corpus: the corpus writes `from collections.abc import Mapping`, and that spelling
+never reaches the shim. `PyImportRootIsConsumedOnly`
+(`compiler/pyparser.inc:33003`) tests only the **root** of a dotted from-import
+and has `collections` on its consume-and-ignore list, so the whole submodule is
+swallowed and binds nothing. `import collections.abc as cabc` does reach the shim
+— that asymmetry is what localises it. Filed as
+[[bug-n-from-collections-abc-import-is-swallowed-by-the-collections-root-rule]]
+(N, p62).
+
+So the honest split is: **this ticket delivered a correct component that is
+currently unreachable.** To show the component is load-bearing rather than merely
+green, the 7 files were re-compiled with their import spelling mechanically
+rewritten to `import collections.abc as _cabc` + `Mapping = _cabc.Mapping`:
+
+| file | with the corpus's own spelling | with the spelling rewritten |
+| --- | --- | --- |
+| `_trie/_base.py` | `unknown base class Mapping` | **OK — compiles clean** |
+| `_utils.py` | `unknown base class Mapping` | `undefined variable (__name__)` |
+| `serializer.py` | `unknown base class Mapping` | `undefined variable (__name__)` |
+| `treebuilders/__init__.py` | `unknown base class Mapping` | `undefined variable (__name__)` |
+| `treewalkers/__init__.py` | `unknown base class Mapping` | `undefined variable (__name__)` |
+
+One file all the way through and four onto a later, unrelated wall. The shim is
+correct; one compiler bug stands between it and those files.
+
+### Track N bugs found and filed
+
+Building an ABC mixin is an unusually good probe for dispatch, because the whole
+pattern is a base class calling *down*. Five filed, all measured on pinned v356:
+
+- [[bug-n-from-collections-abc-import-is-swallowed-by-the-collections-root-rule]]
+  (p62) — **the one that unblocks the 7 files.**
+- [[bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides]]
+  (p55) — `for k in self` in a base method binds to the base `__iter__`.
+- [[bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override]] (p55) —
+  `self[k]` in a base method binds statically; `self.__getitem__(k)` does not.
+  Sibling arm of the already-resolved
+  `bug-n-a-builtin-subclass-subscript-operator-skips-the-override`, which fixed
+  only the builtin-base half of the same double case. **Third sighting of one root
+  cause** — `root-cause-over-microfix.md` calls that a design flaw, not three bugs.
+- [[bug-n-hasattr-through-an-untyped-parameter-is-always-false]] (p55) — sharper
+  than it first looked: not dict-specific, `hasattr` answers False for
+  *everything* through a dynamic receiver, including `hasattr(a_list, 'append')`.
+- [[bug-n-isinstance-does-not-accept-a-qualified-class-name]] (p45) —
+  `isinstance(x, mod.Cls)` is a compile error.
+
+Four workarounds registered in `devdocs/dev/track-b-workarounds.md` with their
+revert conditions.

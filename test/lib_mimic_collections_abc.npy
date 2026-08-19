@@ -1,0 +1,224 @@
+# SPDX-License-Identifier: 0BSD
+"""lib/rtl/mimic_collections_abc.py against CPython's real `collections.abc`.
+
+A DIFFERENTIAL: this file runs unmodified under CPython, where `collections.abc`
+is the stdlib module, and every line was checked to produce identical output both
+ways.
+
+WHY THE IMPORT IS SPELLED `import collections.abc as cabc` AND NOT
+`from collections.abc import Mapping`. The second spelling is the one html5lib
+writes, and it does not reach the shim at all: `PyImportRootIsConsumedOnly` in
+`compiler/pyparser.inc` tests only the ROOT of a dotted from-import, and
+`collections` is on its consume-and-ignore list, so the whole import is swallowed
+and `Mapping` binds to nothing
+(bug-n-from-collections-abc-import-is-swallowed-by-the-collections-root-rule).
+Using the qualified spelling here is deliberate: it tests the SHIM rather than
+the import bug, so this file will not have to change when that is fixed, and it
+does not quietly pretend the corpus is unblocked.
+
+WHAT IS ACTUALLY BEING GUARDED. An ABC stores nothing and is never instantiated
+-- its whole value is mixin methods that dispatch DOWN into a subclass. So every
+assertion below is on a mixin's answer for a subclass the test defines, and the
+subclass deliberately holds data the mixin can only reach through
+`__getitem__`/`__iter__`. A mixin that failed to dispatch would return empty or
+raise, and both are visible here.
+
+Three of these assertions exist because a compiler bug made the natural spelling
+of the shim wrong, and each would pass on a shim that had quietly given up:
+
+  * `items()` and `values()` reach the SUBCLASS's `__getitem__`. Written as
+    `self[k]` inside the base, they reached the BASE's, which raises -- so these
+    two are the direct guard on that workaround.
+  * iteration through a mixin reaches the SUBCLASS's `__iter__`. With the base's
+    abstract `__iter__` written the natural way (a bare `raise`), every
+    subclass override failed at run time.
+  * `pop`/`popitem`/`clear`/`update`/`setdefault` all round-trip through
+    `__setitem__`/`__delitem__` on the subclass, so a MutableMapping that
+    inherited only the read half still fails here.
+"""
+
+import collections.abc as cabc
+
+# Bound to plain names, for two reasons. It is what the corpus's classes look
+# like (`class Trie(Mapping)`), and `isinstance(x, cabc.Mapping)` — the
+# qualified spelling — does not compile: `unknown type in isinstance: cabc`
+# (bug-n-isinstance-does-not-accept-a-qualified-class-name). CPython accepts
+# both spellings, so this file runs unmodified there either way.
+Mapping = cabc.Mapping
+MutableMapping = cabc.MutableMapping
+
+fails = 0
+
+
+def check(name, got, want):
+    global fails
+    if got == want:
+        print(name + "=ok")
+    else:
+        fails = fails + 1
+        print(name + "=FAIL got " + repr(got) + " want " + repr(want))
+
+
+class RO(Mapping):
+    """A read-only mapping over a private dict. It supplies exactly the three
+    methods the ABC requires and NOTHING else, so every other name exercised
+    below is inherited."""
+
+    def __init__(self, d):
+        self._d = d
+
+    def __getitem__(self, key):
+        return self._d[key]
+
+    def __len__(self):
+        return len(self._d)
+
+    def __iter__(self):
+        return iter(self._d)
+
+
+class RW(MutableMapping):
+    """The mutable half: five methods supplied, the rest inherited."""
+
+    def __init__(self, d):
+        self._d = d
+
+    def __getitem__(self, key):
+        return self._d[key]
+
+    def __setitem__(self, key, value):
+        self._d[key] = value
+
+    def __delitem__(self, key):
+        del self._d[key]
+
+    def __len__(self):
+        return len(self._d)
+
+    def __iter__(self):
+        return iter(self._d)
+
+
+# --- Mapping: the three supplied methods still work through the base ---
+m = RO({"a": 1, "b": 2, "c": 3})
+check("len", len(m), 3)
+check("getitem", m["b"], 2)
+check("iter", sorted([k for k in m]), ["a", "b", "c"])
+
+# --- Mapping: the five INHERITED mixins ---
+# Sorted because the ABC promises no order and CPython's dict order is not the
+# thing under test here.
+check("keys", sorted(m.keys()), ["a", "b", "c"])
+check("items", sorted(m.items()), [("a", 1), ("b", 2), ("c", 3)])
+check("values", sorted(m.values()), [1, 2, 3])
+check("contains_present", "b" in m, True)
+check("contains_absent", "zz" in m, False)
+check("get_present", m.get("c"), 3)
+check("get_absent_is_none", m.get("zz") is None, True)
+check("get_absent_default", m.get("zz", 99), 99)
+# get's default must not be returned for a key that IS present and falsy.
+falsy = RO({"z": 0})
+check("get_present_falsy", falsy.get("z", 99), 0)
+# An empty mapping: every mixin must survive zero iterations rather than raise.
+empty = RO({})
+check("empty_len", len(empty), 0)
+# Through sorted(), not raw: CPython's keys()/items()/values() return VIEWS and
+# this shim returns lists, so `empty.keys() == []` is False upstream and True
+# here. Asserting the raw object would bake OUR divergence in as the expectation,
+# which is the one way a differential can be worse than no test. The divergence
+# itself is stated in the shim's docstring; what the corpus actually does with
+# these is iterate them, and that is what is checked.
+check("empty_keys", sorted(empty.keys()), [])
+check("empty_items", sorted(empty.items()), [])
+check("empty_values", sorted(empty.values()), [])
+check("empty_contains", "x" in empty, False)
+check("empty_get", empty.get("x", "d"), "d")
+
+# --- MutableMapping: the read half is inherited through two levels ---
+w = RW({"a": 1, "b": 2})
+check("rw_len", len(w), 2)
+check("rw_keys", sorted(w.keys()), ["a", "b"])
+check("rw_items", sorted(w.items()), [("a", 1), ("b", 2)])
+check("rw_get", w.get("a"), 1)
+check("rw_contains", "b" in w, True)
+
+# --- MutableMapping: the write half, each through the subclass's setter ---
+w["c"] = 3
+check("setitem", sorted(w.keys()), ["a", "b", "c"])
+del w["a"]
+check("delitem", sorted(w.keys()), ["b", "c"])
+
+check("pop_present", w.pop("b"), 2)
+check("pop_removed_it", "b" in w, False)
+check("pop_absent_default", w.pop("nope", "fallback"), "fallback")
+# pop with NO default on a missing key raises; pop(k, None) returns None. Those
+# are different, which is why pop cannot be written with `default=None`.
+raised = False
+try:
+    w.pop("nope")
+except KeyError:
+    raised = True
+check("pop_absent_raises", raised, True)
+check("pop_absent_none_default", w.pop("nope", None) is None, True)
+
+check("setdefault_absent_returns", w.setdefault("d", 4), 4)
+check("setdefault_absent_stored", w["d"], 4)
+check("setdefault_present_returns", w.setdefault("d", 99), 4)
+check("setdefault_present_unchanged", w["d"], 4)
+
+u = RW({})
+u.update({"x": 1, "y": 2})
+check("update_from_mapping", sorted(u.items()), [("x", 1), ("y", 2)])
+u.update([("z", 3)])
+check("update_from_pairs", sorted(u.keys()), ["x", "y", "z"])
+u.update(w=9)
+check("update_from_kwargs", u["w"], 9)
+
+p = RW({"only": 7})
+check("popitem", p.popitem(), ("only", 7))
+check("popitem_emptied", len(p), 0)
+praised = False
+try:
+    p.popitem()
+except KeyError:
+    praised = True
+check("popitem_empty_raises", praised, True)
+
+c = RW({"a": 1, "b": 2, "c": 3})
+c.clear()
+check("clear_len", len(c), 0)
+check("clear_keys", sorted(c.keys()), [])
+
+# --- inheritance is real, not duck typing ---
+check("ro_isinstance_mapping", isinstance(m, Mapping), True)
+check("rw_isinstance_mutable", isinstance(w, MutableMapping), True)
+check("rw_isinstance_mapping", isinstance(w, Mapping), True)
+
+# --- a subclass that OVERRIDES a mixin still wins ---
+# html5lib does exactly this twice: BoundMethodDispatcher overrides `get`, and
+# Trie overrides `keys` with a different signature.
+class Overrider(Mapping):
+    def __init__(self, d):
+        self._d = d
+
+    def __getitem__(self, key):
+        return self._d[key]
+
+    def __len__(self):
+        return len(self._d)
+
+    def __iter__(self):
+        return iter(self._d)
+
+    def get(self, key, default=None):
+        return "overridden"
+
+
+o = Overrider({"k": 1})
+check("override_wins", o.get("k"), "overridden")
+check("override_leaves_siblings", sorted(o.items()), [("k", 1)])
+
+if fails == 0:
+    print("MIMIC-COLLECTIONS-ABC OK")
+else:
+    print("MIMIC-COLLECTIONS-ABC FAIL " + str(fails))
