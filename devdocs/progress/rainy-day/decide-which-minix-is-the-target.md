@@ -133,3 +133,26 @@ would reuse that abstraction rather than invent it**, so FreeBSD plausibly comes
 on cost and usefulness both — leaving MINIX to earn its slot on the *freestanding*
 axis (kernel, no libc beneath, sections, link script, boot), which is the one thing
 neither a BSD port nor any application corpus teaches.
+
+---
+
+# DEFERRED 2026-08-19 by the user — no decision now, and that IS the decision
+
+> "MINIX is deferred for now. It's a nice idea, but pulling in more work will lose our —
+> and in particular my — focus. We will work on that after all current important work is
+> done. No decision to be made now."
+
+**Moved out of the ranked queue into `rainy-day/` so it stops surfacing in
+`ready`/`next` for Track U.** Nothing here is rejected and nothing needs re-analysis when
+it comes back: the version fork, the POSIX/syscall/architecture answers, the ARM and ELF
+counter-arguments, and the four-chunk split are all recorded above and in
+[[goal-compile-minix]].
+
+**The reason is scheduling of ATTENTION, not merit.** The user's constraint is their own
+focus, which is the scarce resource here — agents are cheap and human attention is not.
+So this is not "MINIX is a bad idea"; it is "an idea good enough to pull focus is exactly
+the kind that must wait until the current work is finished."
+
+**Resume condition:** current important work is done, and the user says so. Do not
+re-rank this into the queue on the strength of a quiet week — the whole point is that it
+looks attractive when there is slack.

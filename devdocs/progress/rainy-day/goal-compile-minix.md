@@ -1,5 +1,14 @@
 # 🗼 Lighthouse — build and boot MINIX with PXX's C frontend
 
+> **DEFERRED by the user, 2026-08-19 — do not start, do not rank, do not "just probe it".**
+> *"A nice idea, but pulling in more work will lose our — and in particular my — focus. We
+> will work on that after all current important work is done."* The version decision was
+> withdrawn from the queue with it (`decide-which-minix-is-the-target`, now alongside this
+> file). Everything analysed is recorded and needs no redoing when it returns.
+> **The deferral is about ATTENTION, not merit** — this is precisely the kind of idea that
+> looks affordable during a quiet week, which is why it waits for the user to say so
+> rather than for a gap in the queue.
+
 - **Type:** goal (lighthouse / end-goal — NOT a sprint ticket)
 - **Track:** C (C frontend) + A (backend/ELF/codegen where noted)
 - **Status:** rainy-day

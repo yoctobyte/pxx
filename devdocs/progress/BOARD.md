@@ -43,7 +43,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (238)
+## backlog (237)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -118,7 +118,6 @@ _none_
 | decide-unary-minus-widening-in-the-default-dialect | U | 45 | decide | FPC widens unary minus to 64-bit for EVERY integer type; pxx truncates an UNSIGNED operand to 32 bits first, so `-b shr 1` answers 2147483644 where FPC says 9223372036854775804 — in the DEFAULT dialect, not behind a flag. Adopt FPC's rule as the default, or keep ours and document the divergence? | — |
 | decide-what-an-unwired-test-may-assert | U | 55 | decide | May we record our own output as the expectation? | — |
 | decide-what-synapse-actually-needs-vs-mimic-fpc | U | 20 | decide | Synapse builds under `--mimic-fpc`. What does it actually NEED? | — |
-| decide-which-minix-is-the-target | U | 58 | decide | MINIX 2 / early 3.1.x (small, plain, ACK-era C) versus MINIX 3.2+ (which imported the NetBSD userland and build system). These are close to different projects for our purposes, and the choice dominates the cost of the whole lighthouse. Recommendation: MINIX 2 / early 3.1.x. | — |
 | doc-glossary-of-cross-language-slang | D | 40 | doc | pxx accepts Pascal, C and Python, so its docs mix three vocabularies and define none of them. A reader fluent in one hits the others' slang unexplained — `cls`, `self`, dunder, repr-vs-str going one way; unit, uses, RTL, pinned, fixedpoint going the other. Wanted: a glossary with a Python-to-Pascal equivalence table, since most terms have a counterpart the reader already knows. | — |
 | doc-n-fu-is-how-a-python-package-is-found | D | 25 | doc | `-Fu<dir>` is how NilPy finds a third-party Python package, and it is absent from the compiler's usage line. Its absence misdiagnoses as `import: no unit named X` — a 'feature missing' message for a feature that exists. Cost a wrong first diagnosis on the first corpus attempt; will bite the next person wiring one. | — |
 | docs-cli-fpc-float-errors-flag | D | 40 | docs | One row in docs/reference/cli.md for --fpc-float-errors (landed 2026-08-13): opt-in FPC float-error emulation. The default — quiet IEEE, inf/NaN propagate — is worth a sentence there too, since it is a deliberate divergence from FPC that a Pascal reader will not expect. | — |
@@ -311,7 +310,7 @@ _none_
 | feature-wasm-frontend | A | 45 | feature | WebAssembly frontend — statically typed, IR-shaped; experimental | — |
 | feature-zig-frontend | Z | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
 
-## rainy-day (41)
+## rainy-day (42)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -322,6 +321,7 @@ _none_
 | decide-abi-portable-vs-target-split | U | 60 | decide |  | — |
 | decide-default-float-output-format-and-constant-precision | U | 10 | decide | decide: should WriteLn's default float format follow the STATIC type, and should untyped float constants evaluate at Single precision? | — |
 | decide-ilja-tui-render-model | U | 45 | decide | Track U: four render/input questions Ilja (TUI IDE face) must answer before any code | — |
+| decide-which-minix-is-the-target | U | 58 | decide | MINIX 2 / early 3.1.x (small, plain, ACK-era C) versus MINIX 3.2+ (which imported the NetBSD userland and build system). These are close to different projects for our purposes, and the choice dominates the cost of the whole lighthouse. Recommendation: MINIX 2 / early 3.1.x. | — |
 | design-overloadable-intrinsics | A | 50 | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
 | design-record-copy-dynarray-field-semantics | A | 50 | design | Record copy with a dynamic-array field: PXX deep-copies, FPC shares (reference) | — |
 | experiment-compile-fpc-as-stress-probe | B | 50 | experiment | Experiment: compile FPC's own source as a pxx stress probe | — |
@@ -511,7 +511,6 @@ _none_
 - [p 62] [B] feature-b-mimic-xml-etree-elementtree-tree-model
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 60] [A] refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
-- [p 58] [U] decide-which-minix-is-the-target
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [C] bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 1)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
