@@ -4552,3 +4552,47 @@ pieces tonight. Starting a fresh Track A ticket at 00:35 with a nearly-compacted
 half-applied compiler change happens, which is the one overnight failure that costs everyone. The
 queue is healthy and nothing in it is time-critical. **The next substantive dispatch should be with
 a fresh context and the owner awake.**
+
+### The false alarm is now self-refuting in the tool (T, `57d5880ce`) — verified live
+
+Confirmed by running `--status` here, not taken on report:
+
+    pin verify — v367 at d47acfee770c RED (full, 40m old), 20 red, 11 new vs the v367 baseline
+             ...NOT CORROBORATED: all 11 of those 11 new reds PASS in the full tier at
+                2e8b284343a5, 21m later — a load-shaped flake, not a regression. Do NOT revert
+                on this count alone
+
+**My six commands are now one line, and T chose the three properties that keep it honest rather
+than merely quiet:** a red the later tier ALSO failed is never washed out (prints "corroborated in
+part: 3 of 11…" and keeps full weight — *a noise-suppressor that eats real regressions is a worse
+bug than the one it fixes*); **no later tier prints SINGLE RUN, never nothing**, because silence
+reads as agreement and "not yet checked" must never be confused with "checked, refuted"; and **only
+a FULL tier refutes**, since `jobs` is newest-status-per-job and a quick tier passing 200 says
+nothing about the 2500 it skipped. 29 guards, non-vacuous under four neuters, CLI path so it was
+live on landing.
+
+**Fifth instance of the absence-as-negative-result class, and T volunteered it against itself:**
+while neutering, the harness reddened two guards correctly, **crashed on the third, and T read the
+run as clean** — because it was filtering output for the `FAILED` summary, and a crash produces no
+such line. `check()` now isolates a raising subject into a named FAIL. Same shape as "an error count
+from a build that died early is a FLOOR, not a count".
+
+**The reasons gap is FILED, not improvised** — `bug-t-a-pin-verifys-reds-carry-no-reasons` (T, p45),
+recording my measurement (20 reds, 9 reasons, and the 9 were the inherited set, so the 11 needing
+triage were exactly the 11 with nothing stored). T declined to just add a field because there is a
+real fork — truncated reasons for the new reds, or a pointer to the verify's report on the box that
+ran it, and `report_job()` already drops `log` for the reason that pointer would face: **the path
+does not survive the box.** Also noted the corroboration line changes which reasons are worth the
+bytes, so it is better done after living with it. Correct call.
+
+**`carried_runs` came back 1 — the acceptance test T refused to assume:**
+
+    saved_partials 13 · saved_jobs 2600 · superseded 11 · carried_runs 1 · carried_jobs 15
+
+Saved → a different-work native run started with no eviction → the ladder returned →
+`partial accepted — 15 job(s) already decided against this exact binary (1479b663dd15)` →
+`2746/2755 pass, 15 carried`. **The accepted binary's sha256 matches the one the aborted run
+logged, so the identity check was exercised rather than bypassed**, and `superseded` held at its
+pre-fix 11 throughout. Before: 9/9, 10/10, 11/11 — every partial evicted. Only 15 jobs recovered
+because the abort landed 40s into a 21-minute run; **the number is not the point, the point is it is
+now whatever the abort left instead of always zero.**
