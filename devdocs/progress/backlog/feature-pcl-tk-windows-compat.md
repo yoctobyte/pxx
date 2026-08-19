@@ -18,7 +18,12 @@ blocked-by: [feature-port-windows-pe]
 
 ## What
 
-NilPy `import tk` must "just work" on Windows too. The decision
+NilPy `import 'tk.pas' as tk` must "just work" on Windows too. (Spelling
+note, 2026-08-19: a bare `import tk` no longer reaches the Pascal unit —
+[[decide-nilpy-imports-that-collide-with-a-pascal-rtl-unit]]. `tk` is
+deliberately NOT on the Python-serving list; `lib/pcl/tkinter.pas` is the unit
+written to BE the Python module, `tk.pas` is the layer under it. Nothing about
+this ticket changes — only how the examples spell the import.) The decision
 ([[decide-nilpy-gui-tk-vs-pcl]]) is a **compile-time platform switch inside
 `lib/pcl/tk.pas`** — Linux keeps the real Tcl/Tk embed (works, cheap system dep);
 Windows gets an opt-in emulate/wrap in one isolated include, so the Tcl/Tk DLL-swarm

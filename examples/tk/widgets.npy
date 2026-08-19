@@ -6,7 +6,16 @@
 #
 # Build + run headless:
 #   pxx -Fulib/pcl examples/tk/widgets.npy widgets  &&  xvfb-run -a ./widgets
-import tk
+# `tk` is a PASCAL unit, so it is named with its extension: a bare NilPy import
+# resolves to Python (.py/.npy) only, plus a curated list of units WRITTEN TO BE
+# the Python module of that name
+# (decide-nilpy-imports-that-collide-with-a-pascal-rtl-unit, user 2026-08-19).
+# `lib/pcl/tk.pas` is deliberately not on that list: its own header calls it the
+# layer to build a tkinter-shaped surface ON TOP OF, and `lib/pcl/tkinter.pas`
+# is the one written to BE the Python module. Keeping `tk` off the list also
+# means a program that has `pip install tk`'d (the PyPI package exists) gets its
+# own module rather than silently binding to this Tcl/Tk embed.
+import 'tk.pas' as tk
 
 def main() -> None:
     if not TkInit():
