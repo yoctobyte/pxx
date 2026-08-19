@@ -97,6 +97,22 @@ broader than the survey that found it.
 
 ## SPELLING — SETTLED by the user, 2026-08-19
 
+> **Follow-up settled the same day: the SLASH SPLIT is approved.** The quoted form as first
+> specified could not reach `lib/rtl` at all — `isPath` keys on containing a `/` and resolves
+> authoritatively against `CurUnitDir` with no search chain, so `import './sysutils.pas' as su`
+> finds nothing, and the three tests that need the escape hatch are exactly the ones reaching
+> `lib/rtl`. So:
+>
+> | spelling | resolution |
+> | --- | --- |
+> | `import './mymod.pas' as m` (**with** a slash) | today's authoritative path against `CurUnitDir`, **unchanged** |
+> | `import 'sysutils.pas' as su` (**no** slash) | a unit NAME carrying an explicit extension, resolved through the normal search chain with the language pinned |
+>
+> Unambiguous either way, because it is a string literal in both cases. The user confirmed
+> this falls under the already-given *"this may be language dependent"* rather than being a
+> new fork — *"yes, you answered that yourself"*.
+
+
 > **"The dotted form is optional and only if we can do that safe. If quoted names are needed
 > it's not really an issue. This may be language dependent."**
 >
