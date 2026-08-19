@@ -166,3 +166,48 @@ deliberately NOT automated (`fix(T): refuse a bisect the pin proves cannot be
 causal` records why: Make targets share variables and dependency edges, so
 textual proximity is not causal isolation). A human-equivalent reading may do
 what an unattended rule should not; the guard staying conservative is correct.
+
+## Correction 2026-08-19 — the red under this key was never false
+
+Track T (plexus-T), from measuring the job instead of its steps.
+
+This ticket, and the parent, treat the standing red as a **false** one: a
+duration signal, an arbitrary landing, a naming defect worth fixing for the
+reporting channel. The first two are right. **"False" is wrong**, and the
+distinction changes what this ticket is for.
+
+`lib-test#src:test/crtl_exp2.c` has a learned EWMA of **107.5s** on `plexus`
+against the **90s** `unit` class budget, and `Manager.__init__` kept the class
+figure as a ceiling over a measured job — so the budget could not rise to fit and
+the job was killed at 90s on every full tier. Not a flap, not load-dependent in
+the way it looked: **permanent**, from whenever it crossed 90s.
+[[bug-t-a-job-that-outgrows-its-class-can-never-pass-again]] has the mechanism
+and the fix.
+
+The inversion that hid it: the job takes **73.5s standalone** and ~107s among 24
+jobs on 12 cores, while only a PEER CLONE's run stretches the budget
+(`PEER_TIME_FACTOR`). Intra-run parallelism — the thing actually slowing it —
+stretches nothing. So the job passed when the box was SHARED and failed when it
+had the box to itself, and "green standalone, red in the tier" read as
+contention when it was the permanent state.
+
+**What this means for this ticket:**
+
+- The "do it while `lib-test` is green" precondition is **satisfied and was all
+  along** — the standalone 167/167 baseline recorded above is real, and the tier
+  red never contradicted it. Nothing here is blocked on waiting for green.
+- The two tickets were never independent. **Splitting would have fixed the red
+  as a side effect**, by cutting the composite into pieces that each fit inside
+  90s. The timeout fix removes the red now; the split is what stops the job from
+  being a 23-line composite whose budget is a property nobody can reason about.
+- The crying-wolf argument for the rerank **gets stronger, not weaker**. The key
+  did not merely misname a transient failure — it misnamed a permanent
+  misconfiguration as a C-math regression for three days, across two triages.
+
+One correction to the baseline table while it is being relied on: the job's
+first source is unchanged by a split of the tk steps only if the crtl_exp2
+compile stays the head of its chunk. If the split puts the tk block in its own
+job, `lib-test#src:test/crtl_exp2.c` **keeps** its key (and its metrics history,
+which is keyed on `sel`) and a NEW key appears for the tk chunk with no history —
+so the new job runs on its class default for its first two runs. Worth expecting
+rather than discovering in tstate.

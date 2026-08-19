@@ -363,6 +363,11 @@ TICK = 0.5
 METRICS_PATH = os.path.join(REPO, ".testmgr", "metrics.json")
 METRICS_MIN_RUNS = 2            # trust a job's metrics from its Nth pass
 METRICS_ALPHA = 0.4             # EWMA weight of the newest observation
+# A job whose own measured duration has grown PAST its class budget gets that
+# duration x this, instead of a budget it cannot finish inside.  See the
+# outgrown-class note in Manager.__init__ for why the class figure alone is
+# not safe to keep as a ceiling.
+OUTGROWN_MARGIN = 2.0
 
 
 def metrics_key(job):
@@ -1850,6 +1855,7 @@ class Manager:
         self.peer_last_seen = -1.0
         self.peer_repos = set()
         self.metrics = load_metrics()
+        outgrown = []
         for j in jobs:
             cls_to = CLASSES[j.cls]["timeout"]
             m = self.metrics.get(metrics_key(j))
@@ -1865,8 +1871,37 @@ class Manager:
                     j.timeout = min(cls_to * scale,
                                     max(45.0, j.exp_dur * 10 + 15,
                                         cls_to * scale / 4))
+                    # ...and the case that min() does not handle: a job whose
+                    # MEASURED duration is itself past the class budget.  The
+                    # class figure is the budget for an UNMEASURED job; keeping
+                    # it as a ceiling over a measured one hands that job a
+                    # budget it cannot finish inside, so it is killed at the
+                    # ceiling every single time.  learn_timeout() cannot rescue
+                    # it either — it raises the stored duration "so the next run
+                    # gets room", and this same min() clamps the raise away.
+                    #
+                    # Measured 2026-08-19 on lib-test#src:test/crtl_exp2.c: EWMA
+                    # 107.5s under a 90s `unit` budget, RED in every full tier
+                    # since 2026-08-17 while passing standalone in 73.5s.  What
+                    # makes it slow in a tier is intra-run parallelism (24 jobs
+                    # on 12 cores) and only a PEER CLONE's run stretches the
+                    # budget (effective_timeout), so the job passed when the box
+                    # was SHARED and failed when it had the box to itself.
+                    #
+                    # Raising the budget is the floor, not the fix: a job past
+                    # its class is misclassified or too big, so say so by name.
+                    if j.exp_dur >= j.timeout:
+                        j.timeout = j.exp_dur * OUTGROWN_MARGIN
+                        outgrown.append((j, cls_to * scale))
             if j.timeout is None:
                 j.timeout = cls_to * scale
+        self.outgrown = outgrown
+        for j, budget in outgrown:
+            print("testmgr: %s outgrew its `%s` budget — measured %.0fs against "
+                  "%.0fs, so it could never pass. Budget raised to %.0fs for "
+                  "this run; the job belongs in a bigger class or should be "
+                  "split." % (j.sel or j.name, j.cls, j.exp_dur, budget,
+                              j.timeout), flush=True)
         # launch longest-expected jobs first: the critical path (corpus,
         # conformance shards, selfhost chains) must start at t=0, not after
         # 600 unit jobs have churned through.  Report order stays generation
@@ -3880,6 +3915,13 @@ def main():
         # that overran a 90s budget by a hair from one that is genuinely stuck.
         if j.status == "timeout" and j.timeout:
             note += "  budget was %.0fs" % j.timeout
+            # ...and what we already knew it needed. A budget alone reads as a
+            # hang; budget-beside-expectation is what distinguishes "stuck" from
+            # "this job has been growing for weeks". lib-test#src:test/crtl_exp2.c
+            # spent three days being triaged as a regression while its own EWMA
+            # sat above its class budget, unprinted.
+            if j.exp_dur:
+                note += ", expected %.0fs" % j.exp_dur
         # advisory reds are reported, but they are a NOTICE for the owning
         # track — not part of the gate, and not "the first failure"
         state = ("NOTICE" if j.advisory and j.status != "pass"
@@ -3914,6 +3956,11 @@ def main():
     # this text into a tstate report someone reads days later while deciding
     # whether a red is real. "The box was shared" is the first thing that
     # triage needs and the last thing it used to be told.
+    for j, budget in getattr(mgr, "outgrown", []):
+        print("  NOTE %s is measured at %.0fs against a %.0fs `%s` budget — it "
+              "was given %.0fs here so it can pass at all, but a job past its "
+              "class wants splitting or reclassifying, not a bigger number"
+              % (j.sel or j.name, j.exp_dur, budget, j.cls, j.timeout))
     if mgr.peer_repos:
         print("  NOTE this run shared the box with another clone's testmgr "
               "(%s) — long jobs got %.0fx timeouts and kills were retried; "

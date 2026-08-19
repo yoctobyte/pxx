@@ -340,6 +340,47 @@ introduced or enlarged the job's work, in the spirit of `pin_immune`.
 
 Recorded rather than fixed here because the two changes belong in one commit.
 
+**Before triaging ANY timeout, check the budget against the job's own EWMA.**
+Both shapes above assume the timeout is a statement about the tree. It often is
+not a statement about anything: a job whose learned duration has grown past its
+class budget is killed at that ceiling on **every** run, and no bisect of it —
+refused or performed — is meaningful.
+
+```sh
+python3 - <<'EOF'
+import json, importlib.util
+spec = importlib.util.spec_from_file_location("tm", "tools/testmgr.py")
+tm = importlib.util.module_from_spec(spec); spec.loader.exec_module(tm)
+met = json.load(open(".testmgr/metrics.json"))
+for j in tm.generate("full"):
+    m = met.get(tm.metrics_key(j))
+    if m and m.get("n", 0) >= tm.METRICS_MIN_RUNS \
+            and m["dur"] >= tm.CLASSES[j.cls]["timeout"]:
+        print("CANNOT PASS", j.sel, m["dur"], tm.CLASSES[j.cls]["timeout"])
+EOF
+```
+
+`lib-test#src:test/crtl_exp2.c` was in that state for three days and cost two
+agents a triage each ([[bug-t-a-job-that-outgrows-its-class-can-never-pass-again]]).
+It reads as contention and it *is* contention, with the sign backwards from the
+one triage checks for: the job takes 73.5s alone and ~107s among 24 jobs on 12
+cores, while only a PEER CLONE's run stretches the budget. **So it passed when
+the box was shared and failed when it had the box to itself** — and "green
+standalone, red in the tier" was therefore read as a flap rather than as the
+permanent thing it was.
+
+Two lessons worth more than the fix:
+
+- **Every step passing is not the job passing.** The parent ticket's *"every
+  step of the job runs clean standalone in seconds"* was true, and checking the
+  steps is what stopped anyone from timing the job. A composite job's budget is
+  a property of the composite.
+- **`NEAR BUDGET` fires only on a `pass`.** The warning added *by that same
+  ticket, for this same job*, went silent at the moment it came true, because a
+  timeout is not a pass. An early-warning that is emitted only in the state
+  where it is not yet needed is the never-changed-number failure one level down
+  — the instrument answering a question adjacent to the one that mattered.
+
 The three guards sit in descending order of confidence, and it is worth keeping
 them distinguishable rather than blurring them into "the watcher is unsure":
 
