@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:15 blocked:5 backlog:239 experimental:20 rainy-day:41 done-followup:3 decided:82 done:2031 rejected:38`
+`unfinished:15 blocked:5 backlog:240 experimental:20 rainy-day:41 done-followup:3 decided:82 done:2031 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -37,7 +37,7 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 224, ranked
+## Ready — top 30 of 225, ranked
 
 - `[p 88] [U]` decide-how-a-compiled-def-carries-its-signature-when-boxed (unblocks 2)
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
@@ -54,6 +54,7 @@ _none — no lane is locked._
 - `[p 55] [T]` bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 - `[p 55] [T]` bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label
 - `[p 55] [T]` chore-t-split-lib-test-into-jobs-that-name-what-failed
+- `[p 55] [U]` decide-should-the-gate-prove-self-compile-at-more-than-one-o-level
 - `[p 55] [U]` decide-what-an-unwired-test-may-assert
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [E]` feature-demo-portable-userland
@@ -68,6 +69,5 @@ _none — no lane is locked._
 - `[p 50] [U]` decide-staff-track-c-to-unblock-own-language-first
 - `[p 50] [D]` docs-cross-language-qualifier-note-is-wrong
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
-- `[p 50] [C]` feature-c-vla-via-alloca
 
-_194 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_195 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
