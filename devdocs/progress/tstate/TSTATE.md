@@ -3,8 +3,23 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `48a60d096937` | 2026-08-19T14:37:36Z | RED (native) | 235.7s | `9bfb7fcfac03` GREEN |
+| plexus | `4e27dc2be114` | 2026-08-19T14:43:40Z | RED (native) | 236.1s | `9bfb7fcfac03` GREEN |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-core#src:test/test_asm_ifdef_multiarch.pas** — test/test_asm_ifdef_multiarch.pas test/test_asm_att_reject.pas (plexus): bad `498c6dea3f48`, last good `7364f6c5bdfe`, 4 commit(s) in range
+- **CASCADE 12 jobs** (plexus): bad `4e27dc2be114`, last good `48a60d096937`, 17 commit(s) in range
+  <details><summary>jobs</summary>
+
+  - `test-core#src:examples/tk/callbacks.npy`
+  - `test-core#src:examples/tk/facade_and_paths.npy`
+  - `test-core#src:examples/tk/field_class_identity.npy`
+  - `test-core#src:examples/tk/import_in_body.npy`
+  - `test-core#src:examples/tk/shadow_format_except.npy`
+  - `test-core#src:examples/tk/tkinter_facade.npy`
+  - `test-core#src:test/test_nilpy_array_of_const_unit.npy`
+  - `test-core#src:test/test_nilpy_class_named_after_its_imported_base.npy`
+  - `test-core#src:test/test_nilpy_multiple_inheritance_imported_base.npy`
+  - `test-core#src:test/test_nilpy_qualifier_vs_cproc.npy`
+  - `test-core#src:test/test_nilpy_renamed_class_attrs.npy`
+  - `test-core#src:test/test_nilpy_subclass_unit_base.npy`
+  </details>
