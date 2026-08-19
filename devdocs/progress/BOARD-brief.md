@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:17 blocked:5 backlog:240 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2036 rejected:38`
+`working:1 unfinished:17 blocked:5 backlog:241 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2036 rejected:38`
 
 ## Held now (working/ — do not touch these files)
 
@@ -42,6 +42,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 ## Ready — top 30 of 225, ranked
 
 - `[p 70] [N]` bug-n-a-call-through-a-callable-value-drops-the-callees-defaults
+- `[p 68] [N]` bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view (unblocks 1)
+- `[p 68] [N]` feature-nilpy-for-loop-getitem-protocol-fallback (unblocks 1)
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
@@ -51,7 +53,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [C]` bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 2)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [B]` bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable
-- `[p 55] [N]` bug-n-a-user-classs-keys-items-values-is-dispatched-as-a-dict-view
 - `[p 55] [T]` bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 - `[p 55] [T]` bug-t-pin-verify-records-positional-job-numbers-and-a-stale-version-label
 - `[p 55] [T]` chore-t-split-lib-test-into-jobs-that-name-what-failed
@@ -70,6 +71,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 50] [D]` docs-cross-language-qualifier-note-is-wrong
 - `[p 50] [A]` feature-a-implement-initialize-and-finalize-over-the-arc-helpers
 - `[p 50] [A]` feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
-- `[p 50] [C]` feature-c-vla-via-alloca
 
 _195 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
