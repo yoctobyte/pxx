@@ -468,6 +468,11 @@
   }
  ],
  "host": "plexus",
+ "idle_yield": {
+  "aborts": 1,
+  "phase": "pin-verify",
+  "target": "cabb5d5989f3b4fbcc1897da094f9ad2b9a1d645"
+ },
  "job_tier": {
   "demos#00": "full",
   "fpc-bootstrap#src:compiler/compiler.pas": "native",
