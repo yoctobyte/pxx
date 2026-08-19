@@ -9139,6 +9139,7 @@ var
   vaSaveSym, vaSaveRec, vaOverflowSym: Integer;
   parenName, isVariadic, wasNewProc, fnRetIsFunc, forceSystemExternal, sigMatch, paramsOverflow: Boolean;
   xnI: Integer; xnBad: Boolean;   { cross-namespace float-class check }
+  defPeekPos: Integer; isDefinition: Boolean;   { does a body follow? (bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine) }
   apDims: array[0..MAX_ARR_DIMS-1] of Integer;   { `T name[][A][B]` param: the bracket dims }
   apN, apK, apProd: Integer;
 begin
@@ -9399,6 +9400,38 @@ begin
   else
   begin
     procIdx := FindProc(name);
+    { RUNG 0 -- a DEFINITION may not seize a differently-cased twin's entry.
+      `Procs[procIdx].BodyAddr := CodeLen` below installs this body into
+      whatever FindProc returned, and FindProc is case-insensitive across
+      namespaces, so `double sqrt(double)` with a body landed on Pascal's
+      `Sqrt` and REPLACED the RTL's implementation for the whole program --
+      unreachably, since bare `Sqrt`, `math.Sqrt` and `cmath.sqrt` all follow
+      the one entry (bug-c-definition-of-an-intrinsic-name-overwrites-the-
+      pascal-routine).
+
+      A DECLARATION binding cross-namespace stays: that is how lua's <math.h>
+      `sqrt`/`sin`/`cos` reach the RTL's Pascal routines, and a prototype only
+      claims the function EXISTS. A definition claims THIS translation unit
+      PROVIDES it, which is a different statement and earns its own proc.
+
+      The discriminator is exact CASE, not the unit or the language, and it is
+      this file's own precedent -- the forceSystemExternal loop above compares
+      `Procs[i].Name = name` for the same reason, noting it "excludes
+      differently-cased Pascal twins (Sqrt vs sqrt)". Case is what makes it
+      safe: crtl DELIBERATELY redefines Pascal builtins it spells identically
+      (malloc/memcpy/strtod and dozens more), and those must keep overwriting
+      the one entry, or a C `malloc` and a Pascal `malloc` would be two
+      allocators in one program. Only a twin that Pascal spells differently is
+      a hijack. }
+    if (procIdx >= 0) and (Procs[procIdx].Name <> name) then
+    begin
+      defPeekPos := TokPos;
+      while (CurTok.Kind <> tkSemicolon) and (CurTok.Kind <> tkBegin) and
+            (CurTok.Kind <> tkEOF) do Next;
+      isDefinition := CurTok.Kind = tkBegin;
+      TokPos := defPeekPos - 1; Next;   { rewind; the real scan runs below }
+      if isDefinition then procIdx := -1;
+    end;
     { a C DECLARATION landing on a Pascal routine of another arity -- the
       shape `time_t time(time_t *)` against `function Time: TDateTime`. The
       declaration is explicit and right there in the translation unit, so it

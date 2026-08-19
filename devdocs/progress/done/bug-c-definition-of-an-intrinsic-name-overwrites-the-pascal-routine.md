@@ -4,6 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "A C function DEFINITION whose name matches a Pascal intrinsic (`sqrt` `exp` `ln` `sin` `cos` `arctan`) binds to the Pascal proc entry via case-insensitive FindProc and overwrites its BodyAddr. The Pascal implementation then becomes unreachable by ANY spelling — bare `Sqrt`, `math.Sqrt` and `cmath.sqrt` all return the C body — so a C file silently replaces the RTL's math for the whole program. This is what the ten `__crtl_*` prefixes in lib/crtl exist to dodge."
+status: done
+owner: frank2-C
 ---
 
 # A C definition of an intrinsic name overwrites the Pascal routine, unreachably
@@ -154,3 +156,93 @@ definition case.
 Still the single unmet blocker on `feature-a-own-language-first-symbol-resolution`, which
 sits in `unfinished/` **and** carries a `blocked-by` — two independent switches, either of
 which alone hides it from `ready`/`next`. When this lands, clear both.
+
+
+---
+
+## FIXED 2026-08-19 (Track C, frank2-C)
+
+**The fix is the declaration/definition split the ticket specifies, with one
+change of instrument: the discriminator is exact CASE, not the unit.**
+
+`cparser.inc`, at the `FindProc(name)` site — a new rung 0, ahead of the arity
+and float-class rungs. When the hit's stored name differs from the C spelling
+(`Procs[procIdx].Name <> name`, i.e. a differently-cased twin) the parser peeks
+ahead for `{` vs `;`, and **only if a body follows** drops the bind so a fresh
+proc registers in the C unit. The peek saves and rewinds `TokPos` the way the
+rest of the file does; the real declaration/definition scan below is untouched.
+
+### Why case rather than "another unit / another language"
+
+The ticket suggested refusing a hit that landed on a proc of another unit, and
+noted that a `ProcLang` array does not exist. Case turns out to be both
+sufficient and *safer*, and it is this file's own precedent — the
+`forceSystemExternal` loop already compares `Procs[i].Name = name` and records
+the reason: it "excludes differently-cased Pascal twins (Sqrt vs sqrt)".
+
+The unit test would have been **wrong**. `lib/crtl` deliberately redefines
+Pascal builtins it spells *identically* — malloc, memcpy, strtod and dozens
+more live in `compiler/builtin/*.pas` **and** `lib/crtl/src/*.c`. Those
+overwrites are load-bearing: if a C `malloc` and a Pascal `malloc` became two
+procs, a program would have two allocators, and memory obtained from one and
+released by the other is heap corruption. A same-spelling redefinition is a
+deliberate override; only a twin Pascal spells differently is a hijack. So no
+`ProcLang` array is needed and no Track A ticket falls out of this.
+
+**The `:9448` "lua needs it" comment was left alone**, as the 2026-08-19 note
+directs: this fix touches only the definition case, and the declaration bind is
+verified below to still work.
+
+### Measured — the boundary table, before and after
+
+Compiled and run against a fixedpoint build at this change:
+
+| | before | after | want |
+| --- | --- | --- | --- |
+| `Sqrt(16.0)` | 42.0000 | **4.0000** | 4.0000 |
+| `math.Sqrt(16.0)` | 42.0000 | **4.0000** | 4.0000 |
+| `Exp(0.0)` | 42.0000 | **1.0000** | 1.0000 |
+| `cmath.sqrt(16.0)` | `undefined variable (sqrt)` | **42.0000** | C's, by name |
+| `SqrtSoft(16.0)` | 4.0000 | 4.0000 | unchanged |
+
+The fourth row is the one that shows the fix is the *right* one rather than
+merely a block: the C definition is now reachable through the alias, because a
+proc finally belongs to the C unit.
+
+### Controls — nothing else moved
+
+- **Rows 1-2 of the table** (a user unit's `Cube` vs C `cube`; math's `Tanh` vs
+  C `tanh`): 27 / 27 / 999 and 0.7616 / 55.0000, exactly as before.
+- **The declaration-side cross-bind lua depends on**: a C file that *declares*
+  `double sqrt(double);` and calls it still reaches the RTL — `cd.use(16.0)`
+  returns 4.0000. This is the behaviour the ticket was careful to preserve.
+- **A plain C program** using `malloc` / `strcpy` / `strlen` / `sqrt` / `exp`
+  through the real headers prints `hi 4.0000 1.0000 2` — **byte-identical to
+  the same program built with gcc**, so crtl's same-spelling overrides are
+  undisturbed.
+
+### Test
+
+`test/test_c_def_hijack.pas` + `test/c_def_hijack.c`, wired into the Makefile
+next to `test_c_cross_ns_arity` (enumerated, not globbed). It asserts all four
+boundary rows plus the two controls in one program, with sentinel return values
+(42/43/55/999) no real implementation would produce. Verified by running the
+recipe's exact comparison, not just the program.
+
+### Gate
+
+`make compiler/pascal26` — converged after 1 round, byte-identical.
+`tools/gate.sh quick` — **GREEN** (testmgr quick + FPC seed canary).
+The full C corpus (lua, zlib, quickjs, tcc) is Track T's sweep against this
+sha; the corpus shape most at risk — same-spelling crtl overrides — is covered
+by the gcc-oracle control above.
+
+### Follow-on
+
+`feature-a-own-language-first-symbol-resolution` names this as its single unmet
+blocker and carries **two** independent switches hiding it — a `blocked-by`
+edge *and* sitting in `unfinished/`. Both need clearing now that this has
+landed; it needs the A slot, so it is flagged rather than done here.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.

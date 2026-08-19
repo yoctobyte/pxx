@@ -6130,6 +6130,12 @@ test-core: $(COMPILER)
 	# an UNDECLARED call to such a name is refused rather than mis-bound.
 	./$(COMPILER) -Futest test/test_c_cross_ns_arity.pas $(TESTTMP)/c_cross_ns_arity26
 	test "$$($(TESTTMP)/c_cross_ns_arity26)" = "time=1"
+	# a C DEFINITION must not seize a differently-cased Pascal routine's entry:
+	# `double sqrt(double){...}` used to overwrite the RTL's Sqrt for the whole
+	# program, unreachably (bare, qualified and aliased spellings all followed it).
+	# The tanh/cube rows are the controls that were always correct.
+	./$(COMPILER) -Futest test/test_c_def_hijack.pas $(TESTTMP)/c_def_hijack26
+	test "$$($(TESTTMP)/c_def_hijack26)" = "$$(printf 'sqrt=4.0000\nqsqrt=4.0000\nexp=1.0000\ncxsqrt=42.0000\ntanh=0.7616\ncxtanh=55.0000\ncxcube=999\nsoft=4.0000')"
 	@./$(COMPILER) -Futest test/test_c_cross_ns_arity_fail.pas $(TESTTMP)/c_cross_ns_arity_fail26 2>&1 \
 	  | grep -q "call to undeclared function 'time' would bind to the Pascal routine 'Time'" \
 	  || { echo 'c_cross_ns_arity_fail: FAIL - an undeclared C call must not bind to a Pascal routine of another arity'; exit 1; }

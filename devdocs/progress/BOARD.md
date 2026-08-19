@@ -45,7 +45,7 @@ _none_
 | feature-a-own-language-first-symbol-resolution | A | 55 | feature | Own-language-first symbol resolution: the native language wins | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (242)
+## backlog (241)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -56,7 +56,6 @@ _none_
 | bug-a-riscv32-softfloat-has-no-subnormals | A | 40 | bug | riscv32 flushes subnormals: (1e-320 * 0.5) * 2.0 <> 1e-320, Exp(-745) returns 0 where every other target gives a subnormal, and Ln(5e-324) answers -746.52 instead of -744.44. Identical in both float modes, so it is the target's soft-float runtime, not the math unit. i386, arm32, aarch64 and x86-64 are all correct. | — |
 | bug-a-the-import-escape-hatch-fails-on-classes-pas | A | 65 | bug | The escape hatch the new bare-import diagnostic RECOMMENDS does not work for the unit that motivated the feature: `import 'classes.pas' as cl` from NilPy dies at classes.pas:1060 with `no overload of Delete matches these arguments (Integer)`, while Pascal's own `uses classes;` compiles the identical file fine. Same message, same line, as the failure feature-a-a-bare-nilpy-import-* was filed to fix. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
-| bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine | C | 55 | bug | A C function DEFINITION whose name matches a Pascal intrinsic (`sqrt` `exp` `ln` `sin` `cos` `arctan`) binds to the Pascal proc entry via case-insensitive FindProc and overwrites its BodyAddr. The Pascal implementation then becomes unreachable by ANY spelling — bare `Sqrt`, `math.Sqrt` and `cmath.sqrt` all return the C body — so a C file silently replaces the RTL's math for the whole program. This is what the ten `__crtl_*` prefixes in lib/crtl exist to dodge. | — |
 | bug-n-a-class-base-that-is-an-expression-does-not-compile | N | 45 | bug | A class base which is a NAME bound to a type, or a call, does not compile: `B = object; class P(B)` fails where `class P(object)` and `class P(SomeClass)` both work. Blocks six.with_metaclass, which html5lib's parser spells as `class Phase(with_metaclass(...))` — the single remaining wall on html5parser.py. | — |
 | bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function | N | 50 | bug | `g = f` BOXES the function on the heap; every other path (a dict value, a return value, the bare name) keeps the raw code pointer. So `g == f` and `g is f` are False, two assignments of the same function are unequal to each other, and `id(g)` is a heap address while `id(f)` is the code address. CPython answers True to all of it. | — |
 | bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through | N | 45 | bug | sys.version_info throws at RUNTIME with a message admitting its own guard failed: 'the code guarding that (the flag its except-branch sets) let this call through anyway'. Two defects — the member is missing, and the compile-time guard meant to catch that does not fire. A guard that reports its own failure and continues is worse than no guard. | — |
@@ -470,9 +469,9 @@ _none_
 | decide-what-synapse-actually-needs-vs-mimic-fpc | U | 20 | decide | Synapse builds under `--mimic-fpc`. What does it actually NEED? | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2081)
+## done (2082)
 
-2081 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2082 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -535,7 +534,6 @@ _none_
 - [p 60] [A] refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
 - [p 58] [N] bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - [p 58] [O] feature-opt-o3-register-pressure
-- [p 55] [C] bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (unblocks 2)
 - [p 55] [A] feature-port-freebsd-native (unblocks 1)
 - [p 55] [N] bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - [p 55] [N] bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
@@ -561,6 +559,7 @@ _none_
 - [p 50] [A] feature-a-implement-initialize-and-finalize-over-the-arc-helpers
 - [p 50] [A] feature-a-riscv64-as-a-hosted-first-class-target
 - [p 50] [A] feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
+- [p 50] [C] feature-c-import-a-pascal-unit-under-a-mangled-name
 - [p 50] [C] feature-c-vla-via-alloca
 - [p 50] [E] feature-demo-songformatter-pxx-target
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile
@@ -752,7 +751,6 @@ _none_
 
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
-- **2** — bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
