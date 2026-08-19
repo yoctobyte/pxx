@@ -1906,6 +1906,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-665 | T | 70 | regression | regression: test-core#665 red at 8d1e694a9d8d (auto-filed by twatch) | — |
 | regression-test-core-666 | T | 70 | regression | regression: test-core#666 red at 2758e0d9814c (auto-filed by twatch) | — |
 | regression-test-core-676 | T | 70 | regression | regression: test-core#676 red at 51f2a8a3258f (auto-filed by twatch) | — |
+| regression-test-core-callbacks-2 | N | 70 | regression | regression: test-core#src:examples/tk/callbacks.npy red at 9bbbbef6c055 (auto-filed by twatch) | — |
 | regression-test-core-callbacks | T | 70 | regression | regression: test-core#src:examples/tk/callbacks.npy red at 410b7a40b516 (auto-filed by twatch) | — |
 | regression-test-core-cgeneric-selection-b209 | T | 70 | regression | regression: test-core#src:test/cgeneric_selection_b209.c red at 42786f141ea7 (auto-filed by twatch) | — |
 | regression-test-core-cmath-trig-family-b385 | T | 70 | regression | regression: test-core#src:test/cmath_trig_family_b385.c red at 93d6232f05d1 (auto-filed by twatch) | — |
@@ -1915,6 +1916,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-cstr-table-2d-rows | T | 70 | regression | regression: test-core#src:test/cstr_table_2d_rows.c red at 7eef29e052d2 (auto-filed by twatch) | — |
 | regression-test-core-csystem-libs-granular-libc-b113 | T | 70 | regression | regression: test-core#src:test/csystem_libs_granular_libc_b113.c red at b39ac8f02003 (auto-filed by twatch) | — |
 | regression-test-core-facade-and-paths | T | 70 | regression | regression: test-core#src:examples/tk/facade_and_paths.npy red at d64a5d6a97b4 (auto-filed by twatch) | — |
+| regression-test-core-field-class-identity | N | 70 | regression | regression: test-core#src:examples/tk/field_class_identity.npy red at 9bbbbef6c055 (auto-filed by twatch) | — |
 | regression-test-core-test-algol-skeleton | T | 70 | regression | regression: test-core#src:test/test_algol_skeleton.alg red at ad8e212cf739 (auto-filed by twatch) | — |
 | regression-test-core-test-asyncecho | T | 70 | regression | regression: test-core#src:test/test_asyncecho.pas red at 60502ed0c353 (auto-filed by twatch) | — |
 | regression-test-core-test-basic-comprehensive | T | 70 | regression | regression: test-core#src:test/test_basic_comprehensive.bas red at 3f2828476c6c (auto-filed by twatch) | — |
@@ -1936,11 +1938,13 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-nested-class-type-b348 | P | 70 | regression | regression: test-core#src:test/test_nested_class_type_b348.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
 | regression-test-core-test-nested-cow | T | 70 | regression | regression: test-core#src:test/test_nested_cow.pas red at 899e51cda3ba (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-augmented-assign-class-dunder | T | 70 | regression | regression: test-core#src:test/test_nilpy_augmented_assign_class_dunder.npy red at e8450c58d67e (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-bound-method-in-module | N | 70 | regression | regression: test-core#src:test/test_nilpy_bound_method_in_module.npy red at 9bbbbef6c055 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-c-define-const | T | 70 | regression | regression: test-core#src:test/test_nilpy_c_define_const.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-c-pointer | T | 70 | regression | regression: test-core#src:test/test_nilpy_c_pointer.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-dataclass-dict-factory | T | 70 | regression | regression: test-core#src:test/test_nilpy_dataclass_dict_factory.npy red at 2fbb5a270acc (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-float-pow-oracle | T | 70 | regression | regression: test-core#src:test/test_nilpy_float_pow_oracle.npy red at c9706630b486 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-forward-module-global | T | 70 | regression | regression: test-core#src:test/test_nilpy_forward_module_global.npy red at dbf783346025 (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-from-import-as-rename | N | 70 | regression | regression: test-core#src:test/test_nilpy_from_import_as_rename.npy red at 9bbbbef6c055 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-html-tempfile | T | 70 | regression | regression: test-core#src:test/test_nilpy_html_tempfile.npy red at 106a63cabbca (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-min-max-variadic | T | 70 | regression | regression: test-core#src:test/test_nilpy_min_max_variadic.npy red at 9305672dbcd5 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-module-first-import | T | 70 | regression | regression: test-core#src:test/test_nilpy_module_first_import.npy red at b9e334fbd649 (auto-filed by twatch) | — |
