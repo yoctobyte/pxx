@@ -26,6 +26,7 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import testmgr  # noqa: E402
+from devtest_report import fail_detail  # noqa: E402
 
 FRESH = 1785700000          # any mtime a `cp` would leave: newer than sources
 
@@ -110,7 +111,7 @@ def main():
         try:
             note = case()
         except AssertionError as e:
-            print(f"  FAIL {name}: {e}")
+            print(f"  FAIL {name}: {fail_detail(e)}")
             rc = 1
         else:
             print(f"  ok   {name} — {note}")

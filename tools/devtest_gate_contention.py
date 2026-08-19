@@ -37,6 +37,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from devtest_report import fail_detail  # noqa: E402
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 spec = importlib.util.spec_from_file_location("tw", os.path.join(HERE,
                                                                 "twatch.py"))
@@ -120,7 +123,7 @@ def main():
             print("  ok   %s — %s" % (fn.__name__, fn(root)))
         except Exception as e:              # noqa: BLE001 - report, keep going
             rc = 1
-            print("  FAIL %s — %s: %s" % (fn.__name__, type(e).__name__, e))
+            print("  FAIL %s — %s: %s" % (fn.__name__, type(e).__name__, fail_detail(e)))
         finally:
             shutil.rmtree(root, ignore_errors=True)
     print("gate contention handling OK" if rc == 0

@@ -27,6 +27,7 @@ import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import twatch  # noqa: E402
+from devtest_report import fail_detail  # noqa: E402
 
 JOB = "test-nilpy#src:test/test_nilpy_print_arg_eval_order.npy@1"
 LIVE = "test-core#src:test/live.pas"
@@ -134,7 +135,7 @@ def main():
         try:
             note = case()
         except AssertionError as e:
-            print(f"  FAIL {name}: {e}")
+            print(f"  FAIL {name}: {fail_detail(e)}")
             rc = 1
         else:
             print(f"  ok   {name} — {note}")
