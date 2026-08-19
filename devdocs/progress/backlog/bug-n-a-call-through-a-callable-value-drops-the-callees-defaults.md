@@ -6,6 +6,40 @@ blocked-by: [feature-n-a-callable-value-carries-its-signature-type]
 summary: "A def called through a callable value ignores its own default arguments — `al = g; al(1)` where `g(x, lo=7)` answers empty instead of 7, and passing the def as an argument and calling it with fewer args SEGFAULTS. Not rename-specific and not import-specific: a same-file assignment reproduces it, and only a DIRECT call applies defaults. The box carries a code address and no signature, which is exactly the open decision."
 ---
 
+## Possible duplicate — the 12-file corpus wall may be this same bug
+
+Added 2026-08-19 by frank3-etree (Track B), from the ladder measurement.
+
+[[bug-n-a-user-classs-decode-method-is-hijacked-losing-its-own-parameters]] — the
+**largest** wall on the third-party ladder, 12 of 38 non-compiling files — was
+filed as a method-name hijack. That premise is **disconfirmed** (20 builtin
+method names all dispatch correctly through both receiver shapes). The real
+failing construct is:
+
+```python
+decode = decoder.decode          # bound method -> a variable
+output = decode(b'', final=True) # keyword arg through a callable value
+```
+
+which is this ticket's sentence with one word changed: a call through a callable
+value loses part of the callee's declared signature — **defaults** here,
+**keyword names** there. And this ticket's own summary already names the
+mechanism that would explain both: *"the box carries a code address and no
+signature."*
+
+If that is right, both are downstream of
+[[feature-n-a-callable-value-carries-its-signature-type]], which this ticket is
+already `blocked-by` — meaning **the biggest single wall on the corpus may be
+unblocked by work already in flight** rather than needing its own fix. Worth
+checking before anyone opens a second front.
+
+**Not merged by the reporter.** Track B does not own N, and the adjacent p88
+signature-record work is frank2's; the merge call is its to make with this
+evidence in hand. One caveat carried over deliberately: the minimal repro of the
+`decode` shape produces `undefined variable (final)` while the corpus produces
+`decode has no parameter named 'final'`, so the two have **not** been shown to be
+the same bug — only to be the same shape.
+
 # A call through a callable value drops the callee's defaults
 
 - **Type:** bug — **Track N**. **Found:** 2026-08-18 by frank2-7e, splitting it

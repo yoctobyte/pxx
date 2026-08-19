@@ -3,10 +3,74 @@ track: N
 prio: 70
 type: bug
 blocked-by: []
-summary: "`decode has no parameter named 'final'` is the LARGEST wall on the third-party ladder — 12 of 38 non-compiling files, bigger than the Mapping row. The corpus declares `def decode(self, input, final=False)` on its OWN class; pxx binds the call to a builtin/pylib `decode` instead, so the user's parameter list is not the one consulted. Strongly suspected sibling arm of the already-fixed keys/items/values dict-view hijack."
+summary: "LARGEST wall on the third-party ladder — 12 of 38 non-compiling files. A KEYWORD ARGUMENT passed through a CALLABLE VALUE held in a variable (`decode = decoder.decode`, then `decode(b'', final=True)`) is not matched against the callee's declared parameters. NOT the method hijack this ticket was filed as — that premise is disconfirmed by measurement, see the banner. Original title kept for grep: 'a user class's decode method is hijacked, losing its own parameters'."
 ---
 
-# A user class's `decode` method is hijacked, losing its own parameters
+# A keyword argument through a callable value is not matched to the callee
+
+> *(Filed as "A user class's `decode` method is hijacked, losing its own
+> parameters" — old title kept here so the old spelling still greps.)*
+
+## ⚠ THE ORIGINAL PREMISE IS DISCONFIRMED — read this before working the ticket
+
+Measured by frank3-etree on pinned **v357** (`ebcf15ccb1046b29353b3b85091a8cdc`),
+2026-08-19, before anyone had claimed it. The body below is preserved as filed;
+where it conflicts with this banner, this banner is the measurement.
+
+**1. It is not a name hijack, and `decode` is not a fourth sibling of
+`keys`/`items`/`values`.** Twenty builtin method names — `decode encode keys
+items values append count index split join strip upper lower read write close
+get pop update copy` — were declared on a user class and called with a keyword
+argument, through **both** a direct receiver and an untyped parameter. **All
+twenty dispatch correctly.** There is no counter-example supporting the hijack
+framing.
+
+**2. The failing construct is different, and so is the line.** `webencodings`
+walls at **`__init__.py:230`**, not `:295`:
+
+```python
+def _iter_decode_generator(input, decoder):   # decoder: untyped parameter
+    decode = decoder.decode                   # :217  bound method -> a variable
+    ...
+    output = decode(b'', final=True)          # :230  <-- fails here
+```
+
+So: **a keyword argument passed through a callable value held in a variable.**
+The class's own `def decode(self, input, final=False)` at `:295` is never the
+thing being consulted, because the call does not go through a member lookup at
+all. Nothing about the *name* `decode` is involved — the same shape with
+`mymeth`/`flag` fails identically.
+
+**3. A factual correction to the body.** `lib/rtl/mimic_codecs.pas` **does**
+exist (18 KB) and **is** bound — the compile prints `note: codecs ->
+mimic_codecs (shim, subset)`. The body's "lib/rtl has no `mimic_codecs.py` at
+all" is right about the `.py` and wrong about the shim being absent from play,
+so "nothing of ours supplies a competing signature" needs re-checking rather
+than assuming.
+
+**4. What was NOT established — do not treat the repro below as the bug.** A
+minimal version of the `:230` shape fails with **`undefined variable (final)`**,
+while the corpus produces **`decode has no parameter named 'final'`**. Different
+diagnostics, so the minimal case is very likely a *neighbour* and not the thing;
+there is an ingredient still unfound. Adding a module-level `def decode(input,
+fallback, errors=...)` shadowing the method (which is real — `:139`, and it has
+no `final`) does **not** produce the corpus message either.
+
+No root cause is written here on purpose. The banner says where to start and,
+more usefully, where not to.
+
+## Possible duplicate — a call to make, with this evidence in hand
+
+[[bug-n-a-call-through-a-callable-value-drops-the-callees-defaults]] is the same
+sentence with one word changed: *a call through a callable value loses part of
+the callee's declared signature* — **defaults** there, **keyword names** here. If
+they are one bug, both should say so rather than one being merged away. That call
+belongs to whoever holds N (frank2, whose p88 signature-record work is adjacent),
+not to Track B.
+
+---
+
+## AS FILED — A user class's `decode` method is hijacked, losing its own parameters
 
 - **Track N** (NilPy frontend — member dispatch / name resolution).
 - **Filed by the coordinator 2026-08-19**, the moment it was named, because it had **no
