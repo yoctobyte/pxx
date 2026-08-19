@@ -86,8 +86,66 @@ def normalise(msg):
     return msg.strip()[:70]
 
 
+def pin_provenance():
+    """Identity of the compiler this run measured, read off disk.
+
+    A ladder result is only interpretable against the pin that produced it, and
+    three runs on 2026-08-19 were spent measuring ground that could not contain
+    the fix they were looking for. Reading this here rather than being told it
+    removes the coordination step, which is where every one of those errors was.
+    """
+    md5 = base = "?"
+    try:
+        import hashlib
+        h = hashlib.md5()
+        with open(PXX, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1 << 20), b""):
+                h.update(chunk)
+        md5 = h.hexdigest()
+    except OSError:
+        pass
+    log = os.path.join(ROOT, "stable_linux_amd64", "default", "pin.log")
+    try:
+        with open(log) as fh:
+            last = [ln for ln in fh if ln.strip()][-1]
+        base = last.split()[-1]          # trailing field is the pin base commit
+    except (OSError, IndexError):
+        pass
+    return md5, base
+
+
+def require_ancestor(fix, base):
+    """Refuse to run when the pin cannot contain the commit being measured.
+
+    Deliberately a REFUSAL and not a warning: a caveat on a forty-minute run is
+    a log line, and the whole point is a check that can stop the thing it
+    checks.
+    """
+    import subprocess
+    try:
+        rc = subprocess.call(["git", "merge-base", "--is-ancestor", fix, base],
+                             cwd=ROOT,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    except OSError:
+        print("--require-fix: git unavailable; refusing rather than guessing")
+        return False
+    if rc != 0:
+        print("--require-fix %s: NOT an ancestor of pin base %s" % (fix, base))
+        print("  the pinned compiler predates that commit, so this run cannot")
+        print("  measure it. Refusing to start. Re-pin, or drop --require-fix.")
+        return False
+    return True
+
+
 def main():
     show_files = "--files" in sys.argv
+    fix = None
+    for a in sys.argv[1:]:
+        if a.startswith("--require-fix="):
+            fix = a.split("=", 1)[1]
+    md5, base = pin_provenance()
+    if fix and not require_ancestor(fix, base):
+        return 2
     corp = corpora()
     if not corp:
         print("no corpora fetched — run: tools/install_lib_candidates.sh webencodings html5lib tinycss2")
@@ -99,6 +157,9 @@ def main():
     incl.append("-Fu" + os.path.join(ROOT, "lib", "rtl"))
 
     print("roots: " + ", ".join(os.path.relpath(d, ROOT) for _n, d, _p in corp))
+    # Provenance in the artifact, so a result read next week carries the pin it
+    # was taken on instead of relying on whoever reads it to remember.
+    print("pin:   md5 %s  base %s" % (md5, base))
     ok = 0
     total = 0
     walls = {}
