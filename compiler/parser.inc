@@ -33800,6 +33800,52 @@ begin
   if Length(content) > 0 then begin isCUnit := True; isCHeader := True; end;
 end;
 
+{ Does this `lib/rtl` unit SERVE the Python module of the same name — i.e. must
+  a bare NilPy `import <name>` keep resolving to it?
+
+  A bare NilPy import means PYTHON (decide-nilpy-imports-that-collide-with-a-
+  pascal-rtl-unit, user 2026-08-19), so the .pas chain is closed to it — except
+  for the units below, which ARE the Python module and are reached by that
+  spelling on purpose. `classes`, `types` and `strings` are deliberately absent:
+  they are ordinary Pascal units that happen to share a Python name, and
+  `from classes import Foo` failing with a message about `Delete` inside a unit
+  the program never mentioned is the bug this list exists to fix. A Pascal unit
+  is still reachable from NilPy — with an explicit extension, `import
+  'classes.pas' as c`.
+
+  ADDING A UNIT TO THIS LIST IS PART OF WRITING ONE. When a new lib/rtl unit is
+  written to serve a Python module, it does not resolve by bare name until its
+  name is here, and the failure lands at the import of a unit that plainly
+  exists — far from the omission that caused it.
+
+  A CURATED LIST, and not a property read off the unit, because every derivable
+  form of the question is wrong. The header prose is wrong in BOTH directions:
+  `math`, `json` and `random` read as ordinary Pascal libraries and serve
+  Python's modules, while `sysutils` names NilPy in its header and is a
+  genuinely Pascal unit that must STOP resolving by bare name. Nor is "was it
+  written for the NilPy frontend" answerable from the file. The intent is a
+  fact about each unit, so it is recorded, not inferred — which is also why the
+  list is worth more than the behaviour it selects.
+
+  `collections` is the case that proves the point: its header describes a
+  generic growable list and nothing else, yet it belongs here, because plain
+  `import collections` is deliberately routed to the resolver so that a
+  `collections.Sym` qualifier has a unit to resolve against — see
+  PyImportRootPlainIsConsumedOnly, which says exactly that and is why
+  `from collections import Counter` (consumed, never resolved) does not
+  contradict it.
+
+  The `mimic_*` shims are NOT here: they are Python modules by construction and
+  the resolver reaches them through the prefix path, not through this list. }
+function PyRtlUnitServesPython(const lo: AnsiString): Boolean;
+begin
+  Result := (lo = 'ast') or (lo = 'atexit') or (lo = 'base64') or
+            (lo = 'collections') or (lo = 'configparser') or (lo = 'html') or
+            (lo = 'io') or (lo = 'json') or (lo = 'markdown') or
+            (lo = 'math') or (lo = 'pathlib') or (lo = 'random') or
+            (lo = 're') or (lo = 'subprocess') or (lo = 'tempfile');
+end;
+
 { `mypkg.core.bus` -> `mypkg/core/bus`. A dotted absolute import names a
   DIRECTORY PATH under a package root; the underscore-mangled unit name it also
   carries cannot be turned back into one (`a.b_c` and `a_b.c` mangle alike), so
@@ -34009,6 +34055,10 @@ var
   pyFileIdx, pyDupIdx: Integer;
   { leading-dot count of this relative import; see PyRelativeDir }
   pyRelLevel: Integer;
+  { Which language THIS import named, claimed from PyImportLang on entry: ''
+    for anything that is not a NilPy import statement, 'py' for a bare one,
+    'pas'/'c' for the explicit quoted spelling. See PyImportLang in defs.inc. }
+  pyImportLang: AnsiString;
   isPyUnit, savedPyExprMode: Boolean;
   { The dotted module path this import was written with, claimed from the global
     on entry so a nested unit parse cannot see a stale one. Empty unless it
@@ -34053,6 +34103,11 @@ begin
     nested parse of whatever this resolves to must not inherit it. }
   pyRelLevel := PyRelativeLevel;
   PyRelativeLevel := 0;
+  { Same claim-and-clear for the LANGUAGE this import named, and for the same
+    reason: what we resolve to is parsed with a clean slate, so a Pascal unit
+    pulled in behind a NilPy import does not inherit Python's resolution rules. }
+  pyImportLang := PyImportLang;
+  PyImportLang := '';
   pyDottedIsPath := False;
   for i := 1 to Length(pyDotted) do
     if pyDotted[i] = '.' then pyDottedIsPath := True;

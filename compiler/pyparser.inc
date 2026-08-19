@@ -33242,6 +33242,28 @@ begin
             CaseEqual(root, 'random');
 end;
 
+{ ParseUsesUnit for a NilPy IMPORT STATEMENT — the one place that records the
+  fact every import site shares: this `uses` was written as Python.
+
+  Every user-facing import arm goes through here rather than calling
+  ParseUsesUnit directly, so the resolver's rule ("a bare import means Python")
+  is keyed on something the parser KNOWS instead of on a predicate that merely
+  correlates with it. The two that correlate both break: `isNilPy` is true for
+  the whole compilation, so it also covers the `uses` clauses of the Pascal RTL
+  units a NilPy program pulls in; `NilPyUserCode` goes false inside an imported
+  .py module, whose own imports are Python too. See PyImportLang in defs.inc.
+
+  The COMPILER'S OWN uses of ParseUsesUnit — the auto-used `math`, the ambient
+  pylib/pyeval/builtin units, the `mimic_` re-entry inside the resolver — stay
+  on the bare call on purpose: they are not import statements and must keep
+  resolving under the unchanged Pascal rules. }
+procedure PyParseImportUnit(const name: AnsiString);
+begin
+  PyImportLang := 'py';
+  ParseUsesUnit(name);
+end;
+
+
 { A single `import X [as Y]` / `from X import a, b` statement, leaving the
   parser ON the terminating newline. Shares the resolver with PyParseImportRun;
   see the note at the statement-level call site for why the newline matters. }
@@ -33273,7 +33295,7 @@ begin
       while CurTok.Kind = tkIdent do
       begin
         PyRelativeLevel := impLevel;
-        ParseUsesUnit(CurTok.SVal);
+        PyParseImportUnit(CurTok.SVal);
         Next;
         if PyIsIdent('as') then
         begin
@@ -33293,7 +33315,7 @@ begin
     if not PyImportIsConsumedOnly(impRoot, impName) then
     begin
       PyRelativeLevel := impLevel;
-      ParseUsesUnit(impName);
+      PyParseImportUnit(impName);
     end;
     while CurTok.Kind = tkIdent do
     begin
@@ -33331,7 +33353,7 @@ begin
           left alone: it names what it publishes, which is the whole point of
           writing it. }
         PyImportPending := True;
-        ParseUsesUnit(impName);
+        PyParseImportUnit(impName);
         PyImportPending := False;
       end;
       if PyIsIdent('as') then
@@ -33379,7 +33401,7 @@ begin
         while CurTok.Kind = tkIdent do
         begin
           PyRelativeLevel := impLevel;
-          ParseUsesUnit(CurTok.SVal);
+          PyParseImportUnit(CurTok.SVal);
           Next;
           if PyIsIdent('as') then
           begin
@@ -33443,7 +33465,7 @@ begin
           shim — `from configparser import ConfigParser`. An unknown module still
           fails, with the unit resolver's own "unit source not found: X". }
         PyRelativeLevel := impLevel;
-        ParseUsesUnit(impName);
+        PyParseImportUnit(impName);
         while CurTok.Kind = tkIdent do
         begin
           { Record the name against the IMPORTING module (ParseUsesUnit has
@@ -33666,7 +33688,7 @@ begin
           { plain `import X` — qualified-only if X is a Pascal unit; see
             PyImportPending and the twin site in PyParseOneImport }
           PyImportPending := True;
-          ParseUsesUnit(impName);
+          PyParseImportUnit(impName);
           PyImportPending := False;
         end;
         { `import X as Y` — Python's module alias, and the same thing a Pascal

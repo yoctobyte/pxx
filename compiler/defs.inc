@@ -2489,6 +2489,31 @@ var
     filters/ and treewalkers/ reach their parent that way throughout.
     bug-a-package-and-sibling-module-resolution-is-the-corpus-wall }
   PyRelativeLevel : Integer;
+  { WHICH LANGUAGE the `uses` about to be resolved was written in — and, more
+    to the point, WHETHER it came from a NilPy `import` statement at all.
+
+      ''    not a NilPy import: a Pascal `uses`, a C `#include`, the ambient
+            and auto-injected units, the `mimic_` re-entry. Resolution is
+            unchanged, byte for byte.
+      'py'  a bare NilPy `import X`. Python only — .py/.npy, host headers and
+            the mimic_ shims — with the .pas chain reachable only for the units
+            PyRtlUnitServesPython lists.
+      'pas' / 'c'  an explicit NilPy `import 'x.pas'` / `import 'x.c'`: that
+            language's chain only, and the Python probes are skipped.
+
+    Set by the NilPy import parser, claimed and cleared at the top of
+    ParseUsesUnitBody exactly like PyDottedImport above, so the nested parse of
+    whatever this resolves to cannot inherit it.
+
+    A GLOBAL SET AT THE CALL SITE, and not a predicate, because the two
+    predicates that look like they answer this do not. `isNilPy` is true for the
+    WHOLE compilation — including the nested `uses` of every Pascal RTL unit a
+    NilPy program drags in, so gating on it blocks lib/rtl/re.pas's own
+    `uses sysutils` and fails nowhere near an import. `NilPyUserCode` is false
+    while parsing an imported .py module, whose imports are just as Python as
+    the main program's. The question is about the CALL SITE, so the call site
+    records it. }
+  PyImportLang : AnsiString;
   { Base name (no dir, no ext) of the source file currently being lexed; used to
     resolve the `*` in $R *.lfm / $R *.res to the current unit. }
   CurSrcBaseName : AnsiString;
