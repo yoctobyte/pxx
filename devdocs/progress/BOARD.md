@@ -45,7 +45,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (238)
+## backlog (239)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -125,7 +125,7 @@ _none_
 | docs-name-collisions-and-the-as-escape | D | 45 | docs | The user-facing 'how do I deal with a name collision' page. Two languages in one program will both declare `cube`, and the answer — `uses './mymath.c' as cmath;` then `cmath.cube(...)`, or `import mymath as cmath` from NilPy — is true TODAY and documented nowhere. Not blocked, unlike the own-language-first doc ticket: this describes behaviour that already ships. | — |
 | docs-publish-the-three-language-rounding-table | D | 30 | docs | One backend implements three different, correct rounding rules — Pascal ties-to-even, C half-away-from-zero, Python ties-to-even on the exact decimal — each verified against fpc/gcc/CPython. That is a differentiator and it is documented nowhere; it currently lives only inside a Track B ticket | — |
 | docs-verify-nil-python-page-against-the-compiler | D | 40 | docs | docs/targets/nil-python.md has produced two provably stale claims in one sitting (a four-parameter limit that does not exist, and a dunder list that is wrong) — every remaining behavioural claim on that page needs testing against the pinned compiler, starting with mandatory annotations | — |
-| feature-a-a-bare-nilpy-import-means-python-and-another-language-needs-its-extension | A | 60 | feature | DECIDED 2026-08-19. A bare NilPy import resolves to Python only (.py/.npy); another language needs an explicit extension (math.pas, math.c); a residual collision is solved by `import ... as ...`. Two whitelists carry it: the language-extension set, and the lib/rtl units that ARE a Python module (re, io, math, json, random). Fixes `from classes import Foo` failing with a message about `Delete` inside a Pascal unit the program never mentioned. | — |
+| feature-a-a-bare-nilpy-import-means-python-and-another-language-needs-its-extension | A | 78 | feature | DECIDED 2026-08-19. A bare NilPy import resolves to Python only (.py/.npy); another language needs an explicit extension (math.pas, math.c); a residual collision is solved by `import ... as ...`. Two whitelists carry it: the language-extension set, and the lib/rtl units that ARE a Python module (re, io, math, json, random). Fixes `from classes import Foo` failing with a message about `Delete` inside a Pascal unit the program never mentioned. | — |
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
 | feature-a-error-does-not-halt-so-a-parse-can-be-speculative | A | 45 | feature | `Error()` calls `Halt` directly, so nothing in the compiler can trial-parse and back out. That blocks NilPy's type inference (which needs to read an as-yet-unseen name speculatively), and it is also why the compiler stops at the FIRST error. Make the error path recoverable; several unrelated wants fall out of the same change. | — |
 | feature-a-expose-rounding-mode-intrinsic-to-pascal | A | 30→35 | feature | __pxx_fesetround/__pxx_fegetround exist and flip MXCSR, but only the C frontend can reach them, and off x86-64 they are an accepted no-op returning 0 — so Pascal cannot get a SetRoundMode that actually sets the mode | — |
@@ -221,6 +221,7 @@ _none_
 | feature-p-defineglobal-a-define-that-crosses-unit-boundaries | P | 40 | feature | `{$DEFINEGLOBAL xyz}` — a conditional define that outlives the unit that sets it. Measured: pxx matches FPC today, a unit's {$DEFINE} does not reach the program, which is correct Pascal and is also why two units cannot coordinate. The motivating case is 'first implementation loaded claims the name, second skips itself' — the shape that would have dissolved the pylib/sysutils Exception problem. | — |
 | feature-p-delphi-string-helpers | P | 45 | feature | feature(P): Delphi's TStringHelper surface — `s.Length`, `s.ToUpper`, `s.Trim`, `s.Substring` | — |
 | feature-p-read-text-into-a-char-arm | P | 50 | feature | the RTL half (textfile.TextReadChar) has landed, so ParseTextReadRest can now route read(f, c) to it and drop the 'not supported yet' error | — |
+| feature-p-uses-a-unit-in-an-explicit-file | P | 30 | feature | `uses mymod in 'mymod.pas';` — the FPC/Delphi spelling for naming a unit's source file — does not parse. pxx has the quoted-path form (`uses './mymod.pas' as m;`, shipped 2026-06-30) but not the standard `in` one, so ordinary FPC project sources are refused at the uses clause. | — |
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-load-sampler-refine | B | 20 | feature | Parallel load sampler — refinements (ramp/EMA, BSD/cgroup) | feature-os-targets-bsd-mac |
 | feature-pascal-asmmode-directive-tolerance | A | 50 | feature | Accept `{$asmMode default}` (and other non-intel asmmode values) | — |
@@ -516,12 +517,12 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 78] [A] feature-a-a-bare-nilpy-import-means-python-and-another-language-needs-its-extension
 - [p 66] [A] refactor-a-one-signature-record-for-every-callable-carrier
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
 - [p 65] [P] feature-pascal-corpus-oop
 - [p 60] [A] bug-a-make-revert-the-documented-pin-brake-does-not-fire
-- [p 60] [A] feature-a-a-bare-nilpy-import-means-python-and-another-language-needs-its-extension
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 60] [A] refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
 - [p 58] [N] bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
@@ -684,6 +685,7 @@ _none_
 - [p 30] [N] feature-nilpy-walrus-operator
 - [p 30] [O] feature-opt-arch-level-and-dispatch
 - [p 30] [O] feature-opt-float-format-fast-path
+- [p 30] [P] feature-p-uses-a-unit-in-an-explicit-file
 - [p 30] [S] feature-pal-esp-posix-fd-semantics
 - [p 30] [D] idea-public-status-page
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear

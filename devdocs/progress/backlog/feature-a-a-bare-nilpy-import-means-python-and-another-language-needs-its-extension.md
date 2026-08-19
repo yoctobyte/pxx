@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 60
+prio: 78
 type: feature
 blocked-by: []
 summary: "DECIDED 2026-08-19. A bare NilPy import resolves to Python only (.py/.npy); another language needs an explicit extension (math.pas, math.c); a residual collision is solved by `import ... as ...`. Two whitelists carry it: the language-extension set, and the lib/rtl units that ARE a Python module (re, io, math, json, random). Fixes `from classes import Foo` failing with a message about `Delete` inside a Pascal unit the program never mentioned."
@@ -31,9 +31,33 @@ because the plan assumed it already worked.** It works in exactly one of the thr
 | Pascal `uses 'mymod.pas';` | **fails**: *"unit source not found"*, even for a local file that exists |
 | Pascal `uses mymod in 'mymod.pas';` | **fails to parse** — the FPC/Delphi `in` spelling is not accepted |
 
-**So "importing with the extension already works" is true of C's `#include` and of nothing
-else.** That is a reasonable thing to have believed — the C form does work and was the
-subject of a design discussion earlier the same day — but it does not generalise.
+> **CORRECTION, same day, and it shrinks this ticket: Pascal ALREADY HAS a working
+> extension-bearing cross-language import. My first measurement omitted `as` and I read the
+> deliberately-unbound case as "unsupported".**
+>
+>     uses './mymod.pas' as m;   ->  ok, m.Twice(21) prints 42
+>     uses './lib2.c'    as c;   ->  ok, c.twice(21)  prints 42   (cross-language!)
+>
+> This shipped **2026-06-30** as `feature-uses-alias-as`, and
+> `decided/decide-cross-language-qualifier-syntax` (2026-08-16) records the design: the
+> alias maps to the REAL unit's `Strs[]` index, which is what lets it reach foreign symbols.
+> **Bare `uses './x.c'` without `as` stays unbound DELIBERATELY** — so the failure I
+> originally measured was the designed behaviour, not a gap. I checked the unquoted spelling
+> and reported the feature missing.
+
+**So the corrected picture is:**
+
+| spelling | result |
+| --- | --- |
+| C `#include "./lib2.c"` | **works** |
+| Pascal `uses './mymod.pas' as m;` | **works** |
+| Pascal `uses './lib2.c' as c;` | **works** — cross-language, already |
+| Pascal `uses 'mymod.pas';` (no `as`) | unbound **by design** |
+| Pascal `uses mymod in 'mymod.pas';` | not supported — see [[feature-p-uses-a-unit-in-an-explicit-file]] |
+| **NilPy `import mymod.pas as m`** | **fails — this is the only real gap** |
+
+**Two languages of three already have it.** This ticket is therefore *"give NilPy the
+equivalent of a spelling Pascal and C already ship"*, not *"invent a cross-language import"*.
 
 **Two consequences, and they change the plan:**
 
@@ -68,6 +92,30 @@ su` — **once the spelling exists.** They are exception-surface tests deliberat
 Pascal's RTL, i.e. exactly the legitimate case rule 2 is meant to serve. Note also that
 `sysutils` is NOT one of the eight names in the decision ticket; the collision class is
 broader than the survey that found it.
+
+## SPELLING — worth one user decision before building, because precedent points elsewhere
+
+The decision names the form `math.pas` (dotted). The **already-shipped** Pascal spelling is a
+**quoted path plus `as`** (`uses './mymod.pas' as m`). Mirroring that in NilPy —
+`import './sysutils.pas' as su` — has three advantages that were not visible when the dotted
+form was chosen:
+
+- **It removes the package-submodule ambiguity entirely**, so the language-extension
+  whitelist is not needed at all: a quoted string can never be confused with
+  `import xml.dom`. (The whitelist for *which `lib/rtl` units are Python modules* is still
+  needed — that half is unaffected.)
+- **It matches the convention already in the language**, decided and shipped, rather than
+  adding a second cross-language import syntax with different rules.
+- **It carries a path**, which the dotted form cannot — and paths are how the C side already
+  disambiguates two same-named units.
+
+Against it: `import './sysutils.pas' as su` is not a spelling CPython would accept, whereas
+`import sysutils.pas` at least *looks* like Python. Both are already outside CPython, so this
+is a taste question about which non-Python spelling to use, not a compatibility one.
+
+**Not settled here.** Build the dotted form as decided unless the user says otherwise; this
+section exists so the choice is made knowing the precedent, since the precedent was unknown
+when the fork was answered.
 
 ## The rule
 

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:17 blocked:6 backlog:238 experimental:20 rainy-day:43 done-followup:3 decided:91 done:2063 rejected:40`
+`unfinished:17 blocked:6 backlog:239 experimental:20 rainy-day:43 done-followup:3 decided:91 done:2063 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -40,14 +40,14 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 223, ranked
+## Ready — top 30 of 224, ranked
 
+- `[p 78] [A]` feature-a-a-bare-nilpy-import-means-python-and-another-language-needs-its-extension
 - `[p 66] [A]` refactor-a-one-signature-record-for-every-callable-carrier
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
 - `[p 60] [A]` bug-a-make-revert-the-documented-pin-brake-does-not-fire
-- `[p 60] [A]` feature-a-a-bare-nilpy-import-means-python-and-another-language-needs-its-extension
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 60] [A]` refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
 - `[p 58] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
@@ -73,4 +73,4 @@ _none — no lane is locked._
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
 - `[p 50] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 
-_193 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_194 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
