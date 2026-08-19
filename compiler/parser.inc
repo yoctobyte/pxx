@@ -906,6 +906,7 @@ end;
 
 procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
+function PyParseLValueAST(idx: Integer; identTokIdx: Integer): Integer; forward;  { the NilPy half of ParseLValueAST, carved out into pyparser.inc — ParseLValueAST dispatches here on PyExprMode }
 function PyMakeNone: Integer; forward;  { the None VALUE (a VT_EMPTY variant) — pyparser.inc }
 function PyBuildGeneratorValue(gpi: Integer): Integer; forward;  { a generator CALL in value position becomes a cursor object (pyparser.inc) }
 function PyProgSym(const name: AnsiString): Integer; forward;  { a name in the Nil Python PROGRAM's own scope, never a unit's (pyparser.inc) }
@@ -4285,6 +4286,13 @@ var
   binNode: Integer; augTk2: TTokenKind;   { `v[k] op= x` on a variant base }
   sharedNeedsOvr: Boolean;   { the shared class-attribute slot also has per-instance overrides }
 begin
+  { NilPy runs its own copy of this routine (pyparser.inc). The dispatch is here
+    rather than at the ~50 call sites so that every caller stays untouched. }
+  if PyExprMode then
+  begin
+    Result := PyParseLValueAST(idx, identTokIdx);
+    Exit;
+  end;
   prevTok := identTokIdx;
   if DebugTrace then writeln('ParseLValueAST: idx = ', idx, ' prevTok = ', prevTok, ' TokenStr = "', GetTokenStr(prevTok), '" CurTok.Line = ', CurTok.Line, ' TokPos = ', TokPos);
 
