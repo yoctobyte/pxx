@@ -1806,3 +1806,12 @@ rerank it deliberately rather than inheriting the number).
   wrong-function bug spanning 12 files, and it is not pinged. frank3 stopped on the offer
   made at 01:30. T UP, same documented false positive. Track T remains UNSTAFFED since
   plexus-T closed.
+- **check 2026-08-19 (+7h, morning):** quiet, nobody blocked, no commits. **Track T is
+  RUNNING again** (plexus-T back from unstaffed — the user flagged its old session was at
+  910k and needed fresh context). Not pinged; it is busy and will report or publish tstate
+  on its own. frank2 still holds the top-wall ticket in `working/`; frank3 still stopped.
+  **No dispatch: the user explicitly said not to start any jobs pending the way-forward
+  discussion.** Reported the night to the user, and corrected the alarm they woke to — the
+  `-O0` self-compile failure was already FIXED (`6b2402b92`, ticket in `done/`, T's bench
+  back to 4 `selfcompile` rows at `185575980d53`), and it was never an `-O0` problem: all
+  four levels sat at 88-90% of the cap and the DEFAULT build was next.
