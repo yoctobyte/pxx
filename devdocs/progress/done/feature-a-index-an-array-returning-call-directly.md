@@ -128,3 +128,47 @@ Gate: `make compiler/pascal26` fixedpoint + `tools/gate.sh quick`.
 
 ## Log
 - 2026-08-19 — resolved, commit 1df7a1926.
+
+
+## FOLLOW-UP 2026-08-19 — `1df7a1926` broke five core tests; fixed in place
+
+Track T caught it within the hour, and the cause was mechanical rather than a
+design error. The edit that added the array-vs-record routing guard replaced a
+three-part block — condition, comment, statement — and **dropped the statement**:
+
+```pascal
+  else if ((tk = tyClass) or (tk = tyRecord)) and (...) then
+    { Member access on a class/record-returning call result... }
+    node := ParseClassRecordSelectors(node, ProcRetRecId[procIdx], tk)   { <- gone }
+```
+
+So the class/record arm still matched and then did nothing, and every
+`f(args).field` on a record- or class-returning call stopped parsing:
+`test_call_result_member`, `test_ctor_result_member`, `test_isas_open_world_b325`,
+`test_procedure_as_value_ok`, `test_stmt_call_result_selector_b318` — all five
+`unexpected token`, none of them wrong ANSWERS. Restoring the one line fixes all
+five with the routing untouched, and
+`test_index_a_call_result_directly` stays byte-identical to FPC across all 13
+rows, so nothing of the feature was traded away.
+
+Two things worth keeping:
+
+**`gate.sh quick` cannot see this class of change.** These are `test-core` jobs,
+which only the fuller tiers run — precisely the surface the quick gate trades
+away and Track T sweeps. That is the system working as designed, not a gap to
+close by widening the loop. What it does mean is that a change to
+`ApplyCallResultPtrSuffix` or `ParseClassRecordSelectors` should carry **those
+five tests as an explicit repro**, because the standard gate will not run them:
+
+```
+for t in test_call_result_member test_ctor_result_member test_isas_open_world_b325 \
+         test_procedure_as_value_ok test_stmt_call_result_selector_b318 ; do
+  ./compiler/pascal26 test/$t.pas <out>/$t && <out>/$t
+done
+```
+
+**Attribution was settled by binary A/B, not by reading the diff** — the v361
+compiler (without the commit) compiles the tests, v362 (with it) does not. Worth
+recording because the bad-range also held a float-writer registration change
+that reading alone could not fully exclude, and because `stable_linux_amd64/…/pinned`
+is a SYMLINK: `git show` on it yields the target string, not the ELF.

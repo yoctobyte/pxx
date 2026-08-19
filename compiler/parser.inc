@@ -8969,6 +8969,7 @@ begin
       token`. What decides the arm is whether the RESULT is an array, not what
       its elements happen to be; the element kind is then just the tail the
       shared arm hands back to these same selectors. }
+    node := ParseClassRecordSelectors(node, ProcRetRecId[procIdx], tk)
   else if ((ProcRetFixedArrBytes[procIdx] > 0) or ProcRetIsDynArray[procIdx]) and
           (CurTok.Kind = tkLBrack) then
     { Indexing an ARRAY-returning call directly, `MkArr[1]`, when the element is
