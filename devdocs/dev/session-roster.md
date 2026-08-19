@@ -1522,6 +1522,20 @@ exists, its banner says so and the banner outranks the queue order.
   never dispatch to fill capacity. But **do not bank a day while the user is paying for
   idle capacity** — that call was made once and was wrong.
 - **The coordinator writes no code.** Filing, ranking, routing and verifying only.
+- **REPORTING MODE (user, 2026-08-19): surface only what needs the USER.** *"Just tell me
+  when a track wants a fresh clear."* So the escalation bar is: a worker needs a fresh
+  session, a restart, a permission cleared, or a decision only the human can make (Track U,
+  staffing, ownership). Everything else — landings, greens, pins, reds routed to a lane,
+  tickets filed, predictions confirmed — goes in this roster and the check log, NOT to the
+  user.
+
+  This does NOT relax verification or filing; it narrows who hears about it. Keep verifying
+  peer claims before relaying between workers, keep the roster current, keep filing what
+  gets measured. The change is the OUTBOUND channel to the human only.
+
+  And note the trap it creates, given this session's own history: a status label is not
+  evidence a worker needs clearing (`waiting` means working — four bad escalations came
+  from that). Confirm against something that moves before spending one of these.
 - **`ListAgents` status labels: `waiting` means WORKING, `idle` means IDLE. Do not invert
   them.** A session shows `waiting` while it is waiting on something it started — a build,
   a tool call — which is what a busy worker looks like most of the time. `idle` is the one
