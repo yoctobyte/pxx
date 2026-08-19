@@ -5,14 +5,43 @@ type: bug
 status: open
 ---
 
-# A 14k-line C program is refused: the string table caps at 8192 entries
+# `VisCacheVis` is sized by the string-table constant — and the cap it is tied to is too low
 
-- **Type:** bug (capacity ceiling — `compiler/defs.inc`, `compiler/emit.inc`) —
-  **Track A**
+- **Type:** bug (a constant load-bearing in two unrelated places, plus the
+  capacity ceiling that exposed it — `compiler/defs.inc`, `compiler/symtab.inc`,
+  `compiler/emit.inc`) — **Track A**
 - **Found by:** Track C, csmith axis-3 sweep (seed 200056, `--paranoid`),
   [[feature-c-csmith-differential-fuzzing]]. Filed into A's lane rather than
-  fixed under C: `defs.inc` and `emit.inc` are shared core.
+  fixed under C: those three files are shared core.
 - **Opened:** 2026-08-19.
+
+## Read this first — the slug names the SYMPTOM, and the one-liner is a trap
+
+The reported failure is a refused 14k-line program and the obvious fix is to
+raise `MAX_STRS`. **Do not just do that.** `defs.inc:2378`:
+
+```pascal
+  VisCacheVis   : array[0..MAX_STRS] of Boolean;
+```
+
+It is indexed by **unit** (`declUnit + 1`, `curUnit + 1` in `symtab.inc`), not
+by string. Units are bounded by `CompiledUnits`' 256 slots, so it is ~32x
+oversized today and **cannot overflow — this is not a live correctness bug.**
+But `symtab.inc:691` clears the whole array on every cache miss:
+
+```pascal
+  for i := 0 to MAX_STRS do VisCacheVis[i] := False;
+```
+
+and `VisibilityAllows` is called from every name lookup. So:
+
+- **Raising `MAX_STRS` makes a hot-path clear proportionally longer**, for a
+  reason that has nothing to do with strings. The one-line fix trades a loud
+  refusal for a quiet slowdown, which is the worse of the two.
+- **Decoupling the two pays off before any raise.** Sized by units instead, that
+  clear gets ~32x cheaper than it is TODAY on an unmodified compiler.
+
+That coupling is the actual defect. The cap is what made it visible.
 
 ## Symptom
 
@@ -60,31 +89,15 @@ Raising it to 65536 (one line) and rebuilding to a fixedpoint:
   box's noise**, so treat the compile-time cost of an 8x raise as "not measured
   above noise", NOT as "free" — see below for why it is not obviously free.
 
-**The catch — `VisCacheVis` is sized by the wrong constant.** `defs.inc:2378`:
+**The catch is `VisCacheVis`** — see the top of this ticket. An 8x raise makes
+its hot-path clear 8x longer.
 
-```pascal
-  VisCacheVis   : array[0..MAX_STRS] of Boolean;
-```
+## Suggested shape — in this order
 
-It is indexed by **unit** (`declUnit + 1`, `curUnit + 1`), not by string —
-units are bounded by `CompiledUnits`' 256 slots. So it is 32x oversized today
-and cannot overflow, i.e. **not a live bug**. But `symtab.inc:691` clears the
-whole array on every cache miss:
-
-```pascal
-  for i := 0 to MAX_STRS do VisCacheVis[i] := False;
-```
-
-and `VisibilityAllows` is called from every name lookup. So raising `MAX_STRS`
-makes a hot-path clear 8x longer for a reason that has nothing to do with
-strings. That coupling is the actual defect here; the cap is just what exposed
-it.
-
-## Suggested shape
-
-1. Give `VisCacheVis` its own constant sized by units (`MAX_UNITS`-ish, 256-512),
-   decoupling it from the string table entirely. Cheap, and it makes the clear
-   32x cheaper than it is TODAY, before any raise.
+1. **Give `VisCacheVis` its own constant sized by units** (`MAX_UNITS`-ish,
+   256-512), decoupling it from the string table entirely. This is the fix;
+   everything else is the capacity bump that exposed it. Worth doing on its own
+   merits even if step 2 is never done.
 2. Then raise `MAX_STRS` — with a comment carrying this arithmetic, in the style
    `MAX_CODE` already uses.
 3. Optional, only if a measurement asks for it: `InternStr` is a linear scan of

@@ -30,6 +30,17 @@ was routed to T on 2026-08-19, bundled with
 [[bug-t-csmith-harness-reports-slow-as-a-timeout]] so T visits the file once
 rather than twice.)
 
+## Standing note — how to read a batch's numbers
+
+**Hit count is not severity. Dedup count is closer. Neither substitutes for
+reading the bucket.** Batch B below scored 56 hits and they were ONE missing
+table-row family; batch A scored 1 and it was the more serious finding. A report
+line is a prompt to open the bucket, never a verdict on its own.
+
+And **a null batch is a result, not a non-event** — report a dry run as a dry
+run, with its seed count and its flag set, so the next sitting does not spend
+those seeds again.
+
 ## Resume in one line
 
 ```sh
@@ -323,11 +334,12 @@ same oracle at four backends that have never seen a random program.
 ## Log
 - 2026-08-16 — resolved, commit e9262d5db.
 
-## 2026-08-19 — axis 3 opened: two flag sets, two findings, both real
+## 2026-08-19 — axis 3 opened, worked and CLOSED: three flag sets, two findings, both loud
 
 Axis 3 is "csmith flags the defaults leave off", picked on the ticket's own
 principle that **coverage thins where the GENERATOR is shy, not where the corpus
-is**. Two batches, 150 seeds each, against a HEAD fixedpoint at `cc20f7101`.
+is**. Three batches, 150 seeds each; A and B against a HEAD fixedpoint at
+`cc20f7101`, C at `e6a14039a`. The verdict is at the end of this section.
 
 ### Batch A — `--paranoid --max-pointer-depth 4 --max-struct-fields 15 --max-union-fields 8 --max-array-dim 3`
 
@@ -377,7 +389,7 @@ through `ctz`/`popcount`.
 not merely accepted, they are right on real generated programs.
 `test/c_builtin_bits.c` pins the family against gcc.
 
-### Reading the two batches
+### Reading batches A and B
 
 Batch B's ratio looks alarming (56 hits in 150 seeds) and is the opposite of
 alarming: it is ONE missing table row family, found instantly because the
@@ -400,3 +412,33 @@ the bits, so any ulp difference reads as a full divergence and the bucket cannot
 distinguish a codegen bug from an fp-contraction difference against gcc. That
 needs `-ffp-contract=off` on the gcc side before it is worth a sweep, and the
 findings would need the float-scope rules applied by hand.
+
+### Batch C — the prediction, tested: `--inline-function --inline-function-prob 80 --max-funcs 6 --max-expr-complexity 8 --max-block-depth 4`, `--opts 0,2,3`
+
+Seeds 220000-220149, HEAD fixedpoint at `e6a14039a`. **131 agreed with the gcc
+oracle, 19 skipped, ZERO findings — no miscompile, no compile-fail, nothing.**
+
+Run deliberately as the test of the prediction written above ("if the next flag
+set is also loud-only, that is evidence the remaining silent bugs need axis 2"),
+not as another sweep. The set was picked to give the SILENT buckets their best
+shot: `--inline-function` at 80% drives the inliner, and `--opts 0,2,3` makes
+`MISCOMPILE_OPT` live — that bucket compares our own `-O` levels against each
+other and needs no gcc oracle at all, so it can catch an optimiser bug on a
+program gcc refuses to build.
+
+**Verdict on the prediction: confirmed, and more strongly than it was stated.**
+The prediction expected another loud-only batch; what came back was quieter than
+that — not even a compile-fail. Axis 3 (generator flags) is spent as a source of
+new signal on x86-64: three flag sets, 450 seeds, two findings, both loud, and
+the batch aimed squarely at silence returned nothing. 1450 seeds total on this
+axis without a single `MISCOMPILE_VS_GCC`.
+
+**So: stop here, and the priority moves to axis 2.** Track T's `--target`
+pass-through is now the thing standing between this harness and the untested
+surface, and it inherits axis 3's priority — running the same generator against
+i386/arm32/aarch64/riscv32 tests four backends' worth of codegen that no seed
+has ever reached, whereas a fourth flag set would re-test x86-64.
+
+Flag sets tried and spent (do not repeat): `--paranoid` + deep aggregates,
+`--builtins`, `--inline-function` + deep expressions with multi-`-O`. Still not
+tried: `--float`, for the reason above.
