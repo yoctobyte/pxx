@@ -2119,6 +2119,18 @@ begin
   CPProcessInclude(depth, srcDir);
 end;
 
+{ Does the `#include` operand spanning line[a..e] name a PASCAL UNIT, i.e. end
+  in `.pas`? Compared case-insensitively on the extension alone; the unit name
+  itself keeps its case, because that case is what the mangled C identifier is
+  built from. }
+function CPIncIsPascalUnit(const line: AnsiString; a, e: Integer): Boolean;
+begin
+  CPIncIsPascalUnit :=
+    (e - a + 1 > 4) and (line[e - 3] = '.') and
+    (UpCase(line[e - 2]) = 'P') and (UpCase(line[e - 1]) = 'A') and
+    (UpCase(line[e]) = 'S');
+end;
+
 procedure CPInclude(const line: AnsiString; p, last, depth: Integer;
   const baseDir: AnsiString);
 var a, b, k: Integer; hdrResolved, incName, searchList: AnsiString;
@@ -2132,6 +2144,26 @@ begin
     Inc(p);
     a := p;
     while (p <= last) and (Ord(line[p]) <> b) do Inc(p);
+    { A `.pas` operand is a PASCAL UNIT IMPORT, not a text include. Nothing is
+      spliced in: a marker goes into the token stream and the C parser turns it
+      into a unit load, after which the unit's routines answer to
+      `<unit>_pas_<Identifier>` (feature-c-import-a-pascal-unit-under-a-mangled-
+      name). `#include` rather than a `#pragma` is the deliberate spelling —
+      gcc tries to include the Pascal source textually and dies loudly, where an
+      unknown pragma would be silently ignored and produce a file that compiles
+      elsewhere and behaves differently.
+
+      The state rides in the TOKEN STREAM, not in a preprocessor global: order
+      is then preserved for free (a later declaration sees an earlier import),
+      and the C frontend needs no new shared-internals storage. }
+    if CPIncIsPascalUnit(line, a, p - 1) then
+    begin
+      incName := '';
+      for k := a to p - 1 do AppendChar(incName, line[k]);
+      CPrepOutAppendStr('__pxx_pascal_unit "' + baseDir + '" "' + incName +
+                        '";' + #10);
+      Exit;
+    end;
     { 1. The including file's own directory (baseDir is threaded as the resolved
          dir of each nested include via CPProcessInclude below). }
     CPConcat2(baseDir, '', CPrepPath);

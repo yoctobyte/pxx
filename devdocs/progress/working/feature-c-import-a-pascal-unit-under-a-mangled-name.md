@@ -4,6 +4,8 @@ prio: 50
 type: feature
 blocked-by: [bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine]
 summary: "Give C an explicit import site for a Pascal unit: `#include \"math.pas\"` declares its routines under mangled C identifiers (`math_pas_Sqrt`), case preserved from the Pascal declaration, path-qualified on collision. Overloads resolve by the declared C signature. AnsiString-bearing signatures are refused by name. Design settled by the user 2026-08-19; this ticket is a SPEC, not a discussion."
+status: working
+owner: frank2-C
 ---
 
 # C imports a Pascal unit under a mangled name
@@ -170,3 +172,35 @@ Its `blocked-by`
 (`bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine`) is
 still open in `backlog/`, so the edge is live and the ticket is correctly out
 of `ready`.
+
+## Progress — 2026-08-19 (frank2-C)
+
+Landed and self-host green: the `#include "<unit>.pas"` preprocessor marker
+(`cpreproc.inc`), the pass-1 marker handler that runs `ParseUsesUnit`, mangled
+lookup by FORWARD re-mangling out of `Procs[]` (never by splitting at `_pas_`,
+which is ambiguous in both directions), prototype-selects-the-overload,
+and the §5 non-mappable-type refusals.
+
+Verified by hand against a scratch unit:
+
+    use.c       mymod_pas_Twice(21)                             -> 42
+    t_ovl2.c    extern double mymod_pas_Max(double,double)      -> 9.2   (picks the Double overload)
+    t_redecl.c  identical redeclaration                         -> 9.25
+    t_ovl.c     bare call to an overloaded name                 refused, names the fix
+    t_ovl3.c    two conflicting prototypes for one name         refused (previously: silent 0)
+    t_case.c    mymod_pas_twice                                 refused — case is significant
+    AnsiString parameter                                        refused by name
+    open/dynamic array parameter                                refused by name
+
+**Not yet exercised: the AnsiString RESULT refusal.** The code is in place and
+takes the same path, but it cannot be reached today — ANY Pascal unit whose body
+touches a managed string dies at import with `compiler error: call to a runtime
+stub that was never emitted`, before the C side ever names the routine. That is a
+Track A gap in the C driver's stub emission, filed separately; the result refusal
+is testable the day it is fixed.
+
+Still open from the spec: §3 path-qualified collisions, §6 the bare-name
+experiment (delete the cross-namespace declaration bind, build the C corpus,
+report), real `test/` cases + Makefile recipe lines, and the missing-unit
+diagnostic still speaking Pascal (`uses: unit source not found: nosuch`) at a C
+author who wrote `#include "nosuch.pas"`.

@@ -305,6 +305,188 @@ end;
   friends), which is a machine-word width, not a third size. Kept beside the
   rule it mirrors rather than inlined at the call site, because there are six
   call sites and a hard-coded 64 in any one of them is wrong on four targets. }
+{ ===== A Pascal unit imported into C under a mangled name =====================
+
+  `#include "math.pas"` is a UNIT IMPORT, not a text include (the preprocessor
+  turns it into a `__pxx_pascal_unit` marker; see cpreproc.inc). The unit's
+  routines are then reachable as `math_pas_Sqrt` — `<unit>_pas_<Identifier>`,
+  with the identifier's case taken from the PASCAL DECLARATION.
+
+  Case is the point, not decoration. C's own `sqrt` and Pascal's `Sqrt` are one
+  name to the case-insensitive FindProc that C already binds through, which is
+  why lib/crtl/src/math.c carries a standing rule against writing
+  `double sqrt(double x){ return Sqrt(x); }` — it recurses forever. A mangled
+  name preserving Pascal's case cannot collide with any C spelling, so the
+  hazard stops being spellable rather than being remembered.
+
+  Nothing is registered at import time and no alias proc is minted: the mangled
+  name is DEMANGLED at lookup and resolved straight out of Procs[]. That keeps
+  the one proc entry (so the call marshals through Pascal''s internal convention,
+  exactly as the existing cross-namespace declaration bind does) and adds no
+  shared-internals state. feature-c-import-a-pascal-unit-under-a-mangled-name }
+
+{ The unit name a `#include "<...>.pas"` operand names, lowercased for the
+  Strs[] key: the base name with directories and the extension stripped. }
+function CPascalUnitKeyOf(const spec: AnsiString): AnsiString;
+var i, lastSlash: Integer; base: AnsiString;
+begin
+  lastSlash := 0;
+  for i := 1 to Length(spec) do if spec[i] = '/' then lastSlash := i;
+  base := '';
+  for i := lastSlash + 1 to Length(spec) - 4 do AppendChar(base, spec[i]);
+  CPascalUnitKeyOf := LowerCase(base);
+end;
+
+{ '__pxx_pascal_unit "<baseDir>" "<spec>";' — the token-stream marker the
+  preprocessor leaves where a '#include "<...>.pas"' stood. The state rides in
+  the token stream rather than in a preprocessor global so that import ORDER is
+  preserved for free: a declaration is parsed after every import written above
+  it, with nothing to keep in step. }
+function CIsPascalUnitMarker: Boolean;
+begin
+  CIsPascalUnitMarker := (CurTok.Kind = tkIdent) and
+                         (CurTok.SVal = '__pxx_pascal_unit');
+end;
+
+procedure CParsePascalUnitMarker;
+var baseDir, spec, uname: AnsiString; i: Integer; isPath: Boolean;
+begin
+  Next;                                  { the marker identifier }
+  baseDir := ''; spec := '';
+  if CurTok.Kind = tkString then begin baseDir := CurTok.SVal; Next; end;
+  if CurTok.Kind = tkString then begin spec := CurTok.SVal; Next; end;
+  if CurTok.Kind = tkSemicolon then Next;
+  if spec = '' then Exit;
+  { The name handed to the unit loader keeps its directory part when it has one
+    (the loader reads a '/' as "this is a path, not a unit name") and drops the
+    '.pas', which the loader re-derives. The including file's own directory is
+    prepended for the same reason the C include search starts there. }
+  uname := baseDir + spec;
+  SetLength(uname, Length(uname) - 4);
+  isPath := False;
+  for i := 1 to Length(uname) do if uname[i] = '/' then isPath := True;
+  if not isPath then uname := CPascalUnitKeyOf(spec);
+  { Pin the language. An explicit extension means the Pascal chain and only the
+    Pascal chain — the same rule a quoted NilPy 'import "x.pas"' gets — so a
+    same-named .py or mimic_ shim cannot answer a '#include "x.pas"'. }
+  PyImportLang := 'pas';
+  ParseUsesUnit(uname);
+  PyImportLang := '';
+end;
+
+{ Does Procs[i] answer to the mangled C name `name`? Built FORWARDS -- the
+  proc's own unit key and name are re-mangled and compared -- rather than by
+  splitting `name` at `_pas_`, because the split is ambiguous in both directions
+  (a unit may be called `foo_pas_bar`, a routine may be called `A_pas_B`) and
+  re-mangling has no such case to get wrong.
+
+  The two halves are matched under DIFFERENT rules, and that asymmetry is the
+  design: the identifier tail is compared case-EXACTLY (preserving Pascal's case
+  is what makes the mangled name unable to collide with a C spelling), while the
+  unit head is compared case-insensitively, because it comes from a FILE NAME
+  and file names are not the thing being disambiguated. }
+function CProcMatchesMangled(i: Integer; const name: AnsiString): Boolean;
+var full: AnsiString; nm, hd: Integer;
+begin
+  CProcMatchesMangled := False;
+  if ProcUnitIdx[i] < 0 then Exit;
+  full := Strs[ProcUnitIdx[i]].Text + '_pas_' + Procs[i].Name;
+  if Length(full) <> Length(name) then Exit;
+  nm := Length(Procs[i].Name);
+  hd := Length(full) - nm;
+  if Copy(full, hd + 1, nm) <> Copy(name, hd + 1, nm) then Exit;
+  if LowerCase(Copy(full, 1, hd)) <> LowerCase(Copy(name, 1, hd)) then Exit;
+  CProcMatchesMangled := True;
+end;
+
+{ The next Procs[] index at or after `startAt` answering to the mangled name, or
+  -1. An ITERATOR rather than a lookup because an overloaded Pascal routine has
+  several, and which one is wanted depends on the caller: a call site wants the
+  only one, a C prototype picks the one its declared signature names.
+
+  Deliberately does NOT go through FindProc: that is case-insensitive and
+  visibility-checked, and both are wrong here. Case-insensitive would undo the
+  whole reason the name is mangled, and the C translation unit has no `uses`
+  clause naming the unit -- the `#include` IS that clause, and it grants exactly
+  the mangled spelling and nothing else. }
+function CFindMangledPascalProcAt(const name: AnsiString; startAt: Integer): Integer;
+var i: Integer;
+begin
+  CFindMangledPascalProcAt := -1;
+  for i := startAt to ProcCount - 1 do
+    if CProcMatchesMangled(i, name) then
+    begin
+      CFindMangledPascalProcAt := i;
+      Exit;
+    end;
+end;
+
+{ The single routine the mangled name denotes: -1 when there is none, -2 when it
+  is OVERLOADED and nothing at this site says which is meant. The caller reports
+  the -2 rather than taking the first, because taking the first is a wrong VALUE
+  and a refusal naming the overloads is a fixable one. }
+function CFindMangledPascalProc(const name: AnsiString): Integer;
+var first: Integer;
+begin
+  first := CFindMangledPascalProcAt(name, 0);
+  if (first >= 0) and (CFindMangledPascalProcAt(name, first + 1) >= 0) then
+    CFindMangledPascalProc := -2
+  else
+    CFindMangledPascalProc := first;
+end;
+
+{ Does type kind `tk` have a C spelling at all? The managed and structured
+  Pascal kinds do not: an AnsiString is a refcounted heap buffer whose retain
+  and release the C side cannot participate in, a set is a 32-byte bitset with
+  no C type behind it, a Variant is a tagged pair, and an open/dynamic array
+  arrives with a hidden length the C caller never passes. The fixed-length
+  string kinds are here for the same reason as AnsiString -- the layout is a
+  length prefix, not a NUL-terminated char*, so a C `char*` would be silently
+  wrong rather than merely absent. }
+function CTypeKindHasNoCSpelling(tk: TTypeKind): Boolean;
+begin
+  CTypeKindHasNoCSpelling :=
+    (tk = tyAnsiString) or (tk = tyString) or (tk = tyShortString) or
+    (tk = tyFixedString) or (tk = tySet) or (tk = tyVariant);
+end;
+
+{ Refuse, BY NAME, a Pascal routine whose signature C cannot express. Partial
+  importability is the expected shape: a unit may export twelve routines that
+  import cleanly and two that do not, and only the two are refused -- at the
+  site that names one, never at import time.
+
+  A RESULT of a managed type is refused unconditionally and is worse than a
+  parameter: nothing on the caller's side holds a reference keeping the buffer
+  alive, and C has no way to release it. A `const AnsiString` PARAMETER is the
+  one case that is genuinely safe (the Pascal caller's reference outlives the
+  call) provided the callee does not retain the pointer -- that would be an
+  explicit opt-in and is deliberately not built here, so it is refused too. }
+procedure CRefuseUnmappablePascalSig(i: Integer; const name: AnsiString);
+var k: Integer;
+begin
+  if Procs[i].IsFunc and CTypeKindHasNoCSpelling(Procs[i].RetType) then
+    Error('''' + name + ''' returns ' +
+      TypeKindSpelling(Procs[i].RetType) + ', which has no C spelling, so the '
+      + 'routine is not importable -- nothing on the C side keeps the value '
+      + 'alive or releases it. Wrap it in Pascal in a routine that writes '
+      + 'through a caller-supplied buffer');
+  for k := 0 to Procs[i].ParamCount - 1 do
+  begin
+    if Procs[i].Params[k].IsArray then
+      Error('''' + name + ''' takes an open/dynamic array as parameter ' +
+        AIntToStr(k + 1) + ' (''' + Procs[i].Params[k].Name + '''), which has '
+        + 'no C spelling -- the length travels hidden alongside the pointer '
+        + 'and a C caller cannot supply it. Wrap it in Pascal in a routine '
+        + 'taking a pointer and a count');
+    if CTypeKindHasNoCSpelling(Procs[i].Params[k].TypeKind) then
+      Error('''' + name + ''' takes ' +
+        TypeKindSpelling(Procs[i].Params[k].TypeKind) + ' as parameter ' +
+        AIntToStr(k + 1) + ' (''' + Procs[i].Params[k].Name + '''), which has '
+        + 'no C spelling, so the routine is not importable. Wrap it in Pascal '
+        + 'in a routine taking the C-expressible form');
+  end;
+end;
+
 function CLongWidthSuffix: AnsiString;
 begin
   if TARGET_PTR_SIZE = 8 then CLongWidthSuffix := '64'
@@ -1479,6 +1661,19 @@ begin
         else if name = '__builtin_bswap32' then name := '__pxx_builtin_bswap32'
         else if name = '__builtin_bswap64' then name := '__pxx_builtin_bswap64';
         procIdx := FindProc(name);
+        { `<unit>_pas_<Identifier>` — a routine of a Pascal unit this translation
+          unit imported with `#include "<unit>.pas"`. Tried only after FindProc
+          has missed, so nothing that resolves today can change meaning. }
+        if procIdx < 0 then
+        begin
+          procIdx := CFindMangledPascalProc(name);
+          if procIdx = -2 then
+            Error('''' + name + ''' is an OVERLOADED Pascal routine and this '
+              + 'call does not say which one — declare the one you mean, e.g. '
+              + '`extern double ' + name + '(double, double);`, and the '
+              + 'prototype selects it by signature');
+          if procIdx >= 0 then CRefuseUnmappablePascalSig(procIdx, name);
+        end;
         { An UNDECLARED C call landing on a Pascal routine of another arity —
           `time(&now)` with no <time.h> against sysutils' parameterless `Time`.
           There is no C declaration here to prefer, and binding anyway compiles
@@ -9114,6 +9309,7 @@ begin
   while CurTok.Kind <> tkEOF do
   begin
     if CIsPackMarker then CApplyPackMarker
+    else if CIsPascalUnitMarker then CParsePascalUnitMarker
     else if CIsTopLevelTypeDecl then
     begin
       if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'typedef') then ParseCTypedef
@@ -9268,6 +9464,7 @@ var
   vaSaveSym, vaSaveRec, vaOverflowSym: Integer;
   parenName, isVariadic, wasNewProc, fnRetIsFunc, forceSystemExternal, sigMatch, paramsOverflow: Boolean;
   xnI: Integer; xnBad: Boolean;   { cross-namespace float-class check }
+  mangIdx, mangAny, mangBound: Integer;   { `<unit>_pas_<Name>` candidate scan; mangAny = any candidate (for the diagnostic), mangBound = the one the signature selected }
   defPeekPos: Integer; isDefinition: Boolean;   { does a body follow? (bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine) }
   apDims: array[0..MAX_ARR_DIMS-1] of Integer;   { `T name[][A][B]` param: the bracket dims }
   apN, apK, apProd: Integer;
@@ -9281,6 +9478,7 @@ begin
     `go()(args)` lowers as an indirect call. Captured now, before param parsing
     clobbers CTypeProcSig. }
   retProcSig := CTypeProcSig;
+  mangBound := -1;
   { Capture the return type's pointed-at type so `f()^`, `f()^.field`, `f()[i]`
     on a typed-pointer result resolve the element. }
   retPtrElemTk := Ord(tyUnknown);
@@ -9529,6 +9727,77 @@ begin
   else
   begin
     procIdx := FindProc(name);
+    { `<unit>_pas_<Identifier>` -- a routine of a Pascal unit this translation
+      unit imported with `#include "<unit>.pas"`. The C PROTOTYPE is what picks
+      an overload: it names the unit, the routine and the signature in syntax C
+      already has, so `extern double math_pas_Max(double, double);` selects the
+      (Double, Double) Max with no suffix scheme and nothing new to spell.
+
+      Matched on arity plus the FLOAT CLASS of each parameter and the result --
+      the class that picks the register file and therefore the whole marshalling
+      path, and the same discriminator the cross-namespace bind two rungs below
+      already uses. int-vs-pointer is deliberately not compared, for that rung's
+      reason: both travel the GP path. A declaration that cannot discriminate
+      (K&R `extern double math_pas_Max();`, arity 0) matches only a genuinely
+      parameterless routine, so it is refused by name rather than guessed at.
+      feature-c-import-a-pascal-unit-under-a-mangled-name }
+    mangAny := CFindMangledPascalProcAt(name, 0);
+    { The name is a mangled routine of an imported unit AND it already has a C
+      declaration in this translation unit. C allows one declaration per name,
+      so the two must agree -- and when they do not, the program is trying to
+      use TWO overloads of one Pascal routine from one .c file, which C has no
+      spelling for. Refused by name: without this the second declaration fell
+      through to the cross-namespace float-class rung, which warns and rebinds,
+      and the call that lost the argument returned 0. }
+    if (mangAny >= 0) and (procIdx >= 0) then
+    begin
+      sigMatch := (Procs[procIdx].ParamCount = nparams) and
+                  (TypeIsFloat(retType) = TypeIsFloat(Procs[procIdx].RetType));
+      if sigMatch then
+        for idx := 0 to nparams - 1 do
+          if TypeIsFloat(ptypes[idx]) <>
+             TypeIsFloat(Procs[procIdx].Params[idx].TypeKind) then sigMatch := False;
+      if not sigMatch then
+        Error('''' + name + ''' is already declared in this translation unit '
+          + 'with a different signature. A C file can name only ONE overload of '
+          + 'a Pascal routine, because C has one declaration per name -- split '
+          + 'the uses across translation units, or wrap the other overload in '
+          + 'Pascal under its own name');
+    end;
+    if procIdx < 0 then
+    begin
+      mangIdx := mangAny;
+      while mangIdx >= 0 do
+      begin
+        if Procs[mangIdx].ParamCount = nparams then
+        begin
+          sigMatch := TypeIsFloat(retType) = TypeIsFloat(Procs[mangIdx].RetType);
+          for idx := 0 to nparams - 1 do
+            if TypeIsFloat(ptypes[idx]) <>
+               TypeIsFloat(Procs[mangIdx].Params[idx].TypeKind) then sigMatch := False;
+          if sigMatch then begin mangBound := mangIdx; Break; end;
+        end;
+        mangIdx := CFindMangledPascalProcAt(name, mangIdx + 1);
+      end;
+      { Nothing matched by signature -- but a routine of an UNMAPPABLE shape can
+        never match one, so say WHICH type is the obstacle rather than the
+        arity-and-types generic. Refuses only if a candidate really is
+        unmappable; otherwise it falls through. }
+      if (mangBound < 0) and (mangAny >= 0) then
+      begin
+        mangIdx := mangAny;
+        while mangIdx >= 0 do
+        begin
+          CRefuseUnmappablePascalSig(mangIdx, name);
+          mangIdx := CFindMangledPascalProcAt(name, mangIdx + 1);
+        end;
+      end;
+      if (mangBound < 0) and (mangAny >= 0) then
+        Error('no routine of unit ''' + Strs[ProcUnitIdx[mangAny]].Text +
+              ''' matches the declaration of ''' + name + ''' -- the unit is ' +
+              'imported and the name exists, but no overload takes ' +
+              AIntToStr(nparams) + ' parameter(s) of these types');
+    end;
     { RUNG 0 -- a DEFINITION may not seize a differently-cased twin's entry.
       `Procs[procIdx].BodyAddr := CodeLen` below installs this body into
       whatever FindProc returned, and FindProc is case-insensitive across
@@ -9629,6 +9898,22 @@ begin
       if TypeIsFloat(ptypes[i]) then Inc(nfpNamed) else Inc(ngpNamed);
     ProcNamedGP[procIdx] := ngpNamed;
     ProcNamedFP[procIdx] := nfpNamed;
+  end;
+  { A `<unit>_pas_<Name>` prototype selected a Pascal routine by signature. The
+    C declaration keeps its OWN proc entry -- so C-side argument conversion
+    follows the DECLARED types, which is the whole reason the prototype is the
+    disambiguator -- and that entry is pointed at the Pascal routine's body.
+
+    NOT cdecl, for the reason the cross-namespace bind above spells out: the
+    callee has a Pascal prologue reading its parameters from GP registers, and
+    marking the caller cdecl would route doubles through XMM and deliver
+    garbage. Case-sensitive, because a mangled name means exactly itself. }
+  if mangBound >= 0 then
+  begin
+    CRefuseUnmappablePascalSig(mangBound, name);
+    Procs[procIdx].BodyAddr := Procs[mangBound].BodyAddr;
+    ProcCdecl[procIdx] := False;
+    ProcCaseSensitive[procIdx] := True;
   end;
   for i := 0 to nparams - 1 do
     ProcParamPtrDepth[procIdx * MAX_PROC_PARAMS + i] := pdepths[i];
