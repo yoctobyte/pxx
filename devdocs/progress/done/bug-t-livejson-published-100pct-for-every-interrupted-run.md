@@ -56,9 +56,14 @@ throughout. The `INTERRUPTED` verdict also arrives in f0f603463.
 live.json published `done == total` at `pct: 100.0`, from 2026-07-08 to
 2026-08-19.** Anyone re-reading old `live.json` history — or any frontend that
 sampled it — must treat completeness on an aborted run as unreadable for that
-window; only `verdict` and the job list in the report carry the truth. Note this
-also means the historical record cannot be repaired: the real decided-count for
-those runs was never written down anywhere.
+window; only `verdict` and the job list in the report carry the truth.
+
+**The history cannot be repaired.** The real decided-count for those runs was
+never written down anywhere — not in live.json, not in the report, not in the
+journal. It is not recoverable by recomputation, only by reading each run's job
+list and counting. Whoever later wonders why a July completeness number looks
+odd should find this ticket rather than a reconstruction: the number is gone, and
+the fact that it is gone is the finding.
 
 ## Fix
 

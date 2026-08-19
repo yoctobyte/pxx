@@ -80,3 +80,23 @@ Recording rather than silently deleting, because the failure is instructive: **a
 broadened and the exclusion list written under the old scope was not re-read.** When a category
 widens, the things it now swallows are exactly the ones previously written down as excluded —
 so the exclusion list is the first artifact to re-check, not the last.
+
+## Parked is not lost: the un-park signal
+
+The obvious objection to a folder nothing ranks is that a ticket in it is gone. It is not,
+and the ranker is what makes the difference. `tools/progress.py` treats `float` as **terminal
+for priority propagation in one direction only**:
+
+- a parked F ticket lends **nothing** to the active ticket it depends on — no leverage, no
+  inherited priority. (It used to: `idea-cobol-frontend-feasibility-costing` moved 20 → 25 on
+  the strength of a parked float bug the moment the folder was first loaded, `29db7fba0`.)
+- a parked F ticket **still inherits** from an active dependent. If a ticket in `backlog/`
+  declares `blocked-by: <something in float/>`, that float ticket's effective prio rises to
+  the blocked work's.
+
+That second direction is the point: **the folder tells you when something in it has started
+mattering, instead of swallowing it forever.** Nothing about it ranks anything — an inherited
+prio on a parked ticket does not put it in any queue — but it is visible on the board, and it
+is the signal to un-park by hand. Parking is a decision about attention, not a shredder.
+
+Guarded by `tools/progress_track_f_devtest.py`, both directions.
