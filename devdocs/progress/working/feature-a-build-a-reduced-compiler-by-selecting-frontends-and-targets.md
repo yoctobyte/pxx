@@ -459,6 +459,30 @@ the second measurement fault in this ticket, after the truncated FPC error lists
 **Both had the same shape: the rig answered a slightly different question than the
 one asked, and answered it fluently.**
 
+**Make that three, counting one that was not mine** — a job count relayed between
+sessions without being re-derived (six `examples/tk` jobs; there are seven). The
+common factor is not carelessness, it is **fluency: none of the three produced an
+error, and all three produced plausible output.** A rig that fails loudly costs
+minutes. A rig that answers a neighbouring question costs a wrong conclusion written
+into a ticket, which is the expensive failure this repo already has a playbook about
+(`devdocs/dev/root-cause-over-microfix.md`, and the `PXXDBG` note in CLAUDE.md — both
+exist because reasoning was cheaper than measuring and won).
+
+**Carried forward as an instruction, not an observation:** the riscv32/xtensa
+increment is where a stale-path fault would be hardest to spot, because ESP work
+spans `compiler/`, `lib/rtl/platform/esp/**` and `examples/esp32/**` — three trees a
+scratch rig could silently snapshot. Verify the rig against a KNOWN answer before
+trusting a new number from it.
+
+### The findings this survey turned up before touching riscv32/xtensa
+
+Filed rather than folded in, because neither blocks the omission work — they are
+`TargetArch` comparisons and shared-file placement, not references to backend symbols:
+
+- [[refactor-a-backend-machine-code-lives-in-four-shared-files]] — the structural one.
+- [[refactor-a-nineteen-copies-of-does-this-target-link-the-builtin-unit]] — the
+  ESP-bare predicate written out nineteen times verbatim in `parser.inc`.
+
 ### REVISED ORDER OF ATTACK
 
 1. ~~`omit-i386` / `omit-arm32` / `omit-aarch64`~~ — **done**.
