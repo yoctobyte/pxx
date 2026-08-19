@@ -3262,3 +3262,81 @@ deliberately, because a prio field everyone ignores is worse than none.
 `from classes import Foo` fails with *"no overload of Delete matches these arguments"*,
 naming a unit the program never mentioned. frank2 filed options + a recommendation rather
 than guessing. Parked with N.
+
+## Check +20h — WORKERS PAUSED for a context clear; next is the import/uses refactor
+
+**User, 2026-08-19:** *"frank2 and frank3 should pause once done with current work. I will
+clear the context. And then we start working on our import/uses refactoring."* Both were told
+to finish the ticket in hand, push green, and stop — **not** to start another. frank3 was
+already clean. **plexus-T is NOT paused** and continues its own backlog.
+
+**Pin v362** — md5 `6c8b911012befe60f7a0cdf8dc20b605`, base `b8099c676`, carrying
+`1df7a1926` and `354f734c1`, both ancestry-verified before publishing. Tree was quiet at the
+pre-lock check.
+
+### What the next session starts on, and why it is ready
+
+`decided/decide-nilpy-imports-that-collide-with-a-pascal-rtl-unit` → re-filed as
+**`feature-a-a-bare-nilpy-import-means-python-and-another-language-needs-its-extension`
+(A, p78 — user called it urgent)**. The rule: **a bare extensionless import is Python
+(`.py`/`.npy`); another language needs an explicit extension; `import ... as ...` answers a
+residual collision.** Both halves carried by **whitelists** (user: *"that's a matter of
+whitelisting"*), not renames.
+
+**MEASURED on pin v361/v362 — do not re-derive, and do not trust the first version of this
+table, which was wrong:**
+
+| spelling | result |
+| --- | --- |
+| C `#include "./lib2.c"` | **works** |
+| Pascal `uses './mymod.pas' as m;` | **works** |
+| Pascal `uses './lib2.c' as c;` | **works — cross-language, already** |
+| Pascal `uses 'mymod.pas';` (no `as`) | unbound **by design** (`decided/decide-cross-language-qualifier-syntax`) |
+| Pascal `uses mymod in 'mymod.pas';` | not supported → `feature-p-uses-a-unit-in-an-explicit-file` (P, p30, user: lower prio) |
+| **NilPy `import mymod.pas as m`** | **fails — mangled to `mymod_pas`. THE ONLY REAL GAP.** |
+
+**I got this wrong first time** by testing `uses 'mymod.pas'` without the alias and reading
+the deliberately-unbound case as "unsupported", then reporting the whole feature missing.
+`feature-uses-alias-as` shipped **2026-06-30**. **Two of three languages already have the
+spelling.** The job is to give NilPy the equivalent, not to invent a cross-language import.
+
+**Open spelling question, recorded in the ticket, NOT settled:** the decided form is dotted
+(`math.pas`); the shipped Pascal form is a **quoted path + `as`**, which cannot collide with
+Python's package syntax and so needs no extension whitelist at all. Raised because the
+precedent was unknown when the fork was answered. Build the decided form unless the user says
+otherwise.
+
+**Scope trap for whoever implements it:** the eight colliding `lib/rtl` units are **three**
+populations. `re.pas` and `io.pas` say in their own headers that they ARE Python's module,
+and `math`/`json`/`random` behave as Python's — those must keep resolving by bare name.
+Only `classes`/`types`/`strings` should stop. **No `.npy` imports those three at all**, so
+they have zero test dependency. The only tests reaching a genuinely-Pascal unit by bare name
+are three importing **`sysutils`** (`test_nilpy_import_does_not_publish_names`,
+`test_nilpy_pyexception_bare_vs_qualified`, `test_nilpy_rtl_exception_surface`), all already
+using `as su`. **The test rewrite is downstream of the spelling, not parallel prep** — there
+is nothing to rewrite into today. And `sysutils` is not one of the decision ticket's eight
+names, so the collision class is broader than the survey that found it.
+
+### The backlog-shrink push, so far
+
+Closed today under it: cluster 5's `stdarg.h` (`a54259aab`, −2204 bytes exactly as
+predicted), all three of cluster 2 (`354f734c1` — one parameterisation plus one
+already-fixed), cluster 1's A ticket (`1df7a1926`, eight spellings matching FPC), and T's
+split-jobs lint (`20de759f0`). Deliberate non-closes, all correct: `utoa` (blocked on a live
+residual — bounding the loop would bury it), cluster 1's P half (narrowed back to `backlog/`,
+dyn-array arm banked), and T's 37-source `/tmp` chore (belongs to C/N/B, not T).
+
+**Two findings worth carrying, both from frank3:**
+- **A clean rebase means git placed the hunks, not that the result compiles or behaves.** It
+  rebuilt and re-ran the probe after rebasing. Different claims; only the second matters.
+- **A derived discriminator that happens to be correct is indistinguishable from one correct
+  by construction, until the thing it was derived from changes.** `decs >= 0` meaning "does
+  this writer take arguments?" was exact only because two writers were both called with `-1`
+  — and the first attempted fix would have broken all five backends identically.
+
+### Open for the user
+- Spelling question above (dotted vs quoted) — a heads-up, not a blocker.
+- `bug-t-sync-fills-one-spelling-of-pending-commit` may become a `decide-*`; plexus-T is
+  making the call itself and will escalate only if it is a genuine fork. **~24 resolved
+  tickets still await landed shas** and must NOT be auto-filled by pattern-matching
+  `git log` — that is `bug-t-resolve-cites-a-sha-the-rebase-then-rewrites` at scale.
