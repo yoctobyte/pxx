@@ -65,3 +65,21 @@ continue and produce a correct result for the non-speculative path; `make
 compiler/pascal26` fixedpoint byte-identical; `tools/gate.sh quick` GREEN.
 Plus the property that makes it worth doing: a file with two independent syntax
 errors reports both.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363)
+
+**Genuine feature, still wanted, unchanged — and the cheap symptom still
+reproduces.** A program with two undefined names reports only the first:
+
+```
+pascal26:3: error: undefined variable (undefined_one)
+```
+
+`undefined_two` is never mentioned, because `Error()` still halts. That is item
+2 of the ticket, measured; items 1 and 3 follow from the same mechanism.
+
+Not re-typed: halting at the first error is a quality-of-implementation
+limit, not a wrong answer. Worth noting for ranking, though, that this ticket
+is a **blocker with priority propagating down to it** — its item 1 is why
+`feature-n-nilpy-ast-typing-module-scope` sits at prio 8 — so the N deferral
+does not lower it; items 2 and 3 are A/P-facing on their own.

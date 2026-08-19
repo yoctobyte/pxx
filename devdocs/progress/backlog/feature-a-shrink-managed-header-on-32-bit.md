@@ -72,3 +72,29 @@ compiler ([[bug-a-self-host-seed-has-no-versioned-rtl]]). Then
 `-dPXX_HEAP_DEBUG` for free-base errors, then `stabilize` + `pin`. An ESP/xtensa
 build under `--platform=esp --esp-profile=bare` is the point of the exercise, so
 measure the arena headroom before and after.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363) — the DEADLINE has passed, and was MET
+
+The ticket's whole argument for being filed early was a deadline: *"If phase 2
+spends the upper 32 bits, this ticket becomes impossible."* **Phase 2
+(`feature-nilpy-text-string-kind`) is done** — and it obeyed the constraint.
+Checked in the implementation rather than in the design doc:
+
+`compiler/builtin/builtinheap.pas:166` — *"BlockKind(8) | Flags(8) |
+KindData0(8) | KindData1(8), bits 32-63 RESERVED"* — and line 210 stores a
+small **encoding enum** in `KindData0`, exactly as the ticket demanded, *"NOT a
+codepage"*.
+
+**So the urgency is gone and only the optional memory win remains.** This is
+now a plain ESP-capacity optimization with no expiry, which is a real change in
+how it should rank: nothing is lost if it is never done, and nothing can make
+it impossible any more. The `PXX_HDR_SLOT` sketch and the seed-from-`pinned`
+gate note are unaffected.
+
+**One inconsistency found while checking, for whoever owns
+`devdocs/dev/managed-block-header.md`:** its per-kind table still lists
+ByteString's `KindData0` as *"codepage (`CP_UTF8`=65001 fits a Word —
+FPC-exact)"*, which contradicts both the prose eleven lines above it (an 8-bit
+field cannot hold 65001) and the shipped implementation. The prose and the code
+agree; the table row is the stale one. Not edited here — `devdocs/dev/**` is
+not Track D's ground.

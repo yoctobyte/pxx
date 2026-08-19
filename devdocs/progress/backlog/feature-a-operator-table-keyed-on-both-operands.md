@@ -125,3 +125,17 @@ test pinning that `3 * 5` still compiles to plain arithmetic with a
 `(Integer, TCx)` operator in scope — that is the miscompile this ticket exists to
 make impossible; `test/test_op_overload.pas` and `lib_ucomplex.pas` staying
 green; `make compiler/pascal26` (self-host fixedpoint); `tools/gate.sh quick`.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363)
+
+**Genuine feature, still wanted, unchanged.** `operator + (a: Double; b: TCx): TCx;`
+is still rejected at the declaration:
+
+```
+pascal26:3: error: operator: cannot determine operand type
+```
+
+so the single-key table is still in place and the decision behind this ticket
+is still unimplemented. Kept as a feature: the refusal is at the declaration,
+loud, and the ticket's own warning — that relaxing only the guard would
+**miscompile plain `3 * 5`** — is the reason it must not be shortcut.
