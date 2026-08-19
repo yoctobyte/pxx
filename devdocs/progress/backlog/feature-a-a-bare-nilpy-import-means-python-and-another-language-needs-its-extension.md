@@ -18,6 +18,57 @@ carries the scope finding and both whitelists.
 shared-internals ground even though the semantics are NilPy's. Obeys A's gate and the
 no-concurrent-edit rule with P.
 
+## MEASURED PRECONDITION — the extension spelling does NOT exist yet, except in C
+
+**Checked on pin v361 (`d1fc7394d348b14866e60cd458044121`) before dispatching any work,
+because the plan assumed it already worked.** It works in exactly one of the three:
+
+| spelling | result |
+| --- | --- |
+| **C** `#include "./lib2.c"` | **WORKS** — compiled, linked, ran, printed 42 |
+| NilPy `import mymod.pas as m` | **fails**: *"no unit named mymod_pas and no shim mimic_mymod_pas"* — the dotted form is underscore-mangled as a package path |
+| NilPy `import sysutils.pas as su` | same failure |
+| Pascal `uses 'mymod.pas';` | **fails**: *"unit source not found"*, even for a local file that exists |
+| Pascal `uses mymod in 'mymod.pas';` | **fails to parse** — the FPC/Delphi `in` spelling is not accepted |
+
+**So "importing with the extension already works" is true of C's `#include` and of nothing
+else.** That is a reasonable thing to have believed — the C form does work and was the
+subject of a design discussion earlier the same day — but it does not generalise.
+
+**Two consequences, and they change the plan:**
+
+1. **This ticket must BUILD the NilPy extension spelling.** It is not "add two whitelists to
+   an existing resolver". Rule 2 is the escape hatch that makes rule 1 acceptable, and the
+   escape hatch does not exist yet. The dotted form currently mangles `a.b` to `a_b`, so the
+   language-extension whitelist has to be consulted *before* that mangling, not after.
+2. **The test rewrite CANNOT be done as parallel prep.** It is strictly downstream of (1) —
+   there is no spelling to rewrite the tests INTO today. See the test survey below.
+
+**Open question for whoever takes this, not settled here:** whether Pascal's `uses` should
+gain the same explicit-extension spelling. Nothing in the decision requires it, and no ticket
+asks for it. Do not build it speculatively; note it if a caller needs it.
+
+## TEST SURVEY — three tests, and none of them are the ones expected
+
+Also measured, and it is smaller and different from the "21 tests" figure quoted earlier
+(that count was every `.npy` importing any of the eight colliding names — almost all of them
+population 1, which must keep working untouched).
+
+**No `.npy` imports `classes`, `types` or `strings`.** The population-2 names have **zero**
+test dependency, so nothing needs rewriting on their account.
+
+**The only tests reaching a genuinely-Pascal unit by bare name import `sysutils`:**
+
+    test/test_nilpy_import_does_not_publish_names.npy:49   import sysutils as su
+    test/test_nilpy_pyexception_bare_vs_qualified.npy:21   import sysutils as su
+    test/test_nilpy_rtl_exception_surface.npy:11           import sysutils as su
+
+All three already use the alias form, so the rewrite is mechanical — `import sysutils.pas as
+su` — **once the spelling exists.** They are exception-surface tests deliberately reaching
+Pascal's RTL, i.e. exactly the legitimate case rule 2 is meant to serve. Note also that
+`sysutils` is NOT one of the eight names in the decision ticket; the collision class is
+broader than the survey that found it.
+
 ## The rule
 
 1. **A bare, extensionless import is PYTHON** — `.py` or `.npy` only.
