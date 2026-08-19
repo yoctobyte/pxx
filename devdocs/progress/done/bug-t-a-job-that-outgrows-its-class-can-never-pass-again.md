@@ -127,4 +127,4 @@ which now has a second reason to happen and a corrected premise; updated there
 rather than restated here.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit c99f15692.
