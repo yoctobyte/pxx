@@ -1176,7 +1176,14 @@ begin
       if (j >= 0) and (j < ProcCount) and (ProcSigOff[j] >= 0) then
         Fixups[i].DataOff := ProcSigOff[j]
       else
-        Error('callable value of a def with no signature record');
+        { A callee that got no record -- a synthesized wrapper, or a def
+          EmitPySignatures does not recognise. Point it at the ZEROED scratch
+          record: TotN = 0, so the bridge fills nothing and behaves exactly as
+          it did before signatures existed. This was a hard Error and it FAILED
+          FOUR TESTS at once the moment a bound method crossed a module
+          boundary -- a missing signature must degrade to the old behaviour,
+          never refuse to build. }
+        Fixups[i].DataOff := PyDfltScratchOff;
     end
     else if Fixups[i].DataOff <= -TYPEINFO_REQ_DATAREF_BASE then
     begin

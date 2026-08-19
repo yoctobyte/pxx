@@ -383,6 +383,25 @@ end;
   today exists only for NON-constant defaults (ProcParamDefaultSym); giving the
   constant ones one too is the next increment. Reserved rather than omitted so
   the record layout is final and no consumer has to cope with two shapes. }
+function PyProcIsNilPyDef(pi: Integer): Boolean;
+{ A def the NilPy frontend parsed -- the MAIN module's own (ProcUnitIdx < 0) or
+  an IMPORTED .npy module's. NOT a Pascal routine from pylib/pyeval/the RTL,
+  which share the same unit-index space and would otherwise get a record each:
+  measured +170 KB of .data on the compiler's own self-build for records nothing
+  can reach.
+  Imported defs were skipped by the first cut, and the resolver's hard error is
+  what caught it -- `describe` reached as a callable value from another module
+  had a sentinel and no record. Their defaults matter exactly as much as the
+  main module's, so the test is "did NilPy parse it", not "is it local". }
+var k: Integer;
+begin
+  Result := True;
+  if ProcUnitIdx[pi] < 0 then Exit;
+  for k := 0 to PyModUnitCount - 1 do
+    if PyModUnitIdx[k] = ProcUnitIdx[pi] then Exit;
+  Result := False;
+end;
+
 procedure EmitPySignatures;
 var pi, k, nUser, reqN, dfltOff, firstUser, slot, pend: Integer;
 begin
@@ -398,7 +417,7 @@ begin
     Emitted unconditionally so the address exists even in a module with no
     unbakeable defaults; 16 bytes is one variant. }
   PyDfltScratchOff := DataLen;
-  DataPutZeros(16);
+  DataPutZeros(48);
   for pi := 0 to ProcCount - 1 do
   begin
     { NilPy defs only: a routine declared by the MAIN PROGRAM of a NilPy
@@ -414,7 +433,7 @@ begin
       same def one line below a `print` produced one. A def whose meaning
       depends on where it stands is a different question from whether it IS a
       def, and this pass is asking the second one. }
-    if ProcUnitIdx[pi] >= 0 then Continue;
+    if not PyProcIsNilPyDef(pi) then Continue;
     { Is pi a METHOD (Params[0] = Self)? There is no per-proc flag: every other
       site is handed `firstParam` by a caller that knows from context, and this
       pass has no such caller. UMthProc_ is the post-parse source of truth, so

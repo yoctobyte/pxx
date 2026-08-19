@@ -2180,7 +2180,9 @@ var
   PyDfltPendSym : array[0..PY_MAX_DFLT_PEND-1] of Integer;
   PyDfltPendOff : array[0..PY_MAX_DFLT_PEND-1] of Integer;
   PyDfltPendCount : Integer;
-  { 16 bytes of scratch .data that orphaned def-time stores write into. A trial
+  { 48 zero bytes of scratch .data -- one variant slot for an orphaned def-time
+    store to write into, and a zeroed SIGNATURE RECORD (TotN = 0, so nothing is
+    filled) for a callable value whose callee never got one. A trial
     parse that is rolled back leaves pending entries naming symbols the real
     parse then re-allocates, so an unresolved store is EXPECTED and must not be
     an error here. Sending it to a bit bucket keeps the array slot at
