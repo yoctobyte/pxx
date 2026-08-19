@@ -79,7 +79,7 @@ that file's header). Whether the quoted form should be accepted after `from` is 
 Track U call, filed as `decide-should-from-accept-a-quoted-foreign-file`.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit b47ab6f3f.
 
 ## RESOLVED 2026-08-19 by frank3 (A/P slot holder)
 
