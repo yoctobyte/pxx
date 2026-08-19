@@ -1522,6 +1522,29 @@ exists, its banner says so and the banner outranks the queue order.
   never dispatch to fill capacity. But **do not bank a day while the user is paying for
   idle capacity** — that call was made once and was wrong.
 - **The coordinator writes no code.** Filing, ranking, routing and verifying only.
+- **SEVERAL IMPROVEMENTS THAT REDUCE THE SAME QUANTITY DO NOT MULTIPLY.** frank3's rule,
+  from a prediction of ~4x that delivered 1.6-1.8x:
+
+  > When several improvements all reduce the same underlying quantity, they do not multiply
+  > — and a list of independent-sounding mechanisms is exactly what makes them look like
+  > they do.
+
+  The ticket listed three effects (half the limbs; a five-pass multiply collapsing to one;
+  a bigger chunk halving the setup rounds) and compounded them. They were not three
+  effects — they were three **descriptions of one quantity**, limb operations, which an
+  instrumented counter says fell 2.2x. **Every individual claim was true, which is what
+  made the double-counting persuasive.**
+
+  **The remedy, and it belongs BEFORE the prediction rather than after the shortfall:
+  count the quantity, do not enumerate the reasons it should drop.** Applies directly to
+  ranking and sizing — a coordinator reading "three independent wins" in a ticket should
+  ask whether they are three levers or three views of one.
+
+  Companion discipline from the same report: **record a gate as UNMET rather than reframing
+  the target.** Predicted ~4x / 2-3 µs, delivered 1.6-1.8x / 6.6-7.0 µs, recorded as
+  not met — while separately arguing the change earns its place on other grounds (2.2x less
+  work, a dead routine deleted, a simplification not a speed hack). Two different claims,
+  kept apart.
 - **"A PIN IS DUE" AND "SOMEONE IS BLOCKED ON A PIN" ARE TWO DIFFERENT CLAIMS.** The
   standing rule to pin whenever `compiler/**` moves makes it easy to read the first as the
   second, and then to override a worker's measurement for a hygiene condition. Check who
@@ -2727,3 +2750,24 @@ rerank it deliberately rather than inheriting the number).
   instance is what let this be caught in the coordinator's procedure.** frank3 had no
   reason to think the pin loop had the same bug, and did not go looking — describing the
   mechanism was enough.
+
+- **PIN v357 (12:03Z)** — `2165452af333` (was `2bb09afb0cff`) at `ad71a3749897`, carrying
+  p88's `9c5148087` and `e78cc5882`. **First pin run with `set -o pipefail`;** the four
+  earlier pins today used the unsound form and the commit message records that. New
+  `$(PXX_STABLE)` md5 `cf7bce71808530b2eca30ca70f580877` was sent to frank3, which now
+  captures the toolchain identity before each measurement.
+
+  Held ~10 min for frank3's A/B, released the moment its post-run hash re-check matched.
+  frank3 then asked to be pinned *before* its `lib-test` rather than after, on the grounds
+  that **Track B ships on the pin, so gating against the pin the compiler commits produce
+  is the more meaningful green** — correct, and strictly better than the sequencing I would
+  have chosen.
+
+  **The strtofloat limb result: 1.6-1.8x on heavy rows against a predicted ~4x, recorded as
+  gate UNMET.** Fixed model from an instrumented limb counter: **~9.2 ns per limb op plus
+  ~2.8 µs fixed per-parse setup**, which independently reproduces the parent ticket's
+  separately-measured 2.5-3.5 µs — corroborated, not fitted to itself. **The redirect that
+  matters for future ranking: ~2.8 µs is fixed setup no limb-width change can touch, so
+  anyone chasing another 2x on subnormals should attack the SETUP, not the limbs.** Asked
+  for that to go in the parent ticket body, since it is invisible to `ready`/`next`
+  otherwise and would cost the next optimiser a whole ticket.
