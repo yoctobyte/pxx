@@ -4416,3 +4416,46 @@ reach `$(PXX_STABLE)` without it, and it should go in as soon as the v366 full t
 automated pin check; (3) `bug-nilpy-a-lambda-returned-directly-is-not-callable` — **p55 is light**,
 and note it is a compile-clean **runtime** TypeError far from the `return` that caused it, which is
 this repo's expensive shape rather than a crash with a location.
+
+## Check +29h — v366 VERIFIED CLEAN, v367 PINNED (`d47acfee7`)
+
+**The measurement I was waiting for had already been taken and the status line hid it.**
+`twatch --status` reports `full through a15cb05fa9ce RED` — true, and about `last_full`. But
+`plexus.json:pin_verify` held a **full tier at the pinned sha `cabb5d598`, 21:19:50Z, v366**:
+
+    v365 tier reds : 10
+    v366 verify    : 10
+    NEW at v366    : NONE      GONE at v366: none
+
+**So v366 introduced zero reds and the unswept-carve risk is discharged.** I held v367 for
+~1.5 hours on "there is still no full tier at v366" while the tier sat one field away in the file
+I was reading a summary of. Flagged to T: a `pin_verify` line in `--status` closes it. Same family
+as the empty FAIL line, one level further up — **the data existed and the summary implied its
+absence.**
+
+**frank3 asked the question I had not, before either of us wrote "discharged" down:** does the full
+tier actually execute the carved path, or would a Pascal/C/cross matrix return "zero new" whether
+the carve were correct or catastrophic? Measured from `job_tier` rather than assumed:
+
+    test-nilpy   721 jobs   {'full': 720, 'limited': 1}
+    test-core   1228 jobs   {'native': 1226, 'full': 2}
+    total       2800 jobs
+
+**720 NilPy jobs at full tier; the seven reds are the pre-existing cpyext set. 713 exercised the
+carve and none moved.** That is real coverage, and stronger than the seven hand-picked repros —
+which were the right *kind* of evidence and correctly not claimed as breadth. **The favourable
+answer does not make the challenge less valuable; it is the only reason the claim is worth
+anything.**
+
+**v367 pinned:** `1479b663dd15` (was `5e48116ee780`) at `d47acfee7`, fixedpoint converged, post-pin
+smoke green, 8 builtin RTL sources frozen. Carries `e6075649b`, whose builtin change could not reach
+`$(PXX_STABLE)` otherwise. **Attributability restored** — v366 is measured, so any future red at
+v367 is attributable to that one commit.
+
+**Open discrepancy handed to T, not chased here:** `pin_verify.red` lists `tools-devtest#00` at
+`cabb5d598`, a sha that **contains `93db54159`** — the commit T fixed that devtest with, and T
+measured 46/46 green at HEAD in the real checkout. Two of T's own measurements disagree; it is the
+same job that was unexplainable in the cascade, and it now has a reason field to fill.
+
+**Everything else quiet.** All three workers down, nobody blocked, `urgent/` unchanged, the U
+decision at p75 still the morning headline. Track B/C/D/E ground moved again at 21:34:49Z.
