@@ -4,7 +4,7 @@ prio: 66
 type: refactor
 blocked-by: []
 summary: "Four dispatchers and TWO independent defaults mechanisms serve one concept. Put the PySig record on the boundfn carrier and DELETE pyboundfn_setdefaults, so every callable shape answers signature questions from one place. Filed as work because it was banked as a note at the bottom of a resolved ticket, where ready/next cannot see it."
-status: working
+status: done
 owner: frank2-A
 ---
 
@@ -220,3 +220,4 @@ Track N owns both; filed rather than fixed, per the lane rules.
 - 2026-08-19 — **resolved** (frank2-A). Tag 10 carries `Sig`; `pybound_pair_call_kw` and
   the new tag-10 dispatcher share `PySigFindParam`. `pyboundfn_setdefaults` KEPT — the
   reason is a language property, written up above. Pin deferred by owner's instruction.
+- 2026-08-19 — resolved, commit PENDING-COMMIT.
