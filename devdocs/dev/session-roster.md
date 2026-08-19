@@ -2531,3 +2531,30 @@ rerank it deliberately rather than inheriting the number).
   **`rejected/` rather than `done/`** — the fix did not land under it, and the point of the
   move is that it cannot dispatch a third agent onto finished work. The reasoning is better
   than the convention.
+
+- **check 2026-08-19 (+15h): pin current, T green, frank3 on the Mapping shim, frank2
+  IDLE despite a standing goal — nudged.** Pin v356 (`2bb09afb0cff`) still current; nothing
+  under `compiler/**` since. T UP, native GREEN through `9551d37bad93`, full GREEN through
+  `9bfb7fcfac03`, no reds.
+
+  frank2 parked p88 into `unfinished/` at a genuinely clean point — 2b part 1 green, a
+  RESUME AT note, and the hazard written down (*"nothing may consume the defaults array
+  until 2b part 2 lands"*, since string and non-constant slots hold `PYSIG_DFLT_UNSET`).
+  The park is good work; the idling after it is the problem, since its standing goal was
+  resume-then-self-dispatch. Asked what stopped it, and cleared the two likely reasons:
+  **2b part 2 needs `pyparser.inc` and is uncontended** (frank3 is in `lib/rtl`, and the
+  overlap worry died when frank2 took the N tickets itself), and **2c's pin is available on
+  request, immediately.**
+
+  **Flagged but not demanded: p88 is `track: A` and sits in `unfinished/`** — the case
+  CLAUDE.md calls critical, because a half-applied compiler change can threaten the
+  stable-binary gate. This one is safe (green, self-hosting, pinned, loud sentinel by
+  design), so it is a reason not to leave it parked *long* rather than a reason to unpark
+  now. `tools/progress.sh check` reports "board OK with warnings", so it is not tripping
+  the mechanical guard.
+
+  **Board hygiene found and NOT yet actioned: 24 resolved tickets await their landed sha**
+  (`PENDING-COMMIT`, fixed by `tools/sync.sh`). Deliberately deferred while frank3 is
+  mid-work — `sync.sh` commits and pushes, and racing a busy worker for board files is how
+  a rebase conflict on generated BOARD files happens. Run it in a quiet window. This is the
+  coordinator's housekeeping, not a worker's.
