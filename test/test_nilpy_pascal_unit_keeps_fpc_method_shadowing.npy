@@ -1,0 +1,40 @@
+# A Pascal RTL unit pulled in behind a NilPy program is STILL PASCAL, and still
+# gets FPC's scoping rule: inside a method, the enclosing class's own method
+# shadows a same-named plain proc from a used unit.
+#
+# lib/rtl/classes.pas is the case that found this. It `uses sysutils`, which
+# declares `Delete(var s: AnsiString; index, count: Integer)`, and
+# TStrings.SetValueFromIndex calls its own abstract `Delete(Index)` bare. The
+# shadow rule was disabled on `isNilPy` -- true for the WHOLE compilation, not
+# just for NilPy code -- so under NilPy that call bound sysutils.Delete and
+# classes.pas failed to compile at all:
+#
+#   error: no overload of Delete matches these arguments
+#     argument types: (Integer)
+#     candidates: Delete(AnsiString, Integer, Integer)
+#
+# The same file compiled clean from Pascal on the same pin, which is what made
+# the predicate the suspect rather than the unit.
+#
+# This mattered because it was reachable ONLY through the escape hatch the
+# bare-import rule points users at: `import classes` refuses and names
+# `import 'classes.pas' as classes` as the way through, and that landed back on
+# the original error. An advertised escape that does not work is worse than
+# no escape.
+import 'classes.pas' as cl
+
+# The OTHER direction must survive, and it is why the guard existed: in Python
+# a bare name is never a method, so a method delegating to a module-level
+# function of the same name calls the FUNCTION, not itself. Removing the guard
+# outright would turn this into unbounded recursion.
+def select_image():
+    return 7
+
+class W:
+    def select_image(self):
+        return select_image()
+
+# Reaching a symbol through the alias proves the unit really loaded, rather
+# than the import having been quietly skipped.
+print(cl.TStringList is not None)
+print(W().select_image())

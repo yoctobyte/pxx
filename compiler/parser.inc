@@ -14287,7 +14287,16 @@ begin
         that — a method delegating to the module function it shadows — and
         routing it to implicit-Self dispatch made it a call of ITSELF with the
         wrong arity. }
-      if (procIdx >= 0) and (qUnit = -1) and (idx < 0) and (not isNilPy) and
+      { …and NOT isNilPy, which is true for the WHOLE compilation. A Pascal
+        RTL unit pulled in behind a NilPy program is still Pascal and still
+        wants FPC's shadowing rule: lib/rtl/classes.pas `uses sysutils`, so
+        TStrings.SetValueFromIndex's bare `Delete(Index)` bound
+        sysutils.Delete(var s; index, count) and the unit failed to compile at
+        all under NilPy while compiling clean under Pascal — the same file, the
+        same pin. NilPyUserCode is the predicate that asks what was actually
+        meant ("code the NilPy user wrote", PyExprMode telling a .py module
+        body from a Pascal unit). bug-a-the-import-escape-hatch-fails-on-classes-pas }
+      if (procIdx >= 0) and (qUnit = -1) and (idx < 0) and (not NilPyUserCode) and
          (CurSelfClass >= REC_UCLASS_BASE) and
          (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) >= 0) then
         procIdx := -1;
@@ -24639,7 +24648,9 @@ begin
           of the same name. songformatter has `def select_image(self):
           select_image()` — a method delegating to the module function it
           shadows — and the shadow-clear turned it into a call of ITSELF. }
-        if (procIdx >= 0) and (qUnit = -1) and (si < 0) and (not isNilPy) and
+        { the statement-side twin — see the expression site for why this is
+          NilPyUserCode and not isNilPy; the two MUST move together }
+        if (procIdx >= 0) and (qUnit = -1) and (si < 0) and (not NilPyUserCode) and
            (CurSelfClass >= REC_UCLASS_BASE) and
            (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) >= 0) then
           procIdx := -1;

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:15 blocked:6 backlog:240 experimental:20 rainy-day:43 done-followup:3 decided:93 done:2082 rejected:40`
+`working:1 unfinished:15 blocked:6 backlog:239 experimental:20 rainy-day:43 done-followup:3 decided:93 done:2083 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -38,11 +38,10 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-a-own-language-first-symbol-resolution` [A] — blocked-by: bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 226, ranked
+## Ready — top 30 of 225, ranked
 
 - `[p 70] [T]` regression-cascade-4e27dc2be114
 - `[p 66] [A]` refactor-a-one-signature-record-for-every-callable-carrier
-- `[p 65] [A]` bug-a-the-import-escape-hatch-fails-on-classes-pas
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
@@ -70,5 +69,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [A]` feature-pascal-type-helpers
 - `[p 55] [A]` feature-signal-siginfo-ucontext
 - `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
+- `[p 53] [S]` feature-esp-peripheral-callback-api
 
-_196 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_195 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

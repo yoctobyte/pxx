@@ -290,6 +290,11 @@ test-nilpy: $(COMPILER)
 	# ('./relpath/relstr.pas').
 	./$(COMPILER) test/test_nilpy_quoted_import.npy $(TESTTMP)/test_nilpy_quoted_import26
 	test "$$($(TESTTMP)/test_nilpy_quoted_import26)" = "$$(printf '42\n42')"
+	# A Pascal unit behind a NilPy program keeps FPC's method-shadowing rule,
+	# and NilPy code keeps Python's opposite rule -- both in one file, because
+	# the fix moves one predicate and either direction alone is wrong.
+	./$(COMPILER) test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy $(TESTTMP)/test_nilpy_fpc_shadow26
+	test "$$($(TESTTMP)/test_nilpy_fpc_shadow26)" = "$$(printf 'True\n7')"
 	# A BARE import means Python, so a genuinely-Pascal unit is refused BY NAME
 	# rather than bound and failed one token later: `from classes import Foo`
 	# used to die inside lib/rtl/classes.pas with "no overload of Delete
