@@ -5,11 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:15 blocked:6 backlog:232 experimental:20 rainy-day:40 float:19 done-followup:3 decided:94 done:2086 rejected:40`
+`working:2 unfinished:15 blocked:6 backlog:230 experimental:20 rainy-day:40 float:19 done-followup:3 decided:94 done:2086 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A] — owner: frank3
+- `task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc` [A] — owner: frank3
 
 ## unfinished (15) — parked mid-flight; re-claim, do not duplicate
 
@@ -38,7 +39,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 218, ranked
+## Ready — top 30 of 216, ranked
 
 - `[p 66] [A]` refactor-a-one-signature-record-for-every-callable-carrier
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
@@ -71,4 +72,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 
-_188 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_186 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

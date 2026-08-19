@@ -2,9 +2,32 @@
 track: A
 prio: 45
 type: task
+status: working
+owner: frank3
 ---
 
 # Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2)
+
+**Lane: this is Track A structural work, not deferred Track N work.** The shared
+`parser.inc` is A's ground; the carve serves the owner's reduced-compiler ask and
+deletes the bare-vs-selector double case that has already produced three bugs. The
+standing mandate defers Track N *features and bugs* — NilPy-motivated is not
+NilPy-owned, and A's own structure is not deferred by it.
+
+## This campaign now has an objective finish line
+
+Measured 2026-08-19 by
+[[feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets]], which
+tried to omit the NilPy frontend and could not:
+
+> **176 NilPy symbols are still called from the shared `parser.inc`, at 426 sites.
+> `-dPXX_NO_NILPY` compiling clean IS "carve complete."**
+
+That is the property this campaign lacked. "Fewer guards" is a direction; a compiler
+that builds without the frontend is a test. Heaviest remaining callers, i.e. the best
+targets after this split: `PyParseBoolExpr` (23 sites), `PyCallMeth1` (19),
+`PyAugBinTok` (12), `PyIsIdent` (9), `PyForceVariant` (9), `PyStoredName` (8),
+`PyParseSliceTail` (8), `PyMakeDynAttrSet` (8), `PyHoistPark` (8).
 
 Split 2 of the campaign opened by
 `task-a-carve-nilpy-selectors-out-of-parser-inc`, which landed split 1
