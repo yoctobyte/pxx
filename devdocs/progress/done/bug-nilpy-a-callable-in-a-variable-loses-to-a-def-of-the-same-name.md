@@ -6,7 +6,7 @@ blocked-by: []
 commit: PENDING-COMMIT
 claimed-by: frankonpiler-an
 summary: "A variable holding a callable (a bound method, a lambda) loses to a module-level `def` of the same name: the call silently runs the WRONG function. Top wall of the third-party ladder — one root cause behind 12 of the 38 remaining failures."
-status: unfinished
+status: done
 ---
 
 ## 2026-08-19 — a duplicate folded in here, plus one disconfirmation worth keeping
@@ -218,3 +218,79 @@ separate sites, so a fix to one arm alone will leave the other broken).
 corpus failures, so `tools/nilpy_ladder.py` should move materially. Because the
 site is shared with Pascal, a self-host fixedpoint is not optional and the FPC
 seed canary must be watched.
+
+
+---
+
+## FIXED for the LOCAL arm. The module-level arm stays open, deliberately.
+
+One rule added at the decision site the parked note identified
+(`compiler/parser.inc`, the bare-ident arm of `ParseFactorCore`), immediately
+before the late-`def` unbind:
+
+```pascal
+if NilPyUserCode and (qUnit < 0) and (procIdx >= 0) and
+   (idx >= 0) and (Syms[idx].Kind in [skLocal, skParam]) then
+  procIdx := -1;
+```
+
+`skLocal`/`skParam` only, and that is the whole reason it needs no token
+positions: Python's scoping makes a local binding win for the WHOLE body
+unconditionally, so there is no "which ran last" question to answer.
+
+**`FindProc` was not re-ranked**, per the warning above `MatchElig` in
+`symtab.inc` that the parked note quoted — that route was tried before and broke
+the self-compile and the NilPy stdlib, because `FindProc` returns an
+overload-set representative whose SIGNATURE callers read types off. It answers
+"what is this name", not "what does this call bind to".
+
+### Boundary re-measured against CPython
+
+| shape | before | now |
+| --- | --- | --- |
+| local `f = o.f` shadowing module `def f` | `MOD` | **`METH`** |
+| local `f = lambda` shadowing module `def f` | `MOD` | **`LOCAL`** |
+| a PARAMETER named `f` shadowing module `def f` | (untested) | **`METH`** |
+| local renamed to `g` (control) | `METH` | `METH` |
+| no local at all — module def still reached | `MOD` | `MOD` |
+| **module-level `f = o.f` after `def f`** | `MOD` | **`MOD`** (still wrong) |
+
+Wired as `test/test_nilpy_local_binding_beats_a_def.npy`, expectation generated
+from CPython, byte-identical.
+
+### The module-level arm
+
+Not fixed and not guessed at. At module level the answer depends on which
+statement ran last, and this site cannot see that — a def has `ProcPyDefTok` to
+compare against `TokPos`, an ordinary variable assignment has no equivalent
+record. Doing it properly means giving module-level bindings a token position,
+which is a mechanism, not a patch. **Re-file or re-open for that arm**; the
+repro is the last row above.
+
+### The corpus wall MOVED but did not clear
+
+`webencodings/__init__.py`, the file behind all 12:
+
+* pinned: `error: Nil Python: decode has no parameter named 'final'`
+* HEAD: `error: undefined variable (final)`
+
+That is past this bug and onto the NEXT one — a **keyword argument passed
+through a callable value**, which is frank3's separately-filed finding and is
+NOT this ticket. So the 12 files do not compile yet; they are one wall further
+along. Reported this way deliberately: past-a-wall and onto-the-next are
+different facts.
+
+That next wall is the p88-adjacent one — a callable value carries no parameter
+NAMES, exactly as it carried no defaults — and the fix should extend the PYSIG
+record rather than start a second mechanism.
+
+### Why three sessions read this as a signature bug
+
+The diagnostic was **correct about the wrong callee**. The module-level `decode`
+really does have no `final`, so the message was true and scrutinising it could
+never have found the fault. What settled it was asking WHICH `decode` the call
+bound to — varying the thing that distinguishes the two candidates instead of
+examining the complaint.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.

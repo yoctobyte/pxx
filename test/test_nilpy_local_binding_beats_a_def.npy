@@ -1,0 +1,41 @@
+# In Python a `def` is a name binding like any other, and a LOCAL binding
+# shadows the module-level one for the whole function body.
+# bug-nilpy-a-callable-in-a-variable-loses-to-a-def-of-the-same-name
+def f(x):
+    return "MOD"
+
+class D:
+    def f(self, x):
+        return "METH"
+
+def bound_method_wins(o):
+    f = o.f
+    return f("q")
+
+def lambda_wins():
+    f = lambda x: "LOCAL"
+    return f("q")
+
+def a_different_name_is_the_control(o):
+    g = o.f
+    return g("q")
+
+def a_parameter_wins(f):
+    return f("q")
+
+def no_local_still_reaches_the_module_def():
+    return f("q")
+
+print(bound_method_wins(D()))
+print(lambda_wins())
+print(a_different_name_is_the_control(D()))
+print(a_parameter_wins(D().f))
+print(no_local_still_reaches_the_module_def())
+print(f("q"))
+
+# NOTE the shape that made this loud in the wild -- webencodings' iter_decode
+# does `decode = decoder.decode` then `decode(b'', final=True)`, and the module
+# def has no `final`, so the compiler said "decode has no parameter named
+# 'final'": a diagnostic CORRECT ABOUT THE WRONG CALLEE. It is not exercised
+# here because it now stops one step later, on a keyword argument passed
+# through a callable value, which is a separate open bug.

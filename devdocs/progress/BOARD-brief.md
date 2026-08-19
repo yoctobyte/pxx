@@ -5,17 +5,16 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:17 blocked:5 backlog:244 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2052 rejected:40`
+`unfinished:16 blocked:5 backlog:245 experimental:20 rainy-day:43 done-followup:3 decided:90 done:2053 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (17) — parked mid-flight; re-claim, do not duplicate
+## unfinished (16) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults` [N]
-- `bug-nilpy-a-callable-in-a-variable-loses-to-a-def-of-the-same-name` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `bug-p-cannot-call-directly-through-a-procedural-type-cast` [P]
@@ -39,7 +38,7 @@ _none — no lane is locked._
 - `feature-opt-store-reload-elimination` [O] — blocked-by: feature-opt-accumulator-value-tracker
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 
-## Ready — top 30 of 229, ranked
+## Ready — top 30 of 230, ranked
 
 - `[p 70] [N]` bug-n-a-call-through-a-callable-value-drops-the-callees-defaults
 - `[p 65] [N]` bug-n-a-keyword-argument-through-a-callable-value-is-undefined
@@ -72,4 +71,4 @@ _none — no lane is locked._
 - `[p 53] [A]` feature-threadsafe-heap-optimize
 - `[p 50] [A]` feature-typeinfo-all-types (unblocks 1)
 
-_199 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_200 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

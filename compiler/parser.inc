@@ -13947,6 +13947,44 @@ begin
         Module body only (CurProc < 0): inside a def body the code runs after
         the whole module has executed, so an ordinary forward reference between
         two defs is legal Python and must keep working. }
+      { A LOCAL BINDING BEATS A `def` OF THE SAME NAME.
+
+        In Python a `def` is not a namespace of its own -- it is a name binding
+        like any other, and inside a function body a local binding shadows the
+        module-level one for the WHOLE body. NilPy resolved a bare-name call
+        against declared procedures first and only fell back to variables, so a
+        `def` outranked every later rebinding. `normalise-dont-special-case`:
+        one concept (a name that denotes something callable) served by two
+        mechanisms, and the second one is the one that was broken.
+
+        Silent, which is what made it expensive -- the WRONG function ran and
+        returned a plausible value. It only turned loud where the two arities
+        disagree, which is how it was found: webencodings' `iter_decode` does
+        `decode = decoder.decode` and then `decode(b'', final=True)`, bound to
+        the module-level `def decode(input, fallback_encoding, errors=...)`,
+        and the compiler said `decode has no parameter named 'final'` -- a
+        diagnostic that is CORRECT ABOUT THE WRONG CALLEE, which is why it read
+        as a signature bug. That one line was the first wall on 12 of the 38
+        remaining third-party corpus files.
+
+        skLocal/skParam only, deliberately. Python's scoping makes a local
+        binding unconditionally win for the whole body, so no ordering question
+        arises and the rule needs no token positions. A MODULE-level rebinding
+        (`f = o.f` after `def f`) is the same bug and is NOT fixed here: at
+        module level the answer depends on which statement ran last, which this
+        site cannot see. That arm stays open in the ticket rather than being
+        guessed at.
+
+        NOT fixable by re-ranking FindProc -- see the warning above MatchElig in
+        symtab.inc: that was tried and broke the compiler's own self-compile and
+        the NilPy stdlib, because FindProc returns an overload-set
+        representative whose SIGNATURE callers read types off. It is not a "what
+        does this name call" query. The decision belongs here.
+        bug-nilpy-a-callable-in-a-variable-loses-to-a-def-of-the-same-name }
+      if NilPyUserCode and (qUnit < 0) and (procIdx >= 0) and
+         (idx >= 0) and (Syms[idx].Kind in [skLocal, skParam]) then
+        procIdx := -1;
+
       pyLateDefPi := -1;
       if NilPyUserCode and (qUnit < 0) and (procIdx >= 0) and
          (ProcUnitIdx[procIdx] = -1) and (not PyDefBoundHere(procIdx)) and
