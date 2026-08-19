@@ -71,3 +71,17 @@ the first place the import rule and the upward-compat charter have actually met.
 *Filed by frank2-C during cascade triage; not claimed. Three sibling reds in the
 same cascade WERE ordinary migrations (they import genuine Pascal units) and are
 already fixed.*
+
+## Added 2026-08-19 by the coordinator — this decision now also gates PINNING
+
+Six of the ten reds in Track T's `pin_shadow` at 19:34:58Z are the cpyext jobs blocked on
+this decision. `pin_shadow` reports `would_pin: false` off a raw red count, so **until this
+is answered the shadow can never say yes**, and every pin is taken over its objection. Pin
+v366 was (the reds were all older than v365, so the pin was defensible — but the pattern is
+not). Filed separately as
+[[bug-t-the-pin-shadow-cannot-clear-while-its-reds-are-older-than-the-pin]].
+
+That does not make the decision more urgent on its own merits, and it must NOT be rushed for
+it — the whole point of the ticket is that the green route deletes the tests' subject. It
+does mean the cost of leaving it open is higher than "six tests are red": it is also "the
+automated pin gate is permanently false".
