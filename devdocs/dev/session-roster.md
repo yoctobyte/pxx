@@ -1697,3 +1697,32 @@ rerank it deliberately rather than inheriting the number).
   **frank3 → offered the rescoped ExDecNearest rewrite or a clean stop, its call**; a
   big-integer comparison rewrite is not obviously a small-hours job and two landings is a
   good night.
+
+- **check 2026-08-19 (+3h): no new work commits; one new signal, isolated and routed.**
+  frank2 busy (ladder re-measure, no commits yet — not pinged); frank3 idle, no reply to
+  the take-it-or-stop offer, which is a fine answer at this hour. `working/`/`urgent/`
+  empty.
+
+  **Track T's bench run went RED at `9cc61eee29c8` — 27 rows where the previous run was
+  "ok" with 30.** A row-count drop is a failure to PRODUCE a measurement, not a slow one,
+  so it is a different animal from this repo's two previous bench reds (both timing
+  artefacts: co-tenancy, p-state quantisation). Diffed the row sets by benchmark name:
+
+  ```
+  fib 4  mandelbrot 3  mandelbrot-p 4  nbody 4  raytracer 3  raytracer-p 4  sieve 4
+      -- all IDENTICAL across both runs
+  selfcompile:  4 rows before  ->  1 row now
+  ```
+
+  **The entire delta is `selfcompile` losing 3 of 4 variants.** Routed to plexus-T
+  (bench tooling is T's, and T owns the tool) with the counter-evidence it needs rather
+  than a theory: selfcompile is precisely what the per-fix gate proves, and every commit
+  in that window landed through `make compiler/pascal26` — the byte-identical fixedpoint —
+  plus `gate.sh quick`. Four generator commits and a float parser all passed it, so the
+  compiler demonstrably self-compiles at those shas, which points at the harness rather
+  than at the thing it measures. **No ticket filed by me:** T's tool, T's call, and T has
+  run detail I do not.
+
+  Full tier at the same sha re-checked properly rather than assumed: `new_red: []`,
+  `still_red: [crtl_exp2]` — the documented false positive, and T's own correction banner
+  on the timeout ticket was read first rather than reasoning from the superseded rule.
