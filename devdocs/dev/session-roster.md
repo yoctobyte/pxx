@@ -2399,3 +2399,40 @@ rerank it deliberately rather than inheriting the number).
   A defect that holds for 11 of 11 cases with a constant offset is describing how the
   system is built. Mirror image of the stale-comment class this week — there the prose was
   wrong and the code right; here the *evidence* looked wrong and the design was right.
+
+- **check 2026-08-19 (+14h): pinned v355 in an idle window; ONE OWNERSHIP FORK IS WITH THE
+  USER.** T UP, full GREEN through `9bfb7fcfac03`, no reds. Pin `739dfeb2d0e8` at
+  `264489d47360` — taken because `580e6d1ba` (p88 increment 2a) moved `compiler/**` and
+  both workers were idle. Second time the idle-fleet rule has paid; it costs nobody
+  anything at that moment.
+
+  **The fork: Track B has drained to p30, and the top corpus lever is blocked behind Track
+  N work that frank2's own feature will contend with.** `feature-b-mimic-collections-abc-…`
+  (B, p68) needs the two N bugs at the head of N (`…keys-items-values…`,
+  `…for-loop-getitem-protocol-fallback`, both p68). frank2 holds A+N with human-confirmed
+  sole-A and is mid-p88.
+
+  **Measured, not assumed** — I asked frank2 for the file facts before framing anything:
+  landed p88 is emission-side ONLY (`compiler.pas`, `defs.inc`, `rtti_emit.inc`), but 2b
+  needs `pyparser.inc` (the def-init queue) and 2c needs `pylib.pas` + `pyeval.pas`
+  (`TPyBoundRec` grows in one place, read in two). Both N tickets are `pyparser.inc`
+  dispatch work. **So the overlap is real and the file-grounds case dies.**
+
+  **frank2 supplied a third option I had not framed, and it is my recommendation:** stop
+  p88 at **2a** — already clean, green, self-contained, with 2b/2c/2d banked in the ticket
+  so resuming costs no re-derivation — let frank3 take both N bugs with `pyparser.inc`
+  uncontended, and resume p88 after. It **serialises p88 instead of the corpus lever**, and
+  p88 unblocks nothing currently moving while B is down to p30. I had framed the question
+  as two options and the frame was wrong.
+
+  **Worth recording as conduct:** frank2 measured that the two edit regions sit far apart
+  in a ~34k-line file and would very likely merge clean — then explicitly refused to let
+  that read as a reason to overrule the lane rule, offering it only as a reason the user
+  might judge the risk small. *"Mergeable is not free to mix"* is CLAUDE.md's own line, and
+  a worker volunteering the fact that cuts against the rule it is subject to, correctly
+  fenced, is the behaviour that makes these reports trustworthy. Passed to the user in
+  those terms rather than flattened either way.
+
+  frank2 told to keep going on p88 but **not** to start 2b's `pyparser.inc` edits until the
+  user rules — pressing on loses nothing if they agree (2a is already the stopping point)
+  and avoids a burned increment if they do not.
