@@ -1,7 +1,13 @@
 { SPDX-License-Identifier: MPL-2.0 }
 const
 
-  MAX_CODE      = 8388608;  { 8 MB; arm32's literal-pool-heavy self-host code exceeds 4 MB }
+  { 16 MB. Sized by MEASUREMENT, not by guess: compiler.pas emits 7415348 B at
+    -O2/default, 7458182 at -O1, 7561519 at -O3 and 8394698 at -O0. The old 8 MB
+    cap put every level at 88-90% of the limit and -O0 over it by 6090 bytes --
+    a self-compile that failed at one -O level only, which no gate runs (see
+    bug-a-self-compile-at-o0-overflows-the-code-buffer). Costs virtual BSS only:
+    Code[] plus AsmDisProcAtPos (4 B per code byte, and touched only by -S). }
+  MAX_CODE      = 16777216;
   LOCAL_STR_CAP = 256;     { max string length for local/stack variables }
   DEFAULT_STR_CAP = 255;   { default capacity (max chars) for tyFixedString/tyShortString when no string[N] size given }
   LINE_BUF_SIZE = 4096;    { readln stdin line buffer }

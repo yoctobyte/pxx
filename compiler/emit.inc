@@ -7,9 +7,24 @@ procedure EmitwriteSyscallArm32(dataOff, len: Integer); forward;
 procedure xtensa_j(offset: Integer); forward;
 procedure XtensaEmitLitHeader; forward;
 
+{ Kept out of EmitB so the hot inline path stays a compare and a store. The
+  message names the limit because 'code overflow' alone cost a Track T bench
+  investigation: it does not say whether the cap is close or wildly exceeded,
+  and those want opposite fixes. }
+procedure ErrorCodeOverflow;
+begin
+  { No IntToStr here: emit.inc is included long before sysutils-style helpers
+    or the compiler's own AIntToStr are in scope, and MAX_CODE is a constant
+    the reader can look up. The value was never the missing information. }
+  Error('code overflow: emitted code exceeds MAX_CODE (see compiler/defs.inc). '
+        + 'Raise it if this is growth rather than runaway emission; note that '
+        + 'LOWER -O levels emit MORE code, so a build that fits at -O2 can '
+        + 'still overflow at -O0.');
+end;
+
 procedure EmitB(b: Byte); inline;
 begin
-  if CodeLen >= MAX_CODE then Error('code overflow');
+  if CodeLen >= MAX_CODE then ErrorCodeOverflow;
   Code[CodeLen] := b; Inc(CodeLen);
 end;
 

@@ -4,6 +4,8 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "pxx cannot compile its own source at -O0: `error: code overflow` at compiler.pas:170295. The default level builds fine, so `make compiler/pascal26` and the self-host fixedpoint both pass — the per-fix gate is structurally blind to it. Surfaced by the bench's selfcompile row dropping 4 variants to 1."
+status: done
+owner: frankonpiler-an
 ---
 
 # Self-compile at `-O0` overflows the code buffer
@@ -82,3 +84,71 @@ and the line number is where to start.
 self-host fixedpoint. Worth considering whether the gate should compile itself
 at `-O0` as well, since this class is invisible otherwise — that would be a
 Track T tier change, filed separately if Track A wants it.
+
+
+---
+
+## RESOLVED 2026-08-19 — it was a bound, and the margin was gone at every level
+
+Measured at HEAD with a probe build (MAX_CODE temporarily 32 MB) so the real
+requirement could be read rather than guessed:
+
+| level | code bytes | vs the old 8388608 cap |
+| --- | --- | --- |
+| `-O0` | 8394698 | **over by 6090 B (0.07%)** |
+| `-O1` | 7458182 | 89% |
+| `-O2` (= default) | 7415348 | 88% |
+| `-O3` | 7561519 | 90% |
+
+So the ticket's "suggested first look" was right — no codegen defect, the
+emitted-code buffer was simply too small. But the framing "an `-O0` problem"
+understates it: **every** level sat at 88-90% of the cap. `-O0` was not special,
+it was merely first across a line all four were standing on. A few hundred KB of
+ordinary compiler growth would have taken the default build down too, and that
+failure would have been indistinguishable from a real bug.
+
+**Fix:** `MAX_CODE` 8 MB -> 16 MB (`compiler/defs.inc`), taking the default
+build from 88% to 44%. The cost is virtual BSS only — `Code[]` plus
+`AsmDisProcAtPos` at 4 B per code byte, and the latter is touched only by `-S`.
+Reported BSS goes 166 MB -> 209 MB; resident does not, since untouched BSS pages
+are never faulted in.
+
+**Also:** `Error('code overflow')` now names the cap, points at `defs.inc`, and
+states the inversion that made this confusing — *lower* `-O` levels emit *more*
+code, so a build that fits at `-O2` can still overflow at `-O0`. The bare old
+message cost Track T a bench investigation because it could not distinguish
+"just over the line" from "runaway emission", and those want opposite fixes. It
+lives in `ErrorCodeOverflow` rather than inline in `EmitB` so the hot path stays
+a compare and a store. (No `IntToStr` in the text: `emit.inc` is included long
+before any int-to-string helper is in scope, and the constant's value was never
+the missing information.)
+
+## Verified
+
+```
+-O0  ok  code=8394891   -O1  ok  code=7458375
+-O2  ok  code=7415541   -O3  ok  code=7561720
+```
+
+and the stronger property the bench's canary was reaching for — a compiler built
+at **any** of the four levels emits a **byte-identical** compiler:
+
+```
+q-O0 q-O1 q-O2 q-O3  ->  all fdf98a61a72d89cb
+```
+
+Plus `make compiler/pascal26` converged after 1 round (self-host fixedpoint) and
+`tools/gate.sh quick`.
+
+## What this does NOT fix
+
+The gate is still blind to this class: nothing in the per-fix loop or any Track T
+tier compiles `compiler.pas` at `-O0`, so the next `-O0`-only regression will
+again be found by a benchmark or not at all. Raising the cap bought headroom, not
+coverage. That question is
+[[decide-should-the-gate-prove-self-compile-at-more-than-one-o-level]] — the
+human's call, and Track T's to implement either way. I have deliberately not
+acted on it.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.
