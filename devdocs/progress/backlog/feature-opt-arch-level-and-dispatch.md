@@ -2,11 +2,17 @@
 track: A
 prio: 30
 type: feature
-blocked-by: []
+blocked-by: [decide-x86-64-baseline-for-arch-level-dispatch]
 summary: "What x86-64 feature level does pxx emit for? Referenced as 'if raised' by two existing tickets and never filed; raised by the user 2026-08-15 when FMA came up. MEASURED: our own gate box plexus is a Xeon E5-2620 v2 (Ivy Bridge, 2013) with AVX but NO FMA and no AVX2 — x86-64-v2, not v3. So a v2 bump is safe and FMA would SIGILL on the machine that gates every push. Includes the answer to the 'dispatch defeats inlining' objection: multiversion whole FUNCTIONS, not instructions."
 ---
 
 # x86-64 feature level, and how (or whether) to dispatch
+
+> **BLOCKED on [[decide-x86-64-baseline-for-arch-level-dispatch]] as of 2026-08-19.** This
+> ticket states the reason itself — *"The baseline row is the user's call, not an engineering
+> one"* — so whoever claims it has to guess something the project cannot un-choose. The
+> measured constraint moved into the decision ticket: **plexus, the box that gates every push,
+> is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the gate itself.**
 
 - **Type:** feature / policy (**Track O**, file-owned by **Track A**).
 - Referenced as `[[feature-opt-arch-level-and-dispatch]] if raised` by
