@@ -1,12 +1,34 @@
 ---
 track: N
-prio: 65
+prio: 72
 type: bug
 blocked-by: []
 summary: "`d = obj.meth; d('x', flag=True)` fails with `undefined variable (flag)` — a callable value carries no parameter NAMES, so a keyword argument has nothing to match against. No name collision anywhere; the sibling of the already-known defaults gap on the same carrier. Distinct from the shadowing bug that produces the corpus's `decode has no parameter named 'final'`."
 ---
 
 # A keyword argument through a callable value is `undefined variable`
+
+> **RE-RANKED 65 -> 72 on 2026-08-19 (coordinator). This is now the sole remaining wall on
+> the 12-file corpus group, and it inherited that position by measurement, not by argument.**
+>
+> frank2 fixed the shadowing bug (`5fc7dc358`) that produced the corpus's
+> `decode has no parameter named 'final'`. `webencodings/__init__.py` now reports
+> **`undefined variable (final)`** — i.e. exactly this ticket. The 12 files moved one wall
+> further along and **still do not compile**.
+>
+> **Read that as the expected result, not a failed fix.** A ladder run whose `decode` row is
+> replaced by a `final` row rather than shrinking is what success looks like at this stage;
+> conflating "moved past a wall" with "cleared" misreads the campaign in both directions.
+>
+> **Scope note from frank2, who built the PySig record and went looking:** this is a design
+> increment on p88, not a fifth caller to teach the same trick. It needs something the record
+> does not carry **at all** — parameter NAMES — plus a call-site lowering that can hand a
+> keyword name to the runtime. Today `final=True` is parsed as an expression and dies on the
+> bare name. Recommended order: (1) extend PySig with parameter names, (2) lower a keyword
+> argument at a callable-value call site into a name/value pair the dispatcher can match.
+> Step (3), consolidating the carriers, is deliberately split out as
+> [[refactor-a-one-signature-record-for-every-callable-carrier]] and must not be done inside
+> this ticket — that kind of absorption is what grew p88 to four increments.
 
 Filed 2026-08-19 by frank3-etree (Track B) out of the corpus-ladder
 investigation. **Track N** owns the fix; this is a report, not a claim on the

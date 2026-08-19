@@ -43,7 +43,7 @@ _none_
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (244)
+## backlog (245)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -60,7 +60,7 @@ _none_
 | bug-n-a-class-base-that-is-an-expression-does-not-compile | N | 45 | bug | A class base which is a NAME bound to a type, or a call, does not compile: `B = object; class P(B)` fails where `class P(object)` and `class P(SomeClass)` both work. Blocks six.with_metaclass, which html5lib's parser spells as `class Phase(with_metaclass(...))` — the single remaining wall on html5parser.py. | — |
 | bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function | N | 50 | bug | `g = f` BOXES the function on the heap; every other path (a dict value, a return value, the bare name) keeps the raw code pointer. So `g == f` and `g is f` are False, two assignments of the same function are unequal to each other, and `id(g)` is a heap address while `id(f)` is the code address. CPython answers True to all of it. | — |
 | bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through | N | 45 | bug | sys.version_info throws at RUNTIME with a message admitting its own guard failed: 'the code guarding that (the flag its except-branch sets) let this call through anyway'. Two defects — the member is missing, and the compile-time guard meant to catch that does not fire. A guard that reports its own failure and continues is worse than no guard. | — |
-| bug-n-a-keyword-argument-through-a-callable-value-is-undefined | N | 65 | bug | `d = obj.meth; d('x', flag=True)` fails with `undefined variable (flag)` — a callable value carries no parameter NAMES, so a keyword argument has nothing to match against. No name collision anywhere; the sibling of the already-known defaults gap on the same carrier. Distinct from the shadowing bug that produces the corpus's `decode has no parameter named 'final'`. | — |
+| bug-n-a-keyword-argument-through-a-callable-value-is-undefined | N | 72 | bug | `d = obj.meth; d('x', flag=True)` fails with `undefined variable (flag)` — a callable value carries no parameter NAMES, so a keyword argument has nothing to match against. No name collision anywhere; the sibling of the already-known defaults gap on the same carrier. Distinct from the shadowing bug that produces the corpus's `decode has no parameter named 'final'`. | — |
 | bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides | N | 55 | bug | A base class whose __iter__ only raises poisons every subclass override: `for k in self` inside a base method calls the BASE __iter__, and the subclass's real __iter__ is never reached — `iter() returned non-iterator of type 'Sub'`. This is the whole ABC mixin pattern. | — |
 | bug-n-a-module-level-def-taken-as-a-value-loses-its-defaults-on-the-boundfn-carrier | N | 65 | bug | A module-level def taken as a value through a SUBSCRIPT or a PARAMETER is boxed on the tag-12 boundfn carrier, not the tag-8 pair, and that carrier's defaults machinery does not fire for it: `fs = [g]; fs[0](1)` on `def g(x, lo=7)` segfaults. The nested-def form of the same shape is correct, so it is the module-level arm that was left behind. | — |
 | bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name | N | 45 | bug | The MODULE-level arm of the local-binding-beats-a-def fix: `f = o.f` written after `def f` still calls the def. The local/parameter arm is fixed and gated; this one needs module-level bindings to carry a token position, which is a mechanism rather than a patch, so it was split out rather than guessed at. | — |
@@ -282,6 +282,7 @@ _none_
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files | A | 60 | refactor | parser.inc is 38% of all compiler work (216 of 566 commits in 14 days) and is the ONE file where two lanes must serialize — A and P cannot edit it concurrently. C and NilPy both got carved out into their own lexer/parser; Pascal never did, purely because it was the seed. CLAUDE.md has called this 'the clean long-term shape' in prose for months, where ready/next cannot see it. Prio is a PROPOSAL: the payoff is parallelism, not a feature. | — |
 | refactor-a-one-resolved-file-identity-for-a-translation-unit | A | 45 | refactor | Generalise CompiledUnitFile[] from the .py arm to every load: one resolved-file identity answers 'have I already compiled this unit?', retiring the @cpath: key space. Decided 2026-08-19 (option B). The mechanism already exists — option A built it for one arm in 030ce07ea — so this is promoting a built thing to the general rule, not new machinery. Hazard: CompiledUnitFile is -1 when unresolved and -1 = -1, so a naive compare makes every unresolved unit identical. | — |
+| refactor-a-one-signature-record-for-every-callable-carrier | A | 60 | refactor | Four dispatchers and TWO independent defaults mechanisms serve one concept. Put the PySig record on the boundfn carrier and DELETE pyboundfn_setdefaults, so every callable shape answers signature questions from one place. Filed as work because it was banked as a note at the bottom of a resolved ticket, where ready/next cannot see it. | bug-n-a-keyword-argument-through-a-callable-value-is-undefined |
 | refactor-a-variant-object-tag-list-lives-in-four-places | A | 45 | refactor | The set of variant tags whose payload is a refcounted object is written out in FOUR independent places; a tag added to some and not others leaks silently, with RSS as the only symptom. One of them also just zeroes object payloads outright. | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-n-two-import-handlers-are-twins | N | 30 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
@@ -519,7 +520,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 65] [N] bug-n-a-keyword-argument-through-a-callable-value-is-undefined
+- [p 72] [N] bug-n-a-keyword-argument-through-a-callable-value-is-undefined (unblocks 1)
 - [p 65] [N] bug-n-a-module-level-def-taken-as-a-value-loses-its-defaults-on-the-boundfn-carrier
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
@@ -755,6 +756,7 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
 - **2** — feature-web-track-w-bootstrap
+- **1** — bug-n-a-keyword-argument-through-a-callable-value-is-undefined
 - **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind
