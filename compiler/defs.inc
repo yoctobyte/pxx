@@ -856,9 +856,25 @@ const
       +24 StarIdx PLUS ONE    0 = no `*args`; folded in here rather than left
                               beside the pointer in TPyBound, so one concept
                               keeps one mechanism
-      +32 defaults array ptr  TotN words, each the address of the hidden global
-                              holding that parameter's def-time value, or 0 }
+      +32 defaults array ptr  TotN VARIANTS (16 bytes each: {VType, Payload}),
+                              indexed by user-space parameter number
+
+    Only slots [ReqN, TotN) are ever read: Python requires defaults to be
+    TRAILING and NilPy matches (see ProcParamHasDefault, "Trailing params
+    only"), so the two counts already say which parameters have one and a
+    has-default bitmask would be redundant state.
+
+    A slot the compiler has not filled holds PYSIG_DFLT_UNSET, NOT zero. Zero
+    is VT_EMPTY, which is ALSO how `None` is represented -- so an unfilled slot
+    and a legitimate `lo=None` would be indistinguishable, and a consumer would
+    silently pass None where a string default belongs. That is this repo's
+    expensive failure shape (a plausible wrong value far from the cause), so the
+    unfilled state gets a tag no variant can legally wear and any consumer must
+    treat it as a hard error rather than a value. }
   PYSIG_SIZE       = 40;
+  { An illegal variant tag, so "never filled in" cannot be mistaken for a value.
+    Deliberately NOT 0: see the layout note above -- 0 is VT_EMPTY is None. }
+  PYSIG_DFLT_UNSET = -1;
   PYSIG_OFF_CODE   = 0;
   PYSIG_OFF_REQN   = 8;
   PYSIG_OFF_TOTN   = 16;

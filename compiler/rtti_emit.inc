@@ -384,15 +384,31 @@ end;
   constant ones one too is the next increment. Reserved rather than omitted so
   the record layout is final and no consumer has to cope with two shapes. }
 procedure EmitPySignatures;
-var pi, k, nUser, reqN, dfltOff, firstUser: Integer;
+var pi, k, nUser, reqN, dfltOff, firstUser, slot: Integer;
 begin
   for pi := 0 to MAX_PROCS - 1 do ProcSigOff[pi] := -1;
+  { NilPy compiles only. Without this a PASCAL program emits a record per
+    main-program proc: measured +170 KB of .data on the compiler's own
+    self-build, for records nothing can ever reach -- a callable value is a
+    NilPy construct. The caller's guard excludes C/BASIC/Rust/... but NOT
+    Pascal, so the test has to be here. }
+  if not isNilPy then Exit;
   for pi := 0 to ProcCount - 1 do
   begin
-    { NilPy defs only. ProcPyDefTok is 0 for everything else -- a Pascal routine
-      is never reached through a NilPy callable value, and emitting a record for
-      all 2900 procs would be pure data bloat. }
-    if ProcPyDefTok[pi] = 0 then Continue;
+    { NilPy defs only: a routine declared by the MAIN PROGRAM of a NilPy
+      compile. Pascal RTL/pylib routines (ProcUnitIdx >= 0) are never reached
+      through a NilPy callable value, and a record for all 2900 procs would be
+      pure data bloat.
+
+      NOT ProcPyDefTok, which is what this first used and which was WRONG:
+      that array holds the token index of a def that SHADOWS A BUILTIN, and 0
+      means "no position recorded" -- so it is overloaded with "position 0" and
+      silently dropped any def that is the module's FIRST statement. Measured:
+      `def g(...)` at the top of a file produced no record at all, while the
+      same def one line below a `print` produced one. A def whose meaning
+      depends on where it stands is a different question from whether it IS a
+      def, and this pass is asking the second one. }
+    if ProcUnitIdx[pi] >= 0 then Continue;
     { Is pi a METHOD (Params[0] = Self)? There is no per-proc flag: every other
       site is handed `firstParam` by a caller that knows from context, and this
       pass has no such caller. UMthProc_ is the post-parse source of truth, so
@@ -411,6 +427,10 @@ begin
       if not ProcParamHasDefault[pi * MAX_PROC_PARAMS + k] then Inc(reqN);
 
     ProcSigOff[pi] := DataLen;
+    if PxxDbgEnabled('n.sig') then
+      WriteLn('PXXDBG n.sig pi=', pi, ' name=', Procs[pi].Name,
+              ' paramCount=', Procs[pi].ParamCount, ' firstUser=', firstUser,
+              ' nUser=', nUser, ' reqN=', reqN, ' off=', DataLen);
     DataPutZeros(PYSIG_SIZE);
     QueueMethCodeFixup(ProcSigOff[pi] + PYSIG_OFF_CODE, pi);
     PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_REQN, reqN);
@@ -420,8 +440,45 @@ begin
     if nUser > 0 then
     begin
       dfltOff := DataLen;
-      DataPutZeros(nUser * 8);
+      { 16 bytes per slot: each is a VARIANT {VType, Payload}, not a pointer. }
+      DataPutZeros(nUser * 16);
       AddDataPtrFix(ProcSigOff[pi] + PYSIG_OFF_DFLTS, dfltOff);
+      { Mark every slot UNFILLED first, then bake over the ones we can settle
+        statically. Zero would read as VT_EMPTY, which is None -- see
+        PYSIG_DFLT_UNSET. }
+      for k := 0 to nUser - 1 do
+        PatchDataU64(dfltOff + k * 16, PYSIG_DFLT_UNSET);
+      for k := firstUser to Procs[pi].ParamCount - 1 do
+      begin
+        if not ProcParamHasDefault[pi * MAX_PROC_PARAMS + k] then Continue;
+        slot := dfltOff + (k - firstUser) * 16;
+        { A NON-constant default already has a hidden global carrying its
+          def-time value (ProcParamDefaultSym); it cannot be baked and is left
+          UNSET for the def-time store to fill. Same for a STRING: VT_STRING's
+          payload is a MANAGED AnsiString ref, and baking a static pointer into
+          a managed slot is how refcount corruption starts. }
+        if ProcParamDefaultSym[pi * MAX_PROC_PARAMS + k] >= 0 then Continue;
+        if ProcParamDefaultIsStr[pi * MAX_PROC_PARAMS + k] then Continue;
+        if ProcParamDefaultIsSet[pi * MAX_PROC_PARAMS + k] then Continue;
+        if ProcParamDefaultIsNone[pi * MAX_PROC_PARAMS + k] then
+          PatchDataU64(slot, VT_EMPTY)             { None IS VT_EMPTY }
+        else if ProcParamDefaultIsBool[pi * MAX_PROC_PARAMS + k] then
+        begin
+          PatchDataU64(slot, VT_BOOL);
+          PatchDataU64(slot + 8, ProcParamDefaultVal[pi * MAX_PROC_PARAMS + k]);
+        end
+        else if ProcParamDefaultIsFloat[pi * MAX_PROC_PARAMS + k] then
+        begin
+          { DefaultVal already holds the IEEE-754 bits, as a float TOKEN does. }
+          PatchDataU64(slot, VT_DOUBLE);
+          PatchDataU64(slot + 8, ProcParamDefaultVal[pi * MAX_PROC_PARAMS + k]);
+        end
+        else
+        begin
+          PatchDataU64(slot, VT_INT64);
+          PatchDataU64(slot + 8, ProcParamDefaultVal[pi * MAX_PROC_PARAMS + k]);
+        end;
+      end;
     end;
   end;
 end;
