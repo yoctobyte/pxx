@@ -513,4 +513,4 @@ documents**, orphaning the comment onto the wrong assertion — the same three-p
 that broke five core tests in v362 earlier the same day, arriving within an hour of being
 warned about it. Caught by reading the result back rather than by anything failing: a
 misfiled comment compiles, passes, and is only ever wrong to a human.
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit ca5a96db4.
