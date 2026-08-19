@@ -1185,6 +1185,34 @@ def reg_open(r, authoritative, gone=frozenset()):
     return authoritative.get(r["job"], "red") not in PASSLIKE
 
 
+def cascade_still_red(r, st):
+    """(still red, swept) for a CASCADE ledger entry. Both numbers, on purpose.
+
+    `--status` printed the SWEPT count for as long as the entry stayed open --
+    `open CASCADE: 13 jobs` -- and an entry stays open while ANY ONE of its
+    jobs is red (reg_open). So on 2026-08-20 it said 13 while 4 of those jobs
+    had recovered and 9 were red: a true number about the sweep, printed in the
+    one place a reader is deciding how much is broken. Same shape as the pin
+    verify's red count reading as a verdict the night before, and the same fix
+    -- print the number that matches the action, and keep the other beside it
+    rather than swapping which single number lies.
+
+    The predicate is reg_open's own, so this line can never disagree with the
+    ledger it describes: the merged per-job map, default red, PASSLIKE (pass or
+    skip) closes. One divergence, deliberate: `gone` -- keys no tier carries any
+    more -- which reg_open excludes and status cannot compute, because gone_keys
+    needs a RUN's results and status reads only persisted state. A gone job
+    therefore counts red here. That is the same over-count already holding the
+    entry open, so the verdict still agrees; and it is why the swept total is
+    printed too, so "9 of 13" can be read as a ratio rather than trusted as a
+    census.
+    """
+    jobs = st.get("jobs") or {}
+    swept = r.get("cascade") or []
+    return (sum(1 for j in swept if jobs.get(j, "red") not in PASSLIKE),
+            len(swept))
+
+
         # PASS-LIKE, not pass. A skipped job did not fail, so it must not gate
 # anything — but it did not RUN either, and publishing it as "pass" destroyed
 # the only evidence of that. On xeon 33 full-tier jobs skip when the corpus
@@ -4697,8 +4725,13 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
             continue
         for r in regs[:STATUS_REG_CAP]:
             if r.get("cascade"):
-                print("tstate:   open CASCADE: %d jobs bad=%s (%d in range)"
-                      % (len(r["cascade"]), r["bad"][:12],
+                # STILL RED of SWEPT, never the swept count alone: the entry
+                # outlives the jobs that recovered, so the sweep's size is the
+                # wrong number to hand somebody about to go fix things.
+                nred, nswept = cascade_still_red(r, st)
+                print("tstate:   open CASCADE: %d of %d swept job(s) still "
+                      "red, bad=%s (%d in range)"
+                      % (nred, nswept, r["bad"][:12],
                          len(r.get("range", []))))
             else:
                 print("tstate:   open regression: %s bad=%s (%d in range)"
