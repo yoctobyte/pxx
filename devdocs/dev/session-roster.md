@@ -1726,3 +1726,44 @@ rerank it deliberately rather than inheriting the number).
   Full tier at the same sha re-checked properly rather than assumed: `new_red: []`,
   `still_red: [crtl_exp2]` — the documented false positive, and T's own correction banner
   on the timeout ticket was read first rather than reasoning from the superseded rule.
+
+- **THE BENCH RED WAS A REAL COMPILER BUG, and it broke a piece of reasoning I had been
+  leaning on.** plexus-T settled it before closing: `bug-a-self-compile-at-o0-overflows-
+  the-code-buffer` (A, **p60**, now top of A). Reproduced outside the harness in one line:
+
+  ```
+  make compiler/pascal26                                 -> OK
+  ./compiler/pascal26 -O0 compiler/compiler.pas /tmp/x   -> pascal26:170295: error: code overflow
+  ```
+
+  **My counter-evidence was TRUE and could not speak to the case.** I argued the bench red
+  could not be a compiler problem because every commit in the window passed the fixedpoint.
+  But `make compiler/pascal26` builds at the **DEFAULT** level and the fixedpoint proves
+  byte-identity **at that level** — nothing in the per-fix loop and no T tier compiles
+  `compiler.pas` at `-O0`. So **passing the self-host gate is evidence that the compiler
+  compiles itself at ONE optimisation level, not that it compiles itself.** Week's
+  recurring shape again: a correct, checkable fact standing in for the deciding one. Now a
+  memory.
+
+  **Also one defect presenting as three:** `-O2`/`-O3` reported `CANARY-DIFF vs -O0` only
+  because the canary compares against a `-O0` build that did not exist, and `fpc` survived
+  because it uses FPC. Three red rows, one cause — told frank2 so it does not hunt three.
+
+  **The diagnostic that found it is worth keeping:** a **row-count drop is a failure to
+  produce a measurement; a slow row is a failure of the box.** Both previous bench reds
+  here were timing artefacts, so the trained instinct is to dismiss a bench red — missing
+  rows point at the SUBJECT, slow rows at the ENVIRONMENT. Diffing row sets by name
+  isolated the whole delta in one step.
+
+  **Routed, not actioned:** the ticket goes to frank2 (sole-A) **after** its ladder
+  re-measure — told explicitly not to context-switch mid-measurement. The gate-policy
+  question T raised is filed as
+  `decide-should-the-gate-prove-self-compile-at-more-than-one-o-level` (U, p55) rather
+  than settled here, because gating policy is not the coordinator's to change; my
+  recommendation in it is a **Track T tier, NOT the per-fix loop**, since the loop's
+  shortness is load-bearing and hard-won. Regardless of that outcome, `CLAUDE.md`'s
+  claims-discipline section should note that "self-host fixedpoint" means *at the default
+  level* — the phrase is used as evidence of general soundness and is scoped narrower than
+  it reads.
+
+  plexus-T's session is closed; Track T is unstaffed until the user restarts it.
