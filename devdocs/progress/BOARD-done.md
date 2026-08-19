@@ -2063,6 +2063,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-uforth-00 | T | 70 | regression | regression: test-uforth#00 red at 378295f7c218 (auto-filed by twatch) | — |
 | regression-test-zlib-00 | T | 70 | regression | regression: test-zlib#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-testmgr-conformance-shard-timeout-under-load | T | 60 | regression | Track T: c-conformance shards time out under full parallel load (false REDs) | — |
+| task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc | A | 45 | task | Carve NilPy's lvalue/member parsing out of `parser.inc` (split 2) | — |
 | task-a-carve-nilpy-selectors-out-of-parser-inc | A | 45 | task | Carve NilPy's selector/subscript parsing out of `parser.inc` | — |
 | task-b-revert-pxxcio-clock-int64-cast-workaround | B | 45 | task | Revert the __pxx_clock workaround in lib/rtl/pxxcio.pas — its blocker (the explicit Int64() cast of a NativeInt on 32-bit) is fixed, and the idiomatic one-liner is verified correct on x86-64, i386 and arm32 | — |
 | task-c-retire-the-crtl-name-dodge-prefixes | C | 50 | task | Ten functions in lib/crtl/src/math.c are named __crtl_exp/__crtl_log2/... purely to dodge a case-insensitive collision with Pascal's Exp/Log2, reached through #defines in crtl's math.h. Measured 2026-08-14: that collision no longer fires — the Pascal RTL is not in scope for a C program at all. Try de-prefixing them; it may need no compiler change. | — |
