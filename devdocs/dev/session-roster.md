@@ -1918,3 +1918,69 @@ rerank it deliberately rather than inheriting the number).
   an 8-core box and C's queue does not justify a permanent seat; dispatch its p55 per-ticket
   to whichever frontend session frees up. Not settled here — staffing is never the
   coordinator's call.
+
+- **check 2026-08-19 (+10h): T settled lib_tls with a FOURTH answer, and found a filing
+  bug that had silently disabled 182 jobs.**
+
+  **lib_tls is neither a regression nor transient — the TEST is defective.** plexus-T
+  refused all three options I framed and produced a better one, with an 8-second repro.
+  `test/lib_tls.pas:69` hardcodes `PORT = 28755` and lines 96-107 ignore the return of
+  every socket call — no `SO_REUSEADDR`, no timeout. **Verified here:** the const is there
+  and `fpBind`/`fpListen`/`fpConnect`/`fpAccept` are all called bare. Two concurrent runs
+  and one of them hangs forever at 7 of 14 `=ok` — the TLS seam the test exists to check
+  is never reached. plexus is simply the box where two clones run testmgr by design, so a
+  fixed port is a shared global there.
+
+  **The measurement that beat my framing:** solo re-runs are all green at 1.0s against a
+  90s budget, which reads as "transient, close it" — and the prior 2026-08-16 triage
+  stopped exactly there. But EWMA 45.4s over n=46 on the watcher clone vs 2.4s over n=16
+  in the dev clone says otherwise: **a one-second test does not average forty-five seconds
+  by being slow.** A timeout on a 1s test is a HANG, not slowness. Worth keeping as a
+  diagnostic — mean-vs-solo divergence distinguishes a hang from a slow box.
+
+  Also decidable rather than judgement: lib_tls is `pin_built`, and nothing it reads
+  changed across the 31-commit range (no `lib/**`, no `test/lib_tls.pas`, no
+  `stable_linux_amd64/**`). The watcher's own `pin_immune()` had already refused the
+  bisect. Filed **Track B** (`bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-
+  unavailable`, p55) per "a test fix belongs to the lane owning the test", with siblings
+  flagged (`lib_mimic_urllib_request_server` takes 28901 on the command line;
+  `lib_http`/`lib_http_async` unaudited neighbours).
+
+  **THE OPERATIONAL ITEM — a resolved ticket permanently disabled its job's future
+  filing.** My "no stub was filed" point was right and the cause is worse than a missed
+  auto-file: `already_filed()` scanned **every** bucket including `done/` and `rejected/`,
+  so a job became unticketable FOREVER once its first regression ticket resolved — **182
+  resolved `regression-*` slugs against 0 open ones = 182 jobs in that state**, failing
+  silently (the loop just continued, printing neither "auto-filed" nor "NOT filing").
+  Fixed in `c45ed0062` (recurrences get `<base>-2`, suppression keys on OPEN buckets only,
+  refiling announces itself, runaway guard at 20).
+
+  **CARRY THIS UNTIL IT CLEARS: the fix needs a daemon restart, the watcher is mid-full-
+  tier, so the NEXT new red still will not auto-file.** Until a restart lands, treat T's
+  RED reports as the only filing channel and do not read "no ticket appeared" as "no
+  finding". Ask at the next check whether the restart happened.
+
+  The sharpest detail, worth remembering as a class: `regression-lib-test-lib-tls` closed
+  saying *"reopening is by a fresh NEW-RED stub"* — **closing that ticket is the act that
+  disabled the behaviour it promised.** And the correct reasoning already existed one
+  function away in `stub_sources()`, whose comment reaffirmed the wrong parenthesis.
+
+  Also from T: `crtl_exp2` is off the board for a real reason, not a lucky run — its EWMA
+  had passed the unit-class budget and the formula kept the class figure as a ceiling over
+  a measured job, so it was killed at 90s every time (`c99f15692`). **The inversion that
+  hid it three days: only a PEER CLONE's run stretches a budget, so it passed when the box
+  was SHARED and failed when it had the box to ITSELF.** Two more filed rather than
+  mentioned: `chore-t-five-tool-devtests-are-broken-on-master-and-nothing-runs-them`
+  (28 pass / 5 fail on a clean tree, all pre-existing) and `chore-t-unit-class-est-mem-…`.
+
+  **frank2 answered the p88/p70 question and it was worth asking** (`352a52b4b`): **p70 IS
+  p88**, confirmed by measurement not by reading — there is nothing to fill defaults from,
+  so p70 needs no separate work and N's queue re-ranks with it removed rather than sitting
+  behind it. It also found the plan as written names only ONE of **TWO callable
+  representations** — cf. the standing memory that callables have three; worth checking
+  which count is current. It parked the unwired-test sweep properly (`d05e3657f`, batch 1
+  landed, judgement half remains) and `working/` now correctly holds only p88.
+
+  **frank3 still `waiting` — third consecutive check.** Track B now has TWO ready items at
+  p55+ (the new lib_tls bug, and the ElementTree shim at p62) and nobody able to take them.
+  This is the one thing blocked on the user.
