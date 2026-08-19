@@ -3,6 +3,8 @@ track: D
 prio: 40
 type: doc
 summary: "pxx accepts Pascal, C and Python, so its docs mix three vocabularies and define none of them. A reader fluent in one hits the others' slang unexplained — `cls`, `self`, dunder, repr-vs-str going one way; unit, uses, RTL, pinned, fixedpoint going the other. Wanted: a glossary with a Python-to-Pascal equivalence table, since most terms have a counterpart the reader already knows."
+status: done
+owner: frank2-D
 ---
 
 # Glossary: the slang, and what it maps to in the other language
@@ -111,3 +113,21 @@ Two points the page should make, because neither is guessable:
    [[decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language]].
    Worth stating so nobody proposes it for the Rust frontend and then discovers
    it cannot survive contact with `.pas`.
+
+## Resolved 2026-08-19 (Track D)
+
+`docs/reference/glossary.md` gains a **Cross-language vocabulary** section with
+the equivalence table the ticket identified as the valuable part, in both
+directions (Python→Pascal and Pascal→Python), plus the four build terms a
+newcomer meets first — pinned compiler, fixedpoint, frontend, shim.
+
+`cls` is spelled out, as the trigger asked: short for *class*, the class rather
+than the instance, and the abbreviation exists only because `class` is a
+reserved word and cannot be a parameter name.
+
+The `fixedpoint` entry is written to the claims-discipline rule — "byte-identical
+to the binary that produced it, **at the default optimisation level**" — so the
+glossary cannot become the place the qualifier gets dropped.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.

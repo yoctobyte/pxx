@@ -32,12 +32,39 @@ separate machinery and it is worth keeping them apart:
 
 ## Module resolution — which file
 
-A `uses math` in Pascal looks for `math.pas`. A `#include <math.h>` in C looks
-through the C include path. A Nil Python `import tkhtmlview` prefers
-`tkhtmlview.py`. No frontend implicitly searches another language's files, and
-that is deliberate: importing another language is something you say out loud.
+A bare import name means **this language's own module**. `uses math` in Pascal
+looks for `math.pas`; `#include <math.h>` in C searches the C include path; a
+Nil Python `import tkhtmlview` looks for `tkhtmlview.py` or `.npy` and **only**
+those. No frontend implicitly searches another language's files, and that is
+deliberate: importing another language is something you say out loud.
 
-**To reach another language, name the file:**
+Nil Python enforces this with a diagnostic rather than a silent fallback. A
+name that happens to match a Pascal RTL unit is refused, and the message names
+the file it found and the spelling that reaches it:
+
+```
+error: import: classes is the Pascal unit …/lib/rtl/classes.pas, not a Python
+module — a bare NilPy import resolves to Python (.py/.npy) only. To reach the
+Pascal unit, name it with its extension: import 'classes.pas' as classes
+```
+
+That refusal is the point. Before it, such an import loaded the Pascal unit and
+failed somewhere inside a file the program never mentioned.
+
+### To reach another language, name the file
+
+A quoted string with a foreign extension routes that file through the other
+frontend. What the string may look like differs by language, because each
+frontend keeps its own convention rather than a symmetry imposed on all three:
+
+| you are writing | spelling | what it does |
+| --- | --- | --- |
+| Pascal | `uses './mymath.c';` | compiles `mymath.c` through the C frontend; its functions are callable unqualified |
+| Pascal | `uses './mymath.c' as cmath;` | the same, and gives the file a **scope name** — see [name collisions](./name-collisions.md) |
+| Pascal | `uses './mymod.pas';` | an ordinary Pascal unit named by path rather than by unit name |
+| C | `#include "./lib2.c"` | ordinary C inclusion |
+| Nil Python | `import './mymod.pas' as m` | a **path** (it contains a `/`), resolved against the importing file's directory |
+| Nil Python | `import 'sysutils.pas' as su` | a unit **name** carrying an extension, resolved through the normal search chain — this is how a `.npy` reaches `lib/rtl` |
 
 ```pascal
 program cubes;
@@ -47,9 +74,22 @@ begin
 end.
 ```
 
-That prints `27.0`. The quoted path with a foreign extension is what routes the
-unit through the C frontend; the C functions it defines then become callable
-from Pascal.
+The C functions the file defines become callable from Pascal.
+
+Two asymmetries worth knowing rather than discovering:
+
+- **The slash is the difference in Nil Python.** With a `/` the string is an
+  authoritative path; without one it is a unit name and goes through the search
+  chain. Both are unambiguous because both are string literals.
+- **Pascal has only the path form.** `uses 'sysutils.pas' as su;` — a quoted
+  name with no slash — is *not* accepted from Pascal (`uses: unit source not
+  found`), because Pascal already reaches its own RTL by bare unit name and
+  needs no second route to it.
+- **The dotted spelling is not built.** `import mymod.pas as m` fails, and
+  deliberately so: `a.b` is Python's package-submodule syntax, and making an
+  extension distinguishable from a submodule would need a whitelist that a real
+  package with a submodule named `c` or `pas` would defeat. The quoted form is
+  the supported one.
 
 ### What cross-import is for
 
@@ -207,14 +247,15 @@ has, but do not write code that depends on them landing:
   warning rather than with one.
 - **Scope hiding covers routines, not types and classes.** Two units exporting
   the same *class* name still resolve first-match rather than last-named.
-- **Qualification has no syntax for a cross-language import.** `pu.Cube` works
-  for a Pascal unit; there is no equivalent way to say "C's `cube`" once a
-  Pascal `Cube` is in scope. Distinguish those by case, or rename.
+- **`from '<file>' import <name>` is not built.** The `as` form is how a
+  foreign file is imported; `from 'sysutils.pas' import Trim` is refused with
+  *expected a module name after from*.
 
 Module scoping — specifically whether a `uses` clause is transitive — is not
 documented here yet, because it is still being settled in the compiler.
 
 ## Next
 
+- [Name collisions](./name-collisions.md)
 - [PXX dialect](./dialect.md)
 - [FPC compatibility](./fpc-compatibility.md)

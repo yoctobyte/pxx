@@ -4,6 +4,8 @@ prio: 50
 type: bug
 blocked-by: []   # decided 2026-08-16: not a compiler bug, see the resolution at the bottom
 summary: "NOT A COMPILER BUG — re-aimed at docs 2026-08-16. The cross-language qualifier exists and always did: `uses './mymath.c' as cmath;` then `cmath.cube(3)`. This ticket only ever measured the UNALIASED form. What is left is the docs fix: docs/language/name-resolution.md ships a Current-status note saying the escape does not exist."
+status: done
+owner: frank2-D
 ---
 
 # No qualified syntax for a cross-language import
@@ -161,3 +163,29 @@ That is published, user-facing, and wrong. Replace it with the alias form.
 
 Retracked A -> D. No `compiler/**` change is needed or wanted.
 Fold into [[docs-name-collisions-and-the-as-escape]] if that lands first.
+
+## Resolved 2026-08-19 (Track D, pin v364)
+
+The wrong note is gone, and it was wrong in a way the ticket did not predict.
+Measured first:
+
+```pascal
+uses './mymath.c' as cmath;
+function Cube(x: Double): Double; begin Cube := 27.0; end;
+...
+WriteLn(Cube(3.0):0:1);        { 27.0   — Pascal's, bare }
+WriteLn(cmath.cube(3.0):0:1);  { 1027.0 — C's, qualified }
+```
+
+So cross-language qualification not only exists, it composes with ordinary
+scope hiding exactly as the page's Pascal-unit example does. The
+"Current status" bullet claiming otherwise is replaced — not deleted, but
+replaced with the limit that is actually true today: `from '<file>' import
+<name>` is not built (*expected a module name after from*).
+
+`docs/language/name-resolution.md` also got the module-resolution section
+rewritten around the semantics that landed in v364, and now links the new
+`docs/language/name-collisions.md` page.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.

@@ -4,6 +4,8 @@ prio: 25
 type: docs
 blocked-by: []
 summary: "`-Fu<dir>` is how NilPy finds a third-party Python package, and it is absent from the compiler's usage line. Its absence misdiagnoses as `import: no unit named X` — a 'feature missing' message for a feature that exists. Cost a wrong first diagnosis on the first corpus attempt; will bite the next person wiring one."
+status: done
+owner: frank2-D
 ---
 
 # `-Fu` is how a Python package is found, and nothing says so
@@ -75,3 +77,26 @@ so the next person does not file it: the NilPy answer to `sys.path` is `-Fu`.
 > The `webencodings` and `constants` rows were artefacts and are gone; the real
 > top two are `undefined variable (digits)` (8 files) and
 > `undefined variable (CodecInfo)` (7 files).
+
+## Resolved 2026-08-19 (Track D, pin v364) — with a correction to the ticket's own example
+
+Documented in two places: a **Finding a third-party Python package** section in
+`docs/targets/nil-python.md`, and an expanded `-FuDIR` row in
+`docs/reference/cli.md` that links to it. The misleading failure
+(`no unit named X and no shim mimic_X`) and the `sys.path.insert` dead end are
+both named, since the whole point is that the error reads as "feature missing".
+
+**Measured, and it corrects the ticket:** `-Fu` must point at the directory
+that **contains** the package, not at the package directory. With
+`pkgdir/mypkg/__init__.py`, `from mypkg import greet` resolves under
+`-Fu…/pkgdir` and **fails** under `-Fu…/pkgdir/mypkg` — the same shape as
+Python's own path. The ticket's example (`-Fu…/library_candidates/webencodings`)
+points at the package itself. A plain single-file module in the search root is
+found too.
+
+The usage-line half stays open: the prose is Track D's, but adding `-Fu` to the
+compiler's own `usage:` output is a one-line Track A change and is not done
+here.
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.

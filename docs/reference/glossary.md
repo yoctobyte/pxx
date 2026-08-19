@@ -32,6 +32,50 @@ order: 93
 | `PXX` symbol | Conditional-compilation symbol defined by PXX for Pascal input. |
 | `FPC` symbol | Conditional-compilation symbol reserved for real Free Pascal builds. |
 
+## Cross-language vocabulary
+
+PXX accepts Pascal, C and Nil Python, so its documentation mixes three
+vocabularies. Most terms have a counterpart in the language you already know,
+and the mapping is usually more useful than a definition.
+
+### Python / Nil Python → Pascal
+
+| Python / Nil Python | Pascal | note |
+| --- | --- | --- |
+| module | unit | one file, one namespace |
+| `import` | `uses` | but see [name resolution](../language/name-resolution.md) |
+| `self` | `Self` | the instance the method was called on |
+| `cls` | `Self` in a `class function` | short for *class* — the class, not an instance. The abbreviation exists only because `class` is a reserved word and cannot be a parameter name. |
+| dunder | constructor / operator overload | "dunder" = **d**ouble **under**score, as in `__init__`, `__eq__` |
+| `__init__` | constructor | |
+| `__name__` (on a class) | `ClassName` | |
+| `__str__` / `__repr__` | — | no single Pascal counterpart: `str()` is for a reader, `repr()` for a programmer, and they differ for exceptions and containers |
+| decorator (`@property`) | — | a function wrapping a declaration; PXX accepts a fixed set, not arbitrary ones |
+| list / dict / set | dynamic array / — / — | |
+| `None` | `nil` | |
+| duck typing | — | binding by whether the member exists rather than by declared type |
+
+### Pascal → Python / Nil Python
+
+| Pascal | Python / Nil Python | note |
+| --- | --- | --- |
+| unit | module | |
+| `uses` | `import` | |
+| interface / implementation section | — | Python has no declaration/definition split |
+| RTL | the standard library | PXX's own, under `lib/rtl` |
+| managed string | `str` | reference-counted, freed automatically |
+| `nil` | `None` | |
+| overload | — | Python resolves one name to one function; Pascal picks by argument types |
+
+### Build terms a newcomer meets first
+
+| Term | Meaning |
+| --- | --- |
+| Pinned compiler | The blessed stable binary everything else builds with. Libraries and examples are compiled with it rather than with a freshly built compiler, so a broken build in one lane cannot poison another. |
+| Fixedpoint | The compiler compiles itself and the result is byte-identical to the binary that produced it — at the default optimisation level. It is the property that proves a compiler can still reproduce itself. |
+| Frontend | The part that parses one language. PXX has several (Pascal, C, Nil Python) and they share everything below the parser. |
+| Shim | A unit PXX wrote itself that presents a familiar API under the name `mimic_<module>`, standing in for a package rather than pretending to be it. |
+
 ## Target terms
 
 | Term | Meaning |

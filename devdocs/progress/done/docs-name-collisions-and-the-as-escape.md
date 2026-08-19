@@ -4,6 +4,8 @@ prio: 45
 type: task
 blocked-by: []
 summary: "The user-facing 'how do I deal with a name collision' page. Two languages in one program will both declare `cube`, and the answer — `uses './mymath.c' as cmath;` then `cmath.cube(...)`, or `import mymath as cmath` from NilPy — is true TODAY and documented nowhere. Not blocked, unlike the own-language-first doc ticket: this describes behaviour that already ships."
+status: done
+owner: frank2-D
 ---
 
 # Document how to deal with name collisions
@@ -91,3 +93,22 @@ Also fix, or fold in, [[docs-cross-language-qualifier-note-is-wrong]]:
 `docs/language/name-resolution.md` currently ships "Qualification has no syntax
 for a cross-language import. Distinguish those by case, or rename." under
 **Current status**, which is published and wrong.
+
+## Resolved 2026-08-19 (Track D, pin v364)
+
+New page `docs/language/name-collisions.md`, linked from
+`docs/language/index.md` and from the name-resolution page's Next block.
+
+Every snippet on it was compiled and run against the v364 pin rather than
+transcribed: the Pascal `pu.Cube` qualification (999.0 / 222.0), the
+cross-language `cmath.cube` case (27.0 / 1027.0), and the Nil Python pair
+`import './mymath.c' as c` + `import 'sysutils.pas' as su` (1027.0 / `hi`).
+
+The page also records the one place the escape does not yet work —
+`import 'classes.pas' as cl` fails inside `classes.pas` while Pascal's own
+`uses classes;` compiles it fine — because a reader who hits that needs to know
+it is a known gap and not their mistake. Filed as
+[[bug-a-the-import-escape-hatch-fails-on-classes-pas]].
+
+## Log
+- 2026-08-19 — resolved, commit PENDING-COMMIT.

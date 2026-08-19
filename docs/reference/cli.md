@@ -54,7 +54,7 @@ mode, the same as passing `--shared`.
 | `--dump-rtti` | Print generated RTTI tables while still emitting output. |
 | `-dNAME` | Define a conditional compilation symbol. |
 | `-uNAME` | Undefine a conditional compilation symbol, except `PXX`. |
-| `-FuDIR` | Add a Pascal unit search root. |
+| `-FuDIR` | Add a search root: a Pascal unit directory, and the directory a Nil Python `import` searches for a third-party package (point it at the package's **parent**). See [Nil Python](../targets/nil-python.md#finding-a-third-party-python-package--fu). |
 | `-IDIR` | Add a C include directory and a Pascal unit search root. |
 | `-Mobjfpc` | Accept the Object Pascal compatibility mode marker. |
 | `--threadsafe` | Use atomic refcounts for managed strings and arrays. On x86-64, i386, aarch64, and arm32 only. |

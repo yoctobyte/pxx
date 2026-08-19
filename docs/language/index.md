@@ -27,5 +27,7 @@ language surface as the compiler actually accepts it.
 - [Name resolution](./name-resolution.md) — which file an import loads, which
   declaration a name binds to, and what happens when Pascal, C and Nil Python
   share a name.
+- [Name collisions](./name-collisions.md) — two languages, one name, and the
+  `as` escape that says which you mean.
 - [FPC compatibility](./fpc-compatibility.md) — what matches FPC, what does not,
   and how to write portable code.

@@ -248,6 +248,74 @@ Not present: `match`/`case` and `async`/`await`.
 `f"{value!r}"`/`f"{value!s}"` conversions and a plain format spec are
 supported. Triple-quoted f-strings are not.
 
+## What an `import` resolves to
+
+**A bare import name means Python.** `import mymod` looks for `mymod.py` or
+`mymod.npy` and nothing else — it will not quietly load a Pascal unit that
+happens to share the name. Where a name *does* collide with one of PXX's own
+RTL units, the compiler says so and names the spelling that reaches it:
+
+```
+error: import: classes is the Pascal unit …/lib/rtl/classes.pas, not a Python
+module — a bare NilPy import resolves to Python (.py/.npy) only. To reach the
+Pascal unit, name it with its extension: import 'classes.pas' as classes
+```
+
+**To import another language, quote the file name and give it an alias:**
+
+```python
+import 'sysutils.pas' as su      # a unit NAME + extension, via the search chain
+print(su.Trim('  hi  '))         # hi
+
+import './mymod.pas' as m        # a PATH (it has a slash), from this file's dir
+import './mymath.c'  as c        # C works the same way
+```
+
+The slash is what separates the two: with one, the string is an authoritative
+path; without one, it is a unit name resolved through the normal search chain,
+which is how a `.npy` reaches `lib/rtl`. Both are unambiguous, because both are
+string literals.
+
+Two things that are **not** available, deliberately or not yet:
+
+- `import mymod.pas as m` — the dotted spelling is not built. `a.b` is Python's
+  package-submodule syntax, and telling an extension from a submodule would
+  need a whitelist that any package with a submodule named `c` or `pas` would
+  defeat. Quote it instead.
+- `from 'sysutils.pas' import Trim` — not built; the error is *expected a
+  module name after from*. Use the `as` form and qualify.
+
+### Finding a third-party Python package: `-Fu`
+
+`-Fu<dir>` adds a search root, and it is how a package outside the current
+directory is found:
+
+```sh
+pxx -Fu/path/to/site-packages drv.npy drv
+```
+
+Point it at the directory that *contains* the package, not at the package
+directory itself — `from mypkg import greet` needs the parent of `mypkg/`, the
+same way Python's own path works. A plain single-file module (`solo.py`) in
+that directory is found too.
+
+Without it the failure reads like a missing feature rather than a missing path:
+
+```
+error: import: no unit named mypkg and no shim mimic_mypkg
+```
+
+`sys.path.insert(0, …)` will not help — it is a runtime mechanism, and by the
+time a compiled program runs, imports have long been resolved.
+
+### One name that behaves differently
+
+`import strings` is accepted rather than refused, even though
+`lib/rtl/strings.pas` exists, because the name also resolves through the
+host-header route (`/usr/include/strings.h`). It compiles; its members are not
+Python's. `import types`, `import classes` and `import sysutils` are all
+refused with the diagnostic above.
+
 ## Standard-library surface
 
 `import` resolves against a real backing Pascal unit for a growing list of
