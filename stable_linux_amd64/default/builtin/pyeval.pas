@@ -5098,13 +5098,11 @@ begin
   if key = nil then Exit;
   if PXXObjIsBoundPair(key) then
   begin
-    { pylib's dispatcher, not a second copy of it: it reads the pair's
-      SIGNATURE and fills the parameters this one-argument call omits, so
-      `map(q, xs)` over `def q(a, b=1, c=2)` matches `q(x)` written directly.
-      This arm used to call through a one-parameter pointer regardless of the
-      callee's real arity, which left b and c reading whatever the previous
-      call had put there. feature-n-a-callable-value-carries-its-signature-type }
-    Result := pybound_pair_call(key, 1, a0, pynone, pynone, pynone);
+    code := PPyKeyBoundRec(key)^.Code;
+    recv := PPyKeyBoundRec(key)^.Recv;
+    if code = nil then Exit;
+    if recv = nil then begin f1 := TPyKeyCbF1(code); Result := f1(a0); end
+    else begin m1 := TPyKeyCbM1(code); Result := m1(recv, a0); end;
     Exit;
   end;
   if pyclosure_is(key) then begin Result := pyclosure_call1(key, a0); Exit; end;
