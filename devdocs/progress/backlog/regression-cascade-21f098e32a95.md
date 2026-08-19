@@ -110,3 +110,42 @@ The `str`-parameter refusal loss: GOOD at `9c5148087` and `e78cc5882`, BAD at
 never in the shared checkout. Recipe is in the N ticket.
 
 **Nothing here justifies a pin.** Three jobs are green, ten are filed and open.
+
+---
+
+## `tools-devtest#00` — closed 2026-08-19 by plexus-T, and it was never in this range
+
+The 13th job is answered, and the answer changes the count: **it is five causes,
+not four.** It is also not a regression in `9bfb7fcfa..21f098e32` at all.
+
+The job's true first-bad is **`a1fd5715e`** (2026-08-19T15:44:05Z) — the commit
+that *created the job*, by wiring `tools-devtest` into the Makefile and the full
+tier. It has never once passed in the watcher. It is inside the range only
+because the range is 261 commits wide.
+
+**The failure the watcher saw is not the one frank2 reproduced.** The Makefile
+loop stops at the first failing file, and `tstate_reader_devtest.py` sorts
+before `twatch_host_epoch_devtest.py`, so in the watcher it failed first and
+masked everything after it:
+
+    FAIL detachment-is-detected: a checkout on a branch was reported as detached
+
+That check asserted `head_detached(THIS repo) is False` — a property of the
+**runner**. Every dev checkout is on a branch, so it passed in frank2's
+hand-repro at HEAD and the *next* file's failure is what triage saw. A watcher
+clone is detached at the sha under test by design, so in the one environment
+where the full tier runs, the assertion could not hold. Fixed against a scratch
+repo, both directions pinned:
+`bug-t-the-detachment-guard-tests-its-own-runner-not-the-predicate`.
+
+`twatch_host_epoch_devtest.py` — the one frank2 handed back — is **green** at
+HEAD and needs nothing. It was fixed by `a1fd5715e` itself.
+
+### What this adds to correction 1
+
+Correction 1 above says a `$(PXX_STABLE)` straddle needs asking *"was this
+exposed rather than caused"* before the range is read. This is the same question
+in a third direction: **was the job even old enough to regress?** A job created
+inside the range has no last-good measurement, so "newly red in this range" is
+true of the *observation* and says nothing about the *code*. Track T's own
+tooling is where that will keep happening, because T adds jobs.
