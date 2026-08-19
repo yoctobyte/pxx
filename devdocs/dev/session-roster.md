@@ -2265,3 +2265,46 @@ rerank it deliberately rather than inheriting the number).
   T's tool and T's call. **The caveat stands until it lands: "no ticket appeared" is not
   "no finding", and that is costlier now than this morning because a clear board makes the
   next red likelier to be real.**
+
+- **CAVEAT DROPPED: the twatch stub-refile restart LANDED at 09:27:43Z**, before my message
+  reached plexus-T. Verified by T rather than assumed — process start timestamp AFTER the
+  file's mtime (so the running code is the fix), 4 refs present, clone clean and detached,
+  no orphaned testmgr. It took SIGTERM cooperatively in 2s and dropped the in-flight full
+  run, which is what a backfill survives, so none of the wedged-clone risk. **A NEW-RED on
+  a job with a resolved ticket now files as `<slug>-2` and announces itself.**
+  "No ticket appeared ≠ no finding" comes off the standing caveats.
+
+- **AND THE CORRECTION IS WORTH MORE THAN THE RESTART — I conflated THREE different
+  subjects and called it one signal.** At 09:27:37Z, six seconds before T restarted, its
+  daemon had a testmgr child **6 minutes into a full tier**. The window I flagged as idle
+  was not one.
+
+  My evidence was `ListAgents` showing `plexus-T ... idle`, plus published tstate (native
+  GREEN through `ebb7784692fb`, full GREEN through `c45ed0062491`). **Every part of that
+  was true. None of it was about daemon liveness.** Three distinct subjects:
+
+  | what I read | what it actually answers |
+  | --- | --- |
+  | `ListAgents` `idle` | the **Claude session's** conversational state on another box |
+  | `twatch --status` | **is coverage current for this repo** — history, not liveness |
+  | (never checked) | **is a child mid-run right now** |
+
+  `--status` *cannot* answer liveness by design: a quiet watcher on a quiet repo is
+  deliberately indistinguishable from a dead one, because for coverage purposes it does not
+  matter. Reading it harder will never yield the answer. Same family as
+  `pgrep`-matching-its-own-command-line and the `tkString`-of-a-single-char case — **a
+  checkable, correct statement standing in for the deciding one.**
+
+  **What decides it (T's, run before flagging a window again):**
+
+      ps --ppid $(systemctl --user show -p MainPID --value trackt-watcher.service) \
+         --no-headers | wc -l
+
+  Zero, **re-checked ~5s later** to avoid landing in the gap between two child processes.
+  Plus `git -C <clone> symbolic-ref -q HEAD` for the wedge check. **State, not
+  evidence-of-state.**
+
+  No harm this time — flagging rather than asking was the right move with an uncertain
+  signal, and T said as much. But a false idle reading is how a restart lands mid-test, and
+  T priced that at **11 hours**. Do not spend that on a signal that was never about the
+  subject.
