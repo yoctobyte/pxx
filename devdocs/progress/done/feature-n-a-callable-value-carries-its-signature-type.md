@@ -576,4 +576,4 @@ wrong dispatcher because that number was mapped back by assumption. It is what
 finally identified `pyvar_callv1` as the real call site.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit b515f2842.
