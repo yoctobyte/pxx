@@ -6012,11 +6012,11 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-19T09:10:52Z",
+  "date": "2026-08-19T10:10:13Z",
   "red": [],
-  "sha": "8a16663c6ffe35eb02944a5306afe7a23485d5a0",
+  "sha": "19d5d9c7876bd0eb7f80c0deda77f891bb71706f",
   "tier": "full",
-  "ver": "v353",
+  "ver": "v354",
   "verdict": "GREEN"
  },
  "renamed_from": [
