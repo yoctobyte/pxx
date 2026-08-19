@@ -2,13 +2,41 @@
 track: A
 prio: 55
 type: feature
-blocked-by: []
+blocked-by: []   # NOT blocked overall; ONE configuration is — see "Read this first"
 summary: "Build-time selection of frontends and targets, so `only-pascal` + `only-esp-riscv` yields a small Pascal-for-ESP compiler instead of the megalith. The umbrella build stays the default. Filed with a measurement: C is nearly separable already (16 references in shared files), NilPy is NOT (1281) — so this doubles as a falsifiable test of the frontend-separation design, and NilPy already fails it."
 status: working
 owner: frank3
 ---
 
 # Build a reduced compiler by selecting frontends and targets
+
+## READ THIS FIRST — two things a reader will otherwise get wrong
+
+**1. Omitting frontends is NOT the size lever it sounds like.** Measured
+2026-08-19, same rig, fpc `-O2`:
+
+| build | size | vs default |
+| --- | --- | --- |
+| default | 3,376,848 | — |
+| **9 frontends off** | 3,228,480 | **−4.4 %** |
+| + C frontend + 3 host backends | 2,677,120 | **−20.7 %** |
+
+Nine frontends buy less than three host backends. The skeletons are a few hundred
+lines each; `pyparser.inc` alone is **35,682 lines**, an order of magnitude past every
+other frontend combined. "Omit the languages you don't need" is the obvious lever and
+it is the wrong one — the only frontend omission that moves size is `PXX_NO_NILPY`.
+
+**2. The NilPy-only configuration cannot be built today, at any size.** It needs the
+Pascal frontend out of the *shared* `parser.inc`, which is
+[[refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files]] (Track A backlog,
+p60) — already ranked work, not an open question. This ticket is **blocked-by that
+one for that configuration specifically**; every other configuration is unblocked and
+shipping. Do not quote a size for "the Python compiler for ESP at reduced size" until
+the carve-out lands.
+
+Thirteen omission defines ship today: `PXX_NO_CFRONT` `_ZIG` `_BASIC` `_ADA`
+`_LOLCODE` `_FORTRAN` `_ALGOL` `_ERLANG` `_WHITESPACE` `_RUST` `_I386` `_ARM32`
+`_AARCH64`. (`_RUST` requires `_ZIG` + the six probe defines — see below.)
 
 **Filed 2026-08-19 at the user's request.** The idea: pxx is now a big beast, but someone
 who wants *only* a Pascal compiler should be able to build one. Frontend selection
@@ -675,3 +703,67 @@ worth keeping: `pxx`'s output path is a **positional second argument**, not `-o`
 Passing `-o` made it report `ok: -o` and write a file literally named `./-o` in the
 repo root — twice — while printing a success line with plausible code/data sizes.
 A tool that succeeds at the wrong thing, again.
+
+## CORRECTION: every survey figure in this ticket is a FLOOR, not a cost
+
+Found 2026-08-19 while surveying `PXX_NO_NILPY`, and it retroactively qualifies
+numbers recorded above.
+
+`-dPXX_NO_NILPY` reported **7 errors**. Pre-registration said "hundreds, concentrated
+in `parser.inc`'s forwards; under 50 means the include was not guarded." The guard had
+applied — so the *prediction* was what needed checking, and checking it is what found
+this:
+
+> **FPC does not run its end-of-unit unsolved-forward pass when the module already has
+> errors.** `Fatal: There were N errors compiling module, stopping` aborts first.
+
+Silence the 7 identifier errors (guard the driver branch, stub the two shared call
+sites) and recompile: **191 `Forward declaration not solved`** appear. NilPy's real
+cost is ~198 symbols, not 7 — a factor of 28.
+
+The evidence is clean rather than inferred: `-dPXX_NO_ADA` produced **1 forward error
+and 0 identifier errors**, so the forward pass ran and reported. NilPy produced 7
+identifier errors and 0 forward errors, so it did not. Same compiler, opposite
+behaviour, and the discriminator is whether any other error exists.
+
+### What this qualifies
+
+**The thirteen landed defines are unaffected and remain fully verified.** Each was
+driven to *zero* errors and then to a *built binary* — a binary that links has no
+unsolved forwards by construction, so nothing can be hiding behind an abort. The
+acceptance test and the byte-identical fixedpoint stand.
+
+What is qualified is every **survey** figure, i.e. every count reported for a define
+that was measured but not landed. All of these had ≥1 identifier error, so all are
+lower bounds:
+
+| reported above | actually |
+| --- | --- |
+| `PXX_NO_RISCV32` 518 | **≥ 518** |
+| `PXX_NO_XTENSA` 288 | **≥ 288** |
+| both, 805 | **≥ 805** |
+| `PXX_NO_RUST` alone, 198 | **≥ 198** |
+| `PXX_NO_NILPY` 7 | **198** (measured properly) |
+
+The "800+ lower bound" language used for riscv32/xtensa turns out to have been
+accidentally correct — it was hedging about ESP's platform layer, not about this.
+
+### The pattern, fifth instance
+
+Same species as the other four: **no error, plausible output.** FPC printed a
+well-formed error list and an accurate `There were 7 errors` line. Seven is a
+believable number for a frontend omission — it is exactly what the six esoteric probes
+cost. Nothing looked wrong, and the only reason it was caught is that a written-down
+prediction said "hundreds" and the result said seven, so one of the two had to be
+wrong and it was cheap to find out which.
+
+That is the pre-registration rule paying for itself a second time, and it is worth
+being precise about *how*: it did not flag a suspicious number. It flagged a
+**disagreement** between a number and a prior belief, which is a much sharper signal
+than any property of the number alone. Seven errors is not suspicious. Seven errors
+when you predicted hundreds is.
+
+Standing correction to the method, for this ticket and any future omission work:
+
+> **An error count is only a cost if the build reached the end. Drive to zero and link
+> a binary, or report the number as a floor.**

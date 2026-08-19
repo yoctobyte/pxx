@@ -129,3 +129,18 @@ load-bearing and a header missing `forward;` nests every later routine. So slice
 with `make compiler/pascal26` (the byte-identical fixedpoint) as the gate after each —
 never one big move. Rationale in
 `devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md`.
+
+## It now gates a shipping configuration (added 2026-08-19)
+
+This was structural debt with no deadline. It is now a **blocker**: the reduced-compiler
+work ([[feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets]]) can
+omit any of thirteen frontends and targets, but it cannot build the **NilPy-only**
+compiler the owner asked for — "the python compiler for esp at reduced code size" —
+because omitting the Pascal frontend means omitting the shared `parser.inc`, which is
+also where the NilPy frontend's 174 forward declarations and much of its behaviour
+live. There is no define that can express it; only this carve-out can.
+
+Measured alongside: `pyparser.inc` is 35,682 lines and `PXX_NO_NILPY` costs ~198
+symbols, so the *other* direction (Pascal-only, NilPy omitted) is a define and is in
+progress. The asymmetry is the carve-out's whole subject — P shares its files with A,
+and N does not.

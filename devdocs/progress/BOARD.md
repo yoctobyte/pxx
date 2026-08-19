@@ -45,7 +45,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (230)
+## backlog (231)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -269,6 +269,7 @@ _none_
 | refactor-a-search-path-helpers-live-in-the-c-preprocessor | A | 25 | refactor | AddPasUnitDir / AddPasIncDir / AddCIncludeDir are generic search-path functions that live in cpreproc.inc, so compiler.pas's own -Fu/-I handling depends on the C frontend. Six of the eleven errors from omitting the C frontend are this misplacement, not coupling: moving them drops omit-c from 11 sites to about 4. | — |
 | refactor-a-seven-frontends-borrow-rust-parser-helpers | A | 40 | refactor | Zig, ALGOL, Erlang, Fortran, LOLCODE and Whitespace all call five helpers whose bodies live in rparser.inc, so PXX_NO_RUST alone fails with 198 errors and Rust can only be omitted together with all six. Three different layers are marooned under one R prefix: AST constructors (share, wrong file), RWiden (numeric widening — SEMANTICS, should not be shared at all), and REmitParamRegSpill (raw x86-64 emission in a frontend). | — |
 | refactor-a-the-greenfield-frontends-share-each-others-parser-helpers | A | 30 | refactor | Omitting rparser.inc breaks zparser.inc in 123 places, plus gparser/eparser/fparser — the greenfield frontends call each other's support functions, which is exactly what the-substrate-is-ast-and-ir-not-the-parser.md says not to do. Costs nothing today; makes R and Z individually unomittable and couples two language specs. | — |
+| refactor-a-the-missing-layer-between-frontends-and-backends | A | 50 | refactor | Three frontends have each independently grown a private piece of target machinery: the Pascal driver emits the signal runtime, the C frontend writes the _start stub as raw machine code, and Zig calls Rust's REmitParamRegSpill for raw x86-64 register spill. Two is a smell and three is a design flaw: there is no layer between the frontends and the backends, so each frontend built its own. Found by three unrelated omission probes, not by reading. | — |
 | refactor-a-variant-object-tag-list-lives-in-four-places | A | 45 | refactor | The set of variant tags whose payload is a refcounted object is written out in FOUR independent places; a tag added to some and not others leaks silently, with RSS as the only symptom. One of them also just zeroes object payloads outright. | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-n-two-import-handlers-are-twins | N | 30 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
@@ -577,6 +578,7 @@ _none_
 - [p 50] [P] feature-p-read-text-into-a-char-arm
 - [p 50] [A] feature-pascal-initialize-finalize-intrinsics
 - [p 50] [A] feature-release-checksums-repro
+- [p 50] [A] refactor-a-the-missing-layer-between-frontends-and-backends
 - [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
