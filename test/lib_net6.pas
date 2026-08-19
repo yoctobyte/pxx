@@ -44,11 +44,17 @@ begin
   if got <> 'v6 via net' then begin writeln('FAIL payload [', got, ']'); Halt(1); end;
   NetClose(conn); NetClose(cli); NetClose(srv);
   { IPv4 must still work unchanged }
+  { The listen/connect checks come BEFORE the accept, not after. It does not hang
+    either way — accept on an invalid descriptor errors immediately — but reading
+    `srv` only after using it is the shape that let
+    bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable sit for
+    months, so it should not be left here looking like one. }
   srv := NetTcpListen(NetLoopback(28851), 4);
+  if srv < 0 then begin writeln('FAIL ipv4 listen -> ', srv); Halt(1); end;
   cli := NetTcpConnect(NetLoopback(28851));
+  if cli < 0 then begin writeln('FAIL ipv4 connect -> ', cli); Halt(1); end;
   conn := NetTcpAccept(srv, p);
-  if (srv < 0) or (cli < 0) or (conn < 0) then
-  begin writeln('FAIL ipv4 path regressed'); Halt(1); end;
+  if conn < 0 then begin writeln('FAIL ipv4 accept -> ', conn); Halt(1); end;
   if p.Family <> PAL_NET_AF_INET then begin writeln('FAIL v4 peer family'); Halt(1); end;
   NetClose(conn); NetClose(cli); NetClose(srv);
 

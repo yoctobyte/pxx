@@ -10573,8 +10573,13 @@ endif
 	# (bug-b-lib-tls-hangs-forever-when-its-hardcoded-port-is-unavailable).
 	test "$$($(TESTTMP)/lib_https_mock | grep -c '=ok')" = "7"
 	test "$$($(TESTTMP)/lib_https_mock | grep -c 'FAIL')" = "0"
+	# ephemeral-ports is new: the six hardcoded ports 28766-28771 became port 0
+	# (bug-b-lib-dns-async-ignores-six-bind-returns-and-can-park-forever). Two
+	# concurrent copies of the old binary gave BOTH failure modes at once — one
+	# wedged with no output, the other exited 0 having answered its neighbour's
+	# queries, so chase-* and cache-1query read as DNS-logic regressions.
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_async.pas $(TESTTMP)/lib_dns_async
-	test "$$($(TESTTMP)/lib_dns_async)" = "$$(printf 'server-done=ok\nrcode=ok\ncount=ok\nip=ok\nchase-server-done=ok\nchase-rcode=ok\nchase-count=ok\nchase-ip=ok\ntimeout=ok\nv6-server-done=ok\nv6-rcode=ok\nv6-count=ok\nv6-ip=ok\ncache-1st=ok\ncache-2nd=ok\ncache-1query=ok\ntc-udp-done=ok\ntc-tcp-done=ok\ntc-rcode=ok\ntc-count=ok\ntc-ips=ok')"
+	test "$$($(TESTTMP)/lib_dns_async)" = "$$(printf 'ephemeral-ports=ok\nserver-done=ok\nrcode=ok\ncount=ok\nip=ok\nchase-server-done=ok\nchase-rcode=ok\nchase-count=ok\nchase-ip=ok\ntimeout=ok\nv6-server-done=ok\nv6-rcode=ok\nv6-count=ok\nv6-ip=ok\ncache-1st=ok\ncache-2nd=ok\ncache-1query=ok\ntc-udp-done=ok\ntc-tcp-done=ok\ntc-rcode=ok\ntc-count=ok\ntc-ips=ok')"
 	$(PXX_STABLE) -Fulib/rtl test/lib_classes.pas $(TESTTMP)/lib_classes
 	test "$$($(TESTTMP)/lib_classes | grep -c '=ok')" = "21"
 	test "$$($(TESTTMP)/lib_classes | grep -c 'FAIL')" = "0"
