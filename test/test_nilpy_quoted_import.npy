@@ -1,0 +1,25 @@
+# A NilPy import that names another language BY EXTENSION, in quotes.
+#
+# A bare `import X` means Python (decide-nilpy-imports-that-collide-with-a-
+# pascal-rtl-unit), so this quoted spelling is the only way a NilPy program
+# reaches a Pascal or C unit -- it is the escape hatch that makes the bare-import
+# rule affordable, and the rule cannot take anything away until it works.
+#
+# TWO SHAPES, and the difference is deliberate rather than an artefact:
+#   'sysutils.pas'          no slash -> a unit NAME with an explicit extension,
+#                           found through the ordinary search chain. This is the
+#                           only shape that can reach lib/rtl, which is where the
+#                           units programs actually want live.
+#   './relpath/relstr.pas'  a slash  -> an authoritative path against this file's
+#                           directory, no search chain -- exactly what Pascal's
+#                           `uses './x.pas' as m` already does.
+# Both are string literals, so neither can be confused with `import xml.dom`.
+
+import 'sysutils.pas' as su
+import './relpath/relstr.pas' as rs
+
+# Reached through the alias, which is what a residual name collision is answered
+# with -- and the alias must key on the BASENAME, not on the spelling that
+# reached the unit.
+print(su.IntToStr(42))
+print(rs.Triple(14))

@@ -282,6 +282,12 @@ test-nilpy: $(COMPILER)
 	# is exactly that shape. The isinstance line catches a partial fix that
 	# dedupes the body but not the class rows.
 	# bug-a-a-python-module-s-identity-is-its-name-not-its-file
+	# A quoted import names another language by extension -- the escape hatch
+	# that makes "a bare import means Python" affordable. Both shapes: a
+	# searched unit name ('sysutils.pas') and an authoritative path
+	# ('./relpath/relstr.pas').
+	./$(COMPILER) test/test_nilpy_quoted_import.npy $(TESTTMP)/test_nilpy_quoted_import26
+	test "$$($(TESTTMP)/test_nilpy_quoted_import26)" = "$$(printf '42\n42')"
 	./$(COMPILER) test/test_nilpy_module_identity.npy $(TESTTMP)/test_nilpy_module_identity26
 	test "$$($(TESTTMP)/test_nilpy_module_identity26)" = "$$(printf 'body-ran\nTrue')"
 	# A relative import's DOT LEVEL decides which package it resolves against:

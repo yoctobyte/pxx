@@ -33837,6 +33837,21 @@ end;
 
   The `mimic_*` shims are NOT here: they are Python modules by construction and
   the resolver reaches them through the prefix path, not through this list. }
+{ Did this resolution land on a PASCAL source? Asked of the path a probe
+  actually loaded, rather than of the eight scattered places one could come
+  from — so an import that pinned another language discards the find on the
+  evidence instead of on a predicate per probe site. }
+function PathIsPascalSource(const p: AnsiString): Boolean;
+var e: AnsiString; i, lastDot: Integer;
+begin
+  lastDot := 0;
+  for i := 1 to Length(p) do
+    if p[i] = '.' then lastDot := i;
+  e := '';
+  if lastDot > 0 then e := LowerCase(Copy(p, lastDot + 1, Length(p) - lastDot));
+  Result := (e = 'pas') or (e = 'pp');
+end;
+
 function PyRtlUnitServesPython(const lo: AnsiString): Boolean;
 begin
   Result := (lo = 'ast') or (lo = 'atexit') or (lo = 'base64') or
@@ -34059,6 +34074,7 @@ var
     for anything that is not a NilPy import statement, 'py' for a bare one,
     'pas'/'c' for the explicit quoted spelling. See PyImportLang in defs.inc. }
   pyImportLang: AnsiString;
+  pasLookupOK, pyLookupOK: Boolean;   { which chains this import may use }
   isPyUnit, savedPyExprMode: Boolean;
   { The dotted module path this import was written with, claimed from the global
     on entry so a nested unit parse cannot see a stale one. Empty unless it
@@ -34108,6 +34124,13 @@ begin
     pulled in behind a NilPy import does not inherit Python's resolution rules. }
   pyImportLang := PyImportLang;
   PyImportLang := '';
+  { WHICH CHAINS THIS IMPORT MAY USE. An explicit extension pins the language,
+    so the other language's probes are closed rather than merely outranked — a
+    `import 'classes.pas'` that fell through to a same-named .py would be a
+    wrong answer, not a miss. Both default to open, so every non-NilPy `uses`
+    and every bare import behaves exactly as before. }
+  pasLookupOK := pyImportLang <> 'c';
+  pyLookupOK := (pyImportLang <> 'pas') and (pyImportLang <> 'c');
   pyDottedIsPath := False;
   for i := 1 to Length(pyDotted) do
     if pyDotted[i] = '.' then pyDottedIsPath := True;
@@ -34288,7 +34311,7 @@ begin
         script's own directory first. Only for a NilPy compilation — a Pascal
         `uses` must never start pulling Python in
         (feature-nilpy-py-module-loader). }
-      if isNilPy and (Length(UnitContent) = 0) then
+      if isNilPy and pyLookupOK and (Length(UnitContent) = 0) then
       begin
         ConcatThree(basePath, '.py', '', path);
         LoadFile(path, UnitContent);
@@ -34323,7 +34346,7 @@ begin
     `uses tk` cannot be hijacked by a stray tk.npy sitting next to the user's
     script — which is exactly what happened the first time a build ran out of a
     directory full of old test files. }
-  if isNilPy and (not isPath) and (Length(UnitContent) = 0) then
+  if isNilPy and pyLookupOK and (not isPath) and (Length(UnitContent) = 0) then
   begin
     { An empty CurUnitDir means the importer was named without a directory
       (`pascal26 main.py`), so the bare name IS the relative path — the sibling
@@ -34382,7 +34405,7 @@ begin
     lib/rtl/re.pas (bug-nilpy-stdlib-name-binds-pascal-unit). A package
     DIRECTORY shadowing an RTL unit is Python's own answer and is the shape
     `from mypkg import Bus` needs. }
-  if isNilPy and (not isPath) and (Length(UnitContent) = 0) and (pyDotted <> '') then
+  if isNilPy and pyLookupOK and (not isPath) and (Length(UnitContent) = 0) and (pyDotted <> '') then
   begin
     probePath := PyDottedToRelPath(pyDotted);
     PyTryPackageSource(SourceFileDir, probePath, pyDottedIsPath,
@@ -34681,6 +34704,18 @@ begin
     end;
   end;
 
+  { AN IMPORT THAT PINNED ANOTHER LANGUAGE does not get a Pascal source. Tested
+    on the path a probe actually LOADED, once, rather than by guarding each of
+    the eight .pas/.pp probes above: the question is what was resolved, and a
+    predicate repeated at eight sites is eight chances for one of them to drift.
+    Probes only read files, so dropping the content here is the same as never
+    having run them. }
+  if (Length(UnitContent) > 0) and (not pasLookupOK) and PathIsPascalSource(path) then
+  begin
+    UnitContent := '';
+    path := '';
+  end;
+
   { HOST HEADERS. `import <c-header>` is a DESIGNED NilPy feature — the
     wrapper-free NilPy-to-C arc that `import sqlite3` and `import stdlib`
     (test_nilpy_import_sqlite, test_nilpy_c_pointer) depend on — so this route
@@ -34717,7 +34752,7 @@ begin
 
     The sibling-first rule above is untouched — it is load-bearing (see the
     `tk.npy` note there). }
-  if (Length(UnitContent) = 0) and isNilPy and (not isPath) then
+  if (Length(UnitContent) = 0) and isNilPy and pyLookupOK and (not isPath) then
   begin
     pyRootIdx := 0;
     while (Length(UnitContent) = 0) and (pyRootIdx < PasUnitDirCount) do
@@ -34755,7 +34790,7 @@ begin
     a same-named C header. `import sqlite3` still reaches sqlite3.h (nothing
     ships a mimic_sqlite3), and `import string` will reach mimic_string the
     moment it is written. }
-  if (Length(UnitContent) = 0) and isNilPy and
+  if (Length(UnitContent) = 0) and isNilPy and (pyImportLang <> 'pas') and
      (not PyMimicShimExists(lo, rtldir, lcldir)) then
     PyTryHostHeader(cName, path, UnitContent, isCUnit, isCHeader);
 
@@ -34768,7 +34803,7 @@ begin
     `from reportlab.pdfgen import canvas` reach `mimic_reportlab_pdfgen` with no
     package-directory machinery. Reported, so a build says which shims it used.
     feature-nilpy-dotted-package-imports. }
-  if (Length(UnitContent) = 0) and isNilPy and (not isPath) and
+  if (Length(UnitContent) = 0) and isNilPy and pyLookupOK and (not isPath) and
      (not softMissOK) and (Copy(lo, 1, 6) <> 'mimic_') then
   begin
     if NoShims then

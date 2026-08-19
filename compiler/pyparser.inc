@@ -33257,10 +33257,78 @@ end;
   pylib/pyeval/builtin units, the `mimic_` re-entry inside the resolver — stay
   on the bare call on purpose: they are not import statements and must keep
   resolving under the unchanged Pascal rules. }
+procedure PyParseImportUnitAs(const name, lang: AnsiString);
+begin
+  PyImportLang := lang;
+  ParseUsesUnit(name);
+end;
+
 procedure PyParseImportUnit(const name: AnsiString);
 begin
-  PyImportLang := 'py';
-  ParseUsesUnit(name);
+  PyParseImportUnitAs(name, 'py');
+end;
+
+{ `import 'sysutils.pas' as su` — the QUOTED import: a module named with an
+  explicit extension, which is how a NilPy program reaches a unit written in
+  another language. A bare import means Python, so this is the escape hatch
+  that makes that rule affordable (decide-nilpy-imports-that-collide-with-a-
+  pascal-rtl-unit). Consumes the string token, sets PyImportLang to the
+  language its extension names, and returns the name to hand the resolver.
+
+  A STRING LITERAL rather than a dotted `import math.pas`, because a quoted
+  name cannot be confused with Python's own package syntax — `import xml.dom`
+  stays a submodule import with nothing to disambiguate, so no whitelist of
+  language extensions is needed and none can misfire on a package whose
+  submodule really is called `c`. It also matches what the repo already
+  ships: Pascal's `uses './mymod.pas' as m` (feature-uses-alias-as) and C's
+  `#include "./lib2.c"`. User, 2026-08-19: the spelling may be language
+  dependent, and consistency with the repo beats symmetry with CPython — both
+  spellings are outside CPython anyway.
+
+  TWO SHAPES, split on the slash, and the split is deliberate rather than an
+  artefact (user, 2026-08-19):
+
+    'x.pas'    no slash — a unit NAME carrying an explicit extension, resolved
+               through the ordinary search chain with the language pinned.
+               This is the shape that reaches lib/rtl, and without it the
+               escape hatch cannot open the units it exists for.
+    './x.pas'  with a slash — today's authoritative path, resolved against the
+               importing file's directory with no search chain, exactly as the
+               Pascal spelling already behaves. Unchanged.
+
+  keyName gets the name the ALIAS and the unit key hang off — the basename with
+  no directory and no extension — since that is what ParseUsesUnitBody keys a
+  path-form load on. }
+function PyConsumeQuotedModule(var keyName: AnsiString): AnsiString;
+var raw, ext: AnsiString; i, lastSlash, lastDot: Integer;
+begin
+  raw := CurTok.SVal;
+  Next;
+  lastSlash := 0; lastDot := 0;
+  for i := 1 to Length(raw) do
+  begin
+    if raw[i] = '/' then lastSlash := i;
+    if raw[i] = '.' then lastDot := i;
+  end;
+  ext := '';
+  if lastDot > lastSlash then
+    ext := LowerCase(Copy(raw, lastDot + 1, Length(raw) - lastDot));
+  if (ext = 'pas') or (ext = 'pp') then
+    PyImportLang := 'pas'
+  else if (ext = 'c') or (ext = 'h') then
+    PyImportLang := 'c'
+  else
+    { no extension, or one we do not have a frontend for: say so HERE. The
+      alternative is a "unit source not found" naming a file the program never
+      wrote, one resolution step away from the actual mistake. }
+    Error('Nil Python: a quoted import must name the language by extension — '
+          + '.pas/.pp or .c/.h, as in `import ''sysutils.pas'' as su` (got ''' 
+          + raw + ''')');
+  if lastSlash > 0 then
+    Result := raw            { authoritative path; the resolver keys on its basename }
+  else
+    Result := Copy(raw, 1, lastDot - 1);
+  keyName := LowerCase(GetFileBaseName(raw));
 end;
 
 
@@ -33270,6 +33338,8 @@ end;
 procedure PyParseOneImport;
 var impName, impAlias, impRoot: AnsiString; aStrIdx, realStrIdx: Integer;
     impLevel: Integer;
+    { the unit key and language of a quoted import; see PyConsumeQuotedModule }
+    impKey, impLang: AnsiString;
 begin
   { SoftUnitMissed describes THIS import, and nothing else. It is a global, and
     a soft miss recorded by an earlier one — a module's own `try: from PIL
@@ -33331,9 +33401,23 @@ begin
   else
   begin
     Next;
-    while CurTok.Kind = tkIdent do
+    while (CurTok.Kind = tkIdent) or (CurTok.Kind = tkString) do
     begin
+      if CurTok.Kind = tkString then
+      begin
+        { `import 'x.pas'` — see PyConsumeQuotedModule; twin site in
+          PyParseImportRun. An explicit extension names a FILE, so it is never
+          one of the consumed-only roots. }
+        impName := PyConsumeQuotedModule(impKey);
+        impLang := PyImportLang;
+        PyImportPending := True;
+        PyParseImportUnitAs(impName, impLang);
+        PyImportPending := False;
+      end
+      else
+      begin
       impName := PyConsumeDottedModule(impRoot);
+      impKey := impName;
       { `import typing` joins the consumed roots. The from-import form was
         already consumed; the PLAIN form was not, so `import typing` died with
         "no unit named typing" — which matters now that `@typing.overload` is a
@@ -33356,13 +33440,17 @@ begin
         PyParseImportUnit(impName);
         PyImportPending := False;
       end;
+      end;
       if PyIsIdent('as') then
       begin
         Next;
         if CurTok.Kind <> tkIdent then
           Error('Nil Python: expected a name after `as` in an import');
         aStrIdx := InternStr(LowerCase(CurTok.SVal));
-        realStrIdx := InternStr(LowerCase(impName));
+        { impKey, not impName: a quoted import's name is a path or carries an
+          extension, while the unit is keyed on its basename. Identical to
+          impName for every unquoted import. }
+        realStrIdx := InternStr(LowerCase(impKey));
         if (UnitAliasCount < MAX_UNIT_ALIASES) and (aStrIdx <> realStrIdx) then
         begin
           UnitAliasName[UnitAliasCount] := aStrIdx;
@@ -33378,6 +33466,8 @@ end;
 
 procedure PyParseImportRun;
 var impName, impAlias, impRoot, impReal: AnsiString; isCount: Boolean;
+    { the unit key and language of a quoted import; see PyConsumeQuotedModule }
+    impKey, impLang: AnsiString;
     { The DOTTED module spelling, captured before ParseUsesUnit: PyDottedImport
       is a global, and pulling a unit parses ITS imports and overwrites it. The
       unit arm read it after the pull and bound nothing. }
@@ -33673,12 +33763,26 @@ begin
     else
     begin
       Next;
-      while CurTok.Kind = tkIdent do
+      while (CurTok.Kind = tkIdent) or (CurTok.Kind = tkString) do
       begin
         { Python stdlib modules without a shim yet: consume-and-defer, use
           sites wall visibly (same policy as itertools above). Everything
           else goes through the unit resolver (sqlite3, C headers, ...). }
+        if CurTok.Kind = tkString then
+        begin
+          { `import 'x.pas'` — see PyConsumeQuotedModule. Never consumed-only:
+            an explicit extension is a request for a specific FILE, so there is
+            no stdlib root to defer. Twin site in PyParseOneImport. }
+          impName := PyConsumeQuotedModule(impKey);
+          impLang := PyImportLang;
+          PyImportPending := True;
+          PyParseImportUnitAs(impName, impLang);
+          PyImportPending := False;
+        end
+        else
+        begin
         impName := PyConsumeDottedModule(impRoot);
+        impKey := impName;
         { `typing` — see the twin list in PyParseOneImport for why only this
           root is added and the others are not. }
         if PyImportRootPlainIsConsumedOnly(impRoot) then
@@ -33690,6 +33794,7 @@ begin
           PyImportPending := True;
           PyParseImportUnit(impName);
           PyImportPending := False;
+        end;
         end;
         { `import X as Y` — Python's module alias, and the same thing a Pascal
           `uses X as Y` already does (feature-uses-alias-as): register the alias
@@ -33703,7 +33808,8 @@ begin
           if CurTok.Kind <> tkIdent then
             Error('Nil Python: expected a name after `as` in an import');
           aStrIdx := InternStr(LowerCase(CurTok.SVal));
-          realStrIdx := InternStr(LowerCase(impName));
+          { impKey, not impName — see the twin site in PyParseOneImport }
+          realStrIdx := InternStr(LowerCase(impKey));
           if (UnitAliasCount < MAX_UNIT_ALIASES) and (aStrIdx <> realStrIdx) then
           begin
             UnitAliasName[UnitAliasCount] := aStrIdx;
