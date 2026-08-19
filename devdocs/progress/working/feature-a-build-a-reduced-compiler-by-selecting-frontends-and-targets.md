@@ -767,3 +767,71 @@ Standing correction to the method, for this ticket and any future omission work:
 
 > **An error count is only a cost if the build reached the end. Drive to zero and link
 > a binary, or report the number as a floor.**
+
+## `PXX_NO_NILPY` — measured in full, deliberately NOT landed
+
+The measurement, driven to the point where the next step would have been to write code:
+
+| stage | result |
+| --- | --- |
+| guard the two `{$include}` lines | 7 identifier errors — **a floor**, see the correction above |
+| + guard the driver branch, stub the 2 shared call sites | **191** `Forward declaration not solved` (177 `parser.inc`, 14 `forwards.inc`) |
+| + guard all 191 forwards | **426 identifier errors**, across **176 distinct NilPy functions** — 425 in `parser.inc`, 1 in `cparser.inc` |
+
+Heaviest call sites, which are also the best carve targets:
+
+```
+     23 PyParseBoolExpr
+     19 PyCallMeth1
+     12 PyAugBinTok
+      9 PyIsIdent
+      9 PyForceVariant
+      8 PyStoredName
+      8 PyParseSliceTail
+      8 PyMakeDynAttrSet
+      8 PyHoistPark
+      7 PyNodeIsComplex
+      6 PyNodeIsPyList
+      6 PyMakeDynAttrGet
+```
+
+Pre-registration, third use, and this time it **missed**: I predicted 50-150
+identifier errors and got 426. Recording that rather than quietly moving on, because
+a rule that only gets cited when it wins is not a rule. What it still bought was the
+question — 426 was surprising enough to make me check the shape of the work before
+starting it, which is what produced the decision below.
+
+### Why it is parked, and this is a root-cause call rather than a size complaint
+
+Landing this would mean: 191 `{$ifndef}` wrappers inserted into `parser.inc`'s
+forward block, plus **176 stubs** in `frontend_stubs.inc`, each signature-identical to
+its real body, each depending on the claim that its 426 call sites are unreachable in
+a non-NilPy build.
+
+There is already a **ranked, proven campaign to delete this coupling instead**:
+
+- [[task-a-carve-nilpy-selectors-out-of-parser-inc]] — split 1, **landed**
+  (`ParseClassRecordSelectors` → `PyParseClassRecordSelectors`, 0 regressions over a
+  513-file `.npy` sweep, self-host byte-identical).
+- [[task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc]] — split 2, backlog, p45,
+  with the method written down and proven.
+
+Those splits *remove* NilPy functions from `parser.inc`. Every one they move is a
+forward that no longer needs guarding and a stub that never has to be written. So the
+two approaches do not merely overlap — **they run in opposite directions**, and doing
+mine first makes theirs harder: the carve tickets would then be editing a file with
+191 preprocessor wrappers threaded through the exact region they need to split.
+
+[[root-cause-over-microfix]] names this case directly: prefer the change that deletes
+cases over the one that adds them, and measure by tickets-closed-per-change. 176 stubs
+closes one ticket and complicates two. The carve campaign closes three.
+
+**So: `PXX_NO_NILPY` follows the carve campaign; it does not precede it.** The
+numbers above are its re-entry cost — nobody needs to re-measure. They also give the
+campaign a progress metric it did not have: **176 symbols / 426 sites remaining in
+`parser.inc`**, and `PXX_NO_NILPY` compiling clean is the objective definition of
+"done" for the whole carve.
+
+That is the second time this feature has produced a *measurement* that is worth more
+than the define it was taken for — see the instrument argument in
+[[refactor-a-the-missing-layer-between-frontends-and-backends]].
