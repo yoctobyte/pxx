@@ -115,3 +115,4 @@
 2026-08-19T07:15:27Z	plexus	6070883b46e78cbb0d48d48985fa03eb3e01496e	would NOT pin 6070883b46e7 — 1 red(s) not in the allowlist: lib-test#src:test/lib_tls.pas
 2026-08-19T08:19:24Z	plexus	c45ed0062491e1932d42ef28649480de95189281	would-pin PENDING c45ed0062491 — qualifies, streak 1/2
 2026-08-19T10:31:57Z	plexus	9bfb7fcfac03a57516b6fe9a4d958526efab15c7	WOULD PIN 9bfb7fcfac03 — 0 red(s), all allowlisted, self-host clean, streak 2/2
+2026-08-19T17:28:40Z	plexus	21f098e32a95be73bdeae3832aedfe65677292f7	would NOT pin 21f098e32a95 — 13 red(s) not in the allowlist: lib-test#src:test/lib_mimic_xml_etree_elementtree.npy, test-nilpy#src:test/test_cpyext_args_errors.npy, test-nilpy#src:test/test_cpyext_containers.npy, test-nilpy#src:test/test_cpyext_cython.npy, test-nilpy#src:test/test_cpyext_errformat.npy
