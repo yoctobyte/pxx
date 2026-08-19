@@ -13321,7 +13321,17 @@ function pyiter_of_userobj(o: TObject): TPyIter;
 var itv: Variant; ito: TObject;
 begin
   ito := o;
+  { A class whose `__iter__` is a GENERATOR carries a compiler-generated
+    `__pxx_gen_iter__` that hands back a cursor over a fresh generator instance
+    — asked FIRST, because `__iter__` itself is then the state-machine step
+    function, whose ABI is (instance, self) -> Boolean. Nothing here could call
+    that, and nothing tried: the arity check below is what kept it safe, and
+    the object was simply reported as not iterable. See
+    PyEmitGeneratorIterCursor (pyparser.inc). }
   if o <> nil then
+    if PyUserObjNoArgDunder(o, '__pxx_gen_iter__', itv) then
+      if pyvartag(itv) = 7 then ito := TObject(pyvarobj(itv));
+  if (ito = o) and (o <> nil) then
     if PyUserObjNoArgDunder(o, '__iter__', itv) then
     begin
       if pyvartag(itv) = 7 then ito := TObject(pyvarobj(itv));

@@ -279,6 +279,7 @@ var
     body is emitted by PyEmitDataclassEq once the fields are known.
     bug-nilpy-dataclass-no-generated-eq }
   PyDcEqProc: array[0..MAX_UCLASS-1] of Integer;
+
   { Same, for the synthesized @dataclass `__repr__`. Separate from PyDcEqProc
     because a class may hand-write one and not the other, and each generated
     body is skipped independently. bug-nilpy-dataclass-no-generated-repr }
@@ -31518,6 +31519,113 @@ begin
   SymRollbackTo(savedSC); FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
 end;
 
+{ A class whose `__iter__` is a GENERATOR gets an extra, compiler-generated
+  method: `__pxx_gen_iter__(self): TPyIter`, which allocates the generator
+  instance, seeds `self` into its first slot, and wraps both in a cursor. One
+  statement, and it is what makes such an object ITERABLE at run time —
+  `for v in obj`, `list(obj)`, `iter(obj)`.
+
+  Why a SEPARATE name rather than replacing `__iter__`: `__iter__` is the hook
+  the runtime calls, and a generator method is a state-machine STEP function
+  whose ABI is `(instance, self) -> Boolean`. The runtime cannot call that, and
+  is safe by construction not to try (PyUserObjNoArgDunder requires arity 1), so
+  before this the object simply was not iterable and said so plainly. Mangling
+  `__iter__` out of the way and synthesizing a replacement under that name would
+  work too, and was tried first — but the generated method then inherits the
+  virtual SLOT of the base class's `__iter__`, whose override numbering is keyed
+  on the SOURCE token, and the two would disagree for a subclass. An added name
+  is purely additive: it takes a fresh slot, `FindUMeth` walks parents for it
+  exactly as for any other method, and every existing route to a generator
+  method keeps working untouched.
+
+  Non-virtual deliberately. It is registered AFTER the class body is parsed
+  (the instance size is only final once the generator's own body has been
+  transformed), so claiming a VMT slot here would renumber a layout that
+  subclasses processed earlier already committed to. The runtime finds it by
+  name on the instance's DYNAMIC class, which is what dispatch needed anyway. }
+procedure PyEmitGeneratorIterCursor(ci: Integer);
+var mmi, genPi, procIdx, iterPi, idx, k: Integer;
+    savedSC, savedFS, savedSelf, patchPos: Integer;
+    gIdx, seq, allocCall, instLit, stepNode, a0, a1, callNode: Integer;
+    pnames: array[0..1] of AnsiString; ptypes: array[0..1] of TTypeKind;
+    fullName, nm: AnsiString;
+begin
+  { the class's OWN window, not FindUMeth: an INHERITED generator `__iter__` is
+    already served by the base's cursor method, and generating a second one here
+    would allocate a fresh instance seeded with the wrong receiver type }
+  genPi := -1;
+  for k := 0 to UClsMCount[ci] - 1 do
+  begin
+    mmi := UClsMBase[ci] + k;
+    if PyRawName(UMthNOff[mmi], UMthNLen[mmi]) = '__iter__' then
+    begin
+      genPi := UMthProc_[mmi];
+      Break;
+    end;
+  end;
+  if genPi < 0 then Exit;
+  if (not ProcIsStackless[genPi]) or (not ProcIsGenerator[genPi]) then Exit;
+  iterPi := FindProc('pygen_iter_new');
+  if iterPi < 0 then Exit;
+  if (FindProc('SlNew') < 0) or (FindProc('SlSet') < 0) then Exit;
+
+  nm := '__pxx_gen_iter__';
+  fullName := PyRawName(UClsNOff[ci], UClsNLen[ci]);
+  AppendChar(fullName, '.');
+  for k := 1 to Length(nm) do AppendChar(fullName, nm[k]);
+  pnames[0] := 'self'; ptypes[0] := tyClass;
+  procIdx := RegisterProc(fullName, True, Procs[iterPi].RetType, 1, pnames, ptypes);
+  ProcRetRecId[procIdx] := ProcRetRecId[iterPi];
+  ProcParamRecId[procIdx * MAX_PROC_PARAMS] := REC_UCLASS_BASE + ci;
+  AddUMeth(ci, PyStoredName(nm), Length(nm), procIdx);
+  UMthVirSlot[UMthCount - 1] := -1;
+
+  savedSC := SymCount; savedFS := FrameSize; savedSelf := CurSelfClass;
+  FrameSize := 0; CurProc := procIdx; CurSelfClass := REC_UCLASS_BASE + ci;
+  Procs[procIdx].ScopeBase := SymCount;
+  idx := AllocParam('self', tyClass, False, False);
+  Procs[procIdx].Params[0].SymIdx := idx;
+  Syms[idx].RecName := REC_UCLASS_BASE + ci;
+  SymSyncTypeRef(idx);
+  idx := AllocVar('$pyresult', Procs[procIdx].RetType);
+  Procs[procIdx].RetSymIdx := idx;
+  Syms[idx].Kind := skLocal;
+  Syms[idx].RecName := ProcRetRecId[iterPi];
+  SymSyncTypeRef(idx);
+  gIdx := AllocVar('', tyPointer);
+  Procs[procIdx].BodyAddr := CodeLen;
+  patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
+  PyEmitParamSpills(procIdx, 1);
+
+  instLit := GenMakeIntLit(ProcGenInstSize[genPi]);
+  allocCall := GenMakeCall6(FindProc('SlNew'), tyPointer, instLit, -1, -1, -1, -1, -1);
+  seq := PySeqAppend(-1, PyMakeAssignNode(GenMakeIdent(gIdx, tyPointer), allocCall));
+  { `self` is the generator's first DECLARED parameter, so it is slot 0 — the
+    numbering the state-machine transform assigns and the for-in desugar uses. }
+  seq := PySeqAppend(seq, GenMakeCall6(FindProc('SlSet'), tyInt64,
+           GenMakeIdent(gIdx, tyPointer), GenMakeIntLit(SL_OFF_SLOTS),
+           PyMakeIdent(Procs[procIdx].Params[0].SymIdx), -1, -1, -1));
+  stepNode := AllocNode(AN_PROCADDR);
+  ASTIVal[stepNode] := genPi;
+  ASTTk[stepNode] := Ord(tyPointer);
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := stepNode; ASTRight[a1] := -1;
+  a0 := AllocNode(AN_ARG); ASTLeft[a0] := GenMakeIdent(gIdx, tyPointer); ASTRight[a0] := a1;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := iterPi;
+  ASTTk[callNode] := Ord(Procs[iterPi].RetType);
+  ASTLeft[callNode] := a0;
+  if Procs[iterPi].RetType = tyClass then ASTRight[callNode] := ProcRetRecId[iterPi];
+  seq := PySeqAppend(seq,
+           PyMakeAssignNode(PyMakeIdent(Procs[procIdx].RetSymIdx), callNode));
+
+  CompileAST(seq);
+  EmitProcEpilog(Procs[procIdx].RetSymIdx);
+  PatchProcPrologue(patchPos, FrameSize);
+  ProcBodyEnd[procIdx] := CodeLen;
+  SymRollbackTo(savedSC);
+  FrameSize := savedFS; CurProc := -1; CurSelfClass := savedSelf;
+end;
+
 procedure PyEmitDataclassEq(ci: Integer);
 { Emit the synthesized @dataclass `__eq__`: `Result := (self.f1 = other.f1) and
   ... ` over every declared field, in declaration order — what CPython's
@@ -32458,6 +32566,7 @@ begin
     if CurTok.Kind = tkNewline then Next;
     PySkipNewlines;
     if isDC then begin PyEmitDataclassCtor(ci); PyEmitDataclassEq(ci); PyEmitDataclassRepr(ci); PyEmitDataclassOrder(ci, 0); PyEmitDataclassOrder(ci, 1); PyEmitDataclassOrder(ci, 2); PyEmitDataclassOrder(ci, 3); end;
+    PyEmitGeneratorIterCursor(ci);   { a generator __iter__ makes the object iterable }
     Exit;
   end;
   Expect(tkNewline, 'newline'); Expect(tkIndent, 'indent');
@@ -32662,6 +32771,7 @@ begin
   end;
   if myMixN > 0 then begin PyMixReplay := False; TokPos := savedTokPos - 1; Next; end;
   if isDC then begin PyEmitDataclassCtor(ci); PyEmitDataclassEq(ci); PyEmitDataclassRepr(ci); PyEmitDataclassOrder(ci, 0); PyEmitDataclassOrder(ci, 1); PyEmitDataclassOrder(ci, 2); PyEmitDataclassOrder(ci, 3); end;
+    PyEmitGeneratorIterCursor(ci);   { a generator __iter__ makes the object iterable }
   { AFTER the body: the attribute slots' types are only final once every
     initialiser has been parsed (PyEmitClassAttrExpr retypes them), and the bind
     carries the kind. }
