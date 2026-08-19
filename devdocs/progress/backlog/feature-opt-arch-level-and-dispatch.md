@@ -212,3 +212,22 @@ Whatever lands: `make test` + self-host byte-identical, plus **a run on plexus
 specifically** (not just the dev box) before anything ISA-gated is turned on by
 default — the whole point of the ticket is that the gate box may be the oldest
 machine in the fleet.
+
+## Triage 2026-08-19 (Track D re-triage pass)
+
+**Blocked on judgement, not on engineering — the fourth triage outcome.** The
+ticket says so itself: *"The baseline row is the user's call, not an
+engineering one. Everything below is the material for making it."* A ticket
+typed `feature` with an unanswered policy question at its root reads as
+buildable, and whoever claims it has to guess a baseline the project cannot
+un-choose later.
+
+**Recommendation: split the baseline question into a `decide-` ticket** (the
+same route `feature-p-defineglobal-*` took on 2026-08-19), leaving this one as
+the implementation that follows the answer. Filing it needs the user, so it is
+queued rather than taken.
+
+Nothing here is stale: pxx still emits v1, and the ticket's own gate-box
+measurement — plexus is an Ivy Bridge Xeon with AVX but no FMA, i.e. v2, so a
+v3 bump would SIGILL on the machine that gates every push — is the load-bearing
+fact and is unchanged.

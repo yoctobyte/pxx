@@ -72,3 +72,21 @@ leaf functions, so the fixedpoint is a real test of this), plus
 `test/lib_math_correctly_rounded.pas` under `-dPXX_FLOAT_EXACT` producing the
 **same bits** at `-O2` and `-O3` — inlining must not change a result, and this
 test is the sharpest available detector of that.
+
+## Triage 2026-08-19 (Track D re-triage pass) — confirmed at the instruction level
+
+Not just still open: **measured in the emitted code**, which is stronger than
+the timing the ticket was filed on. Two identical leaves, one `Double`, one
+`Integer`, compiled `-O3 -S` against the v363 pin:
+
+```pascal
+function AddD(a, b: Double): Double;   begin AddD := a + b; end;
+function AddI(a, b: Integer): Integer; begin AddI := a + b; end;
+```
+
+The disassembly contains `call AddD` and **no** `call AddI` — the integer leaf
+is inlined at -O3 and the float leaf is not, from the same source shape. That
+is exactly the asymmetry the ticket describes, isolated to two lines.
+
+**Genuine feature, still wanted**, and the cheapest possible repro is now on
+record for whoever takes it.

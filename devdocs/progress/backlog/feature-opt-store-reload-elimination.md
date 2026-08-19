@@ -2,7 +2,7 @@
 track: A
 prio: 60
 type: feature
-blocked-by: [feature-opt-accumulator-value-tracker]
+blocked-by: []
 ---
 
 # Store-reload (redundant load) elimination — -O1 pass
@@ -121,3 +121,16 @@ no choke point for accumulator writes. **The blocker is unchanged.**
 Split out as [[feature-opt-accumulator-value-tracker]] so it can be ranked, and
 because it unblocks more than this pass (the "dead store to hidden temps" item
 on the umbrella needs the same fact). `blocked-by:` added above.
+
+## Triage 2026-08-19 (Track D re-triage pass) — UNBLOCKED: the blocker is done
+
+`feature-opt-accumulator-value-tracker` — the scaffold this was waiting on — is
+in `done/`, with a summary that names this exact dependency: *"the
+register-value scaffold two -O passes are blocked on"*. So the `blocked-by`
+edge was satisfied and the ticket was sitting in `blocked/` anyway, invisible
+to `ready`, at prio 60 — the highest-ranked A feature in the queue.
+
+`blocked-by` cleared and the ticket moved to `backlog/`. Nothing about the pass
+itself is stale; re-read the 2026-08-03 note at the end against what the
+tracker actually shipped before starting, since the split was written before
+the scaffold existed.

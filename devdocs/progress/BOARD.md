@@ -36,7 +36,7 @@ _none_
 | feature-port-rtl-over-libc | A | 55 | feature | RTL-over-libc lowering mode — route runtime primitives through a system C library instead of raw syscalls | — |
 | feature-real-dynlib-loader | B | 45 | feature | Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect. | bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert |
 
-## blocked (6)
+## blocked (5)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -44,10 +44,9 @@ _none_
 | bug-n-a-subpackage-directory-does-not-resolve-as-a-module | N | 55 | bug | `from .inner import X` (RELATIVE) where `inner` is a subpackage directory fails with `no unit named inner`, while the absolute `from pkg.inner import X` works — so directory-as-module resolution exists and the relative form just hands the resolver a bare name instead of the package-qualified one. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung. | bug-a-a-python-module-s-identity-is-its-name-not-its-file |
 | bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module | N | 85 | bug | RE-SCOPED: not about import aliases. A name that names a `def` is resolved to that def at EVERY call site and any later rebinding is ignored — `def a…; def b…; b = a; b(1,5)` answers 18 (the original b) where CPython answers 5, with no import anywhere. The alias spelling is one way to rebind. Blocked: the correct destination is the dynamic call path, which cannot yet carry defaults (see the decision ticket). | decide-how-a-compiled-def-carries-its-signature-when-boxed |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
-| feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | feature-opt-accumulator-value-tracker |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 
-## backlog (238)
+## backlog (239)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -219,6 +218,7 @@ _none_
 | feature-opt-inline-float-and-record-returning-leaves | O | 35 | feature | The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers. | — |
 | feature-opt-o3-register-pressure | O | 58 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-opt-rtti-emit-on-use | O | 40 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
+| feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | — |
 | feature-p-assertions-directive-and-position | P | 40 | feature | RE-TYPED 2026-08-19 feature -> bug for half 1: `{$ASSERTIONS OFF}` is ACCEPTED AND IGNORED — measured on v363, an Assert whose condition has a side effect still runs it (n=1 where FPC gives n=0), so the two dialects take different paths with no diagnostic. Implement FPC assertion parity: {$ASSERTIONS ON/OFF} and -Sa gating (Assert compiled OUT when off, so its side effects do not run), plus the '(file, line N)' suffix FPC appends to the message | — |
 | feature-p-defineglobal-a-define-that-crosses-unit-boundaries | P | 25 | feature | `{$DEFINEGLOBAL xyz}` — a conditional define that outlives the unit that sets it. Measured: pxx matches FPC today, a unit's {$DEFINE} does not reach the program, which is correct Pascal and is also why two units cannot coordinate. The motivating case is 'first implementation loaded claims the name, second skips itself' — the shape that would have dissolved the pylib/sysutils Exception problem. | — |
 | feature-p-delphi-string-helpers | P | 45 | feature | feature(P): Delphi's TStringHelper surface — `s.Length`, `s.ToUpper`, `s.Trim`, `s.Substring` | — |
@@ -526,6 +526,7 @@ _none_
 - [p 60] [A] bug-a-make-revert-the-documented-pin-brake-does-not-fire
 - [p 60] [N] bug-n-inferred-return-type-of-true-division-is-int
 - [p 60] [T] bug-t-the-push-rate-starves-breadth-coverage-entirely
+- [p 60] [O] feature-opt-store-reload-elimination
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 60] [A] refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
 - [p 58] [N] bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
