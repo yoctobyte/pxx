@@ -4,6 +4,8 @@ prio: 62
 type: bug
 blocked-by: []
 summary: "`X.attr` where X came from an import that did not resolve is compiled as the BARE NAME `attr`, so `ModuleType.__name__` fails with `undefined variable (__name__)` — a message naming the attribute and never the unresolved import that caused it. Now the first wall on 4 html5lib files."
+status: working
+owner: frankonpiler-an
 ---
 
 # An attribute on an unresolved import degrades to a bare name

@@ -180,3 +180,13 @@ duplicate to delete. This bug simply was not an instance of it.
 
 ## Log
 - 2026-08-19 — resolved, commit e360f0c5c.
+
+
+### Companion note: verifying one arity and generalising
+
+`map` over a TWO-parameter defaulted def was silently wrong (`[1,2,3]` where
+CPython says `[2,3,4]`) and I had already pronounced the map path correct — on a
+FOUR-parameter callee, generalised. Boundaries are where these live; check the
+smallest and the largest case, not a comfortable middle. Recorded in
+`devdocs/dev/debugging-playbook.md` beside the sentinel note, since it is not
+NilPy-specific.

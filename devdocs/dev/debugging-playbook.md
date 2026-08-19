@@ -168,3 +168,53 @@ the same bug and disagreeing is a signal, not a nuisance.** Four confounded
 readings were resolved that way in one day — including one where the correction
 to a confound was itself confounded. Deferring to whoever measured last would
 have given the wrong answer three of those four times.
+
+---
+
+## The design counterpart: choose an ILLEGAL sentinel, never a plausible one
+
+Everything above is about finding a plausible wrong value after it has travelled.
+This is how to stop one being created in the first place, and it is a *design*
+rule rather than a debugging one — it is decided when you pick the encoding, and
+it is unfixable afterwards.
+
+**The cost of a sentinel is paid entirely at the moment it is wrong.** A
+*plausible* marker — 0, empty string, `None` — is indistinguishable from a
+legitimate value, so the failure travels arbitrarily far from its cause and
+arrives as this file's opening sentence. An *illegal* one collapses that
+distance to zero.
+
+Worked example, `PYSIG_DFLT_UNSET` in `compiler/defs.inc`. A NilPy signature
+record holds one variant per defaulted parameter, and an unfilled slot needed a
+marker. Zero was the obvious choice and would have been wrong: `VT_EMPTY` **is**
+`0` and `VT_EMPTY` **is** `None`, so an unfilled slot would have answered `None`
+— which is a perfectly ordinary default (`def f(x, lo=None)`). The marker is
+`-1`, an illegal variant tag, precisely so "never filled in" cannot be mistaken
+for a value.
+
+### The half that makes it more than a convenience
+
+When the slot was later reached, it did not merely fail early — **it detected a
+bug nobody was hunting.** The raised error named the parameter, one `PXXDBG`
+probe followed, and the cause turned out to be two unrelated parameters in
+unrelated defs (`r.s` and `outer.inner.b`) reporting the *same symbol index*,
+because a rolled-back trial parse frees an index and a later def's parameter
+gets it. That symbol-recycling defect was independent of the feature being
+built; a silent `None` would have hidden it along with the first fault, and it
+would have surfaced months later in a corpus as a wrong value.
+
+So the argument is not "a loud sentinel is easier to debug". It is:
+
+> **A loud failure is a detector for defects you were not looking for.**
+
+That is what to say when someone proposes a convenient zero. Applies equally to
+variant tags, index fields, capacity counts, and any "not set yet" state whose
+type has a natural-looking neutral value.
+
+### And a companion trap from the same episode
+
+**Verifying one arity and generalising.** The same callable-value work was
+checked against a four-parameter callee and pronounced correct; a two-parameter
+one was silently wrong (`map` answered `[1,2,3]` where CPython says `[2,3,4]`).
+Boundaries are where these live — check the smallest and the largest case, not a
+comfortable middle.
