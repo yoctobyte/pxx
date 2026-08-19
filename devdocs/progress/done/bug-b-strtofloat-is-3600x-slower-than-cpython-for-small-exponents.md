@@ -614,4 +614,4 @@ own ticket rather than a sixth pass here.
 row it names.
 
 ## Log
-- 2026-08-19 — resolved, commit PENDING-COMMIT.
+- 2026-08-19 — resolved, commit cc50090c2.
