@@ -1,19 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T12:20:25Z",
-   "fixed": [
-    "test-core#src:examples/tk/callbacks.npy",
-    "test-core#src:examples/tk/field_class_identity.npy",
-    "test-core#src:test/test_nilpy_bound_method_in_module.npy",
-    "test-core#src:test/test_nilpy_from_import_as_rename.npy"
-   ],
-   "new_red": [],
-   "sha": "0b03169106e1c0b1d0beff2094278c65e574fe73",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T12:25:35Z",
    "fixed": [],
    "new_red": [],
@@ -463,6 +450,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "a5c25e4b9620e4ad6151777f16658441c00720c5",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-19T20:27:54Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "a76c6712e3ce7058c3534d747ea6168f2329fa7d",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -6063,11 +6058,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-19T20:18:42Z",
-  "sha": "a5c25e4b9620e4ad6151777f16658441c00720c5",
+  "date": "2026-08-19T20:27:54Z",
+  "sha": "a76c6712e3ce7058c3534d747ea6168f2329fa7d",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 237.6
+  "wall": 233.7
  },
  "last_bench": {
   "conf_rows": 550,
