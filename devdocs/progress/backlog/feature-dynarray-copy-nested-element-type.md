@@ -74,3 +74,12 @@ managed leaf elements at depth (`array of array of AnsiString`), and the whole
 thing under `-dPXX_HEAP_DEBUG` — which is what caught the missing retain on the
 depth-1 path and is the only way the retain question gets answered honestly.
 Plus `test/test_dynarray_copy*.pas` and `test_nested_alias.pas` staying green.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363)
+
+**Genuine feature, still wanted, unchanged.** `h := Copy(g, 0, 2)` on
+`array of array of Integer` still stops at
+`Copy: nested element type not yet supported for dynamic-array Copy`, so
+nothing landed incidentally. FPC accepts it, so this is **compat** surface —
+but the refusal is loud and replaced a segfault, which is the opposite of the
+silent-wrong class that gets promoted to a bug. Stays a feature.

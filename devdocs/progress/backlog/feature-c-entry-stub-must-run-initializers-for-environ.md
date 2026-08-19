@@ -1,8 +1,8 @@
 ---
 track: C
 prio: 45
-type: feature
-summary: "`char **envp = environ;` silently becomes NULL in a C program: environ is a VARIABLE read directly, with no call to trigger crtl's lazy /proc/self/environ load, and the C entry stub has no init phase. The fini half landed 2026-08-10; this is the init half"
+type: bug
+summary: "RE-TYPED 2026-08-19 feature -> bug (it was already described as a silent wrong value in its own body). MEASURED on v363: with `extern char **environ;` declared, pxx compiles CLEAN — no warning at all — and the program prints a NULL pointer where gcc prints the real environment. `char **envp = environ;` silently becomes NULL in a C program: environ is a VARIABLE read directly, with no call to trigger crtl's lazy /proc/self/environ load, and the C entry stub has no init phase. The fini half landed 2026-08-10; this is the init half"
 ---
 
 # The C entry stub needs an INIT phase, for `environ`
@@ -70,3 +70,30 @@ point, so the save/restore is the mirror of the fini side's.
 `tools/gcc_diff_probe.sh`; the C suites green (the stub is on every C program's
 path); the finalizer test `test/cfinalizers_on_main_return_b379.c` still
 passing, since both now live in the same stub.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363) — RE-TYPED feature -> bug
+
+```c
+#include <stdio.h>
+extern char **environ;
+int main(void){ char **e = environ; printf("%p %s\n", (void*)e, e ? e[0] : "(NULL)"); }
+```
+
+| | output |
+| --- | --- |
+| pxx, pin v363 | `0x0 (NULL)` |
+| gcc | `0x7fff… SHELL=/bin/bash` |
+
+Two things the ticket did not have:
+
+- **The diagnostic is gone.** The ticket quotes `warning: undeclared identifier
+  'environ' used as value (treated as 0)`. With the declaration C code
+  actually writes — `extern char **environ;` — v363 emits **no warning**. The
+  build is clean and the value is wrong, which is strictly worse than the state
+  on record.
+- The body already called this "(silent wrong value)" in its own type line
+  while the frontmatter said `feature`. That mismatch is the ranking error the
+  mandate is about; the frontmatter now agrees with the body.
+
+The fix shape in the ticket is unchanged — the C entry stub still has no init
+phase, and crtl still holds the data it cannot reach.

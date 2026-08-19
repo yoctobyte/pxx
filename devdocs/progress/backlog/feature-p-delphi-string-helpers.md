@@ -49,3 +49,28 @@ negative tests from the bug (`test_scalar_member_fail.pas`,
 string arm — implementing the helpers makes `s.Length` compile and turns its own
 refusal test red, which the quick tier can see (it is in `make test`'s negative
 block). The int arm stays: `i.Bogus` must still be refused.
+
+## Triage 2026-08-19 (Track D re-triage pass, pin v363)
+
+**Genuine feature, still wanted, unchanged.** `s.Length` / `s.ToUpper` on an
+`AnsiString` still stops at the diagnostic this ticket was filed alongside:
+
+```
+error: a string has no members here: pxx does not implement Delphi's string
+helpers (s.Length, s.ToUpper, s.Trim, s.Substring) — use the intrinsics
+Length(s), UpperCase(s), Trim(s), Copy(s, i, n)
+```
+
+Compat surface (Delphi/FPC accept it) with a loud, actionable refusal, so it
+stays a feature rather than being promoted.
+
+**Landmine for whoever takes it — there IS a negative test on this refusal.**
+`Makefile:4170-4171` runs `test/test_scalar_member_fail.pas` under `!` and
+greps for `a string has no members here`. Implementing the helpers makes that
+program compile and reds `test-core`, which `gate.sh quick` does not run, so
+the break would surface only through Track T. Re-point the test at whatever
+stays refused (a member that `TStringHelper` does not declare) **in the same
+commit**, the way `test_asm_att_reject.pas` had to be re-pointed on
+2026-08-19. The neighbouring `test_scalar_member_int_fail.pas` — `a value of
+this type has no members` — is unaffected, since integer helpers are out of
+scope here.
