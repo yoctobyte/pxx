@@ -92,3 +92,49 @@ loop.**
 inversion now named in the error text — **lower `-O` levels emit MORE code, so a build
 that fits at `-O2` can still overflow at `-O0`.** Anyone reasoning about "does it build"
 from the default level alone will get that backwards.
+
+---
+
+# DECIDED 2026-08-19 by the user — a Track T tier, and for a DIFFERENT reason than filed
+
+> "Track T was right with the -O level — although this size limitation was just to protect
+> ourselves from run-away issues. Also, it should not hinder quick-gating. Apart from that
+> it sort of makes sense. **Not because of -O0, but more of -O1-2-3-? and in particular
+> when we start more work on optimizing.**"
+
+**Decision: yes, in a Track T tier. Explicitly NOT in the per-fix loop** — quick-gating
+must not be slowed. The loop stays `make compiler/pascal26` + repro + `gate.sh quick`.
+
+## The rationale is corrected, and this matters for what gets built
+
+Both arguments in this ticket — mine ("closes an invisible class") and the updated one
+("`-O0` was a leading indicator of the code buffer filling") — are **about size, and both
+are now spent.** `MAX_CODE` was only ever a runaway guard, not a real constraint; raising
+it 8 MB to 16 MB cost virtual BSS and nothing else, and the default build went from 88%
+to 44%. Size will not be the thing that catches anything again for a long time.
+
+**The value is CROSS-LEVEL DIFFERENTIAL COVERAGE, and it grows with Track O.** If the
+compiler built at `-O0` and the compiler built at `-O3` disagree about anything, that is
+an **optimizer bug** — and `compiler.pas` is by far the largest, most edge-case-dense
+program we have to run the optimizer over. As optimization work ramps up (new `-O3`
+passes, promotion to `-O2`), a job that compiles the compiler at every level and compares
+is the cheapest optimizer-differential we own. **Build it as a differential across levels,
+not as a "does `-O0` still work" check.**
+
+## Most of the mechanism already exists
+
+The bench harness already reports `CANARY-DIFF vs -O0` for `-O2` and `-O3` on the
+`selfcompile` rows — precisely a cross-level comparison, and what surfaced the original
+failure. So this is largely **formalising an existing canary into a tier job**, not
+building one from scratch. Track T owns tier composition and should size it.
+
+## Also doing, because it is true regardless of this outcome
+
+`CLAUDE.md`'s claims-discipline section now records that **"self-host fixedpoint" means at
+the DEFAULT optimisation level.** The phrase is routinely used as evidence of general
+soundness — the coordinator used it that way to argue a bench red could not be a compiler
+bug, and was wrong — so the scope belongs next to the claim.
+
+## Re-filed as work
+
+See `feature-t-tier-job-self-compile-differential-across-o-levels`.

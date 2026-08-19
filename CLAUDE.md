@@ -456,8 +456,16 @@ will catch it in seconds and the correction costs more than the claim ever gaine
 
 | claim | what is identical | to what | kind |
 | --- | --- | --- | --- |
-| **self-host fixedpoint** | the **binary** | our own previous output | true binary reproducibility |
+| **self-host fixedpoint** | the **binary** | our own previous output | true binary reproducibility, **at the DEFAULT `-O` level only** |
 | **zlib / C corpora vs the gcc oracle** | the **program's OUTPUT** (e.g. zlib's compressed stream) | the output of a gcc-**built** zlib | *behavioral* parity |
+
+**Scope note on the first row (added 2026-08-19):** `make compiler/pascal26` builds
+`compiler.pas` at the **default** optimisation level, and the fixedpoint proves
+byte-identity *at that level*. Nothing in the per-fix loop compiles the compiler's own
+source at another `-O` level. So "it passes the self-host gate" is evidence the compiler
+compiles itself **at one optimisation level**, not that it compiles itself — a `-O0`-only
+self-compile failure passed the entire gate on 2026-08-19 and was found by a benchmark.
+State the scope when you lean on the claim.
 
 We do **NOT** emit the same machine code as gcc and must never imply it. Say
 "zlib built with pxx produces compressed output byte-identical to a gcc-built
