@@ -2145,3 +2145,41 @@ rerank it deliberately rather than inheriting the number).
   an hour earlier. Also folded in: the pin check as step 2 (scoped to `compiler/**`), the
   read-the-last-dated-section-first rule, the corrected `crtl_exp2` status (fixed, so a new
   red there is real and not the old ghost), and the counts-go-stale rule above.
+
+- **frank3: lib_tls + TEN siblings (`7447bb59a`), and one pair that could collide inside a
+  single run.** Verified here: 11 test files, `lib/rtl/asyncnet.pas`, the Makefile.
+
+  Fixed as T diagnosed — reproduced first, then port 0 + `fpGetSockName`, every socket
+  return read (14 `=ok` → 16), `fpSelect(5000)` gating the accept. `SO_REUSEADDR` set too,
+  but against TIME_WAIT, not as the fix: **REUSEADDR makes the collision rarer, port 0
+  makes it unrepresentable.**
+
+  **The audit found NINE more where I had flagged three**, every one the identical shape —
+  `lfd := TcpListen(PORT)` with the return ignored and `TcpAccept(lfd)` on the next line.
+  **And `lib_http_async` held 28755, the SAME number as `lib_tls`, in the same lib-test
+  recipe block** — the one pair that could collide *within a single run* rather than only
+  across clones, and neither side knew. frank3 nearly missed it because it searched for
+  "hardcoded ports" when the killer was "**duplicate** hardcoded ports". Now recorded in
+  the source at `test/lib_http_async.pas:10`.
+
+  **VERIFIED BY CONCURRENCY, NOT BY A GREEN RUN**, and this is the transferable part: the
+  OLD test passed solo five times running, so a single green proved nothing. 8 concurrent
+  copies of the new one → 16/16; all 11 binaries × 4 copies → zero failures. **When the
+  defect IS concurrency, the test for the fix has to be concurrent.**
+
+  Two more things done right rather than fast. `TcpListen` was never the bug — it already
+  set REUSEADDR and already returned `rc<0` on a failed bind; **the tests ignored it.**
+  What was missing was any way to LEARN which port a port-0 bind got, so the async family
+  could not use port 0 at all — hence `TcpLocalPort(fd)` in `asyncnet.pas`, one addition
+  instead of eleven workarounds. And `lib_dns_async` was **filed, not ridden along**
+  (`bug-b-lib-dns-async-…`, p45): same class, but six fixtures and a UDP/PAL shape the
+  other ten do not share, so it would have gone onto their gate unverified. Note its own
+  wrinkle — `rc :=` on every `PalBindIpv4`, never read, which **skims as "checked" and is
+  therefore worse than not assigning at all.**
+
+  The ticket also records which files are ALREADY clean (`lib_http` opens no socket;
+  `lib_ipv6`/`lib_asyncnet6`/`lib_platform_net`/`lib_platform_net_udp` check their binds;
+  `lib_net`/`lib_netconnect`/`lib_net_timeout`/`lib_net_v6only` already use port 0 — where
+  the idiom came from), so nobody re-audits eight files to learn nothing. Relayed to
+  plexus-T with a falsifiable prediction: the watcher's 45.4s EWMA on this job should
+  converge toward ~1s, and if it does not, `lib_dns_async` is next.
