@@ -877,6 +877,19 @@ const
     after EmitTypeInfoHeaders (which itself runs right after EmitRTTI). MUST be the
     most negative base and tested FIRST of all of them -- otherwise the ENUM/
     RECORD/CLASSREF branches below would swallow it. }
+  { Address of proc pi's PYSIG record: DataOff = -(PYSIG_DATAREF_BASE + pi),
+    patched to ProcSigOff[pi] after EmitPySignatures.
+
+    MUST be the most negative base and tested FIRST in compiler.pas's fixup
+    chain -- every branch below matches anything at least as negative as its own
+    base, so an unordered branch swallows this one. Same trap the ENUM-vs-
+    CLASSREF and TYPEINFO-vs-ENUM comments next door already record.
+
+    Rides the EXISTING IR_SET_LIT node rather than a new IR op: that node emits
+    `EmitDataRef(IRIVal)` (or the target's EmitLoadDataRef*) on all five
+    backends, which is byte-for-byte what the classref sentinel does, so a
+    negative sentinel passes through untouched. No backend change, no new op. }
+  PYSIG_DATAREF_BASE = 600000;
   TYPEINFO_REQ_DATAREF_BASE = 500000;
   { TypeInfoReq categories (see TypeInfoReqCat/Key/Off below) and cap. }
   TYPEINFO_REQ_CAT_ORD    = 1;  { scalar/ordinal/string TTypeKind: key = Ord(TTypeKind) }

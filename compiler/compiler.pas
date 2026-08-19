@@ -1153,6 +1153,18 @@ begin
         continue;
       end;
     end
+    else if Fixups[i].DataOff <= -PYSIG_DATAREF_BASE then
+    begin
+      { A NilPy def's signature record (EmitPySignatures). Tested FIRST because
+        it is the MOST negative base -- the TypeInfo branch below matches every
+        sentinel at least as negative as its own, so it would swallow this one.
+        See the ordering notes on the branches that follow. }
+      j := -Fixups[i].DataOff - PYSIG_DATAREF_BASE;
+      if (j >= 0) and (j < ProcCount) and (ProcSigOff[j] >= 0) then
+        Fixups[i].DataOff := ProcSigOff[j]
+      else
+        Error('callable value of a def with no signature record');
+    end
     else if Fixups[i].DataOff <= -TYPEINFO_REQ_DATAREF_BASE then
     begin
       { Widened TypeInfo(T) (scalar/string/class/record): resolve to the request's
