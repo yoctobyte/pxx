@@ -1522,6 +1522,24 @@ exists, its banner says so and the banner outranks the queue order.
   never dispatch to fill capacity. But **do not bank a day while the user is paying for
   idle capacity** — that call was made once and was wrong.
 - **The coordinator writes no code.** Filing, ranking, routing and verifying only.
+- **A MEASUREMENT IN FLIGHT IS A LOCK ON THE FILES IT READS.** Found 2026-08-19 when
+  frank3 began editing `lib/rtl/sysutils.pas` while a ~20-minute ladder re-run was still
+  running against the live tree — some corpus files may have compiled against a half-edited
+  RTL. It caught itself, stashed, and declared the run **possibly contaminated** rather
+  than reporting it.
+
+  The pin lock is the well-known case of this and it is not the only one. Any long
+  measurement — `nilpy_ladder.py`, a corpus sweep, a differential run — reads the working
+  tree *while* it runs, so an edit landing mid-run silently mixes two trees into one
+  result. **The coordinator's share: do not pin, and do not let a worker start editing
+  shared `lib/rtl` or `compiler/**`, while a measurement is known to be in flight.** Ask
+  what is running before taking the lock, the same way the lock is announced before it is
+  taken.
+
+  And the reporting rule that goes with it, which frank3 got right: **a possibly-
+  contaminated measurement is discarded and re-run, never reported with a caveat.** A
+  caveated number gets quoted without its caveat — that is the same mechanism as a dated
+  table reading as current forever.
 - **DISPATCH GOALS, NOT TICKETS — the coordinator is not the queue.** (user, 2026-08-19:
   *"it seems to me the old fashioned way of setting a goal kept agents busier"*, after a
   third check found both workers idle.)
@@ -2607,3 +2625,27 @@ rerank it deliberately rather than inheriting the number).
   `feature-b-strtofloat-big-integers-in-64-bit-limbs` (p25) and two p20 ULP items. frank3
   is on the p25. Noted for the user as a heads-up; not raised as a fork, since B still has
   its own work and the leverage sitting in N is being routed to N's owner.
+
+- **frank3 pushed — verified on origin.** `a3eaec78b`. All five N tickets present with the
+  prios reported (`…collections-abc-import-is-swallowed…` p62,
+  `…mixin-cannot-iterate-self…` / `…subscript-inside-a-base-class…` /
+  `…hasattr-through-an-untyped-parameter…` p55, `…isinstance-qualified…` p45); the Mapping
+  shim is in `done/`; both workers now hold locks in `working/`.
+
+  **Its own account of the miss is the useful part:** it committed, then went straight into
+  the next ticket's rewrite with the push outstanding — *"I treated push as something to do
+  after the next thing."* That is the specific shape, and it is more useful than the rule it
+  broke. The three-arm framing was already in the ticket body before I asked, and it
+  verified that after pushing rather than assuming.
+
+  **One refinement it added to the import blocker, worth carrying into the fix:**
+  `PyImportRootIsConsumedOnly`'s comment justifies listing `collections` on the grounds that
+  *"an unsupported name walls visibly at its use site"* — and that premise is what broke.
+  The failure is now **silent**: the from-import binds nothing and the error surfaces later
+  as `unknown base class Mapping`, pointing at the class rather than the import. So the
+  ticket is as much about the comment's premise as the list's contents. Relayed to frank2.
+
+  Board hygiene still open and still deferred: **24 resolved tickets await their landed
+  sha** (`PENDING-COMMIT`, `tools/sync.sh`). Both workers are busy, and racing them for the
+  generated board files is how the rebase conflicts happen. Run it in a genuinely quiet
+  window.
