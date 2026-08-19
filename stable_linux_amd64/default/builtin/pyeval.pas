@@ -190,6 +190,13 @@ function pyboundfn_setstar(obj: Pointer; si: Int64): Pointer;
   that supplies one overrides the default instead of having the argument
   silently dropped — see the NDef note on TBoundFnObj. }
 function pyboundfn_setdefaults(obj: Pointer; base, count, varmask: Int64): Pointer;
+{ Hand the carrier the callee's SIGNATURE record -- the same static .data record
+  a tag-8 pair carries, so a keyword argument through a lifted lambda or nested
+  def matches a parameter NAME instead of meeting a refusal. It supplies the
+  NAMES only: the default VALUES stay in the bound slots, because a lambda's
+  defaults are captured per INSTANCE while the record is one static array per
+  proc. refactor-a-one-signature-record-for-every-callable-carrier }
+function pyboundfn_setsig(obj: Pointer; sig: Pointer): Pointer;
 { Bind a CLASS capture, taking a reference so it outlives the enclosing call. }
 function pyboundfn_bind_obj(obj: Pointer; idx: Int64; p: Pointer): Pointer;
 function pyboundfn_is(p: Pointer): Boolean;
@@ -235,6 +242,13 @@ procedure pyboundfn_callv(objptr: Pointer; const a0: Variant; var res: Variant);
   one-argument wrapper above is the historic entry point. }
 procedure pyboundfn_callvn(objptr: Pointer; const a0, a1, a2: Variant;
                            nargs: Int64; var res: Variant);
+{ …and the form that knows a caller-side position may be a HOLE. A keyword
+  argument can fill position 2 while leaving position 1 unsupplied, and an
+  unsupplied position must keep its DEFAULT rather than read the pynone sitting
+  in the slot. Bit k of suppliedMask set = caller position k was written.
+  pyboundfn_callvn is this with every bit set. }
+procedure pyboundfn_callvn_mask(objptr: Pointer; const a0, a1, a2: Variant;
+                                nargs, suppliedMask: Int64; var res: Variant);
 
 { Invoke whatever kind of Python callable a value holds, with one argument or
   none. NilPy has four shapes — a BOUND METHOD (tag 8, {code, receiver}), a
@@ -2281,6 +2295,10 @@ type
       upper bound (a default after `*` is keyword-only in Python and cannot be
       supplied positionally at all). }
     StarIdx: Int64;
+    { The callee's SIGNATURE record (EmitPySignatures; PYSIG_OFF_* in
+      compiler/defs.inc), or nil when the producer could not supply one. Read
+      for parameter NAMES only -- see pyboundfn_setsig. }
+    Sig: Pointer;
   end;
   PBoundFnObj = ^TBoundFnObj;
   { A plain compiled def taken as a value: the value IS its code address.
@@ -2399,6 +2417,7 @@ begin
   o^.NDef := 0; o^.NDefBase := -1; o^.DefVarMask := 0;   { no defaulted params unless told }
   o^.BKindMask := 0;
   o^.StarIdx := -1;                                      { pyboundfn_setstar overrides }
+  o^.Sig := nil;                                         { pyboundfn_setsig overrides }
   for i := 0 to 19 do o^.Bound[i] := 0;
   pyboundfn_new := Pointer(o);
 end;
@@ -2438,6 +2457,17 @@ begin
   o^.NDef := count;
   o^.DefVarMask := varmask;
   pyboundfn_setdefaults := obj;
+end;
+
+function pyboundfn_setsig(obj: Pointer; sig: Pointer): Pointer;
+{ Chained like setown and setstar, for the same reason. `sig` is static .data
+  that is never freed, so the carrier owns nothing by holding it -- the same
+  non-owning lifetime the tag-8 pair's Sig has, by construction. }
+var o: PBoundFnObj;
+begin
+  o := PBoundFnObj(obj);
+  o^.Sig := sig;
+  pyboundfn_setsig := obj;
 end;
 
 function pyboundfn_bind_obj(obj: Pointer; idx: Int64; p: Pointer): Pointer;
@@ -2645,6 +2675,14 @@ end;
 
 procedure pyboundfn_callvn(objptr: Pointer; const a0, a1, a2: Variant;
                            nargs: Int64; var res: Variant);
+{ Every caller position supplied -- the shape a purely POSITIONAL call has, and
+  the only shape that existed before keywords could reach this carrier. }
+begin
+  pyboundfn_callvn_mask(objptr, a0, a1, a2, nargs, -1, res);
+end;
+
+procedure pyboundfn_callvn_mask(objptr: Pointer; const a0, a1, a2: Variant;
+                                nargs, suppliedMask: Int64; var res: Variant);
 { Call code(own..., bound...). The own arguments come first because that is the
   order the compiled body declares them in — its capture parameters were LIFTED
   onto the end of its own signature by the frontend.
@@ -2716,7 +2754,8 @@ begin
     NOT NOwn+i, because a zero-parameter lambda carries a dummy own parameter
     the caller never counts. }
   for i := 0 to o^.NDef - 1 do
-    if (i <= 2) and (o^.NDefBase + i < nargs) and (n + i <= 31) then
+    if (i <= 2) and (o^.NDefBase + i < nargs) and (n + i <= 31) and
+       ((suppliedMask shr (o^.NDefBase + i)) and 1 = 1) then
     begin
       dv := (o^.DefVarMask shr i) and 1;
       case o^.NDefBase + i of
@@ -4868,6 +4907,90 @@ begin
   Result := f0();
 end;
 
+function PyBoundFnCallKw(o: PBoundFnObj; nPos: Integer;
+                         const a0, a1, a2, a3: Variant;
+                         kwNames, kwVals: TPyList): Variant;
+{ A keyword argument through a LIFTED bound-fn -- a lambda or a nested def taken
+  as a value (tag 10). The names come from the same signature record the tag-8
+  pair reads, through the same lookup (PySigFindParam), which is the whole point
+  of putting Sig on this carrier: one record answers the question for both.
+
+  The default VALUES still come from the bound slots, not from the record. A
+  lambda's default is captured per INSTANCE (`mk(1)` and `mk(2)` each build a
+  lambda whose `y=k` differs) while the record holds ONE static array per proc,
+  so the record cannot express them and pyboundfn_setdefaults stays. Names are
+  static per proc and these defaults are not: that is the line between the two
+  mechanisms, and it is a property of the language, not of this code.
+
+  Caller-visible positions are NDefBase + NDef -- NOT the record's TotN, which
+  counts the LIFTED signature including the capture parameters the frontend
+  appended. A keyword naming a capture is therefore an unexpected keyword, which
+  is what CPython answers for a name that is not a parameter. }
+var av: array[0..2] of Variant;
+    supplied: Int64;
+    i, hit, nkw, visible, req, nargs, miss: Integer;
+    kn: AnsiString;
+begin
+  Result := pynone;
+  nkw := 0;
+  if kwNames <> nil then nkw := kwNames.count;
+  if o^.StarIdx >= 0 then
+    raise TypeError.Create('a keyword argument through a callable value is '
+            + 'not supported yet for a callee that collects *args');
+  if o^.Sig = nil then
+    raise TypeError.Create('this callable value carries no parameter names, '
+            + 'so a keyword argument cannot be matched to a parameter');
+  if nPos > 3 then
+    raise TypeError.Create('a keyword argument through a callable value is '
+            + 'not supported yet past three positional arguments');
+  { NDefBase < 0 is pyboundfn_new's "arity unchecked" -- the lenient callback
+    bridges. Nothing there can tell a parameter from a capture, so the visible
+    window is the own-parameter count and nothing counts as required. }
+  if o^.NDefBase >= 0 then
+  begin
+    visible := o^.NDefBase + o^.NDef;
+    req := o^.NDefBase;
+  end
+  else
+  begin
+    visible := o^.NOwn;
+    req := 0;
+  end;
+  av[0] := a0; av[1] := a1; av[2] := a2;
+  for i := nPos to 2 do av[i] := pynone;
+  supplied := 0;
+  for i := 0 to nPos - 1 do supplied := supplied or (Int64(1) shl i);
+  nargs := nPos;
+  for i := 0 to nkw - 1 do
+  begin
+    kn := pystr_of(kwNames.at(i));
+    hit := PySigFindParam(o^.Sig, kn);
+    if (hit < 0) or (hit >= visible) then
+      raise TypeError.Create('unexpected keyword argument ''' + kn + '''');
+    if hit > 2 then
+      raise TypeError.Create('a keyword argument through a callable value is '
+              + 'not supported yet past three positional arguments');
+    if (supplied shr hit) and 1 = 1 then
+      raise TypeError.Create('got multiple values for argument ''' + kn + '''');
+    av[hit] := kwVals.at(i);
+    supplied := supplied or (Int64(1) shl hit);
+    if hit + 1 > nargs then nargs := hit + 1;
+  end;
+  { counted AFTER the keywords are bound, because a keyword can supply a
+    REQUIRED parameter -- `r(a=1, b=2)` supplies both and passes none
+    positionally. The same rule the tag-8 path states. }
+  miss := 0;
+  for i := 0 to req - 1 do
+    if (supplied shr i) and 1 = 0 then Inc(miss);
+  if miss > 0 then
+    raise TypeError.Create('missing ' + pystr_of(Int64(miss))
+            + ' required positional argument(s)');
+  { A HOLE below nargs -- `f(0, c=9)` leaving b unsupplied -- must keep b's
+    default, so the supplied mask travels with the call instead of the callee
+    reading the pynone sitting in the slot. }
+  pyboundfn_callvn_mask(Pointer(o), av[0], av[1], av[2], nargs, supplied, Result);
+end;
+
 function pyvar_callv_kw(const cb: Variant; nPos: Integer;
                        const a0, a1, a2, a3: Variant;
                        kwNames, kwVals: TPyList): Variant;
@@ -4876,10 +4999,13 @@ function pyvar_callv_kw(const cb: Variant; nPos: Integer;
   call site sends them as strings -- so they are matched here against the
   callee's own parameter names out of its signature record.
 
-  Only the tag-8 pair carries a signature today. The other callable shapes get a
-  NAMED refusal rather than a wrong answer: a keyword silently dropped would
-  bind the default and return something plausible, which is the failure mode
-  worth avoiding most. }
+  TWO carriers answer from a signature record now: the tag-8 pair, and the
+  lifted bound-fn (a lambda or nested def taken as a value) which got its Sig in
+  refactor-a-one-signature-record-for-every-callable-carrier. The shapes that
+  still have no names get a NAMED refusal rather than a wrong answer -- a
+  keyword silently dropped would bind the default and return something
+  plausible, which is the failure mode worth avoiding most. }
+var o: Pointer;
 begin
   Result := pynone;
   if pycallback_is(cb) then
@@ -4888,9 +5014,16 @@ begin
                                    nPos, a0, a1, a2, a3, kwNames, kwVals);
     Exit;
   end;
+  o := PyCallableObj(cb);
+  if (o <> nil) and pyboundfn_is(o) then
+  begin
+    Result := PyBoundFnCallKw(PBoundFnObj(o), nPos, a0, a1, a2, a3,
+                              kwNames, kwVals);
+    Exit;
+  end;
   raise TypeError.Create('a keyword argument through this kind of callable '
-          + 'value is not supported yet (only a def or bound method taken as '
-          + 'a value carries its parameter names)');
+          + 'value is not supported yet (an interpreted closure and a class '
+          + 'reached as a value still carry no parameter names)');
 end;
 
 function pyvar_callv1(const cb: Variant; const a0: Variant): Variant;
