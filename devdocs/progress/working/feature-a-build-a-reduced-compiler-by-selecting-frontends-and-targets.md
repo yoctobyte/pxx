@@ -533,3 +533,37 @@ Worth recording against the goal: this increment does **not** advance
 `only-nilpy + only-esp`, the configuration actually asked for — that one *keeps*
 riscv32 and xtensa. Its value is the inverse config (host-only) and the coupling it
 exposed. The frontend axis, not the target axis, is the path to the stated goal.
+
+### The increment is PARKED, and this is why
+
+`PXX_NO_RISCV32` / `PXX_NO_XTENSA` are measured (above) and **not landed**. Not
+abandoned, not blocked — parked, for a stated reason:
+
+> **This increment serves the host-only configuration, which nobody has asked for.**
+
+Both configurations the owner described — a Pascal compiler that only targets
+ESP-riscv, and a reduced-size Python compiler for ESP — *keep* riscv32 and xtensa and
+drop the **host** backends. So 805 errors of coupling work here buys the inverse of the
+goal. The remaining distance to either config runs along the **frontend axis** (NilPy,
+Rust, Basic, Ada, Lua) plus eventually x86-64, and that is where the work goes next.
+
+Unpark when someone wants a host-only compiler, or when the frontend axis is done and
+x86-64 omission makes the target axis live again. The measurement above is the whole
+cost of re-entry — do not re-measure it.
+
+### Pre-register the implausible result
+
+Four measurement faults in one session (truncated FPC lists, the `{$UNITPATH}` stale
+`lib/`, the relayed job count, `head -60`). The thing they share is not carelessness:
+**all four were silent successes.** None errored. All produced plausible output. Three
+of the four were caught only because something looked too round or too stable — that is
+instinct, and instinct does not scale to the next agent or the next session.
+
+The one discipline that catches these by method rather than by luck:
+
+> **Before taking a measurement, decide what an implausible result would look like.**
+
+For an omission define: *if two different backends produce the same error count, the
+harness is lying.* Written down before the run, `60 / 60 / 60` fails that test
+instantly; discovered after, it took a second look to notice. Pre-registration costs one
+sentence and converts a lucky catch into a repeatable one.
