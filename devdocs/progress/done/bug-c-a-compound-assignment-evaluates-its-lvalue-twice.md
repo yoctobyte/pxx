@@ -156,4 +156,4 @@ form, the shift/bitwise forms and pointer scaling, pinned in
 `test/cassign_compound_lvalue_once.c`. quickjs's smoke stays byte-exact.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit ed49b3ef7.
