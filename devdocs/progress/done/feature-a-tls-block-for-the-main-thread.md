@@ -135,4 +135,4 @@ thread now has a block, so that becomes a load — filed as
 `tools/gate.sh quick` + the sweep above.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit cd7e4aae3.
