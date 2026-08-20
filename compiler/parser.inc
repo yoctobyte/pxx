@@ -98,9 +98,16 @@ var modId: Integer;
 begin
   if CModRangeCount >= MAX_DBG_RANGES then Exit;
   { interned HERE, not at the call site: clexer.inc is included before emit.inc,
-    where InternStr lives, and the FPC seed build has no declare-anywhere
-    laxness (bug-a-fpc-seed-drift-emitasmx64-forward) }
-  modId := InternStr(path);
+    where InternKey lives, and the FPC seed build has no declare-anywhere
+    laxness (bug-a-fpc-seed-drift-emitasmx64-forward).
+    InternKey, NOT InternStr: `path` carries ExeDir for anything resolved out of
+    lib/crtl, and InternStr would append it to the EMITTED string pool, making a
+    C binary's bytes depend on where the compiler binary sat. Measured: one
+    `#include <stdio.h>` program compiled by ./compiler/pascal26 vs by a copy
+    outside the repo came out 218207 vs 218095 bytes, the difference being
+    './compiler/../lib/crtl/src/*.c' spelled into the output.
+    bug-a-the-compilers-output-depends-on-argv0 }
+  modId := InternKey(path);
   if (CModRangeCount > 0) and (CModRangeId[CModRangeCount - 1] = modId) then Exit;
   if (CModRangeCount > 0) and (CModRangeStart[CModRangeCount - 1] = startTok) then
   begin

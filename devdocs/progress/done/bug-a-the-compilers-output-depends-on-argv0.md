@@ -86,14 +86,38 @@ A compile-time key table with no `Data[]` side:
   `c_pasunit_collide_fail` (the refusal still names both files),
   `c_pasunit_case_fail`
 
+## Second site: the C frontend (found and fixed the same day)
+
+`CMarkTokModule` (`parser.inc`) interned the C *module* path — the key behind
+the same-translation-unit duplicate-static warning — the same way. Measured
+before assuming: one `#include <stdio.h>` program, compiled by
+`./compiler/pascal26` and by a copy outside the repo, came out **218207 vs
+218095 bytes**, the difference being `./compiler/../lib/crtl/src/*.c` spelled
+into the output. Now `InternKey`: identical binaries, 0 leaked crtl paths, and
+472 bytes smaller than before. `CModRangeId` / `ProcCModule` index `KeyStrs`;
+both are compared for equality only, nothing read their text.
+
+Behaviour intact: `cstatic_two_modules` (0 duplicate-definition warnings — two
+modules are not one TU) and `cstatic_same_module_dup` (exactly 1 — one module
+still is).
+
+## Regression cover
+
+`test-quick` now compiles `test/quick_canary_argv0.pas` and
+`test/quick_canary_argv0.c` twice each — once from `./compiler/pascal26`, once
+from a copy under `$(TESTTMP)` (outside the repo, so ExeDir's `../lib/...`
+misses and the CWD-relative spelling wins) — and `cmp`s. Teeth verified against
+the pre-fix binary: Pascal 297921 vs 297833, C 218207 vs 218095. Two canaries
+because there were two sites: a Pascal-only check stays green while every C
+binary still leaks.
+
 ## Left open deliberately
 
 Every emitted binary still carries ~80 other `InternStr` keys that no runtime
 reads — unit names, import aliases, py stdlib alias rows. They are stable text,
 so they cost bytes rather than reproducibility, and sweeping them is a separate
-cleanup. `CMarkTokModule` (`parser.inc:103`) interns a C module *path* and is
-the one member of that set that could reproduce this bug for C compiles whose
-`lib/crtl` resolves through `ExeDir`; unproven, not fixed here.
+cleanup. Debug info (`-g`) records real source paths by design and is not in
+scope here.
 
 ## Log
 - 2026-08-20 — resolved, commit 3b0a886e9.

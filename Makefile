@@ -9798,6 +9798,14 @@ test-quick: $(COMPILER)
 	test "$$($(TESTTMP)/qc_argv0_a26)" = "argv0 canary ok 42"
 	$(TESTTMP)/qc_argv0_copy26 test/quick_canary_argv0.pas $(TESTTMP)/qc_argv0_b26
 	cmp $(TESTTMP)/qc_argv0_a26 $(TESTTMP)/qc_argv0_b26
+	# ...and the C frontend, which leaked the same way through a SECOND site
+	# (CMarkTokModule's module-identity key). One fix per site, so one check per
+	# site: a Pascal-only canary stayed green while every C binary still carried
+	# './compiler/../lib/crtl/src/*.c'.
+	./$(COMPILER) test/quick_canary_argv0.c $(TESTTMP)/qc_argv0_c_a26
+	test "$$($(TESTTMP)/qc_argv0_c_a26)" = "c argv0 canary ok 42"
+	$(TESTTMP)/qc_argv0_copy26 test/quick_canary_argv0.c $(TESTTMP)/qc_argv0_c_b26
+	cmp $(TESTTMP)/qc_argv0_c_a26 $(TESTTMP)/qc_argv0_c_b26
 	./$(COMPILER) test/test_dynarray_torture.pas $(TESTTMP)/smoke_dyntorture26
 	test "$$($(TESTTMP)/smoke_dyntorture26 | tail -1)" = "total ok 27 / 27"
 	./$(COMPILER) test/test_dynarray_insert_delete.pas $(TESTTMP)/smoke_dynid26
