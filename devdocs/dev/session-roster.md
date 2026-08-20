@@ -4623,3 +4623,16 @@ Pin v367 stands (`compiler/**` unmoved). Same full tier `49a511e43271`, same **2
 same nine inherited reds. No new commits, no worker blocked, both local workers deliberately down.
 Track T is running native/opt tiers on its own schedule. Nothing dispatched — the queue is healthy
 and the standing reason from +30h is unchanged.
+
+## Check +33h — still nothing; T is idle because the REPO is idle
+
+Pin v367 stands, `compiler/**` unmoved, same nine inherited reds. **Zero new commits since the +32h
+entry** — the last commit in the repo is my own roster note from an hour ago.
+
+**One thing worth stating so a later reader does not misread it:** `breadth — newest full tier is 2h
+old` will keep growing while nothing at all is wrong. T tests *commits*; with no commits landing it
+has nothing to sweep, and the line carries no "N commits behind" qualifier, which is the tell that
+it is **caught up rather than falling behind**. `UP — commits through 49a511e43271 tested`. Do not
+read a growing age on a quiet repo as a stalled watcher.
+
+Nobody blocked, nothing dispatched, both local workers deliberately down.
