@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T03:17:23Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "ad995742f8dbb929aba0c564b454d176f2b6c09d",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-20T03:24:02Z",
    "fixed": [],
    "new_red": [],
@@ -438,6 +430,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "02aea520154637f31f24d64dfeb9aa648be384ba",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T20:01:56Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "088ff8016e1b982a00b17e4f945951f63f9d08f2",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1964,6 +1964,9 @@
   "test-core#src:test/test_overloading.pas@1": "native",
   "test-core#src:test/test_overloading.pas@2": "native",
   "test-core#src:test/test_overloading.pas@3": "native",
+  "test-core#src:test/test_own_lang_first_alias.pas": "native",
+  "test-core#src:test/test_own_lang_first_c_first.pas": "native",
+  "test-core#src:test/test_own_lang_first_pascal_shadow.pas": "native",
   "test-core#src:test/test_packed_array_field_b258.pas": "native",
   "test-core#src:test/test_param_array_lowbound.pas": "native",
   "test-core#src:test/test_paramcount_for_limit.pas@1": "native",
@@ -4821,6 +4824,9 @@
   "test-core#src:test/test_overloading.pas@1": "pass",
   "test-core#src:test/test_overloading.pas@2": "pass",
   "test-core#src:test/test_overloading.pas@3": "pass",
+  "test-core#src:test/test_own_lang_first_alias.pas": "pass",
+  "test-core#src:test/test_own_lang_first_c_first.pas": "pass",
+  "test-core#src:test/test_own_lang_first_pascal_shadow.pas": "pass",
   "test-core#src:test/test_packed_array_field_b258.pas": "pass",
   "test-core#src:test/test_param_array_lowbound.pas": "pass",
   "test-core#src:test/test_paramcount_for_limit.pas@1": "pass",
@@ -6161,11 +6167,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-20T19:24:06Z",
-  "sha": "02aea520154637f31f24d64dfeb9aa648be384ba",
+  "date": "2026-08-20T20:01:56Z",
+  "sha": "088ff8016e1b982a00b17e4f945951f63f9d08f2",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 452.7
+  "wall": 448.5
  },
  "last_bench": {
   "conf_rows": 550,
