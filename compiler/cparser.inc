@@ -3545,6 +3545,24 @@ begin
     { `arr[i](args)` — call through an element of a function-pointer array; the
       array sym carries the per-element call signature in SymElemProcSig. }
     Result := SymElemProcSig[ASTIVal[ASTLeft[inner]]]
+  else if (ASTKind[inner] = AN_INDEX) and (ASTKind[ASTLeft[inner]] = AN_FIELD) then
+  begin
+    { `s.f[i](args)` / `p->f[i](args)` — the same call, one level in: a STRUCT
+      FIELD that is an array of function pointers. The whole shape was missing
+      here, so a dispatch table living in a struct -- the ordinary way C writes
+      a vtable -- could not be called at all, at any scope, while
+      `g = s.f[0]; g(args)` through a temp worked. The field's per-element
+      signature rides RecFieldElemProcSig, the same channel `(*s.pf)(args)`
+      uses below; fall back to the field's own sig for a declaration that
+      recorded it there. bug-c-a-struct-field-function-pointer-array-is-not-callable }
+    recId := ResolveNodeRec(ASTLeft[ASTLeft[inner]]);
+    if recId <> REC_NONE then
+    begin
+      fname := GetTokenStrFromRaw(ASTSOffset[ASTLeft[inner]], ASTSLen[ASTLeft[inner]]);
+      Result := RecFieldElemProcSig(recId, fname);
+      if Result < 0 then Result := RecFieldProcSig(recId, fname);
+    end;
+  end
   else if ASTKind[inner] = AN_PTR_CAST then
   begin
     if ASTRight[inner] >= 0 then
@@ -5544,6 +5562,17 @@ begin
         SymPtrDepth[idx] := declPtrDepth;
         SymPtrBaseTk[idx] := declBaseTk;
         SymPtrBaseRec[idx] := declBaseRec;
+        { A LOCAL array of function pointers declared through a TYPEDEF --
+          `binop tab[2] = {add, mul};` -- carries its element call signature in
+          SymElemProcSig, the `tab[i](args)` channel, exactly as the file-scope
+          path does. Without it `tab[0](5, 6)` was a PARSE error, while the same
+          declaration at file scope, the raw `int (*tab[2])(int,int)` spelling
+          at either scope, and `g = tab[0]; g(5, 6)` all worked -- four
+          spellings of one thing, one of them broken. NOT SymProcSig: that marks
+          the array VARIABLE as a proc value and makes codegen resolve `tab` to
+          a code address, corrupting the indexing (see the file-scope arm's
+          note). bug-c-a-local-typedef-d-function-pointer-array-is-not-callable }
+        if declProcSig >= 0 then SymElemProcSig[idx] := declProcSig;
         SymSyncTypeRef(idx);
       end;
       { C99 6.7.8p21: any brace initializer zero-fills the tail the list does

@@ -4889,6 +4889,15 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/hello26)" = "Hello, World!"
 	./$(COMPILER) test/hello.c $(TESTTMP)/hello_c26
 	test "$$($(TESTTMP)/hello_c26)" = "Hello, World!"
+	# Calling through a function-pointer TABLE failed to PARSE in two shapes while
+	# four neighbouring spellings worked: a LOCAL `binop tab[2]` declared through a
+	# typedef never got SymElemProcSig (the `tab[i](args)` channel) though the
+	# file-scope path and the raw `int (*tab[2])(int,int)` spelling both did; and
+	# `s.f[i](args)` -- a struct field holding a dispatch table, the ordinary C
+	# vtable -- was missing from CalleeSig entirely, which handles AN_INDEX over an
+	# AN_IDENT but not over an AN_FIELD. gcc -O0 oracle; pinned cannot compile it.
+	./$(COMPILER) test/cfnptr_array_callable.c $(TESTTMP)/cfnptr_array26
+	test "$$($(TESTTMP)/cfnptr_array26)" = "$$(printf 'local  11 30 -1\nfield  11 30 -1\ngfield 11 30\narrow  11 30\nvaridx 30 30\n16 48 8 \nderef  11 30\nnolist 5 13\nglobal 11 30\nraw    11 30\ntemp   -1\ndirect 11\nplain  9 7')"
 	# 17..32-parameter C function definitions + calls (MAX_PROC_PARAMS=32; gcc oracle)
 	# a global pointer initialised to &multidim_array[i][j][k]: only ONE subscript was
 	# consumed, so the whole initializer was silently SKIPPED and the pointer stayed null
