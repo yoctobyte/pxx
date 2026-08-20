@@ -4898,6 +4898,15 @@ test-core: $(COMPILER)
 	# AN_IDENT but not over an AN_FIELD. gcc -O0 oracle; pinned cannot compile it.
 	./$(COMPILER) test/cfnptr_array_callable.c $(TESTTMP)/cfnptr_array26
 	test "$$($(TESTTMP)/cfnptr_array26)" = "$$(printf 'local  11 30 -1\nfield  11 30 -1\ngfield 11 30\narrow  11 30\nvaridx 30 30\n16 48 8 \nderef  11 30\nnolist 5 13\nglobal 11 30\nraw    11 30\ntemp   -1\ndirect 11\nplain  9 7')"
+	# `(char*)"abc"` pointed at the string's 8-byte LENGTH PREFIX, not its data:
+	# b - a was -8 and b[0] was 3. A literal's IR value is the frozen string's
+	# HANDLE, and the assign, return and call-argument paths each carry their own
+	# copy of the +8 skip, keyed on `ASTKind[...] = AN_STR_LIT`; an AN_PTR_CAST in
+	# between is not one, so all three missed at once. In C a string literal already
+	# IS a char*, so the cast is an identity and now yields the literal unchanged --
+	# removing a shape rather than adding a fourth copy of the skip. gcc -O0 oracle.
+	./$(COMPILER) test/cstring_literal_cast.c $(TESTTMP)/cstrlitcast26
+	test "$$($(TESTTMP)/cstrlitcast26)" = "$$(printf 'same 0 0 0 0\nbytes 97 98 99 0\nlen 3 3 3\nstr [abc] [abc] [abc]\nglobal 0 [glob]\nindex y z\ninline [inline] [uncast]\nconcat [ab]\nret [ret] 3\narg 127 127\ncmp 0 0\nempty 0 0')"
 	# 17..32-parameter C function definitions + calls (MAX_PROC_PARAMS=32; gcc oracle)
 	# a global pointer initialised to &multidim_array[i][j][k]: only ONE subscript was
 	# consumed, so the whole initializer was silently SKIPPED and the pointer stayed null

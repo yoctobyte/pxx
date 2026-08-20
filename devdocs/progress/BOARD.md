@@ -49,7 +49,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (256)
+## backlog (257)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -299,6 +299,7 @@ _none_
 | refactor-a-the-greenfield-frontends-share-each-others-parser-helpers | A | 30 | refactor | Omitting rparser.inc breaks zparser.inc in 123 places, plus gparser/eparser/fparser — the greenfield frontends call each other's support functions, which is exactly what the-substrate-is-ast-and-ir-not-the-parser.md says not to do. Costs nothing today; makes R and Z individually unomittable and couples two language specs. | — |
 | refactor-a-the-missing-layer-between-frontends-and-backends | A | 50 | refactor | Three frontends have each independently grown a private piece of target machinery: the Pascal driver emits the signal runtime, the C frontend writes the _start stub as raw machine code, and Zig calls Rust's REmitParamRegSpill for raw x86-64 register spill. Two is a smell and three is a design flaw: there is no layer between the frontends and the backends, so each frontend built its own. Found by three unrelated omission probes, not by reading. | — |
 | refactor-a-variant-object-tag-list-lives-in-four-places | A | 45 | refactor | The set of variant tags whose payload is a refcounted object is written out in FOUR independent places; a tag added to some and not others leaks silently, with RSS as the only symptom. One of them also just zeroes object payloads outright. | — |
+| refactor-c-string-literal-decay-belongs-at-the-producer | C | 45 | refactor | The +8 that turns a C string literal's handle into a char* is duplicated at three consumers (assign, return, call argument), each keyed on `ASTKind[...] = AN_STR_LIT`. Any wrapper node defeats all three at once -- which is exactly how bug-c-a-pointer-cast-of-a-string-literal-points-at-the-length-prefix happened. Do the decay once, at the producer. | — |
 | refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag | C | 25 | refactor | cparser's partial-index builder marks 'this add is raw bytes, do not scale' by RETAGGING its base ASTTk to tyInt64 — a type tag used as a flag. tyInt64 is also the honest element tag of a `long long` array, and that collision cost a real bug. | — |
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-n-two-import-handlers-are-twins | N | 30 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
@@ -513,9 +514,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2143)
+## done (2144)
 
-2143 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2144 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -664,6 +665,7 @@ _none_
 - [p 45] [A] feature-writeln-as-library
 - [p 45] [A] meta-constant-normalisation
 - [p 45] [A] refactor-a-variant-object-tag-list-lives-in-four-places
+- [p 45] [C] refactor-c-string-literal-decay-belongs-at-the-producer
 - [p 45] [A] refactor-centralize-managed-string-pchar-conversion
 - [p 40] [A] bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data
 - [p 40] [A] bug-a-aintostr-returns-empty-for-negative-numbers

@@ -3229,6 +3229,27 @@ begin
       call and is not pruned as a dead retag node. A `void *` cast (depth > 0)
       is a real pointer cast and stays on the retag path below. }
     if isVoidCast then begin Result := operand; Exit; end;
+    { A POINTER cast of a STRING LITERAL is an identity in C -- a string literal
+      already IS a `char *`, so `(char*)"abc"` and `"abc"` denote the same
+      address. Wrapping it in a retag node made them differ, and silently: a
+      string literal's IR value is the frozen string's HANDLE, and every
+      consumer skips the 8-byte length prefix by testing `ASTKind[...] =
+      AN_STR_LIT` on its own operand -- the assign path, the return path and the
+      call-argument marshalling each carry their own copy of that +8. An
+      AN_PTR_CAST in between is not an AN_STR_LIT, so every one of those tests
+      missed and the pointer landed on the LENGTH WORD:
+
+        char *b = (char*)"abc";
+        printf("%s %d\n", b, b[0]);     -> "" 3      gcc: "abc" 97
+
+      Yielding the literal unchanged restores the identity C already promises,
+      and does it by REMOVING a shape rather than adding a fourth copy of the
+      skip. The right long-term fix is to lower a C string literal to its data
+      pointer at the PRODUCER and delete all three consumer skips --
+      refactor-c-string-literal-decay-belongs-at-the-producer.
+      bug-c-a-pointer-cast-of-a-string-literal-points-at-the-length-prefix }
+    if (castDepth > 0) and (ASTKind[operand] = AN_STR_LIT) then
+    begin Result := operand; Exit; end;
     { `(_Bool)e` is a COMPARISON against zero, not a 1-byte truncation
       (C99 6.3.1.2) — `(_Bool)256` is 1 and `(_Bool)ptr` is 1 for any non-null
       ptr. Handled before the numeric/retag paths below, which would otherwise
