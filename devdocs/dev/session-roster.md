@@ -3912,8 +3912,8 @@ windows on its own, so the matrix keeps sweeping without a quiet period being ca
    in six hours and it found real breakage.
 2. **Pin state** — whether it was safe to pin by morning, and what v366 carries if taken.
 3. **The carve** — split 2 done or not, and the campaign's objective finish line
-   (**183 Py* helper bodies / 504 sites remaining** — see the correction below; `PXX_NO_NILPY`
-   compiling clean = carve complete).
+   (figure WITHDRAWN 2026-08-20 — see the banner below; `PXX_NO_NILPY` compiling clean =
+   carve complete).
 4. **Breadth** — whether the full tier kept its cadence overnight, i.e. whether one window was
    a rate after all. T is holding resume-stats until there is one; do not pre-empt that.
 5. **Corrections owed** — every survey error count relayed as a figure is a FLOOR, not a count
@@ -3942,6 +3942,35 @@ forked routines — it is 183 Py\* helper bodies still sitting in `parser.inc`.*
 target helper bodies; another fork site will barely move the metric. (183/504 vs the opening
 176/426 is the same population under a different counting rule — the before/after PAIR is what
 is comparable, both from the same script. Do not mix the two figures.)
+
+### WITHDRAWN 2026-08-20 — the section above is measured with a BROKEN instrument
+
+frank3 retracted it and I corroborated the retraction before recording it. The script called a
+routine a BODY when its header did not `endswith('forward;')` — but most forwards in
+`parser.inc` carry a trailing comment (`... forward;  { the None VALUE }`), so they were counted
+as bodies. Verified independently: 193 `Py*` headers, **175 forwards, 18 bodies**; the naive
+endswith rule sees only 9 forwards, i.e. it mis-classifies 166.
+
+So "183 helper bodies" was 165 forward declarations wearing a body's hat, and **the opening
+176/426 was substantially right**. Correct dependency metric, same script fixed:
+
+    before the carve   181 pyparser-defined routines called from parser.inc, 541 sites
+    after split 2      182                                                    475 sites
+
+The +1 is `PyParseLValueAST` itself, one dispatch. Split 3 goes at the **next heaviest fork
+site**, same copy -> fold -> delete shape; there are 18 body candidates, 17 still called from
+`parser.inc`, exactly one movable outright — an afternoon of tidying, not a campaign.
+
+**The rule this bought, and it generalises past this file:** *a one-off explanation for a
+systematic defect is how a bad measurement survives being noticed.* The tell was present and
+correctly spotted — a delete-only change that RAISED a count is arithmetically impossible — and
+it was spent patching the number instead of the instrument, while 165 other rows sat behind the
+same one-off sentence. **When an impossible figure resolves to "my filter missed this one case",
+the next action is to re-run the filter over the whole population hunting that case, before
+touching the number.** See [[feedback_measuring_a_thing_is_not_filing_it]].
+
+I relayed 183/504 as the campaign's finish line, so the retraction is mine to carry as much as
+frank3's.
 
 Two things the three-commit shape exposed that a single commit would have hidden: a Pascal-only
 "a value of this type has no members" refusal that was dead in a NilPy-only copy, and
@@ -4665,9 +4694,11 @@ below is enough to resume cold.
 - `working/`: `feature-c-import-a-pascal-unit-under-a-mangled-name` (frank2's lock, core landed
   self-host green, §3 path collisions / §6 bare-name experiment / `test/` cases still open);
   `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` (the carve campaign).
-- **Carve split 3 must retarget to Py\* HELPER BODIES**, not fork sites — 183 bodies / 504 sites
-  after split 2, and carving the most forked routine removed zero bodies. Do not quote the old
-  176/426.
+- **Carve split 3 targets the next heaviest FORK SITE** — the retarget-to-helper-bodies
+  instruction below is WITHDRAWN (2026-08-20), and so is the 183/504 pair I relayed. There are
+  **18** Py* bodies in `parser.inc`, not 183; the dependency metric fell **541 -> 475 sites,
+  12%, from carving one routine**, which is what the campaign said all along. State the counting
+  rule with any figure.
 
 ### Pin checklist, as amended overnight
 1. `tail -1 stable_linux_amd64/default/pin.log`, then `git log <sha>..HEAD -- compiler`.
