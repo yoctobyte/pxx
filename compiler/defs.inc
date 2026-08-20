@@ -3019,6 +3019,13 @@ var
                              Python rather than truncating — see
                              bug-nilpy-bitwise-on-float-variant-truncates. }
   AnsiStrReleaseAddr : Integer;
+  { Scratch for Pascal Variant arithmetic operand coercion: two 16-byte variant
+    slots plus two saved operand addresses (48 bytes), allocated on first use in
+    EmitVarBinOp. One shared pair is sound for the same reason the per-node
+    result slot is: both operands are fully evaluated before the binop runs, and
+    the coercion helper cannot re-enter a variant binop. }
+  VarCoerceScratchOff : Integer;
+  VarCoerceScratchSet : Boolean;
   AnsiStrRetainAddr  : Integer;
   AnsiStrFromLiteralAddr : Integer;
   AnsiStrUniqueAddr : Integer;

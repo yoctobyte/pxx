@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:17 blocked:8 backlog:251 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2133 rejected:40`
+`urgent:1 unfinished:17 blocked:8 backlog:251 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2134 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -51,7 +51,6 @@ _none — no lane is locked._
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-pascal-unit-keeps-fpc-method-shadowing
 - `[p 65] [U]` decide-tobject-root-methods-dispatch-model (unblocks 1)
-- `[p 65] [A]` bug-p-variant-arithmetic-on-a-string-reads-the-payload-as-a-number
 - `[p 65] [T]` bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-oop
@@ -78,5 +77,6 @@ _none — no lane is locked._
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [A]` feature-pascal-type-helpers
 - `[p 55] [A]` feature-signal-siginfo-ucontext
+- `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
 
 _208 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

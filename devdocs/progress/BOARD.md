@@ -61,6 +61,7 @@ _none_
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
 | bug-a-only-the-pascal-driver-emits-the-signal-runtime | A | 45 | bug | The signal runtime (SIGSEGV/SIGFPE hook, restorer, sethook, install stubs) is emitted only by the Pascal driver in parser.inc. Every other frontend -- C, NilPy, Rust, Zig, Basic, Ada, Lua, the asm frontend -- produces a binary with no signal runtime, so a hardware fault there is an unhandled signal instead of a runtime error. Same shape as the I/O-lock gap that was already found and fixed. | — |
+| bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did | A | 45 | bug | i386, arm32 and aarch64 route variant binops through PXXVarBinOp in builtinheap.pas, which reimplements the same dispatch x86-64 hand-emits — and the same defect: a stringy operand's payload is read as a number. x86-64 was fixed 2026-08-20; those three targets still answer a heap address for `v('15') - 3`. | — |
 | bug-a-string-table-cap-refuses-a-14k-line-c-program | A | 45 | bug | `VisCacheVis` is sized by the string-table constant — and the cap it is tied to is too low | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-format-percent-u-prints-a-signed-value | B | 45 | bug | `Format('%u', [q])` on a QWord prints -1: sysutils' formatter aliases 'u' to 'd' and runs both through the signed IntToStr. FPC prints 18446744073709551615. The same line makes `%u` of Integer(-1) print -1 where FPC prints 4294967295. Filed from Track A+C+P — B owns lib/rtl. | — |
@@ -104,7 +105,6 @@ _none_
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
 | bug-p-a-parameterless-function-is-undefined-as-a-method-call-argument | P | 35 | bug | A parameterless function used as an ARGUMENT to a method call fails to resolve — `error: undefined variable (zero)` — while the identical argument to a free function compiles. Any argument position. Found writing lib/rtl/mimic_urllib_request.pas, where `headers.get(name, pynone)` would not compile but `HeaderFirst(raw, name, pynone)` did. | — |
 | bug-p-sizeof-rejects-a-pointer-deref-in-its-operand | P | 35 | bug | `SizeOf(p^.A)` is a parse error (`Expected: ), but got: ^`). SizeOf's operand parser is a hand-rolled selector walk that handles `v`, `v.f.g` and `v[i]` but has no `^` case, so any pointer deref in the operand is rejected outright. | — |
-| bug-p-variant-arithmetic-on-a-string-reads-the-payload-as-a-number | A | 65 | bug | Arithmetic on a Variant holding a STRING reads the payload as a number instead of converting: `v('15') - w(3)` answers 139332782393069 — the AnsiString HANDLE, a heap address, as an integer. A one-character string answers its char ordinal ('5'-3 = 50). FPC converts the string (2) or raises EVariantError. Silent, and the wrong value is nondeterministic. | — |
 | bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence | T | 45 | bug | file_cascade_ticket's Root-cause-suspects line falls back to 'likely a broken build or harness event' whenever no CASCADE_ROOT_JOBS entry is in the red set. That is a conclusion drawn from the absence of one narrow signal, printed with no hedge, and it is now directly contradicted by the Range section shipped in 8ec77190c — which on the live incident named the actual cause. Same defect class the Range work fixed for the sha: an auto-filed ticket asserting something it has no evidence for. | — |
 | bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio | T | 45 | bug | Float-accuracy assertions in the gated suites make a one-ulp move a CI RED, and a red job is worked at the priority of BEING RED - which overrides the owner's standing rule that float accuracy is low prio. Parking the tickets in float/ does not close this door; only the tests can. | — |
 | bug-t-a-pin-verifys-reds-carry-no-reasons | T | 45 | bug | A pin verify's reds carry no reasons | — |
@@ -375,7 +375,7 @@ _none_
 | idea-unit-rename-import | B | 50 | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | B | 50 | idea | Enforce private/protected visibility | — |
 
-## float (19)
+## float (20)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -386,6 +386,7 @@ _none_
 | bug-nilpy-complex-pow-is-a-few-ulp-off-cpython | B+F | 20 | bug | `(-8) ** (1/3)` answers a complex now, but its imaginary part is 5 ulp low: pylib cannot `uses math`, so complex pow rides hand-rolled sqrt/sin/cos beside PyMathLn/PyMathExp. Every other line of the complex oracle matches CPython exactly. | — |
 | bug-nilpy-float-pow-loses-a-ulp-vs-libm | N+F | 20 | bug | `2 ** 0.5` is not `math.sqrt(2)` — the float power is computed as exp(y·ln x) | — |
 | bug-nilpy-float-power-is-a-ulp-off-the-rtl-already-has-the-fix | B+F | 20 | bug | NilPy's `**` with a fractional exponent still uses exp(y*ln(x)), so 2**0.5 != math.sqrt(2); lib/rtl/math.pas's Power was fixed with a double-double kernel for exactly these cases and names 2^0.5 in its own comment | — |
+| compat-pascal-a-whole-valued-double-variant-writes-a-trailing-point-zero | P+F | 20 | compat | `writeln(v)` on a Variant holding a whole-valued Double prints `15.0` where FPC prints `15`. Rendering only — the value is right, and the same Double in a plain variable renders identically to FPC. Float FORMATTING, so it parks here. | — |
 | compat-pascal-strict-fpc-unmask-fp-exceptions-two-flags | A+F | 30 | compat | FPC unmasks the FP exceptions every ISA leaves masked: 1/0 is a runtime error there and Inf here, and Floor(1e30) raises EInvalidOp where pxx now saturates. Decided that pxx keeps IEEE masked semantics by default and FPC's behaviour goes behind opt-in flags — TWO of them, because div-by-zero -> runtime error 208 is nearly free (an FPU control word bit) while Floor raising EInvalidOp costs sysutils, +127 KB code and +33 KB bss on every `uses math` program. | — |
 | decide-default-float-output-format-and-constant-precision | U+F | 10 | decide | decide: should WriteLn's default float format follow the STATIC type, and should untyped float constants evaluate at Single precision? | — |
 | docs-publish-the-three-language-rounding-table | D+F | 30 | docs | One backend implements three different, correct rounding rules — Pascal ties-to-even, C half-away-from-zero, Python ties-to-even on the exact decimal — each verified against fpc/gcc/CPython. That is a differentiator and it is documented nowhere; it currently lives only inside a Track B ticket | — |
@@ -507,9 +508,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2133)
+## done (2134)
 
-2133 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2134 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -561,7 +562,6 @@ _none_
 - [urgent p 70] [N] bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - [p 70] [T] regression-test-nilpy-test-nilpy-pascal-unit-keeps-fpc-method-shadowing
 - [p 65] [U] decide-tobject-root-methods-dispatch-model (unblocks 1)
-- [p 65] [A] bug-p-variant-arithmetic-on-a-string-reads-the-payload-as-a-number
 - [p 65] [T] bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-oop
@@ -610,6 +610,7 @@ _none_
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
 - [p 45] [A] bug-a-a-memory-fault-is-a-raw-sigsegv-not-runtime-error-216
 - [p 45] [A] bug-a-only-the-pascal-driver-emits-the-signal-runtime
+- [p 45] [A] bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did
 - [p 45] [A] bug-a-string-table-cap-refuses-a-14k-line-c-program
 - [p 45] [B] bug-b-format-percent-u-prints-a-signed-value
 - [p 45] [N] bug-n-a-class-base-that-is-an-expression-does-not-compile

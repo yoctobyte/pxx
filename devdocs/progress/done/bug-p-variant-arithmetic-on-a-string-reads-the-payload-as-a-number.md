@@ -4,8 +4,8 @@ prio: 65
 type: bug
 blocked-by: []
 summary: "Arithmetic on a Variant holding a STRING reads the payload as a number instead of converting: `v('15') - w(3)` answers 139332782393069 — the AnsiString HANDLE, a heap address, as an integer. A one-character string answers its char ordinal ('5'-3 = 50). FPC converts the string (2) or raises EVariantError. Silent, and the wrong value is nondeterministic."
-status: backlog
-owner: unassigned
+status: done
+owner: frank1-ACP
 ---
 
 # Variant arithmetic reads a string's payload as a number
@@ -95,3 +95,66 @@ into "add an arm the Pascal path takes", and it is how this should start.
 test pinning every row of the matrix above against FPC 3.2.2 — **and**, because
 of the NilPy exposure, `PXX_ALLOW_FULL_SUITE=1 make test-nilpy` once before
 pushing, or an explicit hand-off to Track T with the sha.
+
+---
+
+## RESOLVED 2026-08-20 — `frank1-ACP` (Track A, sole-A confirmed)
+
+Fixed by giving the numeric dispatch the conversion that already existed
+elsewhere, not by rewriting the variant engine.
+
+**`PXXVarNumCoerce(src, dst)`** (`compiler/builtin/builtin.pas`, next to
+`VariantToInt64` whose rule it follows): a `VT_STRING`/`VT_CHAR` operand becomes
+`VT_INT64` if the text parses as an integer, `VT_DOUBLE` if it parses as a real,
+and otherwise halts with FPC's `EVariantError` wording. **Every other tag is
+returned untouched**, which is what lets the emitter call it unconditionally on
+both operands and keeps the change to one arm.
+
+`EmitVarBinOp` (x86-64) calls it at the head of the numeric path, and — for
+Pascal `+` only — now takes the concat branch when **BOTH** operands are stringy
+rather than when either is. Two scratch variants plus the two saved operand
+addresses live in one 48-byte BSS block allocated on first use; one shared block
+is sound for the same reason the per-node result slot is (both operands are
+fully evaluated before the binop runs, and the coercion helper cannot re-enter a
+variant binop).
+
+**NilPy is excluded at EMIT time** (`PyProgramMode`), not at run time, so its
+generated code is unchanged: `'5' * 3` is still `'555'`, `'5' + 'x'` still
+`'5x'`, `'5' + 3` still a TypeError, verified against CPython, and three variant
+`.npy` tests still match their `.expected`. The emitter also skips the coercion
+when `FindProc('PXXVarNumCoerce')` misses, so a program pulling no builtin unit
+keeps the old behaviour instead of failing to compile.
+
+### Result
+
+`test/test_variant_string_arithmetic.pas` — 27 assertions, all `fpc -O-
+-Mobjfpc` 3.2.2's: one-character and multi-character numeric strings on either
+side, a Double on the other side (the pair promotes: `'5' + 2.5` is 7.5, not 7),
+a fractional string, a negative string, both-stringy `+` still concatenating,
+non-stringy pairs untouched, and the comparison rows. **The pinned binary scores
+10/27.** Wired into `make test`; `tools/gate.sh quick` GREEN, self-host
+fixedpoint byte-identical.
+
+### What is NOT fixed, deliberately
+
+- **Mixed-type COMPARISONS.** `3 < '5'` is TRUE in FPC and FALSE here — the
+  compare arm answers "unequal, unordered" for a mixed pair rather than
+  converting. It is a separate arm with its own FPC semantics (FPC raises
+  `EVariantError` comparing a non-numeric string with a number), it is not
+  silently corrupting the way the arithmetic was, and the test asserts today's
+  answers so the day it changes the test says so.
+- **The other backends.** i386/arm32/aarch64 route `IR_VAR_BINOP` through
+  `PXXVarBinOp` in `builtinheap.pas`, which carries the same defect in Pascal
+  form. Its signature has no language discriminator, so giving it the same rule
+  is a separate change — filed as
+  `bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did`.
+- **`EVariantError` is a halt, not a raise.** `VariantToInt64` already halts
+  with a printed message rather than raising a catchable exception, and the new
+  helper follows that convention rather than inventing a second one. FPC raises,
+  so `try..except` around variant arithmetic on a non-numeric string still
+  cannot catch it.
+- **`writeln` of a whole-valued Double variant** prints `15.0` where FPC prints
+  `15`. Measured identical on the pinned binary, so it predates this; it is
+  float FORMATTING and therefore Track F — parked as
+  `float/compat-pascal-a-whole-valued-double-variant-writes-a-trailing-point-zero`.
+

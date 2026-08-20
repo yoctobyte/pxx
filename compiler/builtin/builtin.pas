@@ -101,6 +101,8 @@ function VariantToInt64(const v: Variant): Int64;
 function VariantToDouble(const v: Variant): Double;
 function VariantToBool(const v: Variant): Boolean;
 function VariantToChar(const v: Variant): Char;
+{ Pascal Variant ARITHMETIC operand coercion — see the implementation. }
+function PXXVarNumCoerce(src, dst: Pointer): Pointer;
 { --strict-fpc ONLY: FPC's Variant->Char, which routes through the variant's
   STRING form and takes character 1 — Char(65) = '6', Char(122) = '1',
   Char(True) = 'T', Char(2.5) = '2'. The DEFAULT dialect uses VariantToChar
@@ -673,6 +675,59 @@ begin
   else if t = 7 then Result := 'an object'
   else if (t >= 8192) and (t <= 8199) then Result := 'a promotable integer'
   else Result := 'an unknown tag';
+end;
+
+{ Pascal Variant arithmetic converts a STRING or CHAR operand to a NUMBER, and
+  raises EVariantError when the text is not numeric -- FPC's rule, and the same
+  one VariantToInt64's VT_STRING arm below already implements for `i := v`. The
+  binop path never called it, so `v('15') - 3` read the ANSISTRING HANDLE as an
+  integer and answered a heap address, while `v('5') - 3` answered 50, the char
+  ordinal (bug-p-variant-arithmetic-on-a-string-reads-the-payload-as-a-number).
+
+  Returns src UNTOUCHED for every other tag, so the caller can call it
+  unconditionally on both operands; dst is a caller-owned 16-byte scratch
+  variant that outlives the operation. An integer-looking string coerces to
+  VT_INT64 and a fractional one to VT_DOUBLE, which is what makes `'5' + 2.5`
+  come out 7.5 rather than 7: the existing dispatch promotes to double as soon
+  as either side carries VT_DOUBLE.
+
+  NilPy does NOT come through here -- the emitter only calls it when
+  PyProgramMode is off -- because Python's rules are different in every one of
+  these cases ('5' * 3 is '555', '5' + 3 is a TypeError). }
+function PXXVarNumCoerce(src, dst: Pointer): Pointer;
+var
+  p, d: PVariantRecord;
+  txt: AnsiString;
+  iv: Int64;
+  dv: Double;
+  vcode: Integer;
+begin
+  Result := src;
+  p := PVariantRecord(src);
+  if (p^.VType <> 5) and (p^.VType <> 6) then Exit;   { not VT_CHAR / VT_STRING }
+  if p^.VType = 5 then
+    txt := Chr(Byte(p^.Payload))                      { VT_CHAR: its one character, as text }
+  else
+    txt := PAnsiString(@p^.Payload)^;                 { VT_STRING }
+  d := PVariantRecord(dst);
+  Val(txt, iv, vcode);
+  if vcode = 0 then
+  begin
+    d^.VType := 2;                                    { VT_INT64 }
+    d^.Payload := iv;
+    Result := dst;
+    Exit;
+  end;
+  ValFloat(txt, dv, vcode);
+  if vcode = 0 then
+  begin
+    d^.VType := 3;                                    { VT_DOUBLE }
+    PDouble(@d^.Payload)^ := dv;
+    Result := dst;
+    Exit;
+  end;
+  writeln('Runtime error: EVariantError, cannot convert string to a number');
+  Halt(219);
 end;
 
 function VariantToInt64(const v: Variant): Int64;

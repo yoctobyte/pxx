@@ -4235,6 +4235,15 @@ test-core: $(COMPILER)
 	# stdout path's plain `not TypeSigned`. The pinned binary scores 17/23.
 	./$(COMPILER) test/test_str_of_unsigned.pas $(TESTTMP)/test_strunsigned26
 	cd $(TESTTMP) && ./test_strunsigned26 | tail -1 | grep -qx "total ok 23 / 23"
+	# Arithmetic on a Variant holding a STRING read the payload as a number: a
+	# char's ordinal ('5' - 3 was 50) and, for a longer string, the ANSISTRING
+	# HANDLE ('15' - 3 was a heap address, different every run). And `+` took the
+	# concat branch whenever EITHER side was stringy while rendering only that
+	# side, so '5' + 3 was '5'. Pascal converts a stringy operand to a number --
+	# the rule VariantToInt64 already had and the binop path never called. NilPy
+	# keeps Python's rules, excluded at emit time. The pinned binary scores 10/27.
+	./$(COMPILER) test/test_variant_string_arithmetic.pas $(TESTTMP)/test_varstrarith26
+	test "$$($(TESTTMP)/test_varstrarith26 | tail -1)" = "total ok 27 / 27"
 	./$(COMPILER) test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_nativeshift26
 	test "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
 	test "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"

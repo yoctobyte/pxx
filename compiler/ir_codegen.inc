@@ -2028,6 +2028,8 @@ procedure EmitVarBinOp(opTk, resultOff: Integer; isCompare: Boolean);
   isCompare -> Boolean 0/1 in rax; else Variant result at BSS[resultOff], addr in rax. }
 var pDbl1, pDbl2, pDoneInt, pLi, pRi, pLd, pRd, pForceDbl: Integer;
     pIsStr1, pIsStr2, pIsStr3, pIsStr4, pNumericPath: Integer;
+    pLeftStrOk, pNumericPath2, vcProc: Integer;
+    pasPlus: Boolean;
     pLhsOk, pRhsOk, pDiffTags1, pDiffTags2: Integer;
     pLhsStrCmp, pLhsCharCmp, pLhsDoneCmp, pLhsDone2Cmp, pLhsDone3Cmp, pLhsNilCmp: Integer;
     pRhsStrCmp, pRhsCharCmp, pRhsDoneCmp, pRhsDone2Cmp, pRhsDone3Cmp, pRhsNilCmp: Integer;
@@ -2038,6 +2040,12 @@ var pDbl1, pDbl2, pDoneInt, pLi, pRi, pLd, pRd, pForceDbl: Integer;
 begin
   pIsStr1 := -1; pIsStr2 := -1; pIsStr3 := -1; pIsStr4 := -1;
   pNumericPath := -1;
+  pLeftStrOk := -1; pNumericPath2 := -1;
+  { Pascal's `+` concatenates only when BOTH operands are stringy; with one
+    stringy and one numeric it CONVERTS and adds (`'5' + 3` is 8, FPC 3.2.2
+    measured). The either-side test below is Python's rule and is kept for
+    NilPy, which reaches this emitter with PyProgramMode on. }
+  pasPlus := (not isCompare) and (opTk = Ord(tkPlus)) and (not PyProgramMode);
   pDoneStr1 := -1; pDoneStr2 := -1; pDoneStr3 := -1;
   pNoneDone := -1;
 
@@ -2078,9 +2086,22 @@ begin
     { --- String check --- }
     EmitB($48); EmitB($8B); EmitB($07);                       { mov rax, [rdi] }
     EmitB($48); EmitB($3D); EmitI32(VT_STRING);               { cmp rax, VT_STRING }
-    EmitB($0F); EmitB($84); pIsStr1 := CodeLen; EmitI32(0);   { je L_is_str_op }
-    EmitB($48); EmitB($3D); EmitI32(VT_CHAR);                 { cmp rax, VT_CHAR }
-    EmitB($0F); EmitB($84); pIsStr2 := CodeLen; EmitI32(0);   { je L_is_str_op }
+    if pasPlus then
+    begin
+      { Pascal `+`: a NON-stringy left operand settles it — this is not a
+        concat, so go straight to the numeric path (which coerces the other
+        side if IT is stringy). }
+      EmitB($0F); EmitB($84); pLeftStrOk := CodeLen; EmitI32(0);     { je L_left_stringy }
+      EmitB($48); EmitB($3D); EmitI32(VT_CHAR);                      { cmp rax, VT_CHAR }
+      EmitB($0F); EmitB($85); pNumericPath2 := CodeLen; EmitI32(0);  { jne L_numeric_path }
+      Patch32(pLeftStrOk, CodeLen - (pLeftStrOk + 4));               { L_left_stringy }
+    end
+    else
+    begin
+      EmitB($0F); EmitB($84); pIsStr1 := CodeLen; EmitI32(0);   { je L_is_str_op }
+      EmitB($48); EmitB($3D); EmitI32(VT_CHAR);                 { cmp rax, VT_CHAR }
+      EmitB($0F); EmitB($84); pIsStr2 := CodeLen; EmitI32(0);   { je L_is_str_op }
+    end;
 
     EmitB($48); EmitB($8B); EmitB($06);                       { mov rax, [rsi] }
     EmitB($48); EmitB($3D); EmitI32(VT_STRING);               { cmp rax, VT_STRING }
@@ -2092,8 +2113,8 @@ begin
     EmitB($E9); pNumericPath := CodeLen; EmitI32(0);          { jmp L_numeric_path }
 
     { L_is_str_op }
-    Patch32(pIsStr1, CodeLen - (pIsStr1 + 4));
-    Patch32(pIsStr2, CodeLen - (pIsStr2 + 4));
+    if pIsStr1 >= 0 then Patch32(pIsStr1, CodeLen - (pIsStr1 + 4));
+    if pIsStr2 >= 0 then Patch32(pIsStr2, CodeLen - (pIsStr2 + 4));
     Patch32(pIsStr3, CodeLen - (pIsStr3 + 4));
     Patch32(pIsStr4, CodeLen - (pIsStr4 + 4));
 
@@ -2292,6 +2313,48 @@ begin
   { L_numeric_path }
   if pNumericPath >= 0 then
     Patch32(pNumericPath, CodeLen - (pNumericPath + 4));
+  if pNumericPath2 >= 0 then
+    Patch32(pNumericPath2, CodeLen - (pNumericPath2 + 4));
+  end;
+
+  { Pascal Variant arithmetic COERCES a stringy operand to a number before the
+    numeric dispatch below reads its payload. Without this the dispatch read the
+    payload raw: a VT_CHAR's ordinal (`v('5') - 3` = 50) and, far worse, a
+    VT_STRING's ANSISTRING HANDLE (`v('15') - 3` = a heap address, different
+    every run). FPC converts — 2 and 12 — or raises EVariantError when the text
+    is not numeric, and PXXVarNumCoerce implements exactly that, returning a
+    non-stringy operand untouched so both sides can be passed through it
+    unconditionally.
+
+    NilPy is excluded at EMIT time (PyProgramMode): Python's rules for these
+    pairs are different in every case ('5' * 3 is '555', '5' + 3 is a
+    TypeError), and its own lowering handles them before this emitter sees
+    them. Skipped when the helper is absent — a program that pulls no builtin
+    unit keeps the old behaviour rather than failing to compile.
+    bug-p-variant-arithmetic-on-a-string-reads-the-payload-as-a-number }
+  if (not isCompare) and (not PyProgramMode) then
+  begin
+    vcProc := FindProc('PXXVarNumCoerce');
+    if vcProc >= 0 then
+    begin
+      if not VarCoerceScratchSet then
+      begin
+        BSSSize := AlignTo(BSSSize, 8);
+        VarCoerceScratchOff := BSSSize;
+        Inc(BSSSize, 48);          { [0]=coerced left, [16]=coerced right, [32]/[40]=saved addrs }
+        VarCoerceScratchSet := True;
+      end;
+      EmitAsmX64(['mov [@glob], rdi', VarCoerceScratchOff + 32]);
+      EmitAsmX64(['mov [@glob], rsi', VarCoerceScratchOff + 40]);
+      EmitAsmX64(['mov rsi, @glob', VarCoerceScratchOff]);       { dst = scratch A; rdi = left }
+      EmitCallProc(vcProc);
+      EmitAsmX64(['mov [@glob], rax', VarCoerceScratchOff + 32]);
+      EmitAsmX64(['mov rax, @glob', VarCoerceScratchOff + 40, 'mov rdi, [rax]']);
+      EmitAsmX64(['mov rsi, @glob', VarCoerceScratchOff + 16]);  { dst = scratch B }
+      EmitCallProc(vcProc);
+      EmitAsmX64(['mov rsi, rax']);
+      EmitAsmX64(['mov rax, @glob', VarCoerceScratchOff + 32, 'mov rdi, [rax]']);
+    end;
   end;
 
   { '/' is real division: always Double, like Pascal — skip the integer path. }
