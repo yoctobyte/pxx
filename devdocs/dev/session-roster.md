@@ -4954,3 +4954,70 @@ lands before stdout flushes; prefix-bisect the input first.
 
 frank2 back on `feature-c-csmith-differential-fuzzing` (C, p65) — blocker cleared by T's
 `174186b5d`, so LP64 cross batches are now real differentials.
+
+## 2026-08-20 — OWNER CORRECTION: I dispatched NilPy work under the A/P/C mandate, and mis-ranked a float ticket
+
+Owner, verbatim: *"how come we are working on nilpy.. yesterdays instructions were to defer
+python work and focus on track A+C+P. also, there's a float ticket sitting in urgent, same
+issue - float work is deferred"*
+
+Both correct. Two different failures, and they share a cause.
+
+### 1. The cpyext ticket was N work that I let an `A+N` tag reclassify
+
+`feature-n-a-cpyext-extension-module-is-bare-importable-not-a-pascal-unit` was filed **A+N,
+p70** because its implementation site is in the shared `parser.inc` — a genuine Track A
+**file-lane**. I then dispatched it as the top of frank3's queue.
+
+**The file-lane is A. The work is N.** The subject is NilPy import resolution, its tests are
+`test_cpyext_*.npy`, and the mandate says *A+P+C priority above anything Track N, **even Track
+N bugs*** — and *"lane priority now beats prio number"*. A p70 with an A in its track field is
+exactly the shape that mandate was written to stop, and I gave it the top slot.
+
+**The specific error: I let the file-lane tag answer a question about the WORK.** The letters
+carry two axes on purpose — file-lanes for collision avoidance, work-tags for grouping — and I
+used a collision-avoidance tag as evidence about priority. `A+N` means "N work that touches A's
+files, so respect A's gate and lock". It does not make it A work.
+
+**What made it feel legitimate, and why that is not an excuse:** the owner had decided the
+underlying question that same morning, and I had said I would re-file the work into the owning
+lane. Re-filing is not dispatching. Filing it so it is *visible* to `ready` was right; putting
+it at the front of a worker's queue was a separate act that needed the mandate applied to it
+and did not get it. **A decision being fresh is not a priority signal.**
+
+Not being reverted — it is landed, green, and the owner is reviewing a deviation in it. The
+error is in the scheduling, not the work.
+
+### 2. `bug-a-riscv32-cross-float-output-no-longer-matches-x86-64` was ranked in `urgent/` at p60
+
+Moved to `float/` at p20. The ticket's own body reads *"The VALUES agree — this is digits and
+exponent width, not arithmetic"*, which is the F charter's definition of float **formatting**,
+verbatim. It sat where `ready`/`next` rank it, which is the one thing an F ticket must not do.
+
+**The reasoning that put it there was the regression corollary** — "a regression is worked at
+the priority of being red regardless of subject". The owner has overruled that for float, and
+on the merits it should not have applied anyway: the ticket's own analysis says **the new
+rendering is the more correct one** (a `Single` printed as a `Single`) and the defect is the
+TEST's assumption that a float-depth-reduced target is byte-comparable with x86-64. A red job
+whose recommended fix is to change the expectation is not a compiler regression.
+
+### The shared cause, which is the part worth keeping
+
+Both were **a true fact about the wrong subject**, in scheduling rather than in code. "The
+file lane is A" is true and does not answer *what work is this*. "It is a regression" is true
+and does not answer *what is its subject*. In each case I had a real property in hand and let
+it stand in for the ranking question, exactly the pattern this repo keeps recording in
+measurement and detection — see the `\bunion\b` footer match and the `{$pyextension}`
+self-admitting negative test from earlier the same day.
+
+**Standing check to apply before any dispatch: name the SUBJECT of the work, out loud, and
+rank on that. The track field tells you which files to protect and which gate to run; it does
+not tell you whether to work the ticket now.**
+
+### Consequence to watch
+
+`test-riscv32#src:test/test_cross_float.pas` **stays red** while the ticket is parked. Parking
+stops dispatch, not the failure. It will keep appearing in full tiers and counting against
+`pin_shadow` until it is recorded as a known-red or the test expectation is regenerated for the
+target's own float depth. Neither is float-accuracy work; both are bookkeeping. Flagged in the
+ticket so it is not re-triaged from scratch by someone who cannot see it in `ready`.
