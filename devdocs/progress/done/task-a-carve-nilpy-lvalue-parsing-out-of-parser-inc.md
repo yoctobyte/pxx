@@ -165,3 +165,120 @@ GREEN native (`tstate/832a42d026cd`).
 
 ## Log
 - 2026-08-19 — resolved, commit 86d2fe061.
+
+---
+
+## Split 3 — ParseFactorCore (2026-08-19/20)
+
+The heaviest remaining fork site, carved with the same three-commit shape.
+
+| step | commit | what |
+| --- | --- | --- |
+| 1/3 | `f380d7cd0` | verbatim copy → `PyParseFactorCore` in `pyparser.inc` (6768 lines), dispatch on `PyExprMode` at the top of the Pascal original |
+| 2/3 | `ec33f4e5e` | fold the 95 code-level guards in the copy (43 `PyExprMode`, 52 `isNilPy`/`NilPyUserCode`) → zero |
+| 3/3 | `3c8ec4c7d` | delete the dead `PyExprMode` arms from `parser.inc` (−764 lines) |
+
+`ParseFactorCore` in `parser.inc`: **6786 → 6022 lines**; `PyExprMode` in it
+**43 → 1** (the dispatch); whole file **36354 → 35590** lines and `PyExprMode`
+**119 → 77**.
+
+**The `isNilPy` / `NilPyUserCode` arms stay on the Pascal side, and this is not
+an omission.** `parser.inc` still runs during a NilPy compilation — for the
+Pascal units a `.npy` program pulls in — where `isNilPy` is True and
+`PyExprMode` is False. `NilPyUserCode` is a *function* (`symtab.inc:25`),
+re-evaluated at every read, so there is no cached-value hazard in either
+direction. It is the opposite reduction from the pyparser side: stage 2 folded
+all 52 there, stage 3 folds none here. Any future split inherits this rule.
+
+### Corrected measurement — the figures in `f380d7cd0` are superseded
+
+`f380d7cd0`'s message reported "ParseFactorCore: 94 distinct pyparser routines,
+160 sites, 109 forks; parser.inc total: 182 distinct, 475 sites, 207 forks; 34%
+of the surface". **Those numbers are wrong** and the commit is pushed and left
+as written. Two defects in the measuring script, in sequence:
+
+1. the stripper did not preserve newlines (36355 → 27698 lines) while the caller
+   located routine boundaries in the RAW file and sliced the STRIPPED text, so
+   every per-routine figure named the wrong region of the file;
+2. the replacement stripper preserved lines but did not implement **nested**
+   comments, which `lexer.inc:663` enables by default. A `{code, recv}` inside a
+   brace comment at `pyparser.inc:40278` desynced the scan across ~1000 lines.
+
+Both tells were **arithmetic impossibility**, not implausibility — a stripped
+count exceeding the raw count. That is what makes them cheap to catch and worth
+looking for: *check the instrument, not the output*, because a defect like this
+produces perfectly plausible numbers for every routine it does not happen to
+break. The working stripper is lexer-accurate (NestedComments on; `{}` nests on
+`{}` only, `(* *)` on `(* *)` only, no cross-nesting) and asserts line-count
+preservation and stripped ≤ raw on every run.
+
+Counting rule for everything below: bare-identifier occurrences over
+comment-and-string-stripped source, segmented by column-0 routine headers
+EXCLUDING lines matching `\bforward\s*;`; "sites" = references to `Py*`
+identifiers whose body is in `pyparser.inc` and not in `parser.inc`.
+
+| | forked routines | forks | distinct `Py*` deps | sites |
+| --- | --- | --- | --- | --- |
+| before split 3 | 25 | 226 | 183 | 533 |
+| after split 3 | 25 | 182 | 180 | 478 |
+
+`ParseFactorCore` held 95 forks and 157 `Py*` references over 6786 lines = **29%**
+of the remaining surface (not the 34% claimed). The conclusion that number was
+used for — that it was by far the heaviest remaining site — survives the
+correction; the figure does not.
+
+### Two wrong-extent deletions, both caught by the compiler
+
+Reported because the interesting part is how they were caught, not that they
+happened. In the batch that removed the first 504 lines:
+
+- the extent for the nested-def capture loop stopped **inside** the loop body,
+  so `if PyExprMode ... for ... begin` went and its body stayed. It surfaced as
+  `undefined variable (PyCallMeth1)` at `parser.inc:5395` — **4000 lines earlier
+  than the edit**, because the unclosed routine swallowed `pyparser.inc`'s
+  declarations into its own scope. A `begin`/`end`-balance check over the diff
+  hunks found it.
+- the `isCStringCall` if-branch was deleted as a *balanced* `if..begin..end`,
+  leaving a dangling `else`. The balance check said fine; the parser said
+  "statement made no progress in block". **Balance is necessary and not
+  sufficient.**
+
+Two arms are therefore not pure deletions: `tkBegin` (Pascal's behaviour is
+`Error('unexpected begin in expression')`, so the guard is dropped and the NilPy
+body deleted — the opposite of the mechanical reading) and the `isCStringCall`
+call-result wrapper (the `else` body survives, dedented). Ten locals died with
+the arms and were removed; five more were already dead at HEAD and were left,
+because they are not this change's.
+
+### Banked, NOT acted on: a candidate for split 4
+
+**Measured and unconfirmed — re-derive before picking a target from it.** The
+next-heaviest set is not another monolith but the **expression ladder**, which
+is denser per line than `ParseFactorCore` was:
+
+| routine | forks | `Py*` refs | lines |
+| --- | --- | --- | --- |
+| `ParseFactor` | 32 | 57 | 609 |
+| `ParseExpr` | 16 | 16 | 569 |
+| `ParseTerm` | 13 | 19 | 303 |
+| `ParseSimpleExpr` | 10 | 22 | 271 |
+
+Together 71 forks (39% of the remaining 182) over 1752 lines, against
+`ParseFactorCore`'s 95 over 6786. Whoever takes it should note that the four are
+mutually recursive and share a dispatch discipline, so they probably carve as
+**one** unit, not four — and that `ParseLValueAST` (18 forks, 2512 lines) and
+`ParseUsesUnitBody` (11 forks, 0 refs, 1213 lines) are the two remaining
+individually-notable sites.
+
+### Gate actually run
+
+`make compiler/pascal26` fixedpoint converged in 1 round at every stage;
+`tools/gate.sh quick` GREEN at every stage; NilPy programs run against the
+CPython oracle through `tools/pydiff.py` (10 at stage 1, 16 at stage 2, 17 at
+stage 3, each set chosen to hit the arms that stage touched), all MATCH. The
+full matrix is Track T's, against the pushed shas. **No pin** — this is a
+refactor, nothing downstream needs it blessed.
+
+## Log
+- 2026-08-20 — split 3 (ParseFactorCore) landed: `f380d7cd0`, `ec33f4e5e`,
+  `3c8ec4c7d`. Figures in `f380d7cd0` superseded above.
