@@ -6066,9 +6066,10 @@ test-core: $(COMPILER)
 	# of the literal's HANDLE into a[0], `s := a` answered '', `a = 'abcdefgh'`
 	# was False, `a + '!'` and `Write(a)` printed one garbage character. Reading
 	# stops at the first #0 within the capacity (FPC's rule, not a memcpy);
-	# writing pads with zeros. 77 assertions, all FPC 3.2.2's.
+	# writing pads with zeros. 86 assertions, all FPC 3.2.2's, including a `string`
+	# parameter, Length/Pos, and the `var` parameter that must NOT convert.
 	./$(COMPILER) test/test_char_array_is_a_string.pas $(TESTTMP)/test_chararrstr26
-	test "$$($(TESTTMP)/test_chararrstr26 | head -1)" = "total ok 77 / 77"
+	test "$$($(TESTTMP)/test_chararrstr26 | head -1)" = "total ok 86 / 86"
 	test "$$($(TESTTMP)/test_chararrstr26 | tail -1)" = "write [hi]"
 	./$(COMPILER) test/test_var_nd_array_string_init.pas $(TESTTMP)/test_var_nd_array_string_init26
 	test "$$($(TESTTMP)/test_var_nd_array_string_init26)" = "$$(printf '1 3 4 6\nJan Mar Apr Jun\nx yy zzz')"

@@ -118,3 +118,46 @@ conversion (array-to-array copy and element access).
 
 ## Log
 - 2026-08-20 — resolved, commit a22177c73.
+
+## Follow-up, same day — the argument and Length sites
+
+The first landing named two things left out. One of them, the `string`
+PARAMETER, turned out to be the same three-line change and is now done, along
+with `Length`:
+
+| site | before | now |
+| --- | --- | --- |
+| `Take(a)` where `Take(const q: string)` | one garbage character | `hi` |
+| `Length(a)` on an `array[0..7] of Char` | **1** | 8 |
+| `Pos('i', a)` | 0 | 2 |
+| `Alias(a)` where `Alias(var q: TA8)` | aliases | aliases — unchanged |
+
+`Length` was the sharper of the two: the fold `Length(c) = 1 for a Char` fires on
+`ASTTk[valNode] = tyChar`, and a Char ARRAY's node is typed tyChar too, so
+`Length(a)` had answered 1 for as long as the fold has existed. `Length` on an
+`array[0..3] of Integer` was right all along — only the Char element type walked
+into the Char arm. Guarded with `ASTCharArrayCap(valNode) < 0`.
+
+**The argument case is worth recording for the trap it hid.** Putting the
+conversion inside `IRLowerCallArg` — the parameter-aware lowering that every
+call funnels through, and by every argument the obvious normalisation point —
+looked correct and did nothing. The IR dump showed why:
+
+```
+4: call a=141 b=1 ival=0 tk=23      <- __pxxCharArrayToStr, AnsiString result
+5: arg  a=4   b=-1     ival=0 tk=3  <- ...tagged tyChar
+```
+
+The argument LOOP builds its `IR_ARG` from `ASTTk[ASTLeft[item]]`, the original
+node's type, so converting the value inside the callee-side helper produced the
+right string and then labelled it a Char: the same wrong answer by a different
+route. The node itself has to change, which is precisely what the NilPy
+char-to-pystr wrap sitting in that loop already says in its own comment. The
+conversion is now `IRCoerceCharArrayArg`, called from the six argument loops
+next to it.
+
+Still out, and still loud rather than silent: the typed-const form
+(`CA: TA8 = 'literal'`).
+
+The test grows to 86 assertions and adds the `var` parameter, which must NOT
+convert.

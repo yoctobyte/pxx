@@ -29,6 +29,15 @@ var
   a, a2: TA8; b: TA3; s: string;
   ok, total, i: Integer;
 
+function Wrap(const q: string): string;
+begin Wrap := '<' + q + '>'; end;
+
+function WrapV(q: AnsiString): Integer;
+begin WrapV := Length(q); end;
+
+procedure Alias(var q: TA8);
+begin q[0] := 'Z'; end;
+
 procedure Chk(const what: string; got, want: Integer);
 begin
   total := total + 1;
@@ -95,6 +104,22 @@ begin
   Chk('elem', Ord(a[2]), 99);
   a[2] := 'Q';
   Chk('elem store', Ord(a[2]), 81);
+
+  { a `string` PARAMETER takes the conversion too -- and `Length` of the array
+    itself is the ARRAY's length, 8, not a Char's 1 }
+  a := 'hi';
+  ChkS('const param', Wrap(a), '<hi>');
+  Chk('value param', WrapV(a), 2);
+  Chk('Length arr', Length(a), 8);
+  Chk('Length b3', Length(b), 3);
+  Chk('Low/High', Low(a) * 100 + High(a), 7);
+  Chk('Pos', Pos('i', a), 2);
+  ChkS('Copy', Copy(a, 1, 1), 'h');
+
+  { a `var` parameter must NOT convert -- it aliases the array }
+  Alias(a);
+  Chk('var param aliases', Ord(a[0]), 90);
+  Chk('var param keeps rest', Ord(a[1]), 105);
 
   writeln('total ok ', ok, ' / ', total);
   { Write of the array itself is the last row of the table }

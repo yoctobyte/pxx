@@ -2472,6 +2472,30 @@ begin
   Result := callNode;
 end;
 
+procedure IRCoerceCharArrayArg(cpi, pathIdx, item: Integer);
+{ A static `array of Char` handed to a `string` PARAMETER converts, the same way
+  it does in an assignment or a comparison.
+
+  Rewritten in the ARGUMENT LOOP rather than inside IRLowerCallArg, for exactly
+  the reason the NilPy char-to-pystr wrap next to it gives: the loop builds its
+  IR_ARG with `ASTTk[ASTLeft[item]]`, the ORIGINAL node's type. Converting the
+  value inside IRLowerCallArg produced the right AnsiString and then tagged the
+  arg node tyChar, so the callee read one byte of a handle — the same wrong
+  answer by a different route. The node itself has to change.
+
+  A `var`/`out` parameter is left alone: it aliases the ARRAY.
+  bug-p-a-char-array-is-not-a-string-in-any-direction }
+begin
+  if CProgramMode then Exit;
+  if (cpi < 0) or (item < 0) or (pathIdx < 0) then Exit;
+  if pathIdx >= Procs[cpi].ParamCount then Exit;
+  if Procs[cpi].Params[pathIdx].IsArray then Exit;
+  if Procs[cpi].Params[pathIdx].IsRef then Exit;
+  if not (Procs[cpi].Params[pathIdx].TypeKind in [tyString, tyAnsiString]) then Exit;
+  if ASTCharArrayCap(ASTLeft[item]) < 0 then Exit;
+  ASTLeft[item] := WrapCharArrayToStringExpr(ASTLeft[item]);
+end;
+
 function IRLowerCallArg(cpi: Integer; pathIdx: Integer; argAST: Integer; isRefArg: Boolean): Integer;
 var argTk: TTypeKind;
     needTemp: Boolean;
@@ -6492,6 +6516,7 @@ begin
       pathIdx := 0;
       while item <> -1 do
       begin
+        IRCoerceCharArrayArg(cpi, pathIdx, item);
         isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
         value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
         argNode := IRAppend(IR_ARG, value, -1, -1, 0, ASTTk[ASTLeft[item]]);
@@ -9563,6 +9588,7 @@ begin
             { Param-aware arg lowering + the managed-string temp slot — the
               same shape as AN_METACLASS_NEW's ctor-arg loop, for the same
               reasons (see the comments there). }
+            IRCoerceCharArrayArg(cpi, pathIdx, item);
             isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
             value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
             argIsManagedTemp :=
@@ -9609,6 +9635,9 @@ begin
             (Procs[cpi].Params[pathIdx].TypeKind = tyString)) and
            (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyChar) then
           ASTLeft[item] := WrapCharToPyStr(ASTLeft[item]);
+        { …and the Pascal shape of the same question, one type up: a static
+          `array of Char` bound to a `string` parameter. }
+        IRCoerceCharArrayArg(cpi, pathIdx, item);
         isRefArg := False;
         if cpi >= 0 then
         begin
@@ -10092,6 +10121,7 @@ begin
       pathIdx := 0;
       while item <> -1 do
       begin
+        IRCoerceCharArrayArg(cpi, pathIdx, item);
         isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
         value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
         { Same auto const char* marshalling the direct AN_CALL path applies: a
@@ -10221,6 +10251,7 @@ begin
       pathIdx := 1;
       while item <> -1 do
       begin
+        IRCoerceCharArrayArg(cpi, pathIdx, item);
         isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
         value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
         argIsManagedTemp :=
@@ -11285,6 +11316,7 @@ begin
           frozen string forgave the difference. An Integer argument worked everywhere all
           along, which is what made the bug look target-specific rather than
           argument-specific. }
+        IRCoerceCharArrayArg(cpi, pathIdx, item);
         isRefArg := (pathIdx < Procs[cpi].ParamCount) and Procs[cpi].Params[pathIdx].IsRef;
         value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
         argIsManagedTemp :=

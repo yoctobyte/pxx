@@ -14299,8 +14299,13 @@ begin
           if lenFieldRec >= REC_UCLASS_BASE then
             lenFieldIdx := FindUField(lenFieldRec - REC_UCLASS_BASE, GetASTIdentName(valNode));
         end;
-        if IntToTypeKind(ASTTk[valNode]) = tyChar then
+        if (IntToTypeKind(ASTTk[valNode]) = tyChar) and (ASTCharArrayCap(valNode) < 0) then
         begin
+          { …but NOT a static `array of Char`, whose AST node is ALSO typed
+            tyChar (the arrayness is on the symbol). `Length(a)` on an
+            array[0..7] of Char is 8, the array's length — this arm answered 1,
+            the length of a Char, for as long as it has existed.
+            bug-p-a-char-array-is-not-a-string-in-any-direction }
           { `Length(c)` where c is a CHAR is 1 — FPC's answer, and the same one
             `Length('y')` on a character LITERAL already gave. A Char VARIABLE
             fell through to the runtime -tkLength path, which read the value as

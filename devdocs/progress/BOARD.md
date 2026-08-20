@@ -134,6 +134,7 @@ _none_
 | compat-pascal-string-n-is-not-a-shortstring | P | 25 | compat | `string[20]` is a managed string with a length CAP, not a Turbo/FPC shortstring: SizeOf is 8 (a handle) where FPC says 21, and `ss[0]` — the length byte — reads #0 instead of Chr(Length(ss)). Truncation to the declared length does work, and every character operation agrees. | — |
 | compat-pascal-subrange-storage-size | P | 30 | compat | Every subrange type gets the 4-byte default instead of the smallest type that holds it: SizeOf(10..20) is 4 where FPC says 1, so a `packed record` of subranges is 12 bytes where FPC lays out 3. Values are all correct — this is a layout divergence, not a wrong-value bug, and it breaks binary interop and costs 4x memory. | — |
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
+| compat-pascal-uses-sysutils-withdraws-the-variadic-concat | P | 25 | compat | The variadic `Concat` intrinsic is shadowed by `sysutils`'s two-argument `Concat`, so `uses sysutils` breaks `Concat('a','b','c')` — which compiles fine without it. The shadow rule is `procIdx < 0`, i.e. ANY user Concat disables the intrinsic outright. Loud, not silent. | — |
 | decide-reduced-compiler-switch-spelling | U | 55 | decide | How does a reduced build get selected — subtractive (`omit-c`), positive-list (`only-pascal`), or a named-configuration file? And do frontend and target selection compose freely or only in blessed combinations? The user flagged the names in the parent ticket as placeholders. Recommendation: subtractive defines as the mechanism, named configurations as the tested surface. | — |
 | decide-should-from-accept-a-quoted-foreign-file | U | 45 | decide | A bare NilPy import resolves to Python only, and the escape is `import 'x.pas' as x`. There is no matching escape for `from x import Name` -- `from 'x.pas' import Name` is refused with \"expected a module name after from\". Decide whether the quoted form should be accepted after `from`, or whether the alias form is deliberately the only door. A test already lost an assertion to this. | — |
 | decide-tobject-root-methods-dispatch-model | U | 65 | decide | Decide: how `TObject.Equals` / `GetHashCode` dispatch — intercept, real parent, or reserved slots | — |
@@ -225,7 +226,6 @@ _none_
 | feature-opt-rtti-emit-on-use | O | 40 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
 | feature-opt-store-reload-elimination | O | 60 | feature | Store-reload (redundant load) elimination — -O1 pass | — |
 | feature-p-assertions-directive-and-position | P | 40 | feature | RE-TYPED 2026-08-19 feature -> bug for half 1: `{$ASSERTIONS OFF}` is ACCEPTED AND IGNORED — measured on v363, an Assert whose condition has a side effect still runs it (n=1 where FPC gives n=0), so the two dialects take different paths with no diagnostic. Implement FPC assertion parity: {$ASSERTIONS ON/OFF} and -Sa gating (Assert compiled OUT when off, so its side effects do not run), plus the '(file, line N)' suffix FPC appends to the message | — |
-| feature-p-concat-takes-only-two-arguments | B | 25 | feature | `Concat` is declared as a two-argument function, so FPC's variadic form `Concat('a','b','c')` fails to compile with `candidates: Concat(AnsiString, AnsiString)`. Loud, not silent. | — |
 | feature-p-defineglobal-a-define-that-crosses-unit-boundaries | P | 40 | feature | `{$DEFINEGLOBAL xyz}` — a conditional define that outlives the unit that sets it. Measured: pxx matches FPC today, a unit's {$DEFINE} does not reach the program, which is correct Pascal and is also why two units cannot coordinate. The motivating case is 'first implementation loaded claims the name, second skips itself' — the shape that would have dissolved the pylib/sysutils Exception problem. | — |
 | feature-p-delphi-string-helpers | P | 45 | feature | feature(P): Delphi's TStringHelper surface — `s.Length`, `s.ToUpper`, `s.Trim`, `s.Substring` | — |
 | feature-p-record-const-with-an-array-of-record-field | P | 35 | feature | A record typed constant whose FIELD is an array of records is refused (`not a constant`): `CR: TR = (a: ((x:1;y:2),(x:3;y:4)))`. The kind-7 array-valued-field path handles scalar elements only; FPC compiles it. | — |
@@ -742,13 +742,13 @@ _none_
 - [p 25] [P] compat-pascal-class-helpers
 - [p 25] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off
 - [p 25] [P] compat-pascal-string-n-is-not-a-shortstring
+- [p 25] [P] compat-pascal-uses-sysutils-withdraws-the-variadic-concat
 - [p 25] [A] feature-n-a-quoted-from-import-reaches-another-language
 - [p 25] [N] feature-nilpy-a-genexpr-is-lazy-not-materialised
 - [p 25] [N] feature-nilpy-math-module-twelve-absent-names-measured
 - [p 25] [N] feature-nilpy-str-format-named-keyword-fields
 - [p 25] [N] feature-nilpy-str-surface-gaps-2026-08-09
 - [p 25] [O] feature-opt-alloc-intent-hint
-- [p 25] [B] feature-p-concat-takes-only-two-arguments
 - [p 25] [W] feature-promo-launch-plan
 - [p 25] [T] feature-t-fpc-probe-needs-a-trunk-oracle
 - [p 25] [T] feature-t-record-host-cpu-features-in-tstate
