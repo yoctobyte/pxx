@@ -1,20 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T14:15:18Z",
-   "fixed": [
-    "test-core#src:test/test_call_result_member.pas",
-    "test-core#src:test/test_ctor_result_member.pas",
-    "test-core#src:test/test_isas_open_world_b325.pas",
-    "test-core#src:test/test_procedure_as_value_ok.pas",
-    "test-core#src:test/test_stmt_call_result_selector_b318.pas"
-   ],
-   "new_red": [],
-   "sha": "71099dcb1104959e9f6d147536268ed12687aa6c",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-19T14:23:26Z",
    "fixed": [],
    "new_red": [],
@@ -452,6 +438,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "e0f9cb893fea964c13ab57e7a2fdea0cb8e238c7",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T02:11:47Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "011e3904e52e6b334931da496edf713def2cebc1",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -6078,11 +6072,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T02:02:51Z",
-  "sha": "e0f9cb893fea964c13ab57e7a2fdea0cb8e238c7",
+  "date": "2026-08-20T02:11:47Z",
+  "sha": "011e3904e52e6b334931da496edf713def2cebc1",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 244.5
+  "wall": 241.0
  },
  "last_bench": {
   "conf_rows": 550,
