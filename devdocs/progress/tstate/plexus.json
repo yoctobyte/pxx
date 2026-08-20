@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T02:35:50Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "ef3ea948003db578ee3871802bffcc9051a2ab73",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-20T02:41:39Z",
    "fixed": [],
    "new_red": [],
@@ -441,6 +433,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "766c2fdf68aced5bab319d49575bed52946d04a7",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T18:46:11Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "aa548a7408f52674a28880c87f044129b2341a45",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -967,11 +967,11 @@
   "test-cjson#src:test/cjson/runner.c": "full",
   "test-core#00": "native",
   "test-core#129": "full",
-  "test-core#137": "native",
   "test-core#138": "native",
   "test-core#139": "native",
   "test-core#140": "native",
   "test-core#141": "native",
+  "test-core#142": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
   "test-core#src:examples/tk/callbacks.npy": "native",
@@ -1815,6 +1815,7 @@
   "test-core#src:test/test_nested_dynarray_field.pas": "native",
   "test-core#src:test/test_nested_dynarray_managed.pas@1": "native",
   "test-core#src:test/test_nested_dynarray_managed.pas@2": "native",
+  "test-core#src:test/test_nested_include.pas": "native",
   "test-core#src:test/test_nested_interface_as_cast.pas": "native",
   "test-core#src:test/test_nested_proc_sibling_call.pas": "native",
   "test-core#src:test/test_nested_routine_depth2_capture.pas": "native",
@@ -3825,11 +3826,11 @@
   "test-c-conformance-riscv32#shard5/6": "pass",
   "test-cjson#src:test/cjson/runner.c": "pass",
   "test-core#00": "pass",
-  "test-core#137": "pass",
   "test-core#138": "pass",
   "test-core#139": "pass",
   "test-core#140": "pass",
   "test-core#141": "pass",
+  "test-core#142": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
@@ -4671,6 +4672,7 @@
   "test-core#src:test/test_nested_dynarray_field.pas": "pass",
   "test-core#src:test/test_nested_dynarray_managed.pas@1": "pass",
   "test-core#src:test/test_nested_dynarray_managed.pas@2": "pass",
+  "test-core#src:test/test_nested_include.pas": "pass",
   "test-core#src:test/test_nested_interface_as_cast.pas": "pass",
   "test-core#src:test/test_nested_proc_sibling_call.pas": "pass",
   "test-core#src:test/test_nested_routine_depth2_capture.pas": "pass",
@@ -6162,11 +6164,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-20T18:34:00Z",
-  "sha": "766c2fdf68aced5bab319d49575bed52946d04a7",
+  "date": "2026-08-20T18:46:11Z",
+  "sha": "aa548a7408f52674a28880c87f044129b2341a45",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 456.1
+  "wall": 461.4
  },
  "last_bench": {
   "conf_rows": 550,
