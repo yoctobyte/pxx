@@ -34649,40 +34649,11 @@ begin
   if pyHasExceptions then EnableExceptionRuntime;
   { Forward-declare the builtin heap allocator before emitting the string
     runtime, which calls Alloc. The unit body (compiled by ParseUsesUnit below)
-    fills these in. Mirrors the Pascal ParseProgram path; without it a .npy that
-    touches the heap fails FindProc('PXXAlloc') during EmitAnsiStringRuntime. }
-  savedUnitIdx := CurrentUnitIdx;
-  CurrentUnitIdx := InternStr('builtinheap');
-  dummyNames[0] := 'size';  dummyTypes[0] := tyNativeInt;
-  dummyNames[1] := 'align'; dummyTypes[1] := tyInteger;
-  i := RegisterProc('PXXAlloc', True, tyPointer, 2, dummyNames, dummyTypes);
-  dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
-  i := RegisterProc('PXXFree', False, tyPointer, 1, dummyNames, dummyTypes);
-  { the emitted obj blobs call these (feature-nilpy-object-reclamation) }
-  i := RegisterProc('PXXObjRetain', False, tyPointer, 1, dummyNames, dummyTypes);
-  i := RegisterProc('PXXObjRelease', False, tyPointer, 1, dummyNames, dummyTypes);
-  dummyNames[0] := 'p';     dummyTypes[0] := tyPointer;
-  dummyNames[1] := 'newSize'; dummyTypes[1] := tyNativeInt;
-  dummyNames[2] := 'align'; dummyTypes[2] := tyInteger;
-  i := RegisterProc('PXXRealloc', True, tyPointer, 3, dummyNames, dummyTypes);
-  dummyNames[0] := 'len';   dummyTypes[0] := tyNativeInt;
-  dummyNames[1] := 'src';   dummyTypes[1] := tyPointer;
-  i := RegisterProc('PXXStrFromLit', True, tyPointer, 2, dummyNames, dummyTypes);
-  dummyNames[0] := 'lenA';  dummyTypes[0] := tyNativeInt;
-  dummyNames[1] := 'srcA';  dummyTypes[1] := tyPointer;
-  dummyNames[2] := 'srcB';  dummyTypes[2] := tyPointer;
-  dummyNames[3] := 'lenB';  dummyTypes[3] := tyNativeInt;
-  i := RegisterProc('PXXStrConcat', True, tyPointer, 4, dummyNames, dummyTypes);
-  dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;
-  dummyNames[1] := 'srcB';    dummyTypes[1] := tyPointer;
-  dummyNames[2] := 'lenB';    dummyTypes[2] := tyNativeInt;
-  i := RegisterProc('PXXStrAppend', False, tyPointer, 3, dummyNames, dummyTypes);
-  dummyNames[0] := 'dest';    dummyTypes[0] := tyPointer;
-  dummyNames[1] := 'right';   dummyTypes[1] := tyPointer;
-  i := RegisterProc('PXXVarStrAppend', True, tyInt64, 2, dummyNames, dummyTypes);
-  dummyNames[0] := 'path';  dummyTypes[0] := tyPointer;
-  i := RegisterProc('PXXStrLoadFile', True, tyPointer, 1, dummyNames, dummyTypes);
-  CurrentUnitIdx := savedUnitIdx;
+    fills these in; without it a .npy that touches the heap fails
+    FindProc('PXXAlloc') during EmitAnsiStringRuntime. This block used to be
+    written out here and again in ParseProgram, and the C driver had neither —
+    see the note on the shared helper. }
+  RegisterEmittedStringRuntimeForwards;
   EmitAnsiStringRuntime;
   { builtinheap declares TInterfacedObject/IInterface, whose signatures name
     TGuid and TObject — register the builtin rows first (idempotent), exactly

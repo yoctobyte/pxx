@@ -419,7 +419,7 @@ end;
 
 procedure CParsePascalUnitMarker;
 var baseDir, spec, uname, hops, resolved: AnsiString;
-    i: Integer; isPath: Boolean;
+    i: Integer; isPath, savedCProgramMode: Boolean;
 begin
   Next;                                  { the marker identifier }
   baseDir := ''; spec := '';
@@ -465,7 +465,23 @@ begin
     Pascal chain — the same rule a quoted NilPy 'import "x.pas"' gets — so a
     same-named .py or mimic_ shim cannot answer a '#include "x.pas"'. }
   PyImportLang := 'pas';
+  { Compile the unit as PASCAL. CProgramMode is a global "the program being
+    compiled is C", and the lowering reads it for things that are true of C
+    SOURCE, not of the driver — most visibly a string literal, which C mode
+    adjusts by +8 into a `char*` and Pascal mode leaves as a Pascal string. A
+    unit body reached from here is Pascal by construction, so `s := a + 'cd'`
+    was concatenating a two-character literal as if it were ONE character:
+    Length came back 3 instead of 4, silently, in a unit that gave the right
+    answer when the same source was used from a Pascal program.
+
+    The RTL pulls in ParseCProgram already get this for free by running BEFORE
+    `CProgramMode := True`; a user unit arrives through the token-stream marker,
+    which is parsed during the C pass. Same rule, applied at the other entry.
+    bug-a-c-driver-omits-rtl-stubs-for-an-imported-pascal-unit }
+  savedCProgramMode := CProgramMode;
+  CProgramMode := False;
   ParseUsesUnit(uname);
+  CProgramMode := savedCProgramMode;
   PyImportLang := '';
   CCheckPascalUnitCollision(CPascalUnitKeyOf(spec), resolved, isPath);
 end;
@@ -9195,6 +9211,7 @@ procedure ParseCProgram;
 var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
     initPatch, initIdx: Integer;
     needInit: Boolean;
+    cNeedsHeap, cNeedsAnsi, cNeedsDiv: Boolean;   { shared pre-scan; only cNeedsAnsi is read }
 begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
 
@@ -9466,6 +9483,33 @@ begin
     point -- which jumps back to main and hangs until the stack is gone
     (bug-a-threadsafe-segfaults-on-every-nilpy-program). }
   EmitIoLockStubsForTarget;
+
+  { The emitted AnsiString runtime — the call this driver was MISSING. A Pascal
+    unit `#include`d from C compiles its body through the same lowering as a
+    Pascal program, so `Tag := ''` emits IREmitCodeCall(AnsiStrFromLiteralAddr);
+    with no driver emitting the shims that address stayed 0, i.e. a call to the
+    ELF entry point, and the guard there reported it as `compiler error: call to
+    a runtime stub that was never emitted` pointing at a line in a file the C
+    author never wrote. Same shape as the Div0 and IoLock stubs above, and the
+    same failure class as bug-a-threadsafe-segfaults-on-every-nilpy-program: a
+    per-frontend stub-emission list that one frontend forgot.
+
+    Position matters and mirrors the Pascal and NilPy drivers: BEFORE the RTL
+    pulls below, because the shims are reached by a direct relative call and
+    every caller — the pulled units included — must be compiled after them.
+    That is also why the forwards are registered first.
+
+    Gated on the SAME pre-scan the Pascal driver uses rather than a C-specific
+    guess, so a C translation unit with no Pascal in it carries no shims. x86-64
+    only, like the Pascal path: the shims are x86-64 machine code and the other
+    backends' string IR ops call the builtinheap helpers directly.
+    bug-a-c-driver-omits-rtl-stubs-for-an-imported-pascal-unit }
+  DetectPascalRuntimeNeeds(cNeedsHeap, cNeedsAnsi, cNeedsDiv);
+  if cNeedsAnsi and (TargetArch = TARGET_X86_64) then
+  begin
+    RegisterEmittedStringRuntimeForwards;
+    EmitAnsiStringRuntime;
+  end;
 
   { Auto-pull the C IO bridge (pxxcio) so the stdio veneer's
     `extern __pxx_write`/`__pxx_read` resolve to bodied Pascal procs over the

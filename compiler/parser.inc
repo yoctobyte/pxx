@@ -35449,6 +35449,63 @@ end;
 
 { ===== Program ===== }
 
+procedure RegisterEmittedStringRuntimeForwards;
+{ Forward-declare exactly the builtinheap procs that EmitAnsiStringRuntime's own
+  machine code CALLS, so the shims can be emitted BEFORE builtinheap is parsed.
+
+  The ordering is not a preference: the emitted runtime sits right after the
+  entry stub and is reached by a direct relative `call`, so every site that
+  calls it must be compiled after it — which includes the pulled RTL units
+  themselves. Emitting it after the pull is therefore too late, and pre-declaring
+  is the price. `ParseUsesUnit` fills the bodies in.
+
+  ONE copy, shared by the drivers that need it. It exists because there were
+  two hand-rolled copies (Pascal's ParseProgram and NilPy's) and the C driver
+  had NONE — so a Pascal unit `#include`d from C compiled a call to
+  AnsiStrFromLiteralAddr while that address was still 0, i.e. a call to the ELF
+  entry point (bug-a-c-driver-omits-rtl-stubs-for-an-imported-pascal-unit).
+  ParseProgram still registers a much larger, target-conditional SUPERSET
+  inline (variants, interface ARC, the float writers, the xtensa divide
+  helpers); this is the minimum the emitter itself needs, and adding a call to
+  the emitted runtime is what makes a driver need it. }
+var i: Integer; savedUnitIdx: Integer;
+    dummyNames: array[0..3] of AnsiString;
+    dummyTypes: array[0..3] of TTypeKind;
+begin
+  savedUnitIdx := CurrentUnitIdx;
+  CurrentUnitIdx := InternStr('builtinheap');
+  dummyNames[0] := 'size';    dummyTypes[0] := tyNativeInt;
+  dummyNames[1] := 'align';   dummyTypes[1] := tyInteger;
+  i := RegisterProc('PXXAlloc', True, tyPointer, 2, dummyNames, dummyTypes);
+  dummyNames[0] := 'p';       dummyTypes[0] := tyPointer;
+  i := RegisterProc('PXXFree', False, tyPointer, 1, dummyNames, dummyTypes);
+  { the emitted obj blobs call these (feature-nilpy-object-reclamation) }
+  i := RegisterProc('PXXObjRetain', False, tyPointer, 1, dummyNames, dummyTypes);
+  i := RegisterProc('PXXObjRelease', False, tyPointer, 1, dummyNames, dummyTypes);
+  dummyNames[0] := 'p';       dummyTypes[0] := tyPointer;
+  dummyNames[1] := 'newSize'; dummyTypes[1] := tyNativeInt;
+  dummyNames[2] := 'align';   dummyTypes[2] := tyInteger;
+  i := RegisterProc('PXXRealloc', True, tyPointer, 3, dummyNames, dummyTypes);
+  dummyNames[0] := 'len';     dummyTypes[0] := tyNativeInt;
+  dummyNames[1] := 'src';     dummyTypes[1] := tyPointer;
+  i := RegisterProc('PXXStrFromLit', True, tyPointer, 2, dummyNames, dummyTypes);
+  dummyNames[0] := 'lenA';    dummyTypes[0] := tyNativeInt;
+  dummyNames[1] := 'srcA';    dummyTypes[1] := tyPointer;
+  dummyNames[2] := 'srcB';    dummyTypes[2] := tyPointer;
+  dummyNames[3] := 'lenB';    dummyTypes[3] := tyNativeInt;
+  i := RegisterProc('PXXStrConcat', True, tyPointer, 4, dummyNames, dummyTypes);
+  dummyNames[0] := 'strSlot'; dummyTypes[0] := tyPointer;
+  dummyNames[1] := 'srcB';    dummyTypes[1] := tyPointer;
+  dummyNames[2] := 'lenB';    dummyTypes[2] := tyNativeInt;
+  i := RegisterProc('PXXStrAppend', False, tyPointer, 3, dummyNames, dummyTypes);
+  dummyNames[0] := 'dest';    dummyTypes[0] := tyPointer;
+  dummyNames[1] := 'right';   dummyTypes[1] := tyPointer;
+  i := RegisterProc('PXXVarStrAppend', True, tyInt64, 2, dummyNames, dummyTypes);
+  dummyNames[0] := 'path';    dummyTypes[0] := tyPointer;
+  i := RegisterProc('PXXStrLoadFile', True, tyPointer, 1, dummyNames, dummyTypes);
+  CurrentUnitIdx := savedUnitIdx;
+end;
+
 procedure DetectPascalRuntimeNeeds(var needsHeap, needsAnsiRuntime, needsDivStub: Boolean);
 { Conservative pre-scan for optional emitted runtime support. Imported units
   are treated as opaque: keep the support bundle if uses is present. }

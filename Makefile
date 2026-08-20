@@ -6665,6 +6665,25 @@ test-core: $(COMPILER)
 	@./$(COMPILER) test/c_pasunit_ansistring_fail.c $(TESTTMP)/c_pasunit_ansistring_fail26 2>&1 \
 	  | grep -q "takes AnsiString as parameter 1" \
 	  || { echo 'c_pasunit_ansistring_fail: FAIL - an AnsiString parameter must be refused by name'; exit 1; }
+	# ...and the RESULT side. Unreachable until the C driver compiled the unit's
+	# BODY at all: strmod.Tag builds a managed string, so the whole unit died with
+	# "call to a runtime stub that was never emitted" before the check was tried.
+	@./$(COMPILER) test/c_pasunit_ansistring_result_fail.c $(TESTTMP)/c_pasunit_ansistring_result_fail26 2>&1 \
+	  | grep -q "returns AnsiString, which has no C spelling" \
+	  || { echo 'c_pasunit_ansistring_result_fail: FAIL - an AnsiString RESULT must be refused by name'; exit 1; }
+	# A Pascal unit whose BODY uses managed strings, imported from C. Two driver
+	# defects lived here and both produced a wrong answer rather than a diagnostic
+	# once the first was worked around: the C driver emitted no AnsiString runtime
+	# shims (so the body called code offset 0 -- the ELF entry point), and it left
+	# CProgramMode on while parsing the unit, so a Pascal string literal in a
+	# concat was adjusted into a C `char*` and counted as ONE character --
+	# Length('ab' + 'cdef') came back 3. The ORACLE is the Pascal driver compiling
+	# the SAME unit, so there is no expected string that could be edited to match
+	# a regression. bug-a-c-driver-omits-rtl-stubs-for-an-imported-pascal-unit
+	./$(COMPILER) -Futest test/test_c_pasunit_strings.pas $(TESTTMP)/test_cpasunit_strings_p26
+	./$(COMPILER) -Futest test/c_pasunit_strings.c $(TESTTMP)/test_cpasunit_strings_c26
+	$(TESTTMP)/test_cpasunit_strings_p26 > $(TESTTMP)/test_cpasunit_strings.oracle
+	$(TESTTMP)/test_cpasunit_strings_c26 | diff -u $(TESTTMP)/test_cpasunit_strings.oracle -
 	./$(COMPILER) test/test_type_runtime.pas $(TESTTMP)/test_type_runtime26
 	test "$$($(TESTTMP)/test_type_runtime26)" = "$$(printf '1\n1\n1\n0\n1\n18446744065119617025\n18446744073709551615\n9223372036854775807\n1\n-1\n-1\n-1\n18446744073709551615\n-1\n0\n2\n7\n123456\n9\n20')"
 	./$(COMPILER) test/test_float.pas $(TESTTMP)/test_float26
