@@ -83,6 +83,39 @@ matched-data-model (rather than matched-ISA) oracle, reduce far enough to say wh
 bitfield or padding is involved before routing it to Track A. Cheap insurance against the
 expensive failure — a wrong root cause recorded in a ticket.
 
+### CORRECTION 2026-08-20 — the caveat also covers the CROSS-BACKEND run, and lands harder there
+
+The coordinator originally scoped this caveat to the external-oracle comparison and told
+both Track C and Track T that the ILP32 cross-backend run (i386 / arm32 / riscv32, all
+ILP32, our three backends against each other) was exempt because "both sides are ours, so
+any disagreement is ours by construction". **That is wrong.** Ours by construction, yes; a
+*bug* by construction, no.
+
+i386 is SysV, arm32 is AAPCS32, riscv32 is the riscv psABI, and the three have genuinely
+different bitfield and struct-packing rules. **Three backends each correctly implementing
+its own ABI can legitimately print different checksums** — a csmith checksum reaches layout
+through unions and bitfields even though it only ever hashes values. Removing the external
+oracle removes the *"is gcc right?"* dispute; it does not remove the *"is this a legitimate
+ABI difference?"* one. With three ABIs in play instead of two, the caveat is **stronger**
+here, not absent.
+
+Caught by frank2 before the coordinator's version was acted on. The underlying error was
+treating "we own both sides" as equivalent to "any difference is a defect" — **ownership of
+the code is not ownership of the specification it implements.**
+
+**Track C built the discriminator into the run rather than leaving it as a reduction chore:**
+on any divergence, re-run the SAME seed with `--no-bitfields --no-packed-struct
+--no-unions`. Agreement then means layout-dependent — reported `LAYOUT-SUSPECT`, not a
+finding. Still disagreeing with all three constructs gone means a real backend disagreement,
+and the program is saved. Worth adopting in `tools/csmith_fuzz.py` itself: it converts
+"reduce far enough to rule it out" into a one-command classification at the moment of the
+hit, and **this campaign's cost has always been reduction, not discovery.**
+
+Note the option deliberately NOT taken: disabling those constructs for the whole sweep.
+Bitfields produced three of the first nine bugs in this campaign, so switching them off to
+make divergences easier to read would trade the richest territory for convenience. **Run
+wide, classify on hit.**
+
 ## Gate
 
 T's own lane gate for its tooling.
