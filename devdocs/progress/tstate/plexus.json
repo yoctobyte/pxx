@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T09:10:06Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "b24bb1474624dbce59e6ebd6192bccb5f206c495",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-20T09:25:47Z",
    "fixed": [],
    "new_red": [
@@ -430,6 +422,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "716e53a07afa60fb77b2ff52cbf104578a697375",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T21:20:03Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "9ac7e74e367b2fb2714d3987135465923ef7d818",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -956,11 +956,11 @@
   "test-cjson#src:test/cjson/runner.c": "full",
   "test-core#00": "native",
   "test-core#129": "full",
-  "test-core#145": "native",
   "test-core#146": "native",
   "test-core#147": "native",
   "test-core#148": "native",
   "test-core#149": "native",
+  "test-core#150": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
   "test-core#src:examples/tk/callbacks.npy": "native",
@@ -2156,6 +2156,7 @@
   "test-core#src:test/test_tobject_methodaddress_b256.pas": "native",
   "test-core#src:test/test_tobject_param_b243.pas": "native",
   "test-core#src:test/test_type_helper_for_spelling.pas": "native",
+  "test-core#src:test/test_type_helper_typename_receiver.pas": "native",
   "test-core#src:test/test_type_runtime.pas": "native",
   "test-core#src:test/test_typed_const_record.pas": "native",
   "test-core#src:test/test_typed_metaclass_b278.pas": "native",
@@ -3826,11 +3827,11 @@
   "test-c-conformance-riscv32#shard5/6": "pass",
   "test-cjson#src:test/cjson/runner.c": "pass",
   "test-core#00": "pass",
-  "test-core#145": "pass",
   "test-core#146": "pass",
   "test-core#147": "pass",
   "test-core#148": "pass",
   "test-core#149": "pass",
+  "test-core#150": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
@@ -5024,6 +5025,7 @@
   "test-core#src:test/test_tobject_methodaddress_b256.pas": "pass",
   "test-core#src:test/test_tobject_param_b243.pas": "pass",
   "test-core#src:test/test_type_helper_for_spelling.pas": "pass",
+  "test-core#src:test/test_type_helper_typename_receiver.pas": "pass",
   "test-core#src:test/test_type_runtime.pas": "pass",
   "test-core#src:test/test_typed_const_record.pas": "pass",
   "test-core#src:test/test_typed_metaclass_b278.pas": "pass",
@@ -6175,11 +6177,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-20T21:11:05Z",
-  "sha": "716e53a07afa60fb77b2ff52cbf104578a697375",
+  "date": "2026-08-20T21:20:03Z",
+  "sha": "9ac7e74e367b2fb2714d3987135465923ef7d818",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 463.8
+  "wall": 454.1
  },
  "last_bench": {
   "conf_rows": 550,
