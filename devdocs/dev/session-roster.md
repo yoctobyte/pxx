@@ -4858,3 +4858,53 @@ quarter of ParseFactorCore's size.** Marked measured-and-unconfirmed with the ca
 four are mutually recursive and share a dispatch discipline, so they likely carve as **one
 unit, not four**. Re-derive before picking a target — that instrument has been wrong twice,
 and the mutual-recursion caveat moves the estimate more than the measurement does.
+
+### Check +34h (2026-08-20) — quiet, and the PIN IS DUE BUT DEFERRED ON PURPOSE
+
+Both workers busy, T UP, nobody blocked, nothing dispatched.
+
+- **frank3-fc** `busy` — has the A/P slot for `parser.inc`, working
+  `feature-n-a-cpyext-extension-module-is-bare-importable-not-a-pascal-unit` (A+N, p70),
+  then `refactor-a-one-resolved-file-identity-for-a-translation-unit` (A, p60).
+- **frank2-7e** `busy` — `feature-c-entry-stub-must-run-initializers-for-environ` (C, p60).
+- **plexus-T** `running`, UP, commits through `62c960297f12`, 5 testable commits behind.
+
+### The pin decision, with the reasoning, because "due" alone would have said yes
+
+`compiler/**` HAS moved since v367 (`d47acfee770c`): **4 commits** — `f380d7cd0`,
+`ec33f4e5e`, `3c8ec4c7d` (carve split 3, -764 lines) and `724191cd1` (C unit-name refusal).
+Step 2 of the check therefore says pin. **Not pinning this cycle**, for three reasons, in
+order of weight:
+
+1. **A worker holds the tree.** frank3 is editing `parser.inc` right now. The pin lock covers
+   BUILDS, and a concurrent `make` is a collision. This alone settles it.
+2. **`pin_shadow`'s approval is for a DIFFERENT sha than HEAD.** The log says
+   `WOULD PIN 49a511e43271 — 9 red(s), none new, 9 inherited from the current pin, self-host
+   clean, streak 2/2` — T's baselining fix working, and the first clean would-pin since the
+   cpyext reds started blocking it. But `49a511e43271` is **00:56**, and all four compiler
+   commits are **03:52-04:26**. The shadow has not seen the carve. Pinning HEAD would bless
+   four commits it never evaluated.
+   **This is the v366 mistake in a subtler costume:** there the shadow objected and I pinned
+   anyway; here it approves — *a different tree*. An endorsement of sha X is not an
+   endorsement of sha X+4. Check WHICH sha the shadow blessed, not just its verdict.
+3. **Nobody is blocked on a pin**, so the cost of waiting is zero.
+
+**Resume condition (a command, not a conclusion):** re-run `tail -1
+stable_linux_amd64/default/pin.log`, `tail -3 devdocs/progress/tstate/pin-shadow.log`, and
+confirm the shadow's approved sha is at or after `3c8ec4c7d` AND that frank3 has released the
+tree. Then `make stabilize-fast && make pin`. The carve is worth pinning — it is a large
+structural change Track B/D should build on — but it is an hour old and T has not swept it.
+
+### Queue state — two urgent items are unstaffed, and that is correct
+
+`bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` (N, p70,
+`urgent/`) and `bug-a-riscv32-cross-float-output-no-longer-matches-x86-64` (A+F, p60,
+`urgent/`) both sit unclaimed. Both workers are mid-ticket on higher-mandate work
+(A/P/C over everything N), and **dispatching to fill capacity is the failure mode, not
+the fix**. Neither is blocked; they are queued.
+
+Also: `feature-c-csmith-differential-fuzzing` (C, p65) tops Track C again and **its blocker
+cleared this cycle** — T landed the data-model oracle (`174186b5d`, ticket `350e093ff`,
+54/54 devtests, 34 new guards), so every future LP64 cross batch becomes a real differential
+automatically. It outranks the `environ` ticket frank2 is on, but not enough to interrupt a
+ticket in flight; it is the natural next pull for Track C.
