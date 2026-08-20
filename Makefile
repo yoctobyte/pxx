@@ -4197,9 +4197,19 @@ test-core: $(COMPILER)
 	# element PAST the field into the next one, `array[5..7]` off the record
 	# (SIGSEGV), `array[-2..2]` into a class instance's header so Free crashed.
 	# Reads shifted with the writes, so the field looked self-consistent -- the
-	# guards on either side are the assertion. All 53 values are FPC 3.2.2's.
+	# guards on either side are the assertion. All 58 values are FPC 3.2.2's.
 	./$(COMPILER) test/test_record_field_array_low_bound.pas $(TESTTMP)/test_fldarrlo26
 	test "$$($(TESTTMP)/test_fldarrlo26 | tail -1)" = "total ok 58 / 58"
+	# One level up again: the LOW/HIGH of an enum TYPE answered 0..count-1, the
+	# declaration-index range, not the range of the members' VALUES. `TGap =
+	# (gX = 3, gY = 4, gZ = 9)` gave Low=0 and High=2 -- two ordinals that are not
+	# even values of the type -- so `for g := Low(TGap) to High(TGap)` walked
+	# 0,1,2 and stopped six short of gZ. The same shorthand stood in for the
+	# ordinal range at four sites (both Low/High folders, the `set of <enum>`
+	# scan, the array-index-type bound), now one EnumTypeOrdRange helper.
+	# FPC 3.2.2's values, except array[TGap] which FPC refuses outright.
+	./$(COMPILER) test/test_enum_explicit_ordinal_low_high.pas $(TESTTMP)/test_enumord26
+	test "$$($(TESTTMP)/test_enumord26 | tail -1)" = "total ok 24 / 24"
 	./$(COMPILER) test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_nativeshift26
 	test "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
 	test "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"

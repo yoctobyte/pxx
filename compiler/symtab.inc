@@ -458,6 +458,27 @@ begin
   Inc(EnumValCount);
 end;
 
+procedure EnumTypeOrdRange(etid: Integer; var loOut, hiOut: Integer);
+{ The ORDINAL range of an enum type -- the min and max of its members' VALUES,
+  not 0..count-1. Those two coincide for a plain `(a, b, c)` and diverge the
+  moment an explicit `= N` appears: `(gX = 3, gY = 4, gZ = 9)` runs 3..9, has
+  three members, and Low/High/`set of`/`array[T]` all want 3 and 9. Counting
+  members instead answered 0 and 2 -- two ordinals that are not even values of
+  the type (bug-p-low-high-of-an-enum-with-explicit-values-count-members). }
+var i, base, cnt: Integer;
+begin
+  base := EnumTypeValBase[etid];
+  cnt := EnumTypeValCount[etid];
+  if cnt <= 0 then begin loOut := 0; hiOut := -1; Exit; end;
+  loOut := EnumValOrd[base];
+  hiOut := loOut;
+  for i := base + 1 to base + cnt - 1 do
+  begin
+    if EnumValOrd[i] < loOut then loOut := EnumValOrd[i];
+    if EnumValOrd[i] > hiOut then hiOut := EnumValOrd[i];
+  end;
+end;
+
 function FindEnumMemberOrd(etid: Integer; const name: AnsiString; var ordOut: Integer): Boolean;
 { Member lookup within one enum type (TEnum.member resolution). }
 var i: Integer;

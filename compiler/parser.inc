@@ -9792,7 +9792,7 @@ function TryConstHighLowValue(wantHigh: Boolean; var v: Int64): Boolean;
   the (candidate) type name inside High(...)/Low(...); on success the bound is
   in v and the type name is consumed (bug-pascal-high-low-in-const-expr —
   ZenGL's `array[0..High(LongWord) shr 1 - 1]`). }
-var btk: TTypeKind; etid, aliasIdx: Integer; nm: AnsiString;
+var btk: TTypeKind; etid, aliasIdx, eLo, eHi: Integer; nm: AnsiString;
 begin
   Result := False;
   if (CurTok.Kind = tkInteger_T) or (CurTok.Kind = tkLongWord_T) or
@@ -9834,14 +9834,15 @@ begin
   etid := FindEnumType(nm);
   if etid >= 0 then
   begin
-    if wantHigh then v := EnumTypeValCount[etid] - 1 else v := 0;
+    EnumTypeOrdRange(etid, eLo, eHi);
+    if wantHigh then v := eHi else v := eLo;
     Next;
     Result := True; Exit;
   end;
 end;
 
 function TryFoldHighLowType(wantHigh: Boolean; var outNode: Integer): Boolean;
-var btk: TTypeKind; bv: Int64; etid, aliasIdx: Integer; nm: AnsiString;
+var btk: TTypeKind; bv: Int64; etid, aliasIdx, eLo, eHi: Integer; nm: AnsiString;
 begin
   Result := False;
   if (CurTok.Kind = tkInteger_T) or (CurTok.Kind = tkLongWord_T) or
@@ -9887,7 +9888,8 @@ begin
   etid := FindEnumType(nm);
   if etid >= 0 then
   begin
-    if wantHigh then bv := EnumTypeValCount[etid] - 1 else bv := 0;
+    EnumTypeOrdRange(etid, eLo, eHi);
+    if wantHigh then bv := eHi else bv := eLo;
     Next; outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv; ASTTk[outNode] := Ord(tyInteger);
     Result := True; Exit;
   end;
@@ -19469,11 +19471,11 @@ end;
     X := lo;
     while X <= hi do begin if X in S then BODY; X := X + 1; end;
   X (the loop var) doubles as the scan ordinal. Range from the set element type:
-  `set of <enum>` → 0..count-1; `set of Char` → 0..255. }
+  `set of <enum>` → the enum's ordinal range; `set of Char` → 0..255. }
 { Shared membership-scan builder for `for x in <set>`. The set source is an
   abstract value node (setOperand) — a plain `set var` ident (ParseForInSetAST)
   or a qualified member-access lvalue (ParseForInNodeAST). The element range is
-  given by setEnumId (`set of <enum>` → 0..count-1) or setElemTk = tyChar
+  given by setEnumId (`set of <enum>` → its ordinal range) or setElemTk = tyChar
   (`set of Char` → 0..255). bodyNode is the already-parsed loop body. }
 function BuildForInSetLoop(varIdx, setEnumId, setElemTk, setOperand, bodyNode: Integer): Integer;
 var
@@ -19483,7 +19485,7 @@ var
 begin
   isChar := 0;
   if setEnumId >= 0 then
-  begin loV := 0; hiV := EnumTypeValCount[setEnumId] - 1; end
+    EnumTypeOrdRange(setEnumId, loV, hiV)
   else if setElemTk = Ord(tyChar) then
   begin loV := 0; hiV := 255; isChar := 1; end
   else if TypeIsOrdinal(IntToTypeKind(setElemTk)) then
@@ -26129,7 +26131,7 @@ begin
     eid := FindEnumType(CurTok.SVal);
     if eid >= 0 then
     begin
-      lo := 0; hi := EnumTypeValCount[eid] - 1; Next; Exit;
+      EnumTypeOrdRange(eid, lo, hi); Next; Exit;
     end;
   end;
   lo := ConstEval;
