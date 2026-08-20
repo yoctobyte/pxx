@@ -5245,6 +5245,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     rhsIsLValue: Boolean;
     isComIntf: Boolean;
     intfTmpImt, intfTmpInst: Integer;
+    intfResAddr: Integer;
     cv: Int64;
     constValNode, clauseBodyLabelNode, exitJmpNode, nextClauseLabelNode: Integer;
     beforeCount, handlerLabel, handlerNode, handlerNextLabel, savedDepth: Integer;
@@ -8623,6 +8624,59 @@ begin
           IRB[argNode] := seq;
           Result := IRAppendCall(FindProc('PXXIntfAssign'), first, -1, Ord(tyPointer));
           IRIVal[Result] := 1;
+          Exit;
+        end;
+
+        { COM/ARC interface := a CALL returning an interface. Deliberately NOT in
+          the retain list above: a call result is already OWNED (+1 from the
+          callee), so retaining it would over-count. But it was falling through
+          to the plain record copy, and that is a MOVE done as a COPY.
+
+          An interface-returning call materialises its result into a hidden
+          caller-side temp, and that temp is an ordinary skLocal COM-interface
+          symbol — so EmitManagedLocalCleanup releases it at scope exit. The raw
+          copy handed the SAME +1 to the destination as well, giving one
+          reference two owners:
+
+            f := Mk;      { temp: +1.  f: aliases it, uncounted }
+            f := nil;     { refcount 0 -- object FREED }
+                          { scope exit: releases the temp, on freed memory }
+
+          With one object that stale release usually reads harmless garbage and
+          nothing is observed; the counts even match FPC. Put two of them in a
+          local dynamic array and the freed blocks get recycled between the two
+          releases, and it SEGFAULTS.
+
+          So make the move a move: hand the reference over, then NIL the temp, so
+          its scope-exit release is a no-op. Releasing the destination's old value
+          after the call is evaluated is safe under aliasing because the temp
+          holds a reference to the new value throughout — `f := Mk` returning the
+          object f already holds cannot drop it to zero here.
+          bug-a-two-function-result-interfaces-into-a-local-dyn-array-segfault }
+        if isComIntf and
+           ((ASTKind[ASTRight[node]] = AN_CALL) or (ASTKind[ASTRight[node]] = AN_VIRTUAL_CALL)) and
+           (ResolveNodeRec(ASTRight[node]) >= REC_UCLASS_BASE) and
+           UClsIsInterface[ResolveNodeRec(ASTRight[node]) - REC_UCLASS_BASE] then
+        begin
+          { the call's IR value IS the address of its hidden result temp }
+          intfResAddr := AllocVar('', tyPointer);
+          IRAppend(IR_STORE_SYM, intfResAddr, IRLowerAST(ASTRight[node]), -1, 0, Ord(tyPointer));
+
+          { drop the destination's OLD reference }
+          first := IRAppend(IR_ARG, IRLowerAddress(ASTLeft[node]), -1, -1, 0, Ord(tyPointer));
+          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, varIdx - REC_UCLASS_BASE, Ord(tyNativeInt)), -1, -1, 0, Ord(tyNativeInt));
+          IRB[first] := argNode;
+          seq := IRAppendCall(FindProc('PXXIntfRelease'), first, -1, Ord(tyNativeInt));
+          IRIVal[seq] := 1;
+
+          { move the fat pointer in ... }
+          IRAppend(IR_COPY_REC, IRLowerAddress(ASTLeft[node]),
+                   IRAppend(IR_LOAD_SYM, intfResAddr, -1, -1, 0, Ord(tyPointer)),
+                   -1, RecSize(varIdx), Ord(tyRecord));
+          { ... and clear the source, so the temp owns nothing at scope exit }
+          Result := IRAppend(IR_DEFAULT_MEM,
+                     IRAppend(IR_LOAD_SYM, intfResAddr, -1, -1, 0, Ord(tyPointer)),
+                     -1, REC_NONE, RecSize(varIdx), Ord(tyRecord));
           Exit;
         end;
       end;

@@ -4,7 +4,7 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "Assigning a FUNCTION RESULT of interface type into TWO OR MORE elements of a LOCAL dynamic array segfaults at scope exit. One element is fine, a constructor instead of a function is fine, and a global array is fine — so the trigger is the reused hidden function-result temp meeting the routine's scope-exit cleanup."
-status: working
+status: done
 owner: claude-acp
 ---
 
@@ -68,7 +68,53 @@ Reproduce with `PXXDBG=a.ir:P` and `PXXDBG=a.arc:P` — the latter lists every
 symbol the scope-exit pass considers with its `kind` / `comIntf` /
 `hiddenArgTemp`, which is how the by-value-param root cause was settled.
 
+## Root cause (measured)
+
+`PXXDBG=a.ir:P` showed it directly. `d[0] := Mk` lowers to
+
+```
+lea   <hidden temp>
+call  Mk           { hidden dest = the temp; result written there, +1 }
+copy_rec d[0] <- temp      { RAW -- no retain }
+```
+
+and `PXXDBG=a.arc:P` showed the temp is an ordinary `skLocal` symbol with
+`comIntf=1`, so `EmitManagedLocalCleanup` releases it at scope exit. **One
+reference, two owners.** `d[0] := nil` spends it, the object is freed, and the
+scope-exit release then runs on freed memory.
+
+Not retaining the call result was *correct* — it is already OWNED (+1 from the
+callee) and retaining it would over-count. The wrong half was leaving the temp
+owning it as well. The destination did not need a retain; the temp needed to
+stop owning.
+
+The scalar case `f := Mk` has the IDENTICAL shape and is equally broken — its
+stale release just reads harmless garbage, and its destructor counts match FPC
+exactly, which is why it never surfaced. Two objects in a dyn array recycle the
+block between the two releases and it faults.
+
+## Fix
+
+Make the move a move, in the assignment path: evaluate the call, release the
+destination's OLD reference, copy the fat pointer in, then **nil the temp** so
+its scope-exit release is a no-op.
+
+Releasing the old value after the call is evaluated is safe under aliasing
+because the temp holds a reference to the new value throughout — `f := Mk`
+returning the object `f` already holds cannot drop it to zero there. That case is
+pinned by the test (`SelfReturning`).
+
+## Test
+
+`test/test_interface_call_result_move.pas` — 9/9, identical to FPC. Two and then
+sixteen call results into a local dyn array, a scalar local, overwrite (old
+released exactly once, new survives), the self-returning aliasing case, and
+static-element / record-field destinations. **The pinned binary segfaults
+immediately.**
+
 ## Gate
 
-Track A: `make compiler/pascal26` (fixedpoint) + `tools/gate.sh quick`. Add the
-case to `test/test_dynarray_of_interfaces_assign.pas`.
+`make compiler/pascal26` (fixedpoint, converged 1 round) + `tools/gate.sh quick`.
+
+## Log
+- 2026-08-20 — resolved, commit PENDING-COMMIT.

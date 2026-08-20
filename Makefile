@@ -4302,6 +4302,18 @@ test-core: $(COMPILER)
 	# plain-record element types were unaffected. The pinned binary SEGFAULTS.
 	./$(COMPILER) test/test_dynarray_of_interfaces_assign.pas $(TESTTMP)/test_dynifassign26
 	test "$$($(TESTTMP)/test_dynifassign26 | tail -1)" = "total ok 6 / 6"
+	# An interface-returning CALL assigned to an interface destination handed the
+	# same +1 to two owners: the callee's result lands in a hidden temp that the
+	# scope-exit cleanup releases, and the assignment copied the fat pointer out
+	# of it RAW (correctly not retaining an already-OWNED call result -- but the
+	# temp then had to stop owning, and did not). `f := Mk; f := nil` freed the
+	# object and scope exit released the temp again. With ONE object that stale
+	# release reads harmless garbage and the counts even match FPC; two of them in
+	# a local dyn array recycle the block between the releases and it SEGFAULTS.
+	# Now the move is a move: hand over, then nil the temp. The pinned binary
+	# SEGFAULTS on this file.
+	./$(COMPILER) test/test_interface_call_result_move.pas $(TESTTMP)/test_ifcallmove26
+	test "$$($(TESTTMP)/test_ifcallmove26 | tail -1)" = "total ok 9 / 9"
 	# `type TIA2 = array of TIA` (TIA itself `array of Integer`) silently collapsed
 	# to `array of Integer`: the type-alias parser only composed the depth of a
 	# named FIXED-array element, so a named DYN alias fell through to
