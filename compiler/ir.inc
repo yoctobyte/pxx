@@ -2511,7 +2511,8 @@ var argTk: TTypeKind;
     caIdent, caCountLit, caArg1, caArg2, caSlCall, caNone: Integer;
     caRecName: Integer; caField: AnsiString; oaEligible: Boolean;
   coerceParamSym, coerceIntfCi, coerceCast: Integer;
-  arcArg1, arcArg2, arcCall: Integer;
+  arcArg1, arcArg2, arcArg3, arcCall: Integer;
+  isComIntfArg: Boolean;
   pvSinkIsProcVar: Boolean;
 begin
   { A by-VALUE OPEN ARRAY gets its OWN COPY — FPC's rule, and the one parameter
@@ -3447,6 +3448,10 @@ begin
     LastTypeRecId := argRecId;
     tmpSym := AllocVar('', tyRecord);
     LastTypeRecId := savedLastTypeRecId;
+    isComIntfArg := (argRecId >= REC_UCLASS_BASE) and
+                    UClsIsInterface[argRecId - REC_UCLASS_BASE] and
+                    UClsIsComInterface[argRecId - REC_UCLASS_BASE];
+
     { A managed-field record temp is filled by IR_COPY_REC_MANAGED below, which
       RELEASES the destination's old managed fields before copying. This temp is
       allocated during IR lowering, after the parser's prologue zero-init pass,
@@ -3454,8 +3459,12 @@ begin
       bogus handle (double-free / heap corruption — crashes when the arg is a
       managed-record value, e.g. `f(g(x), …)` with g returning a managed record).
       Mark it so codegen nil-inits its full extent before the body, exactly like
-      the hidden aggregate-result temp in IRAppendCall. }
-    if RecordHasManagedFields(argRecId) then
+      the hidden aggregate-result temp in IRAppendCall.
+
+      A COM-interface temp needs the very same nil-init, and for the very same
+      reason: the PXXIntfAssign below RELEASES whatever the slot already holds,
+      so on the first execution that would be stack garbage. }
+    if RecordHasManagedFields(argRecId) or isComIntfArg then
       SymIsHiddenArgTemp[tmpSym] := True;
 
     tmpAddr := IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer));
@@ -3465,27 +3474,45 @@ begin
     else
       srcAddr := IRLowerAST(argAST);
 
-    if RecordHasManagedFields(argRecId) then
+    { COM/ARC interface by-VALUE param: this private temp is an owning reference,
+      released at the caller's scope exit (EmitManagedLocalCleanup). A `const`
+      interface param never reaches this path — it stays a by-ref alias of the
+      caller's slot (no copy, no refcount), matching FPC.
+
+      The temp is ONE stack slot, reused by every execution of this call site, so
+      filling it with a raw copy_rec + retain OVERWROTE the previous occupant
+      without releasing it: every call but the last dropped a reference on the
+      floor. Measured — five iterations of `f := TFoo.Create; TakeVal(f); f := nil`
+      constructed 5 and destructed 1, and the leak grew with the loop count.
+      PXXIntfAssign is the primitive that already does this correctly (retain
+      source, release old dest, copy — in that order, which is what makes it safe
+      when dest and src alias), so use it instead of hand-rolling the halves.
+      bug-a-an-interface-passed-by-value-leaks-a-reference-per-call }
+    if isComIntfArg then
+    begin
+      arcArg1 := IRAppend(IR_ARG, IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer)), -1, -1, 0, Ord(tyPointer));
+      arcArg2 := IRAppend(IR_ARG, srcAddr, -1, -1, 0, Ord(tyPointer));
+      IRB[arcArg1] := arcArg2;
+      arcArg3 := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, argRecId - REC_UCLASS_BASE, Ord(tyNativeInt)), -1, -1, 0, Ord(tyNativeInt));
+      IRB[arcArg2] := arcArg3;
+      arcCall := IRAppendCall(FindProc('PXXIntfAssign'), arcArg1, -1, Ord(tyPointer));
+      IRIVal[arcCall] := 1;
+      { A call made from the MAIN BODY has no scope exit to release the temp, so
+        its last occupant would be held forever — one bounded leak per call site.
+        Main-body temps are skGlobal; record them for the program-exit release
+        pass, exactly as IRMaterializeIntfCast does for an as-cast temp. }
+      if Syms[tmpSym].Kind = skGlobal then
+      begin
+        if MainBodyIntfTempCount > High(MainBodyIntfTempSym) then
+          Error('too many main-body interface argument temps');
+        MainBodyIntfTempSym[MainBodyIntfTempCount] := tmpSym;
+        Inc(MainBodyIntfTempCount);
+      end;
+    end
+    else if RecordHasManagedFields(argRecId) then
       IRAppend(IR_COPY_REC_MANAGED, tmpAddr, srcAddr, argRecId, RecSize(argRecId), Ord(tyRecord))
     else
       IRAppend(IR_COPY_REC, tmpAddr, srcAddr, -1, RecSize(argRecId), Ord(tyRecord));
-
-    { COM/ARC interface by-VALUE param: this private temp is an owning reference
-      released at the caller's scope exit (EmitManagedLocalCleanup). Without a
-      matching retain here the raw copy_rec above just aliases the caller's single
-      reference, so the temp's scope-exit release double-drops it (silent
-      use-after-free if the callee re-published the value, e.g. to a global). A
-      `const` interface param never reaches this path — it stays a by-ref alias of
-      the caller's slot (no copy, no refcount), matching FPC. }
-    if (argRecId >= REC_UCLASS_BASE) and UClsIsInterface[argRecId - REC_UCLASS_BASE] and
-       UClsIsComInterface[argRecId - REC_UCLASS_BASE] then
-    begin
-      arcArg1 := IRAppend(IR_ARG, IRAppend(IR_LEA, tmpSym, -1, -1, 0, Ord(tyPointer)), -1, -1, 0, Ord(tyPointer));
-      arcArg2 := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, argRecId - REC_UCLASS_BASE, Ord(tyNativeInt)), -1, -1, 0, Ord(tyNativeInt));
-      IRB[arcArg1] := arcArg2;
-      arcCall := IRAppendCall(FindProc('PXXIntfAddRef'), arcArg1, -1, Ord(tyNativeInt));
-      IRIVal[arcCall] := 1;
-    end;
 
     value := tmpAddr;
   end

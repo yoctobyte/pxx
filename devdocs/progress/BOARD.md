@@ -49,12 +49,14 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (258)
+## backlog (260)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-a-by-value-interface-param-is-released-at-caller-scope-exit | A | 35 | bug | pxx releases a by-value interface argument at the CALLER's scope exit; FPC releases it at CALLEE return. Every object is still destroyed exactly once, so this is a lifetime-timing divergence rather than a leak — but a destructor with side effects (closing a file, dropping a lock) runs later than the program says, and the last object of a batch stays alive until the calling routine returns. | — |
 | bug-a-a-lua-cross-timeout-is-reported-as-wrong-output-from-the-backend | A | 50 | bug | test-lua-cross runs each lua script under qemu with a hardcoded `timeout 120` and then diffs the captured stdout against a .expected file. A timeout truncates got.txt, the diff fails, and the recipe reports a per-target output mismatch — which reads as a cross-backend miscompile on whichever of arm32/i386/riscv32/aarch64 happened to be slow. test-core:3553 carries the same class one severity lower. Filed by Track T, which owns the harness but not the Makefile. | — |
 | bug-a-a-memory-fault-is-a-raw-sigsegv-not-runtime-error-216 | A | 45 | bug | Every memory fault — nil read, nil write, a call through a nil procvar, a method on a nil object, a wild array store — kills a pxx binary with a bare `Segmentation fault` and exit 139. FPC prints `Runtime error 216` and exits 216. No message, no line, no exit-code convention, and `try..except` cannot see it. | — |
+| bug-a-a-non-lvalue-is-refused-as-an-interface-argument | A | 45 | bug | `TakeVal(TFoo.Create)` and `TakeVal(IFoo(o))` are refused with `by-reference argument must be a variable`, for both by-value and `const` interface parameters, while the same call with a named variable or an ordinary function result compiles. FPC accepts all four. Passing a freshly constructed object straight into a call is a common idiom, so this rejects working FPC code at compile time. | — |
 | bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data | A | 40 | bug | A typed const array is emitted as BSS plus generated code that fills it element by element at startup, instead of being stored as initialised data. Measured at ~29 bytes of code per element for UInt64; Int64, Double and Cardinal all do it too, so it is every typed const array, not a 64-bit case. A 696-entry table costs 20 KB of code and 0 bytes of data. A string constant of the same bytes costs ~0 code and lands in .data, so the data path exists — the array lowering just does not use it. | — |
 | bug-a-aintostr-returns-empty-for-negative-numbers | A | 40 | bug | AIntToStr(n) returns the EMPTY STRING for any n < 0 — `while n > 0` never enters. It is the compiler's own IntToStr, used in ~40 diagnostics across the Pascal, NilPy and C frontends and the C preprocessor, so a negative value silently drops out of an error message rather than being reported wrong-looking. | — |
 | bug-a-findtypealias-failed-to-find-puint8-on-stderr | A | 20 | bug | `FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr during a compile that then SUCCEEDS. Either the lookup failure is real and something silently fell back to a wrong type, or the message is a stale debug print that should not be in a release build. Both readings are defects; which one it is has not been established. | — |
@@ -515,9 +517,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2144)
+## done (2145)
 
-2144 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2145 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -617,6 +619,7 @@ _none_
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
 - [p 45] [A] bug-a-a-memory-fault-is-a-raw-sigsegv-not-runtime-error-216
+- [p 45] [A] bug-a-a-non-lvalue-is-refused-as-an-interface-argument
 - [p 45] [A] bug-a-only-the-pascal-driver-emits-the-signal-runtime
 - [p 45] [A] bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did
 - [p 45] [A] bug-a-string-table-cap-refuses-a-14k-line-c-program
@@ -699,6 +702,7 @@ _none_
 - [p 40] [T] meta-t-dev-throughput-and-track-a-t-integration
 - [p 40] [A] refactor-a-nineteen-copies-of-does-this-target-link-the-builtin-unit
 - [p 40] [A] refactor-a-seven-frontends-borrow-rust-parser-helpers
+- [p 35] [A] bug-a-a-by-value-interface-param-is-released-at-caller-scope-exit
 - [p 35] [A] bug-a-nilpy-double-star-in-a-mixed-argument-list
 - [p 35] [N] bug-n-abs-of-a-complex-raises-typeerror
 - [p 35] [N] bug-n-exec-ignores-a-caller-supplied-builtins-mapping

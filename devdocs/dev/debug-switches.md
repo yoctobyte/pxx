@@ -146,6 +146,7 @@ enables a whole lane.
 | `a.ast:<proc>` | A (core) | that routine's AST tree before lowering |
 | `a.inline` | A (core) | one line per routine whose body is RETAINED for inline expansion: name, body shape (1 = `Result := E`, 2 = if/else ternary, 3 = straight-line), param count, and whether the body contains a call / reads a global |
 | `a.reload:*` | A (core) | one line per load the -O3 store->reload pass MARKED redundant: IR node, sym index, sym name. The firing count is what a test asserts — an -O0-vs-O3 differential that passes because the pass never ran asserts nothing |
+| `a.arc:<proc>` | A (core) | every symbol the scope-exit managed-cleanup pass CONSIDERS for that routine, with the three facts that decide whether it is released: `kind` (only `skLocal` is released), `comIntf`, `hiddenArgTemp` — plus `scopeBase`/`symCount`/`retSym`. The epilogue releases are emitted as MACHINE CODE, not IR, so a leaking managed temp is invisible in `a.ir`; without this the only way to tell a skipped temp from a released one was to disassemble. It is what showed that the by-value interface temp was NOT skipped by this pass, killing a plausible wrong root cause |
 | `n.*` / `a.*` | — | everything in a lane |
 | `all` | — | everything |
 

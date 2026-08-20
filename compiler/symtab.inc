@@ -8092,6 +8092,22 @@ begin
     per-generator leak traded for correctness, and it is recorded on
     feature-nilpy-yield-outside-a-for-loop rather than left to be rediscovered. }
   if CurProcIsStackless then Exit;
+  { PXXDBG=a.arc:<proc> — every symbol this scope-exit pass CONSIDERS, with the
+    three facts that decide whether it is released. A managed temp that leaks is
+    invisible in `a.ir` (the epilogue releases are emitted as machine code, not
+    IR), so without this the only way to tell a skipped temp from a released one
+    was to disassemble. bug-a-an-interface-passed-by-value-leaks-a-reference-per-call. }
+  if PxxDbgWants('a.arc', Procs[CurProc].Name) then
+  begin
+    WriteLn('PXXDBG a.arc ', Procs[CurProc].Name,
+            ' scopeBase=', Procs[CurProc].ScopeBase, ' symCount=', SymCount,
+            ' retSym=', retSymIdx);
+    for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+      WriteLn('PXXDBG a.arc   sym=', i, ' name=[', Syms[i].Name,
+              '] kind=', Ord(Syms[i].Kind), ' tk=', Ord(Syms[i].TypeKind),
+              ' recId=', SymTR[i].RecId, ' comIntf=', Ord(SymIsComInterface(i)),
+              ' hiddenArgTemp=', Ord(SymIsHiddenArgTemp[i]));
+  end;
   for i := Procs[CurProc].ScopeBase to SymCount - 1 do
   begin
     if (Syms[i].Kind = skLocal) and (i <> retSymIdx) then

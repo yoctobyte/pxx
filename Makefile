@@ -4253,6 +4253,16 @@ test-core: $(COMPILER)
 	# VMT relocates). The pinned binary aborts on the unhandled exception.
 	./$(COMPILER) test/test_class_inherits_from_tobject.pas $(TESTTMP)/test_inhtobj26
 	test "$$($(TESTTMP)/test_inhtobj26 | tail -1)" = "total ok 24 / 24"
+	# A COM interface passed BY VALUE leaked one reference per call. The caller's
+	# argument temp is ONE stack slot reused by every execution of the call site,
+	# and it was filled with a raw copy_rec + retain -- so each call overwrote the
+	# previous occupant without releasing it. Five constructions, one destruction;
+	# from the main body, where no scope exit releases even the last occupant,
+	# ZERO destructors ran. `const` and `var` params were always right, which is
+	# what hid it. Now PXXIntfAssign does the retain/release/copy in the safe
+	# order. The pinned binary scores 12 / 16.
+	./$(COMPILER) test/test_interface_byval_param_no_leak.pas $(TESTTMP)/test_ifbyval26
+	test "$$($(TESTTMP)/test_ifbyval26 | tail -1)" = "total ok 16 / 16"
 	# `type TIA2 = array of TIA` (TIA itself `array of Integer`) silently collapsed
 	# to `array of Integer`: the type-alias parser only composed the depth of a
 	# named FIXED-array element, so a named DYN alias fell through to
