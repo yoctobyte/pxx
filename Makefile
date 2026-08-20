@@ -6523,6 +6523,44 @@ test-core: $(COMPILER)
 	# vanished and read as an undefined variable in the Pascal caller.
 	./$(COMPILER) -Futest test/test_c_unit_pulled_via_pascal_unit.pas $(TESTTMP)/test_c_unit_pulled_via_pascal_unit26
 	test "$$($(TESTTMP)/test_c_unit_pulled_via_pascal_unit26)" = "42"
+	# feature-c-import-a-pascal-unit-under-a-mangled-name: `#include "x.pas"` is
+	# an IMPORT SITE, not textual inclusion -- the unit's routines arrive as
+	# `<unit>_pas_<Identifier>`, case-exact, and a C prototype selects the
+	# overload. 42 is Twice(21); 7 is the Integer Max, 9.25 the Double one, and
+	# the two come from ONE Pascal name.
+	./$(COMPILER) test/c_pasunit.c $(TESTTMP)/c_pasunit26
+	test "$$($(TESTTMP)/c_pasunit26)" = "$$(printf '42\n7')"
+	./$(COMPILER) test/c_pasunit_ovl.c $(TESTTMP)/c_pasunit_ovl26
+	test "$$($(TESTTMP)/c_pasunit_ovl26)" = "9.25"
+	# the same unit included twice, once spelled with a './': one file, allowed
+	./$(COMPILER) test/c_pasunit_twice.c $(TESTTMP)/c_pasunit_twice26
+	test "$$($(TESTTMP)/c_pasunit_twice26)" = "42"
+	# TWO different files both declaring `unit mymod`. A unit's identity is its
+	# NAME, so the loader silently ignored the second include and mymod_pas_Twice
+	# answered 42 where the author asked for 63 -- a wrong VALUE, not a refusal.
+	@./$(COMPILER) test/c_pasunit_collide_fail.c $(TESTTMP)/c_pasunit_collide_fail26 2>&1 \
+	  | grep -q "two Pascal units are both named 'mymod'" \
+	  || { echo 'c_pasunit_collide_fail: FAIL - two units of one name must be refused, not silently resolved to the first'; exit 1; }
+	# case is significant: the mangled name carries the Pascal spelling
+	@./$(COMPILER) test/c_pasunit_case_fail.c $(TESTTMP)/c_pasunit_case_fail26 2>&1 \
+	  | grep -q "call to undeclared function: mymod_pas_twice" \
+	  || { echo 'c_pasunit_case_fail: FAIL - mymod_pas_twice must not reach Twice'; exit 1; }
+	# no prototype for an overloaded routine: nothing to select with
+	@./$(COMPILER) test/c_pasunit_ovl_fail.c $(TESTTMP)/c_pasunit_ovl_fail26 2>&1 \
+	  | grep -q "is an OVERLOADED Pascal routine and this call does not say which one" \
+	  || { echo 'c_pasunit_ovl_fail: FAIL - a bare call to an overloaded name must be refused, not guessed'; exit 1; }
+	# a K&R declaration cannot discriminate, so arity 0 matches nothing here
+	@./$(COMPILER) test/c_pasunit_knr_fail.c $(TESTTMP)/c_pasunit_knr_fail26 2>&1 \
+	  | grep -q "no overload takes 0 parameter(s) of these types" \
+	  || { echo 'c_pasunit_knr_fail: FAIL - a K&R declaration must be refused, not matched'; exit 1; }
+	# C has one declaration per name, so one .c cannot name two overloads
+	@./$(COMPILER) test/c_pasunit_two_overloads_fail.c $(TESTTMP)/c_pasunit_two_overloads_fail26 2>&1 \
+	  | grep -q "is already declared in this translation unit with a different signature" \
+	  || { echo 'c_pasunit_two_overloads_fail: FAIL - two overloads of one Pascal routine in one .c must be refused'; exit 1; }
+	# AnsiString has no C spelling: refused by NAME, and only that routine
+	@./$(COMPILER) test/c_pasunit_ansistring_fail.c $(TESTTMP)/c_pasunit_ansistring_fail26 2>&1 \
+	  | grep -q "takes AnsiString as parameter 1" \
+	  || { echo 'c_pasunit_ansistring_fail: FAIL - an AnsiString parameter must be refused by name'; exit 1; }
 	./$(COMPILER) test/test_type_runtime.pas $(TESTTMP)/test_type_runtime26
 	test "$$($(TESTTMP)/test_type_runtime26)" = "$$(printf '1\n1\n1\n0\n1\n18446744065119617025\n18446744073709551615\n9223372036854775807\n1\n-1\n-1\n-1\n18446744073709551615\n-1\n0\n2\n7\n123456\n9\n20')"
 	./$(COMPILER) test/test_float.pas $(TESTTMP)/test_float26

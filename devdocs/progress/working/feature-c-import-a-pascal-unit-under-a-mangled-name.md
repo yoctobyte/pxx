@@ -204,3 +204,108 @@ experiment (delete the cross-namespace declaration bind, build the C corpus,
 report), real `test/` cases + Makefile recipe lines, and the missing-unit
 diagnostic still speaking Pascal (`uses: unit source not found: nosuch`) at a C
 author who wrote `#include "nosuch.pas"`.
+
+## §3 and the `test/` cases — 2026-08-20 (frank2-C)
+
+### §3 as specified is not implementable from Track C, and the reason is the finding
+
+§3 says a collision is resolved by letting the PATH participate in the mangled
+name (`path_math_pas_Sqrt`). Measured before writing any code, against pin v367:
+two files, `r1/math.pas` and `r2/math.pas`, both `unit math`, `Twice` returning
+`x*2` and `x*3`.
+
+    #include "r1/math.pas"
+    #include "r2/math.pas"
+    math_pas_Twice(21)   ->  42        (r1's answer; the author asked for r2's 63)
+
+**The second include is a silent no-op.** `CompiledUnits` (`defs.inc:2418`) is
+keyed on the unit NAME, so the loader sees `math` already compiled and returns
+without reading r2 at all. A routine present only in r2 does not merely resolve
+to the wrong body — it falls through to the "crtl does not define ..." warning
+and dies at link with `undefined symbol`.
+
+So the two units never COEXIST, and a path-qualified mangled name would denote a
+unit that was never loaded — there would be nothing for it to resolve to.
+Making unit identity the FILE rather than the NAME is a change to the shared
+unit table: **Track A ground**, and already an open question there
+(`decide-one-answer-to-have-i-already-compiled-this-unit`, which
+`parser.inc`'s own Python-module dedup cites). Not edited under C, per the lane
+rule; escalated here rather than guessed at.
+
+### What landed instead
+
+`CCheckPascalUnitCollision` (`cparser.inc`, above `CParsePascalUnitMarker`):
+turn the silent wrong value into a refusal that names both files.
+
+    pascal26:9: error: two Pascal units are both named 'mymod':
+      'test/cpasunit/mymod.pas' was imported first and 'test/cpasunit2/mymod.pas'
+      cannot also be imported -- a unit's identity is its NAME here, so the second
+      include would be silently ignored and every mymod_pas_* would resolve to the
+      first. Rename one of the units
+
+Keyed on the RESOLVED path run through `NormalizePath`, so the same file
+included twice — including a spelling that differs only by a `./` — stays
+allowed. Only when the include spelling is a PATH: a bare `#include "math.pas"`
+is answered by the loader's `-Fu` search and this side never learns which file
+won, so it records nothing and compares nothing. Reuses `CompiledUnitFile`
+(`defs.inc:2429`) for its documented meaning ("the file this compiled unit
+resolved to"); it was simply only written on the Python path until now. Nothing
+declared, no shared structure changed, no `parser.inc` / `pyparser.inc` edit.
+
+**Limit, stated plainly:** this refuses the collision, it does not resolve it.
+Two same-named units still cannot be used from one program. That resolution is
+the Track A question above.
+
+### A real bug found by writing the tests
+
+`#include "cpasunit/mymod.pas"` from `test/c_pasunit.c` looked for
+`test/test/cpasunit/mymod`. The marker handler prepends the includer's
+directory (C's rule), and the unit loader then prepends `CurUnitDir` again
+(`parser.inc:33693`) — the same directory twice. It went unnoticed because every
+hand-verification so far compiled the C file by an ABSOLUTE path, which takes the
+loader's `name[1] = '/'` branch and skips the second prepend. The first
+repository-relative test found it immediately.
+
+Fixed in `CParsePascalUnitMarker`: climb back out of `CurUnitDir` with one `..`
+per segment and let `NormalizePath` collapse the pair. An include written in a
+header in another directory still lands where the C author meant.
+
+### `test/` cases + Makefile recipe lines
+
+`test/cpasunit/mymod.pas` (Twice, and Max overloaded on Integer/Double),
+`test/cpasunit2/mymod.pas` (the same unit NAME, `Twice` returning `x*3`),
+`test/cpasunit/strmod.pas` (an AnsiString-bearing routine beside an importable
+one). Nine recipe lines in `test-core`, beside the existing `test_c_*` block:
+
+| test | covers |
+| --- | --- |
+| `c_pasunit.c` | the short form (42) + the Integer overload picked by prototype (7) |
+| `c_pasunit_ovl.c` | the Double overload of the SAME Pascal name (9.25) |
+| `c_pasunit_twice.c` | one file included twice, once spelled `./` — allowed |
+| `c_pasunit_collide_fail.c` | two files, one unit name — refused, names both |
+| `c_pasunit_case_fail.c` | `mymod_pas_twice` does not reach `Twice` |
+| `c_pasunit_ovl_fail.c` | bare call to an overloaded name — refused, names the fix |
+| `c_pasunit_knr_fail.c` | K&R `extern double mymod_pas_Max();` — refused |
+| `c_pasunit_two_overloads_fail.c` | two overloads in one .c — refused |
+| `c_pasunit_ansistring_fail.c` | AnsiString parameter — refused by name |
+
+The **AnsiString RESULT** refusal is still unreachable for the reason recorded
+in the previous section (a unit whose body touches a managed string dies at
+import in the C driver — a Track A stub-emission gap), so it has no test.
+
+Gate: `make compiler/pascal26` (converged, 1 round) + all nine recipe lines
+hand-run green + `tools/gate.sh quick` GREEN. Not pinned — the pin is the
+coordinator's.
+
+### Still open
+
+- **§6, the bare-name experiment** — delete the cross-namespace declaration bind
+  at `cparser.inc:9448`, build lua / tcc / quickjs / zlib, report what breaks.
+  Untouched; it is the largest remaining item and it is a measurement, not a fix.
+- The **missing-unit diagnostic still speaks Pascal**: `#include "nosuch.pas"`
+  answers `uses: unit source not found: nosuch`. The message is raised in
+  `parser.inc` (Track A ground), and pre-checking the file in `cparser.inc`
+  would have to duplicate the loader's case-insensitive + `.pp` + `-Fu` search
+  to avoid refusing files that do exist. Left alone deliberately.
+- `test/my_pas_lib.pas` is referenced by nothing — an unused leftover, not this
+  feature's.

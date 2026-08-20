@@ -5,18 +5,17 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:3 working:2 unfinished:15 blocked:6 backlog:232 experimental:20 rainy-day:40 float:19 done-followup:3 decided:94 done:2093 rejected:40`
+`urgent:2 working:2 unfinished:15 blocked:6 backlog:236 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2093 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A] — owner: frank3
 - `feature-c-import-a-pascal-unit-under-a-mangled-name` [C] — owner: frank2-C
 
-## urgent (3) — jump the queue
+## urgent (2) — jump the queue
 
 - `bug-a-riscv32-cross-float-output-no-longer-matches-x86-64` [A+F]
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
-- `decide-nilpy-import-rule-vs-a-cpyext-extension-module` [U]
 
 ## unfinished (15) — parked mid-flight; re-claim, do not duplicate
 
@@ -45,11 +44,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 221, ranked
+## Ready — top 30 of 224, ranked
 
-- `[p 75] [U]` decide-nilpy-import-rule-vs-a-cpyext-extension-module
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 60] [A+F]` bug-a-riscv32-cross-float-output-no-longer-matches-x86-64
+- `[p 70] [A+N]` feature-n-a-cpyext-extension-module-is-bare-importable-not-a-pascal-unit
 - `[p 70] [T]` regression-cascade-21f098e32a95
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
@@ -78,4 +77,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 
-_191 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_194 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -337,6 +337,62 @@ begin
   CPascalUnitKeyOf := LowerCase(base);
 end;
 
+{ TWO Pascal units with the SAME unit name, reached from one C file by
+  DIFFERENT paths -- `#include "r1/math.pas"` followed by `#include
+  "r2/math.pas"`.
+
+  Measured before writing this (pin v367): the second include is a SILENT
+  NO-OP. The unit table is keyed on the unit NAME (CompiledUnits, defs.inc), so
+  the loader sees `math` already compiled and returns without reading r2 at all;
+  every `math_pas_*` then binds r1's routine. r1's `Twice(21)` answered 42 where
+  the author who wrote the second include was asking for r2's 63, with no
+  diagnostic anywhere. That is the exact shape this feature exists to avoid: a
+  wrong VALUE, not a refusal.
+
+  §3 of the ticket specifies the fix as `path_math_pas_Sqrt` -- let the path
+  participate in the mangled name. **That is not implementable from here, and
+  the reason is worth stating rather than rediscovering: the two units cannot
+  COEXIST.** A path-qualified mangled name would denote a unit the loader never
+  loaded, so there would be nothing for it to resolve to. Making unit identity
+  the FILE rather than the NAME is a change to the shared unit table, i.e. Track
+  A ground, and it is already an open question there
+  (decide-one-answer-to-have-i-already-compiled-this-unit, cited at
+  parser.inc's own Python-module dedup).
+
+  So what Track C can honestly do is turn the silent no-op into a refusal that
+  names both files. Keyed on the RESOLVED path -- the same string the loader
+  opened, run through NormalizePath -- so `./r1/math.pas` and `r1/math.pas` are
+  one file and the same include written twice stays allowed. Only when the
+  spelling is a PATH: a bare `#include "math.pas"` is answered by the loader''s
+  -Fu search and this side never learns which file won, so it records nothing
+  and compares nothing.
+
+  Reuses CompiledUnitFile, whose documented meaning is already "the FILE this
+  compiled unit resolved to" -- it is simply only written on the Python path
+  today. Nothing is declared and no shared structure changes. }
+procedure CCheckPascalUnitCollision(const key, srcFile: AnsiString; isPath: Boolean);
+var i, e, fIdx: Integer;
+begin
+  if not isPath then Exit;                  { loader-resolved: no file to key on }
+  e := -1;
+  for i := 0 to CompiledUnitCount - 1 do
+    if (CompiledUnits[i] >= 0) and
+       (LowerCase(Strs[CompiledUnits[i]].Text) = key) then e := i;
+  if e < 0 then Exit;
+  fIdx := CompiledUnitFile[e];
+  if fIdx < 0 then
+  begin
+    CompiledUnitFile[e] := InternStr(srcFile);
+    Exit;
+  end;
+  if Strs[fIdx].Text = srcFile then Exit;   { the same file included twice }
+  Error('two Pascal units are both named ''' + key + ''': ''' +
+    Strs[fIdx].Text + ''' was imported first and ''' + srcFile + ''' cannot ' +
+    'also be imported -- a unit''s identity is its NAME here, so the second ' +
+    'include would be silently ignored and every ' + key + '_pas_* would ' +
+    'resolve to the first. Rename one of the units');
+end;
+
 { '__pxx_pascal_unit "<baseDir>" "<spec>";' — the token-stream marker the
   preprocessor leaves where a '#include "<...>.pas"' stood. The state rides in
   the token stream rather than in a preprocessor global so that import ORDER is
@@ -349,7 +405,8 @@ begin
 end;
 
 procedure CParsePascalUnitMarker;
-var baseDir, spec, uname: AnsiString; i: Integer; isPath: Boolean;
+var baseDir, spec, uname, hops, resolved: AnsiString;
+    i: Integer; isPath: Boolean;
 begin
   Next;                                  { the marker identifier }
   baseDir := ''; spec := '';
@@ -365,13 +422,39 @@ begin
   SetLength(uname, Length(uname) - 4);
   isPath := False;
   for i := 1 to Length(uname) do if uname[i] = '/' then isPath := True;
-  if not isPath then uname := CPascalUnitKeyOf(spec);
+  resolved := '';
+  if not isPath then
+    uname := CPascalUnitKeyOf(spec)
+  else
+  begin
+    { The unit loader resolves a relative path against CurUnitDir -- the
+      directory of the file being COMPILED -- while a C include is relative to
+      the directory of the file it was WRITTEN in. Those are the same directory
+      for an include in the main .c, so the two prepends DOUBLED:
+      `#include "cpasunit/mymod.pas"` from test/c_pasunit.c went looking for
+      test/test/cpasunit/mymod. Climb back out of CurUnitDir with one '..' per
+      segment and let NormalizePath collapse the pair. A baseDir from a header
+      in another directory still lands where the C author meant. }
+    if uname[1] <> '/' then
+    begin
+      hops := '';
+      for i := 1 to Length(CurUnitDir) do
+        if CurUnitDir[i] = '/' then hops := hops + '../';
+      uname := hops + uname;
+    end;
+    { The file the loader will actually open, derived the way it derives it, so
+      the collision check below compares canonical paths rather than spellings. }
+    if uname[1] = '/' then resolved := uname else resolved := CurUnitDir + uname;
+    NormalizePath(resolved);
+    resolved := resolved + '.pas';
+  end;
   { Pin the language. An explicit extension means the Pascal chain and only the
     Pascal chain — the same rule a quoted NilPy 'import "x.pas"' gets — so a
     same-named .py or mimic_ shim cannot answer a '#include "x.pas"'. }
   PyImportLang := 'pas';
   ParseUsesUnit(uname);
   PyImportLang := '';
+  CCheckPascalUnitCollision(CPascalUnitKeyOf(spec), resolved, isPath);
 end;
 
 { Does Procs[i] answer to the mangled C name `name`? Built FORWARDS -- the
