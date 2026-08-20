@@ -1,0 +1,19 @@
+sig=fpc-self_forvarlimit
+seed=79339
+sha=49a511e43271
+compiler=/home/neo/trackt-watch/compiler/pascal26
+note=FPC CONTRADICTS ITSELF (-O0 vs -O2) -- an FPC bug, no judgement needed; pxx is not involved
+
+fpc-O0       11470528222560334935
+fpc-O2       <crash>(rc=217)
+pxx-O0       11470528222560334935
+pxx-O2       11470528222560334935
+pxx-O3       11470528222560334935
+
+first divergence at checkpoint 1 of 1 -- a `forvarlimit` statement
+    fpc-O0     15608984115230068096
+    fpc-O2     <crash>(rc=217)
+    (checkpoint N = the Nth statement of the traced program;
+     everything before it agrees, so the bug is AT that statement)
+
+repro: tools/pasmith.py --seed 79339 --vars 10 --funcs 3 --stmts 20 --depth 3 --classes 4 --objs 3 --strs 3 --recs 2 --arrs 2 --enums 2 --shorts 2 --excepts 3 --modeprocs 2 --intfs 0 --hier 4 --mptrs 0 --props 3 --exdtor 3 --clsm 3 --checks 1 --consts 1
