@@ -4636,3 +4636,45 @@ it is **caught up rather than falling behind**. `UP — commits through 49a511e4
 read a growing age on a quiet repo as a stalled watcher.
 
 Nobody blocked, nothing dispatched, both local workers deliberately down.
+
+## COORDINATOR RESUME BLOCK — written 2026-08-20 ~07:00 local, before this session's own autocompact
+
+The owner's point: a low autocompact threshold is *advice*, not damage — 200k is plenty for a bug,
+and compacting 200k is cheaper and cleaner than compacting 1M. **I parked two capable workers for
+~4 hours on an inference I never measured** (frank2 landed three subtle pieces overnight and frank3
+corrected its own number unprompted — neither showed thinness, and frank2 was explicitly offered the
+out and declined it). Recorded as a coordinator error of the same class this session spent the night
+naming in others: a plausible story nobody diffed against an oracle. **Workers self-assess context
+better than the coordinator can from outside — offer the out, then believe the answer.**
+
+This block exists so my own compaction is a non-event. If the roster discipline is real, everything
+below is enough to resume cold.
+
+### State as of this writing
+- **Pin v367** (`1479b663dd15` at `d47acfee7`, 2026-08-19T21:34:49Z). `compiler/**` unmoved since.
+- **Latest full tier `49a511e43271`: 2779 pass / 9 fail.** The nine are all inherited: six cpyext
+  (awaiting the U decision), `test_nilpy_callable_to_str_param_fails.npy`,
+  `lib_mimic_xml_etree_elementtree.npy`, `test_cross_float.pas`.
+- Track T UP on plexus, caught up, unattended. `carried_runs` first non-zero.
+- Tree clean, everything pushed.
+
+### Live threads
+- `urgent/`: **`decide-nilpy-import-rule-vs-a-cpyext-extension-module` (U, p75)** is the owner's
+  call and the headline. `bug-n-a-callable-value-…-bound-method` (N, p70).
+  `bug-a-riscv32-cross-float-output-no-longer-matches-x86-64` (A+F, 60).
+- `working/`: `feature-c-import-a-pascal-unit-under-a-mangled-name` (frank2's lock, core landed
+  self-host green, §3 path collisions / §6 bare-name experiment / `test/` cases still open);
+  `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` (the carve campaign).
+- **Carve split 3 must retarget to Py\* HELPER BODIES**, not fork sites — 183 bodies / 504 sites
+  after split 2, and carving the most forked routine removed zero bodies. Do not quote the old
+  176/426.
+
+### Pin checklist, as amended overnight
+1. `tail -1 stable_linux_amd64/default/pin.log`, then `git log <sha>..HEAD -- compiler`.
+2. **Check `pin_shadow.would_pin`** — I skipped this for v366 and got away with it by luck.
+   If false, `git merge-base --is-ancestor <each red's cause> <current pin>` before overriding:
+   a red whose cause is already inside the current pin is not an argument against the next one.
+3. **A `pin verify` red count is a HYPOTHESIS.** `--status` now prints NOT CORROBORATED / SINGLE
+   RUN / corroborated-in-part itself. Do not revert on an uncorroborated count — it fired at
+   "11 new" once and every one of the eleven passed in the next full tier.
+4. Announce, `make stabilize-fast && make pin`, `git add -u stable_linux_amd64/`, smoke, push.
