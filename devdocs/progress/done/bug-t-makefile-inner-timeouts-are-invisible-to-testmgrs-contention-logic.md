@@ -498,4 +498,4 @@ permitted to make, which is why it sat at p55 unclaimed for a day with a complet
 diagnosis attached.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 536fb13c5.
