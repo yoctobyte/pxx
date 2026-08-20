@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T16:40:42Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "c5a5f9f00e912e883b1d6b48916ad932a2fb6726",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T16:46:01Z",
    "fixed": [],
    "new_red": [],
@@ -430,10 +422,27 @@
    "sha": "b24bb1474624dbce59e6ebd6192bccb5f206c495",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T09:25:47Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_asm_emit.pas",
+    "test-core#src:test/test_integer_longint_overload.pas",
+    "test-core#src:test/test_strict_overload_width.pas@1",
+    "test-core#src:test/test_strict_overload_width.pas@2"
+   ],
+   "sha": "943c706936b329e1777d68892c8e4eb444211ea8",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
+  "test-core#src:test/test_asm_emit.pas": "ok: $TMP  [code=95698B  data=2800B  bss=9532B  procs=203]",
+  "test-core#src:test/test_integer_longint_overload.pas": "+++ -\t2026-08-20 11:24:39.593906650 +0200 | @@ -1,3 +1,3 @@ | FFFFFFFF FFFFFFFF FFFFFFFF | -FFFFFFFFFFFFFFFF FFFFFFFF | +FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF | longint longint int64 longword",
+  "test-core#src:test/test_strict_overload_width.pas@1": "ok: $TMP  [code=293112B  data=9124B  bss=53920B  procs=586]",
+  "test-core#src:test/test_strict_overload_width.pas@2": "ok: $TMP  [code=293112B  data=9124B  bss=53920B  procs=586]",
   "test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy": "ok: $TMP  [code=2568790B  data=74180B  bss=52788B  procs=2020]"
  },
  "job_tier": {
@@ -2122,6 +2131,7 @@
   "test-core#src:test/test_u64_to_double.pas": "native",
   "test-core#src:test/test_ucs4char.pas": "native",
   "test-core#src:test/test_uint64_ops.pas": "native",
+  "test-core#src:test/test_unary_minus_widens_to_int64.pas": "native",
   "test-core#src:test/test_unicodestring_alias.pas": "native",
   "test-core#src:test/test_unit_const_vs_field.pas": "native",
   "test-core#src:test/test_unit_finalization.pas": "native",
@@ -3725,7 +3735,7 @@
   "test-core#src:test/test_arrayofconst_to_method_b287.pas": "pass",
   "test-core#src:test/test_asm.pas": "pass",
   "test-core#src:test/test_asm_branch.pas": "pass",
-  "test-core#src:test/test_asm_emit.pas": "pass",
+  "test-core#src:test/test_asm_emit.pas": "fail",
   "test-core#src:test/test_asm_func.pas": "pass",
   "test-core#src:test/test_asm_global.pas": "pass",
   "test-core#src:test/test_asm_ifdef_multiarch.pas": "pass",
@@ -4022,7 +4032,7 @@
   "test-core#src:test/test_int_arg_to_float_param.pas": "pass",
   "test-core#src:test/test_int_sized_names_b261.pas": "pass",
   "test-core#src:test/test_int_to_float.pas": "pass",
-  "test-core#src:test/test_integer_longint_overload.pas": "pass",
+  "test-core#src:test/test_integer_longint_overload.pas": "fail",
   "test-core#src:test/test_interface_arc.pas": "pass",
   "test-core#src:test/test_interface_arc_exc.pas": "pass",
   "test-core#src:test/test_interface_ascast_dead_branch_temp.pas": "pass",
@@ -4447,8 +4457,8 @@
   "test-core#src:test/test_strict_fpc_shift_widths.pas@1": "pass",
   "test-core#src:test/test_strict_fpc_shift_widths.pas@2": "pass",
   "test-core#src:test/test_strict_overload.pas": "pass",
-  "test-core#src:test/test_strict_overload_width.pas@1": "pass",
-  "test-core#src:test/test_strict_overload_width.pas@2": "pass",
+  "test-core#src:test/test_strict_overload_width.pas@1": "fail",
+  "test-core#src:test/test_strict_overload_width.pas@2": "fail",
   "test-core#src:test/test_strict_visibility_b262.pas": "pass",
   "test-core#src:test/test_string_array_element_charwrite.pas": "pass",
   "test-core#src:test/test_string_concat.pas": "pass",
@@ -4489,6 +4499,7 @@
   "test-core#src:test/test_u64_to_double.pas": "pass",
   "test-core#src:test/test_ucs4char.pas": "pass",
   "test-core#src:test/test_uint64_ops.pas": "pass",
+  "test-core#src:test/test_unary_minus_widens_to_int64.pas": "pass",
   "test-core#src:test/test_unicodestring_alias.pas": "pass",
   "test-core#src:test/test_unit_const_vs_field.pas": "pass",
   "test-core#src:test/test_unit_finalization.pas": "pass",
@@ -4659,11 +4670,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T09:10:06Z",
-  "sha": "b24bb1474624dbce59e6ebd6192bccb5f206c495",
+  "date": "2026-08-20T09:25:47Z",
+  "sha": "943c706936b329e1777d68892c8e4eb444211ea8",
   "tier": "native",
-  "verdict": "GREEN",
-  "wall": 291.8
+  "verdict": "RED",
+  "wall": 304.1
  },
  "last_bench": {
   "conf_rows": 550,
@@ -4711,6 +4722,66 @@
    ],
    "src": "test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy lib/rtl/classes.pas +2",
    "status": "timeout"
+  },
+  {
+   "bad": "943c706936b329e1777d68892c8e4eb444211ea8",
+   "good": "b24bb1474624dbce59e6ebd6192bccb5f206c495",
+   "job": "test-core#src:test/test_asm_emit.pas",
+   "name": "test-core#857",
+   "opened": "2026-08-20T09:25:47Z",
+   "pin_built": false,
+   "range": [
+    "e74c890baa2e4b9f162a4ec9611012bb0fc5060b",
+    "f09524494d6ba4e47abf6e3a9a96f2e716de8d93",
+    "943c706936b329e1777d68892c8e4eb444211ea8"
+   ],
+   "src": "test/test_asm_emit.pas",
+   "status": "fail"
+  },
+  {
+   "bad": "943c706936b329e1777d68892c8e4eb444211ea8",
+   "good": "b24bb1474624dbce59e6ebd6192bccb5f206c495",
+   "job": "test-core#src:test/test_integer_longint_overload.pas",
+   "name": "test-core#282",
+   "opened": "2026-08-20T09:25:47Z",
+   "pin_built": false,
+   "range": [
+    "e74c890baa2e4b9f162a4ec9611012bb0fc5060b",
+    "f09524494d6ba4e47abf6e3a9a96f2e716de8d93",
+    "943c706936b329e1777d68892c8e4eb444211ea8"
+   ],
+   "src": "test/test_integer_longint_overload.pas test/test_integer_longint_overload.expected",
+   "status": "fail"
+  },
+  {
+   "bad": "943c706936b329e1777d68892c8e4eb444211ea8",
+   "good": "b24bb1474624dbce59e6ebd6192bccb5f206c495",
+   "job": "test-core#src:test/test_strict_overload_width.pas@1",
+   "name": "test-core#772",
+   "opened": "2026-08-20T09:25:47Z",
+   "pin_built": false,
+   "range": [
+    "e74c890baa2e4b9f162a4ec9611012bb0fc5060b",
+    "f09524494d6ba4e47abf6e3a9a96f2e716de8d93",
+    "943c706936b329e1777d68892c8e4eb444211ea8"
+   ],
+   "src": "test/test_strict_overload_width.pas",
+   "status": "fail"
+  },
+  {
+   "bad": "943c706936b329e1777d68892c8e4eb444211ea8",
+   "good": "b24bb1474624dbce59e6ebd6192bccb5f206c495",
+   "job": "test-core#src:test/test_strict_overload_width.pas@2",
+   "name": "test-core#773",
+   "opened": "2026-08-20T09:25:47Z",
+   "pin_built": false,
+   "range": [
+    "e74c890baa2e4b9f162a4ec9611012bb0fc5060b",
+    "f09524494d6ba4e47abf6e3a9a96f2e716de8d93",
+    "943c706936b329e1777d68892c8e4eb444211ea8"
+   ],
+   "src": "test/test_strict_overload_width.pas",
+   "status": "fail"
   }
  ],
  "pin_baseline": {
