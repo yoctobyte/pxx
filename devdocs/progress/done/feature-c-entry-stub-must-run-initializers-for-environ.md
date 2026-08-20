@@ -224,4 +224,4 @@ the pinned compiler** — byte-identical (empty) output from both. Small evals
 attribute it to the entry stub; it is not a finding of this ticket.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 01fbe5ceb.
