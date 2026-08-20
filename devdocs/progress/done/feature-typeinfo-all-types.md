@@ -6,7 +6,7 @@ owner: claude-acp
 # `TypeInfo(T)` for every type, not just enums
 
 - **Type:** feature (RTTI — Track A/P)
-- **Status:** working
+- **Status:** done
 - **Blocks:** [[feature-pascal-corpus-generics]] (generics.defaults selects a
   comparer per TypeInfo(T), including TypeInfo of a GENERIC PARAMETER),
   [[feature-typinfo-facade-unit]], and behind those the RTTI->streaming->LFM
@@ -132,7 +132,32 @@ rather than half-applied.
 
 All three are refused outright by the pinned binary, so each one bites.
 
-### Still open (the ticket stays in working/)
+### 4. Generic parameters — the headline item, proven not assumed
+
+`TypeInfo(T)` inside a specialized generic body needs no separate path, and
+`test/test_typeinfo_generic_param.pas` proves it rather than asserting it in
+prose: pxx substitutes the type parameter's token TEXTUALLY before the parser
+reaches the body, so `TypeInfo(T)` in a `TBox<Byte>` is already
+`TypeInfo(Byte)` by then. Byte is the row that bites — `byte` and `integer`
+share a token kind, and answering `Integer` for both is exactly how increment 1
+found this path broken. `TBox<TSub>` proves the substitution reaches the
+NAMED-type tables too, not just the builtin spellings. All four rows match the
+FPC 3.2.2 oracle apart from the escalated `Integer`/`LongInt` spelling.
+
+That closes what the ticket calls "the interesting part and the reason the
+ticket exists" — [[feature-pascal-corpus-generics]]' `generics.defaults`
+comparer selection is unblocked.
+
+### Resolved; tail split out
+
+Everything with a consumer is done. The rest — `TTypeData` payloads (every new
+category writes a nil `DataPtr`), interfaces (14), metaclasses (28), `Currency`
+(4, which needs a `tyCurrency` that does not exist, so a type-system item not an
+RTTI one) and `PChar` — is [[feature-typeinfo-ttypedata-payloads]] at prio 25.
+It is deliberately not urgent: nothing reads `DataPtr` for these kinds today, so
+doing it now would mean designing a layout against a guessed reader.
+
+### Still open there, not here
 
 - **`DataPtr` / `TTypeData` payloads.** Every new category writes a nil
   `DataPtr` — kind and name only. The data is all recoverable when a consumer
@@ -150,3 +175,6 @@ All three are refused outright by the pinned binary, so each one bites.
   TEXTUALLY before the parser sees it, so `TypeInfo(T)` inside a specialized
   body is already `TypeInfo(Integer)` by then. Worth an explicit test before
   claiming it.
+
+## Log
+- 2026-08-20 — resolved, commit PENDING-COMMIT.

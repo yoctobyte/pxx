@@ -1904,6 +1904,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-typed-const-arrays | A | 50 | feature | Typed constant arrays (initialized const arrays) | — |
 | feature-typed-const-record | A | 50 | feature | feature: typed constant record initializer (`const r: TRec = (...)`) | — |
 | feature-typed-instruction-encoders | A | 50 | feature | Typed instruction encoders for codegen | — |
+| feature-typeinfo-all-types | A | 50 | feature | `TypeInfo(T)` for every type, not just enums | — |
 | feature-types-unit | B | 50 | feature | `types` unit (System.Types core) — geometry records + TDuplicates | — |
 | feature-unified-heap-allocator | A | 50 | feature | Unified syscall-free heap allocator | — |
 | feature-untyped-parameters | B | 50 | feature | Untyped `var` / `const` / `out` parameters | — |

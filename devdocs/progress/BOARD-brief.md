@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 working:1 unfinished:17 blocked:8 backlog:271 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2155 rejected:40`
+`urgent:2 unfinished:17 blocked:8 backlog:272 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2156 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-typeinfo-all-types` [A] — owner: claude-acp
+_none — no lane is locked._
 
 ## urgent (2) — jump the queue
 
@@ -47,7 +47,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 259, ranked
+## Ready — top 30 of 261, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [P]` bug-p-a-second-deref-on-a-typecast-pointer-field-is-dropped
@@ -80,4 +80,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 
-_229 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_231 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -9,13 +9,11 @@ lives in git, not in a timestamp._
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method | N | 70 | bug | A callable value is silently accepted where `str` is declared, and no longer compares equal to itself — bisected to `9bbbbef6c` | — |
-| bug-p-a-second-deref-on-a-typecast-pointer-field-is-dropped | P | 70 | bug | `PRec(raw)^.n^` — deref a typecast pointer, take a POINTER field, deref again — silently drops the last `^` and yields the raw pointer value instead of what it points at. Assigning the cast to a variable first (`p := PRec(raw); p^.n^`) is correct, so the two spellings of one expression disagree. Wrong value, no diagnostic, no crash. | — |
+| bug-p-a-second-deref-on-a-typecast-pointer-field-is-dropped | P | 70 | bug | `PRec(raw)^.n^` — deref an INLINE typecast, take a pointer-to-string field, deref again — yields the raw heap pointer instead of the string. The deref happens; the POINTEE TYPE is lost, so the result comes back integer-ish (a `^Int64` field through the same cast is correct, which is what proves it). Parking the cast in a variable first is correct, so two spellings of one expression disagree. Wrong value, no diagnostic, no crash. | — |
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| feature-typeinfo-all-types | A | 50 | feature | `TypeInfo(T)` for every type, not just enums | — |
+_none_
 
 ## unfinished (17)
 
@@ -52,7 +50,7 @@ lives in git, not in a timestamp._
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (271)
+## backlog (272)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -289,6 +287,7 @@ lives in git, not in a timestamp._
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | feature-tls13-from-scratch |
 | feature-toolchain-cli-ux | A | 45 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-twatch-full-tier-coverage-age | T | 40 | feature | No signal distinguishes "full tier is lagging" from "full tier never completes" | — |
+| feature-typeinfo-ttypedata-payloads | A | 25 | feature | TypeInfo(T) now answers kind + name for every category that has a consumer, but every non-class/record blob writes a nil DataPtr — no TTypeData. The data is all already in the compiler (subrange bounds, set element enum, array element type and dims); this is emission, not discovery. Plus the three categories with no consumer yet: interfaces (14), metaclasses (28), Currency (4, which needs a type-system change first). | — |
 | feature-typinfo-facade-unit | B | 50 | feature | `typinfo` facade unit: FPC's RTTI API shapes over OUR blobs | feature-typeinfo-all-types |
 | feature-unicodestring-model | A | 40 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 | feature-web-track-w-bootstrap | W | 40→45 | feature | Track W (website) — bootstrap the lane: two repos, one board | — |
@@ -531,9 +530,9 @@ lives in git, not in a timestamp._
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2155)
+## done (2156)
 
-2155 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2156 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -633,6 +632,7 @@ lives in git, not in a timestamp._
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [A] feature-pascal-initialize-finalize-intrinsics
 - [p 50] [A] feature-release-checksums-repro
+- [p 50] [B] feature-typinfo-facade-unit
 - [p 50] [A] refactor-a-the-missing-layer-between-frontends-and-backends
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
@@ -808,6 +808,7 @@ lives in git, not in a timestamp._
 - [p 25] [T] feature-t-record-host-cpu-features-in-tstate
 - [p 25] [T] feature-t-uforth-bench-restore-the-elfhash-outlier
 - [p 25] [M] feature-t-windows-wine-harness
+- [p 25] [A] feature-typeinfo-ttypedata-payloads
 - [p 25] [C] idea-c-realworld-test-targets
 - [p 25] [A] refactor-a-search-path-helpers-live-in-the-c-preprocessor
 - [p 25] [C] refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag
@@ -863,4 +864,3 @@ lives in git, not in a timestamp._
 - **1** — feature-pcl-win32-widgetset
 - **1** — feature-port-freebsd-native
 - **1** — feature-tls13-from-scratch
-- **1** — feature-typeinfo-all-types

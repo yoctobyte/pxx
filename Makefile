@@ -3967,6 +3967,14 @@ test-core: $(COMPILER)
 	# multi-dimension array is still ONE tkArray, not a nested one.
 	./$(COMPILER) -Fulib/rtl test/test_typeinfo_array_pointer.pas $(TESTTMP)/test_typeinfo_arrptr26
 	test "$$($(TESTTMP)/test_typeinfo_arrptr26)" = "$$(printf 'TArr 12\nTDyn 21\nTArr2 12\nPointer 29\nVariant 11')"
+	# TypeInfo(T) where T is a GENERIC PARAMETER — the case the ticket was opened
+	# for. Needs no separate path (pxx substitutes the parameter's token
+	# textually before the parser sees the body), and this proves it instead of
+	# assuming it. Byte is the row that bites: byte and integer share a token
+	# kind, and answering "Integer" for both is how this path was broken. TSub
+	# proves the substitution reaches the named-type tables too.
+	./$(COMPILER) -Fulib/rtl test/test_typeinfo_generic_param.pas $(TESTTMP)/test_typeinfo_gen26
+	test "$$($(TESTTMP)/test_typeinfo_gen26)" = "$$(printf 'Integer 1\nByte 1\nAnsiString 9\nTSub 1')"
 	# A program naming `puint8` must compile QUIETLY: FindTypeAlias carried a
 	# leftover debug dump keyed on that exact name, printing the whole alias
 	# table to STDOUT before the pointer-alias fallback resolved it. The
