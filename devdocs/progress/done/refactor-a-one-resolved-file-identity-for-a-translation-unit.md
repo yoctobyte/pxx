@@ -4,7 +4,7 @@ prio: 60
 type: refactor
 blocked-by: []
 summary: "Generalise CompiledUnitFile[] from the .py arm to every load: one resolved-file identity answers 'have I already compiled this unit?', retiring the @cpath: key space. Decided 2026-08-19 (option B). The mechanism already exists — option A built it for one arm in 030ce07ea — so this is promoting a built thing to the general rule, not new machinery. Hazard: CompiledUnitFile is -1 when unresolved and -1 = -1, so a naive compare makes every unresolved unit identical."
-status: working
+status: done
 owner: frank3
 ---
 
@@ -188,3 +188,6 @@ wrong-value symptom itself is *refused*, still not *resolved* — that half is T
 The comparison is on path TEXT. Two roots reaching one file by genuinely different routes
 — a symlink, two `-Fu` roots onto one tree — are still two identities. Stated in the code
 comment rather than fixed: it needs inode identity, which is a separate decision.
+
+## Log
+- 2026-08-20 — resolved, commit PENDING-COMMIT.

@@ -5,14 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:16 blocked:6 backlog:235 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2098 rejected:40`
+`urgent:2 working:1 unfinished:16 blocked:6 backlog:235 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2099 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A] — owner: frank3
 
-## urgent (1) — jump the queue
+## urgent (2) — jump the queue
 
+- `bug-a-riscv32-cross-float-output-no-longer-matches-x86-64` [A]
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
 
 ## unfinished (16) — parked mid-flight; re-claim, do not duplicate
@@ -43,9 +44,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 222, ranked
+## Ready — top 30 of 223, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
+- `[p 65] [A]` bug-a-riscv32-cross-float-output-no-longer-matches-x86-64
+- `[p 65] [T]` bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
@@ -54,7 +57,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [O]` feature-opt-store-reload-elimination
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 60] [A]` refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
-- `[p 60] [A]` refactor-a-one-resolved-file-identity-for-a-translation-unit
 - `[p 58] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-a-own-language-first-symbol-resolution (unblocks 1)
@@ -74,6 +76,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [A]` feature-pascal-type-helpers
-- `[p 55] [A]` feature-signal-siginfo-ucontext
 
-_192 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_193 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
