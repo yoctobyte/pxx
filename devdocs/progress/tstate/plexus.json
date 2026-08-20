@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T18:54:53Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "7daee90ac31753ded02fee87b475435c0d4f2b80",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T19:05:03Z",
    "fixed": [],
    "new_red": [],
@@ -426,10 +418,25 @@
    "sha": "23730e49d4467548e7faa5a3705da8065e451ff7",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T11:17:47Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/cfnptr_deref_call_b241.c",
+    "test-core#src:test/cfnptr_typedef_global_b166.c",
+    "test-core#src:test/cglobal_fnptr_addressof_b161.c"
+   ],
+   "sha": "b645e1b2aff7d0fc6f63267e833a4410c5a49fa8",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
+  "test-core#src:test/cfnptr_deref_call_b241.c": "ok: $TMP  [code=90980B  data=504B  bss=4832B  procs=382] | Segmentation fault (core dumped)",
+  "test-core#src:test/cfnptr_typedef_global_b166.c": "ok: $TMP  [code=90100B  data=504B  bss=4832B  procs=381] | Segmentation fault (core dumped)",
+  "test-core#src:test/cglobal_fnptr_addressof_b161.c": "ok: $TMP  [code=90269B  data=504B  bss=4832B  procs=386] | Segmentation fault (core dumped)",
   "test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy": "ok: $TMP  [code=2568790B  data=74180B  bss=52788B  procs=2020]"
  },
  "job_tier": {
@@ -1464,6 +1471,7 @@
   "test-core#src:test/test_cond_comment_skip.pas": "native",
   "test-core#src:test/test_conformance_1.pas": "native",
   "test-core#src:test/test_conformance_2.pas": "native",
+  "test-core#src:test/test_const_array_negative_low_bound.pas": "native",
   "test-core#src:test/test_const_array_of_record.pas": "native",
   "test-core#src:test/test_const_array_of_string.pas": "native",
   "test-core#src:test/test_const_array_of_string_n.pas": "native",
@@ -3449,7 +3457,7 @@
   "test-core#src:test/cfnptr_call_via_ptr_cast_b236.c": "pass",
   "test-core#src:test/cfnptr_cast_call_b97.c": "pass",
   "test-core#src:test/cfnptr_deref_call_b15.c": "pass",
-  "test-core#src:test/cfnptr_deref_call_b241.c": "pass",
+  "test-core#src:test/cfnptr_deref_call_b241.c": "fail",
   "test-core#src:test/cfnptr_four_args_b56.c": "pass",
   "test-core#src:test/cfnptr_local_b95.c": "pass",
   "test-core#src:test/cfnptr_range_array_len_b223.c": "pass",
@@ -3457,7 +3465,7 @@
   "test-core#src:test/cfnptr_string_arg_b169.c": "pass",
   "test-core#src:test/cfnptr_struct_member.c": "pass",
   "test-core#src:test/cfnptr_typedef_array_b214.c": "pass",
-  "test-core#src:test/cfnptr_typedef_global_b166.c": "pass",
+  "test-core#src:test/cfnptr_typedef_global_b166.c": "fail",
   "test-core#src:test/cfnptr_variadic_call_b170.c": "pass",
   "test-core#src:test/cfntype_typedef_call_b198.c": "pass",
   "test-core#src:test/cformfeed_whitespace_b220.c": "pass",
@@ -3474,7 +3482,7 @@
   "test-core#src:test/cglobal_constexpr_array_init_b77.c": "pass",
   "test-core#src:test/cglobal_double_init_arith_b353.c": "pass",
   "test-core#src:test/cglobal_float_init_b91.c": "pass",
-  "test-core#src:test/cglobal_fnptr_addressof_b161.c": "pass",
+  "test-core#src:test/cglobal_fnptr_addressof_b161.c": "fail",
   "test-core#src:test/cglobal_fnptr_array_b109.c": "pass",
   "test-core#src:test/cglobal_multi_declarator_b180.c": "pass",
   "test-core#src:test/cglobal_nested_struct_init_b69.c": "pass",
@@ -3842,6 +3850,7 @@
   "test-core#src:test/test_cond_comment_skip.pas": "pass",
   "test-core#src:test/test_conformance_1.pas": "pass",
   "test-core#src:test/test_conformance_2.pas": "pass",
+  "test-core#src:test/test_const_array_negative_low_bound.pas": "pass",
   "test-core#src:test/test_const_array_of_record.pas": "pass",
   "test-core#src:test/test_const_array_of_string.pas": "pass",
   "test-core#src:test/test_const_array_of_string_n.pas": "pass",
@@ -4673,11 +4682,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T11:03:49Z",
-  "sha": "23730e49d4467548e7faa5a3705da8065e451ff7",
+  "date": "2026-08-20T11:17:47Z",
+  "sha": "b645e1b2aff7d0fc6f63267e833a4410c5a49fa8",
   "tier": "native",
-  "verdict": "GREEN",
-  "wall": 434.4
+  "verdict": "RED",
+  "wall": 422.2
  },
  "last_bench": {
   "conf_rows": 550,
@@ -4725,6 +4734,51 @@
    ],
    "src": "test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy lib/rtl/classes.pas +2",
    "status": "timeout"
+  },
+  {
+   "bad": "b645e1b2aff7d0fc6f63267e833a4410c5a49fa8",
+   "good": "23730e49d4467548e7faa5a3705da8065e451ff7",
+   "job": "test-core#src:test/cfnptr_deref_call_b241.c",
+   "name": "test-core#382",
+   "opened": "2026-08-20T11:17:47Z",
+   "pin_built": false,
+   "range": [
+    "6305e5e53ce3552f072ee3f8242cbf6db5fa982e",
+    "9afcd676a04a3a0f960af47b192c9b4f764560f6",
+    "b645e1b2aff7d0fc6f63267e833a4410c5a49fa8"
+   ],
+   "src": "test/cfnptr_deref_call_b241.c",
+   "status": "fail"
+  },
+  {
+   "bad": "b645e1b2aff7d0fc6f63267e833a4410c5a49fa8",
+   "good": "23730e49d4467548e7faa5a3705da8065e451ff7",
+   "job": "test-core#src:test/cfnptr_typedef_global_b166.c",
+   "name": "test-core#445",
+   "opened": "2026-08-20T11:17:47Z",
+   "pin_built": false,
+   "range": [
+    "6305e5e53ce3552f072ee3f8242cbf6db5fa982e",
+    "9afcd676a04a3a0f960af47b192c9b4f764560f6",
+    "b645e1b2aff7d0fc6f63267e833a4410c5a49fa8"
+   ],
+   "src": "test/cfnptr_typedef_global_b166.c",
+   "status": "fail"
+  },
+  {
+   "bad": "b645e1b2aff7d0fc6f63267e833a4410c5a49fa8",
+   "good": "23730e49d4467548e7faa5a3705da8065e451ff7",
+   "job": "test-core#src:test/cglobal_fnptr_addressof_b161.c",
+   "name": "test-core#439",
+   "opened": "2026-08-20T11:17:47Z",
+   "pin_built": false,
+   "range": [
+    "6305e5e53ce3552f072ee3f8242cbf6db5fa982e",
+    "9afcd676a04a3a0f960af47b192c9b4f764560f6",
+    "b645e1b2aff7d0fc6f63267e833a4410c5a49fa8"
+   ],
+   "src": "test/cglobal_fnptr_addressof_b161.c",
+   "status": "fail"
   }
  ],
  "pin_baseline": {
