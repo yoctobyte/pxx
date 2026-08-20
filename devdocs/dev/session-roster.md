@@ -5084,3 +5084,76 @@ fixedpoint `21f05c52b`, tool `174186b5d`. Header moved from `NO ORACLE for aarch
 weighting, kept verbatim in substance: **a dry 160 bounds only what it measured** — the aarch64
 backend does not diverge on csmith's default construct mix at `-O0`/`-O2` — and it does **not**
 supersede the morning's 250 loud-bucket-only seeds, which remain the only coverage riscv32 has.
+
+## PIN v368 (2026-08-20 03:06Z, coordinator) + single-worker window
+
+`e3394e9cf61b511a` (was `1479b663dd15`) at `21117f4152845a44`. `stabilize-fast` self→next→
+fixedpoint byte-identical, bootstrap smoke green, 8 builtin sources frozen. Taken with **both
+workers idle and the tree released** — frank3 announced the release, frank2 was parked.
+
+Seven compiler commits since v367: the three-stage `ParseFactorCore` carve (`f380d7cd0`,
+`ec33f4e5e`, `3c8ec4c7d`), the C unit-name refusal (`724191cd1`), the C entry-stub init phase
+(`08dccc7df`), cpyext bare-import by declaration (`acf1f8396`), and one resolved-file identity
+for a translation unit (`e6ca52556`).
+
+**Note on the shadow, for the record:** `pin_shadow`'s newest verdict was still `WOULD PIN
+49a511e43271` — a sha that predates all seven. So this pin was NOT taken on the shadow's
+endorsement of *this* tree; it was taken on the reds it named having since been fixed at HEAD
+(six cpyext by `acf1f8396`, the cross-float red by `9835aa8b4`) plus a clean local
+`stabilize-fast`. Stated plainly because "the shadow said would-pin" would be a true sentence
+about the wrong tree — the same error shape as +34h, where I correctly refused for it.
+
+### The single-worker window, and why it went to Track P
+
+Owner: *"everything is idling.. let's put a single frank to work for a while."*
+
+frank3 → `feature-pascal-corpus-oop` **rung 3**. frank2 stood down after adding the
+`gcc_diff_probe.sh` environ case that this pin unblocked.
+
+**The scheduling argument is the whole reason for the choice:** Track P lives in the shared
+`lexer.inc`/`parser.inc` and must never run concurrently with A. With two agents that makes P
+permanently awkward to schedule; with one it is free. **A single-worker window is the cheapest
+time in the week to do Pascal frontend work**, so spending it on C or on more fuzz seeds would
+waste the one property the window has. Track C has no such constraint and loses nothing by
+waiting.
+
+**Rung 3 had no ticket — again the umbrella-is-not-a-queue-entry failure.** Rungs 1 and 2 are
+in `done/` (fpjson finished 203/203, zero failures). The umbrella's own rule says to re-rate
+the next rung when the current goes green; that never happened, and its candidate table
+literally reads "not filed yet" for both rung-3 options. So a p65 ticket sat with **nothing
+actionable under it**. Worker told to file the sub-ticket first, then work it. See
+[[feedback_measuring_a_thing_is_not_filing_it]].
+
+Fork left to the worker with a recommendation, not a decision: **rtl-generics** (the
+generics × classes × interfaces intersection nothing else touches, and smaller — the umbrella's
+sizing rule prefers smallest first so walls arrive one at a time) vs **fcl-xml DOM** (22k,
+roundtrip oracle). Told to **measure LOC first** — the table is dated 2026-07-12 and
+rtl-generics' size cell is EMPTY, so nobody has ever sized it.
+
+Also flagged to the worker: the umbrella's `Gate:` line says `make test` + `make stabilize &&
+make pin` and is **superseded** by CLAUDE.md's per-fix loop.
+
+### The kill mystery: hypothesis moved from pkill to OOM, and I asked the wrong agent
+
+**Owner's correction:** *"track T is on another box.. frank 2 and 3 are on this box."* T runs on
+plexus and structurally could not have touched a process here — my escalation to them was
+misdirected. They audited anyway: zero `pkill`/`killall`/`pgrep` across their tooling, and all
+five kill sites read individually (a `/proc` scan is a name sweep in different clothes) — every
+one scoped to a PID or a `Popen` handle they created.
+
+frank3 clean for today, **checked rather than remembered** (its session had been compacted, so
+memory would not have been an honest answer) by grepping every Bash command in every frank3
+transcript on this box.
+
+**The reasoning correction that matters, from T:** *~8 GB free after the fact is consistent
+with an OOM kill, not evidence against one — the memory is free BECAUSE the killer fired.*
+frank2 and I had both read it the other way. frank3 reached OOM independently.
+
+**Needs the owner:** `dmesg -T | grep -i "killed process"`. No unprivileged agent can read it,
+and the two hypotheses have **identical symptoms and opposite fixes** — so the guardrail ticket
+must not settle on pattern-pkill as the diagnosis.
+
+**The guardrail is still worth building either way**, because frank3 volunteered that it ran
+`pkill -f 'make lib-test'` on 2026-08-19 — which could not have killed a csmith batch but is
+exactly the hazard, and proves the practice is live on this box. Offering evidence against your
+own lane while being asked whether you caused something is worth naming.
