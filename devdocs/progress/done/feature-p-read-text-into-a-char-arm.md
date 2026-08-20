@@ -110,4 +110,4 @@ untouched by this ticket.
 Gate: `make compiler/pascal26` converged 1 round; `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 00d1105d5.
