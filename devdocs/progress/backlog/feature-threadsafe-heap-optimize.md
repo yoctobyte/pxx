@@ -6,7 +6,7 @@ owner: ""
 # Threadsafe heap — optimize + cross-target (M5)
 
 - **Type:** feature (codegen / runtime — optimization) — Track A
-- **Status:** working
+- **Status:** backlog
 - **Opened:** 2026-06-30
 - **Umbrella:** [[meta-multithreading]]. Follows the M0 contract
   [[feature-threadsafe-heap-contract]] (correctness) — this is the *speed* half.

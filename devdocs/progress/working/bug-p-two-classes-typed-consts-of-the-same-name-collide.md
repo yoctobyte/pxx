@@ -4,8 +4,8 @@ prio: 65
 type: bug
 blocked-by: []
 summary: "A TYPED class const (`const X: T = ...`) is registered under its BARE name in the global namespace, not under a class-mangled key like the untyped forms are. Two classes each declaring `const TAG: array[1..2] of Integer` therefore share one storage slot: TA.Get returns TB's value. Silent wrong value, no diagnostic; FPC gets it right."
-status: urgent
-owner: unassigned
+status: working
+owner: claude-acp
 ---
 
 # P typed class consts of the same name in two classes collide

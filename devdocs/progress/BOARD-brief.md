@@ -5,18 +5,17 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 working:1 unfinished:17 blocked:9 backlog:273 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2157 rejected:40`
+`urgent:1 working:1 unfinished:18 blocked:9 backlog:273 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2157 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-pascal-type-helpers` [A] — owner: claude-acp
+- `bug-p-two-classes-typed-consts-of-the-same-name-collide` [P] — owner: claude-acp
 
-## urgent (2) — jump the queue
+## urgent (1) — jump the queue
 
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
-- `bug-p-two-classes-typed-consts-of-the-same-name-collide` [P]
 
-## unfinished (17) — parked mid-flight; re-claim, do not duplicate
+## unfinished (18) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name` [N]
@@ -33,6 +32,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
 - `feature-pascal-corpus-fpc-testsuite` [P]
+- `feature-pascal-type-helpers` [A]
 - `feature-port-rtl-over-libc` [A]
 - `feature-real-dynlib-loader` [B] — blocked-by: bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
 
@@ -48,10 +48,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 262, ranked
+## Ready — top 30 of 261, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
-- `[p 65] [P]` bug-p-two-classes-typed-consts-of-the-same-name-collide
 - `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree
 - `[p 70] [T]` regression-test-c-conformance-shard1-6
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-callable-to-str-param-fails
@@ -80,5 +79,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [U]` decide-reduced-compiler-switch-spelling
 - `[p 55] [N]` feature-a-declaration-phase
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
+- `[p 55] [E]` feature-demo-portable-userland
 
-_232 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_231 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

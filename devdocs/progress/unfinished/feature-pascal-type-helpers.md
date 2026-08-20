@@ -5,7 +5,7 @@ prio: 55
 # `record helper for T` / `type helper for T` — type helpers
 
 - **Type:** feature (Pascal frontend — Track P; dispatch plumbing may touch shared parser = A gate)
-- **Status:** working
+- **Status:** unfinished — v1+v2 landed and pinned; v3 partly landed (type-name spelling, target-type-name receivers). Remaining: rvalue receivers, class helpers.
 - **Owner:** claude-acp
 - **Blocks:** [[feature-pascal-corpus-generics]] (generics.helpers.pas is in
   Generics.Collections' uses chain), and broadly sysutils.TStringHelper-style
