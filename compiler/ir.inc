@@ -1553,18 +1553,23 @@ begin
     end
     else if ASTRChk[node] and (ASTKind[baseNode] = AN_FIELD) then
     begin
-      { record/class FIELD static array: the parser already normalised the
-        index to 0-based, and this path's IR lo stays 0 — so the check is
-        [0, count-1] on the normalised index (r.arr[5] on array[1..3]
-        raises in FPC). Dyn-array fields and N-D fields stay unchecked for
-        now. }
+      { record/class FIELD static array: the index is the SOURCE index and the
+        IR carries the field's own low bound (RecFieldArrLo), so the check is
+        [lo, lo+count-1] — `r.arr[5]` on `array[1..3]` raises, as in FPC. The
+        comment here used to claim the parser normalised the index to 0-based
+        and that the lo stayed 0; nothing normalised it, which is the bug this
+        check was written on top of
+        (bug-p-record-field-array-with-a-non-zero-low-bound-writes-out-of-bounds).
+        Dyn-array fields and N-D fields stay unchecked for now. }
       rcSym := ResolveNodeRec(ASTLeft[baseNode]);
       if (rcSym >= REC_UCLASS_BASE) then
       begin
         rcPi := FindUField(rcSym - REC_UCLASS_BASE, GetASTIdentName(baseNode));
         if (rcPi >= 0) and UFldIsArray[rcPi] and (UFldArrLen[rcPi] >= 0) and
            (UFldDynDepth[rcPi] = 0) and (UFldArrNDims[rcPi] <= 1) then
-          indexNode := IRWrapChkBounds(indexNode, 0, UFldArrLen[rcPi] - 1)
+          indexNode := IRWrapChkBounds(indexNode,
+                         UFldArrDimLo[rcPi * MAX_ARR_DIMS],
+                         UFldArrDimLo[rcPi * MAX_ARR_DIMS] + UFldArrLen[rcPi] - 1)
         else if (rcPi >= 0) and UFldIsArray[rcPi] and (UFldDynDepth[rcPi] = 1) and
                 (ASTKind[ASTLeft[baseNode]] = AN_IDENT) then
         begin
@@ -1667,7 +1672,19 @@ begin
       begin
         if Syms[ASTIVal[baseNode]].RecName <> REC_TPARAM then
           lo := Syms[ASTIVal[baseNode]].ConstVal;
-      end;
+      end
+      else if isArr and (ASTKind[baseNode] = AN_FIELD) then
+        { A record/class FIELD array has a low bound too, and it was never
+          subtracted: `r.c[i]` on `c: array[1..3]` addressed one element PAST
+          the field (clobbering the next one), `array[5..7]` five past (off the
+          record entirely — SIGSEGV), `array[-2..2]` two BEFORE it, and on a
+          class that is the object header, so Free crashed. Reads shifted with
+          the writes, so the field stayed self-consistent and only its
+          NEIGHBOURS were wrong — which is how it survived a corpus full of
+          `array[1..N]` fields.
+          bug-p-record-field-array-with-a-non-zero-low-bound-writes-out-of-bounds }
+        lo := RecFieldArrLo(ResolveNodeRec(ASTLeft[baseNode]),
+                            GetASTIdentName(baseNode));
     end;
 
     { A depth-1 DYNAMIC array / open-array param whose element is a fixed-array

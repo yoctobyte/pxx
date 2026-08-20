@@ -27949,7 +27949,16 @@ begin
             UFldArrDimLo[(UFldCount-1) * MAX_ARR_DIMS + tdi]   := tdDimLo[tdi];
             UFldArrDimSpan[(UFldCount-1) * MAX_ARR_DIMS + tdi] := tdDimSpan[tdi];
           end;
-        end;
+        end
+        else if isArr and (not fIsDyn) then
+          { 1-D static array field: record its LOW BOUND in dim 0 of the same table.
+            UFldArrNDims deliberately stays 0 — nothing dispatches differently — this
+            is only where the index lowering reads a field array's `lo` from. Without
+            it the low was never subtracted: `array[1..3]` wrote one element past its
+            extent and `array[-2..2]` two before it, corrupting the neighbouring field
+            (or, on a class, the object header — Free then segfaulted).
+            bug-p-record-field-array-with-a-non-zero-low-bound-writes-out-of-bounds }
+          UFldArrDimLo[(UFldCount-1) * MAX_ARR_DIMS] := tdDimLo[0];
         curFieldOff := curFieldOff + fSize;
       end;
       if fAlign > classAlign then classAlign := fAlign;
@@ -29370,7 +29379,16 @@ begin
                   UFldArrDimLo[(UFldCount-1) * MAX_ARR_DIMS + tdi]   := tdDimLo[tdi];
                   UFldArrDimSpan[(UFldCount-1) * MAX_ARR_DIMS + tdi] := tdDimSpan[tdi];
                 end;
-              end;
+              end
+              else if isArr and (not fIsDyn) then
+                { 1-D static array field: record its LOW BOUND in dim 0 of the same table.
+                  UFldArrNDims deliberately stays 0 — nothing dispatches differently — this
+                  is only where the index lowering reads a field array's `lo` from. Without
+                  it the low was never subtracted: `array[1..3]` wrote one element past its
+                  extent and `array[-2..2]` two before it, corrupting the neighbouring field
+                  (or, on a class, the object header — Free then segfaulted).
+                  bug-p-record-field-array-with-a-non-zero-low-bound-writes-out-of-bounds }
+                UFldArrDimLo[(UFldCount-1) * MAX_ARR_DIMS] := tdDimLo[0];
               UFldPub[UFldCount-1] := curPublished;
               UFldVis[UFldCount-1] := curVis;
               curFieldOff := curFieldOff + fSize;

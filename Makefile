@@ -4191,6 +4191,15 @@ test-core: $(COMPILER)
 	# are read by index AND from the base through a pointer; all are FPC 3.2.2's.
 	./$(COMPILER) test/test_const_array_negative_low_bound.pas $(TESTTMP)/test_constarrneg26
 	test "$$($(TESTTMP)/test_constarrneg26 | tail -1)" = "total ok 38 / 38"
+	# ...and the same question one level in: a record/class FIELD that is a 1-D
+	# static array indexed from the RAW index, because a 1-D field's low bound was
+	# never recorded (only 2-D-and-up filled the dim table). `array[1..3]` wrote one
+	# element PAST the field into the next one, `array[5..7]` off the record
+	# (SIGSEGV), `array[-2..2]` into a class instance's header so Free crashed.
+	# Reads shifted with the writes, so the field looked self-consistent -- the
+	# guards on either side are the assertion. All 53 values are FPC 3.2.2's.
+	./$(COMPILER) test/test_record_field_array_low_bound.pas $(TESTTMP)/test_fldarrlo26
+	test "$$($(TESTTMP)/test_fldarrlo26 | tail -1)" = "total ok 53 / 53"
 	./$(COMPILER) test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_nativeshift26
 	test "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
 	test "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"

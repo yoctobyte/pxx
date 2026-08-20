@@ -1909,6 +1909,33 @@ begin
   end;
 end;
 
+function RecFieldArrLo(rec: Integer; const field: AnsiString): Integer;
+{ LOW BOUND of a 1-D static array FIELD (`c: array[1..3] of Byte`), 0 when the
+  field is not one or the bound was never recorded.
+
+  A field array's low bound had nowhere to live: only 2-D-and-up fields filled
+  UFldArrDimLo, so `r.c[i]` indexed from the RAW index and never subtracted the
+  low. `array[1..3]` wrote one element PAST its extent (clobbering the next
+  field), `array[5..7]` wrote five past (off the end of the record, a SIGSEGV),
+  and `array[-2..2]` wrote two BEFORE it -- on a class, into the object header,
+  so Free crashed. Reads were shifted identically, which is exactly why it
+  survived: the field is self-consistent and only its NEIGHBOURS are wrong.
+
+  The bound now lives in dim 0 of the same N-D table for 1-D fields too, while
+  UFldArrNDims stays 0/1 so nothing that dispatches on the N-D shape changes.
+  bug-p-record-field-array-with-a-non-zero-low-bound-writes-out-of-bounds }
+var fi: Integer; field2: AnsiString;
+begin
+  Result := 0; field2 := field;
+  if (rec >= REC_UCLASS_BASE) and (BuiltinRecFieldCount(rec) = 0) then
+  begin
+    fi := FindUField(rec - REC_UCLASS_BASE, field2);
+    if (fi >= 0) and UFldIsArray[fi] and (UFldDynDepth[fi] = 0) and
+       (UFldArrNDims[fi] <= 1) then
+      Result := UFldArrDimLo[fi * MAX_ARR_DIMS];
+  end;
+end;
+
 function RecFieldArrNDims(rec: Integer; const field: AnsiString): Integer;
 { Dimension count of an array field (1 for a 1-D array); 0 when unknown/non-array. }
 var fi: Integer; field2: AnsiString;
