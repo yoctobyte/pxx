@@ -65,4 +65,4 @@ writers by array name, not by the pattern the fix happened to touch.
 
 `make compiler/pascal26` fixedpoint + `tools/gate.sh quick`; all three tests
 verified against gcc.
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 3db1ad71c.
