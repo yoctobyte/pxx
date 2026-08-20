@@ -4586,7 +4586,7 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_nested_type_methods26)" = "$$(printf 'nested 42 12 10\nNESTED TYPE METHODS OK')"
 	# RTL names FPC code calls: CompareMemRange, DynArraySize, Wide/UnicodeCompare*, CompareValue, HRESULTs
 	./$(COMPILER) -Fulib/rtl test/test_rtl_fpc_compat_helpers.pas $(TESTTMP)/test_rtl_fpc_compat_helpers26
-	test "$$($(TESTTMP)/test_rtl_fpc_compat_helpers26 | tail -1)" = "total ok 15 / 15"
+	test "$$($(TESTTMP)/test_rtl_fpc_compat_helpers26 | tail -1)" = "total ok 23 / 23"
 	# arity-overloaded class names: TD, TD<K>, TD<K,V> coexist; TD<K> inherits TD
 	./$(COMPILER) test/test_generic_name_overload.pas $(TESTTMP)/test_generic_name_overload26
 	test "$$($(TESTTMP)/test_generic_name_overload26)" = "$$(printf '0 1 2\n0')"
@@ -6544,7 +6544,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) --strict-overload test/test_overloading.pas $(TESTTMP)/test_overloading_strict26
 	test "$$($(TESTTMP)/test_overloading_strict26)" = "$$(printf 'Integer: 42\nChar: A\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
 	./$(COMPILER) test/test_sizeof.pas $(TESTTMP)/test_sizeof26
-	test "$$($(TESTTMP)/test_sizeof26)" = "$$(printf '1\n1\n2\n2\n4\n4\n4\n4\n8\n8\n8\n8\n8\n8\n8\n1\n1')"
+	test "$$($(TESTTMP)/test_sizeof26)" = "$$(printf '1\n1\n2\n2\n4\n4\n4\n4\n8\n8\n8\n8\n8\n8\n8\n1\n1\n4\n8\n8\n10\n16\n2\n4\n1\n8\n8')"
 	! ./$(COMPILER) test/test_sizeof_error.pas $(TESTTMP)/test_sizeof_error26 > $(TESTTMP)/test_sizeof_error.log 2>&1
 	grep -q "SizeOf: unknown type" $(TESTTMP)/test_sizeof_error.log
 	./$(COMPILER) test/test_record_alignment.pas $(TESTTMP)/test_record_alignment26

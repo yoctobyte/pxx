@@ -21,6 +21,23 @@
     8   Pointer
     1   Char
     1   Boolean
+    4   Single
+    8   Double
+    8   Real        (Double on this target, as in FPC)
+   10   Extended
+   16   Variant     (pxx's own 16-byte tagged value: 8 tag + 8 payload; FPC's
+                     TVarData is 24 -- a representation difference, not a bug)
+    2   WideChar
+    4   UCS4Char
+    1   AnsiChar
+    8   String      (a handle)
+    8   AnsiString
+
+  The block from Single down was REJECTED outright until BuiltinTypeNameTk:
+  SizeOf kept a private copy of the builtin type-name table covering only the
+  integer family, Boolean, Char and String, so `SizeOf(Double)` -- a type the
+  compiler otherwise supports fully -- was a compile error. Every value here
+  agrees with FPC 3.2.2 except Variant, whose representation differs as noted.
 }
 program TestSizeOf;
 begin
@@ -52,4 +69,17 @@ begin
   { Character/boolean }
   writeln(SizeOf(Char));
   writeln(SizeOf(Boolean));
+
+  { The float family, Variant, and the wide character kinds -- the names the
+    intrinsic's own table used to be missing }
+  writeln(SizeOf(Single));
+  writeln(SizeOf(Double));
+  writeln(SizeOf(Real));
+  writeln(SizeOf(Extended));
+  writeln(SizeOf(Variant));
+  writeln(SizeOf(WideChar));
+  writeln(SizeOf(UCS4Char));
+  writeln(SizeOf(AnsiChar));
+  writeln(SizeOf(String));
+  writeln(SizeOf(AnsiString));
 end.

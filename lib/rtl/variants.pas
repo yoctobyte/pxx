@@ -20,8 +20,31 @@ unit variants;
 
 interface
 
+{ sysutils, for Exception (EVariantError's parent) and the string<->number
+  conversions VarCompareValue needs when one side is text and the other a
+  number. No cycle: sysutils does not use this unit. }
+uses sysutils;
+
 type
   TVarType = Word;
+
+  { FPC's variant ordering result (Variants.TVariantRelationship).
+
+    vrNotEqual is NOT a spelling of "different" -- it is the answer when an
+    ORDERING is meaningless, which over pxx's tag set means exactly one side
+    holds no value. Two values that are merely unequal answer vrLessThan or
+    vrGreaterThan. }
+  TVariantRelationship = (vrEqual, vrLessThan, vrGreaterThan, vrNotEqual);
+
+  { Raised when the two variants cannot be brought to a common comparable type
+    -- text that is not a number, against a number.
+
+    FPC raises the same class from VarCompareValue and callers DEPEND on it:
+    rtl-generics' TCompare.Variant wraps the call in try/except and falls back
+    to comparing the two as strings, then to a raw memory compare. Answering
+    vrNotEqual instead would silently take that fallback away and return an
+    ordering derived from emptiness, which neither side is. }
+  EVariantError = class(Exception) end;
 
 { FPC's Null / Unassigned variant values.
 
@@ -57,7 +80,39 @@ function VarIsNumeric(const V: Variant): Boolean;
 { True when V holds a string. }
 function VarIsStr(const V: Variant): Boolean;
 
+{ Order A against B the way FPC's Variants.VarCompareValue does.
+
+  The rules, in the order they are tried -- each one is an FPC behaviour checked
+  against the 3.2.2 oracle, not a guess:
+
+    - no value on either side: vrEqual when BOTH are empty, else vrNotEqual.
+      (FPC distinguishes Unassigned from Null here and answers vrNotEqual for
+      that pair; pxx has one empty tag, so it answers vrEqual. Same
+      approximation the unit header states for VarIsNull -- see it.)
+    - two booleans: False < True.
+    - two texts (string or char): CompareStr, so a char compares equal to the
+      one-character string, as in FPC.
+    - text against a boolean: compared as TEXT, with the boolean rendered
+      'True'/'False'. Looks arbitrary and is: FPC answers gt for (True, '1'),
+      which is 'True' > '1' textually and lt numerically.
+    - anything else is compared as a NUMBER. A boolean numifies to -1/0 (FPC's
+      value, and pxx's own Variant->Int64 conversion agrees), text numifies by
+      parsing, and the comparison is done in Int64 unless a Double is involved.
+    - text that will not parse, against a number: EVariantError. That raise is
+      part of the contract -- see EVariantError. }
+function VarCompareValue(const A, B: Variant): TVariantRelationship;
+
 implementation
+
+const
+  { the VT_* tags again, named, so the comparator below reads as intent }
+  VT_EMPTY  = 0;
+  VT_INT    = 1;
+  VT_INT64  = 2;
+  VT_DOUBLE = 3;
+  VT_BOOL   = 4;
+  VT_CHAR   = 5;
+  VT_STRING = 6;
 
 type
   PTagWord = ^Int64;
@@ -88,6 +143,139 @@ end;
 function VarIsStr(const V: Variant): Boolean;
 begin
   Result := VarType(V) = 6;
+end;
+
+{ text tag: a char and a string are one kind here -- this RTL's Variant holds
+  bytes either way, and FPC compares them as text too. }
+function IsTextTag(t: TVarType): Boolean;
+begin
+  Result := (t = VT_STRING) or (t = VT_CHAR);
+end;
+
+function CmpInt(a, b: Int64): TVariantRelationship;
+begin
+  if a < b then Result := vrLessThan
+  else if a > b then Result := vrGreaterThan
+  else Result := vrEqual;
+end;
+
+function CmpDbl(a, b: Double): TVariantRelationship;
+begin
+  if a < b then Result := vrLessThan
+  else if a > b then Result := vrGreaterThan
+  else Result := vrEqual;
+end;
+
+function CmpStr(const a, b: AnsiString): TVariantRelationship;
+var c: Integer;
+begin
+  c := CompareStr(a, b);
+  if c < 0 then Result := vrLessThan
+  else if c > 0 then Result := vrGreaterThan
+  else Result := vrEqual;
+end;
+
+{ V as text, for the text arms: a boolean renders 'True'/'False' (FPC's
+  spelling), everything else goes through the compiler's own conversion. }
+function AsText(const V: Variant; t: TVarType): AnsiString;
+var b: Boolean;
+begin
+  if t = VT_BOOL then
+  begin
+    b := V;
+    if b then Result := 'True' else Result := 'False';
+  end
+  else
+    Result := V;
+end;
+
+{ V as a number: i when isFloat is False, d when it is True. False means V is
+  not numifiable -- text that does not parse -- which is the EVariantError case. }
+function AsNumber(const V: Variant; t: TVarType; var i: Int64; var d: Double;
+                  var isFloat: Boolean): Boolean;
+var s: AnsiString; b: Boolean;
+begin
+  Result := True;
+  isFloat := False;
+  i := 0;
+  d := 0;
+  if (t = VT_INT) or (t = VT_INT64) then
+    i := V
+  else if t = VT_BOOL then
+  begin
+    b := V;
+    { -1, not 1: that is the value FPC's variant boolean carries into a numeric
+      compare, and pxx's own Variant->Int64 conversion already agrees. }
+    if b then i := -1 else i := 0;
+  end
+  else if t = VT_DOUBLE then
+  begin
+    d := V;
+    isFloat := True;
+  end
+  else if IsTextTag(t) then
+  begin
+    s := V;
+    if not TryStrToInt64(s, i) then
+    begin
+      if TryStrToFloat(s, d) then isFloat := True else Result := False;
+    end;
+  end
+  else
+    Result := False;
+end;
+
+function VarCompareValue(const A, B: Variant): TVariantRelationship;
+var
+  ta, tb: TVarType;
+  la, lb: Int64;
+  da, db: Double;
+  fa, fb, oka, okb: Boolean;
+begin
+  ta := VarType(A);
+  tb := VarType(B);
+
+  if (ta = VT_EMPTY) or (tb = VT_EMPTY) then
+  begin
+    if ta = tb then Result := vrEqual else Result := vrNotEqual;
+    Exit;
+  end;
+
+  if (ta = VT_BOOL) and (tb = VT_BOOL) then
+  begin
+    { as booleans, False < True -- NOT as their -1/0 numeric values, which would
+      order True below False. FPC answers gt for (True, False). }
+    la := 0; if AsText(A, ta) = 'True' then la := 1;
+    lb := 0; if AsText(B, tb) = 'True' then lb := 1;
+    Result := CmpInt(la, lb);
+    Exit;
+  end;
+
+  if IsTextTag(ta) and IsTextTag(tb) then
+  begin
+    Result := CmpStr(AsText(A, ta), AsText(B, tb));
+    Exit;
+  end;
+
+  if (IsTextTag(ta) and (tb = VT_BOOL)) or ((ta = VT_BOOL) and IsTextTag(tb)) then
+  begin
+    Result := CmpStr(AsText(A, ta), AsText(B, tb));
+    Exit;
+  end;
+
+  oka := AsNumber(A, ta, la, da, fa);
+  okb := AsNumber(B, tb, lb, db, fb);
+  if not (oka and okb) then
+    raise EVariantError.Create('VarCompareValue: variants are not comparable');
+
+  if fa or fb then
+  begin
+    if not fa then da := la;
+    if not fb then db := lb;
+    Result := CmpDbl(da, db);
+  end
+  else
+    Result := CmpInt(la, lb);
 end;
 
 end.

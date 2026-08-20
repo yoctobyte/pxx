@@ -9700,6 +9700,46 @@ begin
   else Result := tyUnknown;
 end;
 
+{ Map a BUILTIN scalar type NAME to its TTypeKind, tyUnknown when it is not one.
+  The whole builtin set: the ordinals via OrdinalNameToTk above, plus the float
+  family, Variant, Pointer and the string names.
+
+  Exists because SizeOf kept its OWN copy of this table and the copy was a
+  SUBSET -- integer family, Boolean, Char, String and nothing else -- so
+  SizeOf(Double), SizeOf(Single), SizeOf(Extended), SizeOf(Real),
+  SizeOf(Variant), SizeOf(WideChar) and SizeOf(UCS4Char) were every one of them
+  REJECTED, with no diagnostic hinting that the type itself was fine. Found on
+  rtl-generics' `SizeOf(System.Variant)`, then confirmed name by name against
+  FPC 3.2.2. One table, so the next builtin type cannot be present in half the
+  compiler (devdocs/dev/normalise-dont-special-case.md).
+
+  Callers must consult a user type alias FIRST where that matters: this answers
+  what the name means as a BUILTIN, not what the current scope binds it to. }
+function BuiltinTypeNameTk(const nm: AnsiString): TTypeKind;
+begin
+  Result := OrdinalNameToTk(nm);
+  if Result <> tyUnknown then Exit;
+  if CaseEqual(nm, 'single') then Result := tySingle
+  { Real is Double here, as it is in FPC on this target -- not a distinct type. }
+  else if CaseEqual(nm, 'double') or CaseEqual(nm, 'real') then Result := tyDouble
+  else if CaseEqual(nm, 'extended') then Result := tyExtended
+  else if CaseEqual(nm, 'variant') then Result := tyVariant
+  else if CaseEqual(nm, 'pointer') or CaseEqual(nm, 'codepointer') then Result := tyPointer
+  else if CaseEqual(nm, 'string') then Result := tyString
+  { the Ansi/Unicode/Wide string names are one model here -- bytes; which KIND
+    that is depends on the managed-string build, exactly as SizeOf's own table
+    had it }
+  else if CaseEqual(nm, 'ansistring') or CaseEqual(nm, 'unicodestring') or
+          CaseEqual(nm, 'widestring') then
+  begin
+    if PasDefineExists('PXX_MANAGED_STRING') then
+      Result := tyAnsiString
+    else
+      Result := tyString;
+  end
+  else Result := tyUnknown;
+end;
+
 { If the current token names an ordinal TYPE (a type-keyword token, a builtin
   ordinal name like ShortInt/Word, an ordinal type alias, or a user enum),
   consume it and produce an AN_INT_LIT for High/Low of that type; return True.
@@ -10070,7 +10110,7 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     helperPi, sci: Integer;
     isLiftedCall: Boolean;
     bitNot, opIsArith: Boolean; notOp: Integer; notOrdTk: TTypeKind;
-    szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec: Integer; szElemTk: TTypeKind;
+    szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec: Integer; szElemTk: TTypeKind; szBTk: TTypeKind;
     seEtid, seOrd: Integer;
     lenFieldRec, lenFieldIdx: Integer;   { Length() of a static-array record field }
     cpyPi: Integer;   { Copy(s,i,n)[k]: the __pxxStrCopy proc index, kept past ci's reuse }
@@ -12748,278 +12788,222 @@ begin
           Next;               { past '.'            — CurTok is now the nested type name }
           name := CurTok.SVal;
         end;
-        if CurTok.Kind = tkInteger_T then
-        begin
-          { 'Integer', 'LongInt', 'ShortInt', 'Byte', 'Word', 'SmallInt', 'Cardinal', 'LongWord' }
-          if CaseEqual(name, 'shortint') then
-            prevTok := TypeSize(tyInt8)
-          else if CaseEqual(name, 'byte') then
-            prevTok := TypeSize(tyUInt8)
-          else if CaseEqual(name, 'smallint') then
-            prevTok := TypeSize(tyInt16)
-          else if CaseEqual(name, 'word') then
-            prevTok := TypeSize(tyUInt16)
-          else if CaseEqual(name, 'longint') or CaseEqual(name, 'integer') then
-            prevTok := TypeSize(tyInt32)
-          else if CaseEqual(name, 'cardinal') then
-            prevTok := TypeSize(tyUInt32)
-          else
-            prevTok := TypeSize(tyInt32);  { default integer-family }
-        end
-        else if CurTok.Kind = tkLongWord_T then
-          prevTok := TypeSize(tyUInt32)
-        else if CurTok.Kind = tkBoolean_T then
-          prevTok := TypeSize(tyUInt8)   { Boolean is 1 byte per FPC ObjFPC }
-        else if CurTok.Kind = tkChar_T then
-          prevTok := TypeSize(tyChar)
-        else if CurTok.Kind = tkString_T then
-          prevTok := TypeSize(tyString)
+        { A builtin type spelled as a KEYWORD token (Double, Char, String, ...)
+          carries no SVal, so give `name` the token's own text -- then ONE
+          name-keyed lookup answers every builtin, whichever way it lexed. That
+          split is what left SizeOf(Double) and SizeOf(Variant) rejected while
+          SizeOf(Integer) worked: the token-kind arms and the name arms were two
+          tables, and only the second one ever got extended. }
+        if name = '' then name := GetTokenStr(TokPos - 1);
+        szBTk := BuiltinTypeNameTk(name);
+        if szBTk <> tyUnknown then
+          prevTok := TypeSize(szBTk)
         else if CurTok.Kind = tkIdent then
         begin
-          { Named type: check for known types by name }
-          if CaseEqual(name, 'shortint') then
-            prevTok := TypeSize(tyInt8)
-          else if CaseEqual(name, 'byte') or CaseEqual(name, 'uint8') then
-            prevTok := TypeSize(tyUInt8)
-          else if CaseEqual(name, 'smallint') then
-            prevTok := TypeSize(tyInt16)
-          else if CaseEqual(name, 'word') or CaseEqual(name, 'uint16') then
-            prevTok := TypeSize(tyUInt16)
-          else if CaseEqual(name, 'longint') or CaseEqual(name, 'integer') then
-            prevTok := TypeSize(tyInt32)
-          else if CaseEqual(name, 'cardinal') or CaseEqual(name, 'longword') or CaseEqual(name, 'uint32') or CaseEqual(name, 'dword') then
-            prevTok := TypeSize(tyUInt32)
-          else if CaseEqual(name, 'int64') then
-            prevTok := TypeSize(tyInt64)
-          else if CaseEqual(name, 'qword') or CaseEqual(name, 'uint64') then
-            prevTok := TypeSize(tyUInt64)
-          else if CaseEqual(name, 'nativeint') or CaseEqual(name, 'ptrint') then
-            prevTok := TypeSize(tyNativeInt)
-          else if CaseEqual(name, 'nativeuint') or CaseEqual(name, 'ptruint') then
-            prevTok := TypeSize(tyNativeUInt)
-          else if CaseEqual(name, 'pointer') then
-            prevTok := TypeSize(tyPointer)
-          else if CaseEqual(name, 'boolean') then
-            prevTok := TypeSize(tyUInt8)
-          else if CaseEqual(name, 'char') or CaseEqual(name, 'ansichar') then
-            prevTok := TypeSize(tyChar)
-          else if CaseEqual(name, 'ansistring') or
-                  CaseEqual(name, 'unicodestring') or CaseEqual(name, 'widestring') then
+        { Try record/class type. A user `type X = ...` alias SHADOWS a
+            same-named builtin descriptor record (the compiler exposes
+            internal RTTI records like TProc/TParam under common names —
+            see ParseTypeKind's identical guard) — only accept the record
+            match if no user alias claims the same name, otherwise fall
+            through to the alias branch below. }
+          idx := IsRecordType(name);
+          if idx = REC_NONE then
           begin
-            if PasDefineExists('PXX_MANAGED_STRING') then
-              prevTok := TypeSize(tyAnsiString)
-            else
-              prevTok := TypeSize(tyString);
-          end
-          else if CaseEqual(name, 'string') then
-            prevTok := TypeSize(tyString)
+            ci := FindUClass(name);
+            if ci >= 0 then
+              idx := REC_UCLASS_BASE + ci;
+          end;
+          if (idx <> REC_NONE) and (FindTypeAlias(name) < 0) then
+            prevTok := RecSize(idx)
           else
           begin
-            { Try record/class type. A user `type X = ...` alias SHADOWS a
-              same-named builtin descriptor record (the compiler exposes
-              internal RTTI records like TProc/TParam under common names —
-              see ParseTypeKind's identical guard) — only accept the record
-              match if no user alias claims the same name, otherwise fall
-              through to the alias branch below. }
-            idx := IsRecordType(name);
-            if idx = REC_NONE then
+            { Named array type (`TArr = array[..] of T` / `array of T`):
+              mirrors ParseVarSection's FindArrayType check, which resolves
+              this BEFORE falling into ParseTypeKind's alias/enum lookup --
+              so it must be tried here too, ahead of FindTypeAlias/
+              FindEnumType below. A dynamic-array alias is a reference
+              (handle), so its SizeOf is just the pointer width, same as
+              any other managed handle. }
+            szAi := FindArrayType(name);
+            if szAi >= 0 then
             begin
-              ci := FindUClass(name);
-              if ci >= 0 then
-                idx := REC_UCLASS_BASE + ci;
-            end;
-            if (idx <> REC_NONE) and (FindTypeAlias(name) < 0) then
-              prevTok := RecSize(idx)
-            else
-            begin
-              { Named array type (`TArr = array[..] of T` / `array of T`):
-                mirrors ParseVarSection's FindArrayType check, which resolves
-                this BEFORE falling into ParseTypeKind's alias/enum lookup --
-                so it must be tried here too, ahead of FindTypeAlias/
-                FindEnumType below. A dynamic-array alias is a reference
-                (handle), so its SizeOf is just the pointer width, same as
-                any other managed handle. }
-              szAi := FindArrayType(name);
-              if szAi >= 0 then
-              begin
-                if ArrTypeIsDyn[szAi] then
-                  prevTok := TARGET_PTR_SIZE
-                else
-                begin
-                  if ArrTypeNDims[szAi] >= 2 then
-                  begin
-                    szFlatLen := 1;
-                    for szDi := 0 to ArrTypeNDims[szAi] - 1 do
-                      szFlatLen := szFlatLen * ArrTypeDimSpan[szAi * MAX_ARR_DIMS + szDi];
-                  end
-                  else
-                    szFlatLen := ArrTypeHi[szAi] - ArrTypeLo[szAi] + 1;
-                  szElemTk := IntToTypeKind(ArrTypeElemTk[szAi]);
-                  if (szElemTk = tyRecord) and (ArrTypeElemRec[szAi] >= 0) then
-                    prevTok := RecSize(ArrTypeElemRec[szAi]) * szFlatLen
-                  else
-                    prevTok := TypeSize(szElemTk) * szFlatLen;
-                end;
-              end
+              if ArrTypeIsDyn[szAi] then
+                prevTok := TARGET_PTR_SIZE
               else
               begin
-                { Named type alias (integer/pointer/set/enum/proc-type alias --
-                  anything ParseTypeKind resolves via FindTypeAlias/
-                  FindEnumType for a `var x: T` declaration) or a named enum
-                  type. Mirrors ParseTypeKind's tkIdent branch so `SizeOf(T)`
-                  accepts the same type names a variable declaration does
-                  (bug-sizeof-array-and-typename-wrong, symptom 2). }
-                aliasIdx := FindTypeAlias(name);
-                if aliasIdx >= 0 then
+                if ArrTypeNDims[szAi] >= 2 then
                 begin
-                  if AliasTk[aliasIdx] = Ord(tyRecord) then
-                    prevTok := RecSize(AliasElemRec[aliasIdx])   { e.g. method-pointer-of-object alias }
-                  else
-                    prevTok := TypeSize(IntToTypeKind(AliasTk[aliasIdx]));
+                  szFlatLen := 1;
+                  for szDi := 0 to ArrTypeNDims[szAi] - 1 do
+                    szFlatLen := szFlatLen * ArrTypeDimSpan[szAi * MAX_ARR_DIMS + szDi];
                 end
-                else if FindEnumType(name) >= 0 then
-                  prevTok := TypeSize(tyInteger)   { enums are ordinal/integer-sized, cf. ParseTypeKind }
                 else
+                  szFlatLen := ArrTypeHi[szAi] - ArrTypeLo[szAi] + 1;
+                szElemTk := IntToTypeKind(ArrTypeElemTk[szAi]);
+                if (szElemTk = tyRecord) and (ArrTypeElemRec[szAi] >= 0) then
+                  prevTok := RecSize(ArrTypeElemRec[szAi]) * szFlatLen
+                else
+                  prevTok := TypeSize(szElemTk) * szFlatLen;
+              end;
+            end
+            else
+            begin
+              { Named type alias (integer/pointer/set/enum/proc-type alias --
+                anything ParseTypeKind resolves via FindTypeAlias/
+                FindEnumType for a `var x: T` declaration) or a named enum
+                type. Mirrors ParseTypeKind's tkIdent branch so `SizeOf(T)`
+                accepts the same type names a variable declaration does
+                (bug-sizeof-array-and-typename-wrong, symptom 2). }
+              aliasIdx := FindTypeAlias(name);
+              if aliasIdx >= 0 then
+              begin
+                if AliasTk[aliasIdx] = Ord(tyRecord) then
+                  prevTok := RecSize(AliasElemRec[aliasIdx])   { e.g. method-pointer-of-object alias }
+                else
+                  prevTok := TypeSize(IntToTypeKind(AliasTk[aliasIdx]));
+              end
+              else if FindEnumType(name) >= 0 then
+                prevTok := TypeSize(tyInteger)   { enums are ordinal/integer-sized, cf. ParseTypeKind }
+              else
+              begin
+                { Not a type name — accept a VARIABLE operand (FPC/Delphi allow
+                  SizeOf(v) = size of v's declared type, not just SizeOf(Type)).
+                  A record-by-value var uses its record size; everything else its
+                  scalar type size (TypeSize returns pointer width for class/
+                  pointer references). }
+                sci := FindVarSym(name);   { a bare class var is a variable here too }
+                if sci >= 0 then
                 begin
-                  { Not a type name — accept a VARIABLE operand (FPC/Delphi allow
-                    SizeOf(v) = size of v's declared type, not just SizeOf(Type)).
-                    A record-by-value var uses its record size; everything else its
-                    scalar type size (TypeSize returns pointer width for class/
-                    pointer references). }
-                  sci := FindVarSym(name);   { a bare class var is a variable here too }
-                  if sci >= 0 then
+                  if (Tokens[TokPos].Kind = tkDot) and (Syms[sci].RecName >= 0) and
+                     (not Syms[sci].IsArray) then
                   begin
-                    if (Tokens[TokPos].Kind = tkDot) and (Syms[sci].RecName >= 0) and
-                       (not Syms[sci].IsArray) then
+                    { SizeOf(obj.field[.field..]) — walk the selector chain
+                      (never evaluating, like every SizeOf operand) and
+                      report the FINAL field's size (blcksock's
+                      SizeOf(Value.Value)). Scalar/record/class fields; an
+                      array field is out of scope and errors below. }
+                    szRec := Syms[sci].RecName;
+                    szElemTk := tyUnknown;
+                    Next;   { consume the identifier; CurTok = '.' }
+                    while CurTok.Kind = tkDot do
                     begin
-                      { SizeOf(obj.field[.field..]) — walk the selector chain
-                        (never evaluating, like every SizeOf operand) and
-                        report the FINAL field's size (blcksock's
-                        SizeOf(Value.Value)). Scalar/record/class fields; an
-                        array field is out of scope and errors below. }
-                      szRec := Syms[sci].RecName;
-                      szElemTk := tyUnknown;
-                      Next;   { consume the identifier; CurTok = '.' }
-                      while CurTok.Kind = tkDot do
-                      begin
-                        Next;   { consume '.'; CurTok = field name }
-                        if CurTok.Kind <> tkIdent then Error('SizeOf: expected field name');
-                        szElemTk := RecFieldType(szRec, CurTok.SVal);
-                        if szElemTk = tyUnknown then Error('SizeOf: unknown field');
-                        szRec := RecFieldRecId(szRec, CurTok.SVal);
-                        if Tokens[TokPos].Kind = tkDot then Next;   { deeper chain }
-                      end;
-                      { CurTok = the last field name; the shared trailing Next
-                        below moves past it to the ')'. }
-                      if (szElemTk = tyRecord) and (szRec >= 0) then
-                        prevTok := RecSize(szRec)
+                      Next;   { consume '.'; CurTok = field name }
+                      if CurTok.Kind <> tkIdent then Error('SizeOf: expected field name');
+                      szElemTk := RecFieldType(szRec, CurTok.SVal);
+                      if szElemTk = tyUnknown then Error('SizeOf: unknown field');
+                      szRec := RecFieldRecId(szRec, CurTok.SVal);
+                      if Tokens[TokPos].Kind = tkDot then Next;   { deeper chain }
+                    end;
+                    { CurTok = the last field name; the shared trailing Next
+                      below moves past it to the ')'. }
+                    if (szElemTk = tyRecord) and (szRec >= 0) then
+                      prevTok := RecSize(szRec)
+                    else
+                      prevTok := TypeSize(szElemTk);
+                  end
+                  else if Syms[sci].IsArray and (Tokens[TokPos].Kind = tkLBrack) and
+                     (SymArrNDims[sci] <= 1) then
+                  begin
+                    { SizeOf(arr[i]): the index expression's VALUE is never
+                      evaluated by SizeOf (exactly like a type name's own
+                      contents) -- skip the balanced brackets and report
+                      the array's ELEMENT size, so the common idiom
+                      `SizeOf(arr) div SizeOf(arr[0])` (element count)
+                      works (bug-sizeof-array-and-typename-wrong, the
+                      remaining symptom-2 gap). Only one level of
+                      indexing on a genuinely 1-D array; a chained
+                      `arr[i].field` is out of scope, and an N-D array
+                      (SymArrNDims >= 2) needs its own row/sub-array
+                      accounting depending on how many indices are given
+                      (`m[0]` is a row, `m[0,1]` is a scalar) -- rather
+                      than silently reporting the wrong (scalar) size,
+                      that case falls through to the "unknown" error
+                      below by NOT matching this guard. }
+                    Next;                { consume the identifier; CurTok = '[' }
+                    Next;                { consume '['; CurTok = start of index expr }
+                    szBrDepth := 1;
+                    while (szBrDepth > 0) and (CurTok.Kind <> tkEOF) do
+                    begin
+                      if CurTok.Kind = tkLBrack then Inc(szBrDepth)
+                      else if CurTok.Kind = tkRBrack then Dec(szBrDepth);
+                      if szBrDepth > 0 then Next;
+                    end;
+                    { CurTok = ']'; the shared trailing Next below moves past
+                      it to the enclosing SizeOf(...)'s ')'. }
+                    if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
+                      prevTok := RecSize(Syms[sci].ElemRecName)
+                    else
+                      prevTok := TypeSize(Syms[sci].ElemType);
+                  end
+                  else if Syms[sci].IsArray and (Tokens[TokPos].Kind = tkLBrack) then
+                  begin
+                    { SizeOf(m[i]) / SizeOf(m[i,j,..]) on a genuine N-D fixed
+                      array (SymArrNDims[sci] >= 2 -- the <= 1 case is
+                      handled above): mirrors the two subscript forms real
+                      indexing supports (BuildPartialNDRowIndex /
+                      BuildFlatNDIndex) -- a single subscript names a whole
+                      row (sub-array), one subscript per dimension names a
+                      scalar element. Indices are never evaluated (same
+                      rationale as the 1-D case above), so just count
+                      top-level commas while skipping the balanced
+                      brackets. }
+                    Next;                { consume the identifier; CurTok = '[' }
+                    Next;                { consume '['; CurTok = start of first index expr }
+                    szBrDepth := 1; szNIdx := 1;
+                    while (szBrDepth > 0) and (CurTok.Kind <> tkEOF) do
+                    begin
+                      if CurTok.Kind = tkLBrack then Inc(szBrDepth)
+                      else if CurTok.Kind = tkRBrack then Dec(szBrDepth)
+                      else if (CurTok.Kind = tkComma) and (szBrDepth = 1) then Inc(szNIdx);
+                      if szBrDepth > 0 then Next;
+                    end;
+                    { CurTok = ']'; the shared trailing Next below moves past
+                      it to the enclosing SizeOf(...)'s ')'. }
+                    szBase := sci * MAX_ARR_DIMS;
+                    if szNIdx = 1 then
+                    begin
+                      szFlatLen := 1;
+                      for szDi := 1 to SymArrNDims[sci] - 1 do
+                        szFlatLen := szFlatLen * SymArrDimSpan[szBase + szDi];
+                      if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
+                        prevTok := RecSize(Syms[sci].ElemRecName) * szFlatLen
                       else
-                        prevTok := TypeSize(szElemTk);
+                        prevTok := TypeSize(Syms[sci].ElemType) * szFlatLen;
                     end
-                    else if Syms[sci].IsArray and (Tokens[TokPos].Kind = tkLBrack) and
-                       (SymArrNDims[sci] <= 1) then
+                    else if szNIdx = SymArrNDims[sci] then
                     begin
-                      { SizeOf(arr[i]): the index expression's VALUE is never
-                        evaluated by SizeOf (exactly like a type name's own
-                        contents) -- skip the balanced brackets and report
-                        the array's ELEMENT size, so the common idiom
-                        `SizeOf(arr) div SizeOf(arr[0])` (element count)
-                        works (bug-sizeof-array-and-typename-wrong, the
-                        remaining symptom-2 gap). Only one level of
-                        indexing on a genuinely 1-D array; a chained
-                        `arr[i].field` is out of scope, and an N-D array
-                        (SymArrNDims >= 2) needs its own row/sub-array
-                        accounting depending on how many indices are given
-                        (`m[0]` is a row, `m[0,1]` is a scalar) -- rather
-                        than silently reporting the wrong (scalar) size,
-                        that case falls through to the "unknown" error
-                        below by NOT matching this guard. }
-                      Next;                { consume the identifier; CurTok = '[' }
-                      Next;                { consume '['; CurTok = start of index expr }
-                      szBrDepth := 1;
-                      while (szBrDepth > 0) and (CurTok.Kind <> tkEOF) do
-                      begin
-                        if CurTok.Kind = tkLBrack then Inc(szBrDepth)
-                        else if CurTok.Kind = tkRBrack then Dec(szBrDepth);
-                        if szBrDepth > 0 then Next;
-                      end;
-                      { CurTok = ']'; the shared trailing Next below moves past
-                        it to the enclosing SizeOf(...)'s ')'. }
                       if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
                         prevTok := RecSize(Syms[sci].ElemRecName)
                       else
                         prevTok := TypeSize(Syms[sci].ElemType);
                     end
-                    else if Syms[sci].IsArray and (Tokens[TokPos].Kind = tkLBrack) then
-                    begin
-                      { SizeOf(m[i]) / SizeOf(m[i,j,..]) on a genuine N-D fixed
-                        array (SymArrNDims[sci] >= 2 -- the <= 1 case is
-                        handled above): mirrors the two subscript forms real
-                        indexing supports (BuildPartialNDRowIndex /
-                        BuildFlatNDIndex) -- a single subscript names a whole
-                        row (sub-array), one subscript per dimension names a
-                        scalar element. Indices are never evaluated (same
-                        rationale as the 1-D case above), so just count
-                        top-level commas while skipping the balanced
-                        brackets. }
-                      Next;                { consume the identifier; CurTok = '[' }
-                      Next;                { consume '['; CurTok = start of first index expr }
-                      szBrDepth := 1; szNIdx := 1;
-                      while (szBrDepth > 0) and (CurTok.Kind <> tkEOF) do
-                      begin
-                        if CurTok.Kind = tkLBrack then Inc(szBrDepth)
-                        else if CurTok.Kind = tkRBrack then Dec(szBrDepth)
-                        else if (CurTok.Kind = tkComma) and (szBrDepth = 1) then Inc(szNIdx);
-                        if szBrDepth > 0 then Next;
-                      end;
-                      { CurTok = ']'; the shared trailing Next below moves past
-                        it to the enclosing SizeOf(...)'s ')'. }
-                      szBase := sci * MAX_ARR_DIMS;
-                      if szNIdx = 1 then
-                      begin
-                        szFlatLen := 1;
-                        for szDi := 1 to SymArrNDims[sci] - 1 do
-                          szFlatLen := szFlatLen * SymArrDimSpan[szBase + szDi];
-                        if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
-                          prevTok := RecSize(Syms[sci].ElemRecName) * szFlatLen
-                        else
-                          prevTok := TypeSize(Syms[sci].ElemType) * szFlatLen;
-                      end
-                      else if szNIdx = SymArrNDims[sci] then
-                      begin
-                        if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
-                          prevTok := RecSize(Syms[sci].ElemRecName)
-                        else
-                          prevTok := TypeSize(Syms[sci].ElemType);
-                      end
-                      else
-                      begin
-                        Error('SizeOf: wrong number of array subscripts');
-                        prevTok := 0;
-                      end;
-                    end
-                    else if Syms[sci].IsArray then
-                    begin
-                      { Array symbols store the ELEMENT type in TypeKind/ElemType
-                        (a recurring landmine throughout this codebase), so the
-                        aggregate size is elementSize * ArrLen (ArrLen already
-                        holds the flattened element count for N-D arrays too --
-                        see bug-sizeof-array-and-typename-wrong). }
-                      if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
-                        prevTok := RecSize(Syms[sci].ElemRecName) * Syms[sci].ArrLen
-                      else
-                        prevTok := TypeSize(Syms[sci].ElemType) * Syms[sci].ArrLen;
-                    end
-                    else if (Syms[sci].TypeKind = tyRecord) and (Syms[sci].RecName >= 0) then
-                      prevTok := RecSize(Syms[sci].RecName)
                     else
-                      prevTok := TypeSize(Syms[sci].TypeKind);
+                    begin
+                      Error('SizeOf: wrong number of array subscripts');
+                      prevTok := 0;
+                    end;
                   end
-                  else
+                  else if Syms[sci].IsArray then
                   begin
-                    Error('SizeOf: unknown type or variable');
-                    prevTok := 0;
-                  end;
+                    { Array symbols store the ELEMENT type in TypeKind/ElemType
+                      (a recurring landmine throughout this codebase), so the
+                      aggregate size is elementSize * ArrLen (ArrLen already
+                      holds the flattened element count for N-D arrays too --
+                      see bug-sizeof-array-and-typename-wrong). }
+                    if (Syms[sci].ElemType = tyRecord) and (Syms[sci].ElemRecName >= 0) then
+                      prevTok := RecSize(Syms[sci].ElemRecName) * Syms[sci].ArrLen
+                    else
+                      prevTok := TypeSize(Syms[sci].ElemType) * Syms[sci].ArrLen;
+                  end
+                  else if (Syms[sci].TypeKind = tyRecord) and (Syms[sci].RecName >= 0) then
+                    prevTok := RecSize(Syms[sci].RecName)
+                  else
+                    prevTok := TypeSize(Syms[sci].TypeKind);
+                end
+                else
+                begin
+                  Error('SizeOf: unknown type or variable');
+                  prevTok := 0;
                 end;
               end;
             end;
