@@ -1,13 +1,14 @@
 ---
 track: P
 prio: 65
+owner: frank1-ACP
 ---
 
 # rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** unfinished — lock released, see the note at the end
+- **Status:** working
   runs, fpjson's suite is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
@@ -420,3 +421,95 @@ on borg. It is gone twice over — dead machine, and `/tmp` besides. Recreate th
 stage before trusting any wall count, and re-verify the cleared walls against
 master, since the walls landed as pushed commits but the notes describe a tree
 that no longer exists.
+
+## Wall 18 cleared, then three more — 2026-08-20 (frank1-ACP)
+
+Stage rebuilt on plexus (no FPC source on this box): `packages/rtl-generics/src`
+only, 8 files / 12,487 lines, fetched at `release_3_2_2` from GitLab into the
+session scratchpad with a `PROVENANCE.md`. Driver unchanged in spirit — `g1.pp`
+is now `uses generics.defaults`, which is the first unit of the chain.
+
+Walls fell in a row once the stage was back. Each was measured by re-driving
+`g1.pp` after a `make compiler/pascal26`, so the line numbers below are the
+successive stopping points of the SAME compile:
+
+- **635 — `unknown type: array` on a class-var array** (wall 18, the one banked
+  above). Cleared by the `ParseDeclTypeDesc` / `AllocFromDeclTypeDesc` split;
+  see [[bug-p-a-class-var-takes-no-array-type-and-a-named-one-is-silently-a-scalar]].
+- **769 — `too many generic templates`.** `MAX_TEMPLATES = 16` was a per-COMPILATION
+  counter, not per-unit, so every template a program transitively `uses` shared
+  it; generics.defaults alone declares well past 16. Raised to 128 (and the
+  specialization/pending/generic-func counters with it). Cost measured, not
+  guessed: BSS 211,128,564 -> 211,176,708 = **+48 KB**, because a template row is
+  `{name, tok start, tok count}` and the parameter names live in a parallel
+  string table. The megabyte-scale constant in that family is
+  `MAX_TEMPLATE_TOKENS`, which was left alone.
+- **985 — `base type not found: TOrdinalComparer`**, i.e. a generic inheriting a
+  generic with the parameters forwarded. This was the real feature gap and took
+  the rest of the session; write-up below.
+- **1270 (current) — `absolute: unknown variable Self`.** `var p: PFoo absolute
+  Self;` inside a method. New wall, in the implementation section — a different
+  and much smaller gap than the last one.
+
+### The feature: nested generic specializations
+
+`generic TDer<T> = class(specialize TBase<T>)` — and the same shape as a field
+type, and the mode-Delphi spelling `TDer<T> = class(TBase<T>)` — did not compile
+at all. Neither did the two-parameter or three-deep forms. Root cause, measured
+rather than reasoned (`--debug`'s `TEMPLATE`/`DGEN` traces, plus a new `SPEC`
+trace added alongside them):
+
+The generics machinery is token rewriting. A CONCRETE use inside a template
+(`specialize TBase<Integer>`) already resolved, because `DelphiRewriteGenericUses`
+sweeps the stream before the enclosing template captures it, mints `TBase$Integer`
+and inserts the alias declaration. The PARAMETER form cannot resolve there —
+`TBase$T` is not a type, and what `T` is only becomes known when the OUTER
+template is specialized. The old code said so explicitly and gave up:
+`{ specB paramform (inside a later generic body): leave untouched }`.
+
+So it is resolved at the moment it becomes knowable. `ParseSpecialization` now
+walks the template body for `specialize NAME<args>` groups, maps each argument
+through the substitution it is about to apply, and mints the same alias name the
+concrete path would have. Missing prerequisites mean the declaration cannot be
+bound yet — a parent must exist before its child — so the whole declaration is
+**deferred**: emit `TBase$Integer = specialize TBase<Integer>;` followed by a
+fresh copy of the declaration we were in the middle of, and hand back to the
+type-section loop. It parses the prerequisite (deferring again if THAT nests, so
+a chain unwinds), then re-parses ours, which now finds the alias registered.
+Termination is by construction: the retry mints the identical name and finds it.
+`SpecializeStream` then collapses each group to the single alias identifier, so
+the body it inserts speaks the ordinary non-generic surface.
+
+Per `devdocs/dev/normalise-dont-special-case.md`, the mode-Delphi surface got no
+resolver of its own: `TBase<T>` is rewritten INTO `specialize TBase<T>` and falls
+into the same path. That required correcting what the Delphi rewrite does with a
+parameter-spelled group, and the correction is the interesting part:
+
+- It used to strip the `<T>` unconditionally, which is right for a method
+  IMPLEMENTATION header (`function TBase<T>.Get`) and wrong everywhere else — a
+  type reference was left as a bare template name, which is exactly the
+  `base type not found` at 985. Now the strip is keyed on the group being
+  followed by `.`, the one place it means "this template's own methods".
+- The "is this group parameter-spelled?" test was ALL-or-nothing, so
+  rtl-generics' partial specialization
+  `TGStringComparer<T> = class(TGStringComparer<T, TDelphiQuadrupleHashFactory>)`
+  — which mixes a parameter and a concrete type in ONE group — took the concrete
+  path and minted the nonsense specialization `TGStringComparer$T$TDelphi...`,
+  whose body then reported `unknown type: T` from the far side of the unit. Now
+  ANY parameter name anywhere in the group makes the whole group deferred, and
+  the match is by name against any parameter rather than by position (`TBar<V, K>`
+  forwards the same names in the other order).
+- Template lookup by name is now ARITY-AWARE. Arity overloading (`TD`, `TD<K>`,
+  `TD<K,V>` — test_generic_name_overload.pas) used to work by parse-order
+  accident: a concrete use's alias declaration is inserted directly behind its
+  own template and so is parsed before the next arity is even captured. A nested
+  prerequisite is emitted much further down the stream, where every arity is
+  visible at once, and the name-only lookup took the last one.
+
+**Regressions:** `test/test_generic_inherit.pas` (objfpc) and
+`test/test_generic_inherit_delphi.pas` (mode Delphi) — a three-deep forwarded
+chain, a two-parameter generic base, a nested generic as a field type, and the
+method implementations of each. Output verified **identical under fpc 3.2.2**.
+Both registered in the Makefile.
+
+Gate: `make compiler/pascal26` converged in 1 round; `tools/gate.sh quick` GREEN.

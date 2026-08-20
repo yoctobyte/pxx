@@ -1342,17 +1342,30 @@ type
   end;
 
 const
-  MAX_TEMPLATES = 16;
+  { Generic capacities. These are per-COMPILATION counters, not per-unit: every
+    template a program transitively `uses` shares them, so a real library raises
+    the floor for everyone downstream. FPC's rtl-generics (generics.defaults
+    alone) declares well past the original 16 templates. The arrays they size are
+    all tiny by construction -- a template is {name, tok start, tok count} and the
+    type-parameter names live in a parallel MAX_TEMPLATES*MAX_TEMPLATE_PARAMS
+    string table -- so the headroom below costs a few KB of BSS, not the megabytes
+    MAX_TEMPLATE_TOKENS costs. Raise these when a corpus hits them; leave the
+    token buffers alone unless the token buffers are what overflowed. }
+  MAX_TEMPLATES = 128;
   MAX_TEMPLATE_PARAMS = 4;   { type parameters per generic template (<TKey, TData>) }
   MAX_TEMPLATE_TOKENS = 65536;  { FPC fgl alone buffers ~14k tokens of generic method bodies }
   MAX_NESTED_TOKENS = 8192;
   MAX_LIFTS = 512;
   MAX_LIFT_CAPS = 2048;
   MAX_GENERIC_METHODS = 512;    { FPC fgl has ~211 generic method bodies }
-  MAX_PENDING_SPECS = 32;
-  MAX_SPECIALIZATIONS = 32;
-  MAX_GENERIC_FUNCS = 16;
-  MAX_PENDING_GFSPECS = 32;
+  MAX_PENDING_SPECS = 256;
+  MAX_SPECIALIZATIONS = 256;
+  MAX_GENERIC_FUNCS = 128;
+  MAX_PENDING_GFSPECS = 256;
+  { distinct nested generic uses (`class(specialize TBase<T>)`, a field of a
+    generic type) inside ONE template body -- see the nested-specialization
+    note in parser.inc. The +1 slot holds the declaration being deferred. }
+  MAX_NESTED_SPECS = 24;
   MAX_OP_OVERLOADS = 64;
 
 type
@@ -1424,6 +1437,17 @@ var
     to Templates[]/Specializations[] (flat ti*MAX_TEMPLATE_PARAMS+k layout). }
   TemplateParamNames : array[0..MAX_TEMPLATES*MAX_TEMPLATE_PARAMS-1] of AnsiString;
   TemplateNParams    : array[0..MAX_TEMPLATES-1] of Integer;
+  { Nested generic prerequisites collected by ParseSpecialization for ONE
+    deferral, plus the token buffer it emits them from. Global for the same
+    reason the other parser side channels are: fill / consume / discard within
+    one call, never carried across one. }
+  NSpecName   : array[0..MAX_NESTED_SPECS-1] of AnsiString;
+  NSpecTmpl   : array[0..MAX_NESTED_SPECS-1] of AnsiString;
+  NSpecArg    : array[0..MAX_NESTED_SPECS*MAX_TEMPLATE_PARAMS-1] of TRawToken;
+  NSpecNArg   : array[0..MAX_NESTED_SPECS-1] of Integer;
+  NSpecCount  : Integer;
+  NSpecIns    : array[0..MAX_NESTED_SPECS*(8+2*MAX_TEMPLATE_PARAMS)-1] of TRawToken;
+  NSpecInsCnt : Integer;
   SpecConcreteNames  : array[0..MAX_SPECIALIZATIONS*MAX_TEMPLATE_PARAMS-1] of AnsiString;
   SpecConcreteKinds  : array[0..MAX_SPECIALIZATIONS*MAX_TEMPLATE_PARAMS-1] of TTokenKind;
   SpecNParams        : array[0..MAX_SPECIALIZATIONS-1] of Integer;

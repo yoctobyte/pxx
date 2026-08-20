@@ -1838,6 +1838,141 @@ begin
   end;
 end;
 
+{ Append a string to the TokChars pool and return its offset (for synthesized
+  identifier tokens — the mode-Delphi generics desugar mints alias names). }
+function TokCharsAppend(const s: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := TokCharLen;
+  for i := 1 to Length(s) do
+  begin
+    if TokCharLen >= STRING_CAP then Error('token character pool overflow');
+    TokChars[TokCharLen] := s[i];
+    Inc(TokCharLen);
+  end;
+end;
+
+{ ---- nested generic specializations ---------------------------------------
+
+  A template body may name ANOTHER template using the ENCLOSING template's own
+  type parameters — as a base class (`generic TDer<T> = class(specialize
+  TBase<T>)`), as a field type, anywhere a type may appear. The
+  concrete-argument form written inside a template (`specialize TBase<Integer>`)
+  already resolves: DelphiRewriteGenericUses sweeps the token stream before the
+  enclosing template captures it, mints `TBase$Integer` and inserts the alias
+  declaration. The PARAMETER form cannot resolve there — `TBase$T` is not a
+  type, and what T is only becomes known when the enclosing template is
+  specialized.
+
+  So it resolves at that moment instead. Before streaming TDer<Integer>'s body,
+  ParseSpecialization walks the template tokens for `specialize NAME<args>`
+  groups, maps each argument through the substitution it is about to apply, and
+  mints the same alias name the concrete path would have. If that specialization
+  does not exist yet, TDer<Integer> cannot be bound — a parent must exist before
+  its child — so the declaration is DEFERRED: emit `TBase$Integer = specialize
+  TBase<Integer>;` and then a fresh copy of the declaration we were in the
+  middle of, and hand control back to the type-section loop. It parses the
+  prerequisite (which defers again if IT nests, so a chain unwinds), then
+  re-parses ours, which now finds the alias registered and proceeds. Termination
+  is by construction: the retry mints the identical name and finds it.
+
+  Once the prerequisites exist, SpecializeStream collapses each group to the
+  single alias identifier, so the body it inserts speaks the ordinary
+  non-generic surface the rest of the parser already understands.
+
+  ONE mechanism, both surfaces: the mode-Delphi spelling `TBase<T>` is rewritten
+  to `specialize TBase<T>` by DelphiRewriteGenericUses rather than given a
+  resolver of its own. }
+
+function FindSpecialization(const nm: AnsiString): Integer;
+var i: Integer;
+begin
+  Result := -1;
+  for i := 0 to SpecializationCount - 1 do
+    if CaseEqual(Specializations[i].Name, nm) then Result := i;
+end;
+
+{ Does TemplateTokens[ts + i] open a `specialize NAME<...>` group naming a
+  template we know? Returns the offset of the closing `>`, or -1. A binder
+  (`X = specialize ...`, a nested type declaration) is ParseSpecialization's
+  own business and is skipped. }
+function NestedSpecGroup(ts, i, count: Integer): Integer;
+var j, k, ti: Integer; nm: AnsiString; scanning: Boolean;
+begin
+  Result := -1;
+  if i + 3 >= count then Exit;
+  if TemplateTokens[ts + i].Kind <> tkIdent then Exit;
+  if not CaseEqual(GetTokenStrFromRaw(TemplateTokens[ts + i].SOffset,
+                                     TemplateTokens[ts + i].SLen), 'specialize') then Exit;
+  if (i > 0) and (TemplateTokens[ts + i - 1].Kind = tkEq) then Exit;
+  if TemplateTokens[ts + i + 1].Kind <> tkIdent then Exit;
+  if TemplateTokens[ts + i + 2].Kind <> tkLt then Exit;
+  nm := GetTokenStrFromRaw(TemplateTokens[ts + i + 1].SOffset, TemplateTokens[ts + i + 1].SLen);
+  ti := -1;
+  for k := 0 to TemplateCount - 1 do
+    if CaseEqual(Templates[k].Name, nm) then ti := k;
+  if ti < 0 then Exit;
+  j := i + 3;
+  scanning := True;
+  while scanning do
+  begin
+    if j >= count then Exit;
+    if not (TemplateTokens[ts + j].Kind in [tkIdent, tkInteger_T, tkBoolean_T, tkChar_T, tkString_T]) then Exit;
+    Inc(j);
+    if (j < count) and (TemplateTokens[ts + j].Kind = tkComma) then Inc(j)
+    else scanning := False;
+  end;
+  if (j >= count) or (TemplateTokens[ts + j].Kind <> tkGt) then Exit;
+  Result := j;
+end;
+
+{ One argument token of such a group, mapped through the substitution set in
+  force (SpecSub*): a reference to the enclosing template's parameter becomes
+  the concrete type it is being specialized with. }
+procedure NestedSpecArg(ts, at: Integer; var t: TRawToken);
+var k: Integer; nm: AnsiString;
+begin
+  t.Kind := TemplateTokens[ts + at].Kind;
+  t.IVal := TemplateTokens[ts + at].IVal;
+  t.Line := TemplateTokens[ts + at].Line;
+  t.SOffset := TemplateTokens[ts + at].SOffset;
+  t.SLen := TemplateTokens[ts + at].SLen;
+  if t.Kind <> tkIdent then Exit;
+  nm := GetTokenStrFromRaw(t.SOffset, t.SLen);
+  for k := 0 to SpecSubCount - 1 do
+    if CaseEqual(nm, SpecSubNames[k]) then
+    begin
+      t.Kind := SpecSubKinds[k];
+      t.SOffset := TokCharsAppend(SpecSubValues[k]);
+      t.SLen := Length(SpecSubValues[k]);
+      Break;
+    end;
+end;
+
+{ The alias name the group resolves to — the SAME minting DelphiRewriteGenericUses
+  uses for a concrete use, so the two paths never disagree about a name. }
+function NestedSpecAlias(ts, i, gEnd: Integer): AnsiString;
+var j: Integer; t: TRawToken;
+begin
+  Result := GetTokenStrFromRaw(TemplateTokens[ts + i + 1].SOffset, TemplateTokens[ts + i + 1].SLen);
+  j := i + 3;
+  while j < gEnd do
+  begin
+    if TemplateTokens[ts + j].Kind <> tkComma then
+    begin
+      NestedSpecArg(ts, j, t);
+      Result := Result + '$' + GetTokenStrFromRaw(t.SOffset, t.SLen);
+    end;
+    Inc(j);
+  end;
+end;
+
+{ Is the alias already available as a type? }
+function NestedSpecKnown(const nm: AnsiString): Boolean;
+begin
+  Result := (FindSpecialization(nm) >= 0) or (FindUClass(nm) >= 0);
+end;
+
 procedure SpecializeStream(tokStart, count: Integer; const specName: AnsiString);
 { Substitutions come from the SpecSub* globals (param name -> concrete
   name/kind), set by the caller — multi-param generics replace every type
@@ -1845,12 +1980,35 @@ procedure SpecializeStream(tokStart, count: Integer; const specName: AnsiString)
 var
   i, j, k: Integer;
   subCount: Integer;
-  s: AnsiString;
+  gEnd: Integer;
+  s, aliasNm: AnsiString;
 begin
   subCount := 0;
   i := 0;
   while i < count do
   begin
+    { A nested generic use collapses to the single alias identifier naming its
+      specialization — `specialize TBase<T>` with T:=Integer becomes
+      `TBase$Integer`. ParseSpecialization has already guaranteed the alias
+      exists (it defers the whole declaration otherwise), so an unresolved group
+      here means a name that is not a type at all: leave it alone and let the
+      ordinary error reporting name it. }
+    gEnd := NestedSpecGroup(tokStart, i, count);
+    if gEnd >= 0 then
+    begin
+      aliasNm := NestedSpecAlias(tokStart, i, gEnd);
+      if CaseEqual(aliasNm, specName) or NestedSpecKnown(aliasNm) then
+      begin
+        SpecializeTokens[subCount].Kind := tkIdent;
+        SpecializeTokens[subCount].IVal := 0;
+        SpecializeTokens[subCount].Line := TemplateTokens[tokStart + i].Line;
+        SpecializeTokens[subCount].SOffset := TokCharsAppend(aliasNm);
+        SpecializeTokens[subCount].SLen := Length(aliasNm);
+        Inc(subCount);
+        i := gEnd + 1;
+        Continue;
+      end;
+    end;
     SpecializeTokens[subCount].Kind := TemplateTokens[tokStart + i].Kind;
     SpecializeTokens[subCount].IVal := TemplateTokens[tokStart + i].IVal;
     SpecializeTokens[subCount].Line := TemplateTokens[tokStart + i].Line;
@@ -1936,20 +2094,6 @@ begin
   Inc(TokCount, subCount);
 end;
 
-{ Append a string to the TokChars pool and return its offset (for synthesized
-  identifier tokens — the mode-Delphi generics desugar mints alias names). }
-function TokCharsAppend(const s: AnsiString): Integer;
-var i: Integer;
-begin
-  Result := TokCharLen;
-  for i := 1 to Length(s) do
-  begin
-    if TokCharLen >= STRING_CAP then Error('token character pool overflow');
-    TokChars[TokCharLen] := s[i];
-    Inc(TokCharLen);
-  end;
-end;
-
 procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm: Boolean); forward;
 function OrdinalNameToTk(const nm: AnsiString): TTypeKind; forward;
 
@@ -1969,7 +2113,7 @@ function OrdinalNameToTk(const nm: AnsiString): TTypeKind; forward;
 procedure DelphiRewriteGenericUses(ti, insertAt: Integer; delphiPattern: Boolean);
 const MAX_DGEN_TUPLES = 512;
 var
-  i, j, k, na, np, seenCnt, insCnt, aOff, sOff, tOff: Integer;
+  i, j, k, kk, na, np, seenCnt, insCnt, aOff, sOff, tOff: Integer;
   tname, aname, key: AnsiString;
   argTok: array[0..MAX_TEMPLATE_PARAMS-1] of TRawToken;
   seenKey: array[0..MAX_DGEN_TUPLES-1] of AnsiString;
@@ -2018,18 +2162,50 @@ begin
       if ok and (na <> np) then ok := False;
       if ok then
       begin
-        isParamForm := True;
+        { A `<...>` group can be resolved EAGERLY into an alias only when every
+          argument is a concrete type. An argument spelled with one of this
+          template's own parameter names is not concrete: inside another
+          template's body it stands for whatever that outer template is
+          specialized with, and the two spellings MIX in one group --
+          rtl-generics writes
+            `TGStringComparer<T> = class(TGStringComparer<T, TDelphiQuadrupleHashFactory>)`.
+          So one parameter name anywhere in the group sends the whole group down
+          the deferred path (method impls) or the nested-specialization path
+          (type references). Matching is by name against ANY parameter, not
+          position: `TBar<V, K>` forwards the same names in the other order. }
+        isParamForm := False;
         for k := 0 to na - 1 do
-          if not ((argTok[k].Kind = tkIdent) and
-                  CaseEqual(GetTokenStrFromRaw(argTok[k].SOffset, argTok[k].SLen),
-                            TemplateParamNames[ti * MAX_TEMPLATE_PARAMS + k])) then
-            isParamForm := False;
+          for kk := 0 to np - 1 do
+            if (argTok[k].Kind = tkIdent) and
+               CaseEqual(GetTokenStrFromRaw(argTok[k].SOffset, argTok[k].SLen),
+                         TemplateParamNames[ti * MAX_TEMPLATE_PARAMS + kk]) then
+              isParamForm := True;
         if DebugTrace then writeln('DGEN match at ', i, ' na=', na, ' paramform=', isParamForm);
         if isParamForm then
         begin
           if not specB then
-            RemoveTokens(i + 1, j - i);   { strip `<T>` — method impl reference }
-          { specB paramform (inside a later generic body): leave untouched }
+          begin
+            { `TFoo<T>` spelled with TFoo's OWN parameter names. Only a METHOD
+              IMPLEMENTATION header — `procedure TFoo<T>.M` — means "this
+              template's own methods", and only there is dropping the `<T>`
+              right. Everywhere else it is a TYPE reference carrying the
+              ENCLOSING template's parameters (`class(TOrdinalComparer<T,
+              THashFactory>)`, a field, a local), which resolves only once that
+              enclosing template is specialized: give it the objfpc spelling and
+              let ParseSpecialization's nested-prerequisite pass do it. Stripping
+              `<T>` there left a bare template name behind and produced
+              `base type not found` on rtl-generics. }
+            if (j + 1 < TokCount) and (Tokens[j + 1].Kind = tkDot) then
+              RemoveTokens(i + 1, j - i)   { method impl reference }
+            else
+            begin
+              ins[0].Kind := tkIdent; ins[0].IVal := 0; ins[0].Line := Tokens[i].Line;
+              ins[0].SOffset := TokCharsAppend('specialize'); ins[0].SLen := 10;
+              InsertTokens(i, ins, 1);
+              i := j + 1;   { the loop's Inc(i) lands past the inserted group }
+            end;
+          end;
+          { specB paramform (inside a later generic body): already objfpc }
         end
         else
         begin
@@ -2282,25 +2458,79 @@ begin
   end;
 end;
 
-procedure ParseSpecialization(const specName: AnsiString);
+{ Emit one `alias = specialize NAME<args>;` declaration into NSpecIns, reading
+  the argument tokens from NSpecArg[base..base+nArgs-1]. }
+procedure EmitSpecDecl(const aliasNm, tmplNm: AnsiString; base, nArgs: Integer);
+var k: Integer; ln: Integer;
+begin
+  ln := 0;
+  if TokPos > 0 then ln := Tokens[TokPos - 1].Line;
+  if NSpecInsCnt + 8 + 2 * nArgs > MAX_NESTED_SPECS * (8 + 2 * MAX_TEMPLATE_PARAMS) then
+    Error('nested specialization token buffer overflow');
+  NSpecIns[NSpecInsCnt].Kind := tkIdent; NSpecIns[NSpecInsCnt].IVal := 0;
+  NSpecIns[NSpecInsCnt].Line := ln;
+  NSpecIns[NSpecInsCnt].SOffset := TokCharsAppend(aliasNm);
+  NSpecIns[NSpecInsCnt].SLen := Length(aliasNm); Inc(NSpecInsCnt);
+  NSpecIns[NSpecInsCnt].Kind := tkEq; NSpecIns[NSpecInsCnt].IVal := 0;
+  NSpecIns[NSpecInsCnt].Line := ln; NSpecIns[NSpecInsCnt].SOffset := 0;
+  NSpecIns[NSpecInsCnt].SLen := 0; Inc(NSpecInsCnt);
+  NSpecIns[NSpecInsCnt].Kind := tkIdent; NSpecIns[NSpecInsCnt].IVal := 0;
+  NSpecIns[NSpecInsCnt].Line := ln;
+  NSpecIns[NSpecInsCnt].SOffset := TokCharsAppend('specialize');
+  NSpecIns[NSpecInsCnt].SLen := 10; Inc(NSpecInsCnt);
+  NSpecIns[NSpecInsCnt].Kind := tkIdent; NSpecIns[NSpecInsCnt].IVal := 0;
+  NSpecIns[NSpecInsCnt].Line := ln;
+  NSpecIns[NSpecInsCnt].SOffset := TokCharsAppend(tmplNm);
+  NSpecIns[NSpecInsCnt].SLen := Length(tmplNm); Inc(NSpecInsCnt);
+  NSpecIns[NSpecInsCnt].Kind := tkLt; NSpecIns[NSpecInsCnt].IVal := 0;
+  NSpecIns[NSpecInsCnt].Line := ln; NSpecIns[NSpecInsCnt].SOffset := 0;
+  NSpecIns[NSpecInsCnt].SLen := 0; Inc(NSpecInsCnt);
+  for k := 0 to nArgs - 1 do
+  begin
+    if k > 0 then
+    begin
+      NSpecIns[NSpecInsCnt].Kind := tkComma; NSpecIns[NSpecInsCnt].IVal := 0;
+      NSpecIns[NSpecInsCnt].Line := ln; NSpecIns[NSpecInsCnt].SOffset := 0;
+      NSpecIns[NSpecInsCnt].SLen := 0; Inc(NSpecInsCnt);
+    end;
+    NSpecIns[NSpecInsCnt] := NSpecArg[base + k]; Inc(NSpecInsCnt);
+  end;
+  NSpecIns[NSpecInsCnt].Kind := tkGt; NSpecIns[NSpecInsCnt].IVal := 0;
+  NSpecIns[NSpecInsCnt].Line := ln; NSpecIns[NSpecInsCnt].SOffset := 0;
+  NSpecIns[NSpecInsCnt].SLen := 0; Inc(NSpecInsCnt);
+  NSpecIns[NSpecInsCnt].Kind := tkSemicolon; NSpecIns[NSpecInsCnt].IVal := 0;
+  NSpecIns[NSpecInsCnt].Line := ln; NSpecIns[NSpecInsCnt].SOffset := 0;
+  NSpecIns[NSpecInsCnt].SLen := 0; Inc(NSpecInsCnt);
+end;
+
+{ Result = True means the declaration was DEFERRED: its nested generic
+  prerequisites have been emitted ahead of a fresh copy of it, nothing was
+  registered, and the caller must go round the type-section loop again rather
+  than bind a class. See the nested-specialization note above SpecializeStream. }
+function ParseSpecialization(const specName: AnsiString): Boolean;
 var
-  templateName: AnsiString;
+  templateName, aliasNm: AnsiString;
   cNames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   cKinds: array[0..MAX_TEMPLATE_PARAMS-1] of TTokenKind;
-  nc, ti, i: Integer;
+  nc, ti, i, j, k, na, ts, tc, gEnd: Integer;
+  dup: Boolean;
 begin
+  Result := False;
   Next; { consume 'specialize' }
   if CurTok.Kind <> tkIdent then Error('expected generic template name');
   templateName := CurTok.SVal; Next;
 
   Expect(tkLt, '<');
   nc := 0;
+  NSpecCount := 0;
   repeat
     if (CurTok.Kind <> tkIdent) and (CurTok.Kind <> tkInteger_T) and (CurTok.Kind <> tkBoolean_T) and (CurTok.Kind <> tkChar_T) and (CurTok.Kind <> tkString_T) then
       Error('expected concrete type name');
     if nc >= MAX_TEMPLATE_PARAMS then Error('too many specialization arguments (MAX_TEMPLATE_PARAMS)');
     cNames[nc] := CurTok.SVal;
     cKinds[nc] := CurTok.Kind;
+    { keep the raw token too — a deferral re-emits this declaration verbatim }
+    NSpecArg[(MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS + nc] := Tokens[TokPos - 1];
     Inc(nc);
     Next;
   until not Eat(tkComma);
@@ -2310,13 +2540,98 @@ begin
     the inserted 'class', and the caller falls through to the class-binding
     branch (which names the concrete class from the saved tnOff/tnLen). }
 
+  { Arity-overloaded template names are legal (`TD`, `TD<K>`, `TD<K,V>` — see
+    test_generic_name_overload.pas), so the ARGUMENT COUNT is part of the
+    lookup. Order alone used to be enough because a concrete use's alias
+    declaration is inserted right behind its own template, and so is parsed
+    before the next arity is even captured; a nested prerequisite is emitted
+    much further down the stream, where every arity is visible at once. }
   ti := -1;
   for i := 0 to TemplateCount - 1 do
     if CaseEqual(Templates[i].Name, templateName) then
-      ti := i;
+      if (ti < 0) or (TemplateNParams[i] = nc) then ti := i;
   if ti < 0 then Error('generic template ' + templateName + ' not found');
   if nc <> TemplateNParams[ti] then
     Error('specialize ' + templateName + ': wrong number of type arguments');
+
+  { The substitution set is established HERE, before anything is registered,
+    because the prerequisite scan below decides whether this declaration gets
+    registered at all this time round. }
+  SpecSubCount := nc;
+  for i := 0 to nc - 1 do
+  begin
+    SpecSubNames[i]  := TemplateParamNames[ti * MAX_TEMPLATE_PARAMS + i];
+    SpecSubValues[i] := cNames[i];
+    SpecSubKinds[i]  := cKinds[i];
+  end;
+
+  { Nested generic prerequisites: every `specialize NAME<args>` in the body,
+    with args mapped through the substitution, that is not a type yet. }
+  ts := Templates[ti].TokStart;
+  tc := Templates[ti].TokCount;
+  i := 0;
+  while i < tc do
+  begin
+    gEnd := NestedSpecGroup(ts, i, tc);
+    if gEnd >= 0 then
+    begin
+      aliasNm := NestedSpecAlias(ts, i, gEnd);
+      if (not CaseEqual(aliasNm, specName)) and (not NestedSpecKnown(aliasNm)) then
+      begin
+        dup := False;
+        for k := 0 to NSpecCount - 1 do
+          if CaseEqual(NSpecName[k], aliasNm) then dup := True;
+        if not dup then
+        begin
+          if NSpecCount >= MAX_NESTED_SPECS - 1 then
+            Error('too many nested generic specializations (MAX_NESTED_SPECS)');
+          NSpecName[NSpecCount] := aliasNm;
+          NSpecTmpl[NSpecCount] := GetTokenStrFromRaw(TemplateTokens[ts + i + 1].SOffset,
+                                                     TemplateTokens[ts + i + 1].SLen);
+          na := 0;
+          j := i + 3;
+          while j < gEnd do
+          begin
+            if TemplateTokens[ts + j].Kind <> tkComma then
+            begin
+              NestedSpecArg(ts, j, NSpecArg[NSpecCount * MAX_TEMPLATE_PARAMS + na]);
+              Inc(na);
+            end;
+            Inc(j);
+          end;
+          NSpecNArg[NSpecCount] := na;
+          Inc(NSpecCount);
+        end;
+      end;
+      i := gEnd + 1;
+    end
+    else
+      Inc(i);
+  end;
+
+  if DebugTrace then
+  begin
+    writeln('SPEC ', specName, ' = ', templateName, ' nested=', NSpecCount);
+    for k := 0 to NSpecCount - 1 do
+      writeln('  needs ', NSpecName[k], ' from ', NSpecTmpl[k]);
+  end;
+
+  if NSpecCount > 0 then
+  begin
+    { Defer. CurTok is this declaration's trailing ';', so TokPos is exactly
+      where the type-section loop reads next: put the prerequisites there,
+      followed by a fresh copy of this declaration. Nothing has been registered,
+      so the retry is a clean re-parse. }
+    NSpecInsCnt := 0;
+    for k := 0 to NSpecCount - 1 do
+      EmitSpecDecl(NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);
+    EmitSpecDecl(specName, templateName, (MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS, nc);
+    InsertTokens(TokPos, NSpecIns, NSpecInsCnt);
+    NSpecCount := 0;
+    Next;
+    Result := True;
+    Exit;
+  end;
 
   if SpecializationCount >= MAX_SPECIALIZATIONS then Error('too many specializations');
   Specializations[SpecializationCount].Name := specName;
@@ -27280,7 +27595,9 @@ begin
         and leaves CurTok on 'class', falling through to the class-binding
         branch below — the concrete name comes from the saved tnOff/tnLen. }
       if CaseEqual(CurTok.SVal, 'specialize') then
-        ParseSpecialization(tname);
+        { True = the declaration was deferred behind its nested generic
+          prerequisites and re-emitted; nothing to bind, go round again. }
+        if ParseSpecialization(tname) then Continue;
       if CurTok.Kind = tkLParen then
       begin
         etid := RegisterEnumType(tnOff, tnLen);
