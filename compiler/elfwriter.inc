@@ -3319,7 +3319,19 @@ begin
 end;
 
 procedure ExpandIncludes(var src: AnsiString; const baseDir, selfPath: AnsiString);
-{ Replace active dollar-include directives with file contents, one level deep.
+{ Replace active dollar-include directives with file contents, RECURSIVELY: an
+  include inside an include is ordinary Pascal and FPC expands it, so we must
+  too. Until 2026-08-20 this ran one level deep and a nested directive was left
+  in the text, where the lexer skipped it as an unknown directive — a silent
+  drop that compiled a DIFFERENT program than FPC did from the same source
+  (bug-a-a-nested-include-is-silently-dropped).
+
+  Recursion, not a re-scan of the result: the -g line markers name the file a
+  line came from, and a second pass over already-spliced text would attribute
+  the inner file's lines to the outer one. Recursing lets each file emit its own
+  markers, which is why the splice below saves and restores the two module-level
+  buffers rather than making the pass re-entrant on globals.
+
   Conditional directives remain in the text for the real lexer pass; this
   pre-pass only simulates enough state to avoid loading includes from inactive
   branches.
@@ -3333,6 +3345,7 @@ var
   markLine, markPos: Integer;   { -g: line of src at markPos, both advance forward only }
   wantMarkers: Boolean;
   fname, command, name, exprSource: AnsiString;
+  incNested, incDir, savedExpanded: AnsiString;   { see the recursive splice below }
   cond, active: Boolean;
   condParent, condActive, condTaken: array[0..MAX_PAS_CONDS-1] of Boolean;
   savedDefineActive: array[0..MAX_PAS_DEFINES-1] of Boolean;
@@ -3511,6 +3524,32 @@ begin
             ErrorIdent := fname;
             Error('cannot open include file');
           end;
+          { Expand the includes INSIDE this file before splicing it in. The
+            recursive call reuses IncExpanded/IncIncluded (they are module-level
+            buffers, not locals), so hand it copies and put ours back after. }
+          incNested := IncIncluded;
+          savedExpanded := IncExpanded;
+          incDir := '';
+          for k := Length(fullPath) downto 1 do
+            if fullPath[k] = '/' then
+            begin
+              AppendRange(incDir, fullPath, 1, k);
+              Break;
+            end;
+          if Length(incDir) = 0 then incDir := baseDir;
+          Inc(IncExpandDepth);
+          if IncExpandDepth > MAX_INC_DEPTH then
+          begin
+            ErrorIdent := fname;
+            Error('include nesting too deep (circular include?)');
+          end;
+          if wantMarkers then
+            ExpandIncludes(incNested, incDir, fullPath)
+          else
+            ExpandIncludes(incNested, incDir, '');
+          Dec(IncExpandDepth);
+          IncExpanded := savedExpanded;
+          IncIncluded := incNested;
           if wantMarkers then
           begin
             { The included text starts at ITS line 1; afterwards the includer

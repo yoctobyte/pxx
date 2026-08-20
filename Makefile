@@ -3935,6 +3935,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Fitest/incdir_fi test/test_include_fi_search.pas $(TESTTMP)/test_include_fi26
 	test "$$($(TESTTMP)/test_include_fi26)" = "fi-ok"
 	! ./$(COMPILER) test/test_include_miss_fails.pas $(TESTTMP)/test_include_miss26 2>/dev/null
+	# An include INSIDE an include: expansion must recurse, each step resolving
+	# against its own file's dir, and a dead {$ifdef} must not open its include.
+	# Was silently dropped, so the nested declarations vanished and a different
+	# program compiled than FPC builds (bug-a-a-nested-include-is-silently-dropped).
+	./$(COMPILER) test/test_nested_include.pas $(TESTTMP)/test_nested_include26
+	test "$$($(TESTTMP)/test_nested_include26)" = "$$(printf 'l1\nl2\nl3\ndefine-crosses-nesting')"
+	# ...and the brake that recursion needs: mutually-including files must give a
+	# diagnostic, not exhaust the stack.
+	! ./$(COMPILER) test/test_include_cycle_fails.pas $(TESTTMP)/test_include_cycle26 2>/dev/null
 	# with TFoo.Create: single evaluation + with-scoped property/method/Free
 	./$(COMPILER) test/test_with_class_create.pas $(TESTTMP)/test_with_class_create26
 	test "$$($(TESTTMP)/test_with_class_create26)" = "$$(printf '21\n42\ncreates=1')"

@@ -142,6 +142,7 @@ const
   MAX_C_CMD_DEFINES = 256;      { C `-D`/`-U` command-line predefines }
   MAX_PAS_DEFINE_CHARS = 32768;
   MAX_PAS_CONDS = 64;
+  MAX_INC_DEPTH = 32;   { ExpandIncludes recursion brake; FPC's own limit is 16 }
   SPECIAL_IN  = 999;
 
   MAX_UCLASS      = 2048;  { user-defined class/record slots (incl. imported C structs) }
@@ -2799,6 +2800,9 @@ var
   AssignPath : AnsiString;
   IncExpanded : AnsiString;
   IncIncluded : AnsiString;
+  IncExpandDepth : Integer;   { ExpandIncludes recursion depth — an include inside
+                                an include is ordinary Pascal, so the pre-pass
+                                recurses; this is the cycle brake. }
   UnitContent : AnsiString;
   LoadPath : AnsiString;
   SavedLexSource : AnsiString;

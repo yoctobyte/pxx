@@ -103,6 +103,12 @@ procedure AddDefaultCIncludeDirs; forward;   { the C unit pull in parser.inc nee
 { stubs for any frontend omitted from this build; no-op in the default }
 {$include frontend_stubs.inc}
 {$include parser.inc}
+{ Pascal-frontend slices carved out of parser.inc, listed in their ORIGINAL order
+  — that is what makes the carve-out provable by the self-host fixedpoint rather
+  than by reading it. Flat rather than nested inside parser.inc: this file is
+  compiled by the PINNED binary, so it can only use include forms that binary
+  already understands. }
+{$include pasparser_prog.inc}
 {$include ir.inc}
 function GetOrAllocSymRTTI(symIdx: Integer): Integer; forward;
 function GetOrAllocNodeDynDesc(node: Integer): Integer; forward;

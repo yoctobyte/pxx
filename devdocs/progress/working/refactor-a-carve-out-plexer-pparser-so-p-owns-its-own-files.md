@@ -2,9 +2,10 @@
 track: A
 prio: 60
 type: refactor
-owner: unassigned
+owner: claude-acp
 blocked-by: []
 summary: "parser.inc is 38% of all compiler work (216 of 566 commits in 14 days) and is the ONE file where two lanes must serialize — A and P cannot edit it concurrently. C and NilPy both got carved out into their own lexer/parser; Pascal never did, purely because it was the seed. CLAUDE.md has called this 'the clean long-term shape' in prose for months, where ready/next cannot see it. Prio is a PROPOSAL: the payoff is parallelism, not a feature."
+status: working
 ---
 
 # Carve out `plexer` / `pparser` so Track P owns its own files
