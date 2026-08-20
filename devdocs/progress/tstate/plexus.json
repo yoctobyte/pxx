@@ -1,19 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T11:03:49Z",
-   "fixed": [
-    "test-core#src:test/test_asm_emit.pas",
-    "test-core#src:test/test_integer_longint_overload.pas",
-    "test-core#src:test/test_strict_overload_width.pas@1",
-    "test-core#src:test/test_strict_overload_width.pas@2"
-   ],
-   "new_red": [],
-   "sha": "23730e49d4467548e7faa5a3705da8065e451ff7",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-20T11:17:47Z",
    "fixed": [],
    "new_red": [
@@ -463,6 +450,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "0fbf2f8a3460951620a9782d0093f80cb8794ded",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-20T22:50:33Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "6ab56d11a9aa8c20ac73975c902d35f34188e8af",
    "tier": "native",
    "verdict": "RED"
   }
@@ -990,11 +985,11 @@
   "test-cjson#src:test/cjson/runner.c": "full",
   "test-core#00": "native",
   "test-core#129": "full",
-  "test-core#148": "native",
   "test-core#149": "native",
   "test-core#150": "native",
   "test-core#151": "native",
   "test-core#152": "native",
+  "test-core#153": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
   "test-core#src:examples/tk/callbacks.npy": "native",
@@ -1709,6 +1704,7 @@
   "test-core#src:test/test_indexed_property.pas": "native",
   "test-core#src:test/test_inheritance_dispatch.pas": "native",
   "test-core#src:test/test_inherited.pas": "native",
+  "test-core#src:test/test_initialize_finalize.pas": "native",
   "test-core#src:test/test_initsec.pas": "native",
   "test-core#src:test/test_inline_array_field_const_bound.pas": "native",
   "test-core#src:test/test_inline_concat_arg.pas": "native",
@@ -3866,11 +3862,11 @@
   "test-c-conformance-riscv32#shard5/6": "pass",
   "test-cjson#src:test/cjson/runner.c": "pass",
   "test-core#00": "pass",
-  "test-core#148": "pass",
   "test-core#149": "pass",
   "test-core#150": "pass",
   "test-core#151": "pass",
   "test-core#152": "pass",
+  "test-core#153": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
@@ -4584,6 +4580,7 @@
   "test-core#src:test/test_indexed_property.pas": "pass",
   "test-core#src:test/test_inheritance_dispatch.pas": "pass",
   "test-core#src:test/test_inherited.pas": "pass",
+  "test-core#src:test/test_initialize_finalize.pas": "pass",
   "test-core#src:test/test_initsec.pas": "pass",
   "test-core#src:test/test_inline_array_field_const_bound.pas": "pass",
   "test-core#src:test/test_inline_concat_arg.pas": "pass",
@@ -6221,11 +6218,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-20T22:36:49Z",
-  "sha": "0fbf2f8a3460951620a9782d0093f80cb8794ded",
+  "date": "2026-08-20T22:50:33Z",
+  "sha": "6ab56d11a9aa8c20ac73975c902d35f34188e8af",
   "tier": "native",
   "verdict": "RED",
-  "wall": 465.1
+  "wall": 461.2
  },
  "last_bench": {
   "conf_rows": 550,
