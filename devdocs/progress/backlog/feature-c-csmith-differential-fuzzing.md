@@ -728,3 +728,27 @@ someone's memory.
 Caveat learned the same way: the snapshot cannot compile anything that `uses`
 the RTL, because pxx resolves `lib/` relative to its own location. Fine for
 csmith (freestanding C), not a general-purpose trick.
+
+### Sitting 3 — 2026-08-20, seeds 30000..30299, `--opts 0,1,2,3`, x86-64
+
+Compiler `55388136a`, snapshot-pinned as sitting 2 recommends. **253 of 300
+agreed with the gcc oracle, 47 skipped by the native validity filter, no
+findings.** `--opts 0,1,2,3` adds `-O1` to sitting 2's set, so the three
+optimisation tiers plus `-O0` all agreed on every program that ran.
+
+Three dry sittings in a row over 850 fresh seeds is now the shape of this
+campaign, and it is worth saying plainly: **csmith has stopped being the
+productive oracle for this compiler.** The two bugs it found (seeds 5038 and
+31039) were both integer-conversion rules, and the same afternoon a plain FPC
+differential probe found four more of exactly that family (the div/mod and
+comparison signedness pair, `Str` of an unsigned, `Format('%u')`) in under an
+hour of hand-written probes. Csmith generates C, so it can only ever exercise
+the C frontend's slice of the shared IR; a hand-written Pascal probe reaches
+constructs csmith has no vocabulary for.
+
+Recommendation for whoever picks this up: keep csmith running as a background
+regression net (it is nearly free — `nice -n 15` and a snapshot), but do not
+budget session time on widening it. Spend that time on
+`tools/pasmith.py` (random Object Pascal, FPC oracle) instead, which fuzzes the
+frontend that four of today's six findings came from.
+
