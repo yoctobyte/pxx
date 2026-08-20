@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T03:46:08Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:compiler/compiler.pas@2"
-   ],
-   "sha": "57b9b7148d3290ac089cd9360c6e4553a4b44bfb",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-20T03:50:31Z",
    "fixed": [],
    "new_red": [
@@ -436,6 +426,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "2b4086a99c314f7af7ecd0a40d8689a543799fe3",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T20:53:07Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "d1d049a392b95035daf4e02281b859ac8b192bbe",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -962,11 +960,11 @@
   "test-cjson#src:test/cjson/runner.c": "full",
   "test-core#00": "native",
   "test-core#129": "full",
-  "test-core#140": "native",
   "test-core#141": "native",
   "test-core#142": "native",
   "test-core#143": "native",
   "test-core#144": "native",
+  "test-core#145": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
   "test-core#src:examples/tk/callbacks.npy": "native",
@@ -2166,6 +2164,7 @@
   "test-core#src:test/test_typed_pointer_inc_dec.pas": "native",
   "test-core#src:test/test_typed_string_const.pas": "native",
   "test-core#src:test/test_typeinfo_enum_b288.pas": "native",
+  "test-core#src:test/test_typeinfo_named_types.pas": "native",
   "test-core#src:test/test_typeinfo_scalar_names.pas": "native",
   "test-core#src:test/test_typeinfo_widen.pas": "native",
   "test-core#src:test/test_typename_alias_wins_b304.pas": "native",
@@ -3827,11 +3826,11 @@
   "test-c-conformance-riscv32#shard5/6": "pass",
   "test-cjson#src:test/cjson/runner.c": "pass",
   "test-core#00": "pass",
-  "test-core#140": "pass",
   "test-core#141": "pass",
   "test-core#142": "pass",
   "test-core#143": "pass",
   "test-core#144": "pass",
+  "test-core#145": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
@@ -5029,6 +5028,7 @@
   "test-core#src:test/test_typed_pointer_inc_dec.pas": "pass",
   "test-core#src:test/test_typed_string_const.pas": "pass",
   "test-core#src:test/test_typeinfo_enum_b288.pas": "pass",
+  "test-core#src:test/test_typeinfo_named_types.pas": "pass",
   "test-core#src:test/test_typeinfo_scalar_names.pas": "pass",
   "test-core#src:test/test_typeinfo_widen.pas": "pass",
   "test-core#src:test/test_typename_alias_wins_b304.pas": "pass",
@@ -6171,11 +6171,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-20T20:44:16Z",
-  "sha": "2b4086a99c314f7af7ecd0a40d8689a543799fe3",
+  "date": "2026-08-20T20:53:07Z",
+  "sha": "d1d049a392b95035daf4e02281b859ac8b192bbe",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 456.3
+  "wall": 450.0
  },
  "last_bench": {
   "conf_rows": 550,
