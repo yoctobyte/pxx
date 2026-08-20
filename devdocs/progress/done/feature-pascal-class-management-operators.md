@@ -166,4 +166,4 @@ non-record operand types and the `tmoperator*` conformance entries; this slice
 burns the management-operator half. The skip-list sweep is a separate pass.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit fc2e7091d.
