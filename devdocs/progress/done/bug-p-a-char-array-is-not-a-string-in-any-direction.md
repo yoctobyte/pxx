@@ -117,4 +117,4 @@ all FPC 3.2.2's, including the two forms that must NOT be dragged into the
 conversion (array-to-array copy and element access).
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit a22177c73.
