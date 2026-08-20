@@ -58,4 +58,4 @@ Nine FPC-verified rows now agree exactly, including the range edges
 constant expression (`-(1+2)`). Pinned in
 `test/test_unary_minus_constant_keeps_longint.pas` (13 assertions, FPC's own
 answers) alongside the three tests above.
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 584c2703d.
