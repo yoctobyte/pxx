@@ -3,11 +3,8 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `f14d5d48792a` | 2026-08-20T12:00:02Z | RED (native) | 451.8s | `57b9b7148d32` RED |
+| plexus | `a89d797163e4` | 2026-08-20T12:08:54Z | GREEN (native) | 455.7s | `57b9b7148d32` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
 - **test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy** — test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy lib/rtl/classes.pas +2 (plexus): bad `57b9b7148d32`, last good `003d733936aa`, 7 commit(s) in range
-- **test-core#src:test/cfnptr_deref_call_b241.c** — test/cfnptr_deref_call_b241.c (plexus): bad `b645e1b2aff7`, last good `23730e49d446`, 3 commit(s) in range
-- **test-core#src:test/cfnptr_typedef_global_b166.c** — test/cfnptr_typedef_global_b166.c (plexus): bad `b645e1b2aff7`, last good `23730e49d446`, 3 commit(s) in range
-- **test-core#src:test/cglobal_fnptr_addressof_b161.c** — test/cglobal_fnptr_addressof_b161.c (plexus): bad `b645e1b2aff7`, last good `23730e49d446`, 3 commit(s) in range
