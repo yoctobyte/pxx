@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T20:27:54Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "a76c6712e3ce7058c3534d747ea6168f2329fa7d",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T20:39:08Z",
    "fixed": [],
    "new_red": [],
@@ -428,6 +420,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "bdb97538ac7d56948fbe030151ed981e0699b0f9",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T13:08:45Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "132e03d48088e315f8d5cecbb65d80918642fa5f",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1463,6 +1463,7 @@
   "test-core#src:test/test_collections.pas": "native",
   "test-core#src:test/test_comment_directive.pas": "native",
   "test-core#src:test/test_comments.pas": "native",
+  "test-core#src:test/test_compare_mixed_signedness.pas": "native",
   "test-core#src:test/test_concat_arg_bss.pas": "native",
   "test-core#src:test/test_concat_intrinsic.pas": "native",
   "test-core#src:test/test_concat_loop_stack.pas": "native",
@@ -3848,6 +3849,7 @@
   "test-core#src:test/test_collections.pas": "pass",
   "test-core#src:test/test_comment_directive.pas": "pass",
   "test-core#src:test/test_comments.pas": "pass",
+  "test-core#src:test/test_compare_mixed_signedness.pas": "pass",
   "test-core#src:test/test_concat_arg_bss.pas": "pass",
   "test-core#src:test/test_concat_intrinsic.pas": "pass",
   "test-core#src:test/test_concat_loop_stack.pas": "pass",
@@ -4691,11 +4693,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T12:58:16Z",
-  "sha": "bdb97538ac7d56948fbe030151ed981e0699b0f9",
+  "date": "2026-08-20T13:08:45Z",
+  "sha": "132e03d48088e315f8d5cecbb65d80918642fa5f",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 448.1
+  "wall": 445.5
  },
  "last_bench": {
   "conf_rows": 550,
