@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T19:45:49Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "cabb5d5989f3b4fbcc1897da094f9ad2b9a1d645",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T19:51:12Z",
    "fixed": [],
    "new_red": [],
@@ -428,6 +420,14 @@
    ],
    "new_red": [],
    "sha": "a89d797163e437c28cc41b3897b5e6cf7566b42a",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T12:24:18Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "2319ee08235a3c6157184d947037ccc26068e6e5",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1437,6 +1437,7 @@
   "test-core#src:test/test_cdecl_indirect.pas": "native",
   "test-core#src:test/test_channel.pas": "native",
   "test-core#src:test/test_char_arg_ansistring.pas": "native",
+  "test-core#src:test/test_char_array_is_a_string.pas": "native",
   "test-core#src:test/test_char_to_string.pas": "native",
   "test-core#src:test/test_class.pas": "native",
   "test-core#src:test/test_class_cast_field.pas": "native",
@@ -3819,6 +3820,7 @@
   "test-core#src:test/test_cdecl_indirect.pas": "pass",
   "test-core#src:test/test_channel.pas": "pass",
   "test-core#src:test/test_char_arg_ansistring.pas": "pass",
+  "test-core#src:test/test_char_array_is_a_string.pas": "pass",
   "test-core#src:test/test_char_to_string.pas": "pass",
   "test-core#src:test/test_class.pas": "pass",
   "test-core#src:test/test_class_cast_field.pas": "pass",
@@ -4685,11 +4687,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T12:08:54Z",
-  "sha": "a89d797163e437c28cc41b3897b5e6cf7566b42a",
+  "date": "2026-08-20T12:24:18Z",
+  "sha": "2319ee08235a3c6157184d947037ccc26068e6e5",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 455.7
+  "wall": 470.8
  },
  "last_bench": {
   "conf_rows": 550,
