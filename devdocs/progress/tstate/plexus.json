@@ -1,18 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T11:17:47Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:test/cfnptr_deref_call_b241.c",
-    "test-core#src:test/cfnptr_typedef_global_b166.c",
-    "test-core#src:test/cglobal_fnptr_addressof_b161.c"
-   ],
-   "sha": "b645e1b2aff7d0fc6f63267e833a4410c5a49fa8",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-20T11:30:29Z",
    "fixed": [],
    "new_red": [],
@@ -460,6 +448,20 @@
    "sha": "6ab56d11a9aa8c20ac73975c902d35f34188e8af",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-20T23:09:01Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas",
+    "test-core#src:test/test_mode_delphi.pas",
+    "test-core#src:test/test_mode_delphi_callarg.pas",
+    "test-core#src:test/test_mode_delphi_methptr.pas",
+    "test-core#src:test/test_procvar_value_context.pas"
+   ],
+   "sha": "a2ae11a641911bbec759e4ccd454b9a6aca38ea6",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -469,6 +471,11 @@
   "test-c-conformance-aarch64#shard1/6": "FAIL 00206.c \u2014 exit code 39 (want 0) | FAIL 00212.c \u2014 exit code 11 (want 0) | test-c-conformance-aarch64: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-aarch64: FAILURES: 00206.c(exit=39) 00212.c(exit=11)",
   "test-c-conformance-arm32#shard1/6": "FAIL 00206.c \u2014 exit code 64 (want 0) | FAIL 00212.c \u2014 exit code 64 (want 0) | test-c-conformance-arm32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-arm32: FAILURES: 00206.c(exit=64) 00212.c(exit=64)",
   "test-c-conformance-riscv32#shard1/6": "FAIL 00206.c \u2014 exit code 144 (want 0) | FAIL 00212.c \u2014 exit code 144 (want 0) | test-c-conformance-riscv32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-riscv32: FAILURES: 00206.c(exit=144) 00212.c(exit=144)",
+  "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas": "ok: $TMP  [code=58679B  data=1888B  bss=42492B  procs=121] | Segmentation fault (core dumped)",
+  "test-core#src:test/test_mode_delphi.pas": "pascal26:25: warning: bare own name 'Gate' reads the result of parameterless function Gate; write Gate() for a recursive call, or Result to read the result | pascal26:36: error: undefined variable (Dbl) | near: end  begin p  Dbl >>>  WriteLn",
+  "test-core#src:test/test_mode_delphi_callarg.pas": "pascal26:51: error: undefined variable (Dbl) | near:  ApplyFn=  ApplyFn  Dbl >>>",
+  "test-core#src:test/test_mode_delphi_methptr.pas": "pascal26:39: error: \"TCounter.Add\" is a procedure and has no result to use in an expression | near:  e  c  Add >>>  e",
+  "test-core#src:test/test_procvar_value_context.pas": "ok: $TMP  [code=58496B  data=1608B  bss=42516B  procs=125]",
   "test-core#src:test/test_record_helper_for_string_b331.pas": "pascal26:71: error: undefined variable (BITS) | near:  Writeln  bits:     BITS >>>   end",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter",
   "test-pascal-conformance#shard4/6": "SKIP toperator9.pp \u2014 gap: operator overload for `in` on a record type not supported by the parser | SKIP tprocvar1.pp \u2014 gap: method pointers (`procedure(l:longint) of object`), @Class.Method, typed-const procvars | SKIP tsealed6.pp \u2014 gap: `object abstract` / `object sealed` modifiers in object declarations | SKIP tstring4.pp \u2014 wontfix: reads ansistring refcount/length header words \u2014 FPC internal \u2026",
@@ -2152,6 +2159,8 @@
   "test-core#src:test/test_stream_methods.pas": "native",
   "test-core#src:test/test_streaming.pas": "native",
   "test-core#src:test/test_streaming_enumset.pas": "native",
+  "test-core#src:test/test_strict_dialect_ownership.pas": "native",
+  "test-core#src:test/test_strict_dialect_reject.pas@2": "native",
   "test-core#src:test/test_strict_fpc_shift_widths.pas@1": "native",
   "test-core#src:test/test_strict_fpc_shift_widths.pas@2": "native",
   "test-core#src:test/test_strict_overload.pas": "native",
@@ -4441,7 +4450,7 @@
   "test-core#src:test/test_default_keyword.pas": "pass",
   "test-core#src:test/test_default_of_aggregate.pas": "pass",
   "test-core#src:test/test_default_params_methods.pas": "pass",
-  "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas": "pass",
+  "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas": "fail",
   "test-core#src:test/test_delphi_generics.pas": "pass",
   "test-core#src:test/test_deref_managed_string_b302.pas": "pass",
   "test-core#src:test/test_dialect_generics_prereqs_b329.pas": "pass",
@@ -4693,9 +4702,9 @@
   "test-core#src:test/test_mimic_fpc.pas@1": "pass",
   "test-core#src:test/test_mimic_fpc.pas@2": "pass",
   "test-core#src:test/test_missing_diagnostics_fail.pas": "pass",
-  "test-core#src:test/test_mode_delphi.pas": "pass",
-  "test-core#src:test/test_mode_delphi_callarg.pas": "pass",
-  "test-core#src:test/test_mode_delphi_methptr.pas": "pass",
+  "test-core#src:test/test_mode_delphi.pas": "fail",
+  "test-core#src:test/test_mode_delphi_callarg.pas": "fail",
+  "test-core#src:test/test_mode_delphi_methptr.pas": "fail",
   "test-core#src:test/test_move_fillchar_nouses.pas": "pass",
   "test-core#src:test/test_multidim_const_array.pas": "pass",
   "test-core#src:test/test_multithreading.pas@1": "pass",
@@ -4892,7 +4901,7 @@
   "test-core#src:test/test_procedure_as_value_ok.pas": "pass",
   "test-core#src:test/test_proctype.pas": "pass",
   "test-core#src:test/test_procvar_fpc_mode.pas": "pass",
-  "test-core#src:test/test_procvar_value_context.pas": "pass",
+  "test-core#src:test/test_procvar_value_context.pas": "fail",
   "test-core#src:test/test_promoint.pas": "pass",
   "test-core#src:test/test_promoint_arg_literal_and_result.pas": "pass",
   "test-core#src:test/test_promoint_minint64_div.pas": "pass",
@@ -5027,6 +5036,8 @@
   "test-core#src:test/test_stream_methods.pas": "pass",
   "test-core#src:test/test_streaming.pas": "pass",
   "test-core#src:test/test_streaming_enumset.pas": "pass",
+  "test-core#src:test/test_strict_dialect_ownership.pas": "pass",
+  "test-core#src:test/test_strict_dialect_reject.pas@2": "pass",
   "test-core#src:test/test_strict_fpc_shift_widths.pas@1": "pass",
   "test-core#src:test/test_strict_fpc_shift_widths.pas@2": "pass",
   "test-core#src:test/test_strict_overload.pas": "pass",
@@ -6218,11 +6229,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-20T22:50:33Z",
-  "sha": "6ab56d11a9aa8c20ac73975c902d35f34188e8af",
+  "date": "2026-08-20T23:09:01Z",
+  "sha": "a2ae11a641911bbec759e4ccd454b9a6aca38ea6",
   "tier": "native",
   "verdict": "RED",
-  "wall": 461.2
+  "wall": 460.4
  },
  "last_bench": {
   "conf_rows": 550,
@@ -7286,6 +7297,91 @@
     "2e7286e499d1993717b2b5f139254bf5736c695a"
    ],
    "src": "test/test_record_helper_for_string_b331.pas",
+   "status": "fail"
+  },
+  {
+   "bad": "a2ae11a641911bbec759e4ccd454b9a6aca38ea6",
+   "good": "6ab56d11a9aa8c20ac73975c902d35f34188e8af",
+   "job": "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas",
+   "name": "test-core#268",
+   "opened": "2026-08-20T23:09:01Z",
+   "pin_built": false,
+   "range": [
+    "04f3328e2321a7d681f6e54eb8c66c3f38bc416c",
+    "19c3179fe44c90faa934eef5c9cb7b4e538e64c3",
+    "7b45dfa64483a1456d021a57fa06438f7a1b286d",
+    "28bd01e1105f1acb8d4fb29615d6a504f393ca72",
+    "a2ae11a641911bbec759e4ccd454b9a6aca38ea6"
+   ],
+   "src": "test/test_delphi_bare_alldefaulted_arg.pas",
+   "status": "fail"
+  },
+  {
+   "bad": "a2ae11a641911bbec759e4ccd454b9a6aca38ea6",
+   "good": "6ab56d11a9aa8c20ac73975c902d35f34188e8af",
+   "job": "test-core#src:test/test_mode_delphi.pas",
+   "name": "test-core#838",
+   "opened": "2026-08-20T23:09:01Z",
+   "pin_built": false,
+   "range": [
+    "04f3328e2321a7d681f6e54eb8c66c3f38bc416c",
+    "19c3179fe44c90faa934eef5c9cb7b4e538e64c3",
+    "7b45dfa64483a1456d021a57fa06438f7a1b286d",
+    "28bd01e1105f1acb8d4fb29615d6a504f393ca72",
+    "a2ae11a641911bbec759e4ccd454b9a6aca38ea6"
+   ],
+   "src": "test/test_mode_delphi.pas",
+   "status": "fail"
+  },
+  {
+   "bad": "a2ae11a641911bbec759e4ccd454b9a6aca38ea6",
+   "good": "6ab56d11a9aa8c20ac73975c902d35f34188e8af",
+   "job": "test-core#src:test/test_mode_delphi_callarg.pas",
+   "name": "test-core#839",
+   "opened": "2026-08-20T23:09:01Z",
+   "pin_built": false,
+   "range": [
+    "04f3328e2321a7d681f6e54eb8c66c3f38bc416c",
+    "19c3179fe44c90faa934eef5c9cb7b4e538e64c3",
+    "7b45dfa64483a1456d021a57fa06438f7a1b286d",
+    "28bd01e1105f1acb8d4fb29615d6a504f393ca72",
+    "a2ae11a641911bbec759e4ccd454b9a6aca38ea6"
+   ],
+   "src": "test/test_mode_delphi_callarg.pas",
+   "status": "fail"
+  },
+  {
+   "bad": "a2ae11a641911bbec759e4ccd454b9a6aca38ea6",
+   "good": "6ab56d11a9aa8c20ac73975c902d35f34188e8af",
+   "job": "test-core#src:test/test_mode_delphi_methptr.pas",
+   "name": "test-core#840",
+   "opened": "2026-08-20T23:09:01Z",
+   "pin_built": false,
+   "range": [
+    "04f3328e2321a7d681f6e54eb8c66c3f38bc416c",
+    "19c3179fe44c90faa934eef5c9cb7b4e538e64c3",
+    "7b45dfa64483a1456d021a57fa06438f7a1b286d",
+    "28bd01e1105f1acb8d4fb29615d6a504f393ca72",
+    "a2ae11a641911bbec759e4ccd454b9a6aca38ea6"
+   ],
+   "src": "test/test_mode_delphi_methptr.pas",
+   "status": "fail"
+  },
+  {
+   "bad": "a2ae11a641911bbec759e4ccd454b9a6aca38ea6",
+   "good": "6ab56d11a9aa8c20ac73975c902d35f34188e8af",
+   "job": "test-core#src:test/test_procvar_value_context.pas",
+   "name": "test-core#341",
+   "opened": "2026-08-20T23:09:01Z",
+   "pin_built": false,
+   "range": [
+    "04f3328e2321a7d681f6e54eb8c66c3f38bc416c",
+    "19c3179fe44c90faa934eef5c9cb7b4e538e64c3",
+    "7b45dfa64483a1456d021a57fa06438f7a1b286d",
+    "28bd01e1105f1acb8d4fb29615d6a504f393ca72",
+    "a2ae11a641911bbec759e4ccd454b9a6aca38ea6"
+   ],
+   "src": "test/test_procvar_value_context.pas",
    "status": "fail"
   }
  ],
