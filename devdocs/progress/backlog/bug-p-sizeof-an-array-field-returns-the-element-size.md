@@ -38,7 +38,15 @@ end.
 
 The *variable* answers correctly, so this is not `SizeOf` and not the array
 type — it is the selector path losing the array-ness of a FIELD and reporting
-its element's size instead. Same shape as the field-vs-var split that wall 18
+its element's size instead.
+
+**Lane measured, not guessed.** The obvious alternative root was the shared
+type-descriptor ground — pxx models an array by its ELEMENT type, which broke
+the C frontend five separate silent ways once already. So the C side was probed
+before filing: a `struct R { int a[3]; }`, `sizeof(r.a)` against the gcc oracle,
+same binary, answers **12 and gcc answers 12**. C is clean, so this is the
+Pascal FIELD path and not shared descriptor ground — hence Track P. If a fix
+turns out to reach `symtab.inc` after all, re-file it A. Same shape as the field-vs-var split that wall 18
 turned out to be, and worth checking whether the two share a cause: the field
 paths know less about arrays than the var path does at several points.
 

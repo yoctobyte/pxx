@@ -48,7 +48,7 @@ lives in git, not in a timestamp._
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (239)
+## backlog (240)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -56,6 +56,7 @@ lives in git, not in a timestamp._
 | bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data | A | 40 | bug | A typed const array is emitted as BSS plus generated code that fills it element by element at startup, instead of being stored as initialised data. Measured at ~29 bytes of code per element for UInt64; Int64, Double and Cardinal all do it too, so it is every typed const array, not a 64-bit case. A 696-entry table costs 20 KB of code and 0 bytes of data. A string constant of the same bytes costs ~0 code and lands in .data, so the data path exists — the array lowering just does not use it. | — |
 | bug-a-aintostr-returns-empty-for-negative-numbers | A | 40 | bug | AIntToStr(n) returns the EMPTY STRING for any n < 0 — `while n > 0` never enters. It is the compiler's own IntToStr, used in ~40 diagnostics across the Pascal, NilPy and C frontends and the C preprocessor, so a negative value silently drops out of an error message rather than being reported wrong-looking. | — |
 | bug-a-c-driver-omits-rtl-stubs-for-an-imported-pascal-unit | A | 55 | bug | A Pascal unit whose body touches a managed string dies at import from C: "call to a runtime stub that was never emitted" | — |
+| bug-a-findtypealias-failed-to-find-puint8-on-stderr | A | 20 | bug | `FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr during a compile that then SUCCEEDS. Either the lookup failure is real and something silently fell back to a wrong type, or the message is a stale debug print that should not be in a release build. Both readings are defects; which one it is has not been established. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
 | bug-a-only-the-pascal-driver-emits-the-signal-runtime | A | 45 | bug | The signal runtime (SIGSEGV/SIGFPE hook, restorer, sethook, install stubs) is emitted only by the Pascal driver in parser.inc. Every other frontend -- C, NilPy, Rust, Zig, Basic, Ada, Lua, the asm frontend -- produces a binary with no signal runtime, so a hardware fault there is an unhandled signal instead of a runtime error. Same shape as the I/O-lock gap that was already found and fixed. | — |
@@ -100,8 +101,8 @@ lives in git, not in a timestamp._
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 20 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
+| bug-p-a-class-var-takes-no-array-type-and-a-named-one-is-silently-a-scalar | P | 55 | bug | `class var F: array[0..3] of Integer` is `unknown type: array`, and — the dangerous arm — `class var F: TA` where `TA = array[0..3] of Integer` COMPILES SILENTLY AS A SCALAR and fails somewhere else at the use site. The class-var branch parses only `ParseTypeKind` + `AllocVar`; it has none of the var section's array machinery. Blocks the rtl-generics corpus climb at wall 18. | — |
 | bug-p-a-parameterless-function-is-undefined-as-a-method-call-argument | P | 35 | bug | A parameterless function used as an ARGUMENT to a method call fails to resolve — `error: undefined variable (zero)` — while the identical argument to a free function compiles. Any argument position. Found writing lib/rtl/mimic_urllib_request.pas, where `headers.get(name, pynone)` would not compile but `HeaderFirst(raw, name, pynone)` did. | — |
-| bug-p-findtypealias-failed-to-find-puint8-on-stderr | P | 20 | bug | `FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr during a compile that then SUCCEEDS. Either the lookup failure is real and something silently fell back to a wrong type, or the message is a stale debug print that should not be in a release build. Both readings are defects; which one it is has not been established. | — |
 | bug-p-sizeof-an-array-field-returns-the-element-size | P | 45 | bug | `SizeOf(x.F)` where F is a fixed-array FIELD of a record or class returns the ELEMENT size, not the array's: `4 4 12` where FPC 3.2.2 prints `12 12 12` for the same three `array[0..2] of Integer`. A silent wrong VALUE, no diagnostic — a `Move`/`FillChar` sized this way copies one element and looks like it worked. | — |
 | bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits | P | 45 | bug | `-b shr 1` answers 2147483644 where FPC says 9223372036854775804, for Byte, Word and Cardinal — in BOTH the default dialect and --strict-fpc. FPC's unary minus yields a 64-bit value for EVERY integer operand type (SizeOf(-x) is 8 for all seven, measured); pxx's truncates an unsigned operand to 32 bits before any widening can run, so the sign is already gone. | — |
 | bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence | T | 45 | bug | file_cascade_ticket's Root-cause-suspects line falls back to 'likely a broken build or harness event' whenever no CASCADE_ROOT_JOBS entry is in the red set. That is a conclusion drawn from the absence of one narrow signal, printed with no hedge, and it is now directly contradicted by the Range section shipped in 8ec77190c — which on the live incident named the actual cause. Same defect class the Range work fixed for the sha: an auto-filed ticket asserting something it has no evidence for. | — |
@@ -568,6 +569,7 @@ lives in git, not in a timestamp._
 - [p 55] [N] bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
 - [p 55] [N] bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
 - [p 55] [N] bug-nilpy-a-lambda-returned-directly-is-not-callable
+- [p 55] [P] bug-p-a-class-var-takes-no-array-type-and-a-named-one-is-silently-a-scalar
 - [p 55] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 55] [U] decide-reduced-compiler-switch-spelling
 - [p 55] [A] feature-a-declaration-phase
@@ -747,10 +749,10 @@ lives in git, not in a timestamp._
 - [p 25] [C] idea-c-realworld-test-targets
 - [p 25] [A] refactor-a-search-path-helpers-live-in-the-c-preprocessor
 - [p 25] [A] task-a-add-fu-to-the-compiler-usage-line
+- [p 20] [A] bug-a-findtypealias-failed-to-find-puint8-on-stderr
 - [p 20] [N] bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds
 - [p 20] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only
 - [p 20] [N] bug-nilpy-four-remaining-absent-builtins
-- [p 20] [P] bug-p-findtypealias-failed-to-find-puint8-on-stderr
 - [p 20] [A] chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments
 - [p 20] [P] compat-pascal-method-impl-without-declaration
 - [p 20] [A] compat-pascal-strict-fpc-should-reject-a-duplicate-identifier-in-one-scope

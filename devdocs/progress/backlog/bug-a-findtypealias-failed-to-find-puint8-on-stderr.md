@@ -1,5 +1,5 @@
 ---
-track: P
+track: A
 prio: 20
 type: bug
 blocked-by: []
@@ -8,11 +8,14 @@ summary: "`FindTypeAlias failed to find puint8! AliasCount=36` is printed to std
 
 # `FindTypeAlias failed to find puint8!` on stderr, compile continues
 
-- **Type:** bug (Pascal frontend) — **Track P**.
+- **Type:** bug (compiler core) — **Track A**. `FindTypeAlias` and the alias
+  table are shared ground, not frontend ground; a core internal printing to
+  stderr during a normal successful compile is A's to answer.
 - **Filed:** 2026-08-20 by frank3, observed while driving the rtl-generics
   corpus stage for [[feature-pascal-corpus-generics]] (generics.defaults).
-- **Shared-file catch:** `FindTypeAlias` lives in the SHARED compiler core.
-  Obey A's gate and the no-concurrent-edit rule.
+- **Possible loose end, not a new defect:** `PUInt8` was cleared as an earlier
+  wall of the same corpus climb. Check that fix first — this may be its
+  remainder rather than anything new.
 
 ## What was seen
 
