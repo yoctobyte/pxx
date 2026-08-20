@@ -136,3 +136,22 @@ thread now has a block, so that becomes a load — filed as
 
 ## Log
 - 2026-08-20 — resolved, commit cd7e4aae3.
+
+## 2026-08-21 — CORRECTION: the block is in `gs`, not `fs`
+
+The write-up above says `arch_prctl(ARCH_SET_FS)` and `mov rax, fs:[0]`. That is
+what landed and it was **wrong**: glibc and musl keep *their* thread pointer in
+`fs`, so a pxx program linking libc (`external 'libc.so.6'` is supported) lost
+errno, the stack-protector canary at `fs:0x28`, locale and stdio the moment the
+entry code ran. A four-line program calling `printf`/`malloc`/`strerror`
+segfaulted before printing anything, while `pinned` ran it fine.
+
+Nothing caught it before the push: no test in the quick tier links glibc, and
+`test_multithreading` — which links libpthread — survived by luck, its calls
+happening not to touch the clobbered fields.
+
+Fixed the same night by moving to **`gs`**, which userspace does not use on
+x86-64 Linux, so the two thread pointers coexist. `test/test_glibc_tls_coexist.pas`
+is the regression test and is deliberately not `--threadsafe`: this is about
+every build. Left the account above as written rather than editing it — it is the
+record of what was actually done.

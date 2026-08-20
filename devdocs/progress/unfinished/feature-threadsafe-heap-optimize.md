@@ -7,7 +7,7 @@ owner: ""
 # Threadsafe heap — optimize + cross-target (M5)
 
 - **Type:** feature (codegen / runtime — optimization) — Track A
-- **Status:** working
+- **Status:** unfinished — the lock half, the benchmark and the TLS blocker are all done. The magazine half is PARKED with its diagnosis banked: the lock it would bypass is not only the allocator's, so it needs a design change first (see the 2026-08-21 note at the bottom).
 - **Opened:** 2026-06-30
 - **Umbrella:** [[meta-multithreading]]. Follows the M0 contract
   [[feature-threadsafe-heap-contract]] (correctness) — this is the *speed* half.
@@ -179,3 +179,63 @@ slot turns into a load).
 
 So the order is: main-thread block -> magazine. This ticket stays open on the
 magazine and is no longer two-lane.
+
+## 2026-08-21 — the magazine is bigger than this ticket says, and here is why
+
+TLS is no longer the blocker (every thread has a block now). So I went to write
+the magazine and stopped at the first question: **where is the lock taken?**
+
+### The lock is not the allocator's lock
+
+The ticket, and the summary line at the top of this file, both say "a coarse
+global lock on every alloc/free". That is half of it. `EmitAcquireHeapLock` has
+**19 call sites in `ir_codegen.inc` alone**, plus `symtab.inc`, and they are not
+all allocator entries:
+
+| site | what is inside the lock |
+| --- | --- |
+| `EmitDynArrayRetain` | refcount increment |
+| `EmitDynArrayReleaseForNode` | decrement **and free if it hit zero** |
+| `EmitDynArrayUnique` | read refcount, copy, swap, release |
+| `symtab.inc` scope exit | release **every managed field of a record** |
+| plain `GetMem` / `New` / object alloc | actual allocator state |
+
+Only the last row is what a magazine can bypass. The others hold the lock to
+make a **compound** operation atomic — "decrement, and if that reached zero,
+free" is not two independent atomics, and the record-scope-exit site walks a
+whole field list inside one critical section. (The bare refcount bumps that
+*don't* free already use `lock dec` and skip the lock entirely, so the
+distinction is one the codegen already draws — just not where the ticket
+assumes.)
+
+### What that means for the work
+
+A per-thread magazine cannot be written inside `builtinheap.pas` and left at
+that: on x86-64 the lock is taken by **codegen, outside the call**, so a
+magazine hidden in `PXXAlloc` would run with the lock already held and buy
+nothing. (Note `PXX_TS_SOFTLOCK` — the i386 path — does the opposite and takes
+the lock *inside* the allocator. Two mechanisms for one concept, which
+`normalise-dont-special-case.md` calls a smell, and it is: whichever way this
+lands, the two paths should end up the same shape.)
+
+So the real job is, in order:
+
+1. **Separate the two roles.** The allocator-state lock and the
+   managed-refcount critical section are one lock doing two jobs. Splitting them
+   is the actual root fix and is what makes everything below possible.
+2. A magazine fast path at the **pure alloc/free** sites only — TLS load, size
+   class, list pop, zero, fall back to lock + `PXXAlloc` on a miss. Hand-emitted
+   x86-64 at each site, or one lock-free stub they all call.
+3. Then measure against `bench/threadsafe_heap_scaling.pas`, which already
+   exists and already shows the cliff.
+
+Step 1 is a Track A design change with the self-host gate over it, not an
+afternoon. **Parked with the diagnosis banked rather than microfixed** —
+`root-cause-over-microfix.md`'s explicit instruction for this situation, and the
+microfix here (a magazine that skips a lock it does not in fact hold) would be
+worse than nothing, because it would look like it worked.
+
+Where the remaining measured speed actually is, for whoever picks this up: the
+lock half already took 26-32% off the contended path (see the table above), and
+[[feature-a-io-lock-owner-from-tls-not-gettid]] removes a **syscall per I/O
+statement**, which is a bigger constant than anything left in the allocator.

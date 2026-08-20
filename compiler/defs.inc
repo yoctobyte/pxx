@@ -451,17 +451,24 @@ const
     caller already owns, and a growable one would have to be negotiated through
     the __pxxclone signature. }
   TLS_BLOCK_SIZE   = 128;
+  { THE slot map. Every runtime user of the block takes its index from here --
+    an ad-hoc offset is how two consumers end up sharing a slot, which is a
+    silent wrong VALUE, not a crash. Slots 1..15 are unclaimed. }
+  TLS_SLOT_SELF    = 0;   { the block's own address; what __pxxTlsBase reads }
+  TLS_SLOT_FIRST_FREE = 1;
 
   AN_TLSBASE       = 96; { __pxxTlsBase: the calling thread's TLS base pointer, read
                            from the architectural thread register. No operands; yields
                            tyPointer. Lowers to IR_TLSBASE.
                            CONVENTION: slot 0 of the block holds the block's OWN address
-                           (what glibc/musl do), because x86-64 cannot read the fs base
-                           without a syscall -- `mov rax, fs:[0]` is the read. Nothing
-                           INSTALLS a block: that is arch_prctl(ARCH_SET_FS) through the
-                           existing __pxxrawsyscall, so it needs no intrinsic. A thread
-                           that never installed one reads its PARENT's block (clone does
-                           not reset fs), which is the silent aliasing
+                           (what glibc/musl do), because x86-64 cannot read the segment
+                           base without a syscall -- `mov rax, gs:[0]` is the read. GS,
+                           not fs: fs is libc's thread pointer and a pxx program may link
+                           one. Nothing INSTALLS a block through this node: that is
+                           arch_prctl(ARCH_SET_GS) through the existing __pxxrawsyscall,
+                           so it needs no intrinsic. A thread that never installed one
+                           reads its PARENT's block (clone does not reset the base),
+                           which is the silent aliasing
                            feature-a-thread-local-storage-via-clone-settls warns about --
                            install in the launcher, before user code runs. }
 
@@ -641,10 +648,10 @@ const
                            (feature-c-alloca-dynamic-stack). }
 
   IR_TLSBASE       = 73; { __pxxTlsBase: load the calling thread's TLS base into the
-                           accumulator. No operands. x86-64 = `mov rax, fs:[0]` (the base
+                           accumulator. No operands. x86-64 = `mov rax, gs:[0]` (the base
                            is not readable as a register; the block's slot 0 holds its own
                            address by convention). The other targets have a readable thread
-                           register (aarch64 tpidr_el0, arm32 tpidruro, i386 gs) but no way
+                           register (aarch64 tpidr_el0, arm32 tpidruro) but no way
                            to SET it that this runtime uses yet, so the Pascal frontend
                            refuses the intrinsic there and no backend but x86-64 ever sees
                            this op. }
@@ -3012,6 +3019,7 @@ var
     `Signal(sig, handler)` wrapper is — has no other way to learn which one
     fired. x86-64 only so far; the other targets REFUSE the intrinsic rather
     than answer 0 (feature-signal-siginfo-ucontext). }
+  TlsMainInstalled: Boolean;     { the entry-point code that installs the main thread's TLS block was emitted -- false for --emit-obj/--shared, which have no ELF entry, so anything reading gs: must fall back }
   BSS_TLS_MAIN    : Integer;     { the MAIN thread's TLS block (TLS_BLOCK_SIZE bytes); cloned threads carve theirs off their own stack }
   BSS_SIG_NUM     : Integer;
   BSS_SIG_CTX     : Integer;  { the ucontext_t* the kernel passed the handler. Parked for the fault-to-RAISE work (rewrite the saved RIP to a raise stub before returning), which is the rest of feature-signal-siginfo-ucontext; read by __pxxSigContext. }

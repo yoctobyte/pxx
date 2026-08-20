@@ -657,12 +657,26 @@ procedure EmitIoLockStubs;
   Reentrant owner-tid spinlock: BSS_IO_OWNER holds the owning thread id (0 =
   free), BSS_IO_DEPTH the owner's nesting depth — so a write argument calling a
   function that itself writes cannot self-deadlock. gettid is one syscall per
-  I/O statement (no TLS yet); x86 total-store-order gives the store-release /
+  I/O statement -- see the note at the acquire path for why TLS cannot remove it;
+  x86 total-store-order gives the store-release /
   cmpxchg-acquire semantics for free. Clobbers rax/rcx/rsi/r11 — called only at
   statement boundaries, where no evaluation registers are live. }
 var spinStart, d: Integer;
 begin
   IOLockAddr := CodeLen;
+  { The owner tid still costs a gettid SYSCALL PER I/O STATEMENT, and the TLS
+    slot that would remove it is right there -- but it is NOT safe, and the
+    attempt is recorded in feature-a-io-lock-owner-from-tls-not-gettid rather
+    than repeated. A pxx program can host threads it did not create (glibc
+    pthread_create, a callback from a C library). Those threads' thread pointer
+    is not ours, and the base is INHERITED across clone, so a foreign thread
+    reads the main thread's block and would take the main thread's tid as its
+    own -- which makes the reentrancy check answer "already mine" for a lock it
+    does not hold. Silent loss of mutual exclusion, in the primitive whose whole
+    job is mutual exclusion.
+    No content check fixes it: inheritance reproduces the block exactly. The
+    ticket carries the design that does (validate rsp against per-thread stack
+    bounds stored in the block, fall back to gettid on a miss). }
   EmitAsmX64([
     'mov rax, %', 186,                 { gettid }
     'syscall',
@@ -745,14 +759,30 @@ procedure EmitTlsMainInstall;
 
   Storage allocated HERE, next to the only code that uses it -- the BSS_IO_OWNER
   lesson, which has now bitten twice. BSS is zero-filled, so only the
-  self-pointer needs writing. }
+  self-pointer needs writing.
+
+  GS, NOT FS. glibc and musl put THEIR thread pointer in fs, and a pxx program
+  may link them (`external 'libc.so.6'`). Setting fs here destroys glibc's TLS
+  for the main thread: errno, the stack-protector canary at fs:0x28, locale,
+  stdio. Measured, not reasoned -- the fs version of this code segfaulted a
+  four-line program calling printf/malloc/strerror, which `pinned` runs fine,
+  and no test in the quick tier links glibc so nothing caught it. gs is unused
+  by userspace on x86-64 Linux, so the two thread pointers coexist. }
 begin
   if TargetArch <> TARGET_X86_64 then Exit;
+  { --emit-obj / --shared have no ELF entry point: the linker or the host program
+    supplies one, so code at offset 0 is never reached and the block would never
+    be installed. Say so with a flag rather than emitting dead bytes and hoping,
+    because the consumers cannot test for it at RUNTIME -- `mov rax, fs:[0]`
+    faults on an fs base of 0 and, worse, inside a glibc host it succeeds and
+    returns glibc's TCB. }
+  if EmitObjMode or EmitSharedMode then Exit;
+  TlsMainInstalled := True;
   BSS_TLS_MAIN := BSSSize; Inc(BSSSize, TLS_BLOCK_SIZE);
   EmitAsmX64(['mov rsi, @glob', BSS_TLS_MAIN]);
   EmitB($48); EmitB($89); EmitB($36);          { mov [rsi], rsi  (slot 0 = self) }
   EmitAsmX64([
-    'mov edi, %', $1002,                       { ARCH_SET_FS }
+    'mov edi, %', $1001,                       { ARCH_SET_GS -- NOT fs, see below }
     'mov eax, %', 158,                         { arch_prctl }
     'syscall'
   ]);
@@ -3036,12 +3066,13 @@ begin
       end;
 
     IR_TLSBASE:
-      { __pxxTlsBase. The fs BASE is not readable as a register (rdfsbase needs
-        CR4.FSGSBASE, which is not guaranteed), so read the self-pointer the
-        installer parked at offset 0 -- the same trick glibc and musl use. }
+      { __pxxTlsBase. The segment BASE is not readable as a register (rdgsbase
+        needs CR4.FSGSBASE, which is not guaranteed), so read the self-pointer
+        the installer parked at offset 0 -- the same trick glibc and musl use.
+        GS because fs belongs to libc; see EmitTlsMainInstall. }
       begin
-        EmitB($64); EmitB($48); EmitB($8B); EmitB($04); EmitB($25);
-        EmitI32(0);                                    { mov rax, fs:[0] }
+        EmitB($65); EmitB($48); EmitB($8B); EmitB($04); EmitB($25);
+        EmitI32(0);                                    { mov rax, gs:[0] }
       end;
 
     IR_FRAME:

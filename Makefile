@@ -7778,6 +7778,15 @@ test-core: $(COMPILER)
 	grep -q "Unhandled exception" $(TESTTMP)/test_exception_unhandled.log
 	./$(COMPILER) --threadsafe test/test_multithreading.pas $(TESTTMP)/test_multithreading26
 	$(TESTTMP)/test_multithreading26 | grep -q "multithreading test completed successfully"
+	# pxx's thread pointer must not evict libc's. The main-thread TLS block was
+	# installed in fs -- where glibc keeps ITS thread pointer -- and a program
+	# calling strerror/malloc segfaulted before printing anything, while pinned
+	# ran it. Nothing caught it: no quick-tier test links glibc, and
+	# test_multithreading survived only because its libpthread calls happened not
+	# to touch the clobbered fields. gs is unused by userspace on x86-64, which is
+	# why the two can coexist at all. Not --threadsafe: this is about every build.
+	./$(COMPILER) test/test_glibc_tls_coexist.pas $(TESTTMP)/test_glibc_tls_coexist26
+	test "$$($(TESTTMP)/test_glibc_tls_coexist26)" = "GLIBC TLS COEXIST OK"
 	./$(COMPILER) --threadsafe test/test_threadsafe_layout_rtti.pas $(TESTTMP)/test_threadsafe_layout_rtti26
 	test "$$($(TESTTMP)/test_threadsafe_layout_rtti26)" = "threadsafe layout ok"
 	test ! -s $(TESTTMP)/test_exception_unhandled.out

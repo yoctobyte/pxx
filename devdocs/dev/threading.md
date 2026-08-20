@@ -192,7 +192,8 @@ now exists, as the section below.
 ## Thread-local storage (x86-64)
 
 `PXX_CLONE_THREAD` does **not** set `CLONE_SETTLS`, so a fresh thread inherits
-the parent's `fs` base and an `fs:`-relative slot silently aliases the parent's.
+the parent's thread-pointer base and a segment-relative slot silently aliases the
+parent's.
 Measured, not assumed: strip the per-thread install out of `test_tls_base` and
 four threads report ~39000 tag mismatches against each other.
 
@@ -201,15 +202,29 @@ The fix does **not** go through `clone`. `arch_prctl(ARCH_SET_FS)` acts on the
 
 ```pascal
 b^ := Int64(PtrUInt(b));   { slot 0 = the block's own address }
-__pxxrawsyscall(158 { arch_prctl }, $1002 { ARCH_SET_FS }, Int64(PtrUInt(b)), 0, 0, 0, 0);
+__pxxrawsyscall(158 { arch_prctl }, $1001 { ARCH_SET_GS }, Int64(PtrUInt(b)), 0, 0, 0, 0);
 ```
 
+### GS, not FS — the one thing to get right here
+
+**glibc and musl keep their thread pointer in `fs`.** pxx programs are usually
+static and libc-free, but `external 'libc.so.6'` is supported, and the first
+version of this used `fs` — which destroyed libc's TLS for the main thread:
+errno, the stack-protector canary at `fs:0x28`, locale, stdio. A four-line
+program calling `printf`/`malloc`/`strerror` segfaulted before printing
+anything, while `pinned` ran it. Nothing in the quick tier links glibc, so
+nothing caught it; `test_multithreading` links libpthread and survived by luck.
+
+`gs` is unused by userspace on x86-64 Linux, so the two thread pointers coexist.
+`test_glibc_tls_coexist` is the regression test, and it is deliberately **not**
+`--threadsafe`: this is about every build, not the threaded one.
+
 That needs no compiler support at all — it is an ordinary syscall. Only the
-**read** side does, because the x86-64 `fs` base is not readable as a register
-(`rdfsbase` needs `CR4.FSGSBASE`, which is not guaranteed):
+**read** side does, because the x86-64 segment base is not readable as a register
+(`rdgsbase` needs `CR4.FSGSBASE`, which is not guaranteed):
 
 ```pascal
-p := __pxxTlsBase;                        { one instruction: mov rax, fs:[0] }
+p := __pxxTlsBase;                        { one instruction: mov rax, gs:[0] }
 slot := PInt64(PtrUInt(p) + PtrUInt(n * 8));
 ```
 
@@ -258,11 +273,28 @@ the shape that produced `bug-a-threadsafe-segfaults-on-every-nilpy-program`. The
 `.asm` frontend is skipped — its program *is* the emitted bytes and its entry
 point is overridable (`AsmEntryOff`).
 
-Net: `__pxxTlsBase` works on every thread of every x86-64 program, in every mode,
-on every frontend, with nothing installed by hand.
+Net: `__pxxTlsBase` works on every thread **pxx created**, in every mode, on
+every frontend, with nothing installed by hand.
+
+### Threads pxx did NOT create
+
+A program can host threads from outside the runtime — glibc `pthread_create`, a
+callback from a C library. Those threads never passed through the clone stub, and
+the `gs` base is **inherited across clone**, so `__pxxTlsBase` there returns the
+*creating* thread's block. Not a fault; an alias, with a valid-looking pointer.
+
+That is why the `--threadsafe` I/O lock still pays a **`gettid` syscall per I/O
+statement** instead of caching the tid in a slot. It was measured (43% of that
+benchmark's overhead, one syscall per `Writeln`) and it was tried, and it is
+wrong: a foreign thread would read the main thread's cached tid, the reentrancy
+check would answer "already mine" for a lock it does not hold, and mutual
+exclusion would be silently lost. No content check fixes it — inheritance
+reproduces the block exactly. The design that does work (store per-thread stack
+bounds in the block and validate `rsp` against them, falling back to `gettid` on
+a miss) is in [[feature-a-io-lock-owner-from-tls-not-gettid]].
 
 x86-64 only. The other targets have a readable thread register (aarch64
-`tpidr_el0`, arm32 `tpidruro`, i386 `gs`) but no path this runtime uses to
+`tpidr_el0`, arm32 `tpidruro`) but no path this runtime uses to
 *set* one — i386 in particular wants a `struct user_desc`, not a raw base — so
 `__pxxTlsBase` errors there at compile time rather than returning a plausible
 wrong pointer.

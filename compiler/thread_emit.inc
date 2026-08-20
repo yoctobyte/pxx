@@ -78,16 +78,17 @@ begin
     EmitB($75); EmitB($1E);                           { jnz .parent  (skip 30 child bytes) }
     { ---- child: rsp = tlsBlock-16, [rsp]=entry [rsp+8]=arg ---- }
     { Install the TLS block FIRST, before anything Pascal runs. clone does not
-      reset fs, so a child that skipped this would read the PARENT's block --
+      reset the thread pointer, so a child that skipped this would read the PARENT's block --
       not a null base you could test for, but a valid-looking pointer into
       someone else's storage. Doing it here rather than in the RTL launcher is
       what makes that unreachable: every pxx thread passes through this stub,
       whatever frontend or library created it.
       arch_prctl acts on the CALLING thread, which is why no CLONE_SETTLS, no
       sixth argument and no per-arch tls plumbing are involved
-      (feature-a-thread-local-storage-via-clone-settls). syscall clobbers rcx
-      and r11; both are dead here (arg was staged on the stack above). }
-    EmitB($BF); EmitI32($1002);                       { mov edi, ARCH_SET_FS }
+      (feature-a-thread-local-storage-via-clone-settls). GS, not fs: fs belongs
+      to libc, and a pxx program may link one. syscall clobbers rcx and r11;
+      both are dead here (arg was staged on the stack above). }
+    EmitB($BF); EmitI32($1001);                       { mov edi, ARCH_SET_GS }
     EmitB($48); EmitB($8D); EmitB($74); EmitB($24); EmitB($10); { lea rsi, [rsp+16] }
     EmitB($B8); EmitI32(158);                         { mov eax, 158 (arch_prctl) }
     EmitB($0F); EmitB($05);                           { syscall }

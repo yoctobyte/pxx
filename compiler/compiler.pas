@@ -228,6 +228,7 @@ begin
   XtensaFastDoubles := False;
   TARGET_PTR_SIZE := 8;
   EmitObjMode := False;
+  TlsMainInstalled := False;
   EmitSharedMode := False;
   EmitAsmTextMode := False;
   EspBareBoot := False;
