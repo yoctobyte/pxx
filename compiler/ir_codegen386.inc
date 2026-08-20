@@ -2363,7 +2363,7 @@ begin
         if Is64Bit386(tk) or Is64Bit386(lhsTk) or Is64Bit386(rhsTk) then
         begin
           EmitBinop64_386(left, right, op,
-            not ((lhsTk = tyUInt64) or (rhsTk = tyUInt64)),
+            not TypeBinop64Unsigned(op, lhsTk, rhsTk),
             (IRIVal[node] = 1) and ((op = Ord(tkPlus)) or (op = Ord(tkMinus)) or (op = Ord(tkStar))),
             not TypeSigned(IntToTypeKind(IRTk[node])));
           Exit;
@@ -2407,14 +2407,14 @@ begin
         else if op = Ord(tkDiv) then
         begin
           { unsigned dividend (Cardinal/LongWord, C unsigned int): zero edx + div }
-          if TypeDivideUnsigned(lhsTk) then
+          if TypeDivideUnsigned(lhsTk, rhsTk) then
             begin EmitB($31); EmitB($D2); EmitB($F7); EmitB($F1); end { xor edx,edx; div ecx }
           else
             begin EmitB($99); EmitB($F7); EmitB($F9); end;            { cdq; idiv ecx }
         end
         else if op = Ord(tkMod) then
         begin
-          if TypeDivideUnsigned(lhsTk) then
+          if TypeDivideUnsigned(lhsTk, rhsTk) then
             begin EmitB($31); EmitB($D2); EmitB($F7); EmitB($F1); end { xor edx,edx; div ecx }
           else
             begin EmitB($99); EmitB($F7); EmitB($F9); end;            { cdq; idiv ecx }

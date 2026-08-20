@@ -17180,6 +17180,26 @@ begin
 end;
 
 { Apply PromoWidenToDouble to both operands of a float-typed binop, in place. }
+{ Pascal widens a `div`/`mod` pair to a type that holds BOTH operands, and an
+  integer LITERAL's range is its own value, not a declared type -- so `q div 10`
+  is an unsigned division (10 fits QWord) while `q div n` with `n: Int64` is a
+  signed one. The signedness rule below reads only the two operand TYPES, so a
+  positive literal divisor carried tyInteger into it and would have flipped every
+  unsigned division by a constant to signed, turning any QWord above 2^63
+  negative. Retype the LITERAL instead of teaching the rule about literals: one
+  "unsigned iff both operands are" rule then serves the result type and all six
+  backends, with no second path to keep in step (normalise-dont-special-case). }
+procedure NormalizeUnsignedDivLiteral(dividend, divisor: Integer);
+begin
+  if CProgramMode then Exit;
+  if (dividend < 0) or (divisor < 0) then Exit;
+  if ASTKind[divisor] <> AN_INT_LIT then Exit;
+  if ASTIVal[divisor] < 0 then Exit;
+  if not TypeIsOrdinal(IntToTypeKind(ASTTk[dividend])) then Exit;
+  if TypeSigned(IntToTypeKind(ASTTk[dividend])) then Exit;
+  ASTTk[divisor] := Ord(tyUInt64);
+end;
+
 procedure PromoWidenBinopOperands(node: Integer);
 begin
   if node < 0 then Exit;
@@ -17403,12 +17423,12 @@ begin
                                             IntToTypeKind(ASTTk[right])));
       PromoWidenBinopOperands(node);
     end
-    else if op = tkDiv then
+    else if (op = tkDiv) or (op = tkMod) then
+    begin
+      NormalizeUnsignedDivLiteral(left, right);
       ASTTk[node] := Ord(TypeDivideResultPair(IntToTypeKind(ASTTk[left]),
-                                              IntToTypeKind(ASTTk[right])))
-    else if op = tkMod then
-      ASTTk[node] := Ord(TypeDivideResultPair(IntToTypeKind(ASTTk[left]),
-                                              IntToTypeKind(ASTTk[right])))
+                                              IntToTypeKind(ASTTk[right])));
+    end
     else if (op = tkIdent) or (op = tkShl) then
     begin
       { A SHIFT happens at NATIVE width, and its result is not truncated back to

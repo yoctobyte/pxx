@@ -4395,7 +4395,7 @@ begin
           tkDiv:
             begin
               EmitDivZeroCheckX64;
-              if TypeDivideUnsigned(IntToTypeKind(IRTk[left])) then
+              if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
                 begin EmitB($48); EmitB($31); EmitB($D2); EmitB($48); EmitB($F7); EmitB($F1); end
               else
                 begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9); end;
@@ -4403,7 +4403,7 @@ begin
           tkMod:
             begin
               EmitDivZeroCheckX64;
-              if TypeDivideUnsigned(IntToTypeKind(IRTk[left])) then
+              if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
                 begin EmitB($48); EmitB($31); EmitB($D2); EmitB($48); EmitB($F7); EmitB($F1); end
               else
                 begin EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9); end;

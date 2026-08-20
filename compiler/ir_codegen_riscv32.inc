@@ -1840,7 +1840,7 @@ begin
            Is64BitRISCV32(IntToTypeKind(IRTk[right])) then
         begin
           EmitBinop64RISCV32(left, right, op,
-            not ((IntToTypeKind(IRTk[left]) = tyUInt64) or (IntToTypeKind(IRTk[right]) = tyUInt64)),
+            not TypeBinop64Unsigned(op, IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])),
             (IRIVal[node] = 1) and ((op = Ord(tkPlus)) or (op = Ord(tkMinus)) or (op = Ord(tkStar))),
             not TypeSigned(IntToTypeKind(IRTk[node])));
           Exit;
@@ -1921,12 +1921,12 @@ begin
         else if op = Ord(tkDiv) then
         begin
           { unsigned dividend (Cardinal/LongWord, C unsigned int) -> divu }
-          if TypeDivideUnsigned(IntToTypeKind(IRTk[left])) then rv32_divu(reg_a0, reg_a0, reg_a1)
+          if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then rv32_divu(reg_a0, reg_a0, reg_a1)
           else rv32_div(reg_a0, reg_a0, reg_a1);
         end
         else if op = Ord(tkMod) then
         begin
-          if TypeDivideUnsigned(IntToTypeKind(IRTk[left])) then rv32_remu(reg_a0, reg_a0, reg_a1)
+          if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then rv32_remu(reg_a0, reg_a0, reg_a1)
           else rv32_rem(reg_a0, reg_a0, reg_a1);
         end
         else if op = Ord(tkAnd) then rv32_and(reg_a0, reg_a0, reg_a1)

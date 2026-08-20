@@ -1611,12 +1611,12 @@ begin
             an unsigned operand whose top bit is set (e.g. size_t ~0) treated it
             as -1, so `MAX_SIZET/24` came out 0 and lua's table-size guard tripped
             a bogus "table overflow" (bug-aarch64-unsigned-div). }
-          if TypeDivideUnsigned(IntToTypeKind(IRTk[left])) then EmitI32($9AC10800) { udiv x0, x0, x1 }
+          if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then EmitI32($9AC10800) { udiv x0, x0, x1 }
           else EmitI32($9AC10C00);                          { sdiv x0, x0, x1 }
         end
         else if op = Ord(tkMod) then
         begin
-          if TypeDivideUnsigned(IntToTypeKind(IRTk[left])) then EmitI32($9AC10802) { udiv x2, x0, x1 }
+          if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then EmitI32($9AC10802) { udiv x2, x0, x1 }
           else EmitI32($9AC10C02);                          { sdiv x2, x0, x1 }
           EmitI32($9B018040);  { msub x0, x2, x1, x0 }
         end

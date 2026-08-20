@@ -2813,12 +2813,58 @@ begin
     Result := TypeArithmeticResult(lhs, rhs);
 end;
 
-function TypeDivideUnsigned(dividend: TTypeKind): Boolean;
+{ `div`/`mod` read BOTH operands, exactly like a comparison does: the pair
+  widens to a type that holds both, so `Word div SmallInt` is a SIGNED division
+  (FPC 3.2.2 answers -1 for `40000 div -25536`, not 0). Keying on the dividend
+  alone made EVERY unsigned-over-signed division unsigned -- Word/SmallInt,
+  Byte/ShortInt, LongWord/Integer and QWord/Int64 all diverged from FPC, while
+  every signed dividend agreed. That is the same double case TypeCompareUnsigned
+  already got right for comparisons, so this delegates to it rather than growing
+  a second rule: the two must answer the same question the same way, C's usual
+  arithmetic conversions (sub-int promotion, unsigned-wins at equal 8-byte rank)
+  included. A non-ordinal divisor -- synthesized IR tagged tyUnknown -- keeps the
+  old dividend-only rule, so internally generated divisions are untouched. }
+function TypeDivideUnsigned(dividend, divisor: TTypeKind): Boolean;
 begin
-  Result := TypeIsOrdinal(dividend) and not TypeSigned(dividend);
+  Result := False;
+  if not TypeIsOrdinal(dividend) then Exit;
+  if not TypeIsOrdinal(divisor) then
+  begin
+    { synthesized IR carries no divisor type; keep the old dividend-only rule }
+    Result := not TypeSigned(dividend);
+    Exit;
+  end;
+  if CProgramMode then
+  begin
+    { C converts by RANK, not by range: at equal rank the unsigned operand wins
+      (`u / -1` is unsigned), and a sub-int pair promotes to signed int. That is
+      TypeCompareUnsigned's job already. }
+    Result := TypeCompareUnsigned(dividend, divisor);
+    Exit;
+  end;
+  { Pascal converts by RANGE: the pair widens to a type holding both, which is
+    signed the moment either operand is -- `LongWord div SmallInt` is signed even
+    though the unsigned side is WIDER, because Int64 holds both. A positive
+    literal divisor is normalised to unsigned before this (see
+    NormalizeUnsignedDivLiteral), so `q div 10` stays unsigned. }
+  Result := (not TypeSigned(dividend)) and (not TypeSigned(divisor));
 end;
 
-function TypeDivideResult(dividend: TTypeKind): TTypeKind;
+{ The 32-bit backends' 64-bit PAIR path (i386/arm32/riscv32) picks ONE
+  signedness for the whole operation, from "either operand is UInt64". That is
+  the arithmetic/shift rule and it stays; `div`/`mod` must follow the two-operand
+  divide rule instead, or `QWord div Int64` divides unsigned on those targets
+  while x86-64 and aarch64 divide signed. Same question, one answer, every
+  target. }
+function TypeBinop64Unsigned(op: Integer; lhs, rhs: TTypeKind): Boolean;
+begin
+  if (op = Ord(tkDiv)) or (op = Ord(tkMod)) then
+    Result := TypeDivideUnsigned(lhs, rhs)
+  else
+    Result := (lhs = tyUInt64) or (rhs = tyUInt64);
+end;
+
+function TypeDivideResult(dividend, divisor: TTypeKind): TTypeKind;
 begin
   { `div`/`mod` on a promotable int stay promotable. This sits ahead of the
     signedness rule because the tkDiv/tkMod arms in the binop typing sites run
@@ -2829,14 +2875,15 @@ begin
     Result := dividend;
     Exit;
   end;
-  if TypeDivideUnsigned(dividend) then
+  if TypeDivideUnsigned(dividend, divisor) then
     Result := tyUInt64
   else
     Result := tyInt64;
 end;
 
-{ `div`/`mod` typed from BOTH operands. TypeDivideResult reads the dividend
-  alone, which is right for width but wrong for the promotable class: `5 // (j +
+{ `div`/`mod` typed from BOTH operands. TypeDivideResult reads the divisor for
+  signedness but takes its WIDTH class from the dividend, which is wrong for the
+  promotable class: `5 // (j +
   1)` has a machine-int dividend and an ARBITRARY-PRECISION divisor, so the node
   typed Int64, the promo divisor's slot ADDRESS was used as the number, and the
   answer was garbage (0 for `//`, the dividend itself for `%`). The divisor
@@ -2846,7 +2893,7 @@ begin
   if TypeIsPromoInt(divisor) then
     TypeDivideResultPair := tyPromoInt64
   else
-    TypeDivideResultPair := TypeDivideResult(dividend);
+    TypeDivideResultPair := TypeDivideResult(dividend, divisor);
 end;
 
 function TypeIsPointerSized(tk: TTypeKind): Boolean;

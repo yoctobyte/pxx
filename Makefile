@@ -4210,6 +4210,16 @@ test-core: $(COMPILER)
 	# FPC 3.2.2's values, except array[TGap] which FPC refuses outright.
 	./$(COMPILER) test/test_enum_explicit_ordinal_low_high.pas $(TESTTMP)/test_enumord26
 	test "$$($(TESTTMP)/test_enumord26 | tail -1)" = "total ok 24 / 24"
+	# `div`/`mod` picked signed-vs-unsigned from the DIVIDEND alone, so every
+	# unsigned-over-signed division ran unsigned: `Word(40000) div SmallInt(-25536)`
+	# was 0 where FPC says -1, at all four widths, silently. Pascal widens the pair
+	# to a type holding BOTH operands (signed the moment either is), C converts by
+	# rank -- and the C side was wrong too: `uchar/schar`, `ushort/short` and
+	# `long/ulong` all disagreed with gcc. One two-operand TypeDivideUnsigned now
+	# answers both, with a positive literal divisor normalised to unsigned so
+	# `q div 10` does not turn a QWord above 2^63 negative. All 35 are FPC 3.2.2's.
+	./$(COMPILER) test/test_div_mod_mixed_signedness.pas $(TESTTMP)/test_divsign26
+	test "$$($(TESTTMP)/test_divsign26 | tail -1)" = "total ok 35 / 35"
 	./$(COMPILER) test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_nativeshift26
 	test "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
 	test "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"

@@ -1898,7 +1898,7 @@ begin
         if Is64BitArm32(tk) or Is64BitArm32(lhsTk) or Is64BitArm32(rhsTk) then
         begin
           EmitBinop64Arm32(left, right, op,
-            not ((lhsTk = tyUInt64) or (rhsTk = tyUInt64)),
+            not TypeBinop64Unsigned(op, lhsTk, rhsTk),
             (IRIVal[node] = 1) and ((op = Ord(tkPlus)) or (op = Ord(tkMinus)) or (op = Ord(tkStar))),
             not TypeSigned(IntToTypeKind(IRTk[node])));
           Exit;
@@ -1960,12 +1960,12 @@ begin
         else if op = Ord(tkDiv) then
         begin
           { unsigned dividend (Cardinal/LongWord, C unsigned int) -> udiv (bit21) }
-          if TypeDivideUnsigned(lhsTk) then EmitI32($E730F110)   { udiv r0, r0, r1 }
+          if TypeDivideUnsigned(lhsTk, rhsTk) then EmitI32($E730F110)   { udiv r0, r0, r1 }
           else EmitI32($E710F110);                               { sdiv r0, r0, r1 }
         end
         else if op = Ord(tkMod) then
         begin
-          if TypeDivideUnsigned(lhsTk) then EmitI32($E732F110)   { udiv r2, r0, r1 }
+          if TypeDivideUnsigned(lhsTk, rhsTk) then EmitI32($E732F110)   { udiv r2, r0, r1 }
           else EmitI32($E712F110);                               { sdiv r2, r0, r1 }
           EmitI32($E0020192);  { mul r2, r2, r1 }
           EmitI32($E0400002);  { sub r0, r0, r2 }
