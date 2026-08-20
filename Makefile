@@ -419,8 +419,9 @@ test-nilpy: $(COMPILER)
 	@if command -v xvfb-run >/dev/null 2>&1; then \
 	  for t in tkinter_facade:$(TESTTMP)/test_nilpy_tkinter26 field_class_identity:$(TESTTMP)/test_nilpy_fldcls26 callbacks:$(TESTTMP)/test_nilpy_tkcb26; do \
 	    src=$${t%%:*}; bin=$${t##*:}; \
-	    timeout 120 xvfb-run -a $$bin > $(TESTTMP)/$$src.got 2>&1 \
-	      || { echo "  tk: $$src EXITED NONZERO under Xvfb"; cat $(TESTTMP)/$$src.got; exit 1; }; \
+	    timeout 120 xvfb-run -a $$bin > $(TESTTMP)/$$src.got 2>&1; rc=$$?; \
+	    if [ "$$rc" = "124" ]; then echo "  tk: $$src TIMEOUT after 120s under Xvfb (hung, not a wrong exit)"; exit 1; fi; \
+	    [ "$$rc" = "0" ] || { echo "  tk: $$src EXITED NONZERO under Xvfb"; cat $(TESTTMP)/$$src.got; exit 1; }; \
 	    diff -u examples/tk/$$src.expected $(TESTTMP)/$$src.got \
 	      || { echo "  tk: $$src OUTPUT CHANGED"; exit 1; }; \
 	  done; \
@@ -2431,7 +2432,9 @@ test-nilpy: $(COMPILER)
 	  | grep -q 'expects text for parameter "s"' \
 	  || { echo 'test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter'; exit 1; }
 	./$(COMPILER) test/test_nilpy_float_repeat_typeerror.npy $(TESTTMP)/test_nilpy_float_repeat_typeerror26
-	test "$$(timeout 20 $(TESTTMP)/test_nilpy_float_repeat_typeerror26 2>&1 || true)" = "$$(printf 'ababab ababab ababab\nUnhandled exception: TypeError: expected an integer to repeat a str by, got float')"
+	@out=$$(timeout 20 $(TESTTMP)/test_nilpy_float_repeat_typeerror26 2>&1); rc=$$?; \
+	  if [ "$$rc" = "124" ]; then echo "test_nilpy_float_repeat_typeerror: TIMEOUT after 20s (not a wrong diagnostic)"; exit 1; fi; \
+	  test "$$out" = "$$(printf 'ababab ababab ababab\nUnhandled exception: TypeError: expected an integer to repeat a str by, got float')"
 	@# ...and the same diagnostics are CATCHABLE — PyTypeError raises, it no
 	@# longer Halt(219)s (bug-nilpy-pytypeerror-halts-instead-of-raising)
 	./$(COMPILER) test/test_nilpy_typeerror_is_catchable.npy $(TESTTMP)/test_nilpy_typeerror_catch26
@@ -2564,7 +2567,9 @@ test-nilpy: $(COMPILER)
 	@# `"x" * n` must be LINEAR -- the large sizes here are the regression guard,
 	@# the old quadratic routine could not finish this file
 	./$(COMPILER) test/test_nilpy_str_repeat_linear.npy $(TESTTMP)/test_nilpy_str_repeat26
-	test "$$(timeout 60 $(TESTTMP)/test_nilpy_str_repeat26)" = "$$(printf 'xxxxx ababab abcabc\nababab\n[] [] []\n1 1000\n80000\n200000\n1000000\n300000 a b c c')"
+	@out=$$(timeout 60 $(TESTTMP)/test_nilpy_str_repeat26); rc=$$?; \
+	  if [ "$$rc" = "124" ]; then echo "test_nilpy_str_repeat: TIMEOUT after 60s (not a wrong value)"; exit 1; fi; \
+	  test "$$out" = "$$(printf 'xxxxx ababab abcabc\nababab\n[] [] []\n1 1000\n80000\n200000\n1000000\n300000 a b c c')"
 	@# a nested def that CAPTURES and then ESCAPES must carry its captures: the
 	@# bridge marshals the body's own arity before them, not a hardcoded one
 	# `def w` TWICE in one enclosing def: Python rebinds the name, so the later
@@ -3571,7 +3576,9 @@ test-core: $(COMPILER)
 	# did not hang but printed 9223372036854775809.000000. Run under a TIMEOUT — a
 	# regression here is a HANG, not a wrong line.
 	./$(COMPILER) test/test_writeln_nonfinite_float.pas $(TESTTMP)/test_writeln_nonfinite26
-	test "$$(timeout 20 $(TESTTMP)/test_writeln_nonfinite26)" = "$$(printf ' Inf\n Inf\n[ Inf]\n Inf\n Inf\n-Inf\n[-Inf]\n-Inf\n Nan\n[ Nan]\n Nan\n 1.0000000000000000E+000\n-2.5000000000000000E+000\n 0.0000000000000000E+000\n 1.0000000000000001E+300\n3.50\n  -0.125')"
+	@out=$$(timeout 20 $(TESTTMP)/test_writeln_nonfinite26); rc=$$?; \
+	  if [ "$$rc" = "124" ]; then echo "test_writeln_nonfinite: TIMEOUT after 20s (not a wrong value)"; exit 1; fi; \
+	  test "$$out" = "$$(printf ' Inf\n Inf\n[ Inf]\n Inf\n Inf\n-Inf\n[-Inf]\n-Inf\n Nan\n[ Nan]\n Nan\n 1.0000000000000000E+000\n-2.5000000000000000E+000\n 0.0000000000000000E+000\n 1.0000000000000001E+300\n3.50\n  -0.125')"
 	./$(COMPILER) test/test_promoint_minint64_div.pas $(TESTTMP)/test_promoint_minint26
 	test "$$($(TESTTMP)/test_promoint_minint26)" = "$$(printf '9223372036854775808\n9223372036854775808\n0\n-9223372036854775808\n0\n-9223372036854775808\n9223372036854775807\n9223372036854775807\n-1180591620717411303424')"
 	./$(COMPILER) test/test_promoint_parameter.pas $(TESTTMP)/test_promoint_param26
@@ -9512,8 +9519,10 @@ test-lua-cross: $(COMPILER)
 	  for p in test/lua/*.lua; do \
 	    exp="$${p%.lua}.expected"; \
 	    cp "$$p" /tmp/pxx_lua_input.lua; \
-	    timeout 120 tools/run_target.sh $$T $(TESTTMP)/pxx_lua_$$T 2>/dev/null > $(TESTTMP)/pxx_lua_got.txt; \
-	    if diff -u "$$exp" $(TESTTMP)/pxx_lua_got.txt > $(TESTTMP)/pxx_lua_diff.txt; then \
+	    timeout 120 tools/run_target.sh $$T $(TESTTMP)/pxx_lua_$$T 2>/dev/null > $(TESTTMP)/pxx_lua_got.txt; rc=$$?; \
+	    if [ "$$rc" = "124" ]; then \
+	      echo "test-lua-cross: TIMEOUT $$T $$(basename $$p) (120s under qemu; NOT an output mismatch)"; fail=1; \
+	    elif diff -u "$$exp" $(TESTTMP)/pxx_lua_got.txt > $(TESTTMP)/pxx_lua_diff.txt; then \
 	      echo "test-lua-cross: PASS $$T $$(basename $$p)"; \
 	    else \
 	      echo "test-lua-cross: FAIL $$T $$(basename $$p)"; head -12 $(TESTTMP)/pxx_lua_diff.txt; fail=1; \
@@ -9926,8 +9935,11 @@ test-uforth: $(COMPILER)
 	  printf '"%s" INCLUDE\nBYE\n' "$$f" > "$$wd/in.txt"; \
 	  ( cd "$(UFORTH_SRC)" && timeout 180 "$$wd/uforth" < "$$wd/in.txt" ) > "$$wd/p.out" 2>&1 & pp=$$!; \
 	  ( cd "$(UFORTH_SRC)" && timeout 180 python3 uforth.py < "$$wd/in.txt" ) > "$$wd/c.out" 2>&1 & cp=$$!; \
-	  wait $$pp || true; wait $$cp || true; \
-	  if diff -q "$$wd/p.out" "$$wd/c.out" > /dev/null 2>&1; then \
+	  if wait $$pp; then prc=0; else prc=$$?; fi; \
+	  if wait $$cp; then crc=0; else crc=$$?; fi; \
+	  if [ "$$prc" = "124" ] || [ "$$crc" = "124" ]; then \
+	    bad=$$((bad+1)); echo "  TIMEOUT $$f after 180s (pxx=$$prc oracle=$$crc) -- a truncated stream, NOT a differential mismatch"; \
+	  elif diff -q "$$wd/p.out" "$$wd/c.out" > /dev/null 2>&1; then \
 	    ok=$$((ok+1)); \
 	  else \
 	    bad=$$((bad+1)); echo "  DIFF $$f"; diff -u "$$wd/c.out" "$$wd/p.out" | head -12; \
@@ -9945,9 +9957,12 @@ test-uforth: $(COMPILER)
 	  printf '"tests/%s" INCLUDE\nBYE\n' "$$drv" > "$$wd/in.txt"; \
 	  ( cd "$(UFORTH_SRC)" && timeout 900 "$$wd/uforth" < "$$wd/in.txt" ) > "$$wd/p.out" 2>&1 & pp=$$!; \
 	  ( cd "$(UFORTH_SRC)" && timeout 900 python3 uforth.py < "$$wd/in.txt" ) > "$$wd/c.out" 2>&1 & cp=$$!; \
-	  wait $$pp || true; wait $$cp || true; \
+	  if wait $$pp; then prc=0; else prc=$$?; fi; \
+	  if wait $$cp; then crc=0; else crc=$$?; fi; \
 	  rm -f "$(UFORTH_SRC)/tests/$$drv"; \
-	  if diff -q "$$wd/p.out" "$$wd/c.out" > /dev/null 2>&1; then \
+	  if [ "$$prc" = "124" ] || [ "$$crc" = "124" ]; then \
+	    bad=$$((bad+1)); echo "  TIMEOUT word set $$f after 900s (pxx=$$prc oracle=$$crc) -- a truncated stream, NOT a differential mismatch"; \
+	  elif diff -q "$$wd/p.out" "$$wd/c.out" > /dev/null 2>&1; then \
 	    ok=$$((ok+1)); \
 	  else \
 	    bad=$$((bad+1)); echo "  DIFF word set $$f"; diff -u "$$wd/c.out" "$$wd/p.out" | head -12; \

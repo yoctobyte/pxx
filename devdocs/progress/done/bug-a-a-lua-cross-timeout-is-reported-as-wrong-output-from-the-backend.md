@@ -5,6 +5,8 @@ type: bug
 prio: 50
 blocked-by: []
 summary: "test-lua-cross runs each lua script under qemu with a hardcoded `timeout 120` and then diffs the captured stdout against a .expected file. A timeout truncates got.txt, the diff fails, and the recipe reports a per-target output mismatch — which reads as a cross-backend miscompile on whichever of arm32/i386/riscv32/aarch64 happened to be slow. test-core:3553 carries the same class one severity lower. Filed by Track T, which owns the harness but not the Makefile."
+status: done
+owner: claude-A
 ---
 
 # A lua cross timeout is reported as wrong output from the backend
@@ -83,3 +85,76 @@ have been made*. Only the recipe saw the 124.
 Track A's: `make test` + self-host byte-identical. `test-lua-cross` skips cleanly with
 no lua tree at `$(LUA_SRC)` and skips per-target when `qemu-$$T` is absent, so verify
 with at least one emulator installed.
+
+## 2026-08-21 — fixed, at SEVEN sites rather than the two filed
+
+### Grepped for the siblings before closing
+
+`normalise-dont-special-case.md`'s rule — fix one arm of a double case and go
+looking for the other — turned two sites into seven. Every `timeout N` in the
+`Makefile` was checked, and five of them discarded the 124:
+
+| site | what the report said before | severity |
+| --- | --- | --- |
+| `test-lua-cross` (120s, qemu) | per-target **output mismatch** | the filed one: invents a cross-backend miscompile |
+| `test-uforth` corpus (180s) | **`DIFF <file>`** vs the CPython oracle | worse than the filed one, see below |
+| `test-uforth` word sets (900s) | **`DIFF word set <f>`** | same |
+| `test_writeln_nonfinite` (20s) | make `Error 1` | filed; loses a signal, invents nothing |
+| `test_nilpy_str_repeat` (60s) | make `Error 1` | same, and the test's *whole point* is that a regression is a hang |
+| `test_nilpy_float_repeat_typeerror` (20s) | make `Error 1` | same |
+| tk under Xvfb (120s) | `EXITED NONZERO under Xvfb` | true but useless: a hang and a crash read alike |
+
+### The uforth pair is worse than the ticket's own example
+
+Those two run **pxx and CPython concurrently**, each under its own `timeout`, then
+`wait $pp || true; wait $cp || true` — both statuses thrown away — and diff the
+two captures. So when the box is loaded and **either** side is killed, the recipe
+prints `DIFF <file>` with a unified diff of pxx's output against CPython's. That
+is not merely a misattributed red: it is a **differential** red, the single most
+persuasive kind, produced by comparing a truncated stream against a complete one.
+Same failure class as the filed one, one notch more convincing and therefore more
+expensive.
+
+Note the milder-looking third row: `test_nilpy_str_repeat`'s comment says the
+large sizes exist because *"the old quadratic routine could not finish this
+file"*. A timeout there is the regression it was written to catch, and it was
+being reported as a wrong value.
+
+### The fix
+
+One shape everywhere: capture the status, branch on 124 **before** any comparison,
+and say `TIMEOUT` with the ceiling and the fact that it is not a mismatch.
+Timeouts stay **failures** (nothing silently passes) but are never a `diff`, which
+is what the ticket asked for. The uforth pair reports both statuses (`pxx=$prc
+oracle=$crc`) so the reader can see which side was killed. The `wait ... || true`
+became `if wait $pp; then prc=0; else prc=$?; fi` — `|| true` was there to survive
+a nonzero exit, and that is still true, but now the value is kept.
+
+**No constant was raised**, per the ticket's own instruction. The trade it warns
+against — a false red becomes a slow suite and the reader still cannot tell the
+two reds apart — is exactly what the labelling avoids.
+
+The tk site was left as `exit 1` rather than a distinct status because it is a
+`@if command -v xvfb-run` block with no accumulator to fold into.
+
+### Verified
+
+Each branch exercised in isolation with a synthetic 124 (`timeout 1 sleep 5`) and
+with a clean exit, including the concurrent `wait` pair, so the timeout arm is
+executed rather than merely written. The four rewritten expected-output
+assertions re-run by hand against their real binaries and still match — one of
+them caught a stray quote the rewrite introduced, before it reached the gate.
+`test-lua-cross` still parses under `make -n`.
+
+`test-lua-cross` and `test-uforth` need lua/uforth trees plus emulators to run for
+real; they are not in the quick tier and Track T sweeps them, so what is verified
+here is the branch logic and that every recipe still parses and passes when
+nothing times out.
+
+### Gate
+
+`make compiler/pascal26` (byte-identical fixedpoint) + `tools/gate.sh quick`. No
+compiler source changed — this is Makefile-only.
+
+## Log
+- 2026-08-21 — resolved, commit PENDING-COMMIT.
