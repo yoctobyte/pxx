@@ -63,9 +63,15 @@ was left below it, so exactly half the bug was repaired.
 
 ## Fix
 
-One guard: `(Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray`. The other
-four backends' epilogues already spell the arm that way; x86-64 was the outlier,
-which is why this never showed up as a cross-target divergence report.
+One guard: `(Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray`.
+
+**Correction to the first reading of this**, recorded because the wrong version
+was written into this ticket before the other four epilogues were actually read:
+it is NOT true that "the other four backends already carry the guard".
+**aarch64, riscv32 and xtensa** do. **i386 and arm32 do not** — they had the same
+bug, and got the same guard in the same change. Three of five, not four of five;
+the claim came from checking one backend and generalising, which is the exact
+habit `devdocs/dev/debugging-playbook.md` says to distrust.
 
 ## Resolution 2026-08-21
 
@@ -77,7 +83,10 @@ shapes. Regression coverage: the `strarr:` round-trip line in
 `test/test_interface_containers.pas` proves the elements still read back after
 many calls (the leak itself is an RSS measurement, not something a test asserts).
 
-Gate: `make compiler/pascal26` (fixedpoint) + `tools/gate.sh quick` GREEN.
+Fixed on **x86-64, i386 and arm32** (the three that lacked the guard).
+
+Gate: `make compiler/pascal26` (fixedpoint) + `tools/gate.sh quick` GREEN, and
+the interface-container regression run under i386 / arm32 / aarch64 / riscv32.
 
 ## Log
 - 2026-08-21 — resolved, commit bcd8546f9.

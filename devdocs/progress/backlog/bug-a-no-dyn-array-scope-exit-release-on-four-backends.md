@@ -2,8 +2,8 @@
 track: A
 prio: 40
 type: bug
-blocked-by: []
-summary: "Only x86-64 releases a local DYNAMIC array at scope exit. i386, arm32, aarch64 and riscv32 have no `ArrLen = -1` arm in EmitProcEpilog at all, so every local dyn array leaks its block and its managed elements on those four targets. Measured with the interface-container repro: x86-64 destroys 2, aarch64 and i386 destroy 0."
+blocked-by: [bug-a-i386-and-aarch64-dynamic-array-assignment-has-no-store-arm]
+summary: "Only x86-64 released a local DYNAMIC array at scope exit; the other four backends had no `ArrLen = -1` arm at all. HALF DONE 2026-08-21: arm32 and riscv32 now release (measured flat, 112 MB -> 7.8 MB over 200k calls). i386 and aarch64 are BLOCKED — their IR_STORE_SYM has no dyn-array arm, so `b := a` aliases without retaining and the release would be a double free."
 status: backlog
 owner: unassigned
 ---
@@ -77,3 +77,53 @@ them ARE the bug list.
 
 The interface-container repro run under each target's emulator destroys the same
 counts x86-64 does; self-host fixedpoint; `tools/gate.sh quick`.
+
+
+## 2026-08-21 — HALF LANDED (Track A), and the other half found its blocker
+
+**arm32 and riscv32: done.** Both grew the arm x86-64 has, emitted UNLOCKED
+(neither backend uses the codegen BSS spinlock, so there is nothing to hold and
+`ManagedElemKindLocked`'s ThreadSafeMode refusal does not apply to them).
+Measured, 200k calls of a routine with a local 8-element `array of string`:
+
+| | before | after |
+| --- | --- | --- |
+| arm32 | 112 MB | **7.8 MB** |
+| riscv32 | 112 MB | **7.7 MB** |
+
+(~7 MB is the emulator's own floor; the shape is flat, not linear.) And
+`test/test_interface_containers.pas` now reports `dyn: 2` on both, matching FPC
+and x86-64 instead of 0.
+
+**i386 and aarch64: reverted, and the reason is the finding.** Adding the
+release to those two turned a silent leak into memory corruption, because
+neither backend's `IR_STORE_SYM` has a whole-dynamic-array arm: `b := a`
+aliases the handle WITHOUT retaining it, so releasing both at scope exit
+double-frees. aarch64 SIGSEGVs on the second call of such a routine; i386
+double-decrements a freed refcount word and carries on. On aarch64 there is a
+second layer — `IR_STORE_SYM` tests `TypeKind = tyAnsiString` first, and an
+array's TypeKind IS its element kind, so `array of string` is routed through the
+scalar string store as well.
+
+That is filed as
+[[bug-a-i386-and-aarch64-dynamic-array-assignment-has-no-store-arm]] and this
+ticket is now `blocked-by:` it. **Order matters**: retain first, release second.
+The reverse lands a double free, which is exactly what was measured today.
+
+arm32 and riscv32 were safe precisely because they already grew that store arm
+(`bug-a-arm32-dynamic-array-assignment-has-no-store-arm`) — so the split is not
+arbitrary, it follows the retain/release pairing, and it was measured per target
+rather than assumed.
+
+**Still out of scope: xtensa.** Its epilogue has neither a dyn-array arm nor a
+static-array one; it is ESP-class and gets its own pass, not a copy of this one.
+
+## What the five-copy epilogue cost, concretely
+
+This ticket, [[bug-a-local-dynamic-array-of-string-is-released-as-a-string-handle]]
+and the one above are all the same shape: five hand-written copies of one
+epilogue, each missing a different arm, each divergence invisible because a leak
+prints nothing. The audit that finds the rest is to diff the five arm-lists
+against each other — the differences ARE the bug list — and
+[[refactor-a-the-missing-layer-between-frontends-and-backends]] is where that
+stops recurring.

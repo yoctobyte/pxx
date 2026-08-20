@@ -8631,12 +8631,16 @@ begin
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(16);               { add esp, 16 }
           end
-          else if Syms[i].TypeKind = tyAnsiString then
+          else if (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
           begin
-            { mov eax, [ebp + Offset] }
-            EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);
-            { push eax }
-            EmitB($50);
+            { A SCALAR AnsiString local. `not IsArray` is load-bearing: an
+              array's TypeKind IS its element kind, so without it a local
+              `array of string` was claimed here and its DATA POINTER handed to
+              the string releaser — the x86-64 bug
+              bug-a-local-dynamic-array-of-string-is-released-as-a-string-handle,
+              which i386 and arm32 shared. }
+            EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);   { mov eax, [ebp+off] }
+            EmitB($50);                                        { push eax }
             procIdx := FindProc('PXXStrDecRef');
             if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
             EmitCallProc(procIdx);
@@ -8771,8 +8775,43 @@ begin
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-           (Syms[i].TypeKind = tyAnsiString) then
+           Syms[i].IsArray and (Syms[i].ArrLen = -1) then
         begin
+          { Local DYNAMIC array: release the block and, through its descriptor, every
+            managed element. This arm existed ONLY on x86-64 — the other four
+            epilogues stopped at the static-array and scalar-string arms — so a
+            local `array of anything` leaked its whole allocation on every
+            non-x86-64 target. Measured with an interface-element repro that
+            makes destruction observable: x86-64 destroyed 2, aarch64 and i386
+            destroyed 0.
+            Unlocked here, unlike x86-64's EmitDynArrayReleaseForSym: these
+            backends do not use the codegen BSS spinlock at all, so there is no
+            lock to hold and no reentrancy hazard to gate against — which is
+            also why ManagedElemKindLocked's ThreadSafeMode refusal does not
+            apply to them.
+
+            arm32 and riscv32 ONLY. i386 and aarch64 deliberately do NOT get
+            this arm yet: their IR_STORE_SYM has no whole-dynamic-array case at
+            all, so `b := a` aliases the handle without retaining it, and adding
+            the release turns a silent leak into a DOUBLE FREE (aarch64
+            segfaults on the second call of a routine doing `b := a`; i386
+            corrupts quietly). arm32 and riscv32 grew that store arm already —
+            bug-a-arm32-dynamic-array-assignment-has-no-store-arm — which is
+            exactly why the release is safe for them and not for the other two.
+            Measured, not assumed. See the ticket.
+            bug-a-no-dyn-array-scope-exit-release-on-four-backends }
+          EmitLoadVarArm32(i);                         { r0 = data }
+          EmitI32($E92D000E);                          { push {r1,r2,r3} }
+          EmitLoadDataRefArm32(1, GetOrAllocSymRTTI(i));  { r1 = desc }
+          procIdx := FindProc('PXXDynArrayRelease');
+          if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
+          EmitCallProc(procIdx);
+          EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+           (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
+        begin
+          { `not IsArray`: see the i386 arm — arm32 shared that bug. }
           EmitLoadVarArm32(i);                         { r0 = handle }
           EmitI32($E92D000E);                          { push {r1,r2,r3} }
           procIdx := FindProc('PXXStrDecRef');
@@ -9157,6 +9196,38 @@ begin
               -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)))
           else  { kinds 1/4: immediate — 0, or the interface id }
             EmitLoadImmRISCV32(reg_a3, ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+           Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+        begin
+          { Local DYNAMIC array: release the block and, through its descriptor, every
+            managed element. This arm existed ONLY on x86-64 — the other four
+            epilogues stopped at the static-array and scalar-string arms — so a
+            local `array of anything` leaked its whole allocation on every
+            non-x86-64 target. Measured with an interface-element repro that
+            makes destruction observable: x86-64 destroyed 2, aarch64 and i386
+            destroyed 0.
+            Unlocked here, unlike x86-64's EmitDynArrayReleaseForSym: these
+            backends do not use the codegen BSS spinlock at all, so there is no
+            lock to hold and no reentrancy hazard to gate against — which is
+            also why ManagedElemKindLocked's ThreadSafeMode refusal does not
+            apply to them.
+
+            arm32 and riscv32 ONLY. i386 and aarch64 deliberately do NOT get
+            this arm yet: their IR_STORE_SYM has no whole-dynamic-array case at
+            all, so `b := a` aliases the handle without retaining it, and adding
+            the release turns a silent leak into a DOUBLE FREE (aarch64
+            segfaults on the second call of a routine doing `b := a`; i386
+            corrupts quietly). arm32 and riscv32 grew that store arm already —
+            bug-a-arm32-dynamic-array-assignment-has-no-store-arm — which is
+            exactly why the release is safe for them and not for the other two.
+            Measured, not assumed. See the ticket.
+            bug-a-no-dyn-array-scope-exit-release-on-four-backends }
+          EmitLoadVarRISCV32(i);                 { a0 = data }
+          EmitLoadDataRefRISCV32(reg_a1, GetOrAllocSymRTTI(i));   { a1 = desc }
+          procIdx := FindProc('PXXDynArrayRelease');
+          if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and

@@ -53,7 +53,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (275)
+## backlog (276)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -64,9 +64,10 @@ _none_
 | bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data | A | 40 | bug | A typed const array is emitted as BSS plus generated code that fills it element by element at startup, instead of being stored as initialised data. Measured at ~29 bytes of code per element for UInt64; Int64, Double and Cardinal all do it too, so it is every typed const array, not a 64-bit case. A 696-entry table costs 20 KB of code and 0 bytes of data. A string constant of the same bytes costs ~0 code and lands in .data, so the data path exists — the array lowering just does not use it. | — |
 | bug-a-aintostr-returns-empty-for-negative-numbers | A | 40 | bug | AIntToStr(n) returns the EMPTY STRING for any n < 0 — `while n > 0` never enters. It is the compiler's own IntToStr, used in ~40 diagnostics across the Pascal, NilPy and C frontends and the C preprocessor, so a negative value silently drops out of an error message rather than being reported wrong-looking. | — |
 | bug-a-findtypealias-failed-to-find-puint8-on-stderr | A | 20 | bug | `FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr during a compile that then SUCCEEDS. Either the lookup failure is real and something silently fell back to a wrong type, or the message is a stale debug print that should not be in a release build. Both readings are defects; which one it is has not been established. | — |
+| bug-a-i386-and-aarch64-dynamic-array-assignment-has-no-store-arm | A | 45 | bug | `b := a` on a dynamic array aliases the handle WITHOUT retaining it on i386 and aarch64 — IR_STORE_SYM has no whole-dynamic-array case on either backend. Today that is a silent leak; the moment either target releases dyn arrays at scope exit it becomes a DOUBLE FREE (aarch64 segfaults on the second call). arm32 and riscv32 grew this arm already; these two were missed. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
-| bug-a-no-dyn-array-scope-exit-release-on-four-backends | A | 40 | bug | Only x86-64 releases a local DYNAMIC array at scope exit. i386, arm32, aarch64 and riscv32 have no `ArrLen = -1` arm in EmitProcEpilog at all, so every local dyn array leaks its block and its managed elements on those four targets. Measured with the interface-container repro: x86-64 destroys 2, aarch64 and i386 destroy 0. | — |
+| bug-a-no-dyn-array-scope-exit-release-on-four-backends | A | 40 | bug | Only x86-64 released a local DYNAMIC array at scope exit; the other four backends had no `ArrLen = -1` arm at all. HALF DONE 2026-08-21: arm32 and riscv32 now release (measured flat, 112 MB -> 7.8 MB over 200k calls). i386 and aarch64 are BLOCKED — their IR_STORE_SYM has no dyn-array arm, so `b := a` aliases without retaining and the release would be a double free. | bug-a-i386-and-aarch64-dynamic-array-assignment-has-no-store-arm |
 | bug-a-only-the-pascal-driver-emits-the-signal-runtime | A | 45 | bug | The signal runtime (SIGSEGV/SIGFPE hook, restorer, sethook, install stubs) is emitted only by the Pascal driver in parser.inc. Every other frontend -- C, NilPy, Rust, Zig, Basic, Ada, Lua, the asm frontend -- produces a binary with no signal runtime, so a hardware fault there is an unhandled signal instead of a runtime error. Same shape as the I/O-lock gap that was already found and fixed. | — |
 | bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did | A | 45 | bug | i386, arm32 and aarch64 route variant binops through PXXVarBinOp in builtinheap.pas, which reimplements the same dispatch x86-64 hand-emits — and the same defect: a stringy operand's payload is read as a number. x86-64 was fixed 2026-08-20; those three targets still answer a heap address for `v('15') - 3`. | — |
 | bug-a-stack-overflow-fault-to-raise-loops-forever-without-an-sp-reset | A | 45 | bug | Redirecting the ucontext PC to a raise stub turns a hardware fault into a catchable Pascal exception — except for a STACK OVERFLOW, where the resumed stub inherits the exhausted SP and re-faults at the identical address forever. A hang, not a crash. The fault-to-raise design needs an SP reset alongside the PC rewrite for this one signal. | — |
@@ -638,6 +639,7 @@ _none_
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 50] [A] refactor-a-the-missing-layer-between-frontends-and-backends
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [A] bug-a-i386-and-aarch64-dynamic-array-assignment-has-no-store-arm (unblocks 1)
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
 - [p 45] [A] bug-a-a-memory-fault-is-a-raw-sigsegv-not-runtime-error-216
 - [p 45] [A] bug-a-a-non-lvalue-is-refused-as-an-interface-argument
@@ -698,7 +700,6 @@ _none_
 - [p 40] [A] bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data
 - [p 40] [A] bug-a-aintostr-returns-empty-for-negative-numbers
 - [p 40] [A] bug-a-nilpy-leading-double-star-in-a-call-is-not-detected
-- [p 40] [A] bug-a-no-dyn-array-scope-exit-release-on-four-backends
 - [p 40] [N] bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members
 - [p 40] [N] bug-n-inline-cast-deref-loses-a-pointer-fields-pointee
 - [p 40] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base
@@ -856,6 +857,7 @@ _none_
 - **3** — feature-port-rtl-over-libc
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
+- **1** — bug-a-i386-and-aarch64-dynamic-array-assignment-has-no-store-arm
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **1** — decide-interface-members-in-aggregates-lock-strategy

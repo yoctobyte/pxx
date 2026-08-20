@@ -87,6 +87,12 @@ procedure AsmI64(v: Int64); forward;
   forward is invisible until the FPC-seeded cold-start bootstrap
   (bug-a-fpc-seed-drift-emitasmx64-forward). }
 procedure EmitAsmX64(const items: array of const); overload; forward;
+{ Hoisted above symtab.inc (from beside its siblings after ir.inc) because the
+  per-target EmitProcEpilog arms in symtab.inc need a dyn-array descriptor for
+  the scope-exit release. Same reason as the forwards above: PXX's own prescan
+  is order-agnostic, so being late is invisible until the FPC-seeded bootstrap.
+  bug-a-no-dyn-array-scope-exit-release-on-four-backends }
+function GetOrAllocSymRTTI(symIdx: Integer): Integer; forward;
 {$include symtab.inc}
 {$include abi.inc}      { the ABI oracle — after symtab.inc: it uses TypeIsFrozenString }
 {$include exception_emit.inc}
@@ -130,7 +136,6 @@ procedure AddDefaultCIncludeDirs; forward;   { the C unit pull in pasparser_proc
 {$include pasparser_proc.inc}
 {$include pasparser_prog.inc}
 {$include ir.inc}
-function GetOrAllocSymRTTI(symIdx: Integer): Integer; forward;
 function GetOrAllocNodeDynDesc(node: Integer): Integer; forward;
 function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
 {$ifndef PXX_NO_AARCH64}{$include ir_codegen_aarch64.inc}{$endif}
