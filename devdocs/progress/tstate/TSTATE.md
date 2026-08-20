@@ -3,8 +3,9 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `003d733936aa` | 2026-08-20T03:40:00Z | RED (full) | 153.2s | `003d733936aa` RED |
+| plexus | `57b9b7148d32` | 2026-08-20T03:46:08Z | RED (native) | 143.3s | `003d733936aa` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
 - **selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh** — tools/selfhost_fixedpoint.sh (plexus): bad `21117f415284`, last good `8eb2ce583499`, 15 commit(s) in range
+- **test-core#src:compiler/compiler.pas@2** — compiler/compiler.pas tools/progress.sh (plexus): bad `57b9b7148d32`, last good `003d733936aa`, 7 commit(s) in range
