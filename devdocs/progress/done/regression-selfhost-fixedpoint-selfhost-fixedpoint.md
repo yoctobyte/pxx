@@ -64,3 +64,6 @@ Related, and probably NOT the same bug: `regression-test-core-compiler-4`
 is section-header territory, so the shared signature may only mean "the two
 binaries differ in a section size", not "same cause". Do not merge the tickets
 on the strength of that line alone.
+
+## Log
+- 2026-08-20 — auto-closed by the plexus watcher: `selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh` passes at 6e937a27b469 (tier native); it was red at 21117f415284. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
