@@ -301,7 +301,14 @@ coordinator's.
 
 - **§6, the bare-name experiment** — delete the cross-namespace declaration bind
   at `cparser.inc:9448`, build lua / tcc / quickjs / zlib, report what breaks.
-  Untouched; it is the largest remaining item and it is a measurement, not a fix.
+  Untouched, and **it needs the user's say-so to run at all**: the measurement IS
+  `make test-lua` / `test-zlib` / `test-quickjs` / `test-tcc`, and every one of
+  those is refused for this lane by `.claude/hooks/no-full-suite.sh` (rule 1,
+  `make test*`). The escape is `PXX_ALLOW_FULL_SUITE=1` "and only when the user
+  has asked for it" — a coordinator cannot supply it, and hand-running the
+  recipe bodies to get around the refusal would be reshaping a denied command.
+  So §6 is parked on that, not on effort: it is one deletion plus four corpus
+  builds, and whoever has the escape can do it in an afternoon.
 - The **missing-unit diagnostic still speaks Pascal**: `#include "nosuch.pas"`
   answers `uses: unit source not found: nosuch`. The message is raised in
   `parser.inc` (Track A ground), and pre-checking the file in `cparser.inc`
