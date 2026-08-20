@@ -95,4 +95,4 @@ cannot hide behind a matching wrong index — that is what separated the writer
 from the reader during diagnosis (the reader was never wrong).
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 9afcd676a.
