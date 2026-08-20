@@ -1,28 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T17:28:40Z",
-   "fixed": [],
-   "new_red": [
-    "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy",
-    "test-nilpy#src:test/test_cpyext_args_errors.npy",
-    "test-nilpy#src:test/test_cpyext_containers.npy",
-    "test-nilpy#src:test/test_cpyext_cython.npy",
-    "test-nilpy#src:test/test_cpyext_errformat.npy",
-    "test-nilpy#src:test/test_cpyext_hello.npy",
-    "test-nilpy#src:test/test_cpyext_markupsafe.npy",
-    "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy",
-    "test-nilpy#src:test/test_nilpy_kwarg_overload_set.npy",
-    "test-nilpy#src:test/test_nilpy_qualified_proc_omitted_default.npy",
-    "test-nilpy#src:test/test_nilpy_tobject_member_via_local.npy",
-    "test-riscv32#src:test/test_cross_float.pas",
-    "tools-devtest#00"
-   ],
-   "sha": "21f098e32a95be73bdeae3832aedfe65677292f7",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-19T17:33:30Z",
    "fixed": [],
    "new_red": [],
@@ -435,12 +413,20 @@
    "sha": "64cbd63c326b5255f2a2a750e0f420eacde0df2e",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-20T09:57:11Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "b772253ad3dee3e88fcf4ae74186866d9cd92575",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "test-core#src:test/test_asm_emit.pas": "ok: $TMP  [code=95698B  data=2800B  bss=9532B  procs=203]",
-  "test-core#src:test/test_integer_longint_overload.pas": "+++ -\t2026-08-20 11:48:03.663912607 +0200 | @@ -1,3 +1,3 @@ | FFFFFFFF FFFFFFFF FFFFFFFF | -FFFFFFFFFFFFFFFF FFFFFFFF | +FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF | longint longint int64 longword",
+  "test-core#src:test/test_integer_longint_overload.pas": "+++ -\t2026-08-20 11:51:29.745553498 +0200 | @@ -1,3 +1,3 @@ | FFFFFFFF FFFFFFFF FFFFFFFF | -FFFFFFFFFFFFFFFF FFFFFFFF | +FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF | longint longint int64 longword",
   "test-core#src:test/test_strict_overload_width.pas@1": "ok: $TMP  [code=293112B  data=9124B  bss=53920B  procs=586]",
   "test-core#src:test/test_strict_overload_width.pas@2": "ok: $TMP  [code=293112B  data=9124B  bss=53920B  procs=586]",
   "test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy": "ok: $TMP  [code=2568790B  data=74180B  bss=52788B  procs=2020]"
@@ -4676,11 +4662,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T09:49:42Z",
-  "sha": "64cbd63c326b5255f2a2a750e0f420eacde0df2e",
+  "date": "2026-08-20T09:57:11Z",
+  "sha": "b772253ad3dee3e88fcf4ae74186866d9cd92575",
   "tier": "native",
   "verdict": "RED",
-  "wall": 440.7
+  "wall": 414.0
  },
  "last_bench": {
   "conf_rows": 550,
