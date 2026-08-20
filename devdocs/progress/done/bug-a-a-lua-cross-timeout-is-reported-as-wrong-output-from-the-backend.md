@@ -157,4 +157,4 @@ nothing times out.
 compiler source changed — this is Makefile-only.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 525ef7f2c.
