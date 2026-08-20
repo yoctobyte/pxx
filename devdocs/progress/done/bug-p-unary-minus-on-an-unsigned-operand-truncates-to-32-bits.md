@@ -163,4 +163,4 @@ measured under FPC. Filed now as its own ticket:
 [[feature-p-sizeof-of-an-expression]].
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit f09524494.
