@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T22:52:23Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "c791d0e89057d352b9c282437786e254cdf4cfc4",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T23:01:35Z",
    "fixed": [],
    "new_red": [],
@@ -430,6 +422,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "df17e58d7ebd8532addfc23a5239cb14888acf13",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T15:04:59Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "186850ab2046070d78feb5c695b294371d7f9896",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1255,6 +1255,7 @@
   "test-core#src:test/cstr_literal_binop_b163.c": "native",
   "test-core#src:test/cstr_table_2d_rows.c": "native",
   "test-core#src:test/cstr_to_ptr_b19.c": "native",
+  "test-core#src:test/cstring_literal_cast.c": "native",
   "test-core#src:test/cstrlit_index_b174.c": "native",
   "test-core#src:test/cstrtok_b181.c": "native",
   "test-core#src:test/cstruct_array_stride_b23.c": "native",
@@ -3649,6 +3650,7 @@
   "test-core#src:test/cstr_literal_binop_b163.c": "pass",
   "test-core#src:test/cstr_table_2d_rows.c": "pass",
   "test-core#src:test/cstr_to_ptr_b19.c": "pass",
+  "test-core#src:test/cstring_literal_cast.c": "pass",
   "test-core#src:test/cstrlit_index_b174.c": "pass",
   "test-core#src:test/cstrtok_b181.c": "pass",
   "test-core#src:test/cstruct_array_stride_b23.c": "pass",
@@ -4711,11 +4713,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T14:55:31Z",
-  "sha": "df17e58d7ebd8532addfc23a5239cb14888acf13",
+  "date": "2026-08-20T15:04:59Z",
+  "sha": "186850ab2046070d78feb5c695b294371d7f9896",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 475.0
+  "wall": 482.0
  },
  "last_bench": {
   "conf_rows": 550,
