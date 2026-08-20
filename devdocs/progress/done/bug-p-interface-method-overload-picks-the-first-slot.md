@@ -98,4 +98,4 @@ accident, asserted through the interface AND directly on the class with
 identical answers. Output is byte-identical to fpc 3.2.2.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 22e4d0860.
