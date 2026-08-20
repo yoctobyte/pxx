@@ -617,7 +617,7 @@ Checksums are compared; TIMING is not (PXX_SLOW is off this run)
 ```
 
 So aarch64 moved from the weak class to the strong one with no change on our
-side. **`E:` 129/150 agreed with the gcc oracle, 21 skipped, no findings**
+side. **129/150 agreed with the gcc oracle, 21 skipped, no findings**
 (seeds 330000-330149), plus a partial second batch of 31 agreed / 2 skipped
 (seeds 330200-330232) before it was killed from outside this session — see
 below. **160 real cross-target checksum comparisons, zero divergences.**
