@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 45
+prio: 60
 type: refactor
 blocked-by: []
 summary: "Generalise CompiledUnitFile[] from the .py arm to every load: one resolved-file identity answers 'have I already compiled this unit?', retiring the @cpath: key space. Decided 2026-08-19 (option B). The mechanism already exists — option A built it for one arm in 030ce07ea — so this is promoting a built thing to the general rule, not new machinery. Hazard: CompiledUnitFile is -1 when unresolved and -1 = -1, so a naive compare makes every unresolved unit identical."
@@ -82,3 +82,36 @@ path-form C unit and a two-spelling `.py` import + `tools/gate.sh quick`. Push.
 **Land the general rule and the `-1` guard in ONE commit.** A half-applied change to the
 load path is the CRITICAL case `tools/progress.sh check` fails on, and every lane's gate
 runs through this function.
+
+## 2026-08-20 — RAISED 45 -> 60: it now blocks a landed feature, and it answers WRONG, silently
+
+Two new facts arrived from Track C (frank2, §3 of
+[[feature-c-import-a-pascal-unit-under-a-mangled-name]]), measured on pin v367.
+
+**1. It produces a silent wrong ANSWER, not just duplicate work.** With `r1/math.pas` and
+`r2/math.pas` both declaring `unit math`, the second `#include` is a **silent no-op** —
+`CompiledUnits` is keyed on the unit NAME, so the loader returns without ever reading
+`r2`. The author asked for `r2`'s `Twice(21)` = 63 and got `r1`'s = **42, with no
+diagnostic**. A routine present only in `r2` does not even resolve wrong; it falls through
+to the crtl warning and dies at link.
+
+That moves this out of "three mechanisms for one concept, worth tidying" and into the
+repo's own escape rule: **a wrong value with no diagnostic is a bug, not a refactor.** The
+slug stays `refactor-` because the fix is still the decided generalisation, but rank it as
+the bug it produces.
+
+**2. It blocks work that is otherwise finished.** §3 of the C mangled-name feature
+specified resolving a collision by letting the path into the mangled name
+(`path_math_pas_Sqrt`). That is **not implementable from Track C**, and the reason is this
+ticket: the two units never coexist, so a path-qualified name would denote a unit nobody
+loaded. Track C landed the honest half — a refusal naming both files, keyed on the
+resolved path through `NormalizePath` so the same file twice (including a `./`-differing
+spelling) stays allowed — which **refuses** the collision without **resolving** it.
+Resolution waits here.
+
+Track C measured before building and did not reach into `parser.inc`. Correct call.
+
+**Sequencing, unchanged and now load-bearing:** `parser.inc` is shared A/P ground and this
+is a sole-A job. As of this writing frank3 holds that file for the `ParseFactorCore` carve,
+and [[feature-n-a-cpyext-extension-module-is-bare-importable-not-a-pascal-unit]] is queued
+behind it too. Claim through the coordinator.
