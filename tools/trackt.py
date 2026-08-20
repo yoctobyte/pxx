@@ -510,6 +510,32 @@ def ensure_clone_on_branch(clone, branch="master"):
     return True
 
 
+def supervised_unit(clone):
+    """The installed user unit IF it supervises THIS clone, else None.
+
+    `trackt start` used to Popen the daemon directly even on a box where
+    `trackt install` had wired systemd up — so a restart silently traded
+    supervision (Restart=on-failure, and the ExecStartPre that restores a
+    zero-length twatch.py) for a bare process nothing would ever bring back.
+    Noticed 2026-08-20, hours after a power cut had left the daemon down for
+    4h40m *because* systemd had given up on it: "unsupervised" is exactly the
+    state that morning proved expensive, and `trackt start` was reaching it by
+    default.
+
+    Matched on the ExecStart line rather than on mere existence: a unit names
+    ONE clone, and a second clone on the same box (a test rig, another branch)
+    must not be started through somebody else's unit.
+    """
+    if not shutil_which("systemctl"):
+        return None
+    try:
+        with open(unit_path()) as f:
+            text = f.read()
+    except OSError:
+        return None
+    return UNIT_NAME if ("--clone %s\n" % clone) in text + "\n" else None
+
+
 def cmd_start(clone, remote=None, web=True, local_code=False):
     if not os.path.isdir(clone):
         if not remote:
@@ -525,10 +551,34 @@ def cmd_start(clone, remote=None, web=True, local_code=False):
         print("trackt: refusing to start — the daemon would run whatever sha "
               "the clone happens to be sitting on")
         return 1
+    # Hand the start to systemd when this clone has a unit: same daemon, but
+    # supervised. --remote/--local-code are one-off shapes the unit cannot
+    # express (it has a fixed ExecStart), so those still launch directly.
+    unit = None if (local_code or remote) else supervised_unit(clone)
+    if unit:
+        rc = subprocess.run(["systemctl", "--user", "start", unit]).returncode
+        pid = None
+        for _ in range(15):
+            pid, _st = daemon_pid(clone)
+            if pid:
+                break
+            time.sleep(1)
+        if rc != 0 or not pid:
+            print("%strackt: `systemctl --user start %s` did not bring the "
+                  "daemon up%s — `systemctl --user status %s` says why"
+                  % (RED, unit, OFF, unit))
+            return 1
+        print("daemon started under systemd (pid %d, unit %s, log %s)"
+              % (pid, unit, logpath(clone)))
+        conf = twatch.load_conf(clone)
+        if conf.get("web"):
+            start_web(clone, conf)
+        return 0
     lg = open(logpath(clone), "a")
     script = daemon_script(clone, local_code)
     if local_code:
-        print("running THIS checkout's twatch.py (--local-code): %s" % script)
+        print("running THIS checkout's twatch.py (--local-code): %s — NOT "
+              "under systemd, so nothing restarts it" % script)
     cmd = [sys.executable, script, "--clone", clone]
     if remote:
         cmd += ["--remote", remote]
@@ -1055,7 +1105,9 @@ StandardError=append:{log}
 # NO resource limits here on purpose: testmgr re-execs into
 # `systemd-run --user --scope` for its memory cgroup, and a nested scope under a
 # constrained service would inherit the tighter limit and silently undo the
-# per-run budget testmgr computes from MemTotal.
+# per-run budget testmgr computes from MemTotal. The CPU budget for a shared box
+# lives in the same place for the same reason — `trackt config max_cores N`
+# reaches testmgr, which puts CPUQuota on that scope. Do not put one here.
 
 [Install]
 WantedBy=default.target

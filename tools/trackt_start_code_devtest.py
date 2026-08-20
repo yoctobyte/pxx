@@ -89,10 +89,68 @@ def case_dirty_clone_refuses_rather_than_starting_something_arbitrary():
     return "dirty clone -> False, caller refuses"
 
 
+def with_unit_file(text):
+    """Point trackt.unit_path() at a scratch unit file holding `text`."""
+    tmp = pathlib.Path(tempfile.mkdtemp(prefix="trackt-unit-"))
+    unit = tmp / "trackt-watcher.service"
+    unit.write_text(text)
+    trackt.unit_path = lambda: str(unit)          # noqa: E731 - devtest seam
+    return unit
+
+
+UNIT = ("[Service]\nExecStart=/usr/bin/python3 %s/tools/twatch.py "
+        "--clone %s\nRestart=on-failure\n")
+
+
+def case_installed_unit_is_used_instead_of_a_bare_process():
+    """A start on a supervised box must go through systemd.
+
+    Popen-ing the daemon directly trades Restart=on-failure and the
+    zero-length-twatch.py ExecStartPre for a process nothing brings back — the
+    exact state a power cut left on 2026-08-20, arrived at by default.
+    """
+    orig = trackt.unit_path
+    try:
+        with_unit_file(UNIT % ("/home/x/trackt-watch", "/home/x/trackt-watch"))
+        got = trackt.supervised_unit("/home/x/trackt-watch")
+        assert got == trackt.UNIT_NAME, "unit not recognised: %r" % got
+    finally:
+        trackt.unit_path = orig
+    return "clone with a unit -> systemd start"
+
+
+def case_another_clones_unit_is_not_borrowed():
+    """A unit names ONE clone; a second clone on the box must not ride it."""
+    orig = trackt.unit_path
+    try:
+        with_unit_file(UNIT % ("/home/x/trackt-watch", "/home/x/trackt-watch"))
+        assert trackt.supervised_unit("/home/x/other-clone") is None, \
+            "started a different clone through somebody else's unit"
+        assert trackt.supervised_unit("/home/x/trackt-watch2") is None, \
+            "prefix match: 'trackt-watch' accepted for 'trackt-watch2'"
+    finally:
+        trackt.unit_path = orig
+    return "foreign / prefix-alike clone -> direct launch"
+
+
+def case_no_unit_installed_still_starts():
+    """The common unsupervised box keeps working exactly as before."""
+    orig = trackt.unit_path
+    try:
+        trackt.unit_path = lambda: "/nonexistent/trackt-watcher.service"
+        assert trackt.supervised_unit("/home/x/trackt-watch") is None
+    finally:
+        trackt.unit_path = orig
+    return "no unit -> direct launch, unchanged"
+
+
 CASES = [
     case_detached_clone_is_returned_to_the_branch,
     case_clone_already_current_is_left_alone,
     case_dirty_clone_refuses_rather_than_starting_something_arbitrary,
+    case_installed_unit_is_used_instead_of_a_bare_process,
+    case_another_clones_unit_is_not_borrowed,
+    case_no_unit_installed_still_starts,
 ]
 
 

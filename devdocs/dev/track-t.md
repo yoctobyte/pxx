@@ -48,6 +48,13 @@ Notes:
 - Full tier wants `qemu-user` (i386/aarch64/arm/riscv32), `xvfb`, `gcc`;
   without qemu run `--tier limited`. Corpus trees are gitignored — fetch via
   `--fetch-corpus`, else those jobs SKIP (green).
+- `trackt start` hands the start to the installed user unit whenever one
+  supervises **this** clone, so a restart keeps `Restart=on-failure` and the
+  ExecStartPre that restores a zero-length `twatch.py`. Until 2026-08-20 it
+  always Popen'd the daemon directly, which silently downgraded a supervised
+  box to a bare process — found hours after a power cut had already cost 4h40m
+  of coverage for want of supervision. `--local-code` / `--remote` still launch
+  directly (the unit has a fixed ExecStart) and now say so.
 - twatch **refuses a checkout with uncommitted changes** — it does detached
   checkouts of arbitrary SHAs and must never do that under a live dev tree.
   Always give it its own clone. (`--status` is read-only and works anywhere.)
