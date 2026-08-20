@@ -24,3 +24,6 @@ ok: /tmp/testmgr-scratch-4002277/test_nilpy_fpc_shadow26  [code=2568790B  data=7
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-20 — auto-closed by the plexus watcher: `test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy` passes at 1b9b43e5b511 (tier full); it was red at 57b9b7148d32. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
