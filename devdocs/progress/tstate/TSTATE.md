@@ -3,8 +3,15 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `1b9b43e5b511` | 2026-08-20T16:02:13Z | GREEN (native) | 461.4s | `57b9b7148d32` RED |
+| plexus | `1b9b43e5b511` | 2026-08-20T16:41:29Z | RED (full) | 2342.8s | `1b9b43e5b511` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy** — test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy lib/rtl/classes.pas +2 (plexus): bad `57b9b7148d32`, last good `003d733936aa`, 7 commit(s) in range
+- **lib-test#src:test/lib_mimic_xml_etree_elementtree.npy** — test/lib_mimic_xml_etree_elementtree.npy (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range
+- **test-c-conformance#shard1/6** — tools/run_c_conformance.sh (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range
+- **test-c-conformance-aarch64#shard1/6** — tools/run_c_conformance.sh (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range
+- **test-c-conformance-arm32#shard1/6** — tools/run_c_conformance.sh (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range
+- **test-c-conformance-riscv32#shard1/6** — tools/run_c_conformance.sh (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy** — test/test_nilpy_callable_to_str_param_fails.npy test/test_nilpy_float_repeat_typeerror.npy (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range
+- **test-pascal-conformance#shard4/6** — tools/run_pascal_conformance.sh (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range
+- **tools-devtest#00** (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range

@@ -122,3 +122,4 @@
 2026-08-20T03:24:02Z	plexus	ad995742f8dbb929aba0c564b454d176f2b6c09d	would NOT pin ad995742f8db — self-host is not clean (never waivable)
 2026-08-20T03:40:00Z	plexus	003d733936aa9bc279a77baeab9fda4b3c63000b	would NOT pin 003d733936aa — self-host is not clean (never waivable)
 2026-08-20T03:50:31Z	plexus	57b9b7148d3290ac089cd9360c6e4553a4b44bfb	would NOT pin 57b9b7148d32 — self-host is not clean (never waivable)
+2026-08-20T16:41:29Z	plexus	1b9b43e5b511d53e9fbe55f3366e6ce9158ee0b9	would NOT pin 1b9b43e5b511 — 8 red(s) the current pin does not have: lib-test#src:test/lib_mimic_xml_etree_elementtree.npy, test-c-conformance#shard1/6, test-c-conformance-aarch64#shard1/6, test-c-conformance-arm32#shard1/6, test-c-conformance-riscv32#shard1/6
