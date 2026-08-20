@@ -5157,3 +5157,52 @@ must not settle on pattern-pkill as the diagnosis.
 `pkill -f 'make lib-test'` on 2026-08-19 — which could not have killed a csmith batch but is
 exactly the hazard, and proves the practice is live on this box. Offering evidence against your
 own lane while being asked whether you caused something is worth naming.
+
+## 2026-08-20 — correction: rung 3 HAD a ticket; the umbrella's index was stale
+
+I dispatched frank3 to `feature-pascal-corpus-oop` rung 3 saying **"rung 3 has no
+ticket at all"**, citing the umbrella's candidate table (`— not filed yet` for both
+rtl-generics and fcl-xml). frank3 corrected it before starting and I verified against
+the tree: **`unfinished/feature-pascal-corpus-generics.md` exists** — track P, prio 65,
+owner claude-AP, ~9.5k LOC, parked 2026-08-16, **17 numbered walls cleared across four
+rounds**. The fork was settled by measurement (rtl-generics taken, fcl-xml not); my
+"recommendation" re-derived an outcome that already existed.
+
+**The umbrella table is stale, not wrong-at-time-of-writing**: the sub-ticket was filed
+later and nobody updated the parent. frank3 is fixing the table as part of the work.
+
+**Why I missed it — a ticket hid behind TWO independent switches at once:**
+
+1. `unfinished/` is invisible to `ready`/`next` by design, so the ranker could not
+   surface it; and
+2. the parent campaign's candidate table — the *index* a coordinator reads instead —
+   still said "not filed yet".
+
+Either alone is survivable: the ranker's blind spot is what the umbrella is for, and a
+stale umbrella is caught by the ranker. **Together they produce a confident false
+negative**, and note the direction: an index goes stale in the direction that makes
+claimed work look unclaimed, never the reverse. So the failure mode is duplicate or
+re-derived work, not missed work.
+
+**Rule for the next dispatch — one command, before believing any index:**
+
+```
+ls devdocs/progress/*/ | grep -i <topic>
+```
+
+`ready`/`next` scan four directories; the tree is the truth. This is the same rule
+already written for test files ("`ls test/ | grep <topic>` before creating one"),
+applied to tickets — and I had it in memory and did not reach for it, because the
+umbrella *read* as authoritative. An index is a derived artifact; derived artifacts go
+stale silently.
+
+Consequence for how I dispatch: **name the ticket path, not the topic.** Had I written
+"take `<path>`" I would have had to look it up and would have found it. Saying "rung 3
+of the umbrella" let me hand over a topic and never touch the tree.
+
+frank3 is also right not to re-litigate the settled fork — that would spend exactly the
+single-worker window this dispatch existed to buy. Two things they are correctly
+refusing to take on faith: `/tmp/generics-stage` is gone (box rebooted/cleaned), and the
+current wall (line 635, `error: unknown type: array` on an inline `array[TTypeKind]` in a
+class field) was measured **pre-v368** — re-staging and re-measuring against v368 first,
+since seven compiler commits could have moved it in either direction.
