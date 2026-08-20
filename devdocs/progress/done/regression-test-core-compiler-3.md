@@ -31,3 +31,6 @@ ok: /tmp/testmgr-scratch-3974770/pascal26-threadsafe-next.3975840.tmp  [code=863
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-20 — auto-closed by the plexus watcher: `test-core#src:compiler/compiler.pas@2` passes at 003d733936aa (tier full); it was red at 003d733936aa. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
