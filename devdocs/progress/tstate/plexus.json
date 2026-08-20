@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T11:30:29Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "cc7fd9603a026d2a8f3673518e96e83ac8114cd1",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-20T11:39:11Z",
    "fixed": [],
    "new_red": [],
@@ -462,6 +454,14 @@
    "sha": "a2ae11a641911bbec759e4ccd454b9a6aca38ea6",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-20T23:33:39Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "59dc7e3e2f9183143cf6a11026348fdb1d78a302",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -471,11 +471,11 @@
   "test-c-conformance-aarch64#shard1/6": "FAIL 00206.c \u2014 exit code 39 (want 0) | FAIL 00212.c \u2014 exit code 11 (want 0) | test-c-conformance-aarch64: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-aarch64: FAILURES: 00206.c(exit=39) 00212.c(exit=11)",
   "test-c-conformance-arm32#shard1/6": "FAIL 00206.c \u2014 exit code 64 (want 0) | FAIL 00212.c \u2014 exit code 64 (want 0) | test-c-conformance-arm32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-arm32: FAILURES: 00206.c(exit=64) 00212.c(exit=64)",
   "test-c-conformance-riscv32#shard1/6": "FAIL 00206.c \u2014 exit code 144 (want 0) | FAIL 00212.c \u2014 exit code 144 (want 0) | test-c-conformance-riscv32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-riscv32: FAILURES: 00206.c(exit=144) 00212.c(exit=144)",
-  "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas": "ok: $TMP  [code=58679B  data=1888B  bss=42492B  procs=121] | Segmentation fault (core dumped)",
+  "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas": "ok: $TMP  [code=59256B  data=1888B  bss=42492B  procs=121] | Segmentation fault (core dumped)",
   "test-core#src:test/test_mode_delphi.pas": "pascal26:25: warning: bare own name 'Gate' reads the result of parameterless function Gate; write Gate() for a recursive call, or Result to read the result | pascal26:36: error: undefined variable (Dbl) | near: end  begin p  Dbl >>>  WriteLn",
   "test-core#src:test/test_mode_delphi_callarg.pas": "pascal26:51: error: undefined variable (Dbl) | near:  ApplyFn=  ApplyFn  Dbl >>>",
   "test-core#src:test/test_mode_delphi_methptr.pas": "pascal26:39: error: \"TCounter.Add\" is a procedure and has no result to use in an expression | near:  e  c  Add >>>  e",
-  "test-core#src:test/test_procvar_value_context.pas": "ok: $TMP  [code=58496B  data=1608B  bss=42516B  procs=125]",
+  "test-core#src:test/test_procvar_value_context.pas": "ok: $TMP  [code=59073B  data=1608B  bss=42516B  procs=125]",
   "test-core#src:test/test_record_helper_for_string_b331.pas": "pascal26:71: error: undefined variable (BITS) | near:  Writeln  bits:     BITS >>>   end",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter",
   "test-pascal-conformance#shard4/6": "SKIP toperator9.pp \u2014 gap: operator overload for `in` on a record type not supported by the parser | SKIP tprocvar1.pp \u2014 gap: method pointers (`procedure(l:longint) of object`), @Class.Method, typed-const procvars | SKIP tsealed6.pp \u2014 gap: `object abstract` / `object sealed` modifiers in object declarations | SKIP tstring4.pp \u2014 wontfix: reads ansistring refcount/length header words \u2014 FPC internal \u2026",
@@ -1732,6 +1732,8 @@
   "test-core#src:test/test_interface_com_default.pas": "native",
   "test-core#src:test/test_interface_com_value_param.pas": "native",
   "test-core#src:test/test_interface_constref_cdecl_b249.pas": "native",
+  "test-core#src:test/test_interface_containers.pas@1": "native",
+  "test-core#src:test/test_interface_containers.pas@2": "native",
   "test-core#src:test/test_interface_directives.pas": "native",
   "test-core#src:test/test_interface_local_array_zero_init.pas": "native",
   "test-core#src:test/test_interface_mainbody_ascast_temp.pas": "native",
@@ -4610,6 +4612,8 @@
   "test-core#src:test/test_interface_com_default.pas": "pass",
   "test-core#src:test/test_interface_com_value_param.pas": "pass",
   "test-core#src:test/test_interface_constref_cdecl_b249.pas": "pass",
+  "test-core#src:test/test_interface_containers.pas@1": "pass",
+  "test-core#src:test/test_interface_containers.pas@2": "pass",
   "test-core#src:test/test_interface_directives.pas": "pass",
   "test-core#src:test/test_interface_local_array_zero_init.pas": "pass",
   "test-core#src:test/test_interface_mainbody_ascast_temp.pas": "pass",
@@ -6229,11 +6233,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-20T23:09:01Z",
-  "sha": "a2ae11a641911bbec759e4ccd454b9a6aca38ea6",
+  "date": "2026-08-20T23:33:39Z",
+  "sha": "59dc7e3e2f9183143cf6a11026348fdb1d78a302",
   "tier": "native",
   "verdict": "RED",
-  "wall": 460.4
+  "wall": 467.7
  },
  "last_bench": {
   "conf_rows": 550,
