@@ -4797,3 +4797,64 @@ all refused by `.claude/hooks/no-full-suite.sh` for that lane; the escape is
 must not** — a peer cannot hand a peer an escalation, and hand-running the recipe bodies would
 be reshaping a denied command. Track C stopped and routed it up rather than around, which is
 the correct behaviour and is worth saying out loud because the wrong version looks helpful.
+
+## 2026-08-20 afternoon — parser.inc freed, both queued tickets assigned to one agent
+
+**Split 3 (`ParseFactorCore`) COMPLETE** — `3c8ec4c7d` (-764 lines) + `1bf8fefbc`. Fixedpoint
+1 round at every stage, `gate.sh quick` green at every stage, 17 NilPy programs against the
+CPython oracle via pydiff all MATCH. No pin. `PyExprMode` in that routine 43 -> 1 (the 1 is the
+dispatch); whole file 119 -> 77; surface 226 -> 182 forks, 183 -> 180 distinct deps, 533 -> 478
+sites. Real figure: ParseFactorCore was **29%** of the surface, not the 34% relayed — corrected
+forward in the ticket and in `3c8ec4c7d`'s message, naming exactly which line is superseded.
+`f380d7cd0` left untouched.
+
+**A/P slot for `parser.inc`/`pyparser.inc` is FREE and immediately reassigned.** frank3 takes,
+in order and WITHOUT releasing the slot between them:
+1. `feature-n-a-cpyext-extension-module-is-bare-importable-not-a-pascal-unit` (A+N, p70)
+2. `refactor-a-one-resolved-file-identity-for-a-translation-unit` (A, p60)
+
+**Why one agent takes both rather than parallelising two unrelated tickets:** they occupy the
+same REGION of the file — the cpyext refusal at ~33459, `ParseUsesUnit`'s dedupe at ~34590 —
+so they serialise by construction. Unrelated tickets are not independent when they share a
+neighbourhood, and "different tickets" is not a lock any more than "different regions" was.
+
+**Site moved: `parser.inc:34223` -> ~33459** (everything below 9515 shifted -764). The ticket
+now says **navigate by the `THE COLLISION, NAMED.` landmark, not the line number** — a
+recorded line number is a snapshot of a file that moves under it.
+
+### The 50 arms that will NEVER fold — state this to whoever takes split 4
+
+`parser.inc` still runs during a NilPy compilation, for the **Pascal units a `.npy` program
+imports**: `isNilPy` True, `PyExprMode` False. So ~50 `isNilPy`/`NilPyUserCode` arms stay in
+`ParseFactorCore` **by design** — the opposite reduction from the pyparser copy, where stage 2
+folded all 52. Unstated, the next carver reads them as unfinished work and either chases them
+or reports the carve as incomplete. **A rule that prevents a MISREADING is worth more than one
+that prevents an error, because nobody files a bug against a misreading.**
+
+### Balance is necessary and not sufficient (block deletion)
+
+frank3 shipped two wrong-extent deletions in the first batch; **the compiler caught both,
+review caught neither.** A `begin`/`end`-balance check over the diff hunks found one and
+**missed** the other — a deleted, perfectly *balanced* `if..begin..end` that left a dangling
+`else`. Balance says nothing about whether the remaining text is grammatical.
+
+And the diagnostic for the first landed **~4000 lines EARLIER than the edit**, naming
+`PyCallMeth1`: the unclosed routine swallowed `pyparser.inc`'s declarations into its own scope,
+so the reported location was upstream of the cause and the named symbol was a bystander. Same
+mechanism as the missing-`forward;` landmine, reached from the other direction.
+
+**The instrument that works:** assert every removed hunk's first stripped code line is the
+guard you meant to delete, with each exception named in the commit message. That checks the
+INTENT of each hunk rather than a syntactic property of the whole, and it forces the
+non-mechanical cases into the open — here two: a `tkBegin` arm where Pascal's behaviour was
+the `Error` (guard drops, NilPy body goes, opposite to the mechanical reading) and a
+call-result wrapper whose `else` body survives dedented.
+
+### Split 4 — banked, NOT claimed
+
+The expression ladder: `ParseFactor` 32 forks/609 lines, `ParseExpr` 16/569, `ParseTerm`
+13/303, `ParseSimpleExpr` 10/271 = 71 forks over 1752 lines, **39% of what remains at a
+quarter of ParseFactorCore's size.** Marked measured-and-unconfirmed with the caveat that the
+four are mutually recursive and share a dispatch discipline, so they likely carve as **one
+unit, not four**. Re-derive before picking a target — that instrument has been wrong twice,
+and the mutual-recursion caveat moves the estimate more than the measurement does.
