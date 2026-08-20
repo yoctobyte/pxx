@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T19:14:03Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "a15cb05fa9ce23eb569aa134d8ad1f32310f026c",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T19:34:58Z",
    "fixed": [
     "test-nilpy#src:test/test_nilpy_kwarg_overload_set.npy",
@@ -428,6 +420,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "b6f0b209ce87dc8977cfd44bd5753f82492167a6",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-20T11:50:36Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "b1033f3346d5f12b91027bcdca0d59ea8c173f6d",
    "tier": "native",
    "verdict": "RED"
   }
@@ -1554,6 +1554,7 @@
   "test-core#src:test/test_empty_class_shorthand.pas": "native",
   "test-core#src:test/test_empty_paren_default_args_b316.pas": "native",
   "test-core#src:test/test_enum_cast.pas": "native",
+  "test-core#src:test/test_enum_explicit_ordinal_low_high.pas": "native",
   "test-core#src:test/test_enum_identity_ok.pas": "native",
   "test-core#src:test/test_eof_stdin.pas": "native",
   "test-core#src:test/test_erlang_skeleton.erl": "native",
@@ -3934,6 +3935,7 @@
   "test-core#src:test/test_empty_class_shorthand.pas": "pass",
   "test-core#src:test/test_empty_paren_default_args_b316.pas": "pass",
   "test-core#src:test/test_enum_cast.pas": "pass",
+  "test-core#src:test/test_enum_explicit_ordinal_low_high.pas": "pass",
   "test-core#src:test/test_enum_identity_ok.pas": "pass",
   "test-core#src:test/test_eof_stdin.pas": "pass",
   "test-core#src:test/test_erlang_skeleton.erl": "pass",
@@ -4684,11 +4686,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T11:39:11Z",
-  "sha": "b6f0b209ce87dc8977cfd44bd5753f82492167a6",
+  "date": "2026-08-20T11:50:36Z",
+  "sha": "b1033f3346d5f12b91027bcdca0d59ea8c173f6d",
   "tier": "native",
   "verdict": "RED",
-  "wall": 447.4
+  "wall": 452.8
  },
  "last_bench": {
   "conf_rows": 550,
