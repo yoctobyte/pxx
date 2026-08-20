@@ -1300,3 +1300,4 @@
 {"date": "2026-08-20T02:35:50Z", "fixed": [], "full": false, "new_red": [], "sha": "ef3ea948003db578ee3871802bffcc9051a2ab73", "still_red": [], "tier": "native", "verdict": "GREEN", "wall": 234.8}
 {"date": "2026-08-20T02:41:39Z", "fixed": [], "full": false, "new_red": [], "sha": "08dccc7df6548c8d7af2e22d0647d239ad292149", "still_red": [], "tier": "native", "verdict": "GREEN", "wall": 235.3}
 {"date": "2026-08-20T02:53:37Z", "fixed": [], "full": false, "new_red": [], "sha": "8eb2ce5834993cf923943d1ac6a6f65a08b211dc", "still_red": [], "tier": "native", "verdict": "GREEN", "wall": 243.0}
+{"date": "2026-08-20T03:07:54Z", "fixed": [], "full": false, "new_red": ["selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh", "test-core#src:compiler/compiler.pas@2"], "sha": "21117f4152845a44e578a5eb04dc3af250a0b935", "still_red": [], "tier": "native", "verdict": "RED", "wall": 141.8}
