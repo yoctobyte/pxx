@@ -5206,3 +5206,69 @@ refusing to take on faith: `/tmp/generics-stage` is gone (box rebooted/cleaned),
 current wall (line 635, `error: unknown type: array` on an inline `array[TTypeKind]` in a
 class field) was measured **pre-v368** — re-staging and re-measuring against v368 first,
 since seven compiler commits could have moved it in either direction.
+
+- **check 2026-08-20 (+1h) — quiet on staffing, one real finding, and it implicates my own
+  pin.** frank3 busy on Track P generics (rung 3); frank2 landed `9715fdf76` and stood down
+  as instructed. **No pin needed: zero `compiler/**` commits since v368.**
+
+  **`selfhost-fixedpoint` is RED, and the failing arm is the one that matters.**
+  `backlog/regression-selfhost-fixedpoint-selfhost-fixedpoint.md`, p70, top of T's ready
+  queue, auto-filed by the watcher and **untriaged for the whole window**. Read the log
+  before reacting to the name: it says *"converged after 2 round(s) from pinned: the
+  compiler reproduces itself"* and then fails. So **property 1 (convergence) PASSED and
+  property 2 (AGREEMENT, the anti-Thompson check) failed** — the fixedpoint reached from
+  the committed `pinned` seed differs from `compiler/pascal26`. Two distinct
+  self-reproducing fixedpoints. That is the one property CLAUDE.md says a bad pin could
+  poison for everyone.
+
+  **My pin justification was unsound, independent of how the triage lands.** I took v368
+  partly on "a clean local `stabilize-fast`". `stabilize-fast` seeds from the **local**
+  binary; the job seeds hermetically from **committed `pinned`**. Property 2 is exactly the
+  gap between those two seeds, so a green `stabilize-fast` cannot speak to it. I cited a
+  true measurement of the wrong subject — the same class of error as the pkill/OOM frame
+  and the pin_shadow verdict, third instance this week. **The general rule: a gate's green
+  is scoped to the seed it started from, and "self-host fixedpoint" names two properties
+  that can come apart.**
+
+  Not yet established, and deliberately not written as fact: bad `21117f415284` with last
+  good `8eb2ce583499` leaves **15 commits in range**, so this may have gone red *before*
+  the pin — i.e. I may have pinned over an existing red rather than caused one. Unknown
+  until T bisects.
+
+  **What rules out the usual dismissal.** A pin-tier red normally reads as "at the pinned
+  tree, since fixed" (see the pin-commit-looks-like-a-mass-regressor rule). This one does
+  not qualify: T's own status corroborates it in the **full tier at `ad995742f8db`**, which
+  I checked is 3 commits *after* `30d352737` landed the v368 binary. Different tree,
+  still red.
+
+  **Dispatched plexus-T** (idle, owns the job, different box → zero collision with frank3
+  holding this box's tree). Asked for three things in order: re-verify at current HEAD
+  (`003d73393`) since the ticket's own banner demands it and everything else depends on the
+  answer; if still red, which of the two hypotheses its FAIL message names — watcher-clone
+  seed contamination vs a self-perpetuating miscompile, with a check that the script's
+  concurrent-`make` snapshot defence held, since plexus runs many builds; and if it
+  bisects, **file into Track A** — T owns the tool, never the bug. Told it explicitly that
+  "green at HEAD, self-cleared" is a fine answer and I will unwind the caveat rather than
+  leave it hanging.
+
+  **frank2's gate ordering was broken and it flagged this itself, after a green re-run.**
+  Its commit-and-push chained on `tail`'s exit status rather than the gate's — and `tail`
+  succeeds whenever there is output, so **that pipeline was structurally incapable of ever
+  blocking a push**. It did not fail once; it had never been checking. Same family as the
+  fluent-rig entries. Told it to fix the pipeline before its next push rather than carry it
+  as known, and that flagging it when a green re-run would have buried it is what keeps its
+  greens worth anything.
+
+  I also corrected frank2's inference that "the fixedpoint passing is itself the proof the
+  binary matches current sources" — same conflation as my own, and I told it so alongside
+  mine rather than as a one-way correction. Its stale-binary explanation for the red it saw
+  remains the likely one and is not reassigned; if T returns seed contamination, that
+  incident becomes data rather than a footnote.
+
+  **Lock hygiene:** `feature-pascal-corpus-generics.md` is still in `unfinished/` while
+  frank3 works it — frank3 says it claimed it, so this is most likely an unpushed local
+  move. Not pinged (do not interrupt a busy worker); to be raised at its next natural
+  report. `working/` currently shows only the reduced-compiler ticket.
+
+  Everything else genuinely quiet. Track N's p70 urgent callable/bound-method bug stays
+  parked under the A/P/C mandate, not because it is small.
