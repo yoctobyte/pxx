@@ -3942,6 +3942,14 @@ test-core: $(COMPILER)
 	# High/Low of ordinal types in const expressions (bug-pascal-high-low-in-const-expr)
 	./$(COMPILER) test/test_high_low_const_expr.pas $(TESTTMP)/test_high_low_const_expr26
 	test "$$($(TESTTMP)/test_high_low_const_expr26)" = "$$(printf '256\n256\n255 -32768 2\n2147483646\n7\n1\n0 9\n0 9 -5 5\na e\n10\n5')"
+	# A program naming `puint8` must compile QUIETLY: FindTypeAlias carried a
+	# leftover debug dump keyed on that exact name, printing the whole alias
+	# table to STDOUT before the pointer-alias fallback resolved it. The
+	# assertion is on the COMPILER's output — one line, the ok: banner.
+	./$(COMPILER) test/test_puint8_no_compiler_spew.pas $(TESTTMP)/test_puint8_spew26 > $(TESTTMP)/test_puint8_spew.log 2>&1
+	test "$$(grep -c 'FindTypeAlias\|Alias 0:' $(TESTTMP)/test_puint8_spew.log)" = "0"
+	test "$$(wc -l < $(TESTTMP)/test_puint8_spew.log)" = "1"
+	test "$$($(TESTTMP)/test_puint8_spew26)" = "puint8 ok=7"
 	# {$I} -Fi search + hard error on miss (bug-pascal-include-search-silent-miss)
 	./$(COMPILER) -Fitest/incdir_fi test/test_include_fi_search.pas $(TESTTMP)/test_include_fi26
 	test "$$($(TESTTMP)/test_include_fi26)" = "fi-ok"

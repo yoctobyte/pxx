@@ -153,7 +153,7 @@ begin
 end;
 
 function FindTypeAlias(const name: AnsiString): Integer;
-var i, bestRank, r: Integer; lo, name2, s: AnsiString; j: Integer;
+var i, bestRank, r: Integer; lo, name2: AnsiString;
 begin
   Result := -1;
   bestRank := -2;
@@ -180,18 +180,13 @@ begin
     end;
     Inc(i);
   end;
-  if Result >= 0 then Exit;
-  if lo = 'puint8' then
-  begin
-    writeln('FindTypeAlias failed to find puint8! AliasCount=', AliasCount);
-    for i := 0 to AliasCount - 1 do
-    begin
-      s := '';
-      for j := 0 to AliasNLen[i] - 1 do
-        AppendChar(s, TokChars[AliasNOff[i] + j]);
-      writeln('  Alias ', i, ': ', s, ' (noff=', AliasNOff[i], ', nlen=', AliasNLen[i], ')');
-    end;
-  end;
+  { No fallback here on purpose: a miss is normal. `puint8` and friends resolve
+    through the pointer-alias path AFTER this returns -1, so an unresolved name
+    at this point says nothing. A debug dump of the whole alias table used to
+    fire here for exactly that name and printed to STDOUT — i.e. any program
+    mentioning `puint8` (an entirely ordinary name in C-interop Pascal) got a
+    dozen lines of compiler internals mixed into its build output, and then
+    compiled fine. Removed 2026-08-20. }
 end;
 
 procedure RegisterPtrAlias(noff, nlen, elemTk, elemRec, targetNOff, targetNLen: Integer);

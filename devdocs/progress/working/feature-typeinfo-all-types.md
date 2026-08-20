@@ -1,11 +1,12 @@
 ---
 prio: 50
+owner: claude-acp
 ---
 
 # `TypeInfo(T)` for every type, not just enums
 
 - **Type:** feature (RTTI — Track A/P)
-- **Status:** backlog — filed 2026-07-14.
+- **Status:** working
 - **Blocks:** [[feature-pascal-corpus-generics]] (generics.defaults selects a
   comparer per TypeInfo(T), including TypeInfo of a GENERIC PARAMETER),
   [[feature-typinfo-facade-unit]], and behind those the RTTI->streaming->LFM

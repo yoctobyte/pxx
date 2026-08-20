@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:17 blocked:8 backlog:270 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2154 rejected:40`
+`urgent:1 working:1 unfinished:17 blocked:8 backlog:269 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2155 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-typeinfo-all-types` [A] — owner: claude-acp
 
 ## urgent (1) — jump the queue
 
@@ -46,7 +46,7 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 257, ranked
+## Ready — top 30 of 256, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree
@@ -79,4 +79,4 @@ _none — no lane is locked._
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 55] [E]` feature-demo-portable-userland
 
-_227 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_226 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
