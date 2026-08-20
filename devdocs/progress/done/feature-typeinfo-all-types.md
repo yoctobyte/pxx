@@ -177,4 +177,4 @@ doing it now would mean designing a layout against a guessed reader.
   claiming it.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 8f4c10cd6.
