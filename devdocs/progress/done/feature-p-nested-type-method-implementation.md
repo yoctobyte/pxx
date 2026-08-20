@@ -82,7 +82,7 @@ copy in the header parser (`normalise-dont-special-case`).
 repro as `test/test_nested_type_methods.pas`.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 791c33fb6.
 
 ## Resolved — 2026-08-20 (frank1-ACP)
 
