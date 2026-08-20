@@ -119,3 +119,86 @@ wide, classify on hit.**
 ## Gate
 
 T's own lane gate for its tooling.
+
+## 2026-08-20 — THE FIX IS CHEAPER THAN THIS TICKET SAYS: the oracle is already computed and thrown away
+
+Found by frank2 reading `fuzz_one` while the aarch64 batches ran; **verified independently
+by the coordinator in the source** rather than relayed, because it changes the fix.
+
+`tools/csmith_fuzz.py:256` builds and runs a **native x86-64 `gcc -O0` on every seed,
+unconditionally**, as a *validity filter* — "is this program buildable and runnable at
+all". Its checksum is kept in `gcc_out` and its wall time in `gcc_sec`. Then at line 274:
+
+```python
+if cfg.target == "x86_64":
+    oracle_sum, oracle_sec = gcc_out.strip(), gcc_sec   # it IS the native gcc
+else:
+    ... build a SECOND binary with the cross compiler ...
+```
+
+Native gcc is LP64. So are aarch64 and riscv64. **For an LP64 target the oracle's checksum
+is already computed and then discarded**, purely because the guard asks about the ISA
+(`target == "x86_64"`) rather than the data model — the same ISA-vs-data-model confusion
+this ticket is about, in a second place.
+
+So the fix is **not** "add `["gcc"]` to `ORACLE_CC` and pay for another build". It is:
+
+```python
+if TARGETS[cfg.target] == TARGETS["x86_64"]:
+    oracle_sum = gcc_out.strip()
+```
+
+Zero extra build cost, no new probe, and it lights up `MISCOMPILE_VS_GCC` for aarch64 and
+riscv64 immediately. The ILP32 targets still need a real ILP32 compiler, which this box
+does not have.
+
+### TRAP — reuse the CHECKSUM, never the TIMING
+
+Coordinator's note, and it is why the one-line version above assigns `oracle_sum` only.
+`oracle_sec` scales pxx's budget at line 291: `run_limit = max(floor, TIMEOUT_FACTOR *
+oracle_sec)`. The module's own comment at line 267 already states the rule — the oracle
+"has to be run the way the pxx binaries are run (same emulation, same runner), or the
+ratio the timeout is scaled off measures qemu rather than the compiler."
+
+A native gcc run and an emulated aarch64 pxx run are **not** the same way. Reusing
+`gcc_sec` for an emulated target would scale the budget off native silicon while pxx runs
+under qemu — an order of magnitude apart — and manufacture `PXX_TIMEOUT` findings out of
+programs that are merely emulated. That is the `PXX_SLOW`/hang confusion of
+[[bug-t-csmith-harness-reports-slow-as-a-timeout]] returning through a new door, and it
+would look like a real finding.
+
+**Correct shape:** take `gcc_out` as the checksum oracle; leave `oracle_sec` `None` for
+emulated targets so the budget stays the widened flat floor, and keep reporting the timing
+comparison as NOT CHECKED. **Checksum comparability and timing comparability are different
+questions with different preconditions** — data model for one, execution environment for
+the other. Do not let one flag answer both.
+
+### Also: the skip message names the wrong thing
+
+With no oracle configured, a skipped seed still prints `skip (gcc could not build/run
+it)`. That is correct for the validity filter and reads wrong in a run whose banner just
+said there is no gcc for this target — the reporter had to read the source to learn whether
+the skips meant anything. **Name the validity filter, not "gcc".** Small, and it is the
+class of thing that makes a reader distrust a dry run.
+
+## 2026-08-20 — the batches these came from: 270 seeds on aarch64, ZERO findings
+
+Reported as a batch per the campaign's dry-run rule. Self-hosted fixedpoint at `272e347bb`.
+
+- **D1, `--target aarch64`, seeds 300100-300249 (harness as delivered).** 150 seeds: **136
+  ran clean across pxx `-O` levels, 14 skipped, no findings.** No `MISCOMPILE_OPT`, so
+  `-O0` and `-O2` agree with each other on the aarch64 backend. `MISCOMPILE_VS_GCC` and
+  `PXX_SLOW` **NOT CHECKED** — no LP64 oracle under the current table — and the harness
+  said so on every report line, which is the behaviour to keep.
+- **D2, the LP64 cross-data-model differential, seeds 310100-310219.** 120 seeds: **105
+  agreed with native gcc, 15 skipped, 0 divergences.** This is the comparison `ORACLE_CC`
+  does not currently offer. Every checksum matched; no reduction needed and the bitfield
+  caveat never had to apply.
+
+**270 seeds on aarch64, zero findings, with the strongest available oracle live for 120 of
+them.** The aarch64 backend agrees with gcc on random UB-free programs and with itself
+across `-O` levels. Read against the campaign's history — 1450 seeds on axis 3 without a
+`MISCOMPILE_VS_GCC` — the tail is thin on this backend too. **That is not evidence the axis
+was a bad bet: it is the first time any cross backend has seen a random program at all**,
+and a first-ever sweep coming back clean is a result worth the same paragraph a finding
+would get.
