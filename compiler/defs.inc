@@ -1466,6 +1466,18 @@ var
   NSpecCount  : Integer;
   NSpecIns    : array[0..MAX_NESTED_SPECS*(8+2*MAX_TEMPLATE_PARAMS)-1] of TRawToken;
   NSpecInsCnt : Integer;
+  { Deferral round counter per specialization NAME. A specialization whose body
+    names an unregistered nested one re-emits itself behind its prerequisites
+    and re-parses, which terminates only while the unmet set shrinks. Two
+    specializations that require EACH OTHER (`TP<A,B>` with a member of type
+    `TP<B,A>`) shrink nothing: each defers on the other forever, growing the
+    token stream every round, so the compiler span at 100% CPU with no
+    diagnostic. Legitimate deferral depth cannot exceed the number of distinct
+    specializations, so a name that has deferred more rounds than that is in a
+    cycle. bug-p-mutually-recursive-generic-specialization-hangs-the-compiler }
+  SpecDeferName  : array[0..MAX_SPECIALIZATIONS-1] of AnsiString;
+  SpecDeferRound : array[0..MAX_SPECIALIZATIONS-1] of Integer;
+  SpecDeferCount : Integer;
   SpecConcreteNames  : array[0..MAX_SPECIALIZATIONS*MAX_TEMPLATE_PARAMS-1] of AnsiString;
   SpecConcreteKinds  : array[0..MAX_SPECIALIZATIONS*MAX_TEMPLATE_PARAMS-1] of TTokenKind;
   SpecNParams        : array[0..MAX_SPECIALIZATIONS-1] of Integer;

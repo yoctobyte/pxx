@@ -4273,6 +4273,15 @@ test-core: $(COMPILER)
 	# test at `SumArr(Default(TArr))` -- it passes an Int64 where an array goes.
 	./$(COMPILER) test/test_default_of_aggregate.pas $(TESTTMP)/test_defaultagg26
 	test "$$($(TESTTMP)/test_defaultagg26 | tail -1)" = "total ok 29 / 29"
+	# Two specializations that require EACH OTHER (`TP<A,B>` with a member typed
+	# `TP<B,A>`) used to HANG the compiler: a specialization with an unregistered
+	# prerequisite re-emits itself behind it and re-parses, which terminates only
+	# while the unmet set shrinks -- and a cycle shrinks nothing, so it inserted a
+	# fresh copy of both declarations every round at 100% CPU with no diagnostic.
+	# Now a compile error naming both sides, in half a second. FPC rejects this
+	# program too, so nothing legal is lost; a compiler must not spin.
+	! ./$(COMPILER) test/test_generic_cycle_fail.pas $(TESTTMP)/test_gencycle26 > $(TESTTMP)/test_gencycle.log 2>&1
+	grep -q "circular generic specialization" $(TESTTMP)/test_gencycle.log
 	./$(COMPILER) test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_nativeshift26
 	test "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
 	test "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"

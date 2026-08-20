@@ -2629,7 +2629,7 @@ var
   templateName, aliasNm: AnsiString;
   cNames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   cKinds: array[0..MAX_TEMPLATE_PARAMS-1] of TTokenKind;
-  nc, ti, i, j, k, na, ts, tc, gEnd, si: Integer;
+  nc, ti, i, j, k, na, ts, tc, gEnd, si, dfIdx: Integer;
   dup: Boolean;
 begin
   Result := False;
@@ -2766,6 +2766,27 @@ begin
       where the type-section loop reads next: put the prerequisites there,
       followed by a fresh copy of this declaration. Nothing has been registered,
       so the retry is a clean re-parse. }
+    dfIdx := -1;
+    for k := 0 to SpecDeferCount - 1 do
+      if CaseEqual(SpecDeferName[k], specName) then dfIdx := k;
+    if dfIdx < 0 then
+    begin
+      if SpecDeferCount >= MAX_SPECIALIZATIONS then Error('too many deferred specializations');
+      dfIdx := SpecDeferCount;
+      SpecDeferName[dfIdx] := specName;
+      SpecDeferRound[dfIdx] := 0;
+      Inc(SpecDeferCount);
+    end;
+    Inc(SpecDeferRound[dfIdx]);
+    { A deferral is only progress while the unmet prerequisite set shrinks, and
+      it cannot legitimately take more rounds than there are specializations in
+      the whole program. More than that means a CYCLE -- two specializations
+      requiring each other -- which used to spin forever, inserting a fresh copy
+      of both declarations into the token stream every round with no diagnostic
+      and no end. Name both sides: the cycle is what the author has to break. }
+    if SpecDeferRound[dfIdx] > MAX_SPECIALIZATIONS then
+      Error('circular generic specialization: ' + specName + ' requires ' +
+            NSpecName[0] + ', which requires ' + specName + ' back');
     NSpecInsCnt := 0;
     for k := 0 to NSpecCount - 1 do
       EmitSpecDecl(NSpecName[k], NSpecTmpl[k], k * MAX_TEMPLATE_PARAMS, NSpecNArg[k]);

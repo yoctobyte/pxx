@@ -49,7 +49,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (253)
+## backlog (255)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -103,6 +103,7 @@ _none_
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 20 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
+| bug-p-a-call-result-is-refused-as-a-const-open-array-argument | P | 45 | bug | `Sum(Copy(a, 1, 3))` and `Sum(MakeArray)` -- a call result given to a `const array of T` open-array parameter -- do not compile. FPC accepts both. A naive relaxation was tried and REVERTED: it compiles `array of Double` and `array of string` into segfaults, so the by-ref check is a symptom and the real defect is that a dynamic-array-valued call is typed inconsistently. | — |
 | bug-p-a-parameterless-function-is-undefined-as-a-method-call-argument | P | 35 | bug | A parameterless function used as an ARGUMENT to a method call fails to resolve — `error: undefined variable (zero)` — while the identical argument to a free function compiles. Any argument position. Found writing lib/rtl/mimic_urllib_request.pas, where `headers.get(name, pynone)` would not compile but `HeaderFirst(raw, name, pynone)` did. | — |
 | bug-p-sizeof-rejects-a-pointer-deref-in-its-operand | P | 35 | bug | `SizeOf(p^.A)` is a parse error (`Expected: ), but got: ^`). SizeOf's operand parser is a hand-rolled selector walk that handles `v`, `v.f.g` and `v[i]` but has no `^` case, so any pointer deref in the operand is rejected outright. | — |
 | bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence | T | 45 | bug | file_cascade_ticket's Root-cause-suspects line falls back to 'likely a broken build or harness event' whenever no CASCADE_ROOT_JOBS entry is in the red set. That is a conclusion drawn from the absence of one narrow signal, printed with no hedge, and it is now directly contradicted by the Range section shipped in 8ec77190c — which on the live incident named the actual cause. Same defect class the Range work fixed for the sha: an auto-filed ticket asserting something it has no evidence for. | — |
@@ -300,6 +301,7 @@ _none_
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-n-two-import-handlers-are-twins | N | 30 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
+| regression-test-core-test-timer | P | 70 | regression | regression: test-core#src:test/test_timer.pas red at 26dae20b9dec (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-pascal-unit-keeps-fpc-method-shadowing | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy red at 57b9b7148d32 (auto-filed by twatch) | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 25 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 40 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
@@ -510,9 +512,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2137)
+## done (2138)
 
-2137 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2138 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -562,6 +564,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [urgent p 70] [N] bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
+- [p 70] [P] regression-test-core-test-timer
 - [p 70] [T] regression-test-nilpy-test-nilpy-pascal-unit-keeps-fpc-method-shadowing
 - [p 65] [U] decide-tobject-root-methods-dispatch-model (unblocks 1)
 - [p 65] [T] bug-t-agents-kill-each-others-processes-with-pattern-pkill
@@ -623,6 +626,7 @@ _none_
 - [p 45] [N] bug-n-isinstance-does-not-accept-a-qualified-class-name
 - [p 45] [N] bug-n-self-class-cannot-be-called-as-a-constructor
 - [p 45] [N] bug-nilpy-a-keyword-call-through-a-statically-unknown-callee-does-not-compile
+- [p 45] [P] bug-p-a-call-result-is-refused-as-a-const-open-array-argument
 - [p 45] [T] bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence
 - [p 45] [T] bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio
 - [p 45] [T] bug-t-a-pin-verifys-reds-carry-no-reasons
