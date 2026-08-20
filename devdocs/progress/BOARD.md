@@ -51,7 +51,7 @@ lives in git, not in a timestamp._
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (270)
+## backlog (271)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -156,6 +156,7 @@ lives in git, not in a timestamp._
 | decide-segv-runtime-error-default | U | 45 | decide | Should a pxx binary install a SIGSEGV/SIGBUS handler by DEFAULT, so a memory fault prints `Runtime error 216` and exits 216 like FPC — or should that be opt-in behind a flag, the way FPC-style float errors are? It changes how every pxx binary dies. | — |
 | decide-should-from-accept-a-quoted-foreign-file | U | 45 | decide | A bare NilPy import resolves to Python only, and the escape is `import 'x.pas' as x`. There is no matching escape for `from x import Name` -- `from 'x.pas' import Name` is refused with \"expected a module name after from\". Decide whether the quoted form should be accepted after `from`, or whether the alias form is deliberately the only door. A test already lost an assertion to this. | — |
 | decide-tobject-root-methods-dispatch-model | U | 65 | decide | Decide: how `TObject.Equals` / `GetHashCode` dispatch — intercept, real parent, or reserved slots | — |
+| decide-typeinfo-scalar-name-spelling | U | 20 | decide | TypeInfo(Integer)^.Name: pxx says `Integer`, FPC says `LongInt`. pxx's tyInteger and tyInt32 are separate type kinds where FPC's Integer IS LongInt, so TypeInfoOrdName picks one canonical spelling per pxx kind and Integer keeps its own. Cosmetic today (nothing branches on the string), but it is a visible FPC-parity gap in a compat-sensitive API, and changing it later breaks whatever started reading it. | — |
 | docs-d-document-exec-eval-and-the-builtins-incompatibility | D | 40 | docs | docs/targets/nil-python.md tells the public `eval`/`exec` do not exist (\"No eval of runtime-constructed code\") — but the explicit-dict form has worked since 2026-07-31 via pyeval's tree-walker. Document what exec/eval DO support, the refused ambient form, and the decided __builtins__ incompatibility (decided 2026-08-19, permanent for now). | — |
 | docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out | D | 45 | docs | docs/language/name-resolution.md:47 and docs/targets/nil-python.md:260 quote the bare-import refusal message and state the rule with no carve-out. As of 2026-08-20 a unit declaring {$PYEXTENSION} and binding the cpyext runtime IS bare-importable, so both pages are now wrong in the direction that makes a working program look unsupported. | — |
 | feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
@@ -816,6 +817,7 @@ lives in git, not in a timestamp._
 - [p 20] [A] chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments
 - [p 20] [P] compat-pascal-method-impl-without-declaration
 - [p 20] [A] compat-pascal-strict-fpc-should-reject-a-duplicate-identifier-in-one-scope
+- [p 20] [U] decide-typeinfo-scalar-name-spelling
 - [p 20] [A] feature-cli-widgetset-flag
 - [p 20] [B] feature-networking
 - [p 20] [T] feature-t-nilpy-cpython-differential-fuzzer

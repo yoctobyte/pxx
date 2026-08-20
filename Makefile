@@ -3946,9 +3946,20 @@ test-core: $(COMPILER)
 	# lex as one token (tkInteger_T, two spellings), and this path switched on
 	# the token kind — so TypeInfo(Byte) said "Integer" while TypeInfo(UInt8),
 	# resolved by name, said "Byte". Both rows are present because the pair is
-	# what makes it visible. Values checked against FPC 3.2.2.
+	# what makes it visible. Values checked against FPC 3.2.2 — the `string` row
+	# against FPC under {$H+} (AnsiString 9), which is pxx's string model; bare
+	# -Mobjfpc makes `string` a ShortString and answers 7, so an oracle run
+	# without {$H+} will disagree with this row and is the wrong oracle.
 	./$(COMPILER) -Fulib/rtl test/test_typeinfo_scalar_names.pas $(TESTTMP)/test_typeinfo_names26
 	test "$$($(TESTTMP)/test_typeinfo_names26)" = "$$(printf 'Byte 1 Byte\nUInt8 1 Byte\nInteger 1 Integer\nWord 1 Word\nLongWord 1 LongWord\nInt64 19 Int64\nChar 2 Char\nBoolean 18 Boolean\nDouble 4 Double\nSingle 4 Single\nstring 9 AnsiString')"
+	# TypeInfo(T) over the NAMED types the alias table carries — subrange, set,
+	# procedural type, method pointer, string[N], plain rename. All six were a
+	# hard "TypeInfo is not supported for type:" before this. Kinds are FPC's
+	# TTypeKind ordinals measured against FPC 3.2.2, not recalled. The last row
+	# is the interesting one: FPC gives a plain rename the BASE type's name, not
+	# its own, so `TMyInt = Integer` must NOT report "TMyInt".
+	./$(COMPILER) -Fulib/rtl test/test_typeinfo_named_types.pas $(TESTTMP)/test_typeinfo_named26
+	test "$$($(TESTTMP)/test_typeinfo_named26)" = "$$(printf 'TSub 1\nTSet 5\nTProc 23\nTMeth 6\nTStr20 7\nInteger 1')"
 	# A program naming `puint8` must compile QUIETLY: FindTypeAlias carried a
 	# leftover debug dump keyed on that exact name, printing the whole alias
 	# table to STDOUT before the pointer-alias fallback resolved it. The

@@ -319,6 +319,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     fwdList, fwdDict: Integer;   { `f(*args, **kwargs)` forwarded into fixed parameters }
     vcNode: Integer;   { a typecast of a VARIANT, rewritten as the conversion }
     tiName: AnsiString; tiTk: TTypeKind;   { widened TypeInfo(T): scalar/string/class/record }
+    tiAlias: Integer;   { …and the alias-table row when it is a NAMED structural type }
     pyLateDefPi: Integer;   { NilPy def not yet bound at this call site; -1 = none }
 begin
   { NilPy runs its own copy of this routine (pyparser.inc). The dispatch is
@@ -3661,7 +3662,7 @@ begin
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
-        i := -1; ci := -1; tiTk := tyUnknown; tiName := '';
+        i := -1; ci := -1; tiTk := tyUnknown; tiName := ''; tiAlias := -1;
         if CurTok.Kind = tkIdent then
         begin
           tiName := CurTok.SVal;
@@ -3680,6 +3681,12 @@ begin
                 else if CaseEqual(tiName, 'double') or CaseEqual(tiName, 'real') then tiTk := tyDouble
                 else if CaseEqual(tiName, 'extended') then tiTk := tyExtended;
               end;
+              { Last resort: a NAMED type from the alias table — `TSub = 1..10`,
+                `TSet = set of TEnum`, `TProc = procedure(x: Integer)`,
+                `TStr20 = string[20]`, or a plain `TMyInt = Integer`. Last, not
+                first, so every builtin spelling keeps resolving exactly as it
+                did; this only turns an error into an answer. }
+              if tiTk = tyUnknown then tiAlias := FindTypeAlias(tiName);
             end;
           end;
         end
@@ -3744,6 +3751,11 @@ begin
         begin
           ASTLeft[node] := 1;
           ASTIVal[node] := RegisterTypeInfoReq(TYPEINFO_REQ_CAT_ORD, Ord(tiTk));
+        end
+        else if tiAlias >= 0 then
+        begin
+          ASTLeft[node] := 1;
+          ASTIVal[node] := RegisterTypeInfoReq(TYPEINFO_REQ_CAT_ALIAS, tiAlias);
         end
         else
           Error('TypeInfo is not supported for type: ' + tiName);

@@ -865,6 +865,42 @@ begin
       if UClsRTTIOff[ci] >= 0 then
         AddDataPtrFix(hdr + 16, UClsRTTIOff[ci]);   { -> TClassRTTI, same blob AN_CLASSREF points at }
     end
+    else if TypeInfoReqCat[i] = TYPEINFO_REQ_CAT_ALIAS then
+    begin
+      { A named type from the alias table. Kind comes from what the alias
+        DEFINES, because AliasTk alone cannot say it: a subrange and a
+        string[N] both carry an ordinary scalar tk, and only AliasIsSub /
+        AliasStrCap distinguish them from the plain rename that shares it.
+        Measured against FPC 3.2.2 — see TYPEINFO_REQ_CAT_ALIAS in defs.inc
+        for the name rule and why a plain rename does NOT keep its own name. }
+      ci := TypeInfoReqKey[i];
+      if AliasProcSig[ci] >= 0 then
+      begin
+        { Both shapes carry a signature; only AliasTk separates them. A method
+          pointer is a 16-byte {Code,Data} record (RegisterMethodPtrTypeAlias
+          sets tyRecord), a plain procedural type is a bare code address
+          (tyPointer). Measured: FPC 3.2.2 says 6 for `procedure(x: Integer) of
+          object` and 23 for `procedure(x: Integer)` / `function(x): Integer`. }
+        if AliasTk[ci] = Ord(tyRecord) then kind := 6  { tkMethod }
+        else kind := 23;                               { tkProcVar }
+      end
+      else if AliasStrCap[ci] > 0 then kind := 7      { tkSString }
+      else kind := PxxTkToFPCKind(AliasTk[ci]);       { subrange -> 1, set -> 5, … }
+      PatchDataU64(hdr + 0, kind);
+      if (AliasProcSig[ci] >= 0) or (AliasStrCap[ci] > 0) or AliasIsSub[ci] or
+         (AliasTk[ci] = Ord(tySet)) then
+        nm := GetSliceName(AliasNOff[ci], AliasNLen[ci])   { defines a type: own name }
+      else
+        nm := TypeInfoOrdName(AliasTk[ci]);                { plain rename: pass through }
+      if nm <> '' then
+      begin
+        strIdx := InternStr(nm);
+        AddDataPtrFix(hdr + 8, Strs[strIdx].Offset);
+      end;
+      { DataPtr stays nil, as for the scalars: no TTypeData descriptor yet.
+        The subrange's bounds live in AliasSubLo/Hi and the set's element enum
+        in AliasElemTk, so they are recoverable when a consumer needs them. }
+    end
     else if TypeInfoReqCat[i] = TYPEINFO_REQ_CAT_RECORD then
     begin
       ci := TypeInfoReqKey[i];

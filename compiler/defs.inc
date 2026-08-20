@@ -968,6 +968,16 @@ const
   TYPEINFO_REQ_CAT_ORD    = 1;  { scalar/ordinal/string TTypeKind: key = Ord(TTypeKind) }
   TYPEINFO_REQ_CAT_CLASS  = 2;  { class type: key = UCls index }
   TYPEINFO_REQ_CAT_RECORD = 3;  { record type: key = UCls index (UClsIsRecord) }
+  { A NAMED structural type — subrange, set, procedural type, string[N] — where
+    the type's OWN name is the answer: key = alias-table index. FPC's real rule
+    is "a DISTINCT type carries its own typeinfo", and a plain `TMyInt = Integer`
+    is not distinct — measured against FPC 3.2.2, TypeInfo(TMyInt) reports
+    `LongInt`, not `TMyInt`, while TypeInfo(TSub = 1..10) reports `TSub`. We do
+    not track `type X = type Y` distinctness, so we approximate it by structure:
+    an alias that DEFINES something (AliasIsSub / AliasProcSig / AliasStrCap /
+    tySet) keeps its own name, a plain rename passes through to the base type's.
+    That reproduces every measured case. }
+  TYPEINFO_REQ_CAT_ALIAS  = 4;
   MAX_TYPEINFO_REQ = 512;
 
   SYS_READ  = 0;
