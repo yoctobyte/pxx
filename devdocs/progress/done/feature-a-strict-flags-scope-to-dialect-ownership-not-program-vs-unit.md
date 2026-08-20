@@ -201,4 +201,4 @@ ownership carve-out, `DialectIsPxx` is the predicate to call. Filed:
 [[feature-a-audit-strict-flags-against-dialectispxx]].
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 28bd01e11.
