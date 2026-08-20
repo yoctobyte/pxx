@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T17:33:30Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "21f098e32a95be73bdeae3832aedfe65677292f7",
-   "tier": "slow",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T17:38:55Z",
    "fixed": [],
    "new_red": [],
@@ -421,12 +413,20 @@
    "sha": "b772253ad3dee3e88fcf4ae74186866d9cd92575",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-20T10:05:32Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "4b27f1b17fdd33a4136ac478c3d6fb51234e520b",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "test-core#src:test/test_asm_emit.pas": "ok: $TMP  [code=95698B  data=2800B  bss=9532B  procs=203]",
-  "test-core#src:test/test_integer_longint_overload.pas": "+++ -\t2026-08-20 11:51:29.745553498 +0200 | @@ -1,3 +1,3 @@ | FFFFFFFF FFFFFFFF FFFFFFFF | -FFFFFFFFFFFFFFFF FFFFFFFF | +FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF | longint longint int64 longword",
+  "test-core#src:test/test_integer_longint_overload.pas": "+++ -\t2026-08-20 11:59:02.794146642 +0200 | @@ -1,3 +1,3 @@ | FFFFFFFF FFFFFFFF FFFFFFFF | -FFFFFFFFFFFFFFFF FFFFFFFF | +FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF | longint longint int64 longword",
   "test-core#src:test/test_strict_overload_width.pas@1": "ok: $TMP  [code=293112B  data=9124B  bss=53920B  procs=586]",
   "test-core#src:test/test_strict_overload_width.pas@2": "ok: $TMP  [code=293112B  data=9124B  bss=53920B  procs=586]",
   "test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy": "ok: $TMP  [code=2568790B  data=74180B  bss=52788B  procs=2020]"
@@ -1247,6 +1247,7 @@
   "test-core#src:test/cstrlit_index_b174.c": "native",
   "test-core#src:test/cstrtok_b181.c": "native",
   "test-core#src:test/cstruct_array_stride_b23.c": "native",
+  "test-core#src:test/cstruct_assign_dest_side_effects.c": "native",
   "test-core#src:test/cstruct_assign_value_byvalue_arg.c": "native",
   "test-core#src:test/cstruct_assign_value_side_effects.c": "native",
   "test-core#src:test/cstruct_b3.c": "native",
@@ -3620,6 +3621,7 @@
   "test-core#src:test/cstrlit_index_b174.c": "pass",
   "test-core#src:test/cstrtok_b181.c": "pass",
   "test-core#src:test/cstruct_array_stride_b23.c": "pass",
+  "test-core#src:test/cstruct_assign_dest_side_effects.c": "pass",
   "test-core#src:test/cstruct_assign_value_byvalue_arg.c": "pass",
   "test-core#src:test/cstruct_assign_value_side_effects.c": "pass",
   "test-core#src:test/cstruct_b3.c": "pass",
@@ -4662,11 +4664,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T09:57:11Z",
-  "sha": "b772253ad3dee3e88fcf4ae74186866d9cd92575",
+  "date": "2026-08-20T10:05:32Z",
+  "sha": "4b27f1b17fdd33a4136ac478c3d6fb51234e520b",
   "tier": "native",
   "verdict": "RED",
-  "wall": 414.0
+  "wall": 418.9
  },
  "last_bench": {
   "conf_rows": 550,
