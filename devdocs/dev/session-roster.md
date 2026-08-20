@@ -4908,3 +4908,49 @@ cleared this cycle** — T landed the data-model oracle (`174186b5d`, ticket `35
 54/54 devtests, 34 new guards), so every future LP64 cross batch becomes a real differential
 automatically. It outranks the `environ` ticket frank2 is on, but not enough to interrupt a
 ticket in flight; it is the natural next pull for Track C.
+
+### environ init stub LANDED — and it needed no Track A half after all
+
+`08dccc7df` + ticket move `01fbe5ceb`. Entirely Track C: `cparser.inc`, `lib/crtl/src/unistd.c`,
+`unistd.h`, one test, one Makefile line. **No shared stub emission, no backend change,
+`parser.inc` untouched**, and no divergence across the five targets. The "Track A half if the
+shell moves" the ticket anticipated did not materialise — worth recording, because the
+anticipated-A-half is exactly the kind of prediction that gets quoted later as if it happened.
+
+Shape (1) as mandated, done properly rather than nominally: `__pxx_run_initializers(long *sp)`
+is a general shell in crtl, the stub hands it only the raw Linux initial stack pointer (the one
+thing the stub uniquely knows), and the derivation is C. `long` is exactly one stack slot on
+every target we build for, so **one C body serves all five** and the next pre-main requirement
+is a statement in that function rather than a sixth hand-assembled sequence. The two stub call
+sites also folded into one `CPatchStubCall`.
+
+**The ordering constraint DISSOLVED rather than being handled.** The ticket said to mirror the
+fini side's save/restore of argc/argv. Placing the call *before* they are loaded into argument
+registers leaves nothing live but sp, which the callee preserves — so there is nothing to save.
+Only i386 needed anything (it reloads its scratch sp copy from `BSS_INITIAL_RSP`). The faithful
+reading would have produced five hand-mirrored save/restore sequences. **A constraint in a
+ticket is a description of one solution's problem, not a property of the task.**
+
+**Root cause worth more than the fix:** the defect survived because `CPullCrtlForPrototypes`
+scans for `name(` — which **structurally cannot see a variable**. Not "we forgot `environ`": a
+detector whose shape excludes an entire category, leaving every variable-shaped crtl symbol
+equally invisible.
+
+Two dispositions recorded rather than hidden, both correct:
+- **No `gcc_diff_probe.sh` case added yet**, because that probe builds its pxx side with
+  `PXX_STABLE` — a case added now is red until the next pin and reads as a regression rather
+  than a pending fix. Unprompted application of "fixed at HEAD" vs "unblocked for B". **This is
+  now a second consumer waiting on the pin.**
+- **One measured divergence from gcc:** a program that *defines* `char **environ;` itself gets
+  ours filled where gcc leaves its own object alone. POSIX reserves the name and every real
+  corpus user writes `extern`, so filling it is the better answer on a shape POSIX does not
+  sanction — recorded in the ticket AND in a comment beside the causing code.
+
+Filed in passing: `bug-c-quickjs-runner-segfaults-with-zero-output-on-the-full-smoke-js`
+(C, p50). Pre-existing — **reproduces identically when built with the PINNED compiler**, a
+control run before reporting rather than after being challenged. Coordinator added one
+observation: zero output plus a segfault points EARLIER than the first `print`, since the crash
+lands before stdout flushes; prefix-bisect the input first.
+
+frank2 back on `feature-c-csmith-differential-fuzzing` (C, p65) — blocker cleared by T's
+`174186b5d`, so LP64 cross batches are now real differentials.
