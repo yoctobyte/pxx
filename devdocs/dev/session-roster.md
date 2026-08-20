@@ -5021,3 +5021,66 @@ stops dispatch, not the failure. It will keep appearing in full tiers and counti
 `pin_shadow` until it is recorded as a known-red or the test expectation is regenerated for the
 target's own float depth. Neither is float-accuracy work; both are bookkeeping. Flagged in the
 ticket so it is not re-triaged from scratch by someone who cannot see it in `ready`.
+
+### OWNER RULING — low-prio by SUBJECT, urgent by CONSEQUENCE (2026-08-20)
+
+Owner: *"yes i figured, that regression breaks our pinning. that's a valid reason to mark it
+urgent anyways."*
+
+`bug-a-riscv32-cross-float-output-no-longer-matches-x86-64` went back to `urgent/` at p65 with
+the **`F` tag REMOVED** (track now plain `A`). Both facts stand at once:
+
+- **As float work it is still low prio** — digits and exponent width, values agreeing, the new
+  rendering arguably the more correct one.
+- **As a pin blocker it is urgent** — a red job counts against `pin_shadow` no matter how
+  uninteresting its subject, and a stuck pin gate costs every lane.
+
+**The rule to carry:** *a ticket can be low-prio by SUBJECT and urgent by CONSEQUENCE, and every
+deferral rule we have — the F charter, the A/P/C mandate, lane ownership — keys on subject only.
+None of them answers "what does leaving it red cost?" When the two disagree, consequence decides
+SCHEDULING while subject still decides who does it and how much effort it deserves.*
+
+**The F tag came off for a concrete reason, not as a demotion:** the work that unblocks the pin
+is a **test-expectation change** (`Makefile:8225` diffs riscv32's output against x86-64's, which
+stopped being a valid comparison once a float-depth-reduced target's `Double` became a `Single`).
+No float math, no rendering change. Leaving it tagged `F` would have parked the bookkeeping along
+with the physics — which is exactly how the red would have survived indefinitely.
+
+**Second instance in one day of a stuck `pin_shadow` promoting an unremarkable ticket** (the
+first: the cpyext decision's six reds holding `would_pin` permanently false). **Check the pin
+gate's red set before parking anything** — parking stops dispatch and never stops the failure.
+
+Assigned to frank2 (idle, and blocked on the kill mystery below). Deliberate lane stretch: it is
+Makefile/test work, no collision with frank3 in `parser.inc`, and frank2 is one of the two
+consumers queued behind the pin.
+
+### TWO CSMITH RUNS KILLED FROM OUTSIDE THE SESSION — unexplained, escalated
+
+Track C had two batches killed mid-run (seed 4, then seed 33 after a restart). Nothing in that
+session issued a stop; no surviving csmith/qemu either time; ~8 GB free; kernel log unreadable
+unprivileged so OOM is neither confirmed nor excluded. A 150-seed batch had completed normally
+minutes before, so it is not deterministic. **frank2 stopped after the second rather than restart
+into a third — correct.**
+
+Leading candidate: a peer's `pkill -f <script>` catching another agent's run, now that
+`csmith_fuzz.py` is a tool both C and T touch. Same family as the `pgrep` that matched its own
+waiter — **a name pattern is a true fact about the wrong subject when two agents run the same
+tool.** Asked plexus-T directly; a clean "nothing here sweeps" is the valuable answer, because
+then something else on this box is killing long jobs and that outranks a fuzzing batch.
+
+**No more aarch64 seeds until this is understood.**
+
+### Correction I owe: the oracle fix buys ONE target, not two
+
+I told T it "lights up `MISCOMPILE_VS_GCC` for aarch64 and riscv64". Verified in source after
+frank2 flagged it: `defs.inc` has `TARGET_AARCH64=2`, `TARGET_XTENSA=4`, `TARGET_RISCV32=5` and
+**no `TARGET_RISCV64`** — `riscv64` appears nowhere in `compiler/*.inc`. T's `HOST_ORACLE` entry
+is correct-in-advance, not live. Asked for a comment beside it so nobody infers a backend from
+the oracle table.
+
+**Axis 2 re-run result:** dry. 160 real cross-target comparisons on aarch64, zero divergences,
+fixedpoint `21f05c52b`, tool `174186b5d`. Header moved from `NO ORACLE for aarch64 (LP64)` to
+`vs gcc -O0 oracle (datamodel)` with no change on our side. Scoreboard 1820 -> 1980. frank2's
+weighting, kept verbatim in substance: **a dry 160 bounds only what it measured** — the aarch64
+backend does not diverge on csmith's default construct mix at `-O0`/`-O2` — and it does **not**
+supersede the morning's 250 loud-bucket-only seeds, which remain the only coverage riscv32 has.
