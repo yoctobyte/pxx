@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit dns_async;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Async DNS resolution over the coroutine reactor (feature-own-net-http-lib /
   feature-dns-resolver-library). Same wire format as the blocking resolver
   (dns_wire_core builds/parses), but the UDP query yields the coroutine on the

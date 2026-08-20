@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit sysutils;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Canonical SysUtils-style helpers. Now that the compiler loads a real
   lib/rtl/sysutils on `uses sysutils` (bug-sysutils-unit-hard-skipped fixed,
   v10), the conversion helpers live here -- their FPC-correct home -- rather than

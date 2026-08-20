@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit screen;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { A small ncurses-style screen MANAGER over ansiterm (which stays the low-level
   escape/tty backend). You draw into an off-screen "back" buffer of cells; the
   manager keeps a "front" buffer mirroring what is physically on the terminal,

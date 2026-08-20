@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit strings;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { FPC-compatible `strings` unit: classic NUL-terminated PChar routines.
   Semantics follow FPC's strings.pp: nil-tolerant where FPC is (StrLen(nil)=0,
   StrPos with a nil argument returns nil); StrCopy/StrCat trust the caller's

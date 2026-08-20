@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit chacha20poly1305;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { ChaCha20 + Poly1305 + the ChaCha20-Poly1305 AEAD (RFC 8439). Pure Pascal, no
   external library — a TLS 1.3 AEAD (TLS_CHACHA20_POLY1305_SHA256) and the M2
   step of feature-tls13-from-scratch.

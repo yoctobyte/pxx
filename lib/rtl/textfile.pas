@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit textfile;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Classic text-file primitives on top of PAL byte handles.
 
   The compiler still treats ReadLn/WriteLn as keywords, so file-handle keyword

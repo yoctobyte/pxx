@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit calc;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Integer expression evaluator: recursive-descent parse-and-evaluate in one pass
   (no AST, so we sidestep the dynamic-array-in-record codegen bug). Our own unit.
 

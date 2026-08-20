@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit sockets;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { FPC-compatible Sockets unit — IPv4 core (feature-synapse-compile-check + our
   own net stack). Provides the BSD socket surface FPC's Sockets exposes, over the
   PAL IPv4 primitives (lib/rtl/platform). Byte-order helpers (htons/htonl/…) are

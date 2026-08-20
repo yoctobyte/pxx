@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit atexit;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Python's `atexit` for the Nil-Python frontend.
 
   Named `atexit` so `import atexit` needs no frontend change (NilPy turns

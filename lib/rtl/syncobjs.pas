@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit syncobjs;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { FPC's SyncObjs surface. TCriticalSection is a real lock.
 
   It was a NO-OP STUB until 2026-08-05 — every method an empty body, TryEnter

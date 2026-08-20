@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit truststore;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { System trust store: load the platform's CA anchors and validate a server's
   certificate chain against them.
 

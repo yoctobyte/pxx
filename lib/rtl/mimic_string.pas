@@ -1,4 +1,5 @@
 unit mimic_string;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Python's `string` module — the constants and `capwords`.
 
   It exists first of all so that `import string` in a `.npy` stops resolving to

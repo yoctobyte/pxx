@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit palfutex;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { The three futex syscall wrappers, on their own, depending on nothing.
 
   They used to live in palthread next to __pxxclone — and reaching that unit at

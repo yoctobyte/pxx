@@ -12,6 +12,7 @@
   worker-thread tests. No condition variables / TLS keys — SQLite needs neither. }
 unit palpthread;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 interface
 
 uses palfutex, palsync, palthread;

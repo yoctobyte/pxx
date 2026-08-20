@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit mimic_urllib_request;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Python's `urllib.request`, over this RTL's own HTTP client (lib/rtl/http.pas).
 
   `from urllib.request import urlopen` RESOLVES here through the NilPy import

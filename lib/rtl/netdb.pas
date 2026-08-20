@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit netdb;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Minimal FPC-compatible NetDB shim (feature-synapse-compile-check), grown to
   the surface Synapse's ssfpc.inc consumes. Resolution rides our own resolver
   (lib/rtl/dns — "files dns" order, /etc/hosts then /etc/resolv.conf

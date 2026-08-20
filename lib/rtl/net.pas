@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit net;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Target-neutral blocking IPv4 networking over the PAL socket surface.
 
   This is the normal (blocking) networking face; `asyncnet.pas` is the

@@ -1,4 +1,5 @@
 unit mimic_reportlab_pdfbase;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { `from reportlab.pdfbase import pdfmetrics` — text measurement. The one call an
   application makes is `pdfmetrics.stringWidth(text, fontName, fontSize)`, which
   the backend answers from the PDF standard-14 metrics it already carries.

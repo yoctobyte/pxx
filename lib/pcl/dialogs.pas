@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit dialogs;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { PCL-compatible Dialogs.
 
   ShowMessage pops a modal "info + OK" box and blocks until it is closed,

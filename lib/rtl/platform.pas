@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit platform;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Minimal Platform Abstraction Layer (PAL).
 
   This facade is platform-neutral. The implementation is selected by putting one

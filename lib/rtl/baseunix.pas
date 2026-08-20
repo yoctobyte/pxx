@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit baseunix;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Minimal FPC-compatible BaseUnix shim (feature-synapse-compile-check).
 
   Only the surface the Synapse FPC/UNIX branch actually touches: the `timeval`

@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit ed25519;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Ed25519 signature verification (RFC 8032), a TweetNaCl crypto_sign_open port.
   Pure Pascal — 16-limb radix-2^16 field (Int64), Edwards point arithmetic,
   mod-L scalar reduction, SHA-512 hash. Verify only. Part of milestone M4 of

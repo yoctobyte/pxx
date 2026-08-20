@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit netconnect;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Connect to a HOST NAME — the piece that sits above both the transport and the
   resolver (feature-net-a-first-connect-by-name).
 

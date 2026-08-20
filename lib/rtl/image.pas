@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit image;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Small byte-oriented RGBA bitmap core. Track B foundation for PNG and later
   image converters. Owns pixels in row-major order, 0-based coordinates. }
 

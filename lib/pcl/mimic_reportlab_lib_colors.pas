@@ -1,4 +1,5 @@
 unit mimic_reportlab_lib_colors;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { `from reportlab.lib.colors import white, black, red` — colour objects with
   `.red` / `.green` / `.blue` components in 0..1, which is the whole of the
   interface an application touches (songformatter's render backend reads exactly

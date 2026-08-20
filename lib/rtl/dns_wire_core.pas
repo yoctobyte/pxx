@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit dns_wire_core;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Pure-Pascal DNS wire codec (RFC 1035), transport-free — the shared packet
   core for the future dns_wire_blocking / dns_wire_async resolvers
   (feature-dns-resolver-library). Encodes a standard recursive A-record query

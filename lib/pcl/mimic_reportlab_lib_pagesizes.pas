@@ -1,4 +1,5 @@
 unit mimic_reportlab_lib_pagesizes;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { `from reportlab.lib.pagesizes import A4` — a (width, height) pair in points,
   which is what a Canvas takes as `pagesize=`. reportlab hands back a tuple; here
   it is the same shape a NilPy tuple has, a TPyList of two floats.

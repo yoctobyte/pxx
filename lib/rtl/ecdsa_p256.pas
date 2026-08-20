@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit ecdsa_p256;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { ECDSA on NIST P-256 (secp256r1) with SHA-256 (ecdsa_secp256r1_sha256):
   verify, sign, keygen. Part of milestone M4 of feature-tls13-from-scratch.
 

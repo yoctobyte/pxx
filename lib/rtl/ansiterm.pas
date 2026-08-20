@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit ansiterm;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 interface
 
 function AnsiColor(fg: Integer; const s: AnsiString): AnsiString;

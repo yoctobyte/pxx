@@ -1,5 +1,6 @@
 unit ucomplex;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Complex numbers, API-compatible with FPC rtl-extra ucomplex where the pxx
   dialect allows. Ported from FPC 3.2.2 (Pierre Muller, LGPL with linking
   exception); math via the own-RTL math unit (FP-determinism: no libm).

@@ -53,6 +53,7 @@ function DbgFileId(const path: AnsiString): Integer; forward;   { real body in d
 procedure DbgMarkTokFile(startTok, fileId: Integer); forward;   { real body in dbg_filetable.inc, ditto }
 procedure CMarkTokModule(startTok: Integer; const path: AnsiString); forward;    { real body in parser.inc; clexer.inc/cparser.inc call it (bug-a-fpc-seed-drift-emitasmx64-forward) }
 function CPathIsCModule(const path: AnsiString): Boolean; forward;   { ditto }
+procedure MarkUnitPxxDialect(unitIdx: Integer); forward;   { real body in symtab.inc; lexer.inc's {$MODE PXX} handler calls it (ditto) }
 {$include lexer.inc}
 {$include util.inc}   { shared helpers owned by no frontend/backend — AIntToStr lived in aparser.inc until 2026-08-19. AFTER lexer.inc, not before: AppendChar is defined there. }
 {$ifndef PXX_NO_CFRONT}{$include clexer.inc}{$endif}
@@ -212,6 +213,8 @@ begin
   WarnSelfResult := True;   { on by default; --no-warn-self-result silences }
   WarnUsesLeak := False;
   AmbientUnitCount := 0;
+  PxxDialectUnitCount := 0;
+  MainPxxDialect := False;
   CTUnitCount := 0;
   CModRangeCount := 0;
   DeclVisibilityProbe := False;

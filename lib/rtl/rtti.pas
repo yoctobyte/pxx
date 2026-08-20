@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit rtti;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Runtime reflection over the published-method table the compiler already emits.
 
   EmitRTTI writes, for every class with at least one published member, a blob whose

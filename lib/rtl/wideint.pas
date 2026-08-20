@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit wideint;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Widening 64x64 -> 128 unsigned multiply: the high half.
 
   The low half of a 128-bit product is just `a * b` (it wraps, which is exactly

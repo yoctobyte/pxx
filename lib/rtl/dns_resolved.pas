@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit dns_resolved;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { systemd-resolved backend for the `dns` facade (feature-dns-backends-selection,
   item 2). Selected with -dPXX_DNS_RESOLVED; without it nothing here is reached
   and `dns_wire` remains the zero-dependency default.

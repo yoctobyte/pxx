@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit aesgcm;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { AES-128 + AES-128-GCM AEAD (NIST SP 800-38D / FIPS-197). Pure Pascal, no
   external library — a TLS 1.3 AEAD (TLS_AES_128_GCM_SHA256), the second half of
   milestone M2 of feature-tls13-from-scratch.

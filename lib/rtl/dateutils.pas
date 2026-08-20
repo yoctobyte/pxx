@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit dateutils;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Minimal FPC-compatible DateUtils shim (feature-synapse-compile-check —
   ftpsend pulls it). Grown on demand; TDateTime plumbing lives in sysutils. }
 

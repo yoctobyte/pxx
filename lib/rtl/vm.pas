@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit vm;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { A tiny stack-bytecode machine: ~21-opcode ISA, a text assembler (mnemonics +
   labels -> program), and an executor. Self-contained; not a language frontend.
 

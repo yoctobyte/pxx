@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit sat;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { A small CNF-SAT solver: DIMACS parser + DPLL search (unit propagation via
   forced-literal recursion + backtracking). Our own unit, no FPC equivalent.
 

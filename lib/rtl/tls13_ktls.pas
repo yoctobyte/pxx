@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit tls13_ktls;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Linux kernel-TLS (kTLS) offload for TLS 1.3 (RFC 8446 M7 of
   feature-tls13-from-scratch). After our Pascal handshake derives the application
   traffic keys, install them into the kernel so bulk app data is encrypted/

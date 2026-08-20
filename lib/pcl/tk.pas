@@ -1,4 +1,5 @@
 unit tk;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Thin Tcl/Tk embed — the whole GUI is command strings via TkEval, exactly the
   model CPython's tkinter uses (a shim over Tcl_Eval). Links the system Tcl/Tk
   8.6 shared libraries directly by soname; needs no -dev headers and no change

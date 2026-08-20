@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit regex;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Regular expressions: a pattern compiler plus a backtracking matcher.
 
   Track B — language-neutral by design. The first consumer is the Nil-Python

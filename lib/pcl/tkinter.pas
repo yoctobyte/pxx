@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit tkinter;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Python's `tkinter` for the Nil-Python frontend — first slice.
 
   Named `tkinter` so `import tkinter` resolves through the unit resolver, like

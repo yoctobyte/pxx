@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit tls13_native;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { The NATIVE TLS 1.3 backend behind the tls.pas seam — syscall-only, no libssl,
   no libc (feature-tls-provider-abstraction slice 2, over
   feature-tls13-from-scratch).

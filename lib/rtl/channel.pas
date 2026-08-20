@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit channel;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Bounded coroutine-to-coroutine channel (PXX-only). A fixed-size ring of Int64
   items; ChanSend blocks (CoYield) while full, ChanRecv blocks while empty. Pure
   cooperative — no epoll — so it runs on every target the scheduler does.

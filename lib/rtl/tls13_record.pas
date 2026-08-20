@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit tls13_record;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { TLS 1.3 record protection (RFC 8446 §5.2) — milestone M6 of
   feature-tls13-from-scratch. Wraps a handshake/application record into a
   protected TLSCiphertext and back, over either AEAD (AES-128-GCM or

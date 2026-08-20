@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit tls_openssl;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { OpenSSL backend for the TLS seam (feature-tls-provider-abstraction, the OpenSSL
   half). Loads libssl.so.3 at runtime through the real dynlib loader
   (feature-real-dynlib-loader) and implements TTlsBackend over SSL_*.

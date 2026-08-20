@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit lfm;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Phase 5: LFM support, in-memory path.
 
   We have no runtime file I/O yet, so there is no standalone text->binary

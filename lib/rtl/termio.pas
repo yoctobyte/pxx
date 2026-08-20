@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit termio;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Minimal FPC-compatible termio shim (feature-synapse-compile-check). Synapse's
   ssfpc.inc references only the three ioctl request constants below (for socket
   byte-count / non-blocking / async toggles). The full termios/serial surface is

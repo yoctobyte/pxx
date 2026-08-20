@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit png;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { PNG encoder/decoder.
 
   Supports non-interlaced 8-bit RGBA PNGs (color type 6). Encoding writes zlib

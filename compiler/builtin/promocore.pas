@@ -13,6 +13,7 @@
   are `PXXPromo*`, and this name is neither. }
 unit promocore;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Promotable-int runtime (feature-a-promotable-int stage 3).
 
   A promotable int is one semantic type — arbitrary precision — stored in a slot

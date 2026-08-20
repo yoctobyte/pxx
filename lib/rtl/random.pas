@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit random;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Three-tier entropy library.
 
   Tier 1 — HW instruction (RDRAND/x86; RNDR/aarch64; ESP RNG register).

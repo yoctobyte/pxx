@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit testutils;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { pxx-native replacement for fcl-fpcunit's `testutils`.
 
   WHY THIS EXISTS, and why it is not a fork of the vendor source:

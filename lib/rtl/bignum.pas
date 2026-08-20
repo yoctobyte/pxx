@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit bignum;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Arbitrary-precision signed integers. Schoolbook algorithms, correctness over
   speed. Limbs are base 1e9, little-endian, stored as Int64 (the partial
   products limb*limb ~1e18 fit a 64-bit intermediate).

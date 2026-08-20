@@ -1,4 +1,5 @@
 unit mimic_reportlab_pdfgen;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { `from reportlab.pdfgen import canvas` — the drawing surface, over the vendored
   AndreRenaud/pdfgen C writer (lib/vendor/pdfgen).
 

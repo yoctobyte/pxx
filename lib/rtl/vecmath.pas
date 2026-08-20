@@ -1,5 +1,6 @@
 unit vecmath;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Vector/matrix math for demos, games and GUI code (Track B), and a workout
   for record operator overloading. Doubles throughout; matrices are flat
   row-major arrays (TMat3: m[r*3+c], TMat4: m[r*4+c]).

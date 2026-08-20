@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit palparallel;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { M3 data-parallel loop runtime (meta-multithreading, feature-parallel-processing).
 
   The libc-free worker-pool backing the `parallel for` language surface. A single

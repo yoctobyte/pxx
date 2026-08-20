@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit types;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Standard FPC-compatible System.Types surface: the small geometry records
   (TPoint/TSize/TRect/TSmallPoint), the ordinal-comparison relationship type, and
   TDuplicates. Deliberately minimal + extendable — this is the common core real

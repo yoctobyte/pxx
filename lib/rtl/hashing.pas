@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit hashing;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Reusable CRC32 and Adler32 checksums.
 
   CRC32: ISO 3309 / ITU-T V.42 polynomial used by PNG, zlib, gzip, zip.

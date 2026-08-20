@@ -1,4 +1,5 @@
 unit mimic_reportlab_lib_utils;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { `from reportlab.lib.utils import ImageReader` — reportlab's wrapper around an
   image source, which a Canvas accepts wherever a filename would do.
 

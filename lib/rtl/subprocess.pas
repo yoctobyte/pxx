@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit subprocess;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Python's `subprocess` for the Nil-Python frontend — the "launch a program"
   slice.
 

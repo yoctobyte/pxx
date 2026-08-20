@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit unixutil;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Minimal FPC-compatible UnixUtil shim (feature-synapse-compile-check).
 
   Synapse's synautil lists `UnixUtil` in its FPC/UNIX uses clause but the symbols

@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit bitset;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Dynamic bit vector over packed Integer words. 0-based indexing.
   Track B; uses 32-bit words with proven ops (or/and/xor/shl/shr).
   Avoids `not` — the pinned stable treats it as boolean on Integer. }

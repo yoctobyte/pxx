@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit streams;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Minimal read-only byte stream over an in-memory buffer. Part of the Phase 3
   streaming runtime: TReader walks a TPF0 binary form via one of these.
   Dialect notes: no `shl` (use *256 for little-endian assembly); strings are

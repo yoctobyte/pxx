@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit gtk3;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Thin hand-written binding to libgtk-3.so.0 / libc, now backed by direct C header import. }
 
 interface

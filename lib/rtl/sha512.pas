@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit sha512;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { SHA-512 (FIPS 180-4). Pure Pascal, Int64 (treated as unsigned 64-bit) — needed
   by Ed25519 (lib/rtl/ed25519) and generally. M4 support for
   feature-tls13-from-scratch. Verified against the FIPS vectors in test (folded

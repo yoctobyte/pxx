@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit cthreads;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Compatibility shim: exists so portable FPC sources compile unedited.
 
   On Unix, FPC requires `cthreads` FIRST in a threaded program's uses clause —

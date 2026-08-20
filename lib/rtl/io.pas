@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit io;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Python's `io` for the Nil-Python frontend — the in-memory buffers.
 
   Named `io` so `from io import BytesIO` needs no frontend change (NilPy maps

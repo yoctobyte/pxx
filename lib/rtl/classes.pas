@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit classes;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Classic FPC-compatible Classes — the traditional, non-generic surface every
   FPC/Delphi program (and Synapse) expects: TList (a list of Pointer),
   TStrings (abstract) + TStringList (concrete). Standard inheritance on purpose

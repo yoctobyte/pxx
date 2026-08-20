@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit resources;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Runtime access to embedded resources (see the R directive). The compiler
   emits a table (count, then name/data/len triples) reachable via the
   __resources intrinsic; FindResource linearly walks it, like typinfo.GetClass. }

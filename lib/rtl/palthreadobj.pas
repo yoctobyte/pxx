@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit palthreadobj;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { M3 native Pascal TThread (meta-multithreading). The "threads just work" surface:
   subclass TThread, override Execute, Start, WaitFor. FPC-flavoured subset, built
   entirely on the libc-free M1/M2 PAL (palthread + palsync) — no libc, no RTL

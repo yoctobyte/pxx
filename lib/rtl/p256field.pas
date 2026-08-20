@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit p256field;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Arithmetic in GF(p) for the NIST P-256 prime
 
     p = 2^256 - 2^224 + 2^192 + 2^96 - 1

@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit dynlibs;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { FPC-compatible `dynlibs` surface over the PAL dynamic-loader primitives
   (PalDlOpen/PalDlSym/PalDlClose — feature-real-dynlib-loader follow-up (a)).
 

@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit menu;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { A vertical selection list for the TUI library — the pure navigation logic
   (which item is selected after a key). Rendering is the caller's job (loop the
   items, draw each with ScreenWrite, give the selected row ATTR_REVERSE), the

@@ -2,6 +2,7 @@
 {$define PXX_MANAGED_STRING}
 unit stdctrls;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 interface
 
 uses controls, uwidgetset, classes_lite, typinfo;

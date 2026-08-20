@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit dns_wire_blocking;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Blocking DNS A-record resolver over PAL UDP — ties dns_wire_core (packet
   codec) to the PAL socket surface (feature-dns-resolver-library). One query to
   one nameserver, bounded by a timeout. The caller supplies the nameserver

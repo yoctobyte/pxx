@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit palatomic;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { FPC's InterLocked* atomic counter family, over the __pxxatomic_* intrinsics.
 
   WHY ITS OWN UNIT rather than palsync, where the intrinsics are already used:

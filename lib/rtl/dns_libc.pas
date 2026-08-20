@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit dns_libc;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { getaddrinfo backend for the `dns` facade (feature-dns-libc-backend). Selected
   with -dPXX_DNS_LIBC; without it nothing here is reached and `dns_wire` remains
   the zero-dependency default.

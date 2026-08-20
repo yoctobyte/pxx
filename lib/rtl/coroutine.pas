@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit coroutine;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Stackful-generator runtime (PXX-only — FPC has no generators; never used in
   compiler.pas, per the FPC/PXX boundary).
 

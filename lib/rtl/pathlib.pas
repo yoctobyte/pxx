@@ -19,6 +19,7 @@
   Defers to feature-nilpy-py-module-loader (T3). }
 unit pathlib;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 interface
 
 { pylib FIRST: both it and sysutils declare `Exception`, the name is shared

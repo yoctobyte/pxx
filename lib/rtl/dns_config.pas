@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit dns_config;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { POSIX resolver configuration parsing for the dns_wire path
   (feature-dns-resolver-library): dotted-quad IPv4 parsing and `/etc/resolv.conf`
   nameserver extraction. Pure string -> data, no PAL/network dependency, so it

@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit sha256;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { SHA-256 (FIPS 180-4) + HMAC-SHA256 (RFC 2104) + HKDF-SHA256 (RFC 5869).
 
   Pure integer, no external library — the hash/KDF foundation for a from-scratch,

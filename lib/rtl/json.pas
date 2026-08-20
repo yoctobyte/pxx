@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit json;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { A small, self-contained JSON value tree with a recursive-descent parser and a
   canonical serializer. Our own implementation (no fpjson port), FPC-ish naming.
 

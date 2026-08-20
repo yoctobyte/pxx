@@ -1,4 +1,5 @@
 unit mimic_reportlab_pdfbase_pdfmetrics;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { `from reportlab.pdfbase.pdfmetrics import stringWidth` — the same measurement
   mimic_reportlab_pdfbase exposes as `pdfmetrics.stringWidth`, reachable under
   its full dotted module name because that is the other spelling real code uses

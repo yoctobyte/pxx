@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit collections;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { A generic growable list backed by a managed `array of T` field. The element
   storage is reference-counted dynamic-array memory, so there is no manual
   allocation, freeing, or capacity bookkeeping exposed to the user: the list

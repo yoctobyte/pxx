@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit interfaces;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Widgetset SELECTION — the one place that decides which backend a PCL program
   is built against (feature-pcl-widgetset-select).
 

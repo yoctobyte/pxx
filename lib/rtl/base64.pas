@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit base64;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Standard RFC 4648 Base64 (alphabet A-Za-z0-9+/, '=' padding).
 
   Encode/decode over raw bytes (TByteArray) plus AnsiString convenience wrappers.

@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit esptimer;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { ESP32 peripheral callback API, slice 1: timers
   (feature-esp-peripheral-callback-api).
 

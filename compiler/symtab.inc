@@ -615,6 +615,40 @@ begin
     if QualOnlyUnitIdx[i] = unitIdx then begin UnitIsQualifiedOnly := True; Exit; end;
 end;
 
+function UnitIsPxxDialect(unitIdx: Integer): Boolean;
+{ True for a unit that declared `{$MODE PXX}` — see PxxDialectUnitIdx. }
+var i: Integer;
+begin
+  UnitIsPxxDialect := False;
+  if unitIdx < 0 then Exit;
+  for i := 0 to PxxDialectUnitCount - 1 do
+    if PxxDialectUnitIdx[i] = unitIdx then begin UnitIsPxxDialect := True; Exit; end;
+end;
+
+procedure MarkUnitPxxDialect(unitIdx: Integer);
+{ Called from the lexer's {$MODE} handler. CurrentUnitIdx is already the unit's
+  string index by the time its LexAppend runs, so the marking lands on the right
+  unit without threading anything new through the resolver. In the MAIN program
+  CurrentUnitIdx is < 0, which is a real answer rather than an error — the
+  directive is then an explicit opt-out by the person compiling. }
+begin
+  if unitIdx < 0 then begin MainPxxDialect := True; Exit; end;
+  if UnitIsPxxDialect(unitIdx) then Exit;
+  if PxxDialectUnitCount > 255 then Exit;
+  PxxDialectUnitIdx[PxxDialectUnitCount] := unitIdx;
+  Inc(PxxDialectUnitCount);
+end;
+
+function DialectIsPxx: Boolean;
+{ Is the code being compiled RIGHT NOW written in the pxx dialect, i.e. exempt
+  from the FPC-parity strict flags? ONE predicate rather than a copy of the
+  condition at each strict check — the lesson NilPyUserCode's nine-copy history
+  already taught in this file. }
+begin
+  if CurrentUnitIdx < 0 then DialectIsPxx := MainPxxDialect
+  else DialectIsPxx := UnitIsPxxDialect(CurrentUnitIdx);
+end;
+
 procedure MarkUnitQualifiedOnly(unitIdx: Integer);
 var i: Integer;
 begin

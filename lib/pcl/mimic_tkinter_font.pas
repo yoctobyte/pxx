@@ -1,4 +1,5 @@
 unit mimic_tkinter_font;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { `import tkinter.font as tkfont` — Tk's font measurement.
 
   THE SUBSET: `Font(root=..., font=<spec>).metrics(<what>)`, which is how an

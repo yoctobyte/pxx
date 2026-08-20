@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit markdown;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Markdown -> HTML, named so that Python's `import markdown` resolves here and
   `markdown.markdown(text)` is the call an application writes.
 

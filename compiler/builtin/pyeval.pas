@@ -41,6 +41,7 @@
   of the arc (feature-lib-pyexec build plan step 5). }
 unit pyeval;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 interface
 
 uses pylib, typinfo, promocore;

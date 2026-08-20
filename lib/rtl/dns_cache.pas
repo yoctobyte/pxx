@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit dns_cache;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { TTL-aware DNS answer cache (feature-dns-resolver-library). A small fixed-size
   cache of A-record answers keyed by (name, qtype), each with an absolute expiry
   in monotonic milliseconds. Both positive answers (addresses) and negative

@@ -3,6 +3,8 @@ track: A
 prio: 50
 type: feature
 summary: "Strict flags currently exempt code by `CurrentUnitIdx < 0` — main program vs ANY unit — so `--strict-fpc` polices the one file that isn't FPC's and exempts Synapse entirely. The right axis is OURS vs THEIRS: our RTL is written in the pxx dialect and no command-line flag should re-judge it, while external units and the user's own program should be policed. Unblocks folding --strict-overload into the umbrella."
+status: done
+owner: claude-A
 ---
 
 # Strict flags should scope by dialect ownership, not by program-vs-unit
@@ -117,3 +119,86 @@ only" where the intent was "NilPy user code, main program **or** an imported
 landed once. Read that predicate before writing a second one; whether dialect
 ownership can share it or needs its own is exactly the question to answer
 first.
+
+## Resolution 2026-08-21 (Track A)
+
+Implemented as the ticket specifies: a source directive, one predicate, unmarked
+code defaults to policed.
+
+**Mechanism.**
+
+- `{$MODE PXX}` in `lexer.inc`'s existing `mode` handler (the one that already
+  accepted other modes inertly) calls `MarkUnitPxxDialect(CurrentUnitIdx)`.
+- `symtab.inc` gains `UnitIsPxxDialect` / `MarkUnitPxxDialect` / **`DialectIsPxx`**.
+  `DialectIsPxx` is the single predicate every strict check consults — deliberately
+  ONE function rather than the condition copied per check, which is the lesson
+  `NilPyUserCode`'s nine-copy history already taught in that file (the Triage note
+  above asked whether the two predicates could share; the answer is no — that one
+  means "NilPy user code", this one means "written in our dialect" — but its
+  *shape* is exactly what was copied).
+- The check at `pasparser_proc.inc:1279` moved from `(CurrentUnitIdx < 0)` to
+  `not DialectIsPxx`.
+- 144 library files declare the dialect: 8 `compiler/builtin/*.pas` plus 136
+  `lib/rtl/**` + `lib/pcl/**`.
+
+**Both "state up front" clauses honoured.** The main program stays policed — an
+unmarked program is judged exactly as before. A unit with no marking is policed
+too, which is the half the old axis got backwards. `{$MODE PXX}` in a *program*
+is accepted as an explicit opt-out by whoever is compiling, which is a real
+answer rather than a hole: they wrote the directive.
+
+**Measured, not reasoned.** `pinned` compiles AND RUNS a unit with undirectived
+overloads under `--strict-overload` — direct proof the old axis never reached
+units at all. `pinned` also accepts `{$MODE PXX}` silently (inert), so the marked
+library files stay buildable by the stable binary; that is what makes marking 136
+Track B files safe to land from Track A.
+
+Three Makefile assertions, because any two of them pass with a broken flag: a
+`{$MODE PXX}` unit with undirectived overloads is exempt, an unmarked but
+directive-clean unit still compiles (the flag must not reject conformant FPC
+code), and an unmarked undirectived unit is **rejected**. Plus a fourth: with no
+flag, that same rejected program builds and runs — the dialect stays lax by
+default.
+
+## How to finish the fold (deliberately NOT done here)
+
+The ticket's Gate has two halves. The scoping half is done and asserted. The
+other half — folding `--strict-overload` into `EnableStrictFpc` — is **not**
+made, and the reason is evidence rather than design:
+
+> `--strict-overload` folded into `EnableStrictFpc`, and fpjson / Synapse / fgl
+> still compile — which is the exact corpus its exclusion note names.
+
+fgl, Synapse and fpjson live in `external/`, which is **gitignored and fetched on
+demand**, and is not present in this checkout. Enrolling a flag in `--strict-fpc`
+is a promise that those corpora still build; making that promise without running
+them would weaken the one claim the umbrella makes — precisely what the existing
+comment warns about for `StrictOverloadWidth`. The original *objection* is gone
+(the RTL is exempt now, and an RTL-using program does compile under the flag —
+asserted above); only the verification is missing.
+
+Recipe for whoever has the corpora:
+
+1. fetch `external/` (fgl, Synapse, fpjson),
+2. build each with `--strict-overload` against the current pin,
+3. if any rejects, the failures are the real work — each is either an FPC-code
+   overload we mis-diagnose (a bug) or genuinely undirectived FPC source (which
+   would mean FPC itself does not require what the flag requires, i.e. the flag
+   is wrong, not the corpus),
+4. only if all three pass, move `StrictOverload := True` into `EnableStrictFpc`
+   and rewrite the comment at `lexer.inc:601` (it now points here).
+
+The comment in `EnableStrictFpc` was updated to say exactly this, so the next
+reader is not told a reason that is no longer true.
+
+## Follow-on
+
+Only `StrictOverload` is rescoped. The other strict flags (`StrictCase`,
+`StrictOperator`, `StrictVisibility`, `RequireForward`, `StrictShiftWidth`,
+`StrictVariantChar`) do not test `CurrentUnitIdx` at all today — they apply
+everywhere — so there was nothing to rescope, but the moment one of them wants an
+ownership carve-out, `DialectIsPxx` is the predicate to call. Filed:
+[[feature-a-audit-strict-flags-against-dialectispxx]].
+
+## Log
+- 2026-08-21 — resolved, commit PENDING-COMMIT.

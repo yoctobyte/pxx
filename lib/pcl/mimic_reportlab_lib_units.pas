@@ -1,4 +1,5 @@
 unit mimic_reportlab_lib_units;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { `from reportlab.lib.units import mm, cm` — how many PDF points one of each is.
   A PDF point is 1/72 inch, so a millimetre is 72/25.4. These are reportlab's own
   values to the digit. A T1 name shim; see mimic_reportlab_pdfgen for the policy. }

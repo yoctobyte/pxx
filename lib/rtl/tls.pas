@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit tls;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Backend-neutral TLS seam (feature-tls-provider-abstraction).
 
   Any net code (http, future servers) talks to this contract instead of raw

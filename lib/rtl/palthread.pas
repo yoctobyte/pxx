@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit palthread;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { M1 libc-free thread PAL (meta-multithreading). Wraps the compiler's __pxxclone
   trampoline plus raw mmap/futex/munmap syscalls into a small, FPC-flavoured
   thread-primitive API. No libc, no libpthread — pure Linux syscalls.

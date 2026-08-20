@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit x509;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Minimal X.509 / DER parsing + certificate signature verification — milestone
   M5 of feature-tls13-from-scratch. Pure Pascal over the M4 verifiers
   (rsa / ecdsa_p256 / ed25519) + sha256.

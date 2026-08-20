@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit rsa;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { RSA signature verification: PKCS#1 v1.5 and PSS, both with SHA-256. Pure
   Pascal over lib/rtl/bignum + lib/rtl/sha256 — part of milestone M4 of
   feature-tls13-from-scratch (verifying a server certificate's RSA signature).

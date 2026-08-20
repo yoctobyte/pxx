@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit softfloat;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Software IEEE-754 floating-point kernels for targets without (full) hardware
   floating point (riscv32 = no FPU; xtensa = single-only HW, soft double).
 

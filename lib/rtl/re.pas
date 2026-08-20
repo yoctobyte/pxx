@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit re;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Python's `re` module for the Nil-Python frontend.
 
   Deliberately named `re` so `import re` needs NO frontend change: NilPy turns

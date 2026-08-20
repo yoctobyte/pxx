@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit variants;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { The FPC `Variants` surface, over pxx's own Variant.
 
   A pxx Variant is a 16-byte tagged value: an 8-byte TAG (the VT_* constants in

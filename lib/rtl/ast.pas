@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit ast;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Python's `ast` module for the Nil-Python frontend — the `literal_eval` slice.
 
   Named `ast` so `import ast` needs no frontend change: NilPy turns `import X`

@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit zlib;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { zlib/deflate inflate (RFC 1950 / RFC 1951).
 
   Supports all three deflate block types:

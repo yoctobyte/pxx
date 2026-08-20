@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit mimic_urllib_error;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Python's `urllib.error` — the exceptions `urllib.request` raises.
 
   `import urllib.error` / `from urllib.error import HTTPError` RESOLVES here

@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit pylib;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Python-runtime support types for the Nil-Python frontend. Every .npy program
   pulls this unit in automatically (see ParsePyProgram).
 

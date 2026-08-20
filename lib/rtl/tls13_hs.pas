@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit tls13_hs;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { TLS 1.3 handshake messages (RFC 8446 §4) — the ClientHello builder and the
   ServerHello parser, plus small framing helpers and the transcript hash.
   Milestone M6 of feature-tls13-from-scratch. Library-free (on sha256).

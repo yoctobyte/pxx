@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit palsync;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { M2 libc-free synchronisation primitives (meta-multithreading). A futex-backed
   mutex built on the atomic intrinsics (__pxxatomic_cas/xchg) + PalFutexWait/Wake
   from `palfutex`. No libc — pure Linux futex syscalls.

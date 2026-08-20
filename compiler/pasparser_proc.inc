@@ -1276,15 +1276,20 @@ begin
       procIdx := FindProcOverloadRec(name, nparams, ptypes, ptypesRec, parr, pbyref);
       if procIdx < 0 then
       begin
-        if StrictOverload and (FindProc(name) >= 0) and (CurrentUnitIdx < 0) then
+        if StrictOverload and (FindProc(name) >= 0) and not DialectIsPxx then
         begin
-          { --strict-overload polices only the MAIN program's own declarations, not
-            the units it pulls: builtin, the RTL, and libraries are written in the
-            lax PXX dialect (override/overload freely — a first-class feature) and
-            must not be held to FPC's `overload`-directive rule, or every RTL-using
-            program (fpjson, Synapse) would fail to compile and the fix would be
-            compatibility boilerplate we deliberately avoid. This flags an
-            un-directived overload / a System-name shadow in YOUR code. }
+          { --strict-overload polices code that is NOT written in the pxx dialect:
+            the user's own program, and external units like Synapse or fgl. Our
+            own RTL and builtins declare `{$MODE PXX}` and are exempt, because
+            they use undirectived overloads by design (override/overload freely —
+            a first-class feature) and a command-line flag has no business
+            re-judging already-written library code.
+
+            This used to read `CurrentUnitIdx < 0`, i.e. "the main program", which
+            exempted EVERY unit — ours and Synapse's alike — and policed only the
+            one file that is not FPC code. Backwards for a parity flag: Synapse IS
+            what --strict-fpc exists to check. An UNMARKED unit is policed, so the
+            flag cannot go quietly weaker as the tree grows. }
           if not declOverload then Error('overloaded routine requires overload directive');
           if HasNonOverloadProc(name) then Error('all overloaded routines require overload directive');
         end;

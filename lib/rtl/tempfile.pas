@@ -32,6 +32,7 @@
   package's own sources, the real tempfile compiles and this goes away. }
 unit tempfile;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 interface
 
 uses sysutils;

@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit configparser;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Python's `configparser` for the Nil-Python frontend.
 
   Named `configparser` on purpose, like lib/rtl/re.pas: NilPy turns `import X`

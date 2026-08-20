@@ -607,12 +607,20 @@ procedure EnableStrictFpc;
   makes pxx DIVERGE to FPC's stricter choices; --mimic-fpc is this plus declaring
   FPC defined (+ {$I+}). Does NOT change default name resolution.
 
-  StrictOverload is DELIBERATELY EXCLUDED: our own RTL uses undirectived overloads
-  by design (the lax dialect), so requiring the `overload` directive would fail to
-  compile every RTL-using program (fpjson/Synapse) — and directive boilerplate
-  across the RTL is exactly what we refuse. It stays a standalone experimental
-  flag (--strict-overload) for directive-clean code. See
-  bug-pascal-unqualified-call-binds-builtin-over-used-unit. }
+  StrictOverload is still EXCLUDED, but its ORIGINAL reason is gone. That reason
+  was "our own RTL uses undirectived overloads by design, so the flag would fail
+  to compile every RTL-using program" — and since
+  feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit the RTL
+  declares `{$MODE PXX}` and the strict flags no longer judge it, so an
+  RTL-using program compiles under --strict-overload today (asserted in the
+  Makefile). What is missing is EVIDENCE, not a design objection: enrolling a
+  flag here is a promise that the real FPC corpora named at the top of this
+  comment still build, and fgl/Synapse/fpjson live in `external/`, which is
+  gitignored and fetched on demand. Folding it in without running them would
+  weaken the one claim this umbrella makes. The recipe to finish it is recorded
+  in that ticket's "How to finish the fold" section — fetch the corpora, build
+  them with --strict-overload, and if they pass, move the flag up here.
+  See also bug-pascal-unqualified-call-binds-builtin-over-used-unit. }
 begin
   StrictOperator   := True;
   StrictCase       := True;
@@ -1759,6 +1767,21 @@ begin
       { Delphi does not nest same-type comments; FPC modes do. A later
         {$NESTEDCOMMENTS ...} still overrides. }
       NestedComments := not DelphiMode;
+      { {$MODE PXX}: this file is written in the PXX dialect — do not re-judge it
+        by another language's rules. It exempts the unit from the FPC-parity
+        strict-* flags, and nothing else: the dialect it names is already the
+        default, so the directive changes no parsing.
+
+        Why a source directive and not a `lib/rtl/` path rule: it is explicit and
+        greppable in the file it describes, and it SURVIVES VENDORING — someone
+        copying our RTL into their tree keeps the marking, where a path rule
+        would silently reclassify it and start policing our own code by FPC's
+        rules. Exact inverse of {$MIMIC FPC} below, which pins a compatibility
+        NEED in the source; this pins a dialect OWNERSHIP.
+
+        Marked per unit, not globally: CurrentUnitIdx is already this unit's
+        string index while its LexAppend runs. }
+      if CaseEqual(name, 'pxx') then MarkUnitPxxDialect(CurrentUnitIdx);
     end
     else if CaseEqual(command, 'mimic') then
     begin

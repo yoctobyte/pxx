@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit dns;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Resolver facade (feature-dns-resolver-library): host -> A records using the
   "files dns" order — consult /etc/hosts first, then query a configured
   nameserver over UDP via the dns_wire path. This is the stable entrypoint, and

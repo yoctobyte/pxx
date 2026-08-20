@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit rtlconsts;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { FPC-compat: the message-string constants FPC keeps in RtlConsts. Plain string
   consts here (FPC uses resourcestring; this RTL has no resource tables, and
   nothing in the corpus rebinds them at runtime). Texts match FPC's

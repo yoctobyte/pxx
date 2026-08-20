@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit builtin;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Conversion helpers backing the Str and Val built-ins. The compiler pulls this
   unit in automatically, but only when a program actually uses Str or Val (a
   token pre-scan in ParseProgram), so programs that never call them pay nothing

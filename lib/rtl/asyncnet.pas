@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit asyncnet;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Async TCP sockets over PAL sockets plus the coroutine scheduler's reactor.
   Every call is non-blocking: on EAGAIN the coroutine parks on the reactor
   (WaitReadable/WaitWritable) and yields, so one OS thread serves many

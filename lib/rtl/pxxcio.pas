@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit pxxcio;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { C runtime IO bridge — the libc-free byte sink for the C frontend's stdio
   veneer (lib/crtl/src/stdio.c).
 

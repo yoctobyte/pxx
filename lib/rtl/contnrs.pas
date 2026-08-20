@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit contnrs;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { FPC's `contnrs` containers, as much of the surface as real code actually uses.
 
   Built on classes.TFPList (a plain pointer list), which is where the storage and the

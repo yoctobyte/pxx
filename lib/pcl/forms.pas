@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit forms;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 interface
 
 uses controls, classes_lite, typinfo, lfm, interfaces, uwidgetset, menus;

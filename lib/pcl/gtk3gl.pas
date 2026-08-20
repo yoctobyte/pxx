@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit gtk3gl;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { The GTK3 OpenGL backend — the sparse point of the PCL widgetset seam
   (feature-pcl-seam-seal).
 

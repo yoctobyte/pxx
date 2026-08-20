@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit builtinheap;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { ESP (xtensa/bare riscv32) has no mmap and no OS heap of its own here; back the
   allocator with a fixed static arena instead. One marker for both ESP ISAs.
   HOSTED riscv32 (qemu-user linux) DOES have mmap and the linux syscall ABI (its

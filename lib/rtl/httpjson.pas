@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit httpjson;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { JSON-over-HTTP convenience — ties the native HTTP client (http) to the JSON
   codec (json) for REST-style calls. Kept separate from http.pas so plain HTTP
   users don't pull the JSON unit.

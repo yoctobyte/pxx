@@ -2459,6 +2459,24 @@ var
     that off for the frontend's own by-name lookups (`math.pow` -> Power). }
   QualOnlyUnitIdx   : array[0..255] of Integer;
   QualOnlyUnitCount : Integer;
+  { Units that declared `{$MODE PXX}` — "this file is written in the pxx dialect,
+    do not re-judge it by another language's rules". The strict-* parity flags
+    (--strict-fpc and friends) exist to check that code written for FPC behaves
+    as FPC would; our own RTL is not that code, and a command-line flag has no
+    business changing how already-written library code is judged.
+
+    THE AXIS IS OURS-VS-THEIRS, not program-vs-unit. The old spelling was
+    `CurrentUnitIdx < 0` — "the main program" — which exempted EVERY unit, ours
+    and Synapse's alike, and policed only the one file that is not FPC code.
+    Backwards for a parity flag: Synapse IS the code --strict-fpc is for.
+    Same wrong axis NilPyUserCode was introduced to fix (see symtab.inc's note),
+    now fixed a second time in a different place.
+
+    A unit with NO marking is POLICED. Anything else makes the flag silently
+    weaker as the tree grows, which is the failure this replaces. }
+  PxxDialectUnitIdx   : array[0..255] of Integer;
+  PxxDialectUnitCount : Integer;
+  MainPxxDialect      : Boolean;   { the MAIN program said {$MODE PXX} — explicit opt-out, not the default }
   PyImportPending   : Boolean;   { a NilPy plain `import` is resolving right now }
   QualNameLookup    : Boolean;   { this lookup IS the qualified one — do not hide }
   { Every C TRANSLATION UNIT the program pulled in. C has no `uses`: its

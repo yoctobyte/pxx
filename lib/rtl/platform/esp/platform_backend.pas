@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit platform_backend;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { ESP-IDF/FreeRTOS PAL backend selected by -Fulib/rtl/platform/esp. }
 
 interface

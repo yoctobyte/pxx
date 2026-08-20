@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit mimic_codecs;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Python's `codecs` module — the subset that the html5lib dependency ladder
   starts on.
 

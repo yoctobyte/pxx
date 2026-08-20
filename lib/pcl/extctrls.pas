@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit extctrls;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 interface
 
 uses classes_lite, controls, uwidgetset, typinfo, graphics, stdctrls;

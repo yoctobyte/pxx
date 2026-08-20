@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit http;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Minimal native HTTP/1.1 client (our own net stack — NOT a Synapse shim).
   Built on lib/rtl/net (blocking TCP) + lib/rtl/dns (resolution). The request
   build / response parse / URL parse are pure string helpers, kept public and

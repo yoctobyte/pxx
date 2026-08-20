@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit math;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 interface
 uses math_ext;
 

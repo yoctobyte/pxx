@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit slsched;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Stackless-coroutine scheduler (PXX-only; never used in compiler.pas, per the
   FPC/PXX boundary).
 

@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit gtk3widgets;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 interface
 
 uses classes_lite, uwidgetset;

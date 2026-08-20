@@ -1,5 +1,6 @@
 { SPDX-License-Identifier: Zlib }
 unit lineedit;
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { A single-line text input widget for the TUI library — the editable buffer +
   cursor and the keystroke logic, kept separate from any terminal I/O so it is
   fully unit-testable. Feed it the key codes from screen.ScreenReadKey; render it

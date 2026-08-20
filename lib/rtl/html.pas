@@ -16,6 +16,7 @@
   Defers to feature-nilpy-py-module-loader (T3). }
 unit html;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 interface
 
 { Two ARITIES rather than one defaulted parameter: a unit-QUALIFIED call from

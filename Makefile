@@ -7013,6 +7013,26 @@ test-core: $(COMPILER)
 	grep -q "overloaded routine requires overload directive" $(TESTTMP)/test_strict_overload_error.log
 	./$(COMPILER) --strict-overload test/test_overloading.pas $(TESTTMP)/test_overloading_strict26
 	test "$$($(TESTTMP)/test_overloading_strict26)" = "$$(printf 'Integer: 42\nChar: A\nTwo Integers: 10, 20\nAdd integers: 12\nChar addition: XY')"
+	# --strict-overload scopes by DIALECT OWNERSHIP, not program-vs-unit. The old
+	# rule was `CurrentUnitIdx < 0` -- "the main program" -- which exempted EVERY
+	# unit, ours and Synapse's alike, and policed only the one file that is not
+	# FPC code. Backwards for a parity flag: Synapse IS what --strict-fpc is for.
+	# Three arms, because any two of them pass with a broken flag:
+	#   1. a {$MODE PXX} unit with undirectived overloads is EXEMPT,
+	#   2. an unmarked unit with correct `overload` directives still compiles
+	#      (the flag must not reject conformant FPC code), and
+	#   3. an unmarked unit with an UNDIRECTIVED overload is REJECTED -- the arm
+	#      the old axis let through silently, and the one that proves the flag
+	#      reaches units at all.
+	# Arms 1 and 2 share one compilation, so the two answers demonstrably come
+	# from the same run rather than from two runs with different flags.
+	./$(COMPILER) --strict-overload -Futest test/test_strict_dialect_ownership.pas $(TESTTMP)/test_strict_dialect26
+	test "$$($(TESTTMP)/test_strict_dialect26)" = "$$(printf '42 abab\n42 ccc')"
+	! ./$(COMPILER) --strict-overload -Futest test/test_strict_dialect_reject.pas $(TESTTMP)/test_strict_dialect_rej26 > $(TESTTMP)/test_strict_dialect_rej.log 2>&1
+	grep -q "overloaded routine requires overload directive" $(TESTTMP)/test_strict_dialect_rej.log
+	# ...and the dialect stays LAX by default: the same program with no flag builds.
+	./$(COMPILER) -Futest test/test_strict_dialect_reject.pas $(TESTTMP)/test_strict_dialect_lax26
+	test "$$($(TESTTMP)/test_strict_dialect_lax26)" = "8"
 	./$(COMPILER) test/test_sizeof.pas $(TESTTMP)/test_sizeof26
 	test "$$($(TESTTMP)/test_sizeof26)" = "$$(printf '1\n1\n2\n2\n4\n4\n4\n4\n8\n8\n8\n8\n8\n8\n8\n1\n1\n4\n8\n8\n10\n16\n2\n4\n1\n8\n8')"
 	! ./$(COMPILER) test/test_sizeof_error.pas $(TESTTMP)/test_sizeof_error26 > $(TESTTMP)/test_sizeof_error.log 2>&1

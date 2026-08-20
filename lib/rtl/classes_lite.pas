@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit classes_lite;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Phase 3 streaming runtime: a TComponent-lite base and a TReader that
   instantiates and configures a component tree from a binary form stream,
   using the published RTTI (typinfo) and a byte stream (streams).
