@@ -49,6 +49,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [T]` regression-selfhost-fixedpoint-selfhost-fixedpoint
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-pascal-unit-keeps-fpc-method-shadowing
+- `[p 65] [A]` feature-pascal-builtin-tobject-class (unblocks 1)
 - `[p 65] [T]` bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-oop
@@ -75,6 +76,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
-- `[p 55] [A]` feature-pascal-type-helpers
 
 _198 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

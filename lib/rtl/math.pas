@@ -159,6 +159,23 @@ function IsClose(a, b, relTol, absTol: Double): Boolean;
 function Factorial(n: Integer): Int64;
 function Comb(n, k: Integer): Int64;
 
+{ FPC's Math.Float is "the widest float the target supports", which is what
+  portable code writes when it wants a mantissa to survive the round trip
+  (rtl-generics hashes floats through `LMantissa: Float`). This RTL has one
+  wide float -- Extended is aliased to Double, as the header above says -- so
+  Float is Double here. FPC on x86-64 makes it Extended, 10 bytes; the only
+  thing that observes the difference is SizeOf(Math.Float), and the callers
+  that ask are hashing, where the value is implementation-defined anyway. }
+type
+  Float = Double;
+
+{ Frexp / Ldexp -- the exponent pair, exact and libm-free. Frexp splits x into
+  a mantissa in [0.5, 1) and a power of two: x = mantissa * 2**exponent. Zero,
+  the infinities and NaN come back unchanged with exponent 0, which is what FPC
+  and C99 both do. Ldexp is the inverse. }
+procedure Frexp(const x: Double; var mantissa: Double; var exponent: Integer);
+function Ldexp(const x: Double; exponent: Integer): Double;
+
 { ---- Single overloads (widen -> Double -> narrow) ---- }
 function Abs(x: Single): Single;
 function Sqrt(x: Single): Single;
@@ -2091,6 +2108,64 @@ end;
 function IsInf(x: Double): Boolean;
 begin
   Result := (x > 1.7976931348623157e308) or (x < -1.7976931348623157e308);
+end;
+
+procedure Frexp(const x: Double; var mantissa: Double; var exponent: Integer);
+{ Read the biased exponent straight out of the IEEE-754 double and rewrite it to
+  1022, the bias that puts the mantissa in [0.5, 1). A SUBNORMAL has a zero
+  exponent field and no implicit leading 1, so it is scaled up by 2**64 first
+  and the 64 taken back off the answer -- without that the whole subnormal range
+  would report exponent -1022 with a mantissa far below 0.5. }
+const
+  TWO_POW_64 = 18446744073709551616.0;
+var
+  bits, e: Int64;
+  adj: Integer;
+  v: Double;
+begin
+  if (x = 0.0) or IsNan(x) or IsInf(x) then
+  begin
+    mantissa := x;
+    exponent := 0;
+    Exit;
+  end;
+  v := x;
+  adj := 0;
+  bits := PSqrtInt64(@v)^;
+  e := (bits shr 52) and $7FF;
+  if e = 0 then
+  begin
+    v := v * TWO_POW_64;
+    adj := -64;
+    bits := PSqrtInt64(@v)^;
+    e := (bits shr 52) and $7FF;
+  end;
+  exponent := Integer(e) - 1022 + adj;
+  bits := (bits and $800FFFFFFFFFFFFF) or (Int64(1022) shl 52);
+  mantissa := PSqrtDouble(@bits)^;
+end;
+
+function Ldexp(const x: Double; exponent: Integer): Double;
+{ The inverse of Frexp. Scaled by ordinary multiplies so that an out-of-range
+  exponent overflows to Inf / flushes to zero exactly as the arithmetic would,
+  instead of wrapping the biased field; past +-2100 every finite double has
+  already saturated, so the count is clamped rather than spun. }
+var
+  r: Double;
+  n: Integer;
+begin
+  if (x = 0.0) or IsNan(x) or IsInf(x) then
+  begin
+    Result := x;
+    Exit;
+  end;
+  n := exponent;
+  if n > 2100 then n := 2100;
+  if n < -2100 then n := -2100;
+  r := x;
+  while n > 0 do begin r := r * 2.0; n := n - 1; end;
+  while n < 0 do begin r := r * 0.5; n := n + 1; end;
+  Result := r;
 end;
 
 function Degrees(r: Double): Double;

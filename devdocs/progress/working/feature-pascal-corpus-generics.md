@@ -2,6 +2,7 @@
 track: P
 prio: 65
 owner: frank1-ACP
+blocked-by: feature-pascal-builtin-tobject-class
 ---
 
 # rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus
@@ -658,7 +659,120 @@ constants. All are called by generics.defaults' default comparers.
 - `test/test_fpc_compat_batch.pas` — extended 11 → 14 with the `System.`-
   qualified type forms.
 
+## Walls 28-33 — 1397 → 1865
+
+Line numbers are `generics.defaults.pas`, compiled with `$(PXX_STABLE)` against
+the vendored `release_3_2_2` tree (`PROVENANCE.md` in the staging dir). The last
+two are measured in a throwaway copy with `TObject.Equals` / `TObject.GetHashCode`
+stubbed out, to find how far the unit gets past the block described below.
+
+| line | wall | lane |
+| --- | --- | --- |
+| 1397 | `VarCompareValue` / `TVariantRelationship` / `EVariantError` | B (RTL) |
+| 1416 | `SizeOf(System.TMethod)` — SizeOf's private type table | P |
+| 1569 | `TObject.Equals` | **blocked**, see below |
+| 1655 | `HASH_FACTORY` undefined — the macro pre-pass mis-scanned a comment | P |
+| 1699 | `Math.Float` unknown, then `Frexp` / `Ldexp` missing | B (RTL) + P |
+| 1780 | `TObject.GetHashCode` | **blocked**, same |
+| 1865 | `PPExtendedEqualityComparerVMT(Self)^.__ClassRef.GetHashList(...)` | P |
+
+### Blocked on the TObject root-method slice
+
+Two of the six are the same missing thing — `TObject.Equals` and
+`TObject.GetHashCode`, the virtual root methods every default comparer
+overrides. That is [[feature-pascal-builtin-tobject-class]], and it is a real
+design fork rather than an omission: a parser intercept is cheap but the methods
+would not be VIRTUAL, and real root slots move every VMT index. Recorded as a
+`blocked-by:` edge; the walls past it were measured with both stubbed.
+
+### The macro pre-pass scanned Delphi-mode comments as nested (compiler, Track P)
+
+`HASH_FACTORY undefined` at 1655 pointed at nothing — the `{$define}` that
+introduces it is 90 lines earlier and plainly there. The cause is not macros at
+all: **comment nesting is MODE-dependent**, `{$MODE DELPHI}` turns it OFF, and
+`ExpandPasMacros` — which runs over the raw text BEFORE the lexer, so it scans
+comments itself — always nested them. One of the unit's banner comments contains
+a stray `{`, so the pre-pass swallowed everything to the next `}`, `{$define}`
+block included.
+
+`ExpandPasMacros` now tracks `{$MODE}` and `{$NESTEDCOMMENTS}` and mirrors
+`lexer.inc`'s nesting rule, seeded from the ambient `NestedComments` the caller
+just reset per unit. The two scanners agreeing is the invariant; they are
+separate because the pre-pass necessarily runs first.
+
+### A method at the end of a cast-deref chain evaluated to the RECEIVER (compiler, Track P)
+
+The one worth the writeup. `PRec(q)^.o.F(2)` **compiled, ran, and printed a heap
+address** — no crash, no diagnostic, a plausible wrong value far from the cause,
+which is the failure mode `devdocs/dev/debugging-playbook.md` exists for. It was
+found only because a stubbed-out probe made the surrounding code reachable.
+
+`ParseFactorCore`'s two cast-deref suffix loops (the record NAME cast
+`TRec(p)^…`, and the pointer-type ALIAS cast `PRec(p)^…` — two branches, the
+same hand-rolled walk) can only build `AN_FIELD`. A METHOD name therefore became
+a field, and `RecFieldType`'s miss returns the `tyInteger` default rather than a
+sentinel, so nothing downstream objected: the expression typed as an integer and
+evaluated to the receiver pointer.
+
+Fixed by delegation, not by teaching the loops to call methods — one resolver,
+not a second partial copy (`devdocs/dev/normalise-dont-special-case.md`):
+
+- name is not a field of the record → hand the rest of the chain to
+  **`ParseClassRecordSelectors`**, which is what resolves methods, properties
+  and default properties everywhere else;
+- the field is a METACLASS (`cr: TObjClass`) → **`ParseMetaclassMemberTail`**.
+  A `class of` field records `REC_NONE` (the class lives in `UFldPtrElemRec`),
+  so `RecFieldRecId` answers nothing and the first guard cannot fire. This is
+  the 1865 shape, `…^.__ClassRef.GetHashList(…)`.
+
+`ParseMetaclassMemberTail` is new and is the fourth-copy fix: constructor / class
+method / class-reference operation on a metaclass value existed three times over
+(`ParseLValueAST`'s suffix loop, `ApplyCallResultPtrSuffix`, pyparser's twin) and
+zero times in the cast loops. All three now call it. `NodeMetaclassCi` was
+already the shared "is this node a metaclass value" predicate, for the same
+reason — five spellings, one test.
+
+Statement position needed its own arm: a cast-led statement demanded `:=`, so
+`PRec(q)^.o.M(5);` was a parse error. `ParseStatementAST` now looks ahead for a
+depth-0 `:=` (`StatementIsAssignment`) and, when there is none, parses the whole
+thing as an expression inside `Inc/Dec(StmtCallDepth)` — the existing counter
+that stands the no-result-call check down for `(o as T).M;`.
+
+### RTL: Math.Float, Frexp, Ldexp; SizeOf through any unit qualifier
+
+`generics.defaults`' Extended comparer hashes `SizeOf(Float)` bytes after
+splitting the value with `Frexp`. Three separate gaps:
+
+- **`Math.Float`** did not exist. FPC's `Float` is "the widest float the target
+  supports"; this RTL has one wide float (Extended is aliased to Double), so
+  `Float = Double` here. `SizeOf` is 8 vs FPC's 10 — a representation
+  difference, and the only thing that observes it is the hash width, which is
+  implementation-defined anyway.
+- **`Frexp` / `Ldexp`** were missing. Both checked against FPC 3.2.2 including
+  the subnormal range, where the biased exponent field is 0 and the naive bit
+  extraction is silently wrong.
+- **`SizeOf(Math.Float)`** was a compile error even once the type existed:
+  SizeOf stripped a `System.` qualifier and no other unit's. It now calls
+  **`ConsumeUnitQualifier`**, the expression parser's own resolver, which
+  returns -1 without consuming when the leading name is not a unit — so
+  `SizeOf(TOuter.TInner)` still falls to the class-qualifier strip below it.
+  Same shape as wall 23's `EatSystemQualifier` extraction, one level out.
+
+### Regressions (this batch)
+
+- `test/test_pascal_cast_chain_method_call.pas` — 9/9, and every assertion is an
+  identity between the cast spelling and a plain pointer variable, so a silent
+  regression cannot pass by matching itself. Matches fpc 3.2.2, 9/9.
+- `test/test_rtl_math_float_frexp.pas` — 14/14. Runs unchanged under fpc 3.2.2,
+  also 14/14 (the `Float` width is asserted as `>=` for exactly that reason).
+- `test/test_pascal_macro_comment_nesting.pas` + `test/macronest_fpcmode.pas` —
+  the Delphi-mode and FPC-mode halves, the latter a separate unit because FPC
+  allows a mode switch only at the top of a compilation unit. Byte-identical
+  output under fpc 3.2.2.
+
 ### Next wall
 
-`generics.defaults.pas:1397` — `VarCompareValue` (the `variants` unit's variant
-comparator, returning `TVariantRelationship`). Track B.
+`generics.defaults.pas:1569` — `TObject.Equals`, blocked on
+[[feature-pascal-builtin-tobject-class]]. With that and `GetHashCode` stubbed the
+unit reaches 1865, which this batch clears; the next measurement follows the
+TObject decision.

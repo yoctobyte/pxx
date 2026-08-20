@@ -52,6 +52,34 @@ test-core + cross ARC — fixed). Test: test_builtin_tobject.
 Equals (pointer compare), ClassName / UnitName / InstanceSize / ClassInfo —
 for tobject5/tclassinfo1. Needs the RTTI-on-IR surface; separate slice.
 
+## Corpus evidence, and the fork (2026-08-20, frank1-ACP)
+
+The "remaining" slice above is now the **only** thing between the rtl-generics
+corpus rung and its next measurement, and it blocks it twice:
+`generics.defaults.pas:1569` needs `TObject.Equals` and `:1780` needs
+`TObject.GetHashCode`. Every default comparer in that unit overrides both. The
+walls past them ([[feature-pascal-corpus-generics]], walls 28-33) could only be
+measured by stubbing the two out in a throwaway copy of the tree.
+
+That raises the slice's real value well above its `prio: 42`, but it is a
+**decision, not a task**, and the ticket should not be picked up until it is
+settled:
+
+- **Parser intercept** (like `IsClassRefOpName`'s ops): cheap, no VMT change, and
+  it unblocks the corpus today. But the methods are then not VIRTUAL — a
+  descendant's `override` of `Equals` would not be dispatched through, which is
+  precisely what generics.defaults does with them. So it unblocks compilation
+  and may quietly produce wrong ANSWERS: the failure mode this repo keeps
+  paying for.
+- **Real virtual root slots**: correct, and what FPC has. Costs a VMT index
+  shift for every class, which this ticket already records as having RED'd
+  test-core + cross ARC once (see Slice 1) — the implicit-root guard exists to
+  avoid exactly that.
+
+The intercept is not a cheaper version of the slots; it is a different, weaker
+guarantee, and the corpus is the caller that would notice. Recommend the slots,
+scheduled deliberately rather than squeezed into a corpus session.
+
 ## Gate
 
 `make test` + self-host byte-identical; a compile-run test

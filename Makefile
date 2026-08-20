@@ -4587,6 +4587,15 @@ test-core: $(COMPILER)
 	# RTL names FPC code calls: CompareMemRange, DynArraySize, Wide/UnicodeCompare*, CompareValue, HRESULTs
 	./$(COMPILER) -Fulib/rtl test/test_rtl_fpc_compat_helpers.pas $(TESTTMP)/test_rtl_fpc_compat_helpers26
 	test "$$($(TESTTMP)/test_rtl_fpc_compat_helpers26 | tail -1)" = "total ok 23 / 23"
+	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
+	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
+	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"
+	# a method at the end of a cast-deref chain: PRec(q)^.o.F(1), PRec(q)^.cr.NewN(3)
+	./$(COMPILER) test/test_pascal_cast_chain_method_call.pas $(TESTTMP)/test_pascal_cast_chain26
+	test "$$($(TESTTMP)/test_pascal_cast_chain26 | tail -1)" = "total ok 9 / 9"
+	# the macro pre-pass must follow $MODE's comment-nesting rule, not assume nesting
+	./$(COMPILER) -Futest test/test_pascal_macro_comment_nesting.pas $(TESTTMP)/test_pascal_macro_nest26
+	test "$$($(TESTTMP)/test_pascal_macro_nest26)" = "$$(printf 'delphi-mode\n42\nfpc-mode-nested\nnested-off\nMACRO COMMENT NESTING OK')"
 	# arity-overloaded class names: TD, TD<K>, TD<K,V> coexist; TD<K> inherits TD
 	./$(COMPILER) test/test_generic_name_overload.pas $(TESTTMP)/test_generic_name_overload26
 	test "$$($(TESTTMP)/test_generic_name_overload26)" = "$$(printf '0 1 2\n0')"

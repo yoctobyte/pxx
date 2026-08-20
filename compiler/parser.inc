@@ -42,6 +42,8 @@ function ParamIsOpenArrayScalar(procIdx, argNo: Integer): Boolean; forward;
 function ByRefArgStartsExpression(constVariantParam: Boolean): Boolean; forward;
 function ParamIsConstVariant(pi, slot: Integer): Boolean; forward;
 function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer; forward;
+function ParseMetaclassMemberTail(node, mcCi: Integer; var outTk: TTypeKind;
+                                  var outRec: Integer; var finished: Boolean): Integer; forward;  { the ONE member-on-a-class-reference parser -- see its body }
 function PyParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer; forward;  { NilPy twin (pyparser.inc) }
 
 
@@ -4795,7 +4797,7 @@ var
   node, indexNode, fieldNode, prevTok, recName, i: Integer;
   baseNode, baseRec, fIdx, aliasIdx: Integer;
   remDepth, ptrBaseTk, ptrBaseRec: Integer;
-  isND: Boolean; nIdx: Integer; alreadyResolved: Boolean;
+  isND: Boolean; nIdx: Integer; alreadyResolved: Boolean; mcFin: Boolean;
   tk: TTypeKind;
   fieldName: AnsiString;
   mci, mmi, mpi, mcallNode, mselfArg, mlastArg, margSeq, margIdx, mexprNode, mai, pri, ci: Integer;
@@ -6395,55 +6397,21 @@ begin
       ci := NodeMetaclassCi(node);
       if ci >= 0 then
       begin
-        { A class-reference OPERATION on a TYPED metaclass (`AClass: TJSONDataClass`):
-          `AClass.InheritsFrom(MinJSONInstanceTypes[AType])`, `AClass.ClassName` -- fpjson's
-          SetJSONInstanceType does both. A typed metaclass carries a concrete class id, so it
-          lands in this branch rather than the bare-class-reference one, and the ops had to be
-          taught here too. A real member of that name on the class still wins. }
-        if (CurTok.Kind = tkIdent) and IsClassRefOpName(fieldName) and
-           (FindUMeth(ci, fieldName) < 0) then
+        { Constructors (any name -- UMthIsCtor, not the spelling), class methods,
+          and the class-reference operations on a TYPED metaclass
+          (`AClass.InheritsFrom(...)`, `AClass.ClassName` -- fpjson's
+          SetJSONInstanceType does both) all live in ParseMetaclassMemberTail.
+          A member of that name on the class still outranks an operation. }
+        mcallNode := ParseMetaclassMemberTail(node, ci, tk, recName, mcFin);
+        if mcallNode >= 0 then
         begin
-          Next;                        { consume the operation name }
-          mcallNode := GenMakeClassRefOp(node, fieldName, tk);
-          if mcallNode >= 0 then
+          node := mcallNode;
+          if mcFin then
           begin
-            recName := REC_NONE;
-            Result := ParseClassRefOpTail(mcallNode, tk);
+            Result := node;
             Exit;
           end;
-        end;
-
-        { Any CONSTRUCTOR through the metaclass, not just one spelled `Create`. FPC
-          names them freely -- fpcunit's suite builder calls `tc.CreateWith(name, sn)`
-          -- and UMthIsCtor is what actually marks one. Matching on the NAME 'create'
-          silently missed every other constructor, which then fell through to the
-          member paths below and did something else entirely. }
-        mmi := FindUMethOverloadAhead(ci, fieldName, CountCallArgsAhead);
-        if mmi < 0 then mmi := FindUMeth(ci, fieldName);
-        if (mmi >= 0) and UMthIsCtor[mmi] then
-        begin
-          EnforceMethVis(mmi, fieldName);
-          Next; { consume the constructor name }
-          node := BuildMetaclassNew(node, ci, mmi);
-          recName := REC_UCLASS_BASE + ci;
-          tk := tyClass;
-          Continue;   { allow trailing .field/[i] selectors on the new instance }
-        end;
-
-        { A CLASS METHOD through the metaclass: `tc.SingleInstanceForSuite`. Now that
-          Self is a real argument, this needs nothing special -- pass the metaclass
-          VALUE as Self and the method runs against whatever class the variable holds.
-          The dispatch is dynamic for free. }
-        if (mmi >= 0) and UMthIsStatic[mmi] and (UMthProc_[mmi] >= 0) then
-        begin
-          mpi := UMthProc_[mmi];
-          Next; { consume the method name }
-          GenVirtSlot := UMthVirSlot[mmi];
-          node := GenMakeStaticMethodCall(mpi, node);
-          tk := Procs[mpi].RetType;
-          recName := ProcRetRecId[mpi];
-          if (tk <> tyClass) and (tk <> tyRecord) then recName := REC_NONE;
-          Continue;
+          Continue;   { allow trailing .field/[i] selectors on the value }
         end;
       end;
 
@@ -8679,9 +8647,83 @@ begin
   Result := node;
 end;
 
+function ParseMetaclassMemberTail(node, mcCi: Integer; var outTk: TTypeKind;
+                                  var outRec: Integer; var finished: Boolean): Integer;
+{ One member access on a METACLASS VALUE (`class of T`), whatever the receiver is
+  spelled as -- NodeMetaclassCi answers that, this answers what may follow it.
+  CurTok is on the member NAME, the `.` already eaten by the caller.
+
+  Returns the new node, or -1 having consumed NOTHING when the name is not a
+  member this can serve (so a caller with further options can fall through, and
+  one without can raise its own diagnostic). `finished` says the chain is
+  complete -- the class-reference-operation tail consumes its own suffixes -- as
+  opposed to a value the caller may keep applying selectors to.
+
+  There were three copies of this: ParseLValueAST's suffix loop,
+  ApplyCallResultPtrSuffix, and pyparser's twin, and the cast-deref chains had
+  NONE, which is how `PRec(q)^.cr.Get(3)` came out as a plain AN_FIELD and
+  evaluated to the class reference instead of calling the method -- the exact
+  shape rtl-generics needs for `PPVmt(Self)^.__ClassRef.GetHashList(...)`.
+  One resolver, not a fourth partial copy:
+  devdocs/dev/normalise-dont-special-case.md.
+  bug-pascal-record-cast-chain-drops-method-call }
+var
+  fieldName: AnsiString;
+  mmi, mpi, mcallNode: Integer;
+begin
+  Result   := -1;
+  finished := False;
+  outRec   := REC_NONE;
+  if CurTok.Kind <> tkIdent then Exit;
+  fieldName := GetTokenStr(TokPos - 1);
+
+  mmi := FindUMethOverloadAhead(mcCi, fieldName, CountCallArgsAhead);
+  if mmi < 0 then mmi := FindUMeth(mcCi, fieldName);
+
+  { a real member of that name outranks a class-reference operation }
+  if (mmi < 0) and IsClassRefOpName(fieldName) then
+  begin
+    Next;                            { consume the operation name }
+    mcallNode := GenMakeClassRefOp(node, fieldName, outTk);
+    if mcallNode < 0 then
+      Error('unknown class-reference operation: ' + fieldName);
+    Result   := ParseClassRefOpTail(mcallNode, outTk);
+    finished := True;
+    Exit;
+  end;
+  if mmi < 0 then Exit;
+
+  { ANY constructor, not just one spelled `Create` -- FPC names them freely, and
+    UMthIsCtor is what actually marks one. }
+  if UMthIsCtor[mmi] then
+  begin
+    EnforceMethVis(mmi, fieldName);
+    Next;                            { consume the constructor name }
+    Result := BuildMetaclassNew(node, mcCi, mmi);
+    outTk  := tyClass;
+    outRec := REC_UCLASS_BASE + mcCi;
+    Exit;
+  end;
+
+  { A class method: Self is a real argument, so passing the metaclass VALUE makes
+    the dispatch dynamic for free. }
+  if UMthIsStatic[mmi] and (UMthProc_[mmi] >= 0) then
+  begin
+    mpi := UMthProc_[mmi];
+    Next;                            { consume the method name }
+    GenVirtSlot := UMthVirSlot[mmi];
+    Result := GenMakeStaticMethodCall(mpi, node);
+    outTk  := Procs[mpi].RetType;
+    outRec := ProcRetRecId[mpi];
+    if (outTk <> tyClass) and (outTk <> tyRecord) then outRec := REC_NONE;
+    Exit;
+  end;
+  { an INSTANCE method: found, but not callable this way -- -1, caller diagnoses }
+end;
+
 procedure ApplyCallResultPtrSuffix(node, procIdx: Integer);
 var tk: TTypeKind; elemTk, elemRec, recId, sub, prevTok, tmpN: Integer; fieldName: AnsiString;
-    mcCi, mmi, mpi, mcallNode: Integer;
+    mcCi, mmi, mpi, mcallNode: Integer; mcFin: Boolean;
     arrAi, tmpSym, ndD, nIdx: Integer; isND: Boolean;
 begin
   tk := Procs[procIdx].RetType;
@@ -8703,45 +8745,17 @@ begin
     if CurTok.Kind <> tkIdent then Error('expected member name after .');
     prevTok := TokPos - 1;
     fieldName := GetTokenStr(prevTok);
-    mmi := FindUMethOverloadAhead(mcCi, fieldName, CountCallArgsAhead);
-    if mmi < 0 then mmi := FindUMeth(mcCi, fieldName);
-    { a real member of the class outranks a class-reference operation of the
-      same name, exactly as in the ParseLValueAST arm }
-    if (mmi < 0) and IsClassRefOpName(fieldName) then
+    mcallNode := ParseMetaclassMemberTail(node, mcCi, tk, recId, mcFin);
+    if mcallNode < 0 then
     begin
-      Next;                          { consume the operation name }
-      mcallNode := GenMakeClassRefOp(node, fieldName, tk);
-      if mcallNode >= 0 then
-      begin
-        CurASTNode := ParseClassRefOpTail(mcallNode, tk);
-        LastExprTk := tk;
-        Exit;
-      end;
-      Error('unknown class-reference operation: ' + fieldName);
-    end;
-    if mmi < 0 then
+      if FindUMeth(mcCi, fieldName) >= 0 then
+        Error('an INSTANCE method cannot be called through a class reference: '
+              + fieldName);
       Error('unknown member on a class reference: ' + fieldName);
-    if UMthIsCtor[mmi] then
-    begin
-      EnforceMethVis(mmi, fieldName);
-      Next;                          { consume the constructor name }
-      node := BuildMetaclassNew(node, mcCi, mmi);
-      CurASTNode := node;
-      LastExprTk := tyClass;
-      Exit;
     end;
-    if UMthIsStatic[mmi] and (UMthProc_[mmi] >= 0) then
-    begin
-      mpi := UMthProc_[mmi];
-      Next;                          { consume the method name }
-      GenVirtSlot := UMthVirSlot[mmi];
-      node := GenMakeStaticMethodCall(mpi, node);
-      CurASTNode := node;
-      LastExprTk := Procs[mpi].RetType;
-      Exit;
-    end;
-    Error('an INSTANCE method cannot be called through a class reference: '
-          + fieldName);
+    CurASTNode := mcallNode;
+    LastExprTk := tk;
+    Exit;
   end;
 
   if (tk = tyPointer) and (elemTk <> Ord(tyUnknown)) then
@@ -10110,7 +10124,9 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     helperPi, sci: Integer;
     isLiftedCall: Boolean;
     bitNot, opIsArith: Boolean; notOp: Integer; notOrdTk: TTypeKind;
-    szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec: Integer; szElemTk: TTypeKind; szBTk: TTypeKind;
+    szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec, szQUnit: Integer;
+    mcCi: Integer; mcFin: Boolean;   { metaclass receiver at the end of a cast-deref chain }
+ szElemTk: TTypeKind; szBTk: TTypeKind;
     seEtid, seOrd: Integer;
     lenFieldRec, lenFieldIdx: Integer;   { Length() of a static-array record field }
     cpyPi: Integer;   { Copy(s,i,n)[k]: the __pxxStrCopy proc index, kept past ci's reuse }
@@ -12772,9 +12788,15 @@ begin
         Expect(tkLParen, '(');
         { Peek at the type token to determine the kind }
         name := CurTok.SVal;
-        { `SizeOf(System.TMethod)` / `SizeOf(System.LongWord)` — same strip the
-          expression parser does; see EatSystemQualifier. }
-        if EatSystemQualifier(name) then ;
+        { `SizeOf(System.TMethod)` / `SizeOf(System.LongWord)` — and any OTHER
+          unit qualifier: `SizeOf(Math.Float)` is how rtl-generics spells the
+          width it hashes. ConsumeUnitQualifier is the expression parser's own
+          resolver (it starts with EatSystemQualifier, so System.* is still
+          covered) and returns -1 without consuming anything when the leading
+          name is not a unit — which is what leaves `SizeOf(TOuter.TInner)` to
+          the class-qualifier strip just below. One resolver, not a second
+          hand-rolled copy: devdocs/dev/normalise-dont-special-case.md. }
+        szQUnit := ConsumeUnitQualifier(name);   { the consumption is the point }
         { SizeOf has its own hand-rolled type dispatch, so it needs the class-qualifier
           strip too: `SizeOf(TOuter.TInner)` on a class-nested type. Without it the parse
           died on the '.' while `var r: TOuter.TInner` already worked — a half-working
@@ -14627,6 +14649,45 @@ begin
           end
           else { tkDot }
           begin
+            { A METHOD or a property is not a field, and the builder below can
+              only make fields -- RecFieldType's miss returns the tyInteger
+              default, so `PRec(q)^.o.F(2)` built an AN_FIELD on the object and
+              evaluated to the OBJECT POINTER: it compiled, ran, and printed a
+              number instead of calling F. Nothing crashed.
+              (bug-pascal-record-cast-chain-drops-method-call.) Methods,
+              properties and default properties on a record/class value are what
+              ParseClassRecordSelectors resolves, so once the name is not a
+              field, the rest of the chain is its job -- one resolver, not a
+              second partial copy (devdocs/dev/normalise-dont-special-case.md). }
+            if (recName >= REC_UCLASS_BASE) and
+               (FindUField(recName - REC_UCLASS_BASE, GetTokenStr(TokPos)) < 0) then
+            begin
+              node := ParseClassRecordSelectors(node, recName, tk);
+              recName := REC_NONE;
+              Break;
+            end;
+            { ...and a metaclass-typed field is a RECEIVER, not something to walk
+              into either: `PPVmt(Self)^.__ClassRef.GetHashList(...)`. A
+              `class of T` field records REC_NONE (the class lives in
+              UFldPtrElemRec), so RecFieldRecId answers REC_NONE, the not-a-field
+              guard above cannot fire, and the builder below made an AN_FIELD of
+              the METHOD name -- `PRec(q)^.cr.Get(3)` evaluated to the class
+              reference. Same silent wrong value, one spelling further out.
+              NodeMetaclassCi is the shared five-spelling predicate;
+              ParseMetaclassMemberTail is the shared member parser. }
+            mcCi := NodeMetaclassCi(node);
+            if mcCi >= 0 then
+            begin
+              Next;
+              if CurTok.Kind <> tkIdent then Error('expected member name after .');
+              fieldName := GetTokenStr(TokPos - 1);
+              fieldNode := ParseMetaclassMemberTail(node, mcCi, tk, recName, mcFin);
+              if fieldNode < 0 then
+                Error('unknown member on a class reference: ' + fieldName);
+              node := fieldNode;
+              if mcFin then Break;
+              Continue;
+            end;
             Next;
             if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
               Error('expected field name after .');
@@ -14781,6 +14842,42 @@ begin
             end
             else { tkDot }
             begin
+              { Not a field -> not this loop's job. See the twin note in the
+                record-name cast above: the hand-rolled builder here can only
+                make AN_FIELD, so a METHOD at the end of the chain silently
+                evaluated to the receiver instead of being called
+                (bug-pascal-record-cast-chain-drops-method-call). Hand the rest
+                to the shared selector parser, which resolves methods,
+                properties and default properties. }
+              if (recName >= REC_UCLASS_BASE) and
+                 (FindUField(recName - REC_UCLASS_BASE, GetTokenStr(TokPos)) < 0) then
+              begin
+                node := ParseClassRecordSelectors(node, recName, tk);
+                recName := REC_NONE;
+                Break;
+              end;
+              { ...and a metaclass-typed field is a RECEIVER, not something to walk
+                into either: `PPVmt(Self)^.__ClassRef.GetHashList(...)`. A
+                `class of T` field records REC_NONE (the class lives in
+                UFldPtrElemRec), so RecFieldRecId answers REC_NONE, the not-a-field
+                guard above cannot fire, and the builder below made an AN_FIELD of
+                the METHOD name -- `PRec(q)^.cr.Get(3)` evaluated to the class
+                reference. Same silent wrong value, one spelling further out.
+                NodeMetaclassCi is the shared five-spelling predicate;
+                ParseMetaclassMemberTail is the shared member parser. }
+              mcCi := NodeMetaclassCi(node);
+              if mcCi >= 0 then
+              begin
+                Next;
+                if CurTok.Kind <> tkIdent then Error('expected member name after .');
+                fieldName := GetTokenStr(TokPos - 1);
+                fieldNode := ParseMetaclassMemberTail(node, mcCi, tk, recName, mcFin);
+                if fieldNode < 0 then
+                  Error('unknown member on a class reference: ' + fieldName);
+                node := fieldNode;
+                if mcFin then Break;
+                Continue;
+              end;
               Next;
               if CurTok.Kind in [tkEOF, tkSemicolon, tkAssign, tkRBrack, tkRParen] then
                 Error('expected field name after .');
@@ -22595,6 +22692,44 @@ begin
   Result := node;
 end;
 
+function StatementIsAssignment: Boolean;
+{ Looking from CurTok, is the statement an ASSIGNMENT (a `:=` at bracket depth
+  zero before the statement ends) or a CALL?
+
+  ParseStatementAST decides which hand-rolled lvalue path to take from the
+  first token alone, and two of those paths -- the record-name cast and the
+  pointer-alias cast -- then walk the `^`/`.field` chain with RecFieldType and
+  finish on a hard `Expect(:=)`. A METHOD at the end of that chain is not a
+  field, so `PRec(q)^.o.M(1);` and `PPVmt(Self)^.__ClassRef.GetHashList(...);`
+  were a syntax error ("Expected: :=") while the very same expression READ
+  fine on the right of an assignment. The class-cast path already had the
+  answer -- delegate the chain, then take the node if it came back a call --
+  and this predicate is what lets the other two ask the question first.
+  bug-pascal-cast-deref-method-call-statement }
+var i, depth: Integer;
+begin
+  Result := False;
+  depth := 0;
+  i := TokPos - 1;                 { index of CurTok }
+  while i < TokCount do
+  begin
+    if (Tokens[i].Kind = tkLParen) or (Tokens[i].Kind = tkLBrack) then
+      Inc(depth)
+    else if (Tokens[i].Kind = tkRParen) or (Tokens[i].Kind = tkRBrack) then
+      Dec(depth)
+    else if (Tokens[i].Kind = tkAssign) and (depth <= 0) then
+    begin
+      Result := True;
+      Exit;
+    end
+    else if (depth <= 0) and
+            (Tokens[i].Kind in [tkSemicolon, tkEnd, tkElse, tkUntil,
+                                tkFinally, tkExcept, tkEOF]) then
+      Exit;
+    Inc(i);
+  end;
+end;
+
 function ParseStatementAST: Integer;
 var
   smmiS, pvSig, pvTarget, smSelfNode, fanSym: Integer;
@@ -24192,6 +24327,26 @@ begin
                 ASTRight[node] := CurASTNode;
               end;
             end;
+          end;
+
+          if (node = -1) and (Tokens[TokPos].Kind = tkLParen) and
+             (not StatementIsAssignment) and
+             ((IsRecordType(name) <> REC_NONE) or (FindTypeAlias(name) >= 0)) then
+          begin
+            { A cast-headed statement with no `:=` in it is a CALL, so hand the
+              whole thing to the expression parser, which already builds this
+              chain correctly (it is what the right-hand side of an assignment
+              uses). The two lvalue paths below cannot: they resolve every `.name`
+              as a FIELD and end on Expect(:=). Same shape as the class-cast path
+              above, which delegates its selectors and keeps the node when it
+              comes back a call. }
+            Inc(StmtCallDepth);   { it IS a statement: a procedure call is fine }
+            ParseExpr;
+            Dec(StmtCallDepth);
+            node := CurASTNode;
+            if not ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
+                    (ASTKind[node] = AN_INTF_CALL) or (ASTKind[node] = AN_CALL_IND)) then
+              Error('statement is neither a call nor an assignment');
           end;
 
           if node = -1 then

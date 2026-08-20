@@ -3063,9 +3063,9 @@ procedure ExpandPasMacros(var src: AnsiString);
 var
   mNames, mBodies: array[0..31] of AnsiString;
   mCount, i, j, k, n, mi, depth: Integer;
-  res, w, body: AnsiString;
+  res, w, cmd, body: AnsiString;
   c: Char;
-  found, seen: Boolean;
+  found, seen, nest: Boolean;
 begin
   { cheap guard: any dollar-define whose directive text contains := ? }
   n := Length(src);
@@ -3100,6 +3100,11 @@ begin
   if not seen then Exit;
 
   mCount := 0;
+  { Comment nesting is MODE-dependent and this pass runs before the lexer, so it
+    must track the two directives that set it or it scans the wrong text as
+    comment. Seeded from the ambient state the caller just set (parser.inc resets
+    it per unit); the unit's own {$MODE} / {$NESTEDCOMMENTS} then apply below. }
+  nest := NestedComments;
   res := '';
   i := 1;
   while i <= n do
@@ -3143,6 +3148,7 @@ begin
           AppendChar(w, src[j]);
           Inc(j);
         end;
+        cmd := w;
         found := False;
         if CaseEqual(w, 'define') then
         begin
@@ -3181,6 +3187,27 @@ begin
         end;
         if not found then
         begin
+          { {$MODE DELPHI} turns comment nesting OFF for the rest of the unit and
+            {$NESTEDCOMMENTS} sets it directly -- the same two the lexer reads.
+            rtl-generics is {$MODE DELPHI} and banners its sections with a brace
+            comment whose SECOND line opens another brace, so under forced
+            nesting every banner left the scanner "inside a comment" and no
+            macro was expanded after the first one: HASH_FACTORY reached the
+            parser as an undefined variable. }
+          if CaseEqual(cmd, 'mode') or CaseEqual(cmd, 'nestedcomments') then
+          begin
+            while (j <= n) and ((src[j] = ' ') or (src[j] = #9)) do Inc(j);
+            w := '';
+            while (j <= n) and (((src[j] >= 'a') and (src[j] <= 'z')) or
+                                ((src[j] >= 'A') and (src[j] <= 'Z'))) do
+            begin
+              AppendChar(w, src[j]);
+              Inc(j);
+            end;
+            if CaseEqual(cmd, 'mode') then nest := not CaseEqual(w, 'delphi')
+            else if CaseEqual(w, 'off') then nest := False
+            else if CaseEqual(w, 'on') then nest := True;
+          end;
           { any other directive: copy verbatim through its closing brace }
           while (i <= n) and (src[i] <> '}') do begin AppendChar(res, src[i]); Inc(i); end;
           if i <= n then begin AppendChar(res, src[i]); Inc(i); end;
@@ -3188,13 +3215,20 @@ begin
       end
       else
       begin
-        { comment — nested braces tolerated; over-nesting in delphi-mode
-          sources only risks skipping macro USES inside dead comment text }
-        depth := 0;
+        { Comment. Exactly the lexer's rule (lexer.inc, the brace arm): nest on
+          an inner open-brace under NESTEDCOMMENTS, and ALWAYS on a
+          directive-looking open-brace-dollar so prose quoting a directive keeps
+          its close-brace from ending the comment early. Getting this wrong
+          costs no text -- the comment is copied verbatim either way -- but it
+          silently moves where macro expansion stops. }
+        depth := 1;
+        AppendChar(res, src[i]);
+        Inc(i);
         while i <= n do
         begin
           AppendChar(res, src[i]);
-          if src[i] = '{' then Inc(depth)
+          if (src[i] = '{') and (nest or ((i < n) and (src[i+1] = '$'))) then
+            Inc(depth)
           else if src[i] = '}' then
           begin
             Dec(depth);
