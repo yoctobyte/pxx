@@ -169,4 +169,4 @@ Docs: `devdocs/dev/threading.md` gained a "Thread-local storage (x86-64)" sectio
 `tools/gate.sh quick` + `test_tls_base` ×10 + the negative variant.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 00b51fd03.
