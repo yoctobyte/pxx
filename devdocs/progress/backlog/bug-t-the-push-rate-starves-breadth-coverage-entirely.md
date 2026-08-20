@@ -330,3 +330,83 @@ slices, for the whole period the fix was believed to be deployed.
 `carried_runs` on the live clone leaves zero and a full tier lands off resumed
 slices. Watching the stats file is the remaining work — which is what the stats
 file was built for, and this correction is the first time it earned its keep.
+
+## Measurement, 2026-08-20: the first half is met; the second half cannot be, for breadth
+
+`carried_runs` has left zero. From the live clone at 04:24Z:
+
+    saved_partials 16 · saved_jobs 3282 · carried_runs 1 · carried_jobs 15
+    last_note: "resume: partial accepted — 15 job(s) already decided against
+                this exact binary (1479b663dd15)"
+
+So the keyed store works and the eviction bug is genuinely fixed. But **the one
+carry was a pin verify**, and that is not luck. Breadth cannot carry, and the
+proof is short enough to state in full:
+
+1. Breadth targets `tested = st["last"].sha` — the newest sha the fast tier has
+   verdicted (`twatch.py:5047`, used at `:5134`).
+2. Breadth aborts through `make_preempted(clone, tested)` (`:3899`), which
+   returns True only when a commit between `tested` and head passes
+   `needs_test()` — i.e. touches anything outside `devdocs/` / `docs/`
+   (`:3892`, `NOTEST_PREFIXES` at `:3602`).
+3. That is the *same predicate* that makes `do_test` fire on the next cycle
+   (`:5051`), which runs the fast tier at head and moves `tested` to it.
+4. The partial is keyed `(sha, tier)` (`:1887`) and `resume_arg()` opens only
+   that one file (`:755`, `:666`).
+
+**⇒ the abort that creates a breadth partial is caused by the very sha move that
+makes its key unmatchable.** Not a race, not a tuning problem: a breadth partial
+is dead at the instant it is written. The only breadth path that can carry is
+`STOP` — a daemon restart, where `tested` does not move. Pin verify carries
+because it targets a *frozen* pin sha across slices.
+
+Live, from the log, in one 40-minute window:
+
+```
+testing e0f9cb893fea (full)  -> aborted ->  64 jobs kept  -> key dead
+testing 011e3904e52e (full)  -> aborted -> 537 jobs kept  -> key dead
+testing ef3ea948003d (full)  -> aborted ->  15 jobs kept  -> key dead
+```
+
+616 jobs saved, 0 carried, and the newest full tier is `49a511e43271` at
+2026-08-19T23:23:18Z — **5h12m stale** at the time of measurement, with five
+pushes in the interval. The starvation this ticket names is live right now.
+
+### The key is NOT too strict — do not "fix" it by keying on the binary
+
+The obvious next move is to drop the sha from the key, since testmgr already
+validates the partial against the compiler's **sha256** (`testmgr.py:1474`) and
+that is the invariant that actually matters. **That would be unsound.** The
+compiler sha256 answers "same binary"; it says nothing about the *corpus* or the
+*harness*. `tested` only ever moves when a commit touches something outside
+`devdocs/`/`docs/` — which means `compiler/`, `test/`, `tools/`, or `lib/`. The
+sha256 covers the first. The git sha is what covers the other three, and a
+carried verdict for `test_foo` measured against an old expected-output file is
+exactly the wrong-answer-with-confidence this repo keeps paying for.
+
+So the two-part key is correct as designed, and shape 2's near-zero carry rate
+for breadth is the mechanism **refusing** to carry work it cannot attribute —
+not a defect in it.
+
+### What that means for this ticket
+
+The close condition as written — "a full tier lands off resumed slices" — is
+**unachievable for breadth by construction**, so it cannot be the bar. Shape 2
+is doing its job on the path where carrying is sound (pin verify); breadth's
+remaining lever is the one shape 1 already identified and this measurement
+re-confirms: **contiguity, not capacity.** Idle time is abundant; a contiguous
+21-minute window is not, because a push arrives every ~8 minutes and every push
+restarts the ladder from zero.
+
+Revised close condition: **a full tier lands within a working day of the sha it
+tests, sustained over a week.** That is the outcome the ticket actually wants,
+and unlike the old one it is reachable by more than one mechanism.
+
+### Found on the way: a killed job was being published as a failed one
+
+Reading the partials to write the above turned up
+`ef3ea948003d-full.json` holding `selfhost-fixedpoint#00` as a 26.7s `"fail"`
+after an eight-second run — an artifact of `teardown()`, not a verdict. Filed
+and fixed separately as [[bug-t-a-killed-job-is-published-as-a-failed-job]],
+because it is a phantom red on the **published** path too, not only on this
+ticket's resume path.

@@ -1278,6 +1278,26 @@ _REASON_NOISE_RE = re.compile(
     r"|Makefile:\d+: recipe for target\b)")
 
 
+# A run's jobs, minus the ones that produced no verdict. Extracted for the
+# same reason report_job() was: the report OUTLIVES the run, so what it omits
+# deserves a guard that does not need a full tier to reach it.
+#
+#   queued/skipped -- never launched (a dep failed, or the run ended first)
+#   carried        -- the carried dict supplies this job's real verdict
+#   interrupted    -- launched, then killed by teardown(); judged by nothing
+#
+# All four are omitted rather than emitted with an honest status because
+# twatch's merge treats anything outside PASSLIKE as red, so any status it does
+# not already know would arrive as a NEW-RED. Omitting lets the merge keep the
+# job's PREVIOUS verdict, which is the truthful answer for work this run did
+# not decide.
+NO_VERDICT = ("queued", "skipped", "carried", "interrupted")
+
+
+def reportable(jobs):
+    return [j for j in jobs if j.status not in NO_VERDICT]
+
+
 def report_job(j):
     """One job's entry in the report JSON.
 
@@ -1513,6 +1533,11 @@ def load_resume(path, tier, compiler_sha):
         return [], ("resume: DISCARDED — compiler rebuilt to different bytes "
                     "(%s -> %s); the partial's results are not attributable "
                     "to this binary" % (was[:12], compiler_sha[:12]))
+    # An explicit allow-list, not a deny-list, and that is what makes it safe
+    # to carry a "fail": every status here is a JUDGEMENT. A job the previous
+    # slice merely killed is "interrupted", never reaches the report, and so
+    # cannot arrive here -- but if it ever did, the allow-list would drop it
+    # rather than hand carried_red() a red the job never earned.
     jobs = [j for j in (part.get("jobs") or [])
             if j.get("status") in ("pass", "fail", "timeout", "skip")]
     if not jobs:
@@ -2455,7 +2480,8 @@ class Manager:
         conformance shard outweighs a thousand unit compiles."""
         total_w = sum(self.job_weight(j) for j in self.jobs) or 1.0
         done_w = sum(self.job_weight(j) for j in self.jobs
-                     if j.status in ("pass", "fail", "timeout", "skipped"))
+                     if j.status in ("pass", "fail", "timeout", "skipped",
+                                     "interrupted"))
         run_w = sum(min(time.monotonic() - j.t0, self.job_weight(j))
                     for j in self.running if j.t0)
         pct = min(99.0, 100.0 * (done_w + run_w) / total_w)
@@ -2663,6 +2689,30 @@ class Manager:
                      newest.name), flush=True)
 
     def teardown(self):
+        """Kill everything in flight. A job killed here produced NO VERDICT.
+
+        It used to be marked "fail", which was harmless while the only consumer
+        was this process's own exit code -- a torn-down run exits 130 or 1 and
+        records nothing either way. Two later consumers made that status
+        load-bearing and turned it into a phantom red:
+
+          * the REPORT, which survives the run. teardown() also fires on a
+            self-host red and on --fail-fast, and those reports ARE published:
+            every job that merely happened to be running alongside the real
+            failure was published as a failure of its own, and twatch's merge
+            (anything not PASSLIKE is red) filed the fan-out as NEW-REDs.
+          * the RESUME partial, which is the same report persisted. A carried
+            "fail" is authoritative by design (carried_red: a carried red is
+            still a red), so a killed job would have gated the NEXT slice --
+            observed on 2026-08-20 in a partial holding selfhost-fixedpoint#00
+            as a 26.7s "fail" after an 8-second run, the one red in this system
+            that triggers a revert.
+
+        "interrupted" is excluded from the report's job list (like "skipped"),
+        from live_progress's decided count, and from load_resume's decided
+        filter -- so the next slice simply re-runs the job, which is the only
+        honest answer for work that was stopped rather than judged.
+        """
         for job in self.running:
             self.kill_group(job)
         for job in self.running:
@@ -2671,7 +2721,7 @@ class Manager:
             except subprocess.TimeoutExpired:
                 self.kill_group(job)
         for job in self.running:
-            job.status = "fail"
+            job.status = "interrupted"
             job.t1 = time.monotonic()
         self.running = []
 
@@ -2784,8 +2834,10 @@ class Manager:
         return 1 if failed else 0
 
     def done_count(self):
+        # "no longer running", not "decided" -- that is live_progress's
+        # question and it deliberately answers it differently.
         return sum(1 for j in self.jobs if j.status in
-                   ("pass", "fail", "timeout", "skipped"))
+                   ("pass", "fail", "timeout", "skipped", "interrupted"))
 
     def _sigint(self, *_):
         self.interrupted = True
@@ -4200,10 +4252,18 @@ def main():
     # deps:lib-test#00. The per-job lines already said SKIPPED; only the
     # headline lied by omission.
     nblocked = sum(1 for j in jobs if j.status == "skipped")
-    print("  %d/%d pass%s%s%s%s" % (npass, len(jobs) - nskip - ncarried,
+    # Jobs teardown() killed mid-flight. Named for the same reason as nblocked:
+    # they sit in the denominator, so "1/2778 pass" with nothing else said
+    # invites the reader to believe 2777 tests are broken. They are not judged
+    # and are absent from the report, so this line is the ONLY place they are
+    # visible at all.
+    ntorn = sum(1 for j in jobs if j.status == "interrupted")
+    print("  %d/%d pass%s%s%s%s%s" % (npass, len(jobs) - nskip - ncarried,
                                     ", %d skip (corpus absent)" % nskip if nskip else "",
                                     ", %d carried from an aborted earlier slice"
                                     % ncarried if ncarried else "",
+                                    ", %d killed mid-run, no verdict" % ntorn
+                                    if ntorn else "",
                                     ", %d not run (a job they depend on failed)"
                                     % nblocked if nblocked else "",
                                     ", %d flaky (passed on retry)" % len(flaky) if flaky else ""))
@@ -4297,10 +4357,7 @@ def main():
                # read as a mass RED. Omitting them lets twatch's merge keep each
                # job's previous verdict, which is the honest answer for a job
                # this run never attempted.
-               "jobs": [report_job(j)
-                        for j in jobs
-                        if j.status not in ("queued", "skipped",
-                                            "carried")] + carried}
+               "jobs": [report_job(j) for j in reportable(jobs)] + carried}
         with open(args.report_json, "w") as f:
             json.dump(rep, f, indent=1)
     return rc
