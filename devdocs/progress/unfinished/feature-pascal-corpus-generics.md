@@ -1,13 +1,12 @@
 ---
 prio: 65
-owner: frank3
 ---
 
 # rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** working
+- **Status:** unfinished — lock released, see the note at the end
   runs, fpjson's suite is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
@@ -403,3 +402,20 @@ the overhaul, not this session. Banked here per
   `12 12 12`. Pre-existing, unrelated to the above, and a silent wrong value.
 - `FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr
   during the generics.defaults drive without stopping compilation.
+
+## Lock released — 2026-08-20 (hardware loss, not a decision about the work)
+
+The session holding this ticket (`frank3`) ran on the workstation **borg**,
+whose PSU failed on the morning of 2026-08-20 and took a household fuse with it.
+Borg is down for several days; its working tree — including anything uncommitted
+— is gone, so **nothing of this ticket is in flight anywhere**.
+
+Moved `working/` → `unfinished/` on the owner's instruction: *"any ticket
+claimed as 'working on' is now invalidated."*
+
+**Re-claiming this one needs a rebuild first:** the recon above stands on a stage
+directory at `/tmp/generics-stage` (symlinks + `inc/`, driver `g1.pp`) that lived
+on borg. It is gone twice over — dead machine, and `/tmp` besides. Recreate the
+stage before trusting any wall count, and re-verify the cleared walls against
+master, since the walls landed as pushed commits but the notes describe a tree
+that no longer exists.

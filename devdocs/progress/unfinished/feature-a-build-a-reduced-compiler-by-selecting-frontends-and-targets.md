@@ -4,8 +4,7 @@ prio: 55
 type: feature
 blocked-by: []   # NOT blocked overall; ONE configuration is — see "Read this first"
 summary: "Build-time selection of frontends and targets, so `only-pascal` + `only-esp-riscv` yields a small Pascal-for-ESP compiler instead of the megalith. The umbrella build stays the default. Filed with a measurement: C is nearly separable already (16 references in shared files), NilPy is NOT (1281) — so this doubles as a falsifiable test of the frontend-separation design, and NilPy already fails it."
-status: working
-owner: frank3
+status: unfinished
 ---
 
 # Build a reduced compiler by selecting frontends and targets
@@ -835,3 +834,21 @@ campaign a progress metric it did not have: **176 symbols / 426 sites remaining 
 That is the second time this feature has produced a *measurement* that is worth more
 than the define it was taken for — see the instrument argument in
 [[refactor-a-the-missing-layer-between-frontends-and-backends]].
+
+## Lock released — 2026-08-20 (hardware loss, not a decision about the work)
+
+The session holding this ticket (`frank3`) ran on the workstation **borg**,
+whose PSU failed on the morning of 2026-08-20 — audibly, taking a household
+fuse with it. Borg is down for several days (a replacement PSU is being
+borrowed), and its working tree died with it, so **nothing of this ticket is in
+flight anywhere**.
+
+Moved `working/` → `unfinished/` on the owner's instruction: *"any ticket
+claimed as 'working on' is now invalidated."*
+
+Track A in `unfinished/` normally means a possibly half-applied compiler change.
+**It does not here.** Dev work has moved to `/home/neo/frank1` on plexus, a
+clean clone of origin/master taken after the failure, so whatever frank3 pushed
+is landed and green and nothing is partially applied in any live tree. Re-claim
+this the ordinary way; just re-verify the notes below against master before
+building on them, since they describe a tree that no longer exists.

@@ -5,18 +5,17 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:2 unfinished:15 blocked:6 backlog:241 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2103 rejected:40`
+`urgent:1 unfinished:17 blocked:6 backlog:242 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2103 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A] — owner: frank3
-- `feature-pascal-corpus-generics` [P] — owner: frank3
+_none — no lane is locked._
 
 ## urgent (1) — jump the queue
 
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
 
-## unfinished (15) — parked mid-flight; re-claim, do not duplicate
+## unfinished (17) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name` [N]
@@ -26,11 +25,13 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `bug-p-cannot-call-directly-through-a-procedural-type-cast` [P]
 - `chore-a-sweep-the-unwired-tests-into-the-suite` [A]
 - `docs-devnotes-ai-assisted-build` [D]
+- `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
 - `feature-b-the-module-shim-batch-blocking-the-python-corpus` [B] — blocked-by: decide-xml-etree-thin-tree-model-or-a-real-xml-library
 - `feature-c-import-a-pascal-unit-under-a-mangled-name` [C] — blocked-by: bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
+- `feature-pascal-corpus-generics` [P]
 - `feature-port-rtl-over-libc` [A]
 - `feature-real-dynlib-loader` [B] — blocked-by: bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
 
@@ -43,11 +44,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 228, ranked
+## Ready — top 30 of 229, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [T]` regression-selfhost-fixedpoint-selfhost-fixedpoint
 - `[p 70] [P]` regression-test-core-compiler-4
+- `[p 70] [T]` regression-test-nilpy-test-nilpy-pascal-unit-keeps-fpc-method-shadowing
 - `[p 65] [T]` bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
@@ -74,6 +76,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [U]` decide-reduced-compiler-switch-spelling
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
-- `[p 55] [E]` feature-demo-portable-userland
 
-_198 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_199 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

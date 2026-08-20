@@ -26,7 +26,7 @@ owner:
 > from the prose immediately below.
 
 - **Type:** compat (Pascal frontend parity) — Track P
-- **Status:** working
+- **Status:** backlog (an earlier session left this line saying "working"; the folder is the lock and it was never held)
 - **Opened:** 2026-08-05
 - **Found by:** `tools/fpc_diff_probe.sh`, dynamic-array case batch
   (`dynarray-copy-and-alias`, now tagged `[known]`).
