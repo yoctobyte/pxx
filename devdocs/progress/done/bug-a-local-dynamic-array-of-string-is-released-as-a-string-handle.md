@@ -80,4 +80,4 @@ many calls (the leak itself is an RSS measurement, not something a test asserts)
 Gate: `make compiler/pascal26` (fixedpoint) + `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit bcd8546f9.
