@@ -5272,3 +5272,54 @@ since seven compiler commits could have moved it in either direction.
 
   Everything else genuinely quiet. Track N's p70 urgent callable/bound-method bug stays
   parked under the A/P/C mandate, not because it is small.
+
+## 2026-08-20 — COORDINATION STOOD DOWN by the owner: one track + Track T
+
+> "for now, stop managing and coordinating.. i'll keep an eye. we need to get to a stable
+> state.. i want to go back to 1 track + track T for a while."
+
+**This supersedes the STANDING MANDATE's coordinator rules for the duration.** The
+week-long coordination assignment (evaluate 2026-08-25) is paused, not cancelled — the
+mandate section stays as the charter if coordination resumes. The hourly coordinator cron
+was cancelled at the owner's word; nothing will run the check cycle.
+
+**Staffing, effective now:**
+
+| | |
+| --- | --- |
+| **frank3** | the one dev track — Track P, `feature-pascal-corpus-generics` (rung 3). Files its own tickets, picks its own lanes, reports to the owner. |
+| **plexus-T** | Track T, watcher + the live `selfhost-fixedpoint` triage. |
+| **frank2** | idle. Not to be re-dispatched without the owner. |
+
+Both workers were told directly, so neither is waiting on a coordinator that is no longer
+checking.
+
+**Why this is the right shape, recorded so it is not re-litigated later.** Two dev workers
+made Track P permanently awkward to schedule (P shares `lexer.inc`/`parser.inc` with A and
+must never run concurrently with it), and the coordination overhead was buying less than it
+cost — the last two hours produced one genuine finding and two corrections *of the
+coordinator*. One track needs no lane arbitration at all: the A/P slot question disappears
+when there is one editor.
+
+**"Stable state" has a concrete referent right now, and it is not a mood.** The live
+obstacle is `regression-selfhost-fixedpoint-selfhost-fixedpoint` (p70): convergence passes,
+the **anti-Thompson AGREEMENT** check fails — the fixedpoint reached from committed
+`pinned` differs from `compiler/pascal26`. Everything in the repo stands on that property.
+T is triaging; if it bisects, it files Track A.
+
+**Open with the owner, neither needing action from a coordinator:**
+
+- `dmesg -T | grep -i "killed process"` — separates OOM from pattern-pkill for the two
+  killed csmith batches. Identical symptoms, opposite fixes; no unprivileged agent can read
+  it.
+- §6 of `feature-c-import-a-pascal-unit-under-a-mangled-name` — needs
+  `PXX_ALLOW_FULL_SUITE=1`, which only the owner can authorise.
+- `decide-should-the-gate-prove-self-compile-at-more-than-one-o-level` (p55) now has **two**
+  instances rather than one: the `-O0`-only failure (level axis) and this regression (seed
+  axis). Same underlying question — what is "it passes the self-host gate" a claim about? —
+  and worth deciding once with both in view.
+
+**Last coordinator act:** told frank3 to file its three pending findings itself rather than
+route them through me, including the one it had banked *inside* a `working/` ticket — a
+banked finding is invisible to `ready`/`next`, which is the same failure that hid rung 3's
+ticket from me this morning.
