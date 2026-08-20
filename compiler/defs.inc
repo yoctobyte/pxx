@@ -70,6 +70,17 @@ const
   MAX_ARR_DIMS = 6;      { max dimensions of a fixed multidimensional array }
   MAX_PENDING_INITS = 16384;  { constant global-var initializer assignments }
   MAX_LOCAL_INITS   = 4096;   { routine-local typed-const initializer assignments }
+  { PendingInitElem / LocalInitElem carry an initializer element's array INDEX,
+    and a Pascal array index can be NEGATIVE (`array[-2..2] of Integer`). So the
+    "this is not an element" markers must live OUTSIDE the value space. They did
+    not: the emitters asked `Elem >= 0`, so every element with a negative index
+    built no index node at all and was assigned to the array's BASE — `(10, 20,
+    30, 40, 50)` on `array[-2..2]` stored 20 at slot 0, nothing at slot 1, and
+    the rest correctly. A low bound of -1 hid it, because there the one
+    misplaced element lands where it belonged.
+    bug-p-typed-const-array-with-a-negative-low-bound-writes-to-its-base }
+  PI_ELEM_NONE      = -2000000000;   { scalar target: no array index }
+  PI_ELEM_ADDRG     = -2000000001;   { address-of-global pointer init (C) }
   MAX_CPREP_PARAMS = 131072;
   MAX_CPREP_CONDS = 256;
   MAX_CPREP_INCLUDES = 128;
@@ -3119,7 +3130,7 @@ var
     with `if count < MAX` and silently DROP the excess, leaving those globals
     zero at runtime (native_error_name all-NULL). }
   PendingInitSym  : array of Integer;  { target symbol }
-  PendingInitElem : array of Integer;  { array index, or -1 for a scalar }
+  PendingInitElem : array of Integer;  { array index (MAY BE NEGATIVE), or PI_ELEM_NONE / PI_ELEM_ADDRG }
   PendingInitVal  : array of Int64;    { constant value }
   PendingInitValAux: array of Integer; { string length / spare }
   PendingInitKind : array of Integer;  { 0=int, 1=string literal, 2=proc addr }

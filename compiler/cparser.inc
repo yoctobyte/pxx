@@ -8260,7 +8260,7 @@ begin
           assign (no field offset, so the by-name emission path is unaffected),
           run at the start of main. Anything more complex falls through to skip. }
         PendingInitSym[PendingInitCount]  := idx;
-        PendingInitElem[PendingInitCount] := -1;
+        PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
         PendingInitFOff[PendingInitCount] := -1;
         PendingInitFLen[PendingInitCount] := 0;
         PendingInitVal[PendingInitCount]  := CurTok.IVal;
@@ -8289,7 +8289,7 @@ begin
             initV := initV xor signMask;
           end;
           PendingInitSym[PendingInitCount]  := idx;
-          PendingInitElem[PendingInitCount] := -1;
+          PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
           PendingInitFOff[PendingInitCount] := -1;
           PendingInitFLen[PendingInitCount] := 0;
           PendingInitVal[PendingInitCount]  := initV;
@@ -8307,7 +8307,7 @@ begin
           if negFloat then dvv := -dvv;
           Move(dvv, initV, 8);
           PendingInitSym[PendingInitCount]  := idx;
-          PendingInitElem[PendingInitCount] := -1;
+          PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
           PendingInitFOff[PendingInitCount] := -1;
           PendingInitFLen[PendingInitCount] := 0;
           PendingInitVal[PendingInitCount]  := initV;
@@ -8334,7 +8334,7 @@ begin
         else
           initV := CEvalConstExpr;
         PendingInitSym[PendingInitCount]  := idx;
-        PendingInitElem[PendingInitCount] := -1;
+        PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
         PendingInitFOff[PendingInitCount] := -1;
         PendingInitFLen[PendingInitCount] := 0;
         PendingInitVal[PendingInitCount]  := initV;
@@ -8354,7 +8354,7 @@ begin
           (FOff = -3 string-span sentinel, Elem = -1 scalar). The assignment
           lowering applies the C string-literal +8 char-pointer adjustment. }
         PendingInitSym[PendingInitCount]  := idx;
-        PendingInitElem[PendingInitCount] := -1;
+        PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
         PendingInitFOff[PendingInitCount] := -3;
         PendingInitFLen[PendingInitCount] := Tokens[TokPos - 1].SLen;
         PendingInitVal[PendingInitCount]  := Tokens[TokPos - 1].SOffset;
@@ -8440,7 +8440,7 @@ begin
           if PendingInitHasRoom(PendingInitCount) then
           begin
             PendingInitSym[PendingInitCount]    := idx;
-            PendingInitElem[PendingInitCount]   := -2;   { address-of-sym }
+            PendingInitElem[PendingInitCount]   := PI_ELEM_ADDRG;   { address-of-sym }
             PendingInitFOff[PendingInitCount]   := -1;
             PendingInitFLen[PendingInitCount]   := 0;
             PendingInitVal[PendingInitCount]    := anonIdx;
@@ -8502,7 +8502,7 @@ begin
           if CurTok.Kind in [tkComma, tkSemicolon] then
           begin
             PendingInitSym[PendingInitCount]  := idx;
-            PendingInitElem[PendingInitCount] := -2;     { address-of-sym sentinel }
+            PendingInitElem[PendingInitCount] := PI_ELEM_ADDRG;     { address-of-sym sentinel }
             PendingInitFOff[PendingInitCount] := -1;
             PendingInitFLen[PendingInitCount] := 0;
             PendingInitVal[PendingInitCount]  := initSymIdx;

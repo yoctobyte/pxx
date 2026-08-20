@@ -677,3 +677,31 @@ batch had completed normally minutes earlier, so it is not deterministic. Noted
 rather than fought — restarting into a third kill would have added nothing.
 The known repo hazard here is a peer's `pkill -f <script>` matching another
 agent's run of the same tool, which has happened before in this checkout.
+
+
+## Sitting 2026-08-20 (frank1-ACP) — DRY, 100 seeds, x86-64, `--opts 0,2,3`
+
+```
+tools/csmith_fuzz.py --iters 100 --opts 0,2,3 --compiler ./compiler/pascal26
+```
+
+**93/100 agreed with the gcc oracle, 7 skipped by the native validity filter,
+no findings.** Seeds 1..100, default csmith flags, compiler at `584c2703d`
+(a self-hosted fixedpoint build at that sha, not a stale binary).
+
+Reported as a dry run so the next sitting does not spend these seeds again.
+Two things it does say:
+
+- **`-O3` is now in the sweep.** The "what is still open" list above names
+  `--opts 0,2,3` as an untried axis; this batch ran it, and pxx's own -O0/-O2/-O3
+  agreed with each other on all 93. That is the first evidence for Track O's
+  newer passes from this oracle.
+- The run was the regression check for the same day's two C assignment-lowering
+  fixes (`311864e46`, `ed49b3ef7`), which is why it was worth spending a batch on
+  a corner csmith has already been through.
+
+A first batch, started before those fixes landed, was **discarded rather than
+reported**: the compiler binary was rebuilt underneath it mid-run, so its
+results describe no single compiler. Noted because the mistake is easy to repeat
+— the harness takes `--compiler <path>` and reads that path per program, so a
+`make compiler/pascal26` during a run silently splits the batch in two.

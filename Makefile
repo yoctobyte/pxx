@@ -4183,6 +4183,14 @@ test-core: $(COMPILER)
 	# FPC 3.2.2 -O-'s own answers.
 	./$(COMPILER) test/test_unary_minus_constant_keeps_longint.pas $(TESTTMP)/test_unaryminusconst26
 	test "$$($(TESTTMP)/test_unaryminusconst26 | tail -1)" = "total ok 13 / 13"
+	# A typed const (or var) ARRAY with a NEGATIVE low bound put every
+	# negative-indexed element at the array's BASE: `array[-2..2] of Integer =
+	# (10,20,30,40,50)` stored 20 at slot 0, nothing at slot 1, the rest right. The
+	# element index doubled as the "not an element" sentinel and the emitter asked
+	# `>= 0`. A low bound of -1 is the benign case and is asserted here too. Values
+	# are read by index AND from the base through a pointer; all are FPC 3.2.2's.
+	./$(COMPILER) test/test_const_array_negative_low_bound.pas $(TESTTMP)/test_constarrneg26
+	test "$$($(TESTTMP)/test_constarrneg26 | tail -1)" = "total ok 38 / 38"
 	./$(COMPILER) test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_nativeshift26
 	test "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
 	test "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"

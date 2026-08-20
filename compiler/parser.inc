@@ -25940,7 +25940,7 @@ begin
 	          Error('local var-section ARRAY initializer not supported; assign in statements');
 	        if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
 	        LocalInitSym[LocalInitCount]  := idx;
-	        LocalInitElem[LocalInitCount] := -1;
+	        LocalInitElem[LocalInitCount] := PI_ELEM_NONE;
 	        LocalInitFOff[LocalInitCount] := -1;
 	        if CurTok.Kind = tkString then
 	        begin
@@ -26071,7 +26071,7 @@ begin
 	          PendingInitTk[PendingInitCount]   := Ord(tk);
 	        end;
 	        PendingInitSym[PendingInitCount]  := idx;
-	        PendingInitElem[PendingInitCount] := -1;
+	        PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
         PendingInitFOff[PendingInitCount] := -1;
 	        PendingInitVal[PendingInitCount]  := initVal;
 	        Inc(PendingInitCount);
@@ -26785,7 +26785,7 @@ begin
           begin
             if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
             LocalInitSym[LocalInitCount]  := cIdx;
-            LocalInitElem[LocalInitCount] := -1;
+            LocalInitElem[LocalInitCount] := PI_ELEM_NONE;
             LocalInitFOff[LocalInitCount] := -1;
             LocalInitKind[LocalInitCount] := 5;
             LocalInitVal[LocalInitCount]  := cCi;
@@ -26796,7 +26796,7 @@ begin
           begin
             EnsurePendingInitCapacity(PendingInitCount);
             PendingInitSym[PendingInitCount]  := cIdx;
-            PendingInitElem[PendingInitCount] := -1;
+            PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
             PendingInitFOff[PendingInitCount] := -1;
             PendingInitKind[PendingInitCount] := 5;
             PendingInitVal[PendingInitCount]  := cCi;
@@ -26834,7 +26834,7 @@ begin
               begin
                 EnsurePendingInitCapacity(PendingInitCount);
                 PendingInitSym[PendingInitCount]  := cIdx;
-                PendingInitElem[PendingInitCount] := -1;
+                PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
                 PendingInitFOff[PendingInitCount] := fNameOff;
                 PendingInitFLen[PendingInitCount] := fNameLen;
                 PendingInitKind[PendingInitCount] := 7;
@@ -26851,7 +26851,7 @@ begin
             begin
               if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
               LocalInitSym[LocalInitCount]  := cIdx;
-              LocalInitElem[LocalInitCount] := -1;
+              LocalInitElem[LocalInitCount] := PI_ELEM_NONE;
               LocalInitFOff[LocalInitCount] := fNameOff;
               LocalInitFLen[LocalInitCount] := fNameLen;
               if TryParseInitValForm(fTk, fvKind, fvVal, fvAux) then
@@ -26879,7 +26879,7 @@ begin
             begin
               EnsurePendingInitCapacity(PendingInitCount);
               PendingInitSym[PendingInitCount]  := cIdx;
-              PendingInitElem[PendingInitCount] := -1;
+              PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
               PendingInitFOff[PendingInitCount] := fNameOff;
               PendingInitFLen[PendingInitCount] := fNameLen;
               if TryParseInitValForm(fTk, fvKind, fvVal, fvAux) then
@@ -26905,7 +26905,7 @@ begin
         begin
           if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
           LocalInitSym[LocalInitCount]  := cIdx;
-          LocalInitElem[LocalInitCount] := -1;
+          LocalInitElem[LocalInitCount] := PI_ELEM_NONE;
           LocalInitFOff[LocalInitCount] := -1;
           LocalInitKind[LocalInitCount] := 0;   { slots are reused; clear a stale kind }
           LocalInitVal[LocalInitCount]  := ParseInitValTk(cTk);
@@ -26916,7 +26916,7 @@ begin
         begin
           EnsurePendingInitCapacity(PendingInitCount);
           PendingInitSym[PendingInitCount]  := cIdx;
-          PendingInitElem[PendingInitCount] := -1;
+          PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
           PendingInitFOff[PendingInitCount] := -1;
           { Same non-ordinal value forms the record-field path takes, for a
             SCALAR typed const: `const P: Pointer = @Something`. The string arm
@@ -30729,7 +30729,7 @@ begin
       ASTSLen[target] := LocalInitFLen[i];
       ASTTk[target] := initTk;
     end
-    else if LocalInitElem[i] >= 0 then
+    else if LocalInitElem[i] <> PI_ELEM_NONE then   { an index MAY be negative — see PI_ELEM_NONE }
     begin
       idxLit := AllocNode(AN_INT_LIT);
       ASTIVal[idxLit] := LocalInitElem[i];
@@ -35689,7 +35689,7 @@ begin
 
     target := identNode;
 
-    if PendingInitElem[i] >= 0 then
+    if (PendingInitElem[i] <> PI_ELEM_NONE) and (PendingInitElem[i] <> PI_ELEM_ADDRG) then   { an index MAY be negative }
     begin
       idxLit := AllocNode(AN_INT_LIT);
       ASTIVal[idxLit] := PendingInitElem[i];
@@ -35726,7 +35726,7 @@ begin
       target := valNode;
     end;
 
-    if PendingInitElem[i] = -2 then
+    if PendingInitElem[i] = PI_ELEM_ADDRG then
     begin
       { Address-of-global pointer init: `T *p = &g;` or `T *p = &arr[N];`.
         Emit `p := @g` (AN_ADDR of target sym) or `p := @g + byte_offset`
