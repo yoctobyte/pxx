@@ -9523,18 +9523,14 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     mcCtorNm: AnsiString;
     nArgs, argsHead, currArg: Integer; argTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
     kwIdx, slotIdx: Integer;   { NilPy keyword argument: binding+1, and the param it fills }
-    pyPrintNode: Integer;      { print(...) in expression position: the write node, wrapped }
     ci, mmi, mpi, mcallNode, mlastArg, smSelfIdx, smselfArg: Integer;
     aliasIdx, fieldNode, indexNode, baseNode, baseRec, fIdx, mci, margSeq, margIdx, mexprNode, mai, pri, qUnit: Integer;
     fieldName, methName: AnsiString; isAssign: Boolean; castTk: TTypeKind;
     liftedVar, identNode, addrNode: Integer;
     rcCi, rcMmi, rcPi, rcTmp, rcSelf, rcSelfArg, savedRecId: Integer;   { advanced-record ctor call }
     castTk2: TTypeKind;   { postfix tail on a record-factory result }
-    helperPi, wrapperArg, wrapperCall, sci: Integer;
-    isLiftedCall, isCStringCall: Boolean;
-    capSym: Integer;   { NilPy nested-def capture actual (feature-nilpy-nested-defs) }
-    derefNode: Integer;   { ...through its frame cell, when it has one (SymCellPtr) }
-    capIdx: Integer;   { PXXDBG=n.caps probe cursor }
+    helperPi, sci: Integer;
+    isLiftedCall: Boolean;
     bitNot, opIsArith: Boolean; notOp: Integer; notOrdTk: TTypeKind;
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec: Integer; szElemTk: TTypeKind;
     seEtid, seOrd: Integer;
@@ -9546,7 +9542,6 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     rndIntArg: Boolean;      { …and was it an INTEGER? then round is identity }
     rndArgTk, rndRawTk: TTypeKind;   { its type, to restore after the identity }
     fwdList, fwdDict: Integer;   { `f(*args, **kwargs)` forwarded into fixed parameters }
-    altPi, wpj: Integer; paramsAllVariant: Boolean;   { callable-value wrapper selection }
     vcNode: Integer;   { a typecast of a VARIANT, rewritten as the conversion }
     tiName: AnsiString; tiTk: TTypeKind;   { widened TypeInfo(T): scalar/string/class/record }
     pyLateDefPi: Integer;   { NilPy def not yet bound at this call site; -1 = none }
@@ -9560,72 +9555,6 @@ begin
     Exit;
   end;
   LastExprTk := tyInteger;
-  { Nil Python: ClassName(args) in ANY expression position is construction
-    (Pascal reads it as a typecast). The statement-level intercept only saw
-    top-level assignments, so a ctor call in a method arg quietly became a
-    cast — a Word("x") boxed into a list slot carried the string pointer
-    with an int64 tag. }
-  { FindUClassNonRecord, not IsClassType: the first row of that name may be a
-    RECORD — the RTL's `Text` file type against tkinter's Text widget — and a
-    construction in NilPy always means the class. Read as a record typecast it
-    parsed with one argument and failed with two. Confined to this NilPy
-    intercept: Pascal code still gets the record, which is what `var f: Text`
-    means there. }
-  if PyExprMode and (CurTok.Kind = tkIdent) and
-     PyIsExactCtorName(CurTok.SVal) and
-     (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
-  begin
-    CurASTNode := PyClassCreateExpr;
-    LastExprTk := tyClass;
-    { `C(5)[2]` — a SUBSCRIPT applied straight to a construction. `C(5).m()`
-      is picked up downstream, so only the bracket was missing, and it was
-      missing as a PARSE ERROR ("unexpected token") on a shape CPython accepts.
-      Handed to the selector loop, exactly as the Pascal cast arm hands its
-      own result over. }
-    if PyExprMode and (CurTok.Kind = tkLBrack) and
-       (ResolveNodeRec(CurASTNode) >= REC_UCLASS_BASE) then
-    begin
-      CurASTNode := PyParseClassRecordSelectors(CurASTNode,
-                      ResolveNodeRec(CurASTNode), LastExprTk);
-    end;
-    Exit;
-  end;
-  { `set(xs)` in ANY expression position (`return set(...)`, an argument, a
-    comparison). It used to be recognised only as an assignment RHS, and only in
-    its empty form. PyIsSetCall stands down when the program declares its own
-    `set`, which songformatter's settings.py does. }
-  if PyExprMode and PyIsSetCall then
-  begin
-    CurASTNode := PyParseEmptySet;
-    LastExprTk := tyClass;
-    Exit;
-  end;
-  { The same intercept through a MODULE QUALIFIER — `tk.Frame(root, ...)`, which
-    is how real tkinter code is written. Without it the cursor sits on the unit
-    name, the ctor intercept above never fires, and the whole thing falls into
-    the Pascal qualified-call path: that resolves a qualified PROC (which is why
-    `tk.Tk_()` always worked) but cannot construct a class and does not do NilPy
-    keyword arguments. Unit scope here is flat, so consuming the qualifier is
-    enough — the class then resolves by its bare name.
-    (feature-nilpy-qualified-class-construction) }
-  if PyExprMode and (CurTok.Kind = tkIdent) and (TokPos + 2 < TokCount) and
-     (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos + 1].Kind = tkIdent) and
-     (Tokens[TokPos + 2].Kind = tkLParen) and
-     (FindUClassNonRecord(GetTokenStr(TokPos + 1)) >= 0) and
-     (FindSym(CurTok.SVal) < 0) and (FindUnitOrAlias(CurTok.SVal) >= 0) then
-  begin
-    { Remember WHICH unit was named: two libraries may export the same class
-      name (tkinter's `Canvas` and the reportlab shim's), and resolving by the
-      bare name afterwards took whichever was registered first — silently, and
-      then the keyword arguments did not match. }
-    PyCtorQualUnit := FindUnitOrAlias(CurTok.SVal);
-    Next;                 { the module name }
-    Expect(tkDot, '.');
-    CurASTNode := PyClassCreateExpr;
-    PyCtorQualUnit := -1;
-    LastExprTk := tyClass;
-    Exit;
-  end;
   case CurTok.Kind of
     tkInteger:
     begin
@@ -9648,72 +9577,21 @@ begin
           to 0 and would otherwise be typed tyInteger, which is both wrong and
           indistinguishable from a char literal's char-pool span. }
         ASTTk[node] := Ord(tyInt64);
-        { NilPy: ints are arbitrary precision, so a wide literal IS a
-          promotable int — the promo type makes the binop/assign typing carry
-          promotion through everything it touches (the `& 0xFFFFFFFFFFFFFFFF`
-          unsigned-mask idiom). Gated on the parse MODE, not isNilPy: the
-          auto-used Pascal units compile under isNilPy too and must keep the
-          Pascal reading. }
-        if PyExprMode then
-          ASTTk[node] := Ord(tyPromoInt64);
       end;
       CurASTNode := node; Next;
     end;
     tkLBrack:
     begin
-      if PyExprMode and PyIsListCompAhead then
-      begin
-        { `[EXPR for x in it]` in an EXPRESSION position — a hoisted temp. }
-        CurASTNode := PyParseCompExprValue(True);
-        LastExprTk := tyClass;
-      end
-      else if PyExprMode then
-      begin
-        PyParseListLiteral;
-        LastExprTk := tyClass;
-      end
-      else
-      begin
-        CurASTNode := ParseSetLiteralAST;
-        LastExprTk := tySet;
-      end;
+      CurASTNode := ParseSetLiteralAST;
+      LastExprTk := tySet;
     end;
     tkBegin:
     begin
-      if not PyExprMode then Error('unexpected begin in expression');
-      if PyIsDictCompAhead then
-      begin
-        { a brace dict comprehension in an EXPRESSION position (a field/subscript
-          target's RHS, a call argument) — a hoisted hidden TPyDict temp. }
-        CurASTNode := PyParseDictCompExprValue;
-        LastExprTk := tyClass;
-      end
-      else
-      begin
-        PyParseSetLiteral;
-        LastExprTk := tyClass;
-      end;
+      Error('unexpected begin in expression');
     end;
     tkNil:
     begin
-      { In NilPy `None` is a VALUE (pylib's VT_EMPTY variant), not the nil cell.
-        As integer 0 it compared equal to every falsy number (`0 == None` was
-        True) and `str(None)` formatted as `0`. A dozen call sites already
-        substituted PyMakeNone by hand wherever they could see the token
-        coming — list elements, dict values, tuple members, the `or`/`and`
-        arms, print — which is why most of the language looked right; the
-        positions nobody had enumerated were the wrong ones. Doing it HERE
-        covers every position at once (bug-nilpy-none-equals-zero-is-true,
-        bug-nilpy-str-of-literal-none-prints-zero). Pascal keeps the nil cell:
-        the switch is PyExprMode. }
-      if PyExprMode then
-      begin
-        CurASTNode := PyMakeNone; Next; LastExprTk := tyVariant;
-      end
-      else
-      begin
-        node := AllocNode(AN_INT_LIT); ASTIVal[node] := 0; ASTTk[node] := Ord(tyPointer); CurASTNode := node; Next; LastExprTk := tyPointer;
-      end;
+      node := AllocNode(AN_INT_LIT); ASTIVal[node] := 0; ASTTk[node] := Ord(tyPointer); CurASTNode := node; Next; LastExprTk := tyPointer;
     end;
     tkPlusPlus, tkMinusMinus:
     begin
@@ -9955,14 +9833,7 @@ begin
     tkString:
     begin
       prevTok := TokPos - 1;
-      { A 1-character literal is a CHAR in Pascal — but Python has no char type,
-        `"d"` is a 1-length str like any other. Typing it tyChar in NilPy made
-        every context that expects a string depend on a char->string coercion,
-        and the method/ctor call-argument paths have none: `A("d")` passed the
-        character CODE where the callee dereferenced a string pointer, so a
-        1-character argument segfaulted while `A("dd")` worked
-        (bug-a-nilpy-one-char-string-literal-is-a-char). }
-      if (Length(CurTok.SVal) = 1) and not PyExprMode then
+      if Length(CurTok.SVal) = 1 then
       begin
         node := AllocNode(AN_INT_LIT); ASTIVal[node] := Ord(CurTok.SVal[1]); ASTTk[node] := Ord(tyChar);
         ASTSOffset[node] := Tokens[prevTok].SOffset; ASTSLen[node] := Tokens[prevTok].SLen;
@@ -9979,13 +9850,13 @@ begin
     end;
     tkLParen:
     begin
-      Next; if PyExprMode then PyParseBoolExpr else ParseExpr;
+      Next; ParseExpr;
       { C comma operator `(a, b, ...)`: each operand but the last is evaluated for
         its side effects then discarded; the value is the last. A parenthesised
         comma list is otherwise a syntax error in pxx, so this is conflict-free
-        and reads identically to C. Skipped in Python mode (there `(a, b)` is a
-        tuple). Right-nested AN_COMMA so lowering discards each Left in turn. }
-      if (not PyExprMode) and (CurTok.Kind = tkComma) then
+        and reads identically to C. Right-nested AN_COMMA so lowering discards
+        each Left in turn. }
+      if (CurTok.Kind = tkComma) then
       begin
         node := CurASTNode;
         while Eat(tkComma) do
@@ -10001,50 +9872,12 @@ begin
         LastExprTk := IntToTypeKind(ASTTk[node]);
       end;
       Expect(tkRParen, ')');
-      { Record that a Python comparison came out of an explicit paren group, so
-        PyBitGuard can tell `(a == b) & c` (deliberate, and the very form its
-        message asks for) from `a & b == c` (the precedence typo it exists to
-        catch). Only stamped on an unmarked node — PY_BINOP_IDENTITY and
-        friends share this field and outrank it. }
-      if PyExprMode and (ASTKind[CurASTNode] = AN_BINOP) and
-         (ASTSLen[CurASTNode] = 0) then
-        ASTSLen[CurASTNode] := PY_BINOP_PARENED;
-      { A parenthesised CALLABLE VALUE used directly as a callee —
-        `(lambda a, b: a - b)(9, 4)`. The lambda lowering yields the raw
-        closure/bound-fn pointer; it is `PyBoxCallableValue` that turns one into
-        the variant the dynamic-call path recognises, and until now that ran
-        only on an assignment's right-hand side. So the identical lambda bound to
-        a NAME first was callable and the inline form raised "object is not
-        callable" (bug-nilpy-immediately-invoked-lambda-is-not-callable).
-
-        Boxing here rather than teaching the call site a second callability
-        rule: the tyVariant dynamic-call loop further down already handles
-        everything after this point, including a call whose result is itself
-        callable. PyBoxCallableValue is a no-op on any node that is not one of
-        the callable-producing calls, so a grouped expression of any other kind
-        is untouched. }
-      if PyExprMode and (CurTok.Kind = tkLParen) then
-        CurASTNode := PyBoxCallableValue(CurASTNode);
       { Postfix suffix on a parenthesised expression: `(p)^`, `(p+k)^`, `(r).f`,
         `(a)[i]`. Without this the `^`/`.`/`[` were left dangling and the grouped
         value was used as-is (e.g. `(p)^` returned the pointer, not the pointee). }
       node := CurASTNode;
-      { `.to_bytes(` / `.bit_length(` are left for the NilPy intrinsics — see PyIsIntMethodSuffixAhead. }
-      { …and in PYTHON mode, so is every other `.` and `[`. This tail is
-        Pascal-shaped: it builds a raw AN_INDEX for `[` and reads a record FIELD
-        for `.`, neither of which is what a Python receiver means. So
-        `("ab").upper()` was "expected newline after statement" and `(x)[1]`
-        SIGSEGV'd — a grouped receiver was simply not usable, while the same
-        expression without the parentheses worked. ParseFactor's own Python
-        suffix loops (str methods, subscript/slice, variant dispatch, class
-        methods) run immediately after this and handle all of it, so the fix is
-        to stand down rather than to grow a Python arm here — the same call the
-        comment below makes about not writing a fourth copy of member dispatch.
-        `^` stays: it has no Python spelling and no Python loop.
-        bug-nilpy-postfix-after-a-parenthesised-expression }
       while ((CurTok.Kind = tkCaret) or
-             ((CurTok.Kind in [tkDot, tkLBrack]) and not PyExprMode)) and
-            not (PyExprMode and PyIsIntMethodSuffixAhead) do
+             (CurTok.Kind in [tkDot, tkLBrack])) do
       begin
         { A grouped value whose type is a CLASS goes to the real member/index dispatcher --
           `(Data as TJSONArray)[0].ClassType` (fcl-json's suite).
@@ -10368,35 +10201,11 @@ begin
     begin
       Next; ParseFactor;
       left := CurASTNode;
-      if PyExprMode and PyNodeIsComplex(left) then
-      begin
-        { `-z` on a complex negates both components. Its own arm because
-          complex is a pylib class and the user-class arm below excludes those,
-          which would leave it in the AN_NEG path negating the object HANDLE. }
-        node := PyCallProc1('pycomplex_neg', left);
-      end
-      else if PyExprMode and (IntToTypeKind(ASTTk[left]) = tyClass) and
-         (ResolveNodeRec(left) >= REC_UCLASS_BASE) then
-      begin
-        { `-n` on a user class's own `__neg__` dunder — same silent-garbage
-          root cause as the binary +/-/*// dunder dispatch
-          (bug-nilpy-arithmetic-operator-dunders-not-dispatched): with no
-          check here, a tyClass operand fell straight into the untyped AN_NEG
-          below and printed the class HANDLE negated as if it were an
-          integer. }
-        node := PyCallMeth1(ResolveNodeRec(left) - REC_UCLASS_BASE, '__neg__', left, -1);
-        if node < 0 then
-          node := PyMakeUnsupportedOperand;   { runtime TypeError, not a build abort }
-      end
-      else
-      begin
-        node := AllocNode(AN_NEG); ASTLeft[node] := left;
-        { Carry the operand's type, as the additive-level sign in
-          ParseSimpleExpr does. Left untagged, `-(a // b)` on an
-          Int64-returning helper printed 18446744073709551613 instead of -3
-          — the untyped node read unsigned. }
-        ASTTk[node] := ASTTk[left];
-      end;
+      node := AllocNode(AN_NEG); ASTLeft[node] := left;
+      { Carry the operand's type, as the additive-level sign in ParseSimpleExpr
+        does. Left untagged, `-(a // b)` on an Int64-returning helper printed
+        18446744073709551613 instead of -3 — the untyped node read unsigned. }
+      ASTTk[node] := ASTTk[left];
       CurASTNode := node;
     end;
     tkNot:
@@ -10845,172 +10654,7 @@ begin
     tkIdent:
     begin
       name := CurTok.SVal;
-      { A GENERATOR called in VALUE position — `g = gen()`, `list(gen())`,
-        `next(gen())`. The `for` header has its own desugar and never reaches
-        here; everything else becomes a cursor object (PyBuildGeneratorValue,
-        pyparser.inc). Ahead of every other arm because the name resolves to an
-        ordinary proc and would otherwise be CALLED — which, with the injected
-        instance parameter, is a step function invoked with the user's
-        arguments. That is why this used to be an arity error rather than a
-        wrong answer, and the arm must keep it from becoming one. }
-      { PyProgSym, not FindSym: FindSym also answers for a PARAMETER symbol left
-        behind by some RTL unit's routine, so a user generator named `src` — a
-        parameter name in json.pas and ed25519.pas — was refused here and fell
-        through to be CALLED, while the same generator named `gen` worked. The
-        question this guard asks is whether the PROGRAM binds the name to
-        something else, and only the program's own scope can answer it. }
-      if PyExprMode and (Tokens[TokPos].Kind = tkLParen) and
-         (PyProgSym(name) < 0) then
-      begin
-        procIdx := FindProcInUnit(name, -1);
-        if procIdx < 0 then procIdx := FindProc(name);
-        if (procIdx >= 0) and ProcIsStackless[procIdx] and
-           ProcIsGenerator[procIdx] then
-        begin
-          CurASTNode := PyBuildGeneratorValue(procIdx);
-          LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
-          Exit;
-        end;
-      end;
-      { A bare def NAME in a value position is that function's ADDRESS. Python
-        has no paramless call without parentheses — `f` is the function, `f()`
-        calls it — so unlike Pascal there is nothing to disambiguate, and
-        without this the name fell through to the paramless-call/Result path
-        (feature-nilpy-function-values). Only when a '(' does NOT follow, and
-        only for a name that resolves to a proc and not to a variable.
 
-        A '.' does not follow either: there the name is a QUALIFIER or a
-        receiver, never a function value — a function value has no members. The
-        C library namespace is flat and shares names with Python modules
-        (crtl's <stdlib.h> declares `atexit`), so pulling any C unit used to
-        make this branch swallow `atexit` in `atexit.register(fn)`, leaving the
-        parser on the dot and reporting "Expected: =". The module had imported
-        and resolved perfectly well; only the dotted form broke.
-        bug-nilpy-import-lost-after-a-fallback-import-block. }
-      { A BUILTIN TYPE NAME in VALUE position — `t = str`, `f(str)`,
-        `string_types = (str,)`, `{"k": int}`, `[str, int]`.
-
-        AHEAD of the function-value arm below and of every conversion arm
-        further down, and it has to be both. The conversion arms all open with
-        `Next; Expect(tkLParen, '(')`, so with no '(' after the name they
-        reported a bare "unexpected token" — a builtin type could be CALLED and
-        never BOUND. And `list` / `dict` / `tuple` / `bytes` / `bool` are also
-        pylib PROCS, so the function-value arm below claimed those five first
-        and `print([str, list])` rendered `[<class 'str'>, <function at 0x...>]`
-        — the same name answering two different things depending on which
-        builtin happened to exist. One arm for all eleven names.
-
-        A following '.' is excluded for the same reason that arm excludes it:
-        `str.lower` as an unbound method value is a different construct with its
-        own path. bug-n-a-type-name-is-not-a-first-class-value }
-      if isNilPy and PyExprMode and (TokPos <= TokCount) and
-         (Tokens[TokPos].Kind <> tkLParen) and (Tokens[TokPos].Kind <> tkDot) and
-         (PyBuiltinTypeCode(name) > 0) and (not PyUserShadowsProc(name)) and
-         (FindSym(name) < 0) then
-      begin
-        Next;
-        CurASTNode := PyMakeBuiltinTypeValue(PyBuiltinTypeCode(name));
-        LastExprTk := tyVariant;
-        Exit;
-      end;
-      if PyExprMode and (CurTok.Kind = tkIdent) and
-         (Tokens[TokPos].Kind <> tkLParen) and (Tokens[TokPos].Kind <> tkDot) and
-         ((FindSym(name) < 0) or PyNestedDefOutranksSym(name)) and
-         (FindProcExactCase(PyQualifyNested(name)) >= 0) then
-      begin
-        { EXACT case, as in PyMakeFuncValue's twin arm: a Python name is
-          case-sensitive and Pascal's proc lookup is not, so `Counter` used to
-          answer for `counter`. }
-        idx := FindProcExactCase(PyQualifyNested(name));
-        { Same fix as PyMakeFuncValue's twin case, needed here too since a
-          bare callable in an ordinary expression position (a `key=`/`cmp=`
-          keyword argument, not an assignment RHS) reaches THIS handler
-          instead: the first FindProc match may not be the SAFE overload
-          (`len`'s first declared one takes a TPyBytes, not a Variant), and
-          even the safe one's RETURN isn't the Variant-hidden-destination-
-          pointer convention every callable-value dispatcher assumes --
-          `sorted(xs, key=len)` crashed even though `f = len; sorted(xs,
-          key=f)` (going through PyMakeFuncValue) already worked.
-          feature-nilpy-callable-value-unified-dispatch }
-        altPi := PyFindVariantParamOverload(name, Procs[idx].ParamCount);
-        if altPi >= 0 then idx := altPi;
-        if Procs[idx].RetType <> tyVariant then
-        begin
-          paramsAllVariant := True;
-          for wpj := 0 to Procs[idx].ParamCount - 1 do
-            if Procs[idx].Params[wpj].TypeKind <> tyVariant then
-            begin
-              paramsAllVariant := False;
-              Break;
-            end;
-          if paramsAllVariant and (Procs[idx].ParamCount = 1) and
-             Procs[idx].IsFunc and PyScalarWrappableRetType(Procs[idx].RetType) then
-            idx := PyGetOrMakeCallableWrapper(idx);
-        end;
-        Next;
-        { A nested def whose meaning depends on values live NOW (default-arg
-          expressions, captured enclosing locals) cannot travel as a bare
-          address — bind those values into a closure (uforth's DOES>).
-          -1 = nothing to bind, the plain address stays. }
-        node := PyNestedDefClosureValue(idx);
-        if node < 0 then
-        begin
-          { A callee that COLLECTS cannot travel as a bare address either: the
-            packing of surplus arguments into its one TPyList parameter is
-            work the CALL SITE does, and an address carries nothing that says
-            so. The {code, recv} pair does — pybound_new_star records the star
-            position — so a variadic def takes that road even with no captures.
-            `return wrapper` over `def wrapper(*args)` (the shape every Python
-            decorator has) otherwise called the body with loose Variants where
-            it declares a list. }
-          { ...and NEITHER CAN A CALLEE WITH DEFAULTS, for exactly the same
-            reason one word later. The star case above was written when the
-            pair's only extra cargo was the star position; the pair now also
-            carries the SIGNATURE record -- ReqN/TotN, the def-time default
-            values and the parameter names -- and a bare address carries none
-            of it. So a def with any defaulted parameter must take the same
-            road, or `fs = [g]` / `take(g)` on `def g(a, b=7)` enters a
-            two-parameter body through a one-parameter pointer and reads
-            whatever the previous call left where `b` lives.
-
-            This is the sibling-arm shape from
-            devdocs/dev/normalise-dont-special-case.md: one concept ("this
-            callee cannot travel as a bare address") served by a condition
-            listing the reasons, and only the first reason was listed. Measured
-            rather than reasoned -- `f = g` went through PyMakeFuncValueFor and
-            worked while `fs = [g]` did not reach it at all, which is what
-            pointed here.
-            bug-n-a-module-level-def-taken-as-a-value-loses-its-defaults }
-          if (idx >= 0) and (idx < ProcCount) and
-             ((ProcPyStarIdx[idx] >= 0) or PyProcHasDefaultParam(idx)) then
-            node := PyMakeFuncValueFor(idx, name);
-          if node >= 0 then
-          begin
-            CurASTNode := node;
-            LastExprTk := tyVariant;
-            Exit;
-          end;
-          node := AllocNode(AN_PROCADDR);
-          ASTIVal[node] := idx;
-          ASTTk[node] := Ord(tyPointer);
-          CurASTNode := node;
-          LastExprTk := tyPointer;
-          Exit;
-        end;
-        CurASTNode := node;
-        LastExprTk := tyPointer;
-        Exit;
-      end;
-
-      { A NilPy def nested in another def is registered QUALIFIED
-        (`outer.inner`) so two parents may each define a `helper` without the
-        first registration winning every lookup. Inside the enclosing body the
-        call is written unqualified, so rewrite the name here, before any
-        lookup — overload matching resolves by name too, not just FindProc
-        (feature-nilpy-nested-defs). }
-      if PyExprMode and (PyNestPrefix <> '') and
-         ((FindSym(name) < 0) or PyNestedDefOutranksSym(name)) then
-        name := PyQualifyNested(name);
       if CaseEqual(name, 'await') and CurProcIsAsync then
       begin
         { `await E` as an expression. Binds tightly (a unary/primary operand, like
@@ -11840,34 +11484,6 @@ begin
         LastExprTk := tyAnsiString;
         Exit;
       end
-      else if isNilPy and PyExprMode and CaseEqual(name, 'print') and
-              (not PyUserShadowsProc(name)) and
-              (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
-      begin
-        { `print(...)` in EXPRESSION position — `lambda first, last: print(...)`
-          above all, which is how a Tk callback is written and how this arm was
-          found: a lifted lambda's body is compiled as a real proc, so the name
-          has to resolve there like any other.
-
-          It works because print IS a function in Python and its value is None.
-          The statement arm (pyparser.inc) builds a write node, which is a
-          STATEMENT, so it is wrapped in AN_COMMA — evaluate the left for its
-          effect, yield the right — with None as the value. That is exactly
-          what CPython's print returns.
-
-          Only reachable since print stopped lexing as tkwriteln; before that
-          the token could not appear in an expression at all, and
-          examples/tk/callbacks.npy compiled by accident because the lambda's
-          body was never name-resolved.
-          regression-test-core-callbacks }
-        pyPrintNode := PyParsePrint;
-        CurASTNode := AllocNode(AN_COMMA);
-        ASTLeft[CurASTNode] := pyPrintNode;
-        ASTRight[CurASTNode] := PyMakeNone;
-        ASTTk[CurASTNode] := Ord(tyVariant);
-        LastExprTk := tyVariant;
-        Exit;
-      end
       else if NilPyUserCode and CaseEqual(name, 'format') and (FindSym(name) < 0) and
               (not PyUserShadowsProc(name)) and
               (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
@@ -12571,21 +12187,8 @@ begin
           Exit;
         end;
       end;
-      { ---- SizeOf(TypeName) intrinsic: resolved at parse time to AN_INT_LIT ----
-        Declined under NilPy when the program actually declares a routine of
-        that name and arity: a Python `def sizeof(x)` was claimed by the
-        intrinsic, whose hand-rolled type dispatch then rejected the integer
-        argument with "SizeOf: expected type name". `high`, `low` and `length`
-        already honour a NilPy def of their name — sizeof was the odd one out,
-        not a deliberate exception
-        (bug-nilpy-def-named-sizeof-is-hijacked-by-the-pascal-intrinsic).
-
-        Gated on PyExprMode so Pascal's own SizeOf stays an intrinsic, where it
-        must: the self-host fixedpoint is the check for that. }
-      if CaseEqual(name, 'sizeof') and
-         not (PyExprMode and (TokPos < TokCount) and
-              (Tokens[TokPos].Kind = tkLParen) and
-              PyAnyProcWithArity(name, CountCallArgsAhead)) then
+      { ---- SizeOf(TypeName) intrinsic: resolved at parse time to AN_INT_LIT ---- }
+      if CaseEqual(name, 'sizeof') then
       begin
         Next; { consume 'SizeOf' }
         Expect(tkLParen, '(');
@@ -13746,30 +13349,6 @@ begin
         Exit;
       end;
 
-      { Python's `input()` / `input(prompt)`. It needs an explicit arm because
-        `Input` is a STANDARD PASCAL IDENTIFIER — the text file — so the name
-        never reached a call lowering at all: `line = input()` bound the file
-        variable, and the failure surfaced later and unrecognisably at the first
-        USE of the result (`len(line)` reported "expected newline after
-        statement" pointing into builtinheap's source). uforth could not compile
-        past its `line = input()`.
-        NilPy only, so Pascal's Input is untouched.
-        bug-nilpy-input-builtin-is-shadowed-by-pascals-standard-input-file }
-      if PyExprMode and CaseEqual(name, 'input') and (procIdx < 0) and
-         (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
-      begin
-        CurASTNode := PyParseInputCall;   { the shared builder, see the arm above }
-        LastExprTk := tyAnsiString;
-        Exit;
-      end;
-      if PyExprMode and CaseEqual(name, 'format') and
-         (not PyUserShadowsProc(name)) and
-         (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
-      begin
-        CurASTNode := PyParseFormatCall;  { the shared builder, see the arm above }
-        LastExprTk := tyAnsiString;
-        Exit;
-      end;
 
       { Ord(x)/Chr(x): soft-keyword intrinsics (same recipe as Length below —
         plain idents, name dispatch, user proc / in-scope symbol shadows,
@@ -13783,63 +13362,8 @@ begin
         else
         begin op := Ord(tkOrd); LastExprTk := tyInteger; end;
         Next; Expect(tkLParen, '(');
-        if PyExprMode then PyParseBoolExpr else ParseExpr;
+        ParseExpr;
         Expect(tkRParen, ')');
-        { Python has no char type: `ord("a")` takes a 1-length STR, which the
-          ordinal intrinsic would read as the string's pointer. Route a string
-          operand to pylib instead — as a normal AN_CALL, so the argument goes
-          through the regular frozen-string conversion. }
-        if (op = Ord(tkOrd)) and PyExprMode and
-           ((IntToTypeKind(ASTTk[CurASTNode]) = tyString) or
-            (IntToTypeKind(ASTTk[CurASTNode]) = tyAnsiString)) then
-        begin
-          idx := FindProc('pyord_s');
-          if idx < 0 then Error('Nil Python: pylib (pyord_s) not loaded');
-          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
-          node := AllocNode(AN_CALL); ASTIVal[node] := idx;
-          ASTTk[node] := Ord(tyInt64); ASTLeft[node] := argSeq;
-          CurASTNode := node; LastExprTk := tyInt64;
-          Exit;
-        end;
-        { Chr's mirror of the Ord arm above. A VARIANT argument -- a list
-          element, a for-loop variable, an unannotated parameter -- fell
-          through to the -tkChr intrinsic, which reads the 16-byte variant SLOT
-          as an ordinal, so chr(xs[0]) for 97 gave `X` and a loop-built string
-          came out empty. Unbox first; pyvar_to_int already applies Python's
-          numeric rules and raises TypeError for a non-number. The literal and
-          int-typed paths are untouched, so ordinary chr(65) stays inline
-          (bug-nilpy-chr-of-a-variant-reads-the-slot-not-the-value). }
-        if (op = Ord(tkChr)) and PyExprMode and
-           (IntToTypeKind(ASTTk[CurASTNode]) = tyVariant) then
-        begin
-          idx := FindProc('pyvar_to_int');
-          if idx < 0 then Error('Nil Python: pylib (pyvar_to_int) not loaded');
-          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
-          node := AllocNode(AN_CALL); ASTIVal[node] := idx;
-          ASTTk[node] := Ord(tyInt64); ASTLeft[node] := argSeq;
-          CurASTNode := node;
-        end;
-        { chr() out of the byte range NilPy strings actually represent used to
-          silently TRUNCATE via the raw intrinsic's mod-256 cast (`chr(8364)`
-          gave the wrong byte 172, no error) — worse than the ticket's own
-          repro. Loudly refuse instead of guessing
-          (bug-nilpy-non-ascii-string-surface-measured). }
-        if (op = Ord(tkChr)) and PyExprMode then
-        begin
-          { Python's chr() answers a one-CHARACTER str across the whole Unicode
-            range, not a byte. The raw tkChr intrinsic can only produce a Char,
-            so it first TRUNCATED (chr(8364) gave byte 172) and was then made to
-            refuse anything over 255 — loud, but still not chr(). pychr_s
-            encodes UTF-8, and its result is a str exactly like every other
-            NilPy character. feature-nilpy-text-string-kind }
-          idx := FindProc('pychr_s');
-          if idx < 0 then Error('Nil Python: pylib (pychr_s) not loaded');
-          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
-          node := AllocNode(AN_CALL); ASTIVal[node] := idx;
-          ASTTk[node] := Ord(tyAnsiString); ASTLeft[node] := argSeq;
-          CurASTNode := node; LastExprTk := tyAnsiString;
-          Exit;
-        end;
         node := AllocNode(AN_CALL); ASTIVal[node] := -op;
         if op = Ord(tkChr) then ASTTk[node] := Ord(tyChar) else ASTTk[node] := Ord(tyInteger);
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
@@ -14224,93 +13748,7 @@ begin
         Exit;
       end;
 
-      { NilPy's `hash(x)`. pylib's PyVarHashKey already computes exactly this —
-        it is the dict's own key hash, written to mirror PyVarEq arm for arm —
-        it simply was not reachable from the language, so a program could not
-        ask what a value hashes to. `procIdx < 0` keeps a user `def hash` in
-        charge, like every other builtin intercept here.
-        bug-n-hash-builtin-is-not-implemented }
-      if PyExprMode and CaseEqual(name, 'hash') and (procIdx < 0) and
-         (Tokens[TokPos].Kind = tkLParen) and (FindProc('pyhash_v') >= 0) then
-      begin
-        Next; Expect(tkLParen, '(');
-        ParseExpr; node := CurASTNode;
-        Expect(tkRParen, ')');
-        helperPi := FindProc('pyhash_v');
-        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := PyForceVariant(node);
-        CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
-        ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyInt64);
-        LastExprTk := tyInt64;
-        Exit;
-      end;
 
-      { `id(x)` and `ascii(x)`, the same shape as `hash(x)` above — a pylib
-        helper the language could not reach. `procIdx < 0` keeps a user `def id`
-        in charge, which is Python's own rule for shadowing a builtin, and is
-        why these are intercepts rather than pylib routines named `id`/`ascii`:
-        a later `uses` unit SHADOWS a whole name rather than joining its
-        overload set, so a pylib `format` stopped existing the moment a program
-        said `import json` (see the format note in
-        bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep).
-        A builtin that vanishes when you add an import is worse than a missing one. }
-      if PyExprMode and CaseEqual(name, 'id') and (procIdx < 0) and
-         (Tokens[TokPos].Kind = tkLParen) and (FindProc('pyid_v') >= 0) then
-      begin
-        Next; Expect(tkLParen, '(');
-        ParseExpr; node := CurASTNode;
-        Expect(tkRParen, ')');
-        helperPi := FindProc('pyid_v');
-        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := PyForceVariant(node);
-        CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
-        ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyInt64);
-        LastExprTk := tyInt64;
-        Exit;
-      end;
-      { `max(xs, default=D)` / `min(xs, default=D)` — the empty-sequence guard.
-        Intercepted here because `default=` is a KEYWORD whose callee has no
-        such parameter, so the ordinary keyword binder is right to refuse it
-        ("max has no parameter named 'default'") — the same shape as
-        `d.update(a=1)`, where the fix is also a lowering rather than a binder
-        change. `key=` alongside it is refused by name rather than silently
-        dropped: combining them needs the keyed scan to carry the guard too,
-        and answering the wrong one of two keywords is worse than saying so. }
-      if PyExprMode and (CaseEqual(name, 'max') or CaseEqual(name, 'min')) and
-         (Tokens[TokPos].Kind = tkLParen) and PyMinMaxDefaultAhead and
-         (FindProc('pymax_default') >= 0) then
-      begin
-        Next; Expect(tkLParen, '(');
-        ParseArgExpr; node := CurASTNode;
-        Expect(tkComma, ',');
-        if not CaseEqual(CurTok.SVal, 'default') then
-          Error('Nil Python: min()/max() take `default=` as their only keyword '
-                + 'here; `key=` together with `default=` is not supported yet');
-        Next; Expect(tkAssign, '=');
-        ParseArgExpr; op := CurASTNode;
-        Expect(tkRParen, ')');
-        if CaseEqual(name, 'max') then helperPi := FindProc('pymax_default')
-        else helperPi := FindProc('pymin_default');
-        if helperPi < 0 then Error('Nil Python: pylib (min/max default) not loaded');
-        left := AllocNode(AN_ARG); ASTLeft[left] := PyForceVariant(op);
-        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := PyForceVariant(node);
-        ASTRight[argSeq] := left;
-        CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
-        ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyVariant);
-        LastExprTk := tyVariant;
-        Exit;
-      end;
-      if PyExprMode and CaseEqual(name, 'ascii') and (procIdx < 0) and
-         (Tokens[TokPos].Kind = tkLParen) and (FindProc('pyascii_v') >= 0) then
-      begin
-        Next; Expect(tkLParen, '(');
-        ParseExpr; node := CurASTNode;
-        Expect(tkRParen, ')');
-        helperPi := FindProc('pyascii_v');
-        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := PyForceVariant(node);
-        CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
-        ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyAnsiString);
-        LastExprTk := tyAnsiString;
-        Exit;
-      end;
 
       { Abs(e)/Sqr(e): System intrinsics lowered to builtin helpers (eval-once;
         int and float variants by the argument type). No `uses`; user routine of
@@ -14340,71 +13778,6 @@ begin
         Next; Expect(tkLParen, '(');
         ParseExpr; node := CurASTNode;
         Expect(tkRParen, ')');
-        { A VARIANT argument — a for-in loop variable is always one — cannot
-          choose between the int and float helpers statically, and tagging the
-          int helper's call tyVariant (which is what the argument's type gave
-          it) made the result marshal as a variant it never produced: a
-          segfault as soon as a second expression shared the statement.
-          pyabs_v dispatches on the tag and really does return a Variant
-          (bug-a-len-of-variant-picks-wrong-overload). }
-        { `abs(obj)` on a user class dispatches its __abs__. Without this a
-          tyClass argument reached the integer helper and returned the class
-          HANDLE as a number (measured: 140450157559832 where CPython printed
-          5) — silent, no error.
-          bug-nilpy-unary-numeric-dunders-return-raw-handle. }
-        { `abs(z)` on a COMPLEX is its modulus. A pylib class, so the
-          user-class arm below excludes it by design and it would otherwise hit
-          exactly the handle-as-a-number bug that arm was written for. }
-        if PyExprMode and CaseEqual(name, 'Abs') and
-           (IntToTypeKind(ASTTk[node]) = tyClass) and
-           PyRecIsComplex(ResolveNodeRec(node)) then
-        begin
-          CurASTNode := PyCallProc1('pycomplex_abs', node);
-          LastExprTk := tyDouble;
-          Exit;
-        end;
-        if PyExprMode and CaseEqual(name, 'Abs') and
-           (IntToTypeKind(ASTTk[node]) = tyClass) and
-           (ResolveNodeRec(node) >= REC_UCLASS_BASE) and
-           not PyRecIsPylibOwnClass(ResolveNodeRec(node)) and
-           (FindUMeth(ResolveNodeRec(node) - REC_UCLASS_BASE, '__abs__') >= 0) then
-        begin
-          CurASTNode := PyCallMeth1(ResolveNodeRec(node) - REC_UCLASS_BASE,
-                                    '__abs__', node, -1);
-          if CurASTNode >= 0 then
-          begin
-            LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
-            Exit;
-          end;
-        end;
-        { A PROMOTABLE INT goes through pyabs_v too. The integer helper below
-          takes an Int64, and this site hand-builds its call, so a promo
-          argument arrived as its SLOT ADDRESS and `abs(0 - i)` answered -5:
-          the sign was simply never inspected. pyabs_v takes a Variant, which
-          the promo boxes into losslessly, and it has its own VT_PROMO_INT64
-          arm. }
-        if PyExprMode and CaseEqual(name, 'Abs') and
-           (TypeIsPromoInt(IntToTypeKind(ASTTk[node]))) and
-           (FindProc('pyabs_v') >= 0) then
-        begin
-          helperPi := FindProc('pyabs_v');
-          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := node;
-          CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
-          ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyVariant);
-          LastExprTk := tyVariant;
-          Exit;
-        end;
-        if PyExprMode and CaseEqual(name, 'Abs') and
-           (IntToTypeKind(ASTTk[node]) = tyVariant) and
-           (FindProc('pyabs_v') >= 0) then
-        begin
-          helperPi := FindProc('pyabs_v');
-          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := node;
-          CurASTNode := AllocNode(AN_CALL); ASTIVal[CurASTNode] := helperPi;
-          ASTLeft[CurASTNode] := argSeq; ASTTk[CurASTNode] := Ord(tyVariant);
-          LastExprTk := tyVariant;
-          Exit;
-        end;
         if TypeIsFloat(IntToTypeKind(ASTTk[node])) then
         begin
           if CaseEqual(name, 'Abs') then helperPi := FindProc('__pxxAbsDbl')
@@ -14627,7 +14000,6 @@ begin
         case-insensitive lookup per site, each found separately
         (bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class). }
       if (idx < 0) and (procIdx < 0) and IsClassType(name) and
-         ((not PyExprMode) or PyIsClassTypeExact(name)) and
          (Tokens[TokPos].Kind = tkLParen) then
       begin
         ci := FindUClass(name);
@@ -15878,119 +15250,6 @@ begin
             Error('no overload of ' + name + ' matches these arguments' + OverloadReport);
         end;
 
-        { A CALLABLE where a STRING parameter is declared. The bound-method
-          variant coerces into an AnsiString silently, and the callee then
-          passed the {code, receiver} pair on as text — Tk evaluated it as a
-          script and hung inside the event loop, with nothing pointing back
-          here. A plain def argument was already refused (its node is a raw
-          Pointer and no overload matches); this closes the callable VALUES
-          that ride a variant (bug-nilpy-bound-method-coerced-to-string). }
-        if PyExprMode and (procIdx >= 0) then
-        begin
-          currArg := argsHead;
-          i := 0;
-          while (currArg <> -1) and (i < Procs[procIdx].ParamCount) do
-          begin
-            if (Procs[procIdx].Params[i].TypeKind in [tyAnsiString, tyString]) and
-               PyNodeIsCallableValue(ASTLeft[currArg]) then
-              Error('Nil Python: ' + name + ' expects text for parameter "'
-                    + Procs[procIdx].Params[i].Name
-                    + '", but the argument is a callable — call it, or declare '
-                    + 'the parameter as a Callable');
-            { A `Callable[...]` parameter is tyPointer (the annotation registers a
-              $proctype signature), and a callable VALUE is a 16-byte variant. The
-              plain coercion took the variant's first word — its TAG — as the code
-              address, so passing a lambda to a Callable parameter jumped to 9.
-              pyvar_callee_addr yields the payload, unwrapping a {code, recv}
-              function value on the way
-              (bug-nilpy-callable-annotated-param-segfaults-on-a-heap-callable). }
-            if (Procs[procIdx].Params[i].TypeKind = tyPointer) and
-               (IntToTypeKind(ASTTk[ASTLeft[currArg]]) = tyVariant) then
-            begin
-              { A parameter that DECLARES a default of nil means "not given" by
-                nil, so None is a legal value for it — `sorted(xs, key=None)` is
-                CPython's own no-key spelling and was raising a TypeError. The
-                strict form stays for a parameter with no default, where None
-                really is an error (map/filter refuse it in CPython too).
-                bug-nilpy-builtin-surface-gaps-found-by-the-2026-08-12-sweep }
-              if (i < MAX_PROC_PARAMS) and
-                 ProcParamHasDefault[procIdx * MAX_PROC_PARAMS + i] then
-                capSym := FindProc('pyvar_callable_ptr_opt')
-              else
-                capSym := FindProc('pyvar_callable_ptr');
-              if capSym >= 0 then
-              begin
-                identNode := AllocNode(AN_STR_LIT);
-                ASTSOffset[identNode] := PyStoredName(Procs[procIdx].Params[i].Name);
-                ASTSLen[identNode] := Length(Procs[procIdx].Params[i].Name);
-                ASTTk[identNode] := Ord(tyString);
-                argSeq := AllocNode(AN_ARG);
-                ASTLeft[argSeq] := identNode;
-                ASTRight[argSeq] := -1;
-                lastArg := AllocNode(AN_ARG);
-                ASTLeft[lastArg] := ASTLeft[currArg];
-                ASTRight[lastArg] := argSeq;
-                exprNode := AllocNode(AN_CALL);
-                ASTIVal[exprNode] := capSym;
-                ASTLeft[exprNode] := lastArg;
-                ASTTk[exprNode] := Ord(tyPointer);
-                ASTLeft[currArg] := exprNode;
-              end;
-            end;
-            currArg := ASTRight[currArg];
-            Inc(i);
-          end;
-        end;
-
-        { NilPy nested def: fill the trailing parameters that stand for the
-          enclosing locals it reads. The call is written with only the declared
-          arguments; each captured name is resolved HERE, in the enclosing body
-          where it is in scope, and appended as a by-value actual — Python reads
-          a closed-over name at call time, so its value at the call site is the
-          right one (feature-nilpy-nested-defs). }
-        if PyExprMode and (procIdx >= 0) and (PyCapCount[procIdx] > 0) and
-           (nArgs < Procs[procIdx].ParamCount) then
-          for i := 0 to PyCapCount[procIdx] - 1 do
-          begin
-            capSym := FindSym(PyCapName[procIdx * PY_MAX_CAPS + i]);
-            if capSym < 0 then
-            begin
-              if PxxDbgEnabled('n.caps') then
-              begin
-                Write('PXXDBG n.caps MISS ', PyCapName[procIdx * PY_MAX_CAPS + i],
-                      ' callee=', Procs[procIdx].Name, ' in=');
-                if CurProc >= 0 then Write(Procs[CurProc].Name) else Write('<main>');
-                Write(' params=');
-                if CurProc >= 0 then
-                  for capIdx := 0 to Procs[CurProc].ParamCount - 1 do
-                    Write(Procs[CurProc].Params[capIdx].Name, ' ');
-                WriteLn;
-              end;
-              Error('nested def captures ' + PyCapName[procIdx * PY_MAX_CAPS + i]
-                    + ', which is not in scope at this call');
-            end;
-            identNode := AllocNode(AN_IDENT);
-            ASTIVal[identNode] := capSym;
-            ASTTk[identNode] := Ord(Syms[capSym].TypeKind);
-            { a CELL capture travels as the cell itself: the parameter is by-ref
-              and address-of a deref collapses to the pointer, so the callee
-              gets the frame's one storage rather than a copy of its value }
-            if SymCellPtr[capSym] >= 0 then
-            begin
-              ASTIVal[identNode] := SymCellPtr[capSym];
-              ASTTk[identNode] := Ord(tyPointer);
-              derefNode := AllocNode(AN_DEREF);
-              ASTLeft[derefNode] := identNode;
-              ASTTk[derefNode] := Ord(Syms[capSym].TypeKind);
-              identNode := derefNode;
-            end;
-            argSeq := AllocNode(AN_ARG);
-            ASTLeft[argSeq] := identNode;
-            if argsHead = -1 then begin argsHead := argSeq; lastArg := argSeq; end
-            else begin ASTRight[lastArg] := argSeq; lastArg := argSeq; end;
-            argTypes[nArgs] := Syms[capSym].TypeKind;
-            Inc(nArgs);
-          end;
 
         isLiftedCall := (procIdx >= 0) and (Procs[procIdx].ParamCount > nArgs) and
                         (ProcParamPtrDepth[procIdx * MAX_PROC_PARAMS + nArgs] = 2);
@@ -16047,11 +15306,6 @@ begin
             Inc(nArgs);
           end;
         end;
-
-        isCStringCall := PyExprMode and (Procs[procIdx].RetType = tyPointer) and
-                         ((ProcRetPtrElemTk[procIdx] = Ord(tyChar)) or
-                          (ProcRetPtrElemTk[procIdx] = Ord(tyUInt8)) or
-                          (ProcRetPtrElemTk[procIdx] = Ord(tyInt8)));
 
         currArg := argsHead;
         for i := 0 to nArgs - 1 do
@@ -16133,29 +15387,11 @@ begin
           ASTTk[node] := Ord(tyPointer);
         end;
 
-        if isCStringCall then
+        ApplyCallResultPtrSuffix(node, procIdx);  { f(...)^ / ^.field / [i] }
+        if isLiftedCall then
         begin
-          helperPi := FindProc('PCharToString');
-          if helperPi < 0 then Error('builtin: PCharToString not found in Nil Python mode');
-          wrapperArg := AllocNode(AN_ARG);
-          ASTLeft[wrapperArg] := node;
-          wrapperCall := AllocNode(AN_CALL);
-          ASTIVal[wrapperCall] := helperPi;
-          ASTTk[wrapperCall] := Ord(Procs[helperPi].RetType);
-          ASTLeft[wrapperCall] := wrapperArg;
-          node := wrapperCall;
-
           CurASTNode := node;
-          LastExprTk := Procs[helperPi].RetType;
-        end
-        else
-        begin
-          ApplyCallResultPtrSuffix(node, procIdx);  { f(...)^ / ^.field / [i] }
-          if isLiftedCall then
-          begin
-            CurASTNode := node;
-            LastExprTk := tyPointer;
-          end;
+          LastExprTk := tyPointer;
         end;
         Exit;
       end
