@@ -165,4 +165,4 @@ is GREEN.
 reachable now. Nothing there needs changing.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 6b26c38e8.
