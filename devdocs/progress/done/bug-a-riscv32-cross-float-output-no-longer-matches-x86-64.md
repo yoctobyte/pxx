@@ -223,4 +223,4 @@ depth-reduced. i386 / aarch64 / arm32 are not depth-reduced and are unaffected.
 `tools/gate.sh quick` **GREEN** · the job itself re-run standalone and passing.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 9835aa8b4.
