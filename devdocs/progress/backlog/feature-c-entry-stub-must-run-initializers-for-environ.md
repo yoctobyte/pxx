@@ -1,6 +1,6 @@
 ---
 track: C
-prio: 45
+prio: 60
 type: bug
 summary: "RE-TYPED 2026-08-19 feature -> bug (it was already described as a silent wrong value in its own body). MEASURED on v363: with `extern char **environ;` declared, pxx compiles CLEAN — no warning at all — and the program prints a NULL pointer where gcc prints the real environment. `char **envp = environ;` silently becomes NULL in a C program: environ is a VARIABLE read directly, with no call to trigger crtl's lazy /proc/self/environ load, and the C entry stub has no init phase. The fini half landed 2026-08-10; this is the init half"
 ---
@@ -97,3 +97,30 @@ Two things the ticket did not have:
 
 The fix shape in the ticket is unchanged — the C entry stub still has no init
 phase, and crtl still holds the data it cannot reach.
+
+## 2026-08-20 — RAISED 45 -> 60 (coordinator), and the reason is the ticket's own re-typing
+
+This was re-typed feature -> bug on 2026-08-19 because it is a **silent wrong value**, and
+then left at the prio it had as a feature. Ranking did not follow the re-typing.
+
+By the repo's own escape rule a defect that produces a wrong value with no diagnostic is
+ranked as the bug it is, not as the feature it was filed as. This one is worse than the
+generic case on two counts:
+
+- It **compiles clean** at v363 — no warning at all — so nothing at the call site suggests
+  anything happened. (Note the body's earlier `warning: undeclared identifier` transcript
+  predates that measurement; with `extern char **environ;` declared there is no warning.
+  Two snapshots, different conditions — the 2026-08-19 one is current.)
+- It is on **every C program's path**. `tcc.c` builds and runs and sees no environment at
+  all, which is the kind of failure a corpus target absorbs silently.
+
+Second, structural reason to rank it now: the ticket already contains the design call —
+**prefer shape (1), a `__pxx_run_initializers` shell, over (2), exporting `environ` from
+crtl.** (2) is an `environ`-shaped hole the next pre-main requirement duplicates, which is
+the `normalise-dont-special-case` failure this repo has paid for repeatedly. That decision
+decays if the ticket sits: the longer it waits, the more likely the next person takes the
+narrow route because it is smaller. Ranking a decided design is cheap; re-deciding it after
+someone has built the special case is not.
+
+The fini half landed 2026-08-10 on all five targets and the mechanism is symmetric, so this
+is the second end of a stub that already works.
