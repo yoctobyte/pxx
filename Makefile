@@ -6146,6 +6146,11 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_math_intrinsics_no_uses26)" = "$$(printf '4.0\n0.0\n1.0\n1.0\n0.0\n3.14159\n7')"
 	./$(COMPILER) test/test_writeln_text_char.pas $(TESTTMP)/test_writeln_text_char26
 	test "$$($(TESTTMP)/test_writeln_text_char26)" = "$$(printf 'ax   x  Z|\nab42 3.5|\nABCD\nOK')"
+	# the read side of the same coin: read(f, c) takes ONE character (the newline
+	# is one), readln(f, c) takes one and skips to the next line, and past end of
+	# file yields #26 — all 25 assertions are FPC 3.2.2's own output.
+	./$(COMPILER) test/test_read_text_char.pas $(TESTTMP)/test_read_text_char26
+	test "$$($(TESTTMP)/test_read_text_char26 | tail -1)" = "total ok 25 / 25"
 	./$(COMPILER) test/test_promoint_function_result.pas $(TESTTMP)/test_promoint_function_result26
 	test "$$($(TESTTMP)/test_promoint_function_result26)" = "$$(printf '12\n10000000000000000000000000000000000000000\n12\n24\n10000000000000000000000000000000000000000\n13\n1\nOK')"
 	./$(COMPILER) test/test_promoint_parameter_32bit.pas $(TESTTMP)/test_promoint_parameter_32bit26

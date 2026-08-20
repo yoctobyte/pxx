@@ -1731,6 +1731,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-overflow-checks-cross-and-intrinsics | A | 35 | feature | {$Q+} follow-up: cross-backend checks (pair carry chains), Succ/Pred/Abs/Sqr, subword widths | — |
 | feature-own-net-http-lib | B | 50 | feature | Own networking library — native HTTP client (+ sockets, async) | — |
 | feature-p-nested-type-method-implementation | P | 60 | feature | A method of a NESTED type cannot be implemented: `TOuter.TInner.Method` | — |
+| feature-p-read-text-into-a-char-arm | P | 50 | feature | the RTL half (textfile.TextReadChar) has landed, so ParseTextReadRest can now route read(f, c) to it and drop the 'not supported yet' error | — |
 | feature-pal-esp-lwip-sockaddr-readback | S | 50 | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
 | feature-pal-file-stat-metadata | B | 50 | feature | PAL file stat metadata | — |
 | feature-pal-network-datagram-poll-errno | B | 50 | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |
