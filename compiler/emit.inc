@@ -242,6 +242,23 @@ end;
 
 { ===== String table ===== }
 
+function InternKey(const s: AnsiString): Integer;
+{ Intern a COMPILE-TIME key: an identity the compiler compares against itself
+  and the compiled program never sees. Same contract as InternStr — equal text
+  gives an equal index — minus the emission into Data[]. Use this, never
+  InternStr, for anything derived from a resolved FILE PATH: those carry ExeDir
+  (from ParamStr(0)), and a path in the emitted string pool makes the output
+  depend on how the compiler was invoked. See KeyStrs in defs.inc. }
+var i: Integer;
+begin
+  for i := 0 to KeyCount-1 do
+    if KeyStrs[i] = s then begin Result := i; Exit; end;
+  if KeyCount >= MAX_KEYS then Error('compile-time key table overflow');
+  KeyStrs[KeyCount] := s;
+  Result := KeyCount;
+  Inc(KeyCount);
+end;
+
 function InternStr(const s: AnsiString): Integer;
 var i, j: Integer; len: Int64; match: Boolean;
 begin

@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: A
+status: done
+owner: frank1-ACP
 ---
 
 > **Re-tracked P -> A on 2026-08-20.** The stub guessed P from the test source
@@ -71,3 +73,22 @@ catch this and is not wrong — `make compiler/pascal26` and
 are green at this sha (see the sibling ticket). This is the same class as the
 `-O0`-only self-compile failure CLAUDE.md's claims section warns about: the
 fixedpoint holds *at one build configuration*.
+
+## Root cause found and fixed — 2026-08-20
+
+Not a `--threadsafe` bug. The compiler's emitted output depended on **argv[0]**:
+`ParseUsesUnit` interned the resolved unit path — which begins with `ExeDir`,
+derived from `ParamStr(0)` — through `InternStr`, and `InternStr` appends its
+text to the emitted string pool. Every binary the compiler produced therefore
+carried the path the compiler had been invoked as.
+
+The plain self-host chain passed only by coincidence (both generations run from
+`$(TESTTMP)` under equal-length names); the threadsafe chain starts from
+`./compiler/pascal26` and continues from `$(TESTTMP)/pascal26-threadsafe-self`,
+two different `ExeDir`s, so it was the one that showed the 32-byte data delta.
+
+Full diagnosis, fix and verification: [[bug-a-the-compilers-output-depends-on-argv0]].
+
+Verified for THIS job: `ts-self` and `ts-next` byte-identical, both
+`data=226912B`; `tools/gate.sh quick` GREEN.
+- 2026-08-20 — resolved, commit PENDING-COMMIT.

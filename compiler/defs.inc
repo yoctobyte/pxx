@@ -13,6 +13,10 @@ const
   LINE_BUF_SIZE = 4096;    { readln stdin line buffer }
   MAX_DATA    = 2097152;      { 2 MB }
   MAX_STRS    = 8192;
+  { Compile-time-only identity keys (see KeyStrs). Bounded by the compiled-unit
+    count, which CompiledUnitFile already caps at 256; 1024 leaves headroom for
+    the other key classes without pretending to be a general string table. }
+  MAX_KEYS    = 1024;
   MAX_USES_EDGES = 16384;  { one slot per `uses X` clause parsed across the whole compile }
   MAX_FIXUPS  = 131072;
   MAX_SYMS    = 131072;
@@ -2426,6 +2430,26 @@ var
     isinstance against each other.
     bug-a-a-python-module-s-identity-is-its-name-not-its-file (symptom 1). }
   CompiledUnitFile : array[0..255] of Integer;
+  { The COMPILE-TIME string table CompiledUnitFile indexes into — deliberately
+    NOT Strs[].
+
+    InternStr does two jobs at once: it hands back a stable index, and it
+    APPENDS the text to Data[], the emitted string pool. That is right for a
+    string the compiled program will read at runtime and wrong for a key the
+    compiler only compares against itself. Interning a resolved unit PATH
+    through it baked that path into every binary we emit — and the path carries
+    ExeDir, which comes from ParamStr(0), so the same compiler compiling the
+    same source emitted DIFFERENT bytes depending on how it had been invoked
+    (`./compiler/pascal26` vs an absolute path: 32 data bytes apart). That is
+    what made the --threadsafe self-host job red while the plain one stayed
+    green — the plain chain happens to run both generations from the same
+    directory with equal-length names, so its interned paths matched by luck.
+    bug-a-the-compilers-output-depends-on-argv0
+
+    A key table has no Data[] side: same identity semantics, nothing emitted,
+    and the emitted binary stops depending on where the compiler binary sits. }
+  KeyStrs  : array[0..MAX_KEYS-1] of AnsiString;
+  KeyCount : Integer;
   { The IDENTITY each compiled unit is deduped on, which is not always its name.
     A path-form reference (`uses './x.c'`, `#include "r1/math.pas"`) is keyed on
     the normalised path it resolves to, because the base name it would otherwise

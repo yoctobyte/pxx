@@ -33687,7 +33687,7 @@ begin
     bug-a-a-python-module-s-identity-is-its-name-not-its-file (symptom 1). }
   if Length(path) > 0 then
   begin
-    pyFileIdx := InternStr(path);
+    pyFileIdx := InternKey(path);   { a KEY, not an emitted string — see KeyStrs }
     pyDupIdx := -1;
     for i := 0 to CompiledUnitCount - 1 do
       if (CompiledUnitFile[i] >= 0) and (CompiledUnitFile[i] = pyFileIdx) then

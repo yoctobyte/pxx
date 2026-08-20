@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:17 blocked:6 backlog:242 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2103 rejected:40`
+`urgent:1 unfinished:17 blocked:6 backlog:241 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2105 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -44,11 +44,10 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 229, ranked
+## Ready — top 30 of 228, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [T]` regression-selfhost-fixedpoint-selfhost-fixedpoint
-- `[p 70] [A]` regression-test-core-compiler-4
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-pascal-unit-keeps-fpc-method-shadowing
 - `[p 65] [T]` bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
@@ -76,5 +75,6 @@ _none — no lane is locked._
 - `[p 55] [U]` decide-reduced-compiler-switch-spelling
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
+- `[p 55] [E]` feature-demo-portable-userland
 
-_199 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_198 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

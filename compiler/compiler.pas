@@ -960,6 +960,7 @@ begin
   Data[NEWLINE_OFFSET] := 10;
   BSSSize  := 0;
   StrCount := 0; FixCount := 0;
+  KeyCount := 0;
   GlobFixCount := 0; CallFixCount := 0; ProcAddrFixCount := 0;
   IramCallFixCount := 0;
   SymCount := 0; ProcCount := 0;

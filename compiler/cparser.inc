@@ -396,10 +396,10 @@ begin
     begin
       fIdx := CompiledUnitFile[i];
       if fIdx < 0 then
-        CompiledUnitFile[i] := InternStr(srcFile)   { loader knew no file: adopt }
-      else if Strs[fIdx].Text <> srcFile then       { a DIFFERENT file, same name }
+        CompiledUnitFile[i] := InternKey(srcFile)   { loader knew no file: adopt }
+      else if KeyStrs[fIdx] <> srcFile then         { a DIFFERENT file, same name }
         Error('two Pascal units are both named ''' + key + ''': ''' +
-          Strs[fIdx].Text + ''' was imported first and ''' + srcFile +
+          KeyStrs[fIdx] + ''' was imported first and ''' + srcFile +
           ''' cannot also be imported -- both would declare ' + key +
           '_pas_*, and the mangled name cannot say which file it means. ' +
           'Rename one of the units');
