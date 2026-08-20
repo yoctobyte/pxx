@@ -1,29 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T14:43:40Z",
-   "fixed": [
-    "test-core#src:test/test_asm_ifdef_multiarch.pas"
-   ],
-   "new_red": [
-    "test-core#src:examples/tk/callbacks.npy",
-    "test-core#src:examples/tk/facade_and_paths.npy",
-    "test-core#src:examples/tk/field_class_identity.npy",
-    "test-core#src:examples/tk/import_in_body.npy",
-    "test-core#src:examples/tk/shadow_format_except.npy",
-    "test-core#src:examples/tk/tkinter_facade.npy",
-    "test-core#src:test/test_nilpy_array_of_const_unit.npy",
-    "test-core#src:test/test_nilpy_class_named_after_its_imported_base.npy",
-    "test-core#src:test/test_nilpy_multiple_inheritance_imported_base.npy",
-    "test-core#src:test/test_nilpy_qualifier_vs_cproc.npy",
-    "test-core#src:test/test_nilpy_renamed_class_attrs.npy",
-    "test-core#src:test/test_nilpy_subclass_unit_base.npy"
-   ],
-   "sha": "4e27dc2be11471f92064756e17d426617d0d284b",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-19T14:48:41Z",
    "fixed": [],
    "new_red": [],
@@ -446,6 +423,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "08dccc7df6548c8d7af2e22d0647d239ad292149",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T02:53:37Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8eb2ce5834993cf923943d1ac6a6f65a08b211dc",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -6074,11 +6059,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T02:41:39Z",
-  "sha": "08dccc7df6548c8d7af2e22d0647d239ad292149",
+  "date": "2026-08-20T02:53:37Z",
+  "sha": "8eb2ce5834993cf923943d1ac6a6f65a08b211dc",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 235.3
+  "wall": 243.0
  },
  "last_bench": {
   "conf_rows": 550,
