@@ -4282,6 +4282,21 @@ test-core: $(COMPILER)
 	# program too, so nothing legal is lost; a compiler must not spin.
 	! ./$(COMPILER) test/test_generic_cycle_fail.pas $(TESTTMP)/test_gencycle26 > $(TESTTMP)/test_gencycle.log 2>&1
 	grep -q "circular generic specialization" $(TESTTMP)/test_gencycle.log
+	# `Inc(p)` on a TYPED pointer stepped ONE BYTE instead of SizeOf(element) --
+	# silently, so a pointer walk read from the wrong offset -- while `Inc(p, 1)`,
+	# `Inc(p, 2)`, `p + 1`, `p[k]` and `(p+k)^` all scaled correctly. Inc/Dec lower
+	# to `p := p +/- step`, and the step node for the IMPLICIT 1 was allocated with
+	# no type tag, so it read as tyUnknown and pointer arithmetic declined to scale
+	# it. Dec had the same one node and stepped one byte backwards. Pinned: 18/34.
+	./$(COMPILER) test/test_typed_pointer_inc_dec.pas $(TESTTMP)/test_ptrincdec26
+	test "$$($(TESTTMP)/test_ptrincdec26 | tail -1)" = "total ok 34 / 34"
+	# `String(p)` on a PChar was rejected while AnsiString(p), `t := p` and
+	# StrPas(p) -- the same conversion, three other spellings -- all worked. String
+	# is a KEYWORD token with its own parser branch, so it never reached the
+	# identifier-cast path that handles `ansistring`. The pinned binary refuses the
+	# test outright: `String(): operand must be Char or string`.
+	./$(COMPILER) test/test_string_of_pchar.pas $(TESTTMP)/test_strpchar26
+	test "$$($(TESTTMP)/test_strpchar26 | tail -1)" = "total ok 17 / 17"
 	./$(COMPILER) test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_nativeshift26
 	test "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
 	test "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"

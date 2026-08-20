@@ -11436,6 +11436,29 @@ begin
           CurASTNode := vcNode;
           LastExprTk := tyString;
         end
+        else if IntToTypeKind(ASTTk[CurASTNode]) = tyPointer then
+        begin
+          { `String(p)` on a PChar -- the NUL-terminated-to-Pascal conversion.
+            PChar is tyPointer here, so it fell to the error below, while every
+            other spelling of the same conversion worked: `AnsiString(p)`, the
+            implicit `s := p`, and `StrPas(p)`. One concept, four spellings, and
+            the one FPC code actually writes was the broken one -- exactly the
+            shape devdocs/dev/normalise-dont-special-case.md is about, and the
+            reason it survived is that `String` is a KEYWORD token (tkString_T)
+            with its own branch, so it never reached the identifier-cast path
+            where `ansistring` is handled. Build the same AN_PTR_CAST that path
+            builds, with the same managed/frozen choice of string kind.
+            bug-p-string-of-a-pchar-is-rejected-while-ansistring-of-it-works }
+          node := AllocNode(AN_PTR_CAST);
+          ASTLeft[node] := CurASTNode;
+          ASTIVal[node] := -1;              { built-in cast, as the ident path does }
+          if PasDefineExists('PXX_MANAGED_STRING') then
+            ASTTk[node] := Ord(tyAnsiString)
+          else
+            ASTTk[node] := Ord(tyString);
+          CurASTNode := node;
+          LastExprTk := IntToTypeKind(ASTTk[node]);
+        end
         else
           Error('String(): operand must be Char or string');
       end;
@@ -23808,8 +23831,16 @@ begin
         end
         else
         begin
+          { The IMPLICIT step of 1. It must be typed, like any other literal: an
+            untyped node reads as tyUnknown, and pointer arithmetic then declined
+            to scale it -- so `Inc(p)` on a typed pointer stepped ONE BYTE while
+            `Inc(p, 1)`, `Inc(p, 2)` and `p + 1` all stepped SizeOf(element)
+            correctly. Silently: the walk just read from the wrong offset. The
+            same one node serves Dec, which stepped one byte backwards for the
+            same reason. bug-p-inc-of-a-typed-pointer-steps-one-byte }
           stepsNode := AllocNode(AN_INT_LIT);
           ASTIVal[stepsNode] := 1;
+          ASTTk[stepsNode] := Ord(tyInteger);
         end;
         Expect(tkRParen, ')');
 
