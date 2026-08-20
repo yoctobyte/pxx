@@ -2147,6 +2147,58 @@ begin
   end;
 end;
 
+function RecFieldByteSize(rec: Integer; const field: AnsiString): Integer;
+{ The byte size of ONE field, ARRAYS INCLUDED — what `SizeOf(r.F)` must answer.
+
+  RecFieldType reports an array field's ELEMENT kind (UFldTk holds the element
+  type), so anything that sized a field as TypeSize(RecFieldType(...)) answered 4
+  for an `array[0..2] of Integer` and nothing said so: SizeOf(r.A) was 4 where FPC
+  3.2.2 says 12, and the idiomatic `Move(src.A, dst.A, SizeOf(src.A))` /
+  `FillChar(r.A, SizeOf(r.A), 0)` touched one element of three while every
+  surrounding line read as correct
+  (bug-p-sizeof-an-array-field-returns-the-element-size).
+
+  A dynamic-array field is a handle, so pointer width — the same rule SizeOf
+  already applies to a named dynamic-array alias. A field whose array extent is
+  not recorded keeps the element size rather than inventing one: today's answer
+  beats a confidently wrong new one. }
+var d, n, cnt, i, acc, erec: Integer; field2: AnsiString; etk: TTypeKind;
+begin
+  field2 := field;
+  etk := RecFieldType(rec, field2);
+  erec := RecFieldRecId(rec, field2);
+  if (etk = tyRecord) and (erec >= 0) then
+    Result := RecSize(erec)
+  else
+    Result := TypeSize(etk);
+  if not RecFieldIsArray(rec, field2) then Exit;
+  { a dynamic-array field is a reference }
+  if RecFieldDynDepth(rec, field2) > 0 then begin Result := TARGET_PTR_SIZE; Exit; end;
+  { builtin descriptor records carry a plain element count and no dim table }
+  cnt := BuiltinRecFieldCount(rec);
+  if cnt > 0 then
+  begin
+    for i := 0 to cnt - 1 do
+      if BuiltinRecFieldMatches(rec, i, field2) then
+      begin
+        if BuiltinRecFieldArrayCount(rec, i) > 0 then
+          Result := Result * BuiltinRecFieldArrayCount(rec, i);
+        Exit;
+      end;
+    Exit;
+  end;
+  n := RecFieldArrNDims(rec, field2);
+  if n >= 2 then
+  begin
+    acc := Result;
+    for d := 0 to n - 1 do
+      acc := acc * RecFieldArrDimSpanAt(rec, field2, d);
+    Result := acc;
+  end
+  else if RecFieldArrLen(rec, field2) > 0 then
+    Result := Result * RecFieldArrLen(rec, field2);
+end;
+
 function RecordHasManagedFieldsDepth(recId, depth: Integer): Boolean;
 { Class/object references are deliberately unmanaged. Only recurse through
   fixed-size user records and compiler-managed value fields. The depth cap is a

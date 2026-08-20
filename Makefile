@@ -4590,6 +4590,9 @@ test-core: $(COMPILER)
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"
+	# SizeOf of an ARRAY field reports the array's size, not the element's
+	./$(COMPILER) test/test_sizeof_array_field.pas $(TESTTMP)/test_sizeof_array_field26
+	test "$$($(TESTTMP)/test_sizeof_array_field26 | tail -1)" = "total ok 22 / 22"
 	# a method at the end of a cast-deref chain: PRec(q)^.o.F(1), PRec(q)^.cr.NewN(3)
 	./$(COMPILER) test/test_pascal_cast_chain_method_call.pas $(TESTTMP)/test_pascal_cast_chain26
 	test "$$($(TESTTMP)/test_pascal_cast_chain26 | tail -1)" = "total ok 9 / 9"

@@ -90,3 +90,10 @@ Per sub-ticket. Frontend/IR changed → `make test` + self-host byte-identical �
   blocker is the actionable item, not this umbrella. Returned to `backlog/` — an
   umbrella has no work of its own, and holding it in `working/` takes the ranker's
   top slot away from the rung that does.
+- 2026-08-20 — the ladder is STALLED, not merely blocked: rung 3's default pick
+  (rtl-generics) waits on [[decide-tobject-root-methods-dispatch-model]] and rung 4
+  is gated on rung 3. The one rung available without that answer is the **fcl-xml
+  DOM** alternative this ticket already names (22k, roundtrip oracle) — but opening
+  a 22k-LOC campaign to route around a pending decision is a scope call for the
+  user, not something an agent should start on its own. Until either lands, this
+  umbrella has no work despite ranking at 65.

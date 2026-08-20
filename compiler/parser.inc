@@ -12902,8 +12902,16 @@ begin
                     { SizeOf(obj.field[.field..]) — walk the selector chain
                       (never evaluating, like every SizeOf operand) and
                       report the FINAL field's size (blcksock's
-                      SizeOf(Value.Value)). Scalar/record/class fields; an
-                      array field is out of scope and errors below. }
+                      SizeOf(Value.Value)).
+
+                      Sized through RecFieldByteSize, NOT TypeSize(RecFieldType):
+                      RecFieldType answers an array field's ELEMENT kind, so the
+                      latter reported 4 for an `array[0..2] of Integer` field
+                      while the same array as a plain VAR reported 12, silently
+                      and with the comment here claiming array fields errored out
+                      (bug-p-sizeof-an-array-field-returns-the-element-size). One
+                      field-size answer for everyone rather than a formula per
+                      caller: devdocs/dev/normalise-dont-special-case.md. }
                     szRec := Syms[sci].RecName;
                     szElemTk := tyUnknown;
                     Next;   { consume the identifier; CurTok = '.' }
@@ -12913,15 +12921,13 @@ begin
                       if CurTok.Kind <> tkIdent then Error('SizeOf: expected field name');
                       szElemTk := RecFieldType(szRec, CurTok.SVal);
                       if szElemTk = tyUnknown then Error('SizeOf: unknown field');
+                      prevTok := RecFieldByteSize(szRec, CurTok.SVal);
                       szRec := RecFieldRecId(szRec, CurTok.SVal);
                       if Tokens[TokPos].Kind = tkDot then Next;   { deeper chain }
                     end;
                     { CurTok = the last field name; the shared trailing Next
-                      below moves past it to the ')'. }
-                    if (szElemTk = tyRecord) and (szRec >= 0) then
-                      prevTok := RecSize(szRec)
-                    else
-                      prevTok := TypeSize(szElemTk);
+                      below moves past it to the ')'. prevTok already holds that
+                      field's size. }
                   end
                   else if Syms[sci].IsArray and (Tokens[TokPos].Kind = tkLBrack) and
                      (SymArrNDims[sci] <= 1) then
@@ -13005,6 +13011,18 @@ begin
                       prevTok := 0;
                     end;
                   end
+                  else if Syms[sci].IsArray and
+                          ((SymDynDepth[sci] > 0) or (Syms[sci].ArrLen < 0)) then
+                    { A DYNAMIC array variable is a handle, so pointer width --
+                      the rule the named dynamic-array ALIAS branch above already
+                      applies, and the one a dynamic-array FIELD gets from
+                      RecFieldByteSize. Falling into the static formula below
+                      multiplied the element size by ArrLen = -1 and SizeOf(d)
+                      answered **-4**: a negative size, silently, which
+                      `GetMem(SizeOf(d))` and any Move/FillChar sized that way
+                      would carry straight into the allocator
+                      (found widening bug-p-sizeof-an-array-field-returns-the-element-size). }
+                    prevTok := TARGET_PTR_SIZE
                   else if Syms[sci].IsArray then
                   begin
                     { Array symbols store the ELEMENT type in TypeKind/ElemType
