@@ -1622,6 +1622,7 @@ procedure ParseRecordPropertyDecl(ci: Integer); forward;
 function IsNodePChar(node: Integer): Boolean; forward;  { defined in ir.inc (included later) }
 procedure ParseSubroutine; forward;
 function NegWidensToInt64(tk: TTypeKind): Boolean; forward;  { FPC: unary minus yields Int64 for EVERY integer operand }
+function ASTConstIntValue(node: Integer; var v: Int64; depth: Integer): Boolean; forward;  { ...except a CONSTANT, which FPC types by its folded VALUE }
 procedure ParseGenericFunctionDef; forward;
 procedure ParseOperatorDef; forward;
 procedure ParseNestedRoutine; forward;
@@ -10131,7 +10132,8 @@ begin
 end;
 
 procedure ParseFactorCore;
-var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
+var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG node }
+    lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
@@ -10844,7 +10846,26 @@ begin
         tyPointer (no sign), the promotable ints (already arbitrary precision,
         so a width has no meaning), and every float — where the operand type IS
         the result type. bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits }
-      if NegWidensToInt64(IntToTypeKind(ASTTk[left])) then ASTTk[node] := Ord(tyInt64)
+      { A negated CONSTANT is the exception, and it is not a small one: FPC folds
+        a constant expression and gives the result the SMALLEST SIGNED type that
+        holds the value, so `-1` is a LongInt and stays one. Widening it changed
+        three measured behaviours at once -- `IntToHex(-1, 8)` printed 16 digits
+        because the Int64 overload won, `-7` in an `array of const` arrived as
+        vtInt64 so a vtInteger reader skipped it, and the overload-width table
+        moved its literal row to int64. All three are LongInt under FPC, and all
+        three came back from Track T within the hour
+        (regression-test-core-test-asm-emit and its two siblings). The widening
+        below is about a negated VARIABLE, where FPC really does have one result
+        type -- `-b` on a Byte is Int64 while `-7` is not. }
+      if ASTConstIntValue(left, negConstVal, 0) then
+      begin
+        negConstVal := -negConstVal;
+        if (negConstVal >= -2147483648) and (negConstVal <= 2147483647) then
+          ASTTk[node] := Ord(tyInteger)
+        else
+          ASTTk[node] := Ord(tyInt64);
+      end
+      else if NegWidensToInt64(IntToTypeKind(ASTTk[left])) then ASTTk[node] := Ord(tyInt64)
       else ASTTk[node] := ASTTk[left];
       { {$Q+} region: unary minus is overflow-checked too. FPC raises
         EIntOverflow on `-Low(Int64)` and on nothing else once the widening
@@ -18690,6 +18711,59 @@ procedure ParseStatement; forward;
 { Does unary minus on this operand type yield an Int64, the way FPC's does?
   True for every INTEGER type and nothing else — see the long note at
   ParseFactor's tkMinus case. }
+function ASTConstIntValue(node: Integer; var v: Int64; depth: Integer): Boolean;
+{ Is this an integer CONSTANT expression, and what is its value?
+
+  Used only to TYPE a negated constant (ParseFactor's tkMinus arm); nothing is
+  folded in the AST or the IR on the strength of it, so an arithmetic surprise
+  here costs a type, not a value. Wide literals are excluded -- their digits live
+  in the token span and ASTIVal holds only the wrapped reading, so they are not a
+  value this can read (see IsWideIntLit).
+
+  Depth-capped, and deliberately small: literals, a nested negation, and the
+  integer operators a constant expression is built from. Anything else answers
+  False and takes the widening path. }
+var a, b: Int64;
+begin
+  Result := False;
+  v := 0;
+  if (node < 0) or (depth > 16) then Exit;
+  case ASTKind[node] of
+    AN_INT_LIT:
+      begin
+        if (ASTSLen[node] > 0) and
+           ((ASTTk[node] = Ord(tyInt64)) or (ASTTk[node] = Ord(tyPromoInt64))) then Exit;
+        if ASTTk[node] = Ord(tyPromoInt64) then Exit;
+        v := ASTIVal[node];
+        Result := True;
+      end;
+    AN_NEG:
+      begin
+        Result := ASTConstIntValue(ASTLeft[node], a, depth + 1);
+        if Result then v := -a;
+      end;
+    AN_BINOP:
+      begin
+        if not ASTConstIntValue(ASTLeft[node], a, depth + 1) then Exit;
+        if not ASTConstIntValue(ASTRight[node], b, depth + 1) then Exit;
+        Result := True;
+        case TTokenKind(ASTIVal[node]) of
+          tkPlus:  v := a + b;
+          tkMinus: v := a - b;
+          tkStar:  v := a * b;
+          tkDiv:   if b = 0 then Result := False else v := a div b;
+          tkMod:   if b = 0 then Result := False else v := a mod b;
+          tkShl:   if (b < 0) or (b > 63) then Result := False else v := a shl b;
+          tkShr:   if (b < 0) or (b > 63) then Result := False else v := a shr b;
+          tkAnd:   v := a and b;
+          tkOr:    v := a or b;
+          tkXor:   v := a xor b;
+          else     Result := False;
+        end;
+      end;
+  end;
+end;
+
 function NegWidensToInt64(tk: TTypeKind): Boolean;
 begin
   Result := False;

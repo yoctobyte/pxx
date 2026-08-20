@@ -4175,6 +4175,14 @@ test-core: $(COMPILER)
 	# resolution and {$$Q+} included.
 	./$(COMPILER) test/test_unary_minus_widens_to_int64.pas $(TESTTMP)/test_unaryminus26
 	test "$$($(TESTTMP)/test_unaryminus26 | tail -1)" = "total ok 31 / 31"
+	# ...but a negated CONSTANT is folded and typed by its VALUE, not widened:
+	# FPC gives it the smallest signed type that holds it, so `-1` is a LongInt.
+	# Widening it too moved `IntToHex(-1, 8)` onto the Int64 overload (16 digits),
+	# made `-7` in an `array of const` a vtInt64 that a vtInteger reader skipped,
+	# and moved the overload-width table's literal row. All 13 assertions are
+	# FPC 3.2.2 -O-'s own answers.
+	./$(COMPILER) test/test_unary_minus_constant_keeps_longint.pas $(TESTTMP)/test_unaryminusconst26
+	test "$$($(TESTTMP)/test_unaryminusconst26 | tail -1)" = "total ok 13 / 13"
 	./$(COMPILER) test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_nativeshift26
 	test "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
 	test "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"
