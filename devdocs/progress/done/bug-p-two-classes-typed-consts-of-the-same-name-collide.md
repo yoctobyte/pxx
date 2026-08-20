@@ -4,7 +4,7 @@ prio: 65
 type: bug
 blocked-by: []
 summary: "A TYPED class const (`const X: T = ...`) is registered under its BARE name in the global namespace, not under a class-mangled key like the untyped forms are. Two classes each declaring `const TAG: array[1..2] of Integer` therefore share one storage slot: TA.Get returns TB's value. Silent wrong value, no diagnostic; FPC gets it right."
-status: working
+status: done
 owner: claude-acp
 ---
 
@@ -87,3 +87,72 @@ arm.
 `make compiler/pascal26` + the repro above + `tools/gate.sh quick`. The test
 that bites is the two-class table, not the single-class qualified read: one
 class alone works today, so a test with one class would pass before the fix.
+
+---
+
+## Fixed — 2026-08-20
+
+### What it was
+
+The untyped class-const forms already got a `ClassConst` registry row and a
+mangled backing name. The TYPED form (`const X: T = ...`) skipped both, on the
+reasoning recorded beside it: *"typed class consts have real storage and stay
+global (rare; tracked as a follow-up)"*. Because the backing name stayed BARE
+and global, two owners declaring the same const name shared one slot.
+
+Records were the same bug one level further out, and worse — their const
+section was parsed with **no owner at all**, `ParseConstSection(-1, 0)`, with
+the comment *"a constant has no storage and pxx does not scope declarations, so
+there is nothing to scope."* Both halves of that are false for a typed const.
+
+### The fix
+
+1. **Declaration** (`ParseConstSection`, typed arm): register the registry row
+   and mangle `name` **before** the storage is allocated, so `AllocVar` /
+   `AllocArray` names the mangled key. Identical to what the untyped arm does.
+2. **Records** now pass their own `ci` instead of `-1`. Visibility is passed as
+   0 (public) deliberately: a record's sections are already restricted
+   (protected/published are refused outright) and record consts were never
+   visibility-checked, so this keeps today's behaviour rather than quietly
+   tightening it.
+3. **Lookup** — one new predicate, `FindClassConstSym`, placed beside
+   `FindClassVar` because it answers the same question about the same kind of
+   thing: the backing SYMBOL of a const that is storage rather than a literal.
+   The three access paths (qualified `TFoo.X`, bare-in-method, const-folding)
+   call it instead of each rebuilding mangle-then-`FindSym`. Where it hits, the
+   caller re-enters `ParseLValueAST` on the symbol — exactly what a `class var`
+   already does, which is what makes suffixes (`TAG[1]`, `.f`, `^`) parse.
+
+The untyped forms are untouched: they have no symbol, `EmitClassConstNode`
+still answers them as literals, and `FindClassConstSym` returns -1 for them.
+
+### One real trap, worth recording
+
+The first attempt at the bare-in-method path re-entered `ParseLValueAST`
+**without consuming the identifier**. `ParseLValueAST`'s contract is that the
+caller has already consumed the name — it reads the spelling from the token
+INDEX it is handed, not from the cursor — and the literal path two lines above
+does its own `Next` for exactly that reason. Symptom was
+`Expected: ), but got: N` from an enclosing `Writeln('w: ', N)`, i.e. an error
+about the CALLER's syntax with nothing wrong in the source. Capture the token
+index, `Next`, then re-enter.
+
+### Verified
+
+`test/test_typed_class_const_scoping.pas` — two records and two classes, each
+pair declaring the same typed const name, read bare (from a method) and
+qualified, plus untyped consts in the same program to prove they were not
+disturbed. Every row matches FPC 3.2.2 (`{$modeswitch advancedrecords}`).
+The A/B pairing is the point: a single-owner test passes with or without the
+fix.
+
+### It closed type-helpers v3's last item for free
+
+`UInt32.SIZED_SIGN_MASK[i]` — the open item in
+[[feature-pascal-type-helpers]] — now works, along with the helper-name and
+in-body spellings, because a helper IS a record and its consts now reach the
+same registry the type-name receiver already used. No typed-const path was
+added to the helper code. `test/test_type_helper_const_array.pas`.
+
+## Log
+- 2026-08-20 — resolved, commit PENDING-COMMIT.

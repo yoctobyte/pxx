@@ -214,6 +214,28 @@ begin
   end;
 end;
 
+function FindClassConstSym(ci: Integer; const nm: AnsiString): Integer;
+{ The backing SYMBOL of a class const that has real storage rather than a
+  literal value — i.e. a TYPED one, `const X: T = ...`. -1 when this class chain
+  declares no const of that name, or when it does but the const is one of the
+  untyped forms (whose backing lives in the const tables and is answered by
+  EmitClassConstNode instead).
+
+  Exists so the three access paths — qualified `TFoo.X`, bare-in-method, and the
+  const-expression folder — ask ONE question rather than each rebuilding the
+  mangle-then-FindSym pair. Same shape as FindClassVar above, and for the same
+  reason: a typed const, like a class var, is storage the caller must re-enter
+  ParseLValueAST on so that suffixes (`[i]`, `.f`, `^`) parse.
+  bug-p-two-classes-typed-consts-of-the-same-name-collide }
+var reg: Integer;
+begin
+  Result := -1;
+  if ci < 0 then Exit;
+  reg := FindClassConst(ci, nm);
+  if reg < 0 then Exit;
+  Result := FindSym(ClassConstMangle(ClassConstCi[reg], nm));
+end;
+
 function EmitClassConstNode(const key: AnsiString; var outTk: TTypeKind): Integer;
 { Build a literal AST node for a resolved class-const backing entry (its mangled
   key). Scalar -> AN_INT_LIT/AN_FLOAT_LIT (carrying any enum identity), string ->

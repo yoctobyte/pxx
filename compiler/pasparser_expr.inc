@@ -4139,6 +4139,28 @@ begin
             LastExprTk := ccTk;
             Exit;
           end;
+          { No literal backing — a TYPED class const is writable STORAGE, so it
+            has a symbol. Route the BARE in-method reference through it: the
+            name is mangled now, so plain FindSym on the source spelling misses
+            and without this the const would be invisible inside its own class's
+            methods. ParseLValueAST re-entry gets the suffixes (`TAG[1]`) too.
+            bug-p-two-classes-typed-consts-of-the-same-name-collide }
+          ccNode := FindSym(ccKey);
+          if ccNode >= 0 then
+          begin
+            { Note the order: capture the identifier's token index, CONSUME it,
+              and only then re-enter. ParseLValueAST's contract is that the
+              caller has already consumed the name (it reads the spelling from
+              the token INDEX it is handed, not from the cursor) — the literal
+              path above does its own `Next` for the same reason. Re-entering
+              without consuming left `N` as the current token, so an enclosing
+              `Writeln('w: ', N)` reported `Expected: ), but got: N`. }
+            prevTok := TokPos - 1;
+            Next;
+            CurASTNode := ParseLValueAST(ccNode, prevTok);
+            LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+            Exit;
+          end;
         end;
       end;
 

@@ -113,10 +113,13 @@ knowing that the two spellings are not equally portable.
 
 ### v3 remaining, and one thing that turned out to be a different bug
 
+So v3 now has exactly two items left:
+
 - **rvalue receivers** — `'abc'.ToLower`, `F().ToLower`. Need a materialized
   temp. FPC oracle for both: `Abc` in the probe used here. Still refused.
 - **class helpers** (`class helper for TSomeClass`).
-- **`UInt32.SIZED_SIGN_MASK[i]` is NOT a helper gap.** It fails identically
+- ~~**`UInt32.SIZED_SIGN_MASK[i]`**~~ — **DONE 2026-08-20, and not by helper
+  code.** It fails identically
   through the HELPER's own name (`TU32Helper.SIZED_SIGN_MASK[2]`), so the
   type-name work above is not what is missing. A TYPED class const
   (`const X: T = ...`) never enters the ClassConst registry at all — the code
@@ -127,5 +130,7 @@ knowing that the two spellings are not equally portable.
   declaring `const TAG: array[1..2] of Integer` share one global slot, and
   `TA.Get` returns TB's value where FPC returns TA's. Fixing that ticket makes
   `UInt32.SIZED_SIGN_MASK[i]` work for free, because it routes through the same
-  registry the type-name receiver already uses. So this ticket does NOT need to
-  grow a typed-const path of its own.
+  registry the type-name receiver already uses. So this ticket did NOT grow a
+  typed-const path of its own — fixing that bug made all three spellings
+  (helper name, target-type name, in-body) work at once.
+  `test/test_type_helper_const_array.pas`.

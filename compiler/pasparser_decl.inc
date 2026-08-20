@@ -1462,6 +1462,29 @@ begin
         symbol index past SymCount and IR validation rejects it. }
       constIsStatic := CurProc >= 0;
       isLocalConst := False;
+      { A TYPED class-body const gets the same registry row + mangled backing
+        name the untyped forms below get. It used to keep its BARE name and
+        ordinary global storage — "rare; tracked as a follow-up", said the note
+        in the untyped arm — and the consequence was not merely that
+        `TFoo.X` could not resolve it: two classes each declaring
+        `const TAG: array[1..2] of Integer` shared ONE slot, so TA's method read
+        TB's value with no diagnostic, where FPC reads TA's.
+        bug-p-two-classes-typed-consts-of-the-same-name-collide
+
+        Registered here, BEFORE the storage is allocated, so AllocVar/AllocArray
+        names the mangled key. Access goes through the registry at every site
+        (qualified, bare-in-method, const-fold), and because a typed const is
+        STORAGE rather than a literal, those sites resolve the mangled key to a
+        SYMBOL and re-enter — exactly what a `class var` already does. }
+      if ParsingClassConstCi >= 0 then
+      begin
+        if ClassConstCount >= MAX_TYPEALIAS then Error('too many class constants');
+        ClassConstCi[ClassConstCount]   := ParsingClassConstCi;
+        ClassConstName[ClassConstCount] := name;
+        ClassConstVis[ClassConstCount]  := ParsingClassConstVis;
+        Inc(ClassConstCount);
+        name := ClassConstMangle(ParsingClassConstCi, name);
+      end;
       Next;
       { A NAMED fixed-array type (`Action0: TLogonActions = (...)`, ftpsend)
         takes the same array-constant path as the inline `array[..] of T`
@@ -2699,14 +2722,25 @@ begin
        (Tokens[TokPos].Kind = tkVar) then
       Error('class var is not allowed in a record type');
 
-    { `const` section inside a record — same treatment as in a class body: parsed as
-      ordinary GLOBAL constants. A constant has no storage and pxx does not scope
-      declarations, so there is nothing to scope, and `TRec.K` resolves through the
-      qualified-const path. Unparsed, `const` fell into the field parser below and
-      demanded a ':' after the name. }
+    { `const` section inside a record — same treatment as in a class body, and
+      that now means SCOPED to the record, not global.
+
+      This used to pass -1 (no owner) on the reasoning that "a constant has no
+      storage and pxx does not scope declarations, so there is nothing to
+      scope". Both halves are false for a TYPED const (`const X: T = ...`),
+      which FPC defines as writable storage with an initial value — so two
+      records, or two type HELPERS, declaring the same const name shared one
+      global slot and read each other's values, and `TRec.X` could not resolve
+      it at all because no registry row existed.
+      bug-p-two-classes-typed-consts-of-the-same-name-collide
+
+      Visibility is passed as 0 (public): a record's sections are already
+      restricted above (protected and published are refused outright), and
+      record consts were never visibility-checked, so this keeps today's
+      behaviour rather than quietly tightening it. }
     if CurTok.Kind = tkConst then
     begin
-      ParseConstSection(-1, 0);
+      ParseConstSection(ci, 0);
       continue;
     end;
 

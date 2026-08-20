@@ -3693,6 +3693,20 @@ test-core: $(COMPILER)
 	# must all land on one helper (builtin name, named alias, alternative
 	# builtin spelling, string helper); row f is the guard that a BARE type name
 	# is still a TYPE and not a class reference. FPC 3.2.2 answers 2147483648.
+	# A TYPED class/record const must be SCOPED to its owner. It kept its BARE
+	# name and global storage, so two owners with the same const name shared ONE
+	# slot and TA's method read TB's value — silently. Rows A and B of each pair
+	# are what makes that visible; a single-owner test passes either way. Records
+	# were the same bug with no owner passed at all. Untyped consts (K) are here
+	# because they already worked and must not be disturbed. Diffed against FPC.
+	./$(COMPILER) test/test_typed_class_const_scoping.pas $(TESTTMP)/test_typed_cc26
+	test "$$($(TESTTMP)/test_typed_cc26)" = "$$(printf 'rec  A bare : 11 (want 11)\nrec  B bare : 22 (want 22)\nrec  A qual : 11 1 (want 11 1)\nrec  B qual : 21 2 (want 21 2)\ncls  A      : 100 100 (want 100 100)\ncls  B      : 200 200 (want 200 200)')"
+	# …and the helper case that fell out of it: a helper's typed const ARRAY
+	# through the helper name, the TARGET TYPE name, and a helper body. This was
+	# type-helpers v3's last open item and was never a helper gap — a helper is a
+	# record, and a record's consts had no owner.
+	./$(COMPILER) test/test_type_helper_const_array.pas $(TESTTMP)/test_th_constarr26
+	test "$$($(TESTTMP)/test_th_constarr26)" = "$$(printf 'helper-name : 32768\nTYPE-name   : 2147483648\nfrom body   : 8388608\n128 32768 8388608 2147483648 ')"
 	./$(COMPILER) test/test_type_helper_typename_receiver.pas $(TESTTMP)/test_th_typename26
 	test "$$($(TESTTMP)/test_th_typename26)" = "$$(printf 'a typename static  : 2147483648\nb alias  static    : 2147483648\nc cardinal spelling: 2147483648\nd string typename  : str\ne typename const   : 2147483648 u32\nf bare type is type: 4 5')"
 	# FPC {$MACRO ON} text macros ({$define name := body}), RolDWord-family

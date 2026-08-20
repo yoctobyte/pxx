@@ -314,6 +314,16 @@ begin
       cvIdx := -1;
       if (fldIdx < 0) and (CurMethClass >= REC_UCLASS_BASE) and (CurProc >= 0) then
         cvIdx := FindClassVar(CurMethClass - REC_UCLASS_BASE, fieldName);
+      { …and a bare TYPED class const (`const X: T = ...`), which is writable
+        STORAGE like a class var rather than a literal, so it resolves to a
+        symbol and re-enters the same way. The untyped forms do NOT come through
+        here — they have no symbol and are answered as literals by
+        EmitClassConstNode further down. Placed beside the class-var lookup
+        because they are the same question about the same kind of thing; a
+        separate branch elsewhere is how the two would drift.
+        bug-p-two-classes-typed-consts-of-the-same-name-collide }
+      if (cvIdx < 0) and (fldIdx < 0) and (CurMethClass >= REC_UCLASS_BASE) and (CurProc >= 0) then
+        cvIdx := FindClassConstSym(CurMethClass - REC_UCLASS_BASE, fieldName);
       if cvIdx >= 0 then
       begin
         { Re-enter with the backing global resolved: the idx >= 0 path already
@@ -798,6 +808,17 @@ begin
               begin
                 tk := ccTk; recName := REC_NONE;
                 Result := ccNode;
+                Exit;
+              end;
+              { No literal backing — a TYPED class const (`const X: T = ...`)
+                is writable STORAGE, not a value, so it has a symbol instead.
+                Re-enter with that symbol exactly as the class-VAR branch above
+                does, which is what makes `TFoo.TAG[1]` parse its suffixes.
+                bug-p-two-classes-typed-consts-of-the-same-name-collide }
+              fldIdx := FindSym(ccKey);
+              if fldIdx >= 0 then
+              begin
+                Result := ParseLValueAST(fldIdx, qualNameTok);
                 Exit;
               end;
             end;
