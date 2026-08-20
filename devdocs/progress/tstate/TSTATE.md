@@ -3,12 +3,8 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `252084d705ce` | 2026-08-20T10:49:22Z | RED (native) | 424.5s | `57b9b7148d32` RED |
+| plexus | `23730e49d446` | 2026-08-20T11:03:49Z | GREEN (native) | 434.4s | `57b9b7148d32` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
 - **test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy** — test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy lib/rtl/classes.pas +2 (plexus): bad `57b9b7148d32`, last good `003d733936aa`, 7 commit(s) in range
-- **test-core#src:test/test_asm_emit.pas** — test/test_asm_emit.pas (plexus): bad `943c706936b3`, last good `b24bb1474624`, 3 commit(s) in range
-- **test-core#src:test/test_integer_longint_overload.pas** — test/test_integer_longint_overload.pas test/test_integer_longint_overload.expected (plexus): bad `943c706936b3`, last good `b24bb1474624`, 3 commit(s) in range
-- **test-core#src:test/test_strict_overload_width.pas@1** — test/test_strict_overload_width.pas (plexus): bad `943c706936b3`, last good `b24bb1474624`, 3 commit(s) in range
-- **test-core#src:test/test_strict_overload_width.pas@2** — test/test_strict_overload_width.pas (plexus): bad `943c706936b3`, last good `b24bb1474624`, 3 commit(s) in range
