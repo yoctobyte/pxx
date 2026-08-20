@@ -3942,6 +3942,13 @@ test-core: $(COMPILER)
 	# High/Low of ordinal types in const expressions (bug-pascal-high-low-in-const-expr)
 	./$(COMPILER) test/test_high_low_const_expr.pas $(TESTTMP)/test_high_low_const_expr26
 	test "$$($(TESTTMP)/test_high_low_const_expr26)" = "$$(printf '256\n256\n255 -32768 2\n2147483646\n7\n1\n0 9\n0 9 -5 5\na e\n10\n5')"
+	# TypeInfo(T) must report the type the CALLER NAMED. `byte` and `integer`
+	# lex as one token (tkInteger_T, two spellings), and this path switched on
+	# the token kind — so TypeInfo(Byte) said "Integer" while TypeInfo(UInt8),
+	# resolved by name, said "Byte". Both rows are present because the pair is
+	# what makes it visible. Values checked against FPC 3.2.2.
+	./$(COMPILER) -Fulib/rtl test/test_typeinfo_scalar_names.pas $(TESTTMP)/test_typeinfo_names26
+	test "$$($(TESTTMP)/test_typeinfo_names26)" = "$$(printf 'Byte 1 Byte\nUInt8 1 Byte\nInteger 1 Integer\nWord 1 Word\nLongWord 1 LongWord\nInt64 19 Int64\nChar 2 Char\nBoolean 18 Boolean\nDouble 4 Double\nSingle 4 Single\nstring 9 AnsiString')"
 	# A program naming `puint8` must compile QUIETLY: FindTypeAlias carried a
 	# leftover debug dump keyed on that exact name, printing the whole alias
 	# table to STDOUT before the pointer-alias fallback resolved it. The

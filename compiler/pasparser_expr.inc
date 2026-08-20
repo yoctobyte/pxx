@@ -3690,7 +3690,28 @@ begin
             Double/Extended lex as their OWN token kind, not tkIdent -- SVal is
             empty for these, read the spelling via GetTokenStr like the class-body
             method-named-after-a-type-keyword path does, b332. }
-          tiName := GetTokenStr(TokPos);
+          { TokPos - 1, not TokPos: Next has already advanced past this token
+            (lexer.inc's Next reads Tokens[TokPos] then Inc(TokPos)), so
+            GetTokenStr(TokPos) returns the `)` AFTER the type name. That was
+            invisible while tiName fed only the "not supported" error, which
+            this branch never reaches — the case below always assigns a kind. }
+          tiName := GetTokenStr(TokPos - 1);
+          { Resolve from the SPELLING first, not the token kind. `byte` and
+            `integer` both lex as tkInteger_T (lexer.inc:229/284 — one token,
+            two spellings), so switching on the kind alone reported
+            TypeInfo(Byte) as tkInteger named "Integer" while the identical
+            TypeInfo(UInt8) — an ordinary tkIdent, resolved by name — correctly
+            said "Byte". FPC says Byte. The type system was never confused:
+            SizeOf(Byte) has always been 1; only this path lost the spelling.
+            OrdinalNameToTk answers tyUnknown for the non-ordinal keywords
+            (string/real/single/double/extended), which is what the case below
+            still handles. }
+          tiTk := OrdinalNameToTk(tiName);
+          if tiTk <> tyUnknown then
+          begin
+            { resolved by name }
+          end
+          else
           case CurTok.Kind of
             tkInteger_T:  tiTk := tyInteger;
             tkBoolean_T:  tiTk := tyBoolean;

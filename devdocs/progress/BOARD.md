@@ -51,7 +51,7 @@ lives in git, not in a timestamp._
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (269)
+## backlog (270)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -101,6 +101,7 @@ lives in git, not in a timestamp._
 | bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic | N | 25 | bug | `return super().hi()` (super() in expression position, documented as unsupported) is refused with `error: Nil Python: annotate the type / too dynamic [a=22 b=8]` reported at line 1 — a diagnostic that names neither the construct nor the right line. Also: `B.__init__(self)` for a second base is `class method not found`. | — |
 | bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop | N | 55 | bug | A class with __getitem__/__len__ now iterates with `for`, but every OTHER consumer of iteration still refuses it — and `list(b)` returns [] SILENTLY. Found while fixing feature-nilpy-for-loop-getitem-protocol-fallback; the for-loop was one path of several serving one concept. | — |
 | bug-n-tk-got-files-are-invisible-to-testmgr-privatization | N | 40 | bug | The tk loop in `test-nilpy` spells its BINARIES by full path — that was the callbacks fix — but still captures output to `$(TESTTMP)/$$src.got`. `make -n` yields `/tmp/$src.got`, which testmgr's filename scan cannot match, so those three files are never privatized and two concurrent runs share them. Found by T's new lint, in the recipe whose earlier fix was believed complete. | — |
+| bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind | N | 30 | bug | NilPy's TypeInfo path carries the same two defects Track A just fixed on the Pascal side: it reads GetTokenStr(TokPos) — one token PAST the type name, because Next already advanced — and it resolves the type from the TOKEN KIND rather than the spelling, so TypeInfo(byte) answers Integer (byte and integer share tkInteger_T). | — |
 | bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells | N | 40 | bug | A Nil Python generator instance leaks its locals and its argument cells | — |
 | bug-nilpy-a-keyword-call-through-a-statically-unknown-callee-does-not-compile | N | 45 | bug | `a = mk(1); a(x=5)` fails to COMPILE — `error: undefined variable (x)` — because the keyword-argument lowering only fires when the frontend can resolve the callee to a def/lambda by name. The runtime dispatcher handles this fine (a callee reached as a PARAMETER works), so it is the parse-time gate, not the call path. | — |
 | bug-nilpy-a-lambda-returned-directly-is-not-callable | N | 55 | bug | `return lambda x: ...` yields a value that is NOT callable — `TypeError: object is not callable (no __call__)` where CPython calls it. Binding the same lambda to a local first (`g = lambda ...; return g`) works, so the lift is fine and it is the RETURN of the lambda expression that loses the callable tag. | — |
@@ -755,6 +756,7 @@ lives in git, not in a timestamp._
 - [p 35] [D] task-d-document-the-strict-overload-width-flag
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
 - [p 30] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder
+- [p 30] [N] bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind
 - [p 30] [N] bug-nilpy-an-extended-slice-cannot-be-assigned
 - [p 30] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
 - [p 30] [A] chore-a-re-include-bench-timing-in-tools-devtest
