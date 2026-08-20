@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `426b90021634` | 2026-08-20T22:12:22Z | RED (native) | 456.0s | `1b9b43e5b511` RED |
+| plexus | `079ab9a6fb24` | 2026-08-20T22:27:35Z | RED (native) | 472.3s | `1b9b43e5b511` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -16,24 +16,3 @@
 - **test-pascal-conformance#shard4/6** — tools/run_pascal_conformance.sh (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range
 - **tools-devtest#00** (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range
 - **test-core#src:test/test_record_helper_for_string_b331.pas** — test/test_record_helper_for_string_b331.pas (plexus): bad `2e7286e499d1`, last good `9ac7e74e367b`, 3 commit(s) in range
-- **CASCADE 17 jobs** (plexus): bad `426b90021634`, last good `8a5e4abb3242`, 3 commit(s) in range
-  <details><summary>jobs</summary>
-
-  - `test-core#src:test/test_ansistring_cast_extern_pchar.pas`
-  - `test-core#src:test/test_ansistring_cast_fnptr.pas`
-  - `test-core#src:test/test_c_dlopen.pas`
-  - `test-core#src:test/test_c_gtk_call.pas`
-  - `test-core#src:test/test_c_gtk_types.pas`
-  - `test-core#src:test/test_c_gtk_window.pas`
-  - `test-core#src:test/test_cdecl_indirect.pas`
-  - `test-core#src:test/test_dynlib.pas@2`
-  - `test-core#src:test/test_exception_unhandled.pas@1`
-  - `test-core#src:test/test_exception_unhandled.pas@3`
-  - `test-core#src:test/test_multithreading.pas@1`
-  - `test-core#src:test/test_nilpy_c_pointer.npy`
-  - `test-core#src:test/test_shared_object.pas`
-  - `test-core#src:test/test_sqlite_crud.pas`
-  - `test-core#src:test/test_sqlite_crud_autotyped.pas`
-  - `test-core#src:test/test_sqlite_crud_lazy.pas`
-  - `test-core#src:test/test_string_to_pchar_auto.pas`
-  </details>
