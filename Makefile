@@ -4994,6 +4994,13 @@ test-core: $(COMPILER)
 	# emitter has no value cache. The index and field forms were always right.
 	./$(COMPILER) test/cassign_dest_call_once.c $(TESTTMP)/cassign_dest_call26
 	test "$$($(TESTTMP)/cassign_dest_call26)" = "ok"
+	# ...and the COMPOUND half, a different mechanism: `x OP= y` desugars to
+	# `x = x OP y` REUSING the one lvalue AST node, so lowering walked it twice and
+	# `*f() += 1` called f twice, `a[i++] += 1` stepped i twice, `*p++ += 1` moved p
+	# by TWO. Values right, side effects doubled. A plain-char lvalue is in there
+	# because it arrives promoted three binops deep and outlived the first fix.
+	./$(COMPILER) test/cassign_compound_lvalue_once.c $(TESTTMP)/cassign_compound26
+	test "$$($(TESTTMP)/cassign_compound26)" = "ok"
 	./$(COMPILER) test/cnested_union_b44.c $(TESTTMP)/cnested_union_b4426
 	$(TESTTMP)/cnested_union_b4426; test "$$?" = "42"
 	./$(COMPILER) test/canon_agg_global_b45.c $(TESTTMP)/canon_agg_global_b4526

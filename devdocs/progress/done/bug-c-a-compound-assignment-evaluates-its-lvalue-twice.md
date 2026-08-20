@@ -4,7 +4,8 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "`x OP= y` desugars to `x = x OP y` REUSING the lvalue AST node, so a side-effecting lvalue runs twice: `*f() += 1` calls f twice and `*p++ += 1` advances p by TWO. Idiomatic C, silently wrong, values still plausible."
-status: backlog
+status: done
+owner: frank1-ACP
 ---
 
 # A compound assignment evaluates its lvalue TWICE
@@ -99,3 +100,60 @@ whole corpus (lua, sqlite, tcc, zlib, quickjs) until a csmith checksum found it.
 The shapes above match gcc; a test under `test/` pins each of them (the
 `cassign_dest_call_once.c` sibling is the model); C tests green + self-host
 byte-identical.
+
+
+## What it was — and why the fix is in the IR, not in cparser
+
+The diagnosis in the ticket held: `ParseCAssignExpr` reuses the one lvalue AST
+node, so `IRLowerAST` walks it twice and runs its side effects twice. What
+changed is where the repair landed.
+
+Rewriting the desugar in cparser — hoisting the lvalue's side-effecting operands
+into temps and re-emitting `(tmp = f(), *tmp += 1)` — would have had to rebuild
+each temp's type metadata (pointer element kind, depth, record id) to keep the
+binop typing and pointer SCALING identical, which is exactly where this family's
+bugs live. So the AST is left alone and only the shared node's LOWERING is
+pinned:
+
+- `IRLowerCompoundAssign` lowers the destination address once
+  (`IRLowerDestAddress`, which parks a call-bearing address in a pointer temp),
+  reads through it once, and holds `IRCompoundLvAST/Addr/Val` for the duration of
+  the RHS.
+- `IRLowerAST` and `IRLowerDestAddress` answer from that pin when they are asked
+  for the same AST node again — so the second walk yields the already-read value
+  instead of re-running the call. Saved and restored around the recursion, so a
+  nested compound assignment keeps its own pin.
+- `IRAssignIsSharedCompound` is the trigger, and it is deliberately narrow: C
+  mode, an AN_BINOP RHS, the destination node reachable inside it, a scalar /
+  float / pointer destination, and an lvalue that actually HAS a side effect.
+  Ordinary `a[i] += 1` keeps the exact IR it had.
+
+Because the AST is untouched, the binop keeps deriving its conversions and its
+pointer scaling from the real lvalue node — `*pp += 3` on a `long long **`
+still steps 24 bytes, which is the property that switching to
+`AN_COMPOUND_ASSIGN` would have lost.
+
+## Two things measurement caught that reasoning would not have
+
+**A plain-char lvalue outlived the first cut.** The exact-identity check
+(`ASTLeft[binop] = ASTLeft[assign]`) missed it: a `char` lvalue arrives
+PROMOTED, as `((lv & $FF) ^ $80) - $80`, so the shared node sits three binops
+down the left spine. The trigger now searches the RHS subtree for the node index
+instead of guessing a depth — node identity is the signature, and only the
+desugar produces it.
+
+**A float lvalue segfaulted.** `dbuf[f()-1] += 0.25` crashed on a null pointer.
+The parked address was an `IR_INDEX` node, and an address node carries the
+element type it points AT — so with a `double` element the store into the
+pointer temp hit the emitter's C double→int rule and truncated an ADDRESS
+through `cvttsd2si`. It is the same trap the `IR_LEA` exclusion in
+`EmitStoreVar` documents (that one crashed sqlite3AtoF); the node is retagged as
+the pointer it is in that position. gdb on the faulting instruction found it in
+one step; nothing about the IR dump looked wrong.
+
+All shapes in the ticket's table now match gcc, plus the value form, the nested
+form, the shift/bitwise forms and pointer scaling, pinned in
+`test/cassign_compound_lvalue_once.c`. quickjs's smoke stays byte-exact.
+
+## Log
+- 2026-08-20 — resolved, commit PENDING-COMMIT.

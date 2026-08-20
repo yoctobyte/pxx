@@ -3094,6 +3094,17 @@ var
     bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow }
   IRSeqSpine    : array[0..MAX_IR_SEQ_SPINE-1] of Integer;
   IRSeqSpineTop : Integer;
+  { C `lv OP= rhs` desugars in cparser to `lv = lv OP rhs` REUSING the one lvalue
+    AST node, so lowering it twice ran its side effects twice (`*f() += 1` called
+    f twice, `a[i++] += 1` stepped i twice). These pin that node to the address
+    and the value it was lowered to ONCE, for the duration of the rewritten
+    assignment; IRLowerAST and IRLowerDestAddress answer from them instead of
+    walking it again. -1 when no compound assignment is being lowered; saved and
+    restored around nesting (`a[i++] += (b[j++] += 1)`).
+    bug-c-a-compound-assignment-evaluates-its-lvalue-twice }
+  IRCompoundLvAST  : Integer;   { the shared lvalue AST node, or -1 }
+  IRCompoundLvAddr : Integer;   { its address, lowered once }
+  IRCompoundLvVal  : Integer;   { the load through that address, one value node }
   GotoLabelCount  : Integer;
   GotoFixupCodePos: array[0..255] of Integer; { code position of the jmp rel32 operand }
   GotoFixupNOff   : array[0..255] of Integer; { name offset }

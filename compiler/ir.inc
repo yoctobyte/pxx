@@ -21,6 +21,9 @@ begin
     rest so a lowering that stopped early (an Error) cannot leak slots into the
     next one }
   IRSeqSpineTop := 0;
+  IRCompoundLvAST := -1;
+  IRCompoundLvAddr := -1;
+  IRCompoundLvVal := -1;
   CurLowerLine := 0;
   CurLowerFile := 1;
 end;
@@ -1802,6 +1805,27 @@ begin
   end;
 end;
 
+function CASTLValueHasSideEffect(n, depth: Integer): Boolean;
+{ Does EVALUATING this lvalue do anything observable — call, increment, assign?
+  Only then is it worth pinning the node down; an ordinary `a[i] += 1` must keep
+  the exact IR it has today, so the default answer is False and the recursion
+  covers only the shapes an lvalue is actually built from. }
+begin
+  Result := False;
+  if (n < 0) or (n >= ASTNodeCount) or (depth > 12) then Exit;
+  case ASTKind[n] of
+    AN_CALL, AN_VIRTUAL_CALL, AN_INCDEC, AN_ASSIGN, AN_COMPOUND_ASSIGN, AN_COMMA:
+      Result := True;
+    AN_DEREF, AN_FIELD, AN_PTR_CAST, AN_ADDR, AN_CLASS_CAST:
+      Result := CASTLValueHasSideEffect(ASTLeft[n], depth + 1);
+    AN_INDEX, AN_BINOP:
+      begin
+        Result := CASTLValueHasSideEffect(ASTLeft[n], depth + 1);
+        if not Result then Result := CASTLValueHasSideEffect(ASTRight[n], depth + 1);
+      end;
+  end;
+end;
+
 function IRLowerDestAddress(node: Integer): Integer;
 { The destination address of an assignment, evaluated EXACTLY ONCE.
 
@@ -1823,12 +1847,112 @@ function IRLowerDestAddress(node: Integer): Integer;
   byte-identical. }
 var addrTmp: Integer;
 begin
+  { the lvalue of a compound assignment already has its address: this is the
+    SECOND ask for the same AST node, and re-lowering it is the bug }
+  if (node >= 0) and (node = IRCompoundLvAST) then
+  begin
+    Result := IRCompoundLvAddr;
+    Exit;
+  end;
   Result := IRLowerAddress(node);
   if not CProgramMode then Exit;
   if not IRAddrMayCall(Result, 0) then Exit;
   addrTmp := AllocVar('', tyPointer);
+  { An address node carries its ELEMENT type -- IR_INDEX and IR_FIELD are tagged
+    with the kind of what they point AT -- and the store below puts it in a
+    POINTER slot. With a float element that trips the emitter's C double->int
+    rule, which truncated an ADDRESS through cvttsd2si: `dbuf[f()-1] += 0.25`
+    segfaulted on a null pointer. It is the same trap the IR_LEA exclusion in
+    EmitStoreVar documents (it crashed sqlite3AtoF). This node is freshly
+    lowered and, once parked, is read only by the store on the next line, so
+    retag it for what it is in this position: a pointer. }
+  IRTk[Result] := Ord(tyPointer);
   IRAppend(IR_STORE_SYM, addrTmp, Result, -1, 0, Ord(tyPointer));
   Result := IRAppend(IR_LOAD_SYM, addrTmp, -1, -1, 0, Ord(tyPointer));
+end;
+
+function IRLowerCompoundAssign(node: Integer): Integer;
+{ C `lv OP= rhs` where lv has a SIDE EFFECT.
+
+  cparser desugars it to `lv = lv OP rhs` and REUSES the one lvalue AST node in
+  both places -- the comment there says "since it is a pure lvalue read this is
+  safe", which is the assumption C breaks. Lowering walks that node twice, so
+  `*f() += 1` called f twice, `a[i++] += 1` stepped i twice, and `*p++ += 1`
+  advanced p by TWO. The increment operators never had it: AN_INCDEC lowers the
+  address once, and that is the model here.
+
+  Keeping the desugar is deliberate. The alternative -- switching cparser to the
+  AN_COMPOUND_ASSIGN node, whose docstring promises exactly "the lvalue address
+  is computed ONCE" -- looks like a one-line fix and is a trap: that node lowers
+  to a raw scalar read-modify-write with no pointer-arithmetic SCALING, so
+  `p += 1` on a `long long *` would step one byte. The desugar inherits all of
+  C's conversion and scaling rules from the ordinary binop path, because the AST
+  is untouched; only the VALUE the shared node lowers to is supplied here.
+
+  So: lower the destination address once, read through it once, and pin the node
+  to both for the duration of the RHS. Saved/restored around the recursion so a
+  nested compound assignment (`a[i++] += (b[j++] += 1)`) keeps its own pinning.
+  bug-c-a-compound-assignment-evaluates-its-lvalue-twice }
+var lvNode, lvTk, addr, cur, val: Integer;
+    savedAST, savedAddr, savedVal: Integer;
+begin
+  lvNode := ASTLeft[node];
+  lvTk := ASTTk[lvNode];
+  addr := IRLowerDestAddress(lvNode);
+  cur := IRAppend(IR_LOAD_MEM, addr, -1, -1, 0, lvTk);
+  savedAST := IRCompoundLvAST; savedAddr := IRCompoundLvAddr; savedVal := IRCompoundLvVal;
+  IRCompoundLvAST := lvNode;
+  IRCompoundLvAddr := addr;
+  IRCompoundLvVal := cur;
+  val := IRLowerAST(ASTRight[node]);
+  IRCompoundLvAST := savedAST; IRCompoundLvAddr := savedAddr; IRCompoundLvVal := savedVal;
+  Result := IRAppend(IR_STORE_MEM, addr, val, -1, 0, lvTk);
+  { an assignment is an expression yielding the stored value (C 6.5.16), same
+    load-back the ordinary scalar arms append }
+  Result := IRAppend(IR_LOAD_MEM, addr, -1, -1, 0, lvTk);
+end;
+
+function CASTNodeOccursIn(root, target, depth: Integer): Boolean;
+{ Does this exact AST NODE INDEX appear inside that subtree? Node identity, not
+  equality: two spellings of the same expression are two nodes, so a hit means
+  one node is genuinely reachable from two places — which in C only cparser's
+  `lv OP= rhs` -> `lv = lv OP rhs` desugar produces. Depth-capped; the shared
+  node sits on the RHS's left spine, a few levels down at most (a plain-char
+  lvalue promotes through three binops before it). }
+begin
+  Result := False;
+  if (root < 0) or (root >= ASTNodeCount) or (depth > 24) then Exit;
+  if root = target then begin Result := True; Exit; end;
+  Result := CASTNodeOccursIn(ASTLeft[root], target, depth + 1);
+  if not Result then Result := CASTNodeOccursIn(ASTRight[root], target, depth + 1);
+end;
+
+function IRAssignIsSharedCompound(node: Integer): Boolean;
+{ Is this AN_ASSIGN the `lv = lv OP rhs` cparser builds for `lv OP= rhs`, with a
+  side-effecting lvalue? The signature is exact: the binop's LEFT is the very
+  same AST node index as the destination, which nothing else produces.
+
+  Narrow on purpose -- a pure lvalue keeps the IR it has today (the shared node
+  lowers to the same loads twice, which is only duplicated work), an AN_IDENT
+  destination has no address to double, and a managed or aggregate destination
+  belongs to the arms that know how to copy it. C has no compound assignment on
+  those anyway. }
+var lv: Integer; tk: TTypeKind;
+begin
+  Result := False;
+  if not CProgramMode then Exit;
+  lv := ASTLeft[node];
+  if (lv < 0) or (ASTKind[lv] = AN_IDENT) then Exit;
+  if (ASTRight[node] < 0) or (ASTKind[ASTRight[node]] <> AN_BINOP) then Exit;
+  { The lvalue is normally the binop's own left operand, but a promotion sits in
+    between when it needs one: a plain-char lvalue arrives as
+    `((lv & $FF) ^ $80) - $80`, three binops deep, and that spelling kept its
+    double evaluation after the direct check was already fixed. Search the RHS
+    instead of guessing the depth. }
+  if not CASTNodeOccursIn(ASTRight[node], lv, 0) then Exit;
+  tk := IntToTypeKind(ASTTk[lv]);
+  if not (TypeIsOrdinal(tk) or TypeIsFloat(tk) or (tk = tyPointer)) then Exit;
+  Result := CASTLValueHasSideEffect(lv, 0);
 end;
 
 function IRBuildHiddenDest(procIdx: Integer): Integer;
@@ -5091,6 +5215,15 @@ begin
     Exit;
   end;
 
+  { the lvalue of a compound assignment, asked for a SECOND time: answer with the
+    value it was already read as, instead of running its side effects again
+    (bug-c-a-compound-assignment-evaluates-its-lvalue-twice) }
+  if node = IRCompoundLvAST then
+  begin
+    Result := IRCompoundLvVal;
+    Exit;
+  end;
+
   if ASTLine[node] <> 0 then
   begin
     CurLowerLine := ASTLine[node];
@@ -7834,6 +7967,14 @@ begin
 
     AN_ASSIGN:
     begin
+      { `lv OP= rhs` with a side-effecting lvalue: the desugar shares one AST
+        node between the destination and the binop's left operand, so it is
+        lowered here, once, rather than walked twice. }
+      if IRAssignIsSharedCompound(node) then
+      begin
+        Result := IRLowerCompoundAssign(node);
+        Exit;
+      end;
       { FPC/Delphi parity: a procedural VARIABLE named in a VALUE context is
         CALLED. Taking its address is what `@fp` is for, and `fp()` with explicit
         parens was already right — so the two spellings disagreed, and the wrong
