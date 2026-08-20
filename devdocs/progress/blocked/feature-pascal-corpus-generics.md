@@ -9,7 +9,7 @@ blocked-by: feature-pascal-builtin-tobject-class
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** working
+- **Status:** blocked on [[feature-pascal-builtin-tobject-class]]
   runs, fpjson's suite is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
