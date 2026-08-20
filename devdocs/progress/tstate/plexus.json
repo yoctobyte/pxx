@@ -1,19 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T09:25:47Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:test/test_asm_emit.pas",
-    "test-core#src:test/test_integer_longint_overload.pas",
-    "test-core#src:test/test_strict_overload_width.pas@1",
-    "test-core#src:test/test_strict_overload_width.pas@2"
-   ],
-   "sha": "943c706936b329e1777d68892c8e4eb444211ea8",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-20T09:49:42Z",
    "fixed": [],
    "new_red": [],
@@ -432,6 +419,16 @@
    "sha": "9ac7e74e367b2fb2714d3987135465923ef7d818",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T21:33:46Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_record_helper_for_string_b331.pas"
+   ],
+   "sha": "2e7286e499d1993717b2b5f139254bf5736c695a",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -441,6 +438,7 @@
   "test-c-conformance-aarch64#shard1/6": "FAIL 00206.c \u2014 exit code 39 (want 0) | FAIL 00212.c \u2014 exit code 11 (want 0) | test-c-conformance-aarch64: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-aarch64: FAILURES: 00206.c(exit=39) 00212.c(exit=11)",
   "test-c-conformance-arm32#shard1/6": "FAIL 00206.c \u2014 exit code 64 (want 0) | FAIL 00212.c \u2014 exit code 64 (want 0) | test-c-conformance-arm32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-arm32: FAILURES: 00206.c(exit=64) 00212.c(exit=64)",
   "test-c-conformance-riscv32#shard1/6": "FAIL 00206.c \u2014 exit code 144 (want 0) | FAIL 00212.c \u2014 exit code 144 (want 0) | test-c-conformance-riscv32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-riscv32: FAILURES: 00206.c(exit=144) 00212.c(exit=144)",
+  "test-core#src:test/test_record_helper_for_string_b331.pas": "pascal26:71: error: undefined variable (BITS) | near:  Writeln  bits:     BITS >>>   end",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter",
   "test-pascal-conformance#shard4/6": "SKIP toperator9.pp \u2014 gap: operator overload for `in` on a record type not supported by the parser | SKIP tprocvar1.pp \u2014 gap: method pointers (`procedure(l:longint) of object`), @Class.Method, typed-const procvars | SKIP tsealed6.pp \u2014 gap: `object abstract` / `object sealed` modifiers in object declarations | SKIP tstring4.pp \u2014 wontfix: reads ansistring refcount/length header words \u2014 FPC internal \u2026",
   "tools-devtest#00": "FAIL: new hardcoded /tmp path(s) in compiled test sources. These are written at RUNTIME, so no Makefile sweep reaches them and testmgr cannot privatize them \u2014 two concurrent runs share the file: | test/test_read_text_char.pas                         $TMP | test/test_read_text_char.pas                         $TMP | Read the directory from the environment instead ($TESTTMP, which the sweep already\u2026"
@@ -956,11 +954,11 @@
   "test-cjson#src:test/cjson/runner.c": "full",
   "test-core#00": "native",
   "test-core#129": "full",
-  "test-core#146": "native",
-  "test-core#147": "native",
   "test-core#148": "native",
   "test-core#149": "native",
   "test-core#150": "native",
+  "test-core#151": "native",
+  "test-core#152": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
   "test-core#src:examples/tk/callbacks.npy": "native",
@@ -2155,9 +2153,11 @@
   "test-core#src:test/test_tobject_destroy_override.pas": "native",
   "test-core#src:test/test_tobject_methodaddress_b256.pas": "native",
   "test-core#src:test/test_tobject_param_b243.pas": "native",
+  "test-core#src:test/test_type_helper_const_array.pas": "native",
   "test-core#src:test/test_type_helper_for_spelling.pas": "native",
   "test-core#src:test/test_type_helper_typename_receiver.pas": "native",
   "test-core#src:test/test_type_runtime.pas": "native",
+  "test-core#src:test/test_typed_class_const_scoping.pas": "native",
   "test-core#src:test/test_typed_const_record.pas": "native",
   "test-core#src:test/test_typed_metaclass_b278.pas": "native",
   "test-core#src:test/test_typed_pointer_inc_dec.pas": "native",
@@ -3827,11 +3827,11 @@
   "test-c-conformance-riscv32#shard5/6": "pass",
   "test-cjson#src:test/cjson/runner.c": "pass",
   "test-core#00": "pass",
-  "test-core#146": "pass",
-  "test-core#147": "pass",
   "test-core#148": "pass",
   "test-core#149": "pass",
   "test-core#150": "pass",
+  "test-core#151": "pass",
+  "test-core#152": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
@@ -4895,7 +4895,7 @@
   "test-core#src:test/test_record_copy.pas": "pass",
   "test-core#src:test/test_record_ctor_expr_tails_b333.pas": "pass",
   "test-core#src:test/test_record_field_array_low_bound.pas": "pass",
-  "test-core#src:test/test_record_helper_for_string_b331.pas": "pass",
+  "test-core#src:test/test_record_helper_for_string_b331.pas": "fail",
   "test-core#src:test/test_record_interface_field_zero_init.pas": "pass",
   "test-core#src:test/test_record_layout_stress.pas": "pass",
   "test-core#src:test/test_record_method_open_array_b334.pas": "pass",
@@ -5024,9 +5024,11 @@
   "test-core#src:test/test_tobject_destroy_override.pas": "pass",
   "test-core#src:test/test_tobject_methodaddress_b256.pas": "pass",
   "test-core#src:test/test_tobject_param_b243.pas": "pass",
+  "test-core#src:test/test_type_helper_const_array.pas": "pass",
   "test-core#src:test/test_type_helper_for_spelling.pas": "pass",
   "test-core#src:test/test_type_helper_typename_receiver.pas": "pass",
   "test-core#src:test/test_type_runtime.pas": "pass",
+  "test-core#src:test/test_typed_class_const_scoping.pas": "pass",
   "test-core#src:test/test_typed_const_record.pas": "pass",
   "test-core#src:test/test_typed_metaclass_b278.pas": "pass",
   "test-core#src:test/test_typed_pointer_inc_dec.pas": "pass",
@@ -6177,11 +6179,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-20T21:20:03Z",
-  "sha": "9ac7e74e367b2fb2714d3987135465923ef7d818",
+  "date": "2026-08-20T21:33:46Z",
+  "sha": "2e7286e499d1993717b2b5f139254bf5736c695a",
   "tier": "native",
-  "verdict": "GREEN",
-  "wall": 454.1
+  "verdict": "RED",
+  "wall": 460.1
  },
  "last_bench": {
   "conf_rows": 550,
@@ -7230,6 +7232,21 @@
     "1b9b43e5b511d53e9fbe55f3366e6ce9158ee0b9"
    ],
    "src": "",
+   "status": "fail"
+  },
+  {
+   "bad": "2e7286e499d1993717b2b5f139254bf5736c695a",
+   "good": "9ac7e74e367b2fb2714d3987135465923ef7d818",
+   "job": "test-core#src:test/test_record_helper_for_string_b331.pas",
+   "name": "test-core#39",
+   "opened": "2026-08-20T21:33:46Z",
+   "pin_built": false,
+   "range": [
+    "eb7202a787921f582bf76cc02fc3da16375bd456",
+    "ee388cf3af766dd3f109733ea72bb7203f8de34b",
+    "2e7286e499d1993717b2b5f139254bf5736c695a"
+   ],
+   "src": "test/test_record_helper_for_string_b331.pas",
    "status": "fail"
   }
  ],
