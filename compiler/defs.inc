@@ -978,6 +978,12 @@ const
     tySet) keeps its own name, a plain rename passes through to the base type's.
     That reproduces every measured case. }
   TYPEINFO_REQ_CAT_ALIAS  = 4;
+  { A named ARRAY type — `TArr = array[0..3] of Integer` / `TDyn = array of
+    Integer`. Its own category because arrays live in their OWN name table
+    (ArrType*, FindArrayType), not the alias table: key = ArrType index.
+    ArrTypeIsDyn is the whole kind decision — 21 tkDynArray vs 12 tkArray. An
+    array type always DEFINES something, so it always keeps its own name. }
+  TYPEINFO_REQ_CAT_ARRAY  = 5;
   MAX_TYPEINFO_REQ = 512;
 
   SYS_READ  = 0;

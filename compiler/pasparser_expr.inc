@@ -320,6 +320,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     vcNode: Integer;   { a typecast of a VARIANT, rewritten as the conversion }
     tiName: AnsiString; tiTk: TTypeKind;   { widened TypeInfo(T): scalar/string/class/record }
     tiAlias: Integer;   { …and the alias-table row when it is a NAMED structural type }
+    tiArr: Integer;     { …and the ArrType row when it is a NAMED array type }
     pyLateDefPi: Integer;   { NilPy def not yet bound at this call site; -1 = none }
 begin
   { NilPy runs its own copy of this routine (pyparser.inc). The dispatch is
@@ -3662,7 +3663,7 @@ begin
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
-        i := -1; ci := -1; tiTk := tyUnknown; tiName := ''; tiAlias := -1;
+        i := -1; ci := -1; tiTk := tyUnknown; tiName := ''; tiAlias := -1; tiArr := -1;
         if CurTok.Kind = tkIdent then
         begin
           tiName := CurTok.SVal;
@@ -3672,21 +3673,39 @@ begin
             ci := FindUClass(tiName);
             if ci < 0 then
             begin
-              tiTk := OrdinalNameToTk(tiName);
+              { The string names are decided HERE rather than deferred to
+                BuiltinTypeNameTk below, because the two answer different
+                questions. BuiltinTypeNameTk reports the internal type TAG a
+                `string` variable carries (tyString in an unmanaged build);
+                RTTI has to report the string MODEL the program observes, and
+                pxx's `string` is pointer-sized (SizeOf = 8) and grows past
+                255 — measured — i.e. an AnsiString, which is also what FPC
+                answers for `string` under {$H+}. Deferring these rows would
+                report ShortString for a type that is nothing of the kind. }
               if tiTk = tyUnknown then
               begin
                 if CaseEqual(tiName, 'string') or CaseEqual(tiName, 'ansistring') then tiTk := tyAnsiString
                 else if CaseEqual(tiName, 'shortstring') then tiTk := tyShortString
-                else if CaseEqual(tiName, 'single') then tiTk := tySingle
-                else if CaseEqual(tiName, 'double') or CaseEqual(tiName, 'real') then tiTk := tyDouble
-                else if CaseEqual(tiName, 'extended') then tiTk := tyExtended;
+                else
+                  { Everything else builtin comes from the ONE table — the float
+                    family, Variant, Pointer, CodePointer. This path used to keep
+                    a private subset of it (single/double/real/extended and
+                    nothing more), so TypeInfo(Pointer) and TypeInfo(Variant)
+                    were refused while SizeOf of the same names worked. Exactly
+                    the duplicate-table defect BuiltinTypeNameTk's own header
+                    comment describes SizeOf having had
+                    (devdocs/dev/normalise-dont-special-case.md). }
+                  tiTk := BuiltinTypeNameTk(tiName);
               end;
-              { Last resort: a NAMED type from the alias table — `TSub = 1..10`,
-                `TSet = set of TEnum`, `TProc = procedure(x: Integer)`,
-                `TStr20 = string[20]`, or a plain `TMyInt = Integer`. Last, not
+              { Then the NAMED type tables, which the builtin names cannot be in.
+                Arrays keep their own table (ArrType*), so both are consulted:
+                `TArr = array[0..3] of Integer` / `TDyn = array of Integer`, then
+                `TSub = 1..10`, `TSet = set of TEnum`, `TProc = procedure(...)`,
+                `TStr20 = string[20]`, a plain `TMyInt = Integer`. Last, not
                 first, so every builtin spelling keeps resolving exactly as it
                 did; this only turns an error into an answer. }
-              if tiTk = tyUnknown then tiAlias := FindTypeAlias(tiName);
+              if tiTk = tyUnknown then tiArr := FindArrayType(tiName);
+              if (tiTk = tyUnknown) and (tiArr < 0) then tiAlias := FindTypeAlias(tiName);
             end;
           end;
         end
@@ -3751,6 +3770,11 @@ begin
         begin
           ASTLeft[node] := 1;
           ASTIVal[node] := RegisterTypeInfoReq(TYPEINFO_REQ_CAT_ORD, Ord(tiTk));
+        end
+        else if tiArr >= 0 then
+        begin
+          ASTLeft[node] := 1;
+          ASTIVal[node] := RegisterTypeInfoReq(TYPEINFO_REQ_CAT_ARRAY, tiArr);
         end
         else if tiAlias >= 0 then
         begin

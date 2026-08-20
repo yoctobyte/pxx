@@ -901,6 +901,24 @@ begin
         The subrange's bounds live in AliasSubLo/Hi and the set's element enum
         in AliasElemTk, so they are recoverable when a consumer needs them. }
     end
+    else if TypeInfoReqCat[i] = TYPEINFO_REQ_CAT_ARRAY then
+    begin
+      { A named array type. ArrTypeIsDyn is the whole decision — measured
+        against FPC 3.2.2: `TArr = array[0..3] of Integer` is 12 tkArray,
+        `TDyn = array of Integer` is 21 tkDynArray, and both report their own
+        name. }
+      ci := TypeInfoReqKey[i];
+      if ArrTypeIsDyn[ci] then kind := 21 else kind := 12;
+      PatchDataU64(hdr + 0, kind);
+      nm := ArrTypeName[ci];
+      if nm <> '' then
+      begin
+        strIdx := InternStr(nm);
+        AddDataPtrFix(hdr + 8, Strs[strIdx].Offset);
+      end;
+      { DataPtr stays nil: no TTypeData yet. Element type and bounds are in
+        ArrTypeElemTk / ArrTypeDimLo / ArrTypeDimSpan when one is needed. }
+    end
     else if TypeInfoReqCat[i] = TYPEINFO_REQ_CAT_RECORD then
     begin
       ci := TypeInfoReqKey[i];

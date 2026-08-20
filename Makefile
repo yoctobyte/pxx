@@ -3960,6 +3960,13 @@ test-core: $(COMPILER)
 	# its own, so `TMyInt = Integer` must NOT report "TMyInt".
 	./$(COMPILER) -Fulib/rtl test/test_typeinfo_named_types.pas $(TESTTMP)/test_typeinfo_named26
 	test "$$($(TESTTMP)/test_typeinfo_named26)" = "$$(printf 'TSub 1\nTSet 5\nTProc 23\nTMeth 6\nTStr20 7\nInteger 1')"
+	# …and over named ARRAY types (their own name table, so their own category)
+	# plus the builtin non-ordinals this path used to keep a private subset of:
+	# TypeInfo(Pointer)/TypeInfo(Variant) were refused while SizeOf of the same
+	# names worked. All five diffed against FPC 3.2.2. TArr2 is here because a
+	# multi-dimension array is still ONE tkArray, not a nested one.
+	./$(COMPILER) -Fulib/rtl test/test_typeinfo_array_pointer.pas $(TESTTMP)/test_typeinfo_arrptr26
+	test "$$($(TESTTMP)/test_typeinfo_arrptr26)" = "$$(printf 'TArr 12\nTDyn 21\nTArr2 12\nPointer 29\nVariant 11')"
 	# A program naming `puint8` must compile QUIETLY: FindTypeAlias carried a
 	# leftover debug dump keyed on that exact name, printing the whole alias
 	# table to STDOUT before the pointer-alias fallback resolved it. The
