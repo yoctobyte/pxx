@@ -489,6 +489,11 @@ begin
     SA_ONSTACK so far. }
   BSS_SIG_ALTSTK := BSSSize; Inc(BSSSize, SIG_ALTSTACK_SIZE);
   BSS_SIG_ALTSS  := BSSSize; Inc(BSSSize, 24);
+  { …and the signal-number slot, here for the same reason rather than beside
+    BSS_SIG_CODE in the Pascal driver: allocating in ParseProgram is what left
+    every non-Pascal driver's copy at 0, aliased onto offset 0. This is the only
+    code that writes it. }
+  BSS_SIG_NUM    := BSSSize; Inc(BSSSize, 8);
 
   { --- restorer --- }
   SigRestorerAddr := CodeLen;
@@ -510,7 +515,9 @@ begin
     means); the null check costs two bytes and turns a would-be handler-time
     SIGSEGV into a zeroed slot. }
   EmitAsmX64([
-    'mov [@glob], rdx', BSS_SIG_CTX,
+    'mov eax, edi',                                   { the signal number... }
+    'mov [@glob], rax', BSS_SIG_NUM,                  { ...zero-extended; valid for every }
+    'mov [@glob], rdx', BSS_SIG_CTX,                  { signal, unlike si_code/si_addr }
     'test rsi, rsi',
     'jz .nosi',
     'mov eax, [rsi+8]',                               { si_code (32-bit, zero-extended) }

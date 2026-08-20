@@ -3612,9 +3612,20 @@ begin
         pointer would be a small bogus address) — same caller-must-know contract
         as si_addr being a pid for a kill()-delivered signal. }
       if (CaseEqual(name, '__pxxSigCode') or CaseEqual(name, '__pxxSigAddr') or
-          CaseEqual(name, '__pxxSigContext') or CaseEqual(name, '__pxxSigPCPtr')) and
+          CaseEqual(name, '__pxxSigContext') or CaseEqual(name, '__pxxSigPCPtr') or
+          CaseEqual(name, '__pxxSigNum')) and
          (FindProc(name) < 0) and (FindSym(name) < 0) then
       begin
+        { __pxxSigNum is x86-64 only for now — the other four hosted targets
+          install with SA_SIGINFO but their dispatch stubs do not park the
+          signal number yet. REFUSING is the point: answering 0 there would be a
+          plausible wrong value in a handler that dispatches on it, which is the
+          failure mode this repo pays most for. Same call slice 1 made when
+          si_code was x86-64 only. }
+        if CaseEqual(name, '__pxxSigNum') and (TargetArch <> TARGET_X86_64) then
+          Error('__pxxSigNum is x86-64 only so far — this target''s signal '
+                + 'dispatch stub does not park the signal number '
+                + '(feature-signal-siginfo-ucontext item 4)');
         { Every hosted Linux target now installs with SA_SIGINFO; only xtensa/ESP
           is left out, and deliberately — FreeRTOS is not a Unix and has no
           signal runtime at all (EmitSignalRuntime* has no xtensa sibling). }
@@ -3650,9 +3661,16 @@ begin
         begin
           ASTIVal[node] := 2; ASTTk[node] := Ord(tyPointer);
         end
-        else
+        else if CaseEqual(name, '__pxxSigPCPtr') then
         begin
           ASTIVal[node] := 3; ASTTk[node] := Ord(tyPointer);
+        end
+        else
+        begin
+          { __pxxSigNum. tyInteger for the same reason __pxxSigCode is: the
+            kernel's signo is a 32-bit int, and an Int64 is a register PAIR on
+            the ILP32 targets this will grow to. }
+          ASTIVal[node] := 4; ASTTk[node] := Ord(tyInteger);
         end;
         LastExprTk := IntToTypeKind(ASTTk[node]);
         CurASTNode := node;

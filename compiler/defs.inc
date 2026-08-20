@@ -2975,6 +2975,15 @@ var
   BSS_SIG_ADDR    : Integer;  { siginfo_t.si_addr — the faulting address for SIGSEGV/SIGBUS/SIGFPE/SIGILL. Meaningless for a kill()-delivered signal (that union member is a pid there); the CALLER must know which signal it asked about. Read by __pxxSigAddr. }
   BSS_SIG_ALTSTK  : Integer;  { the signal ALT STACK (SIG_ALTSTACK_SIZE bytes). A stack-overflow SIGSEGV faults on the guard page with no usable stack left, so a handler on the FAULTING stack cannot run — the kernel just kills the process. SA_ONSTACK + sigaltstack(2) give the handler its own ground. Allocated by EmitSignalRuntime, next to its only user (the BSS_IO_OWNER lesson). }
   BSS_SIG_ALTSS   : Integer;  { the 24-byte kernel `stack_t` handed to sigaltstack: ss_sp(0), ss_flags(8, int), ss_size(16). }
+  { The signal NUMBER currently being dispatched, zero-extended to 64 bits.
+    Written by the dispatch stub from the kernel's first handler argument,
+    before the hook runs; read by __pxxSigNum. Exists because the pxx hook ABI
+    is deliberately PARAMETERLESS, so a handler that needs to serve several
+    signals from one body — which is exactly what an FPC-compatible
+    `Signal(sig, handler)` wrapper is — has no other way to learn which one
+    fired. x86-64 only so far; the other targets REFUSE the intrinsic rather
+    than answer 0 (feature-signal-siginfo-ucontext). }
+  BSS_SIG_NUM     : Integer;
   BSS_SIG_CTX     : Integer;  { the ucontext_t* the kernel passed the handler. Parked for the fault-to-RAISE work (rewrite the saved RIP to a raise stub before returning), which is the rest of feature-signal-siginfo-ucontext; read by __pxxSigContext. }
   ExceptionUsed   : Boolean;
   ProcExceptionCleanupFrameActive: Boolean;

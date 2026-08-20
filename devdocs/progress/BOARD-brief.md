@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:18 blocked:9 backlog:273 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2158 rejected:40`
+`urgent:1 unfinished:19 blocked:9 backlog:273 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2158 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -15,7 +15,7 @@ _none — no lane is locked._
 
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
 
-## unfinished (18) — parked mid-flight; re-claim, do not duplicate
+## unfinished (19) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name` [N]
@@ -35,6 +35,7 @@ _none — no lane is locked._
 - `feature-pascal-type-helpers` [A]
 - `feature-port-rtl-over-libc` [A]
 - `feature-real-dynlib-loader` [B] — blocked-by: bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
+- `feature-signal-siginfo-ucontext` [A]
 
 ## blocked (9) — has an unmet blocker; do not claim
 

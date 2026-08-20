@@ -3789,8 +3789,8 @@ end;
 function IRExcStoreSlot(n: Integer): Integer;
 { Which runtime STATUS slot an IR_EXC_STORE reads. IRC selects it: 0 (the
   default, `on E: T do`) = the exception OBJECT; 1 (__pxxExceptAddr) = the RAISE
-  SITE the raise stub recorded; 2/3/4 (__pxxSigCode/__pxxSigAddr/
-  __pxxSigContext) = the siginfo fields the signal dispatch stub parked. Same
+  SITE the raise stub recorded; 2/3/4/5 (__pxxSigCode/__pxxSigAddr/
+  __pxxSigContext/__pxxSigNum) = the fields the signal dispatch stub parked. Same
   load, different slot — which is why none of them needs a backend op, and why
   adding the signal three cost nothing in the six backends (they all route
   IR_EXC_STORE through this function).
@@ -3802,6 +3802,7 @@ begin
   else if IRC[n] = 2 then Result := BSS_SIG_CODE
   else if IRC[n] = 3 then Result := BSS_SIG_ADDR
   else if IRC[n] = 4 then Result := BSS_SIG_CTX
+  else if IRC[n] = 5 then Result := BSS_SIG_NUM
   else Result := BSS_EXC_OBJ;
 end;
 
@@ -6597,6 +6598,8 @@ begin
       eaSym := AllocVar('', IntToTypeKind(ASTTk[node]));
       if ASTIVal[node] = 3 then
         IRAppend(IR_EXC_STORE, eaSym, -1, 4, 0, 0)      { the ucontext pointer }
+      else if ASTIVal[node] = 4 then
+        IRAppend(IR_EXC_STORE, eaSym, -1, 5, 0, 0)      { __pxxSigNum }
       else
         IRAppend(IR_EXC_STORE, eaSym, -1, ASTIVal[node] + 2, 0, 0);
       Result := IRAppend(IR_LOAD_SYM, eaSym, -1, -1, 0, ASTTk[node]);

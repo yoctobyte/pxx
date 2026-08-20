@@ -4667,6 +4667,13 @@ test-core: $(COMPILER)
 	# on RLIMIT_STACK. feature-signal-siginfo-ucontext item 3
 	./$(COMPILER) test/test_signal_altstack.pas $(TESTTMP)/test_signal_altstack26
 	test "$$($(TESTTMP)/test_signal_altstack26; echo "exit=$$?")" = "$$(printf 'recursing\ncode=1\nhandler-off-faulting-stack=TRUE\nexit=0')"
+	# __pxxSigNum: which signal is being dispatched, read from inside the
+	# PARAMETERLESS hook. One hook registered for three signals, counted per
+	# number — usr1 twice is the row that matters (a hook that merely counted
+	# deliveries would pass with the slot stuck at one value), and zero=0
+	# catches the slot never being written at all.
+	./$(COMPILER) test/test_signal_num.pas $(TESTTMP)/test_signal_num26
+	test "$$($(TESTTMP)/test_signal_num26)" = "usr1=2 usr2=1 int=1 zero=0"
 	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
 	# that raises, and the fault is caught by the try/except the faulting
 	# code was already inside. The pc-is-the-fault line is the exact check

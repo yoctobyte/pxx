@@ -3,13 +3,13 @@ track: A
 prio: 55
 type: feature
 blocked-by: []
-owner: ""
+owner: claude-acp
 ---
 
 # Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface
 
 - **Type:** feature (runtime / PAL) — Track A
-- **Status:** backlog
+- **Status:** unfinished — items 1 (SA_SIGINFO/ucontext) and 3 (sigaltstack) DONE; item 4's compiler half done (__pxxSigNum), its RTL half is Track B. Items 2 (--threadsafe) and 5 (SIGPIPE) remain, plus parking the signal number on the other four targets.
 - **Opened:** 2026-07-16, split out of [[feature-signal-handlers]] once the base
   slice (libc-free `rt_sigaction` handler install + `SetSignalHandler`) shipped
   and pinned on all five hosted targets (x86-64 b336, aarch64 b370,
@@ -464,3 +464,79 @@ hand against their Makefile assertions (`test_signal_handlers`,
 `test_signal_siginfo`, `test_signal_pc_rewrite`,
 `test_signal_handler_callback_b336`) — the hook ABI is unchanged, which is what
 makes this additive.
+
+
+## Progress — 2026-08-20: sigaltstack (item 3), and `__pxxSigNum` for item 4
+
+### Item 3 — sigaltstack — DONE (x86-64)
+
+Landed earlier tonight: the runtime allocates a BSS alt stack, fills a
+`stack_t` and calls `sigaltstack(2)` at install time, and the sigaction flags
+gained `SA_ONSTACK` ($14000004 -> $1C000004). A guard-page fault now reaches a
+handler instead of dying, which is what the item was for.
+
+The test's load-bearing assertion is deliberately NOT "the program survived" —
+surviving shows the handler ran, not *where*. `test/test_signal_altstack.pas`
+compares the handler's own frame address against the faulting address; on the
+alt stack (a BSS buffer) versus the faulting stack they are hundreds of
+megabytes apart, so `gap > $10000000` proves sigaltstack took effect rather
+than the overflow having left a usable slack page. Recursion depth is not
+printed: it depends on RLIMIT_STACK and frame layout, the classic flapping
+test.
+
+That immediately exposed a sharp edge on the newly reachable capability, filed
+rather than papered over:
+[[bug-a-stack-overflow-fault-to-raise-loops-forever-without-an-sp-reset]] — a
+resumed raise stub inherits the exhausted SP and re-faults at the identical
+address. The ordinary hook-and-return case exits cleanly.
+
+### Item 4 — the compiler half is in: `__pxxSigNum`
+
+FPC's `Signal(sig, handler)` hands the handler the signal NUMBER. pxx's hook
+ABI is **parameterless** and stays that way — every existing
+`SetSignalHandler` user depends on it — so one procedure serving several
+signals had no way to tell them apart, and that, not the wrapper, was the real
+blocker.
+
+So the dispatch stub now parks the number the kernel passed in `edi`, next to
+si_code / si_addr / ucontext*, and `__pxxSigNum` reads it. Cost in the six
+backends: **zero** — it is IRC 5 through `IRExcStoreSlot`, the same
+compiler-owned-status-slot load the other four use. The slot is allocated in
+`EmitSignalRuntime` beside the alt stack rather than in `ParseProgram`,
+following the `BSS_IO_OWNER` lesson: allocating in the Pascal driver is what
+leaves every other frontend's copy aliased onto offset 0.
+
+Unlike si_code/si_addr it is valid for **every** signal, not just the fault
+ones — there is no union involved, the kernel always passes signo.
+
+**x86-64 only, and the intrinsic REFUSES elsewhere** with a message naming this
+ticket. The other four hosted targets install with SA_SIGINFO but their
+dispatch stubs do not park the number. Answering 0 there would send every
+signal to handler 0 — a plausible wrong value in exactly the place that is
+hardest to notice — so refusing is the point. Same call slice 1 made when
+si_code was x86-64 only; the follow-up slice does the four, as slice 2 did.
+
+Test: `test/test_signal_num.pas` — ONE hook registered for three signals,
+counted per number. `usr1=2` is the row that matters (a hook that merely
+counted deliveries would pass with the slot stuck at any single value) and
+`zero=0` catches the slot never being written.
+
+### The RTL half is Track B's, and is filed
+
+The `Signal()` / `fpSignal` unit itself lives in `lib/rtl`, which is Track B's
+file-lane, so it is [[feature-b-fpc-signal-compat-unit]] rather than more work
+here. It needs no further compiler support — a 64-entry table plus one
+trampoline reading `__pxxSigNum` — and the ticket records the three things to
+decide while writing it rather than guess: what `SIG_IGN` means when the
+runtime only has "revert to default", whether pxx accepts and ignores `cdecl`
+on a procedure type, and the x86-64-only restriction.
+
+### This ticket keeps items 2 and 5
+
+- **2. `--threadsafe` interaction** — masks are per-thread, the hook table is
+  process-wide; which thread runs the handler, and mask inheritance under
+  `clone(2)`, are undefined and untested.
+- **5. SIGPIPE policy** — still deliberately parked until the net library.
+
+Plus the follow-up slice: park the signal number on the remaining four hosted
+targets, and drop the refusal.
