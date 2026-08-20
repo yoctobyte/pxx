@@ -6515,6 +6515,24 @@ test-core: $(COMPILER)
 	# The tanh/cube rows are the controls that were always correct.
 	./$(COMPILER) -Futest test/test_c_def_hijack.pas $(TESTTMP)/c_def_hijack26
 	test "$$($(TESTTMP)/c_def_hijack26)" = "$$(printf 'sqrt=4.0000\nqsqrt=4.0000\nexp=1.0000\ncxsqrt=42.0000\ntanh=0.7616\ncxtanh=55.0000\ncxcube=999\nsoft=4.0000')"
+	# feature-a-own-language-first-symbol-resolution: a Pascal call site binds
+	# PASCAL's routine when a C import defines the same name case-insensitively,
+	# and the C one stays reachable by alias. These LOCK a decided rule rather
+	# than prove a fix — the behaviour is already correct on the pinned binary.
+	# Worth locking anyway: resolution changes have twice passed gate.sh quick
+	# while broken (bug-p-uses-order-does-not-decide-which-unit-wins).
+	./$(COMPILER) -Futest test/test_own_lang_first_alias.pas $(TESTTMP)/olf_alias26
+	test "$$($(TESTTMP)/olf_alias26)" = "$$(printf 'Exp=2.7183\nSqrt=4.0000\nqSqrt=4.0000\ncmExp=42.0000\ncmCube=999')"
+	# ...and with BOTH variables flipped: C named first, no alias. A resolver
+	# that merely stopped the proc-entry seizure could still let import ORDER
+	# decide, passing the row above and failing this one.
+	./$(COMPILER) -Futest test/test_own_lang_first_c_first.pas $(TESTTMP)/olf_cfirst26
+	test "$$($(TESTTMP)/olf_cfirst26)" = "$$(printf 'Exp=2.7183\nSqrt=4.0000')"
+	# The boundary on the other side: a PASCAL unit redefining an intrinsic must
+	# STILL shadow it — the rule is cross-language only. FPC prints 77.0000 too,
+	# so this is the control that stops "make the intrinsic always win".
+	./$(COMPILER) -Futest test/test_own_lang_first_pascal_shadow.pas $(TESTTMP)/olf_shadow26
+	test "$$($(TESTTMP)/olf_shadow26)" = "Exp=77.0000"
 	# feature-c-vla-via-alloca: `int arr[n]` with a runtime n, lowered through
 	# alloca. Every number is gcc's own answer on the same source. The sizeof
 	# rows are the ones that used to print the POINTER size (8) - C evaluates

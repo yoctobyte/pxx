@@ -3,8 +3,8 @@ track: A
 prio: 55
 type: feature
 blocked-by: []
-status: unfinished
-owner: —
+status: done
+owner: claude-acp
 ---
 
 # Own-language-first symbol resolution: the native language wins
@@ -445,3 +445,93 @@ and nothing in the ticket records one — this belongs in `blocked/`, where the
 open edge is visible. A Track A ticket parked in `unfinished/` is the shape
 `tools/progress.sh check` is meant to escalate, so a wrong folder here is not
 cosmetic. Not moved by this read-only pass; flagged for the A slot.
+
+---
+
+## Done — 2026-08-20. **No compiler change was needed.** Re-measured at HEAD first.
+
+Following this ticket's own established practice — every prior session measured
+before building, and each measurement moved the target — I measured before
+writing code. The result is that the decided rule is **already the behaviour**,
+and the one case that was not is fixed.
+
+### The rule holds, and not by import-order luck
+
+`olf_cmath.c` defines `exp` -> 42.0, `sqrt` -> 43.0, `cube` -> 999 (sentinels no
+real implementation returns). Against `uses math`:
+
+| uses clause | bare `Exp(1.0)` | bare `Sqrt(16)` | `math.Sqrt` | `cm.exp` |
+| --- | --- | --- | --- | --- |
+| `math, './olf_cmath.c' as cm` | 2.7183 | 4.0000 | 4.0000 | 42.0000 |
+| `'./olf_cmath.c' as cm, math` | 2.7183 | 4.0000 | — | 999 (cube) |
+| `math, './olf_cmath.c'` | 2.7183 | 4.0000 | — | — |
+| `'./olf_cmath.c', math` | 2.7183 | 4.0000 | — | — |
+| `math` alone (control) | 2.7183 | 4.0000 | — | — |
+
+Pascal wins in **every** arrangement — both orders, with and without an alias —
+and the C routine stays reachable by name. That is the decided rule exactly:
+*implicit resolution prefers your own language; explicit import overrides it.*
+
+Compare the 2026-08-16 entry, where bare `Sqrt` gave 42.0, `math.Sqrt` gave
+42.0, and `cmath.sqrt` was `undefined variable` — no spelling reached Pascal's
+`Sqrt` at all. All three now answer correctly. What closed it was
+[[bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine]]
+(`eb5c7be11`), this ticket's blocker: the defect was a C definition seizing the
+Pascal proc entry, not a precedence gap. With the seizure gone there is nothing
+left for a precedence pass to arbitrate.
+
+So the plans this ticket accumulated are all **not needed**: no `MatchElig`
+candidate-removal pass, and no `ProcLang` parallel array. Recording that
+explicitly, because `ProcLang` was specified in detail across two entries and
+the next reader would otherwise build it.
+
+### The acceptance test was already run — by the other half of the ticket
+
+The stated acceptance was "de-prefix the ten `__crtl_*` names and delete the
+`#define`s". That is done: `lib/crtl/src/math.c` today declares `double exp(`,
+`double sin(`, `double log2(` under their real names, with no `__crtl_` dodge
+left. It landed as [[task-c-retire-the-crtl-name-dodge-prefixes]] (Track C file
+ownership, as this ticket always said it would be).
+
+### The `__pxx_*` PAL entries — verified, as the ticket asked
+
+A C program calling `open`/`write`/`read`/`close` (which bottom out on
+`__pxx_open` and friends, declared in C and DEFINED in Pascal) compiles and runs
+correctly. As predicted: one declaration plus one definition is a single symbol
+with two halves, not two competing definitions, so the rule never fires on it.
+No dedicated test added — every C file-I/O test in the corpus exercises this
+path, and a second one would assert the same thing.
+
+### What was actually added: three regression locks
+
+`test_own_lang_first_alias` (Pascal wins bare, C reachable by alias),
+`test_own_lang_first_c_first` (C named FIRST and with NO alias — the row that
+separates "own-language-first" from "the seizure is fixed", since a resolver
+that only stopped the seizure could still let import order decide), and
+`test_own_lang_first_pascal_shadow` (a PASCAL unit redefining an intrinsic must
+STILL shadow it — the rule is cross-language only; **FPC prints 77.0000 here
+too**, so this is the control that stops a future "make the intrinsic always
+win" from looking correct).
+
+**These do not bite.** The pinned binary passes all three. They are locks on a
+decided rule, not evidence of a fix, and the Makefile comment says so. Locking
+is justified on this ticket's own record: resolution changes have twice passed
+`gate.sh quick` while broken, per
+[[bug-p-uses-order-does-not-decide-which-unit-wins]], and nothing in the suite
+asserted order-independence before.
+
+### Correction to an earlier entry
+
+The 2026-08-14 entry says `devdocs/dev/c-linking-and-crtl-autopull.md` still
+calls math.c's `sqrt`/`sin`/`pow` "a thin bridge to the Pascal RTL" and should
+be fixed when this lands. That line was already corrected — on 2026-08-14, in
+the same document, which now carries the correction inline. Nothing to do.
+
+### Gate
+
+`tools/gate.sh quick` GREEN + the three new tests verified against their
+Makefile assertions + the shadow control verified against the FPC oracle.
+No compiler source changed, so the fixedpoint is unaffected by construction.
+
+## Log
+- 2026-08-20 — resolved, commit PENDING-COMMIT.

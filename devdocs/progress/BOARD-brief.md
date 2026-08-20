@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:17 blocked:8 backlog:269 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2153 rejected:40`
+`urgent:1 unfinished:17 blocked:8 backlog:268 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2154 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -65,7 +65,6 @@ _none — no lane is locked._
 - `[p 60] [O]` feature-opt-store-reload-elimination
 - `[p 58] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - `[p 58] [O]` feature-opt-o3-register-pressure
-- `[p 55] [A]` feature-a-own-language-first-symbol-resolution (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
 - `[p 55] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - `[p 55] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
@@ -78,5 +77,6 @@ _none — no lane is locked._
 - `[p 55] [U]` decide-reduced-compiler-switch-spelling
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
+- `[p 55] [E]` feature-demo-portable-userland
 
 _225 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
