@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T09:49:42Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "64cbd63c326b5255f2a2a750e0f420eacde0df2e",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-20T09:57:11Z",
    "fixed": [],
    "new_red": [],
@@ -427,6 +419,14 @@
     "test-core#src:test/test_record_helper_for_string_b331.pas"
    ],
    "sha": "2e7286e499d1993717b2b5f139254bf5736c695a",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-20T21:43:42Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "2268a9d16ca75deb5069f7960d4e2e0b334cd469",
    "tier": "native",
    "verdict": "RED"
   }
@@ -2089,6 +2089,7 @@
   "test-core#src:test/test_signal_default_revert_b336.pas": "native",
   "test-core#src:test/test_signal_handler_callback_b336.pas": "native",
   "test-core#src:test/test_signal_handlers.pas": "native",
+  "test-core#src:test/test_signal_num.pas": "native",
   "test-core#src:test/test_signal_pc_rewrite.pas": "native",
   "test-core#src:test/test_signal_siginfo.pas": "native",
   "test-core#src:test/test_single_first_class.pas": "native",
@@ -4960,6 +4961,7 @@
   "test-core#src:test/test_signal_default_revert_b336.pas": "pass",
   "test-core#src:test/test_signal_handler_callback_b336.pas": "pass",
   "test-core#src:test/test_signal_handlers.pas": "pass",
+  "test-core#src:test/test_signal_num.pas": "pass",
   "test-core#src:test/test_signal_pc_rewrite.pas": "pass",
   "test-core#src:test/test_signal_siginfo.pas": "pass",
   "test-core#src:test/test_single_first_class.pas": "pass",
@@ -6179,11 +6181,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-20T21:33:46Z",
-  "sha": "2e7286e499d1993717b2b5f139254bf5736c695a",
+  "date": "2026-08-20T21:43:42Z",
+  "sha": "2268a9d16ca75deb5069f7960d4e2e0b334cd469",
   "tier": "native",
   "verdict": "RED",
-  "wall": 460.1
+  "wall": 459.7
  },
  "last_bench": {
   "conf_rows": 550,
