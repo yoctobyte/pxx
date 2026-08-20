@@ -22,14 +22,23 @@ tools/run_target.sh, which execs it natively or under qemu-user. What it does NO
 do is keep the gcc oracle by default: the checksum a csmith program prints depends
 on the DATA MODEL (`long` is 64-bit under LP64 and 32-bit under ILP32), so a native
 x86-64 gcc and an ILP32 target disagree for reasons that are not miscompiles. The
-harness looks for a gcc whose data model matches the target, and if it cannot find
-one it says so and drops the vs-gcc comparison for the run rather than filing
-MISCOMPILE_VS_GCC on a `long` width. The pxx-vs-pxx -O comparison is unaffected --
+harness looks for a gcc whose data model matches the target -- a CROSS one first,
+and failing that a native one, which decides every checksum question even though
+it cannot decide a timing one -- and if it can find neither it says so and drops
+the vs-gcc comparison for the run rather than filing MISCOMPILE_VS_GCC on a
+`long` width. The pxx-vs-pxx -O comparison is unaffected --
 it is a comparison of one target against itself and is the finding we own outright.
 
 Buckets, worst first:
   MISCOMPILE_VS_GCC   pxx and gcc both ran and printed DIFFERENT checksums
   MISCOMPILE_OPT      two pxx -O levels printed different checksums
+  LAYOUT_SUSPECT      pxx and gcc disagreed, but the oracle matched only the
+                      DATA MODEL and the program contains bitfields or unions --
+                      the two things two ABIs may legitimately lay out
+                      differently at the same widths. Ranked with the
+                      miscompiles on purpose: it may be one. Not to be routed
+                      to Track A until reduced or re-checked against a
+                      matched-ISA oracle.
   PXX_CRASH           pxx's binary died (signal / non-zero exit)
   PXX_COMPILE_FAIL    pxx could not compile it (a frontend or codegen gap)
   PXX_TIMEOUT         pxx's binary did not finish even at a limit scaled off
@@ -145,6 +154,36 @@ ORACLE_CC = {
     "riscv64": [["riscv64-linux-gnu-gcc", "-static"]],
 }
 
+# The DATA-MODEL fallback, and the second half of the doctrine above. When no
+# cross gcc exists for a target, a NATIVE compiler whose data model matches is
+# still a legitimate checksum oracle -- that is what "the ISA does not decide"
+# means. Keyed by data model, probed NATIVELY (no target runner: these binaries
+# are x86-64, and running one through qemu-aarch64 is how a naive reading of
+# this fix fails its own probe).
+#
+# It buys the target Track O actually invests in. On this box every cross gcc is
+# absent -- aarch64/arm/riscv/i686 all missing, and `gcc -m32` accepts the flag
+# without being able to link -- so aarch64 had NO oracle at all and the run
+# silently narrowed to the weaker pxx-vs-pxx -O check.
+#
+# One thing this oracle CANNOT say, enforced below rather than left to a reader:
+# TIMING. It ran natively; the pxx side runs under qemu at ~14x. Feeding that
+# ratio to SLOW_FACTOR would file every single seed as PXX_SLOW. `oracle_sec` is
+# withheld, and the existing "no timing -> no slow verdict, flat budget" path
+# already handles the rest.
+#
+# The other limit is LAYOUT, and it is handled by classify_divergence() rather
+# than by narrowing what we generate. Same data model and same endianness still
+# leaves bitfield allocation and union punning, where SysV x86-64 and AAPCS64
+# legitimately differ -- so a divergence can be correct on both sides, and we
+# already have an open finding in that area (bug-c-bitfield-packing-sizeof-vs-gcc).
+HOST_ORACLE = [(["gcc"], "LP64"), (["gcc", "-m32"], "ILP32")]
+
+# The compiler the validity filter runs on every seed. Named because fuzz_one
+# reuses that build's checksum when the chosen oracle IS this compiler, and
+# must NOT when it is a different one at the same data model.
+VALIDITY_CC = ["gcc"]
+
 # i386 binaries exec natively on an x86-64 kernel (run_target.sh falls back to
 # qemu-i386 only if that fails), so they are not "emulated" for timing purposes.
 NATIVE_TARGETS = ("x86_64", "i386")
@@ -159,12 +198,18 @@ class Cfg:
     only ever correct together.
     """
     __slots__ = ("pxx", "inc", "opts", "timeout", "csmith_args", "target",
-                 "oracle_cc", "runner", "emulated")
+                 "oracle_cc", "oracle_kind", "runner", "emulated")
 
-    def __init__(self, pxx, inc, opts, timeout, csmith_args, target, oracle_cc):
+    def __init__(self, pxx, inc, opts, timeout, csmith_args, target, oracle_cc,
+                 oracle_kind=None):
         self.pxx, self.inc, self.opts = pxx, inc, opts
         self.timeout, self.csmith_args = timeout, csmith_args
         self.target, self.oracle_cc = target, oracle_cc
+        # "isa" = built for the target and run through the target runner;
+        # checksum AND timing are comparable. "datamodel" = a native compiler
+        # with the same long/pointer widths, run natively; the CHECKSUM is
+        # comparable and nothing else is. None = no oracle at all.
+        self.oracle_kind = oracle_kind
         # x86_64 keeps the bare exec it has always had: run_target.sh would only
         # add a shell to every timed run, and timing is what the budget is
         # scaled off.
@@ -184,15 +229,23 @@ class Cfg:
 def probe_oracle(target, workdir):
     """The first candidate compiler that BUILDS and RUNS for this target, or None.
 
-    Returns (argv, note). `note` is what the report prints, and it is printed
-    whether or not a compiler was found: dropping the vs-gcc comparison silently
-    would turn "we did not check" into "we checked and it agreed".
+    Returns (argv, kind, note). `kind` is "isa" (built for the target and run
+    through the target runner -- checksum AND timing comparable), "datamodel"
+    (a native compiler with the same long/pointer widths, run natively -- only
+    the CHECKSUM is comparable), or None.
+
+    `note` is what the report prints, and it is printed whether or not a
+    compiler was found: dropping the vs-gcc comparison silently would turn "we
+    did not check" into "we checked and it agreed". It names WHICH kind was
+    found for the same reason -- the two answer different questions, and a
+    reader who cannot tell them apart cannot weigh a divergence.
     """
     src = workdir / "probe.c"
     src.write_text("int main(void){return 42;}\n")
     runner = [] if target == "x86_64" else [str(ROOT / "tools/run_target.sh"), target]
-    tried = []
+    tried, tried_cmds = [], []
     for cc in ORACLE_CC.get(target, []):
+        tried_cmds.append(cc)
         # which() first only so a missing cross compiler does not hit run()'s
         # sys.exit on FileNotFoundError -- "no such compiler" is an ordinary
         # answer here, not a broken environment. The real test is still the
@@ -210,11 +263,135 @@ def probe_oracle(target, workdir):
         if rc != 42:
             tried.append(f"{cc[0]}: builds but does not run here")
             continue
-        return cc, f"oracle: {' '.join(cc)} ({TARGETS[target]}, matches the target)"
+        return cc, "isa", f"oracle: {' '.join(cc)} ({TARGETS[target]}, matches the target)"
+
+    # No cross compiler. A NATIVE one with the same data model still decides
+    # every checksum question -- run it natively (runner = []), because these
+    # binaries are x86-64 whatever the target is.
+    model = TARGETS[target]
+    for cc, cc_model in HOST_ORACLE:
+        if cc_model != model:
+            continue
+        if cc in tried_cmds:
+            continue          # already probed above; do not report it twice
+        if not shutil.which(cc[0]):
+            tried.append(f"{' '.join(cc)}: not installed")
+            continue
+        binp = workdir / "probe.bin"
+        rc, _, _ = run(cc + [str(src), "-o", str(binp)], 60)
+        if rc != 0:
+            tried.append(f"{' '.join(cc)}: does not build")
+            continue
+        rc, _, _ = run([str(binp)], 60)     # NATIVE, deliberately not `runner`
+        if rc != 42:
+            tried.append(f"{' '.join(cc)}: builds but does not run here")
+            continue
+        return cc, "datamodel", (
+            "oracle: %s (%s, matches the DATA MODEL, not the ISA) -- runs "
+            "natively.\n  Checksums are compared; TIMING is not (PXX_SLOW is "
+            "off this run), and a divergence in a program with bitfields or "
+            "unions is filed LAYOUT_SUSPECT rather than as a miscompile."
+            % (" ".join(cc), model))
+
     detail = "; ".join(tried) or "no candidate compiler known"
-    return None, ("NO ORACLE for %s (%s) -- %s.\n"
+    return None, None, ("NO ORACLE for %s (%s) -- %s.\n"
                   "  MISCOMPILE_VS_GCC and PXX_SLOW are NOT CHECKED this run; "
                   "pxx-vs-pxx -O comparison still is." % (target, TARGETS[target], detail))
+
+
+LAYOUT_KEYS = {
+    "total union variables": "union variables",
+    "structs with bitfields in the program": "structs with bitfields",
+}
+
+
+def layout_constructs(src_text):
+    """Which layout-sensitive constructs this PROGRAM actually contains.
+
+    Read out of csmith's own `XXX ...` statistics footer, which counts them per
+    program -- not grepped for. A first attempt at this regexed the C for
+    `\bunion\b` and reported unions in 12 of 12 programs; every hit was the
+    footer line `XXX total union variables: 0`. A true fact about the wrong
+    subject, which is the exact failure this function exists to prevent
+    downstream, so it is worth one sentence here.
+
+    Only these two matter. csmith's checksum hashes named FIELDS through
+    transparent_crc, not raw struct bytes, so ordinary padding and alignment
+    differences cannot reach it. What can: bitfield allocation (where bits land
+    inside the storage unit, which SysV x86-64 and AAPCS64 genuinely disagree
+    about) and union punning (reading a member other than the one written).
+    """
+    found = {}
+    for line in src_text.splitlines():
+        if not line.startswith("XXX "):
+            continue
+        key, _, val = line[4:].strip().rpartition(":")
+        if key in LAYOUT_KEYS:
+            try:
+                n = int(val)
+            except ValueError:
+                continue
+            if n:
+                found[LAYOUT_KEYS[key]] = n
+    return found
+
+
+DATAMODEL_UNAMBIGUOUS = """
+The oracle matched this target's DATA MODEL, not its ISA (see HOST_ORACLE), so
+an ABI disagreement would normally be a live alternative explanation. It is not
+here: csmith reports this program contains no bitfields and no union variables,
+and its checksum hashes named fields rather than raw bytes, so padding and
+alignment cannot reach it either. Nothing left but a real difference."""
+
+
+def classify_divergence(cfg, src_text, base_detail, seed, opt):
+    """A checksum divergence, bucketed by whether it CAN be an ABI difference.
+
+    Against a matched-ISA oracle it cannot be, and this returns the finding
+    unchanged. Against a matched-DATA-MODEL oracle it can, and the campaign's
+    real cost has always been reduction rather than discovery -- so the split is
+    made here, at the hit, out of facts the diverging program already carries.
+
+    Measured over 20 default seeds: 6 carry neither construct. Those 30% become
+    confident findings immediately instead of joining a queue of maybes, and the
+    other 70% are labelled rather than confidently misfiled.
+
+    Deliberately NOT done by re-running the seed with --no-bitfields
+    --no-packed-struct --no-unions and seeing whether the disagreement survives.
+    That sounds like reduction and is not: csmith's option set is part of its RNG
+    input, so the same seed under different flags is a DIFFERENT program --
+    measured, seed 90044 goes 1879 -> 3373 lines with a different checksum. A
+    layout-free program agreeing tells you almost nothing, because layout-free
+    programs agreeing is the norm whatever caused the original. (The converse
+    does hold: if such a run diverges too, that is a fresh unambiguous finding --
+    on its own merits, as its own seed, not as evidence about this one.)
+
+    Nor is the answer to stop generating the constructs. Bitfields produced
+    three of this campaign's first nine bugs; sweeping them out to make the
+    remainder easier to read trades the richest territory for convenience. Run
+    wide, classify on hit.
+    """
+    if cfg.oracle_kind != "datamodel":
+        return Finding("MISCOMPILE_VS_GCC", seed, base_detail, f"O{opt}:vs-gcc")
+    found = layout_constructs(src_text)
+    if not found:
+        return Finding("MISCOMPILE_VS_GCC", seed,
+                       base_detail + "\n" + DATAMODEL_UNAMBIGUOUS,
+                       f"O{opt}:vs-gcc")
+    what = ", ".join("%d %s" % (n, k) for k, n in sorted(found.items()))
+    return Finding("LAYOUT_SUSPECT", seed,
+                   base_detail + """
+
+NOT a finding yet, and must NOT be routed to Track A on this evidence. The
+oracle matched this target's DATA MODEL, not its ISA, and this program contains
+%s -- the two places where SysV x86-64 and AAPCS64
+legitimately disagree at the same long/pointer widths. Both sides may be
+correct.
+
+To settle it: reduce until no bitfield or union remains and the divergence
+survives, or re-run this seed against a matched-ISA oracle (a cross gcc for
+%s), which has no such ambiguity.""" % (what, cfg.target),
+                   f"O{opt}:layout-suspect")
 
 
 class Finding:
@@ -238,7 +415,8 @@ def first_error_line(text):
     return "(no output)"
 
 
-SKIP = "skip"   # the seed told us nothing (gcc could not build or run it)
+SKIP = "skip"   # the seed told us nothing (the validity filter, or the
+                # oracle, could not build or run the program)
 
 
 def fuzz_one(seed, cfg, workdir):
@@ -253,7 +431,8 @@ def fuzz_one(seed, cfg, workdir):
     # generator hiccup on a cross run would be filed as PXX_COMPILE_FAIL -- a gap
     # in our frontend that isn't one.
     gcc_bin = workdir / "g"
-    rc, out, _ = run(["gcc", "-O0", f"-I{cfg.inc}", "-w", str(src), "-o", str(gcc_bin)], 180)
+    rc, out, _ = run(VALIDITY_CC + ["-O0", f"-I{cfg.inc}", "-w", str(src),
+                                    "-o", str(gcc_bin)], 180)
     if rc != 0:
         return SKIP  # gcc won't build it -> not our problem
     rc, gcc_out, gcc_sec = run([str(gcc_bin)], cfg.timeout)
@@ -273,6 +452,38 @@ def fuzz_one(seed, cfg, workdir):
     if cfg.oracle_cc is not None:
         if cfg.target == "x86_64":
             oracle_sum, oracle_sec = gcc_out.strip(), gcc_sec   # it IS the native gcc
+        elif cfg.oracle_kind == "datamodel":
+            # Run NATIVELY in both arms -- this oracle's binary is the host's
+            # whatever --target says -- and `oracle_sec` stays None in both.
+            # That is deliberate: the pxx side runs under qemu at ~14x, so every
+            # seed would clear SLOW_FACTOR and PXX_SLOW would fill with noise.
+            # Checksum comparability and TIMING comparability are different
+            # questions with different preconditions (data model for one,
+            # execution environment for the other), and one oracle must not be
+            # taken to answer both. The existing oracle_sec-is-None path already
+            # gives the flat budget and suppresses the slow verdict.
+            if cfg.oracle_cc == VALIDITY_CC:
+                # Identical to the validity filter above, so reuse its result:
+                # zero extra work, and no second definition of "the native
+                # build". This is the aarch64/riscv64 case, and the whole
+                # ticket -- that checksum was already being computed and thrown
+                # away because the guard asked about the ISA.
+                oracle_sum = gcc_out.strip()
+            else:
+                # NOT the same compiler: `gcc -m32` is an ILP32 oracle and
+                # `gcc_out` came from an LP64 build. Reusing it here would
+                # compare a 32-bit target against 64-bit `long`s -- the exact
+                # wrong-width comparison this file exists to refuse, arrived at
+                # by way of an optimisation.
+                obin = workdir / "o"
+                rc, _, _ = run(cfg.oracle_cc + ["-O0", f"-I{cfg.inc}", "-w",
+                                                str(src), "-o", str(obin)], 180)
+                if rc != 0:
+                    return SKIP
+                rc, oout, _ = run([str(obin)], floor)     # native, not cfg.runner
+                if rc != 0 or "checksum" not in oout:
+                    return SKIP
+                oracle_sum = oout.strip()
         else:
             obin = workdir / "o"
             rc, _, _ = run(cfg.oracle_cc + ["-O0", f"-I{cfg.inc}", "-w", str(src),
@@ -293,8 +504,11 @@ def fuzz_one(seed, cfg, workdir):
         scale = f"{TIMEOUT_FACTOR}x the oracle's {oracle_sec:.1f}s"
     else:
         run_limit = floor
-        scale = ("a FLAT budget: no oracle for this target, so nothing to scale "
-                 "off -- treat as a hint, not a hang")
+        scale = ("a FLAT budget: %s, so nothing to scale off -- treat as a "
+                 "hint, not a hang"
+                 % ("the oracle ran natively and this target does not"
+                    if cfg.oracle_kind == "datamodel"
+                    else "no oracle for this target"))
 
     # ---- pxx, at each -O level -------------------------------------------
     results, secs = {}, {}
@@ -324,9 +538,9 @@ def fuzz_one(seed, cfg, workdir):
     if oracle_sum is not None:
         for opt, got in results.items():
             if got != oracle_sum:
-                return Finding("MISCOMPILE_VS_GCC", seed,
-                               f"-O{opt}\n  gcc: {oracle_sum}\n  pxx: {got}",
-                               f"O{opt}:vs-gcc")
+                return classify_divergence(
+                    cfg, src.read_text(),
+                    f"-O{opt}\n  gcc: {oracle_sum}\n  pxx: {got}", seed, opt)
 
     distinct = set(results.values())
     if len(distinct) > 1:
@@ -389,12 +603,13 @@ def main():
     outdir.mkdir(parents=True, exist_ok=True)
 
     workdir = Path(tempfile.mkdtemp(prefix="csmith-fuzz-"))
-    oracle_cc, oracle_note = probe_oracle(args.target, workdir)
-    cfg = Cfg(pxx, inc, opts, args.timeout, csmith_args, args.target, oracle_cc)
+    oracle_cc, oracle_kind, oracle_note = probe_oracle(args.target, workdir)
+    cfg = Cfg(pxx, inc, opts, args.timeout, csmith_args, args.target, oracle_cc,
+              oracle_kind)
 
     print(f"csmith fuzz: {len(seeds)} program(s), pxx -O{{{','.join(opts)}}}"
           + (f" --target={args.target}" if args.target != "x86_64" else "")
-          + (" vs gcc -O0 oracle" if oracle_cc else ""))
+          + (" vs gcc -O0 oracle (%s)" % oracle_kind if oracle_cc else ""))
     print(f"  csmith.h: {inc}")
     print(f"  findings: {outdir}")
     print(f"  {oracle_note}")
@@ -408,7 +623,13 @@ def main():
             f = fuzz_one(seed, cfg, workdir)
             if f is SKIP:
                 skipped += 1
-                print(f"  [{i}/{len(seeds)}] seed {seed}: skip (gcc could not build/run it)",
+                # "gcc could not build it" reads as the ORACLE in a run whose
+                # banner just said there is no oracle for this target, and a
+                # reader then has to open the source to learn whether the skips
+                # meant anything. It is the validity filter, which runs whether
+                # or not an oracle exists; say so.
+                print(f"  [{i}/{len(seeds)}] seed {seed}: skip (the native "
+                      f"validity filter could not build/run it)",
                       flush=True)
                 continue
             if f is None:
@@ -453,7 +674,15 @@ def main():
 
     print()
     print("== csmith fuzz report ==")
-    if oracle_cc:
+    if oracle_cc and oracle_kind == "datamodel":
+        # An oracle that answered one of the two questions must not be reported
+        # as though it answered both. Same rule as the no-oracle branch below,
+        # one notch finer.
+        print(f"  {agreed}/{len(seeds)} agreed with the gcc oracle"
+              + (f"  ({skipped} skipped)" if skipped else ""))
+        print("  NOT CHECKED: the slow ratio — the oracle matched "
+              f"{args.target}'s data model, not its ISA, and ran natively.")
+    elif oracle_cc:
         print(f"  {agreed}/{len(seeds)} agreed with the gcc oracle"
               + (f"  ({skipped} skipped)" if skipped else ""))
     else:
@@ -467,13 +696,17 @@ def main():
     if not counts:
         print("  no findings")
         return 0
-    for bucket in ("MISCOMPILE_VS_GCC", "MISCOMPILE_OPT", "PXX_CRASH",
-                   "PXX_COMPILE_FAIL", "PXX_TIMEOUT", "PXX_SLOW"):
+    for bucket in ("MISCOMPILE_VS_GCC", "MISCOMPILE_OPT", "LAYOUT_SUSPECT",
+                   "PXX_CRASH", "PXX_COMPILE_FAIL", "PXX_TIMEOUT", "PXX_SLOW"):
         if bucket in counts:
             uniq = sum(1 for k in seen if k.startswith(bucket + "|"))
             print(f"  {bucket:20s} {counts[bucket]:4d} hit(s), {uniq} distinct")
     print(f"\n  saved to {outdir}")
-    # a miscompile is a hard failure; gaps and crashes are findings to triage
+    # A miscompile is a hard failure; gaps and crashes are findings to triage.
+    # LAYOUT_SUSPECT deliberately does NOT fail the run: it is not yet known to
+    # be a defect, and a red exit is pressure to make it go away -- which here
+    # means routing an ABI difference to Track A as a codegen bug. It is loud in
+    # the report instead, which is where an unresolved thing belongs.
     return 1 if ("MISCOMPILE_VS_GCC" in counts or "MISCOMPILE_OPT" in counts) else 0
 
 

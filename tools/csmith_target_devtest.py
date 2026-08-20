@@ -79,7 +79,8 @@ def fuzz(tmp, target, oracle_cc, **kw):
     C.run = stub
     try:
         cfg = C.Cfg(pathlib.Path("/x/compiler/pascal26"), pathlib.Path("/inc"),
-                    ["0", "2"], 15, [], target, oracle_cc)
+                    ["0", "2"], 15, [], target, oracle_cc,
+                    kw.pop("oracle_kind", "isa") if oracle_cc else None)
         return cfg, stub, C.fuzz_one(1, cfg, tmp)
     finally:
         C.run = old
@@ -149,13 +150,27 @@ check(15 * C.EMU_TIMEOUT_FACTOR > C.TIMEOUT_FACTOR * 1.0,
       "...and below that, the floor is what protects a fast oracle from a tight budget")
 
 print("the probe answers honestly, and says so either way")
-cc, note = C.probe_oracle("aarch64", tmp)
-check(cc is None, "no aarch64 cross gcc on this box, so no oracle is claimed")
-check("NO ORACLE" in note and "LP64" in note and "NOT CHECKED" in note,
+# aarch64 used to land here as the honest NEGATIVE -- no cross gcc on this box,
+# so no oracle claimed. It is not the negative any more: the host gcc is LP64,
+# aarch64 is LP64, and the checksum comparison that was being skipped is now
+# made (bug-t-csmith-oracle-list-is-keyed-on-isa-when-its-own-doctrine-says-
+# data-model). The honest-negative case moved to arm32, where the only ILP32
+# candidate is `gcc -m32` and this box cannot link it. Both halves are still
+# tested; which target sits on which side is what changed.
+cc, kind, note = C.probe_oracle("arm32", tmp)
+check(cc is None and kind is None,
+      "no ILP32 oracle on this box (gcc -m32 compiles, does not link), so none is claimed")
+check("NO ORACLE" in note and "ILP32" in note and "NOT CHECKED" in note,
       "...and the note names the target's data model and what went unchecked")
-check("not installed" in note, "...and why (the compiler is absent, not broken)")
-cc, note = C.probe_oracle("x86_64", tmp)
-check(cc == ["gcc"] and "matches the target" in note,
+check("not installed" in note or "does not build" in note,
+      "...and why, per candidate")
+cc, kind, note = C.probe_oracle("aarch64", tmp)
+check(cc == ["gcc"] and kind == "datamodel",
+      "aarch64 DOES get an oracle now: the host gcc, matched on the data model")
+check("DATA MODEL, not the ISA" in note,
+      "...and the note says which question it can answer, not just that it exists")
+cc, kind, note = C.probe_oracle("x86_64", tmp)
+check(cc == ["gcc"] and kind == "isa" and "matches the target" in note,
       "the native target finds its oracle and says which one")
 
 print()
