@@ -5178,6 +5178,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     foldOff, foldK, foldSym: Integer;
     bLastNode: Integer;
     writeFd: Integer;
+    chArrCap, chArrCap2: Integer;   { static `array of Char` <-> string conversion }
     foldStr: AnsiString;
     down: Boolean;
     varIdx, varIdx2: Integer;
@@ -7007,6 +7008,34 @@ begin
         that `+` concat and the explicit cast already use, so no backend code.
         Pascal only: C compares chars as ints, and NilPy routes str ordering
         through pylib. }
+      { A static `array of Char` meeting a string (or a Char, or another Char
+        array) in `+` or a comparison converts to its STRING value first.
+        Without this `a = 'abcdefgh'` compared the array's ADDRESS against the
+        string handle and was always False, and `a + '!'` concatenated one
+        garbage character. Both silent.
+        bug-p-a-char-array-is-not-a-string-in-any-direction }
+      if not CProgramMode and not NilPyUserCode and
+         (TTokenKind(ASTIVal[node]) in [tkPlus, tkLt, tkLe, tkGt, tkGe, tkEq, tkNeq]) then
+      begin
+        chArrCap := ASTCharArrayCap(ASTLeft[node]);
+        chArrCap2 := ASTCharArrayCap(ASTRight[node]);
+        if ((chArrCap >= 0) and ((chArrCap2 >= 0) or
+              (IntToTypeKind(ASTTk[ASTRight[node]]) in [tyString, tyAnsiString, tyChar]))) or
+           ((chArrCap2 >= 0) and
+              (IntToTypeKind(ASTTk[ASTLeft[node]]) in [tyString, tyAnsiString, tyChar])) then
+        begin
+          if chArrCap >= 0 then
+            ASTLeft[node] := WrapCharArrayToStringExpr(ASTLeft[node]);
+          if chArrCap2 >= 0 then
+            ASTRight[node] := WrapCharArrayToStringExpr(ASTRight[node]);
+          if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyChar then
+            ASTLeft[node] := WrapCharToStringExpr(ASTLeft[node]);
+          if IntToTypeKind(ASTTk[ASTRight[node]]) = tyChar then
+            ASTRight[node] := WrapCharToStringExpr(ASTRight[node]);
+          if TTokenKind(ASTIVal[node]) = tkPlus then ASTTk[node] := Ord(tyAnsiString);
+        end;
+      end;
+
       { A UCS4Char meeting a string in `+` or a comparison converts to its UTF-8
         ENCODING. Without this the kind is ordinal, so `'h' + c` took the
         ARITHMETIC path and produced Chr(104+233) — one wrong byte, silently.
@@ -7992,6 +8021,32 @@ begin
         Result := IRLowerCompoundAssign(node);
         Exit;
       end;
+      { A static `array of Char` IS a string, in both directions, and neither
+        direction reached a conversion: `a := 'abcdefgh'` fell through to the
+        scalar store and wrote the low byte of the literal's HANDLE into a[0],
+        and `s := a` typed the array as a bare Char and answered ''. Both
+        silent. Rewritten here for the reason the arms below give — every
+        syntactic form of assignment funnels through this node.
+        bug-p-a-char-array-is-not-a-string-in-any-direction }
+      if not CProgramMode then
+      begin
+        if (ASTCharArrayCap(ASTLeft[node]) >= 0) and
+           (IntToTypeKind(ASTTk[ASTRight[node]]) in [tyString, tyAnsiString, tyChar]) then
+        begin
+          { a ONE-character literal is spelled tyChar, and `b := 'q'` on an
+            `array[1..3] of Char` still pads: FPC leaves 113 0 0, not 113 and
+            two stale bytes. Promote it to a string and take the same path. }
+          if IntToTypeKind(ASTTk[ASTRight[node]]) = tyChar then
+            ASTRight[node] := WrapCharToStringExpr(ASTRight[node]);
+          Result := IRLowerAST(WrapStringToCharArrayStmt(ASTLeft[node], ASTRight[node]));
+          IRIVal[Result] := 1;
+          Exit;
+        end;
+        if (ASTCharArrayCap(ASTRight[node]) >= 0) and
+           (IntToTypeKind(ASTTk[ASTLeft[node]]) in [tyString, tyAnsiString]) then
+          ASTRight[node] := WrapCharArrayToStringExpr(ASTRight[node]);
+      end;
+
       { FPC/Delphi parity: a procedural VARIABLE named in a VALUE context is
         CALLED. Taking its address is what `@fp` is for, and `fp()` with explicit
         parens was already right — so the two spellings disagreed, and the wrong
@@ -10937,6 +10992,13 @@ begin
         { IR_WRITE: IRB = field width (0 = none), IRC = decimals (-1 = none),
           IRIVal = target fd, IRTk = the source expression type (write dispatch). }
         bLastNode := -1;
+        { write(a) on a static `array of Char` prints the STRING, not one
+          garbage character read from the array's address.
+          bug-p-a-char-array-is-not-a-string-in-any-direction }
+        if (not CProgramMode) and
+           ((ASTKind[item] = AN_ARG) or (ASTKind[item] = AN_PAIR)) and
+           (ASTCharArrayCap(ASTLeft[item]) >= 0) then
+          ASTLeft[item] := WrapCharArrayToStringExpr(ASTLeft[item]);
         if (ASTKind[item] = AN_ARG) and (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyBoolean) then
         begin
           { write(Boolean[:w]) -> FPC-style TRUE/FALSE text, branched at runtime. }
@@ -10993,6 +11055,14 @@ begin
         begin
           value := IRVariantAddr(item);
           outNode := IRAppend(IR_WRITE, value, -1, -1, writeFd, Ord(tyVariant));
+        end
+        else if (not CProgramMode) and (ASTCharArrayCap(item) >= 0) then
+        begin
+          { the BARE form — no width, no pair. Rewriting `item` in place would
+            break the argument chain (ASTRight[item] is the next item), so the
+            wrap is applied to the lowered value here rather than to the slot. }
+          value := IRLowerAST(WrapCharArrayToStringExpr(item));
+          outNode := IRAppend(IR_WRITE, value, -1, -1, writeFd, Ord(tyAnsiString));
         end
         else
         begin

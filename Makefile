@@ -6061,6 +6061,15 @@ test-core: $(COMPILER)
 	# change value under the cast still keeps the pun (no masking emitted).
 	./$(COMPILER) test/test_integer_cast_truncates_rvalue.pas $(TESTTMP)/test_intcast26
 	test "$$($(TESTTMP)/test_intcast26 | tail -1)" = "total ok 28 / 28"
+	# A static `array[lo..hi] of Char` IS a string in FPC, both ways, and pxx
+	# treated it as a bare Char everywhere: `a := 'abcdefgh'` stored the low byte
+	# of the literal's HANDLE into a[0], `s := a` answered '', `a = 'abcdefgh'`
+	# was False, `a + '!'` and `Write(a)` printed one garbage character. Reading
+	# stops at the first #0 within the capacity (FPC's rule, not a memcpy);
+	# writing pads with zeros. 77 assertions, all FPC 3.2.2's.
+	./$(COMPILER) test/test_char_array_is_a_string.pas $(TESTTMP)/test_chararrstr26
+	test "$$($(TESTTMP)/test_chararrstr26 | head -1)" = "total ok 77 / 77"
+	test "$$($(TESTTMP)/test_chararrstr26 | tail -1)" = "write [hi]"
 	./$(COMPILER) test/test_var_nd_array_string_init.pas $(TESTTMP)/test_var_nd_array_string_init26
 	test "$$($(TESTTMP)/test_var_nd_array_string_init26)" = "$$(printf '1 3 4 6\nJan Mar Apr Jun\nx yy zzz')"
 	./$(COMPILER) test/test_sizeof_array_typename.pas $(TESTTMP)/test_sizeof_array_typename26

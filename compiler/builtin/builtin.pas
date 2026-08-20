@@ -111,6 +111,22 @@ function VariantToChar(const v: Variant): Char;
 function VariantToCharFPC(const v: Variant): Char;
 function PCharToString(p: PChar): AnsiString;
 
+{ A static `array[lo..hi] of Char` IS a string in FPC, in both directions, and
+  these two are that conversion. `cap` is the array's element count.
+
+  __pxxCharArrayToStr stops at the first #0 within cap and otherwise takes all
+  cap characters -- FPC's rule, verified against 3.2.2: an
+  `array[0..7] of Char` holding 'ABC'#0'EFGH' converts to the 3-character
+  'ABC', while the same array holding eight non-NUL characters converts to all
+  eight. So it is PCharToString with a hard length bound, not a plain memcpy.
+
+  __pxxStrToCharArray copies Min(Length(s), cap) characters and ZERO-fills the
+  rest, which is what makes `a := 'abc'` on an 8-element array leave
+  `97 98 99 0 0 0 0 0` rather than five bytes of whatever was there.
+  bug-p-a-char-array-is-not-a-string-in-any-direction }
+function __pxxCharArrayToStr(p: PChar; cap: Integer): AnsiString;
+procedure __pxxStrToCharArray(p: PChar; cap: Integer; const s: AnsiString);
+
 { WideChar -> UTF-8 conversion, backing the frontend's widechar-in-string-context
   lowering (`s := WideChar(u)`, `WideChar(u1)+WideChar(u2)`, a WideChar(x) passed
   to a string parameter). pxx's one string model is UTF-8 bytes, so a UTF-16 code
@@ -1441,6 +1457,38 @@ begin
       i := i + 1;
       c := p[i];
     end;
+  end;
+end;
+
+function __pxxCharArrayToStr(p: PChar; cap: Integer): AnsiString;
+var i: Integer;
+begin
+  Result := '';
+  if p = nil then Exit;
+  i := 0;
+  while (i < cap) and (p[i] <> #0) do
+  begin
+    Result := Result + p[i];
+    i := i + 1;
+  end;
+end;
+
+procedure __pxxStrToCharArray(p: PChar; cap: Integer; const s: AnsiString);
+var i, n: Integer;
+begin
+  if p = nil then Exit;
+  n := Length(s);
+  if n > cap then n := cap;
+  i := 0;
+  while i < n do
+  begin
+    p[i] := s[i + 1];
+    i := i + 1;
+  end;
+  while i < cap do
+  begin
+    p[i] := #0;
+    i := i + 1;
   end;
 end;
 

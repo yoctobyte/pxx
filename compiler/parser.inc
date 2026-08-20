@@ -9187,6 +9187,100 @@ begin
   Result := wCall;
 end;
 
+{ ===== A static `array of Char` IS a string =====
+
+  FPC treats `array[lo..hi] of Char` as string-compatible in BOTH directions and
+  pxx did not, because the arrayness lives on the SYMBOL (Syms[].IsArray/ArrLen)
+  while the AST node for `a` is typed tyChar. Every string context therefore saw
+  a plain Char and quietly did something defensible with it: `a := 'abcdefgh'`
+  stored the low byte of the literal's HANDLE into a[0] and left the rest alone,
+  `s := a` answered '', `a = 'abcdefgh'` was False. All silent.
+
+  These are the one conversion, called from the places that want a string —
+  the same shape WrapPCharToString and WrapCharToStringExpr already have, and
+  for the same reason: a wrap at the boundary beats a special case grown at
+  each site. bug-p-a-char-array-is-not-a-string-in-any-direction }
+
+function ASTCharArrayCap(node: Integer): Integer;
+{ The element count if `node` denotes a STATIC Char array, else -1. A DYNAMIC
+  array (ArrLen = -1) is a managed handle and a different animal; an array of
+  anything but Char is not a string at all. }
+var sym: Integer;
+begin
+  Result := -1;
+  if (node < 0) or (node >= ASTNodeCount) then Exit;
+  if ASTKind[node] <> AN_IDENT then Exit;
+  sym := ASTIVal[node];
+  if (sym < 0) or (sym >= SymCount) then Exit;
+  if not Syms[sym].IsArray then Exit;
+  if Syms[sym].ArrLen < 0 then Exit;
+  if SymElemDynDepth[sym] <> 0 then Exit;
+  if Syms[sym].ElemType <> tyChar then Exit;
+  Result := Syms[sym].ArrLen;
+end;
+
+function WrapCharArrayToStringExpr(node: Integer): Integer;
+{ `a` in a string context -> __pxxCharArrayToStr(@a, cap). The helper stops at
+  the first #0 within cap, which is FPC's rule and not a plain memcpy: an
+  array[0..7] holding 'ABC'#0'EFGH' is the 3-character 'ABC'. }
+var procIdx, cap, addrNode, a0, a1, capNode, callNode: Integer;
+begin
+  Result := node;
+  cap := ASTCharArrayCap(node);
+  if cap < 0 then Exit;
+  procIdx := FindProc('__pxxCharArrayToStr');
+  if procIdx < 0 then
+    Error('a Char array in a string context needs __pxxCharArrayToStr (builtin unit not loaded)');
+  addrNode := AllocNode(AN_ADDR);
+  ASTLeft[addrNode] := node;
+  ASTTk[addrNode] := Ord(tyPointer);
+  capNode := AllocNode(AN_INT_LIT);
+  ASTIVal[capNode] := cap;
+  ASTTk[capNode] := Ord(tyInteger);
+  a0 := AllocNode(AN_ARG);
+  ASTLeft[a0] := addrNode; ASTTk[a0] := Ord(tyPointer);
+  a1 := AllocNode(AN_ARG);
+  ASTLeft[a1] := capNode;  ASTTk[a1] := Ord(tyInteger);
+  ASTRight[a0] := a1;      ASTRight[a1] := -1;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := procIdx;
+  ASTTk[callNode] := Ord(Procs[procIdx].RetType);
+  ASTLeft[callNode] := a0; ASTRight[callNode] := -1;
+  Result := callNode;
+end;
+
+function WrapStringToCharArrayStmt(destNode, valueNode: Integer): Integer;
+{ `a := s` -> __pxxStrToCharArray(@a, cap, s): Min(Length(s), cap) characters
+  and then a ZERO fill, which is what leaves `a := 'abc'` on an 8-element array
+  as 97 98 99 0 0 0 0 0 rather than five stale bytes. }
+var procIdx, cap, addrNode, capNode, a0, a1, a2, callNode: Integer;
+begin
+  Result := -1;
+  cap := ASTCharArrayCap(destNode);
+  if cap < 0 then Exit;
+  procIdx := FindProc('__pxxStrToCharArray');
+  if procIdx < 0 then
+    Error('a string assigned to a Char array needs __pxxStrToCharArray (builtin unit not loaded)');
+  addrNode := AllocNode(AN_ADDR);
+  ASTLeft[addrNode] := destNode;
+  ASTTk[addrNode] := Ord(tyPointer);
+  capNode := AllocNode(AN_INT_LIT);
+  ASTIVal[capNode] := cap;
+  ASTTk[capNode] := Ord(tyInteger);
+  a0 := AllocNode(AN_ARG);
+  ASTLeft[a0] := addrNode; ASTTk[a0] := Ord(tyPointer);
+  a1 := AllocNode(AN_ARG);
+  ASTLeft[a1] := capNode;  ASTTk[a1] := Ord(tyInteger);
+  a2 := AllocNode(AN_ARG);
+  ASTLeft[a2] := valueNode; ASTTk[a2] := Ord(tyAnsiString);
+  ASTRight[a0] := a1; ASTRight[a1] := a2; ASTRight[a2] := -1;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := procIdx;
+  ASTTk[callNode] := Ord(Procs[procIdx].RetType);
+  ASTLeft[callNode] := a0; ASTRight[callNode] := -1;
+  Result := callNode;
+end;
+
 { Promote a Char-typed expression to a 1-char string VALUE, reusing the exact
   `String(c)` desugar: assign the char into a hidden tyString temp, then read the
   temp (AN_STR_FROM_CHAR: Left = the store side-effect, Right = the yielded read).
@@ -36470,6 +36564,16 @@ begin
       builtins) never drags in builtin.pas. ESP can't compile builtin. }
     if (not NoDefaultRtl) and (Tokens[i].Kind = tkIdent) and
        (CaseEqual(GetTokenStr(i), 'pchar') or CaseEqual(GetTokenStr(i), 'pansichar')) and
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+      needsBuiltin := True;
+    { …and the same rule for a static `array of Char`, which IS a string in both
+      directions and lowers to __pxxCharArrayToStr / __pxxStrToCharArray (also
+      in builtin). Keyed on the token PAIR `of` + `char` so it fires for
+      `array[0..7] of Char` and `array of Char` and nothing else — `char` alone
+      appears in almost every program and would drag builtin.pas into all of
+      them. bug-p-a-char-array-is-not-a-string-in-any-direction }
+    if (not NoDefaultRtl) and (Tokens[i].Kind = tkOf) and (i + 1 < TokCount) and
+       (Tokens[i + 1].Kind = tkChar_T) and
        (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
     Inc(i);
