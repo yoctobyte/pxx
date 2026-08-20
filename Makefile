@@ -8281,9 +8281,19 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) --target=riscv32 test/test_cross_exception.pas $(TESTTMP)/test_rv32x_exception
 	./$(COMPILER) test/test_cross_exception.pas $(TESTTMP)/test_rv32x_exception_x64
 	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_exception)" = "$$($(TESTTMP)/test_rv32x_exception_x64)"
+	# NOT compared against x86-64's output, unlike its neighbours: riscv32
+	# reduces float depth from the target, so a Single-typed expression renders
+	# in the 10-significant-digit / 2-digit-exponent Single form here and in the
+	# Double form there. The VALUES agree — every line that differs is an
+	# exactly-representable one (3.5, -0.5, 3.0, 0.75, 4.5, 1.5) — so this
+	# expectation records widths, not a rounding. Cross-equality stopped being
+	# a valid comparison for this file when PXXWriteFloatSci learned to print a
+	# Single as a Single (354f734c1); the two sibling tests
+	# test_cross_float_return / test_cross_float_const still agree with x86-64
+	# and deliberately keep the cheaper check.
+	# bug-a-riscv32-cross-float-output-no-longer-matches-x86-64
 	./$(COMPILER) --target=riscv32 test/test_cross_float.pas $(TESTTMP)/test_rv32x_float
-	./$(COMPILER) test/test_cross_float.pas $(TESTTMP)/test_rv32x_float_x64
-	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_float)" = "$$($(TESTTMP)/test_rv32x_float_x64)"
+	tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_float | diff -u test/test_cross_float.riscv32.expected -
 	./$(COMPILER) --target=riscv32 test/test_cross_float_return.pas $(TESTTMP)/test_rv32x_fret
 	./$(COMPILER) test/test_cross_float_return.pas $(TESTTMP)/test_rv32x_fret_x64
 	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_fret)" = "$$($(TESTTMP)/test_rv32x_fret_x64)"

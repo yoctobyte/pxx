@@ -2,7 +2,7 @@
 slug: bug-a-riscv32-cross-float-output-no-longer-matches-x86-64
 track: A
 prio: 65
-status: urgent
+status: done
 ---
 
 # `test-riscv32#src:test/test_cross_float.pas` — the two sides print the same numbers at different widths
@@ -156,3 +156,71 @@ known-red with this ticket as its reason. Cheapest correct thing wins; it is boo
 
 **Do NOT:** change `PXXWriteFloatSci`, adjust digit counts, or chase the rendering difference.
 The rendering is believed correct and that question stays low-prio.
+
+## RESOLVED 2026-08-20 (frank2) — option 1, as a test change; no compiler source touched
+
+Exactly the scope the last section set: bookkeeping. `PXXWriteFloatSci` is
+untouched, no digit count moved, and the rendering question stays where it was
+parked. `gate.sh quick` reports `SKIP FPC seed canary (compiler/ unchanged vs
+origin/master)`, which is the mechanical confirmation that nothing in
+`compiler/` moved.
+
+### What changed
+
+`test/test_cross_float.riscv32.expected` (new) plus the one job line, which was:
+
+```make
+./$(COMPILER) --target=riscv32 test/test_cross_float.pas $(TESTTMP)/test_rv32x_float
+./$(COMPILER) test/test_cross_float.pas $(TESTTMP)/test_rv32x_float_x64
+test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_float)" = "$$($(TESTTMP)/test_rv32x_float_x64)"
+```
+
+and is now a `diff -u` against that recorded expectation. The x86-64 build of
+this file is dropped, because it existed only to be the oracle; nothing else
+referenced `test_rv32x_float_x64`. The `.expected` convention is the one 312
+other tests already use, so this adds no new mechanism.
+
+### Why the expectation is safe to record — it captures widths, not a rounding
+
+This is the part worth checking rather than asserting, because "record the
+current output" is how a wrong value gets blessed. It cannot happen here:
+**every line that differs between the two targets is an exactly-representable
+value.**
+
+| line | x86-64 | riscv32 |
+| --- | --- | --- |
+| `s1 + s2` | ` 3.5000000000000000E+000` | ` 3.500000000E+00` |
+| `s1 - s2` | `-5.0000000000000000E-001` | `-5.000000000E-01` |
+| `s1 * s2` | ` 3.0000000000000000E+000` | ` 3.000000000E+00` |
+| `s1 / s2` | ` 7.5000000000000000E-001` | ` 7.500000000E-01` |
+| `i * s1` | ` 4.5000000000000000E+000` | ` 4.500000000E+00` |
+| `i / 2` | ` 1.5000000000000000E+000` | ` 1.500000000E+00` |
+
+3.5, -0.5, 3.0, 0.75, 4.5, 1.5 — no digit in the recorded file could be hiding
+a wrong computation, because there is no inexact digit in it. The other 19
+lines are byte-identical to x86-64's and stay that way in the expectation.
+
+The set is also exactly what the diagnosis predicted: the six Single-typed
+expressions. Four are Single/Single, one is Integer*Single, and `i / 2` is the
+ordinal/ordinal case with no target type to take a depth from, so it falls to
+the target's native depth — which is Single here. That is
+`test_esp_float_depth_from_target.pas`'s documented behaviour, not a second
+defect.
+
+### Scope checked, not assumed
+
+The two neighbouring cross-float jobs were re-measured on riscv32 rather than
+reasoned about: `test_cross_float_return` and `test_cross_float_const` both
+still agree with x86-64 byte for byte, so they keep the cheaper cross-equality
+check and only the one file that actually diverges gets an expectation. No
+xtensa job runs `test_cross_float` at all (`grep`ed, not assumed), so there is
+no sibling arm to fix — despite the analysis above naming xtensa as equally
+depth-reduced. i386 / aarch64 / arm32 are not depth-reduced and are unaffected.
+
+### Gate
+
+`make compiler/pascal26` (converged in 1 round) · the repro above ·
+`tools/gate.sh quick` **GREEN** · the job itself re-run standalone and passing.
+
+## Log
+- 2026-08-20 — resolved, commit PENDING-COMMIT.
