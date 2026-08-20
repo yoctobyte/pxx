@@ -5676,6 +5676,75 @@ begin
   Result := FindUMeth(ci, name);
 end;
 
+function FindUMethForSig(ci: Integer; const name: AnsiString; sigProc: Integer): Integer;
+{ The class method that implements ONE interface method SLOT.
+
+  The IMT builder used to fill every slot with FindUMeth -- a NAME-only lookup --
+  so an OVERLOADED interface method bound all of its slots to the class's FIRST
+  method of that name: `IThing.Pick(x)` and `IThing.Pick(x, y)` both dispatched to
+  TThing.Pick(x), and the second argument was read as garbage. Silent wrong
+  values, and only THROUGH the interface -- the direct class call resolved
+  correctly the whole time, which is why the defect survived
+  (bug-p-interface-method-overload-picks-the-first-slot).
+
+  Signature = arity, then each parameter's type kind, array-ness and class/record
+  id. Param 0 is Self on both sides and is skipped. Falls back to the first name
+  match when nothing matches exactly, so a class whose implementation differs only
+  cosmetically binds exactly as it did before, and "does not implement" stays the
+  IMT builder's diagnostic rather than this function's. }
+var i, base, cnt, curr, k, cp, sRec, cRec: Integer; lo, name2: AnsiString; ok: Boolean;
+begin
+  Result := -1;
+  name2 := name;
+  lo := ULower(name2);
+  curr := ci;
+  while curr >= 0 do
+  begin
+    base := UClsMBase[curr];
+    cnt  := UClsMCount[curr];
+    i := 0;
+    while i < cnt do
+    begin
+      if UMemberNameMatch(UMthNOff[base + i], UMthNLen[base + i], curr, name, lo) then
+      begin
+        cp := UMthProc_[base + i];
+        if (cp >= 0) and (sigProc >= 0) and
+           (Procs[cp].ParamCount = Procs[sigProc].ParamCount) then
+        begin
+          ok := True;
+          k := 1;
+          while k < Procs[cp].ParamCount do
+          begin
+            if (Procs[cp].Params[k].TypeKind <> Procs[sigProc].Params[k].TypeKind) or
+               (Procs[cp].Params[k].IsArray <> Procs[sigProc].Params[k].IsArray) then
+            begin ok := False; k := Procs[cp].ParamCount; end
+            else
+            begin
+              if k < MAX_PROC_PARAMS then
+              begin
+                cRec := ProcParamRecId[cp * MAX_PROC_PARAMS + k];
+                sRec := ProcParamRecId[sigProc * MAX_PROC_PARAMS + k];
+                { only when BOTH sides know the id -- an unrecorded one must not
+                  veto a match that the type kinds already agree on }
+                if (cRec <> REC_NONE) and (sRec <> REC_NONE) and (cRec <> sRec) then
+                begin ok := False; k := Procs[cp].ParamCount; end
+                else
+                  k := k + 1;
+              end
+              else
+                k := k + 1;
+            end;
+          end;
+          if ok then begin Result := base + i; Exit; end;
+        end;
+      end;
+      Inc(i);
+    end;
+    curr := UClsParent[curr];
+  end;
+  Result := FindUMeth(ci, name);
+end;
+
 function FindUMethByProc(ci, procIdx: Integer): Integer;
 { The UMeth entry bound to a specific proc — an overloaded method's impl must
   update ITS OWN entry (slot/proc mapping), not the first name match. }

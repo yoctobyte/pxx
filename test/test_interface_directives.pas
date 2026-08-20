@@ -9,22 +9,28 @@ program test_interface_directives;
   virtual by definition, overload resolution is signature-keyed, and pxx has
   one internal calling convention.
 
-  Two same-named interface overloads are NOT exercised here on purpose: pxx
-  picks an interface method by declaration slot, so a call selects the first
-  of the name regardless of argument type. That is a separate defect (a
-  silently wrong value, filed on its own); baking it into this test's expected
-  output would freeze it. }
+  Same-named interface OVERLOADS are the second half of this test, and they
+  used to be deliberately absent: the IMT builder bound every slot of a name to
+  the class's FIRST method of that name (a plain FindUMeth), so `Compare(L, R)`
+  and `Compare(L, M, R)` both dispatched to whichever came first and the extra
+  argument was read as garbage. Silent, and only THROUGH the interface -- the
+  direct class call resolved correctly the whole time
+  (bug-p-interface-method-overload-picks-the-first-slot). The class below
+  declares its overloads in a DIFFERENT order from the interface on purpose: a
+  slot binds by SIGNATURE, so declaration position must not matter. }
 type
   IThing = interface
     function Compare(constref L, R: Integer): Integer; overload;
-    function CompareStr(constref L, R: string): Integer; overload;
+    function Compare(constref L, R: string): Integer; overload;
+    function Compare(constref L, M, R: Integer): Integer; overload;
     procedure Poke; stdcall;
     function Legacy: string; deprecated 'use Poke';
   end;
 
   TThing = class(TInterfacedObject, IThing)
+    function Compare(constref L, M, R: Integer): Integer; overload;
+    function Compare(constref L, R: string): Integer; overload;
     function Compare(constref L, R: Integer): Integer; overload;
-    function CompareStr(constref L, R: string): Integer; overload;
     procedure Poke; stdcall;
     function Legacy: string;
   end;
@@ -34,9 +40,14 @@ begin
   if L < R then Result := -1 else if L > R then Result := 1 else Result := 0;
 end;
 
-function TThing.CompareStr(constref L, R: string): Integer;
+function TThing.Compare(constref L, R: string): Integer;
 begin
   if L < R then Result := -1 else if L > R then Result := 1 else Result := 0;
+end;
+
+function TThing.Compare(constref L, M, R: Integer): Integer;
+begin
+  Result := L + M + R;
 end;
 
 procedure TThing.Poke; stdcall;
@@ -51,9 +62,14 @@ end;
 
 var
   i: IThing;
+  t: TThing;
 begin
-  i := TThing.Create;
-  WriteLn('cmp ', i.Compare(2, 5), ' ', i.CompareStr('b', 'a'));
+  t := TThing.Create;
+  i := t;
+  { through the interface -- the path that was wrong }
+  WriteLn('cmp ', i.Compare(2, 5), ' ', i.Compare('b', 'a'), ' ', i.Compare(1, 2, 3));
+  { ...and directly on the class, which always worked. Identical answers. }
+  WriteLn('cls ', t.Compare(2, 5), ' ', t.Compare('b', 'a'), ' ', t.Compare(1, 2, 3));
   i.Poke;
   WriteLn('legacy ', i.Legacy);
   WriteLn('INTERFACE DIRECTIVES OK');

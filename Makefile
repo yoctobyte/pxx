@@ -4577,7 +4577,7 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_generic_nested_diamond26)" = "$$(printf 'diamond 4 9 13\nGENERIC NESTED DIAMOND OK')"
 	# directives on an interface method signature, and stdcall on a method impl
 	./$(COMPILER) test/test_interface_directives.pas $(TESTTMP)/test_interface_directives26
-	test "$$($(TESTTMP)/test_interface_directives26)" = "$$(printf 'cmp -1 1\npoke\nlegacy legacy\nINTERFACE DIRECTIVES OK')"
+	test "$$($(TESTTMP)/test_interface_directives26)" = "$$(printf 'cmp -1 1 6\ncls -1 1 6\npoke\nlegacy legacy\nINTERFACE DIRECTIVES OK')"
 	# a record's static class function called on the TYPE name (not the ctor shape)
 	./$(COMPILER) test/test_record_static_method.pas $(TESTTMP)/test_record_static_method26
 	test "$$($(TESTTMP)/test_record_static_method26)" = "$$(printf 'ctor 15\nstatic-int 6\nstatic-rec 6 12\nRECORD STATIC OK')"

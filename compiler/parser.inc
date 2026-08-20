@@ -28126,8 +28126,8 @@ begin
           while EatIntfMethodDirective do ;
           { inject implicit Self (the instance) at param 0, like a class method }
           for i := mNParams downto 1 do
-          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPConst[i] := mPConst[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultIsFloat[i] := mPDefaultIsFloat[i-1]; mPDefaultIsSet[i] := mPDefaultIsSet[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
-          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPArr[0] := False; mPByRef[0] := False; mPConst[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0; mPDefaultIsStr[0] := False; mPDefaultIsFloat[0] := False; mPDefaultIsSet[0] := False; mPDefaultSOff[0] := 0; mPDefaultSLen[0] := 0;
+          begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPTypesRec[i] := mPTypesRec[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPConst[i] := mPConst[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultIsFloat[i] := mPDefaultIsFloat[i-1]; mPDefaultIsSet[i] := mPDefaultIsSet[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
+          mPNames[0] := 'Self'; mPTypes[0] := tyClass; mPTypesRec[0] := REC_NONE; mPArr[0] := False; mPByRef[0] := False; mPConst[0] := False; mPDefault[0] := False; mPDefaultVal[0] := 0; mPDefaultIsStr[0] := False; mPDefaultIsFloat[0] := False; mPDefaultIsSet[0] := False; mPDefaultSOff[0] := 0; mPDefaultSLen[0] := 0;
           mNParams := mNParams + 1;
           mFullName := tname; AppendChar(mFullName, '.');
           for i := 1 to Length(mname) do AppendChar(mFullName, mname[i]);
@@ -28144,6 +28144,11 @@ begin
           for i := 0 to mNParams-1 do
           begin
             Procs[mpi].Params[i].IsArray := mPArr[i]; Procs[mpi].Params[i].IsRef := mPByRef[i];
+            { ...and the parameter's class/record id, which this path computed and
+              then dropped -- so a class-typed interface PARAMETER was REC_NONE and
+              nothing downstream could tell two overloads of it apart. The
+              class-method path has always recorded it. }
+            if i < MAX_PROC_PARAMS then ProcParamRecId[mpi * MAX_PROC_PARAMS + i] := mPTypesRec[i];
             if i < MAX_PROC_PARAMS then ProcParamIsConst[mpi * MAX_PROC_PARAMS + i] := mPConst[i];
             if (i < MAX_PROC_PARAMS) and mPDefault[i] then
             begin
@@ -29258,7 +29263,14 @@ begin
             imName := '';
             for i := 0 to UMthNLen[UClsMBase[tmpCi] + imSlot] - 1 do
               AppendChar(imName, TokChars[UMthNOff[UClsMBase[tmpCi] + imSlot] + i]);
-            mmi := FindUMeth(ci, imName);
+            { By SIGNATURE, not by name: an OVERLOADED interface method has one
+              slot per signature, and FindUMeth answers the class's FIRST method
+              of the name for every one of them -- so `IThing.Pick(x)` and
+              `IThing.Pick(x, y)` both dispatched to TThing.Pick(x) and the extra
+              argument was read as garbage. Silent, and only through the
+              interface: the direct class call resolved correctly all along
+              (bug-p-interface-method-overload-picks-the-first-slot). }
+            mmi := FindUMethForSig(ci, imName, UMthProc_[UClsMBase[tmpCi] + imSlot]);
             if mmi < 0 then Error('class does not implement interface method: ' + imName);
             imProc := UMthProc_[mmi];
             if MethodFixCount >= MAX_METHFIX then Error('too many method fixups (IMT)');
