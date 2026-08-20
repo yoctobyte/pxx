@@ -4057,32 +4057,13 @@
   "would_pin": true
  },
  "pin_verify": {
-  "date": "2026-08-19T22:07:53Z",
+  "date": "2026-08-20T03:20:06Z",
   "red": [
-   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy",
-   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy",
-   "test-nilpy#src:test/test_cpyext_hello.npy",
-   "test-nilpy#src:test/test_cpyext_args_errors.npy",
-   "test-nilpy#src:test/test_cpyext_containers.npy",
-   "test-nilpy#src:test/test_cpyext_markupsafe.npy",
-   "test-nilpy#src:test/test_cpyext_errformat.npy",
-   "test-nilpy#src:test/test_cpyext_cython.npy",
-   "test-riscv32#src:test/test_cross_float.pas",
-   "test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy",
-   "test-uforth#corpus",
-   "test-uforth#core",
-   "test-uforth#coreplustest",
-   "test-uforth#memorytest",
-   "test-uforth#searchordertest",
-   "test-c-conformance-riscv32#shard3/6",
-   "test-sqlite-threads-aarch64#src:tools/run_sqlite_thread_test.sh",
-   "test-sqlite-threads-arm32#src:tools/run_sqlite_thread_test.sh",
-   "tools-devtest#00",
-   "demos#00"
+   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh"
   ],
-  "sha": "d47acfee770cf057000fa49861c3d04b46bc51a1",
+  "sha": "21117f4152845a44e578a5eb04dc3af250a0b935",
   "tier": "full",
-  "ver": "v367",
+  "ver": "v368",
   "verdict": "RED"
  },
  "renamed_from": [
