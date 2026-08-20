@@ -4569,6 +4569,15 @@ test-core: $(COMPILER)
 	# (SI_TKILL = -6), which is what the stub's sign-extension exists for.
 	./$(COMPILER) test/test_signal_siginfo.pas $(TESTTMP)/test_signal_siginfo26
 	test "$$($(TESTTMP)/test_signal_siginfo26)" = "$$(printf 'segv code=1\nsegv addr=3735879680\nctx set=TRUE\nusr1 code=-6\nstage=2')"
+	# sigaltstack + SA_ONSTACK: a stack-overflow SIGSEGV must be HANDLEABLE. It
+	# is the one fault a handler cannot take on the faulting stack, so before
+	# this the program died with exit 139 and the hook never ran. The third line
+	# is the real assertion — it proves the handler ran on the ALT stack (its
+	# frame is hundreds of MB from the faulting address) rather than the
+	# overflow having left a usable slack page. Depth is not printed: it depends
+	# on RLIMIT_STACK. feature-signal-siginfo-ucontext item 3
+	./$(COMPILER) test/test_signal_altstack.pas $(TESTTMP)/test_signal_altstack26
+	test "$$($(TESTTMP)/test_signal_altstack26; echo "exit=$$?")" = "$$(printf 'recursing\ncode=1\nhandler-off-faulting-stack=TRUE\nexit=0')"
 	# PC rewrite: the handler points the saved ucontext PC at a Pascal proc
 	# that raises, and the fault is caught by the try/except the faulting
 	# code was already inside. The pc-is-the-fault line is the exact check

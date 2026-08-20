@@ -445,6 +445,14 @@ procedure EmitSignalRuntime;
   The program entry installs dispatch for SIGINT(2) and SIGTERM(15). Hooks for
   any other signal 1..64 install on the first SetSignalHandler call. }
 begin
+  { The alt stack's STORAGE lives here, next to the only code that uses it —
+    the BSS_IO_OWNER lesson (see EmitIoLockStubsForTarget): storage allocated in
+    the Pascal driver is storage every other frontend leaves at 0, i.e. aliased
+    onto offset 0. x86-64 only, because this is the only target that sets
+    SA_ONSTACK so far. }
+  BSS_SIG_ALTSTK := BSSSize; Inc(BSSSize, SIG_ALTSTACK_SIZE);
+  BSS_SIG_ALTSS  := BSSSize; Inc(BSSSize, 24);
+
   { --- restorer --- }
   SigRestorerAddr := CodeLen;
   EmitAsmX64(['mov rax, %', 15, 'syscall']);          { rt_sigreturn }
@@ -543,10 +551,39 @@ begin
 
   { --- install (edi = sig) --- }
   SigInstallAddr := CodeLen;
+  { sigaltstack FIRST. Without it a stack-overflow SIGSEGV is unhandleable: the
+    fault happens because there is no stack left, so pushing a signal frame onto
+    the faulting stack faults again and the kernel kills the process outright —
+    measured, exit 139 with the hook never entered. SA_ONSTACK below is the
+    other half; neither works alone.
+
+    Re-registering on every install is deliberate: sigaltstack is idempotent
+    with the same values, and one syscall per SetSignalHandler call is nothing
+    against needing a separate "have we done this yet" flag. Note the stack is
+    PER-THREAD — a hook installed from a clone(2) thread gets the main thread's
+    registration only, which is item 2 of this ticket and not addressed here.
+
+    rdi carries the signal number into the rt_sigaction below, so it is parked
+    in r8 across the call rather than reloaded. }
+  EmitAsmX64([
+    'mov r8, rdi',
+    'mov rcx, @glob', BSS_SIG_ALTSS,
+    'mov rdx, @glob', BSS_SIG_ALTSTK,
+    'mov [rcx], rdx',                                 { ss_sp = base of the buffer }
+    'xor edx, edx',
+    'mov [rcx+8], rdx',                               { ss_flags = 0 }
+    'mov rdx, %', SIG_ALTSTACK_SIZE,
+    'mov [rcx+16], rdx',                              { ss_size }
+    'mov rdi, rcx',
+    'xor esi, esi',                                   { old = nil }
+    'mov rax, %', 131,                                { sigaltstack }
+    'syscall',
+    'mov rdi, r8'
+  ]);
   EmitAsmX64(['mov rcx, @glob', BSS_SIG_SCRATCH]);
   EmitCodeAbsToRdx(SigDispatchAddr);
   EmitAsmX64(['mov [rcx], rdx']);                     { handler = dispatch }
-  EmitAsmX64(['mov edx, %', $14000004,                { flags = SA_RESTORER or SA_RESTART or SA_SIGINFO }
+  EmitAsmX64(['mov edx, %', $1C000004,                { flags = SA_RESTORER or SA_RESTART or SA_SIGINFO or SA_ONSTACK }
     'mov [rcx+8], rdx']);
   { SA_SIGINFO ($04) is what makes the kernel pass siginfo_t*/ucontext_t* in
     rsi/rdx — without it the fault CAUSE is unknowable (si_code is the only

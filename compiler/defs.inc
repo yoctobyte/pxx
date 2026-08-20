@@ -142,7 +142,8 @@ const
   MAX_C_CMD_DEFINES = 256;      { C `-D`/`-U` command-line predefines }
   MAX_PAS_DEFINE_CHARS = 32768;
   MAX_PAS_CONDS = 64;
-  MAX_INC_DEPTH = 32;   { ExpandIncludes recursion brake; FPC's own limit is 16 }
+  MAX_INC_DEPTH = 32;
+  SIG_ALTSTACK_SIZE = 32768;   { alt-stack bytes. Linux MINSIGSTKSZ is 2048 and SIGSTKSZ 8192, but both are advisory floors that grew with the register file (AVX-512 pushes the kernel's signal frame past the old constants), and this is zero-filled BSS with no file cost. }   { ExpandIncludes recursion brake; FPC's own limit is 16 }
   SPECIAL_IN  = 999;
 
   MAX_UCLASS      = 2048;  { user-defined class/record slots (incl. imported C structs) }
@@ -2956,6 +2957,8 @@ var
   BSS_SIG_SCRATCH : Integer;  { 32-byte kernel struct sigaction build area for the install/redefault stubs (handler, flags, restorer, mask) }
   BSS_SIG_CODE    : Integer;  { siginfo_t.si_code of the signal currently being dispatched, sign-extended to 64 bits (SA_SIGINFO, x86-64). Written by the dispatch stub BEFORE the hook runs, read by __pxxSigCode. THE reason SA_SIGINFO exists here: it is the only carrier of WHICH fault occurred — the MXCSR status flags read 0x00 in a handler because Linux hands it a clean FP state (measured, see feature-float-exception-mask-control). }
   BSS_SIG_ADDR    : Integer;  { siginfo_t.si_addr — the faulting address for SIGSEGV/SIGBUS/SIGFPE/SIGILL. Meaningless for a kill()-delivered signal (that union member is a pid there); the CALLER must know which signal it asked about. Read by __pxxSigAddr. }
+  BSS_SIG_ALTSTK  : Integer;  { the signal ALT STACK (SIG_ALTSTACK_SIZE bytes). A stack-overflow SIGSEGV faults on the guard page with no usable stack left, so a handler on the FAULTING stack cannot run — the kernel just kills the process. SA_ONSTACK + sigaltstack(2) give the handler its own ground. Allocated by EmitSignalRuntime, next to its only user (the BSS_IO_OWNER lesson). }
+  BSS_SIG_ALTSS   : Integer;  { the 24-byte kernel `stack_t` handed to sigaltstack: ss_sp(0), ss_flags(8, int), ss_size(16). }
   BSS_SIG_CTX     : Integer;  { the ucontext_t* the kernel passed the handler. Parked for the fault-to-RAISE work (rewrite the saved RIP to a raise stub before returning), which is the rest of feature-signal-siginfo-ucontext; read by __pxxSigContext. }
   ExceptionUsed   : Boolean;
   ProcExceptionCleanupFrameActive: Boolean;

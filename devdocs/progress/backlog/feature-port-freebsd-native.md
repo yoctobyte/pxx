@@ -55,3 +55,43 @@ zero-work smoke on a real BSD kernel before writing a line of code.
 qemu FreeBSD image (pre-built qcow2 exists) + linuxulator. The per-OS image/runner
 harness may live in a Track T clone (see portability-axes.md) — the compiler work is
 here.
+
+## 2026-08-20 — not started: the test infra this needs is not on plexus
+
+Reached as the top Track A item and **deliberately not claimed**. The blocker is
+environmental, not a design question, so it is recorded here rather than
+escalated to Track U.
+
+Measured on plexus (the dev box, `frank1`):
+
+- `qemu-system-x86_64` — **not installed**.
+- No FreeBSD image anywhere obvious (`~`, `/var/lib/libvirt/images`). The "Test
+  infra" section above says "pre-built qcow2 exists"; it does not exist on this
+  machine. It may exist on another box, or the claim may be stale — worth
+  confirming before anyone plans around it.
+
+Both acceptance criteria are unrunnable here: the native `--platform=freebsd`
+run *and* the linuxulator smoke need a FreeBSD kernel. The ticket's own plan
+puts that smoke **first**, ahead of writing any code, which is the right order —
+it is the cheap proof that the ELF layout is already acceptable to the kernel.
+
+### Why the verifiable subset was not landed either
+
+Two of the four deltas could be written and partially checked without FreeBSD —
+the syscall-number table, and the ELF brand (`EI_OSABI = 9`, assertable straight
+out of the emitted header). The third cannot: the **carry-flag error
+convention** is the item this ticket itself calls *"the real work"*, it touches
+every syscall wrapper's error check, and nothing on this box can tell a correct
+carry-flag path from a wrong one.
+
+Landing the easy two would leave a `--platform=freebsd` that emits a
+correctly-branded ELF whose every syscall error check is untested — a
+half-applied Track A change, which `CLAUDE.md` flags as the critical case
+because it is the shape that quietly poisons the shared ground. Better an
+unstarted ticket than a platform that looks present and is not.
+
+**What unblocks it:** qemu plus a FreeBSD/amd64 image on whichever box runs it,
+or confirmation of where the existing qcow2 lives. That is Track T-shaped
+infrastructure work (per `portability-axes.md`, the per-OS image/runner harness
+may live in a Track T clone); the compiler work here is ready to start the
+moment a kernel is reachable.

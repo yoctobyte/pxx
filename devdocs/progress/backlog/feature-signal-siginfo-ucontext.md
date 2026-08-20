@@ -3,12 +3,13 @@ track: A
 prio: 55
 type: feature
 blocked-by: []
+owner: ""
 ---
 
 # Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface
 
 - **Type:** feature (runtime / PAL) — Track A
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-16, split out of [[feature-signal-handlers]] once the base
   slice (libc-free `rt_sigaction` handler install + `SetSignalHandler`) shipped
   and pinned on all five hosted targets (x86-64 b336, aarch64 b370,
@@ -374,3 +375,81 @@ done, and the *consumer* path it was for is not. A `Low(Int64) div -1` inside a
 `try … except on E: Exception` still core-dumps with SIGFPE (exit 136) instead
 of reaching the handler, so nothing here has landed incidentally. Items 2-5
 stand as written.
+
+## Progress — item 3 landed (x86-64 sigaltstack + SA_ONSTACK), 2026-08-20
+
+**Item 3 only.** Items 2, 4 and 5, and the other four targets, are untouched;
+this ticket stays open for them.
+
+### The gap, measured before writing anything
+
+A stack-overflow SIGSEGV was **unhandleable**, and not by a subtlety: install a
+hook with `SetSignalHandler(11, ...)`, recurse until the guard page, and the
+program dies with **exit 139 and the hook never entered**. It cannot run,
+because the fault happens precisely when there is no stack left — pushing a
+signal frame onto the faulting stack faults again, and the kernel kills the
+process outright.
+
+Oracle: the same program in C (gcc, `sigaltstack` + `SA_ONSTACK | SA_SIGINFO`)
+prints `code=1 depth=7936` and exits 0. pxx now prints `code=1 depth=8056` and
+exits 0 — the depths differ because the frames differ, which is why the test
+does not assert one.
+
+### What landed
+
+- **`sigaltstack(2)` (syscall 131) at the top of the install stub**, pointing at
+  a `SIG_ALTSTACK_SIZE` (32 KiB) BSS buffer, and **`SA_ONSTACK`** added to the
+  flags word: `$14000004` -> `$1C000004`. Neither half works alone — the flag
+  without a registered stack is ignored, and the stack without the flag is never
+  used.
+- Re-registering on every install rather than once behind a flag: `sigaltstack`
+  is idempotent with the same values, and one syscall per `SetSignalHandler`
+  call is cheaper than a "have we done this yet" bit and the bug it eventually
+  grows.
+- `rdi` carries the signal number into the `rt_sigaction` below, so it is parked
+  in `r8` across the syscall rather than reloaded.
+
+### Storage placement — the BSS_IO_OWNER lesson, applied on purpose
+
+The buffer and its 24-byte `stack_t` are allocated **inside `EmitSignalRuntime`**,
+next to the only code that reads them — not in the Pascal driver where the other
+`BSS_SIG_*` slots live. That is the rule
+`EmitIoLockStubsForTarget` had to learn the hard way: storage allocated in the
+Pascal driver is storage every *other* frontend leaves at 0, which is to say
+aliased onto offset 0. `BSS_IO_OWNER` and `BSS_IO_DEPTH` became the same eight
+bytes that way and `--threadsafe` hung on every NilPy program.
+
+(The pre-existing `BSS_SIG_*` slots still sit in the Pascal driver. Not touched
+here — that is exactly [[bug-a-only-the-pascal-driver-emits-the-signal-runtime]],
+whose scope is "make every frontend call the runtime", and widening this slice
+into it would tangle two changes. The new slots simply do not add to the debt.)
+
+### x86-64 only, and the b371 landmine is still untouched
+
+i386 and arm32 pick the signal FRAME SHAPE by SA_SIGINFO rather than by which
+syscall installed the handler, and their restorers still call `sigreturn (119)`.
+Nothing here touches their install sites — same reason the SA_SIGINFO slice was
+x86-64-only. Whoever does those targets must flip them to `rt_sigreturn (173)`
+in the same change.
+
+### Test
+
+`test/test_signal_altstack.pas`, wired into `make test`. **The load-bearing
+assertion is not that the program survived** — surviving shows the handler ran,
+not *where*. The handler compares its own frame address against the faulting
+address: on the alt stack (a BSS buffer, ~4 MB) versus the faulting stack
+(~140 TB) they are hundreds of megabytes apart, so `gap > $10000000` proves
+sigaltstack took effect rather than the overflow having happened to leave a
+usable slack page. Recursion depth is deliberately not printed — it depends on
+`RLIMIT_STACK` and frame layout, the classic source of a flapping test.
+
+Bites: the pinned binary dies with exit 139 on it.
+
+### Gate
+
+`make compiler/pascal26` (byte-identical fixedpoint, converged after 2 rounds) +
+`tools/gate.sh quick` GREEN, and all four existing signal tests re-checked by
+hand against their Makefile assertions (`test_signal_handlers`,
+`test_signal_siginfo`, `test_signal_pc_rewrite`,
+`test_signal_handler_callback_b336`) — the hook ABI is unchanged, which is what
+makes this additive.
