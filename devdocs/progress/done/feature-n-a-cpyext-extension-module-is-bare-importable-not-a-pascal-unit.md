@@ -180,4 +180,4 @@ refusal message and state the rule without the extension-module carve-out. Prose
 `docs/**` is **Track D**; not edited here.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit acf1f8396.
