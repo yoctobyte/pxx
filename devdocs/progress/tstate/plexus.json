@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T20:18:42Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "a5c25e4b9620e4ad6151777f16658441c00720c5",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T20:27:54Z",
    "fixed": [],
    "new_red": [],
@@ -428,6 +420,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "d337960c35b88e764743df30a28dce99e2402808",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T12:58:16Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "bdb97538ac7d56948fbe030151ed981e0699b0f9",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1524,6 +1524,7 @@
   "test-core#src:test/test_deref_managed_string_b302.pas": "native",
   "test-core#src:test/test_dialect_generics_prereqs_b329.pas": "native",
   "test-core#src:test/test_directive_if_numeric.pas": "native",
+  "test-core#src:test/test_div_mod_mixed_signedness.pas": "native",
   "test-core#src:test/test_div_zero_re200.pas": "native",
   "test-core#src:test/test_dyn_comma.pas": "native",
   "test-core#src:test/test_dynarray.pas": "native",
@@ -3908,6 +3909,7 @@
   "test-core#src:test/test_deref_managed_string_b302.pas": "pass",
   "test-core#src:test/test_dialect_generics_prereqs_b329.pas": "pass",
   "test-core#src:test/test_directive_if_numeric.pas": "pass",
+  "test-core#src:test/test_div_mod_mixed_signedness.pas": "pass",
   "test-core#src:test/test_div_zero_re200.pas": "pass",
   "test-core#src:test/test_dyn_comma.pas": "pass",
   "test-core#src:test/test_dynarray.pas": "pass",
@@ -4689,11 +4691,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T12:44:15Z",
-  "sha": "d337960c35b88e764743df30a28dce99e2402808",
+  "date": "2026-08-20T12:58:16Z",
+  "sha": "bdb97538ac7d56948fbe030151ed981e0699b0f9",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 453.0
+  "wall": 448.1
  },
  "last_bench": {
   "conf_rows": 550,
