@@ -17189,15 +17189,15 @@ end;
   negative. Retype the LITERAL instead of teaching the rule about literals: one
   "unsigned iff both operands are" rule then serves the result type and all six
   backends, with no second path to keep in step (normalise-dont-special-case). }
-procedure NormalizeUnsignedDivLiteral(dividend, divisor: Integer);
+procedure NormalizeUnsignedLiteralOperand(typed, lit: Integer);
 begin
   if CProgramMode then Exit;
-  if (dividend < 0) or (divisor < 0) then Exit;
-  if ASTKind[divisor] <> AN_INT_LIT then Exit;
-  if ASTIVal[divisor] < 0 then Exit;
-  if not TypeIsOrdinal(IntToTypeKind(ASTTk[dividend])) then Exit;
-  if TypeSigned(IntToTypeKind(ASTTk[dividend])) then Exit;
-  ASTTk[divisor] := Ord(tyUInt64);
+  if (typed < 0) or (lit < 0) then Exit;
+  if ASTKind[lit] <> AN_INT_LIT then Exit;
+  if ASTIVal[lit] < 0 then Exit;
+  if not TypeIsOrdinal(IntToTypeKind(ASTTk[typed])) then Exit;
+  if TypeSigned(IntToTypeKind(ASTTk[typed])) then Exit;
+  ASTTk[lit] := Ord(tyUInt64);
 end;
 
 procedure PromoWidenBinopOperands(node: Integer);
@@ -17425,7 +17425,8 @@ begin
     end
     else if (op = tkDiv) or (op = tkMod) then
     begin
-      NormalizeUnsignedDivLiteral(left, right);
+      NormalizeUnsignedLiteralOperand(left, right);
+      NormalizeUnsignedLiteralOperand(right, left);
       ASTTk[node] := Ord(TypeDivideResultPair(IntToTypeKind(ASTTk[left]),
                                               IntToTypeKind(ASTTk[right])));
     end
@@ -17953,17 +17954,16 @@ begin
             GetTokenStrFromRaw(EnumTypeNOff[NodeEnumIdOf(left)], EnumTypeNLen[NodeEnumIdOf(left)]) +
             ' with enum type ' +
             GetTokenStrFromRaw(EnumTypeNOff[NodeEnumIdOf(right)], EnumTypeNLen[NodeEnumIdOf(right)]));
-    { FPC range-based constants: a NON-NEGATIVE literal compared against a
-      QWord compares UNSIGNED — retag the literal so codegen's
+    { FPC range-based constants: a NON-NEGATIVE literal compared against an
+      UNSIGNED operand compares UNSIGNED — retag the literal so codegen's
       TypeCompareUnsigned sees two unsigned operands. Without this
       `q > $f0000000` (literal widened to tyInt64 at parse) compared signed
-      and a qword >= 2^63 answered wrong (tint642 family). }
-    if (ASTTk[left] = Ord(tyUInt64)) and (ASTKind[right] = AN_INT_LIT) and
-       (ASTIVal[right] >= 0) then
-      ASTTk[right] := Ord(tyUInt64)
-    else if (ASTTk[right] = Ord(tyUInt64)) and (ASTKind[left] = AN_INT_LIT) and
-            (ASTIVal[left] >= 0) then
-      ASTTk[left] := Ord(tyUInt64);
+      and a qword >= 2^63 answered wrong (tint642 family). This read
+      `= tyUInt64` for years, i.e. it fixed the 8-byte arm of a rule that
+      applies at every width; it is the same normalisation `div`/`mod` needs,
+      so both now call the one helper. }
+    NormalizeUnsignedLiteralOperand(left, right);
+    NormalizeUnsignedLiteralOperand(right, left);
     if PyExprMode and (op in [tkEq, tkNeq]) and
        PyNodeIsPyBytes(left) and PyNodeIsPyBytes(right) then
     begin

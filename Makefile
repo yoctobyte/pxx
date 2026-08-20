@@ -4220,6 +4220,14 @@ test-core: $(COMPILER)
 	# `q div 10` does not turn a QWord above 2^63 negative. All 35 are FPC 3.2.2's.
 	./$(COMPILER) test/test_div_mod_mixed_signedness.pas $(TESTTMP)/test_divsign26
 	test "$$($(TESTTMP)/test_divsign26 | tail -1)" = "total ok 35 / 35"
+	# The same rule one operator family over: a COMPARISON picked its domain from
+	# the WIDER operand (a C rank rule), so `LongWord(3000000000) > SmallInt(-1)`
+	# was FALSE where FPC says TRUE -- Pascal widens the pair to a type that HOLDS
+	# BOTH, which is signed unless no wider signed type exists. Equal widths were
+	# right all along, which is what hid it. The QWord carve-out (`q > i` unsigned,
+	# `q > n` signed) is FPC's own inconsistency and is asserted, not smoothed.
+	./$(COMPILER) test/test_compare_mixed_signedness.pas $(TESTTMP)/test_cmpsign26
+	test "$$($(TESTTMP)/test_cmpsign26 | tail -1)" = "total ok 28 / 28"
 	./$(COMPILER) test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_nativeshift26
 	test "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
 	test "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"

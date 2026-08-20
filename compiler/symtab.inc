@@ -2667,6 +2667,32 @@ begin
     operand still falls through (the narrow side promotes to int, then the usual
     conversions with the wider operand apply). Pascal keeps its own rule. }
   if CProgramMode and (TypeSize(lhs) < 4) and (TypeSize(rhs) < 4) then Exit;
+  if not CProgramMode then
+  begin
+    { Pascal converts by RANGE, not by rank: the pair widens to a type that HOLDS
+      BOTH, and Int64 holds every LongWord, Word and Byte -- so
+      `LongWord(3000000000) > SmallInt(-1)` is TRUE even though the unsigned side
+      is WIDER. Under the wider-operand rule below (C's) the signed operand
+      sign-extended into a huge unsigned value and the answer was FALSE.
+
+      The exception is the one width where no wider signed type EXISTS: an
+      8-byte unsigned operand against a NARROWER signed one converts the signed
+      side to QWord, so `QWord(9e18) > Integer(-1)` is FALSE. Against Int64 it
+      is signed again (FPC 3.2.2 measured, both ways) -- and `div`/`mod` do NOT
+      copy that carve-out: `q div i` IS signed in FPC where `q > i` is unsigned.
+      That inconsistency is the oracle's, so TypeDivideUnsigned keeps its own
+      plainer rule and the two must NOT be merged.
+
+      A non-negative literal operand is normalised to unsigned before this
+      (NormalizeUnsignedLiteralOperand), so `q > 10` still compares unsigned. }
+    if TypeSigned(lhs) = TypeSigned(rhs) then
+      Result := not TypeSigned(lhs)
+    else if not TypeSigned(lhs) then
+      Result := (TypeSize(lhs) = 8) and (TypeSize(rhs) < 8)
+    else
+      Result := (TypeSize(rhs) = 8) and (TypeSize(lhs) < 8);
+    Exit;
+  end;
   if TypeSize(lhs) > TypeSize(rhs) then
     Result := not TypeSigned(lhs)
   else if TypeSize(rhs) > TypeSize(lhs) then
