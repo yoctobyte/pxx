@@ -245,11 +245,21 @@ nothing against `PAL_DEFAULT_STACK`. The block is zeroed rather than trusted —
 directly, and a reused stack would otherwise present the previous thread's slots
 as this one's.
 
-**The MAIN thread is the exception and is not covered yet**: it passes through no
-stub, and a static pxx binary starts with `fs` base 0, so `__pxxTlsBase` faults
-there unless the program installs a block itself. Tracked as
-[[feature-a-tls-block-for-the-main-thread]] — it needs a shared startup emitter,
-which does not exist today.
+The **main thread** passes through no stub, and a static pxx binary starts with
+`fs` base 0 — so it gets its block from code emitted at **code offset 0, the ELF
+entry point**, which therefore runs before any frontend's code does
+(`EmitTlsMainInstall`, called once from `compiler.pas`). Its block is BSS, not
+stack, and BSS is already zero, so only the self-pointer and the `arch_prctl` are
+emitted: six instructions, unconditional on x86-64.
+
+One call site rather than one per driver, deliberately: every frontend emits its
+own entry sequence and only Pascal's puts anything in it, so a per-driver call is
+the shape that produced `bug-a-threadsafe-segfaults-on-every-nilpy-program`. The
+`.asm` frontend is skipped — its program *is* the emitted bytes and its entry
+point is overridable (`AsmEntryOff`).
+
+Net: `__pxxTlsBase` works on every thread of every x86-64 program, in every mode,
+on every frontend, with nothing installed by hand.
 
 x86-64 only. The other targets have a readable thread register (aarch64
 `tpidr_el0`, arm32 `tpidruro`, i386 `gs`) but no path this runtime uses to
@@ -258,8 +268,7 @@ x86-64 only. The other targets have a readable thread register (aarch64
 wrong pointer.
 
 The consumer work — the per-thread allocator magazine that motivated this — is
-[[feature-threadsafe-heap-optimize]], and it needs the main-thread block first.
-A free win waits alongside it: the `--threadsafe` I/O lock does a `gettid`
+[[feature-threadsafe-heap-optimize]]. A free win waits alongside it: the `--threadsafe` I/O lock does a `gettid`
 **syscall per I/O statement** (`EmitIoLockStubs`), which a TLS slot turns into a
 load.
 

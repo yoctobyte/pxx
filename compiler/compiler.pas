@@ -1031,6 +1031,15 @@ begin
   AddConst('MaxLongInt', tyInteger, 2147483647);
   AddConst('MaxSmallInt', tyInteger, 32767);
 
+  { The main thread's TLS block, at code offset 0 = the ELF entry point, so it is
+    installed before any frontend's code runs. One call site rather than one per
+    driver: each frontend emits its own entry sequence and only Pascal's puts
+    anything in it, so the per-driver shape is the one that produced
+    bug-a-threadsafe-segfaults-on-every-nilpy-program. Skipped for .asm, whose
+    program IS the emitted bytes and whose entry point is overridable
+    (AsmEntryOff). x86-64 only, inside the emitter. }
+  if not isAsm then EmitTlsMainInstall;
+
   if isNilPy then
   begin
     PyLoopElseFlag := -1;   { no enclosing loop yet; 0 is a real Syms index }

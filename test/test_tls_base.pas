@@ -10,13 +10,18 @@ program test_tls_base;
   fix is one read-side intrinsic instead of a sixth __pxxclone argument plus four
   backend changes.
 
-  Two phases, because there are two ways to get a block:
+  Three phases, because there are three ways to get a block:
+    0. THE MAIN THREAD -- code at the ELF entry point installs a BSS block before
+       any frontend's code runs, so __pxxTlsBase works there with nothing done.
+       It passes through no clone stub and a static binary starts with fs base 0,
+       so this is the one that used to fault outright.
     A. AUTOMATIC -- the clone stub carves 128 bytes off the top of the child's
        stack and arch_prctl's it before any Pascal runs. Nothing in the RTL or
        the program has to remember, which is the point: the failure mode of
        forgetting is not a null pointer but the parent's block.
-    B. MANUAL -- arch_prctl from the thread itself. The main thread has no
-       launcher, so this is how it gets one.
+    B. MANUAL -- arch_prctl from the thread itself. Nothing in the runtime needs
+       this any more, but it is the primitive both of the above are built out of,
+       and a program with its own idea of where its block should live uses it.
 
   What each check catches:
     - blocks distinct   : the aliasing bug itself. If arch_prctl were not
@@ -107,7 +112,21 @@ begin
   if __pxxTlsBase <> Pointer(@Blocks[idx][0]) then Inc(Errs[idx]);
 end;
 
+var mb: Pointer;
 begin
+  { ---- phase 0: the MAIN thread, which installs nothing ---- }
+  { It passes through no clone stub, and a static pxx binary starts with fs base
+    0, so before feature-a-tls-block-for-the-main-thread this faulted outright.
+    The block comes from BSS via code at the ELF entry point, so this holds on
+    every frontend and in every mode, not just --threadsafe. }
+  errors := 0;
+  mb := __pxxTlsBase;
+  if mb = nil then Inc(errors);
+  if PInt64(mb)^ <> Int64(PtrUInt(mb)) then Inc(errors);   { slot 0 = self }
+  for i := 1 to 15 do
+    if PInt64(PtrUInt(mb) + PtrUInt(i * 8))^ <> 0 then Inc(errors);
+
+  { and the manual path still works, over the top of that block }
   InstallTls(@Blocks[NTHREADS][0]);
   TlsSlot(1)^ := 999;
 
@@ -121,7 +140,6 @@ begin
     end;
   for i := 0 to NTHREADS - 1 do PalThreadJoin(Handles[i]);
 
-  errors := 0;
   for i := 0 to NTHREADS - 1 do Inc(errors, Errs[i]);
   { distinct blocks -- the aliasing bug this whole ticket is about. Also
     distinct from the main thread's, which no clone stub touched. }

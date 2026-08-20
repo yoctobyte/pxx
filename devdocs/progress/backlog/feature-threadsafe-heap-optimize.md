@@ -1,7 +1,7 @@
 ---
 track: A
 prio: 53  # auto
-owner: claude-A
+owner: ""
 ---
 
 # Threadsafe heap — optimize + cross-target (M5)

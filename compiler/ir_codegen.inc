@@ -729,6 +729,35 @@ begin
   end;
 end;
 
+procedure EmitTlsMainInstall;
+{ The MAIN thread's TLS block. Cloned threads get theirs from the clone stub
+  (thread_emit.inc); the main thread passes through no stub, and a static pxx
+  binary starts with `fs` base 0, so without this __pxxTlsBase FAULTS there.
+
+  Emitted at code offset 0 -- the ELF entry point -- so it runs before anything
+  else, on every frontend, from ONE call site in compiler.pas. That is the whole
+  reason it lives here rather than in the drivers: each frontend emits its own
+  entry sequence (and only Pascal's puts anything in it), so a per-driver call
+  would be the ninth-copy shape that produced
+  bug-a-threadsafe-segfaults-on-every-nilpy-program. The driver's own `jmp` over
+  its stub region is emitted straight after and still ends up as the first
+  branch, so nothing about the stub layout changes.
+
+  Storage allocated HERE, next to the only code that uses it -- the BSS_IO_OWNER
+  lesson, which has now bitten twice. BSS is zero-filled, so only the
+  self-pointer needs writing. }
+begin
+  if TargetArch <> TARGET_X86_64 then Exit;
+  BSS_TLS_MAIN := BSSSize; Inc(BSSSize, TLS_BLOCK_SIZE);
+  EmitAsmX64(['mov rsi, @glob', BSS_TLS_MAIN]);
+  EmitB($48); EmitB($89); EmitB($36);          { mov [rsi], rsi  (slot 0 = self) }
+  EmitAsmX64([
+    'mov edi, %', $1002,                       { ARCH_SET_FS }
+    'mov eax, %', 158,                         { arch_prctl }
+    'syscall'
+  ]);
+end;
+
 procedure EmitIoLockStubsForTarget;
 { THE one place that decides which I/O-lock stubs a build needs. Every frontend
   driver calls this; none of them may spell out the per-arch choice itself.

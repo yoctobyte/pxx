@@ -3012,6 +3012,7 @@ var
     `Signal(sig, handler)` wrapper is — has no other way to learn which one
     fired. x86-64 only so far; the other targets REFUSE the intrinsic rather
     than answer 0 (feature-signal-siginfo-ucontext). }
+  BSS_TLS_MAIN    : Integer;     { the MAIN thread's TLS block (TLS_BLOCK_SIZE bytes); cloned threads carve theirs off their own stack }
   BSS_SIG_NUM     : Integer;
   BSS_SIG_CTX     : Integer;  { the ucontext_t* the kernel passed the handler. Parked for the fault-to-RAISE work (rewrite the saved RIP to a raise stub before returning), which is the rest of feature-signal-siginfo-ucontext; read by __pxxSigContext. }
   ExceptionUsed   : Boolean;

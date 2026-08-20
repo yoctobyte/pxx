@@ -4,8 +4,8 @@ prio: 45
 type: feature
 blocked-by: []
 summary: "Cloned threads get a TLS block automatically (the clone stub carves and installs one), but the MAIN thread does not: it starts with fs base 0, so __pxxTlsBase faults there unless the program installs a block itself. Blocks any runtime fast path that wants per-thread state on all threads -- the per-thread allocator magazine first."
-status: backlog
-owner: ""
+status: done
+owner: claude-A
 ---
 
 # The main thread has no TLS block
@@ -75,3 +75,64 @@ With a block on every thread that becomes a load.
 
 `__pxxTlsBase` works on the main thread of a program that installs nothing,
 across frontends; `test_tls_base` still green; self-host byte-identical.
+
+## 2026-08-20 — RESOLVED, without the shared startup emitter this ticket asked for
+
+### The "no shared hook" problem dissolved once the entry point was checked
+
+The plan above was "a shared emitter plus one call per frontend driver", and the
+driver list is long — Pascal, C, NilPy, BASIC, e, Rust, Zig, Ada, F90, Algol,
+Erlang, Lol, Whitespace. Adding a call to each is the shape that produced
+`bug-a-threadsafe-segfaults-on-every-nilpy-program`, and it would have had to be
+re-added to every future frontend.
+
+**The ELF entry point is code offset 0** (`elfwriter.inc`: `entry := LOAD_ADDR +
+codeOffset + AsmEntryOff`, and `AsmEntryOff` is 0 for everything but `.asm`).
+Every driver's first emission is its `jmp` over its stub region — so code emitted
+*before* any driver runs sits at offset 0 and executes first, on every frontend,
+from **one** call site in `compiler.pas`. The driver's `jmp` follows it and is
+still the first branch; nothing about the stub layout changes.
+
+So `EmitTlsMainInstall` is six instructions and one call, not thirteen calls and
+a rule for the fourteenth frontend.
+
+### What it does
+
+Allocates `BSS_TLS_MAIN` (`TLS_BLOCK_SIZE`) **inside the emitter**, next to the
+only code that touches it — the `BSS_IO_OWNER` lesson, which had already bitten
+twice. BSS is zero-filled, so only the self-pointer store and the
+`arch_prctl(ARCH_SET_FS)` are emitted.
+
+**Unconditional on x86-64**, not gated on `--threadsafe`, which is what this
+ticket recommended and the recommendation held up: it is two stores and a syscall
+at startup, and gating it would make `__pxxTlsBase` mean one thing in one mode and
+fault in the other — a mode-dependent difference in exactly the place nobody
+tests. `.asm` is skipped: its program *is* the emitted bytes and its entry point
+is overridable.
+
+### Verified
+
+`test/test_tls_base.pas` gained phase 0 — the main thread, installing nothing:
+base non-nil, slot 0 = its own address, slots 1..15 zero. Plus a standalone
+program with no `uses` and no `--threadsafe` reading and writing a slot, which is
+the case that faulted before this.
+
+Frontend sweep, since this changes the first bytes of every x86-64 binary: NilPy,
+C, Rust, Zig and BASIC hello-worlds all still run; `test_asm_entry_global` still
+exits 42 (the `.asm` skip working); the four cross targets still build. Existing
+thread suite green.
+
+### Follow-up now unblocked
+
+The free win this ticket recorded is real and still waiting: `EmitIoLockStubs`
+does a **`gettid` syscall per I/O statement** to identify the lock owner. Every
+thread now has a block, so that becomes a load — filed as
+[[feature-a-io-lock-owner-from-tls-not-gettid]].
+
+### Gate
+
+`make compiler/pascal26` (byte-identical fixedpoint, converged in 2 rounds) +
+`tools/gate.sh quick` + the sweep above.
+
+## Log
+- 2026-08-20 — resolved, commit PENDING-COMMIT.
