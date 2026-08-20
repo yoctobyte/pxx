@@ -195,4 +195,4 @@ an item at the head of Track T's queue that Track T cannot move — **T owns the
 tool, never the bug**, and all nine remaining bugs are in A, N and U.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit c6b68d4b3.
