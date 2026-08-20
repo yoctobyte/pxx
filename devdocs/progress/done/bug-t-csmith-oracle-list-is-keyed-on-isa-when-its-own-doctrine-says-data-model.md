@@ -4,6 +4,7 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "ORACLE_CC lists only ISA-matching cross compilers, while the module's own comment three lines above says the DATA MODEL decides comparability and the ISA does not. A native LP64 gcc is a legitimate oracle for aarch64 and riscv64; because the table does not know it, axis 2 on this box reports NO ORACLE and silently degrades to the weaker pxx-vs-pxx cross-check on the one cross backend Track O actually invests in."
+status: done
 ---
 
 # `ORACLE_CC` is keyed on the ISA; the file's own doctrine says the data model decides
@@ -202,3 +203,6 @@ across `-O` levels. Read against the campaign's history — 1450 seeds on axis 3
 was a bad bet: it is the first time any cross backend has seen a random program at all**,
 and a first-ever sweep coming back clean is a result worth the same paragraph a finding
 would get.
+
+## Log
+- 2026-08-20 — resolved, commit PENDING-COMMIT.
