@@ -4228,6 +4228,13 @@ test-core: $(COMPILER)
 	# `q > n` signed) is FPC's own inconsistency and is asserted, not smoothed.
 	./$(COMPILER) test/test_compare_mixed_signedness.pas $(TESTTMP)/test_cmpsign26
 	test "$$($(TESTTMP)/test_cmpsign26 | tail -1)" = "total ok 28 / 28"
+	# `Str(x, s)` had no unsigned dispatch at all -- `Str(q, s)` on a QWord >= 2^63
+	# gave '-1' while `writeln(q)` two lines away was right -- and write(Text) had
+	# one keyed on `tk = tyUInt64`, one of FOUR spellings of an 8-byte unsigned, so
+	# `writeln(f, pu)` with pu: PtrUInt printed -1 too. All three paths now use the
+	# stdout path's plain `not TypeSigned`. The pinned binary scores 17/23.
+	./$(COMPILER) test/test_str_of_unsigned.pas $(TESTTMP)/test_strunsigned26
+	cd $(TESTTMP) && ./test_strunsigned26 | tail -1 | grep -qx "total ok 23 / 23"
 	./$(COMPILER) test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_nativeshift26
 	test "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
 	test "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"

@@ -21586,9 +21586,14 @@ begin
   end
   else if TypeIsOrdinal(tk) and (tk <> tyChar) then
   begin
-    { A QWord goes through the UNSIGNED formatter — StrInt printed values
-      >= 2^63 with a minus sign (tint642's testioqword). }
-    if tk = tyUInt64 then pi := FindProc('StrQWord')
+    { An UNSIGNED value goes through the unsigned formatter — StrInt printed
+      values >= 2^63 with a minus sign (tint642's testioqword). This read
+      `tk = tyUInt64`, which is one of the four spellings of an 8-byte unsigned:
+      `write(f, pu)` with `pu: PtrUInt` (tyNativeUInt) still printed -1. The
+      stdout path has always keyed on `not TypeSigned`, and that is the whole
+      rule — a narrower unsigned is zero-extended and formats the same either
+      way, so there is nothing left for a width test to add. }
+    if not TypeSigned(tk) then pi := FindProc('StrQWord')
     else pi := FindProc('StrInt');
     if pi < 0 then Error('write(Text): StrInt not loaded');
     Result := GenMakeCall6(pi, Procs[pi].RetType, exprNode,
@@ -24131,7 +24136,17 @@ begin
         { Float value -> StrFloat(x, width, decimals); integer -> StrInt(x, width).
           (decimals is ignored by StrInt, used by StrFloat.) }
         strIsFloat := TypeIsFloat(IntToTypeKind(ASTTk[exprNode]));
-        if strIsFloat then procIdx := FindProc('StrFloat') else procIdx := FindProc('StrInt');
+        { ...and an UNSIGNED value takes StrQWord, the same dispatch write(Text)
+          and stdout make. Str had none at all, so `Str(q, s)` on a QWord >= 2^63
+          produced `-1` -- a silent wrong VALUE, while `writeln(q)` two lines
+          away was right. bug-p-str-of-a-qword-formats-it-signed }
+        if strIsFloat then procIdx := FindProc('StrFloat')
+        else if TypeIsOrdinal(IntToTypeKind(ASTTk[exprNode])) and
+                (not TypeSigned(IntToTypeKind(ASTTk[exprNode]))) and
+                (IntToTypeKind(ASTTk[exprNode]) <> tyChar) and
+                (IntToTypeKind(ASTTk[exprNode]) <> tyBoolean) then
+          procIdx := FindProc('StrQWord')
+        else procIdx := FindProc('StrInt');
         if procIdx < 0 then Error('Str: builtin unit not loaded');
         { float with NO width: -1 selects FPC's default scientific Str form
           (` d.ddd...E+eee`) in StrFloat; an explicit width keeps the fixed/
