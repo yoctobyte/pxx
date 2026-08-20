@@ -159,7 +159,7 @@ _none_
 | decide-typeinfo-scalar-name-spelling | U | 20 | decide | TypeInfo(Integer)^.Name: pxx says `Integer`, FPC says `LongInt`. pxx's tyInteger and tyInt32 are separate type kinds where FPC's Integer IS LongInt, so TypeInfoOrdName picks one canonical spelling per pxx kind and Integer keeps its own. Cosmetic today (nothing branches on the string), but it is a visible FPC-parity gap in a compat-sensitive API, and changing it later breaks whatever started reading it. | — |
 | docs-d-document-exec-eval-and-the-builtins-incompatibility | D | 40 | docs | docs/targets/nil-python.md tells the public `eval`/`exec` do not exist (\"No eval of runtime-constructed code\") — but the explicit-dict form has worked since 2026-07-31 via pyeval's tree-walker. Document what exec/eval DO support, the refused ambient form, and the decided __builtins__ incompatibility (decided 2026-08-19, permanent for now). | — |
 | docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out | D | 45 | docs | docs/language/name-resolution.md:47 and docs/targets/nil-python.md:260 quote the bare-import refusal message and state the rule with no carve-out. As of 2026-08-20 a unit declaring {$PYEXTENSION} and binding the cpyext runtime IS bare-importable, so both pages are now wrong in the direction that makes a working program look unsupported. | — |
-| feature-a-declaration-phase | A | 55 | feature | A real declaration phase: all decls before any body is typed | — |
+| feature-a-declaration-phase | N | 55 | feature | A real declaration phase: all decls before any body is typed | — |
 | feature-a-error-does-not-halt-so-a-parse-can-be-speculative | A | 45 | feature | `Error()` calls `Halt` directly, so nothing in the compiler can trial-parse and back out. That blocks NilPy's type inference (which needs to read an as-yet-unseen name speculatively), and it is also why the compiler stops at the FIRST error. Make the error path recoverable; several unrelated wants fall out of the same change. | — |
 | feature-a-implement-initialize-and-finalize-over-the-arc-helpers | A | 50 | feature | RE-TYPED 2026-08-19 feature -> bug: MEASURED against FPC 3.x, `Finalize(s)` on an AnsiString leaves `len=5 [hello]` where FPC prints `len=0 []` — FPC-shaped code compiles, runs, and silently does not do what it says. The fix is unchanged: implement Initialize()/Finalize() over the ARC release helpers pxx already emits at scope exit. Zero in-tree callers, so no regression risk; the helpers already exist, so this is a mapping, not new machinery. Supersedes feature-pascal-initialize-finalize-intrinsics, whose premise is wrong. | — |
 | feature-a-operator-table-keyed-on-both-operands | A | 40 | feature | Implement the 2026-08-10 decision: key the operator-overload table on BOTH operand types. Until then `operator + (a: Double; b: TCx)` stays refused ('cannot determine operand type' / 'predefined for built-in operand types') where FPC accepts it. Relaxing only the guard would MISCOMPILE plain `3 * 5`. | — |
@@ -610,7 +610,7 @@ _none_
 - [p 55] [N] bug-nilpy-a-lambda-returned-directly-is-not-callable
 - [p 55] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 55] [U] decide-reduced-compiler-switch-spelling
-- [p 55] [A] feature-a-declaration-phase
+- [p 55] [N] feature-a-declaration-phase
 - [p 55] [B] feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [O] feature-opt-heap-per-thread-cache

@@ -76,7 +76,7 @@ _none — no lane is locked._
 - `[p 55] [N]` bug-nilpy-a-lambda-returned-directly-is-not-callable
 - `[p 55] [T]` chore-t-split-lib-test-into-jobs-that-name-what-failed
 - `[p 55] [U]` decide-reduced-compiler-switch-spelling
-- `[p 55] [A]` feature-a-declaration-phase
+- `[p 55] [N]` feature-a-declaration-phase
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 55] [E]` feature-demo-portable-userland
 
