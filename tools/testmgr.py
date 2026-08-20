@@ -614,6 +614,8 @@ def find_runs():
         for i, a in enumerate(argv):
             if a == "--tier" and i + 1 < len(argv):
                 tier = argv[i + 1]
+            elif a == "--quick":        # the shorthand is the same tier
+                tier = "quick"
         # argv may hold a RELATIVE path (`tools/testmgr.py`), which resolves
         # against THAT process's cwd, not ours. Getting this wrong yields an
         # empty repo, which compares equal to no clone and unequal to ours.
@@ -3994,6 +3996,11 @@ def reexec_scoped():
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--tier", choices=sorted(TIERS))
+    ap.add_argument("--quick", action="store_true",
+                    help="shorthand for --tier quick: the per-fix gate, the only "
+                         "tier a dev lane runs (Track T sweeps the rest against "
+                         "the pushed sha). Combines with --pin, which then has a "
+                         "fixed tier and cannot escalate.")
     ap.add_argument("--pin", action="store_true",
                     help="gate, stabilize-fast and PIN, as one interruptible "
                          "operation: SIGINT leaves either a completed pin or an "
@@ -4037,6 +4044,17 @@ def main():
                          "shell/agent is gone but which keep running and starving "
                          "new runs")
     args = ap.parse_args()
+
+    # --quick IS --tier quick, resolved here so that EVERY later reader sees a
+    # tier that was chosen explicitly. That matters most for --pin: it picks its
+    # gate tier from watcher_is_down() when no tier was given, which reads the
+    # LOCAL tstate/ and escalates to minutes on a stale checkout — the failure
+    # the no-full-suite hook refuses. A fixed tier cannot escalate.
+    if args.quick:
+        if args.tier and args.tier != "quick":
+            ap.error("--quick and --tier %s conflict — pass one or the other"
+                     % args.tier)
+        args.tier = "quick"
 
     if args.status or args.kill_orphans:
         state, info = lock_state()
@@ -4119,7 +4137,8 @@ def main():
         # the box.  Don't perturb a history that spans hundreds of rows.
         return run_bench()
     if not args.tier:
-        ap.error("--tier is required (unless --bench or --pin)")
+        ap.error("--tier is required (unless --bench or --pin); "
+                 "--quick is the shorthand for --tier quick")
 
     # --list does no work; TESTMGR_NO_SCOPE=1 is the escape hatch (self-tests)
     if not args.list and os.environ.get("TESTMGR_NO_SCOPE") != "1":

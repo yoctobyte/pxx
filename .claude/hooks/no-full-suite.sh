@@ -116,7 +116,7 @@ fi
 # written to prevent. `slow` had been created the same day the gap was found,
 # which is exactly how a maintained list goes stale.
 if printf '%s' "$scan" | grep -Eq 'testmgr\.py.*--tier[[:space:]]+[a-z]+' \
-   && ! printf '%s' "$scan" | grep -Eq -- '--tier[[:space:]]+quick([[:space:]]|$)'; then
+   && ! printf '%s' "$scan" | grep -Eq -- '--tier[[:space:]]+quick([[:space:]]|$)|--quick([[:space:]]|$)'; then
   deny "REFUSED: every testmgr tier except quick is Track T's sweep — native, slow and opt cost the same ten minutes as full and limited. $loop --tier quick is allowed; to pin, use make stabilize-fast && make pin. $hatch"
 fi
 
@@ -136,13 +136,15 @@ fi
 # pushed sha regardless, which is the whole point of having Track T.
 #
 # An explicit `--tier quick` fixes the tier and cannot escalate, so it stays
-# allowed for anyone who wants the interruptible atomic pin.
+# allowed for anyone who wants the interruptible atomic pin. `--quick` is the
+# shorthand testmgr resolves to exactly that, before anything reads the tier —
+# so it is allowed here on the same grounds, not as a courtesy.
 # Matched at a COMMAND position only. `grep -n "testmgr.py --pin" CLAUDE.md` is
 # reading about the rule, not running it, and refusing that is pure noise — the
 # first thing this rule did on the day it landed.
 if printf '%s' "$scan" | grep -Eq '(^|[;&|(]|&&|\|\|)[[:space:]]*(python3[[:space:]]+)?(\./)?tools/testmgr\.py[^|;&]*--pin' \
-   && ! printf '%s' "$scan" | grep -Eq -- '--tier[[:space:]]+quick'; then
-  deny "REFUSED: testmgr --pin chooses its gate tier from watcher_is_down(), which reads the LOCAL tstate/ — so without a fetch it escalates and runs for MINUTES with the repo lock held, blocking every other lane. Pin with: make stabilize-fast && make pin (~35s — that chain IS the self-host fixedpoint, the only property a bad pin could poison for everyone). If you specifically want the interruptible atomic pin, tools/testmgr.py --pin --tier quick cannot escalate and is allowed. $hatch"
+   && ! printf '%s' "$scan" | grep -Eq -- '--tier[[:space:]]+quick|--quick([[:space:]]|$)'; then
+  deny "REFUSED: testmgr --pin chooses its gate tier from watcher_is_down(), which reads the LOCAL tstate/ — so without a fetch it escalates and runs for MINUTES with the repo lock held, blocking every other lane. Pin with: make stabilize-fast && make pin (~35s — that chain IS the self-host fixedpoint, the only property a bad pin could poison for everyone). If you specifically want the interruptible atomic pin, tools/testmgr.py --pin --tier quick (or --pin --quick, the same thing) cannot escalate and is allowed. $hatch"
 fi
 
 # --- 2c. the slow stabilize --------------------------------------------------
