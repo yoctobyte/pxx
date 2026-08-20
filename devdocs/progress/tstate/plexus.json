@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T16:35:59Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "29db7fba05c06cb3d5616c7f43851fa541be5fda",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T16:40:42Z",
    "fixed": [],
    "new_red": [],
@@ -428,6 +420,14 @@
    ],
    "new_red": [],
    "sha": "6e937a27b469c7a6cc6927623c68bdb690b31aa7",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T09:10:06Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "b24bb1474624dbce59e6ebd6192bccb5f206c495",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1748,6 +1748,7 @@
   "test-core#src:test/test_method_shadows_builtin.pas": "native",
   "test-core#src:test/test_method_shadows_unit_proc.pas": "native",
   "test-core#src:test/test_methodptr.pas": "native",
+  "test-core#src:test/test_mgmt_operators.pas": "native",
   "test-core#src:test/test_mimic_directive.pas": "native",
   "test-core#src:test/test_mimic_fpc.pas@1": "native",
   "test-core#src:test/test_mimic_fpc.pas@2": "native",
@@ -1950,7 +1951,6 @@
   "test-core#src:test/test_procvar_value_context.pas": "native",
   "test-core#src:test/test_promoint.pas": "native",
   "test-core#src:test/test_promoint_arg_literal_and_result.pas": "native",
-  "test-core#src:test/test_promoint_function_result.pas": "native",
   "test-core#src:test/test_promoint_minint64_div.pas": "native",
   "test-core#src:test/test_promoint_overflow.pas": "native",
   "test-core#src:test/test_promoint_parameter.pas": "native",
@@ -4116,6 +4116,7 @@
   "test-core#src:test/test_method_shadows_builtin.pas": "pass",
   "test-core#src:test/test_method_shadows_unit_proc.pas": "pass",
   "test-core#src:test/test_methodptr.pas": "pass",
+  "test-core#src:test/test_mgmt_operators.pas": "pass",
   "test-core#src:test/test_mimic_directive.pas": "pass",
   "test-core#src:test/test_mimic_fpc.pas@1": "pass",
   "test-core#src:test/test_mimic_fpc.pas@2": "pass",
@@ -4317,7 +4318,6 @@
   "test-core#src:test/test_procvar_value_context.pas": "pass",
   "test-core#src:test/test_promoint.pas": "pass",
   "test-core#src:test/test_promoint_arg_literal_and_result.pas": "pass",
-  "test-core#src:test/test_promoint_function_result.pas": "pass",
   "test-core#src:test/test_promoint_minint64_div.pas": "pass",
   "test-core#src:test/test_promoint_overflow.pas": "pass",
   "test-core#src:test/test_promoint_parameter.pas": "pass",
@@ -4659,11 +4659,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T08:51:43Z",
-  "sha": "6e937a27b469c7a6cc6927623c68bdb690b31aa7",
+  "date": "2026-08-20T09:10:06Z",
+  "sha": "b24bb1474624dbce59e6ebd6192bccb5f206c495",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 304.7
+  "wall": 291.8
  },
  "last_bench": {
   "conf_rows": 550,
