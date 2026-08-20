@@ -91,4 +91,4 @@ Full diagnosis, fix and verification: [[bug-a-the-compilers-output-depends-on-ar
 
 Verified for THIS job: `ts-self` and `ts-next` byte-identical, both
 `data=226912B`; `tools/gate.sh quick` GREEN.
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 3b0a886e9.

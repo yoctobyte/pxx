@@ -96,4 +96,4 @@ the one member of that set that could reproduce this bug for C compiles whose
 `lib/crtl` resolves through `ExeDir`; unproven, not fixed here.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 3b0a886e9.
