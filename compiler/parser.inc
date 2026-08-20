@@ -21196,9 +21196,7 @@ begin
       if CurTok.Kind = tkLBrack then
       begin
         Next;
-        arrLo := ConstEval;
-        Expect(tkDotDot, '..');
-        arrHi := ConstEval;
+        ParseArrayDimBounds(arrLo, arrHi);
         Expect(tkRBrack, ']');
         Expect(tkOf, 'of');
       end
@@ -28632,7 +28630,7 @@ begin
           begin
             Next;   { consume '[' }
             repeat
-              tdLo := ConstEval; Expect(tkDotDot, '..'); tdHi := ConstEval;
+              ParseArrayDimBounds(tdLo, tdHi);
               if tdCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
               tdDimLo[tdCnt] := tdLo; tdDimSpan[tdCnt] := tdHi - tdLo + 1; Inc(tdCnt);
             until not Eat(tkComma);

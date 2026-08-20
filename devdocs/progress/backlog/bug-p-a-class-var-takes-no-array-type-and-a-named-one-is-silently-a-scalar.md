@@ -3,7 +3,7 @@ track: P
 prio: 55
 type: bug
 blocked-by: []
-summary: "`class var F: array[0..3] of Integer` is `unknown type: array`, and — the dangerous arm — `class var F: TA` where `TA = array[0..3] of Integer` COMPILES SILENTLY AS A SCALAR and fails somewhere else at the use site. The class-var branch parses only `ParseTypeKind` + `AllocVar`; it has none of the var section's array machinery. Blocks the rtl-generics corpus climb at wall 18."
+summary: "An INLINE array type as a `class var` is `unknown type: array`. A NAMED one indexes correctly but carries no array metadata, so `Length(F)` answers 0 where FPC says 4 (silent, no diagnostic), `SizeOf(F)` and `SetLength` error, and `TC.F[0]` will not parse. The class-var branch is `ParseTypeKind` + `AllocVar` and has none of the var section's array machinery. Blocks the rtl-generics corpus climb at wall 18."
 ---
 
 # A `class var` takes no array type, and a named array type is silently a scalar
@@ -18,39 +18,36 @@ summary: "`class var F: array[0..3] of Integer` is `unknown type: array`, and �
   Track P and Track A both touch. Obey A's gate and the no-concurrent-edit
   rule.
 
-## Measured (self-hosted build at `57b9b7148`)
+## Measured (self-hosted build at HEAD, FPC 3.2.2 as the oracle)
 
-| `class var F: ...` | today |
-| --- | --- |
-| `array[0..3] of Integer` (inline fixed) | `unknown type: array` |
-| `array of Integer` (inline dynamic) | `unknown type: array` |
-| `TA`, where `TA = array[0..3] of Integer` | **compiles as a scalar**, fails later at the use site |
-| `TD`, where `TD = array of Integer` | **compiles as a scalar**, fails later at the use site |
+**Corrected 2026-08-20**, an hour after filing. The first version of this
+ticket said a named array type "compiles silently as a scalar and fails at the
+use site". That was inferred from two failing uses and it is wrong: the
+ordinary uses work. Re-measured shape by shape, the real split is:
 
-The bottom two are why this is rated above the two that error. An error arm at
-least stops; a wrong TYPE accepted silently puts the diagnostic somewhere else
-entirely, and the reader has no reason to suspect the declaration.
+| `class var F: ...`, then the use | pxx | FPC |
+| --- | --- | --- |
+| `TA = array[0..3] of Integer`, `F[i] := ...` in a class method | **works** | works |
+| ... `c.F[0]` through an instance | **works** | works |
+| ... `array[TKind]` as the index (since the wall-18 fix) | **works** | works |
+| ... `Length(F)` | **0** | 4 |
+| ... `SizeOf(F)` | `SizeOf: unknown type or variable` | 16 |
+| ... `TC.F[0]`, class-qualified | `unexpected token` (parse) | 5 |
+| `TD = array of Integer`, `SetLength(G, 3)` | `SetLength expects a string variable in IR codegen` | works |
+| `array[0..3] of Integer` inline | `unknown type: array` | works |
+| `array of Integer` inline | `unknown type: array` | works |
 
-Ordinary instance fields are fine — `array[0..3]`, `array of T`, and (since
-`57b9b7148`) an ordinal type as the index all work in a record or class field.
-It is specifically the `class var` section.
+**`Length(F)` answering 0 is the one silent wrong value here**, and it is the
+reason this ticket keeps its priority: every other row stops the build. A loop
+written `for i := 0 to Length(F) - 1` over a class-var array does nothing at
+all and reports no error.
 
-## Cause
-
-`compiler/parser.inc` ~27726, the `class var` branch, is:
-
-```pascal
-Expect(tkColon, ':');
-fTk := ParseTypeKind; fRec := LastTypeRecId;
-...
-i := AllocVar('', fTk);
-```
-
-`ParseTypeKind` has no array case, so `array` reaches the unknown-type error;
-a named array alias resolves to something `ParseTypeKind` will answer with, and
-`AllocVar` then reserves a scalar slot. Storage is an anonymous global
-(`CurProc < 0`), which is not the problem — the problem is that nothing on this
-path ever calls `AllocArray` / `AllocDynArray`.
+The declaration is therefore NOT silently a scalar — the alias is resolved well
+enough for indexing to work. What is missing is the array METADATA on the
+allocated symbol: `AllocVar` reserves a scalar slot, so `ArrLen` / `IsArray`
+are never set, and every consumer that asks the symbol about its shape rather
+than just indexing it (`Length`, `SizeOf`, `SetLength`, and the class-qualified
+selector's parse) gets the wrong answer or no answer.
 
 ## Do NOT microfix this
 
@@ -88,14 +85,15 @@ type
   TA = array[0..3] of Integer;
   TC = class
   private
-    class var F: TA;        { compiles; F is a scalar }
+    class var F: TA;
   public
     class procedure Go;
   end;
 class procedure TC.Go;
 begin
-  F[0] := 1;                { the error lands HERE, not at the declaration }
-  WriteLn(F[0]);
+  F[0] := 1;
+  WriteLn(F[0]);        { 1 -- indexing is fine }
+  WriteLn(Length(F));   { 0 in pxx, 4 in FPC -- SILENT }
 end;
 begin
   TC.Go;
@@ -103,4 +101,4 @@ end.
 ```
 
 Swap `F: TA` for `F: array[0..3] of Integer` to see the honest arm
-(`unknown type: array`). FPC 3.2.2 accepts both.
+(`unknown type: array` at the declaration). FPC 3.2.2 accepts both.
