@@ -163,4 +163,4 @@ class-qualified, through an instance and through a subclass, plus `Length`, `Siz
   fails identically, so it is pre-existing and orthogonal.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 0ae5d7aa8.
