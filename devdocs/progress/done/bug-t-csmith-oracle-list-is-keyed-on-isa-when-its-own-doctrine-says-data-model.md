@@ -205,4 +205,4 @@ and a first-ever sweep coming back clean is a result worth the same paragraph a 
 would get.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 350e093ff.
