@@ -759,6 +759,20 @@ begin
   tk := Syms[idx].TypeKind;
   sz := TypeSize(tk);
   sgn := TypeSigned(tk);
+  { A dynamic array's slot holds a pointer-sized heap handle, not an element, so
+    TypeSize(elementType) — 4 for `array of Integer` — would load HALF the
+    64-bit handle. EmitStoreVarA64 has carried this exact guard, with this exact
+    comment, since `b := a` was fixed on the store side; the LOAD side was left
+    without it and stayed invisible while nothing loaded a dyn-array handle
+    through this helper. The scope-exit release does, and it segfaulted on a
+    truncated pointer. The sibling arm of a double case, which
+    devdocs/dev/normalise-dont-special-case.md says to grep for before closing
+    the first half. bug-a-i386-and-aarch64-dynamic-array-assignment-has-no-store-arm }
+  if Syms[idx].IsArray and (Syms[idx].ArrLen = -1) then
+  begin
+    sz := TARGET_PTR_SIZE;
+    sgn := False;
+  end;
 
   if tk = tySingle then
   begin
@@ -1048,6 +1062,54 @@ begin
     IR_STORE_SYM:
       begin
         si := IRA[node];
+        if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
+        begin
+          { Whole DYNAMIC-array assignment (`b := a`). This arm did not exist:
+            the store aliased the handle with NO retain, so both names owned one
+            reference. While nothing released a dyn array at scope exit that was
+            a silent leak; the moment the epilogue does release, it is a DOUBLE
+            FREE — measured as a SIGSEGV on the second call of a routine doing
+            `b := a`, which is how this was found
+            (bug-a-i386-and-aarch64-dynamic-array-assignment-has-no-store-arm).
+
+            Mirrors arm32's arm, which mirrors x86-64: retain the new handle,
+            publish it, release the old one. The release goes through
+            PXXDynArrayRelease with the symbol's layout descriptor, so a
+            managed-element array releases its elements too.
+
+            MUST stay ahead of the tyAnsiString arm below: for an
+            `array of string` the symbol's TypeKind IS tyAnsiString (it names
+            the ELEMENT), so that arm would otherwise claim the array and hand
+            the array's data pointer to the string releaser. }
+          IREmitNodeAarch64(IRB[node]);       { x0 = new data pointer }
+          { Move semantics: a fresh user-function result already carries the +1
+            destined for this owner, so retaining again would leak one
+            reference. Intrinsic results (IRA < 0) keep the conservative retain.
+            Same discrimination as x86-64 and arm32. }
+          if not ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0)) then
+          begin
+            EmitI32($F81F0FE0);               { str x0, [sp,#-16]! (call clobbers x0) }
+            procIdx := FindProc('PXXDynArrayIncRef');
+            if procIdx < 0 then Error('compiler error: PXXDynArrayIncRef not found');
+            EmitCallProc(procIdx);            { x0 already = arg0 }
+            EmitI32($F84107E0);               { ldr x0, [sp], #16 }
+          end;
+          EmitI32($F81F0FE0);                 { str x0, [sp,#-16]! (push new) }
+          { x1 = the slot's own ADDRESS. EmitLoadVarAddrA64 bakes in the by-ref
+            deref, so a `var d: array of T` param yields &caller_slot — exactly
+            what the publish below must write through. }
+          EmitLoadVarAddrA64(si);             { x0 = slot address }
+          EmitI32($AA0003E1);                 { mov x1, x0 }
+          EmitI32($F9400020);                 { ldr x0, [x1] = old handle }
+          EmitI32($F94003E2);                 { ldr x2, [sp] = new }
+          EmitI32($F9000022);                 { str x2, [x1] — publish new }
+          EmitLoadDataRefA64(1, GetOrAllocSymRTTI(si));   { x1 = desc }
+          procIdx := FindProc('PXXDynArrayRelease');
+          if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
+          EmitCallProc(procIdx);              { release(old, desc) — nil-safe }
+          EmitI32($F84107E0);                 { ldr x0, [sp], #16 (new = stmt value) }
+          Exit;
+        end;
         if Syms[si].TypeKind = tyAnsiString then
         begin
           valNode := IRB[node];

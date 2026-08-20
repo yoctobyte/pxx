@@ -1451,6 +1451,57 @@ begin
     IR_STORE_SYM:
       begin
         si := IRA[node];
+        if Syms[si].IsArray and (Syms[si].ArrLen = -1) then
+        begin
+          { Whole DYNAMIC-array assignment (`b := a`). This arm did not exist:
+            the store aliased the handle with NO retain, so both names owned one
+            reference. While nothing released a dyn array at scope exit that was
+            a silent leak; once the epilogue releases, it is a DOUBLE FREE — on
+            i386 a double decrement of a freed refcount word, which happens not
+            to re-free and so corrupts quietly (aarch64, the same bug, SIGSEGVs
+            and is how this was found).
+            bug-a-i386-and-aarch64-dynamic-array-assignment-has-no-store-arm
+
+            Mirrors arm32's arm, which mirrors x86-64: retain the new handle,
+            publish it, release the old one through PXXDynArrayRelease with the
+            symbol's layout descriptor, so a managed-element array releases its
+            elements too.
+
+            MUST stay ahead of the tyAnsiString arm below: for an
+            `array of string` the symbol's TypeKind IS tyAnsiString (it names
+            the ELEMENT), so that arm would otherwise claim the array. }
+          IREmitNode386(IRB[node]);                     { eax = new data pointer }
+          { Move semantics: a fresh user-function result already carries the +1
+            destined for this owner; retaining again would leak one reference.
+            Intrinsic results (IRA < 0) keep the conservative retain. }
+          if not ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0)) then
+          begin
+            EmitB($50);                                 { push eax (arg0) }
+            procIdx := FindProc('PXXDynArrayIncRef');
+            if procIdx < 0 then Error('compiler error: PXXDynArrayIncRef not found');
+            EmitCallProc(procIdx);
+            EmitB($58);                                 { pop eax (restore + unwind) }
+          end;
+          EmitB($50);                                   { push eax — keep new }
+          { edx = the slot's own ADDRESS (global / frame local / by-ref param). }
+          if Syms[si].Kind = skGlobal then
+            begin EmitB($BA); EmitGlobRef(Syms[si].Offset); end       { mov edx, slot addr }
+          else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
+            begin EmitB($8B); EmitB($95); EmitI32(Syms[si].Offset); end { mov edx,[ebp+off] = &caller_slot }
+          else
+            begin EmitB($8D); EmitB($95); EmitI32(Syms[si].Offset); end; { lea edx,[ebp+off] }
+          EmitB($8B); EmitB($02);                       { mov eax, [edx] = old handle }
+          EmitB($8B); EmitB($0C); EmitB($24);           { mov ecx, [esp] = new }
+          EmitB($89); EmitB($0A);                       { mov [edx], ecx — publish new }
+          EmitB($50);                                   { push arg0 = old }
+          EmitB($68); EmitDataRef(GetOrAllocSymRTTI(si)); { push arg1 = desc }
+          procIdx := FindProc('PXXDynArrayRelease');
+          if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
+          EmitCallProc(procIdx);                        { release(old, desc) — nil-safe }
+          EmitB($81); EmitB($C4); EmitI32(8);           { add esp, 8 }
+          EmitB($58);                                   { pop eax = new (stmt value) }
+          Exit;
+        end;
         if Syms[si].TypeKind = tyAnsiString then
         begin
           { Managed-string assignment to a variable: build the new handle, then

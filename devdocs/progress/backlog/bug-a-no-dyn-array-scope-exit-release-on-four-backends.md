@@ -3,7 +3,7 @@ track: A
 prio: 40
 type: bug
 blocked-by: [bug-a-i386-and-aarch64-dynamic-array-assignment-has-no-store-arm]
-summary: "Only x86-64 released a local DYNAMIC array at scope exit; the other four backends had no `ArrLen = -1` arm at all. HALF DONE 2026-08-21: arm32 and riscv32 now release (measured flat, 112 MB -> 7.8 MB over 200k calls). i386 and aarch64 are BLOCKED — their IR_STORE_SYM has no dyn-array arm, so `b := a` aliases without retaining and the release would be a double free."
+summary: "Only x86-64 releases a local DYNAMIC array at scope exit; the other four backends have no `ArrLen = -1` arm at all, so every local dyn array leaks its block there. Attempted 2026-08-21 and REVERTED: the release is only safe where every dyn-array STORE retains, and on those backends the class/record FIELD store (IR_STORE_DYN is x86-64 only) does not. Fix the retain sites first; the ticket now carries the audit list."
 status: backlog
 owner: unassigned
 ---
@@ -127,3 +127,60 @@ prints nothing. The audit that finds the rest is to diff the five arm-lists
 against each other — the differences ARE the bug list — and
 [[refactor-a-the-missing-layer-between-frontends-and-backends]] is where that
 stops recurring.
+
+
+## 2026-08-21 (second pass) — landed, then REVERTED, and this is the finding
+
+The arm was added to arm32 and riscv32, gated green, and **pushed** (4999d2a62).
+It regressed `test_dynarray_managed_field_reassign` on both: `1 1 1 1 1 1` became
+`1 0 0 0 0 0`. Reverted in the following commit. Recorded rather than tidied
+away, because the reason is the whole lesson.
+
+**The rule this ticket got wrong twice.** A scope-exit release is only safe when
+EVERY store that can put a handle into that local retains it. There is more than
+one such store, and the second one was missed:
+
+| store shape | x86-64 | i386 / arm32 / aarch64 / riscv32 |
+| --- | --- | --- |
+| `b := a` (symbol) | `IR_STORE_SYM` dyn arm, retains | arm32 + riscv32 retain; **i386 + aarch64 did not** (now fixed) |
+| `obj.f := a` (field / nested) | `IR_STORE_DYN`, retains | **NONE — `IR_STORE_DYN` is x86-64 only** |
+
+`defs.inc` says it outright: *"x86-64 only; other targets keep the IR_STORE_MEM
+share path."* A share path does not retain. So `Items := tmp` inside a method
+copies the handle, and adding the scope-exit release then frees the data the
+FIELD now points at — which is exactly what the regression printed.
+
+The first pass caught the symbol half by measuring (aarch64 SIGSEGV) and
+concluded arm32/riscv32 were safe *because they had that arm*. True and
+insufficient: the table above has two rows, and only one was checked. **Count
+the store sites before adding a release, not the ones you happen to hit.**
+
+## The audit this ticket now depends on
+
+Before the arm can land on any non-x86-64 backend, every one of these must
+retain on that backend:
+
+1. `IR_STORE_SYM`, whole dyn array — done for all four
+   ([[bug-a-i386-and-aarch64-dynamic-array-assignment-has-no-store-arm]] covered
+   the last two).
+2. **`IR_STORE_DYN` — field / nested-subarray store. Missing on all four.**
+   This is the blocker; it wants either a per-backend arm or (better) the
+   x86-64 lowering generalised so `ir.inc` stops emitting a different IR shape
+   per target — see the note in `ir.inc` where the choice is made.
+3. Any other path that publishes a handle into a local slot: function-result
+   assignment (the move-semantics carve-out already in the symbol arms),
+   `SetLength` publishing through a by-ref param, and open-array parameter
+   marshalling. Each needs a yes/no answer per backend, written down here.
+
+Only when 1-3 are all yes for a backend does its release arm go in — and then
+the cross sweep below is the gate, not a spot check.
+
+## Gate (revised)
+
+Run the FULL dyn-array + interface test set under `tools/run_target.sh` for the
+backend being changed and diff every one against the native answer — not
+against `pinned`, which is old enough to fail some of them for unrelated
+reasons. The two tests that caught this were
+`test_dynarray_managed_field_reassign` and `test_dynarray_of_interfaces_assign`;
+neither is in the quick tier, which is why the gate was green and the push was
+still wrong.
