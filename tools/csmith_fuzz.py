@@ -137,6 +137,10 @@ TARGETS = {
     "aarch64": "LP64",
     "arm32": "ILP32",
     "riscv32": "ILP32",
+    # NOT a backend pxx has. compiler/defs.inc stops at TARGET_RISCV32 = 5 and
+    # "riscv64" appears nowhere in compiler/**. The row is correct-in-advance so
+    # the table needs no edit the day the backend lands -- it is not evidence one
+    # exists, and --target riscv64 will fail at the pxx invocation, not here.
     "riscv64": "LP64",
 }
 
@@ -151,7 +155,7 @@ ORACLE_CC = {
     "arm32": [["arm-linux-gnueabihf-gcc", "-static"],
               ["arm-linux-gnueabi-gcc", "-static"]],
     "riscv32": [["riscv32-linux-gnu-gcc", "-static"]],
-    "riscv64": [["riscv64-linux-gnu-gcc", "-static"]],
+    "riscv64": [["riscv64-linux-gnu-gcc", "-static"]],   # no pxx backend yet -- see TARGETS
 }
 
 # The DATA-MODEL fallback, and the second half of the doctrine above. When no

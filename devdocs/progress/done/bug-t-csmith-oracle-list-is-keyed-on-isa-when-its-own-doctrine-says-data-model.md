@@ -204,5 +204,45 @@ was a bad bet: it is the first time any cross backend has seen a random program 
 and a first-ever sweep coming back clean is a result worth the same paragraph a finding
 would get.
 
+## CORRECTION 2026-08-20 — the fix buys ONE target, not two
+
+The line above ("lights up `MISCOMPILE_VS_GCC` for aarch64 and riscv64 immediately")
+is wrong on the second target. **It buys exactly aarch64.**
+
+Caught by frank2, verified in source by both sides rather than relayed:
+`compiler/defs.inc` defines `TARGET_I386=1`, `TARGET_AARCH64=2`, `TARGET_ARM32=3`,
+`TARGET_XTENSA=4`, `TARGET_RISCV32=5` — **there is no `TARGET_RISCV64`**, and `riscv64`
+occurs nowhere in `compiler/**`. So there is nothing on the pxx side of the comparison
+to light up: `--target riscv64` fails at the pxx invocation, upstream of any oracle.
+
+`riscv64: "LP64"` stays in `TARGETS` and its `ORACLE_CC` row stays too — the table is
+**correct-in-advance**, not wrong, and it needs no edit the day the backend lands. What
+was missing was a reader being able to tell those two states apart, so both rows now
+carry a comment saying pxx has no riscv64 backend yet. **A target list is not a backend
+list**, and this ticket briefly read as if it were.
+
+## 2026-08-20 — the fix, measured: 160 cross-target comparisons on aarch64, ZERO divergences
+
+Run by Track C (frank2) with the one-line fix live. Self-hosted fixedpoint at `21f05c52b`,
+`tools/csmith_fuzz.py` at `174186b5d`.
+
+**160 real checksum comparisons against the native `gcc -O0` oracle, 0 divergences** —
+the strongest class of evidence this campaign has produced, because it is the first time
+a cross backend has been checked against an *external* implementation rather than against
+another build of itself.
+
+The header line is the visible proof the fix took, and it is exactly the "never report a
+comparison it did not make" discipline moving from a refusal to a claim:
+
+| before | after |
+| --- | --- |
+| `NO ORACLE for aarch64 (LP64)` | `vs gcc -O0 oracle (datamodel)` |
+| `MISCOMPILE_VS_GCC and PXX_SLOW are NOT CHECKED this run` | `Checksums are compared; TIMING is not` |
+
+The second row is the TRAP section above holding: the checksum is reused, `oracle_sec` is
+not, so `PXX_SLOW` stays honestly unchecked on an emulated target instead of manufacturing
+timeouts out of qemu. **Checksum comparability and timing comparability really are
+different questions, and the report now answers them separately.**
+
 ## Log
 - 2026-08-20 — resolved, commit 350e093ff.
