@@ -155,4 +155,4 @@ same registry the type-name receiver already used. No typed-const path was
 added to the helper code. `test/test_type_helper_const_array.pas`.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit ee388cf3a.
