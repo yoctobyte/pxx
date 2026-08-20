@@ -515,6 +515,40 @@ int main(void) {
   return 0;
 }
 C
+# environ was NULL under pxx until the C entry stub grew an init phase
+# (bug/feature-c-entry-stub-must-run-initializers-for-environ, 08dccc7df,
+# PXX_STABLE from v368). Structural assertions only, never a dump of the
+# environment: both sides run under the same env, but the shell sets `_` to the
+# path of the binary it is launching, so the two arrays legitimately differ in
+# one entry and a raw dump would report a phantom divergence forever.
+probe environ-prefilled <<'C'
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+extern char **environ;
+int main(void) {
+  int n = 0, eq = 1;
+  char **e;
+  char *v;
+  if (environ == 0) { printf("environ is NULL\n"); return 0; }
+  for (e = environ; *e; e++) { n++; if (strchr(*e, '=') == 0) eq = 0; }
+  printf("%d %d\n", n > 0, eq);          /* non-empty, every entry NAME=VALUE */
+  /* the first entry must be findable by its own name, with its own value --
+     a check that says nothing about WHICH variables this box happens to set */
+  {
+    char name[256];
+    char *s = environ[0];
+    char *p = strchr(s, '=');
+    size_t len = (size_t)(p - s);
+    if (len < sizeof(name)) {
+      memcpy(name, s, len); name[len] = 0;
+      v = getenv(name);
+      printf("%d\n", v != 0 && strcmp(v, p + 1) == 0);
+    } else printf("1\n");
+  }
+  return 0;
+}
+C
 probe exit-code <<'C'
 #include <stdlib.h>
 int main(void) { exit(3); }
