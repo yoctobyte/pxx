@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T14:37:36Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "48a60d09693770480d649fc8ee649eac9486a56e",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-19T14:43:40Z",
    "fixed": [
     "test-core#src:test/test_asm_ifdef_multiarch.pas"
@@ -446,6 +438,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "ef3ea948003db578ee3871802bffcc9051a2ab73",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T02:41:39Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "08dccc7df6548c8d7af2e22d0647d239ad292149",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -990,6 +990,7 @@
   "test-core#src:test/arrays.pas": "native",
   "test-core#src:test/bootstrap_features.pas@1": "native",
   "test-core#src:test/c_builtin_bits.c": "native",
+  "test-core#src:test/c_environ_prefilled_b380.c": "native",
   "test-core#src:test/c_lua_opcode_decode_b132.c": "native",
   "test-core#src:test/c_lua_tvalue_int_b131.c": "native",
   "test-core#src:test/c_pasunit.c": "native",
@@ -3800,6 +3801,7 @@
   "test-core#src:test/arrays.pas": "pass",
   "test-core#src:test/bootstrap_features.pas@1": "pass",
   "test-core#src:test/c_builtin_bits.c": "pass",
+  "test-core#src:test/c_environ_prefilled_b380.c": "pass",
   "test-core#src:test/c_lua_opcode_decode_b132.c": "pass",
   "test-core#src:test/c_lua_tvalue_int_b131.c": "pass",
   "test-core#src:test/c_pasunit.c": "pass",
@@ -6072,11 +6074,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T02:35:50Z",
-  "sha": "ef3ea948003db578ee3871802bffcc9051a2ab73",
+  "date": "2026-08-20T02:41:39Z",
+  "sha": "08dccc7df6548c8d7af2e22d0647d239ad292149",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 234.8
+  "wall": 235.3
  },
  "last_bench": {
   "conf_rows": 550,
