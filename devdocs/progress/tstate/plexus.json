@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T23:28:32Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "49a511e43271b4341ab4007e62a8181bb9edfb5a",
-   "tier": "slow",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T23:34:46Z",
    "fixed": [],
    "new_red": [],
@@ -430,6 +422,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "aee45d597e57c3ffdd8530d7f694c45db41b0169",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T15:53:14Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "4a12acf6e7f01362cf96f53f1bccbdccc20f5b8e",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -2011,6 +2011,7 @@
   "test-core#src:test/test_record_ctor_expr_tails_b333.pas": "native",
   "test-core#src:test/test_record_field_array_low_bound.pas": "native",
   "test-core#src:test/test_record_helper_for_string_b331.pas": "native",
+  "test-core#src:test/test_record_interface_field_zero_init.pas": "native",
   "test-core#src:test/test_record_layout_stress.pas": "native",
   "test-core#src:test/test_record_method_open_array_b334.pas": "native",
   "test-core#src:test/test_record_multifield.pas": "native",
@@ -4407,6 +4408,7 @@
   "test-core#src:test/test_record_ctor_expr_tails_b333.pas": "pass",
   "test-core#src:test/test_record_field_array_low_bound.pas": "pass",
   "test-core#src:test/test_record_helper_for_string_b331.pas": "pass",
+  "test-core#src:test/test_record_interface_field_zero_init.pas": "pass",
   "test-core#src:test/test_record_layout_stress.pas": "pass",
   "test-core#src:test/test_record_method_open_array_b334.pas": "pass",
   "test-core#src:test/test_record_multifield.pas": "pass",
@@ -4719,11 +4721,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T15:44:08Z",
-  "sha": "aee45d597e57c3ffdd8530d7f694c45db41b0169",
+  "date": "2026-08-20T15:53:14Z",
+  "sha": "4a12acf6e7f01362cf96f53f1bccbdccc20f5b8e",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 473.5
+  "wall": 460.6
  },
  "last_bench": {
   "conf_rows": 550,
