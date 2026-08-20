@@ -369,28 +369,41 @@ end;
 
   Reuses CompiledUnitFile, whose documented meaning is already "the FILE this
   compiled unit resolved to" -- it is simply only written on the Python path
-  today. Nothing is declared and no shared structure changes. }
+  today. Nothing is declared and no shared structure changes.
+
+  UPDATED 2026-08-20 by refactor-a-one-resolved-file-identity-for-a-translation-unit
+  (Track A), which is why this now scans EVERY entry of the name instead of the
+  last one. The loader keys a path-form reference on the resolved FILE, so the
+  second `#include "cpasunit2/mymod.pas"` is no longer a no-op: both units load
+  and both register under the name `mymod`. Looking at only the last match then
+  found the entry just created, compared its file against itself, and read the
+  collision as "the same file included twice" -- the refusal stopped firing and
+  the answer became 63 (the later body wins, with a duplicate-definition
+  warning) where it had been 42. Ambiguous either way; refusal is still the
+  answer, because the mangled name `mymod_pas_Twice` cannot say WHICH mymod.
+
+  Note what this un-blocks: the "not implementable from here" above rested on
+  the two units being unable to coexist. They can now, so path-qualified
+  mangling (§3 of the C ticket) has become a Track C question again rather than
+  a Track A blocker. }
 procedure CCheckPascalUnitCollision(const key, srcFile: AnsiString; isPath: Boolean);
-var i, e, fIdx: Integer;
+var i, fIdx: Integer;
 begin
   if not isPath then Exit;                  { loader-resolved: no file to key on }
-  e := -1;
   for i := 0 to CompiledUnitCount - 1 do
     if (CompiledUnits[i] >= 0) and
-       (LowerCase(Strs[CompiledUnits[i]].Text) = key) then e := i;
-  if e < 0 then Exit;
-  fIdx := CompiledUnitFile[e];
-  if fIdx < 0 then
-  begin
-    CompiledUnitFile[e] := InternStr(srcFile);
-    Exit;
-  end;
-  if Strs[fIdx].Text = srcFile then Exit;   { the same file included twice }
-  Error('two Pascal units are both named ''' + key + ''': ''' +
-    Strs[fIdx].Text + ''' was imported first and ''' + srcFile + ''' cannot ' +
-    'also be imported -- a unit''s identity is its NAME here, so the second ' +
-    'include would be silently ignored and every ' + key + '_pas_* would ' +
-    'resolve to the first. Rename one of the units');
+       (LowerCase(Strs[CompiledUnits[i]].Text) = key) then
+    begin
+      fIdx := CompiledUnitFile[i];
+      if fIdx < 0 then
+        CompiledUnitFile[i] := InternStr(srcFile)   { loader knew no file: adopt }
+      else if Strs[fIdx].Text <> srcFile then       { a DIFFERENT file, same name }
+        Error('two Pascal units are both named ''' + key + ''': ''' +
+          Strs[fIdx].Text + ''' was imported first and ''' + srcFile +
+          ''' cannot also be imported -- both would declare ' + key +
+          '_pas_*, and the mangled name cannot say which file it means. ' +
+          'Rename one of the units');
+    end;
 end;
 
 { '__pxx_pascal_unit "<baseDir>" "<spec>";' — the token-stream marker the

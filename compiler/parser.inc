@@ -32784,10 +32784,11 @@ var
   basePath, ext, emsg: AnsiString;
   lastSlash, lastDot: Integer;
   isCompiled, isCUnit, isCHeader, isPath, savedCaseMode, softMissOK: Boolean;
-  guardIdx: Integer;   { CompiledUnits key — see the note at its assignment }
+  guardIdx: Integer;   { CompiledUnitKey — see the note at its assignment }
+  gPath: AnsiString;   { …the normalised path a path-form reference keys on }
   realIdx: Integer;    { alias-resolved unit for the already-compiled edge }
-  { The RESOLVED FILE key, and the already-compiled entry holding it — the
-    second key space that makes one module one unit however it was spelled. }
+  { The RESOLVED FILE key, and the already-compiled entry holding it — what
+    makes one file one unit however it was spelled. }
   pyFileIdx, pyDupIdx: Integer;
   { leading-dot count of this relative import; see PyRelativeDir }
   pyRelLevel: Integer;
@@ -32892,13 +32893,18 @@ begin
   aliasEdgeIdx := -1;
   if isPath then
   begin
-    lastDot := 0;
-    for i := 1 to Length(name) do
-      if name[i] = '.' then lastDot := i;
-    ext := '';
-    if lastDot > 0 then ext := LowerCase(Copy(name, lastDot, Length(name) - lastDot + 1));
-    if (ext = '.c') or (ext = '.h') then
-      guardIdx := InternStr('@cpath:' + LowerCase(name));
+    { The path a probe will actually open, derived the way the path branch below
+      derives it — CurUnitDir-relative unless absolute, then NormalizePath — so
+      `./r1/math.pas` and `r1/math.pas` are ONE identity rather than two, which
+      the raw-text `@cpath:` key could not say. Extension-less spellings resolve
+      to the same prefix and therefore still share a key; that is right, since
+      the .pas/.pp probe order makes them the same file. }
+    if name[1] = '/' then
+      gPath := name
+    else
+      ConcatThree(CurUnitDir, name, '', gPath);
+    NormalizePath(gPath);
+    guardIdx := InternStr('@path:' + LowerCase(gPath));
   end;
   { Record the edge for EVERY `uses X` clause, even one that hits the
     already-compiled guard below — a warn/count pass over
@@ -32944,7 +32950,7 @@ begin
   isCompiled := False;
   for i := 0 to CompiledUnitCount - 1 do
   begin
-    if CompiledUnits[i] = guardIdx then
+    if CompiledUnitKey[i] = guardIdx then
       isCompiled := True;
   end;
   if isCompiled then
@@ -32985,7 +32991,8 @@ begin
   savedCUC := CompiledUnitCount;
   if CompiledUnitCount < 256 then
   begin
-    CompiledUnits[CompiledUnitCount] := guardIdx;
+    CompiledUnits[CompiledUnitCount] := strIdx;   { the NAME — what everyone else means }
+    CompiledUnitKey[CompiledUnitCount] := guardIdx; { …the identity it dedupes on }
     CompiledUnitFile[CompiledUnitCount] := -1;  { filled in once resolved }
     Inc(CompiledUnitCount);
   end;
@@ -33659,29 +33666,49 @@ begin
     already uses; FindCompiledUnitOrAlias chases the chain, so `pkg.sub.X` still
     resolves) and do not parse it again.
 
-    Keyed on the resolved path TEXT. Both spellings of the repro produce the
-    identical string, measured, because they are built from the same root — this
-    is deliberately not a canonicalising comparison, so two roots spelling one
-    file differently (a symlink, `./x` vs `x`) still slip through. That is
-    strictly better than today and honest about its limit; the general answer is
-    the Track U question decide-one-answer-to-have-i-already-compiled-this-unit.
+    GENERALISED 2026-08-20 from the `.py` arm to every load that resolved to a
+    file — decide-one-answer-to-have-i-already-compiled-this-unit, option B. The
+    question "is this the same translation unit?" had three answers (the NAME
+    key, the `@cpath:` key space, this one), two of which are the same question;
+    a key space per surprise is what
+    devdocs/dev/root-cause-over-microfix.md says to stop repeating.
+
+    Keyed on the resolved path TEXT, which is now NormalizePath'd for a path form
+    at the guard above, so `./x` and `x` are one identity. Two roots reaching one
+    file by genuinely different routes (a symlink, two -Fu roots onto one tree)
+    still slip through: this compares strings, not inodes.
+
+    THE SENTINEL: CompiledUnitFile is -1 for every entry not resolved to a file
+    and -1 = -1, so an unguarded comparison makes every unresolved unit identical
+    to every other and the second ambient/builtin unit is skipped as already
+    compiled. It passes the whole suite and surfaces far away as a builtin that
+    silently did not load. Hence `>= 0` below, and it is the reason this must not
+    be split across commits.
     bug-a-a-python-module-s-identity-is-its-name-not-its-file (symptom 1). }
-  if isPyUnit then
+  if Length(path) > 0 then
   begin
     pyFileIdx := InternStr(path);
     pyDupIdx := -1;
     for i := 0 to CompiledUnitCount - 1 do
-      if CompiledUnitFile[i] = pyFileIdx then pyDupIdx := i;
+      if (CompiledUnitFile[i] >= 0) and (CompiledUnitFile[i] = pyFileIdx) then
+        pyDupIdx := i;
     if pyDupIdx >= 0 then
     begin
-      if UnitAliasCount < MAX_UNIT_ALIASES then
+      { …but only when the two spellings are two NAMES. The same path written
+        twice (`uses './x.c'` and `uses 'x.c'`) resolves to one name too, and
+        aliasing a name to itself is a wasted slot in a table small enough to
+        run out — MAX_UNIT_ALIASES exhaustion is an Error, not a degradation. }
+      if CompiledUnits[pyDupIdx] <> strIdx then
       begin
-        UnitAliasName[UnitAliasCount] := strIdx;
-        UnitAliasReal[UnitAliasCount] := CompiledUnits[pyDupIdx];
-        Inc(UnitAliasCount);
-      end
-      else
-        Error('too many unit aliases (raise MAX_UNIT_ALIASES)');
+        if UnitAliasCount < MAX_UNIT_ALIASES then
+        begin
+          UnitAliasName[UnitAliasCount] := strIdx;
+          UnitAliasReal[UnitAliasCount] := CompiledUnits[pyDupIdx];
+          Inc(UnitAliasCount);
+        end
+        else
+          Error('too many unit aliases (raise MAX_UNIT_ALIASES)');
+      end;
       { The alias answers a QUALIFIER; it does not make the module's symbols
         VISIBLE. Visibility is per uses-edge (symtab.inc:799) and the edge
         recorded on entry points at the SPELLING (`pkg_sub`), while the symbols

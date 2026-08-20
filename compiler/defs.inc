@@ -2426,6 +2426,17 @@ var
     isinstance against each other.
     bug-a-a-python-module-s-identity-is-its-name-not-its-file (symptom 1). }
   CompiledUnitFile : array[0..255] of Integer;
+  { The IDENTITY each compiled unit is deduped on, which is not always its name.
+    A path-form reference (`uses './x.c'`, `#include "r1/math.pas"`) is keyed on
+    the normalised path it resolves to, because the base name it would otherwise
+    key on is shared with any other directory's file of that name — and with the
+    ENCLOSING unit, which is how `unit hello_ext` pulling `./hello_ext.c` hit the
+    already-compiled guard against itself and silently never loaded the C.
+    Split out of CompiledUnits so that array can go on meaning the unit NAME: the
+    C mangled-name collision check and the scope-rank scan both read it as one,
+    and the old `@cpath:` key space made it lie for .c/.h path forms.
+    refactor-a-one-resolved-file-identity-for-a-translation-unit. }
+  CompiledUnitKey : array[0..255] of Integer;
   CompiledUnitCount : Integer;
   CurrentUnitIdx : Integer; { Strs[] name while parsing an imported unit, else -1 }
   { `uses 'name' as alias` table: a qualifier `alias.Sym` resolves to the real
