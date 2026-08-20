@@ -1,4 +1,5 @@
 ---
+track: A
 prio: 53  # auto
 owner: ""
 ---
@@ -6,7 +7,7 @@ owner: ""
 # Threadsafe heap — optimize + cross-target (M5)
 
 - **Type:** feature (codegen / runtime — optimization) — Track A
-- **Status:** backlog
+- **Status:** backlog — the lock half and the benchmark landed 2026-08-20; the per-thread-arena half was blocked on TLS, which now exists (see the 2026-08-20 unblock note at the bottom).
 - **Opened:** 2026-06-30
 - **Umbrella:** [[meta-multithreading]]. Follows the M0 contract
   [[feature-threadsafe-heap-contract]] (correctness) — this is the *speed* half.
@@ -112,3 +113,23 @@ are done.
 
 `make compiler/pascal26` (byte-identical fixedpoint) + `tools/gate.sh quick`
 GREEN + the thread suite above, repeated.
+
+## 2026-08-20 (later) — UNBLOCKED: the TLS primitive exists
+
+[[feature-a-thread-local-storage-via-clone-settls]] resolved, and not the way it
+proposed: `arch_prctl(ARCH_SET_FS)` acts on the calling thread, so no
+`CLONE_SETTLS` and no sixth `__pxxclone` argument were needed. A thread installs
+its own block; `__pxxTlsBase` reads it back in one instruction (`mov rax,
+fs:[0]`, slot 0 = self-pointer). x86-64 only, which is where `--threadsafe`
+lives anyway. See `devdocs/dev/threading.md` "Thread-local storage (x86-64)".
+
+So the magazine is writable now. Two things to know before starting it:
+
+1. **The install is not automatic.** Nothing in the RTL installs a block yet, and
+   a thread that skips it reads its PARENT's block rather than nil — the aliasing
+   failure, wearing a valid-looking pointer. `palthreadobj`'s `ThreadObjLauncher`
+   is the place, and it is **`lib/rtl` = Track B's file-lane**. The allocator half
+   (`compiler/builtin/builtinheap.pas`, `EmitAcquireHeapLock`) is A. So this
+   ticket now spans two lanes; do the B half as a B ticket or hold both lanes.
+2. **The main thread needs one too**, before the first allocation, or the fast
+   path faults on an fs base of 0 at the worst possible moment.

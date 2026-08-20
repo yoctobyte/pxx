@@ -3006,6 +3006,15 @@ begin
         IREmitCodeCall(CloneStubAddr);
       end;
 
+    IR_TLSBASE:
+      { __pxxTlsBase. The fs BASE is not readable as a register (rdfsbase needs
+        CR4.FSGSBASE, which is not guaranteed), so read the self-pointer the
+        installer parked at offset 0 -- the same trick glibc and musl use. }
+      begin
+        EmitB($64); EmitB($48); EmitB($8B); EmitB($04); EmitB($25);
+        EmitI32(0);                                    { mov rax, fs:[0] }
+      end;
+
     IR_FRAME:
       { get_frame: the current frame pointer. Every pxx prologue does
         `push rbp; mov rbp, rsp`, so rbp IS this function's frame and [rbp] the

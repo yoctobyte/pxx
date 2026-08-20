@@ -3272,6 +3272,16 @@ test-threads: $(COMPILER)
 	# heap contract: every allocation family safe under concurrent churn (strings, dynarrays, classes, raw+realloc)
 	./$(COMPILER) --threadsafe test/test_thread_heap_mixed.pas $(TESTTMP)/test_thread_heap_mixed26
 	test "$$($(TESTTMP)/test_thread_heap_mixed26)" = "$$(printf 'errors=0\nHEAP MIXED OK')"
+	# per-thread storage: __pxxTlsBase. Four threads each arch_prctl(ARCH_SET_FS)
+	# their own block and re-read their tag 20000x while the others do the same.
+	# The prize is a per-thread slot reachable WITHOUT a syscall -- gettid is fine
+	# at I/O-statement granularity and hopeless on an allocator fast path, which
+	# is what blocks the per-thread-arena half of feature-threadsafe-heap-optimize.
+	# Deleting the per-thread install from this exact program yields ~39000 errors
+	# (children alias the parent's block, since clone does not reset fs), so the
+	# assertion below is not merely "it ran".
+	./$(COMPILER) --threadsafe test/test_tls_base.pas $(TESTTMP)/test_tls_base26
+	test "$$($(TESTTMP)/test_tls_base26)" = "$$(printf 'errors=0\nTLS OK')"
 	# --threadsafe on a NON-PASCAL frontend. Every --threadsafe job above is
 	# Pascal and every NilPy job elsewhere runs without the flag, so this exact
 	# combination had never been executed by any gate on any box -- which is how

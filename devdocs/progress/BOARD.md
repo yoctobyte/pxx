@@ -170,7 +170,6 @@ _none_
 | feature-a-riscv64-as-a-hosted-first-class-target | A | 50 | feature | pxx has no riscv64 target at all — only riscv32, which exists for ESP-class bare metal. Real RISC-V hardware (notebooks, SBCs) is RV64GC running Linux, so today we cannot build for the machines RISC-V actually ships on. The harness is already ready: run_target.sh handles riscv64, install_qemu.sh installs qemu-riscv64, twatch_web lists it in CROSS_TARGETS — nothing can produce a binary for it. | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 15 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
 | feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit | A | 50 | feature | Strict flags currently exempt code by `CurrentUnitIdx < 0` — main program vs ANY unit — so `--strict-fpc` polices the one file that isn't FPC's and exempts Synapse entirely. The right axis is OURS vs THEIRS: our RTL is written in the pxx dialect and no command-line flag should re-judge it, while external units and the user's own program should be policed. Unblocks folding --strict-overload into the umbrella. | — |
-| feature-a-thread-local-storage-via-clone-settls | A | 50 | feature | The runtime has no thread-local storage: PXX_CLONE_THREAD is $350F00, which omits CLONE_SETTLS, so every thread shares the parent's fs base. Nothing per-thread is reachable more cheaply than a gettid syscall, which is what blocks per-thread heap arenas — the remaining half of feature-threadsafe-heap-optimize — and any other per-thread fast path. | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
 | feature-a-why-threadsafe-needs-45pct-more-global-fixups | A | 35 | feature | --threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away | — |
 | feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise | B | 55 | feature | The ladder's three corpora are ONE FAMILY, not three samples — same domain, overlapping lineage, and tinycss2 literally imports webencodings. Two days of NilPy ranking rest on it. Measure an idiom-distant fourth corpus and report against the prediction: either the walls generalise, or some of what we rank at 70 is a webencodings-shaped preference. | — |
@@ -321,6 +320,7 @@ _none_
 | refactor-p-three-hand-rolled-postfix-loops | P | 35 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | regression-lib-test-lib-mimic-xml-etree-elementtree | N | 70 | regression | regression: lib-test#src:test/lib_mimic_xml_etree_elementtree.npy red at 1b9b43e5b511 (auto-filed by twatch) | — |
 | regression-test-c-conformance-shard1-6 | T | 70 | regression | regression: test-c-conformance#shard1/6 red at 1b9b43e5b511 (auto-filed by twatch) | — |
+| regression-test-core-test-record-helper-for-string-b331 | P | 70 | regression | regression: test-core#src:test/test_record_helper_for_string_b331.pas red at 2e7286e499d1 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-callable-to-str-param-fails | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy red at 1b9b43e5b511 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard4-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 red at 1b9b43e5b511 (auto-filed by twatch) | — |
 | regression-tools-devtest-00 | T | 70 | regression | regression: tools-devtest#00 red at 1b9b43e5b511 (auto-filed by twatch) | — |
@@ -533,9 +533,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2158)
+## done (2159)
 
-2158 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2159 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -587,6 +587,7 @@ _none_
 - [urgent p 70] [N] bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - [p 70] [N] regression-lib-test-lib-mimic-xml-etree-elementtree
 - [p 70] [T] regression-test-c-conformance-shard1-6
+- [p 70] [P] regression-test-core-test-record-helper-for-string-b331
 - [p 70] [N] regression-test-nilpy-test-nilpy-callable-to-str-param-fails
 - [p 70] [T] regression-test-pascal-conformance-shard4-6-2
 - [p 70] [T] regression-tools-devtest-00
@@ -626,7 +627,6 @@ _none_
 - [p 50] [A] feature-a-implement-initialize-and-finalize-over-the-arc-helpers
 - [p 50] [A] feature-a-riscv64-as-a-hosted-first-class-target
 - [p 50] [A] feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit
-- [p 50] [A] feature-a-thread-local-storage-via-clone-settls
 - [p 50] [E] feature-demo-songformatter-pxx-target
 - [p 50] [A] feature-mimic-fpc-compiler-define-profile
 - [p 50] [A] feature-nilpy-collections-and-string-methods

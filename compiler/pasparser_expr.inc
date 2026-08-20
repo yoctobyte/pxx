@@ -3400,6 +3400,29 @@ begin
         Exit;
       end;
 
+      if CaseEqual(name, '__pxxTlsBase') then
+      begin
+        { The calling thread's TLS base. Reading it is the only part that needs a
+          compiler: INSTALLING a block is arch_prctl(ARCH_SET_FS) and goes through
+          __pxxrawsyscall like any other syscall, from the thread itself -- which is
+          why this ticket did NOT need CLONE_SETTLS, a sixth __pxxclone argument, or
+          four backend changes to IR_CLONE (see
+          feature-a-thread-local-storage-via-clone-settls). }
+        Next; { consume '__pxxTlsBase' }
+        if TargetArch <> TARGET_X86_64 then
+          Error('__pxxTlsBase is x86-64 only: the other targets have a readable thread register (aarch64 tpidr_el0, arm32 tpidruro, i386 gs) but this runtime has no way to SET one yet, and answering with the parent thread''s block would be a plausible wrong pointer -- see feature-a-thread-local-storage-via-clone-settls');
+        node := AllocNode(AN_TLSBASE);
+        ASTTk[node] := Ord(tyPointer);
+        if CurTok.Kind = tkLParen then
+        begin
+          Next;
+          Expect(tkRParen, ')');
+        end;
+        LastExprTk := tyPointer;
+        CurASTNode := node;
+        Exit;
+      end;
+
       if CaseEqual(name, '__pxxrawsyscall') then
       begin
         { Raw syscall intrinsic: lowered to the target's native syscall

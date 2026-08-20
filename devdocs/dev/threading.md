@@ -186,21 +186,68 @@ GetMem/ReallocMem/FreeMem — 4 threads, tag-verified, 0 errors).
 The single-threaded self-host took shortcuts that are *not* yet thread-safe — most
 notably the per-process exception-chain head (`BSS_EXC_TOP`, shared by CoSwitch) and
 other shared globals. Those are tracked under
-[[audit-shared-global-reentrancy-thread-safety]] and need per-thread TLS (no
-`CLONE_SETTLS` yet — child currently shares the parent fs base).
+[[audit-shared-global-reentrancy-thread-safety]] and need per-thread TLS — which
+now exists, as the section below.
+
+## Thread-local storage (x86-64)
+
+`PXX_CLONE_THREAD` does **not** set `CLONE_SETTLS`, so a fresh thread inherits
+the parent's `fs` base and an `fs:`-relative slot silently aliases the parent's.
+Measured, not assumed: strip the per-thread install out of `test_tls_base` and
+four threads report ~39000 tag mismatches against each other.
+
+The fix does **not** go through `clone`. `arch_prctl(ARCH_SET_FS)` acts on the
+*calling* thread, so a thread installs its own block as its first act:
+
+```pascal
+b^ := Int64(PtrUInt(b));   { slot 0 = the block's own address }
+__pxxrawsyscall(158 { arch_prctl }, $1002 { ARCH_SET_FS }, Int64(PtrUInt(b)), 0, 0, 0, 0);
+```
+
+That needs no compiler support at all — it is an ordinary syscall. Only the
+**read** side does, because the x86-64 `fs` base is not readable as a register
+(`rdfsbase` needs `CR4.FSGSBASE`, which is not guaranteed):
+
+```pascal
+p := __pxxTlsBase;                        { one instruction: mov rax, fs:[0] }
+slot := PInt64(PtrUInt(p) + PtrUInt(n * 8));
+```
+
+**Slot 0 holds the block's own address.** That is the whole convention, and it is
+what glibc and musl do for the same reason. `__pxxTlsBase` is deliberately
+read-only and base-only: with the self-pointer in place, ordinary pointer
+arithmetic reaches every future per-thread field — arena, errno, exception
+stack, RNG — so no intrinsic-per-field is ever needed.
+
+**Installing is mandatory and belongs in the launcher, before user code runs.**
+A thread that skips it does not get a null base to check against; it gets the
+*parent's* block, which is the aliasing failure above wearing a working-looking
+pointer.
+
+x86-64 only. The other targets have a readable thread register (aarch64
+`tpidr_el0`, arm32 `tpidruro`, i386 `gs`) but no path this runtime uses to
+*set* one — i386 in particular wants a `struct user_desc`, not a raw base — so
+`__pxxTlsBase` errors there at compile time rather than returning a plausible
+wrong pointer.
+
+The remaining consumer work — `palthreadobj`'s launcher installing a block per
+`TThread`, and the per-thread allocator magazine that motivated this — is
+`lib/rtl` and therefore Track B's lane; see
+[[feature-threadsafe-heap-optimize]].
 
 ## Tests / gate
 
 `make test-threads` (x86-64, in `make test`): `test_thread_clone`, `test_palthread`,
 `test_atomic_counter`, `test_mutex`, `test_event`, `test_critsec_once`,
-`test_tthread`, `test_thread_heap` (`--threadsafe`). tids stay out of stdout so
-output is deterministic.
+`test_tthread`, `test_thread_heap`, `test_tls_base` (`--threadsafe`). tids stay
+out of stdout so output is deterministic.
 
 ## What's done / what's next
 
 Done (x86-64): M1 primitives, M2 atomics+mutex+event+critsec+once, M3 TThread,
 M5 heap-safety *validated*. Remaining (each ticketed): i386 trampoline + atomics;
 condition variable; `TThread.Synchronize`/Queue + virtual destructor/auto-join;
-per-thread TLS; re-export `TThread` from `classes`; M5 heap *optimisation*
+per-thread TLS *primitive* (`__pxxTlsBase`, x86-64) — its RTL consumers are not
+wired yet; re-export `TThread` from `classes`; M5 heap *optimisation*
 (per-thread arenas / lock-free fast path); M4 C `pthread` shim
 ([[feature-syscall-pthread-shim]]) reusing this PAL.

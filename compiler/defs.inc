@@ -445,6 +445,19 @@ const
                            no backend op and all six backends carry it unchanged. Reserved-prefix
                            names, so they cannot collide with user routines.
                            feature-signal-siginfo-ucontext }
+  AN_TLSBASE       = 96; { __pxxTlsBase: the calling thread's TLS base pointer, read
+                           from the architectural thread register. No operands; yields
+                           tyPointer. Lowers to IR_TLSBASE.
+                           CONVENTION: slot 0 of the block holds the block's OWN address
+                           (what glibc/musl do), because x86-64 cannot read the fs base
+                           without a syscall -- `mov rax, fs:[0]` is the read. Nothing
+                           INSTALLS a block: that is arch_prctl(ARCH_SET_FS) through the
+                           existing __pxxrawsyscall, so it needs no intrinsic. A thread
+                           that never installed one reads its PARENT's block (clone does
+                           not reset fs), which is the silent aliasing
+                           feature-a-thread-local-storage-via-clone-settls warns about --
+                           install in the launcher, before user code runs. }
+
   AN_PYSIGREF      = 95; { NilPy: the ADDRESS of proc ASTIVal's SIGNATURE RECORD (EmitPySignatures).
                            What a callable value carries so a call made THROUGH it can fill the
                            parameters the caller omitted. Lowers to IR_CONST_DATA with the PYSIG
@@ -619,6 +632,15 @@ const
                            restores the stack pointer from the frame pointer (x86-64 `leave`);
                            the other backends Error at codegen until ported
                            (feature-c-alloca-dynamic-stack). }
+
+  IR_TLSBASE       = 73; { __pxxTlsBase: load the calling thread's TLS base into the
+                           accumulator. No operands. x86-64 = `mov rax, fs:[0]` (the base
+                           is not readable as a register; the block's slot 0 holds its own
+                           address by convention). The other targets have a readable thread
+                           register (aarch64 tpidr_el0, arm32 tpidruro, i386 gs) but no way
+                           to SET it that this runtime uses yet, so the Pascal frontend
+                           refuses the intrinsic there and no backend but x86-64 ever sees
+                           this op. }
 
   IR_FPU_MASK      = 72; { float-exception MASK control (feature-float-exception-mask-control).
                            IRC selects the direction: 0 = read the current mask, 1 = IRA is the

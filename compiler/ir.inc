@@ -133,6 +133,7 @@ begin
     IR_CONST_DATA: Result := 'const_data';
     IR_MULHI: Result := 'mulhi';
     IR_FRAME: Result := 'frame';
+    IR_TLSBASE: Result := 'tlsbase';
     IR_ALLOCA: Result := 'alloca';
     IR_FPU_MASK: Result := 'fpu_mask';
   else
@@ -221,7 +222,7 @@ begin
   begin
     case IRKind[i] of
       IR_CONST_INT, IR_CONST_STR, IR_NOP, IR_LABEL, IR_ASM, IR_RTTI_REG, IR_SET_LIT, IR_RESOURCES,
-      IR_FRAME:
+      IR_FRAME, IR_TLSBASE:
         begin end;
 
       IR_LOAD_SYM:
@@ -6649,6 +6650,15 @@ begin
                     IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyPointer)),
                     Ord(tkMinus), 0, Ord(tyPointer));
       Result := IRAppend(IR_LOAD_MEM, slotNode, -1, -1, 0, Ord(tyPointer));
+    end;
+
+    AN_TLSBASE:
+    begin
+      { __pxxTlsBase. Deliberately READ-only and base-only: with the block's own
+        address in slot 0 the caller does ordinary pointer arithmetic to reach a
+        slot, so one op covers every future per-thread field (arena, errno,
+        exception stack, RNG) without an intrinsic per field. }
+      Result := IRAppend(IR_TLSBASE, -1, -1, -1, 0, Ord(tyPointer));
     end;
 
     AN_FRAME:
