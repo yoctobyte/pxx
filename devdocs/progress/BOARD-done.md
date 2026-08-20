@@ -2054,6 +2054,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-strict-overload-width | P | 70 | regression | RESOLVED — not a defect. An intended EXPECTATION change: Integer and LongInt are one 4-byte signed type, so the LongInt overload is an exact match and the exact phase now sees it. Fixed forward in 58f5ef974; auto-closed by the watcher and independently verified GREEN at HEAD by Track T. | — |
 | regression-test-core-test-string-to-pchar-auto | A | 70 | regression | regression: test-core#src:test/test_string_to_pchar_auto.pas red at 8997639f144f (auto-filed by twatch) | — |
 | regression-test-core-test-syncobjs | T | 70 | regression | regression: test-core#src:test/test_syncobjs.pas red at 9df868bf3680 (auto-filed by twatch) | — |
+| regression-test-core-test-timer | P | 70 | regression | regression: test-core#src:test/test_timer.pas red at 26dae20b9dec (auto-filed by twatch) | — |
 | regression-test-core-test-typed-const-record | P | 70 | regression | regression: test-core#src:test/test_typed_const_record.pas red at 406a40dfaffa (auto-filed by twatch) | — |
 | regression-test-core-test-uses-order-pylib-exception-a | T | 70 | regression | regression: test-core#src:test/test_uses_order_pylib_exception_a.pas red at 1df75aad5458 (auto-filed by twatch) | — |
 | regression-test-core-test-uses-order-pylib-exception-b | T | 70 | regression | regression: test-core#src:test/test_uses_order_pylib_exception_b.pas red at 60502ed0c353 (auto-filed by twatch) | — |
