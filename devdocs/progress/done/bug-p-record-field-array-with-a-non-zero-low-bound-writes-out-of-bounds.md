@@ -84,4 +84,4 @@ typed consts, for-in bounds, param low bounds) were run individually and match
 their recorded expectations.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 6fa645073.
