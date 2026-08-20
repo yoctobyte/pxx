@@ -7,6 +7,13 @@ unit fmt_ext;
   test/test_cpyext_errformat.npy.
   bug-cpyext-pyerr-format-prints-U-and-S-literally }
 
+{$PYEXTENSION}
+{ This unit is a Python EXTENSION MODULE, not an ordinary Pascal unit: NilPy
+  reaches it with a bare `import fmt_ext`, the way CPython reaches every C
+  accelerator. The directive is the record of that; the resolver checks it
+  against the unit binding the cpyext runtime before honouring it.
+  feature-n-a-cpyext-extension-module-is-bare-importable-not-a-pascal-unit }
+
 interface
 
 uses pxxcio, '../../lib/cpyext/src/pyruntime.c', './fmt_ext_host.c';

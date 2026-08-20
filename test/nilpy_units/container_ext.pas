@@ -11,6 +11,13 @@ unit container_ext;
   the module source is container_ext_module.c, not container_ext.c (see
   bug-c-uses-path-basename-collides-with-enclosing-unit-name). }
 
+{$PYEXTENSION}
+{ This unit is a Python EXTENSION MODULE, not an ordinary Pascal unit: NilPy
+  reaches it with a bare `import container_ext`, the way CPython reaches every C
+  accelerator. The directive is the record of that; the resolver checks it
+  against the unit binding the cpyext runtime before honouring it.
+  feature-n-a-cpyext-extension-module-is-bare-importable-not-a-pascal-unit }
+
 interface
 
 uses pxxcio, '../../lib/cpyext/src/pyruntime.c', './container_ext_module.c', './container_ext_host.c';

@@ -11,6 +11,13 @@ unit argerr_ext;
   bug-c-uses-path-basename-collides-with-enclosing-unit-name; confirmed with
   --debug when M1 hit this the first time, not guessed). }
 
+{$PYEXTENSION}
+{ This unit is a Python EXTENSION MODULE, not an ordinary Pascal unit: NilPy
+  reaches it with a bare `import argerr_ext`, the way CPython reaches every C
+  accelerator. The directive is the record of that; the resolver checks it
+  against the unit binding the cpyext runtime before honouring it.
+  feature-n-a-cpyext-extension-module-is-bare-importable-not-a-pascal-unit }
+
 interface
 
 uses pxxcio, '../../lib/cpyext/src/pyruntime.c', './argerr_ext_module.c', './argerr_ext_host.c';

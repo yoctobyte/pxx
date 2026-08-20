@@ -21,6 +21,13 @@ unit hello_ext;
   test/nilpy_units/fmtprobe.pas's `describe` does for
   test_nilpy_array_of_const_unit.npy. }
 
+{$PYEXTENSION}
+{ This unit is a Python EXTENSION MODULE, not an ordinary Pascal unit: NilPy
+  reaches it with a bare `import hello_ext`, the way CPython reaches every C
+  accelerator. The directive is the record of that; the resolver checks it
+  against the unit binding the cpyext runtime before honouring it.
+  feature-n-a-cpyext-extension-module-is-bare-importable-not-a-pascal-unit }
+
 interface
 
 uses pxxcio, '../../lib/cpyext/src/pyruntime.c', './hello_ext.c', './hello_ext_host.c';

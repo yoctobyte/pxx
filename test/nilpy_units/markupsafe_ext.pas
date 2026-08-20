@@ -10,6 +10,13 @@ unit markupsafe_ext;
   PyModuleDef_Init) exist because THIS extension's real source needed them —
   see the M4 comment atop Python.h. }
 
+{$PYEXTENSION}
+{ This unit is a Python EXTENSION MODULE, not an ordinary Pascal unit: NilPy
+  reaches it with a bare `import markupsafe_ext`, the way CPython reaches every C
+  accelerator. The directive is the record of that; the resolver checks it
+  against the unit binding the cpyext runtime before honouring it.
+  feature-n-a-cpyext-extension-module-is-bare-importable-not-a-pascal-unit }
+
 interface
 
 uses pxxcio, '../../lib/cpyext/src/pyruntime.c', './vendor/_speedups.c', './markupsafe_ext_host.c';

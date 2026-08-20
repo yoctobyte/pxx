@@ -1,0 +1,9 @@
+# The extension-module carve-out is keyed on the unit DECLARING itself
+# ({$PYEXTENSION}), not on where it lives or on what it links: undeclared_ext
+# binds the same cpyext runtime as the six real extension modules and omits the
+# directive, so the ordinary rule applies and the bare import is refused by name.
+# The failure IS the feature; the Makefile asserts on the message.
+# feature-n-a-cpyext-extension-module-is-bare-importable-not-a-pascal-unit
+import undeclared_ext
+
+print(undeclared_ext.nine())

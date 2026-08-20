@@ -32640,6 +32640,83 @@ begin
   Result := False;
 end;
 
+{ Plain substring test. `needle` must already be lower-case; `hay` is expected to
+  be a LowerCase()d copy, so the caller pays for the fold once across both probes
+  rather than per character here. }
+function SrcContains(const hay, needle: AnsiString): Boolean;
+var i, j, n, m: Integer; ok: Boolean;
+begin
+  Result := False;
+  n := Length(hay); m := Length(needle);
+  if (m = 0) or (n < m) then Exit;
+  for i := 1 to n - m + 1 do
+  begin
+    ok := True;
+    for j := 1 to m do
+      if hay[i + j - 1] <> needle[j] then begin ok := False; Break; end;
+    if ok then begin Result := True; Exit; end;
+  end;
+end;
+
+{ Does a line of `hay` consist of exactly `needle` and nothing else but blanks?
+  `hay` is a LowerCase()d copy and `needle` is lower-case, as above. }
+function SrcHasLoneLine(const hay, needle: AnsiString): Boolean;
+var i, n, ls, le: Integer; ln: AnsiString;
+begin
+  Result := False;
+  n := Length(hay);
+  ls := 1;
+  for i := 1 to n + 1 do
+    if (i > n) or (hay[i] = #10) then
+    begin
+      le := i - 1;
+      if (le >= ls) and (hay[le] = #13) then Dec(le);
+      while (ls <= le) and ((hay[ls] = ' ') or (hay[ls] = #9)) do Inc(ls);
+      while (le >= ls) and ((hay[le] = ' ') or (hay[le] = #9)) do Dec(le);
+      ln := Copy(hay, ls, le - ls + 1);
+      if ln = needle then begin Result := True; Exit; end;
+      ls := i + 1;
+    end;
+end;
+
+{ ---- A cpyext EXTENSION MODULE is a Python module, not a Pascal unit ----------
+  `import <name>` from NilPy resolves to Python only, and a Pascal unit of that
+  name is refused with the error further down. An extension module is not that
+  rule's subject: it is a Python module whose body happens to be Pascal + C, so
+  the bare import is ordinary CPython — every stdlib accelerator is reached that
+  way — and the rule simply never applies to it.
+  decide-nilpy-import-rule-vs-a-cpyext-extension-module, DECIDED 2026-08-20.
+
+  Shape (b) of that decision: the unit RECORDS the fact, the compiler does not
+  infer it. `{$PYEXTENSION}` is the record; the unit binding the cpyext runtime
+  is the CHECK, so the directive pasted onto an ordinary Pascal unit does not
+  quietly make it bare-importable.
+
+  The decision named `PyInit_<name>` as the check and it does not hold — measured
+  on the six units the implementation ticket requires green:
+    hello_ext, argerr_ext, container_ext   PyInit_<name>            3
+    cyadd_ext        PyInit_cyadd          the VENDORED module's symbol, adapted
+    markupsafe_ext   PyInit__speedups        by the unit's host shim
+    fmt_ext          none at all           a C-API consumer, not a module
+  So `PyInit_<name>` verifies 3 of 6, and rewriting the other three to satisfy it
+  would be fabricating evidence for a predicate. The check below is the nearest
+  recorded fact that holds for all six and for no ordinary Pascal unit.
+
+  Both tests are textual, over the unit source the resolver is already holding —
+  the alternative was grepping the unit's C files, which is the compiler reading
+  C to make a Pascal decision. A pre-lex scan cannot tell a directive from the
+  same text inside a comment, so the directive must stand ALONE on its line: this
+  file's own negative-test unit mentioned it in prose and was admitted as an
+  extension module until the rule tightened. What remains matchable is a
+  commented-out directive on a line of its own, which is a unit opting in in its
+  own source either way. }
+function PyUnitDeclaresExtensionModule(const src: AnsiString): Boolean;
+var lc: AnsiString;
+begin
+  lc := LowerCase(src);
+  Result := SrcHasLoneLine(lc, '{$pyextension}') and SrcContains(lc, 'pyruntime.c');
+end;
+
 
 procedure ParseUsesUnitAmbient(const name: AnsiString); forward;
 
@@ -33365,9 +33442,13 @@ begin
     the eight .pas/.pp probes above: the question is what was resolved, and a
     predicate repeated at eight sites is eight chances for one of them to drift.
     Probes only read files, so dropping the content here is the same as never
-    having run them. }
+    having run them.
+    The carve-out: a unit that declares itself a cpyext EXTENSION MODULE is a
+    Python module, so a bare NilPy import of it was never the refusal's subject
+    — see PyUnitDeclaresExtensionModule above. }
   pasRefusedPath := '';
-  if (Length(UnitContent) > 0) and (not pasLookupOK) and PathIsPascalSource(path) then
+  if (Length(UnitContent) > 0) and (not pasLookupOK) and PathIsPascalSource(path) and
+     not ((pyImportLang = 'py') and PyUnitDeclaresExtensionModule(UnitContent)) then
   begin
     if pyImportLang = 'py' then pasRefusedPath := path;
     UnitContent := '';

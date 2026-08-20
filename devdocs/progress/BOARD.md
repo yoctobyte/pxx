@@ -61,6 +61,7 @@ lives in git, not in a timestamp._
 | bug-a-only-the-pascal-driver-emits-the-signal-runtime | A | 45 | bug | The signal runtime (SIGSEGV/SIGFPE hook, restorer, sethook, install stubs) is emitted only by the Pascal driver in parser.inc. Every other frontend -- C, NilPy, Rust, Zig, Basic, Ada, Lua, the asm frontend -- produces a binary with no signal runtime, so a hardware fault there is an unhandled signal instead of a runtime error. Same shape as the I/O-lock gap that was already found and fixed. | — |
 | bug-a-string-table-cap-refuses-a-14k-line-c-program | A | 45 | bug | `VisCacheVis` is sized by the string-table constant — and the cap it is tied to is too low | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
+| bug-c-quickjs-runner-segfaults-with-zero-output-on-the-full-smoke-js | C | 50 | bug | test/quickjs/runner.c segfaults with ZERO output on the full smoke.js, and does so identically when built with the PINNED compiler — so it is not a HEAD regression. Small evals work on both. Observed 2026-08-20 in passing while landing the C entry-stub init phase; NOT caused by it, and filed separately so it is not attributed there. | — |
 | bug-n-a-class-base-that-is-an-expression-does-not-compile | N | 45 | bug | A class base which is a NAME bound to a type, or a call, does not compile: `B = object; class P(B)` fails where `class P(object)` and `class P(SomeClass)` both work. Blocks six.with_metaclass, which html5lib's parser spells as `class Phase(with_metaclass(...))` — the single remaining wall on html5parser.py. | — |
 | bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function | N | 50 | bug | `g = f` BOXES the function on the heap; every other path (a dict value, a return value, the bare name) keeps the raw code pointer. So `g == f` and `g is f` are False, two assignments of the same function are unequal to each other, and `id(g)` is a heap address while `id(f)` is the code address. CPython answers True to all of it. | — |
 | bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through | N | 45 | bug | sys.version_info throws at RUNTIME with a message admitting its own guard failed: 'the code guarding that (the flag its except-branch sets) let this call through anyway'. Two defects — the member is missing, and the compile-time guard meant to catch that does not fire. A guard that reports its own failure and continues is worse than no guard. | — |
@@ -168,7 +169,6 @@ lives in git, not in a timestamp._
 | feature-lib-mimic-string-template | B | 15 | feature | string.Template — the $-placeholder class (substitute, safe_substitute) — is the one member of Python's string module still missing, and it is what logging/__init__.py uses. Deliberately NOT urgent: `import logging` does not resolve at all today, so nothing can reach Template until a logging shim exists. Split out of feature-lib-mimic-string, which shipped every constant and both capwords forms. | — |
 | feature-mimic-fpc-compiler-define-profile | A | 50 | feature | FPC-compiler define profile (`fpcdefs.inc` build-config gates) | — |
 | feature-move-fillchar-intrinsics | A | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
-| feature-n-a-cpyext-extension-module-is-bare-importable-not-a-pascal-unit | A+N | 70 | feature | A cpyext extension module is a Python module, not a Pascal unit — make it bare-importable via `PyInit_<name>` | — |
 | feature-n-a-quoted-from-import-reaches-another-language | A | 25 | feature | `import 'sysutils.pas' as su` works; `from 'sysutils.pas' import Trim` does not. The quoted cross-language import was built for the PLAIN arm only, because the from-arms thread impName/impRoot through member binding, alias recording and PyStdAliasRecord. Nothing needs it today — the refusal diagnostic points at the plain spelling, which works — so this is filed to be visible rather than to be urgent. | — |
 | feature-n-nilpy-ast-typing-module-scope | N | 8 | feature | NilPy: type MODULE locals from the AST too | — |
 | feature-nested-routine-fixed-array-capture | A | 35 | feature | Nested routines: capture of fixed-size array locals not supported | — |
@@ -490,9 +490,9 @@ lives in git, not in a timestamp._
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2096)
+## done (2097)
 
-2096 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2097 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -543,7 +543,6 @@ lives in git, not in a timestamp._
 
 - [urgent p 70] [N] bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - [urgent p 60] [A+F] bug-a-riscv32-cross-float-output-no-longer-matches-x86-64
-- [p 70] [A+N] feature-n-a-cpyext-extension-module-is-bare-importable-not-a-pascal-unit
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite
 - [p 65] [P] feature-pascal-corpus-oop
@@ -577,6 +576,7 @@ lives in git, not in a timestamp._
 - [p 53] [S] feature-esp-peripheral-callback-api
 - [p 53] [A] feature-threadsafe-heap-optimize
 - [p 50] [A] feature-typeinfo-all-types (unblocks 1)
+- [p 50] [C] bug-c-quickjs-runner-segfaults-with-zero-output-on-the-full-smoke-js
 - [p 50] [N] bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - [p 50] [N] bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - [p 50] [T] bug-t-track-ts-own-pushes-destroy-track-ts-own-breadth-coverage

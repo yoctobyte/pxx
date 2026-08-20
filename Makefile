@@ -308,6 +308,15 @@ test-nilpy: $(COMPILER)
 	  | grep -q "classes is the Pascal unit"
 	./$(COMPILER) test/test_nilpy_bare_import_is_python.npy $(TESTTMP)/test_nilpy_bare_import26 2>&1 \
 	  | grep -q "import 'classes.pas' as classes"
+	# ...and the cpyext carve-out below does not widen that rule. undeclared_ext
+	# binds the same cpyext runtime as the six extension modules and omits the
+	# directive, so it is still refused: the DECLARATION is what makes a unit a
+	# Python module, not its -Fu root and not what it links.
+	if ./$(COMPILER) -Futest/nilpy_units -Ilib/cpyext/include test/test_nilpy_pyextension_declaration_required.npy $(TESTTMP)/test_nilpy_pyextdecl26 >/dev/null 2>&1; then \
+	  echo "FAIL: an undeclared unit was admitted as a cpyext extension module"; exit 1; \
+	fi
+	./$(COMPILER) -Futest/nilpy_units -Ilib/cpyext/include test/test_nilpy_pyextension_declaration_required.npy $(TESTTMP)/test_nilpy_pyextdecl26 2>&1 \
+	  | grep -q "undeclared_ext is the Pascal unit"
 	# A relative import's DOT LEVEL decides which package it resolves against:
 	# `from ..constants import TOP` climbs to the parent, `from .peer` does not.
 	# Both spellings are in the one file, so ignoring the level fails this
