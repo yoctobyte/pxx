@@ -4616,3 +4616,10 @@ Both local workers idle and deliberately left down — same reason as +30h, unch
 context each on low autocompact thresholds, three substantial landings apiece, and nothing in any
 queue is time-critical. Track T continues unattended on plexus. **Next substantive dispatch belongs
 to a fresh context with the owner awake.**
+
+## Check +32h — unchanged from +31h, nothing to do
+
+Pin v367 stands (`compiler/**` unmoved). Same full tier `49a511e43271`, same **2779 pass / 9 fail**,
+same nine inherited reds. No new commits, no worker blocked, both local workers deliberately down.
+Track T is running native/opt tiers on its own schedule. Nothing dispatched — the queue is healthy
+and the standing reason from +30h is unchanged.
