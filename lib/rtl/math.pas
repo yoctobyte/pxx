@@ -11,6 +11,22 @@ function Power(base, exponent: Integer): Integer;
 function Gcd(a, b: Integer): Integer;
 function Lcm(a, b: Integer): Integer;
 
+{ FPC's three-way comparison (Math.CompareValue), the ordinary way an FPC
+  `IComparer<T>.Compare` body is written -- rtl-generics' TCompare.Integer is
+  exactly `Result := Math.CompareValue(ALeft, ARight)`. Answers -1 / 0 / 1;
+  FPC types that as TValueRelationship, a -1..1 subrange, which is an Integer
+  here. The float overload takes FPC's optional epsilon: values within delta of
+  each other compare EQUAL, and delta = 0.0 is exact comparison. }
+const
+  LessThanValue    = -1;
+  EqualsValue      = 0;
+  GreaterThanValue = 1;
+
+function CompareValue(a, b: Integer): Integer;
+function CompareValue(a, b: Int64): Integer;
+function CompareValue(a, b: Double): Integer;
+function CompareValue(a, b: Double; delta: Double): Integer;
+
 { Floating-point math — pure Pascal, no libm (keeps the no-libc design), native
   x86-64; other-CPU asm optimizations come later. Extended is NOT supported here
   (it is currently aliased to Double); only Single + Double overloads.
@@ -2637,6 +2653,31 @@ end;
 function Max(a, b: Integer): Integer;
 begin
   if a > b then Result := a else Result := b;
+end;
+
+function CompareValue(a, b: Integer): Integer;
+begin
+  if a < b then Result := -1 else if a > b then Result := 1 else Result := 0;
+end;
+
+function CompareValue(a, b: Int64): Integer;
+begin
+  if a < b then Result := -1 else if a > b then Result := 1 else Result := 0;
+end;
+
+function CompareValue(a, b: Double): Integer;
+begin
+  if a < b then Result := -1 else if a > b then Result := 1 else Result := 0;
+end;
+
+function CompareValue(a, b: Double; delta: Double): Integer;
+var d: Double;
+begin
+  d := a - b;
+  if d < 0.0 then d := -d;
+  if d <= delta then Result := 0
+  else if a < b then Result := -1
+  else Result := 1;
 end;
 
 function Power(base, exponent: Integer): Integer;

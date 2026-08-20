@@ -71,6 +71,23 @@ type
   end;
   IUnknown = IInterface;
 
+const
+  { The COM HRESULT codes, for the same reason IInterface and HResult are here:
+    FPC hands them to every unit from System, and pxx has no auto-injected
+    System unit. A QueryInterface body that refuses an interface returns
+    E_NOINTERFACE, which is the first one any FPC source implementing
+    IInterface reaches for (rtl-generics' Generics.Defaults does, at
+    generics.defaults.pas:1088). Written as signed LongInt values because
+    that is what HResult is; $80004002 does not fit a positive LongInt. }
+  S_OK          = LongInt(0);
+  S_FALSE       = LongInt(1);
+  E_NOTIMPL     = LongInt(-2147467263);   { $80004001 }
+  E_NOINTERFACE = LongInt(-2147467262);   { $80004002 }
+  E_FAIL        = LongInt(-2147467259);   { $80004005 }
+  E_UNEXPECTED  = LongInt(-2147418113);   { $8000FFFF }
+
+type
+
   { ---- TPersistent: assignable base (FPC Classes surface) ---- }
   TPersistent = class(TObject)
   protected

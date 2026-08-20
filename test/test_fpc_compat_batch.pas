@@ -30,6 +30,7 @@ type
 
 var
   total, okc, m1hits, m3sum: Integer;
+  bb: Byte;
 
 procedure Check(name: string; ok: Boolean);
 begin
@@ -112,6 +113,24 @@ begin
   { System.-qualified builtins resolve like the bare names }
   System.FillChar(total, 0, 0);
   Check('system-qualifier', True);
+
+  { …and so do System.-qualified TYPES. A builtin type lexes as a KEYWORD, not
+    as an identifier, so the two spellings took different paths and only the
+    identifier one had learned the strip: `System.Integer(b)` died as
+    `undefined variable (System)` and `SizeOf(System.Integer)` as `SizeOf:
+    unknown type`, while `System.FillChar` above worked. Asserted as
+    IDENTITIES — the qualifier must change nothing — so the checks stay true on
+    every target width.
+
+    NOT asserted with `Integer`: FPC's System.Integer really is a DIFFERENT type
+    from mode-objfpc's Integer (smallint, 2 bytes, vs longint) — pxx has one
+    Integer and no separate System namespace to differ from. See
+    compat-p-system-integer-is-smallint-in-fpc. LongWord is the same type under
+    both spellings in both compilers, so it tests the parse and nothing else. }
+  bb := 200;
+  Check('system-type-cast', System.LongWord(bb) = LongWord(bb));
+  Check('system-sizeof-keyword', SizeOf(System.LongWord) = SizeOf(LongWord));
+  Check('system-sizeof-ident', SizeOf(System.Pointer) = SizeOf(Pointer));
 
   l := TL.Create;
   l.UseItems;

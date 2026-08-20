@@ -591,3 +591,74 @@ duplicate-class error. Regression: `test/test_generic_nested_diamond.pas`.
   `class function TComparerService.TInstance.Create(...)`, a method
   implementation qualified by outer class AND nested type. The declaration side
   parses; the implementation header does not.
+
+## Walls 22-27 cleared — 2026-08-20 (frank1-ACP)
+
+Wall progression this segment: **1178 → 1272 → 1280 → 1371 → 1385 → 1397**
+(`generics.defaults.pas`). Six walls, two compiler fixes and one RTL batch.
+
+### 1. `System.` qualifier on a builtin TYPE (compiler, Track P)
+
+`System.Integer(ALeft)` (`TCompare.UInt8`) died as `undefined variable
+(System)` while `System.Move(...)` beside it worked. A builtin type lexes as a
+KEYWORD token, and the qualifier resolver's guard demanded a `.ident`, so the
+strip was never reached. `SizeOf(System.TMethod)` failed the same way five lines
+later, because SizeOf has its own hand-rolled type dispatch that had never
+learned the strip at all.
+
+Both now go through one function, **`EatSystemQualifier`** — the strip was
+inline in `ConsumeUnitQualifier`, which is exactly why the second dispatch could
+not reuse it. Two call sites, one rule.
+
+FPC divergence found while writing the regression and filed rather than
+mimicked: **FPC's `System.Integer` is SmallInt** (the 4-byte `Integer` comes
+from the mode, which shadows the system unit's). `SizeOf(System.Integer)` is
+`2 4` under FPC and `4 4` under pxx. See
+[[compat-p-system-integer-is-smallint-in-fpc]] (prio 15) — the test asserts the
+`System.LongWord` identities instead, which agree under both.
+
+### 2. A record's static called on the TYPE name returned GARBAGE (compiler, Track P)
+
+Chasing wall 22 ([[feature-p-nested-type-method-implementation]], now resolved)
+turned up a second bug the ticket's repro was hiding, and it had nothing to do
+with nesting: `TRec.MakeI(5)` — a plain record's `class function ... static`
+invoked on its type name — silently returned a garbage value, for any return
+type, at every call site. The parser arm claiming `TRec.Something(...)` is the
+record-CONSTRUCTOR arm (allocate a temp receiver, type the call `tyRecord`,
+yield the temp); it had been given the correct no-receiver shape for a TYPE
+HELPER only, keyed on `UClsHelperTk >= 0` instead of on `UMthIsStatic`. Both
+arms now share the static discriminator.
+
+Also from wall 22: class / record / interface type registration collapsed onto
+one **`AddClassLikeType`** — the record arm never called `AddNestedType`, so a
+nested record was invisible to `FindNestedType` while a nested class was not.
+
+Third `normalise-dont-special-case` catch in two sessions, and all three the
+same shape: an arm fixed, its sibling left behind.
+
+### 3. RTL names FPC code calls (Track B files, no B agent live)
+
+`lib/rtl/sysutils.pas`: `CompareMemRange` (unsigned byte compare — a PChar
+compare would sort `$FF` below `$01`), `DynArraySize` (Length() through an
+untyped pointer, reading the managed-block header at `p-8`), and the
+`WideCompareStr/Text` + `UnicodeCompareStr/Text` pairs (this RTL has one string
+model, so they ARE the Ansi ones). `lib/rtl/math.pas`: `CompareValue` ×4 plus
+`LessThanValue/EqualsValue/GreaterThanValue`. `lib/rtl/classes.pas`: the HRESULT
+constants. All are called by generics.defaults' default comparers.
+
+### Regressions
+
+- `test/test_record_static_method.pas` — ctor shape, static returning a scalar,
+  static returning the record. Matches fpc 3.2.2.
+- `test/test_nested_type_methods.pas` — nested record and nested class, both
+  method-implementation forms. Matches fpc 3.2.2.
+- `test/test_rtl_fpc_compat_helpers.pas` — the RTL batch, 15/15. Matches fpc
+  3.2.2 (with `cwstring` first in uses, which FPC needs for its widestring
+  manager and pxx does not).
+- `test/test_fpc_compat_batch.pas` — extended 11 → 14 with the `System.`-
+  qualified type forms.
+
+### Next wall
+
+`generics.defaults.pas:1397` — `VarCompareValue` (the `variants` unit's variant
+comparator, returning `TVariantRelationship`). Track B.

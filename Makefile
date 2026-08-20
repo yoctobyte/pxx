@@ -4578,6 +4578,15 @@ test-core: $(COMPILER)
 	# directives on an interface method signature, and stdcall on a method impl
 	./$(COMPILER) test/test_interface_directives.pas $(TESTTMP)/test_interface_directives26
 	test "$$($(TESTTMP)/test_interface_directives26)" = "$$(printf 'cmp -1 1\npoke\nlegacy legacy\nINTERFACE DIRECTIVES OK')"
+	# a record's static class function called on the TYPE name (not the ctor shape)
+	./$(COMPILER) test/test_record_static_method.pas $(TESTTMP)/test_record_static_method26
+	test "$$($(TESTTMP)/test_record_static_method26)" = "$$(printf 'ctor 15\nstatic-int 6\nstatic-rec 6 12\nRECORD STATIC OK')"
+	# methods of a type nested in a class body, implemented as TOuter.TInner.M -- record AND class
+	./$(COMPILER) test/test_nested_type_methods.pas $(TESTTMP)/test_nested_type_methods26
+	test "$$($(TESTTMP)/test_nested_type_methods26)" = "$$(printf 'nested 42 12 10\nNESTED TYPE METHODS OK')"
+	# RTL names FPC code calls: CompareMemRange, DynArraySize, Wide/UnicodeCompare*, CompareValue, HRESULTs
+	./$(COMPILER) -Fulib/rtl test/test_rtl_fpc_compat_helpers.pas $(TESTTMP)/test_rtl_fpc_compat_helpers26
+	test "$$($(TESTTMP)/test_rtl_fpc_compat_helpers26 | tail -1)" = "total ok 15 / 15"
 	# arity-overloaded class names: TD, TD<K>, TD<K,V> coexist; TD<K> inherits TD
 	./$(COMPILER) test/test_generic_name_overload.pas $(TESTTMP)/test_generic_name_overload26
 	test "$$($(TESTTMP)/test_generic_name_overload26)" = "$$(printf '0 1 2\n0')"
@@ -4586,7 +4595,7 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_impl_static_and_pchar_index26 | tail -1)" = "total ok 5 / 5"
 	# FPC-compat batch: System.-qualifier, Assigned, resourcestring, method directives, unqualified indexed properties
 	./$(COMPILER) test/test_fpc_compat_batch.pas $(TESTTMP)/test_fpc_compat_batch26
-	test "$$($(TESTTMP)/test_fpc_compat_batch26 | tail -1)" = "total ok 11 / 11"
+	test "$$($(TESTTMP)/test_fpc_compat_batch26 | tail -1)" = "total ok 14 / 14"
 	# Ord/Chr/Length/Succ/Pred/Low/High fold in const decls, case labels, array bounds
 	./$(COMPILER) test/test_const_expr_builtins.pas $(TESTTMP)/test_const_expr_builtins26
 	test "$$($(TESTTMP)/test_const_expr_builtins26)" = "ok"

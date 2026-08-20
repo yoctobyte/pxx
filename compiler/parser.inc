@@ -1257,11 +1257,59 @@ begin
   Result := FindUnitOrAlias(m);
 end;
 
+{ Strip a leading `System.` qualifier. pxx has no separate System unit — System
+  IS the builtin layer — so FPC's `System.Move(p, q, n)`, `System.Integer(x)` and
+  `SizeOf(System.TMethod)` must resolve exactly like the bare name. CurTok sits on
+  the candidate `System`; on True the name and its dot are consumed, CurTok is the
+  member, and `name` holds the member's spelling. False consumes nothing —
+  including when something REAL is named System (a loaded unit, or a local /
+  record var), which keeps its own meaning.
+
+  The member may lex as an IDENTIFIER (`System.Move`) or as a builtin TYPE
+  KEYWORD (`System.Integer`, `System.LongWord`) — the two are the same
+  declaration read two ways, and every hand-rolled dispatch that forgot the
+  second half broke on it. ONE function, two callers (the unit-qualifier
+  resolver and SizeOf's own type dispatch), because each had to learn the strip
+  separately and only the first one ever did: `System.Integer(ALeft)` and
+  `SizeOf(System.TMethod)` — adjacent lines in rtl-generics' TCompare — failed
+  for the one missing rule. }
+function EatSystemQualifier(var name: AnsiString): Boolean;
+var mk: TTokenKind;
+begin
+  Result := False;
+  if (CurTok.Kind <> tkIdent) or (not CaseEqual(name, 'System')) then Exit;
+  if not ((TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkDot)) then Exit;
+  mk := Tokens[TokPos + 1].Kind;
+  if not ((mk = tkIdent) or (mk = tkInteger_T) or (mk = tkLongWord_T) or
+          (mk = tkBoolean_T) or (mk = tkChar_T) or (mk = tkString_T) or
+          (mk = tkReal_T) or (mk = tkSingle_T) or (mk = tkDouble_T) or
+          (mk = tkExtended_T)) then Exit;
+  if (FindUnitOrAlias(name) >= 0) or (FindSym(name) >= 0) then Exit;
+  Next;                 { consume 'System' (CurTok -> '.') }
+  Expect(tkDot, '.');   { consume '.'      (CurTok -> the member) }
+  name := CurTok.SVal;
+  { a keyword token carries no SVal in every lexer path — fall back to its text }
+  if name = '' then name := GetTokenStr(TokPos - 1);
+  Result := True;
+end;
+
 function ConsumeUnitQualifier(var name: AnsiString): Integer;
 var cand: AnsiString; bestUnit, bestExtra, extra, ti, k, u: Integer;
 begin
   Result := -1;
   if CurTok.Kind <> tkIdent then Exit;
+  { `System.X` — stripped, and reported as -2: like unqualified (-1) everywhere,
+    but the builtin soft-aliases must WIN over a same-named method of the
+    enclosing class — TFPSList.Delete's System.Move(...) names the builtin
+    precisely because the class has its own Move(CurIndex, NewIndex). Checked
+    BEFORE the `.ident` guard below, because a System member may be a builtin
+    TYPE, which lexes as a keyword token rather than an identifier. }
+  if EatSystemQualifier(name) then
+  begin
+    Result := -2;
+    Exit;
+  end;
+
   { Need at least one `.ident` after the name to be a qualifier at all — or, in
     NilPy, a `.KEYWORD`: `tk.END` is written by every tkinter application and
     END is a reserved word here, so the façade spells the constant END_ and the
@@ -1270,25 +1318,6 @@ begin
   if not ((TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkDot) and
           ((Tokens[TokPos + 1].Kind = tkIdent) or
            (isNilPy and (Tokens[TokPos + 1].Kind = tkEnd)))) then Exit;
-
-  { `System.X` — pxx has no separate System unit (System IS the builtin layer).
-    Strip the qualifier so FPC's `System.Move(...)` / `System.FreeMem` resolve
-    exactly like the bare name. Only when nothing real is named System (a
-    loaded unit wins below; a local/record var named System wins here). }
-  if CaseEqual(name, 'System') and (FindUnitOrAlias(name) < 0) and
-     (FindSym(name) < 0) then
-  begin
-    Next;                 { consume 'System' (CurTok -> '.') }
-    Expect(tkDot, '.');   { consume '.'      (CurTok -> member) }
-    name := CurTok.SVal;
-    Result := -2;         { SYSTEM marker: like unqualified (-1) everywhere,
-                            but the builtin soft-aliases must WIN over a
-                            same-named method of the enclosing class —
-                            TFPSList.Delete's System.Move(...) names the
-                            builtin precisely because the class has its own
-                            Move(CurIndex, NewIndex). }
-    Exit;
-  end;
 
   { A local/param/global SYMBOL shadows a same-named unit (FPC scoping):
     `function NetToHost(Net: in_addr)...` must keep `Net.s_addr` a record
@@ -1850,6 +1879,43 @@ begin
     TokChars[TokCharLen] := s[i];
     Inc(TokCharLen);
   end;
+end;
+
+function AddClassLikeType(existingCi, tnOff, tnLen: Integer;
+                          const tname: AnsiString): Integer;
+{ Register a class/record/interface type declaration, honouring an enclosing
+  class body as a SCOPE rather than as part of the flat per-unit type table.
+
+  Inside a class body the name is not the unit's, it is that class's:
+  `TOuter.TInner` and `TOther.TInner` are two legal, distinct types, and a
+  generic's nested type is re-materialised once per specialization on purpose
+  (tgeneric72 asserts those two are unique). So when the bare name is already
+  taken in this unit, register the nested one under its QUALIFIED name — the
+  first keeps the bare one, and every existing unqualified use resolves exactly
+  as before — and make it reachable by (owning class, bare name) either way.
+  One registry, so the qualified `TOuter.TInner` spelling and a bare `TInner`
+  inside the owner's own body find the same entry.
+  bug-a-duplicate-class-name-check-is-scope-blind
+
+  ONE function, because the class branch had this and the RECORD branch did
+  not: a nested record was registered flat under its bare name and was invisible
+  to FindNestedType, so `function TOuter.TInner.M` parsed when TInner was a
+  class and failed when it was a record — the exact sibling case
+  normalise-dont-special-case is about. rtl-generics' TComparerService.TInstance
+  is a nested record. }
+var qualNm: AnsiString;
+begin
+  if (existingCi >= 0) and (ParsingClassBodyCi >= 0) and
+     (UClsUnitIdx[existingCi] = CurrentUnitIdx) then
+  begin
+    qualNm := GetTokenStrFromRaw(UClsNOff[ParsingClassBodyCi],
+                                 UClsNLen[ParsingClassBodyCi]) + '.' + tname;
+    Result := AddUClass(TokCharsAppend(qualNm), Length(qualNm));
+  end
+  else
+    Result := AddUClass(tnOff, tnLen);
+  if ParsingClassBodyCi >= 0 then
+    AddNestedType(ParsingClassBodyCi, tname, Result);
 end;
 
 { ---- nested generic specializations ---------------------------------------
@@ -12666,6 +12732,9 @@ begin
         Expect(tkLParen, '(');
         { Peek at the type token to determine the kind }
         name := CurTok.SVal;
+        { `SizeOf(System.TMethod)` / `SizeOf(System.LongWord)` — same strip the
+          expression parser does; see EatSystemQualifier. }
+        if EatSystemQualifier(name) then ;
         { SizeOf has its own hand-rolled type dispatch, so it needs the class-qualifier
           strip too: `SizeOf(TOuter.TInner)` on a class-nested type. Without it the parse
           died on the '.' while `var r: TOuter.TInner` already worked — a half-working
@@ -14942,13 +15011,22 @@ begin
         Next; { dot }
         Next; { method name }
 
-        if UClsHelperTk[rcCi] >= 0 then
+        if (UClsHelperTk[rcCi] >= 0) or UMthIsStatic[rcMmi] then
         begin
-          { a TYPE HELPER's static through the helper's name
-            (TU32Helper.GetSignMask): no receiver exists — Self is a by-value
-            dummy the static body may not read, and the call's type is the
-            method's REAL return type (the record-factory shape below returned
-            tyRecord and read a garbage temp). }
+          { A STATIC method through the type name — a TYPE HELPER's
+            (TU32Helper.GetSignMask) or a plain record's
+            (`TRec.MakeI(5)`, rtl-generics' TComparerService). No receiver
+            exists: Self is a by-value dummy the static body may not read, and
+            the call's type is the method's REAL return type.
+
+            The discriminator is STATIC, not helper-ness. It was written as
+            `UClsHelperTk >= 0` because a helper was the case in hand, so a
+            plain record's static kept the record-FACTORY shape below: it
+            allocated a temp receiver, typed the call tyRecord, and the
+            expression read that untouched temp — `TRec.MakeI(5)` returned
+            GARBAGE with no diagnostic, at every call site, for any return type.
+            One test (`class function` in a record, called on the type) covers
+            both arms now. }
           mcallNode := AllocNode(AN_CALL);
           ASTIVal[mcallNode] := rcPi;
           ASTTk[mcallNode] := Ord(Procs[rcPi].RetType);
@@ -14993,7 +15071,7 @@ begin
           Expect(tkRParen, ')');
         end;
 
-        if UClsHelperTk[rcCi] >= 0 then
+        if (UClsHelperTk[rcCi] >= 0) or UMthIsStatic[rcMmi] then
           LastExprTk := Procs[rcPi].RetType
         else
         begin
@@ -27632,7 +27710,7 @@ var
   isConstructor, isDestructor, isVirtual, isOverride, isAbstract, isClassMethod: Boolean;
   hadParens: Boolean;
   clsSealed, clsAbstract: Boolean;
-  qualNm: AnsiString; savedPCB: Integer;   { nested-type scoping — see AddNestedType }
+  savedPCB: Integer;   { nested-type scoping — see AddClassLikeType }
   mname, propName, readName, writeName: AnsiString;
   propTk: TTypeKind;
   mIsFunc, mDoneArgs, mDoneParam, mIsArr, mIsByRef, mSawConst, mIsUntyped: Boolean;
@@ -27792,7 +27870,7 @@ begin
           if (parentIntfCi >= 0) and not UClsIsInterface[parentIntfCi] then
             parentIntfCi := -1;
         end;
-        ci := AddUClass(tnOff, tnLen);
+        ci := AddClassLikeType(FindUClass(tname), tnOff, tnLen, tname);
         UClsIsInterface[ci] := True;
         UClsIsComInterface[ci] := InterfacesComMode;
         if InterfacesComMode then ComInterfaceUsed := True;
@@ -28121,22 +28199,8 @@ begin
             unqualified use resolves exactly as before — and let the nested-type
             registry below make it reachable.
             bug-a-duplicate-class-name-check-is-scope-blind }
-          if (ci >= 0) and (ParsingClassBodyCi >= 0) and
-             (UClsUnitIdx[ci] = CurrentUnitIdx) then
-          begin
-            qualNm := GetTokenStrFromRaw(UClsNOff[ParsingClassBodyCi],
-                                         UClsNLen[ParsingClassBodyCi]) + '.' + tname;
-            ci := AddUClass(TokCharsAppend(qualNm), Length(qualNm));
-          end
-          else
-            ci := AddUClass(tnOff, tnLen);
+          ci := AddClassLikeType(ci, tnOff, tnLen, tname);
         end;
-        { Reachable by (owning class, bare name) whether it kept the bare name
-          or was qualified above — one registry, so the qualified `TOuter.TInner`
-          spelling and a bare name inside the owner's own body find the same
-          entry. bug-a-duplicate-class-name-check-is-scope-blind }
-        if ParsingClassBodyCi >= 0 then
-          AddNestedType(ParsingClassBodyCi, tname, ci);
         UClsSealed[ci] := clsSealed;
         UClsAbstractCls[ci] := clsAbstract;
         { `sealed` is a promise that the class has no descendants — so deriving from one
@@ -29076,7 +29140,7 @@ begin
         end
         else
           Next;
-        ci := AddUClass(tnOff, tnLen);
+        ci := AddClassLikeType(FindUClass(tname), tnOff, tnLen, tname);
         UClsParent[ci] := -1;
         UClsIsRecord[ci] := True;
         if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'helper') and

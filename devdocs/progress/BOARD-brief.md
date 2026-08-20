@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:17 blocked:6 backlog:241 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2106 rejected:40`
+`urgent:1 working:1 unfinished:17 blocked:6 backlog:241 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2107 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -56,7 +56,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [P]` bug-p-interface-method-overload-picks-the-first-slot
 - `[p 60] [T]` bug-t-the-push-rate-starves-breadth-coverage-entirely
 - `[p 60] [O]` feature-opt-store-reload-elimination
-- `[p 60] [P]` feature-p-nested-type-method-implementation
 - `[p 60] [A]` refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
 - `[p 58] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - `[p 58] [O]` feature-opt-o3-register-pressure
@@ -76,5 +75,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
+- `[p 55] [A]` feature-pascal-type-helpers
 
 _198 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

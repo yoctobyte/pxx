@@ -121,6 +121,7 @@ lives in git, not in a timestamp._
 | chore-t-test-binaries-hardcode-unsweepable-tmp-paths | T | 45 | chore | 60 /tmp paths are hardcoded in 37 COMPILED TEST SOURCES and written by the test binary at runtime, so no Makefile sweep can reach them and testmgr does not privatize them either. Two concurrent runs still share those files EVEN UNDER testmgr. Split out of chore-makefile-testtmp-parameterize, which closed the recipe half. | — |
 | chore-t-unit-class-est-mem-is-below-what-lib-test-00-actually-peaks-at | T | 30 | chore | testmgr's own advisory, printed at the end of every full tier: `lib-test#00 peaked at 596 MB against a 550 MB estimate` for class `unit`. The scheduler admitted it on a promise the box did not have to keep. Raise the CLASSES row to max*1.5, or give the outlier its own class. | — |
 | chore-web-secrets-sops-age | W | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
+| compat-p-system-integer-is-smallint-in-fpc | P | 15 | compat | `System.Integer` is SmallInt in FPC, LongInt in pxx | — |
 | compat-pascal-a-string-n-field-makes-a-record-a-different-size-than-fpc | P | 40 | compat | `string[N]` is a word-prefix tyFixedString, so any record holding one is a different SIZE and LAYOUT than FPC's: `record s: string[10] end` is 24 bytes where FPC says 11. Values are all right; the bytes are not. | — |
 | compat-pascal-binop-operand-eval-order | A | 15 | compat | pxx evaluates binary-operator operands left-to-right; FPC evaluates right-to-left | — |
 | compat-pascal-calling-convention-directives-uneven | P | 35 | compat | `stdcall`/`safecall`/`pascal`/`mwpascal` are accepted on a class METHOD declaration but are a parse ERROR on a plain routine, an `external`, or a procedural type — so FPC sources that spell a convention on a routine do not compile, and which spelling works depends on where it is written. | — |
@@ -223,7 +224,6 @@ lives in git, not in a timestamp._
 | feature-p-assertions-directive-and-position | P | 40 | feature | RE-TYPED 2026-08-19 feature -> bug for half 1: `{$ASSERTIONS OFF}` is ACCEPTED AND IGNORED — measured on v363, an Assert whose condition has a side effect still runs it (n=1 where FPC gives n=0), so the two dialects take different paths with no diagnostic. Implement FPC assertion parity: {$ASSERTIONS ON/OFF} and -Sa gating (Assert compiled OUT when off, so its side effects do not run), plus the '(file, line N)' suffix FPC appends to the message | — |
 | feature-p-defineglobal-a-define-that-crosses-unit-boundaries | P | 40 | feature | `{$DEFINEGLOBAL xyz}` — a conditional define that outlives the unit that sets it. Measured: pxx matches FPC today, a unit's {$DEFINE} does not reach the program, which is correct Pascal and is also why two units cannot coordinate. The motivating case is 'first implementation loaded claims the name, second skips itself' — the shape that would have dissolved the pylib/sysutils Exception problem. | — |
 | feature-p-delphi-string-helpers | P | 45 | feature | feature(P): Delphi's TStringHelper surface — `s.Length`, `s.ToUpper`, `s.Trim`, `s.Substring` | — |
-| feature-p-nested-type-method-implementation | P | 60 | feature | A method of a NESTED type cannot be implemented: `TOuter.TInner.Method` | — |
 | feature-p-read-text-into-a-char-arm | P | 50 | feature | the RTL half (textfile.TextReadChar) has landed, so ParseTextReadRest can now route read(f, c) to it and drop the 'not supported yet' error | — |
 | feature-p-uses-a-unit-in-an-explicit-file | P | 30 | feature | `uses mymod in 'mymod.pas';` — the FPC/Delphi spelling for naming a unit's source file — does not parse. pxx has the quoted-path form (`uses './mymod.pas' as m;`, shipped 2026-06-30) but not the standard `in` one, so ordinary FPC project sources are refused at the uses clause. | — |
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
@@ -497,9 +497,9 @@ lives in git, not in a timestamp._
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2106)
+## done (2107)
 
-2106 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2107 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -558,7 +558,6 @@ lives in git, not in a timestamp._
 - [p 60] [P] bug-p-interface-method-overload-picks-the-first-slot
 - [p 60] [T] bug-t-the-push-rate-starves-breadth-coverage-entirely
 - [p 60] [O] feature-opt-store-reload-elimination
-- [p 60] [P] feature-p-nested-type-method-implementation
 - [p 60] [A] refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
 - [p 58] [N] bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - [p 58] [O] feature-opt-o3-register-pressure
@@ -762,6 +761,7 @@ lives in git, not in a timestamp._
 - [p 20] [B] feature-networking
 - [p 20] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 15] [N] bug-nilpy-delattr-globals-and-locals-are-absent
+- [p 15] [P] compat-p-system-integer-is-smallint-in-fpc
 - [p 15] [A] compat-pascal-binop-operand-eval-order
 - [p 15] [A] feature-a-shrink-managed-header-on-32-bit
 - [p 15] [B] feature-b-a-real-minidom-is-an-implementation-not-a-shim

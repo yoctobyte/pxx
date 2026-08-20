@@ -1728,6 +1728,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-optimization-levels | O | 65 | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-overflow-checks-cross-and-intrinsics | A | 35 | feature | {$Q+} follow-up: cross-backend checks (pair carry chains), Succ/Pred/Abs/Sqr, subword widths | — |
 | feature-own-net-http-lib | B | 50 | feature | Own networking library — native HTTP client (+ sockets, async) | — |
+| feature-p-nested-type-method-implementation | P | 60 | feature | A method of a NESTED type cannot be implemented: `TOuter.TInner.Method` | — |
 | feature-pal-esp-lwip-sockaddr-readback | S | 50 | feature | PAL esp/lwIP: getsockname & recvfrom return an unfilled (zero) sockaddr | — |
 | feature-pal-file-stat-metadata | B | 50 | feature | PAL file stat metadata | — |
 | feature-pal-network-datagram-poll-errno | B | 50 | feature | PAL network: datagrams, readiness polling, and exact errno semantics | — |

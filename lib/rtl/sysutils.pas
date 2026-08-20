@@ -376,6 +376,21 @@ function Pos(const substr, s: AnsiString): Integer;
 { True when the Len bytes at P1 and P2 are identical (FPC SysUtils.CompareMem). }
 function CompareMem(P1, P2: Pointer; Len: Int64): Boolean;
 
+{ Ordering twin of CompareMem (FPC SysUtils.CompareMemRange): the sign of the
+  first differing byte pair, 0 when the Len bytes match. Unsigned byte compare,
+  like FPC — a byte >= 128 must sort ABOVE one below it, which a PChar (signed)
+  compare would invert. rtl-generics' TCompare._Binary is the default comparer
+  for every record type, so this is what `TComparer<TRec>.Default` runs on. }
+function CompareMemRange(P1, P2: Pointer; Len: Int64): Integer;
+
+{ Element count of the dynamic array whose handle is P, 0 for nil (FPC
+  System.DynArraySize). The count is the managed-block header's length word at
+  P-8 — the same slot Length() reads — so this is Length() reached through an
+  untyped Pointer, which is what a generic comparer has: rtl-generics'
+  TCompare._DynArray is handed two `constref ... : Pointer` and must size them
+  without knowing the element type. See devdocs/dev/managed-block-header.md. }
+function DynArraySize(P: Pointer): Int64;
+
 function StrLCopy(Dest, Source: PChar; MaxLen: Cardinal): PChar;
 function StrLComp(Str1, Str2: PChar; MaxLen: Cardinal): Integer;
 
@@ -415,6 +430,17 @@ function CompareText(const s1, s2: AnsiString): Integer;
   sign convention. Declared because FPC code calls them by name. }
 function AnsiCompareStr(const s1, s2: AnsiString): Integer;
 function AnsiCompareText(const s1, s2: AnsiString): Integer;
+
+{ The Wide/Unicode spellings of the same two comparators. This RTL has ONE
+  string model -- bytes -- and `WideString`/`UnicodeString` ARE `string` here
+  (see the UTF-8 converter note above), so these are the Ansi pair verbatim
+  rather than a second implementation. Declared because FPC code names them:
+  rtl-generics' TCompare.WideString/UnicodeString call them to build the default
+  comparer for those types. }
+function WideCompareStr(const s1, s2: AnsiString): Integer;
+function WideCompareText(const s1, s2: AnsiString): Integer;
+function UnicodeCompareStr(const s1, s2: AnsiString): Integer;
+function UnicodeCompareText(const s1, s2: AnsiString): Integer;
 function SameText(const s1, s2: AnsiString): Boolean;
 function AnsiSameText(const s1, s2: AnsiString): Boolean;
 
@@ -2953,6 +2979,26 @@ begin
   Result := CompareText(s1, s2);
 end;
 
+function WideCompareStr(const s1, s2: AnsiString): Integer;
+begin
+  Result := CompareStr(s1, s2);
+end;
+
+function WideCompareText(const s1, s2: AnsiString): Integer;
+begin
+  Result := CompareText(s1, s2);
+end;
+
+function UnicodeCompareStr(const s1, s2: AnsiString): Integer;
+begin
+  Result := CompareStr(s1, s2);
+end;
+
+function UnicodeCompareText(const s1, s2: AnsiString): Integer;
+begin
+  Result := CompareText(s1, s2);
+end;
+
 function SameText(const s1, s2: AnsiString): Boolean;
 begin
   Result := CompareText(s1, s2) = 0;
@@ -4603,6 +4649,28 @@ begin
       CompareMem := False;
       Exit;
     end;
+end;
+
+function CompareMemRange(P1, P2: Pointer; Len: Int64): Integer;
+var a, b: PByte; i: Int64;
+begin
+  a := PByte(P1);
+  b := PByte(P2);
+  CompareMemRange := 0;
+  for i := 0 to Len - 1 do
+    if a[i] <> b[i] then
+    begin
+      if a[i] < b[i] then CompareMemRange := -1 else CompareMemRange := 1;
+      Exit;
+    end;
+end;
+
+function DynArraySize(P: Pointer): Int64;
+begin
+  if P = nil then
+    DynArraySize := 0
+  else
+    DynArraySize := PInt64(PtrUInt(P) - 8)^;
 end;
 
 function SysBackTraceStr(Addr: Pointer): string;
