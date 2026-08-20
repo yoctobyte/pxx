@@ -29888,7 +29888,29 @@ begin
           fAi := -1;
           aElemStrCap := 0;
           if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
-          if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
+          if (fAi >= 0) and ArrTypeIsDyn[fAi] then
+          begin
+            { A named DYNAMIC-array alias as the element (`TIA2 = array of TIA`
+              where `TIA = array of Integer`) composes its depth, exactly as the
+              var-declaration path already did for the same type spelled inline
+              (`var m: array of TIA`). Without this the else-arm below reached
+              ParseTypeKind, which resolves TIA to its BASE scalar -- array-type
+              aliases live in the ArrType table, not the scalar alias table -- so
+              the alias silently became `array of Integer`. `m[0][0]` then read a
+              heap handle as an Integer and printed a different number every run,
+              and Length(m[0]) did the same; only SetLength(m[0], n) was loud,
+              and only because codegen refused a depth-1 target.
+              bug-p-array-of-a-named-dynamic-array-alias-loses-a-dimension }
+            if (ArrTypeElemRowLen[fAi] <> 0) then
+              Error('array of array of <fixed array type> not supported');
+            aElemTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+            aElemStrCap := ArrTypeElemStrCap[fAi];
+            LastTypeRecId := ArrTypeElemRec[fAi];
+            LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
+            tdCnt := tdCnt + ArrTypeDynDepth[fAi];
+            Next;               { consume the alias name }
+          end
+          else if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
           begin
             if tdCnt > 1 then
               Error('array of array of <fixed array type> not supported');

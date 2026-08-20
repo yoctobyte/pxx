@@ -4253,6 +4253,16 @@ test-core: $(COMPILER)
 	# VMT relocates). The pinned binary aborts on the unhandled exception.
 	./$(COMPILER) test/test_class_inherits_from_tobject.pas $(TESTTMP)/test_inhtobj26
 	test "$$($(TESTTMP)/test_inhtobj26 | tail -1)" = "total ok 24 / 24"
+	# `type TIA2 = array of TIA` (TIA itself `array of Integer`) silently collapsed
+	# to `array of Integer`: the type-alias parser only composed the depth of a
+	# named FIXED-array element, so a named DYN alias fell through to
+	# ParseTypeKind, which resolves it to its base scalar. m[0][0] then read the
+	# row's heap handle as an Integer -- a different number every run. ParseVarDecl
+	# had composed alias depth all along, so `var m: array of TIA` was correct and
+	# only the alias-of-alias spelling was wrong. The pinned binary prints garbage
+	# for m[0][0] and rejects SetLength(m[0], n) outright.
+	./$(COMPILER) test/test_dynarray_named_alias_element.pas $(TESTTMP)/test_dynalias26
+	test "$$($(TESTTMP)/test_dynalias26 | tail -1)" = "total ok 26 / 26"
 	./$(COMPILER) test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_nativeshift26
 	test "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
 	test "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"
