@@ -49,7 +49,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (244)
+## backlog (246)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -127,7 +127,9 @@ _none_
 | compat-pascal-index-a-function-call-result | P | 40 | compat | Indexing a call result: the FIXED-array, array-of-record and Copy-intrinsic spellings now match FPC; DYNAMIC-array results remain refused, and the fix needs one materialisation point rather than 20 | — |
 | compat-pascal-inline-generic-specialization | P | 35 | compat | pxx accepts only the declaration form `specialize Max<Integer> as MaxInt;` — FPC's inline `specialize Max<Integer>(a, b)` in an expression or statement is rejected with 'undefined variable' | — |
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
+| compat-pascal-not-of-a-cast-constant-keeps-its-width | P | 10 | compat | `not Byte(0)` folds to 255 in pxx and to -1 in FPC — FPC evaluates a constant `not` in the Int64 domain and drops the cast's width. pxx matches Delphi. Variables agree; only the constant-folded form differs. | — |
 | compat-pascal-strict-fpc-should-reject-a-duplicate-identifier-in-one-scope | A | 20 | compat | pxx compiles `var p: Pointer;` and `procedure P(...)` in the SAME scope and resolves both correctly — bare p is the variable, P(x) the routine. FPC rejects it ('overloaded identifier \"p\" isn't a function'), since Pascal is case-insensitive and those are one identifier. Assumed to be dialect laxness rather than a defect, on the precedent set for overload widening; --strict-fpc should reject it. Not filed as a bug: nothing resolves wrongly. | — |
+| compat-pascal-subrange-storage-size | P | 30 | compat | Every subrange type gets the 4-byte default instead of the smallest type that holds it: SizeOf(10..20) is 4 where FPC says 1, so a `packed record` of subranges is 12 bytes where FPC lays out 3. Values are all correct — this is a layout divergence, not a wrong-value bug, and it breaks binary interop and costs 4x memory. | — |
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | decide-reduced-compiler-switch-spelling | U | 55 | decide | How does a reduced build get selected — subtractive (`omit-c`), positive-list (`only-pascal`), or a named-configuration file? And do frontend and target selection compose freely or only in blessed combinations? The user flagged the names in the parent ticket as placeholders. Recommendation: subtractive defines as the mechanism, named configurations as the tested surface. | — |
 | decide-should-from-accept-a-quoted-foreign-file | U | 45 | decide | A bare NilPy import resolves to Python only, and the escape is `import 'x.pas' as x`. There is no matching escape for `from x import Name` -- `from 'x.pas' import Name` is refused with \"expected a module name after from\". Decide whether the quoted form should be accepted after `from`, or whether the alias form is deliberately the only door. A test already lost an assertion to this. | — |
@@ -714,6 +716,7 @@ _none_
 - [p 30] [A] chore-a-re-include-bench-timing-in-tools-devtest
 - [p 30] [T] chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile
 - [p 30] [T] chore-t-unit-class-est-mem-is-below-what-lib-test-00-actually-peaks-at
+- [p 30] [P] compat-pascal-subrange-storage-size
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
 - [p 30] [N] feature-nilpy-fstring-nested-spec-and-nested-fstring
 - [p 30] [N] feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition
@@ -776,6 +779,7 @@ _none_
 - [p 15] [P] feature-pascal-corpus-expansion
 - [p 15] [A] idea-a-auto-enable-threadsafe-by-restarting-the-compile
 - [p 12] [P] task-pascal-conformance-long-tail
+- [p 10] [P] compat-pascal-not-of-a-cast-constant-keeps-its-width
 - [p 10] [B] feature-crtl-implement-libc-assumptions
 - [p 10] [A] idea-adaptive-heap-growth
 - [p 10] [A] idea-cross-namespace-ambiguity-warning
