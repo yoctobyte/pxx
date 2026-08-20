@@ -1621,6 +1621,7 @@ var RecordMethodClassPrefix: Boolean = False;  { `class function` in a record/he
 procedure ParseRecordPropertyDecl(ci: Integer); forward;
 function IsNodePChar(node: Integer): Boolean; forward;  { defined in ir.inc (included later) }
 procedure ParseSubroutine; forward;
+function NegWidensToInt64(tk: TTypeKind): Boolean; forward;  { FPC: unary minus yields Int64 for EVERY integer operand }
 procedure ParseGenericFunctionDef; forward;
 procedure ParseOperatorDef; forward;
 procedure ParseNestedRoutine; forward;
@@ -10823,8 +10824,36 @@ begin
       node := AllocNode(AN_NEG); ASTLeft[node] := left;
       { Carry the operand's type, as the additive-level sign in ParseSimpleExpr
         does. Left untagged, `-(a // b)` on an Int64-returning helper printed
-        18446744073709551613 instead of -3 — the untyped node read unsigned. }
-      ASTTk[node] := ASTTk[left];
+        18446744073709551613 instead of -3 — the untyped node read unsigned.
+
+        ...except for an INTEGER operand, where FPC widens to Int64 first and
+        carrying the operand's type is the bug. Measured, every integer type:
+        `SizeOf(-x)` is 8 for Byte, ShortInt, Word, SmallInt, Integer, Cardinal,
+        Int64, QWord, NativeInt and NativeUInt alike — FPC's unary minus has ONE
+        result type. Carrying an unsigned operand's own width instead negated
+        inside it, so `-b shr 1` on a Byte answered 2147483644 ($7FFFFFFC, a
+        32-bit logical shift of $FFFFFFF8) where FPC says 9223372036854775804:
+        the sign was gone before the shift ever ran, which is why the shift path
+        was never where this could be fixed.
+
+        The default dialect, not behind --strict-fpc: a silent wrong VALUE is a
+        bug, not parity work (decide-unary-minus-widening-in-the-default-dialect,
+        confirmed by the owner 2026-08-19).
+
+        Deliberately NOT widened: tyBoolean and tyBool8 (not arithmetic),
+        tyPointer (no sign), the promotable ints (already arbitrary precision,
+        so a width has no meaning), and every float — where the operand type IS
+        the result type. bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits }
+      if NegWidensToInt64(IntToTypeKind(ASTTk[left])) then ASTTk[node] := Ord(tyInt64)
+      else ASTTk[node] := ASTTk[left];
+      { {$Q+} region: unary minus is overflow-checked too. FPC raises
+        EIntOverflow on `-Low(Int64)` and on nothing else once the widening
+        above is in place — every narrower type's negation fits an Int64.
+        The check itself is not a new IR op: ir.inc rewrites a tagged AN_NEG
+        into `0 - x`, the same rewrite the promotable-int and variant arms
+        already use, so the existing IR_BINOP check runs and no backend moves.
+        feature-pascal-overflow-checks-q-plus }
+      if TokQChecks[TokPos - 1] then ASTQChk[node] := True;
       CurASTNode := node;
     end;
     tkNot:
@@ -18658,6 +18687,21 @@ end;
 { ===== Statement parser ===== }
 
 procedure ParseStatement; forward;
+{ Does unary minus on this operand type yield an Int64, the way FPC's does?
+  True for every INTEGER type and nothing else — see the long note at
+  ParseFactor's tkMinus case. }
+function NegWidensToInt64(tk: TTypeKind): Boolean;
+begin
+  Result := False;
+  case Ord(tk) of
+    1, 3,            { tyInteger, tyChar }
+    7, 8, 9, 10,     { tyInt8, tyUInt8, tyInt16, tyUInt16 }
+    11, 12, 13, 14,  { tyInt32, tyUInt32, tyInt64, tyUInt64 }
+    15, 16:          { tyNativeInt, tyNativeUInt }
+      Result := True;
+  end;
+end;
+
 procedure ParseBlock; forward;
 function WrapMainBodyManagementOps(bodyNode: Integer): Integer; forward;  { class operator Initialize/Finalize on globals }
 

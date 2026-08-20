@@ -6631,6 +6631,27 @@ begin
         Result := IRLowerAST(last);
         Exit;
       end;
+      if ASTQChk[node] and TypeIsOrdinal(IntToTypeKind(ASTTk[node])) then
+      begin
+        { `-x` inside a {$Q+} region: rewrite to `0 - x` so the IR_BINOP
+          overflow check does the work. IR_NEG carries no checked form and
+          teaching it one is six backends; this is the same rewrite the
+          promotable-int and variant arms above already use, and the only value
+          it can trap is -Low(Int64) — every narrower operand widens to Int64
+          first, where its negation always fits.
+          bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits }
+        first := AllocNode(AN_INT_LIT);
+        ASTIVal[first] := 0;
+        ASTTk[first] := ASTTk[node];
+        last := AllocNode(AN_BINOP);
+        ASTIVal[last] := Ord(tkMinus);
+        ASTLeft[last] := first;
+        ASTRight[last] := ASTLeft[node];
+        ASTTk[last] := ASTTk[node];
+        ASTQChk[last] := True;
+        Result := IRLowerAST(last);
+        Exit;
+      end;
       left := IRLowerAST(ASTLeft[node]);
       { Trust the LOWERED operand's type over the parse-time one: `//` on floats
         is spelled tkDiv, so the parser typed it integer and only the lowering

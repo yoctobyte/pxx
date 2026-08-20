@@ -4,6 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`-b shr 1` answers 2147483644 where FPC says 9223372036854775804, for Byte, Word and Cardinal — in BOTH the default dialect and --strict-fpc. FPC's unary minus yields a 64-bit value for EVERY integer operand type (SizeOf(-x) is 8 for all seven, measured); pxx's truncates an unsigned operand to 32 bits before any widening can run, so the sign is already gone."
+status: done
+owner: frank1-ACP
 ---
 
 # Unary minus on an unsigned operand truncates to 32 bits before the widen
@@ -95,3 +97,70 @@ language, so two things move with it and neither is optional:
 
 Land with those tests in front of you. If either turns out to force a staged rollout
 after all, that is a finding worth reporting back, not a reason to re-open the direction.
+
+---
+
+## FIXED 2026-08-20 (frank1-ACP)
+
+All seven table rows now match `fpc -O1` exactly, in the DEFAULT dialect, and so
+do the three the table never listed.
+
+### The fix is one line of typing, in `ParseFactor`'s `tkMinus` case
+
+The `AN_NEG` node used to carry the operand's own type (`ASTTk[node] :=
+ASTTk[left]`), which is right for a float and wrong for an integer. It now
+carries `tyInt64` whenever `NegWidensToInt64` says the operand is an integer
+kind — tyInteger, tyChar, tyInt8..tyUInt64, tyNativeInt/tyNativeUInt.
+Deliberately excluded: tyBoolean and tyBool8 (not arithmetic), tyPointer (no
+sign), the promotable ints (already arbitrary precision, so a width has no
+meaning), and every float — where the operand type IS the result type.
+
+Measured first, on the two types the ticket's table omitted plus the aliases:
+`SizeOf(-x)` is **8** for QWord, NativeInt, NativeUInt and Char as well. FPC's
+unary minus has exactly one result type.
+
+### Both blast-radius items the decision named were checked, and neither bit
+
+- **Overload resolution.** `Pick(b)` selects the `Integer` overload and
+  `Pick(-b)` selects the `Int64` one — which is the point, and byte-identical
+  to FPC. A `Double` overload is still selected for `-d`.
+- **`{$Q+}`.** After the widening, `-Low(Int64)` is the ONLY negation that can
+  overflow: every narrower operand widens to Int64 first, where its negation
+  always fits. FPC raises `EIntOverflow` there; pxx did not, because unary
+  minus was not in the checked set at all — a pre-existing gap that the
+  widening made into the last remaining divergence, so it is fixed here too.
+
+  No new IR op and no backend moved: `ir.inc` rewrites a `{$Q+}`-tagged
+  `AN_NEG` into `0 - x`, the same rewrite the promotable-int and variant arms
+  above it already use, and the existing `IR_BINOP` check does the work.
+  `-Byte(200)`, `-Cardinal(4000000000)` and `-Low(Integer)` correctly do NOT
+  trap.
+
+### The trap
+
+The **FPC seed canary** caught what the self-host fixedpoint could not:
+`NegWidensToInt64` was defined further down `parser.inc` than its call site,
+which pxx accepts and FPC does not (`Identifier not found`). A `forward;` next
+to `ParseSubroutine`'s fixes it — the same shape as
+[[bug-a-fpc-seed-drift-emitasmx64-forward]]. Worth knowing that a helper added
+next to its logical neighbours can still be "too late" for the seed.
+
+### Files
+
+- `compiler/parser.inc` — `NegWidensToInt64` (+ its forward), the `tkMinus`
+  typing, and the `{$Q+}` tag on the negation node.
+- `compiler/ir.inc` — the `0 - x` rewrite for a checked `AN_NEG`.
+- `test/test_unary_minus_widens_to_int64.pas` — 31 assertions, all of them FPC
+  3.2.2 `-O1`'s own answers (the two programs print the same line). Wired into
+  the Makefile beside `test_strict_fpc_shift_widths`, which stays green in both
+  modes.
+
+### Left alone, as the ticket said
+
+`SizeOf(-a)` — `SizeOf` of an EXPRESSION — is still `error: SizeOf: expected
+type name`; FPC accepts it and answers 8. It is how the widths above were
+measured under FPC. Filed now as its own ticket:
+[[feature-p-sizeof-of-an-expression]].
+
+## Log
+- 2026-08-20 — resolved, commit PENDING-COMMIT.

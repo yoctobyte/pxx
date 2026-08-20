@@ -4167,6 +4167,14 @@ test-core: $(COMPILER)
 	# mode that got these wrong.
 	test "$$($(TESTTMP)/test_strictshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"
 	# ...and WITHOUT the flag the same file keeps the native-width answers
+	# ...and unary minus WIDENS TO Int64 for every integer operand, in the DEFAULT
+	# dialect. `-b shr 1` on a Byte answered 2147483644 ($7FFFFFFC -- a 32-bit
+	# logical shift of $FFFFFFF8) where FPC says 9223372036854775804: the operand's
+	# own unsigned width was carried onto the negation, so the sign was gone before
+	# the shift ran. All 31 assertions are FPC 3.2.2 -O1's own answers, overload
+	# resolution and {$$Q+} included.
+	./$(COMPILER) test/test_unary_minus_widens_to_int64.pas $(TESTTMP)/test_unaryminus26
+	test "$$($(TESTTMP)/test_unaryminus26 | tail -1)" = "total ok 31 / 31"
 	./$(COMPILER) test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_nativeshift26
 	test "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
 	test "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"
