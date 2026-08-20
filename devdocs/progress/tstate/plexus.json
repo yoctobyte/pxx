@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T10:49:22Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "252084d705ceb743d55b2d91459f5adc0e022acf",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-20T11:03:49Z",
    "fixed": [
     "test-core#src:test/test_asm_emit.pas",
@@ -463,6 +455,14 @@
    ],
    "new_red": [],
    "sha": "079ab9a6fb24f90a3fd96626c8acdb352bd40b6f",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-20T22:36:49Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "0fbf2f8a3460951620a9782d0093f80cb8794ded",
    "tier": "native",
    "verdict": "RED"
   }
@@ -6221,11 +6221,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-20T22:27:35Z",
-  "sha": "079ab9a6fb24f90a3fd96626c8acdb352bd40b6f",
+  "date": "2026-08-20T22:36:49Z",
+  "sha": "0fbf2f8a3460951620a9782d0093f80cb8794ded",
   "tier": "native",
   "verdict": "RED",
-  "wall": 472.3
+  "wall": 465.1
  },
  "last_bench": {
   "conf_rows": 550,
