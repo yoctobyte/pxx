@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T09:57:11Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "b772253ad3dee3e88fcf4ae74186866d9cd92575",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-20T10:05:32Z",
    "fixed": [],
    "new_red": [],
@@ -427,6 +419,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "2268a9d16ca75deb5069f7960d4e2e0b334cd469",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-20T21:53:18Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "b05f1835f67178c02e0e574444975a81e054785d",
    "tier": "native",
    "verdict": "RED"
   }
@@ -3290,6 +3290,7 @@
   "test-threads#src:test/test_threadsafe_heap_debug_combo.pas@2": "native",
   "test-threads#src:test/test_threadsafe_heap_debug_combo.pas@3": "native",
   "test-threads#src:test/test_threadsafe_nilpy_io.npy": "native",
+  "test-threads#src:test/test_tls_base.pas": "native",
   "test-threads#src:test/test_tthread.pas": "native",
   "test-threads#src:test/test_tthread_final.pas": "native",
   "test-threads#src:test/test_tthread_sync.pas": "native",
@@ -6153,6 +6154,7 @@
   "test-threads#src:test/test_threadsafe_heap_debug_combo.pas@2": "pass",
   "test-threads#src:test/test_threadsafe_heap_debug_combo.pas@3": "pass",
   "test-threads#src:test/test_threadsafe_nilpy_io.npy": "pass",
+  "test-threads#src:test/test_tls_base.pas": "pass",
   "test-threads#src:test/test_tthread.pas": "pass",
   "test-threads#src:test/test_tthread_final.pas": "pass",
   "test-threads#src:test/test_tthread_sync.pas": "pass",
@@ -6181,11 +6183,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-20T21:43:42Z",
-  "sha": "2268a9d16ca75deb5069f7960d4e2e0b334cd469",
+  "date": "2026-08-20T21:53:18Z",
+  "sha": "b05f1835f67178c02e0e574444975a81e054785d",
   "tier": "native",
   "verdict": "RED",
-  "wall": 459.7
+  "wall": 463.7
  },
  "last_bench": {
   "conf_rows": 550,
