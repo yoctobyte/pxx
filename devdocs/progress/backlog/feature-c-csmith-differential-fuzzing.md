@@ -594,3 +594,86 @@ source for `\bunion\b` and reported unions in **12 of 12** programs — every hi
 was the footer line `XXX total union variables: 0`. A true fact about the wrong
 subject, inside the classifier written to prevent exactly that. **The thing you
 grep for appears in the metadata too.**
+
+## 2026-08-20 (later) — axis 2 with a REAL oracle: 160 aarch64 differential seeds, dry
+
+Binary: self-hosted fixedpoint at `21f05c52b` (`make compiler/pascal26`,
+converged in 1 round). Tool at T's `174186b5d`.
+
+T's data-model oracle landed, and the header line is the whole difference. The
+morning's D1 run said:
+
+```
+NO ORACLE for aarch64 (LP64) -- aarch64-linux-gnu-gcc: not installed.
+MISCOMPILE_VS_GCC and PXX_SLOW are NOT CHECKED this run
+```
+
+and this one says:
+
+```
+vs gcc -O0 oracle (datamodel)
+oracle: gcc (LP64, matches the DATA MODEL, not the ISA) -- runs natively.
+Checksums are compared; TIMING is not (PXX_SLOW is off this run)
+```
+
+So aarch64 moved from the weak class to the strong one with no change on our
+side. **`E:` 129/150 agreed with the gcc oracle, 21 skipped, no findings**
+(seeds 330000-330149), plus a partial second batch of 31 agreed / 2 skipped
+(seeds 330200-330232) before it was killed from outside this session — see
+below. **160 real cross-target checksum comparisons, zero divergences.**
+
+### Weighting, stated as before
+
+This is 160 seeds of the STRONGEST class this campaign has: a different backend
+from the one that generated the checksum, compared against an external oracle,
+on a target Track O actually invests in. It is not 160 seeds of loud-bucket
+coverage. Against that, the sample is small — the x86-64 axis has 1450 — and a
+dry 160 bounds only what it measured: it says the aarch64 backend does not
+diverge on csmith's *default* construct mix at `-O0`/`-O2`, not that it is
+clean. The morning's 250 loud-bucket-only seeds are not superseded by this;
+they measured a different thing (crashes, compile failures, hangs) and remain
+the only coverage riscv32 has.
+
+Scoreboard: 1820 -> 1980 seeds.
+
+### What I checked in T's implementation before running
+
+Three things differed from what was sketched, and all three are improvements:
+
+- The oracle-reuse guard is `cfg.oracle_cc == VALIDITY_CC`, not a data-model
+  comparison. The data-model version is **wrong** and it is worth recording why,
+  because it reads as the more principled test: the validity filter always runs
+  plain native `gcc`, so the moment the probe picks `gcc -m32` for an ILP32
+  target, a data-model guard would say "same model, reuse it" and compare a
+  32-bit target against 64-bit `long`s — the exact wrong-width comparison the
+  file exists to refuse, reached by way of an optimisation.
+- The LAYOUT-SUSPECT discriminator I proposed and retracted this morning is
+  replaced by one reading csmith's own `XXX` statistics footer for union
+  variables and bitfield-carrying structs. The fact that settles the scope:
+  **csmith hashes named fields through `transparent_crc`, not raw struct
+  bytes**, so ordinary padding and alignment cannot reach a checksum at all.
+  The caveat is narrower than either side of this morning's exchange assumed —
+  it is bitfield ALLOCATION and union PUNNING only.
+- `LAYOUT_SUSPECT` ranks with the miscompiles in the report but is deliberately
+  outside the exit code, so a maybe cannot fail a run.
+
+### riscv64 is listed but unreachable
+
+`HOST_ORACLE` carries `riscv64: LP64` and a `riscv64-linux-gnu-gcc` entry.
+**pxx has no riscv64 backend** — there is no `TARGET_RISCV64` in `defs.inc`,
+only riscv32. The entry is correct-in-advance, not currently live, so this
+oracle fix buys exactly ONE target today: aarch64. riscv32 stays ILP32 with no
+oracle on this box (`gcc -m32` accepts the flag and cannot link — no `Scrt1.o`).
+Worth knowing before anyone reads "aarch64 and riscv64" as two targets' worth
+of new coverage.
+
+### Two runs killed from outside this session
+
+The second 150-seed batch was killed twice, at seed 4 and at seed 33, both
+times mid-run. Nothing in this session issued a stop; no csmith or qemu process
+survived either kill; ~8 GB was available and the kernel log is not readable
+unprivileged, so OOM is unruled-out rather than ruled out. The first 150-seed
+batch had completed normally minutes earlier, so it is not deterministic. Noted
+rather than fought — restarting into a third kill would have added nothing.
+The known repo hazard here is a peer's `pkill -f <script>` matching another
+agent's run of the same tool, which has happened before in this checkout.
