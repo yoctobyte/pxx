@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 working:1 unfinished:16 blocked:6 backlog:235 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2095 rejected:40`
+`urgent:2 working:1 unfinished:16 blocked:6 backlog:234 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2096 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -44,7 +44,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 223, ranked
+## Ready — top 30 of 222, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 60] [A+F]` bug-a-riscv32-cross-float-output-no-longer-matches-x86-64
@@ -54,7 +54,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [P]` feature-pascal-corpus-oop
 - `[p 60] [N]` bug-n-inferred-return-type-of-true-division-is-int
 - `[p 60] [T]` bug-t-the-push-rate-starves-breadth-coverage-entirely
-- `[p 60] [C]` feature-c-entry-stub-must-run-initializers-for-environ
 - `[p 60] [O]` feature-opt-store-reload-elimination
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 60] [A]` refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
@@ -76,5 +75,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 55] [E]` feature-demo-portable-userland
+- `[p 55] [O]` feature-opt-heap-per-thread-cache
 
-_193 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_192 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
