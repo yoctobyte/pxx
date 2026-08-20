@@ -4,8 +4,8 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "Assigning a FUNCTION RESULT of interface type into TWO OR MORE elements of a LOCAL dynamic array segfaults at scope exit. One element is fine, a constructor instead of a function is fine, and a global array is fine — so the trigger is the reused hidden function-result temp meeting the routine's scope-exit cleanup."
-status: backlog
-owner: unassigned
+status: working
+owner: claude-acp
 ---
 
 # Two function-result interfaces into a local dyn array segfault

@@ -2,10 +2,10 @@
 track: A
 prio: 60
 type: bug
-blocked-by: []
+blocked-by: [decide-interface-members-in-aggregates-lock-strategy]
 summary: "`b := a` on a record holding a COM interface field copies the pointer with no retain, so the two records share one counted reference. Nilling either one destroys the object and the other is left dangling — a use-after-free that segfaults on the next member call. Present on pinned and on HEAD."
-status: backlog
-owner: unassigned
+status: working
+owner: claude-acp
 ---
 
 # A record copy does not retain an interface field

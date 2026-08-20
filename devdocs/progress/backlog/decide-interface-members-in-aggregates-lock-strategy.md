@@ -1,0 +1,97 @@
+---
+track: U
+prio: 60
+type: decide
+blocked-by: []
+summary: "SIX open Track A tickets (two of them use-after-frees) are all the same missing capability: a COM interface held inside an aggregate is invisible to every container-level retain/release walk. The one fix is blocked on a heap-lock question that was attempted once and reverted. Which strategy — reentrant lock, unlocked interface pass, or a copy-site-only stopgap — and who validates it against the threading stress tests?"
+status: backlog
+owner: unassigned
+---
+
+# Interface members in aggregates: which lock strategy?
+
+- **Track U** — a decision, not work. Blocks six Track A tickets.
+- Raised 2026-08-20 after a differential sweep of interfaces-in-containers turned
+  up six defects that are all one missing capability.
+
+## What is blocked
+
+| ticket | severity |
+| --- | --- |
+| `bug-a-a-record-copy-does-not-retain-an-interface-field` | **use-after-free** |
+| `bug-a-two-function-result-interfaces-into-a-local-dyn-array-segfault` | **crash** |
+| `bug-a-a-local-array-of-interfaces-is-never-released-at-scope-exit` | leak |
+| `bug-a-a-local-dynamic-array-of-interfaces-is-not-released-at-scope-exit` | leak |
+| `bug-a-setlength-shrink-does-not-release-dropped-interface-elements` | leak |
+| `bug-a-class-managed-fields-not-finalized-on-destroy` | leak (holds the blocker) |
+
+Three more in the same family were fixable WITHOUT touching the lock and are
+already fixed and gated today — the zero-init trio plus the dyn-array-assign
+crash. What remains is exactly the part that needs a release to run somewhere
+safe.
+
+## The state of the machinery
+
+- The record descriptor's runtime walk (`PXXRecordRetain` / `PXXRecordRelease`)
+  knows member kinds **1 = String, 2 = DynArray, 3 = Record**. There is **no
+  interface kind**. (An earlier ticket describes the kinds as including
+  Interface; the runtime `case` does not have it. Worth correcting there.)
+- `EmitManagedRecordRetain` / `EmitManagedRecordReleaseLocked` both early-exit on
+  `RecordHasManagedFields`, which deliberately excludes interface fields — so for
+  a record whose only refcounted member is an interface, the ARC copy is not even
+  selected; it takes the raw `IR_COPY_REC`.
+- The blocker: record-field finalization runs under the **non-reentrant heap
+  spinlock**, and `PXXIntfRelease -> _Release -> Free -> FreeMem` re-acquires it
+  and spins forever. Confirmed under `{$threadsafe on}`. A previous attempt at
+  the COM record-field case (`cb2ed843`) hit exactly this and was reverted
+  (`87108477`) back to a benign leak.
+- Scope-exit interface LOCALS and by-value param temps are already correct and
+  threadsafe, because `EmitManagedLocalCleanup` does NOT wrap them in the lock.
+
+## The fork
+
+**(a) Reentrant heap lock** — owner + depth, needs a per-thread identity / TLS.
+Fixes every site at once and makes the whole family fall out. Highest blast
+radius: it changes the allocator's core locking for all code, not just ARC.
+
+**(b) Unlocked interface pass at every finalize/copy site** — emit the interface
+retain/release BEFORE acquiring the lock, leaving the string/dynarray pass
+locked as today. This is the option the existing ticket already names. Needs
+descriptor member kind 4 (plus the iface id) and matching runtime support, and
+must be repeated at every site across six backends.
+
+**(c) Copy-site-only stopgap (new; my recommendation to consider first)** — fix
+only the *use-after-free* half now, and leave finalization leaking exactly as it
+already does by design. At the record-copy site the field offsets and iface ids
+are known at COMPILE time, so the compiler can emit a short inline sequence —
+`PXXIntfAddRef(src+off, id)` per interface field, then `PXXIntfRelease(dest+off,
+id)` — **before** `EmitAcquireHeapLock`, with no descriptor or runtime change at
+all. Needs a new predicate (`RecordHasManagedFields` OR has an interface field)
+to select the ARC copy in the first place.
+Trade: a record copy then RETAINS but never releases, so each copy leaks one
+reference instead of dangling one. That is strictly better than a UAF and is the
+same benign-leak-over-correctness trade this area already made deliberately.
+Cost: it is a fourth partial in an area that already has three, so it is only
+worth doing if (a)/(b) are genuinely far off.
+
+## What I could not do, and why I am asking rather than guessing
+
+The existing ticket states both real options are "heap-critical and must be
+validated by the threading stress tests, not just the single-threaded native
+tier." A development track gates on `gate.sh quick`, which does not run those.
+So this needs either a decision to route it through Track T's heavier tiers, or
+an explicit owner who will validate it.
+
+Guessing here means re-running `cb2ed843`'s revert.
+
+## Recommendation
+
+**(a) if the allocator work is acceptable — it deletes the whole family and every
+future instance of it.** The recurring shape all day was "one predicate answering
+two questions"; a reentrant lock removes the reason the questions were ever
+split. If (a) is off the table for now, take (c) to kill the two crashes, and
+leave the leaks filed against (b)/(a).
+
+Either way the two **use-after-frees** should not sit in the backlog at leak
+priority — they are silent wrong-memory bugs, and one of them
+(`b := a` on a record with an interface field) is ordinary-looking Pascal.

@@ -2103,6 +2103,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-nilpy-test-nilpy-lambda-in-range-comprehension | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_lambda_in_range_comprehension.npy red at 4c9da77f9368 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-list-mutators-return-none | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_list_mutators_return_none.npy red at 9294bce2c800 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-operator-dunders | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_operator_dunders.npy red at 6840247771d5 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-pascal-unit-keeps-fpc-method-shadowing | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy red at 57b9b7148d32 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-pow-matches-cpython | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_pow_matches_cpython.npy red at 096da361dd93 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-print-arg-eval-order | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_print_arg_eval_order.npy@1 red at 9df2717684a3 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-pyexpr-semantics | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_pyexpr_semantics.npy red at 9294bce2c800 (auto-filed by twatch) | — |
