@@ -290,6 +290,7 @@ class Clone:
         # refuse to watch a working dev checkout: we do detached checkouts of
         # arbitrary SHAs — running that under an active agent/dev tree would
         # yank files out from under them.  A watcher clone stays pristine.
+        self.heal_object_db()
         self.heal_truncations()
         dirty = self.dirty()
         if dirty:
@@ -406,6 +407,126 @@ class Clone:
                   "Restored from HEAD (a zero-byte file has nothing to lose): "
                   "%s" % (len(healed), ", ".join(healed)), flush=True)
         return healed
+
+    def heal_object_db(self):
+        """Recover from an object database an unclean shutdown corrupted.
+
+        heal_truncations() below restores tracked WORKTREE files that came back
+        at length zero. On 2026-08-20 the same class of event — a power cut,
+        this time the whole house going down with a failed PSU — zeroed
+        something it cannot reach: the loose object holding this clone's own
+        HEAD commit. Every git command then failed:
+
+            error: object file .git/objects/80/4829ad… is empty
+            fatal: bad object HEAD
+
+        including the `git status` that heal_truncations() opens with, so the
+        healer raised RuntimeError from its first line, __init__ died with it,
+        and the daemon exited 1 in 315ms — eleven times, until StartLimitBurst
+        gave up into `failed`. Nothing tested a commit for 4h40m. Note where
+        that left us: the repo became readable again ~17 minutes later, when an
+        unrelated fetch packed a good copy of the object, but by then the unit
+        had already stopped retrying. The corruption outlived itself; the
+        give-up did not.
+
+        `size == 0` is the same evidence-based signature heal_truncations()
+        uses, and it is even stronger here: a zero-byte file is not a valid
+        loose object under ANY circumstances — even an empty blob carries a
+        zlib header — so deleting one destroys nothing that could be read. The
+        same holds for a zero-byte `.git/index`, which git rebuilds from HEAD.
+        Deleting is the whole repair when the object is also in a pack or on
+        the remote; when it is not, the fetch+reset below re-obtains it, which
+        is lossless in a watcher clone by construction: everything face 1
+        produces is pushed before it matters, which is exactly why
+        _drop_to_origin() may already reset --hard onto origin.
+
+        Narrow on purpose: this only acts when git cannot READ the repo. A
+        readable clone, dirty or not, falls through untouched to the guard in
+        __init__ — a real dev checkout is as protected as it was.
+        """
+        try:
+            self.dirty()
+            return []
+        except RuntimeError as e:
+            first = str(e).strip().splitlines()[-1] if str(e).strip() else "?"
+        print("twatch: git cannot read this clone (%s) — checking for the "
+              "zero-length files an unclean shutdown leaves behind" % first,
+              flush=True)
+
+        removed = []
+        objdir = os.path.join(self.path, ".git", "objects")
+        for sub in (sorted(os.listdir(objdir)) if os.path.isdir(objdir) else []):
+            # loose objects only: `xx/` fanout dirs, never `pack/` or `info/`
+            if len(sub) != 2:
+                continue
+            d = os.path.join(objdir, sub)
+            for name in sorted(os.listdir(d)):
+                full = os.path.join(d, name)
+                try:
+                    if os.path.getsize(full) == 0:
+                        os.remove(full)
+                        removed.append("%s/%s" % (sub, name))
+                except OSError:
+                    continue
+        idx = os.path.join(self.path, ".git", "index")
+        try:
+            if os.path.getsize(idx) == 0:
+                os.remove(idx)
+                removed.append("index")
+        except OSError:
+            pass
+        if removed:
+            print("twatch: removed %d zero-length git file(s) — a zero-byte "
+                  "object can never be a valid one: %s"
+                  % (len(removed), ", ".join(removed[:10])), flush=True)
+        if "index" in removed:
+            # An ABSENT index is not an empty one: git reads it as "nothing is
+            # tracked", so every file in HEAD shows up staged-deleted and the
+            # guard below refuses the clone as a dev checkout with 40k
+            # deletions in it. Rebuild it from HEAD — --mixed touches the index
+            # only, never the worktree, so heal_truncations() still sees the
+            # real damage afterwards. If HEAD is unreadable too this fails and
+            # the refetch below is the answer anyway.
+            try:
+                sh(["git", "reset", "--quiet", "--mixed", "HEAD"], cwd=self.path)
+            except RuntimeError:
+                pass
+
+        try:
+            self.dirty()
+            print("twatch: clone readable again", flush=True)
+            return removed
+        except RuntimeError:
+            pass
+
+        # Still unreadable: the objects are gone, not merely empty. Refetch
+        # them and land on origin's tip. --refetch is the fallback because
+        # negotiation walks local refs, which is the very thing that cannot be
+        # read here; it re-downloads without asking what we have.
+        try:
+            self.fetch()
+        except RuntimeError:
+            sh(["git", "fetch", "--quiet", "--no-write-fetch-head", "--refetch",
+                "origin", "+refs/heads/%s:refs/remotes/origin/%s"
+                % (self.branch, self.branch)], cwd=self.path)
+        sh(["git", "symbolic-ref", "HEAD", "refs/heads/%s" % self.branch],
+           cwd=self.path)
+        sh(["git", "reset", "--hard", "origin/%s" % self.branch], cwd=self.path)
+        try:
+            self.dirty()
+        except RuntimeError as e:
+            # Out of repairs. Say what to DO — the 4h40m outage was not caused
+            # by a hard problem, it was caused by `fatal: bad object HEAD`
+            # scrolling past in a log nobody had a reason to open.
+            sys.exit("twatch: %s is damaged beyond automatic repair (%s).\n"
+                     "A watcher clone holds nothing of its own: delete it and "
+                     "reclone with `trackt setup --fetch-corpus`."
+                     % (self.path, str(e).strip().splitlines()[-1]))
+        print("twatch: object database was damaged beyond the empty files — "
+              "refetched from origin and reset onto origin/%s. A watcher clone "
+              "holds nothing unpushed, so this is lossless." % self.branch,
+              flush=True)
+        return removed or ["(refetched)"]
 
     def fetch(self):
         """Poll origin WITHOUT touching FETCH_HEAD.
@@ -5021,6 +5142,7 @@ def main():
             # a dev edit leaked into a run, then killed the daemon on publish)
             # a truncated file is corruption, not an edit to wait for: heal it
             # here too, or an OOM kill mid-publish parks the daemon forever
+            clone.heal_object_db()
             clone.heal_truncations()
             rotate_log(clone.path)
             clone.publish_own_writes(host)

@@ -184,6 +184,49 @@ Detaching is not the bug and is not going away: `twatch` checks out arbitrary
 shas to test them, which is why it demands its own clone and refuses a dirty
 one. The defect is only ever in readers that assume the tree reflects now.
 
+## Rule: a power cut is CORRUPTION, and the dirty guard cannot tell
+
+The refusal above is right about a human's edit and blind to a truncated tree,
+because ext4's delayed allocation makes the two look identical in `git status`.
+Two power cuts have now proven it, and each one hit a different layer:
+
+| date | what came back at length zero | what it broke | the healer |
+| --- | --- | --- | --- |
+| 2026-08-11 | 7 tracked worktree files | the dirty guard refused; 326 restarts, 13.6h dark | `heal_truncations()` |
+| 2026-08-20 | the loose object for HEAD, plus 15 worktree files | `git status` itself failed, so the healer died on its own first line; 11 restarts, 4h40m dark | `heal_object_db()` |
+
+`size == 0` is the whole signature, and it is why healing is safe rather than
+brave: no edit anyone makes on purpose looks like this, and a zero-byte file has
+nothing in it to lose. A zero-byte *object* is even more clear-cut — not even an
+empty blob can be zero bytes, since every loose object carries a zlib header.
+
+Three things follow, all of them enforced by
+`tools/twatch_heal_objectdb_devtest.py`:
+
+- **Heal below the layer you are protecting.** The 2026-08-20 outage was a
+  healer that could not run because the repo it was healing was too damaged to
+  answer `git status`. So `heal_object_db()` runs *first*, sweeps zero-length
+  loose objects and a zero-length `.git/index`, and falls back to refetching
+  from origin — lossless in a watcher clone by construction, since everything
+  face 1 produces is pushed before it matters.
+- **Removing an index is not repairing it.** An absent index reads as "nothing
+  is tracked", so every file in HEAD shows up staged-deleted and the dirty guard
+  refuses the clone over 40k phantom deletions. Rebuild with `reset --mixed`.
+- **The daemon cannot heal its own file.** A zero-length `twatch.py` is the
+  worst shape available: python exits 0 on an empty file, `Type=simple` reports
+  a clean start, `Restart=on-failure` declines to retry, and the unit sits
+  `inactive` looking deliberate. That one is an `ExecStartPre` in the unit
+  `trackt install` writes.
+
+What is deliberately NOT changed: `StartLimitBurst=10` / `StartLimitIntervalSec=600`.
+Giving up into `failed` after ten tries is the 2026-08-12 lesson and it still
+holds — an eternal restart loop is invisible, a `failed` unit is not, and
+`trackt-health.timer` turns it into a `~/USER_ATTENTION.md` REQUEST within ~15
+minutes. On 2026-08-20 that alert path worked exactly as designed; the box was
+simply unattended, because the same PSU failure had taken the house down. The
+answer to "nothing retried" is to stop manufacturing the failure, not to retry
+forever.
+
 ## Diagnostic: which numbers in your reports have NEVER changed?
 
 A constant in a report is the hardest defect to see, because it reads as a

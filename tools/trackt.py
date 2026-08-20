@@ -1023,6 +1023,18 @@ StartLimitIntervalSec=600
 [Service]
 Type=simple
 WorkingDirectory={clone}
+
+# twatch heals a clone an unclean shutdown corrupted (heal_object_db /
+# heal_truncations) — but it cannot heal the one file it needs in order to run,
+# and that file is as truncatable as any other. A zero-length twatch.py is the
+# worst shape of all: python exits 0 on an empty file, so Type=simple reports a
+# clean start, Restart=on-failure declines to retry, and the unit sits
+# `inactive` looking deliberate. Restoring a zero-byte tracked file from HEAD is
+# provably lossless (there is nothing in it to lose), so do it before ExecStart
+# rather than discovering it afterwards. `-` because a repo too damaged for this
+# is twatch's own problem to report, not a reason to refuse to start.
+ExecStartPre=-/bin/sh -c 'test -s {clone}/tools/twatch.py || git -C {clone} checkout -- tools/twatch.py'
+
 ExecStart={python} {clone}/tools/twatch.py --clone {clone}
 
 # on-failure, NOT always: a crash or OOM kill restarts, but a deliberate
