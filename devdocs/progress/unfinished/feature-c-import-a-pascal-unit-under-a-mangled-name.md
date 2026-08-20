@@ -2,10 +2,9 @@
 track: C
 prio: 50
 type: feature
-blocked-by: [bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine]
+blocked-by: []
 summary: "Give C an explicit import site for a Pascal unit: `#include \"math.pas\"` declares its routines under mangled C identifiers (`math_pas_Sqrt`), case preserved from the Pascal declaration, path-qualified on collision. Overloads resolve by the declared C signature. AnsiString-bearing signatures are refused by name. Design settled by the user 2026-08-19; this ticket is a SPEC, not a discussion."
 status: unfinished
-owner: frank2-C
 ---
 
 # C imports a Pascal unit under a mangled name
@@ -169,9 +168,11 @@ pascal26:1: error: stray token at top level (not a declaration): 'unit'
 So `#include` of a `.pas` is still plain textual inclusion — the import site
 this ticket specifies does not exist, and nothing about it landed incidentally.
 Its `blocked-by`
-(`bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine`) is
-still open in `backlog/`, so the edge is live and the ticket is correctly out
-of `ready`.
+(`bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine`) was
+read as still open in `backlog/` when this was written. **It was not** — that
+bug was resolved 2026-08-19 in `eb5c7be11`, which is in master. The edge was
+stale and has been cleared (2026-08-20); the ticket is back in `ready` for
+Track C.
 
 ## Progress — 2026-08-19 (frank2-C)
 

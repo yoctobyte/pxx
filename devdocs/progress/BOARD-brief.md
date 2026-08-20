@@ -27,7 +27,7 @@ _none — no lane is locked._
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
 - `feature-b-the-module-shim-batch-blocking-the-python-corpus` [B] — blocked-by: decide-xml-etree-thin-tree-model-or-a-real-xml-library
-- `feature-c-import-a-pascal-unit-under-a-mangled-name` [C] — blocked-by: bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
+- `feature-c-import-a-pascal-unit-under-a-mangled-name` [C]
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
