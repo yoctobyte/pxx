@@ -534,4 +534,4 @@ Makefile assertions + the shadow control verified against the FPC oracle.
 No compiler source changed, so the fixedpoint is unaffected by construction.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 1d478cdd3.
