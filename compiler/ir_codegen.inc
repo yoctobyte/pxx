@@ -31,6 +31,36 @@ begin
 end;
 
 procedure EmitAcquireHeapLock;
+{ Test-and-test-and-set with a PAUSE backoff, not a bare `lock xchg` loop.
+
+  The difference is not the uncontended path — that is one atomic either way —
+  it is what a WAITER costs everyone else. A plain xchg loop performs an atomic
+  read-modify-write on every spin, and each one takes the lock's cache line
+  exclusive, so N waiters bounce a line that the HOLDER also needs in order to
+  finish and release. The waiters therefore slow down the very work they are
+  waiting for, which is why the cost grows faster than the thread count.
+
+  So: spin on an ordinary LOAD (shared line, no bus traffic, no interference)
+  and only attempt the atomic when the lock actually looks free. PAUSE is the
+  spin-wait hint — it throttles the loop and yields the pipeline to a
+  hyperthread sibling.
+
+  Measured on this benchmark (400k GetMem/FreeMem pairs total, SPLIT across the
+  threads, so a perfectly scaling allocator would keep wall time FLAT). Median
+  of 3 runs, 12-core box with Track T's watcher also running, so treat the
+  absolute values as noisy and the ratio as the result:
+
+      threads      1     2     4     8
+      xchg loop   66ms 100ms 132ms 171ms
+      TTAS+pause  60ms  74ms  90ms 122ms
+                        -26%  -32%  -29%
+
+  Single-thread cost is unchanged (the uncontended path is one atomic either
+  way; the 66-vs-60 gap is run-to-run noise, not a win to claim). It does NOT
+  make the allocator scale — the lock is still global and one thread allocates
+  at a time; that needs per-thread arenas, which needs real TLS, which this
+  runtime does not have yet (see the ticket). This is the part of the cliff that
+  was pure contention overhead rather than serialisation. }
 begin
   if ThreadSafeMode then
     EmitAsmX64([
@@ -39,7 +69,14 @@ begin
       'mov eax, 1',
       'lock xchg [@glob], eax',  BSS_HEAP_LOCK,
       'test eax, eax',
-      'jnz .spin',
+      'jz .got',
+    '.wait:',
+      'pause',
+      'mov eax, [@glob]', BSS_HEAP_LOCK,
+      'test eax, eax',
+      'jnz .wait',
+      'jmp .spin',
+    '.got:',
       'pop rax'
     ]);
 end;

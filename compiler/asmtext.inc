@@ -329,6 +329,7 @@ begin
   if CaseEqual(mnem, 'leave') then begin x64_leave; Exit; end;
   if CaseEqual(mnem, 'syscall') then begin x64_syscall; Exit; end;
   if CaseEqual(mnem, 'nop') then begin EncB($90); Exit; end;
+  if CaseEqual(mnem, 'pause') then begin EncB($F3); EncB($90); Exit; end;   { F3 90 — the spin-wait hint: on a real core it throttles the loop and drains the store buffer, and on a hyperthread it yields the pipeline to the sibling. Decodes as NOP on anything that predates it, so it is always safe to emit. }
   if CaseEqual(mnem, 'cqo') then begin EncB($48); EncB($99); Exit; end;
   { CPU feature discovery. These gate any RUNTIME ISA dispatch — a program can
     pick a GP, SSE or AVX kernel only if it can ask what the CPU has — so they

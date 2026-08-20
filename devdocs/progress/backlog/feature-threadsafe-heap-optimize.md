@@ -1,11 +1,12 @@
 ---
 prio: 53  # auto
+owner: ""
 ---
 
 # Threadsafe heap — optimize + cross-target (M5)
 
 - **Type:** feature (codegen / runtime — optimization) — Track A
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-06-30
 - **Umbrella:** [[meta-multithreading]]. Follows the M0 contract
   [[feature-threadsafe-heap-contract]] (correctness) — this is the *speed* half.
@@ -41,3 +42,73 @@ PXXFree holds). WITHOUT --threadsafe: SIGSEGV every run — proving threaded
 allocation genuinely requires the flag (the M5 contract). In make test-threads
 (compiled --threadsafe). The *optimisation* part of M5 (per-thread arenas /
 lock-free fast path) is still open; correctness is now demonstrated + gated.
+
+## 2026-08-20 — measured first; the cross-target half is largely already done, the lock half landed, the scaling half is BLOCKED
+
+### The ticket's scope had drifted — checked before writing anything
+
+"Today `--threadsafe` = a coarse global lock ... **x86-64 only**" was true when
+this was opened on 2026-06-30. It is not true now: `compiler.pas:845` accepts
+**x86-64, i386, aarch64 and arm32**, each with its own lock implementation, and
+`EmitIoLockStubsForTarget` dispatches to four per-arch I/O-lock stubs. Only
+**riscv32** still refuses, and riscv32 is the ESP32-C3 target — FreeRTOS, not
+clone(2) threads — so `--threadsafe` there is close to meaningless. The
+cross-target bullet is therefore effectively closed; what is left is the
+bullet this ticket is named for.
+
+### The benchmark the acceptance asks for now exists
+
+`bench/threadsafe_heap_scaling.pas`, `make benchmark-threadsafe-heap`. It holds
+the TOTAL allocator work constant and splits it across the threads, so flat wall
+time = perfect scaling and a rise = the lock serialising. That framing is what
+makes the result legible; a per-thread-fixed-iterations benchmark would have hid
+the cliff behind "more threads do more work".
+
+### The cliff was real, and part of it was pure interference
+
+| threads | 1 | 2 | 4 | 8 |
+| --- | --- | --- | --- | --- |
+| `lock xchg` spin loop (before) | 66 ms | 100 ms | 132 ms | 171 ms |
+| TTAS + `pause` (after) | 60 ms | 74 ms | 90 ms | 122 ms |
+| | — | −26% | −32% | −29% |
+
+Median of 3 on a 12-core box with Track T also running — ratios, not absolutes.
+Full write-up: `benchmarks/2026-08-20-threadsafe-heap-lock.md`.
+
+`EmitAcquireHeapLock` was a bare `lock xchg` loop, which performs an atomic
+read-modify-write on *every* spin and so takes the lock's cache line exclusive
+each time — while the **holder** needs that same line to finish and release.
+Waiters were slowing down the work they were waiting for, which is why the curve
+grew faster than the thread count. Test-and-test-and-set spins on an ordinary
+load and only attempts the atomic when the lock looks free; `pause` throttles
+the loop and yields to a hyperthread sibling. (`pause` was not in the text
+assembler; added as `F3 90`.)
+
+**Single-thread cost is unchanged** — the uncontended path is one atomic either
+way. The 66-vs-60 is noise and is not claimed as a win.
+
+Correctness: `test_thread_heap` run **12×** and `test_thread_heap_mixed` 8×,
+zero failures, plus `test_thread_heap_mixed`, `test_threadsafe_io_lock`,
+`test_multithreading`, `test_tthread_sync` green. A lock change earns repetition
+rather than one pass.
+
+### The scaling half is BLOCKED, and the blocker is not in this ticket
+
+What remains — flattening that curve — is honest serialisation: one global lock,
+one thread allocating at a time. The standard fix is a per-thread free-list
+magazine so uncontended alloc/free never touches the lock. **It cannot be
+written, because this runtime has no thread-local storage at all:**
+`PXX_CLONE_THREAD = $350F00` omits `CLONE_SETTLS`, so every thread shares the
+parent's `fs` base and an `fs:`-relative slot is the same memory in every
+thread. The only per-thread handle available is `gettid`, a syscall — fine at
+I/O-statement granularity (where the I/O lock already uses it) and hopeless on
+an allocator fast path.
+
+Filed as [[feature-a-thread-local-storage-via-clone-settls]]. This ticket should
+be considered blocked on it for the arena work; the lock and benchmark halves
+are done.
+
+### Gate
+
+`make compiler/pascal26` (byte-identical fixedpoint) + `tools/gate.sh quick`
+GREEN + the thread suite above, repeated.

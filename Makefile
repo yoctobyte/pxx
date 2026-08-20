@@ -226,6 +226,17 @@ benchmark-compiler-runtime: $(COMPILER) benchmark-check
 # landed -O1 passes gate OptLevel>=1 and no -O2/-O3-only pass exists yet — so
 # their rows track -O1 until the higher tiers gain distinct passes; they stay
 # in the table so the tiers remain visible as work lands.
+# --threadsafe allocator scaling. Total allocator work is held CONSTANT and
+# split across the threads, so flat = perfect scaling and rising = the global
+# lock serialising. No hyperfine: the program times itself with CLOCK_MONOTONIC.
+# feature-threadsafe-heap-optimize
+benchmark-threadsafe-heap: $(COMPILER)
+	./$(COMPILER) --threadsafe -Fulib/rtl bench/threadsafe_heap_scaling.pas $(TESTTMP)/bench-ts-heap
+	@echo "=== --threadsafe alloc scaling (constant total work; flat vs1x100=100 is ideal) ==="
+	@$(TESTTMP)/bench-ts-heap
+	@$(TESTTMP)/bench-ts-heap
+	@$(TESTTMP)/bench-ts-heap
+
 benchmark-opt-levels: $(COMPILER) benchmark-check
 	@echo "=== building the compiler at each -O tier ==="
 	./$(COMPILER) -O0 $(COMPILER_SRC) $(TESTTMP)/pxx-opt-O0
