@@ -556,3 +556,41 @@ box that has one.
 
 Scoreboard delta: seeds 1450 → 1820; findings unchanged; first non-x86-64 seeds
 in the campaign's history (250 of them).
+
+### CORRECTION 2026-08-20 — the LAYOUT-SUSPECT discriminator above is INVALID in the direction it was written for
+
+Track T measured the D3 triage and it does not do what it says. **csmith's
+option set is part of its RNG input**, so re-running a seed with
+`--no-bitfields --no-packed-struct --no-unions` does not yield the same program
+minus those constructs — it yields a *different program* (T measured seed 90044
+going 1879 → 3373 lines with a different checksum). Agreement from that rerun
+therefore carries almost no power to clear the original divergence, which was
+the classifier's entire job.
+
+The other direction survives: if the layout-free run *also* diverges, that is a
+fresh finding on its own merits. But "agrees, therefore layout-dependent" was
+never valid, and the D3 script must not be used to make that call again.
+
+What replaced it in `tools/csmith_fuzz.py` (T, `174186b5d`) is better than
+either of our versions: it reads csmith's own `XXX` statistics footer for the
+two constructs that can actually reach a checksum — union variables, and structs
+with bitfields — because **csmith hashes named FIELDS through `transparent_crc`,
+not raw bytes**, so padding and alignment cannot reach the checksum at all. That
+narrows the ABI caveat well below where D3 put it. A divergence in a program
+with neither construct is a `MISCOMPILE_VS_GCC` with the caveat explicitly
+retired; anything else is `LAYOUT_SUSPECT`, naming the construct and its count.
+`LAYOUT_SUSPECT` ranks *with* the miscompiles and is deliberately kept out of
+the exit code, so a red exit cannot become pressure to misfile an ABI difference
+into Track A.
+
+D3's numbers are unaffected (it recorded 0 layout-suspect, so the invalid arm
+never fired) and so is the sitting's reading. What is retracted is the claim
+that the triage is sound-but-untested machinery: it is unsound in one direction,
+and that was not visible until someone measured what the flags do to the
+generator rather than reasoning about what they mean.
+
+Second lesson, T's, worth more than the fix: their first detector grepped the C
+source for `\bunion\b` and reported unions in **12 of 12** programs — every hit
+was the footer line `XXX total union variables: 0`. A true fact about the wrong
+subject, inside the classifier written to prevent exactly that. **The thing you
+grep for appears in the metadata too.**
