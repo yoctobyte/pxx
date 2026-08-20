@@ -4950,6 +4950,8 @@ test-core: $(COMPILER)
 	$(TESTTMP)/cfloat_array_decay_addr_b37826; test "$$?" = "42"
 	./$(COMPILER) test/cfinalizers_on_main_return_b379.c $(TESTTMP)/cfinalizers_main_b37926
 	$(TESTTMP)/cfinalizers_main_b37926; test "$$?" = "42"
+	./$(COMPILER) test/c_environ_prefilled_b380.c $(TESTTMP)/c_environ_prefilled_b38026
+	$(TESTTMP)/c_environ_prefilled_b38026; test "$$?" = "42"
 	./$(COMPILER) test/cfield_2d_row_decay_b62.c $(TESTTMP)/cfield_2d_row_decay_b6226
 	$(TESTTMP)/cfield_2d_row_decay_b6226; test "$$?" = "42"
 	./$(COMPILER) test/ctypedef_shadow_local_b151.c $(TESTTMP)/ctypedef_shadow_local_b15126

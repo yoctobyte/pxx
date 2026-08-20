@@ -19,6 +19,11 @@
 #define W_OK 2
 #define R_OK 4
 
+/* POSIX declares the environment here. It is defined in unistd.c and filled
+   before main by __pxx_run_initializers, which the C entry stub calls with the
+   initial stack pointer (feature-c-entry-stub-must-run-initializers-for-environ). */
+extern char **environ;
+
 int close(int fd);
 ssize_t read(int fd, void *buf, size_t count);
 ssize_t write(int fd, const void *buf, size_t count);

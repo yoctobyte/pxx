@@ -8974,6 +8974,39 @@ end;
   path and the header auto-pull brings the sibling src/<name>.c in. The pulled
   region then goes through the same pass 1 / pass 2 as the main program.
   No-op under --system-libs (there the externals SHOULD bind to glibc). }
+{ True when this translation unit needs the pre-main initializer phase.
+  `environ` is the first thing to need one. It is a VARIABLE read directly, not
+  a call, so nothing in the crtl pull sweeps (which look for `name(`) can see
+  it, and no call ever triggers stdlib.c's lazy /proc/self/environ load -- which
+  is why `char **environ;` was a clean compile producing NULL where gcc gives
+  the real environment. The data is on the initial stack the stub already saves.
+
+  Demand-driven, like every other crtl pull in this file: a program that never
+  names `environ` pays nothing, and the identifier scan is length-filtered so it
+  costs nothing on a large TU either. The MECHANISM is general -- the stub calls
+  a `__pxx_run_initializers` shell and further pre-main work is a C statement
+  added to that shell, not another per-target stub sequence -- it is only the
+  ACTIVATION that is demand-driven.
+
+  Called from two places (the stub, and the crtl pull that supplies the shell's
+  body) and they must agree, so it is one function rather than two spellings of
+  one condition. feature-c-entry-stub-must-run-initializers-for-environ }
+function CNeedsEnvironInit: Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if EmitObjMode or CUseSystemLibs or NoDefaultRtl then Exit;
+  if TargetArch = TARGET_XTENSA then Exit;
+  if (TargetArch = TARGET_RISCV32) and EspBareBoot then Exit;
+  for i := 0 to TokCount - 1 do
+    if (Tokens[i].Kind = tkIdent) and (Tokens[i].SLen = 7) and
+       (GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen) = 'environ') then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 function CPullCrtlForPrototypes: Integer;
 var
   i, k, n: Integer;
@@ -9016,6 +9049,14 @@ begin
       end;
     end;
   end;
+  { `environ` is a VARIABLE, so neither sweep above can see it -- both look for
+    `name(`. A TU that reads it needs unistd.c pulled, both for the definition
+    and for __pxx_run_initializers, the pre-main shell the entry stub calls to
+    fill it. Same predicate the stub used, so the call and the body cannot
+    disagree. feature-c-entry-stub-must-run-initializers-for-environ }
+  if (not CHdrListHas(wantList, 'unistd.h')) and CNeedsEnvironInit then
+    AppendString(wantList, 'unistd.h ');
+
   synth := '';
   n := Length(wantList);
   i := 1;
@@ -9112,8 +9153,35 @@ begin
     (s = '__asm__') or (s = '__asm');
 end;
 
+{ Patch one entry-stub call site with a body address. There are two of them now
+  -- the call to `main` and the call to the pre-main initializer runner -- and
+  the encoding table is per target, so it lives here once rather than being
+  written out twice. x86 family: E8 rel32 = target - (patch+4). arm32: BL imm24
+  = (target - (patch+8)) div 4 (pc is 8 ahead of the BL). aarch64: BL imm26.
+  riscv32: the auipc+jalr pair, both words. }
+procedure CPatchStubCall(patchPos, bodyAddr: Integer);
+var rvHi, rvLo: Integer;
+begin
+  if TargetArch = TARGET_ARM32 then
+    Patch32(patchPos, Integer($EB000000) or
+      (((bodyAddr - (patchPos + 8)) div 4) and $00FFFFFF))
+  else if TargetArch = TARGET_AARCH64 then
+    Patch32(patchPos, Integer($94000000) or
+      (((bodyAddr - patchPos) div 4) and $03FFFFFF))
+  else if TargetArch = TARGET_RISCV32 then
+  begin
+    RISCVPcrelSplit(bodyAddr - patchPos, rvHi, rvLo);
+    Patch32(patchPos, EncodeRISCVAuipc(reg_t0, rvHi));
+    Patch32(patchPos + 4, EncodeRISCVJalr(reg_ra, reg_t0, rvLo));
+  end
+  else
+    Patch32(patchPos, bodyAddr - (patchPos + 4));
+end;
+
 procedure ParseCProgram;
-var firstIdx, callPatch, mainIdx, rvHi, rvLo, crtlStart, userTokEnd: Integer;
+var firstIdx, callPatch, mainIdx, crtlStart, userTokEnd: Integer;
+    initPatch, initIdx: Integer;
+    needInit: Boolean;
 begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
 
@@ -9126,6 +9194,13 @@ begin
     -1: the user EOF sits at index TokCount-1 and CLexAppend overwrites that
     slot with the first pulled token, so the appended region starts there. }
   userTokEnd := TokCount - 1;
+
+  { Does this program need the pre-main initializer phase? Decided BEFORE the
+    stub is emitted, because the call has to sit inside it; the crtl pull below
+    asks the same question again and gets the same answer (the pulled tokens
+    never name `environ`). }
+  needInit := CNeedsEnvironInit;
+  initPatch := -1;
 
   { Program entry stub (the ELF entry at code offset 0): save the initial stack
     pointer, hand C `main(argc, argv)` the Linux initial stack ([argc][argv0]...),
@@ -9158,6 +9233,19 @@ begin
     TARGET_X86_64:
     begin
       EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP); { mov [initial_rsp], rsp }
+      { Pre-main initializer phase. Placed BEFORE argc/argv are loaded into the
+        argument registers, which is what makes the ordering constraint vanish:
+        there is nothing live to save across the call yet, only the stack
+        pointer, and that the callee preserves. The shell gets the raw initial
+        stack pointer -- the one thing only the stub knows -- and derives
+        everything it wants from it in C, so a future pre-main requirement is a
+        statement in __pxx_run_initializers rather than a sixth hand-assembled
+        stub sequence. feature-c-entry-stub-must-run-initializers-for-environ }
+      if needInit then
+      begin
+        EmitB($48); EmitB($89); EmitB($E7);                    { mov rdi, rsp (arg1 = initial sp) }
+        EmitB($E8); initPatch := CodeLen; EmitI32(0);          { call __pxx_run_initializers }
+      end;
       EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP); { mov rax, [initial_rsp] }
       EmitB($8B); EmitB($38);                                                       { mov edi, [rax]  (argc) }
       EmitB($48); EmitB($8D); EmitB($70); EmitB($08);                               { lea rsi, [rax+8] (argv) }
@@ -9183,6 +9271,21 @@ begin
     begin
       EmitB($89); EmitB($E0);                                  { mov eax, esp }
       EmitB($A3); EmitGlobRef(BSS_INITIAL_RSP);                { mov [initial_sp], eax }
+      { Pre-main initializer phase. Placed BEFORE argc/argv are loaded into the
+        argument registers, which is what makes the ordering constraint vanish:
+        there is nothing live to save across the call yet, only the stack
+        pointer, and that the callee preserves. The shell gets the raw initial
+        stack pointer -- the one thing only the stub knows -- and derives
+        everything it wants from it in C, so a future pre-main requirement is a
+        statement in __pxx_run_initializers rather than a sixth hand-assembled
+        stub sequence. feature-c-entry-stub-must-run-initializers-for-environ }
+      if needInit then
+      begin
+        EmitB($50);                                            { push eax (arg1 = initial sp) }
+        EmitB($E8); initPatch := CodeLen; EmitI32(0);          { call __pxx_run_initializers }
+        EmitB($83); EmitB($C4); EmitB($04);                    { add esp, 4 (cdecl caller-pops) }
+        EmitB($A1); EmitGlobRef(BSS_INITIAL_RSP);              { mov eax, [initial_sp] (call clobbered eax) }
+      end;
       EmitB($8D); EmitB($48); EmitB($04);                      { lea ecx, [eax+4] (argv) }
       { The i386 internal convention pushes LEFTMOST-FIRST, and ir_codegen386's
         cdecl reversal is disabled inside a C program, so main reads arg1 from
@@ -9218,6 +9321,19 @@ begin
       EmitI32($EA000000);                 { b .+8 (skip the literal) }
       EmitGlobRef(BSS_INITIAL_RSP);       { literal: absolute BSS address }
       EmitI32($E581D000);                 { str sp, [r1] }
+      { Pre-main initializer phase. Placed BEFORE argc/argv are loaded into the
+        argument registers, which is what makes the ordering constraint vanish:
+        there is nothing live to save across the call yet, only the stack
+        pointer, and that the callee preserves. The shell gets the raw initial
+        stack pointer -- the one thing only the stub knows -- and derives
+        everything it wants from it in C, so a future pre-main requirement is a
+        statement in __pxx_run_initializers rather than a sixth hand-assembled
+        stub sequence. feature-c-entry-stub-must-run-initializers-for-environ }
+      if needInit then
+      begin
+        EmitI32($E1A0000D);               { mov r0, sp (arg1 = initial sp) }
+        initPatch := CodeLen; EmitI32($EB000000);   { bl __pxx_run_initializers }
+      end;
       EmitI32($E59D0000);                 { ldr r0, [sp]  (argc) }
       EmitI32($E28D1004);                 { add r1, sp, #4 (argv) }
       callPatch := CodeLen; EmitI32($EB000000);   { bl main (offset patched) }
@@ -9246,6 +9362,19 @@ begin
       EmitGlobRef(BSS_INITIAL_RSP);       { literal: absolute BSS address }
       EmitI32($910003E2);                 { mov x2, sp }
       EmitI32($F9000022);                 { str x2, [x1] }
+      { Pre-main initializer phase. Placed BEFORE argc/argv are loaded into the
+        argument registers, which is what makes the ordering constraint vanish:
+        there is nothing live to save across the call yet, only the stack
+        pointer, and that the callee preserves. The shell gets the raw initial
+        stack pointer -- the one thing only the stub knows -- and derives
+        everything it wants from it in C, so a future pre-main requirement is a
+        statement in __pxx_run_initializers rather than a sixth hand-assembled
+        stub sequence. feature-c-entry-stub-must-run-initializers-for-environ }
+      if needInit then
+      begin
+        EmitI32($910003E0);               { mov x0, sp (arg1 = initial sp) }
+        initPatch := CodeLen; EmitI32($94000000);   { bl __pxx_run_initializers }
+      end;
       EmitI32($F94003E0);                 { ldr x0, [sp]  (argc) }
       EmitI32($910023E1);                 { add x1, sp, #8 (argv) }
       callPatch := CodeLen; EmitI32($94000000);   { bl main (offset patched) }
@@ -9271,6 +9400,19 @@ begin
         Save sp to BSS_INITIAL_RSP (absolute address via the inline-literal load). }
       EmitLoadGlobAddrRISCV32(reg_t0, BSS_INITIAL_RSP);  { t0 = &initial_sp }
       rv32_sw(reg_sp, reg_t0, 0);         { sw sp, 0(t0) }
+      { Pre-main initializer phase. Placed BEFORE argc/argv are loaded into the
+        argument registers, which is what makes the ordering constraint vanish:
+        there is nothing live to save across the call yet, only the stack
+        pointer, and that the callee preserves. The shell gets the raw initial
+        stack pointer -- the one thing only the stub knows -- and derives
+        everything it wants from it in C, so a future pre-main requirement is a
+        statement in __pxx_run_initializers rather than a sixth hand-assembled
+        stub sequence. feature-c-entry-stub-must-run-initializers-for-environ }
+      if needInit then
+      begin
+        rv32_addi(reg_a0, reg_sp, 0);     { mv a0, sp (arg1 = initial sp) }
+        initPatch := CodeLen; rv32_auipc(reg_t0, 0); rv32_jalr(reg_ra, reg_t0, 0);
+      end;
       rv32_lw(reg_a0, reg_sp, 0);         { a0 = argc = [sp] }
       rv32_addi(reg_a1, reg_sp, 4);       { a1 = argv = sp+4 }
       { auipc+jalr (full range) not JAL (+/-1MB): main can sit past 1MB in a
@@ -9502,23 +9644,24 @@ begin
 
   mainIdx := FindProc('main');
   if mainIdx < 0 then Error('main function not found');
-  { Patch the entry stub's call-to-main with main's body address. x86 family: E8
-    rel32 = target - (callPatch+4). arm32: BL imm24 = (target - (callPatch+8))/4
-    in the low 24 bits of 0xEB000000 (pc is 8 ahead of the BL on arm). }
-  if TargetArch = TARGET_ARM32 then
-    Patch32(callPatch, Integer($EB000000) or
-      (((Procs[mainIdx].BodyAddr - (callPatch + 8)) div 4) and $00FFFFFF))
-  else if TargetArch = TARGET_AARCH64 then
-    Patch32(callPatch, Integer($94000000) or
-      (((Procs[mainIdx].BodyAddr - callPatch) div 4) and $03FFFFFF))
-  else if TargetArch = TARGET_RISCV32 then
+  { Patch the entry stub's call-to-main with main's body address. }
+  CPatchStubCall(callPatch, Procs[mainIdx].BodyAddr);
+
+  { ... and the pre-main initializer call, the same way. The stub emitted it as
+    a forward because the shell's body lives in crtl, which is not pulled until
+    long after the stub. If it is missing here the program would jump into
+    whatever sits at that offset, so this errors rather than leaving a wrong
+    address: the pull is driven by the same predicate that emitted the call, so
+    a missing body means the two disagreed, which is a compiler bug and not
+    something a C author can act on by editing their program. }
+  if initPatch >= 0 then
   begin
-    RISCVPcrelSplit(Procs[mainIdx].BodyAddr - callPatch, rvHi, rvLo);
-    Patch32(callPatch, EncodeRISCVAuipc(reg_t0, rvHi));
-    Patch32(callPatch + 4, EncodeRISCVJalr(reg_ra, reg_t0, rvLo));
-  end
-  else
-    Patch32(callPatch, Procs[mainIdx].BodyAddr - (callPatch + 4));
+    initIdx := FindProc('__pxx_run_initializers');
+    if initIdx < 0 then
+      Error('internal: the entry stub asked for a pre-main initializer phase ' +
+            'but __pxx_run_initializers was never pulled');
+    CPatchStubCall(initPatch, Procs[initIdx].BodyAddr);
+  end;
 end;
 
 procedure ParseCSubroutine;

@@ -244,3 +244,41 @@ int usleep(unsigned int usec) {
 /* Linux is 4096 everywhere pxx targets. sysconf(_SC_PAGESIZE) is the portable
    spelling and returns the same thing. */
 int getpagesize(void) { return 4096; }
+
+/* ---- pre-main initialization ---------------------------------------------
+ *
+ * `environ` is a variable C code reads directly, so nothing can be lazy about
+ * it the way getenv() is lazy about /proc/self/environ: by the time anyone
+ * looks, it has to already hold the right pointer. It was a clean compile
+ * producing NULL, which is worse than a diagnostic.
+ *
+ * __pxx_run_initializers is the pre-main shell the C entry stub calls before
+ * it hands main its arguments. It receives the raw Linux initial stack
+ * pointer, which is the one thing only the stub knows, and derives what it
+ * needs here in C rather than in five hand-assembled stub sequences -- so the
+ * next thing that must happen before main is a statement in this function.
+ *
+ * The initial stack is [argc][argv0]..[argvN-1][NULL][envp0]..[NULL], one
+ * machine word per slot, and `long` is exactly that word on every target pxx
+ * builds for (8 on LP64, 4 on ILP32), so the pointer arithmetic below scales
+ * itself: envp starts at slot argc+2.
+ *
+ * ONE MEASURED DIVERGENCE FROM GCC, recorded rather than hidden: a program
+ * that DEFINES `char **environ;` itself (rather than declaring it extern) gets
+ * ours filled, where gcc leaves that program's own zero-initialised object
+ * alone. POSIX reserves the name for the implementation and every real user in
+ * this repo's corpora writes `extern char **environ;` (tcc's tccrun.c,
+ * quickjs-libc.c); the one bare definition is in a win32 test tcc never builds
+ * here. Filling it is the more useful answer and the divergence is on a shape
+ * POSIX does not sanction, so it stands -- but it IS a divergence, and a
+ * program relying on gcc's answer would see a different one.
+ *
+ * feature-c-entry-stub-must-run-initializers-for-environ
+ */
+char **environ;
+
+void __pxx_run_initializers(long *sp)
+{
+  long argc = sp[0];
+  environ = (char **)(sp + argc + 2);
+}
