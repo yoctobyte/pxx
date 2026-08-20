@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T21:47:38Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "2e8b284343a50c2ffeb9f9ae328b1615d7e2630a",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T22:29:45Z",
    "fixed": [
     "tools-devtest#00"
@@ -430,10 +422,21 @@
    "sha": "24df0095adfe67a703ae8e005781d638417f9619",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T14:21:12Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_timer.pas"
+   ],
+   "sha": "26dae20b9dec8eb36cb0e8182d358e4a00e5baed",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
+  "test-core#src:test/test_timer.pas": "ok: $TMP  [code=102842B  data=2912B  bss=47304B  procs=223]",
   "test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy": "ok: $TMP  [code=2568790B  data=74180B  bss=52788B  procs=2020]"
  },
  "job_tier": {
@@ -1520,6 +1523,7 @@
   "test-core#src:test/test_decl_order_ret_recid_b291.pas": "native",
   "test-core#src:test/test_declared_directive.pas": "native",
   "test-core#src:test/test_default_keyword.pas": "native",
+  "test-core#src:test/test_default_of_aggregate.pas": "native",
   "test-core#src:test/test_default_params_methods.pas": "native",
   "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas": "native",
   "test-core#src:test/test_delphi_generics.pas": "native",
@@ -3910,6 +3914,7 @@
   "test-core#src:test/test_decl_order_ret_recid_b291.pas": "pass",
   "test-core#src:test/test_declared_directive.pas": "pass",
   "test-core#src:test/test_default_keyword.pas": "pass",
+  "test-core#src:test/test_default_of_aggregate.pas": "pass",
   "test-core#src:test/test_default_params_methods.pas": "pass",
   "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas": "pass",
   "test-core#src:test/test_delphi_generics.pas": "pass",
@@ -4509,7 +4514,7 @@
   "test-core#src:test/test_textfile_in_unit.pas": "pass",
   "test-core#src:test/test_tfplist_b259.pas": "pass",
   "test-core#src:test/test_threadsafe_io_lock.pas": "pass",
-  "test-core#src:test/test_timer.pas": "pass",
+  "test-core#src:test/test_timer.pas": "fail",
   "test-core#src:test/test_tinterfacedobject_builtin.pas": "pass",
   "test-core#src:test/test_tmyclass_name.pas": "pass",
   "test-core#src:test/test_tobject_cast_free.pas": "pass",
@@ -4701,11 +4706,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T14:11:44Z",
-  "sha": "24df0095adfe67a703ae8e005781d638417f9619",
+  "date": "2026-08-20T14:21:12Z",
+  "sha": "26dae20b9dec8eb36cb0e8182d358e4a00e5baed",
   "tier": "native",
-  "verdict": "GREEN",
-  "wall": 496.3
+  "verdict": "RED",
+  "wall": 483.5
  },
  "last_bench": {
   "conf_rows": 550,
@@ -4753,6 +4758,20 @@
    ],
    "src": "test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy lib/rtl/classes.pas +2",
    "status": "timeout"
+  },
+  {
+   "bad": "26dae20b9dec8eb36cb0e8182d358e4a00e5baed",
+   "good": "24df0095adfe67a703ae8e005781d638417f9619",
+   "job": "test-core#src:test/test_timer.pas",
+   "name": "test-core#772",
+   "opened": "2026-08-20T14:21:12Z",
+   "pin_built": false,
+   "range": [
+    "e18d01cef7ee6e283beabac3263d32b53afb02e6",
+    "26dae20b9dec8eb36cb0e8182d358e4a00e5baed"
+   ],
+   "src": "test/test_timer.pas",
+   "status": "fail"
   }
  ],
  "pin_baseline": {
