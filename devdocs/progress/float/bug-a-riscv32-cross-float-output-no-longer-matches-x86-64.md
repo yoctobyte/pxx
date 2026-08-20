@@ -1,8 +1,8 @@
 ---
 slug: bug-a-riscv32-cross-float-output-no-longer-matches-x86-64
 track: A+F
-prio: 60
-status: urgent
+prio: 20
+status: parked
 ---
 
 # `test-riscv32#src:test/test_cross_float.pas` — the two sides print the same numbers at different widths
@@ -76,3 +76,39 @@ asserts.
 then `tools/gate.sh quick`.
 
 *Filed by frank2-C during cascade triage; not claimed.*
+
+## 2026-08-20 — MOVED urgent/ -> float/, prio 60 -> 20 (owner correction)
+
+**Filed and ranked in the wrong place, and the ticket's own body says so.** It reads:
+*"The VALUES agree — this is digits and exponent width, not arithmetic."* Digit counts and
+exponent form are **exactly** what the F charter names as float FORMATTING, which is Track F
+and low prio by definition. It sat in `urgent/` at p60 where `ready`/`next` rank it, which is
+the one thing F tickets must not do.
+
+The owner caught it: *"there's a float ticket sitting in urgent, same issue — float work is
+deferred."*
+
+**Why the regression framing did not save it.** The corollary "a regression is worked at the
+priority of being red regardless of subject" is what put it in `urgent/`. That corollary is
+overruled here by the owner, and on the merits it should not have applied anyway: this is not
+a case where correct behaviour became incorrect. The ticket's own analysis says **the new
+rendering is arguably the CORRECT one** — a `Single` printed as a `Single`, now that
+`PXXWriteFloatSci` can ask for the 10-significant-digit form — and the defect is the TEST's
+assumption that a float-depth-reduced target's output is byte-comparable with x86-64's. A red
+job whose recommended fix is to change the expectation is not a regression in the compiler.
+
+**Rank the mechanism, never the datatype** — and here the mechanism *is* the rendering, so F
+is right rather than being a place to hide something.
+
+### What stays true while this is parked, and someone should see it
+
+`test-riscv32#src:test/test_cross_float.pas` **stays red in Track T's matrix.** Parking the
+ticket does not make the job green; it only stops the ticket being dispatched. So the red
+continues to appear in full-tier reports and to count against `pin_shadow` unless allowlisted.
+
+That is a Track T bookkeeping question, not a reason to unpark this: either the job is
+recorded as a known-red with this ticket as its reason, or the trivial half of option 1
+(generate the expectation for the target's own float depth, rather than diffing against
+x86-64's output) is done as a **test** fix by whoever owns that Makefile line. Neither is
+float-accuracy work. Flagged so the red does not get re-triaged from scratch in a week by
+someone who cannot see this ticket in `ready`.
