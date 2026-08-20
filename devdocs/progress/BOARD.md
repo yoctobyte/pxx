@@ -49,7 +49,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (268)
+## backlog (269)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -68,6 +68,7 @@ _none_
 | bug-a-only-the-pascal-driver-emits-the-signal-runtime | A | 45 | bug | The signal runtime (SIGSEGV/SIGFPE hook, restorer, sethook, install stubs) is emitted only by the Pascal driver in parser.inc. Every other frontend -- C, NilPy, Rust, Zig, Basic, Ada, Lua, the asm frontend -- produces a binary with no signal runtime, so a hardware fault there is an unhandled signal instead of a runtime error. Same shape as the I/O-lock gap that was already found and fixed. | — |
 | bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did | A | 45 | bug | i386, arm32 and aarch64 route variant binops through PXXVarBinOp in builtinheap.pas, which reimplements the same dispatch x86-64 hand-emits — and the same defect: a stringy operand's payload is read as a number. x86-64 was fixed 2026-08-20; those three targets still answer a heap address for `v('15') - 3`. | — |
 | bug-a-setlength-shrink-does-not-release-dropped-interface-elements | A | 45 | bug | SetLength shrinking a dynamic array of interfaces drops the tail elements without releasing them — shrinking 4→2 destroys 0 objects where FPC destroys 2. A leak, not a crash; the surviving elements and a later re-grow are all correct. | — |
+| bug-a-stack-overflow-fault-to-raise-loops-forever-without-an-sp-reset | A | 45 | bug | Redirecting the ucontext PC to a raise stub turns a hardware fault into a catchable Pascal exception — except for a STACK OVERFLOW, where the resumed stub inherits the exhausted SP and re-faults at the identical address forever. A hang, not a crash. The fault-to-raise design needs an SP reset alongside the PC rewrite for this one signal. | — |
 | bug-a-string-table-cap-refuses-a-14k-line-c-program | A | 45 | bug | `VisCacheVis` is sized by the string-table constant — and the cap it is tied to is too low | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-format-percent-u-prints-a-signed-value | B | 45 | bug | `Format('%u', [q])` on a QWord prints -1: sysutils' formatter aliases 'u' to 'd' and runs both through the signed IntToStr. FPC prints 18446744073709551615. The same line makes `%u` of Integer(-1) print -1 where FPC prints 4294967295. Filed from Track A+C+P — B owns lib/rtl. | — |
@@ -636,6 +637,7 @@ _none_
 - [p 45] [A] bug-a-only-the-pascal-driver-emits-the-signal-runtime
 - [p 45] [A] bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did
 - [p 45] [A] bug-a-setlength-shrink-does-not-release-dropped-interface-elements
+- [p 45] [A] bug-a-stack-overflow-fault-to-raise-loops-forever-without-an-sp-reset
 - [p 45] [A] bug-a-string-table-cap-refuses-a-14k-line-c-program
 - [p 45] [B] bug-b-format-percent-u-prints-a-signed-value
 - [p 45] [N] bug-n-a-class-base-that-is-an-expression-does-not-compile

@@ -445,6 +445,17 @@ usable slack page. Recursion depth is deliberately not printed — it depends on
 
 Bites: the pinned binary dies with exit 139 on it.
 
+### And what it immediately exposed
+
+With a handler finally able to RUN on a stack overflow, the obvious next step —
+point the ucontext PC at a raise stub, as item 1's machinery already allows —
+**loops forever**: the resumed stub inherits the exhausted SP and re-faults at
+the identical address. Measured and filed as
+[[bug-a-stack-overflow-fault-to-raise-loops-forever-without-an-sp-reset]].
+It is a sharp edge on a newly reachable capability, not a regression; the
+ordinary hook-and-return case exits cleanly. Whoever takes item 1 further should
+read it first — fault-to-raise needs an SP reset for this one signal.
+
 ### Gate
 
 `make compiler/pascal26` (byte-identical fixedpoint, converged after 2 rounds) +
