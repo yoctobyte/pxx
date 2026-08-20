@@ -2209,7 +2209,15 @@ class Manager:
             -(j.exp_dur if j.exp_dur else CLASSES[j.cls]["timeout"])))
         # cores/mem-aware admission does the real throttling; the cap is just
         # a runaway guard, and >nproc lets io/qemu-idle jobs keep cores busy
-        self.hard_cap = 1 if args.serial else (args.jobs or self.nproc * 2)
+        self.core_budget = core_budget(getattr(args, "max_cores", 0),
+                                       self.nproc)
+        # The 2x oversubscription is a RATIO, not the number 24: it exists so
+        # io- and qemu-idle jobs (cores < 1) can pack denser than the core
+        # budget suggests. Tie it to the budget, or `--max-cores 6` would leave
+        # the runaway guard at 24 and mean nothing until admission caught up.
+        cap = (self.nproc * 2 if self.core_budget > self.nproc
+               else max(2, int(round(self.core_budget * 2))))
+        self.hard_cap = 1 if args.serial else (args.jobs or cap)
         self.selfhost_red = False
         self.prev_cpu = cpu_times()
         self.idle_frac = 1.0
@@ -2595,7 +2603,7 @@ class Manager:
         # don't oversubscribe cpu with jobs KNOWN to be compute-hungry —
         # io/qemu-idle jobs (cores < 1) pack denser and keep the box busy
         if (sum(j.exp_cores for j in self.running) + job.exp_cores
-                > self.nproc + 1):
+                > self.core_budget):
             return False
         # swap + PSI gates: MemAvailable stays optimistic on a swapping box
         # (it ignores swap entirely), so these are the guards that actually
@@ -3934,8 +3942,90 @@ def run_bench():
 
 
 # ------------------------------------------------------------------ main ---
-def reexec_scoped():
-    """Re-exec ourselves inside a memory-capped systemd scope.
+# ------------------------------------------------------------ cpu budget ---
+# How many cores a run may keep busy. The default is "the box" (nproc + 1 --
+# see admit_ok), because the historical deployment was a DEDICATED watcher box.
+# plexus stopped being one on 2026-08-20, when borg's PSU died and the watcher
+# box became the human's workstation, so a run now has to leave a share behind.
+#
+# Two mechanisms, and they are not redundant:
+#
+#   * the ADMISSION budget (core_budget) is what actually shapes the run: the
+#     scheduler stops starting jobs once their learned core usage sums past it,
+#     so the run simply stays smaller. Cheap and self-correcting.
+#   * the cgroup CPUQuota on our own scope is the BACKSTOP, for when the
+#     learned figures are wrong -- a job that forks its own `make -j`, a shard
+#     that spawns qemu, anything whose cost we mis-measured. Admission cannot
+#     see inside a job; the kernel can. Same division of labour as MemoryMax
+#     in reexec_scoped(): heuristics keep the run healthy, the cgroup makes the
+#     bad case survivable rather than a frozen desktop.
+#
+# Note what is NOT here: no timeout compensation. Lowering the budget makes the
+# run NARROWER, not slower -- each job gets at least the contention it had at
+# cap=nproc*2 -- so per-job budgets stay as they are. (TESTMGR_LOAD_SCALE falls
+# out of hard_cap and drops with it, which is the correct direction.)
+def core_budget(max_cores, nproc):
+    """Cores a run may keep busy. 0/None = the whole box (the old behaviour).
+
+    Never raises the ceiling: a value above the box is clamped, so
+    `--max-cores 64` on a 12-core box is not a licence to oversubscribe.
+    """
+    whole = float(nproc) + 1.0
+    try:
+        want = float(max_cores or 0)
+    except (TypeError, ValueError):
+        want = 0.0
+    if want <= 0:
+        return whole
+    return max(1.0, min(want, whole))
+
+
+def load_scale(hard_cap, budget, nproc):
+    """TESTMGR_LOAD_SCALE: how much to stretch scripts' INNER per-item timeouts.
+
+    Historically just hard_cap/ncpu — the oversubscription this run imposes on
+    itself, which is what starves a qemu-user conformance shard's per-program
+    `timeout` and false-REDs the whole shard with exit 124.
+
+    A core budget lowers hard_cap, so the old formula would TIGHTEN those inner
+    budgets on exactly the box where that is least safe: we budget cores
+    because somebody else is on the machine, and their load is invisible to
+    hard_cap. So a throttled run keeps at least the generosity it had at full
+    width (nproc/budget: half the box, twice the patience). Never below 1 --
+    this only ever extends a budget, never shortens one.
+    """
+    ncpu = float(nproc or 1)
+    shared = ncpu / budget if (budget and budget <= ncpu) else 1.0
+    return max(1.0, hard_cap / ncpu, shared)
+
+
+def scope_cpu_args(budget, nproc):
+    """systemd-run properties enforcing `budget` cores, or [] if unthrottled.
+
+    CPUQuota is the hard ceiling and its unit is ONE CPU, not the box: six
+    cores of a twelve-core machine is `CPUQuota=600%`, and writing the 50% that
+    "half the box" suggests would hand the run half of a single core -- a 12x
+    throttle wearing the right label, which is the kind of mistake that reads
+    as "the watcher got slow" for a week. Verified against cpu.max: 600% lands
+    as 600000/100000.
+
+    CPUWeight is the other half and is genuinely a fraction: it lowers our
+    share of what is LEFT when the box is contended, because the quota alone
+    would still let us fight the human's build for the unreserved half at equal
+    weight, and the whole point of the budget is that they win that fight. Jobs
+    already run at nice 10, which cgroup v2 ignores across cgroups -- the
+    weight is what carries that intent up to the scope.
+    """
+    ncpu = float(nproc or 1)
+    if budget >= ncpu:                  # not throttled: leave the scope alone
+        return []
+    frac = max(0.05, budget / ncpu)
+    return ["-p", "CPUQuota=%d%%" % max(5, int(round(budget * 100))),
+            "-p", "CPUWeight=%d" % max(10, int(round(frac * 100)))]
+
+
+def reexec_scoped(cpu_props=()):
+    """Re-exec ourselves inside a memory- (and optionally cpu-) capped scope.
 
     This is the guard that makes a desktop freeze structurally impossible: a
     runaway job is killed by the kernel INSIDE our own cgroup, so the rest of
@@ -3980,13 +4070,16 @@ def reexec_scoped():
         except ValueError:
             pass
     os.environ["TESTMGR_SCOPED"] = "1"
-    print("testmgr: scoped — MemoryMax=%dM MemorySwapMax=%dM"
-          % (cap >> 20, SCOPE_SWAP_MAX >> 20), flush=True)
+    print("testmgr: scoped — MemoryMax=%dM MemorySwapMax=%dM%s"
+          % (cap >> 20, SCOPE_SWAP_MAX >> 20,
+             " " + " ".join(p for p in cpu_props if p != "-p")
+             if cpu_props else ""), flush=True)
     try:
         os.execvp("systemd-run", [
             "systemd-run", "--user", "--scope", "--quiet",
             "-p", "MemoryMax=%d" % cap,
             "-p", "MemorySwapMax=%d" % SCOPE_SWAP_MAX,
+            *cpu_props,
             sys.executable, os.path.abspath(__file__), *sys.argv[1:]])
     except OSError:             # exec failed: run unscoped rather than not at all
         os.environ.pop("TESTMGR_SCOPED", None)
@@ -4011,6 +4104,16 @@ def main():
                          "canary-checked then timed, rows appended to "
                          "tstate/bench.tsv (serial, ~2-3 min)")
     ap.add_argument("--jobs", type=int, help="fixed concurrency cap (else adaptive)")
+    ap.add_argument("--max-cores", type=float,
+                    # A box that is somebody's workstation wants the budget on
+                    # EVERY run, not only the watcher's: export it once from a
+                    # profile and dev gates inherit it too.
+                    default=float(os.environ.get("TESTMGR_MAX_CORES") or 0),
+                    help="cores this run may keep busy (default: the whole "
+                         "box). Shapes admission AND pins a cgroup CPUQuota, "
+                         "so it holds even for a job that forks its own -j. "
+                         "For a box someone also WORKS on: --max-cores 6 on 12 "
+                         "cores leaves half the machine responsive.")
     ap.add_argument("--serial", action="store_true", help="PAR=1: one job at a time")
     ap.add_argument("--fail-fast", action="store_true",
                     help="first red kills the run (inner-loop mode)")
@@ -4142,7 +4245,9 @@ def main():
 
     # --list does no work; TESTMGR_NO_SCOPE=1 is the escape hatch (self-tests)
     if not args.list and os.environ.get("TESTMGR_NO_SCOPE") != "1":
-        reexec_scoped()         # does not return if it scopes us
+        reexec_scoped(scope_cpu_args(              # does not return if it scopes us
+            core_budget(getattr(args, "max_cores", 0), os.cpu_count() or 1),
+            os.cpu_count() or 1))
 
     # One run per repo. Acquired AFTER reexec_scoped (which replaces the
     # process) so the pid in the lock is the one that actually schedules, and
@@ -4254,15 +4359,18 @@ def main():
     # under-load). TESTMGR_TIME_SCALE is an idle hardware probe and stays ~1 on
     # a fast box, so it never captures this; cap/cores does. Never below 1 (only
     # ever extends a budget, never shortens it).
-    os.environ["TESTMGR_LOAD_SCALE"] = "%.2f" % max(
-        1.0, mgr.hard_cap / float(os.cpu_count() or 1))
+    os.environ["TESTMGR_LOAD_SCALE"] = "%.2f" % load_scale(
+        mgr.hard_cap, mgr.core_budget, os.cpu_count() or 1)
     nskip = sum(1 for j in jobs if j.status == "skip")
     ncarried = sum(1 for j in jobs if j.status == "carried")
-    print("testmgr: tier=%s jobs=%d%s%s cap=%d scale=%.2f logs=%s"
+    print("testmgr: tier=%s jobs=%d%s%s cap=%d%s scale=%.2f logs=%s"
           % (args.tier, len(run_jobs),
              " skip=%d(corpus-absent)" % nskip if nskip else "",
              " carried=%d(resumed)" % ncarried if ncarried else "",
-             mgr.hard_cap, scale, logdir), flush=True)
+             mgr.hard_cap,
+             (" cores<=%.0f/%d" % (mgr.core_budget, mgr.nproc)
+              if mgr.core_budget <= mgr.nproc else ""),
+             scale, logdir), flush=True)
     report_mem_floor()
     if any(j.target in PIN_BUILT_TARGETS for j in run_jobs):
         report_pin_identity()

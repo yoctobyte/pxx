@@ -227,6 +227,74 @@ simply unattended, because the same PSU failure had taken the house down. The
 answer to "nothing retried" is to stop manufacturing the failure, not to retry
 forever.
 
+## Rule: the watcher is a TENANT — budget cores when a human shares the box
+
+plexus ran the full matrix with no CPU ceiling because it was a *dedicated*
+watcher box: `cap=24` on 12 cores, deliberately oversubscribed, and nothing
+else on the machine cared. That stopped being true on **2026-08-20**, when
+borg's PSU failed and plexus became the workstation as well. Same daemon, same
+config, completely different correct answer.
+
+The knob is one line, and it applies from the next gate cycle (twatch re-reads
+`twatch.conf` every cycle — no restart needed):
+
+```sh
+~/trackt-watch/trackt config max_cores 6      # 6 of 12 cores; the rest is the human's
+```
+
+`max_cores` is a **core budget**, not a job count (it was wired to testmgr's
+`--jobs` until this change, which is why "half the cores" in the `restricted`
+profile used to mean "half the job slots" — a very different thing when a job
+forks its own `make -j`). It reaches testmgr as `--max-cores N`, which does two
+separate things:
+
+| mechanism | what it is | fails how |
+| --- | --- | --- |
+| admission budget | the scheduler stops launching once the running jobs' *learned* core usage sums past N; `hard_cap` comes down with it, keeping the 2x io-oversubscription ratio | can't see inside a job — a recipe that forks `make -j12` counts as one core |
+| cgroup `CPUQuota` on the run's own scope | the kernel ceiling, pinned by the same `systemd-run` call that already sets `MemoryMax` | needs the `cpu` controller delegated to the user slice (it is on plexus; check `cgroup.controllers`) |
+
+Neither is redundant: the first shapes the run, the second is what makes a
+mis-measured job survivable rather than a stuttering desktop. Jobs already run
+at `nice 10`; the scope also gets a proportional `CPUWeight`, because cgroup v2
+ignores nice *across* cgroups and the quota alone would still fight the human's
+build at equal weight for the half we did not reserve.
+
+**`CPUQuota` is denominated in ONE cpu.** Six cores of twelve is
+`CPUQuota=600%`. Writing the `50%` that "half the box" suggests gives the run
+half of a single core — a 12x throttle wearing the right label, which reads as
+"the watcher got slow" rather than as a misconfiguration. Verify against the
+kernel, not the unit file:
+
+```sh
+systemctl --user list-units 'run-*.scope'          # find the live run's scope
+cat /sys/fs/cgroup/user.slice/user-1000.slice/user@1000.service/app.slice/<scope>/cpu.max
+# 600000 100000   <- 6 cores
+```
+
+Two things the budget deliberately does **not** cover:
+
+- **`--bench` stays unscoped and unthrottled.** It is serial, and it appends to
+  a timing series hundreds of rows deep — throttling it would silently rebase
+  the history. It already abandons a batch when `box_speed` says the box is
+  loaded, so on a workstation expect more abandoned batches, not wrong numbers.
+- **A bisect step at an old sha falls back to `--jobs N`.** twatch runs the
+  *clone's* testmgr, which is self-versioned with the tree under test, and
+  shas older than this change have no `--max-cores` — passing it would be an
+  argparse error and the step would die with no verdict. `testmgr_supports()`
+  greps for the flag and downgrades. Those steps throttle by job count only and
+  pin no quota.
+
+**Per-job** budgets are untouched, and that is deliberate: a core budget makes
+the run **narrower, not slower** — each job sees no more contention than it did
+at `cap=nproc*2`. What does move is `TESTMGR_LOAD_SCALE`, the stretch on
+scripts' *inner* per-item timeouts (the thing that keeps a qemu conformance
+shard from false-REDing at exit 124). It used to be `hard_cap/ncpu`, so pulling
+`hard_cap` down would have *tightened* those inner budgets on the one box where
+that is least safe — we budget cores precisely because another tenant is there,
+and their load never shows up in `hard_cap`. A throttled run therefore keeps at
+least the patience it had at full width. All of it is guarded by
+`tools/testmgr_cpu_budget_devtest.py`.
+
 ## Diagnostic: which numbers in your reports have NEVER changed?
 
 A constant in a report is the hardest defect to see, because it reads as a

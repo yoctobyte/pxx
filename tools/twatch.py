@@ -134,7 +134,10 @@ CONF_DEFAULTS = {"tier": "full", "mid_tier": "full",
                  "fuzz_backoff_minutes": 90,
                  # resource ceilings for a shared/small box (the wizard's
                  # limited/restricted profiles). 0 = no cap (use the box).
-                 "max_cores": 0,       # cap testmgr concurrency (--jobs N)
+                 # max_cores is a CORE budget, not a job count: testmgr shapes
+                 # admission around it and pins a cgroup CPUQuota to match, so
+                 # half the box stays responsive for whoever else is on it.
+                 "max_cores": 0,       # cores testmgr may keep busy (--max-cores)
                  "max_mem_mb": 0,      # cap the cgroup MemoryMax (env override)
                  "web": True, "web_port": 8377}   # everything ON by default;
                                        # ./trackt flags / config opt OUT
@@ -895,6 +898,21 @@ def resume_arg(clone, key):
     return path
 
 
+def testmgr_supports(clone, flag):
+    """Does the CLONE's testmgr accept `flag`?
+
+    Read from the source rather than probed with `--help`, because --help on an
+    old testmgr is a subprocess we would be spawning for every gate, and the
+    answer is one grep. False on an unreadable tree: assume the older, always-
+    accepted spelling rather than kill the run over a missing file.
+    """
+    try:
+        with open(os.path.join(clone.path, "tools/testmgr.py")) as f:
+            return ('"%s"' % flag) in f.read()
+    except OSError:
+        return False
+
+
 def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False,
              resume_key=None):
     """Run the CLONE's testmgr (self-versioned with the tested tree).
@@ -932,11 +950,20 @@ def run_gate(clone, tier, job_glob=None, abort_check=None, _reseeded=False,
     res_path = resume_arg(clone, resume_key)
     if res_path:
         cmd += ["--resume", res_path]
-    # resource ceilings (limited/restricted profiles). Concurrency is a testmgr
-    # CLI arg; the mem cap is an env override read by reexec_scoped().
+    # resource ceilings (limited/restricted profiles). The cpu budget is a
+    # testmgr CLI arg; the mem cap is an env override read by reexec_scoped().
     env = dict(os.environ)
     if CONF.get("max_cores"):
-        cmd += ["--jobs", str(int(CONF["max_cores"]))]
+        # We run the CLONE's testmgr, which is self-versioned with the tree
+        # under test — and a bisect step checks out shas from before
+        # `--max-cores` existed, where passing it is an argparse error and the
+        # step dies with no verdict. `--jobs` is the closest thing those
+        # versions have: a job count rather than a core budget, so it throttles
+        # less exactly and pins no CPUQuota, but it is the difference between a
+        # polite bisect and a broken one.
+        flag = ("--max-cores" if testmgr_supports(clone, "--max-cores")
+                else "--jobs")
+        cmd += [flag, str(int(CONF["max_cores"]))]
     if CONF.get("max_mem_mb"):
         env["TESTMGR_MEM_CAP_MB"] = str(int(CONF["max_mem_mb"]))
     proc = subprocess.Popen(cmd, cwd=clone.path, start_new_session=True, env=env)

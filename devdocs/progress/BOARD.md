@@ -49,7 +49,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (241)
+## backlog (242)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -112,6 +112,7 @@ _none_
 | bug-t-two-devtests-measure-the-box-and-flake-the-fleet-job | T | 45 | bug | Two guards in the tools/*devtest*.py family assert on ambient timing and go red when the box is busy — which on plexus means whenever the watcher runs a tier, i.e. whenever the fleet job runs. bench_timing was FIXED (c194b01e9/415d8e9f2); twatch_bench_quiet_devtest.py is the surviving one, observed red at load 14 and green on immediate rerun. tools-devtest#00 stops at the first failing file, so one flake masks all 50 other guards. | — |
 | chore-a-re-include-bench-timing-in-tools-devtest | A | 30 | chore | One line: `tools-devtest` skips `bench_timing_devtest.py` with an explicit `case ... continue`, added by a1fd5715e because the guard was load-sensitive. It has been fixed (c194b01e9) and is green under load average 14. Deleting the skip re-arms the only guard for bug-t-bench-sub-second-timings-quantized-to-50ms, which has not run in the fleet since the family was wired up. | — |
 | chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments | A | 20 | chore | compiler/builtin/pylib.pas still carries a no-op `pyexec` stub, plus comments in pylib.pas and pyeval.pas saying things SEGFAULT 'because pyexec is a stub'. Engine 1 landed 2026-07-31 and `exec` lowers to pyeval's EvalPyStmts — nothing calls the stub. The stale prose is the cost: it reads as an unimplemented feature and made a reader doubt a done, gated one. | — |
+| chore-p-read-text-char-test-hardcodes-tmp-paths | P | 50 | chore | test/test_read_text_char.pas (00d1105d5) hardcodes /tmp/test_read_text_char_{a,b}.txt, written by the test binary at runtime where no Makefile sweep or testmgr privatization reaches them. The ratchet guard tools/testmgr_hardcoded_tmp_devtest.py is RED on master because of it, so `make tools-devtest` fails at that step for every lane. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
 | chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile | T | 30 | chore | The second, weaker half of the split_jobs lint: flag any job that RUNS a /tmp binary no line in that job produces. Prototyped and deliberately NOT shipped — it yields 5-7 candidates depending on how recipe lines are segmented, and every one needs individual adjudication. Shipping it half-tuned would produce exactly the noisy guard that gets muted. | — |
 | chore-t-split-lib-test-into-jobs-that-name-what-failed | T | 55 | chore | One lib-test job bundles several sources, so its tstate key names only the FIRST of them: `lib-test#src:test/crtl_exp2.c` is really `crtl_exp2.c examples/tk/hello.npy +5`, and a timeout in the tk step reads as a C-math regression. Split it so a job names what failed. Do it while lib-test is green — the baseline is recorded here. | — |
@@ -589,6 +590,7 @@ _none_
 - [p 50] [N] bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - [p 50] [N] bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - [p 50] [T] bug-t-track-ts-own-pushes-destroy-track-ts-own-breadth-coverage
+- [p 50] [P] chore-p-read-text-char-test-hardcodes-tmp-paths
 - [p 50] [A] feature-a-implement-initialize-and-finalize-over-the-arc-helpers
 - [p 50] [A] feature-a-riscv64-as-a-hosted-first-class-target
 - [p 50] [A] feature-a-strict-flags-scope-to-dialect-ownership-not-program-vs-unit

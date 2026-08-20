@@ -648,6 +648,10 @@ def cmd_config(clone, key=None, val=None):
 # CONF_DEFAULTS (everything-on, dedicated). max_cores/max_mem_mb are filled in
 # per-box at wizard time (they depend on this box's cpu/ram), so they're None
 # here as "compute from the box".
+#
+# max_cores is a CORE BUDGET (testmgr --max-cores): it shapes admission and
+# pins a matching cgroup CPUQuota on the run's scope, so "half the cores"
+# below is now literally half the machine rather than half the job slots.
 PROFILES = {
     "dedicated": {
         "_blurb": "this box exists to test. Full matrix, all idle work "
@@ -794,7 +798,8 @@ def detect_role(nproc, total_mb):
         # informational: it does NOT change the role, but the operator should
         # know the box will be worked hard while they are sitting at it
         reasons.append("NOTE a graphical session is present — if someone works "
-                       "here, choose 'limited' or `trackt config max_cores N`")
+                       "here, choose 'limited', or leave the box half free "
+                       "with `trackt config max_cores %d`" % max(1, nproc // 2))
     return "dedicated", reasons
 
 
