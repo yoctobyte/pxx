@@ -445,6 +445,13 @@ const
                            no backend op and all six backends carry it unchanged. Reserved-prefix
                            names, so they cannot collide with user routines.
                            feature-signal-siginfo-ucontext }
+  { Per-thread TLS block carved off the top of a cloned thread's stack by the
+    clone stub (thread_emit.inc). 16 pointer slots; slot 0 is the block's own
+    address. Sized generously and fixed rather than tunable: it is stack the
+    caller already owns, and a growable one would have to be negotiated through
+    the __pxxclone signature. }
+  TLS_BLOCK_SIZE   = 128;
+
   AN_TLSBASE       = 96; { __pxxTlsBase: the calling thread's TLS base pointer, read
                            from the architectural thread register. No operands; yields
                            tyPointer. Lowers to IR_TLSBASE.

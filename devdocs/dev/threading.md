@@ -224,16 +224,44 @@ A thread that skips it does not get a null base to check against; it gets the
 *parent's* block, which is the aliasing failure above wearing a working-looking
 pointer.
 
+So the launcher does it, and the launcher is the **clone stub** — not the RTL.
+On the child path, before anything Pascal runs, `EnsureCloneStub` carves
+`TLS_BLOCK_SIZE` (128) bytes off the top of the child's stack, zeroes them,
+writes the self-pointer and `arch_prctl`s the block:
+
+```
+childStack ─┐
+            │  [ 128-byte TLS block: slot0 = self, slots 1..15 zeroed ]
+            │  [ entry ][ arg ]        <- staged by the parent
+   child rsp ┘  (grows down from here)
+```
+
+Putting it in the stub rather than in `palthreadobj` is what makes forgetting
+unreachable: **every** pxx thread passes through `__pxxclone`, whatever frontend
+or library created it. The cost is that `__pxxclone` now requires 144 usable
+bytes of stack from its caller, which is documented at the intrinsic and is
+nothing against `PAL_DEFAULT_STACK`. The block is zeroed rather than trusted —
+`palthread` hands over fresh anonymous `mmap`, but `__pxxclone` is reachable
+directly, and a reused stack would otherwise present the previous thread's slots
+as this one's.
+
+**The MAIN thread is the exception and is not covered yet**: it passes through no
+stub, and a static pxx binary starts with `fs` base 0, so `__pxxTlsBase` faults
+there unless the program installs a block itself. Tracked as
+[[feature-a-tls-block-for-the-main-thread]] — it needs a shared startup emitter,
+which does not exist today.
+
 x86-64 only. The other targets have a readable thread register (aarch64
 `tpidr_el0`, arm32 `tpidruro`, i386 `gs`) but no path this runtime uses to
 *set* one — i386 in particular wants a `struct user_desc`, not a raw base — so
 `__pxxTlsBase` errors there at compile time rather than returning a plausible
 wrong pointer.
 
-The remaining consumer work — `palthreadobj`'s launcher installing a block per
-`TThread`, and the per-thread allocator magazine that motivated this — is
-`lib/rtl` and therefore Track B's lane; see
-[[feature-threadsafe-heap-optimize]].
+The consumer work — the per-thread allocator magazine that motivated this — is
+[[feature-threadsafe-heap-optimize]], and it needs the main-thread block first.
+A free win waits alongside it: the `--threadsafe` I/O lock does a `gettid`
+**syscall per I/O statement** (`EmitIoLockStubs`), which a TLS slot turns into a
+load.
 
 ## Tests / gate
 

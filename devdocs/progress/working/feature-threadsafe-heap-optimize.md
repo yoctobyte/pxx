@@ -1,13 +1,13 @@
 ---
 track: A
 prio: 53  # auto
-owner: ""
+owner: claude-A
 ---
 
 # Threadsafe heap — optimize + cross-target (M5)
 
 - **Type:** feature (codegen / runtime — optimization) — Track A
-- **Status:** backlog — the lock half and the benchmark landed 2026-08-20; the per-thread-arena half was blocked on TLS, which now exists (see the 2026-08-20 unblock note at the bottom).
+- **Status:** working
 - **Opened:** 2026-06-30
 - **Umbrella:** [[meta-multithreading]]. Follows the M0 contract
   [[feature-threadsafe-heap-contract]] (correctness) — this is the *speed* half.
@@ -125,7 +125,8 @@ lives anyway. See `devdocs/dev/threading.md` "Thread-local storage (x86-64)".
 
 So the magazine is writable now. Two things to know before starting it:
 
-1. **The install is not automatic.** Nothing in the RTL installs a block yet, and
+1. **The install is not automatic.** (SUPERSEDED same day -- see the last
+   section: the clone stub installs it now.) Nothing in the RTL installs a block yet, and
    a thread that skips it reads its PARENT's block rather than nil — the aliasing
    failure, wearing a valid-looking pointer. `palthreadobj`'s `ThreadObjLauncher`
    is the place, and it is **`lib/rtl` = Track B's file-lane**. The allocator half
@@ -133,3 +134,48 @@ So the magazine is writable now. Two things to know before starting it:
    ticket now spans two lanes; do the B half as a B ticket or hold both lanes.
 2. **The main thread needs one too**, before the first allocation, or the fast
    path faults on an fs base of 0 at the worst possible moment.
+
+## 2026-08-20 (later still) — the TLS install is now AUTOMATIC for cloned threads
+
+The primitive existed but was unusable in practice: nothing installed a block, and
+a thread that skipped the install read its PARENT's block — not a null pointer you
+could branch on, but a valid-looking pointer into someone else's storage. An
+allocator magazine built on "the launcher remembers" would have been a heap
+corruptor waiting for the one caller that didn't.
+
+So the **clone stub** installs it, not the RTL. On the child path, before any
+Pascal runs, it carves `TLS_BLOCK_SIZE` (128) bytes off the top of the child's
+stack, zeroes them, writes the self-pointer and `arch_prctl`s the block. Every
+pxx thread passes through `__pxxclone` whatever frontend or library created it,
+so forgetting is now unreachable rather than merely documented — and it took the
+RTL half out of Track B's lane entirely, which is a better outcome than the
+two-lane split noted above.
+
+Zeroed rather than trusted: `palthread` hands over fresh anonymous `mmap`, but
+`__pxxclone` is reachable directly and a reused stack would otherwise present the
+previous thread's slots as this one's. Cost to the caller: `__pxxclone` now needs
+144 usable bytes of stack, against a 1 MiB default.
+
+`test/test_tls_base.pas` grew a phase A that proves it: four children that call
+`arch_prctl` **nowhere** still come back with four distinct bases, distinct from
+the main thread's, each with slot 0 = its own address and slot 1 zeroed. Nothing
+but the stub can have done that. Phase B keeps the manual path covered. Existing
+thread suite re-verified after the stub change (`test_thread_clone`,
+`test_palthread`, `test_atomic_counter`, `test_mutex`, `test_event`,
+`test_critsec_once`, `test_tthread`, plus `test_thread_heap`,
+`test_thread_heap_mixed`, `test_threadsafe_io_lock`, `test_multithreading`,
+`test_tthread_sync` ×5 each).
+
+### Still blocking the magazine: the MAIN thread
+
+It passes through no stub, and a static pxx binary starts with `fs` base 0, so
+`__pxxTlsBase` faults there. A fast path that faults on the main thread is not a
+fast path. Filed as [[feature-a-tls-block-for-the-main-thread]] with the design
+worked out — it needs a shared startup emitter, which does not exist: every
+frontend driver emits its own entry sequence and only Pascal's puts anything in
+it. That ticket also records the free win sitting next to this one (the
+`--threadsafe` I/O lock does a `gettid` **syscall per I/O statement**, which a TLS
+slot turns into a load).
+
+So the order is: main-thread block -> magazine. This ticket stays open on the
+magazine and is no longer two-lane.

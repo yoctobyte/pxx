@@ -10,6 +10,14 @@ program test_tls_base;
   fix is one read-side intrinsic instead of a sixth __pxxclone argument plus four
   backend changes.
 
+  Two phases, because there are two ways to get a block:
+    A. AUTOMATIC -- the clone stub carves 128 bytes off the top of the child's
+       stack and arch_prctl's it before any Pascal runs. Nothing in the RTL or
+       the program has to remember, which is the point: the failure mode of
+       forgetting is not a null pointer but the parent's block.
+    B. MANUAL -- arch_prctl from the thread itself. The main thread has no
+       launcher, so this is how it gets one.
+
   What each check catches:
     - blocks distinct   : the aliasing bug itself. If arch_prctl were not
                           per-thread, every child would end up with one base and
@@ -43,8 +51,9 @@ type
 var
   Blocks: array[0..NTHREADS] of TTlsBlock;   { [NTHREADS] is the main thread's }
   Handles: array[0..NTHREADS - 1] of TThreadHandle;
+  AutoBase: array[0..NTHREADS - 1] of Pointer;   { each child's stub-installed block }
   Errs: array[0..NTHREADS - 1] of Integer;
-  i, errors: Integer;
+  i, j, errors: Integer;
 
 { Make block b the calling thread's TLS block. }
 procedure InstallTls(b: PInt64);
@@ -64,6 +73,27 @@ begin
   TlsSlot := PInt64(PtrUInt(__pxxTlsBase) + PtrUInt(n * 8));
 end;
 
+{ Phase A: use the block the CLONE STUB installed. No InstallTls here -- that is
+  the whole assertion. }
+procedure AutoBody(arg: Pointer);
+var idx, k: Integer; tag: Int64;
+begin
+  idx := Integer(PtrUInt(arg));
+  AutoBase[idx] := __pxxTlsBase;
+  { slot 0 must be the block's own address: the stub wrote it, and everything
+    else in this file depends on that convention holding. }
+  if PInt64(AutoBase[idx])^ <> Int64(PtrUInt(AutoBase[idx])) then Inc(Errs[idx]);
+  { the stub zeroes the block; a reused stack must not show the previous
+    thread's slots. }
+  if TlsSlot(1)^ <> 0 then Inc(Errs[idx]);
+  tag := 2000 + idx;
+  TlsSlot(1)^ := tag;
+  for k := 1 to CHURN do
+    if TlsSlot(1)^ <> tag then Inc(Errs[idx]);
+  if TlsSlot(1)^ <> tag then Inc(Errs[idx]);
+end;
+
+{ Phase B: install our own block over the stub's. }
 procedure Body(arg: Pointer);
 var idx, k: Integer; tag: Int64;
 begin
@@ -81,6 +111,30 @@ begin
   InstallTls(@Blocks[NTHREADS][0]);
   TlsSlot(1)^ := 999;
 
+  { ---- phase A: the clone stub's automatic install ---- }
+  for i := 0 to NTHREADS - 1 do begin Errs[i] := 0; AutoBase[i] := nil; end;
+  for i := 0 to NTHREADS - 1 do
+    if PalThreadCreate(Handles[i], @AutoBody, Pointer(PtrUInt(i)), 0) <> 0 then
+    begin
+      Writeln('spawn failed');
+      Halt(1);
+    end;
+  for i := 0 to NTHREADS - 1 do PalThreadJoin(Handles[i]);
+
+  errors := 0;
+  for i := 0 to NTHREADS - 1 do Inc(errors, Errs[i]);
+  { distinct blocks -- the aliasing bug this whole ticket is about. Also
+    distinct from the main thread's, which no clone stub touched. }
+  for i := 0 to NTHREADS - 1 do
+  begin
+    if AutoBase[i] = nil then Inc(errors);
+    if AutoBase[i] = Pointer(@Blocks[NTHREADS][0]) then Inc(errors);
+    for j := 0 to NTHREADS - 1 do
+      if (i <> j) and (AutoBase[i] = AutoBase[j]) then Inc(errors);
+  end;
+  if TlsSlot(1)^ <> 999 then Inc(errors);   { four children later, ours is ours }
+
+  { ---- phase B: a thread installing its own block over the stub's ---- }
   for i := 0 to NTHREADS - 1 do Errs[i] := 0;
   for i := 0 to NTHREADS - 1 do
     if PalThreadCreate(Handles[i], @Body, Pointer(PtrUInt(i)), 0) <> 0 then
@@ -90,7 +144,6 @@ begin
     end;
   for i := 0 to NTHREADS - 1 do PalThreadJoin(Handles[i]);
 
-  errors := 0;
   for i := 0 to NTHREADS - 1 do Inc(errors, Errs[i]);
   for i := 0 to NTHREADS - 1 do
     if Blocks[i][1] <> 1000 + i then Inc(errors);

@@ -18,7 +18,10 @@
                         the child tid into *ctidptr at clone time and clears it +
                         futex-wakes on exit (the join handshake).
     childStack(arg2) -> highest address of the child's stack (grows down); must be
-                        16-byte aligned. The stub stages [entry][arg] just below it.
+                        16-byte aligned. The stub carves the child's TLS_BLOCK_SIZE-byte
+                        TLS block off the top (x86-64), then stages [entry][arg] just
+                        below that, so the caller must provide at least
+                        TLS_BLOCK_SIZE + 16 usable bytes.
     entry     (arg3) -> ^procedure(arg: Pointer); cdecl-free, called with arg in rdi.
     arg       (arg4) -> opaque pointer handed to entry.
     ctidptr   (arg5) -> &tidword, the CLONE_*_*TID futex word used by join.
@@ -44,6 +47,25 @@ begin
     EmitB($E9); jmpOver := CodeLen; EmitI32(0);
     CloneStubAddr := CodeLen;
     { input: rdi=flags rsi=childStack rdx=entry rcx=arg r8=ctidptr }
+    { ---- carve the child's TLS block off the top of its stack ---- }
+    { 128 bytes = 16 slots, zeroed, slot 0 = its own address (the convention
+      __pxxTlsBase reads through). Zeroed rather than trusted: palthread hands us
+      fresh anonymous mmap, but __pxxclone is reachable directly and a reused
+      stack would otherwise present the previous thread's slots as this one's.
+      cld because rep stosq reads DF and only the ABI (not this stub's caller)
+      guarantees it clear. rdi holds flags and rcx holds arg, so both are saved
+      across stosq's fixed-register contract. }
+    EmitB($48); EmitB($81); EmitB($EE); EmitI32(TLS_BLOCK_SIZE);  { sub rsi, 128 }
+    EmitB($FC);                                       { cld }
+    EmitB($57);                                       { push rdi   (flags) }
+    EmitB($51);                                       { push rcx   (arg) }
+    EmitB($48); EmitB($89); EmitB($F7);               { mov rdi, rsi }
+    EmitB($31); EmitB($C0);                           { xor eax, eax }
+    EmitB($B9); EmitI32(TLS_BLOCK_SIZE div 8);        { mov ecx, 16 }
+    EmitB($F3); EmitB($48); EmitB($AB);               { rep stosq }
+    EmitB($59);                                       { pop rcx }
+    EmitB($5F);                                       { pop rdi }
+    EmitB($48); EmitB($89); EmitB($36);               { mov [rsi], rsi  (slot 0 = self) }
     EmitB($48); EmitB($83); EmitB($EE); EmitB($10);   { sub rsi, 16   (stage area) }
     EmitB($48); EmitB($89); EmitB($16);               { mov [rsi], rdx     (entry) }
     EmitB($48); EmitB($89); EmitB($4E); EmitB($08);   { mov [rsi+8], rcx   (arg) }
@@ -53,8 +75,22 @@ begin
     EmitB($B8); EmitB($38); EmitB($00); EmitB($00); EmitB($00);   { mov eax, 56  (SYS_clone) }
     EmitB($0F); EmitB($05);                           { syscall }
     EmitB($48); EmitB($85); EmitB($C0);               { test rax, rax }
-    EmitB($75); EmitB($0D);                           { jnz .parent  (skip 13 child bytes) }
-    { ---- child: rsp = childStack-16, [rsp]=entry [rsp+8]=arg ---- }
+    EmitB($75); EmitB($1E);                           { jnz .parent  (skip 30 child bytes) }
+    { ---- child: rsp = tlsBlock-16, [rsp]=entry [rsp+8]=arg ---- }
+    { Install the TLS block FIRST, before anything Pascal runs. clone does not
+      reset fs, so a child that skipped this would read the PARENT's block --
+      not a null base you could test for, but a valid-looking pointer into
+      someone else's storage. Doing it here rather than in the RTL launcher is
+      what makes that unreachable: every pxx thread passes through this stub,
+      whatever frontend or library created it.
+      arch_prctl acts on the CALLING thread, which is why no CLONE_SETTLS, no
+      sixth argument and no per-arch tls plumbing are involved
+      (feature-a-thread-local-storage-via-clone-settls). syscall clobbers rcx
+      and r11; both are dead here (arg was staged on the stack above). }
+    EmitB($BF); EmitI32($1002);                       { mov edi, ARCH_SET_FS }
+    EmitB($48); EmitB($8D); EmitB($74); EmitB($24); EmitB($10); { lea rsi, [rsp+16] }
+    EmitB($B8); EmitI32(158);                         { mov eax, 158 (arch_prctl) }
+    EmitB($0F); EmitB($05);                           { syscall }
     EmitB($58);                                       { pop rax  (entry) }
     EmitB($5F);                                       { pop rdi  (arg -> first int arg) }
     EmitB($FF); EmitB($D0);                           { call rax (entry(arg)) }
