@@ -35,8 +35,15 @@ OOP surface is already shaken out.
 | **fcl-fpcunit** | 5,089 | `tests/` + `exampletests/` | [[feature-pascal-corpus-fpcunit]] |
 | **fcl-json** | 9,769 | 12,261 LOC, fpcunit | [[feature-pascal-corpus-fpjson]] |
 | fcl-xml (DOM/SAX) | 21,753 | yes | — not filed yet |
-| rtl-generics | — | — | — not filed yet |
+| rtl-generics | — | — | [[feature-pascal-corpus-generics]] (rung 3, in `working/`) |
 | **fcl-passrc** | 60,696 | 40,477 LOC, fpcunit | [[feature-pascal-corpus-passrc]] (ENDGAME) |
+
+> **Keep this column current.** The rtl-generics row said "not filed yet" for weeks
+> while [[feature-pascal-corpus-generics]] existed and had already cleared 17 walls.
+> It sat in `unfinished/`, which `ready`/`next` do not scan by design, so the ticket
+> was invisible to the ranker AND to this index at the same time -- the two switches
+> that normally cover for each other were both off, and a dispatch went out to file a
+> duplicate. Update the row when a rung's ticket is filed, not when it is done.
 
 Rung 1 — **fpcunit** (5k). Test framework = OOP by construction: `TTestCase` inheritance,
 `TTestSuite` composite, `ITestListener` interfaces, exception classes, and **RTTI method

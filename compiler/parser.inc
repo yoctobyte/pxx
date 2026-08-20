@@ -26288,7 +26288,11 @@ begin
       if CurTok.Kind = tkArray then
       begin
         Next; Expect(tkLBrack, '[');
-        loVal := ConstEval; Expect(tkDotDot, '..'); hiVal := ConstEval;
+        { Through ParseArrayDimBounds, like every other array-bound site: a whole
+          ordinal TYPE as the index (`array[Byte]`, `array[TKind]`) as well as the
+          `lo..hi` const-expression form. See the class-field site above --
+          normalise-dont-special-case: this was the same concept's third copy. }
+        ParseArrayDimBounds(loVal, hiVal);
         arrLen := hiVal - loVal + 1;
         Expect(tkRBrack, ']'); Expect(tkOf, 'of');
         fTk := ParseTypeKind; fRec := LastTypeRecId; isArr := True;
@@ -26848,21 +26852,17 @@ begin
         if CurTok.Kind = tkLBrack then
         begin
           Next;
-          { Const-EXPRESSION bounds (`0..N - 1`), not just literals — same
-            ConstEval the named array-type path uses
-            (bug-inline-array-field-const-bound). }
-          loVal := ConstEval;
-          Expect(tkDotDot, '..');
-          hiVal := ConstEval;
+          { Bounds through ParseArrayDimBounds: const EXPRESSIONS (`0..N - 1`,
+            bug-inline-array-field-const-bound) and a whole ordinal TYPE as the
+            index (`array[Byte]`, `array[TKind]`) alike. }
+          ParseArrayDimBounds(loVal, hiVal);
           arrLen := hiVal - loVal + 1;
           { N-D field: collect dim0 then any comma dims. }
           fNDims := 1; tdDimLo[0] := loVal; tdDimSpan[0] := hiVal - loVal + 1;
           while CurTok.Kind = tkComma do
           begin
             Eat(tkComma);
-            tdLo := ConstEval;
-            Expect(tkDotDot, '..');
-            tdHi := ConstEval;
+            ParseArrayDimBounds(tdLo, tdHi);
             if fNDims >= MAX_ARR_DIMS then Error('too many array dimensions');
             tdDimLo[fNDims] := tdLo; tdDimSpan[fNDims] := tdHi - tdLo + 1;
             arrLen := arrLen * tdDimSpan[fNDims];
@@ -28287,21 +28287,23 @@ begin
               if CurTok.Kind = tkLBrack then
               begin
                 Next;
-                { Const-EXPRESSION bounds (`0..N - 1`), not just literals —
-                  same ConstEval the named array-type path uses
-                  (bug-inline-array-field-const-bound). }
-                loVal := ConstEval;
-                Expect(tkDotDot, '..');
-                hiVal := ConstEval;
+                { Bounds through ParseArrayDimBounds, the same helper the var
+                  section and the named-array-type path use — const EXPRESSIONS
+                  (`0..N - 1`, bug-inline-array-field-const-bound) and, since it
+                  is shared, a whole ordinal TYPE as the index (`array[Byte]`,
+                  `array[TTypeKind]`, rtl-generics' comparer tables). Inline
+                  ConstEval here accepted only the `lo..hi` form, so an index
+                  type that a var section took happily was `not a constant` in a
+                  field — a second mechanism for one concept, which is the case
+                  devdocs/dev/normalise-dont-special-case.md is about. }
+                ParseArrayDimBounds(loVal, hiVal);
                 arrLen := hiVal - loVal + 1;
                 { N-D field: collect dim0 then any comma dims. }
                 fNDims := 1; tdDimLo[0] := loVal; tdDimSpan[0] := hiVal - loVal + 1;
                 while CurTok.Kind = tkComma do
                 begin
                   Eat(tkComma);
-                  tdLo := ConstEval;
-                  Expect(tkDotDot, '..');
-                  tdHi := ConstEval;
+                  ParseArrayDimBounds(tdLo, tdHi);
                   if fNDims >= MAX_ARR_DIMS then Error('too many array dimensions');
                   tdDimLo[fNDims] := tdLo; tdDimSpan[fNDims] := tdHi - tdLo + 1;
                   arrLen := arrLen * tdDimSpan[fNDims];

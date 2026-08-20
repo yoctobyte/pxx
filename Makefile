@@ -3809,6 +3809,14 @@ test-core: $(COMPILER)
 	# line here runs it. feature-pascal-corpus-generics
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_typeinfo_widen.pas $(TESTTMP)/test_typeinfo_widen26
 	test "$$($(TESTTMP)/test_typeinfo_widen26)" = "test_typeinfo_widen: OK"
+	# An ordinal TYPE as a whole array index (`array[Byte]`, `array[TKind]`,
+	# `array[Char]`, `array[Boolean]`) in a RECORD field, a CLASS field, and as
+	# dim 1 of an N-D field. The var section took these via ParseArrayDimBounds;
+	# the three FIELD sites each had their own inline `ConstEval .. ConstEval`
+	# copy and answered `not a constant`. Self-checking (Halt 1 / prints OK);
+	# FPC 3.2.2 is the oracle. feature-pascal-corpus-generics
+	./$(COMPILER) test/test_field_array_ordinal_index_b388.pas $(TESTTMP)/test_field_array_ordinal_index_b38826
+	test "$$($(TESTTMP)/test_field_array_ordinal_index_b38826)" = "test_field_array_ordinal_index_b388: OK"
 	./$(COMPILER) -Fulib/rtl -Fulib/rtl/platform/posix test/test_typeinfo_enum_b288.pas $(TESTTMP)/test_typeinfo_enum_b28826
 	test "$$($(TESTTMP)/test_typeinfo_enum_b28826)" = "$$(printf 'count: 3\n  0 = Red\n  1 = Green\n  2 = Blue\nvalue of Green: 1\nvalue of green (ci): 1\nvalue of nope: -1\nout of range: []\n--- a second enum type:\njtUnknown jtNumber jtString jtBoolean jtNull jtArray jtObject ')"
 	# bug-pascal-array-of-pointer-deref-loses-the-record-type: `arr[i]^.Field`

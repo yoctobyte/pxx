@@ -5,17 +5,18 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:16 blocked:6 backlog:237 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2102 rejected:40`
+`urgent:1 working:2 unfinished:15 blocked:6 backlog:237 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2103 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A] — owner: frank3
+- `feature-pascal-corpus-generics` [P] — owner: frank3
 
 ## urgent (1) — jump the queue
 
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
 
-## unfinished (16) — parked mid-flight; re-claim, do not duplicate
+## unfinished (15) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name` [N]
@@ -30,7 +31,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
-- `feature-pascal-corpus-generics` [P]
 - `feature-port-rtl-over-libc` [A]
 - `feature-real-dynlib-loader` [B] — blocked-by: bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
 

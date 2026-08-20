@@ -1,13 +1,13 @@
 ---
 prio: 65
-owner: claude-AP
+owner: frank3
 ---
 
 # rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** unfinished — parked 2026-08-16 at the arity-overloaded-class-names wall
+- **Status:** working
   runs, fpjson's suite is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
@@ -346,3 +346,60 @@ writing these repros. Not folded in; see
 
 Untouched by this session and still resting on the argument recorded above, not
 a fresh run: `test-fpjson` is still SKIPped on this box (no fcl-json staged).
+
+### Wall 18 (line 635) — HALF cleared 2026-08-20 (frank3)
+
+The ticket named the wall as `array[TTypeKind]` "in a class FIELD declaration".
+Varying the shape showed that is two separate gaps wearing one error, and only
+the first is fixed here.
+
+**Gap 1 — an ordinal TYPE as a whole array index in a FIELD. FIXED.**
+`var F: array[TKind] of Integer` already worked: the var section parses bounds
+through `ParseArrayDimBounds`, which accepts `tkBoolean_T`, `tkChar_T`, a small
+ordinal (`array[Byte]`) and an enum type name as the entire index range. The
+three FIELD sites each carried their own inline `loVal := ConstEval; Expect('..');
+hiVal := ConstEval` copy, so a shape the var section took happily answered
+`not a constant` in a record or class field. Exactly the double-case
+`devdocs/dev/normalise-dont-special-case.md` is about — except it was a
+*quadruple* case, and the first fix (the class-field site) left the record-field
+copy failing, which the new test caught.
+
+All three now call `ParseArrayDimBounds`, dim 1 and the comma dims alike:
+`parser.inc` class field ~28290, record field ~26291, and the N-D field site
+~26854. Test `test/test_field_array_ordinal_index_b388.pas` (self-checking, FPC
+3.2.2 as the oracle) covers `array[TKind]` / `array[Byte]` in a record and
+`array[TKind]` / `array[Char]` / `array[Boolean]` / `array[TKind, 0..1]` in a
+class; it is wired into `test-core` next to `test_typeinfo_widen`. Gate at this
+sha: `make compiler/pascal26` converged, `tools/gate.sh quick` GREEN.
+
+**Gap 2 — `class var` takes no array at all. NOT fixed, and one arm is silent.**
+The wall's real field is in a `private class var` section, and that branch
+(`parser.inc` ~27726) is just `fTk := ParseTypeKind; fRec := LastTypeRecId;`
+followed by `AllocVar`. Measured against the self-hosted binary from this tree:
+
+| class var form | today |
+| --- | --- |
+| `array[0..3] of Integer` (inline fixed) | `unknown type: array` |
+| `array of Integer` (inline dynamic) | `unknown type: array` |
+| `TA` where `TA = array[0..3] of Integer` | **compiles as a scalar**, fails later at the use site |
+| `TD` where `TD = array of Integer` | **compiles as a scalar**, fails later at the use site |
+
+The bottom two are the dangerous ones: a wrong TYPE accepted silently, with the
+diagnostic landing somewhere else entirely.
+
+This is deliberately NOT microfixed into a fifth copy of the bound parser. The
+class-var branch needs the var section's whole descriptor+alloc machinery
+(`isArr`/`isDyn`/`arrLo`/`arrHi`/`ndCnt`, named-alias resolution, then
+`AllocArray`/`AllocDynArray` instead of `AllocVar`) — that lives inline in
+`ParseVarSection` (`:24622`, alloc loop ~24925-24990) and wants extracting into a
+shared "parse a variable's type" + "allocate from the descriptor" pair, which is
+the overhaul, not this session. Banked here per
+`devdocs/dev/root-cause-over-microfix.md`; the wall at 635 has NOT moved yet.
+
+### Side findings measured here, not yet filed
+
+- `SizeOf(<record or class field that is a fixed array>)` returns the ELEMENT
+  size, not the array's: pinned v368 prints `4 4 12` where FPC 3.2.2 prints
+  `12 12 12`. Pre-existing, unrelated to the above, and a silent wrong value.
+- `FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr
+  during the generics.defaults drive without stopping compilation.
