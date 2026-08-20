@@ -198,4 +198,4 @@ shadowing guards were kept, so this does not become a reserved word.
 comment per row saying which way it can be wrong.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit ff29a3920.
