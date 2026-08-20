@@ -108,6 +108,13 @@ procedure AddDefaultCIncludeDirs; forward;   { the C unit pull in parser.inc nee
   than by reading it. Flat rather than nested inside parser.inc: this file is
   compiled by the PINNED binary, so it can only use include forms that binary
   already understands. }
+{$include dbg_filetable.inc}
+{$include ast_arena.inc}
+{$include inline_expand.inc}
+{$include ast_syminfer.inc}
+{$include pyforwards.inc}
+{$include pasparser_name.inc}
+{$include pasparser_class.inc}
 {$include pasparser_generic.inc}
 {$include pasparser_call.inc}
 {$include pasparser_lval.inc}
