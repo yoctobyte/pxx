@@ -132,4 +132,4 @@ ticket said to grep for.
 Gate: `make compiler/pascal26` converged 1 round; `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit db0496276.
