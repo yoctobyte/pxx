@@ -242,4 +242,4 @@ canary, which is the one that matters for a change that moves declarations
 across include boundaries.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit bbae00c78.
