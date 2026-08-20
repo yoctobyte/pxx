@@ -6,8 +6,7 @@ prio: 65
 
 - **Type:** feature (umbrella — Pascal frontend validation)
 - **Track:** P — tag: compat (FPC-parity on real OO code; see parallel-tracks.md)
-- **Status:** backlog
-- **Owner:** claude-P1
+- **Status:** backlog (umbrella — the actionable work is always a rung sub-ticket)
 - **Unblocks:** the whole OO surface's credibility (RTTI, streaming, generics×classes)
 
 ## Why
@@ -35,7 +34,7 @@ OOP surface is already shaken out.
 | **fcl-fpcunit** | 5,089 | `tests/` + `exampletests/` | [[feature-pascal-corpus-fpcunit]] |
 | **fcl-json** | 9,769 | 12,261 LOC, fpcunit | [[feature-pascal-corpus-fpjson]] |
 | fcl-xml (DOM/SAX) | 21,753 | yes | — not filed yet |
-| rtl-generics | — | — | [[feature-pascal-corpus-generics]] (rung 3, in `working/`) |
+| rtl-generics | — | — | [[feature-pascal-corpus-generics]] (rung 3, in `blocked/` on [[feature-pascal-builtin-tobject-class]]) |
 | **fcl-passrc** | 60,696 | 40,477 LOC, fpcunit | [[feature-pascal-corpus-passrc]] (ENDGAME) |
 
 > **Keep this column current.** The rtl-generics row said "not filed yet" for weeks
@@ -86,3 +85,8 @@ Per sub-ticket. Frontend/IR changed → `make test` + self-host byte-identical �
 
 ## Log
 - 2026-07-12 — opened. Candidate survey done; passrc + fpcunit picked as the first landing.
+- 2026-08-20 — rungs 1 (fpcunit) and 2 (fpjson) are GREEN and in `done/`. Rung 3
+  (rtl-generics) is in `blocked/` on [[feature-pascal-builtin-tobject-class]]; that
+  blocker is the actionable item, not this umbrella. Returned to `backlog/` — an
+  umbrella has no work of its own, and holding it in `working/` takes the ranker's
+  top slot away from the rung that does.

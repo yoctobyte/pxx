@@ -1,11 +1,12 @@
 ---
 prio: 42
+blocked-by: decide-tobject-root-methods-dispatch-model
 ---
 
 # Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods
 
 - **Type:** feature (Pascal frontend — builtin class) — **Track P/A**
-- **Status:** backlog — filed 2026-07-12 (conformance sweep + Pascal Script).
+- **Status:** blocked on [[decide-tobject-root-methods-dispatch-model]]
 
 ## Symptom
 
@@ -79,6 +80,14 @@ settled:
 The intercept is not a cheaper version of the slots; it is a different, weaker
 guarantee, and the corpus is the caller that would notice. Recommend the slots,
 scheduled deliberately rather than squeezed into a corpus session.
+
+**2026-08-20, frank1-ACP:** that fork is now filed as
+[[decide-tobject-root-methods-dispatch-model]] and this ticket is blocked on it.
+Written as prose inside a feature ticket, the "do not pick this up until it is
+settled" instruction was invisible to the ranker, which kept offering the ticket
+as the top of Track A's queue. The decide ticket adds a third option the write-up
+above did not consider (reserved leading VMT slots in every class, TObject still
+implicit) and carries the recommendation.
 
 ## Gate
 
