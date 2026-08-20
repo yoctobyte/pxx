@@ -234,6 +234,39 @@ simply unattended, because the same PSU failure had taken the house down. The
 answer to "nothing retried" is to stop manufacturing the failure, not to retry
 forever.
 
+## Host-local alerting: `TRACKT_NOTIFY` (all | health | off)
+
+Two **host-local** user timers watch the watcher. They live outside the repo
+(`~/.local/bin/`, `~/.config/systemd/user/`) because they are per-box operator
+wiring, not project code — origin and design in
+[[task-t-xeon-host-local-health-alerting]]:
+
+| timer | asks | fires on |
+| --- | --- | --- |
+| `trackt-health.timer` (5 min) | is the *watcher* alive? | DOWN/WEDGED transitions; after 3 sustained checks it writes a REQUEST into `~/USER_ATTENTION.md` |
+| `trackt-regressions.timer` (15 min) | is *master* alive? | a job appearing in / clearing from `open_regressions`, with triage evidence into its log |
+
+Both are edge-triggered, and both pop a `notify-send` desktop notification. On a
+dedicated watcher box nobody sees those; on a **workstation** the regression one
+is a firehose — 81 NEW and 11 CLEARED entries on 2026-08-20 alone, each a
+`critical` popup over whatever the human was doing, and a red master is a normal
+working state, not news.
+
+So `notify()` in both scripts honours `TRACKT_NOTIFY`, set per box in the
+`.service` unit's `Environment=`:
+
+| value | health popups | regression popups |
+| --- | --- | --- |
+| `all` (default) | yes | yes |
+| `health` | yes | no |
+| `off` | no | no |
+
+**The switch governs the popup, never the record.** `~/USER_ATTENTION.md`
+escalation, `~/.local/state/trackt-health/alerts.log` and
+`~/.local/state/trackt-triage/regressions.log` are written either way, so
+nothing is lost by silencing — `trackt health` and those logs still answer
+"what happened while I was away". plexus runs `off` since 2026-08-20.
+
 ## Rule: the watcher is a TENANT — budget cores when a human shares the box
 
 plexus ran the full matrix with no CPU ceiling because it was a *dedicated*
