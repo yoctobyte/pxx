@@ -6339,7 +6339,7 @@
    "status": "fail"
   },
   {
-   "bad": "1d85d2430a54910fa971a30d10a29c3a5a6ce8f2",
+   "bad": "d9419ae86420334ef870bce46acd58f00d35d2f3",
    "good": "57b9b7148d3290ac089cd9360c6e4553a4b44bfb",
    "job": "test-c-conformance#shard1/6",
    "name": "test-c-conformance#shard1/6",
@@ -6347,9 +6347,7 @@
    "pin_built": false,
    "range": [
     "e96a698f1f293982d22980f2d2fb01b72556c3a1",
-    "d9419ae86420334ef870bce46acd58f00d35d2f3",
-    "be43d398142d6974de1873144e1fbc9592941d9a",
-    "1d85d2430a54910fa971a30d10a29c3a5a6ce8f2"
+    "d9419ae86420334ef870bce46acd58f00d35d2f3"
    ],
    "src": "tools/run_c_conformance.sh",
    "status": "fail"

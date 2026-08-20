@@ -8,7 +8,7 @@
 
 ## Open regressions
 - **lib-test#src:test/lib_mimic_xml_etree_elementtree.npy** — test/lib_mimic_xml_etree_elementtree.npy (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range
-- **test-c-conformance#shard1/6** — tools/run_c_conformance.sh (plexus): bad `1d85d2430a54`, last good `57b9b7148d32`, 4 commit(s) in range
+- **test-c-conformance#shard1/6** — tools/run_c_conformance.sh (plexus): bad `d9419ae86420`, last good `57b9b7148d32`, 2 commit(s) in range
 - **test-c-conformance-aarch64#shard1/6** — tools/run_c_conformance.sh (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range
 - **test-c-conformance-arm32#shard1/6** — tools/run_c_conformance.sh (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range
 - **test-c-conformance-riscv32#shard1/6** — tools/run_c_conformance.sh (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range
