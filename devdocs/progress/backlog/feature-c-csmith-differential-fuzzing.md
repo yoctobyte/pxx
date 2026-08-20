@@ -442,3 +442,117 @@ has ever reached, whereas a fourth flag set would re-test x86-64.
 Flag sets tried and spent (do not repeat): `--paranoid` + deep aggregates,
 `--builtins`, `--inline-function` + deep expressions with multi-`-O`. Still not
 tried: `--float`, for the reason above.
+
+## 2026-08-20 — axis 2 opened (cross targets): 370 seeds, THREE comparison classes, zero findings
+
+Binary: self-hosted fixedpoint at **`272e347bb`** — `make compiler/pascal26`
+rebuilt deliberately at that sha before the first batch (the tree had an edit on
+top of the previous build), tree clean, no pin taken.
+
+Axis 3 closed with the prediction "the remaining silent bugs need axis 2". This
+is axis 2's first sitting, and the first thing it turned up was not a compiler
+bug but the **shape of the axis**: on this box there is no cross gcc of any kind
+(`aarch64-linux-gnu-gcc`, `arm-linux-gnueabihf-gcc`, `riscv64-linux-gnu-gcc` —
+none installed; `gcc -m32` accepts the flag and then cannot link, no `Scrt1.o`).
+qemu-user IS present, so we can RUN every target and cannot independently
+JUDGE any of them. That splits axis 2 into three classes with different
+evidentiary strength, and they must be reported separately or the numbers lie.
+
+### D1 — aarch64 through the harness, no oracle: 150 seeds, 0 findings
+
+`tools/csmith_fuzz.py --target aarch64 --iters 150 --seed-start 300100`.
+**136 ran clean across pxx `-O` levels, 14 skipped, no findings.** The harness
+said so itself, in the header: `NO ORACLE for aarch64 (LP64) --
+aarch64-linux-gnu-gcc: not installed`, so `MISCOMPILE_VS_GCC` and `PXX_SLOW`
+were **NOT CHECKED**. What this batch does cover is real and worth having:
+`MISCOMPILE_OPT` (our own `-O` levels against each other), `PXX_CRASH`,
+`PXX_COMPILE_FAIL`, `PXX_TIMEOUT` — 136 csmith programs compiled and ran on the
+aarch64 backend without one of them. That is a first for this campaign; every
+prior seed in 1450 hit x86-64 only.
+
+But a batch whose strongest bucket is switched off is a weak batch, and saying
+"150 seeds on aarch64, clean" without the qualifier would overstate it by
+exactly the bucket that has found most of this campaign's bugs.
+
+### D2 — the LP64 differential, oracle restored: 120 seeds, 0 findings
+
+Then the harness's own doctrine (`tools/csmith_fuzz.py`, ~line 120: *"The data
+model decides whether a checksum is comparable at all; the ISA does not"*)
+answered the missing-oracle problem. aarch64 is LP64; so is native x86-64 gcc;
+both little-endian. **A native gcc checksum IS comparable with an aarch64 pxx
+checksum**, because a csmith checksum is arithmetic over integers of a given
+width, not machine code.
+
+Seeds 310100-310219, native `gcc -O0` vs `pascal26 --target=aarch64` run under
+`tools/run_target.sh`: **105 agreed, 15 skipped, 0 divergences.**
+
+That restores `MISCOMPILE_VS_GCC` for aarch64 with no cross toolchain
+installed, and it is the batch with real teeth in this sitting.
+
+It also surfaced a Track T defect, filed through the coordinator as
+`bug-t-csmith-oracle-list-is-keyed-on-isa-when-its-own-doctrine-says-data-model`
+(T, p60): `ORACLE_CC` keys its candidate compiler list on the **ISA**, so
+`--target aarch64` looks only for an aarch64 gcc and reports NO ORACLE, while
+the doctrine three screens above says the **data model** is what decides. The
+fix is nearly free — `fuzz_one` already builds and runs a native gcc on every
+seed as a validity filter and already has its checksum in `gcc_out`, so for any
+LP64 target the oracle is *already computed and then discarded*.
+
+**Trap recorded for whoever implements it: reuse the CHECKSUM, never the
+TIMING.** `oracle_sec` scales pxx's time budget; feeding a native gcc's seconds
+into an emulated target's budget would manufacture `PXX_TIMEOUT` findings —
+`bug-t-csmith-harness-reports-slow-as-a-timeout` in costume. Comparability of
+checksums is governed by the data model; comparability of timings by the
+execution environment, and those are different questions. So: set `oracle_sum`,
+leave `oracle_sec` `None` for emulated targets, keep timing NOT CHECKED.
+
+### D3 — the ILP32 cross-backend class: 100 seeds, 0 findings, 0 layout-suspect
+
+The three ILP32 backends against **each other** on the same program — i386,
+arm32, riscv32, seeds 320000-320099. Not an independent oracle (both sides are
+ours); a different question: not "is pxx right?" but "is pxx self-consistent?".
+**84 agreed, 16 skipped, 0 layout-suspect, 0 findings.**
+
+Two design points in this class are worth keeping, because both were nearly got
+wrong:
+
+1. **A native-gcc validity filter still belongs here**, even though its checksum
+   is useless across the data-model boundary. It is answering only "is this
+   program buildable and runnable at all" — without it, a csmith hiccup gets
+   filed as a pxx compile failure it is not. On this run the filter is doing
+   only that original job.
+2. **Same data model does NOT mean same ABI.** SysV i386, AAPCS32 and the
+   riscv32 psABI have genuinely different bitfield and struct-packing rules, and
+   a csmith checksum reaches layout through unions and bitfields. "We own both
+   sides" means any difference is *ours*; it does not mean any difference is a
+   *defect* — ownership of the code is not ownership of the specification it
+   implements. So a divergence here is triaged at the moment of the hit, not at
+   reduction time: re-run the same seed with `--no-bitfields --no-packed-struct
+   --no-unions`, and if the three then agree it is `LAYOUT-SUSPECT` (possibly a
+   legitimate ABI difference) rather than a backend bug. Deliberately NOT
+   disabling those constructs sweep-wide — bitfields produced 3 of this
+   campaign's first 9 bugs.
+
+The triage did not fire this sitting (0 layout-suspect), so it is untested
+machinery; it is written into the script so the next hit is classified rather
+than argued about.
+
+### Reading the sitting
+
+**370 seeds, zero findings — a dry sitting, reported as one.** That is a result,
+not a non-event, but it is a weaker result than the raw number suggests and the
+weighting matters: 120 of the 370 (D2) had the strongest oracle this campaign
+has; 150 (D1) had no `MISCOMPILE_VS_GCC` at all; 100 (D3) had a self-consistency
+check instead of an oracle. So the honest one-liner is **"120 seeds of real
+cross-target differential, plus 250 of loud-bucket-only coverage, all clean"** —
+and D1/D2 should be read as a PAIR, since they are the same backend with the
+strongest bucket off and then on.
+
+The backends are in better shape than the absence of a cross toolchain made it
+look. What axis 2 needs next is not more seeds at this strength but the Track T
+oracle fix, which converts every LP64 cross batch into a D2 automatically and
+would make an i386/arm32/riscv32 differential possible against a `-m32` gcc on a
+box that has one.
+
+Scoreboard delta: seeds 1450 → 1820; findings unchanged; first non-x86-64 seeds
+in the campaign's history (250 of them).
