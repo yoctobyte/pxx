@@ -1789,6 +1789,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-pascal-corpus-fpjson | P | 58 | feature | fpjson (fcl-json) — rung 2 of the Pascal OOP corpus | — |
 | feature-pascal-delphi-generics-syntax | P | 56 | feature | Mode-Delphi generics syntax: `TFoo<T> = class`, inline `TFoo<LongInt>` | — |
 | feature-pascal-generic-nonclass-templates | P | 50 | feature | Generic templates beyond classes: records, arrays, procvars | — |
+| feature-pascal-initialize-finalize-intrinsics | A | 50 | feature | `Initialize()` / `Finalize()` standard procedures (managed-type intrinsics) | — |
 | feature-pascal-io-checks-i-plus | A | 40 | feature | {$I+} I/O checking: EInOutError / RE on failed Text ops — third sibling of the landed {$Q+}/{$R+}; carries a DIALECT-DEFAULT question for the user | — |
 | feature-pascal-operator-decl-fpc-compat | A | 44 | feature | operator declarations: FPC named-result syntax + `/` in the op set | — |
 | feature-pascal-otherwise-case-keyword | A | 35 | feature | `otherwise` as case-else soft keyword (FPC default-mode parity) | — |

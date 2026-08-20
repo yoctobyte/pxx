@@ -6,7 +6,7 @@ prio: 50
 
 - **Type:** feature (Pascal frontend — Track P parse; lowering touches the
   managed-type init/final machinery = Track A gate)
-- **Status:** backlog — unclaimed
+- **Status:** resolved 2026-08-21 — superseded by [[feature-a-implement-initialize-and-finalize-over-the-arc-helpers]]; see the note at the bottom.
 - **Opened:** 2026-07-18, out of the FPC-compiler gap analysis
 - **Blocks:** [[goal-compile-fpc-compiler]] — used by FPC's
   `cclasses.pas:2394` (`TCmdStrListItem.GetCopy`) and common in low-level
@@ -92,3 +92,34 @@ into it with an explicit address.
 refcount pattern (mirror the cclasses idiom) leaks nothing and double-frees
 nothing under the ansistring refcount checks; Finalize on a record with
 mixed managed/unmanaged fields.
+
+## 2026-08-21 — RESOLVED by [[feature-a-implement-initialize-and-finalize-over-the-arc-helpers]]
+
+Closed rather than worked, as that ticket instructed. Its premise — that the
+intrinsics were *missing* — was half wrong: `Finalize` was parsed and its
+arguments discarded (an empty sequence emitted), which is worse than missing,
+because FPC-shaped code compiled and silently did nothing. `Initialize` genuinely
+did not exist.
+
+**This ticket's own canonical example now matches FPC exactly.** The
+`TLinkedListItem.GetCopy` shape — raw-`Move` a record containing an AnsiString,
+so the copy aliases the original with no refcount bump, then `Initialize` the
+alias before assigning through it — run against FPC 3.x `-Mobjfpc -O-`:
+
+```
+a=[orig] b=[copy] keep=[orig]
+b after fin len=0 a still=[orig]
+```
+
+Identical on both. The original survives the copy's `Finalize`, which is the
+property the whole idiom depends on.
+
+**Scope note for [[goal-compile-fpc-compiler]]**, which this listed as a blocker:
+records and AnsiStrings are done; a **bare** dynamic-array or variant lvalue is
+still refused with a compile error (deliberately, not a no-op) and is
+[[feature-a-finalize-for-bare-dynarray-and-variant]]. `cclasses.pas:2394` is a
+record-with-managed-field case, so it is covered.
+
+The track line here said "Track P parse; lowering touches Track A" — in the end
+it was all Track A: the parse desugars a string `Finalize` into an assignment and
+everything else is IR plus two `builtinheap` helpers.
