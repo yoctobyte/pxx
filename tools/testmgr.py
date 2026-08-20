@@ -305,6 +305,27 @@ RUN_RETRY_SIG_TAIL = 8192   # bytes of the log tail to scan for a signature
 PEER_POLL_PERIOD = 15.0     # seconds between /proc scans for co-tenant runs
 PEER_TIME_FACTOR = 2.0      # two runs sizing to the whole box ~halve our share
 CONTENTION_SIGNALS = (signal.SIGTERM, signal.SIGKILL, signal.SIGHUP)
+
+# The DURATION discriminator, for a kill we never saw. `timeout N` written
+# inside a make recipe kills its child, the recipe returns an ordinary nonzero,
+# and make reports `Error 1`: from here it is a job that FAILED, never a job
+# that ran out of time, so every mechanism above is structurally blind to it --
+# `effective_timeout` stretches a budget the recipe does not consult, and
+# CONTENTION_SIGNALS only covers a signal WE observed. See
+# _inner_timeout_shaped(); ten such ceilings are hardcoded in the Makefile and
+# not one of them propagates `timeout`'s exit 124.
+#
+# How many times its learned duration a FAILED job must have run before the
+# failure is read as duration-shaped rather than value-shaped. Generous on
+# purpose: these ceilings sit far above normal runtime (test-uforth's corpus
+# arms learn tens of seconds against a 180s one), so a real inner kill
+# overshoots by a lot, while a job that failed on a wrong VALUE is not
+# stretched at all.
+INNER_TIMEOUT_RATIO = 3.0
+# ...and the floor beneath it, because a ratio is not evidence at every scale.
+# On a job that normally takes 0.2s, 3x is 0.6s -- scheduler noise. Only a job
+# with a real duration can carry a duration signal at all.
+INNER_TIMEOUT_FLOOR = 20.0
 # tiers that carry the FPC cold-start canary (advisory; see fpc_canary_job).
 # Not "quick": that is the inner loop and an FPC compile of compiler.pas is a
 # whole build, not an inner-loop cost.
@@ -2299,6 +2320,39 @@ class Manager:
                 and job.cls in RUN_RETRY_CLASSES
                 and job.attempts < RUN_RETRY_TRIES)
 
+    def _inner_timeout_shaped(self, job, now):
+        """Did this FAILED job blow a budget we cannot see?
+
+        The exit status is silent by construction here (see
+        INNER_TIMEOUT_RATIO), so the DURATION is the only signal left. A job
+        that has passed on this box before carries a learned EWMA; a failure
+        that took many times that long is a statement about the BOX, which is
+        exactly what _retriable_contention exists to act on.
+
+        Deliberately only PROPOSES the shape -- the caller still routes it
+        through _retriable_contention, so a peer must actually have been live.
+        Without that gate a 9x-overlong failure could equally be a real
+        performance regression, and retrying would mask the one finding the
+        duration is good at surfacing.
+
+        Fails closed: a job that has never passed here has no exp_dur and so no
+        discriminator, and gets no retry. `not job.exp_dur` rather than `is
+        None` is correct for once -- learn() floors at 0.05, so a stored 0.0
+        means the metrics file is corrupt, and a corrupt baseline must not
+        license retries.
+
+        NOTE this does not change the job's STATUS. Calling it "timeout" would
+        be the more honest word and is the wrong move: bisect_step refuses to
+        bisect a timeout ([[bug-t-a-timeout-bisects-to-an-innocent-commit]]),
+        so relabelling would silently suppress bisects that are sound today.
+        Retry the job; leave the verdict spelled as it was.
+        """
+        if not job.exp_dur or job.exp_dur < INNER_TIMEOUT_FLOOR:
+            return False
+        if job.t0 is None:
+            return False
+        return (now - job.t0) >= job.exp_dur * INNER_TIMEOUT_RATIO
+
     def _retriable_signature(self, job):
         """A HARNESS-level failure that any class may retry — see
         RUN_RETRY_SIGNATURES. Returns the matched signature, or None.
@@ -2391,6 +2445,12 @@ class Manager:
                     self._requeue_retry(
                         job, "failed (rc=%d) with a harness signature (%s)"
                              % (rc, self._retriable_signature(job)))
+                elif (self._inner_timeout_shaped(job, now)
+                      and self._retriable_contention(
+                          job, "failed after %.0fs against a %.0fs expectation "
+                               "— a budget inside the recipe, not ours"
+                               % (now - job.t0, job.exp_dur))):
+                    pass
                 elif (rc < 0 and -rc in CONTENTION_SIGNALS
                       and self._retriable_contention(
                           job, "killed by SIG%s"

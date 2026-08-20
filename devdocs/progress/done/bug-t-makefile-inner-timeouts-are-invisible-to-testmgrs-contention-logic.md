@@ -3,7 +3,7 @@ slug: bug-t-makefile-inner-timeouts-are-invisible-to-testmgrs-contention-logic
 track: T
 type: bug
 prio: 55
-status: backlog
+status: done
 blocked-by: []
 summary: "MEASURED 2026-08-19: option 2 (map exit 124) is unimplementable as written — zero of the ten sites propagate 124 to make, and the uforth corpus rows report a timeout as a false pxx-vs-CPython DIFF at recipe exit 0. Option 3 (record duration) was ALREADY DONE; the real gap is exp_dur missing from the report; the recipe markers are not T's lane. Original: ten `timeout N` calls are hardcoded INSIDE Makefile recipes, so they fire within make and surface to testmgr as an ordinary `fail`. Every piece of testmgr's contention machinery — PEER_TIME_FACTOR budget stretching, co-tenant retry, the `timeout` status itself — is structurally unable to see them. That is why six separately-fixed timeout tickets did not stop the class recurring: all six fixed testmgr's OWN timeouts, and the inner ones were never in scope."
 ---
@@ -389,3 +389,113 @@ Track T's push lane.
 
 **This ticket stays open** for that half. What is left is the table in the measurement
 section above, split per owning lane.
+
+---
+
+## CORRECTION 2026-08-20 (plexus-T) — the uforth row's "exit 0" is wrong. The severity claim is not.
+
+The measurement table above reports, for the uforth corpus arms, *"what make reports:
+**exit 0**"*, and the prose concludes *"the recipe exits 0, so testmgr does not even see
+a fail."* **That is false about the real recipe.** `Makefile:9437` ends the target with:
+
+```make
+	if [ "$$bad" != "0" ]; then \
+	  echo "test-uforth: FAIL — $$bad of $$((ok+bad)) corpora differ from CPython"; exit 1; \
+	fi
+```
+
+A `DIFF` increments `bad`, and `bad != 0` exits 1. **testmgr does see a fail.**
+
+The scratch reproduction that produced the `exit 0` reproduced the *comparison block* and
+stopped there — it never included the trailing gate that reads `bad`. So the measurement
+was true about the fragment it ran and false about the subject it was cited for.
+
+Note what this is: the ticket's own method note, one paragraph below the table, says *"a
+scratch reproduction is only evidence about the real code when it reproduces the real
+code's shape, and here four distinct shapes all needed reproducing separately."* It was
+right, and the count was five — the fifth shape was the whole-target gate that the
+per-comparison shape sits inside. **The premise check that caught two errors did not run
+on its own output.**
+
+**What survives, unchanged and unweakened:** the uforth arms discard `timeout`'s 124 via
+`wait $$pp || true`, the kill truncates `p.out` mid-stream, and the truncation is
+reported as `DIFF <corpus>` — a pxx-versus-CPython divergence. That is still the worst of
+the ten sites, still manufactures a false finding in another lane, and is now filed as
+[[bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence]]. The correction is
+to *how the false red arrives* (as a fail carrying a divergence, not as a silent pass),
+not to *whether it arrives*.
+
+## Landed 2026-08-20 (plexus-T): the duration is now ACTED ON, not just recorded
+
+The 2026-08-19 entry made an inner timeout **legible** (`exp_dur` beside `dur` in the
+report) and closed by saying it did not make one **detectable** — that the rest needed
+recipe-side markers, i.e. `Makefile`, i.e. not this lane. That was one step too
+pessimistic. There is a discriminator entirely inside `tools/testmgr.py`.
+
+`Manager._retriable_contention()` already states the governing principle — *"a
+kill/timeout while a co-tenant run was live is a statement about the BOX, not the
+artifact"* — and is reachable from exactly two places: `rc < 0` with a signal **we**
+sent or observed, and **our own** timeout. An inner `timeout` is neither. But the
+baseline that landed yesterday supplies the missing third route:
+
+- **`Manager._inner_timeout_shaped(job, now)`** — a FAILED job that has passed on this
+  box before carries a learned EWMA. A failure that ran `INNER_TIMEOUT_RATIO` (3.0) times
+  that long, above an `INNER_TIMEOUT_FLOOR` (20.0s), is **duration-shaped** rather than
+  value-shaped. That is the fact the exit status was supposed to carry and does not.
+- **The call site conjoins it with `_retriable_contention`**, deliberately, and that
+  coupling is the whole safety argument. "Took 9x as long and failed" on an *idle* box is
+  a plausible **performance regression**, and retrying it would mask the one finding a
+  duration signal is genuinely good at surfacing. The peer gate is what makes the shape
+  safe to act on; the shape alone is not.
+- **Fails closed.** No learned duration — a job that has never passed here — means no
+  discriminator and no retry.
+- **It does not change the STATUS**, and that omission is load-bearing. Calling these
+  `timeout` is the more honest word and is the wrong move: `bisect_step` refuses to
+  bisect a timeout ([[bug-t-a-timeout-bisects-to-an-innocent-commit]]), so relabelling
+  would silently suppress bisects that are sound today — the exact TRAP this ticket
+  recorded on 2026-08-18. Retry the job; leave the verdict spelled as it was.
+
+`tools/testmgr_inner_timeout_retry_devtest.py` — 17 guards, milliseconds, no tier.
+Non-vacuity by four independent neuterings of production: dropping the floor reddens 1,
+forcing the shape true reddens 2, setting the ratio to 1.0 reddens 2, and **removing the
+contention gate from the call site reddens the guard written for exactly that** — the
+last one matters most, because no runtime assertion inside the method can see its own
+caller, so that guard reads the source. Smoked with a live `--tier quick` (16/16, and the
+run happened to share the box with the watcher, so the co-tenancy path was exercised).
+
+### What this covers, and the two sites it cannot
+
+Covered: every site whose failure is a plain `Error 1` — the three `test "$$(timeout N
+...)"` comparisons and the tk `|| { ...; exit 1; }` — **when a peer run was live**. Under
+contention they now retry instead of going red, which is what the machinery was always
+supposed to do for them.
+
+Not covered, and not coverable from here: the two sites that report a **diff**.
+`test-uforth`'s corpus arms and `test-lua-cross` both truncate a captured stream and then
+compare it, so the red's stated subject is a NilPy divergence or a cross-backend
+mismatch. A duration signal can say the box was busy. It cannot say *the comparison
+should not have been made* — only the recipe saw the 124.
+
+## Resolution 2026-08-20 — T's half is complete; the recipe half is filed per lane
+
+Split as this ticket's own measurement section recommended.
+
+- **Done here (T, `tools/testmgr.py`, self-contained):** option 3 plus the baseline
+  (2026-08-19), and the duration discriminator with its contention gate (above).
+- **Filed out, with the measured table as the work list:**
+  - [[bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence]] (p55) — the
+    three uforth ceilings, headlined by the false `DIFF`, plus `test-nilpy`'s three.
+  - [[bug-a-a-lua-cross-timeout-is-reported-as-wrong-output-from-the-backend]] (p50) —
+    `test-lua-cross`'s truncated-stream diff, plus `test-core:3553`.
+
+Both carry the fix shape (capture the status, branch on 124 *before* comparing) and the
+standing warning against raising the constants. Six of the ten sites are N's, two are
+A's, and the remaining two are the tk and lua ones already counted in those.
+
+The ticket closes because **it can now be finished by the lanes that own the files**,
+which is the thing it could not claim before: as filed it required an edit T is not
+permitted to make, which is why it sat at p55 unclaimed for a day with a complete
+diagnosis attached.
+
+## Log
+- 2026-08-20 — resolved, commit PENDING-COMMIT.
