@@ -117,4 +117,4 @@ immediately.**
 `make compiler/pascal26` (fixedpoint, converged 1 round) + `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 3a0499b7c.
