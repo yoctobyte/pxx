@@ -49,11 +49,12 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (248)
+## backlog (250)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-lua-cross-timeout-is-reported-as-wrong-output-from-the-backend | A | 50 | bug | test-lua-cross runs each lua script under qemu with a hardcoded `timeout 120` and then diffs the captured stdout against a .expected file. A timeout truncates got.txt, the diff fails, and the recipe reports a per-target output mismatch — which reads as a cross-backend miscompile on whichever of arm32/i386/riscv32/aarch64 happened to be slow. test-core:3553 carries the same class one severity lower. Filed by Track T, which owns the harness but not the Makefile. | — |
+| bug-a-a-memory-fault-is-a-raw-sigsegv-not-runtime-error-216 | A | 45 | bug | Every memory fault — nil read, nil write, a call through a nil procvar, a method on a nil object, a wild array store — kills a pxx binary with a bare `Segmentation fault` and exit 139. FPC prints `Runtime error 216` and exits 216. No message, no line, no exit-code convention, and `try..except` cannot see it. | — |
 | bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data | A | 40 | bug | A typed const array is emitted as BSS plus generated code that fills it element by element at startup, instead of being stored as initialised data. Measured at ~29 bytes of code per element for UInt64; Int64, Double and Cardinal all do it too, so it is every typed const array, not a 64-bit case. A 696-entry table costs 20 KB of code and 0 bytes of data. A string constant of the same bytes costs ~0 code and lands in .data, so the data path exists — the array lowering just does not use it. | — |
 | bug-a-aintostr-returns-empty-for-negative-numbers | A | 40 | bug | AIntToStr(n) returns the EMPTY STRING for any n < 0 — `while n > 0` never enters. It is the compiler's own IntToStr, used in ~40 diagnostics across the Pascal, NilPy and C frontends and the C preprocessor, so a negative value silently drops out of an error message rather than being reported wrong-looking. | — |
 | bug-a-findtypealias-failed-to-find-puint8-on-stderr | A | 20 | bug | `FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr during a compile that then SUCCEEDS. Either the lookup failure is real and something silently fell back to a wrong type, or the message is a stale debug print that should not be in a release build. Both readings are defects; which one it is has not been established. | — |
@@ -137,6 +138,7 @@ _none_
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-uses-sysutils-withdraws-the-variadic-concat | P | 25 | compat | The variadic `Concat` intrinsic is shadowed by `sysutils`'s two-argument `Concat`, so `uses sysutils` breaks `Concat('a','b','c')` — which compiles fine without it. The shadow rule is `procIdx < 0`, i.e. ANY user Concat disables the intrinsic outright. Loud, not silent. | — |
 | decide-reduced-compiler-switch-spelling | U | 55 | decide | How does a reduced build get selected — subtractive (`omit-c`), positive-list (`only-pascal`), or a named-configuration file? And do frontend and target selection compose freely or only in blessed combinations? The user flagged the names in the parent ticket as placeholders. Recommendation: subtractive defines as the mechanism, named configurations as the tested surface. | — |
+| decide-segv-runtime-error-default | U | 45 | decide | Should a pxx binary install a SIGSEGV/SIGBUS handler by DEFAULT, so a memory fault prints `Runtime error 216` and exits 216 like FPC — or should that be opt-in behind a flag, the way FPC-style float errors are? It changes how every pxx binary dies. | — |
 | decide-should-from-accept-a-quoted-foreign-file | U | 45 | decide | A bare NilPy import resolves to Python only, and the escape is `import 'x.pas' as x`. There is no matching escape for `from x import Name` -- `from 'x.pas' import Name` is refused with \"expected a module name after from\". Decide whether the quoted form should be accepted after `from`, or whether the alias form is deliberately the only door. A test already lost an assertion to this. | — |
 | decide-tobject-root-methods-dispatch-model | U | 65 | decide | Decide: how `TObject.Equals` / `GetHashCode` dispatch — intercept, real parent, or reserved slots | — |
 | docs-d-document-exec-eval-and-the-builtins-incompatibility | D | 40 | docs | docs/targets/nil-python.md tells the public `eval`/`exec` do not exist (\"No eval of runtime-constructed code\") — but the explicit-dict form has worked since 2026-07-31 via pyeval's tree-walker. Document what exec/eval DO support, the refused ambient form, and the decided __builtins__ incompatibility (decided 2026-08-19, permanent for now). | — |
@@ -604,6 +606,7 @@ _none_
 - [p 50] [A] refactor-a-the-missing-layer-between-frontends-and-backends
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
+- [p 45] [A] bug-a-a-memory-fault-is-a-raw-sigsegv-not-runtime-error-216
 - [p 45] [A] bug-a-only-the-pascal-driver-emits-the-signal-runtime
 - [p 45] [A] bug-a-string-table-cap-refuses-a-14k-line-c-program
 - [p 45] [B] bug-b-format-percent-u-prints-a-signed-value
@@ -620,6 +623,7 @@ _none_
 - [p 45] [T] bug-t-a-pin-verifys-reds-carry-no-reasons
 - [p 45] [T] bug-t-two-devtests-measure-the-box-and-flake-the-fleet-job
 - [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
+- [p 45] [U] decide-segv-runtime-error-default
 - [p 45] [U] decide-should-from-accept-a-quoted-foreign-file
 - [p 45] [D] docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out
 - [p 45] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
