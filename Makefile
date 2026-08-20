@@ -6071,6 +6071,12 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_char_array_is_a_string.pas $(TESTTMP)/test_chararrstr26
 	test "$$($(TESTTMP)/test_chararrstr26 | head -1)" = "total ok 86 / 86"
 	test "$$($(TESTTMP)/test_chararrstr26 | tail -1)" = "write [hi]"
+	# `(p + k)^` resolved its pointee only for a bare ident or `arr[i]`; a BINOP
+	# defaulted to Integer, which is right for a ^Integer and a wrong SPAN for
+	# every other pointer. `(pc + 2)^` read four bytes (1717920867 = 'dcef') where
+	# `pc^` and `pc[2]` both answered 'c'; a ^Int64 read short. 17 FPC 3.2.2 values.
+	./$(COMPILER) test/test_pointer_arith_deref_keeps_pointee.pas $(TESTTMP)/test_ptrarith26
+	test "$$($(TESTTMP)/test_ptrarith26 | tail -1)" = "total ok 17 / 17"
 	./$(COMPILER) test/test_var_nd_array_string_init.pas $(TESTTMP)/test_var_nd_array_string_init26
 	test "$$($(TESTTMP)/test_var_nd_array_string_init26)" = "$$(printf '1 3 4 6\nJan Mar Apr Jun\nx yy zzz')"
 	./$(COMPILER) test/test_sizeof_array_typename.pas $(TESTTMP)/test_sizeof_array_typename26

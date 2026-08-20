@@ -9187,6 +9187,42 @@ begin
   Result := wCall;
 end;
 
+function NodePtrElem(node: Integer; var elemTk: TTypeKind; var elemRec: Integer;
+                    depth: Integer): Boolean;
+{ The POINTEE type of a pointer-valued expression, seen through the arithmetic.
+
+  `(p + k)^` used to resolve its pointee only when the inner node was a bare
+  identifier or `arr[i]`; a binop "carries no element-type tag" and defaulted to
+  Integer. That default is right for a ^Integer and wrong for every other
+  pointer, so `(pc + 2)^` read FOUR bytes as an integer -- 1717920867, the bytes
+  'dcef' -- where `pc^` and `pc[2]`, the two other spellings of the same access,
+  both answered 'c'. Silent, and on a ^Byte or ^SmallInt it is a wrong SPAN, not
+  just a wrong tag.
+
+  Pointer arithmetic keeps the pointer's type, so the pointee comes from
+  whichever operand carries one. bug-p-a-pchar-plus-offset-loses-its-type-when-dereferenced }
+begin
+  Result := False;
+  if (node < 0) or (node >= ASTNodeCount) or (depth > 8) then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    if (ASTIVal[node] < 0) or (ASTIVal[node] >= SymCount) then Exit;
+    if IntToTypeKind(ASTTk[node]) <> tyPointer then Exit;
+    elemTk := Syms[ASTIVal[node]].PtrElemTk;
+    elemRec := Syms[ASTIVal[node]].PtrElemRec;
+    Result := elemTk <> tyUnknown;
+  end
+  else if ASTKind[node] = AN_INDEX then
+    Result := NodePtrElem(ASTLeft[node], elemTk, elemRec, depth + 1)
+  else if (ASTKind[node] = AN_BINOP) and
+          (TTokenKind(ASTIVal[node]) in [tkPlus, tkMinus]) then
+  begin
+    Result := NodePtrElem(ASTLeft[node], elemTk, elemRec, depth + 1);
+    if not Result then
+      Result := NodePtrElem(ASTRight[node], elemTk, elemRec, depth + 1);
+  end;
+end;
+
 { ===== A static `array of Char` IS a string =====
 
   FPC treats `array[lo..hi] of Char` as string-compatible in BOTH directions and
@@ -10628,21 +10664,16 @@ begin
           indexNode := AllocNode(AN_DEREF);
           ASTLeft[indexNode] := node;
           { Resolve the pointee type from the inner node, mirroring the direct
-            `ident^` path. A non-trivial pointer expression (binop/cast) carries
-            no element-type tag, so default to Integer (matches `else` below). }
+            `ident^` path. NodePtrElem sees through pointer ARITHMETIC as well:
+            this used to handle only a bare ident or `arr[i]` and default a binop
+            to Integer, which is right for a ^Integer and a wrong SPAN for every
+            other pointer — `(pc + 2)^` read four bytes.
+            bug-p-a-pchar-plus-offset-loses-its-type-when-dereferenced }
           tk := tyInteger; recName := REC_NONE;
-          if IntToTypeKind(ASTTk[node]) = tyPointer then
+          if not NodePtrElem(node, tk, recName, 0) then
           begin
-            if ASTKind[node] = AN_IDENT then
-            begin
-              tk := Syms[ASTIVal[node]].PtrElemTk;
-              recName := Syms[ASTIVal[node]].PtrElemRec;
-            end
-            else if (ASTKind[node] = AN_INDEX) and (ASTKind[ASTLeft[node]] = AN_IDENT) then
-            begin
-              tk := Syms[ASTIVal[ASTLeft[node]]].PtrElemTk;
-              recName := Syms[ASTIVal[ASTLeft[node]]].PtrElemRec;
-            end;
+            { still no pointee to be had — Integer, as before }
+            tk := tyInteger; recName := REC_NONE;
           end;
           ASTTk[indexNode] := StrValTk(tk);
           node := indexNode;
