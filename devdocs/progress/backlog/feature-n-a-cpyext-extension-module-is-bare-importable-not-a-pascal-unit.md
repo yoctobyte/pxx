@@ -61,3 +61,18 @@ file-ownership** despite being N-flavoured work. It must not be worked while ano
 agent holds that file. As of filing, frank3 holds `parser.inc` for the `ParseFactorCore`
 carve (`feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets`), which is
 a multi-session job. Claim through the coordinator.
+
+## 2026-08-20 — the site MOVED, and the file is now free
+
+Split 3 of the carve deleted 764 lines from `parser.inc` at ~9515 (`3c8ec4c7d`), so
+everything below shifted **-764**: the refusal site is **~33459**, not 34223.
+
+**Do not navigate by line number — the landmark is unchanged:** the `THE COLLISION, NAMED.`
+comment block immediately above
+`if (Length(UnitContent) = 0) and isNilPy and (pasRefusedPath <> '')`.
+
+`parser.inc` is no longer held by the carve. This ticket and
+[[refactor-a-one-resolved-file-identity-for-a-translation-unit]] both live in the same
+region of that file (this at ~33459, `ParseUsesUnit`'s dedupe at ~34590), so they
+**serialise by construction** — one agent takes both in sequence rather than two agents
+colliding over unrelated tickets. Assigned together 2026-08-20.
