@@ -261,6 +261,7 @@ end;
 
 procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm: Boolean); forward;
 function OrdinalNameToTk(const nm: AnsiString): TTypeKind; forward;
+function BuiltinTypeNameTk(const nm: AnsiString): TTypeKind; forward;   { body in pasparser_lval.inc, which also CALLS it above the body (the type-helper type-name receiver). pxx pre-scans and does not need this; FPC does. }
 
 { mode-Delphi generics desugar. After template ti (`TFoo<T> = class...`) is
   captured, rewrite every later use of the Delphi surface into the objfpc

@@ -5,8 +5,8 @@ prio: 55
 # `record helper for T` / `type helper for T` — type helpers
 
 - **Type:** feature (Pascal frontend — Track P; dispatch plumbing may touch shared parser = A gate)
-- **Status:** backlog — not in progress; v1+v2 landed and pinned (test_record_helper_for_string_b331 green); remaining = v3 (type-name receivers, rvalue receivers, class helpers).
-- **Owner:** — (unclaimed; parked to backlog 2026-07-14)
+- **Status:** working
+- **Owner:** claude-acp
 - **Blocks:** [[feature-pascal-corpus-generics]] (generics.helpers.pas is in
   Generics.Collections' uses chain), and broadly sysutils.TStringHelper-style
   code across the FPC/Delphi ecosystem.
@@ -74,3 +74,58 @@ Instance methods + statics dispatch through the existing helper machinery. Test:
 test_type_helper_for_spelling.pas. **Remaining v3:** target-type-name receivers
 (`UInt32.GetSignMask`, `UInt32.SIZED_SIGN_MASK[i]`), rvalue receivers (`'abc'.ToLower`,
 `F().ToLower` — need a materialized temp), class helpers.
+
+## v3 slice landed 2026-08-20: TARGET-TYPE-NAME receivers
+
+`UInt32.GetSignMask` — the spelling `generics.helpers` uses for its UInt32/
+UInt64 sections. Before this the type's own name is not a class, so
+`FindUClass` missed and it was `undefined variable (UInt32)`.
+
+**Not a second dispatch path.** The type name resolves to the HELPER's `ci`,
+which makes it the exact spelling that already worked
+(`TU32Helper.GetSignMask`), so the whole static / class-var / class-const block
+below it serves the new spelling unchanged — including the `UClsIsRecord[ci]`
+arm that passes a by-value dummy Self, because a helper has no metaclass. One
+resolver, two spellings (`normalise-dont-special-case.md`).
+
+Guarded three ways so no other `.` path can be caught: a dot must follow (a
+BARE `UInt32` must stay a type name and not become a class reference — asserted
+in the test via `SizeOf(UInt32)` and an ordinary UInt32 variable in the same
+program), the name must denote a type, and that type must actually have a
+helper in scope. A member that then does not exist still gets the ordinary
+"class method not found", which names the helper — strictly more informative
+than "undefined variable".
+
+Resolves through `BuiltinTypeNameTk` (the one builtin-name table) and then the
+alias table, so all four spellings reach one helper: the builtin name
+(`UInt32`), an alternative builtin spelling of the same type (`Cardinal`), a
+named alias (`TMyInt = LongWord`), and a string helper (`AnsiString.Tag`).
+Statics and scalar/string consts both work through it.
+
+Test: `test/test_type_helper_typename_receiver.pas`. FPC 3.2.2 (with
+`{$modeswitch typehelpers}`) answers 2147483648 for `UInt32.GetSignMask`.
+
+**Dialect note found while building the oracle:** FPC *rejects* the helper-NAME
+spelling `TU32Helper.GetSignMask` ("Objective-C categories and Object Pascal
+class helpers cannot be used as types"), which pxx has accepted since v2. That
+is deliberate laxness in pxx's direction, not a parity bug — but it is worth
+knowing that the two spellings are not equally portable.
+
+### v3 remaining, and one thing that turned out to be a different bug
+
+- **rvalue receivers** — `'abc'.ToLower`, `F().ToLower`. Need a materialized
+  temp. FPC oracle for both: `Abc` in the probe used here. Still refused.
+- **class helpers** (`class helper for TSomeClass`).
+- **`UInt32.SIZED_SIGN_MASK[i]` is NOT a helper gap.** It fails identically
+  through the HELPER's own name (`TU32Helper.SIZED_SIGN_MASK[2]`), so the
+  type-name work above is not what is missing. A TYPED class const
+  (`const X: T = ...`) never enters the ClassConst registry at all — the code
+  says so itself: *"Only the untyped forms below are scoped; typed class consts
+  have real storage and stay global."* Under that is a silent wrong-value bug
+  filed separately at prio 65 as
+  [[bug-p-two-classes-typed-consts-of-the-same-name-collide]]: two classes each
+  declaring `const TAG: array[1..2] of Integer` share one global slot, and
+  `TA.Get` returns TB's value where FPC returns TA's. Fixing that ticket makes
+  `UInt32.SIZED_SIGN_MASK[i]` work for free, because it routes through the same
+  registry the type-name receiver already uses. So this ticket does NOT need to
+  grow a typed-const path of its own.

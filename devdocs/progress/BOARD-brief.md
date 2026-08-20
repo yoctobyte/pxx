@@ -5,15 +5,16 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:17 blocked:9 backlog:274 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2157 rejected:40`
+`urgent:2 working:1 unfinished:17 blocked:9 backlog:273 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2157 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-pascal-type-helpers` [A] — owner: claude-acp
 
-## urgent (1) — jump the queue
+## urgent (2) — jump the queue
 
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
+- `bug-p-two-classes-typed-consts-of-the-same-name-collide` [P]
 
 ## unfinished (17) — parked mid-flight; re-claim, do not duplicate
 
@@ -50,6 +51,7 @@ _none — no lane is locked._
 ## Ready — top 30 of 262, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
+- `[p 65] [P]` bug-p-two-classes-typed-consts-of-the-same-name-collide
 - `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree
 - `[p 70] [T]` regression-test-c-conformance-shard1-6
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-callable-to-str-param-fails
@@ -78,6 +80,5 @@ _none — no lane is locked._
 - `[p 55] [U]` decide-reduced-compiler-switch-spelling
 - `[p 55] [N]` feature-a-declaration-phase
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
-- `[p 55] [E]` feature-demo-portable-userland
 
 _232 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

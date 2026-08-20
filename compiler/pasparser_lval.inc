@@ -38,6 +38,7 @@ var
   isAssign: Boolean;
   selfClassCi, selfIdx, fldIdx, selfNode: Integer;
   cvIdx: Integer;
+  helperTk: TTypeKind; helperAi: Integer;   { TARGET-type-name receiver for a type helper — `UInt32.GetSignMask` }
   w, withNode, recId: Integer;
   propFOff, propFLen: Integer;
   withResolved: Boolean;
@@ -608,6 +609,35 @@ begin
       else
       begin
         ci := FindUClass(fieldName);
+        { TARGET-TYPE-NAME receiver for a type helper: `UInt32.GetSignMask`,
+          `UInt32.SIZED_SIGN_MASK[i]`. The type's own name is not a class, so
+          FindUClass misses and this used to be `undefined variable (UInt32)`.
+
+          Resolving it to the HELPER's ci makes it the exact spelling that
+          already works — `TU32Helper.GetSignMask` — so the whole static /
+          class-var / class-const block below serves it unchanged, including
+          the `UClsIsRecord[ci]` arm that passes a by-value dummy Self because a
+          helper has no metaclass. One resolver, two spellings, rather than a
+          second dispatch path (devdocs/dev/normalise-dont-special-case.md).
+
+          Guarded three ways so no other `.` path can be caught: a dot must
+          follow (a BARE `UInt32` must stay a type name, not become a class
+          reference), the name must denote a type, and that type must actually
+          have a helper in scope. A member that then does not exist still gets
+          the ordinary "class method not found", which names the helper —
+          strictly more informative than "undefined variable".
+          feature-pascal-type-helpers v3 }
+        if (ci < 0) and (CurTok.Kind = tkDot) then
+        begin
+          helperTk := BuiltinTypeNameTk(fieldName);
+          if helperTk = tyUnknown then
+          begin
+            helperAi := FindTypeAlias(fieldName);
+            if helperAi >= 0 then helperTk := IntToTypeKind(AliasTk[helperAi]);
+          end;
+          if helperTk <> tyUnknown then
+            ci := FindHelperForType(helperTk, REC_NONE);
+        end;
         if PxxDbgEnabled('a.qual') then WriteLn('PXXDBG a.qual MEMBER field=', fieldName, ' flat=', ci);
         if ci >= 0 then
         begin

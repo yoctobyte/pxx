@@ -3686,6 +3686,15 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_rec_helper_b33126)" = "$$(printf 'lower:  hello\ndouble: HeLLoHeLLo\nbang:   HeLLo!\nparam: mixed\nsq:     49\nmask:   2147483648\nbits:   32')"
 	./$(COMPILER) test/test_type_helper_for_spelling.pas $(TESTTMP)/test_type_helper_spelling26
 	test "$$($(TESTTMP)/test_type_helper_spelling26)" = "42 0"
+	# v3: the TARGET TYPE'S OWN NAME as receiver — UInt32.GetSignMask, how
+	# generics.helpers spells its UInt32/UInt64 sections. Not a second dispatch
+	# path: the name resolves to the HELPER's ci, so the spelling that already
+	# worked (TU32Helper.GetSignMask) serves it. Rows a-d are the spellings that
+	# must all land on one helper (builtin name, named alias, alternative
+	# builtin spelling, string helper); row f is the guard that a BARE type name
+	# is still a TYPE and not a class reference. FPC 3.2.2 answers 2147483648.
+	./$(COMPILER) test/test_type_helper_typename_receiver.pas $(TESTTMP)/test_th_typename26
+	test "$$($(TESTTMP)/test_th_typename26)" = "$$(printf 'a typename static  : 2147483648\nb alias  static    : 2147483648\nc cardinal spelling: 2147483648\nd string typename  : str\ne typename const   : 2147483648 u32\nf bare type is type: 4 5')"
 	# FPC {$MACRO ON} text macros ({$define name := body}), RolDWord-family
 	# System rotates (builtin soft-alias), Int8/16/32 value-cast names
 	./$(COMPILER) test/test_text_macros_rotates_b330.pas $(TESTTMP)/test_macros_rot_b33026
