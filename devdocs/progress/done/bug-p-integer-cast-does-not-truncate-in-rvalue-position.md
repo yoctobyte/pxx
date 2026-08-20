@@ -78,4 +78,4 @@ and the five neighbours the July fix owns, re-asserted. All FPC 3.2.2's.
 `make compiler/pascal26` fixedpoint (converges in 2 rounds) + `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 1069e7fc3.
