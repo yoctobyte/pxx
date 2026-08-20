@@ -10086,11 +10086,20 @@ begin
       end
       else if Syms[i].TypeKind = tyVariant then
         zeroBytes := TypeSize(tyVariant)
+      { RecordNeedsZeroInit, not RecordHasManagedFields: an interface FIELD is
+        excluded from the finalization predicate on purpose (releasing it under
+        the record heap lock deadlocks), but it still has to START NIL — nilling
+        a stack slot takes no lock. Sharing one predicate between the two
+        questions meant a record whose only refcounted member was an interface
+        was never zeroed, so `r.f := x` released stack garbage and dispatched
+        _Release through a junk IMT. The documented trade was a benign LEAK; what
+        it actually produced was a use-after-free.
+        bug-a-a-record-with-an-interface-field-is-not-zero-initialised }
       else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-              RecordHasManagedFields(Syms[i].RecName) then
+              RecordNeedsZeroInit(Syms[i].RecName) then
         zeroBytes := RecSize(Syms[i].RecName)
       else if (Syms[i].TypeKind = tyRecord) and Syms[i].IsArray and
-              RecordHasManagedFields(Syms[i].ElemRecName) then
+              RecordNeedsZeroInit(Syms[i].ElemRecName) then
         zeroBytes := Syms[i].ArrLen * RecSize(Syms[i].ElemRecName)
       else if SymIsComInterface(i) then
         { COM/ARC interface fat pointer: must start nil so the ARC release at

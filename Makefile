@@ -4282,6 +4282,17 @@ test-core: $(COMPILER)
 	# lottery. The pinned binary SEGFAULTS on this file.
 	./$(COMPILER) test/test_interface_local_array_zero_init.pas $(TESTTMP)/test_ifarrzi26
 	test "$$($(TESTTMP)/test_ifarrzi26 | tail -1)" = "total ok 5 / 5"
+	# A local RECORD holding an interface field was never zero-initialised either,
+	# so the first `r.f := x` released stack garbage. RecordHasManagedFields
+	# deliberately excludes a COM interface field (finalizing one under the
+	# non-reentrant record heap lock deadlocks) and the documented trade was a
+	# benign LEAK -- but that one predicate was also answering the ZERO-INIT
+	# question, which takes no lock and cannot deadlock, so the intended leak was
+	# really a use-after-free. Split into RecordHasManagedFields (finalization,
+	# unchanged) and RecordNeedsZeroInit (counts interfaces). The leak remains BY
+	# DESIGN. The pinned binary SEGFAULTS on this file.
+	./$(COMPILER) test/test_record_interface_field_zero_init.pas $(TESTTMP)/test_recifzi26
+	test "$$($(TESTTMP)/test_recifzi26 | tail -1)" = "total ok 5 / 5"
 	# `type TIA2 = array of TIA` (TIA itself `array of Integer`) silently collapsed
 	# to `array of Integer`: the type-alias parser only composed the depth of a
 	# named FIXED-array element, so a named DYN alias fell through to

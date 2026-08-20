@@ -2272,7 +2272,7 @@ begin
     Result := Result * RecFieldArrLen(rec, field2);
 end;
 
-function RecordHasManagedFieldsDepth(recId, depth: Integer): Boolean;
+function RecordHasManagedFieldsDepth2(recId, depth: Integer; inclIntf: Boolean): Boolean;
 { Class/object references are deliberately unmanaged. Only recurse through
   fixed-size user records and compiler-managed value fields. The depth cap is a
   robustness backstop: a malformed record that (transitively) contains ITSELF
@@ -2296,23 +2296,46 @@ begin
       retained on record copy, and released on finalization. }
     if UFldIsArray[base + i] and (UFldArrLen[base + i] = -1) then
       begin Result := True; Exit; end;
-    { NOTE: a COM/ARC interface field is NOT treated as managed here. It is a
-      refcounted handle, but finalizing it under the record heap lock deadlocks:
-      the record-scope finalization holds the non-reentrant heap spinlock and the
-      interface's _Release -> Free -> FreeMem re-acquires it. Correct field-level
-      finalization needs the interface member released OUTSIDE the lock (a
+    { A COM/ARC interface field is NOT "managed" for FINALIZATION purposes. It is
+      a refcounted handle, but finalizing it under the record heap lock
+      deadlocks: record-scope finalization holds the non-reentrant heap spinlock
+      and the interface's _Release -> Free -> FreeMem re-acquires it. Correct
+      field-level finalization needs the member released OUTSIDE the lock (a
       reentrant heap lock, or a separate unlocked interface pass) — see
-      bug-a-class-managed-fields-not-finalized-on-destroy. Until then a COM
-      interface record field leaks (benign) rather than deadlocking. }
+      bug-a-class-managed-fields-not-finalized-on-destroy. Until then such a
+      field leaks, which is the deliberate benign-over-deadlock trade.
+
+      ZERO-INIT IS A DIFFERENT QUESTION, and answering both with this one
+      predicate is what turned that benign leak into a use-after-free. Nilling a
+      stack slot at routine entry takes no lock, calls no _Release and cannot
+      deadlock — and WITHOUT it `r.f := x` releases whatever stack garbage the
+      slot held and dispatches _Release through a junk IMT. So `inclIntf` counts
+      an interface field, and only the zero-init caller passes True:
+      RecordNeedsZeroInit. Finalization behaviour is unchanged.
+      bug-a-a-record-with-an-interface-field-is-not-zero-initialised }
+    if inclIntf and RecIsComInterface(UFldRec_[base + i]) then
+      begin Result := True; Exit; end;
     if (UFldTk[base + i] = Ord(tyRecord)) and (UFldRec_[base + i] <> recId) and
-       RecordHasManagedFieldsDepth(UFldRec_[base + i], depth + 1) then
+       RecordHasManagedFieldsDepth2(UFldRec_[base + i], depth + 1, inclIntf) then
       begin Result := True; Exit; end;
   end;
 end;
 
 function RecordHasManagedFields(recId: Integer): Boolean;
+{ FINALIZATION question: does this record hold fields the scope-exit / destructor
+  walk must release? A COM interface field deliberately does NOT count — see the
+  note above. }
 begin
-  Result := RecordHasManagedFieldsDepth(recId, 0);
+  Result := RecordHasManagedFieldsDepth2(recId, 0, False);
+end;
+
+function RecordNeedsZeroInit(recId: Integer): Boolean;
+{ ZERO-INIT question: does this record hold any slot that must start nil so the
+  FIRST assignment's release sees an empty slot instead of stack garbage? Same
+  walk, plus COM interface fields, which are excluded from finalization but must
+  still be nilled. }
+begin
+  Result := RecordHasManagedFieldsDepth2(recId, 0, True);
 end;
 
 { ===== Central type-query helpers ===== }
