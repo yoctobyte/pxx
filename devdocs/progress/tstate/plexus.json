@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T03:40:00Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "003d733936aa9bc279a77baeab9fda4b3c63000b",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-20T03:46:08Z",
    "fixed": [],
    "new_red": [
@@ -436,6 +428,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "e590b3039c32c88bd3deb325deae08c63d9f13c3",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T20:44:16Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "2b4086a99c314f7af7ecd0a40d8689a543799fe3",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -962,11 +962,11 @@
   "test-cjson#src:test/cjson/runner.c": "full",
   "test-core#00": "native",
   "test-core#129": "full",
-  "test-core#139": "native",
   "test-core#140": "native",
   "test-core#141": "native",
   "test-core#142": "native",
   "test-core#143": "native",
+  "test-core#144": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
   "test-core#src:examples/tk/callbacks.npy": "native",
@@ -2166,6 +2166,7 @@
   "test-core#src:test/test_typed_pointer_inc_dec.pas": "native",
   "test-core#src:test/test_typed_string_const.pas": "native",
   "test-core#src:test/test_typeinfo_enum_b288.pas": "native",
+  "test-core#src:test/test_typeinfo_scalar_names.pas": "native",
   "test-core#src:test/test_typeinfo_widen.pas": "native",
   "test-core#src:test/test_typename_alias_wins_b304.pas": "native",
   "test-core#src:test/test_types_point_methods_b269.pas": "native",
@@ -3826,11 +3827,11 @@
   "test-c-conformance-riscv32#shard5/6": "pass",
   "test-cjson#src:test/cjson/runner.c": "pass",
   "test-core#00": "pass",
-  "test-core#139": "pass",
   "test-core#140": "pass",
   "test-core#141": "pass",
   "test-core#142": "pass",
   "test-core#143": "pass",
+  "test-core#144": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
@@ -5028,6 +5029,7 @@
   "test-core#src:test/test_typed_pointer_inc_dec.pas": "pass",
   "test-core#src:test/test_typed_string_const.pas": "pass",
   "test-core#src:test/test_typeinfo_enum_b288.pas": "pass",
+  "test-core#src:test/test_typeinfo_scalar_names.pas": "pass",
   "test-core#src:test/test_typeinfo_widen.pas": "pass",
   "test-core#src:test/test_typename_alias_wins_b304.pas": "pass",
   "test-core#src:test/test_types_point_methods_b269.pas": "pass",
@@ -6169,11 +6171,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-20T20:34:12Z",
-  "sha": "e590b3039c32c88bd3deb325deae08c63d9f13c3",
+  "date": "2026-08-20T20:44:16Z",
+  "sha": "2b4086a99c314f7af7ecd0a40d8689a543799fe3",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 450.6
+  "wall": 456.3
  },
  "last_bench": {
   "conf_rows": 550,
