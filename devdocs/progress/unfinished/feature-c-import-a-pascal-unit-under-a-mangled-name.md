@@ -4,7 +4,7 @@ prio: 50
 type: feature
 blocked-by: [bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine]
 summary: "Give C an explicit import site for a Pascal unit: `#include \"math.pas\"` declares its routines under mangled C identifiers (`math_pas_Sqrt`), case preserved from the Pascal declaration, path-qualified on collision. Overloads resolve by the declared C signature. AnsiString-bearing signatures are refused by name. Design settled by the user 2026-08-19; this ticket is a SPEC, not a discussion."
-status: working
+status: unfinished
 owner: frank2-C
 ---
 
@@ -316,3 +316,17 @@ coordinator's.
   to avoid refusing files that do exist. Left alone deliberately.
 - `test/my_pas_lib.pas` is referenced by nothing — an unused leftover, not this
   feature's.
+
+## Parked to `unfinished/` — 2026-08-20 (frank2-C)
+
+Everything in this ticket is landed and green except **§6**, and §6 is blocked on
+permission the owner has to grant (`PXX_ALLOW_FULL_SUITE=1` for the four corpus
+builds; see "Still open"). Two smaller items are blocked on Track A holding
+`parser.inc`: the collision RESOLUTION
+(`refactor-a-one-resolved-file-identity-for-a-translation-unit`, raised to p60
+carrying the `Twice(21)` = 42 measurement) and the C-flavoured missing-unit
+diagnostic.
+
+So the ticket is not being actively worked and should not hold the `working/`
+lock. Moved to `unfinished/`. Nothing here is half-applied: the compiler change
+is complete, self-host green, and pushed.

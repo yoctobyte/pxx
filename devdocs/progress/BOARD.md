@@ -11,14 +11,13 @@ lives in git, not in a timestamp._
 | bug-a-riscv32-cross-float-output-no-longer-matches-x86-64 | A+F | 60 | bug | `test-riscv32#src:test/test_cross_float.pas` — the two sides print the same numbers at different widths | — |
 | bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method | N | 70 | bug | A callable value is silently accepted where `str` is declared, and no longer compares equal to itself — bisected to `9bbbbef6c` | — |
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets | A | 55 | feature | Build-time selection of frontends and targets, so `only-pascal` + `only-esp-riscv` yields a small Pascal-for-ESP compiler instead of the megalith. The umbrella build stays the default. Filed with a measurement: C is nearly separable already (16 references in shared files), NilPy is NOT (1281) — so this doubles as a falsifiable test of the frontend-separation design, and NilPy already fails it. | — |
-| feature-c-import-a-pascal-unit-under-a-mangled-name | C | 50 | feature | Give C an explicit import site for a Pascal unit: `#include \"math.pas\"` declares its routines under mangled C identifiers (`math_pas_Sqrt`), case preserved from the Pascal declaration, path-qualified on collision. Overloads resolve by the declared C signature. AnsiString-bearing signatures are refused by name. Design settled by the user 2026-08-19; this ticket is a SPEC, not a discussion. | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine |
 
-## unfinished (15)
+## unfinished (16)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -31,6 +30,7 @@ lives in git, not in a timestamp._
 | chore-a-sweep-the-unwired-tests-into-the-suite | A | 55 | chore | DECIDED 2026-08-19: SWEEP the ~61 unwired test files into the suite — one job, not 61 tickets. Track A, not T, precisely because A can FIX a red in place; T would have had to file one per red. These are repro tests from fix commits that were never wired, so the bug already has a ticket in done/ — reference it, do not re-file. Never record current output as the expectation. | — |
 | docs-devnotes-ai-assisted-build | D | 50 | docs | Developer notes: how this was actually built (AI-assisted, and honest about it) | — |
 | feature-b-the-module-shim-batch-blocking-the-python-corpus | B | 62 | feature | RE-MEASURED on pinned v352: the batch this ticket was filed to attack no longer exists — six, warnings, codecs, colorsys, copy, bisect, xml.sax.*, urllib.parse, six.moves, urllib.request and xml.dom all shipped during 2026-08-18 and are gated by make lib-test. Eight missing-module files remain and none is a thin stdlib shim: xml.etree (4, now a Track U decision), genshi_core (2) and lxml (1) are third-party packages, weakref (1) is a runtime facility. The language walls are 32, with yield alone at 18 — Track N is the bottleneck for this ladder again. | decide-xml-etree-thin-tree-model-or-a-real-xml-library |
+| feature-c-import-a-pascal-unit-under-a-mangled-name | C | 50 | feature | Give C an explicit import site for a Pascal unit: `#include \"math.pas\"` declares its routines under mangled C identifiers (`math_pas_Sqrt`), case preserved from the Pascal declaration, path-qualified on collision. Overloads resolve by the declared C signature. AnsiString-bearing signatures are refused by name. Design settled by the user 2026-08-19; this ticket is a SPEC, not a discussion. | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
@@ -274,7 +274,7 @@ lives in git, not in a timestamp._
 | refactor-a-backend-machine-code-lives-in-six-shared-files | A | 35 | refactor | A backend is not ir_codegen_<arch>.inc + asmtext_<arch>.inc. Six shared files emit or name per-arch machine code: symtab.inc (three full function epilogues), asmenc.inc (inline-asm text for all five targets), ir_codegen.inc (the shared -O pipeline calls two aarch64 passes by name), asmfront.inc, exception_emit.inc, and -- the one that crosses a lane -- cparser.inc, the C FRONTEND, which writes the C _start entry stub as raw rv32_/a64_/arm32_ emission. Measured by the omission defines, which turn every one of these into a compile error. | — |
 | refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files | A | 60 | refactor | parser.inc is 38% of all compiler work (216 of 566 commits in 14 days) and is the ONE file where two lanes must serialize — A and P cannot edit it concurrently. C and NilPy both got carved out into their own lexer/parser; Pascal never did, purely because it was the seed. CLAUDE.md has called this 'the clean long-term shape' in prose for months, where ready/next cannot see it. Prio is a PROPOSAL: the payoff is parallelism, not a feature. | — |
 | refactor-a-nineteen-copies-of-does-this-target-link-the-builtin-unit | A | 40 | refactor | `(TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot))` appears verbatim NINETEEN times in parser.inc, always answering one question: does this target link the builtin RTL unit at all? Give it a name. The duplication is the mechanism by which the next ESP-adjacent target gets it wrong in some of the nineteen and right in the rest. | — |
-| refactor-a-one-resolved-file-identity-for-a-translation-unit | A | 45 | refactor | Generalise CompiledUnitFile[] from the .py arm to every load: one resolved-file identity answers 'have I already compiled this unit?', retiring the @cpath: key space. Decided 2026-08-19 (option B). The mechanism already exists — option A built it for one arm in 030ce07ea — so this is promoting a built thing to the general rule, not new machinery. Hazard: CompiledUnitFile is -1 when unresolved and -1 = -1, so a naive compare makes every unresolved unit identical. | — |
+| refactor-a-one-resolved-file-identity-for-a-translation-unit | A | 60 | refactor | Generalise CompiledUnitFile[] from the .py arm to every load: one resolved-file identity answers 'have I already compiled this unit?', retiring the @cpath: key space. Decided 2026-08-19 (option B). The mechanism already exists — option A built it for one arm in 030ce07ea — so this is promoting a built thing to the general rule, not new machinery. Hazard: CompiledUnitFile is -1 when unresolved and -1 = -1, so a naive compare makes every unresolved unit identical. | — |
 | refactor-a-search-path-helpers-live-in-the-c-preprocessor | A | 25 | refactor | AddPasUnitDir / AddPasIncDir / AddCIncludeDir are generic search-path functions that live in cpreproc.inc, so compiler.pas's own -Fu/-I handling depends on the C frontend. Six of the eleven errors from omitting the C frontend are this misplacement, not coupling: moving them drops omit-c from 11 sites to about 4. | — |
 | refactor-a-seven-frontends-borrow-rust-parser-helpers | A | 40 | refactor | Zig, ALGOL, Erlang, Fortran, LOLCODE and Whitespace all call five helpers whose bodies live in rparser.inc, so PXX_NO_RUST alone fails with 198 errors and Rust can only be omitted together with all six. Three different layers are marooned under one R prefix: AST constructors (share, wrong file), RWiden (numeric widening — SEMANTICS, should not be shared at all), and REmitParamRegSpill (raw x86-64 emission in a frontend). | — |
 | refactor-a-the-greenfield-frontends-share-each-others-parser-helpers | A | 30 | refactor | Omitting rparser.inc breaks zparser.inc in 123 places, plus gparser/eparser/fparser — the greenfield frontends call each other's support functions, which is exactly what the-substrate-is-ast-and-ir-not-the-parser.md says not to do. Costs nothing today; makes R and Z individually unomittable and couples two language specs. | — |
@@ -555,6 +555,7 @@ lives in git, not in a timestamp._
 - [p 60] [O] feature-opt-store-reload-elimination
 - [p 60] [A] meta-dialect-extensions-and-fpc-strict
 - [p 60] [A] refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
+- [p 60] [A] refactor-a-one-resolved-file-identity-for-a-translation-unit
 - [p 58] [N] bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - [p 58] [O] feature-opt-o3-register-pressure
 - [p 55] [A] feature-a-own-language-first-symbol-resolution (unblocks 1)
@@ -640,7 +641,6 @@ lives in git, not in a timestamp._
 - [p 45] [A] feature-toolchain-cli-ux
 - [p 45] [A] feature-writeln-as-library
 - [p 45] [A] meta-constant-normalisation
-- [p 45] [A] refactor-a-one-resolved-file-identity-for-a-translation-unit
 - [p 45] [A] refactor-a-variant-object-tag-list-lives-in-four-places
 - [p 45] [A] refactor-centralize-managed-string-pchar-conversion
 - [p 42] [A] feature-pascal-builtin-tobject-class

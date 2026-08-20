@@ -5,19 +5,18 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 working:2 unfinished:15 blocked:6 backlog:236 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2093 rejected:40`
+`urgent:2 working:1 unfinished:16 blocked:6 backlog:236 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2093 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A] — owner: frank3
-- `feature-c-import-a-pascal-unit-under-a-mangled-name` [C] — owner: frank2-C
 
 ## urgent (2) — jump the queue
 
 - `bug-a-riscv32-cross-float-output-no-longer-matches-x86-64` [A+F]
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
 
-## unfinished (15) — parked mid-flight; re-claim, do not duplicate
+## unfinished (16) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name` [N]
@@ -28,6 +27,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `chore-a-sweep-the-unwired-tests-into-the-suite` [A]
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-b-the-module-shim-batch-blocking-the-python-corpus` [B] — blocked-by: decide-xml-etree-thin-tree-model-or-a-real-xml-library
+- `feature-c-import-a-pascal-unit-under-a-mangled-name` [C] — blocked-by: bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
@@ -58,6 +58,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 60] [O]` feature-opt-store-reload-elimination
 - `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 60] [A]` refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
+- `[p 60] [A]` refactor-a-one-resolved-file-identity-for-a-translation-unit
 - `[p 58] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-a-own-language-first-symbol-resolution (unblocks 1)
@@ -75,6 +76,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 55] [E]` feature-demo-portable-userland
-- `[p 55] [O]` feature-opt-heap-per-thread-cache
 
 _194 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
