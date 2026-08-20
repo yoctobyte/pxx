@@ -1851,11 +1851,43 @@ begin
 end;
 
 function IRNodePointerBase(node: Integer): Boolean;
+{ Is this node something pointer ARITHMETIC scales against — a pointer, or an
+  array that decays to one?
+
+  tyInt64 on a C node is AMBIGUOUS, and that is the whole difficulty here. The
+  partial-index builder in cparser.inc RETAGS its base `ASTTk[base] :=
+  Ord(tyInt64)` as a SENTINEL meaning "this add is raw bytes, already scaled —
+  do not scale me again" (`m[1]` on `int m[3][4]`). But tyInt64 is also the
+  honest element tag of `long long a[8]`, and the blanket `<> tyInt64` bail this
+  function used to carry could not tell the two apart: a signed 64-bit array was
+  never a pointer base, so `a + 1` stepped ONE BYTE instead of eight, while
+  `unsigned long long a[8]` (tyUInt64) stepped correctly. A sign bit decided a
+  stride. `a[1]` was always right — indexing scales itself — so the layout
+  looked fine and only the decayed form was wrong.
+
+  Tell them apart by asking whether the node's own DECLARATION explains the tag:
+  a fixed-extent, single-dimension array whose element type really is tyInt64
+  carries it honestly and decays like any other array. Everything else keeps the
+  bail, which is what the multi-dimensional row cases need — a 2-D array's ident
+  is retagged in place, and there the sentinel reading is the right one.
+
+  The real fix is for the sentinel to stop borrowing a type tag; filed as
+  [[refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag]].
+  bug-c-pointer-difference-on-a-long-long-element-type }
+var symIdx: Integer;
 begin
   Result := IntToTypeKind(ASTTk[node]) = tyPointer;
-  if CProgramMode and not Result and
-     (IntToTypeKind(ASTTk[node]) <> tyInt64) then
-    Result := CNodeDecaysToPointer(node);
+  if Result or (not CProgramMode) then Exit;
+  if IntToTypeKind(ASTTk[node]) = tyInt64 then
+  begin
+    symIdx := -1;
+    if ASTKind[node] = AN_IDENT then symIdx := ASTIVal[node];
+    if (symIdx < 0) or (not Syms[symIdx].IsArray) or
+       (Syms[symIdx].ArrLen = -1) or (SymArrNDims[symIdx] > 1) or
+       (Syms[symIdx].ElemType <> tyInt64) then
+      Exit;
+  end;
+  Result := CNodeDecaysToPointer(node);
 end;
 
 function IRArrayElemStride(node: Integer): Integer; forward;

@@ -5405,6 +5405,14 @@ test-core: $(COMPILER)
 	$(TESTTMP)/carr2d_param_row_length26; test "$$?" = "42"
 	./$(COMPILER) test/carr2d_decay_stride.c $(TESTTMP)/carr2d_decay_stride26
 	$(TESTTMP)/carr2d_decay_stride26; test "$$?" = "42"
+	# ...and the OTHER reading of the same tag. An AN_IDENT for `long long a[8]`
+	# carries tyInt64 -- its element kind -- and the pointer-base test bailed on
+	# tyInt64 outright, so a signed 64-bit array was never a pointer base: `a + 1`
+	# stepped ONE BYTE and `q - p` came back 0, while `unsigned long long` was
+	# right. A sign bit decided a stride. Indexing scales itself, so `a[1]` was
+	# always correct and only the decayed form was wrong.
+	./$(COMPILER) test/cptrdiff_elem_types.c $(TESTTMP)/cptrdiff_elem_types26
+	$(TESTTMP)/cptrdiff_elem_types26; test "$$?" = "42"
 	./$(COMPILER) test/csizeof_compound_literal.c $(TESTTMP)/csizeof_compound_literal26
 	$(TESTTMP)/csizeof_compound_literal26; test "$$?" = "42"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_log2_expm1_family_b382.c $(TESTTMP)/cmath_log2_expm1_family_b38226

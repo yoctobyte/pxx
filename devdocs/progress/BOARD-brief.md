@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:17 blocked:8 backlog:243 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2115 rejected:40`
+`urgent:1 unfinished:17 blocked:8 backlog:243 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2116 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -65,7 +65,6 @@ _none — no lane is locked._
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [A]` feature-a-own-language-first-symbol-resolution (unblocks 1)
 - `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
-- `[p 55] [C]` bug-c-pointer-difference-on-a-long-long-element-type
 - `[p 55] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - `[p 55] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
 - `[p 55] [N]` bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence
@@ -78,5 +77,6 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 55] [E]` feature-demo-portable-userland
+- `[p 55] [O]` feature-opt-heap-per-thread-cache
 
 _200 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
