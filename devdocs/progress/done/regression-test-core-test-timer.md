@@ -27,3 +27,6 @@ ok: /tmp/testmgr-scratch-1152877/test_timer26  [code=102842B  data=2912B  bss=47
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-20 — auto-closed by the plexus watcher: `test-core#src:test/test_timer.pas` passes at fe8a34230146 (tier native); it was red at 26dae20b9dec. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
