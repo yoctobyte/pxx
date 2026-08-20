@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:17 blocked:8 backlog:274 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2157 rejected:40`
+`urgent:1 unfinished:17 blocked:9 backlog:274 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2157 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -35,7 +35,7 @@ _none — no lane is locked._
 - `feature-port-rtl-over-libc` [A]
 - `feature-real-dynlib-loader` [B] — blocked-by: bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
 
-## blocked (8) — has an unmet blocker; do not claim
+## blocked (9) — has an unmet blocker; do not claim
 
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `bug-n-a-subpackage-directory-does-not-resolve-as-a-module` [N] — blocked-by: bug-a-a-python-module-s-identity-is-its-name-not-its-file
@@ -43,6 +43,7 @@ _none — no lane is locked._
 - `bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity` [N] — blocked-by: feature-b-tkhtmlview-in-nilpy
 - `feature-pascal-builtin-tobject-class` [A] — blocked-by: decide-tobject-root-methods-dispatch-model
 - `feature-pascal-corpus-generics` [P] — blocked-by: feature-pascal-builtin-tobject-class
+- `feature-port-freebsd-native` [A] — blocked-by: feature-t-freebsd-image-and-runner
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
@@ -65,7 +66,7 @@ _none — no lane is locked._
 - `[p 60] [O]` feature-opt-store-reload-elimination
 - `[p 58] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - `[p 58] [O]` feature-opt-o3-register-pressure
-- `[p 55] [A]` feature-port-freebsd-native (unblocks 1)
+- `[p 55] [T]` feature-t-freebsd-image-and-runner (unblocks 1)
 - `[p 55] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - `[p 55] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
 - `[p 55] [N]` bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence

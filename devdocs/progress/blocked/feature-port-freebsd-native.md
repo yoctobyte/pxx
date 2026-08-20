@@ -2,12 +2,14 @@
 summary: "FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand"
 type: feature
 prio: 55
+status: blocked
+blocked-by: [feature-t-freebsd-image-and-runner]
 ---
 
 # FreeBSD native target (amd64) — raw-syscall, stays in the libc-free family
 
 - **Type:** feature (Track A — backend/ABI/ELF/syscall emission). Portability campaign.
-- **Status:** backlog
+- **Status:** blocked on [[feature-t-freebsd-image-and-runner]] — no FreeBSD kernel is reachable from plexus (no qemu, no image), and this ticket's own plan puts a linuxulator smoke test FIRST, before any code. The compiler work is ready to start the moment a kernel is.
 - **Owner:** —
 - **Opened:** 2026-07-17, OS-portability mapping session. Full map in
   [`devdocs/dev/portability-axes.md`](../../dev/portability-axes.md).
