@@ -4293,6 +4293,15 @@ test-core: $(COMPILER)
 	# DESIGN. The pinned binary SEGFAULTS on this file.
 	./$(COMPILER) test/test_record_interface_field_zero_init.pas $(TESTTMP)/test_recifzi26
 	test "$$($(TESTTMP)/test_recifzi26 | tail -1)" = "total ok 5 / 5"
+	# `b := a` on a dynamic array of INTERFACES was lowered as an ARC interface
+	# assign over the array HANDLE: an array's TypeKind IS its element kind, so
+	# the assignment path saw tyRecord + ResolveNodeRec = IFoo and emitted
+	# PXXIntfAssign(@b, @a, ifaceId), which reads a dyn-array handle as an
+	# interface fat pointer and dispatches _Release through it. It crashed even
+	# with every element nil -- the elements were never the point. Integer/string/
+	# plain-record element types were unaffected. The pinned binary SEGFAULTS.
+	./$(COMPILER) test/test_dynarray_of_interfaces_assign.pas $(TESTTMP)/test_dynifassign26
+	test "$$($(TESTTMP)/test_dynifassign26 | tail -1)" = "total ok 6 / 6"
 	# `type TIA2 = array of TIA` (TIA itself `array of Integer`) silently collapsed
 	# to `array of Integer`: the type-alias parser only composed the depth of a
 	# named FIXED-array element, so a named DYN alias fell through to

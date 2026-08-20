@@ -1919,6 +1919,23 @@ begin
   end;
 end;
 
+function ASTNodeIsWholeArray(node: Integer): Boolean;
+{ True iff this lvalue node denotes a WHOLE array rather than one element.
+
+  An array's TypeKind IS its element kind, so any pass that decides what an
+  assignment means from the type kind alone cannot tell `arr := other` from
+  `arr[i] := other` — and for an array of interfaces that mistake lowered the
+  whole-array copy into an ARC interface assign over the array HANDLE.
+  bug-a-assigning-a-dynamic-array-of-interfaces-is-lowered-as-an-interface-assign }
+begin
+  Result := False;
+  if node < 0 then Exit;
+  { An index or a deref has already selected an ELEMENT. }
+  if ASTKind[node] <> AN_IDENT then Exit;
+  Result := (ASTIVal[node] >= 0) and (ASTIVal[node] < SymCount) and
+            Syms[ASTIVal[node]].IsArray;
+end;
+
 function RecFieldIsArray(rec: Integer; const field: AnsiString): Boolean;
 var fi, i, cnt: Integer; field2: AnsiString;
 begin

@@ -8502,9 +8502,24 @@ begin
       if lhsTk = tyRecord then
       begin
         varIdx := ResolveNodeRec(ASTLeft[node]);
+        { NOT when the LHS is a whole ARRAY. An array's TypeKind IS its element
+          kind, so `b := a` with `a, b: array of IFoo` arrives here with
+          lhsTk = tyRecord and ResolveNodeRec answering IFoo — and the ARC arms
+          below then treated the ARRAY HANDLE as an interface fat pointer and
+          lowered the assignment to PXXIntfAssign(&b, &a, ifaceId). That reads a
+          dyn-array handle as an instance pointer and dispatches _Release through
+          a garbage IMT: SIGSEGV, even when every element is nil, because nothing
+          about the elements is involved. `array of Integer` / `of string` / `of
+          <plain record>` were all fine — only the interface element type routed
+          into the ARC path.
+
+          Ask about the CONTAINER, not the member: an array assignment is a whole
+          -array copy and belongs to the paths below, whatever its elements are.
+          bug-a-assigning-a-dynamic-array-of-interfaces-is-lowered-as-an-interface-assign }
         isComIntf := (varIdx >= REC_UCLASS_BASE) and
                      UClsIsInterface[varIdx - REC_UCLASS_BASE] and
-                     UClsIsComInterface[varIdx - REC_UCLASS_BASE];
+                     UClsIsComInterface[varIdx - REC_UCLASS_BASE] and
+                     (not ASTNodeIsWholeArray(ASTLeft[node]));
         { interface := nil — zero the whole fat pointer {nil, nil}. The RHS is a
           pointer/ordinal nil, not a class or interface, so it never reaches the
           record-copy path (which would dereference a bogus source). }
