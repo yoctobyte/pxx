@@ -1,5 +1,6 @@
 ---
 prio: 70
+status: done
 ---
 
 > **origin/master has advanced 4 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
@@ -149,3 +150,49 @@ in a third direction: **was the job even old enough to regress?** A job created
 inside the range has no last-good measurement, so "newly red in this range" is
 true of the *observation* and says nothing about the *code*. Track T's own
 tooling is where that will keep happening, because T adds jobs.
+
+---
+
+## 2026-08-20 — every one of the 13 is accounted for; the stub is dissolved
+
+Checked against the live per-job map in `tstate/plexus.json`, not against this
+ticket's own prose. **4 green, 9 red, and all 9 carry an owning-lane ticket**, so
+there is nothing left that Track T can act on and nothing left that would be lost
+by closing this. The stub was one signal for one event; the event has been fanned
+out.
+
+| job(s) | now | where it lives now |
+| --- | --- | --- |
+| `test_nilpy_kwarg_overload_set`, `..._qualified_proc_omitted_default`, `..._tobject_member_via_local` | **pass** | fixed in triage |
+| `tools-devtest#00` | **pass** | [[bug-t-the-detachment-guard-tests-its-own-runner-not-the-predicate]] — closed |
+| the 6 `test_cpyext_*` | red | decision made, implementation re-filed as [[feature-n-a-cpyext-extension-module-is-bare-importable-not-a-pascal-unit]] |
+| `test_nilpy_callable_to_str_param_fails` | red | [[bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method]] (urgent) |
+| `lib_mimic_xml_etree_elementtree` | red | same ticket, its part 2 |
+| `test_cross_float` | red | [[bug-a-riscv32-cross-float-output-no-longer-matches-x86-64]] (urgent) |
+
+**The `lib_mimic` routing was verified, not inherited.** This ticket's correction 1
+argues the job is a pre-existing defect the v365 pin exposed, and a reader could
+reasonably route it to the function-*equality* ticket
+([[bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function]]) on the
+strength of the filer's note that its subject is a function used as a sentinel.
+Reproduced instead:
+
+    tools/testmgr.py --tier full --job 'lib-test#src:test/lib_mimic_xml_etree_elementtree.npy'
+    Unhandled exception: TypeError: can only concatenate str (not "method") to str
+
+That is the callable-value family, and it is the same line already recorded in
+the urgent N ticket's part 2 — so frank2's "2 jobs, one family" row was right and
+the equality ticket is a neighbour, not the owner. Two tickets whose repros both
+plausibly fit one red job is exactly where a routing goes quietly wrong, which is
+why this one was run rather than argued.
+
+### What still tracks the reds
+
+`tstate`'s CASCADE ledger entry, which closes on its own when every swept job is
+PASSLIKE and today reports `9 of 13 swept job(s) still red`. That is the live
+tracker; this ticket was the triage record. Keeping it open at prio 70 only puts
+an item at the head of Track T's queue that Track T cannot move — **T owns the
+tool, never the bug**, and all nine remaining bugs are in A, N and U.
+
+## Log
+- 2026-08-20 — resolved, commit PENDING-COMMIT.

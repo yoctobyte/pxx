@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 working:1 unfinished:16 blocked:6 backlog:236 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2094 rejected:40`
+`urgent:2 working:1 unfinished:16 blocked:6 backlog:235 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2095 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -44,12 +44,11 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 224, ranked
+## Ready — top 30 of 223, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 60] [A+F]` bug-a-riscv32-cross-float-output-no-longer-matches-x86-64
 - `[p 70] [A+N]` feature-n-a-cpyext-extension-module-is-bare-importable-not-a-pascal-unit
-- `[p 70] [T]` regression-cascade-21f098e32a95
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
@@ -76,5 +75,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [U]` decide-reduced-compiler-switch-spelling
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
+- `[p 55] [E]` feature-demo-portable-userland
 
-_194 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_193 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
