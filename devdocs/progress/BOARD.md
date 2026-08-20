@@ -49,11 +49,12 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (260)
+## backlog (261)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-by-value-interface-param-is-released-at-caller-scope-exit | A | 35 | bug | pxx releases a by-value interface argument at the CALLER's scope exit; FPC releases it at CALLEE return. Every object is still destroyed exactly once, so this is a lifetime-timing divergence rather than a leak — but a destructor with side effects (closing a file, dropping a lock) runs later than the program says, and the last object of a batch stays alive until the calling routine returns. | — |
+| bug-a-a-local-array-of-interfaces-is-never-released-at-scope-exit | A | 45 | bug | A local `array[0..N] of IFoo` is never released at scope exit — a routine that fills three elements and returns destroys none of them. The same two-arm gap that left the array un-zero-initialised (now fixed) also leaves it un-cleaned: SymNeedsManagedCleanup answers False for it, and EmitManagedLocalCleanup has no per-element interface walk. | — |
 | bug-a-a-lua-cross-timeout-is-reported-as-wrong-output-from-the-backend | A | 50 | bug | test-lua-cross runs each lua script under qemu with a hardcoded `timeout 120` and then diffs the captured stdout against a .expected file. A timeout truncates got.txt, the diff fails, and the recipe reports a per-target output mismatch — which reads as a cross-backend miscompile on whichever of arm32/i386/riscv32/aarch64 happened to be slow. test-core:3553 carries the same class one severity lower. Filed by Track T, which owns the harness but not the Makefile. | — |
 | bug-a-a-memory-fault-is-a-raw-sigsegv-not-runtime-error-216 | A | 45 | bug | Every memory fault — nil read, nil write, a call through a nil procvar, a method on a nil object, a wild array store — kills a pxx binary with a bare `Segmentation fault` and exit 139. FPC prints `Runtime error 216` and exits 216. No message, no line, no exit-code convention, and `try..except` cannot see it. | — |
 | bug-a-a-non-lvalue-is-refused-as-an-interface-argument | A | 45 | bug | `TakeVal(TFoo.Create)` and `TakeVal(IFoo(o))` are refused with `by-reference argument must be a variable`, for both by-value and `const` interface parameters, while the same call with a named variable or an ordinary function result compiles. FPC accepts all four. Passing a freshly constructed object straight into a call is a common idiom, so this rejects working FPC code at compile time. | — |
@@ -517,9 +518,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2145)
+## done (2147)
 
-2145 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2147 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -618,6 +619,7 @@ _none_
 - [p 50] [A] refactor-a-the-missing-layer-between-frontends-and-backends
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
+- [p 45] [A] bug-a-a-local-array-of-interfaces-is-never-released-at-scope-exit
 - [p 45] [A] bug-a-a-memory-fault-is-a-raw-sigsegv-not-runtime-error-216
 - [p 45] [A] bug-a-a-non-lvalue-is-refused-as-an-interface-argument
 - [p 45] [A] bug-a-only-the-pascal-driver-emits-the-signal-runtime

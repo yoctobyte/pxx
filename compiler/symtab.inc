@@ -944,19 +944,44 @@ begin
   end;
 end;
 
+function RecIsComInterface(recId: Integer): Boolean;
+{ True iff this REC ID is a COM/ARC interface UCls (a reference-counted
+  single-pointer interface value). Split out of SymIsComInterface because the
+  same question has to be asked of an ARRAY's ELEMENT rec, where the symbol-level
+  predicate deliberately answers False. }
+var ci: Integer;
+begin
+  Result := False;
+  if recId < REC_UCLASS_BASE then Exit;
+  ci := recId - REC_UCLASS_BASE;
+  if (ci < 0) or (ci >= UClsCount) then Exit;
+  Result := UClsIsInterface[ci] and UClsIsComInterface[ci];
+end;
+
 function SymIsComInterface(symIdx: Integer): Boolean;
 { True iff the local/var symbol is a COM/ARC interface value (a reference-counted
   single-pointer interface value): modelled as a tyRecord whose rec id is a
-  COM-interface UCls. }
-var ci: Integer;
+  COM-interface UCls. ARRAYS answer False here on purpose — an array's slot is
+  not itself a reference — so a caller that cares about `array[..] of IFoo` must
+  ask RecIsComInterface about the ELEMENT rec (SymElemIsComInterface). }
 begin
   Result := False;
   if (symIdx < 0) or (Syms[symIdx].TypeKind <> tyRecord) or Syms[symIdx].IsArray then Exit;
   { feature-a-typeref-migrate-consumers lane 1: RecName read via SymTR[..].RecId. }
-  if SymTR[symIdx].RecId < REC_UCLASS_BASE then Exit;
-  ci := SymTR[symIdx].RecId - REC_UCLASS_BASE;
-  if (ci < 0) or (ci >= UClsCount) then Exit;
-  Result := UClsIsInterface[ci] and UClsIsComInterface[ci];
+  Result := RecIsComInterface(SymTR[symIdx].RecId);
+end;
+
+function SymElemIsComInterface(symIdx: Integer): Boolean;
+{ True iff the symbol is a STATIC array whose ELEMENTS are COM/ARC interfaces —
+  `keep: array[0..N] of IFoo`. Every managed-local pass keyed on
+  SymIsComInterface alone, which answers False for an array, so such a local was
+  neither zero-initialised nor released: the first `keep[i] := x` ran the ARC
+  release on STACK GARBAGE and dispatched _Release through a junk IMT.
+  bug-a-a-local-array-of-interfaces-is-not-zero-initialised }
+begin
+  Result := (symIdx >= 0) and Syms[symIdx].IsArray and (Syms[symIdx].ArrLen >= 0) and
+            (SymElemDynDepth[symIdx] = 0) and (Syms[symIdx].TypeKind = tyRecord) and
+            RecIsComInterface(SymTR[symIdx].ElemRec);
 end;
 
 function UMemberNameMatch(off, len, cls: Integer; const name, lo: AnsiString): Boolean;

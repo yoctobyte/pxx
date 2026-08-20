@@ -10097,6 +10097,24 @@ begin
           first overwrite / scope exit sees an empty slot, not stale stack bytes
           (a garbage IMT would dispatch _Release into nowhere). }
         zeroBytes := RecSize(Syms[i].RecName)
+      else if SymElemIsComInterface(i) then
+        { STATIC ARRAY of COM interfaces — `keep: array[0..N] of IFoo`. Exactly
+          the arm above, one indirection out, and it did not exist: every
+          managed-local pass keys on SymIsComInterface, which answers False for
+          an array on purpose, and the managed-RECORD-array arm above does not
+          claim it either (an interface UCls has no managed FIELDS). So the slots
+          held stack garbage and the very first `keep[i] := x` ran the ARC
+          release on that garbage, dispatching _Release through a junk IMT.
+
+          It presented as `uses sysutils` causing a segfault -- add the unit and
+          an otherwise identical program crashes -- which is a pure red herring:
+          the unit's initialisation merely DIRTIES the stack the routine is about
+          to use. With a hand-written stack-dirtying routine the same crash
+          reproduces with no sysutils at all, and with a clean stack the bug is
+          invisible because the garbage happens to be zero. A constant index and
+          a global array both "worked" for the same accidental reason.
+          bug-a-a-local-array-of-interfaces-is-not-zero-initialised }
+        zeroBytes := Syms[i].ArrLen * RecSize(SymTR[i].ElemRec)
       else if (Syms[i].TypeKind = tyClass) and (not Syms[i].IsArray) and
               NilPyUserCode then
         { NilPy-user class local: refcounted binding — must start nil so the

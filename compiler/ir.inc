@@ -8572,10 +8572,32 @@ begin
         end;
         { COM/ARC interface -> interface (RHS is another interface lvalue):
           retain source, release old dest, copy the single-pointer value — all in
-          the ARC-correct order inside PXXIntfAssign. }
+          the ARC-correct order inside PXXIntfAssign.
+
+          AN_AS_CAST belongs in this list. `f := b as IFoo` fell through to the
+          generic 16-byte record copy below, which moves the pointer with NO
+          retain — so three holders (b, the as-cast temp, f) shared two counted
+          references and the object died one release early:
+
+            b := TBar.Create; f := b as IFoo; b := nil; f := nil;
+                                    { destroyed here — FPC keeps it alive }
+
+          The scope-exit release of the as-cast temp then ran on a freed object.
+          That is only a latent UAF until something reuses the block, which is
+          why it read as a harmless timing difference in isolation and SEGFAULTED
+          as soon as a later statement allocated over it.
+
+          The ownership rule this list encodes: an lvalue is a BORROW and must be
+          retained; a call result is already OWNED and must not be. An as-cast is
+          a borrow FROM ITS TEMP — IRMaterializeIntfCast retains that temp and
+          scope exit releases it — so it retains, like the other four.
+          IRLowerAddress already materialises an interface as-cast into an
+          addressable fat-pointer temp, so no new address path is needed.
+          bug-a-an-as-cast-assigned-to-an-interface-variable-is-not-retained }
         if isComIntf and
            ((ASTKind[ASTRight[node]] = AN_IDENT) or (ASTKind[ASTRight[node]] = AN_FIELD) or
-            (ASTKind[ASTRight[node]] = AN_INDEX) or (ASTKind[ASTRight[node]] = AN_DEREF)) and
+            (ASTKind[ASTRight[node]] = AN_INDEX) or (ASTKind[ASTRight[node]] = AN_DEREF) or
+            (ASTKind[ASTRight[node]] = AN_AS_CAST)) and
            (ResolveNodeRec(ASTRight[node]) >= REC_UCLASS_BASE) and
            UClsIsInterface[ResolveNodeRec(ASTRight[node]) - REC_UCLASS_BASE] then
         begin

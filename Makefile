@@ -4263,6 +4263,25 @@ test-core: $(COMPILER)
 	# order. The pinned binary scores 12 / 16.
 	./$(COMPILER) test/test_interface_byval_param_no_leak.pas $(TESTTMP)/test_ifbyval26
 	test "$$($(TESTTMP)/test_ifbyval26 | tail -1)" = "total ok 16 / 16"
+	# `f := b as IFoo` moved the interface pointer with NO retain: the ARC assign
+	# path routes through PXXIntfAssign only for an ENUMERATED list of RHS node
+	# kinds and AN_AS_CAST was not in it, so it fell through to the generic record
+	# copy. Three holders shared two references, the object died one release
+	# early, and the scope-exit release of the as-cast temp then ran on freed
+	# memory -- a latent UAF that segfaulted as soon as a later statement
+	# allocated over the block. The pinned binary fails row 1 and then crashes.
+	./$(COMPILER) test/test_interface_as_cast_retains.pas $(TESTTMP)/test_ifascast26
+	test "$$($(TESTTMP)/test_ifascast26 | tail -1)" = "total ok 7 / 7"
+	# A LOCAL `array[0..N] of IFoo` was never zero-initialised, so the first
+	# element assignment ran the ARC release on stack garbage and dispatched
+	# _Release through a junk IMT. It fell between two arms: SymIsComInterface
+	# answers False for an array, and the managed-record-array arm does not claim
+	# it (an interface UCls has no managed FIELDS). It presented as `uses sysutils`
+	# causing a segfault -- a red herring; that unit merely dirties the stack. The
+	# test dirties the stack itself so the failure is deterministic rather than a
+	# lottery. The pinned binary SEGFAULTS on this file.
+	./$(COMPILER) test/test_interface_local_array_zero_init.pas $(TESTTMP)/test_ifarrzi26
+	test "$$($(TESTTMP)/test_ifarrzi26 | tail -1)" = "total ok 5 / 5"
 	# `type TIA2 = array of TIA` (TIA itself `array of Integer`) silently collapsed
 	# to `array of Integer`: the type-alias parser only composed the depth of a
 	# named FIXED-array element, so a named DYN alias fell through to
