@@ -875,3 +875,32 @@ was true and could not speak to the case.
   rescoped float work is p20 ULP items.
 - **Track T is UNSTAFFED** — plexus-T closed its session after handing off the `-O0` bug.
   Nothing is watching the matrix until you restart it.
+
+## SNAPSHOT SUPERSEDED — 2026-08-20
+
+**"State on waking" above is a 2026-08-18 snapshot. Do not read it as current.** It says
+Track T is unstaffed; T has been staffed and running on plexus since, and its watcher is
+what surfaced the finding below. Corrected here rather than in place, because the original
+records what was true when the review was written.
+
+Current, as of 2026-08-20 (verify before relying — this line ages the same way):
+
+- **frank3** — Track P, `feature-pascal-corpus-generics` (rung 3 of the OOP corpus), busy.
+- **frank2** — idle by instruction; queue is csmith axis 2, then the quickjs segfault.
+- **plexus-T** — staffed, watcher UP, triaging the item below.
+- **Pin v368** at `21117f415284`; no `compiler/**` commits since, so no pin is due.
+
+**Live and outranking the board:** `regression-selfhost-fixedpoint-selfhost-fixedpoint`
+(p70). Convergence passes; the **anti-Thompson AGREEMENT** check fails — the fixedpoint
+reached from committed `pinned` differs from `compiler/pascal26`. See the roster's
+2026-08-20 +1h entry for what is established (corroborated in the full tier three commits
+past the v368 binary commit, so not the usual at-the-pinned-tree shape) and what is not
+(15 commits in range, so it may predate the pin).
+
+**Note for whoever works the decide table above:** `decide-should-the-gate-prove-self-compile-at-more-than-one-o-level`
+(p55) is no longer a hypothetical. The `-O0`-only self-compile failure that motivated it
+was one way a gate's green turns out to be scoped more narrowly than its name; this
+regression is a second, along a different axis — the **seed** the gate started from rather
+than the `-O` level. Both are the same question wearing different clothes: *what exactly is
+"it passes the self-host gate" a claim about?* Worth deciding once, with both instances in
+front of the decider, rather than twice.
