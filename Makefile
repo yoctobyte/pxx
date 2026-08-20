@@ -6053,6 +6053,14 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_builtin_name_demote26)" = "$$(printf '10000\n60\nsys-ok')"
 	./$(COMPILER) test/test_narrowing_typecast_rvalue.pas $(TESTTMP)/test_narrowing_typecast_rvalue26
 	test "$$($(TESTTMP)/test_narrowing_typecast_rvalue26)" = "$$(printf '44\ncmp-ok\n44\n44\n4464\n4294967295\n4294967295\n-1\n-56\n5\n5')"
+	# ...and the arm that fix deliberately left alone: `Integer(x)` as an RVALUE
+	# handed the bit pattern through untruncated, so Integer(LongWord(4000000000))
+	# was 4000000000 where FPC says -294967296 -- while `LongInt(x)`, the same
+	# cast spelled the other way, was right, because `longint` is not a type TOKEN
+	# and took the identifier path into a real AN_PTR_CAST. An operand that cannot
+	# change value under the cast still keeps the pun (no masking emitted).
+	./$(COMPILER) test/test_integer_cast_truncates_rvalue.pas $(TESTTMP)/test_intcast26
+	test "$$($(TESTTMP)/test_intcast26 | tail -1)" = "total ok 28 / 28"
 	./$(COMPILER) test/test_var_nd_array_string_init.pas $(TESTTMP)/test_var_nd_array_string_init26
 	test "$$($(TESTTMP)/test_var_nd_array_string_init26)" = "$$(printf '1 3 4 6\nJan Mar Apr Jun\nx yy zzz')"
 	./$(COMPILER) test/test_sizeof_array_typename.pas $(TESTTMP)/test_sizeof_array_typename26

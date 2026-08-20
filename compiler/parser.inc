@@ -11078,6 +11078,32 @@ begin
             Exit;
           end;
         end;
+        { `Integer(x)` is a NARROWING cast the moment x is wider than 32 bits
+          or 32-bit UNSIGNED, and FPC truncates it: Integer(LongWord(4000000000))
+          is -294967296. The pun below hands the bit pattern through untouched,
+          so it answered 4000000000 -- while `LongInt(x)`, the exact synonym,
+          was right all along, because `longint` is not a type TOKEN and took
+          the identifier path into a real AN_PTR_CAST. One concept, two
+          spellings, and the fix for the other spellings (byte/longword, in
+          bug-narrowing-typecast-rvalue-no-truncate) deliberately left this one
+          alone -- which is precisely how the second path stays broken.
+          An operand that cannot change value under the cast (a signed 32-bit
+          or narrower ordinal, Char, Boolean) keeps the pun, so the common
+          `Integer(someInteger)` emits no masking at all.
+          bug-p-integer-cast-does-not-truncate-in-rvalue-position }
+        castTk := IntToTypeKind(ASTTk[CurASTNode]);
+        if TypeIsOrdinal(castTk) and (castTk <> tyBoolean) and (castTk <> tyChar) and
+           ((TypeSize(castTk) > 4) or
+            ((TypeSize(castTk) = 4) and not TypeSigned(castTk))) then
+        begin
+          node := AllocNode(AN_PTR_CAST);
+          ASTLeft[node] := CurASTNode;
+          ASTIVal[node] := -1;
+          ASTTk[node] := Ord(tyInteger);
+          CurASTNode := node;
+          LastExprTk := tyInteger;
+          Exit;
+        end;
         node := AllocNode(AN_CALL); ASTIVal[node] := -op;
         ASTTk[node] := Ord(tyInteger);
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
