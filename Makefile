@@ -9781,6 +9781,23 @@ test-quick: $(COMPILER)
 	grep -q "undefined variable (DeepInt)" $(TESTTMP)/qc_usesf.log
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/quick_canary_c.c $(TESTTMP)/qc_c26
 	test "$$($(TESTTMP)/qc_c26 | tail -1)" = "total ok 22 / 22"
+	# THE EMITTED BINARY MUST NOT DEPEND ON HOW THE COMPILER WAS INVOKED. Unit
+	# resolution builds paths out of ExeDir (the directory of ParamStr(0)), and
+	# those resolved paths were interned into the EMITTED string pool, so one
+	# compiler compiled one source into different bytes depending on its own
+	# path. Nothing checked this: the plain self-host chain runs both
+	# generations out of $(TESTTMP) under equal-length names and matched by
+	# COINCIDENCE, and only the --threadsafe chain -- which starts from
+	# ./compiler/pascal26 and continues from $(TESTTMP) -- ever went red.
+	# The copy must live OUTSIDE the repo ($(TESTTMP) is under /tmp): in-repo
+	# ExeDir resolves '../lib/rtl/', outside it falls back to the CWD-relative
+	# spelling, and those two strings are exactly what used to leak.
+	# bug-a-the-compilers-output-depends-on-argv0
+	cp $(COMPILER) $(TESTTMP)/qc_argv0_copy26
+	./$(COMPILER) test/quick_canary_argv0.pas $(TESTTMP)/qc_argv0_a26
+	test "$$($(TESTTMP)/qc_argv0_a26)" = "argv0 canary ok 42"
+	$(TESTTMP)/qc_argv0_copy26 test/quick_canary_argv0.pas $(TESTTMP)/qc_argv0_b26
+	cmp $(TESTTMP)/qc_argv0_a26 $(TESTTMP)/qc_argv0_b26
 	./$(COMPILER) test/test_dynarray_torture.pas $(TESTTMP)/smoke_dyntorture26
 	test "$$($(TESTTMP)/smoke_dyntorture26 | tail -1)" = "total ok 27 / 27"
 	./$(COMPILER) test/test_dynarray_insert_delete.pas $(TESTTMP)/smoke_dynid26
