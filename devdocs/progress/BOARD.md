@@ -286,7 +286,7 @@ _none_
 | refactor-n-two-import-handlers-are-twins | N | 30 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
 | regression-selfhost-fixedpoint-selfhost-fixedpoint | T | 70 | regression | regression: selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh red at 21117f415284 (auto-filed by twatch) | — |
-| regression-test-core-compiler-4 | P | 70 | regression | regression: test-core#src:compiler/compiler.pas@2 red at 57b9b7148d32 (auto-filed by twatch) | — |
+| regression-test-core-compiler-4 | A | 70 | regression | regression: test-core#src:compiler/compiler.pas@2 red at 57b9b7148d32 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-pascal-unit-keeps-fpc-method-shadowing | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy red at 57b9b7148d32 (auto-filed by twatch) | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 25 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 40 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
@@ -549,7 +549,7 @@ _none_
 
 - [urgent p 70] [N] bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - [p 70] [T] regression-selfhost-fixedpoint-selfhost-fixedpoint
-- [p 70] [P] regression-test-core-compiler-4
+- [p 70] [A] regression-test-core-compiler-4
 - [p 70] [T] regression-test-nilpy-test-nilpy-pascal-unit-keeps-fpc-method-shadowing
 - [p 65] [T] bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - [p 65] [C] feature-c-csmith-differential-fuzzing

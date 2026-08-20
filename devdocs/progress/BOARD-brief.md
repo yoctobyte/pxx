@@ -48,7 +48,7 @@ _none — no lane is locked._
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [T]` regression-selfhost-fixedpoint-selfhost-fixedpoint
-- `[p 70] [P]` regression-test-core-compiler-4
+- `[p 70] [A]` regression-test-core-compiler-4
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-pascal-unit-keeps-fpc-method-shadowing
 - `[p 65] [T]` bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing

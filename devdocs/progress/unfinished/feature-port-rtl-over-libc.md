@@ -1,4 +1,5 @@
 ---
+track: A
 summary: "RTL-over-libc lowering mode — route runtime primitives through a system C library instead of raw syscalls"
 type: feature
 prio: 55
