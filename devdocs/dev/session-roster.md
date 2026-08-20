@@ -4709,3 +4709,91 @@ below is enough to resume cold.
    RUN / corroborated-in-part itself. Do not revert on an uncorroborated count — it fired at
    "11 new" once and every one of the eleven passed in the next full tier.
 4. Announce, `make stabilize-fast && make pin`, `git add -u stable_linux_amd64/`, smoke, push.
+
+## 2026-08-20 morning — the decision landed, and a blocked ticket had been unblocked for a day
+
+**Track U decided.** `decide-nilpy-import-rule-vs-a-cpyext-extension-module` answered by the
+owner: quoted spelling AFFIRMED (and the ticket's framing of it as a workaround corrected —
+it is the rule applied consistently); an extension module is a Python module whose body is
+Pascal + C, so the rule never applies to it; bare import keyed on `PyInit_<name>`, preferring
+the unit's own declaration with `PyInit_` as verification over a C-grep proxy. `_ext`
+REJECTED as a signal — measured, 147 real CPython extension modules (48 stdlib dynload + 61
+builtin + 99 third-party), **zero** ending `_ext`, 70 leading with `_`. Moved to `decided/`,
+re-filed as `feature-n-a-cpyext-extension-module-is-bare-importable-not-a-pascal-unit` (A+N,
+p70).
+
+**The coordination fact of the morning: THREE sole-A jobs want `compiler/parser.inc`.**
+
+| what | prio | state |
+| --- | --- | --- |
+| frank3's `ParseFactorCore` carve | — | HOLDS the file, multi-session |
+| `refactor-a-one-resolved-file-identity-for-a-translation-unit` | 60 (was 45) | queued |
+| cpyext bare-import | 70 | queued |
+
+The highest-prio item is behind the longest-running one. They do not overlap textually — the
+carve is at ~9500, the other two at ~34000 — so splitting the regions is available if the
+carve runs long. **Do not split it pre-emptively**; one file, two agents is the exact hazard
+the letters exist to prevent, and "different regions" is an argument, not a lock.
+
+**Why the refactor rose 45 -> 60.** Track C measured on v367: two units both named `math` in
+different dirs, the second `#include` is a **silent no-op** keyed on the unit NAME, so
+`Twice(21)` answers 42 where the author asked for 63 — **no diagnostic**. That is a wrong
+value, which is the repo's own escape rule out of refactor-shaped ranking. The number existed
+only inside a report about *why §3 was blocked*; a blocked report that carries a measurement
+is worth the paragraph it costs, and it would have stayed invisible otherwise.
+
+### A BLOCKED TICKET STAYS BLOCKED-LOOKING AFTER ITS BLOCKER LANDS — check the blocker, not the ticket
+
+`feature-c-csmith-differential-fuzzing` (p65) is top of `ready --track C`. Its own tested
+prediction says the remaining SILENT bugs need axis 2 (cross targets), which needed a
+`--target` pass-through in `tools/csmith_fuzz.py` — Track T's lane, routed to T 2026-08-19.
+**T shipped it that day** (`764e98048`, `6edac13fd`; the bundled
+`bug-t-csmith-harness-reports-slow-as-a-timeout` is in `done/`) and the C ticket still read as
+waiting. It sat available for a day because the *blocked* side has no reason to re-check and
+the *delivering* side does not know who was waiting.
+
+**Rule: when you route a move to another lane, the routing note is a debt. Before dispatching
+from a queue, check whether the top ticket's stated blocker has LANDED — `git log -- <the
+file>` and the blocker's own directory — rather than trusting the ticket's prose.** A ticket
+describes the world when it was last written. Same family as
+[[feedback_measuring_a_thing_is_not_filing_it]] and the "dated scan reads as current forever"
+hazard.
+
+### Instrument trust — frank3 retracted twice, and the second rule is better than mine
+
+Two defects in ONE measurement script, a day apart; the second survived **because** the first
+was fixed. (1) forwards with trailing comments counted as bodies — 183 "bodies" were 18. (2) a
+stripper that dropped newlines, so routine boundaries found in the RAW file were sliced from
+the STRIPPED text — an entire per-routine table named unrelated regions. Whole-file totals
+survived both; per-segment tables did not.
+
+Yesterday's rule (mine): when an impossible figure resolves to "my filter missed this one
+case", re-run the filter over the whole population before touching the number.
+**Today's rule (frank3's, stronger): a corrected instrument is not a trusted instrument** —
+every output it already produced is suspect until independently re-derived. Both defects were
+caught by **arithmetic impossibility** (a delete-only change raising a count; stripped
+exceeding raw), never by implausibility: the tool produced perfectly plausible numbers for
+every other row, so scrutinising output could not have worked. Check the instrument.
+
+`ParseFactorCore` survives as split 3's target (77 forks, 101 Py* refs, more than double the
+next); "34% of the surface" was really 21%. Commit `f380d7cd0` is pushed with the wrong
+figures and **is not being rewritten** — correcting forward in the ticket and commit 2.
+
+### Fixture shape selects which branch you test
+
+Track C's `#include "unit.pas"` verification had ALWAYS used an absolute path, which takes the
+loader's `name[1] = '/'` branch and skips a second directory prepend. Every check ever run was
+**structurally incapable** of exhibiting the path-composition bug; the first
+repository-relative fixture found it instantly. Not "an absolute path can hide a bug" — the
+test method was choosing which code got tested. Prefer fixtures that look like REAL usage over
+CONVENIENT usage; convenient inputs are convenient because they take the short branch.
+
+### OPEN WITH THE OWNER — §6 needs permission, not effort
+
+Delete the cross-namespace bind at `cparser.inc:9448`, rebuild lua/tcc/quickjs/zlib, report
+what breaks. Blocked because the instrument is `make test-lua|test-zlib|test-quickjs|test-tcc`,
+all refused by `.claude/hooks/no-full-suite.sh` for that lane; the escape is
+`PXX_ALLOW_FULL_SUITE=1` conditioned on the OWNER asking. **A coordinator cannot grant it and
+must not** — a peer cannot hand a peer an escalation, and hand-running the recipe bodies would
+be reshaping a denied command. Track C stopped and routed it up rather than around, which is
+the correct behaviour and is worth saying out loud because the wrong version looks helpful.
