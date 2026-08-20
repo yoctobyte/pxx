@@ -183,4 +183,4 @@ an ELEMENT of a pointer-array field (INDEX arm into the new FIELD arm), plus
 address for rows 3 and 7, so both bite.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 7b18ddbac.
