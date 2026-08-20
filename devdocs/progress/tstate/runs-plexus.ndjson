@@ -1305,3 +1305,4 @@
 {"date": "2026-08-20T03:17:23Z", "fixed": [], "full": false, "new_red": [], "sha": "ad995742f8dbb929aba0c564b454d176f2b6c09d", "still_red": ["selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh", "test-core#src:compiler/compiler.pas@2"], "tier": "native", "verdict": "RED", "wall": 137.3}
 {"date": "2026-08-20T03:20:06Z", "fixed": [], "full": true, "new_red": [], "pin": "v368", "sha": "21117f4152845a44e578a5eb04dc3af250a0b935", "tier": "full", "verdict": "RED", "wall": 151.4}
 {"date": "2026-08-20T03:24:02Z", "fixed": [], "full": true, "new_red": [], "sha": "ad995742f8dbb929aba0c564b454d176f2b6c09d", "still_red": ["selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh"], "tier": "full", "verdict": "RED", "wall": 146.0}
+{"date": "2026-08-20T03:29:56Z", "fixed": [], "full": false, "new_red": [], "sha": "ad995742f8dbb929aba0c564b454d176f2b6c09d", "still_red": [], "tier": "slow", "verdict": "GREEN", "wall": 270.1}

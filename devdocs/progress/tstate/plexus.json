@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T15:52:24Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "8ec77190c90a88b6e854df67b7e82797fbb222bf",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-19T15:56:54Z",
    "fixed": [
     "test-core#src:test/test_nilpy_array_of_const_unit.npy",
@@ -436,6 +428,14 @@
    "sha": "ad995742f8dbb929aba0c564b454d176f2b6c09d",
    "tier": "full",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-20T03:29:56Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "ad995742f8dbb929aba0c564b454d176f2b6c09d",
+   "tier": "slow",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -2101,11 +2101,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T03:24:02Z",
+  "date": "2026-08-20T03:29:56Z",
   "sha": "ad995742f8dbb929aba0c564b454d176f2b6c09d",
-  "tier": "full",
-  "verdict": "RED",
-  "wall": 146.0
+  "tier": "slow",
+  "verdict": "GREEN",
+  "wall": 270.1
  },
  "last_bench": {
   "conf_rows": 550,
