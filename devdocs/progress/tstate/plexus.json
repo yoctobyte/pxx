@@ -439,11 +439,6 @@
   }
  ],
  "host": "plexus",
- "idle_yield": {
-  "aborts": 1,
-  "phase": "pin-verify",
-  "target": "21117f4152845a44e578a5eb04dc3af250a0b935"
- },
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2543179B  data=59857B  bss=17852B  procs=1762] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh": "FAIL: the fixedpoint reached from PINNED differs from compiler/pascal26 | (both may self-reproduce \u2014 that is exactly the point: two distinct | fixedpoints means the binary we test with is not the one these | sources define. Local seed contamination, or a self-perpetuating | miscompile.) | $TMP $TMP differ: byte 97, line 1",
