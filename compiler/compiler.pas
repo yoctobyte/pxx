@@ -108,6 +108,9 @@ procedure AddDefaultCIncludeDirs; forward;   { the C unit pull in parser.inc nee
   than by reading it. Flat rather than nested inside parser.inc: this file is
   compiled by the PINNED binary, so it can only use include forms that binary
   already understands. }
+{$include pasparser_stmt.inc}
+{$include pasparser_decl.inc}
+{$include pasparser_proc.inc}
 {$include pasparser_prog.inc}
 {$include ir.inc}
 function GetOrAllocSymRTTI(symIdx: Integer): Integer; forward;
