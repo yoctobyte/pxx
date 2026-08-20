@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T14:09:49Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:test/test_asm_ifdef_multiarch.pas"
-   ],
-   "sha": "498c6dea3f48816144fa8959a6534d131959a68c",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-19T14:15:18Z",
    "fixed": [
     "test-core#src:test/test_call_result_member.pas",
@@ -454,6 +444,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "f380d7cd00f268d882306dac24900e4fa60b9d1c",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T02:02:51Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "e0f9cb893fea964c13ab57e7a2fdea0cb8e238c7",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -1000,6 +998,15 @@
   "test-core#src:test/c_builtin_bits.c": "native",
   "test-core#src:test/c_lua_opcode_decode_b132.c": "native",
   "test-core#src:test/c_lua_tvalue_int_b131.c": "native",
+  "test-core#src:test/c_pasunit.c": "native",
+  "test-core#src:test/c_pasunit_ansistring_fail.c": "native",
+  "test-core#src:test/c_pasunit_case_fail.c": "native",
+  "test-core#src:test/c_pasunit_collide_fail.c": "native",
+  "test-core#src:test/c_pasunit_knr_fail.c": "native",
+  "test-core#src:test/c_pasunit_ovl.c": "native",
+  "test-core#src:test/c_pasunit_ovl_fail.c": "native",
+  "test-core#src:test/c_pasunit_twice.c": "native",
+  "test-core#src:test/c_pasunit_two_overloads_fail.c": "native",
   "test-core#src:test/c_vla.c": "native",
   "test-core#src:test/c_vla_const_fail.c": "native",
   "test-core#src:test/caddr_array_field_b16.c": "native",
@@ -2121,7 +2128,6 @@
   "test-core#src:test/test_tobject_methodaddress_b256.pas": "native",
   "test-core#src:test/test_tobject_param_b243.pas": "native",
   "test-core#src:test/test_type_helper_for_spelling.pas": "native",
-  "test-core#src:test/test_type_runtime.pas": "native",
   "test-core#src:test/test_typed_const_record.pas": "native",
   "test-core#src:test/test_typed_metaclass_b278.pas": "native",
   "test-core#src:test/test_typed_string_const.pas": "native",
@@ -3802,6 +3808,15 @@
   "test-core#src:test/c_builtin_bits.c": "pass",
   "test-core#src:test/c_lua_opcode_decode_b132.c": "pass",
   "test-core#src:test/c_lua_tvalue_int_b131.c": "pass",
+  "test-core#src:test/c_pasunit.c": "pass",
+  "test-core#src:test/c_pasunit_ansistring_fail.c": "pass",
+  "test-core#src:test/c_pasunit_case_fail.c": "pass",
+  "test-core#src:test/c_pasunit_collide_fail.c": "pass",
+  "test-core#src:test/c_pasunit_knr_fail.c": "pass",
+  "test-core#src:test/c_pasunit_ovl.c": "pass",
+  "test-core#src:test/c_pasunit_ovl_fail.c": "pass",
+  "test-core#src:test/c_pasunit_twice.c": "pass",
+  "test-core#src:test/c_pasunit_two_overloads_fail.c": "pass",
   "test-core#src:test/c_vla.c": "pass",
   "test-core#src:test/c_vla_const_fail.c": "pass",
   "test-core#src:test/caddr_array_field_b16.c": "pass",
@@ -4921,7 +4936,6 @@
   "test-core#src:test/test_tobject_methodaddress_b256.pas": "pass",
   "test-core#src:test/test_tobject_param_b243.pas": "pass",
   "test-core#src:test/test_type_helper_for_spelling.pas": "pass",
-  "test-core#src:test/test_type_runtime.pas": "pass",
   "test-core#src:test/test_typed_const_record.pas": "pass",
   "test-core#src:test/test_typed_metaclass_b278.pas": "pass",
   "test-core#src:test/test_typed_string_const.pas": "pass",
@@ -6064,11 +6078,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T01:57:33Z",
-  "sha": "f380d7cd00f268d882306dac24900e4fa60b9d1c",
+  "date": "2026-08-20T02:02:51Z",
+  "sha": "e0f9cb893fea964c13ab57e7a2fdea0cb8e238c7",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 244.0
+  "wall": 244.5
  },
  "last_bench": {
   "conf_rows": 550,
