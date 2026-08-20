@@ -343,6 +343,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-pthread-without-threadsafe-builds-then-dies-at-load | C | 55 | bug | a C program using <pthread.h> without --threadsafe builds clean and then dies at load with `undefined symbol: __pxx_pmutex_init` — a pxx-internal symbol imported from glibc, which cannot possibly have it | — |
 | bug-c-ptr-to-array-parameter | C | 30 | bug | MULTI-dim ptr-to-array param `int f(int (*q)[A][B])` fails to lower (AN_BINOP/kind-5 gap). Single-dim `int (*q)[N]` FIXED in 85c233a2. | — |
 | bug-c-ptrdiff-of-addr-elem | C | 55 | bug | C ptrdiff of &-expressions: `&x[1] - &x[0]` wrong stride | — |
+| bug-c-quickjs-runner-segfaults-with-zero-output-on-the-full-smoke-js | C | 50 | bug | test/quickjs/runner.c segfaults with ZERO output on the full smoke.js, and does so identically when built with the PINNED compiler — so it is not a HEAD regression. Small evals work on both. Observed 2026-08-20 in passing while landing the C entry-stub init phase; NOT caused by it, and filed separately so it is not attributed there. | — |
 | bug-c-quoted-include-search-path | A | 50 | bug | C quoted includes do not search the including file directory | — |
 | bug-c-scalar-ptr-global-init-silently-skipped | C | 60 | bug | bug: scalar pointer-global initializers silently skipped (null pointer at runtime) | — |
 | bug-c-shift-result-type-battery-00200 | A | 45 | bug | C shift-result-type battery (00200): result type = promoted LEFT operand across all int classes | — |

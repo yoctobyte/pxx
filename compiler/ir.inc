@@ -8615,10 +8615,21 @@ begin
 
         C-mode only, so Pascal keeps the store node as its result and the
         self-host build stays byte-identical — same reasoning as the scalar
-        arms. }
+        arms.
+
+        REUSE the destination operand the copy already carries; do NOT lower the
+        LHS a second time. Re-lowering re-emits the LHS's SIDE EFFECTS, so the
+        first cut traded a doubled RHS for a doubled LHS: `*p++ = v` on a struct
+        advanced p by TWO, `buf[i++] = v` incremented i twice, and `*bump() = v`
+        called bump twice — quickjs's interpreter pushes with `*sp++ = <JSValue>`
+        on every single opcode, so `1+2` evaluated to 2 and every literal to 0.
+        The scalar arms above have always done it this way (one `leftAddr` node
+        feeding both the store and the load-back), which is also the proof that
+        one node with two consumers is emitted once.
+        bug-c-quickjs-runner-segfaults-with-zero-output-on-the-full-smoke-js }
       if CProgramMode and (Result >= 0) and
          ((IRKind[Result] = IR_COPY_REC) or (IRKind[Result] = IR_COPY_REC_MANAGED)) then
-        Result := IRLowerAddress(ASTLeft[node]);
+        Result := IRA[Result];
     end;
 
     AN_HALT, AN_EXIT:

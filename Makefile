@@ -4979,6 +4979,14 @@ test-core: $(COMPILER)
 	# and the record temp was sized by the 8-byte fallback (csmith seed 91110).
 	./$(COMPILER) test/cstruct_assign_value_byvalue_arg.c $(TESTTMP)/cstruct_assign_arg26
 	test "$$($(TESTTMP)/cstruct_assign_arg26)" = "ok"
+	# ...and the DESTINATION half. Making the assignment yield the stored value was
+	# done by lowering the LHS a SECOND time, which re-emits its side effects: on a
+	# struct, `*p++ = v` advanced p by TWO and `buf[i++] = v` stepped i twice. The
+	# scalar arms never had it, because they reuse one address node for both the
+	# store and the load-back. Found through quickjs, whose interpreter pushes with
+	# `*sp++ = <JSValue>` on every opcode -- `1+2` evaluated to 2.
+	./$(COMPILER) test/cstruct_assign_dest_side_effects.c $(TESTTMP)/cstruct_assign_dest26
+	test "$$($(TESTTMP)/cstruct_assign_dest26)" = "ok"
 	./$(COMPILER) test/cnested_union_b44.c $(TESTTMP)/cnested_union_b4426
 	$(TESTTMP)/cnested_union_b4426; test "$$?" = "42"
 	./$(COMPILER) test/canon_agg_global_b45.c $(TESTTMP)/canon_agg_global_b4526
