@@ -907,6 +907,7 @@ end;
 procedure ParseExpr; forward;
 procedure PyParseBoolExpr; forward;  { Nil Python boolean layer (defined in pyparser.inc) }
 function PyParseLValueAST(idx: Integer; identTokIdx: Integer): Integer; forward;  { the NilPy half of ParseLValueAST, carved out into pyparser.inc — ParseLValueAST dispatches here on PyExprMode }
+procedure PyParseFactorCore; forward;  { the NilPy half of ParseFactorCore, carved out into pyparser.inc — ParseFactorCore dispatches here on PyExprMode }
 function PyMakeNone: Integer; forward;  { the None VALUE (a VT_EMPTY variant) — pyparser.inc }
 function PyBuildGeneratorValue(gpi: Integer): Integer; forward;  { a generator CALL in value position becomes a cursor object (pyparser.inc) }
 function PyProgSym(const name: AnsiString): Integer; forward;  { a name in the Nil Python PROGRAM's own scope, never a unit's (pyparser.inc) }
@@ -9550,6 +9551,14 @@ var lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hois
     tiName: AnsiString; tiTk: TTypeKind;   { widened TypeInfo(T): scalar/string/class/record }
     pyLateDefPi: Integer;   { NilPy def not yet bound at this call site; -1 = none }
 begin
+  { NilPy runs its own copy of this routine (pyparser.inc). The dispatch is
+    here rather than at the call sites so that every caller — and every
+    recursive re-entry through the expression layers — stays untouched. }
+  if PyExprMode then
+  begin
+    PyParseFactorCore;
+    Exit;
+  end;
   LastExprTk := tyInteger;
   { Nil Python: ClassName(args) in ANY expression position is construction
     (Pascal reads it as a typecast). The statement-level intercept only saw
