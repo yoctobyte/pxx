@@ -834,7 +834,7 @@ end;
   EmitRTTI so class/record requests can point DataPtr at the ALREADY-emitted
   UClsRTTIOff[ci] blob (the same TClassRTTI/layout-descriptor typinfo.pas
   already reads). Enum TypeInfo() does not go through here at all -- see the
-  parser.inc comment at the TypeInfo() call site. }
+  pasparser_*.inc comment at the TypeInfo() call site. }
 procedure EmitTypeInfoHeaders;
 var i, hdr, strIdx, ci, kind: Integer; nm: AnsiString;
 begin

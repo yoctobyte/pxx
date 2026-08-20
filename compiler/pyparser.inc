@@ -558,16 +558,16 @@ begin
 end;
 
 function PyBuildComp(targetSym, exprStart: Integer): Integer; forward; { comprehension core (pyparser.inc) }
-{ PyMakeTruthy is forward-declared in parser.inc (included FIRST): the bool()
+{ PyMakeTruthy is forward-declared in pasparser_*.inc (included FIRST): the bool()
   arm there calls it too, and FPC rejects a second forward. }
 function PyMethodName(const name: AnsiString): AnsiString; forward; { ditto }
 function PyUserNameShadowsHere(const nm: AnsiString): Boolean; forward; { does this module define the name itself? — the `cast` intercept asks }
 function PyMakeTupleFromArgs(firstArg: Integer): Integer; forward; { a PYSEQ_TUPLE from an already-parsed AN_ARG chain — the multi-arg exception fold asks, and is defined above it }
 function PyEnsureExceptionClass: Integer; forward; { pylib's Exception, shelled lazily — the bare-class `raise` resolver asks, ~12000 lines above the definition }
 function PyIsStaticMethodAt(defIdx: Integer): Boolean; forward; { ditto }
-{ PyMakeIdent and PyHiddenName are likewise forward-declared in parser.inc
+{ PyMakeIdent and PyHiddenName are likewise forward-declared in pasparser_*.inc
   now (same duplicate-forward issue as PyCallMeth1 below). }
-{ PyCallMeth1 is forward-declared in parser.inc (included before this file),
+{ PyCallMeth1 is forward-declared in pasparser_*.inc (included before this file),
   which already makes it visible here — a second forward decl of the same
   signature is a genuine duplicate FPC rejects even though PXX tolerates it
   (regression-fpc-seed-drift-b1976-stale). }
@@ -578,7 +578,7 @@ function PySkipTargetGroup(i: Integer): Integer; forward; { Nil Python: step ove
   caller; PyParseTry now renames an `except ... as` binder with it too, and that
   sits EARLIER in this include — the FPC seed build needs the forward. }
 procedure PyRenameIdentRange(lo, hi: Integer; const oldName, newName: AnsiString); forward;
-{ PyBareGenExprAhead is likewise forward-declared in parser.inc now (same
+{ PyBareGenExprAhead is likewise forward-declared in pasparser_*.inc now (same
   duplicate-forward issue as PyCallMeth1 above). }
 { Called from the bytes membership/slice paths ~3900 lines before its body.
   pxx's own frontend resolves it either way; FPC is single-pass and stops the
@@ -734,7 +734,7 @@ begin
 end;
 
 function PyStarOperandAsList(node, listCi: Integer): Integer; forward;
-{ PyNewContainerTemp is forward-declared in parser.inc, which is included first
+{ PyNewContainerTemp is forward-declared in pasparser_*.inc, which is included first
   and now calls it (the leading `**d` lowering). Re-forwarding it here is an FPC
   seed error -- "Function is already declared Public/Forward" -- since FPC is
   single-pass and sees both. Same convention as PyMakeIdent / PyStarForwardCall,
@@ -789,7 +789,7 @@ end;
 
 function PyHoistPark: Integer;
 { Take the hoist queue away and hand it back to the caller — for a TRIAL parse
-  whose statements must not join the enclosing one's. parser.inc cannot touch
+  whose statements must not join the enclosing one's. pasparser_*.inc cannot touch
   PyHoistHead directly (it is declared here, and this file is included after
   it), so the parking is spelled as these three helpers.
   bug-nilpy-len-of-a-string-method-on-a-file-read-answers-zero }
@@ -807,7 +807,7 @@ end;
 procedure PyHoistMerge(saved, trial: Integer);
 { Put `saved` back as the hoist queue and re-queue every statement of the parked
   `trial` chain after it — for a caller that parked the queue across a TRIAL
-  parse (see the `len` intercept in parser.inc) and then decided to KEEP that
+  parse (see the `len` intercept in pasparser_*.inc) and then decided to KEEP that
   parse's AST after all. Dropping the chain instead is what a caller does when it
   rewinds and re-parses. bug-nilpy-len-of-a-string-method-on-a-file-read-answers-zero }
 var h: Integer;
@@ -1545,7 +1545,7 @@ begin
       at the boundary — decided 2026-08-08. }
     Result := tyVariant;
     { A PARAMETER drops the signature outright (above). A FIELD keeps it — not
-      as an ABI (the slot is a variant now, so parser.inc's `tyPointer/tyRecord
+      as an ABI (the slot is a variant now, so pasparser_*.inc's `tyPointer/tyRecord
       + UFldProcSig >= 0` indirect-call marshalling deliberately no longer
       fires) but as the MARKER that says "this field is callable": it is what
       lets `obj.native(vm)` resolve on a dynamically-typed receiver at
@@ -5120,7 +5120,7 @@ function PyClsAttrEnsureGlobal(ci, nOff, nLen: Integer; tk: TTypeKind;
 { The single shared slot behind a class attribute, registered as a CLASS VAR of
   `ci` so that all three access routes reach it with no new lookup code:
 
-    C.attr        parser.inc's ClassName.member branch (FindClassVar)
+    C.attr        pasparser_*.inc's ClassName.member branch (FindClassVar)
     attr          the bare-name branch inside a method body
     inst.attr     the "class variable through an instance" branch — which fires
                   only when the class has no instance FIELD of that name, i.e.
@@ -5206,7 +5206,7 @@ end;
 function PyMakeClsAttrInstGet(baseNode: Integer; const fname: AnsiString): Integer;
 { `self.attr` / `obj.attr` where attr is a class attribute REDECLARED in the
   chain — read it off the RECEIVER's runtime class instead of the declaring
-  one. Built here so both the `self.` site and the instance site in parser.inc
+  one. Built here so both the `self.` site and the instance site in pasparser_*.inc
   emit the same call.
   bug-nilpy-self-class-attribute-in-an-inherited-method-reads-the-base-value }
 var procIdx, a0, a1, nameNode: Integer;
@@ -7183,7 +7183,7 @@ end;
 
 { Nil Python str methods: `s.upper()` -> pylib pystr_upper(s).
 
-  Reached from the shared parser's postfix `.member` branch (parser.inc) once
+  Reached from the shared parser's postfix `.member` branch (pasparser_*.inc) once
   the base expression is known to be string-typed and PyExprMode is on; the
   method name is already consumed, CurTok is the '('. Returns the AN_CALL node
   with ASTTk set to the method's result type, which the caller feeds back into
@@ -8002,8 +8002,8 @@ end;
   for a list (`get`) or a dict (`fetch`) — the same methods the lvalue path
   reaches, just built here because a non-lvalue never gets there. }
 { `v[key]` on a variant -> pyvar_getitem(v, key); yields a variant.
-  (PyMakeNone's forward declaration lives in parser.inc's Py* forward block —
-  parser.inc's PyExprMode nil arm and PyParseBoolExpr both need it.) }
+  (PyMakeNone's forward declaration lives in pasparser_*.inc's Py* forward block —
+  pasparser_*.inc's PyExprMode nil arm and PyParseBoolExpr both need it.) }
 
 { A `lambda p1, ...: <expr>` — lowered to a PYEVAL CLOSURE built from the
   body's SOURCE text: pyclosure_src_new(params, 'return <expr>') with every
@@ -9699,7 +9699,7 @@ end;
 function PyStarIterableNode(listNode: Integer): Integer;
 { Wrap a star operand (already a TPyList) in pystar_iterable, which picks the
   element's contents when exactly ONE was starred and hands the list back
-  otherwise. See the call site in parser.inc for why the count decides.
+  otherwise. See the call site in pasparser_*.inc for why the count decides.
   bug-nilpy-max-and-min-of-a-starred-list-pick-the-wrong-overload }
 var argNode, listCi: Integer;
 begin
@@ -9994,7 +9994,7 @@ begin
 end;
 
 { ...and the same for a receiver named only by its CLASS index, which is what
-  the NAMED-receiver subscript path in parser.inc has. }
+  the NAMED-receiver subscript path in pasparser_*.inc has. }
 function PyIndexSeqKindCi(mci: Integer): AnsiString;
 var listCi: Integer;
 begin
@@ -10018,7 +10018,7 @@ var rec, listCi, dictCi, procIdx, a0, a1, notIntN: Integer;
 begin
   { An object index with no `__index__` on a SEQUENCE raises TypeError. The
     raiser stands in for the index EXPRESSION rather than replacing the whole
-    subscript, so both this path and the named-receiver one in parser.inc use
+    subscript, so both this path and the named-receiver one in pasparser_*.inc use
     the identical shape and the getter is never reached. }
   notIntN := PyIndexNotIntRaise(baseNode, idxNode);
   if notIntN >= 0 then idxNode := notIntN
@@ -12980,7 +12980,7 @@ begin
   if CurTok.Kind <> tkIdent then Exit;
   { `str.lower` — an UNBOUND method is a callable value exactly like a def name,
     and this is the other entry point that builds one (the factor path in
-    parser.inc is the first). Both, or `key=str.lower` would work and
+    pasparser_*.inc is the first). Both, or `key=str.lower` would work and
     `map(str.lower, xs)` would not — the two-paths-for-one-construct shape
     devdocs/dev/normalise-dont-special-case.md is about. Answers -1 and consumes
     nothing unless the tokens really are that shape. }
@@ -13700,7 +13700,7 @@ end;
 
 { `obj.m(*xs)` — a STARRED argument in a method call, expanded into the callee's
   remaining declared parameters. Unlike the free-function forwarding path
-  (PyStarForwardCall in parser.inc, which dispatches on len(args) at run time to
+  (PyStarForwardCall in pasparser_*.inc, which dispatches on len(args) at run time to
   keep defaults working), the arity here is settled at compile time: each
   remaining parameter becomes one pystar_arg(list, k) read into a hidden variant
   local, guarded by a single pystar_check_arity. A callee with DEFAULTS in the
@@ -13867,7 +13867,7 @@ begin
 end;
 
 { A METHOD call whose argument list contains a `*expr` unpack. The arity-driven
-  Pascal loop in parser.inc cannot parse it (a star is not an expression), so it
+  Pascal loop in pasparser_*.inc cannot parse it (a star is not an expression), so it
   hands the whole list here — the mirror of PyParseStarMethodArgs, which does the
   same for a callee that DECLARES *args. }
 procedure PyStarUnpackMethodArgs(mpi, mcallNode: Integer; var mlastArg, mai: Integer);
@@ -13957,7 +13957,7 @@ end;
 
 { The Python spelling of a pylib container method that pylib declares under a
   DIFFERENT name — in ONE table, because a class-typed receiver is resolved by
-  two paths (parser.inc's member access and PyParseClassMethodCall below) and a
+  two paths (pasparser_*.inc's member access and PyParseClassMethodCall below) and a
   name added to only one of them is exactly the shape this frontend keeps
   paying for (devdocs/dev/normalise-dont-special-case.md). Answers '' when the
   class already spells the name as written.
@@ -14089,7 +14089,7 @@ begin
   { A dict whose static type is known — most visibly a LITERAL — failed with
     "TPyDict has no method .items()" while the identical call through a
     variable worked (bug-nilpy-dict-method-on-a-literal-receiver-not-found).
-    The table is shared with parser.inc's typed member access. }
+    The table is shared with pasparser_*.inc's typed member access. }
   mn := PyMethNameFor(ci, mname);
   mmi := FindUMeth(ci, mn);
   if mmi < 0 then
@@ -14485,7 +14485,7 @@ begin
     end;
     Exit;
   end;
-  { Python's dict views on a VARIANT receiver. The typed path (parser.inc's
+  { Python's dict views on a VARIANT receiver. The typed path (pasparser_*.inc's
     member access) already maps items/keys/values onto pylib's itemlist /
     keylist / vallist — names chosen to dodge the default `Items[]` property —
     but a variant receiver never reaches it: the candidate scan below found no
@@ -14514,7 +14514,7 @@ begin
     run time instead of at compile time by a coin flip.
     normalise-dont-special-case. }
   { `w.destroy()` on a dynamically-typed widget — see the typed path in
-    parser.inc: Pascal reserves `destroy` for the destructor. }
+    pasparser_*.inc: Pascal reserves `destroy` for the destructor. }
   if mname = 'destroy' then
   begin
     for ci := 0 to UClsCount - 1 do
@@ -14528,7 +14528,7 @@ begin
     underscore (`set_`, `destroy_`). If nothing declares the name as written but
     something declares the underscored one, that is the method meant:
     configparser's `cfg.set(section, key, value)` on a dynamically-typed
-    receiver. The typed path in parser.inc does the same. }
+    receiver. The typed path in pasparser_*.inc does the same. }
   if PyNoClassDeclares(mname) and (not PyNoClassDeclares(mname + '_')) then
   begin
     Result := PyParseVariantMethod(baseNode, mname + '_');
@@ -17710,7 +17710,7 @@ end;
   neither applies, so the caller keeps its own behaviour.
 
   ONE routine because this decision had THREE copies — `PyReprContainer` for
-  `print`, and two sites in `parser.inc` for `str()` and for the f-string's
+  `print`, and two sites in `pasparser_*.inc` for `str()` and for the f-string's
   `pystr_of` — and all three had the SAME bug: the Exception/msg arm sat first,
   so a user `__str__` on an exception subclass was never consulted and the
   CONSTRUCTOR ARGUMENT was printed instead. Fixing one site moved `print(e)` and
@@ -21422,7 +21422,7 @@ begin
   ASTRight[Result] := rhs;
 end;
 
-{ The value-position twin of GenMakeVariantArgCell (parser.inc): a variant
+{ The value-position twin of GenMakeVariantArgCell (pasparser_*.inc): a variant
   argument to a generator needs a heap cell whose address the instance slot can
   hold, because the callee reads it again at every resume, long after the
   expression that produced the argument is gone. The only difference is where
@@ -21656,7 +21656,7 @@ begin
   Expect(tkIn, 'in');
   { `for x in gen(args):` where `gen` is a GENERATOR def — hand it to the shared
     for-in desugar over the stackless instance protocol (ParseForInGeneratorAST,
-    parser.inc), which allocates the instance, seeds the argument slots, drives
+    pasparser_*.inc), which allocates the instance, seeds the argument slots, drives
     the step function and frees it. Exactly the desugar Pascal's
     `for x in Gen(args) do` uses; only the header's tail differs, and that is
     handled inside it.
@@ -21900,7 +21900,7 @@ begin
     caught it (bug-nilpy-range-over-a-variant-bound-loops-forever).
     pyvar_to_int already applies Python's numeric rules and raises TypeError for
     a non-number, which is also what `range("x")` should do. Same shape the
-    chr() unbox in parser.inc uses. All three of start/stop/step, since any of
+    chr() unbox in pasparser_*.inc uses. All three of start/stop/step, since any of
     them can be a parameter. }
   startNode := PyUnboxRangeBound(startNode);
   stopNode := PyUnboxRangeBound(stopNode);
@@ -23622,7 +23622,7 @@ end;
   other side tests for first.
 
   The generic call path already coerces every variant argument to a Pointer
-  parameter this way (parser.inc); the map/filter intercepts build their call by
+  parameter this way (pasparser_*.inc); the map/filter intercepts build their call by
   hand and so must do it themselves.
   bug-nilpy-map-over-a-bound-method-segfaults }
 function PyMakeCallablePtrArg(node: Integer; const what: AnsiString): Integer;
@@ -23705,7 +23705,7 @@ end;
 { `base[idx] = val` as a NODE, for a caller that already has all three and no
   tokens left to read — the tuple-unpack target list (`h[i], h[j] = h[j], h[i]`).
 
-  The same four-way fork the inline `x[k] = v` path in parser.inc makes, written
+  The same four-way fork the inline `x[k] = v` path in pasparser_*.inc makes, written
   once: a VARIANT base dispatches at run time, a class with a Pascal default
   property (pylib's TPyList/TPyDict) calls its setter, a user class calls
   `__setitem__`, a class with neither raises CPython's TypeError at run time,
@@ -24679,7 +24679,7 @@ begin
     which is why the check below is an internal error rather than the user
     diagnostic: a yield outside a def is caught by the marking pass. The node is
     the SAME AN_YIELD the Pascal frontend builds, and it lowers through the same
-    stackless state-machine transform (SLLowerYield, parser.inc). }
+    stackless state-machine transform (SLLowerYield, pasparser_*.inc). }
   if PyIsIdent('yield') then
   begin
     if not CurProcIsStackless then
@@ -24808,7 +24808,7 @@ begin
     { `del c[k]` on a USER class -> its `__delitem__`, the last member of the
       subscript protocol (`__getitem__`/`__setitem__` were already dispatched).
 
-      TWO node shapes reach here, because the subscript arm in parser.inc only
+      TWO node shapes reach here, because the subscript arm in pasparser_*.inc only
       claims a class that declares `__getitem__`:
         * declares `__getitem__` too -> the read lowered to a CALL of it, and
           the receiver and key are its two arguments;
@@ -27797,7 +27797,7 @@ end;
   produced sequence and shift to 1..n, where they become persistent instance
   slots the transform restores each step; the step function itself takes only
   the instance pointer and returns has-next. Mirrors the Pascal rewrite in
-  ParseRoutine (parser.inc), on this frontend's own header arrays.
+  ParseRoutine (pasparser_*.inc), on this frontend's own header arrays.
 
   Every per-param array shifts, not just the interesting ones: the ONE array
   left behind in the Pascal twin wrote a real parameter's attribute into the
@@ -28586,7 +28586,7 @@ begin
       goto/label STATE MACHINE — restore the persistent slots, jump to the
       resume point, run to the next yield (which checkpoints and returns True),
       and on fall-off mark done and return False. Every step of this is the
-      SHARED machinery the Pascal frontend drives (parser.inc); nothing about
+      SHARED machinery the Pascal frontend drives (pasparser_*.inc); nothing about
       the transform is Nil-Python-specific, which is the whole reason this
       feature is wiring rather than an implementation.
 
@@ -28606,7 +28606,7 @@ begin
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
     { DWARF -g: same three lines every Pascal routine body ends with
-    (parser.inc's routine-body tail). Without them a NilPy def had NO
+    (pasparser_*.inc's routine-body tail). Without them a NilPy def had NO
     DW_TAG_subprogram at all — `break combine` in gdb answered "Function not
     defined", so the frontend where the hard bugs live was the one frontend you
     could not debug. ProcBodyEnd must be taken here, after the epilogue, and
@@ -29304,7 +29304,7 @@ begin
 
         A WIDE integer literal is the same fact one shape over: the lexer marks
         one that does not fit Int64 by setting SLen on the token (see the
-        literal arm in parser.inc), and `return 1180591620717411303424` was
+        literal arm in pasparser_*.inc), and `return 1180591620717411303424` was
         truncated for want of reading that mark.
 
         Binding to a local first always worked, because the local takes its
@@ -30861,7 +30861,7 @@ begin
       else
         AddUMeth(ci, Tokens[i + 1].SOffset, Tokens[i + 1].SLen, procIdx);
       { @staticmethod: no receiver. UMthIsStatic is the SAME flag Pascal's
-        `class procedure` sets, and parser.inc's call paths already consult it
+        `class procedure` sets, and pasparser_*.inc's call paths already consult it
         (including the PyExprMode arm), so marking it here is the whole of the
         dispatch change — `C.s(1)` and `inst.s(1)` both stop passing an
         instance. Nothing needs to suppress a `self` parameter, because a
@@ -32519,7 +32519,7 @@ begin
       if mmi >= 0 then mpi := UMthProc_[mmi];
       PyHdrName := mname;
       { parameter 0 is self, matching the index the member pre-pass records
-        under and the one parser.inc / ir.inc read back }
+        under and the one pasparser_*.inc / ir.inc read back }
       pIdx := 0;
       pname := '';
       depth := 0;
@@ -34319,7 +34319,7 @@ var stmt, seqNode, lastSeq, procIdx, patchPos, savedSC, savedFS: Integer;
     dummyTypes: array[0..0] of TTypeKind;
 begin
   { Record that THIS unit is a NilPy module. `ProcUnitIdx >= 0` was standing in
-    for "a Pascal library facade" at DefaultArgValueNode (parser.inc), and an
+    for "a Pascal library facade" at DefaultArgValueNode (pasparser_*.inc), and an
     imported .py module met the proxy while needing the opposite answer for its
     parameter defaults. bug-n-a-default-argument-is-dropped-on-every-cross-module-call }
   MarkUnitPyModule(CurrentUnitIdx);
@@ -34936,7 +34936,7 @@ begin
 end;
 
 { ===== NilPy selector/subscript parsing =====
-  The NilPy-only twin of parser.inc's ParseClassRecordSelectors, split out on
+  The NilPy-only twin of pasparser_*.inc's ParseClassRecordSelectors, split out on
   2026-08-09 (task-a-carve-nilpy-selectors-out-of-parser-inc). The user's rule:
   once two languages diverge inside a shared parse helper, copy the helper and
   specialise it -- the shared thing is the AST/IR, not the parser.
@@ -34974,7 +34974,7 @@ begin
     `b.add(2).add(3)` ran add(2) TWICE and printed 7 where CPython prints 5.
     Silent, and the more links a chain has the further the answer drifts. Bound
     to a hidden temp, which is also what Python's evaluation order says. The
-    Pascal twin in parser.inc keeps its current codegen, so the self-host
+    Pascal twin in pasparser_*.inc keeps its current codegen, so the self-host
     binary is untouched. }
   if (ASTKind[node] = AN_CALL) and (CurTok.Kind in [tkDot, tkLBrack]) then
     node := PyEvalOnce(node);
@@ -35232,7 +35232,7 @@ begin
       end;
 
       { `mk().__class__.__name__`, `xs[0].__class__.__name__` — the same chain
-        parser.inc's bare-identifier path takes, here for every receiver that
+        pasparser_*.inc's bare-identifier path takes, here for every receiver that
         reaches the selector instead. One builder, both routes. }
       if PyIsClassNameChainAhead then
       begin
@@ -35708,7 +35708,7 @@ end;
 
 { ---------------------------------------------------------------------------
   PyParseLValueAST — the NilPy half of ParseLValueAST, carved out of the shared
-  parser.inc on 2026-08-19 (task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc,
+  pasparser_*.inc on 2026-08-19 (task-a-carve-nilpy-lvalue-parsing-out-of-parser-inc,
   split 2). ParseLValueAST dispatches here whenever PyExprMode is set, so every
   existing call site is untouched.
 
@@ -38792,13 +38792,13 @@ end;
 
 { ---------------------------------------------------------------------------
   PyParseFactorCore — the NilPy half of ParseFactorCore, carved out of the
-  shared parser.inc on 2026-08-20 (task-a-carve-nilpy-lvalue-parsing-out-of-
+  shared pasparser_*.inc on 2026-08-20 (task-a-carve-nilpy-lvalue-parsing-out-of-
   parser-inc, split 3). ParseFactorCore dispatches here whenever PyExprMode is
   set, so every existing call site — and every recursive re-entry — is
   untouched.
 
   This commit is the VERBATIM copy: the body below is byte-identical to the
-  parser.inc original except for the routine name on the header line. The fold
+  pasparser_*.inc original except for the routine name on the header line. The fold
   (PyExprMode guards collapse to True inside this routine) and the deletion of
   the now-dead NilPy arms from the Pascal original are the two commits after
   this one, so a regression can be bisected to a stage rather than argued about.

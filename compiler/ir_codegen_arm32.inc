@@ -2612,7 +2612,7 @@ begin
           Int64/UInt64 by-value arg is two (lo then hi, lo at the lower word
           index). j counts total words. Words are pushed in index order so word
           k sits at [sp + (j-1-k)*4]; words 0..3 load into r0..r3, the rest stay
-          on the stack for the callee. Mirrors the parser.inc spill loop. }
+          on the stack for the callee. Mirrors the pasparser_*.inc spill loop. }
         argNode := IRB[node];
         nArgs := 0;
         j := 0;

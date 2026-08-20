@@ -1,6 +1,6 @@
 { ===== pasparser_stmt.inc — Pascal frontend: statement parsing ===============
 
-  Carved out of parser.inc, byte-for-byte, by
+  Carved out of pasparser_*.inc, byte-for-byte, by
   refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files.
 
   Owned by Track P (Pascal frontend). Included from compiler.pas at exactly the
@@ -1682,7 +1682,7 @@ function SLLower(node, selfSym, retSym: Integer): Integer; forward;
 
 { yield E -> current:=E; state:=k; save locals; Result:=True; Exit; Lk:
   Record element: E is always an lvalue here (a record call result was already
-  materialised into a hidden temp at the yield parse site, parser.inc ~8690) —
+  materialised into a hidden temp at the yield parse site, pasparser_*.inc ~8690) —
   blob-copy its bytes into the instance CURRENT region and publish the region's
   address in the CURRENT word. }
 function SLLowerYield(node, selfSym, retSym: Integer): Integer;

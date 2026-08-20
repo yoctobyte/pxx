@@ -379,9 +379,9 @@ end;
 {$endif}
 
 { Token text from the TokChars pool (off, len). Defined here in lexer.inc —
-  before its lexer.inc diagnostic use and the parser.inc uses — so FPC's
+  before its lexer.inc diagnostic use and the pasparser_* uses — so FPC's
   declaration-before-use is satisfied (the pxx self-host prescan is order-
-  agnostic, so it built either way). Moved up from parser.inc. }
+  agnostic, so it built either way). Moved up from the old pasparser_*.inc. }
 function GetTokenStrFromRaw(off, len: Integer): AnsiString;
 var s: AnsiString; i: Integer;
 begin

@@ -2559,7 +2559,7 @@ begin
     CompileAST(bodyNode);
     EmitProcEpilog(Procs[procIdx].RetSymIdx);
     PatchProcPrologue(patchPos, FrameSize);
-        { DWARF -g: the routine-body tail every Pascal proc ends with (parser.inc).
+        { DWARF -g: the routine-body tail every Pascal proc ends with (pasparser_*.inc).
       Without it this frontend's functions had NO DW_TAG_subprogram, so
       `break <fn>` in gdb answered "Function not defined" — the same total
       absence NilPy had before 58937b717. ProcBodyEnd must be taken after the
@@ -2668,7 +2668,7 @@ begin
   CompileAST(bodyNode);
   EmitProcEpilog(Procs[procIdx].RetSymIdx);
   PatchProcPrologue(patchPos, FrameSize);
-    { DWARF -g: the routine-body tail every Pascal proc ends with (parser.inc).
+    { DWARF -g: the routine-body tail every Pascal proc ends with (pasparser_*.inc).
     Without it this frontend's functions had NO DW_TAG_subprogram, so
     `break <fn>` in gdb answered "Function not defined" — the same total
     absence NilPy had before 58937b717. ProcBodyEnd must be taken after the

@@ -3102,7 +3102,7 @@ begin
   mCount := 0;
   { Comment nesting is MODE-dependent and this pass runs before the lexer, so it
     must track the two directives that set it or it scans the wrong text as
-    comment. Seeded from the ambient state the caller just set (parser.inc resets
+    comment. Seeded from the ambient state the caller just set (pasparser_*.inc resets
     it per unit); the unit's own {$MODE} / {$NESTEDCOMMENTS} then apply below. }
   nest := NestedComments;
   res := '';
@@ -3338,7 +3338,7 @@ procedure ExpandIncludes(var src: AnsiString; const baseDir, selfPath: AnsiStrin
 
   selfPath is the path of `src` itself, used to name it in the -g line markers
   above. Pass '' to suppress markers entirely: a Pascal UNIT is deliberately
-  left out of the line table (see the DbgMarkTokFile note in parser.inc — the
+  left out of the line table (see the DbgMarkTokFile note in dbg_filetable.inc — the
   RTL would swamp it), and a marker is exactly what would opt it back in. }
 var
   i, j, k, incDi, closePos, condCount, savedDefineCount, savedDefineCharLen: Integer;

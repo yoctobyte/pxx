@@ -246,7 +246,7 @@ call. The single-pass obstacle (callee body torn down after its `CompileAST`) is
 solved by *retaining* the eligible body in a reserved top slice of the AST pool
 `[INLINE_AST_BASE..MAX_AST)` — never touched by the per-proc reset — with param
 idents rewritten to `AN_INLINE_PARAM(i)` placeholders (`TryRetainInlineBody`,
-`parser.inc`). At the `AN_CALL` site (`IRInlineExpand`, `ir.inc`) the retained
+`inline_expand.inc`). At the `AN_CALL` site (`IRInlineExpand`, `ir.inc`) the retained
 body is cloned into the live pool with placeholders bound to the args and lowered
 normally. Pure args (literal / plain scalar ident) substitute directly; if any
 arg has a side effect, ALL args are captured left-to-right into temps first, so
@@ -395,7 +395,7 @@ tiers (the sacred gate); pins are -O2-built and transparent.
 | `compiler/defs.inc` | `OptLevel` global; IR opcode + `AN_*` constants; `AN_INLINE_PARAM`, `INLINE_AST_BASE`, `RcResident*`, `Inline*` globals |
 | `compiler/ir.inc` | shared IR build; **`IROptimize` pipeline + IR passes (§3a)**; **inline splice `IRInlineExpand`/`IRCloneInlineBody` (§4)** |
 | `compiler/ir_codegen.inc` | x86-64 backend; `CompileAST` (pipeline call site); emitter passes 1/2/4; `CmpFusible`; **`RegcallAssignResidency` (§4)** |
-| `compiler/parser.inc` | **inline retention `TryRetainInlineBody`/`CloneToInlineRegion`/`BuildInlineTernary` (§4)**; `inline;` directive capture |
+| `compiler/inline_expand.inc` | **inline retention `TryRetainInlineBody`/`CloneToInlineRegion`/`BuildInlineTernary` (§4)**; `inline;` directive capture |
 | `compiler/emit.inc` | low-level x86-64 emit; `MovRaxImm` (pass 3) |
 | `compiler/symtab.inc` | `EmitLoadVar`/`EmitLoadVarRcx` + `LeafSymRcxLoadable` (pass 2); **`ResidentRegOf`/`RegcallRefreshResident` + resident hooks + epilogue restore (§4)** |
 | `compiler/ir_codegen386/arm32/aarch64/riscv32/xtensa.inc` | cross backends — read the shared (optimized) IR incl. inlined bodies; **no emitter peepholes, no regcall (x86-64 only)** |

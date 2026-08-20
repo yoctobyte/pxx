@@ -17,7 +17,7 @@ function NilPyUserCode: Boolean;
 
   `PyExprMode` is the discriminator that tells a `.py` module from a Pascal
   unit: ParsePyUnit turns it on for a module body, and the Pascal unit path
-  (parser.inc, CompileUnit) explicitly turns it off. The rules MUST move
+  (pasparser_prog.inc, CompileUnit) explicitly turns it off. The rules MUST move
   together — zero-init without release leaks, release without zero-init frees
   garbage — which is why they share one predicate instead of nine copies of the
   condition. }
@@ -535,7 +535,7 @@ function UnitIsAmbient(unitIdx: Integer): Boolean;
   says so outright ("pxx has no separate System unit (System IS the builtin
   layer)"), and every Pascal dialect auto-includes System everywhere with no
   `uses` needed. They are injected by ParseProgram's epilogue
-  (`ParseUsesUnit('builtinheap')` / `('builtin')`, compiler/parser.inc), never
+  (`ParseUsesUnit('builtinheap')` / `('builtin')`, compiler/pasparser_proc.inc), never
   written by a user clause, so the edge table structurally cannot show them as
   reachable from anywhere — without this, every unit in the tree reports a leak
   to them and the raw hit counts drown out the real ones. Ambient by design, not
@@ -644,7 +644,7 @@ end;
 
 function ClassNameIsAmbientIntrinsic(const lo: AnsiString): Boolean;
 { TObject/TGuid are System-unit intrinsics minted by RegisterBuiltinTObject /
-  RegisterBuiltinTGuid (compiler/parser.inc) rather than declared by any unit,
+  RegisterBuiltinTGuid (compiler/pasparser_prog.inc) rather than declared by any unit,
   so AddUClass stamps them with whatever CurrentUnitIdx is at ParseProgram time
   (-1, "the program"). Every UNIT that names TObject then looks like it leaked
   through the program — the same ambient-System artifact UnitIsAmbient handles
@@ -1493,7 +1493,7 @@ begin
   if Result >= 0 then Exit;
   { Class-name ALIASES too, exactly as FindUClass resolves them. Without this
     the two predicates disagree about the same name, and the NilPy construction
-    intercept (parser.inc, `FindUClassNonRecord(...) and next is '('`) stood
+    intercept (pasparser_lval.inc, `FindUClassNonRecord(...) and next is '('`) stood
     down for an alias while the Pascal typecast branch below it — which asks
     IsClassType, i.e. FindUClass, i.e. alias-AWARE — claimed it. So
     `AliasName(9)` compiled as a hard reinterpret cast of the integer 9 to a
@@ -2609,7 +2609,7 @@ function IRVariantUnboxKind(target: TTypeKind): Boolean;
 
   Lives here, not in ir.inc where its only caller used to be, because the NilPy
   *args forwarder needs the same answer when it decides whether an argument may
-  be left as a variant for IRLowerCallArg to unbox — and parser.inc is included
+  be left as a variant for IRLowerCallArg to unbox — and the pasparser_* slices are included
   before ir.inc. It answers a question about a TYPE KIND, so it has no business
   being IR-private in the first place. }
 begin
@@ -2644,7 +2644,7 @@ end;
 
 function PyEqDisjointFromString(tk: TTypeKind): Boolean;
 { True for a type that can NEVER compare equal to a string in Python, for
-  NilPy's `==`/`!=` string-vs-other fold in parser.inc. Numbers, booleans,
+  NilPy's `==`/`!=` string-vs-other fold in pasparser_expr.inc. Numbers, booleans,
   pointers, class handles and nil all qualify: a `str` is equal only to a
   `str`, so the answer is False (True for `!=`) without any comparison.
 
@@ -3556,7 +3556,7 @@ begin
       no-op there; on a 32-bit target (TARGET_PTR_SIZE = 4) a 5-8 byte
       record previously got only a 4-byte slot, so writing its second word
       (e.g. the arm32 by-value record-arg fix in ir_codegen_arm32.inc /
-      parser.inc's prologue spill) silently overflowed into whatever symbol's
+      pasparser_proc.inc's prologue spill) silently overflowed into whatever symbol's
       slot happened to sit right after it
       (bug-arm32-record-byvalue-over-4-bytes-abi-gap). Never smaller than
       TARGET_PTR_SIZE, matching the existing tiny-record (<=4-byte) case. }
@@ -7091,7 +7091,7 @@ end;
   every Halt site). Registered lazily — a Halt can lower before all units are
   parsed, so the shell is a forward call resolved by ApplyCallFixups; the body
   (unit finalizers in reverse init order, behind a run-once BSS guard) is
-  emitted by EmitFinalizerRunnerBody in parser.inc
+  emitted by EmitFinalizerRunnerBody in pasparser_proc.inc
   (bug-unit-finalization-not-executed). }
 function GetFiniRunnerProc: Integer;
 var dummyNames: array[0..0] of AnsiString;
@@ -8398,7 +8398,7 @@ end;
 { Stash the caller's hidden aggregate-result destination pointer (passed in the
   per-target indirect-result register) into the proc's dest-sym frame slot, right
   after the prologue and before the param-copy loop can clobber that register.
-  Shared by the Pascal (parser.inc) and C (cparser.inc) routine emitters so an
+  Shared by the Pascal (pasparser_*.inc) and C (cparser.inc) routine emitters so an
   aggregate-returning C function uses the same convention as a Pascal one. }
 procedure EmitAggregateDestStash(procIdx: Integer);
 var idx: Integer;

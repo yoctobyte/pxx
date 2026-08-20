@@ -36,7 +36,7 @@ function PyDrainIfCursor(node: Integer): Integer; forward;
 { "a user class declaring __iter__" — PyDrainIfCursor asks it, and sits above
   its definition. }
 function PyNodeIsUserIterable(node: Integer): Boolean; forward;
-{ Wraps any iterable node in a cursor — enumerate()/zip() in parser.inc. }
+{ Wraps any iterable node in a cursor — enumerate()/zip() in pasparser_*.inc. }
 function PyMakeIterOf(node: Integer): Integer; forward;
 { One-argument call to a plain pylib function; PyMakeIterOf sits above it. }
 function PyCallProc1(const pname: AnsiString; argNode: Integer): Integer; forward;

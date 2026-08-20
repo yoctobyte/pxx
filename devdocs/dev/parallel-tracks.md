@@ -162,7 +162,8 @@ branch — it's a file-ownership rule):
 - **C owns only the C-specific frontend files** (`clexer.inc`, `cparser.inc`,
   `cpreproc.inc`, C→IR lowering, `lib/crtl`, C tests). Shared compiler internals
   — AST node kinds, IR ops, `symtab` structures, `defs.inc`, `lexer.inc`,
-  `parser.inc`, backend codegen (`ir_codegen*`), ABI, ELF — are **Track A's**.
+  backend codegen (`ir_codegen*`), ABI, ELF — are **Track A's**. (`pasparser_*.inc`
+  became **Track P's** on 2026-08-20; `lexer.inc` is still shared.)
 - **Need a new AST node / IR op / symtab field / token / backend change?** →
   **file a Track A ticket;** do not edit the shared file under Track C. A
   implements it, gates it (`make test` + self-host), and `make pin`s it. This is

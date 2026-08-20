@@ -1,6 +1,6 @@
 { ===== pasparser_expr.inc — Pascal frontend: the expression parser ===========
 
-  Carved out of parser.inc, byte-for-byte, by
+  Carved out of pasparser_*.inc, byte-for-byte, by
   refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files.
 
   Owned by Track P (Pascal frontend). Included from compiler.pas at exactly the
@@ -194,7 +194,7 @@ begin
 end;
 
 { Is `node` a DYNAMIC-ARRAY-typed expression, and at what nesting depth?
-  Copy's parse sites need the answer before ir.inc's NodeDynDepth exists (parser.inc
+  Copy's parse sites need the answer before ir.inc's NodeDynDepth exists (pasparser_*.inc
   is included first), and they need it for more than a bare name: an element of a
   nested array (`g[0]`), a record/class field (`r.items`). Deliberately a small
   mirror of NodeDynDepth's ident / field / index arms rather than a general type

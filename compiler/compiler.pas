@@ -30,7 +30,7 @@ program Pascal26;
   lib/asmcore with no -Fu flag needed -- "self-host when pointed to the
   right source, dependencies implicit" (PXX never needed the flag: its own
   ParseUsesUnit already resolves lib/asmcore via the same exe-anchored
-  search chain as lib/rtl/lib/pcl, see compiler/parser.inc; {$UNITPATH} is
+  search chain as lib/rtl/lib/pcl, see compiler/pasparser_proc.inc; {$UNITPATH} is
   an FPC-only directive, silently ignored by PXX like any other directive
   it doesn't recognize). Path is relative to this source file's own
   directory (compiler/), not CWD -- portable to any checkout location. }
@@ -49,8 +49,8 @@ uses asmcore_base, asmcore_x64;
   what a literal MEANS — a divergence that cost nothing only because the
   compiler's own float constants are few. }
 {$include exdec.inc}
-function DbgFileId(const path: AnsiString): Integer; forward;   { real body in parser.inc, included after lexer.inc and clexer.inc use it (regression-fpc-seed-drift-b1976-stale) }
-procedure DbgMarkTokFile(startTok, fileId: Integer); forward;   { real body in parser.inc, ditto }
+function DbgFileId(const path: AnsiString): Integer; forward;   { real body in dbg_filetable.inc, included after lexer.inc and clexer.inc use it (regression-fpc-seed-drift-b1976-stale) }
+procedure DbgMarkTokFile(startTok, fileId: Integer); forward;   { real body in dbg_filetable.inc, ditto }
 procedure CMarkTokModule(startTok: Integer; const path: AnsiString); forward;    { real body in parser.inc; clexer.inc/cparser.inc call it (bug-a-fpc-seed-drift-emitasmx64-forward) }
 function CPathIsCModule(const path: AnsiString): Boolean; forward;   { ditto }
 {$include lexer.inc}
@@ -99,13 +99,18 @@ procedure EmitAsmX64(const items: array of const); overload; forward;
 {$ifndef PXX_NO_ARM32}{$include asmtext_arm32.inc}{$endif}
 {$include asmtext_xtensa.inc}
 {$ifndef PXX_NO_CFRONT}procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;{$endif}
-procedure AddDefaultCIncludeDirs; forward;   { the C unit pull in parser.inc needs it too }
+procedure AddDefaultCIncludeDirs; forward;   { the C unit pull in pasparser_proc.inc needs it too }
 { stubs for any frontend omitted from this build; no-op in the default }
 {$include frontend_stubs.inc}
-{$include parser.inc}
-{ Pascal-frontend slices carved out of parser.inc, listed in their ORIGINAL order
-  — that is what makes the carve-out provable by the self-host fixedpoint rather
-  than by reading it. Flat rather than nested inside parser.inc: this file is
+{ Cross-frontend forward declarations the FPC seed needs, and the map of where
+  the old parser.inc went. }
+{$include frontend_forwards.inc}
+{ The slices of the old 37,249-line parser.inc, listed in their ORIGINAL order
+  — each is a contiguous range re-included where it sat, which is what makes the
+  carve-out provable by the self-host fixedpoint rather than by reading it.
+  Track A owns the first four (AST and debug-info machinery that was never
+  Pascal), Track N owns pyforwards.inc, Track P owns the pasparser_* set; the
+  map is in frontend_forwards.inc. Flat rather than nested: this file is
   compiled by the PINNED binary, so it can only use include forms that binary
   already understands. }
 {$include dbg_filetable.inc}
@@ -955,7 +960,7 @@ begin
   { lib/asmcore resolution (asmcore_base/asmcore_x64, both for the compiler's
     own .asm frontend / inline-asm branches and for any user program) is now a
     first-class peer of RTL/PCL in ParseUsesUnit's own search chain — no
-    AddPasUnitDir needed here, see compiler/parser.inc (asmdir). }
+    AddPasUnitDir needed here, see compiler/pasparser_proc.inc (asmdir). }
   CompiledUnitCount := 0;
   UnitAliasCount := 0;
   InitProcCount := 0;

@@ -3075,7 +3075,7 @@ begin
           For a VARIADIC call ALL args are pushed in REVERSE index order so the
           whole block is FORWARD in memory (arg0 at [ebp+8], ascending). The
           callee then reads its named params with the FORWARD spill (ProcVariadic
-          branch in parser.inc) and va_arg walks the tail forward from
+          branch in pasparser_*.inc) and va_arg walks the tail forward from
           [ebp+8+namedBytes]. A non-variadic call keeps plain index order (the
           reversed spill). }
         vaNvw := 0;

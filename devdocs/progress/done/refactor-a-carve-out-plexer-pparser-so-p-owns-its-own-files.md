@@ -5,7 +5,7 @@ type: refactor
 owner: claude-acp
 blocked-by: []
 summary: "parser.inc is 38% of all compiler work (216 of 566 commits in 14 days) and is the ONE file where two lanes must serialize — A and P cannot edit it concurrently. C and NilPy both got carved out into their own lexer/parser; Pascal never did, purely because it was the seed. CLAUDE.md has called this 'the clean long-term shape' in prose for months, where ready/next cannot see it. Prio is a PROPOSAL: the payoff is parallelism, not a feature."
-status: working
+status: done
 ---
 
 # Carve out `plexer` / `pparser` so Track P owns its own files
@@ -145,3 +145,101 @@ Measured alongside: `pyparser.inc` is 35,682 lines and `PXX_NO_NILPY` costs ~198
 symbols, so the *other* direction (Pascal-only, NilPy omitted) is a define and is in
 progress. The asymmetry is the carve-out's whole subject — P shares its files with A,
 and N does not.
+
+---
+
+## Done — 2026-08-20
+
+`parser.inc` went from **37,249 lines to 109**, in fourteen contiguous slices,
+and the residue was renamed `frontend_forwards.inc` because what is left is
+cross-frontend forward declarations, not a Pascal parser.
+
+### The method, and why it made the gate a proof rather than a review
+
+Every slice is a **contiguous range of the original, re-included from
+compiler.pas in the exact position it occupied**. That is not a stylistic
+choice: a contiguous cut restored at its own offset is identical *by
+construction*, so the byte-identical self-host fixedpoint can prove the move.
+It did — **emitted code size stayed at 8655567B across all fourteen cuts**, and
+the fixedpoint converged after every one. The ticket asked for slice-by-slice
+gating because include order is load-bearing; this is the shape that makes the
+gate answer the question rather than merely not object.
+
+### Where it went
+
+Track P (the Pascal frontend, in include order): `pasparser_name` ·
+`pasparser_class` · `pasparser_generic` · `pasparser_call` · `pasparser_lval` ·
+`pasparser_expr` · `pasparser_stmt` · `pasparser_decl` · `pasparser_proc` ·
+`pasparser_prog`.
+
+Track N: **`pyforwards.inc`** — ~200 `Py*` forwards plus `ParseArgExpr`, the
+hook that sends a NilPy call argument down the *Python* precedence chain. This
+is the ticket's shipping blocker made concrete: omitting the Pascal frontend
+meant omitting `parser.inc`, which is where the NilPy frontend declared itself.
+
+Track A — machinery that was never Pascal and had no business in a frontend's
+file: **`ast_arena.inc`** (AllocNode/CloneAST — the substrate every frontend
+shares), **`inline_expand.inc`** (an AST pass; also Track O),
+**`ast_syminfer.inc`** (symbol typing, stack layout, DWARF var snapshot),
+**`dbg_filetable.inc`** (which file a token came from — it maps C translation
+units too).
+
+The map lives in the closing comment of `compiler/frontend_forwards.inc`.
+
+### On the rename
+
+The ticket says `parser.inc` → `pasparser.inc`. After the split that name would
+have been **wrong**: the 109-line residue holds the C frontend's forwards, the
+per-arch emitter dispatchers and path helpers — it is not Pascal. It is
+`frontend_forwards.inc`, which serves the ticket's actual intent (kill the
+generic name that reads as a mandate) more honestly than the literal one would.
+
+### Two things found on the way
+
+1. **A nested `{$I}` was silently dropped, not expanded** — filed and fixed as
+   [[bug-a-a-nested-include-is-silently-dropped]]. The first slice was included
+   from `parser.inc` and simply did not appear: `ExpandIncludes` ran one level
+   deep and the leftover directive was skipped by the lexer as unknown, so a
+   *different program compiled than FPC builds from the same source*. Never seen
+   because **no `.inc` in the compiler included another `.inc`** — 58 files, and
+   the shape had never been exercised in-tree.
+2. **The bootstrap constraint that follows from it.** `make compiler/pascal26`
+   compiles `compiler.pas` with the **pinned** binary, so the compiler's own
+   source cannot use a feature the pinned binary lacks. The slices are therefore
+   listed flat in `compiler.pas` rather than nested under one file — which also
+   matches how every other frontend is spelled there. Nesting becomes available
+   only after a compiler carrying the fix is pinned; it is not needed.
+
+### One real defect, caught by the gate
+
+Rewriting the residue's tail into a single map deleted `procedure ParseExpr;
+forward;`, which happened to sit *between* two pointer comments. **pxx pre-scans
+declarations and did not care — the fixedpoint passed.** The FPC seed canary
+failed, which is exactly the "gap only the fpc-bootstrap job sees" that file's
+own comment warns about. Restored with a note saying so.
+
+### Not done — the remaining half
+
+**The lexer is not carved out.** Pascal still shares `lexer.inc` with A (and the
+Pascal-facing paths of `defs.inc`/`symtab.inc`), so the A/P no-concurrent-edit
+rule still binds — over `lexer.inc`, not over one 37k-line file both lanes had
+to queue behind. `pyparser.inc` (45k lines) is the same monolith shape and is
+untouched. Filed as [[refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too]].
+
+Live docs updated to match: `CLAUDE.md` (Track P, the A/P slot, the shared-file
+lists), `devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md`,
+`session-roster.md`, `parallel-tracks.md`, `ir-as-substrate.md`,
+`optimization-architecture.md` and five others; ~55 stale in-code pointers
+re-aimed at the slice that now holds the code. Dated handover notes and
+`devdocs/progress/**` were left alone — they are records of what a past session
+saw, not instructions.
+
+### Gate
+
+`make compiler/pascal26` (byte-identical fixedpoint) after **each** of the
+fourteen slices, plus `tools/gate.sh quick` GREEN — including the FPC seed
+canary, which is the one that matters for a change that moves declarations
+across include boundaries.
+
+## Log
+- 2026-08-20 — resolved, commit PENDING-COMMIT.

@@ -243,7 +243,7 @@ procedure XtensaPadTo64Xtensa(procIdx: Integer; var nArgs: Integer);
   convention is the TARGET's by definition — a `cdecl`/`stdcall` marker in this
   dialect is decoration — so xtensa uses the xtensa C ABI for everyone, and pxx
   and gcc cannot disagree. Internal calls stay correct because the callee spill
-  in parser.inc applies the identical rule; the two must be changed together. }
+  in pasparser_*.inc applies the identical rule; the two must be changed together. }
 begin
   if (nArgs and 1) = 1 then
   begin
@@ -1778,7 +1778,7 @@ begin
           Error('target xtensa: builtin calls not supported in bare-metal stage 1');
         end;
 
-        { Word-based argument passing (matches the callee spill in parser.inc):
+        { Word-based argument passing (matches the callee spill in pasparser_*.inc):
           each scalar arg is one word, a by-value Int64/UInt64 is two (lo then
           hi). nArgs counts WORDS; word k loads into the k-th arg register
           (Call0 a2+k / windowed a10+k). }
@@ -2080,7 +2080,7 @@ begin
             every memory class, so the first S32C1I traps into the ROM vector
             loop with no output at all. The bare entry now programs it (0x2A,
             internal operation for all three classes) beside CPENABLE — see
-            parser.inc. This is what made the instruction look unimplemented:
+            pasparser_*.inc. This is what made the instruction look unimplemented:
             an assembler-built two-instruction .S faults identically, and one
             `wsr.atomctl` makes both run.
           - The branch offset. `xtensa_bne(s, t, off)` measures off from the

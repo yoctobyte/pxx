@@ -1,7 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 { NAMED promocore, NOT promoint — deliberately.
 
-  `PromoInt` is a compiler-INTRINSIC TYPE NAME (parser.inc maps `promoint` /
+  `PromoInt` is a compiler-INTRINSIC TYPE NAME (pasparser_*.inc maps `promoint` /
   `promoint32` / `promoint64` to tyPromoInt*), and Pascal identifiers are
   case-insensitive, so a unit called `promoint` is the SAME identifier as the
   type it implements. That resolves correctly today — measured: `uses promoint`

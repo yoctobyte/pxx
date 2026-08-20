@@ -252,7 +252,7 @@ frontends lower to a shared IR, and lexer/parser work usually reaches the IR
 layer anyway. **Track A is the single mutex; everything else works around it.**
 
 **The sole-A guard is now checkable, not a guess.** Before taking a Track A
-ticket — or a Track P edit touching the shared `lexer.inc`/`parser.inc` — look
+ticket — or a Track P edit touching the shared `lexer.inc` — look
 at what the peer holds:
 
 ```sh

@@ -73,7 +73,7 @@ Not a complete list — a starting one. Each is a place where a fix applied to o
 arm will not reach the other.
 
 - **Literal receiver vs named receiver on a subscript.** `PyMakeSuffixIndex`
-  handles `"abc"[i]`; the default-indexed-property path in `parser.inc` handles
+  handles `"abc"[i]`; the default-indexed-property path in `pasparser_lval.inc` handles
   `xs[i]`. They have already diverged once — the `__index__` coercion had to be
   added to the named path with the comment *"A LITERAL receiver already went
   through PyMakeSuffixIndex"*, which is the tell.

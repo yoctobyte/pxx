@@ -4488,7 +4488,7 @@ begin
     genuinely missing attribute, not a "maybe dynamic, maybe not" ambiguity:
     hasattr/getattr(o, n, default) both resolve through pydynattr_has FIRST
     and never reach this branch on a miss (see their call sites in
-    parser.inc), so raising cannot break either. Silently answering None
+    pasparser_*.inc), so raising cannot break either. Silently answering None
     instead let a typo'd attribute name travel arbitrarily far as a plausible
     value before anything noticed
     (bug-nilpy-missing-attribute-yields-none-instead-of-attributeerror). }
@@ -5493,7 +5493,7 @@ end;
   bug-nilpy-list-sort-rejects-key-and-reverse-with-a-bare-parse-error.
 
   Declaring the parameter is the whole frontend fix. The method call path in
-  parser.inc drives its argument loop off ParamCount (`while mai <=
+  pasparser_*.inc drives its argument loop off ParamCount (`while mai <=
   ParamCount-1`), so with sort() taking nothing the loop body never ran, the
   keyword recognizer inside it never saw `reverse`, and control fell to
   Expect(tkRParen) — which is why a missing FEATURE surfaced as a bare
@@ -5902,7 +5902,7 @@ end;
   representation, so a "set" is a TPyList built through `.add()` (the
   duplicate-skipping insert). These four operators were entirely
   unhandled: `&`/`|`/`-`/`^` between two class-typed (tyClass) operands
-  fell through every arm of the operator-typing chain in parser.inc and
+  fell through every arm of the operator-typing chain in pasparser_*.inc and
   landed on the bare-integer default, so codegen did a raw bitwise/
   subtract op on the two operands' HEAP POINTERS -- silently producing a
   huge garbage integer (`&`/`|`) or a small, meaningless one (`-`/`^`,

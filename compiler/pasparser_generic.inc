@@ -1,6 +1,6 @@
 { ===== pasparser_generic.inc — Pascal frontend: generics =====================
 
-  Carved out of parser.inc, byte-for-byte, by
+  Carved out of pasparser_*.inc, byte-for-byte, by
   refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files.
 
   Owned by Track P (Pascal frontend). Included from compiler.pas at exactly the

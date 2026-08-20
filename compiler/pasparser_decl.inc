@@ -1,6 +1,6 @@
 { ===== pasparser_decl.inc — Pascal frontend: declaration parsing ==============
 
-  Carved out of parser.inc, byte-for-byte, by
+  Carved out of pasparser_*.inc, byte-for-byte, by
   refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files.
 
   Owned by Track P (Pascal frontend). Included from compiler.pas at exactly the
@@ -4853,7 +4853,7 @@ begin
             else
               mTk := ParseTypeKind;
             { A `const` record/variant param is passed by reference — must match
-              ParseSubroutine's rule (parser.inc ~11403) so an INDIRECT call
+              ParseSubroutine's rule (pasparser_*.inc ~11403) so an INDIRECT call
               through this proc-type marshals the arg the same way the callee
               receives it (else the address/value mismatch segfaults — see
               bug-proc-typed-call-const-record-arg). }

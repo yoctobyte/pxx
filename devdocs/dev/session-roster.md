@@ -82,9 +82,14 @@ still apply — they prevent conflicting EDITS to the same file, not tree damage
 
 ## The coordinator's actual job
 
-1. Own the **A/P slot**. A and P share `lexer.inc`/`parser.inc` and must never be
+1. Own the **A/P slot**. A and P share `lexer.inc` and must never be
    edited concurrently. Exactly one session may hold either at a time; the
-   coordinator says who.
+   coordinator says who. **Narrowed 2026-08-20:** the 37,249-line `parser.inc`
+   was sliced into per-area `pasparser_*.inc` files owned by P, with the AST /
+   inline / debug machinery moved to A's own files and NilPy's forwards to
+   `pyforwards.inc` — so the slot now covers `lexer.inc` and the shared
+   `defs.inc`/`symtab.inc` paths, not one 37k-line file both lanes had to queue
+   behind. Everything below is the log of when that was still true.
 2. **Pin — the coordinator RUNS it, not just schedules it** (human, 2026-08-17).
    `make stabilize-fast && make pin` (~35s) holds a repo lock and blocks every
    other lane, so one at a time, announced. A worker that needs a pin STOPS and

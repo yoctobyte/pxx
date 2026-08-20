@@ -62,19 +62,28 @@ in Pascal), which is the tell that the syntactic layer is not shared ground.
 ## The naming accident this explains
 
 `compiler/parser.inc` was intended as **`pasparser.inc`** — the *Pascal* parser. Its
-generic name is a historical accident of Pascal being the seed, not a design decision,
-and it is why Track P still cannot be staffed alongside Track A. C and NilPy were both
+generic name was a historical accident of Pascal being the seed, not a design decision,
+and it is why Track P could not be staffed alongside Track A. C and NilPy were both
 carved out into their own lexer/parser; Pascal never was.
 
-**Do not read the name as a mandate.** A `commonparser.inc` may hold what is genuinely
+**Resolved 2026-08-20** by
+`refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files`: the file is now the
+`pasparser_*.inc` set (name, class, generic, call, lval, expr, stmt, decl, proc, prog),
+the machinery that was never Pascal moved to its real owners (`ast_arena.inc`,
+`inline_expand.inc`, `ast_syminfer.inc`, `dbg_filetable.inc` → A; `pyforwards.inc` → N),
+and what is left of the old file is a 109-line forward header renamed
+`frontend_forwards.inc`, whose closing comment is the map. The **lexer** is not carved
+out yet — that is the remaining half.
+
+**Do not read a name as a mandate.** A `commonparser.inc` may hold what is genuinely
 neutral, but the default is per-language files, and "make it serve both" is the move
-this note exists to refuse. Tracked as
-`refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files`.
+this note exists to refuse.
 
 ## Granularity: a file is the unit of ownership, not a topic label
 
 Measured 2026-08-18: `compiler/` is **58 files, 169k lines, one subdirectory**
-(`builtin/`). `parser.inc` is **36,217 lines**; `pyparser.inc` is 34,374.
+(`builtin/`). `parser.inc` was **36,217 lines**; `pyparser.inc` is 34,374. (It reached
+37,249 before being split on 2026-08-20; `pyparser.inc` has not been.)
 
 > "A human would have made a subfolder with dozens of files. AI agents insist on having
 > a single `.inc` file per topic. Which is fair but lacks design." — user, 2026-08-18
@@ -88,9 +97,10 @@ excuse.
 **Two costs, both already being paid:**
 
 1. **Granularity IS concurrency.** The track rule "A and P must never edit these
-   concurrently" keys on *files*. `parser.inc` serializes two lanes **because it is one
-   file**. Split into per-area files, the lanes would collide only when genuinely working
-   the same area. A monolith converts occasional contention into permanent serialization.
+   concurrently" keys on *files*. `parser.inc` serialized two lanes **because it was one
+   file**. Split into per-area files, the lanes collide only when genuinely working the
+   same area. A monolith converts occasional contention into permanent serialization.
+   Done for Pascal on 2026-08-20; `pyparser.inc` is the same shape and still whole.
 
 2. **It manufactures the repo's most common bug shape** — *one concept, N independent
    sites; fix one and the others stay wrong.* Class attributes (3 lowerings × 4 routes),

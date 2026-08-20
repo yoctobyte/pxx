@@ -74,7 +74,7 @@ appears in the *guest* language while the cause sits in the *host's* rule.
   carved out — the intended shape.
 - **NilPy's PARSER** still enters Pascal's `ParseExpr` for expression atoms, and
   **Pascal** has no `plexer`/`pparser` at all (it was the seed, so it still lives
-  in the shared `lexer.inc`/`parser.inc`).
+  in the shared `lexer.inc`).
 
 Both of those are **legacy accidents, not the design.** When the choice is open,
 prefer re-implementing in the frontend's own file over adding another

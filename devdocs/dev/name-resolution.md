@@ -22,7 +22,7 @@ awkward cases live, and where the unimplemented rule is.
 ## 1. Module resolution — which file
 
 Each frontend searches **its own extension only**. A Pascal `uses math` builds
-`math.pas` candidates (`parser.inc`, the uses-path search); C's `#include`
+`math.pas` candidates (`pasparser_proc.inc`, the uses-path search); C's `#include`
 searches C headers; NilPy prefers `tkhtmlview.py`. No cross-language file search
 happens implicitly, which is the intended behaviour, not an omission.
 

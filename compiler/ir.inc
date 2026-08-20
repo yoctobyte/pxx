@@ -2383,7 +2383,7 @@ end;
   for every PChar->managed-string conversion site (cast, assign, …) so the wrapper
   cannot drift between contexts. See
   refactor-centralize-managed-string-pchar-conversion. }
-{ WrapPCharToString lives in parser.inc (near the other Wrap* helpers); the
+{ WrapPCharToString lives in pasparser_lval.inc (near the other Wrap* helpers); the
   duplicate that used to sit here was an exact copy and tripped FPC's
   "overloaded functions have the same parameter list" — removed
   (bug-fpc-seed-helper-ordering-after-lua-c-frontend recurrence). }
@@ -2646,7 +2646,7 @@ begin
     { ProcParamProcSig, not the parameter's SYMBOL: a param symbol is a local
       that does not outlive the callee's scope, and RegisterProc leaves
       Params[].SymIdx = -1, so a caller has no way back to it. The per-proc
-      parallel array persists — see the write site in parser.inc's param loop. }
+      parallel array persists — see the write site in pasparser_proc.inc's param loop. }
     pvSinkIsProcVar := (ProcParamProcSig[cpi * MAX_PROC_PARAMS + pathIdx] >= 0);
   end;
   argAST := IRProcVarAutoCall(argAST, pvSinkIsProcVar);
@@ -2951,7 +2951,7 @@ begin
   { PROMO argument to a PROMO parameter: give the callee its OWN slot.
 
     A promo parameter is by-ref like every other aggregate parameter (see the
-    IsRef promotion in parser.inc), so what crosses the call is an address —
+    IsRef promotion in pasparser_proc.inc), so what crosses the call is an address —
     and Pascal value semantics then depend on that address naming a COPY, which
     is exactly what the record path does with a hidden temp and copy_rec. Promo
     needs PXXPromoCopy rather than a raw 16-byte copy: the heap tier's payload
@@ -4591,7 +4591,7 @@ end;
 
 { IRVariantUnboxKind moved to symtab.inc — the NilPy frontend has to ask the
   same question when it decides whether an argument may be left as a variant,
-  and parser.inc is included BEFORE this file. One predicate, both consumers;
+  and the pasparser_* slices are included BEFORE this file. One predicate, both consumers;
   a private copy in pyparser.inc is how the two answers drift apart. }
 
 function IRFindProc1ByArgTk(const name: AnsiString; tk: TTypeKind): Integer;
@@ -6638,7 +6638,7 @@ begin
 
         The offset is a HARD 8 on every target, not SizeOf(Pointer): the word the VMT
         allocator reserves ahead of the table is 8 bytes wide on 32-bit too (see the
-        VMT-alloc sites in parser.inc/pyparser.inc, and __pxxRttiOf, which hardcodes
+        VMT-alloc sites in pasparser_*.inc/pyparser.inc, and __pxxRttiOf, which hardcodes
         -8 and is what the 32-bit ClassName path has always used). Using the pointer
         size here read 4 bytes too high on the ILP32 targets and returned garbage. }
       frameNode := IRAppend(IR_LOAD_MEM, IRLowerAST(ASTLeft[node]), -1, -1, 0, Ord(tyPointer));

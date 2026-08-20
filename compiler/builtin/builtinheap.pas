@@ -253,7 +253,7 @@ function PXXObjIsBoundPair(p: Pointer): Boolean;
 { COM/ARC interface ARC helpers dispatch through the IMT via an indirect call,
   which the ESP (xtensa/riscv32) backends cannot lower yet; ESP has no COM
   interfaces anyway, so exclude them there (their RegisterProc is likewise
-  gated in parser.inc). }
+  gated in pasparser_*.inc). }
 {$ifndef PXX_ESP}
 { An interface VALUE is ONE pointer: the instance (FPC's ABI). The IMT — and so
   the _AddRef/_Release slots — is recovered from the instance's class RTTI blob
@@ -273,7 +273,7 @@ procedure PXXIntfAssign(dest, src: Pointer; ifaceId: NativeInt);
   instead of silently building a parentless class whose ARC dispatch walks a
   garbage IMT slot (bug-pascal-tinterfacedobject-missing-silent-segfault).
   A COM-mode interface with no explicit parent implicitly derives IInterface
-  (parser.inc), which is what reserves IMT slots 0..2 for QueryInterface /
+  (pasparser_*.inc), which is what reserves IMT slots 0..2 for QueryInterface /
   _AddRef / _Release — ARC releases through slot 2.
   NOTE: a user declaration of either name lands on a LATER UCls row and is
   shadowed by this one (FindUClass is first-match); the shapes are identical to

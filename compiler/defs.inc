@@ -655,7 +655,7 @@ const
   SL_MAX_PARAMS    = 6;
 
   { Stackless-generator instance layout (see lib/rtl/slgen.pas + the stackless
-    state-machine transform in parser.inc). Shares CURRENT/DONE offsets with the
+    state-machine transform in pasparser_stmt.inc). Shares CURRENT/DONE offsets with the
     stackful layout so for-in reads the value/done flag identically for either
     strategy; only the advance step differs (CoSwitch vs a direct step call).
     SL_OFF_STATE reuses the unused GENCTX slot. Persistent slots (declared params
@@ -1383,7 +1383,7 @@ const
   MAX_PENDING_GFSPECS = 256;
   { distinct nested generic uses (`class(specialize TBase<T>)`, a field of a
     generic type) inside ONE template body -- see the nested-specialization
-    note in parser.inc. The +1 slot holds the declaration being deferred. }
+    note in pasparser_*.inc. The +1 slot holds the declaration being deferred. }
   MAX_NESTED_SPECS = 24;
   MAX_OP_OVERLOADS = 64;
 
@@ -1487,7 +1487,7 @@ var
   { Nested routines (Approach B / lambda-lifting): a nested procedure/function is
     forward-declared in place and its full body stashed here to be re-parsed as a
     fresh top-level routine once the enclosing routine finishes. See
-    ParseNestedRoutine / FlushPendingNestedProcs in parser.inc. }
+    ParseNestedRoutine / FlushPendingNestedProcs in pasparser_decl.inc. }
   PendNestTok        : array[0..MAX_NESTED_TOKENS-1] of TRawToken;
   PendNestCount      : Integer;
   { Per-routine boundaries within PendNestTok: a single enclosing body may stash
@@ -2408,7 +2408,7 @@ var
     unit" was being used as a PROXY for "the routine is a Pascal library facade",
     and a user's imported .py module satisfies the proxy while wanting the
     opposite treatment for its parameter defaults — see DefaultArgValueNode in
-    parser.inc. A PARALLEL ARRAY on the CTUnitIdx pattern, not a field: a new
+    pasparser_*.inc. A PARALLEL ARRAY on the CTUnitIdx pattern, not a field: a new
     TProc/TSymbol field is the known self-host landmine
     (project_tsymbol_field_landmine).
     bug-n-a-default-argument-is-dropped-on-every-cross-module-call }
@@ -2503,7 +2503,7 @@ var
 
     A key table has no Data[] side: same identity semantics, nothing emitted,
     and the emitted binary stops depending on where the compiler binary sits. }
-  { --- declaration type descriptor (see ParseDeclTypeDesc in parser.inc) ---
+  { --- declaration type descriptor (see ParseDeclTypeDesc in pasparser_decl.inc) ---
     One parsed type, held between "read the type" and "allocate a symbol for
     each name". Global for the same reason the LastType* side channel is: the
     two steps are adjacent by construction, so there is nothing to nest. Fill it

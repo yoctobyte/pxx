@@ -357,7 +357,7 @@ end;
   the FILE rather than the NAME is a change to the shared unit table, i.e. Track
   A ground, and it is already an open question there
   (decide-one-answer-to-have-i-already-compiled-this-unit, cited at
-  parser.inc's own Python-module dedup).
+  pasparser_*.inc's own Python-module dedup).
 
   So what Track C can honestly do is turn the silent no-op into a refusal that
   names both files. Keyed on the RESOLVED path -- the same string the loader
@@ -10504,7 +10504,7 @@ begin
       rv32_sw(reg_a0 + 6, reg_t0, 24);
       rv32_sw(reg_a0 + 7, reg_t0, 28);
       { Overflow (stack args past a7) starts at entry_sp = s0+16 — the callee's
-        incoming-stack-word base after the ra/s0 prologue (see parser.inc rv32
+        incoming-stack-word base after the ra/s0 prologue (see pasparser_*.inc rv32
         param spill: word k>=8 at [s0+16+(pnWords-1-k)*4]). The call site reverses
         the variadic stack tail (ir_codegen_riscv32.inc) so word 8 lands at s0+16
         and va_arg's forward walk reads args in order. Was s0+8 — off by 8, so the
@@ -10565,7 +10565,7 @@ begin
       The i386 call site pushes them left-to-right (leftmost ends up deepest), so
       param i of n sits at [ebp + 8 + sz] where sz = the total stack width of the
       params to its right. Copy each into its frame slot; the caller cleans the
-      arg area. Mirrors the Pascal i386 param spill (parser.inc). int/ptr =
+      arg area. Mirrors the Pascal i386 param spill (pasparser_*.inc). int/ptr =
       4-byte slots, double/Int64 = 8-byte. }
     for i := 0 to nparams - 1 do
     begin
@@ -10617,7 +10617,7 @@ begin
   end
   else if TargetArch = TARGET_ARM32 then
   begin
-    { arm32 word-based spill (mirrors the Pascal arm32 path in parser.inc): each
+    { arm32 word-based spill (mirrors the Pascal arm32 path in pasparser_*.inc): each
       scalar param is one machine word, a by-value Int64/UInt64/Double is two
       (lo then hi). Word k arrives in r[k] when k<4, else on the stack at
       [fp + 8 + (pnWords-1-k)*4] (the caller pushed words in index order). }
@@ -10706,7 +10706,7 @@ begin
   end
   else if TargetArch = TARGET_RISCV32 then
   begin
-    { RV32 word-based (mirrors the Pascal riscv32 spill in parser.inc): args
+    { RV32 word-based (mirrors the Pascal riscv32 spill in pasparser_*.inc): args
       arrive in a0..a7 (word k in a[k]); scalar = 1 word, by-value
       Int64/UInt64/Double = 2 (lo then hi). Words 8+ stay on the CALLER's stack
       (the IR_CALL site keeps the whole pushed block live when the total exceeds
@@ -10933,7 +10933,7 @@ begin
   PatchProcPrologue(patchPos, FrameSize);
   
   { Restore scope }
-    { DWARF -g: the routine-body tail every Pascal proc ends with (parser.inc).
+    { DWARF -g: the routine-body tail every Pascal proc ends with (pasparser_*.inc).
     Without it this frontend's functions had NO DW_TAG_subprogram, so
     `break <fn>` in gdb answered "Function not defined" — the same total
     absence NilPy had before 58937b717. ProcBodyEnd must be taken after the

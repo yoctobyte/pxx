@@ -617,7 +617,7 @@ end;
 procedure EmitSignalRuntimeForTarget;
 { THE one place that decides which signal runtime a build needs — the sibling of
   EmitIoLockStubsForTarget below, and added for the same reason: the per-arch
-  choice used to be spelled out in the Pascal driver (parser.inc), which is both
+  choice used to be spelled out in the Pascal driver (pasparser_*.inc), which is both
   how a backend name leaked into a shared file and how a per-arch decision ends
   up made in one frontend only.
 
@@ -627,7 +627,7 @@ procedure EmitSignalRuntimeForTarget;
   is a behaviour change, filed separately as
   bug-a-only-the-pascal-driver-emits-the-signal-runtime.
 
-  xtensa has no sibling stub on purpose (see parser.inc's note at the AN_WRITE
+  xtensa has no sibling stub on purpose (see pasparser_*.inc's note at the AN_WRITE
   lowering); riscv32 skips it under --esp-profile=bare, where there is no OS to
   deliver a signal. }
 begin

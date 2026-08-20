@@ -129,5 +129,5 @@ begin
   end;
   { Other targets land in later phases (riscv32/xtensa). }
 end;
-{ EnableCoroutineRuntime lives in parser.inc (it must call EnableExceptionRuntime,
+{ EnableCoroutineRuntime lives in pasparser_name.inc (it must call EnableExceptionRuntime,
   defined there) — see near EnableExceptionRuntime. }

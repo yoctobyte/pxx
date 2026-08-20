@@ -110,15 +110,19 @@ frontend)"). **At session start, infer your track from the request:**
   Works on `master`.
 - **Track P — Pascal frontend (pfront).** The Pascal *dialect* as a language:
   syntax / semantics / new language features and their frontend bugs — a full
-  frontend, peer of C/Z, not "the compiler's impl language." *Physical catch:*
-  Pascal was the seed, so its frontend still lives inside the SHARED `lexer.inc`
-  / `parser.inc` (and Pascal-facing `defs.inc` / `symtab.inc`) rather than its
-  own `plexer` / `pparser` the way C got carved out. So today P shares those
-  files with A: same `master`, same self-host gate, same node/token-numbering
-  discipline, and **P and A must not edit them concurrently** (combined-track
-  note below). Anything below the frontend (IR ops, backends, ABI, ELF) is core
-  A. The clean long-term shape is to split out `plexer`/`pparser` so P owns files
-  like C/Z do. Works on `master`.
+  frontend, peer of C/Z, not "the compiler's impl language." **P now owns its
+  own parser files** (2026-08-20): the 37,249-line `parser.inc` was sliced into
+  `pasparser_name` / `_class` / `_generic` / `_call` / `_lval` / `_expr` /
+  `_stmt` / `_decl` / `_proc` / `_prog`, and the machinery that was never Pascal
+  went with its real owner — `ast_arena.inc`, `inline_expand.inc`,
+  `ast_syminfer.inc`, `dbg_filetable.inc` to **A**, and NilPy's ~200 forwards to
+  **N** as `pyforwards.inc`. The map is at the bottom of
+  `compiler/frontend_forwards.inc`.
+  *Residual catch:* the LEXER is not carved out — Pascal still shares
+  `lexer.inc` with A (and Pascal-facing `defs.inc` / `symtab.inc`), so **P and A
+  must not edit `lexer.inc` concurrently** and the node/token-numbering
+  discipline still binds. A `pas`lexer split is the remaining half. Anything
+  below the frontend (IR ops, backends, ABI, ELF) is core A. Works on `master`.
 - **Track R — Rust frontend (rfront).** The Rust-language frontend and its
   Rust→IR lowering, `lib/rrtl` (as it lands), Rust tests. Live work in
   `devdocs/progress/working/feature-rust-*`. Same rule as C/Z: own your frontend
@@ -218,7 +222,7 @@ frontend)"). **At session start, infer your track from the request:**
   future `compiler/zlexer.inc`, `zparser.inc`, Zig-exclusive Zig→IR lowering,
   `lib/zrtl`, Zig tests. **Works on `master`**, under the same pin boundary as C.
   Same rule as C: own your frontend files; a shared-internals change (new AST
-  node / IR op / symtab field / backend / anything in `lexer.inc`, `parser.inc`,
+  node / IR op / symtab field / backend / anything in `lexer.inc`,
   `ir*.inc`, `symtab.inc`, `defs.inc`, the backends) → **file a Track A ticket**,
   do not edit it under Track Z. Gate = Zig tests green + self-host byte-identical
   + cross. Land only green; destabilizing work behind a flag or incremental,
@@ -230,7 +234,7 @@ frontend)"). **At session start, infer your track from the request:**
   coverage — SQLite CRUD, classes, variants, string methods). Works on `master`,
   under the same pin boundary as C. Same rule as C/Z: own your frontend files; a
   shared-internals change (new AST node / IR op / symtab field / backend / anything
-  in `lexer.inc`, `parser.inc`, `ir*.inc`, `symtab.inc`, `defs.inc`, the backends)
+  in `lexer.inc`, `ir*.inc`, `symtab.inc`, `defs.inc`, the backends)
   → **file a Track A ticket**, do not edit it under N. Gate = `test-nilpy` green +
   self-host byte-identical + cross. Land only green. NOTE the two-hats split: the
   *language* is N; a **NilPy IDE or app built with it is an E app** (Track B
@@ -307,7 +311,9 @@ is the counterweight that keeps "push generality down" from being over-read: **s
 AST and the IR; duplicate the parser, the lexer and their support functions per
 language.** Normalise *within* a language, duplicate *across* languages — a shared parser
 helper couples two specs and is wrong in both. (`parser.inc` was meant to be
-`pasparser.inc`; its generic name is an accident of Pascal being the seed, not a mandate.)
+`pasparser.inc`; its generic name was an accident of Pascal being the seed, not a
+mandate — and it is gone: the file is now the `pasparser_*.inc` set, with the
+map at the bottom of `compiler/frontend_forwards.inc`.)
 
 **`devdocs/dev/root-cause-over-microfix.md`** is when to apply them. A ticket
 reports a SYMPTOM and usually names a plausible cause — and 9 times out of 10
@@ -346,7 +352,7 @@ never rebuild the compiler. `make lib-test` (green smoke) / `make demos`
 Own the C-frontend files (`clexer`/`cparser`/`cpreproc`, C→IR lowering,
 `lib/crtl`, C tests) on `master`. **Shared compiler internals stay A's** — a new
 AST node / IR op / symtab field / backend change (anything in `lexer.inc`,
-`parser.inc`, `ir*.inc`, `symtab.inc`, `defs.inc`, the backends) → **file a Track
+`ir*.inc`, `symtab.inc`, `defs.inc`, the backends) → **file a Track
 A ticket**, do not edit it under Track C. That rule keeps A's self-host gate safe
 and is what stops AST-node-number / token collisions. Gate = C tests green +
 self-host byte-identical + cross. Land only green; big destabilizing work goes in
@@ -367,8 +373,8 @@ topics**:
   mostly-disjoint file set (`cparser` vs `pyparser` vs `zparser` vs the Rust files…),
   so their edits merge cleanly. So **A+N, B+N, N+C**, etc. are all fine — N owns
   `pylexer`/`pyparser`, disjoint from every other lane. The catch is **P**: the
-  Pascal frontend still lives in the *shared* `lexer.inc`/`parser.inc`, so "P +
-  anything" touches A's ground — treat the P edits under A's gate + no-concurrent-edit
+  Pascal frontend still shares `lexer.inc` with A (its parser is carved out, its
+  lexer is not), so "P + anything" still touches A's ground — treat the P edits under A's gate + no-concurrent-edit
   rule. (N does NOT have this catch — it's carved out like C/Z.) For automated /
   scheduled workers the overlap rules may need tuning, but a single supervised
   agent holding e.g. A+N is exactly the intended combined-track case.
@@ -391,7 +397,8 @@ Verify code snippets by compiling them; don't invent behaviour.
 
 ### Track P in one line
 Full Pascal-language frontend (peer of C/Z), but its files aren't carved out yet
-— it lives in the SHARED `lexer.inc` / `parser.inc` (Pascal paths). So same
+— its PARSER is carved out (`pasparser_*.inc`) but its LEXER still lives in the
+SHARED `lexer.inc`. So same
 `master`, same gate = `make test` + self-host fixedpoint (byte-identical), plus
 cross where a target is touched, and **never edit those files concurrently with
 A**. IR / backends / ABI / ELF are core A: a Pascal feature needing a new IR op /
@@ -570,7 +577,7 @@ That assignment is complete on its own: the roster's opening section is the whol
 job, and nothing else is needed to start. **No more, no less** (user, 2026-08-17).
 
 The coordinator holds no lane and **writes no code** — it dispatches idle workers
-from the ranked queues, owns the A/P slot (A and P share `lexer.inc`/`parser.inc`
+from the ranked queues, owns the A/P slot (A and P still share `lexer.inc`
 and must never be edited concurrently), runs pins because they hold a repo-wide
 lock, routes decisions to Track U, and relays findings between workers, who cannot
 see each other. Taking a ticket is the failure mode, not a bonus: the one session
@@ -733,7 +740,7 @@ fix the doc, not the loop.
   2. `tools/progress.sh next` — the single highest-effective-prio ready ticket,
      any track. (If the user *did* name a track, use `next --track <X>` instead.)
   3. **Sole-A guard:** if that ticket is Track A — or a Track P edit that touches
-     the shared `lexer.inc`/`parser.inc` (i.e. it edits shared core/IR files) —
+     the shared `lexer.inc` (i.e. it edits shared core/IR files) —
      confirm you are the *only* agent on Track A right now; ask the user if you
      can't tell. If you're not sole-A, skip it and take the top of a non-A track
      (`next --track C|B|R|D`). Any non-shared ticket: just claim it.

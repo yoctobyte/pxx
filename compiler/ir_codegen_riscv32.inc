@@ -2285,7 +2285,7 @@ begin
           end;
         end;
 
-        { Word-based argument passing (matches the callee spill in parser.inc):
+        { Word-based argument passing (matches the callee spill in pasparser_*.inc):
           each scalar arg is one word, a by-value Int64/UInt64 is two (lo then
           hi). nArgs counts WORDS here; word k is pushed in index order so it
           lands at [sp + (nWords-1-k)*4], then loads into a[k] (<=8 words). }
@@ -2452,7 +2452,7 @@ begin
         begin
           { Words 8+ pass on the stack: keep the WHOLE pushed word block live
             across the call (the callee reads word k >= 8 at
-            [entry_sp + (nArgs-1-k)*4], see the parser.inc rv32 param spill),
+            [entry_sp + (nArgs-1-k)*4], see the pasparser_*.inc rv32 param spill),
             load a0..a7 from their slots, and free everything after return. }
           for i := 0 to 7 do
             rv32_lw(reg_a0 + i, reg_sp, (nArgs - 1 - i) * 4);
