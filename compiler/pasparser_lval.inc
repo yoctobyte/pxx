@@ -4406,7 +4406,16 @@ function NodePtrElem(node: Integer; var elemTk: TTypeKind; var elemRec: Integer;
   just a wrong tag.
 
   Pointer arithmetic keeps the pointer's type, so the pointee comes from
-  whichever operand carries one. bug-p-a-pchar-plus-offset-loses-its-type-when-dereferenced }
+  whichever operand carries one. bug-p-a-pchar-plus-offset-loses-its-type-when-dereferenced
+
+  The FIELD and PTR_CAST arms were added for
+  bug-p-a-second-deref-on-a-typecast-pointer-field-is-dropped: the alias-cast
+  postfix loop in pasparser_expr.inc answered every `^` in a chain from the
+  ORIGINAL cast's alias, so `PRec(raw)^.n^` typed the second deref as the
+  record the CAST points at instead of what the FIELD points at. Same shape as
+  NodeMetaclassCi's note below — one predicate that knows every spelling beats
+  a per-site copy that knows one, because the copy is what goes stale. }
+var baseRec, fIdx: Integer;
 begin
   Result := False;
   if (node < 0) or (node >= ASTNodeCount) or (depth > 8) then Exit;
@@ -4420,6 +4429,28 @@ begin
   end
   else if ASTKind[node] = AN_INDEX then
     Result := NodePtrElem(ASTLeft[node], elemTk, elemRec, depth + 1)
+  else if ASTKind[node] = AN_FIELD then
+  begin
+    { A pointer-typed FIELD: the pointee is the FIELD's, from UFldPtrElem*. }
+    if IntToTypeKind(ASTTk[node]) <> tyPointer then Exit;
+    baseRec := ResolveNodeRec(ASTLeft[node]);
+    if baseRec < REC_UCLASS_BASE then Exit;
+    fIdx := FindUField(baseRec - REC_UCLASS_BASE, GetASTIdentName(node));
+    if fIdx < 0 then Exit;
+    elemTk := IntToTypeKind(UFldPtrElemTk[fIdx]);
+    elemRec := UFldPtrElemRec[fIdx];
+    Result := elemTk <> tyUnknown;
+  end
+  else if ASTKind[node] = AN_PTR_CAST then
+  begin
+    { An inline typed pointer cast: the pointee is the alias's. A NEGATIVE
+      ASTIVal is an adapter marker (-2 = the PChar +8 skip, -1 = a widening
+      ordinal pun), not an alias row — those carry no pointee here. }
+    if ASTIVal[node] < 0 then Exit;
+    elemTk := IntToTypeKind(AliasElemTk[ASTIVal[node]]);
+    elemRec := AliasElemRec[ASTIVal[node]];
+    Result := elemTk <> tyUnknown;
+  end
   else if (ASTKind[node] = AN_BINOP) and
           (TTokenKind(ASTIVal[node]) in [tkPlus, tkMinus]) then
   begin

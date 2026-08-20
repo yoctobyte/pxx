@@ -3975,6 +3975,20 @@ test-core: $(COMPILER)
 	# proves the substitution reaches the named-type tables too.
 	./$(COMPILER) -Fulib/rtl test/test_typeinfo_generic_param.pas $(TESTTMP)/test_typeinfo_gen26
 	test "$$($(TESTTMP)/test_typeinfo_gen26)" = "$$(printf 'Integer 1\nByte 1\nAnsiString 9\nTSub 1')"
+	# An INLINE typed-pointer cast must not lose a pointer FIELD's pointee type.
+	# PRec(raw)^.n^ typed the second ^ from the CAST's alias instead of from the
+	# field the ^ applies to, so the bytes were right and only the tag was
+	# wrong. Rows 3 and 7 were the broken ones; 2/4/5 are the three things that
+	# hid it (a variable spelling that worked, a ^Int64 field whose wrong tag
+	# happened to match, and one level always being fine).
+	./$(COMPILER) test/test_cast_deref_pointer_field.pas $(TESTTMP)/test_cast_deref26
+	test "$$($(TESTTMP)/test_cast_deref26)" = "$$(printf '2 var  n^     : hello\n3 cast n^     : hello\n4 cast m^     : 99\n5 cast k      : 42\n6 field  n^   : hello\n7 nocast p^n^ : hello')"
+	# …and its siblings, checked before closing rather than after the next
+	# report: a doubly-nested ^.^.^, and a deref of an ELEMENT of a pointer
+	# array field (INDEX arm into the new FIELD arm). Length/concat put the
+	# derefed value in contexts Writeln does not.
+	./$(COMPILER) test/test_cast_deref_chain_siblings.pas $(TESTTMP)/test_cast_sib26
+	test "$$($(TESTTMP)/test_cast_sib26)" = "$$(printf 'a nested ^.^.^  : world\nb field arr[i]^ : world\nc len of deref  : 5\nd concat        : hello!\ne nested field  : world?')"
 	# A program naming `puint8` must compile QUIETLY: FindTypeAlias carried a
 	# leftover debug dump keyed on that exact name, printing the whole alias
 	# table to STDOUT before the pointer-alias fallback resolved it. The

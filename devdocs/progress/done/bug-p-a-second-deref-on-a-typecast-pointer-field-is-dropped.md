@@ -4,8 +4,8 @@ prio: 70
 type: bug
 blocked-by: []
 summary: "`PRec(raw)^.n^` — deref an INLINE typecast, take a pointer-to-string field, deref again — yields the raw heap pointer instead of the string. The deref happens; the POINTEE TYPE is lost, so the result comes back integer-ish (a `^Int64` field through the same cast is correct, which is what proves it). Parking the cast in a variable first is correct, so two spellings of one expression disagree. Wrong value, no diagnostic, no crash."
-status: urgent
-owner: unassigned
+status: done
+owner: claude-acp
 ---
 
 # P an inline typecast drops a pointer field's POINTEE TYPE
@@ -98,3 +98,89 @@ it and **file** rather than edit if it does (Track N's file).
 `make compiler/pascal26` + the repro above + `tools/gate.sh quick`. The test
 that bites is the three-row diff, not just the middle row — the point is that
 the two spellings must AGREE.
+
+
+---
+
+## Fixed — 2026-08-20
+
+### Measured root cause (the AST, not a theory)
+
+`PXXDBG=a.ast` on the two spellings, side by side. Working (`p^.n^`):
+
+```
+#8197 kind=36 tk=23   <- DEREF, tk = tyAnsiString   CORRECT
+  #8196 kind=11 tk=17 <- FIELD .n, tk = tyPointer
+    #8195 kind=36 tk=5 ival=21   <- DEREF, carries the pointee rec id
+      #8194 kind=3  tk=17        <- IDENT p
+```
+
+Broken (`PRec(raw)^.n^`):
+
+```
+#8198 kind=36 tk=5    <- DEREF, tk = tyRecord       WRONG
+  #8197 kind=11 tk=17 <- FIELD .n, tk = tyPointer   (correct!)
+    #8196 kind=36 tk=5 ival=0
+      #8195 kind=39 tk=17 ival=13  <- PTR_CAST, alias row 13
+        #8194 kind=3 tk=17         <- IDENT raw
+```
+
+The field resolves correctly in both. Only the OUTER deref differs, and it came
+back `tyRecord` — the type `PRec` points at — which is exactly what the
+alias-cast postfix loop in `pasparser_expr.inc` (~5223) assigns:
+
+```pascal
+{ After ^, type becomes the pointee }
+tk      := IntToTypeKind(AliasElemTk[aliasIdx]);
+recName := AliasElemRec[aliasIdx];
+```
+
+`aliasIdx` is the alias of the cast that OPENED the chain and never changes, so
+every `^` in the chain is answered from it. By the second `^` the node is the
+field, not the cast. All three things that hid it follow from that: the variable
+spelling goes through a different loop, the `^Int64` field "works" because the
+wrong tag happens to match, and one level is always fine because at one level
+the node IS the cast.
+
+### The fix — the shared predicate, not the call site
+
+`NodePtrElem` (`compiler/pasparser_lval.inc`) already exists as "the pointee of
+a pointer-valued expression", knowing AN_IDENT / AN_INDEX / AN_BINOP. It was
+missing the two spellings this chain uses, so it got them — a pointer FIELD
+(`UFldPtrElem*` via `ResolveNodeRec`) and an inline `AN_PTR_CAST` (the alias
+row, guarding the NEGATIVE adapter markers, which are not alias rows). The
+caret arm now asks the predicate about the CURRENT node and falls back to
+`aliasIdx` only when it has no answer — which is exactly what the `-1`/`-2`
+adapter casts need, so their behaviour is unchanged.
+
+Same shape as `NodeMetaclassCi`, whose own header says it: one predicate that
+knows every spelling beats a per-site copy that knows one, because the copy is
+what goes stale.
+
+### Siblings checked BEFORE closing
+
+`test/test_cast_deref_chain_siblings.pas` — a doubly-nested `^.^.^`, a deref of
+an ELEMENT of a pointer-array field (INDEX arm into the new FIELD arm), plus
+`Length()` and a concatenation, which put the derefed value in contexts
+`Writeln` does not. All five match FPC 3.2.2.
+
+### Filed, not fixed here
+
+- [[bug-n-inline-cast-deref-loses-a-pointer-fields-pointee]] —
+  `compiler/pyparser.inc:44098` holds a BYTE-IDENTICAL copy of the broken caret
+  arm. Track N's file, N deferred, so handed off. It shares `NodePtrElem`, so
+  only the caret arm needs changing there.
+- [[refactor-p-three-hand-rolled-postfix-loops]] — the overhaul this exposed
+  and deliberately did not attempt. There are THREE hand-rolled copies of the
+  `^ / .field / [i]` loop in Pascal (plus N's), and they have produced four
+  separate silent wrong-value bugs, each fixed in one copy. Banked with the
+  evidence rather than microfixed away.
+
+### Tests
+
+`test/test_cast_deref_pointer_field.pas` (the seven-row table above) and
+`test/test_cast_deref_chain_siblings.pas`. The pinned binary prints the heap
+address for rows 3 and 7, so both bite.
+
+## Log
+- 2026-08-20 — resolved, commit PENDING-COMMIT.

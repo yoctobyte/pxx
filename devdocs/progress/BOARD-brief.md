@@ -5,16 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 unfinished:17 blocked:8 backlog:272 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2156 rejected:40`
+`urgent:1 unfinished:17 blocked:8 backlog:274 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2157 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## urgent (2) — jump the queue
+## urgent (1) — jump the queue
 
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
-- `bug-p-a-second-deref-on-a-typecast-pointer-field-is-dropped` [P]
 
 ## unfinished (17) — parked mid-flight; re-claim, do not duplicate
 
@@ -47,10 +46,9 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 261, ranked
+## Ready — top 30 of 262, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
-- `[p 70] [P]` bug-p-a-second-deref-on-a-typecast-pointer-field-is-dropped
 - `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree
 - `[p 70] [T]` regression-test-c-conformance-shard1-6
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-callable-to-str-param-fails
@@ -79,5 +77,6 @@ _none — no lane is locked._
 - `[p 55] [U]` decide-reduced-compiler-switch-spelling
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
+- `[p 55] [E]` feature-demo-portable-userland
 
-_231 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_232 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

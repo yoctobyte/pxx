@@ -321,6 +321,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     tiName: AnsiString; tiTk: TTypeKind;   { widened TypeInfo(T): scalar/string/class/record }
     tiAlias: Integer;   { …and the alias-table row when it is a NAMED structural type }
     tiArr: Integer;     { …and the ArrType row when it is a NAMED array type }
+    elemTk: TTypeKind; elemRec: Integer;   { pointee of the node a `^` is applied to }
     pyLateDefPi: Integer;   { NilPy def not yet bound at this call site; -1 = none }
 begin
   { NilPy runs its own copy of this routine (pyparser.inc). The dispatch is
@@ -5227,9 +5228,30 @@ begin
               Next;
               indexNode := AllocNode(AN_DEREF);
               ASTLeft[indexNode] := node;
-              { After ^, type becomes the pointee }
-              tk      := IntToTypeKind(AliasElemTk[aliasIdx]);
-              recName := AliasElemRec[aliasIdx];
+              { After ^ the type is the pointee of the CURRENT node, which is
+                not always the cast: by the second `^` in `PRec(raw)^.n^` the
+                node is the FIELD `n`, and answering from aliasIdx here typed
+                that deref as the record PRec points at. The deref still
+                happened, so the bytes were right and only the TAG was wrong —
+                Writeln printed the string's heap address as an integer, while
+                the same chain with the cast parked in a variable was correct,
+                and a `^Int64` field through the same cast "worked" because the
+                wrong tag happened to match. Silent, and one of the two
+                spellings of one expression.
+                bug-p-a-second-deref-on-a-typecast-pointer-field-is-dropped }
+              elemTk := tyUnknown; elemRec := REC_NONE;
+              if NodePtrElem(node, elemTk, elemRec, 0) then
+              begin
+                tk      := elemTk;
+                recName := elemRec;
+              end
+              else
+              begin
+                { No pointee on the node — the adapter casts (-1/-2) land here,
+                  and for them the alias IS the right answer. }
+                tk      := IntToTypeKind(AliasElemTk[aliasIdx]);
+                recName := AliasElemRec[aliasIdx];
+              end;
               ASTTk[indexNode] := StrValTk(tk);
               node := indexNode;
             end
