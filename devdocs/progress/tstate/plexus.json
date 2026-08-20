@@ -1,18 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T19:34:58Z",
-   "fixed": [
-    "test-nilpy#src:test/test_nilpy_kwarg_overload_set.npy",
-    "test-nilpy#src:test/test_nilpy_qualified_proc_omitted_default.npy",
-    "test-nilpy#src:test/test_nilpy_tobject_member_via_local.npy"
-   ],
-   "new_red": [],
-   "sha": "a15cb05fa9ce23eb569aa134d8ad1f32310f026c",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-19T19:39:37Z",
    "fixed": [],
    "new_red": [],
@@ -430,13 +418,21 @@
    "sha": "b1033f3346d5f12b91027bcdca0d59ea8c173f6d",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-20T12:00:02Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "f14d5d48792a526e7014e0bdfe9344e2801a5223",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
-  "test-core#src:test/cfnptr_deref_call_b241.c": "ok: $TMP  [code=90980B  data=504B  bss=4832B  procs=382] | Segmentation fault (core dumped)",
-  "test-core#src:test/cfnptr_typedef_global_b166.c": "ok: $TMP  [code=90100B  data=504B  bss=4832B  procs=381] | Segmentation fault (core dumped)",
-  "test-core#src:test/cglobal_fnptr_addressof_b161.c": "ok: $TMP  [code=90269B  data=504B  bss=4832B  procs=386] | Segmentation fault (core dumped)",
+  "test-core#src:test/cfnptr_deref_call_b241.c": "ok: $TMP  [code=94178B  data=504B  bss=4832B  procs=382] | Segmentation fault (core dumped)",
+  "test-core#src:test/cfnptr_typedef_global_b166.c": "ok: $TMP  [code=93298B  data=504B  bss=4832B  procs=381] | Segmentation fault (core dumped)",
+  "test-core#src:test/cglobal_fnptr_addressof_b161.c": "ok: $TMP  [code=93467B  data=504B  bss=4832B  procs=386] | Segmentation fault (core dumped)",
   "test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy": "ok: $TMP  [code=2568790B  data=74180B  bss=52788B  procs=2020]"
  },
  "job_tier": {
@@ -1665,6 +1661,7 @@
   "test-core#src:test/test_int_arg_to_float_param.pas": "native",
   "test-core#src:test/test_int_sized_names_b261.pas": "native",
   "test-core#src:test/test_int_to_float.pas": "native",
+  "test-core#src:test/test_integer_cast_truncates_rvalue.pas": "native",
   "test-core#src:test/test_integer_longint_overload.pas": "native",
   "test-core#src:test/test_interface_arc.pas": "native",
   "test-core#src:test/test_interface_arc_exc.pas": "native",
@@ -4045,6 +4042,7 @@
   "test-core#src:test/test_int_arg_to_float_param.pas": "pass",
   "test-core#src:test/test_int_sized_names_b261.pas": "pass",
   "test-core#src:test/test_int_to_float.pas": "pass",
+  "test-core#src:test/test_integer_cast_truncates_rvalue.pas": "pass",
   "test-core#src:test/test_integer_longint_overload.pas": "pass",
   "test-core#src:test/test_interface_arc.pas": "pass",
   "test-core#src:test/test_interface_arc_exc.pas": "pass",
@@ -4686,11 +4684,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T11:50:36Z",
-  "sha": "b1033f3346d5f12b91027bcdca0d59ea8c173f6d",
+  "date": "2026-08-20T12:00:02Z",
+  "sha": "f14d5d48792a526e7014e0bdfe9344e2801a5223",
   "tier": "native",
   "verdict": "RED",
-  "wall": 452.8
+  "wall": 451.8
  },
  "last_bench": {
   "conf_rows": 550,
