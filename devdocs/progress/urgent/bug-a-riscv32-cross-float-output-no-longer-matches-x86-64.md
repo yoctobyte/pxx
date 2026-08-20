@@ -1,8 +1,8 @@
 ---
 slug: bug-a-riscv32-cross-float-output-no-longer-matches-x86-64
-track: A+F
-prio: 20
-status: parked
+track: A
+prio: 65
+status: urgent
 ---
 
 # `test-riscv32#src:test/test_cross_float.pas` — the two sides print the same numbers at different widths
@@ -112,3 +112,47 @@ recorded as a known-red with this ticket as its reason, or the trivial half of o
 x86-64's output) is done as a **test** fix by whoever owns that Makefile line. Neither is
 float-accuracy work. Flagged so the red does not get re-triaged from scratch in a week by
 someone who cannot see this ticket in `ready`.
+
+## 2026-08-20 — BACK TO `urgent/` (owner): it BLOCKS PINNING, and that is a reason on its own
+
+Owner: *"yes i figured, that regression breaks our pinning. that's a valid reason to mark it
+urgent anyways."*
+
+Correct, and it overturns the parking two paragraphs above — **on a different ground than the
+one the parking was argued on.** Both things are true at once and the ticket now has to say so
+without letting either erase the other:
+
+- **As float work it is still low prio.** Digits and exponent width, values agreeing, the new
+  rendering arguably the more correct one. Nothing here is worth a float engineer's afternoon.
+- **As a PIN BLOCKER it is urgent**, because a red job in the matrix counts against
+  `pin_shadow` regardless of how uninteresting its subject is. A stuck pin gate costs every
+  lane, and the cost has nothing to do with floats.
+
+**So the `F` tag is REMOVED and the track is plain `A`.** That is not a reclassification of the
+subject — it is recognition that **the work that unblocks the pin is not float work at all.**
+Option 1 in the analysis above is a *test* change: generate the expectation for the target's
+own float depth instead of diffing riscv32's output against x86-64's. No float math, no
+rendering change, no ULP judgement. Leaving it tagged `F` would park the bookkeeping along
+with the physics, which is precisely how the red would have survived indefinitely.
+
+### The general shape, worth carrying past this ticket
+
+**A ticket can be low-prio by SUBJECT and urgent by CONSEQUENCE, and the deferral rules key on
+subject only.** The F charter, the mandate, every lane rule — all of them answer "what is this
+about?". None of them answers "what does leaving it red cost?". When those two disagree, the
+consequence wins for *scheduling* while the subject still decides *who does it and how much
+effort it deserves*.
+
+This is the second time in one day that a stuck `pin_shadow` turned an unremarkable ticket into
+a blocking one — see the cpyext decision, whose six reds held `would_pin` permanently false.
+**Check the pin gate's red set before parking anything**, because parking stops dispatch and
+never stops the failure.
+
+### What the urgent work is, and what it is NOT
+
+**Do:** make the riscv32/xtensa comparison use an expectation generated for that target's float
+depth (`Makefile:8225` is a straight equality of the two outputs), or record the job as a
+known-red with this ticket as its reason. Cheapest correct thing wins; it is bookkeeping.
+
+**Do NOT:** change `PXXWriteFloatSci`, adjust digit counts, or chase the rendering difference.
+The rendering is believed correct and that question stays low-prio.
