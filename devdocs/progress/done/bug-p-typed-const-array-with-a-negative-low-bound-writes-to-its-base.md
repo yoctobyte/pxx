@@ -96,3 +96,28 @@ from the reader during diagnosis (the reader was never wrong).
 
 ## Log
 - 2026-08-20 — resolved, commit 9afcd676a.
+
+## Follow-up, same day — one writer did not move with the readers
+
+The sentinel rename (`-1`/`-2` -> `PI_ELEM_NONE`/`PI_ELEM_ADDRG`) moved ten
+write sites in `parser.inc` and seven in `cparser.inc`. It missed an eighth:
+`cparser.inc:7708`, the `if not wasArr then ... := -1` arm of the C
+array/struct initializer walker. The READERS had already moved, so a C
+initializer for a non-array target kept writing `-1` and the global-init flush
+read it as a real element index, emitting `sym[-1] := value` — a store one slot
+below the symbol.
+
+Track T caught it within the hour: three C regressions at `b645e1b2aff7`
+([[regression-test-core-cfnptr-deref-call-b241]],
+[[regression-test-core-cfnptr-typedef-global-b166]],
+[[regression-test-core-cglobal-fnptr-addressof-b161]]), all function-pointer
+globals, because for those the slot below the symbol is live and the call went
+through a corrupted target. One line fixed all three.
+
+The lesson generalises past this ticket: **when a change redefines what a VALUE
+means, grep the array's NAME for every read and every write** — not the pattern
+the fix happened to touch. Both of today's misses (this one and
+`ParseRecordVariantPart` in
+[[bug-p-record-field-array-with-a-non-zero-low-bound-writes-out-of-bounds]])
+were sites with no text in common with the code being changed, so a
+pattern-shaped grep could not see them.

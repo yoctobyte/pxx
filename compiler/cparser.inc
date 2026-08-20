@@ -7705,7 +7705,7 @@ begin
       if (idx >= 0) and (PendingInitHasRoom(PendingInitCount)) then
       begin
         PendingInitSym[PendingInitCount]  := idx;
-        if not wasArr then PendingInitElem[PendingInitCount] := -1
+        if not wasArr then PendingInitElem[PendingInitCount] := PI_ELEM_NONE
         else if fnHadDesig then PendingInitElem[PendingInitCount] := arrTgt[ei]
         else PendingInitElem[PendingInitCount] := ei;
         PendingInitFLen[PendingInitCount] := 0;

@@ -705,3 +705,26 @@ reported**: the compiler binary was rebuilt underneath it mid-run, so its
 results describe no single compiler. Noted because the mistake is easy to repeat
 — the harness takes `--compiler <path>` and reads that path per program, so a
 `make compiler/pascal26` during a run silently splits the batch in two.
+
+### Sitting 2 — 2026-08-20, seeds 20000..20249, `--opts 0,2,3`, x86-64
+
+```
+tools/csmith_fuzz.py --iters 250 --seed-start 20000 --opts 0,2,3 \
+  --compiler <a snapshot copy of compiler/pascal26 at fabe8e845>
+```
+
+**217/250 agreed with the gcc oracle, 33 skipped by the native validity filter,
+no findings.** A fresh seed range, so it does not re-walk sitting 1's ground.
+
+The operational note from sitting 1 — that a `make compiler/pascal26` during a
+run silently splits the batch across two compilers — has a cheap fix worth
+writing down, because the run is long and the session usually wants to keep
+working: **`cp compiler/pascal26 <scratch>/pxx-<sha>` and pass that path to
+`--compiler`.** The harness reads the path per program, so a snapshot pins the
+whole batch to one binary and the tree stays free to rebuild. Name the copy
+after the sha; the batch's provenance is then in the filename rather than in
+someone's memory.
+
+Caveat learned the same way: the snapshot cannot compile anything that `uses`
+the RTL, because pxx resolves `lib/` relative to its own location. Fine for
+csmith (freestanding C), not a general-purpose trick.

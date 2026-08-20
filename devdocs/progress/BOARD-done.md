@@ -1970,7 +1970,10 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-676 | T | 70 | regression | regression: test-core#676 red at 51f2a8a3258f (auto-filed by twatch) | — |
 | regression-test-core-callbacks-2 | N | 70 | regression | regression: test-core#src:examples/tk/callbacks.npy red at 9bbbbef6c055 (auto-filed by twatch) | — |
 | regression-test-core-callbacks | T | 70 | regression | regression: test-core#src:examples/tk/callbacks.npy red at 410b7a40b516 (auto-filed by twatch) | — |
+| regression-test-core-cfnptr-deref-call-b241 | C | 70 | regression | regression: test-core#src:test/cfnptr_deref_call_b241.c red at b645e1b2aff7 (auto-filed by twatch) | — |
+| regression-test-core-cfnptr-typedef-global-b166 | C | 70 | regression | regression: test-core#src:test/cfnptr_typedef_global_b166.c red at b645e1b2aff7 (auto-filed by twatch) | — |
 | regression-test-core-cgeneric-selection-b209 | T | 70 | regression | regression: test-core#src:test/cgeneric_selection_b209.c red at 42786f141ea7 (auto-filed by twatch) | — |
+| regression-test-core-cglobal-fnptr-addressof-b161 | C | 70 | regression | regression: test-core#src:test/cglobal_fnptr_addressof_b161.c red at b645e1b2aff7 (auto-filed by twatch) | — |
 | regression-test-core-cmath-trig-family-b385 | T | 70 | regression | regression: test-core#src:test/cmath_trig_family_b385.c red at 93d6232f05d1 (auto-filed by twatch) | — |
 | regression-test-core-compiler-2 | P | 70 | regression | regression: test-core#src:compiler/compiler.pas@2 red at 21117f415284 (auto-filed by twatch) | — |
 | regression-test-core-compiler-3 | P | 70 | regression | regression: test-core#src:compiler/compiler.pas@2 red at 003d733936aa (auto-filed by twatch) | — |
