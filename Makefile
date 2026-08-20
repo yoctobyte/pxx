@@ -4244,6 +4244,15 @@ test-core: $(COMPILER)
 	# keeps Python's rules, excluded at emit time. The pinned binary scores 10/27.
 	./$(COMPILER) test/test_variant_string_arithmetic.pas $(TESTTMP)/test_varstrarith26
 	test "$$($(TESTTMP)/test_varstrarith26 | tail -1)" = "total ok 27 / 27"
+	# Every class descends from TObject, but nothing said so at RUN TIME: a root
+	# class's RTTI blob carried a nil parent, so the chain __pxxInheritsFrom walks
+	# stopped one link short. `b is TObject` and `TBase.InheritsFrom(TObject)` both
+	# answered FALSE, for every class in the program -- and `except on E: TObject`
+	# never fired, so a catch-all handler let the process abort instead. The link
+	# is RTTI, not layout, so TObject stays the IMPLICIT parent it has to be (no
+	# VMT relocates). The pinned binary aborts on the unhandled exception.
+	./$(COMPILER) test/test_class_inherits_from_tobject.pas $(TESTTMP)/test_inhtobj26
+	test "$$($(TESTTMP)/test_inhtobj26 | tail -1)" = "total ok 24 / 24"
 	./$(COMPILER) test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_nativeshift26
 	test "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
 	test "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"

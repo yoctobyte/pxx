@@ -553,7 +553,7 @@ end;
 procedure EmitRTTI;
 var ci, i, j, k, base, cnt, hdr, strIdx, etid: Integer;
     propCount, methCount, fieldCount, ifaceCount, firstOff, entryOff: Integer;
-    regEntries, entryPos: Integer;
+    regEntries, entryPos, tobjCi: Integer;
     nm: AnsiString;
 begin
   RTTIRegistryOff := -1;
@@ -597,9 +597,26 @@ begin
       strIdx := InternStr(nm);
       AddDataPtrFix(hdr + 0, Strs[strIdx].Offset);
 
-      { parent RTTI }
+      { parent RTTI. A ROOT class (`class ... end`, or the explicit
+        `class(TObject)` spelling, which RegisterBuiltinTObject deliberately
+        leaves at parentCi = -1 so no VMT relocates) still descends from TObject
+        in the LANGUAGE, and this chain is what answers that question at run
+        time. Leaving it nil made `b is TObject` and `TBase.InheritsFrom(TObject)`
+        answer FALSE — silently, and for every class in the program — while
+        `TDer.InheritsFrom(TBase)` was right, because only the implicit root link
+        was missing. Linking it HERE costs nothing: the blob's parent word is
+        RTTI, not layout, so the implicit-root VMT model is untouched.
+        Interfaces are excluded (an interface does not descend from TObject),
+        and TObject itself keeps a nil parent, which is what terminates the walk.
+        bug-p-a-class-does-not-inherit-from-tobject-at-run-time }
       if (UClsParent[ci] >= 0) and (UClsRTTIOff[UClsParent[ci]] >= 0) then
-        AddDataPtrFix(hdr + 8, UClsRTTIOff[UClsParent[ci]]);
+        AddDataPtrFix(hdr + 8, UClsRTTIOff[UClsParent[ci]])
+      else if (UClsParent[ci] < 0) and (not UClsIsInterface[ci]) then
+      begin
+        tobjCi := FindUClass('TObject');
+        if (tobjCi >= 0) and (tobjCi <> ci) and (UClsRTTIOff[tobjCi] >= 0) then
+          AddDataPtrFix(hdr + 8, UClsRTTIOff[tobjCi]);
+      end;
 
       { instance size }
       PatchDataU64(hdr + 16, UClsSize_[ci]);
