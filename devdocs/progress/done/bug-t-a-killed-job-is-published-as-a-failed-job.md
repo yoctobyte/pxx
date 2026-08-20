@@ -128,4 +128,4 @@ reddens the run.
 `make tools-devtest` — 55 guards green.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 35383f56b.
