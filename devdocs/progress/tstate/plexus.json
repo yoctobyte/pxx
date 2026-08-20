@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T17:38:55Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "21f098e32a95be73bdeae3832aedfe65677292f7",
-   "tier": "opt",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T18:26:32Z",
    "fixed": [],
    "new_red": [],
@@ -421,12 +413,20 @@
    "sha": "4b27f1b17fdd33a4136ac478c3d6fb51234e520b",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-20T10:13:23Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "f93574b677776376b628be550e59420935b7a771",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "test-core#src:test/test_asm_emit.pas": "ok: $TMP  [code=95698B  data=2800B  bss=9532B  procs=203]",
-  "test-core#src:test/test_integer_longint_overload.pas": "+++ -\t2026-08-20 11:59:02.794146642 +0200 | @@ -1,3 +1,3 @@ | FFFFFFFF FFFFFFFF FFFFFFFF | -FFFFFFFFFFFFFFFF FFFFFFFF | +FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF | longint longint int64 longword",
+  "test-core#src:test/test_integer_longint_overload.pas": "+++ -\t2026-08-20 12:07:51.776879247 +0200 | @@ -1,3 +1,3 @@ | FFFFFFFF FFFFFFFF FFFFFFFF | -FFFFFFFFFFFFFFFF FFFFFFFF | +FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF | longint longint int64 longword",
   "test-core#src:test/test_strict_overload_width.pas@1": "ok: $TMP  [code=293112B  data=9124B  bss=53920B  procs=586]",
   "test-core#src:test/test_strict_overload_width.pas@2": "ok: $TMP  [code=293112B  data=9124B  bss=53920B  procs=586]",
   "test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy": "ok: $TMP  [code=2568790B  data=74180B  bss=52788B  procs=2020]"
@@ -1195,6 +1195,7 @@
   "test-core#src:test/cptr_to_multidim_array.c": "native",
   "test-core#src:test/cptrcast_deref_double_b81.c": "native",
   "test-core#src:test/cptrdiff_addr_elem_b175.c": "native",
+  "test-core#src:test/cptrdiff_elem_types.c": "native",
   "test-core#src:test/cptrdiff_vararg_b.c": "native",
   "test-core#src:test/cptrptr_clear_chain_b54.c": "native",
   "test-core#src:test/cquickjs_prereq.c": "native",
@@ -3569,6 +3570,7 @@
   "test-core#src:test/cptr_to_multidim_array.c": "pass",
   "test-core#src:test/cptrcast_deref_double_b81.c": "pass",
   "test-core#src:test/cptrdiff_addr_elem_b175.c": "pass",
+  "test-core#src:test/cptrdiff_elem_types.c": "pass",
   "test-core#src:test/cptrdiff_vararg_b.c": "pass",
   "test-core#src:test/cptrptr_clear_chain_b54.c": "pass",
   "test-core#src:test/cquickjs_prereq.c": "pass",
@@ -4664,11 +4666,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T10:05:32Z",
-  "sha": "4b27f1b17fdd33a4136ac478c3d6fb51234e520b",
+  "date": "2026-08-20T10:13:23Z",
+  "sha": "f93574b677776376b628be550e59420935b7a771",
   "tier": "native",
   "verdict": "RED",
-  "wall": 418.9
+  "wall": 395.3
  },
  "last_bench": {
   "conf_rows": 550,
