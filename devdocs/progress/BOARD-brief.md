@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:20 blocked:9 backlog:273 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2161 rejected:40`
+`urgent:1 unfinished:20 blocked:9 backlog:272 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2163 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -50,10 +50,9 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 261, ranked
+## Ready — top 30 of 260, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
-- `[p 70] [T]` regression-cascade-426b90021634
 - `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree
 - `[p 70] [T]` regression-test-c-conformance-shard1-6
 - `[p 70] [P]` regression-test-core-test-record-helper-for-string-b331
@@ -82,5 +81,6 @@ _none — no lane is locked._
 - `[p 55] [T]` chore-t-split-lib-test-into-jobs-that-name-what-failed
 - `[p 55] [U]` decide-reduced-compiler-switch-spelling
 - `[p 55] [N]` feature-a-declaration-phase
+- `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 
-_231 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_230 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

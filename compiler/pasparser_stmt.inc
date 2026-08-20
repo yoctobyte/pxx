@@ -4248,6 +4248,7 @@ var
   castFieldName: AnsiString; castTk: TTypeKind; castRec: Integer;
   decVal, decNode: Integer; strIsFloat: Boolean;
   valTmpSym, valTmpAssign, valTmpIdent: Integer;
+  miArg, miEmpty: Integer; miIsFin: Boolean;   { Initialize/Finalize }
   pfIsPF: Boolean; pfK, pfDepth: Integer;
 begin
   { `parallel for` soft keyword: `parallel` lexes as a plain ident, so it is a
@@ -4523,26 +4524,52 @@ begin
     begin
       name := CurTok.SVal;
       qUnit := ConsumeUnitQualifier(name);
-      { Finalize(x[, n]) — releases a managed value in FPC. pxx manages
-        AnsiStrings by scope/assignment (ARC), so v1 parses-and-discards the
-        call (no-op). NOTE: a Finalize-reliant container leaks managed
-        elements until this maps onto the ARC release helpers. }
-      if (qUnit < 0) and CaseEqual(name, 'Finalize') and
+      { Initialize(x) / Finalize(x) — System.
+
+        Both used to be no-ops (Finalize parsed-and-discarded its argument,
+        Initialize did not exist), which made `Finalize(s)` leave `len=5
+        [hello]` where FPC prints `len=0 []`: FPC-shaped code that compiles,
+        runs, and silently does not do what it says. They now lower onto the
+        ARC machinery that already exists — see AN_MANAGED_INIT.
+
+        The count form `Finalize(x, n)` (x as the first of n elements) is
+        REFUSED rather than accepted-and-ignored: accepting it would put the
+        silent no-op straight back, in the one shape where it leaks an array's
+        worth of references instead of one. }
+      if (qUnit < 0) and (CaseEqual(name, 'Finalize') or CaseEqual(name, 'Initialize')) and
          (Tokens[TokPos].Kind = tkLParen) and
          (FindProc(name) < 0) and (FindSym(name) < 0) and
          ((CurSelfClass < REC_UCLASS_BASE) or
           (FindUMeth(CurSelfClass - REC_UCLASS_BASE, name) < 0)) then
       begin
+        miIsFin := CaseEqual(name, 'Finalize');
         Next; Expect(tkLParen, '(');
-        i := 1;
-        while (i > 0) and (CurTok.Kind <> tkEOF) do
-        begin
-          if CurTok.Kind = tkLParen then Inc(i)
-          else if CurTok.Kind = tkRParen then Dec(i);
-          if i > 0 then Next;
-        end;
+        ParseExpr;
+        miArg := CurASTNode;
+        if CurTok.Kind = tkComma then
+          Error(name + '(x, n) — the element-count form is not implemented; call it per element (feature-a-implement-initialize-and-finalize-over-the-arc-helpers)');
         Expect(tkRParen, ')');
-        Result := GenMakeSeq(-1, -1);
+        { Finalize of a STRING is `x := ''` — literally. Assignment already
+          releases the old reference and stores the new one, which is Finalize's
+          definition down to both load-bearing properties: idempotent (the
+          second one releases '' ) and it drops a REFERENCE, not the object.
+          Desugaring here rather than hand-building the release in IR is the
+          normalise-dont-special-case call, and it is not academic: the
+          hand-built version passed the string's CONTENT to PXXStrDecRef instead
+          of its handle and segfaulted, while this path is the one every
+          assignment in the language already exercises. A zero-length literal
+          needs no source text, so SOffset is irrelevant at SLen = 0. }
+        if miIsFin and ((LastExprTk = tyAnsiString) or (LastExprTk = tyString)) then
+        begin
+          miEmpty := AllocNode(AN_STR_LIT);
+          ASTSOffset[miEmpty] := 0; ASTSLen[miEmpty] := 0;
+          ASTTk[miEmpty] := Ord(tyString);
+          Result := GenMakeAssign(miArg, miEmpty);
+          Exit;
+        end;
+        Result := AllocNode(AN_MANAGED_INIT);
+        ASTLeft[Result] := miArg;
+        if miIsFin then ASTIVal[Result] := 1 else ASTIVal[Result] := 0;
         Exit;
       end;
 

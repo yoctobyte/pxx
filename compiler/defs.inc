@@ -457,6 +457,22 @@ const
   TLS_SLOT_SELF    = 0;   { the block's own address; what __pxxTlsBase reads }
   TLS_SLOT_FIRST_FREE = 1;
 
+  AN_MANAGED_INIT  = 97; { Initialize(x) / Finalize(x). Left = the lvalue; IVal 0 =
+                           Initialize, 1 = Finalize. Statement position only.
+                           Lowers per the lvalue's TYPE, not to a bespoke op:
+                           a record goes to PXXRecordInitialize/PXXRecordFinalize
+                           with the SAME layout descriptor scope-exit release
+                           already walks; a scalar managed lvalue (string,
+                           dyn-array, interface, variant) to the release helper
+                           it already has plus a raw zero store. An UNMANAGED
+                           lvalue is a no-op, as in FPC.
+                           The difference between the two is exactly one step:
+                           Finalize releases first, Initialize does not -- the
+                           incoming bytes are not references, which is the whole
+                           reason the pair exists (a GetMem'd record's string
+                           field holds garbage). Both END by nil'ing, so Finalize
+                           is idempotent. }
+
   AN_TLSBASE       = 96; { __pxxTlsBase: the calling thread's TLS base pointer, read
                            from the architectural thread register. No operands; yields
                            tyPointer. Lowers to IR_TLSBASE.

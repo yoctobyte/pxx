@@ -321,6 +321,13 @@ function __pxx_modsi3(a: Integer; b: Integer): Integer;
 function PXXStrLoadFile(path: Pointer): Pointer;
 procedure PXXRecordRetain(recAddr: Pointer; desc: Pointer);
 procedure PXXRecordRelease(recAddr: Pointer; desc: Pointer);
+{ Initialize(x) / Finalize(x) over the SAME layout descriptor the scope-exit
+  release already walks. The pair exists because scope-exit cleanup only covers
+  variables the compiler declared: a record conjured from GetMem is just bytes
+  to it, so its AnsiString field holds garbage until something puts it in a
+  valid empty state. }
+procedure PXXRecordInitialize(recAddr: Pointer; desc: Pointer);
+procedure PXXRecordFinalize(recAddr: Pointer; desc: Pointer);
 procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);
 function PXXDynArrayUnique(arrSlot: Pointer; desc: Pointer): Pointer;
 function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
@@ -2056,6 +2063,92 @@ end;
 { Forward only where the BODY exists — PXXClassFinalize is itself inside
   {$ifndef PXX_ESP}, so an unconditional forward left it unresolved on the
   ESP profile (test-emit-obj: "unresolved forward: PXXClassFinalize"). }
+procedure PXXRecordZeroManaged(recAddr: Pointer; desc: Pointer);
+{ Store a valid EMPTY state into every managed member, releasing nothing.
+
+  Two callers with opposite reasons for wanting it, which is why it is its own
+  walk rather than folded into either:
+  - Initialize: the incoming bytes are NOT references. Releasing them would
+    decrement a refcount through whatever GetMem last left there.
+  - Finalize, after PXXRecordRelease: what makes a second Finalize decrement
+    nothing. Losing that turns the obvious double-Finalize into a heap
+    corruption instead of a no-op.
+
+  A zeroed slot IS the empty state for every managed kind here: a nil string
+  handle is '' , a nil dyn-array handle is length 0, a nil interface/object
+  reference is nil, and varEmpty is 0. Variants are zeroed as bytes rather than
+  PXXVarClear'd for the Initialize reason above -- PXXVarClear reads the tag
+  first, and on garbage that is a deref of a garbage pointer. }
+var
+  memberCount, i, j: Integer;
+  memberPtr: Int64;
+  offset, kind, arrayCount, typeRef: Integer;
+  memberAddr, itemAddr: Pointer;
+  subDesc: Pointer;
+  memberSize, k: Int64;
+begin
+  if (recAddr = nil) or (desc = nil) then Exit;
+  memberCount := PInt32(Int64(desc) + 8)^;
+  memberPtr := Int64(desc) + 12;
+  i := 0;
+  while i < memberCount do
+  begin
+    offset := PInt32(memberPtr)^;
+    kind := PInt32(memberPtr + 4)^;
+    arrayCount := PInt32(memberPtr + 8)^;
+    typeRef := PInt32(memberPtr + 12)^;
+    memberAddr := Pointer(Int64(recAddr) + offset);
+    subDesc := Pointer(memberPtr + 12 + typeRef);
+    if kind = 3 then memberSize := PInt32(Int64(subDesc) + 4)^
+    else if kind = 5 then memberSize := 16   { Variant slot: [tag:8][payload:8] }
+    else memberSize := SizeOf(Pointer);
+    j := 0;
+    while j < arrayCount do
+    begin
+      itemAddr := Pointer(Int64(memberAddr) + j * memberSize);
+      case kind of
+        1: PWord(itemAddr)^ := 0;                     { String handle }
+        2: PWord(itemAddr)^ := 0;                     { DynArray handle }
+        3: PXXRecordZeroManaged(itemAddr, subDesc);   { nested record }
+        4: PWord(itemAddr)^ := 0;                     { COM interface }
+        5: begin                                      { Variant: varEmpty = all zero }
+             k := 0;
+             while k < memberSize do
+             begin
+               PByte(Int64(itemAddr) + k)^ := 0;
+               k := k + 1;
+             end;
+           end;
+        6: PWord(itemAddr)^ := 0;                     { NilPy class reference }
+      end;
+      j := j + 1;
+    end;
+    memberPtr := memberPtr + 16;
+    i := i + 1;
+  end;
+end;
+
+procedure PXXRecordInitialize(recAddr: Pointer; desc: Pointer);
+{ Initialize(x): put the managed members into a valid empty state WITHOUT
+  releasing -- the incoming bytes are not references, which is the whole point.
+  Unmanaged members are left alone (FPC does the same); a caller who wants the
+  whole record cleared has FillChar, and FillChar over managed fields is the
+  hazard this intrinsic exists to replace. }
+begin
+  PXXRecordZeroManaged(recAddr, desc);
+end;
+
+procedure PXXRecordFinalize(recAddr: Pointer; desc: Pointer);
+{ Finalize(x): release each managed member's REFERENCE, then nil it.
+
+  Releases a reference, not the object: a string at refcount 3 because copies
+  exist goes to 2 and the copies stay valid. And it nils, so a second Finalize
+  on the same storage decrements nothing. }
+begin
+  PXXRecordRelease(recAddr, desc);
+  PXXRecordZeroManaged(recAddr, desc);
+end;
+
 procedure PXXClassFinalize(inst: Pointer); forward;
 {$endif}
 

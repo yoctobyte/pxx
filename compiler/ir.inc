@@ -5212,6 +5212,8 @@ function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     seqBase, seqCur: Integer;       { iterative AN_SEQ spine walk — see the arm }
     cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
+    miArg, miRec, miPi, miArgN: Integer;   { Initialize/Finalize }
+    miTk: TTypeKind; miIsFin: Boolean;
     promoLhs, promoRhs, promoDst, promoSym, promoOp: Integer;   { promotable-int slot lowering }
     vuExitUnboxed: Boolean;         { `return <variant>` unboxed to a scalar result }
     vuArgProc, vuArgAddr, vuArgNode: Integer;   { `return <variant>` -> class via pyvarobj }
@@ -6992,6 +6994,78 @@ begin
     begin
       left := IRLowerAST(ASTLeft[node]);
       Result := IRAppend(IR_ALLOCA, left, -1, -1, 0, Ord(tyPointer));
+    end;
+
+    AN_MANAGED_INIT:
+    begin
+      { Initialize(x) / Finalize(x). Dispatch on the lvalue's TYPE onto machinery
+        that already exists -- the point of the ticket was that none of this
+        needed inventing, only wiring.
+
+        The two differ by exactly one step: Finalize RELEASES first, Initialize
+        does not, because Initialize's incoming bytes are not references (a
+        GetMem'd record's AnsiString field holds whatever the allocator last
+        left there, and decrementing a refcount through that is the access
+        violation the intrinsic exists to prevent). Both END by nil'ing, which
+        is what makes a second Finalize on the same storage decrement nothing.
+
+        And it releases a REFERENCE, not the object: a string at refcount 3
+        because copies exist goes to 2 and the copies stay valid -- that falls
+        out of using the ordinary release helper rather than a bespoke free. }
+      miIsFin := ASTIVal[node] = 1;
+      miArg := ASTLeft[node];
+      miTk := IntToTypeKind(ASTTk[miArg]);
+      if miTk = tyRecord then
+      begin
+        miRec := ResolveNodeRec(miArg);
+        if miRec < REC_UCLASS_BASE then
+          Error('Initialize/Finalize: cannot resolve the record type of the argument');
+        if not RecordHasManagedFields(miRec) then
+          { No managed members: nothing to do, exactly as in FPC. NOT an error --
+            a generic container calling Finalize on every element type must
+            compile for the unmanaged ones too. }
+          Result := IRAppend(IR_NOP, -1, -1, -1, 0, Ord(tyInteger))
+        else
+        begin
+          if miIsFin then miPi := FindProc('PXXRecordFinalize')
+          else miPi := FindProc('PXXRecordInitialize');
+          if miPi < 0 then
+            Error('compiler error: PXXRecordInitialize/PXXRecordFinalize not found');
+          { (recAddr, desc) -- the SAME layout descriptor scope-exit release
+            walks, reached the way AN_DYN_DELETE reaches it. }
+          miArgN := IRAppend(IR_ARG, IRLowerAddress(miArg), -1, -1, 0, Ord(tyPointer));
+          IRB[miArgN] := IRAppend(IR_ARG,
+                           IRAppend(IR_CONST_DATA, -1, -1, -1,
+                             -(RECORD_RTTI_DATAREF_BASE + (miRec - REC_UCLASS_BASE)),
+                             Ord(tyPointer)),
+                           -1, -1, 0, Ord(tyPointer));
+          Result := IRAppendCall(miPi, miArgN, -1, Ord(tyNativeInt));
+          IRIVal[Result] := 1;   { statement: emit for effect }
+        end;
+      end
+      else if (miTk = tyAnsiString) or (miTk = tyString) then
+        { Initialize only — the parser desugars Finalize of a string into
+          `x := ''` and never builds this node for it. A raw store, NOT an
+          assignment: an assignment would RELEASE the old handle, and
+          Initialize's whole premise is that the incoming bytes are not a
+          reference. }
+        Result := IRAppend(IR_STORE_MEM, IRLowerAddress(miArg),
+                    IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
+                    -1, 0, Ord(tyPointer))
+      else if (miTk = tyVariant) or
+              ((ASTKind[miArg] = AN_IDENT) and Syms[ASTIVal[miArg]].IsArray and
+               (Syms[ASTIVal[miArg]].ArrLen = -1)) then
+        { Deliberately an ERROR, not a no-op: a silent no-op on a managed type is
+          the exact defect this ticket was filed for. A bare dynamic array has a
+          one-line workaround (`a := nil`, which releases and nils exactly as
+          Finalize must) and a record CONTAINING one is fully handled above --
+          PXXRecordFinalize walks to PXXDynArrayRelease with the sub-descriptor
+          -- so the gap is narrow and is not on the ticket's motivating path.
+          feature-a-finalize-for-bare-dynarray-and-variant. }
+        Error('Initialize/Finalize on a bare dynamic array or variant is not implemented yet; assign nil instead, or wrap it in a record (feature-a-finalize-for-bare-dynarray-and-variant)')
+      else
+        { Unmanaged type: legal and does nothing, as in FPC. }
+        Result := IRAppend(IR_NOP, -1, -1, -1, 0, Ord(tyInteger));
     end;
 
     AN_FPUMASK:

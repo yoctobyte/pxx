@@ -3575,6 +3575,19 @@ test-core: $(COMPILER)
 	# a loop that never terminates on a non-finite value; the x86-64 fixed-form twin
 	# did not hang but printed 9223372036854775809.000000. Run under a TIMEOUT — a
 	# regression here is a HANG, not a wrong line.
+	# Initialize/Finalize. Both were no-ops, so Finalize(s) left `len=5 [hello]`
+	# where FPC prints `len=0 []` -- FPC-shaped code that compiles, runs and
+	# silently does not do what it says. The expected block below is byte-identical
+	# to FPC 3.x -Mobjfpc output, diffed rather than reasoned about. Rows that
+	# earn their place: `again len=0` (Finalize NILS after releasing, so the second
+	# one decrements nothing -- lose that and a double Finalize is heap corruption);
+	# `keep=[world]` (it releases a REFERENCE, not the object); `n=3` after the
+	# record Finalize (unmanaged members untouched, which is the line between
+	# Finalize and FillChar); and `plain 1 2 5` (no managed members, and a plain
+	# ordinal, are legal no-ops -- a generic container finalizing every element
+	# type has to compile for those too).
+	./$(COMPILER) test/test_initialize_finalize.pas $(TESTTMP)/test_initfin26
+	test "$$($(TESTTMP)/test_initfin26)" = "$$(printf 'len=0 []\nagain len=0\ns len=0 keep=[world]\nrec [from-heap] n=3 nums0=7 len=3\nafter fin: namelen=0 numslen=0 n=3\nafter fin2: namelen=0\nplain 1 2 5\ndone 0')"
 	./$(COMPILER) test/test_writeln_nonfinite_float.pas $(TESTTMP)/test_writeln_nonfinite26
 	@out=$$(timeout 20 $(TESTTMP)/test_writeln_nonfinite26); rc=$$?; \
 	  if [ "$$rc" = "124" ]; then echo "test_writeln_nonfinite: TIMEOUT after 20s (not a wrong value)"; exit 1; fi; \
