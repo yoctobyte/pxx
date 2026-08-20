@@ -108,6 +108,10 @@ procedure AddDefaultCIncludeDirs; forward;   { the C unit pull in parser.inc nee
   than by reading it. Flat rather than nested inside parser.inc: this file is
   compiled by the PINNED binary, so it can only use include forms that binary
   already understands. }
+{$include pasparser_generic.inc}
+{$include pasparser_call.inc}
+{$include pasparser_lval.inc}
+{$include pasparser_expr.inc}
 {$include pasparser_stmt.inc}
 {$include pasparser_decl.inc}
 {$include pasparser_proc.inc}
