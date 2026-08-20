@@ -2285,9 +2285,9 @@ end;
 procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm: Boolean);
 var
   templateName, nextStr: AnsiString;
-  depth, startTok, cur, finalCur, np, gi: Integer;
+  depth, startTok, cur, finalCur, np, gi, scan: Integer;
   pnames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
-  isOpener, doneParams: Boolean;
+  isOpener, doneParams, bodyless: Boolean;
 begin
   { Copy BEFORE Next: callers pass CurTok.SVal, and a const AnsiString param
     aliases it by reference — Next would mutate the name out from under us. }
@@ -2369,6 +2369,52 @@ begin
   end
   else
   begin
+  { A class or interface declaration need not HAVE a body: a forward
+    `class;`, a bodyless derived class `class(TBase);`, or a metaclass
+    `class of T;`. There is no `end` to count down to, so the depth loop
+    below would run on and swallow whatever declaration ends next --
+    rtl-generics' one-line
+      `TGStringComparer<T> = class(TGStringComparer<T, TDelphiQuadrupleHashFactory>);`
+    captured 126 further lines into the template and reported the damage as
+    an error deep inside the swallowed text. Detect the bodyless forms up
+    front; only a real body goes through the depth count. }
+  bodyless := False;
+  cur := TokPos;
+  if (Tokens[startTok].Kind = tkClass) or
+     ((Tokens[startTok].Kind = tkIdent) and CaseEqual(GetTokenStr(startTok), 'interface')) then
+  begin
+    if (Tokens[startTok].Kind = tkClass) and (cur < TokCount) and (Tokens[cur].Kind = tkOf) then
+    begin
+      while (cur < TokCount) and (Tokens[cur].Kind <> tkSemicolon) do Inc(cur);
+      bodyless := True;
+    end
+    else
+    begin
+      scan := cur;
+      if (scan < TokCount) and (Tokens[scan].Kind = tkLParen) then
+      begin
+        depth := 0;
+        repeat
+          if Tokens[scan].Kind = tkLParen then Inc(depth)
+          else if Tokens[scan].Kind = tkRParen then Dec(depth);
+          Inc(scan);
+        until (scan >= TokCount) or (depth = 0);
+      end;
+      if (scan < TokCount) and (Tokens[scan].Kind = tkSemicolon) then
+      begin
+        cur := scan;
+        bodyless := True;
+      end;
+    end;
+  end;
+
+  if bodyless then
+  begin
+    if cur < TokCount then Inc(cur);   { include the ';' }
+    finalCur := cur;
+  end
+  else
+  begin
   depth := 1;
   cur := TokPos;
   while (cur < TokCount) and (depth > 0) do
@@ -2405,6 +2451,7 @@ begin
     Inc(cur);
 
   finalCur := cur;  { save before for-loop clobbers 'cur' }
+  end;
   end;
 
   if TemplateCount >= MAX_TEMPLATES then Error('too many generic templates');
@@ -2512,7 +2559,7 @@ var
   templateName, aliasNm: AnsiString;
   cNames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   cKinds: array[0..MAX_TEMPLATE_PARAMS-1] of TTokenKind;
-  nc, ti, i, j, k, na, ts, tc, gEnd: Integer;
+  nc, ti, i, j, k, na, ts, tc, gEnd, si: Integer;
   dup: Boolean;
 begin
   Result := False;
@@ -2607,6 +2654,33 @@ begin
     end
     else
       Inc(i);
+  end;
+
+  { A prerequisite queued by one deferral may already have been satisfied by
+    another: rtl-generics reaches TCustomComparer$string through BOTH
+    TGStringComparer and TOrdinalComparer, and each deferral emits its own copy
+    of the alias declaration. The second copy is an exact re-statement of the
+    first -- same template, same arguments, and the name is minted from exactly
+    those -- so it is a no-op, not a redeclaration. Consume it and let the
+    type-section loop go round again. A name that collides with a DIFFERENT
+    template or different arguments still falls through to the ordinary
+    duplicate-class diagnosis. }
+  si := FindSpecialization(specName);
+  if (si >= 0) and CaseEqual(Specializations[si].TemplateName, templateName) and
+     (SpecNParams[si] = nc) then
+  begin
+    dup := True;
+    for i := 0 to nc - 1 do
+      if not CaseEqual(SpecConcreteNames[si * MAX_TEMPLATE_PARAMS + i], cNames[i]) then
+        dup := False;
+    if dup then
+    begin
+      if DebugTrace then writeln('SPEC ', specName, ' = ', templateName, ' (already declared)');
+      NSpecCount := 0;
+      Next;
+      Result := True;
+      Exit;
+    end;
   end;
 
   if DebugTrace then
@@ -3489,11 +3563,18 @@ end;
   when parenthesized): top-level commas + 1; 0 for `()` or no parens. Used to
   pick among method OVERLOADS before the signature-driven arg loop parses. }
 function IsCallConvDirectiveTok: Boolean;
-{ A calling-convention directive in a class-body member's directive list
-  (`function QueryInterface(...): HResult; virtual; cdecl;` — testutils). They are
-  plain identifiers, and pxx is a whole-program compiler with one internal
-  convention, so they are parse-and-ignore here (ParseSubroutine already accepts
-  them on the implementation side).
+{ A calling-convention directive in ANY directive list — class-body member
+  (`function QueryInterface(...): HResult; virtual; cdecl;` — testutils),
+  record method, interface method signature, routine implementation header, and
+  the routine pre-scan. They are plain identifiers, and pxx is a whole-program
+  compiler with one internal convention, so they are parse-and-ignore
+  everywhere.
+
+  ONE list, five call sites, deliberately: each of those loops grew its own
+  spelling of the set and they drifted apart — the implementation-side loop
+  knew `cdecl` and `register` but not `stdcall`, so `procedure TC.Poke;
+  stdcall;` parsed in the class body and then died on its own body's header.
+  Add a convention here and every position accepts it.
 
   Guarded on a following ';' because these words are not reserved: a FIELD named
   `register` is legal, and `register: Integer;` has a ':' next, so it stays a
@@ -3505,6 +3586,45 @@ begin
           CaseEqual(CurTok.SVal, 'safecall') or CaseEqual(CurTok.SVal, 'register') or
           CaseEqual(CurTok.SVal, 'pascal') or CaseEqual(CurTok.SVal, 'mwpascal')) then Exit;
   Result := (TokPos < TokCount) and (Tokens[TokPos].Kind = tkSemicolon);
+end;
+
+function EatIntfMethodDirective: Boolean;
+{ One directive on an INTERFACE method signature, plus its trailing ';'.
+  An interface method is abstract and virtual by definition, so the dispatch
+  directives (virtual/override/abstract/static) mean nothing here and FPC
+  rejects them; what IS legal is `overload`, a calling convention, and the
+  hint directives. All are parse-and-ignore -- overload resolution is
+  signature-keyed, pxx is a whole-program compiler with one internal calling
+  convention, and a hint changes no code.
+
+  The interface member loop had NO directive handling at all, so a signature
+  carrying one stopped the parse where it stood: rtl-generics' very first
+  declaration is `function Compare(constref Left, Right: T): Integer;
+  overload;`. Guarded like IsCallConvDirectiveTok -- these words are not
+  reserved, so a directive is recognised only where a ';' (or `deprecated`'s
+  message string) follows. }
+begin
+  Result := False;
+  if CurTok.Kind = tkOverload then
+  begin
+    Next; Eat(tkSemicolon); Result := True; Exit;
+  end;
+  if IsCallConvDirectiveTok then
+  begin
+    Next; Eat(tkSemicolon); Result := True; Exit;
+  end;
+  if (CurTok.Kind = tkIdent) and
+     (CaseEqual(CurTok.SVal, 'deprecated') or CaseEqual(CurTok.SVal, 'platform') or
+      CaseEqual(CurTok.SVal, 'experimental') or CaseEqual(CurTok.SVal, 'unimplemented') or
+      CaseEqual(CurTok.SVal, 'library') or CaseEqual(CurTok.SVal, 'varargs')) and
+     (TokPos < TokCount) and
+     ((Tokens[TokPos].Kind = tkSemicolon) or (Tokens[TokPos].Kind = tkString)) then
+  begin
+    Next;
+    if CurTok.Kind = tkString then Next;   { `deprecated 'message'` }
+    Eat(tkSemicolon);
+    Result := True;
+  end;
 end;
 
 function IsConstParamTok: Boolean;
@@ -27012,7 +27132,7 @@ begin
     anything here. `static` is the exception — it is REQUIRED on a record's class method
     (below), so its presence has to be observed rather than skipped. }
   rmSawStatic := False;
-  while (CurTok.Kind = tkOverload) or
+  while (CurTok.Kind = tkOverload) or IsCallConvDirectiveTok or
         ((CurTok.Kind = tkIdent) and
          (CaseEqual(CurTok.SVal, 'inline') or CaseEqual(CurTok.SVal, 'static') or
           CaseEqual(CurTok.SVal, 'deprecated'))) do
@@ -27595,8 +27715,10 @@ begin
         and leaves CurTok on 'class', falling through to the class-binding
         branch below — the concrete name comes from the saved tnOff/tnLen. }
       if CaseEqual(CurTok.SVal, 'specialize') then
-        { True = the declaration was deferred behind its nested generic
-          prerequisites and re-emitted; nothing to bind, go round again. }
+        { True = handled, nothing to bind, go round again — either the
+          declaration was deferred behind its nested generic prerequisites and
+          re-emitted, or it was an exact re-statement of a specialization that
+          another deferral had already queued. }
         if ParseSpecialization(tname) then Continue;
       if CurTok.Kind = tkLParen then
       begin
@@ -27784,6 +27906,7 @@ begin
             mRetRecId := LastTypeRecId;   { the return type's class/record id }
           end;
           Eat(tkSemicolon);
+          while EatIntfMethodDirective do ;
           { inject implicit Self (the instance) at param 0, like a class method }
           for i := mNParams downto 1 do
           begin mPNames[i] := mPNames[i-1]; mPTypes[i] := mPTypes[i-1]; mPArr[i] := mPArr[i-1]; mPByRef[i] := mPByRef[i-1]; mPConst[i] := mPConst[i-1]; mPDefault[i] := mPDefault[i-1]; mPDefaultVal[i] := mPDefaultVal[i-1]; mPDefaultIsStr[i] := mPDefaultIsStr[i-1]; mPDefaultIsFloat[i] := mPDefaultIsFloat[i-1]; mPDefaultIsSet[i] := mPDefaultIsSet[i-1]; mPDefaultSOff[i] := mPDefaultSOff[i-1]; mPDefaultSLen[i] := mPDefaultSLen[i-1]; end;
@@ -30306,7 +30429,7 @@ begin
               CaseEqual(CurTok.SVal, 'experimental') or CaseEqual(CurTok.SVal, 'unimplemented') or
               CaseEqual(CurTok.SVal, 'library') or
               CaseEqual(CurTok.SVal, 'external'))) or
-            (CurTok.Kind = tkOverload) do
+            (CurTok.Kind = tkOverload) or IsCallConvDirectiveTok do
       begin
         if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'external') then
         begin
@@ -30866,7 +30989,7 @@ begin
           CaseEqual(CurTok.SVal, 'experimental') or
           CaseEqual(CurTok.SVal, 'unimplemented') or
           CaseEqual(CurTok.SVal, 'library'))) or
-        (CurTok.Kind = tkOverload) do
+        (CurTok.Kind = tkOverload) or IsCallConvDirectiveTok do
   begin
     if CurTok.Kind = tkOverload then declOverload := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'flexcolumn') then declFlexColumn := True;

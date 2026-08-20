@@ -4569,6 +4569,15 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_generic_inherit26)" = "$$(printf 'chain 5 5 10 1\nplain plain\npair 6 4\nwrap nil\nGENERIC INHERIT OK')"
 	./$(COMPILER) test/test_generic_inherit_delphi.pas $(TESTTMP)/test_generic_inherit_delphi26
 	test "$$($(TESTTMP)/test_generic_inherit_delphi26)" = "$$(printf 'chain 5 5 10 1\nplain plain\npair 6 4\nwrap nil\nGENERIC INHERIT DELPHI OK')"
+	# a generic class with NO body (`= class(Parent);`) must not swallow what follows
+	./$(COMPILER) test/test_generic_bodyless.pas $(TESTTMP)/test_generic_bodyless26
+	test "$$($(TESTTMP)/test_generic_bodyless26)" = "$$(printf 'bodyless 7 hi 3\nGENERIC BODYLESS OK')"
+	# a diamond of nested generic prerequisites: the same alias queued twice
+	./$(COMPILER) test/test_generic_nested_diamond.pas $(TESTTMP)/test_generic_nested_diamond26
+	test "$$($(TESTTMP)/test_generic_nested_diamond26)" = "$$(printf 'diamond 4 9 13\nGENERIC NESTED DIAMOND OK')"
+	# directives on an interface method signature, and stdcall on a method impl
+	./$(COMPILER) test/test_interface_directives.pas $(TESTTMP)/test_interface_directives26
+	test "$$($(TESTTMP)/test_interface_directives26)" = "$$(printf 'cmp -1 1\npoke\nlegacy legacy\nINTERFACE DIRECTIVES OK')"
 	# arity-overloaded class names: TD, TD<K>, TD<K,V> coexist; TD<K> inherits TD
 	./$(COMPILER) test/test_generic_name_overload.pas $(TESTTMP)/test_generic_name_overload26
 	test "$$($(TESTTMP)/test_generic_name_overload26)" = "$$(printf '0 1 2\n0')"

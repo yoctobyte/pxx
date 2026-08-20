@@ -513,3 +513,81 @@ method implementations of each. Output verified **identical under fpc 3.2.2**.
 Both registered in the Makefile.
 
 Gate: `make compiler/pascal26` converged in 1 round; `tools/gate.sh quick` GREEN.
+
+## Walls 19-21 cleared — 2026-08-20 (frank1-ACP)
+
+Wall progression this pass: **1270 → 46 → 964 → 2179**. Three fixes landed
+together, all found by driving `generics.defaults` with `$(PXX_STABLE)`; each
+reduced to a minimal repro and diffed against fpc 3.2.2 before the fix.
+
+### 19. a bodyless generic class swallowed the rest of the type section
+`ParseGenericTemplateNamed` opened the capture at `depth := 1` and counted down
+to a matching `end` — but a class declaration need not HAVE a body.
+rtl-generics' one-liner
+
+    TGStringComparer<T> = class(TGStringComparer<T, TDelphiQuadrupleHashFactory>);
+
+has no `end` at all, so the capture ran on and took the next 126 source lines
+into the template (`--debug` showed `TEMPLATE TGStringComparer startTok=49657
+endTok=50397 endLine=1119` for a declaration that ends on line 993). The damage
+surfaced far downstream as `absolute: unknown variable Self` at line 1270 —
+which is why every isolated repro of *that* construct passed. Measured, not
+reasoned: the `TEMPLATE` trace named the real boundary in one run.
+
+Fix: detect the three bodyless forms up front — `class;`, `class(Parent);`,
+`class of T;` (and the same for `interface`) — and end the capture at the `;`.
+Only a real body goes through the depth count. The non-generic path already
+handled all three, so this was the generic path growing a second, worse copy of
+"where does a class declaration end". Regression:
+`test/test_generic_bodyless.pas`, with a following declaration as the canary.
+
+### 20. an interface method could not carry a directive
+The interface member loop had **no** directive handling — it read the signature,
+ate the `;`, and expected the next `procedure`/`function`/`end`. Generics.Defaults'
+very first declaration is `function Compare(constref Left, Right: T): Integer;
+overload;`, so the parse stopped on line 45 of a 2400-line unit.
+
+Fix: `EatIntfMethodDirective` — `overload`, a calling convention, and the hint
+directives, all parse-and-ignore (an interface method is abstract and virtual by
+definition; overload resolution is signature-keyed; pxx has one internal calling
+convention). Guarded like `IsCallConvDirectiveTok`: these words are not
+reserved, so one is recognised only where a `;` (or `deprecated`'s message
+string) follows.
+
+**And the root cause behind it** — this was the *fifth* place in `parser.inc`
+that spells out "consume a method directive", and they had drifted: the
+implementation-side loop knew `cdecl` and `register` but not `stdcall`, so
+`procedure TC.Poke; stdcall;` parsed in the class body and then died on its own
+body's header (`<scratchpad>/gen/rj.pas`). The class-body loop already used the
+shared `IsCallConvDirectiveTok`; the record-method loop, the routine pre-scan
+and `ParseSubroutine` each had their own list. All five now go through the one
+predicate, so adding a convention is a one-line change in one place.
+`normalise-dont-special-case`: three mechanisms for one concept was the design
+flaw, and the sibling arms were exactly where the bug was.
+
+### 21. a nested-generic prerequisite queued twice = duplicate class
+The defer-and-retry mechanism from wall 18 emits one alias declaration per
+prerequisite. rtl-generics reaches `TCustomComparer<string>` through **both**
+`TGStringComparer` and `TOrdinalComparer`, so two deferrals queued their own
+copy of the same alias and the second was diagnosed as a duplicate class.
+
+Fix: at `ParseSpecialization`, a name that already names a specialization of the
+**same template with the same arguments** is an exact re-statement — the alias
+name is minted from exactly those — so consume it as a no-op. A collision with a
+different template or different arguments still falls through to the ordinary
+duplicate-class error. Regression: `test/test_generic_nested_diamond.pas`.
+
+### Gate
+`make compiler/pascal26` converged in 1 round; `tools/gate.sh quick` GREEN
+(self-host fixedpoint 91s, testmgr quick 10s, FPC seed canary).
+
+### Filed while here (not fixed)
+- [[bug-p-interface-method-overload-picks-the-first-slot]] — an interface method
+  is selected by declaration slot, not by argument type, so a call to the wrong
+  same-named overload returns a silently wrong value. Found writing
+  `test_interface_directives.pas`; the test deliberately avoids two same-named
+  interface overloads so it does not freeze the wrong expectation.
+- [[feature-p-nested-type-method-implementation]] — the next wall (line 2179):
+  `class function TComparerService.TInstance.Create(...)`, a method
+  implementation qualified by outer class AND nested type. The declaration side
+  parses; the implementation header does not.
