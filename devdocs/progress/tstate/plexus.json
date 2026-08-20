@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T22:35:01Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "2e8b284343a50c2ffeb9f9ae328b1615d7e2630a",
-   "tier": "slow",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T22:41:26Z",
    "fixed": [],
    "new_red": [],
@@ -430,6 +422,14 @@
    ],
    "new_red": [],
    "sha": "fe8a342301467fe7fe0e943c5732210283a4a2b0",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-20T14:41:59Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "0ff2389eb295979494448d38f7e52bb9f8f36d62",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -2109,6 +2109,7 @@
   "test-core#src:test/test_string_copy_intrinsic.pas": "native",
   "test-core#src:test/test_string_default_param_b245.pas": "native",
   "test-core#src:test/test_string_delete_insert.pas": "native",
+  "test-core#src:test/test_string_of_pchar.pas": "native",
   "test-core#src:test/test_string_ordering.pas": "native",
   "test-core#src:test/test_string_sized.pas": "native",
   "test-core#src:test/test_string_to_pchar_auto.pas": "native",
@@ -2135,6 +2136,7 @@
   "test-core#src:test/test_type_runtime.pas": "native",
   "test-core#src:test/test_typed_const_record.pas": "native",
   "test-core#src:test/test_typed_metaclass_b278.pas": "native",
+  "test-core#src:test/test_typed_pointer_inc_dec.pas": "native",
   "test-core#src:test/test_typed_string_const.pas": "native",
   "test-core#src:test/test_typeinfo_enum_b288.pas": "native",
   "test-core#src:test/test_typeinfo_widen.pas": "native",
@@ -4498,6 +4500,7 @@
   "test-core#src:test/test_string_copy_intrinsic.pas": "pass",
   "test-core#src:test/test_string_default_param_b245.pas": "pass",
   "test-core#src:test/test_string_delete_insert.pas": "pass",
+  "test-core#src:test/test_string_of_pchar.pas": "pass",
   "test-core#src:test/test_string_ordering.pas": "pass",
   "test-core#src:test/test_string_sized.pas": "pass",
   "test-core#src:test/test_string_to_pchar_auto.pas": "pass",
@@ -4524,6 +4527,7 @@
   "test-core#src:test/test_type_runtime.pas": "pass",
   "test-core#src:test/test_typed_const_record.pas": "pass",
   "test-core#src:test/test_typed_metaclass_b278.pas": "pass",
+  "test-core#src:test/test_typed_pointer_inc_dec.pas": "pass",
   "test-core#src:test/test_typed_string_const.pas": "pass",
   "test-core#src:test/test_typeinfo_enum_b288.pas": "pass",
   "test-core#src:test/test_typeinfo_widen.pas": "pass",
@@ -4705,11 +4709,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T14:32:21Z",
-  "sha": "fe8a342301467fe7fe0e943c5732210283a4a2b0",
+  "date": "2026-08-20T14:41:59Z",
+  "sha": "0ff2389eb295979494448d38f7e52bb9f8f36d62",
   "tier": "native",
   "verdict": "GREEN",
-  "wall": 479.8
+  "wall": 487.3
  },
  "last_bench": {
   "conf_rows": 550,
