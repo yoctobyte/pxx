@@ -112,4 +112,4 @@ The increment operators are already correct — `AN_INCDEC` lowers the address
 once — which is the model that ticket should follow.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 311864e46.
