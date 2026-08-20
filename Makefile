@@ -4263,6 +4263,16 @@ test-core: $(COMPILER)
 	# for m[0][0] and rejects SetLength(m[0], n) outright.
 	./$(COMPILER) test/test_dynarray_named_alias_element.pas $(TESTTMP)/test_dynalias26
 	test "$$($(TESTTMP)/test_dynalias26 | tail -1)" = "total ok 26 / 26"
+	# `Default(T)` yielded the integer 0 for EVERY T, so an aggregate had no zero
+	# value: `a := Default(TRec)` copied RecSize bytes from address 0 (SIGSEGV) and
+	# `ar := Default(TArr)` stored an integer into an array slot, leaving every
+	# element untouched -- silent, so a dirty array stayed dirty. Zero of an
+	# aggregate is a whole zeroed OBJECT, so one is materialised: a hidden static
+	# (BSS, zero at load) of that type, unwritable because Default() is an rvalue.
+	# A class keeps the integer 0, its correct nil. The pinned binary rejects the
+	# test at `SumArr(Default(TArr))` -- it passes an Int64 where an array goes.
+	./$(COMPILER) test/test_default_of_aggregate.pas $(TESTTMP)/test_defaultagg26
+	test "$$($(TESTTMP)/test_defaultagg26 | tail -1)" = "total ok 29 / 29"
 	./$(COMPILER) test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_nativeshift26
 	test "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
 	test "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"

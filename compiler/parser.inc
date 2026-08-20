@@ -10288,6 +10288,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     mcCi: Integer; mcFin: Boolean;   { metaclass receiver at the end of a cast-deref chain }
  szElemTk: TTypeKind; szBTk: TTypeKind;
     seEtid, seOrd: Integer;
+    dfSym, dfRec, dfAi: Integer; dfTk: TTypeKind; dfSaveStatic: Boolean;  { Default(T) over an aggregate }
     lenFieldRec, lenFieldIdx: Integer;   { Length() of a static-array record field }
     cpyPi: Integer;   { Copy(s,i,n)[k]: the __pxxStrCopy proc index, kept past ci's reuse }
     ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { bare class-const in a method body }
@@ -10410,9 +10411,71 @@ begin
              not ((TokPos < TokCount) and (Tokens[TokPos].Kind = tkLt)) then
             Error('Default: the generic type ' + CurTok.SVal + ' must be specialized');
         end;
-        node := AllocNode(AN_INT_LIT);
-        ASTIVal[node] := 0;
-        ASTTk[node] := Ord(tyInt64);
+        { An AGGREGATE type has no integer zero: `Default(TRec)` used to yield
+          the same INT_LIT 0 as `Default(Integer)`, and the record assignment
+          then copied RecSize bytes from address 0 -- a SEGFAULT. A static
+          array was worse, because it was silent: `ar := Default(TArr)` stored
+          an integer into an array slot and left every element untouched, so a
+          dirty array stayed dirty and nothing said so.
+
+          Zero of an aggregate is a whole zeroed OBJECT, so materialise one:
+          a hidden static (BSS, therefore zero-filled at load) variable of that
+          exact type, which nothing can ever write to -- Default() is an rvalue,
+          so it cannot be passed by reference or assigned through. The ordinary
+          record/array copy then does the rest, managed fields included.
+          A CLASS is not an aggregate here (IsRecordType excludes it) and keeps
+          the integer 0, which is its correct nil.
+          bug-p-default-of-a-record-segfaults-of-an-array-does-nothing }
+        dfSym := -1;
+        dfTk := tyInt64;
+        if CurTok.Kind = tkIdent then
+        begin
+          dfRec := IsRecordType(CurTok.SVal);
+          if dfRec <> REC_NONE then
+          begin
+            dfSaveStatic := AllocStaticLocal;
+            AllocStaticLocal := True;
+            LastTypeRecId := dfRec;
+            LastTypeIsSub := False;
+            dfSym := AllocVar('', tyRecord);
+            AllocStaticLocal := dfSaveStatic;
+            dfTk := tyRecord;
+          end
+          else
+          begin
+            dfAi := FindArrayType(CurTok.SVal);
+            if (dfAi >= 0) and (not ArrTypeIsDyn[dfAi]) then
+            begin
+              { A FIXED array alias. Multi-dimensional and row-element forms
+                carry shape AllocArray cannot rebuild from lo/hi alone -- refuse
+                those LOUDLY rather than fall back to the integer 0 that made
+                this a silent bug in the first place. }
+              if (ArrTypeNDims[dfAi] > 1) or (ArrTypeElemRowLen[dfAi] <> 0) then
+                Error('Default: multi-dimensional array types are not supported yet');
+              dfSaveStatic := AllocStaticLocal;
+              AllocStaticLocal := True;
+              LastTypeRecId := ArrTypeElemRec[dfAi];
+              LastTypeIsSub := False;
+              LastTypeElemDynDepth := 0;
+              dfSym := AllocArray('', IntToTypeKind(ArrTypeElemTk[dfAi]),
+                                  ArrTypeLo[dfAi], ArrTypeHi[dfAi]);
+              AllocStaticLocal := dfSaveStatic;
+              dfTk := IntToTypeKind(ArrTypeElemTk[dfAi]);
+            end;
+          end;
+        end;
+        if dfSym >= 0 then
+        begin
+          node := AllocNode(AN_IDENT);
+          ASTIVal[node] := dfSym;
+          ASTTk[node] := Ord(dfTk);
+        end
+        else
+        begin
+          node := AllocNode(AN_INT_LIT);
+          ASTIVal[node] := 0;
+          ASTTk[node] := Ord(tyInt64);
+        end;
         i := 1;
         while (i > 0) and (CurTok.Kind <> tkEOF) do
         begin
@@ -10422,7 +10485,7 @@ begin
         end;
         Expect(tkRParen, ')');
         CurASTNode := node;
-        LastExprTk := tyInt64;
+        LastExprTk := dfTk;
       end
       else
       begin
