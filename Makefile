@@ -4081,6 +4081,15 @@ test-core: $(COMPILER)
 	# global (bug-pascal-class-const-visibility). FPC-differential identical.
 	./$(COMPILER) test/test_class_const_scope.pas $(TESTTMP)/test_class_const_scope26
 	test "$$($(TESTTMP)/test_class_const_scope26 | tail -1)" = "CLASS CONST OK"
+	# a `class var` takes every type a plain `var` does: named/inline/N-D/dynamic
+	# arrays, read bare, class-qualified, through an instance and through a
+	# subclass. The class-var branch used to be ParseTypeKind+AllocVar, which
+	# reserved a SCALAR slot for an array — Length() then answered garbage with
+	# no diagnostic. FPC-differential identical, line for line.
+	./$(COMPILER) test/test_class_var_array.pas $(TESTTMP)/test_class_var_array26
+	test "$$($(TESTTMP)/test_class_var_array26 | tail -1)" = "CLASS VAR ARRAY OK"
+	test "$$($(TESTTMP)/test_class_var_array26 | head -1)" = "bare 11 4 16"
+	test "$$($(TESTTMP)/test_class_var_array26 | sed -n 4p)" = "dyn 3 8"
 	# the mirror rule for FIELDS: inside a method the class's own field beats a
 	# unit-level const of the same name, and reads and writes must agree
 	# (bug-unit-const-shadows-a-field). FPC-differential identical.

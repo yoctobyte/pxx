@@ -1,11 +1,18 @@
 ---
-prio: 60  # auto
+prio: 5  # standing index, not dispatchable work — see the note below
 ---
 
 # Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded)
 
 - **Type:** meta (governance / index / epic) — Track A; tag: compat (this is the Pascal-compat charter: dialect-vs-FPC-parity policy, strict-flag family — see parallel-tracks.md)
 - **Status:** backlog (standing index — never "done"; new dialect work links here)
+- **Not dispatchable — do not claim this ticket.** It is a charter/index: there is
+  no green state it can reach, so an agent that "works" it has nothing to land.
+  `prio:` here only controls where the ranker prints it, and ranking a
+  never-completable item above real work is how it sat at the head of
+  `next --track A` on 2026-08-20. Hence prio 5: it stays visible at the tail of
+  the queue and out of the dispatch slot. Rate the *linked* tickets instead —
+  they are the work.
 - **Owner:** — (Track A; language-design calls go to the user)
 - **Opened:** 2026-06-30
 - **Origin:** crystallised while designing the inline-var / auto-locals family

@@ -1704,6 +1704,30 @@ begin
   end;
 end;
 
+function FindVarSym(const name: AnsiString): Integer;
+{ FindSym, plus the bare `class var` a method body may name without a qualifier.
+
+  FindSym only knows plain scoped symbols. A class var is reachable inside its own
+  class's methods through the ClassVar registry, and ParseLValueAST does that lookup
+  when it parses an lvalue — so an *expression* naming a class var has always worked.
+  What did not work is the intrinsics that resolve their OPERAND themselves with a raw
+  FindSym before handing it to ParseLValueAST: they saw -1 and silently took whatever
+  their no-symbol arm was. For SetLength that arm classifies the target as a STRING, so
+  `SetLength(G, n)` on a dynamic-array class var wrote a string header over the array
+  handle and the next read segfaulted. For SizeOf it was the honest
+  `SizeOf: unknown type or variable`.
+
+  One lookup, one answer: an intrinsic that wants "the symbol this name denotes here"
+  calls THIS, not FindSym. Roughly forty other operand lookups in this file still call
+  FindSym directly; each is a one-word change when its own ticket arrives — do not
+  grow a second class-var branch beside one
+  (devdocs/dev/normalise-dont-special-case.md). }
+begin
+  Result := FindSym(name);
+  if (Result < 0) and (CurMethClass >= REC_UCLASS_BASE) and (CurProc >= 0) then
+    Result := FindClassVar(CurMethClass - REC_UCLASS_BASE, name);
+end;
+
 function ClassConstMangle(ownerCi: Integer; const nm: AnsiString): AnsiString;
 { The mangled backing key a class const lives under in the ordinary const tables
   (Syms skConst / StrConst / SetConst). Keyed by the OWNING class's NAME (unique
@@ -4260,6 +4284,7 @@ end;
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   augBin: TTokenKind; augRead, augNode: Integer;   { `d[k] += v` }
+  qualNameTok: Integer;   { token index of the member name in `TClass.member` }
   augPow: Boolean;   { `d[k] **= v` — `**` has no binary token, see PyAugDunderName }
   viaProp: Boolean;   { fieldName was rewritten from a PROPERTY's backing field — visibility is the property's, skip the field check }
   mblobNode, cpPri, cpMmi, cpMpi: Integer;
@@ -4866,6 +4891,7 @@ begin
           Expect(tkDot, '.');
           if not IsMethodNameTok then Error('expected class method name');
           fieldName := GetTokenStr(TokPos - 1);  { keyword-token names carry no SVal }
+          qualNameTok := TokPos - 1;             { for a class var: re-enter on it, suffixes and all }
           Next;
 
           { `TOuter.TInner.Create` — the middle name is a nested TYPE, i.e. a
@@ -4880,6 +4906,7 @@ begin
             Expect(tkDot, '.');
             if not IsMethodNameTok then Error('expected class method name');
             fieldName := GetTokenStr(TokPos - 1);
+            qualNameTok := TokPos - 1;
             Next;
           end;
 
@@ -4979,11 +5006,14 @@ begin
             fldIdx := FindClassVar(ci, fieldName);
             if fldIdx >= 0 then
             begin
-              node := AllocNode(AN_IDENT);
-              ASTIVal[node] := fldIdx;
-              ASTTk[node] := Ord(Syms[fldIdx].TypeKind);
-              tk := Syms[fldIdx].TypeKind; recName := REC_NONE;
-              Result := node;
+              { Re-enter with the backing global resolved, exactly like the bare-name
+                path above: the idx >= 0 arm of this same function already parses every
+                suffix. Building a bare AN_IDENT here instead left a following `[` for
+                a caller that had no use for it, so `TC.F[0]` — a class-qualified read
+                of a class-var ARRAY — was `unexpected token` while the same array
+                indexed fine through `Self` or an instance. One resolver, three
+                spellings. }
+              Result := ParseLValueAST(fldIdx, qualNameTok);
               Exit;
             end;
 
@@ -12352,7 +12382,7 @@ begin
                     A record-by-value var uses its record size; everything else its
                     scalar type size (TypeSize returns pointer width for class/
                     pointer references). }
-                  sci := FindSym(name);
+                  sci := FindVarSym(name);   { a bare class var is a variable here too }
                   if sci >= 0 then
                   begin
                     if (Tokens[TokPos].Kind = tkDot) and (Syms[sci].RecName >= 0) and
@@ -22929,7 +22959,10 @@ begin
             CaseEqual(CurTok.SVal, LastDotName(Procs[CurProc].Name))) then
           idx := Procs[CurProc].RetSymIdx
         else
-          idx := FindSym(CurTok.SVal);
+          { FindVarSym, not FindSym: a bare `class var` target used to resolve to -1
+            here and fall through to the STRING arm of the classification below,
+            writing a string header over a dynamic-array handle. }
+          idx := FindVarSym(CurTok.SVal);
         identTokIdx := TokPos - 1; Next;
         valNode := ParseLValueAST(idx, identTokIdx);
         Expect(tkComma, ',');
@@ -24624,15 +24657,337 @@ begin
   Next;
 end;
 
+{ ---------------------------------------------------------------------------
+  DECLARATION TYPE DESCRIPTOR — parse a type once, allocate N symbols from it.
+
+  `var x, y: T` and `class var x, y: T` need the same two steps, in this order:
+  read a type, then reserve storage per name. Before this they each had their
+  own copy, and the class-var copy was the two-liner `ParseTypeKind + AllocVar`,
+  which cannot express an array at all: an inline `array[0..3] of Integer` died
+  as `unknown type: array`, and a NAMED array type reached AllocVar as a scalar,
+  so it indexed correctly but `Length()` answered garbage with NO diagnostic
+  (bug-p-a-class-var-takes-no-array-type-and-a-named-one-is-silently-a-scalar).
+
+  Copying a slice of ParseVarSection into the class-var branch would have made a
+  fifth copy of array-declaration parsing in this file — and wall 18 of the
+  generics corpus was exactly that disease one level down: four inline copies of
+  the array-BOUND parser, one of which stayed broken after the other three were
+  fixed. So the split is by RESPONSIBILITY instead:
+
+    ParseDeclTypeDesc      consumes the type tokens, fills the VD* descriptor,
+                           and makes no storage decision whatsoever;
+    AllocFromDeclTypeDesc  turns that descriptor into exactly one symbol and
+                           reads no tokens.
+
+  Neither knows who is asking. Record fields and class fields are the next two
+  callers to fold in — add a THIRD caller, never a third copy
+  (devdocs/dev/normalise-dont-special-case.md).
+
+  The LastType* globals stay the side channel they already were (record id,
+  pointer element, proc signature, enum id, set element). They are live from the
+  parse to the alloc, so a caller must keep that window free of any other type
+  parsing — which is what every caller already did, since the alloc immediately
+  follows. The VD* descriptor is a global for the same reason and with the same
+  rule: fill it, consume it, do not nest. }
+procedure ParseDeclTypeDesc;
+var ai, di, dLo, dHi, flatLen: Integer;
+    moreDims, elemResolved: Boolean;
+begin
+    VDIsArr := False; VDIsDyn := False; VDArrLo := 0; VDArrHi := 0; VDElemTk := tyInteger;
+    elemResolved := False; VDElemDynDepth := 0;
+    VDElemRowLen := 0; VDElemRowLo := 0;
+    VDElemProcSig := -1;
+    VDIsArrND := False; VDNdCnt := 0;
+    ai := -1;
+    if CurTok.Kind = tkIdent then ai := FindArrayType(CurTok.SVal);
+    if ai >= 0 then
+    begin
+      { Variable of a named array type. }
+      VDIsArr := True;
+      VDElemTk := IntToTypeKind(ArrTypeElemTk[ai]); VDTk := VDElemTk;
+      LastTypeRecId := ArrTypeElemRec[ai];
+      LastTypePointerElemRec := ArrTypePtrElemRec[ai];
+      { The alias records its frozen-string element width; LastTypeStrCap here
+        is whatever the last unrelated `string[N]` anywhere left behind. }
+      if (VDElemTk = tyFixedString) or (VDElemTk = tyShortString) then
+        LastTypeStrCap := ArrTypeElemStrCap[ai];
+      if ArrTypeIsDyn[ai] then
+      begin
+        { dynamic-array alias -> AllocDynArray below }
+        VDIsDyn := True; VDDynDepth := ArrTypeDynDepth[ai];
+        { alias whose element is a named FIXED array: thread the row shape to
+          AllocDynArray below (via LastTypeDynElemRowLen at the call). }
+        VDElemRowLen := ArrTypeElemRowLen[ai];
+        VDElemRowLo  := ArrTypeElemRowLo[ai];
+      end
+      else
+      begin
+        VDArrLo := ArrTypeLo[ai]; VDArrHi := ArrTypeHi[ai];
+        if ArrTypeNDims[ai] >= 2 then
+        begin
+          VDIsArrND := True; VDNdCnt := ArrTypeNDims[ai];
+          for di := 0 to VDNdCnt - 1 do
+          begin
+            VDNdDimLo[di]   := ArrTypeDimLo[ai * MAX_ARR_DIMS + di];
+            VDNdDimSpan[di] := ArrTypeDimSpan[ai * MAX_ARR_DIMS + di];
+          end;
+        end;
+      end;
+      Next; { consume the type name }
+    end
+    else if (CurTok.Kind = tkArray) or
+            ((CurTok.Kind = tkPacked) and (TokPos < TokCount) and
+             (Tokens[TokPos].Kind = tkArray)) then
+    begin
+      { `packed` on an array only affects ELEMENT padding, and pxx already lays
+        elements out contiguously — so accept it and parse the array as usual
+        (same rule as the record-field path). }
+      if CurTok.Kind = tkPacked then Next;
+      VDIsArr := True; Next;
+      if CurTok.Kind = tkLBrack then
+      begin
+        { One or more comma-separated dimensions: `array[a..b, c..d, ...] of T`.
+          An anonymous nested fixed array (`array[a] of array[b] of T`) has the
+          SAME layout as `array[a,b] of T` in FPC, so merge the inner dims into
+          the outer list. 1 dimension is an ordinary array; >=2 flattens to 1-D
+          (N-D indexing via BuildFlatNDIndex). }
+        VDNdCnt := 0;
+        moreDims := True;
+        while moreDims do
+        begin
+          Next;   { consume '[' }
+          repeat
+            ParseArrayDimBounds(dLo, dHi);
+            if VDNdCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
+            VDNdDimLo[VDNdCnt] := dLo; VDNdDimSpan[VDNdCnt] := dHi - dLo + 1; Inc(VDNdCnt);
+          until not Eat(tkComma);
+          Expect(tkRBrack, ']');
+          Expect(tkOf, 'of');
+          { Continue only for a FIXED nested array (`array [`), not a dynamic
+            `array of` element or a scalar/record element type. }
+          moreDims := (CurTok.Kind = tkArray) and (Tokens[TokPos].Kind = tkLBrack);
+          if moreDims then Next;   { consume 'array'; loop head consumes '[' }
+        end;
+        if VDNdCnt = 1 then
+        begin VDArrLo := VDNdDimLo[0]; VDArrHi := VDNdDimLo[0] + VDNdDimSpan[0] - 1; end
+        else
+        begin
+          VDIsArrND := True;
+          flatLen := 1;
+          for di := 0 to VDNdCnt - 1 do flatLen := flatLen * VDNdDimSpan[di];
+          VDArrLo := 0; VDArrHi := flatLen - 1;
+        end;
+      end
+      else
+      begin
+        VDIsDyn := True;   { 'array of T' without bounds is a dynamic array }
+        VDDynDepth := 1;
+        Expect(tkOf, 'of');
+        { Nested dynamic arrays: array of array of ... of BaseType. }
+        while CurTok.Kind = tkArray do
+        begin
+          Next;
+          if CurTok.Kind = tkLBrack then
+            Error('mixed static/dynamic nested arrays not supported');
+          Inc(VDDynDepth);
+          Expect(tkOf, 'of');
+        end;
+        { A named dynamic-array alias as the element (`array of TA` where
+          `TA = array of Integer`) composes its depth: the result is
+          `array of (dyn TA)`, i.e. our VDDynDepth plus the alias's depth, with the
+          alias's BASE element type. ParseTypeKind cannot do this — array-type
+          aliases live in the ArrType table, not the scalar alias table, so it
+          would resolve `TA` to a bare base type and drop the dynamic dimension. }
+        if CurTok.Kind = tkIdent then
+        begin
+          ai := FindArrayType(CurTok.SVal);
+          if (ai >= 0) and ArrTypeIsDyn[ai] then
+          begin
+            VDElemTk := IntToTypeKind(ArrTypeElemTk[ai]);
+            LastTypeRecId := ArrTypeElemRec[ai];
+            LastTypePointerElemRec := ArrTypePtrElemRec[ai];
+            VDDynDepth := VDDynDepth + ArrTypeDynDepth[ai];
+            Next;                 { consume the alias name }
+            VDTk := VDElemTk;
+            elemResolved := True;
+          end
+          else if (ai >= 0) and (not ArrTypeIsDyn[ai]) then
+          begin
+            { `array of T` where T is a named FIXED array: the element is a whole
+              ROW of ArrTypeHi-ArrTypeLo+1 base elements (flattened for N-D T).
+              Without this, ParseTypeKind resolves T to its bare base scalar and
+              the element stride collapses to the base type's size — d[i] lands on
+              the wrong row and r := d[i] copies one scalar
+              (bug-pascal-openarray-of-array-param-marshal). Row semantics are
+              modelled for depth 1 only; deeper nesting stays unsupported. }
+            if VDDynDepth > 1 then
+              Error('array of array of <fixed array type> not supported');
+            VDElemTk := IntToTypeKind(ArrTypeElemTk[ai]);
+            LastTypeRecId := ArrTypeElemRec[ai];
+            LastTypePointerElemRec := ArrTypePtrElemRec[ai];
+            if (VDElemTk = tyAnsiString) or (VDElemTk = tyString) or
+               (VDElemTk = tyFixedString) or (VDElemTk = tyShortString) or
+               ((VDElemTk = tyRecord) and RecordHasManagedFields(LastTypeRecId)) then
+              Error('array of <fixed array of managed elements> not supported');
+            VDElemRowLen := ArrTypeHi[ai] - ArrTypeLo[ai] + 1;
+            VDElemRowLo  := ArrTypeLo[ai];
+            Next;                 { consume the alias name }
+            VDTk := VDElemTk;
+            elemResolved := True;
+          end;
+        end;
+      end;
+      { A FIXED array whose element is a dynamic-array alias
+        (`array[0..3] of TA`, TA = `array of T`): each element slot holds a
+        pointer-sized dyn-array handle. Record the element's dyn depth in
+        VDElemDynDepth (threaded into SymElemDynDepth via LastTypeElemDynDepth at
+        AllocArray); base element type/rec come from the alias. The dynamic-outer
+        case above already handled its own alias element. }
+      if VDIsArr and (not VDIsDyn) and (not elemResolved) and (CurTok.Kind = tkIdent) then
+      begin
+        ai := FindArrayType(CurTok.SVal);
+        if (ai >= 0) and ArrTypeIsDyn[ai] then
+        begin
+          VDElemTk := IntToTypeKind(ArrTypeElemTk[ai]);
+          LastTypeRecId := ArrTypeElemRec[ai];
+          LastTypePointerElemRec := ArrTypePtrElemRec[ai];
+          VDElemDynDepth := ArrTypeDynDepth[ai];
+          Next;                 { consume the alias name }
+          VDTk := VDElemTk;
+          elemResolved := True;
+        end
+        else if (ai >= 0) and (not ArrTypeIsDyn[ai]) then
+        begin
+          { A FIXED array whose element is a FIXED named-array type
+            (`array[0..2] of TG`, `TG = array[0..3] of T`): same flat layout as
+            `array[0..2,0..3] of T` — merge TG's dims into the outer list, like
+            the anonymous-nested form. Without this ParseTypeKind drops TG's
+            dimension and the element stride collapses to the base type's size. }
+          if ArrTypeNDims[ai] >= 2 then
+          begin
+            for di := 0 to ArrTypeNDims[ai] - 1 do
+            begin
+              if VDNdCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
+              VDNdDimLo[VDNdCnt]   := ArrTypeDimLo[ai * MAX_ARR_DIMS + di];
+              VDNdDimSpan[VDNdCnt] := ArrTypeDimSpan[ai * MAX_ARR_DIMS + di];
+              Inc(VDNdCnt);
+            end;
+          end
+          else
+          begin
+            if VDNdCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
+            VDNdDimLo[VDNdCnt]   := ArrTypeLo[ai];
+            VDNdDimSpan[VDNdCnt] := ArrTypeHi[ai] - ArrTypeLo[ai] + 1;
+            Inc(VDNdCnt);
+          end;
+          VDIsArrND := True;
+          flatLen := 1;
+          for di := 0 to VDNdCnt - 1 do flatLen := flatLen * VDNdDimSpan[di];
+          VDArrLo := 0; VDArrHi := flatLen - 1;
+          VDElemTk := IntToTypeKind(ArrTypeElemTk[ai]);
+          LastTypeRecId := ArrTypeElemRec[ai];
+          LastTypePointerElemRec := ArrTypePtrElemRec[ai];
+          VDTk := VDElemTk;
+          elemResolved := True;
+          Next;                 { consume the named array type }
+        end;
+      end;
+      if not elemResolved then
+      begin
+        VDElemTk := ParseTypeKind;
+        VDTk := VDElemTk;
+        { array of <proctype>: element carries a call signature (plain proc =>
+          tyPointer, method pointer => tyRecord). Captured for indexed indirect
+          calls `arr[i](args)`. }
+        if (VDElemTk = tyPointer) or (VDElemTk = tyRecord) then
+          VDElemProcSig := LastTypeProcSig;
+      end;
+    end
+    else
+    begin
+      { Skip qualifiers like pointer, ^, etc. Stop at `=` so a scalar
+        initializer (`var x: Integer = 5`) is left for the init handler below.
+        Stop at `absolute` too: it is a plain identifier, so this loop used to hand it
+        (and the target name after it) to ParseTypeKind, where they fell through the
+        unknown-name default and quietly became Integers. That is how `absolute` came to
+        be silently IGNORED — the overlay never happened and the variable got its own
+        storage. Handled properly just below. }
+      while not (CurTok.Kind in [tkSemicolon, tkEq, tkBegin, tkVar, tkConst, tkType,
+                 tkProcedure, tkFunction, tkEnd, tkEOF]) and
+            not ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'absolute')) do
+      begin
+        VDTk := ParseTypeKind;
+      end;
+    end;
+end;
+
+{ One symbol from the descriptor ParseDeclTypeDesc just filled. Reads no tokens.
+  The caller owns everything that is about the DECLARATION rather than the type:
+  the declared-type name span, `absolute` overlays, initializers, and (for a
+  class var) the ClassVar registry row. }
+function AllocFromDeclTypeDesc(const nm: AnsiString): Integer;
+var idx, di: Integer;
+begin
+  if VDIsArr then
+  begin
+    if VDIsDyn then
+    begin
+      LastTypeDynElemRowLen := VDElemRowLen;  { fixed-array row element (consumed + reset by AllocDynArray) }
+      LastTypeDynElemRowLo := VDElemRowLo;
+      idx := AllocDynArray(nm, VDElemTk, VDDynDepth);
+    end
+    else
+    begin
+      LastTypeElemDynDepth := VDElemDynDepth;  { fixed array of a dyn-array element (consumed + reset by AllocArray) }
+      idx := AllocArray(nm, VDElemTk, VDArrLo, VDArrHi);
+      if VDElemTk = tyRecord then
+      begin
+        Syms[idx].ElemRecName := LastTypeRecId;
+        SymSyncTypeRef(idx);
+      end;
+      if VDIsArrND then
+      begin
+        SymArrNDims[idx] := VDNdCnt;
+        for di := 0 to VDNdCnt - 1 do
+        begin
+          SymArrDimLo[idx * MAX_ARR_DIMS + di]   := VDNdDimLo[di];
+          SymArrDimSpan[idx * MAX_ARR_DIMS + di] := VDNdDimSpan[di];
+        end;
+      end;
+    end;
+    if VDElemProcSig >= 0 then SymElemProcSig[idx] := VDElemProcSig;  { array of proc-type: indexed indirect call arr[i](args) }
+  end
+  else
+  begin
+    idx := AllocVar(nm, VDTk);
+    if (VDTk = tyInteger) and (LastTypeEnumId >= 0) then SymEnumId[idx] := LastTypeEnumId;
+    if (VDTk = tyRecord) or (VDTk = tyClass) then
+    begin
+      Syms[idx].RecName := LastTypeRecId;
+      SymProcSig[idx] := LastTypeProcSig;   { method-pointer record: callable }
+      SymSyncTypeRef(idx);
+    end
+    else if VDTk = tyPointer then
+    begin
+      Syms[idx].PtrElemTk := LastTypePointerElemTk;
+      Syms[idx].PtrElemRec := LastTypePointerElemRec;
+      SymProcSig[idx] := LastTypeProcSig;
+      SymSyncTypeRef(idx);
+    end
+    else if VDTk = tySet then
+    begin
+      SymSetEnumId[idx] := LastTypeSetEnumId;
+      SymSetElemTk[idx] := LastTypeSetElemTk;
+    end;
+  end;
+  Result := idx;
+end;
+
 procedure ParseVarSection;
 var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
-    isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind; dynDepth: Integer;
-    initElem: Integer; initVal: Int64; elemResolved: Boolean; elemDynDepth: Integer;
-    elemRowLen, elemRowLo: Integer;
-    isArrND: Boolean; ndCnt, dLo, dHi, di, flatLen, ai: Integer;
-    moreDims: Boolean; elemProcSig: Integer;
+    isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind;
+    initElem: Integer; initVal: Int64;
     absTarget: Integer;   { `x: T absolute y` — y's symbol, or -1 }
-    ndDimLo, ndDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
     initDepth, scOff, scLen: Integer;
     declTypeNOff, declTypeNLen: Integer;   { single-named-type span, for `parallel for` capture }
 begin
@@ -24675,232 +25030,12 @@ begin
       declTypeNOff := Tokens[TokPos-1].SOffset;
       declTypeNLen := Tokens[TokPos-1].SLen;
     end;
-    isArr := False; isDyn := False; arrLo := 0; arrHi := 0; elemTk := tyInteger;
-    elemResolved := False; elemDynDepth := 0;
-    elemRowLen := 0; elemRowLo := 0;
-    elemProcSig := -1;
-    isArrND := False; ndCnt := 0;
-    ai := -1;
-    if CurTok.Kind = tkIdent then ai := FindArrayType(CurTok.SVal);
-    if ai >= 0 then
-    begin
-      { Variable of a named array type. }
-      isArr := True;
-      elemTk := IntToTypeKind(ArrTypeElemTk[ai]); tk := elemTk;
-      LastTypeRecId := ArrTypeElemRec[ai];
-      LastTypePointerElemRec := ArrTypePtrElemRec[ai];
-      { The alias records its frozen-string element width; LastTypeStrCap here
-        is whatever the last unrelated `string[N]` anywhere left behind. }
-      if (elemTk = tyFixedString) or (elemTk = tyShortString) then
-        LastTypeStrCap := ArrTypeElemStrCap[ai];
-      if ArrTypeIsDyn[ai] then
-      begin
-        { dynamic-array alias -> AllocDynArray below }
-        isDyn := True; dynDepth := ArrTypeDynDepth[ai];
-        { alias whose element is a named FIXED array: thread the row shape to
-          AllocDynArray below (via LastTypeDynElemRowLen at the call). }
-        elemRowLen := ArrTypeElemRowLen[ai];
-        elemRowLo  := ArrTypeElemRowLo[ai];
-      end
-      else
-      begin
-        arrLo := ArrTypeLo[ai]; arrHi := ArrTypeHi[ai];
-        if ArrTypeNDims[ai] >= 2 then
-        begin
-          isArrND := True; ndCnt := ArrTypeNDims[ai];
-          for di := 0 to ndCnt - 1 do
-          begin
-            ndDimLo[di]   := ArrTypeDimLo[ai * MAX_ARR_DIMS + di];
-            ndDimSpan[di] := ArrTypeDimSpan[ai * MAX_ARR_DIMS + di];
-          end;
-        end;
-      end;
-      Next; { consume the type name }
-    end
-    else if (CurTok.Kind = tkArray) or
-            ((CurTok.Kind = tkPacked) and (TokPos < TokCount) and
-             (Tokens[TokPos].Kind = tkArray)) then
-    begin
-      { `packed` on an array only affects ELEMENT padding, and pxx already lays
-        elements out contiguously — so accept it and parse the array as usual
-        (same rule as the record-field path). }
-      if CurTok.Kind = tkPacked then Next;
-      isArr := True; Next;
-      if CurTok.Kind = tkLBrack then
-      begin
-        { One or more comma-separated dimensions: `array[a..b, c..d, ...] of T`.
-          An anonymous nested fixed array (`array[a] of array[b] of T`) has the
-          SAME layout as `array[a,b] of T` in FPC, so merge the inner dims into
-          the outer list. 1 dimension is an ordinary array; >=2 flattens to 1-D
-          (N-D indexing via BuildFlatNDIndex). }
-        ndCnt := 0;
-        moreDims := True;
-        while moreDims do
-        begin
-          Next;   { consume '[' }
-          repeat
-            ParseArrayDimBounds(dLo, dHi);
-            if ndCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
-            ndDimLo[ndCnt] := dLo; ndDimSpan[ndCnt] := dHi - dLo + 1; Inc(ndCnt);
-          until not Eat(tkComma);
-          Expect(tkRBrack, ']');
-          Expect(tkOf, 'of');
-          { Continue only for a FIXED nested array (`array [`), not a dynamic
-            `array of` element or a scalar/record element type. }
-          moreDims := (CurTok.Kind = tkArray) and (Tokens[TokPos].Kind = tkLBrack);
-          if moreDims then Next;   { consume 'array'; loop head consumes '[' }
-        end;
-        if ndCnt = 1 then
-        begin arrLo := ndDimLo[0]; arrHi := ndDimLo[0] + ndDimSpan[0] - 1; end
-        else
-        begin
-          isArrND := True;
-          flatLen := 1;
-          for di := 0 to ndCnt - 1 do flatLen := flatLen * ndDimSpan[di];
-          arrLo := 0; arrHi := flatLen - 1;
-        end;
-      end
-      else
-      begin
-        isDyn := True;   { 'array of T' without bounds is a dynamic array }
-        dynDepth := 1;
-        Expect(tkOf, 'of');
-        { Nested dynamic arrays: array of array of ... of BaseType. }
-        while CurTok.Kind = tkArray do
-        begin
-          Next;
-          if CurTok.Kind = tkLBrack then
-            Error('mixed static/dynamic nested arrays not supported');
-          Inc(dynDepth);
-          Expect(tkOf, 'of');
-        end;
-        { A named dynamic-array alias as the element (`array of TA` where
-          `TA = array of Integer`) composes its depth: the result is
-          `array of (dyn TA)`, i.e. our dynDepth plus the alias's depth, with the
-          alias's BASE element type. ParseTypeKind cannot do this — array-type
-          aliases live in the ArrType table, not the scalar alias table, so it
-          would resolve `TA` to a bare base type and drop the dynamic dimension. }
-        if CurTok.Kind = tkIdent then
-        begin
-          ai := FindArrayType(CurTok.SVal);
-          if (ai >= 0) and ArrTypeIsDyn[ai] then
-          begin
-            elemTk := IntToTypeKind(ArrTypeElemTk[ai]);
-            LastTypeRecId := ArrTypeElemRec[ai];
-            LastTypePointerElemRec := ArrTypePtrElemRec[ai];
-            dynDepth := dynDepth + ArrTypeDynDepth[ai];
-            Next;                 { consume the alias name }
-            tk := elemTk;
-            elemResolved := True;
-          end
-          else if (ai >= 0) and (not ArrTypeIsDyn[ai]) then
-          begin
-            { `array of T` where T is a named FIXED array: the element is a whole
-              ROW of ArrTypeHi-ArrTypeLo+1 base elements (flattened for N-D T).
-              Without this, ParseTypeKind resolves T to its bare base scalar and
-              the element stride collapses to the base type's size — d[i] lands on
-              the wrong row and r := d[i] copies one scalar
-              (bug-pascal-openarray-of-array-param-marshal). Row semantics are
-              modelled for depth 1 only; deeper nesting stays unsupported. }
-            if dynDepth > 1 then
-              Error('array of array of <fixed array type> not supported');
-            elemTk := IntToTypeKind(ArrTypeElemTk[ai]);
-            LastTypeRecId := ArrTypeElemRec[ai];
-            LastTypePointerElemRec := ArrTypePtrElemRec[ai];
-            if (elemTk = tyAnsiString) or (elemTk = tyString) or
-               (elemTk = tyFixedString) or (elemTk = tyShortString) or
-               ((elemTk = tyRecord) and RecordHasManagedFields(LastTypeRecId)) then
-              Error('array of <fixed array of managed elements> not supported');
-            elemRowLen := ArrTypeHi[ai] - ArrTypeLo[ai] + 1;
-            elemRowLo  := ArrTypeLo[ai];
-            Next;                 { consume the alias name }
-            tk := elemTk;
-            elemResolved := True;
-          end;
-        end;
-      end;
-      { A FIXED array whose element is a dynamic-array alias
-        (`array[0..3] of TA`, TA = `array of T`): each element slot holds a
-        pointer-sized dyn-array handle. Record the element's dyn depth in
-        elemDynDepth (threaded into SymElemDynDepth via LastTypeElemDynDepth at
-        AllocArray); base element type/rec come from the alias. The dynamic-outer
-        case above already handled its own alias element. }
-      if isArr and (not isDyn) and (not elemResolved) and (CurTok.Kind = tkIdent) then
-      begin
-        ai := FindArrayType(CurTok.SVal);
-        if (ai >= 0) and ArrTypeIsDyn[ai] then
-        begin
-          elemTk := IntToTypeKind(ArrTypeElemTk[ai]);
-          LastTypeRecId := ArrTypeElemRec[ai];
-          LastTypePointerElemRec := ArrTypePtrElemRec[ai];
-          elemDynDepth := ArrTypeDynDepth[ai];
-          Next;                 { consume the alias name }
-          tk := elemTk;
-          elemResolved := True;
-        end
-        else if (ai >= 0) and (not ArrTypeIsDyn[ai]) then
-        begin
-          { A FIXED array whose element is a FIXED named-array type
-            (`array[0..2] of TG`, `TG = array[0..3] of T`): same flat layout as
-            `array[0..2,0..3] of T` — merge TG's dims into the outer list, like
-            the anonymous-nested form. Without this ParseTypeKind drops TG's
-            dimension and the element stride collapses to the base type's size. }
-          if ArrTypeNDims[ai] >= 2 then
-          begin
-            for di := 0 to ArrTypeNDims[ai] - 1 do
-            begin
-              if ndCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
-              ndDimLo[ndCnt]   := ArrTypeDimLo[ai * MAX_ARR_DIMS + di];
-              ndDimSpan[ndCnt] := ArrTypeDimSpan[ai * MAX_ARR_DIMS + di];
-              Inc(ndCnt);
-            end;
-          end
-          else
-          begin
-            if ndCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
-            ndDimLo[ndCnt]   := ArrTypeLo[ai];
-            ndDimSpan[ndCnt] := ArrTypeHi[ai] - ArrTypeLo[ai] + 1;
-            Inc(ndCnt);
-          end;
-          isArrND := True;
-          flatLen := 1;
-          for di := 0 to ndCnt - 1 do flatLen := flatLen * ndDimSpan[di];
-          arrLo := 0; arrHi := flatLen - 1;
-          elemTk := IntToTypeKind(ArrTypeElemTk[ai]);
-          LastTypeRecId := ArrTypeElemRec[ai];
-          LastTypePointerElemRec := ArrTypePtrElemRec[ai];
-          tk := elemTk;
-          elemResolved := True;
-          Next;                 { consume the named array type }
-        end;
-      end;
-      if not elemResolved then
-      begin
-        elemTk := ParseTypeKind;
-        tk := elemTk;
-        { array of <proctype>: element carries a call signature (plain proc =>
-          tyPointer, method pointer => tyRecord). Captured for indexed indirect
-          calls `arr[i](args)`. }
-        if (elemTk = tyPointer) or (elemTk = tyRecord) then
-          elemProcSig := LastTypeProcSig;
-      end;
-    end
-    else
-    begin
-      { Skip qualifiers like pointer, ^, etc. Stop at `=` so a scalar
-        initializer (`var x: Integer = 5`) is left for the init handler below.
-        Stop at `absolute` too: it is a plain identifier, so this loop used to hand it
-        (and the target name after it) to ParseTypeKind, where they fell through the
-        unknown-name default and quietly became Integers. That is how `absolute` came to
-        be silently IGNORED — the overlay never happened and the variable got its own
-        storage. Handled properly just below. }
-      while not (CurTok.Kind in [tkSemicolon, tkEq, tkBegin, tkVar, tkConst, tkType,
-                 tkProcedure, tkFunction, tkEOF]) and
-            not ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'absolute')) do
-      begin
-        tk := ParseTypeKind;
-      end;
-    end;
+    ParseDeclTypeDesc;
+    { Mirror the descriptor into the locals the initializer handling below reads.
+      That code is about the `= value` clause, not about types, so it keeps the
+      names it always had. }
+    isArr := VDIsArr; isDyn := VDIsDyn; arrLo := VDArrLo; arrHi := VDArrHi;
+    elemTk := VDElemTk; tk := VDTk;
 
     { `b: Integer absolute a;` — b SHARES a's storage (a classic Pascal overlay).
       `absolute` was not recognised at all and was silently swallowed, so b became an
@@ -24933,66 +25068,16 @@ begin
       Next;
     end;
 
-	    if isArr then
-	      for i := 0 to n-1 do
-	      begin
-	        if isDyn then
-	        begin
-	          LastTypeDynElemRowLen := elemRowLen;  { fixed-array row element (consumed + reset by AllocDynArray) }
-	          LastTypeDynElemRowLo := elemRowLo;
-	          idx := AllocDynArray(names[i], elemTk, dynDepth);
-	        end
-	        else
-	        begin
-	          LastTypeElemDynDepth := elemDynDepth;  { fixed array of a dyn-array element (consumed + reset by AllocArray) }
-	          idx := AllocArray(names[i], elemTk, arrLo, arrHi);
-	          if elemTk = tyRecord then
-	          begin
-	            Syms[idx].ElemRecName := LastTypeRecId;
-	            SymSyncTypeRef(idx);
-	          end;
-	          if isArrND then
-	          begin
-	            SymArrNDims[idx] := ndCnt;
-	            for di := 0 to ndCnt - 1 do
-	            begin
-	              SymArrDimLo[idx * MAX_ARR_DIMS + di]   := ndDimLo[di];
-	              SymArrDimSpan[idx * MAX_ARR_DIMS + di] := ndDimSpan[di];
-	            end;
-	          end;
-	        end;
-	        if elemProcSig >= 0 then SymElemProcSig[idx] := elemProcSig;  { array of proc-type: indexed indirect call arr[i](args) }
-	        if declTypeNOff <> 0 then begin SymDeclTypeNOff[idx] := declTypeNOff; SymDeclTypeNLen[idx] := declTypeNLen; end;
-	      end
-	    else
-	      for i := 0 to n-1 do
-	      begin
-	        idx := AllocVar(names[i], tk);
-	        if declTypeNOff <> 0 then begin SymDeclTypeNOff[idx] := declTypeNOff; SymDeclTypeNLen[idx] := declTypeNLen; end;
-	        { `absolute` overlay: take the target's storage instead of our own. AllocVar
-	          already reserved a slot; we simply never use it, which costs a few bytes and
-	          keeps every other invariant (scope, rollback, slot recycling) intact. }
-	        if absTarget >= 0 then Syms[idx].Offset := Syms[absTarget].Offset;
-	        if (tk = tyInteger) and (LastTypeEnumId >= 0) then SymEnumId[idx] := LastTypeEnumId;
-	        if (tk = tyRecord) or (tk = tyClass) then
-	        begin
-	          Syms[idx].RecName := LastTypeRecId;
-	          SymProcSig[idx] := LastTypeProcSig;   { method-pointer record: callable }
-	          SymSyncTypeRef(idx);
-	        end
-	        else if tk = tyPointer then
-	        begin
-	          Syms[idx].PtrElemTk := LastTypePointerElemTk;
-	          Syms[idx].PtrElemRec := LastTypePointerElemRec;
-	          SymProcSig[idx] := LastTypeProcSig;
-	          SymSyncTypeRef(idx);
-	        end
-	        else if tk = tySet then
-	        begin
-	          SymSetEnumId[idx] := LastTypeSetEnumId;
-	          SymSetElemTk[idx] := LastTypeSetElemTk;
-	        end;
-	      end;
+	    for i := 0 to n-1 do
+	    begin
+	      idx := AllocFromDeclTypeDesc(names[i]);
+	      if declTypeNOff <> 0 then begin SymDeclTypeNOff[idx] := declTypeNOff; SymDeclTypeNLen[idx] := declTypeNLen; end;
+	      { `absolute` overlay: take the target's storage instead of our own. The alloc
+	        already reserved a slot; we simply never use it, which costs a few bytes and
+	        keeps every other invariant (scope, rollback, slot recycling) intact. Arrays
+	        never carried an overlay and still do not. }
+	      if (absTarget >= 0) and (not isArr) then Syms[idx].Offset := Syms[absTarget].Offset;
+	    end;
 	    if Eat(tkEq) then
 	    begin
 	      { Constant initializer `= v` / `= (e0,e1,...)`. Recorded as pending
@@ -27740,16 +27825,17 @@ begin
                 Inc(nFldNames); Next;
               until not Eat(tkComma);
               Expect(tkColon, ':');
-              fTk := ParseTypeKind; fRec := LastTypeRecId;
+              { The SAME type parser + allocator the `var` section uses, so a class
+                var takes every type a global can: arrays (inline and named, fixed
+                and dynamic, N-D), sets, pointers, enums, proc types. It used to be
+                `ParseTypeKind + AllocVar`, which reserved a SCALAR slot for an
+                array type — indexing worked, Length() silently answered garbage,
+                and an inline `array[...] of T` did not parse at all. }
+              ParseDeclTypeDesc;
               for fni := 0 to nFldNames - 1 do
               begin
                 if ClassVarCount >= MAX_TYPEALIAS then Error('too many class variables');
-                i := AllocVar('', fTk);
-                if (fTk = tyRecord) or (fTk = tyClass) then
-                begin
-                  Syms[i].RecName := fRec;
-                  SymSyncTypeRef(i);
-                end;
+                i := AllocFromDeclTypeDesc('');
                 ClassVarCi[ClassVarCount]   := ci;
                 ClassVarNOff[ClassVarCount] := fldNOffs[fni];
                 ClassVarNLen[ClassVarCount] := fldNLens[fni];

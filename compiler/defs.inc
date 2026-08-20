@@ -2448,6 +2448,28 @@ var
 
     A key table has no Data[] side: same identity semantics, nothing emitted,
     and the emitted binary stops depending on where the compiler binary sits. }
+  { --- declaration type descriptor (see ParseDeclTypeDesc in parser.inc) ---
+    One parsed type, held between "read the type" and "allocate a symbol for
+    each name". Global for the same reason the LastType* side channel is: the
+    two steps are adjacent by construction, so there is nothing to nest. Fill it
+    with ParseDeclTypeDesc, consume it with AllocFromDeclTypeDesc, do not carry
+    it across another type parse. }
+  VDTk           : TTypeKind;
+  VDElemTk       : TTypeKind;
+  VDIsArr        : Boolean;
+  VDIsDyn        : Boolean;
+  VDIsArrND      : Boolean;
+  VDArrLo        : Integer;
+  VDArrHi        : Integer;
+  VDDynDepth     : Integer;
+  VDElemDynDepth : Integer;
+  VDElemRowLen   : Integer;
+  VDElemRowLo    : Integer;
+  VDElemProcSig  : Integer;
+  VDNdCnt        : Integer;
+  VDNdDimLo      : array[0..MAX_ARR_DIMS-1] of Integer;
+  VDNdDimSpan    : array[0..MAX_ARR_DIMS-1] of Integer;
+
   KeyStrs  : array[0..MAX_KEYS-1] of AnsiString;
   KeyCount : Integer;
   { The IDENTITY each compiled unit is deduped on, which is not always its name.

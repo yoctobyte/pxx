@@ -4,6 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "An INLINE array type as a `class var` is `unknown type: array`. A NAMED one indexes correctly but carries no array metadata, so `Length(F)` answers 0 where FPC says 4 (silent, no diagnostic), `SizeOf(F)` and `SetLength` error, and `TC.F[0]` will not parse. The class-var branch is `ParseTypeKind` + `AllocVar` and has none of the var section's array machinery. Blocks the rtl-generics corpus climb at wall 18."
+status: done
+owner: frank1-ACP
 ---
 
 # A `class var` takes no array type, and a named array type is silently a scalar
@@ -102,3 +104,63 @@ end.
 
 Swap `F: TA` for `F: array[0..3] of Integer` to see the honest arm
 (`unknown type: array` at the declaration). FPC 3.2.2 accepts both.
+
+---
+
+## Fixed — 2026-08-20 (frank1-ACP)
+
+Done the way the ticket asked: the descriptor split, not a fifth copy.
+
+**1. `ParseDeclTypeDesc` + `AllocFromDeclTypeDesc` (`compiler/parser.inc`).**
+`ParseVarSection`'s type-parsing prologue became a routine that consumes the type
+tokens, fills a `VD*` descriptor (`compiler/defs.inc`) and makes no storage
+decision; its alloc loop became a function that turns that descriptor into
+exactly one symbol and reads no tokens. `ParseVarSection` is now those two plus
+the things that are about the DECLARATION rather than the type (the declared-type
+name span, `absolute`, initializers). The `class var` branch is the same two with
+the ClassVar registry row in between — it went from `ParseTypeKind + AllocVar` to
+`ParseDeclTypeDesc + AllocFromDeclTypeDesc`, i.e. it lost its own copy rather than
+gaining a bigger one. Record fields and class fields are the next callers to fold
+in; the header comment says so where the next person will read it.
+
+**2. `FindVarSym`.** Fixing the declaration exposed the second half. Intrinsics
+that resolve their OPERAND themselves with a raw `FindSym` — `SetLength`,
+`SizeOf` — see `-1` for a bare class var (it is not a plain scoped symbol; only
+`ParseLValueAST` knows the ClassVar registry) and silently took their no-symbol
+arm. For `SetLength` that arm classifies the target as a STRING, so it wrote a
+string header over the dyn-array handle and the next read **segfaulted** — which
+is what the old `SetLength expects a string variable in IR codegen` was really
+telling us. `FindVarSym` = `FindSym`, then the class-var registry; `SizeOf` and
+`SetLength` call it. ~40 other operand lookups in the file still call `FindSym`
+directly and are a one-word change each when their own ticket arrives.
+
+**3. `TC.F[0]` parsed.** The class-QUALIFIED class-var branch of `ParseLValueAST`
+built a bare `AN_IDENT` and returned, leaving a following `[` to a caller with no
+use for it. It now re-enters `ParseLValueAST` on the backing global, exactly as
+the bare-name path a few hundred lines above already did — one resolver, three
+spellings (bare, `TC.x`, `obj.x`).
+
+## Verified (self-hosted build at HEAD, FPC 3.2.2 as the oracle)
+
+Every row of the table above now agrees with FPC, and `test/test_class_var_array.pas`
+(new, registered in the Makefile beside the class-const tests) is FPC-differential
+identical line for line: named / inline / N-D / dynamic class-var arrays, read bare,
+class-qualified, through an instance and through a subclass, plus `Length`, `SizeOf`,
+`SetLength`, and pointer/set class vars as the non-array control.
+
+`tools/gate.sh quick`: GREEN (self-host fixedpoint + `testmgr --tier quick`).
+
+## Left open (measured, deliberately not fixed here)
+
+- `SizeOf(TB.F)` — the CLASS-QUALIFIED operand — is still `SizeOf: unknown type or
+  variable`. `SizeOf` resolves `TB` itself and never reaches the class-qualified
+  member path; teaching it would mean a third class-var lookup site, which is the
+  anti-pattern this ticket exists to remove. Bare `SizeOf(F)` (the row in the table)
+  works. Fix belongs with whatever finally routes intrinsic operands through
+  `ParseLValueAST`.
+- `set of (rA, rB, rC)` — an ANONYMOUS enum as a set element — is `unknown type:`
+  at the declaration. **Not a class-var bug**: a plain `var S: set of (rA,rB,rC);`
+  fails identically, so it is pre-existing and orthogonal.
+
+## Log
+- 2026-08-20 — resolved, commit PENDING-COMMIT.

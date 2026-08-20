@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:17 blocked:6 backlog:241 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2105 rejected:40`
+`urgent:1 unfinished:18 blocked:6 backlog:239 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2106 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -15,7 +15,7 @@ _none — no lane is locked._
 
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
 
-## unfinished (17) — parked mid-flight; re-claim, do not duplicate
+## unfinished (18) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name` [N]
@@ -31,6 +31,7 @@ _none — no lane is locked._
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
+- `feature-pascal-corpus-fpc-testsuite` [P]
 - `feature-pascal-corpus-generics` [P]
 - `feature-port-rtl-over-libc` [A]
 - `feature-real-dynlib-loader` [B] — blocked-by: bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
@@ -44,19 +45,17 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 228, ranked
+## Ready — top 30 of 226, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [T]` regression-selfhost-fixedpoint-selfhost-fixedpoint
 - `[p 70] [T]` regression-test-nilpy-test-nilpy-pascal-unit-keeps-fpc-method-shadowing
 - `[p 65] [T]` bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
-- `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
 - `[p 60] [N]` bug-n-inferred-return-type-of-true-division-is-int
 - `[p 60] [T]` bug-t-the-push-rate-starves-breadth-coverage-entirely
 - `[p 60] [O]` feature-opt-store-reload-elimination
-- `[p 60] [A]` meta-dialect-extensions-and-fpc-strict
 - `[p 60] [A]` refactor-a-carve-out-plexer-pparser-so-p-owns-its-own-files
 - `[p 58] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - `[p 58] [O]` feature-opt-o3-register-pressure
@@ -70,11 +69,13 @@ _none — no lane is locked._
 - `[p 55] [N]` bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
 - `[p 55] [N]` bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
 - `[p 55] [N]` bug-nilpy-a-lambda-returned-directly-is-not-callable
-- `[p 55] [P]` bug-p-a-class-var-takes-no-array-type-and-a-named-one-is-silently-a-scalar
 - `[p 55] [T]` chore-t-split-lib-test-into-jobs-that-name-what-failed
 - `[p 55] [U]` decide-reduced-compiler-switch-spelling
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 55] [E]` feature-demo-portable-userland
+- `[p 55] [O]` feature-opt-heap-per-thread-cache
+- `[p 55] [A]` feature-pascal-type-helpers
+- `[p 55] [A]` feature-signal-siginfo-ucontext
 
-_198 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_196 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
