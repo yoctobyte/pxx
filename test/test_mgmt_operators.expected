@@ -1,0 +1,42 @@
+  init
+  init
+main start, g1.n=0 g2.n=0
+TwoLocals
+  init
+  init
+  body
+  fin 1
+  fin 2
+EarlyExit
+  init
+  fin 4
+Raiser
+  init
+  fin 6
+  caught
+LoopLocal
+  init
+  fin 3
+InitOnly
+  ionly init
+  ionly body 11
+FinOnly
+  fonly body
+  fonly fin 12
+Outer
+  outer
+  init
+  inner
+  fin 5
+Method
+  init
+  in method
+  fin 42
+Mk
+  init
+  in Mk
+  r.n=9
+  fin 9
+main end
+  fin 0
+  fin 77

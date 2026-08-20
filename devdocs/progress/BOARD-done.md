@@ -1742,6 +1742,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-parallel-tracks-stable-compiler | A | 50 | feature | Parallel tracks: pin libraries/demos to a "stable" compiler | — |
 | feature-pascal-advanced-records | P | 55 | feature | Advanced records: methods (and `public`/`private`) inside a record | — |
 | feature-pascal-asmmode-directive-tolerance | A | 50 | feature | Accept `{$asmMode default}` (and other non-intel asmmode values) | — |
+| feature-pascal-class-management-operators | P | 48 | feature | `class operator` + named operators (Initialize/Finalize/Explicit/...) | — |
 | feature-pascal-class-property | P | 50 | feature | Class properties (and properties backed by a `class var`) | — |
 | feature-pascal-complex-numbers-ucomplex | B | 45 | feature | ucomplex library (complex numbers, FPC-compatible API) — Track B | — |
 | feature-pascal-corpus-fpcunit | P | 55 | feature | Pascal corpus: fpcunit — OOP + RTTI test framework (and the harness for the rest) | — |
@@ -1923,6 +1924,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-optdiff-shard4-6 | T | 70 | regression | regression: optdiff#shard4/6 red at 6e0395e5495f (auto-filed by twatch) | — |
 | regression-optdiff-shard5-6 | T | 70 | regression | regression: optdiff#shard5/6 red at 2add2ebb487b (auto-filed by twatch) | — |
 | regression-optdiff-shard8-12 | T | 70 | regression | regression: optdiff#shard8/12 red at 28eb1a105ddb (auto-filed by twatch) | — |
+| regression-selfhost-fixedpoint-selfhost-fixedpoint | T | 70 | regression | regression: selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh red at 21117f415284 (auto-filed by twatch) | — |
 | regression-test-aarch64-test-asyncecho | T | 70 | regression | regression: test-aarch64#src:test/test_asyncecho.pas red at 88986014e07d (auto-filed by twatch) | — |
 | regression-test-aarch64-test-lfm | T | 70 | regression | regression: test-aarch64#src:test/test_lfm.pas red at adaecd1206f3 (auto-filed by twatch) | — |
 | regression-test-aarch64-test-set-runtime | P | 70 | regression | regression: test-aarch64#src:test/test_set_runtime.pas red at 61e2448bac6d (auto-filed by twatch) | — |

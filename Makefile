@@ -6151,6 +6151,34 @@ test-core: $(COMPILER)
 	# file yields #26 — all 25 assertions are FPC 3.2.2's own output.
 	./$(COMPILER) test/test_read_text_char.pas $(TESTTMP)/test_read_text_char26
 	test "$$($(TESTTMP)/test_read_text_char26 | tail -1)" = "total ok 25 / 25"
+	# `class operator Initialize/Finalize` -- FPC's MANAGEMENT operators, invoked
+	# at a variable's LIFETIME events. Desugared into Initialize + try..finally
+	# Finalize around the declaring routine's body (and the main body, for
+	# globals), so Exit and a raise both still finalize on every target with no
+	# backend work. The .expected is FPC 3.2.2's output but for two deliberate
+	# divergences the test header states and explains.
+	./$(COMPILER) test/test_mgmt_operators.pas $(TESTTMP)/test_mgmt_operators26
+	$(TESTTMP)/test_mgmt_operators26 | diff -u test/test_mgmt_operators.expected -
+	# ...and the three shapes that are REFUSED rather than silently skipped: an
+	# array of a managed record, a record holding one in a field, and Copy/AddRef
+	# (recognised, but the copy event is not dispatched yet). Each must name its
+	# follow-up ticket, because a declared invariant that never runs is worse
+	# than a program that does not compile.
+	if ./$(COMPILER) test/test_mgmt_operators_array_refused.pas $(TESTTMP)/test_mgmt_op_arr26 >/dev/null 2>&1; then \
+	  echo "FAIL: an array of a managed record compiled"; exit 1; \
+	fi
+	if ./$(COMPILER) test/test_mgmt_operators_field_refused.pas $(TESTTMP)/test_mgmt_op_fld26 >/dev/null 2>&1; then \
+	  echo "FAIL: a record holding a managed record in a field compiled"; exit 1; \
+	fi
+	if ./$(COMPILER) test/test_mgmt_operators_copy_refused.pas $(TESTTMP)/test_mgmt_op_cpy26 >/dev/null 2>&1; then \
+	  echo "FAIL: class operator Copy compiled while nothing dispatches it"; exit 1; \
+	fi
+	./$(COMPILER) test/test_mgmt_operators_array_refused.pas $(TESTTMP)/test_mgmt_op_arr26 2>&1 \
+	  | grep -q "feature-pascal-management-operators-nested-and-array"
+	./$(COMPILER) test/test_mgmt_operators_field_refused.pas $(TESTTMP)/test_mgmt_op_fld26 2>&1 \
+	  | grep -q "feature-pascal-management-operators-nested-and-array"
+	./$(COMPILER) test/test_mgmt_operators_copy_refused.pas $(TESTTMP)/test_mgmt_op_cpy26 2>&1 \
+	  | grep -q "feature-pascal-management-operators-copy-and-addref"
 	./$(COMPILER) test/test_promoint_function_result.pas $(TESTTMP)/test_promoint_function_result26
 	test "$$($(TESTTMP)/test_promoint_function_result26)" = "$$(printf '12\n10000000000000000000000000000000000000000\n12\n24\n10000000000000000000000000000000000000000\n13\n1\nOK')"
 	./$(COMPILER) test/test_promoint_parameter_32bit.pas $(TESTTMP)/test_promoint_parameter_32bit26

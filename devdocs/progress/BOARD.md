@@ -227,12 +227,13 @@ _none_
 | feature-p-uses-a-unit-in-an-explicit-file | P | 30 | feature | `uses mymod in 'mymod.pas';` — the FPC/Delphi spelling for naming a unit's source file — does not parse. pxx has the quoted-path form (`uses './mymod.pas' as m;`, shipped 2026-06-30) but not the standard `in` one, so ordinary FPC project sources are refused at the uses clause. | — |
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-load-sampler-refine | B | 20 | feature | Parallel load sampler — refinements (ramp/EMA, BSD/cgroup) | feature-os-targets-bsd-mac |
-| feature-pascal-class-management-operators | P | 48 | feature | `class operator` + named operators (Initialize/Finalize/Explicit/...) | — |
 | feature-pascal-corpus-expansion | P | 15 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-corpus-oop | P | 65 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-pascal-corpus-passrc | P | 45 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
 | feature-pascal-exitcode-finalization-halt | A | 45 | feature | ExitCode global + unit finalization execution + FPC Halt semantics (Halt sets ExitCode, runs finalizations, exits with ExitCode) | — |
 | feature-pascal-initialize-finalize-intrinsics | A | 50 | feature | `Initialize()` / `Finalize()` standard procedures (managed-type intrinsics) | — |
+| feature-pascal-management-operators-copy-and-addref | P | 35 | feature | `class operator Copy` / `AddRef` are recognised but never dispatched | — |
+| feature-pascal-management-operators-nested-and-array | P | 40 | feature | Management operators do not reach an array element or a nested field | — |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
 | feature-pascal-typed-and-untyped-files | P | 35 | feature | `file of T` and untyped `file` are refused outright — only TextFile works. Blocks the classic Pascal record-file idiom (Assign/Rewrite/Write/Seek/FileSize/BlockRead). | — |
 | feature-pcl-cross-platform-gui | B | 30 | feature | UMBRELLA: cross-platform GUI — copy the LCL widgetset model; PCL = TComponent tree behind a TWidgetSet seam; compile-time widgetset select; sparse widgetset×OS matrix, hard-fail the rest | feature-pcl-seam-seal, feature-pcl-widgetset-select, feature-pcl-win32-widgetset |
@@ -285,7 +286,6 @@ _none_
 | refactor-centralize-managed-string-pchar-conversion | A | 45 | refactor | Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source | — |
 | refactor-n-two-import-handlers-are-twins | N | 30 | refactor | PyParseOneImport (105 lines, 1 caller) and PyParseImportRun (283 lines, 4 callers) are two handlers for one concept — the tree already calls them 'the twin list' and 'the twin site'. The duplication is not cosmetic: it is why a relative import fails with two DIFFERENT errors depending on which one it reaches, and why fixing it has an ordering constraint at all. | — |
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
-| regression-selfhost-fixedpoint-selfhost-fixedpoint | T | 70 | regression | regression: selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh red at 21117f415284 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-pascal-unit-keeps-fpc-method-shadowing | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy red at 57b9b7148d32 (auto-filed by twatch) | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 25 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 40 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
@@ -495,9 +495,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2110)
+## done (2112)
 
-2110 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2112 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -547,7 +547,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [urgent p 70] [N] bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
-- [p 70] [T] regression-selfhost-fixedpoint-selfhost-fixedpoint
 - [p 70] [T] regression-test-nilpy-test-nilpy-pascal-unit-keeps-fpc-method-shadowing
 - [p 65] [U] decide-tobject-root-methods-dispatch-model (unblocks 1)
 - [p 65] [T] bug-t-agents-kill-each-others-processes-with-pattern-pkill
@@ -595,7 +594,6 @@ _none_
 - [p 50] [A] feature-pascal-initialize-finalize-intrinsics
 - [p 50] [A] feature-release-checksums-repro
 - [p 50] [A] refactor-a-the-missing-layer-between-frontends-and-backends
-- [p 48] [P] feature-pascal-class-management-operators
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
 - [p 45] [A] bug-a-only-the-pascal-driver-emits-the-signal-runtime
@@ -668,6 +666,7 @@ _none_
 - [p 40] [O] feature-opt-rtti-emit-on-use
 - [p 40] [P] feature-p-assertions-directive-and-position
 - [p 40] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
+- [p 40] [P] feature-pascal-management-operators-nested-and-array
 - [p 40] [T] feature-twatch-full-tier-coverage-age
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [T] meta-t-dev-throughput-and-track-a-t-integration
@@ -694,6 +693,7 @@ _none_
 - [p 35] [N] feature-nilpy-multi-arg-callback-bridges
 - [p 35] [N] feature-nilpy-staticmethod-and-classmethod
 - [p 35] [O] feature-opt-inline-float-and-record-returning-leaves
+- [p 35] [P] feature-pascal-management-operators-copy-and-addref
 - [p 35] [P] feature-pascal-typed-and-untyped-files
 - [p 35] [T] feature-t-pasmith-rung-selftest
 - [p 35] [T] feature-t-uforth-bench-on-the-watcher-idle-phase

@@ -3098,15 +3098,18 @@ begin
   else if opKind = tkIdent then
   begin
     { Named operators (FPC): Implicit = the := form; Explicit fires at
-      value casts; Inc/Dec at the Inc()/Dec() statements. Enumerator and
-      the management operators (Initialize/Finalize/AddRef/Copy) are
-      parsed+registered but not yet dispatched (lifetime events are a
-      Track A slice). }
+      value casts; Inc/Dec at the Inc()/Dec() statements; Enumerator at for-in.
+      Initialize/Finalize are MANAGEMENT operators — the compiler invokes them
+      at a variable's lifetime events, not at an expression. }
     if CaseEqual(CurTok.SVal, 'implicit') then opKey := Ord(tkAssign)
     else if CaseEqual(CurTok.SVal, 'explicit') then opKey := OPK_EXPLICIT
     else if CaseEqual(CurTok.SVal, 'inc') then opKey := OPK_INC
     else if CaseEqual(CurTok.SVal, 'dec') then opKey := OPK_DEC
-    else if CaseEqual(CurTok.SVal, 'enumerator') then opKey := OPK_ENUMERATOR;
+    else if CaseEqual(CurTok.SVal, 'enumerator') then opKey := OPK_ENUMERATOR
+    else if CaseEqual(CurTok.SVal, 'initialize') then opKey := OPK_INITIALIZE
+    else if CaseEqual(CurTok.SVal, 'finalize') then opKey := OPK_FINALIZE
+    else if CaseEqual(CurTok.SVal, 'addref') then opKey := OPK_ADDREF
+    else if CaseEqual(CurTok.SVal, 'copy') then opKey := OPK_COPY;
   end;
   if opKey < 0 then
     Error('expected operator symbol after operator keyword');
@@ -3264,7 +3267,29 @@ begin
   if procIdx < 0 then Error('operator: internal error, proc not found after parse');
   { Arity: conversion/unary named operators take exactly ONE parameter —
     FPC rejects `operator :=(S1, S2: String)` (tassignmentoperator1 %fail). }
-  if (opKey = Ord(tkAssign)) or (opKey = OPK_EXPLICIT) or (opKey = OPK_INC) or
+  { Copy/AddRef are recognised so the spelling is not a syntax error, but they
+    fire on a value COPY, which nothing dispatches yet — accepting one silently
+    would give a record whose invariant simply never runs, which is worse than
+    not compiling. Refuse loudly and name the ticket instead.
+    feature-pascal-class-management-operators }
+  if (opKey = OPK_ADDREF) or (opKey = OPK_COPY) then
+    Error('operator Copy/AddRef is recognised but not dispatched yet — the copy '
+          + 'lifetime event is a separate slice '
+          + '(feature-pascal-management-operators-copy-and-addref)');
+  if (opKey = OPK_INITIALIZE) or (opKey = OPK_FINALIZE) then
+  begin
+    { `class operator Initialize(var a: TFoo)` — exactly one VAR parameter of
+      the record type, and no result. FPC's own shape. }
+    if Procs[procIdx].ParamCount <> 1 then
+      Error('a management operator must take exactly one parameter');
+    if Procs[procIdx].IsFunc then
+      Error('a management operator must be a procedure (no result)');
+    if recId = REC_NONE then
+      Error('a management operator needs a record or class operand type');
+    if not Procs[procIdx].Params[0].IsRef then
+      Error('a management operator takes its operand as a var parameter');
+  end
+  else if (opKey = Ord(tkAssign)) or (opKey = OPK_EXPLICIT) or (opKey = OPK_INC) or
      (opKey = OPK_DEC) or (opKey = OPK_ENUMERATOR) then
   begin
     if Procs[procIdx].ParamCount <> 1 then
@@ -18634,6 +18659,7 @@ end;
 
 procedure ParseStatement; forward;
 procedure ParseBlock; forward;
+function WrapMainBodyManagementOps(bodyNode: Integer): Integer; forward;  { class operator Initialize/Finalize on globals }
 
 function ParseIfStatementAST: Integer;
 var condNode, thenNode, elseNode, pairNode, node: Integer;
@@ -24797,10 +24823,13 @@ begin
   ASTNodeCount := ASTArenaFloor;
 end;
 
+{ The MAIN PROGRAM BODY (its only caller), so the globals' management
+  operators are woven in here the way a routine's locals are in
+  ParseSubroutine. }
 procedure ParseBlock;
 var node: Integer;
 begin
-  node := ParseBlockAST;
+  node := WrapMainBodyManagementOps(ParseBlockAST);
   CompileAST(node);
   ASTNodeCount := ASTArenaFloor;
 end;
@@ -30725,6 +30754,156 @@ begin
   Eat(tkSemicolon);
 end;
 
+{ FPC's `class operator Initialize/Finalize` are MANAGEMENT operators: the
+  compiler invokes them at a variable's LIFETIME events, not at an expression.
+  So they are woven into the routine's body rather than dispatched from a call
+  site:
+
+    Initialize(v0); Initialize(v1); ...
+    try BODY finally Finalize(v0); Finalize(v1); ... end;
+
+  A desugar, deliberately, and not an extension of the managed-local cleanup:
+  that cleanup is six per-target emitters deep, while `try..finally` already
+  covers every way a routine can leave — falling off the end, `Exit`, an
+  exception — on every target, which is exactly the guarantee a Finalize needs.
+  One shape, no backend edit, right on xtensa the day it is right on x86-64.
+
+  Order is FPC 3.2.2's, measured rather than assumed: BOTH lists run in
+  DECLARATION order — a routine with x.n=1 and y.n=2 prints `fin 1` then
+  `fin 2`, not the reverse a stack discipline would suggest.
+
+  Deliberately NOT covered, each measured against FPC first: a function's
+  Result slot (FPC does not initialize one either), and the slot is not zeroed
+  before Initialize runs (FPC hands over raw memory — an ordinary Integer field
+  still held $5A5A5A5A, only the managed fields were nil).
+
+  GLOBALS are covered, wrapped around the main body (WrapMainBodyManagementOps)
+  — and here we deliberately go PAST FPC 3.2.2, which initializes a record-typed
+  global and then never finalizes it. Delphi's managed records do finalize
+  globals, a Finalize that never runs is a leak by construction, and the whole
+  point of the operator is the pairing; so the divergence is one FPC line
+  missing, not one of ours too many.
+
+  What is NOT reached is refused rather than left silent: an ARRAY of a managed
+  record, and any record or class that merely CONTAINS one in a field, both of
+  which FPC handles through recursive RTTI and this per-symbol desugar does not.
+  feature-pascal-management-operators-nested-and-array }
+
+{ Does this record type itself declare a management operator? }
+function RecHasManagementOp(recId: Integer): Boolean;
+begin
+  Result := (recId <> REC_NONE) and
+            ((FindOpOverload(OPK_INITIALIZE, Ord(tyRecord), recId) >= 0) or
+             (FindOpOverload(OPK_FINALIZE, Ord(tyRecord), recId) >= 0));
+end;
+
+{ ...and does it CONTAIN one, at any depth, in a field? The depth cap is the
+  cheap guard against a record graph that refers back to itself. }
+function RecContainsManagementOp(recId, depth: Integer): Boolean;
+var ci, i, base, cnt, frec: Integer;
+begin
+  { Only user records/classes can hold one: the builtin descriptors are the
+    compiler's own TProc/TSymbol/..., which no user operator can name. }
+  Result := False;
+  if (recId < REC_UCLASS_BASE) or (depth > 8) then Exit;
+  ci := recId - REC_UCLASS_BASE;
+  base := UClsFBase[ci];
+  cnt := UClsFCount[ci];
+  for i := 0 to cnt - 1 do
+    if IntToTypeKind(UFldTk[base + i]) = tyRecord then
+    begin
+      { UFldTk carries the ELEMENT kind, so an `array of TFoo` field lands here
+        too — also unsupported, also refused. }
+      frec := UFldRec_[base + i];
+      if RecHasManagementOp(frec) or RecContainsManagementOp(frec, depth + 1) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
+end;
+
+function WrapManagementOpsRange(loSym, hiSym, retSym: Integer; wantGlobal: Boolean;
+                               bodyNode: Integer): Integer;
+var i, ip, fp, callNode, headInit, tailInit, headFin, tailFin, newSeq, tryNode: Integer;
+    isTarget: Boolean;
+begin
+  Result := bodyNode;
+  headInit := -1; tailInit := -1; headFin := -1; tailFin := -1;
+  for i := loSym to hiSym do
+  begin
+    if wantGlobal then isTarget := Syms[i].Kind = skGlobal
+    else isTarget := Syms[i].Kind = skLocal;
+    { Refuse the shapes the desugar cannot reach, rather than compile a variable
+      whose declared invariant simply never runs. An array needs a loop and a
+      nested field needs a path, both of which FPC gets free from recursive RTTI
+      and this pass does not have. }
+    if isTarget and (SymTR[i].RecId <> REC_NONE) and
+       (Syms[i].TypeKind in [tyRecord, tyClass]) then
+    begin
+      if Syms[i].IsArray and RecHasManagementOp(SymTR[i].RecId) then
+        Error('an array of a record with a management operator is not supported yet '
+              + '(feature-pascal-management-operators-nested-and-array)');
+      if RecContainsManagementOp(SymTR[i].RecId, 0) then
+        Error('a field of a record with a management operator is not managed yet '
+              + '(feature-pascal-management-operators-nested-and-array)');
+    end;
+    if isTarget and (Syms[i].TypeKind = tyRecord) and
+       (not Syms[i].IsArray) and (i <> retSym) and
+       (SymTR[i].RecId <> REC_NONE) then
+    begin
+      ip := FindOpOverload(OPK_INITIALIZE, Ord(tyRecord), SymTR[i].RecId);
+      if ip >= 0 then
+      begin
+        callNode := GenMakeCall6(ip, tyUnknown, GenMakeIdent(i, tyRecord),
+                                 -1, -1, -1, -1, -1);
+        newSeq := GenMakeSeq(callNode, -1);
+        if headInit = -1 then headInit := newSeq else ASTRight[tailInit] := newSeq;
+        tailInit := newSeq;
+      end;
+      fp := FindOpOverload(OPK_FINALIZE, Ord(tyRecord), SymTR[i].RecId);
+      if fp >= 0 then
+      begin
+        callNode := GenMakeCall6(fp, tyUnknown, GenMakeIdent(i, tyRecord),
+                                 -1, -1, -1, -1, -1);
+        newSeq := GenMakeSeq(callNode, -1);
+        if headFin = -1 then headFin := newSeq else ASTRight[tailFin] := newSeq;
+        tailFin := newSeq;
+      end;
+    end;
+  end;
+  if (headInit = -1) and (headFin = -1) then Exit;
+  if headFin >= 0 then
+  begin
+    tryNode := AllocNode(AN_TRY_FINALLY);
+    ASTLeft[tryNode] := bodyNode;
+    ASTRight[tryNode] := headFin;
+    Result := tryNode;
+  end;
+  if headInit >= 0 then
+  begin
+    ASTRight[tailInit] := GenMakeSeq(Result, -1);
+    Result := headInit;
+  end;
+end;
+
+{ A routine's own locals. }
+function WrapManagementOps(procIdx, bodyNode: Integer): Integer;
+begin
+  if procIdx < 0 then Result := bodyNode
+  else Result := WrapManagementOpsRange(Procs[procIdx].ScopeBase, SymCount - 1,
+                                        Procs[procIdx].RetSymIdx, False, bodyNode);
+end;
+
+{ The program's GLOBALS, wrapped around the main body — same lifetime rule one
+  scope up. Every skGlobal is in range, not just the program's own: a unit that
+  declares a variable of such a record has the same claim on its Initialize, and
+  the pass is one walk of the symbol table. }
+function WrapMainBodyManagementOps(bodyNode: Integer): Integer;
+begin
+  Result := WrapManagementOpsRange(0, SymCount - 1, -1, True, bodyNode);
+end;
+
 procedure ParseSubroutine;
 var
   pzi      : Integer;  { pFixedLen/pFixedLo entry-zero loop }
@@ -32905,7 +33084,7 @@ begin
       non-method plain routine is a candidate; TryRetainInlineBody re-checks all
       eligibility and no-ops unless OptLevel>=2. Behaviour is otherwise identical
       to ParseBlock, so -O0/-O1 stay byte-identical. }
-    inlineBodyNode := ParseBlockAST;
+    inlineBodyNode := WrapManagementOps(procIdx, ParseBlockAST);
     if methOwnerCi < 0 then TryRetainInlineBody(procIdx, inlineBodyNode);
     CompileAST(inlineBodyNode);
     ASTNodeCount := ASTArenaFloor;
@@ -35854,6 +36033,17 @@ begin
   while i < TokCount do
   begin
     if Tokens[i].Kind in [tkTry, tkRaise] then hasExceptions := True;
+    { `class operator Finalize` desugars to a try..finally around the routine
+      body (WrapManagementOps), and the exception runtime's stubs are emitted
+      HERE, from a token pre-scan, long before that body is parsed. A program
+      whose only try is one the compiler synthesised therefore called a stub at
+      code offset 0. Trigger on the declaration itself, which is the same
+      evidence the desugar will act on.
+      feature-pascal-class-management-operators }
+    if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'finalize') and
+       (i > 0) and (Tokens[i - 1].Kind = tkIdent) and
+       CaseEqual(GetTokenStr(i - 1), 'operator') then
+      hasExceptions := True;
     { A program naming the promotable-int type pulls its runtime (and, through
       it, bignum). Nothing else references those entry points, so a Pascal or C
       program that never names the type keeps them unreachable and DCE drops

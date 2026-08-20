@@ -162,6 +162,13 @@ const
   OPK_INC        = 1002;
   OPK_DEC        = 1003;
   OPK_ENUMERATOR = 1004;
+  { Management operators — compiler-invoked at a variable's LIFETIME events
+    rather than at an expression. Initialize/Finalize fire at scope entry/exit;
+    Copy/AddRef at a value copy. }
+  OPK_INITIALIZE = 1005;
+  OPK_FINALIZE   = 1006;
+  OPK_ADDREF     = 1007;
+  OPK_COPY       = 1008;
   MAX_METHFIX     = 8192;  { code-address relocations into Data[] (VMT + RTTI) — blcksock's deep virtual hierarchy blew 1024 }
 
   { RTTI property kinds (OUR codes; streaming-grade subset) }
