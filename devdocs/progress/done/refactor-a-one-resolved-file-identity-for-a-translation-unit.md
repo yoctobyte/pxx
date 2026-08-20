@@ -190,4 +190,4 @@ The comparison is on path TEXT. Two roots reaching one file by genuinely differe
 comment rather than fixed: it needs inode identity, which is a separate decision.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit 883ef0c05.
