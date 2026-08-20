@@ -2375,6 +2375,88 @@ begin
   Result := RecordHasManagedFieldsDepth2(recId, 0, False);
 end;
 
+function ManagedElemKind(elemTk, elemRec: Integer): Integer;
+{ THE answer to "what must a container's element walk do for this element type",
+  and the only place that answer is written down. It is the `baseKind` the
+  runtime array descriptor carries and the four element walks in builtinheap
+  (PXXArrayReleaseImmediate, PXXDynArrayRetainImmediate, PXXDynArrayReleaseDepth,
+  and PXXDynSetLen through them) switch on:
+
+    0 = nothing managed
+    1 = AnsiString element      (PXXStrIncRef / PXXStrDecRef)
+    3 = record with managed fields, walked via its layout descriptor
+    4 = COM interface element   (PXXIntfAddRef / PXXIntfRelease)
+
+  It exists because that policy was spelled out NINE times — ir.inc's two
+  whole-static-array copy branches, ir_codegen.inc's two descriptor allocators,
+  rtti_emit.inc's descriptor writer, and this file's four per-target scope-exit
+  arms — and every one of them was missing kind 4. That is not four bugs, it is
+  one absent case reachable through nine doors, which is exactly the shape
+  devdocs/dev/normalise-dont-special-case.md describes: an array of interfaces
+  released nothing at scope exit, nothing on SetLength shrink, and nothing on
+  whole-array assignment, for the same reason each time. A tenth kind (variant
+  elements are the obvious next one) goes HERE, once.
+
+  Note the ORDER: a COM interface is modelled as a tyRecord whose rec id is an
+  interface UCls, so the interface test must precede the managed-record test.
+  It would answer False anyway (an interface UCls has no managed FIELDS) — which
+  is precisely how these elements fell through every walk — but relying on that
+  is how the next kind gets mis-ordered. }
+begin
+  if elemTk = Ord(tyAnsiString) then
+    ManagedElemKind := 1
+  else if elemTk <> Ord(tyRecord) then
+    ManagedElemKind := 0
+  else if RecIsComInterface(elemRec) then
+    ManagedElemKind := 4
+  else if RecordHasManagedFields(elemRec) then
+    ManagedElemKind := 3
+  else
+    ManagedElemKind := 0;
+end;
+
+function ManagedElemRef(elemTk, elemRec: Integer): Integer;
+{ The second half of the (baseKind, ref) pair every element walk takes. Kind 3
+  passes a descriptor ADDRESS (each emit site builds it from elemRec itself);
+  kind 4 passes the INTERFACE ID as a plain integer, which is what this returns.
+  0 for every other kind, where the argument is unused. }
+begin
+  if ManagedElemKind(elemTk, elemRec) = 4 then
+    ManagedElemRef := elemRec - REC_UCLASS_BASE
+  else
+    ManagedElemRef := 0;
+end;
+
+function ManagedElemKindLocked(elemTk, elemRec: Integer): Integer;
+{ ManagedElemKind for an element walk that runs while the CODEGEN HEAP LOCK is
+  held — every dynamic-array path on x86-64 (EmitDynArrayReleaseForSym wraps the
+  call, and both SetLength lowerings hold the lock from the allocation through
+  the release of the old block).
+
+  Kind 4 is refused there, and the refusal is not conservatism: releasing an
+  interface element runs _Release -> Destroy -> FreeMem, and the FreeMem
+  intrinsic re-acquires this same NON-REENTRANT spinlock, so the program would
+  hang rather than leak. That is the identical hazard
+  bug-a-class-managed-fields-not-finalized-on-destroy documented and solved for
+  class fields by running the kind-4 pass first and UNLOCKED, and the identical
+  reason it left the record-field case as a benign leak.
+
+  So under --threadsafe / {$threadsafe on} a dynamic array of interfaces keeps
+  the pre-existing leak instead of deadlocking, and every other build — which is
+  every build that does not opt into hard locking — releases correctly. STATIC
+  arrays are NOT gated: their scope-exit walk is emitted outside any lock (the
+  same unlocked shape SymIsComInterface's scalar arm has shipped with for a
+  long time), so nothing there can deadlock.
+
+  Lifting this is decide-interface-members-in-aggregates-lock-strategy (Track U):
+  it needs a reentrant heap lock or a split unlocked interface pass, and that is
+  one decision covering records, classes and containers together. }
+begin
+  ManagedElemKindLocked := ManagedElemKind(elemTk, elemRec);
+  if (ManagedElemKindLocked = 4) and ThreadSafeMode then
+    ManagedElemKindLocked := 0;
+end;
+
 function RecordNeedsZeroInit(recId: Integer): Boolean;
 { ZERO-INIT question: does this record hold any slot that must start nil so the
   FIRST assignment's release sees an empty slot instead of stack garbage? Same
@@ -8120,15 +8202,19 @@ begin
   else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
           RecordHasManagedFields(SymTR[i].RecId) then
     Result := True
-  { A STATIC array whose ELEMENTS are managed records. The tyAnsiString arm at
-    the top already (accidentally) catches an array of strings, because an
-    array's TypeKind IS its element kind — but the record arm above excludes
-    arrays, so a proc whose only managed local was an `array[0..N] of TRec`
-    got no cleanup emitted at all and leaked every element.
-    bug-a-local-static-array-of-string-never-released-at-scope-exit }
-  else if Syms[i].IsArray and (Syms[i].ArrLen >= 0) and
-          (SymElemDynDepth[i] = 0) and (Syms[i].TypeKind = tyRecord) and
-          RecordHasManagedFields(SymTR[i].ElemRec) then
+  { A STATIC array whose ELEMENTS are managed. The tyAnsiString arm at the top
+    already (accidentally) catches an array of strings, because an array's
+    TypeKind IS its element kind — but the record arm above excludes arrays, so
+    a proc whose only managed local was an `array[0..N] of TRec` got no cleanup
+    emitted at all and leaked every element.
+    bug-a-local-static-array-of-string-never-released-at-scope-exit
+    Asked through ManagedElemKind rather than re-derived here, which is what
+    also brings in `array[0..N] of IFoo` (kind 4): SymIsComInterface answers
+    False for an array on purpose, so nothing above claims it and the whole
+    array leaked.
+    bug-a-a-local-array-of-interfaces-is-never-released-at-scope-exit }
+  else if Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
+          (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
     Result := True;
 end;
 
@@ -8169,7 +8255,7 @@ begin
 end;
 
 procedure EmitManagedLocalCleanup(retSymIdx: Integer);
-var i, procIdx: Integer;
+var i, procIdx, mek: Integer;
 begin
   if CurProc < 0 then Exit;
   { A STACKLESS GENERATOR step function RETURNS at every yield and is re-entered
@@ -8215,11 +8301,8 @@ begin
         x64_mov_reg_imm(8, rRSI, SymTR[i].RecId - REC_UCLASS_BASE);  { rsi = interface id }
         EmitCallProc(procIdx);
       end
-      else if Syms[i].IsArray and (Syms[i].ArrLen >= 0) and
-              (SymElemDynDepth[i] = 0) and
-              ((Syms[i].TypeKind = tyAnsiString) or
-               ((Syms[i].TypeKind = tyRecord) and
-                RecordHasManagedFields(SymTR[i].ElemRec))) then
+      else if Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
+              (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
       begin
         { STATIC array with MANAGED ELEMENTS: release EVERY element.
 
@@ -8240,23 +8323,30 @@ begin
         if procIdx < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
         x64_lea_reg_mem(8, rRDI, rRBP, Syms[i].Offset, True);   { rdi = &arr }
         x64_mov_reg_imm(8, rRSI, Syms[i].ArrLen);               { rsi = count }
-        if Syms[i].TypeKind = tyAnsiString then
-        begin
-          x64_mov_reg_imm(8, rRDX, 1);                          { baseKind = string }
-          x64_mov_reg_imm(8, rRCX, 0);                          { desc = nil }
-        end
-        else
-        begin
-          x64_mov_reg_imm(8, rRDX, 3);                          { baseKind = record }
+        mek := ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec);
+        x64_mov_reg_imm(8, rRDX, mek);                          { baseKind }
+        if mek = 3 then
           EmitAsmX64(['mov rcx, @data',
-            -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE))]);
-        end;
+            -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE))])
+        else
+          { kinds 1 and 4: the fourth argument is an immediate, not an address —
+            0 for a string element, the interface id for kind 4. }
+          x64_mov_reg_imm(8, rRCX, ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
         EmitCallProc(procIdx);
       end
-      else if Syms[i].TypeKind = tyAnsiString then
+      else if (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
       begin
-        { mov rax, [rbp + Offset] }
-        x64_mov_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);
+        { A SCALAR AnsiString local. The `not IsArray` guard is load-bearing and
+          was missing: an array's TypeKind IS its element kind, so a local
+          `array of string` (TypeKind = tyAnsiString, ArrLen = -1) was claimed
+          HERE — above the dynamic-array arm below — and the array's DATA
+          POINTER was handed to the string releaser as if it were a string
+          handle. Neither the elements nor the block were ever freed: measured
+          at ~560 bytes leaked per call for an 8-element array, growing linearly
+          (200k calls = 112 MB), on HEAD and on pinned alike. The other four
+          backends' epilogues already carry this guard; x86-64 was the outlier.
+          bug-a-local-dynamic-array-of-string-is-released-as-a-string-handle }
+        x64_mov_reg_mem(8, rRAX, rRBP, Syms[i].Offset, True);   { mov rax, [rbp+off] }
         IREmitCodeCall(AnsiStrReleaseAddr);
       end
       else if Syms[i].TypeKind = tyVariant then
@@ -8489,7 +8579,7 @@ begin
 end;
 
 procedure EmitProcEpilog(retSymIdx: Integer);
-var sz, i, procIdx: Integer;
+var sz, i, procIdx, mek: Integer;
 begin
   if TargetArch = TARGET_I386 then
   begin
@@ -8512,11 +8602,8 @@ begin
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(8);                { add esp, 8 }
           end
-          else if Syms[i].IsArray and (Syms[i].ArrLen >= 0) and
-                (SymElemDynDepth[i] = 0) and
-                ((Syms[i].TypeKind = tyAnsiString) or
-                 ((Syms[i].TypeKind = tyRecord) and
-                  RecordHasManagedFields(SymTR[i].ElemRec))) then
+          else if Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
+                  (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
           begin
           { STATIC array with MANAGED ELEMENTS: release EVERY element at scope
             exit. Without this arm an `array[0..N] of string` either fell into
@@ -8530,16 +8617,16 @@ begin
             EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);   { lea eax, [ebp+off] }
             EmitB($50);                                        { push arg0 = &arr }
             EmitB($68); EmitI32(Syms[i].ArrLen);               { push arg1 = count }
-            if Syms[i].TypeKind = tyAnsiString then
+            mek := ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec);
+            EmitB($68); EmitI32(mek);                          { push arg2 = baseKind }
+            if mek = 3 then
             begin
-              EmitB($68); EmitI32(1);                          { push arg2 = kind string }
-              EmitB($68); EmitI32(0);                          { push arg3 = desc nil }
-            end
-            else
-            begin
-              EmitB($68); EmitI32(3);                          { push arg2 = kind record }
               EmitB($68);
               EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)));
+            end
+            else
+            begin  { kinds 1/4: immediate — 0, or the interface id }
+              EmitB($68); EmitI32(ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
             end;
             EmitCallProc(procIdx);
             EmitB($81); EmitB($C4); EmitI32(16);               { add esp, 16 }
@@ -8659,11 +8746,8 @@ begin
           EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                Syms[i].IsArray and (Syms[i].ArrLen >= 0) and
-                (SymElemDynDepth[i] = 0) and
-                ((Syms[i].TypeKind = tyAnsiString) or
-                 ((Syms[i].TypeKind = tyRecord) and
-                  RecordHasManagedFields(SymTR[i].ElemRec))) then
+                Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
+                (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
         begin
           { STATIC array with MANAGED ELEMENTS: release EVERY element at scope
             exit. Without this arm an `array[0..N] of string` either fell into
@@ -8677,17 +8761,13 @@ begin
           EmitLoadImmArm32(0, Syms[i].Offset);
           EmitI32($E08B0000);                          { add r0, fp, r0 = &arr }
           EmitLoadImmArm32(1, Syms[i].ArrLen);         { r1 = count }
-          if Syms[i].TypeKind = tyAnsiString then
-          begin
-            EmitLoadImmArm32(2, 1);                    { r2 = kind string }
-            EmitLoadImmArm32(3, 0);                    { r3 = desc nil }
-          end
-          else
-          begin
-            EmitLoadImmArm32(2, 3);                    { r2 = kind record }
+          mek := ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec);
+          EmitLoadImmArm32(2, mek);                    { r2 = baseKind }
+          if mek = 3 then
             EmitLoadDataRefArm32(3,
-              -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)));
-          end;
+              -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)))
+          else  { kinds 1/4: immediate — 0, or the interface id }
+            EmitLoadImmArm32(3, ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
@@ -8804,11 +8884,8 @@ begin
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                Syms[i].IsArray and (Syms[i].ArrLen >= 0) and
-                (SymElemDynDepth[i] = 0) and
-                ((Syms[i].TypeKind = tyAnsiString) or
-                 ((Syms[i].TypeKind = tyRecord) and
-                  RecordHasManagedFields(SymTR[i].ElemRec))) then
+                Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
+                (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
         begin
           { STATIC array with MANAGED ELEMENTS — every arm here guards
             `not IsArray`, so an array of strings/managed records was simply
@@ -8819,17 +8896,13 @@ begin
           EmitLoadImmA64(9, Syms[i].Offset);
           EmitI32($8B0903A0);                      { add x0, x29, x9 = &arr }
           EmitLoadImmA64(1, Syms[i].ArrLen);       { x1 = count }
-          if Syms[i].TypeKind = tyAnsiString then
-          begin
-            EmitLoadImmA64(2, 1);                  { x2 = baseKind string }
-            EmitLoadImmA64(3, 0);                  { x3 = desc nil }
-          end
-          else
-          begin
-            EmitLoadImmA64(2, 3);                  { x2 = baseKind record }
+          mek := ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec);
+          EmitLoadImmA64(2, mek);                  { x2 = baseKind }
+          if mek = 3 then
             EmitLoadDataRefA64(3,
-              -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)));
-          end;
+              -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)))
+          else  { kinds 1/4: immediate — 0, or the interface id }
+            EmitLoadImmA64(3, ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
           procIdx := FindProc('PXXArrayReleaseImmediate');
           if procIdx < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
           EmitCallProc(procIdx);
@@ -9063,11 +9136,8 @@ begin
     if CurProc >= 0 then
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
         if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-           Syms[i].IsArray and (Syms[i].ArrLen >= 0) and
-           (SymElemDynDepth[i] = 0) and
-           ((Syms[i].TypeKind = tyAnsiString) or
-            ((Syms[i].TypeKind = tyRecord) and
-             RecordHasManagedFields(SymTR[i].ElemRec))) then
+           Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
+           (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
         begin
           { STATIC array with MANAGED ELEMENTS: release EVERY element at scope
             exit, as the other four backends do. This arm was held back while
@@ -9080,17 +9150,13 @@ begin
           if procIdx < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
           EmitSlotAddrRISCV32(reg_a0, i);        { a0 = &arr }
           EmitLoadImmRISCV32(reg_a1, Syms[i].ArrLen);
-          if Syms[i].TypeKind = tyAnsiString then
-          begin
-            EmitLoadImmRISCV32(reg_a2, 1);
-            EmitLoadImmRISCV32(reg_a3, 0);
-          end
-          else
-          begin
-            EmitLoadImmRISCV32(reg_a2, 3);
+          mek := ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec);
+          EmitLoadImmRISCV32(reg_a2, mek);
+          if mek = 3 then
             EmitLoadDataRefRISCV32(reg_a3,
-              -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)));
-          end;
+              -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)))
+          else  { kinds 1/4: immediate — 0, or the interface id }
+            EmitLoadImmRISCV32(reg_a3, ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and

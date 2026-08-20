@@ -95,3 +95,43 @@ leave the leaks filed against (b)/(a).
 Either way the two **use-after-frees** should not sit in the backlog at leak
 priority — they are silent wrong-memory bugs, and one of them
 (`b := a` on a record with an interface field) is ordinary-looking Pascal.
+
+## 2026-08-21 — this is now the LAST blocker in its family (Track A)
+
+The COM-interface-in-a-container family landed today without waiting on this
+decision, because the array cases had an escape route this one does not:
+
+- **static arrays** release outside any lock, so kind 4 is simply on;
+- **dynamic arrays** release under the lock, so `ManagedElemKindLocked`
+  (`compiler/symtab.inc`) refuses kind 4 when `ThreadSafeMode` is set — the
+  pre-existing leak instead of a deadlock, asserted in the Makefile including
+  that `--threadsafe` terminates.
+
+So the residual is now precise and small: **under `--threadsafe` on x86-64, a
+DYNAMIC array of interfaces leaks its elements, and a record's interface field
+is neither copied with a retain nor finalized.** Everything else in the family
+is correct and FPC-matched.
+
+That makes this decision worth more than it was: resolving it closes
+[[bug-a-a-record-copy-does-not-retain-an-interface-field]] (the only family
+member still open), removes the `ThreadSafeMode` gate in `ManagedElemKindLocked`,
+and retires the residual `bug-a-class-managed-fields-not-finalized-on-destroy`
+recorded for record fields — three things, one answer.
+
+The two options are unchanged and both are now implemented ONCE somewhere in
+the tree, which should make the choice cheaper than when this was filed:
+
+- **(a) reentrant heap lock** (owner + depth). The blocker used to be "needs a
+  per-thread identity / TLS, which this runtime does not have". **It has TLS
+  now** — `feature-a-thread-local-storage-via-clone-settls` and
+  `feature-a-tls-block-for-the-main-thread` landed 2026-08-20, `gs`-based, with
+  a slot convention and free slots reserved. That removes the stated obstacle;
+  what remains is whether an owner/depth check on the hot allocator path is
+  acceptable, which is a measurement, not a judgement.
+- **(b) a separate unlocked interface pass before the locked one** — already
+  shipped for CLASS fields (`PXXClassFinalize` runs its kind-4 pass first and
+  unlocked) and known to work.
+
+Recommendation: **(b) for the containers** (it is the proven shape and needs no
+allocator change), and evaluate (a) separately as an allocator question now that
+TLS exists, rather than as a prerequisite for this family.

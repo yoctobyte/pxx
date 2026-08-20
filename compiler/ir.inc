@@ -5104,10 +5104,11 @@ end;
   over a raw buffer + explicit count. N-D arrays are stored flat, so the
   flattened element count is the right one.
 
-  baseKind: 1 = AnsiString elements, 3 = record elements (walked via elemRec's
-  layout descriptor). Returns the IR_COPY_REC node (the statement's value). }
+  baseKind: as ManagedElemKind answers it — 1 = AnsiString elements, 3 = record
+  elements (walked via elemRec's layout descriptor), 4 = COM interface elements.
+  Returns the IR_COPY_REC node (the statement's value). }
 function IRManagedArrayCopy(dstAST, srcAST, count, elemSize, baseKind, elemRec: Integer): Integer;
-var maSrcTmp, maDstTmp, maFirst, maLast, maArg, maProc, maCall: Integer;
+var maSrcTmp, maDstTmp, maFirst, maLast, maArg, maProc, maCall, kindRef: Integer;
 
   { The trailing (baseKind, baseRecDesc) argument pair, identical in both calls.
     IR_CONST_DATA yields the layout blob's data address — the negative sentinel
@@ -5125,13 +5126,16 @@ var maSrcTmp, maDstTmp, maFirst, maLast, maArg, maProc, maCall: Integer;
                        Ord(tyPointer)),
                      -1, -1, 0, Ord(tyPointer))
     else
+      { kinds 1 and 4: an immediate, not an address — 0 for a string element,
+        the interface id for kind 4 (the walks read it out of the same slot). }
       IRB[kArg] := IRAppend(IR_ARG,
-                     IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
+                     IRAppend(IR_CONST_INT, -1, -1, -1, kindRef, Ord(tyPointer)),
                      -1, -1, 0, Ord(tyPointer));
     AppendKindAndDesc := kArg;
   end;
 
 begin
+  if baseKind = 4 then kindRef := elemRec - REC_UCLASS_BASE else kindRef := 0;
   { Both addresses are parked in pointer temps: each is needed three times
     (retain, release, copy) and re-lowering an AN_INDEX/AN_FIELD base would
     re-evaluate its subscript. }
@@ -8879,10 +8883,11 @@ begin
             TypeSize's default 8 — which copied only the first element. }
           elemSize := FrozenStrSlotSize(Syms[i].ElemType, SymStrCap[i])
         else elemSize := TypeSize(Syms[i].ElemType);
-        waBaseKind := 0;
-        if Syms[i].ElemType = tyAnsiString then waBaseKind := 1
-        else if (Syms[i].ElemType = tyRecord) and
-                RecordHasManagedFields(Syms[i].ElemRecName) then waBaseKind := 3;
+        { Element policy from the single owner — which is what brings COM
+          interface elements (kind 4) in: `b := a` on an array of interfaces
+          used to take the raw byte copy, so both arrays held the same counted
+          references and nilling one dangled the other. }
+        waBaseKind := ManagedElemKind(Ord(Syms[i].ElemType), Syms[i].ElemRecName);
         if waBaseKind = 0 then
         begin
           leftAddr := IRLowerDestAddress(ASTLeft[node]);
@@ -8914,10 +8919,7 @@ begin
         else if TypeIsFrozenString(IntToTypeKind(UFldTk[faFldIdx])) then
           elemSize := FrozenStrSlotSize(IntToTypeKind(UFldTk[faFldIdx]), UFldStrCap[faFldIdx])
         else elemSize := TypeSize(IntToTypeKind(UFldTk[faFldIdx]));
-        waBaseKind := 0;
-        if UFldTk[faFldIdx] = Ord(tyAnsiString) then waBaseKind := 1
-        else if (UFldTk[faFldIdx] = Ord(tyRecord)) and
-                RecordHasManagedFields(UFldRec_[faFldIdx]) then waBaseKind := 3;
+        waBaseKind := ManagedElemKind(UFldTk[faFldIdx], UFldRec_[faFldIdx]);
         if waBaseKind = 0 then
         begin
           leftAddr := IRLowerDestAddress(ASTLeft[node]);

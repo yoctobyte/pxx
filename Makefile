@@ -4202,6 +4202,19 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_dynarray_of_fixed_array26 | tail -1)" = "total ok 13 / 13"
 	./$(COMPILER) test/test_class_managed_fields_finalize.pas $(TESTTMP)/test_class_managed_fields_finalize26
 	test "$$($(TESTTMP)/test_class_managed_fields_finalize26)" = "$$(printf 'basic freed=1 order=HT\nalias freed=1\nls=keep-me\nafter alias freed=2\nruntime freed=2')"
+	# COM interface elements inside CONTAINERS. Five shapes that all leaked (or
+	# dangled) for ONE reason: the element-kind policy had no case for an
+	# interface, written out in nine places. Counts are FPC's, from a
+	# differential run of this exact program.
+	./$(COMPILER) test/test_interface_containers.pas $(TESTTMP)/test_interface_containers26
+	test "$$($(TESTTMP)/test_interface_containers26)" = "$$(printf 'strarr:  ok\nstatic:  3\ndyn:     2\nafter shrink: 2\nshrink:  4\nafter whole-copy nil-a: 0\nb still alive: pq\ncopy:    2')"
+	# ...and --threadsafe must still TERMINATE. Releasing an interface element
+	# under the non-reentrant heap lock would hang, so ManagedElemKindLocked
+	# refuses kind 4 there and the dyn-array counts fall back to the documented
+	# pre-existing leak (0). Asserting the leak is not the point; asserting that
+	# it is a leak and not a DEADLOCK is (decide-interface-members-in-aggregates-lock-strategy).
+	./$(COMPILER) --threadsafe test/test_interface_containers.pas $(TESTTMP)/test_interface_containers_ts26
+	test "$$($(TESTTMP)/test_interface_containers_ts26)" = "$$(printf 'strarr:  ok\nstatic:  3\ndyn:     0\nafter shrink: 0\nshrink:  0\nafter whole-copy nil-a: 0\nb still alive: pq\ncopy:    2')"
 	./$(COMPILER) test/test_member_visibility.pas $(TESTTMP)/test_member_visibility26
 	test "$$($(TESTTMP)/test_member_visibility26)" = "$$(printf '7\n30\n3\n1')"
 	# class consts are class-SCOPED, not unscoped globals: two classes' same-named

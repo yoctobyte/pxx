@@ -53,13 +53,11 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (272)
+## backlog (275)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-by-value-interface-param-is-released-at-caller-scope-exit | A | 35 | bug | pxx releases a by-value interface argument at the CALLER's scope exit; FPC releases it at CALLEE return. Every object is still destroyed exactly once, so this is a lifetime-timing divergence rather than a leak — but a destructor with side effects (closing a file, dropping a lock) runs later than the program says, and the last object of a batch stays alive until the calling routine returns. | — |
-| bug-a-a-local-array-of-interfaces-is-never-released-at-scope-exit | A | 45 | bug | A local `array[0..N] of IFoo` is never released at scope exit — a routine that fills three elements and returns destroys none of them. The same two-arm gap that left the array un-zero-initialised (now fixed) also leaves it un-cleaned: SymNeedsManagedCleanup answers False for it, and EmitManagedLocalCleanup has no per-element interface walk. | — |
-| bug-a-a-local-dynamic-array-of-interfaces-is-not-released-at-scope-exit | A | 45 | bug | A local dynamic array of interfaces is not released at scope exit — a routine that fills two elements and returns destroys neither. Explicitly nilling every element before returning is a complete workaround, which is why the shape usually looks fine. | — |
 | bug-a-a-memory-fault-is-a-raw-sigsegv-not-runtime-error-216 | A | 45 | bug | Every memory fault — nil read, nil write, a call through a nil procvar, a method on a nil object, a wild array store — kills a pxx binary with a bare `Segmentation fault` and exit 139. FPC prints `Runtime error 216` and exits 216. No message, no line, no exit-code convention, and `try..except` cannot see it. | — |
 | bug-a-a-non-lvalue-is-refused-as-an-interface-argument | A | 45 | bug | `TakeVal(TFoo.Create)` and `TakeVal(IFoo(o))` are refused with `by-reference argument must be a variable`, for both by-value and `const` interface parameters, while the same call with a named variable or an ordinary function result compiles. FPC accepts all four. Passing a freshly constructed object straight into a call is a common idiom, so this rejects working FPC code at compile time. | — |
 | bug-a-a-record-copy-does-not-retain-an-interface-field | A | 60 | bug | `b := a` on a record holding a COM interface field copies the pointer with no retain, so the two records share one counted reference. Nilling either one destroys the object and the other is left dangling — a use-after-free that segfaults on the next member call. Present on pinned and on HEAD. | decide-interface-members-in-aggregates-lock-strategy |
@@ -68,9 +66,9 @@ _none_
 | bug-a-findtypealias-failed-to-find-puint8-on-stderr | A | 20 | bug | `FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr during a compile that then SUCCEEDS. Either the lookup failure is real and something silently fell back to a wrong type, or the message is a stale debug print that should not be in a release build. Both readings are defects; which one it is has not been established. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
+| bug-a-no-dyn-array-scope-exit-release-on-four-backends | A | 40 | bug | Only x86-64 releases a local DYNAMIC array at scope exit. i386, arm32, aarch64 and riscv32 have no `ArrLen = -1` arm in EmitProcEpilog at all, so every local dyn array leaks its block and its managed elements on those four targets. Measured with the interface-container repro: x86-64 destroys 2, aarch64 and i386 destroy 0. | — |
 | bug-a-only-the-pascal-driver-emits-the-signal-runtime | A | 45 | bug | The signal runtime (SIGSEGV/SIGFPE hook, restorer, sethook, install stubs) is emitted only by the Pascal driver in parser.inc. Every other frontend -- C, NilPy, Rust, Zig, Basic, Ada, Lua, the asm frontend -- produces a binary with no signal runtime, so a hardware fault there is an unhandled signal instead of a runtime error. Same shape as the I/O-lock gap that was already found and fixed. | — |
 | bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did | A | 45 | bug | i386, arm32 and aarch64 route variant binops through PXXVarBinOp in builtinheap.pas, which reimplements the same dispatch x86-64 hand-emits — and the same defect: a stringy operand's payload is read as a number. x86-64 was fixed 2026-08-20; those three targets still answer a heap address for `v('15') - 3`. | — |
-| bug-a-setlength-shrink-does-not-release-dropped-interface-elements | A | 45 | bug | SetLength shrinking a dynamic array of interfaces drops the tail elements without releasing them — shrinking 4→2 destroys 0 objects where FPC destroys 2. A leak, not a crash; the surviving elements and a later re-grow are all correct. | — |
 | bug-a-stack-overflow-fault-to-raise-loops-forever-without-an-sp-reset | A | 45 | bug | Redirecting the ucontext PC to a raise stub turns a hardware fault into a catchable Pascal exception — except for a STACK OVERFLOW, where the resumed stub inherits the exhausted SP and re-faults at the identical address forever. A hang, not a crash. The fault-to-raise design needs an SP reset alongside the PC rewrite for this one signal. | — |
 | bug-a-string-table-cap-refuses-a-14k-line-c-program | A | 45 | bug | `VisCacheVis` is sized by the string-table constant — and the cap it is tied to is too low | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
@@ -320,6 +318,11 @@ _none_
 | refactor-p-three-hand-rolled-postfix-loops | P | 35 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | regression-lib-test-lib-mimic-xml-etree-elementtree | N | 70 | regression | regression: lib-test#src:test/lib_mimic_xml_etree_elementtree.npy red at 1b9b43e5b511 (auto-filed by twatch) | — |
 | regression-test-c-conformance-shard1-6 | T | 70 | regression | regression: test-c-conformance#shard1/6 red at 1b9b43e5b511 (auto-filed by twatch) | — |
+| regression-test-core-test-delphi-bare-alldefaulted-arg | P | 70 | regression | regression: test-core#src:test/test_delphi_bare_alldefaulted_arg.pas red at a2ae11a64191 (auto-filed by twatch) | — |
+| regression-test-core-test-mode-delphi-callarg | P | 70 | regression | regression: test-core#src:test/test_mode_delphi_callarg.pas red at a2ae11a64191 (auto-filed by twatch) | — |
+| regression-test-core-test-mode-delphi-methptr | P | 70 | regression | regression: test-core#src:test/test_mode_delphi_methptr.pas red at a2ae11a64191 (auto-filed by twatch) | — |
+| regression-test-core-test-mode-delphi | P | 70 | regression | regression: test-core#src:test/test_mode_delphi.pas red at a2ae11a64191 (auto-filed by twatch) | — |
+| regression-test-core-test-procvar-value-context-2 | P | 70 | regression | regression: test-core#src:test/test_procvar_value_context.pas red at a2ae11a64191 (auto-filed by twatch) | — |
 | regression-test-core-test-record-helper-for-string-b331 | P | 70 | regression | regression: test-core#src:test/test_record_helper_for_string_b331.pas red at 2e7286e499d1 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-callable-to-str-param-fails | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy red at 1b9b43e5b511 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard4-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 red at 1b9b43e5b511 (auto-filed by twatch) | — |
@@ -533,9 +536,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2165)
+## done (2169)
 
-2165 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2169 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -587,6 +590,11 @@ _none_
 - [urgent p 70] [N] bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - [p 70] [N] regression-lib-test-lib-mimic-xml-etree-elementtree
 - [p 70] [T] regression-test-c-conformance-shard1-6
+- [p 70] [P] regression-test-core-test-delphi-bare-alldefaulted-arg
+- [p 70] [P] regression-test-core-test-mode-delphi
+- [p 70] [P] regression-test-core-test-mode-delphi-callarg
+- [p 70] [P] regression-test-core-test-mode-delphi-methptr
+- [p 70] [P] regression-test-core-test-procvar-value-context-2
 - [p 70] [P] regression-test-core-test-record-helper-for-string-b331
 - [p 70] [N] regression-test-nilpy-test-nilpy-callable-to-str-param-fails
 - [p 70] [T] regression-test-pascal-conformance-shard4-6-2
@@ -631,13 +639,10 @@ _none_
 - [p 50] [A] refactor-a-the-missing-layer-between-frontends-and-backends
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
-- [p 45] [A] bug-a-a-local-array-of-interfaces-is-never-released-at-scope-exit
-- [p 45] [A] bug-a-a-local-dynamic-array-of-interfaces-is-not-released-at-scope-exit
 - [p 45] [A] bug-a-a-memory-fault-is-a-raw-sigsegv-not-runtime-error-216
 - [p 45] [A] bug-a-a-non-lvalue-is-refused-as-an-interface-argument
 - [p 45] [A] bug-a-only-the-pascal-driver-emits-the-signal-runtime
 - [p 45] [A] bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did
-- [p 45] [A] bug-a-setlength-shrink-does-not-release-dropped-interface-elements
 - [p 45] [A] bug-a-stack-overflow-fault-to-raise-loops-forever-without-an-sp-reset
 - [p 45] [A] bug-a-string-table-cap-refuses-a-14k-line-c-program
 - [p 45] [B] bug-b-format-percent-u-prints-a-signed-value
@@ -693,6 +698,7 @@ _none_
 - [p 40] [A] bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data
 - [p 40] [A] bug-a-aintostr-returns-empty-for-negative-numbers
 - [p 40] [A] bug-a-nilpy-leading-double-star-in-a-call-is-not-detected
+- [p 40] [A] bug-a-no-dyn-array-scope-exit-release-on-four-backends
 - [p 40] [N] bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members
 - [p 40] [N] bug-n-inline-cast-deref-loses-a-pointer-fields-pointee
 - [p 40] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base

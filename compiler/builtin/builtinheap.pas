@@ -2481,6 +2481,22 @@ begin
             i := i + 1;
           end;
         end;
+      end
+      else if baseKind = 4 then
+      begin
+        { COM interface elements: _Release each slot. Nil-safe per element, so a
+          partly-filled array is fine, and UNLOCKED — _Release runs Destroy and
+          the self-locking FreeMem, so no heap lock may be held here. Every
+          caller of this walk is already outside the lock (scope-exit cleanup
+          and PXXDynSetLen both call it unwrapped), which is what let the array
+          family be fixed without the record/class lock-strategy decision. }
+        i := 0;
+        while i < len do
+        begin
+          itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+          PXXIntfRelease(itemAddr, Int64(baseRecDesc));
+          i := i + 1;
+        end;
       end;
     end;
     PXXFree(Pointer(PXXHdrBase(arrData)));
@@ -2529,6 +2545,20 @@ begin
           i := i + 1;
         end;
       end;
+    end
+    else if baseKind = 4 then
+    begin
+      { COM interface elements: _AddRef each slot. This is the half that makes
+        SetLength SHRINK release exactly the dropped tail — the survivors are
+        retained here, then the whole old array is released, so the net effect
+        on an element that survived is zero and on a dropped one is one release. }
+      i := 0;
+      while i < len do
+      begin
+        itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+        PXXIntfAddRef(itemAddr, Int64(baseRecDesc));
+        i := i + 1;
+      end;
     end;
   end;
 end;
@@ -2539,7 +2569,8 @@ end;
   decrements a header and may free the block) cannot serve it. Used by whole
   static-array assignment `b := a` to release the destination's old element
   handles before the bulk byte copy overwrites them.
-  baseKind: 1 = AnsiString elements, 3 = record elements (walked via desc). }
+  baseKind: 1 = AnsiString, 3 = record (walked via desc), 4 = COM interface
+  (baseRecDesc carries the interface id, not a pointer). }
 procedure PXXArrayReleaseImmediate(arrData: Pointer; len: NativeInt; baseKind: Integer; baseRecDesc: Pointer);
 var
   i: Int64;
@@ -2569,6 +2600,18 @@ begin
         PXXRecordRelease(itemAddr, baseRecDesc);
         i := i + 1;
       end;
+    end;
+  end
+  else if baseKind = 4 then
+  begin
+    { COM interface elements — the STATIC-array case: `keep: array[0..N] of IFoo`
+      at scope exit, and the destination side of a whole-array assignment. }
+    i := 0;
+    while i < len do
+    begin
+      itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+      PXXIntfRelease(itemAddr, Int64(baseRecDesc));
+      i := i + 1;
     end;
   end;
 end;
@@ -2753,6 +2796,17 @@ begin
   baseTypeRef := PInt32(Int64(desc) + 16)^;
   if baseKind = 3 then
     baseRecDesc := Pointer(Int64(desc) + 16 + baseTypeRef)
+  else if baseKind = 4 then
+    { Kind 4 = COM INTERFACE elements. There is no sub-descriptor to point at,
+      so the descriptor's typeRef word carries the INTERFACE ID instead — the
+      same discriminated slot a CLASS layout descriptor already uses for its
+      kind-4 members (rtti_emit.inc). It rides here in the baseRecDesc argument
+      so the four element-walk helpers keep the arity every backend's codegen
+      already emits.
+      NEVER nil-guard a kind-4 arm on baseRecDesc: interface id 0 is a real id
+      and would nil-check as "no descriptor". The kind-3 arms guard, kind 4
+      must not. }
+    baseRecDesc := Pointer(baseTypeRef)
   else
     baseRecDesc := nil;
 
@@ -2804,6 +2858,8 @@ begin
   baseTypeRef := PInt32(Int64(desc) + 16)^;
   if baseKind = 3 then
     baseRecDesc := Pointer(Int64(desc) + 16 + baseTypeRef)
+  else if baseKind = 4 then
+    baseRecDesc := Pointer(baseTypeRef)   { interface id, see PXXDynArrayRelease }
   else
     baseRecDesc := nil;
 
@@ -2867,6 +2923,8 @@ begin
   baseTypeRef := PInt32(Int64(desc) + 16)^;
   if baseKind = 3 then
     baseRecDesc := Pointer(Int64(desc) + 16 + baseTypeRef)
+  else if baseKind = 4 then
+    baseRecDesc := Pointer(baseTypeRef)   { interface id, see PXXDynArrayRelease }
   else
     baseRecDesc := nil;
 

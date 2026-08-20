@@ -1239,18 +1239,13 @@ begin
     PatchDataI32(hdr + 0, 2); { Kind = 2 (DynArray) }
 
     depth := AnonDynArrayDepth[i];
-    if AnonDynArrayBaseTk[i] = Ord(tyAnsiString) then
-      baseKind := 1
-    else if (AnonDynArrayBaseTk[i] = Ord(tyRecord)) and RecordHasManagedFields(AnonDynArrayBaseRec[i]) then
-      baseKind := 3
-    else
-      baseKind := 0;
+    baseKind := ManagedElemKindLocked(AnonDynArrayBaseTk[i], AnonDynArrayBaseRec[i]);
 
     if depth > 1 then
       elSize := targetPtrSize
     else
     begin
-      if baseKind = 1 then
+      if (baseKind = 1) or (baseKind = 4) then
         elSize := targetPtrSize
       else if baseKind = 3 then
         elSize := UClsSize_[AnonDynArrayBaseRec[i] - REC_UCLASS_BASE]
@@ -1267,7 +1262,13 @@ begin
       subCi := AnonDynArrayBaseRec[i] - REC_UCLASS_BASE;
       if (subCi >= 0) and (subCi < UClsCount) and (UClsRTTIOff[subCi] >= 0) then
         baseTypeRef := UClsRTTIOff[subCi] - (hdr + 16);
-    end;
+    end
+    else if baseKind = 4 then
+      { COM interface elements: the SAME word carries the interface id rather
+        than a relative offset to a sub-descriptor — the discriminated slot a
+        class layout descriptor's kind-4 member already uses (see mKind = 4
+        above). builtinheap's walks read it back through baseRecDesc. }
+      baseTypeRef := ManagedElemRef(AnonDynArrayBaseTk[i], AnonDynArrayBaseRec[i]);
     PatchDataI32(hdr + 16, baseTypeRef);
   end;
 end;

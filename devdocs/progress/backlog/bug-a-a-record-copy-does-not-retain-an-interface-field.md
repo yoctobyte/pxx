@@ -4,8 +4,8 @@ prio: 60
 type: bug
 blocked-by: [decide-interface-members-in-aggregates-lock-strategy]
 summary: "`b := a` on a record holding a COM interface field copies the pointer with no retain, so the two records share one counted reference. Nilling either one destroys the object and the other is left dangling — a use-after-free that segfaults on the next member call. Present on pinned and on HEAD."
-status: working
-owner: claude-acp
+status: backlog
+owner: ""
 ---
 
 # A record copy does not retain an interface field
@@ -71,3 +71,22 @@ Do it with `bug-a-class-managed-fields-not-finalized-on-destroy`, not before:
 Track A: `make compiler/pascal26` (fixedpoint) + `tools/gate.sh quick`. Add the
 copy case to `test/test_record_interface_field_zero_init.pas`, which currently
 asserts only that the init crash is gone.
+
+## 2026-08-21 — claimed, then released unworked (Track A)
+
+Picked up with the array family
+([[bug-a-a-local-array-of-interfaces-is-never-released-at-scope-exit]] and its
+siblings) and put back: it does NOT share their escape route.
+
+The array family turned out to be fixable without the lock decision because its
+walks are unlocked (static arrays) or gatable at one point (dyn arrays, where
+`ManagedElemKindLocked` refuses kind 4 under `--threadsafe` and keeps the
+pre-existing leak instead of a hang). This ticket has neither property: a record
+copy's RELEASE of the destination's old interface field is the thing that frees,
+it runs from the record-field path that holds the heap lock, and the record
+descriptor's managed-field predicate is shared with FINALIZATION — so widening
+it turns on both halves at once, and the finalization half is what deadlocks.
+
+Still `blocked-by: decide-interface-members-in-aggregates-lock-strategy`. That
+decision is now the ONLY thing standing between this family and completeness,
+which raises its value: everything around it has landed.

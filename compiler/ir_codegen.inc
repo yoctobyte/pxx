@@ -252,18 +252,16 @@ begin
   AnonDynArrayBaseRec[anonIdx] := SymTR[symIdx].ElemRec;
 
   depth := SymTR[symIdx].DynDepth;
-  if IntToTypeKind(SymTR[symIdx].ElemTk) = tyAnsiString then
-    baseKind := 1
-  else if (IntToTypeKind(SymTR[symIdx].ElemTk) = tyRecord) and RecordHasManagedFields(SymTR[symIdx].ElemRec) then
-    baseKind := 3
-  else
-    baseKind := 0;
+  { LOCKED variant: every consumer of a dyn-array descriptor on x86-64 walks it
+    with the codegen heap lock held. }
+  baseKind := ManagedElemKindLocked(SymTR[symIdx].ElemTk, SymTR[symIdx].ElemRec);
 
   if depth > 1 then
     elSize := TARGET_PTR_SIZE
   else
   begin
-    if baseKind = 1 then
+    if (baseKind = 1) or (baseKind = 4) then
+      { string handle or COM interface reference — one pointer either way }
       elSize := TARGET_PTR_SIZE
     else if baseKind = 3 then
       elSize := UClsSize_[SymTR[symIdx].ElemRec - REC_UCLASS_BASE]
@@ -321,16 +319,11 @@ begin
   AnonDynArrayBaseTk[anonIdx] := baseTk;
   AnonDynArrayBaseRec[anonIdx] := baseRec;
 
-  if baseTk = Ord(tyAnsiString) then
-    baseKind := 1
-  else if (baseTk = Ord(tyRecord)) and RecordHasManagedFields(baseRec) then
-    baseKind := 3
-  else
-    baseKind := 0;
+  baseKind := ManagedElemKindLocked(baseTk, baseRec);   { locked walk — see the note in GetOrAllocSymRTTI }
 
   if depth > 1 then
     elSize := TARGET_PTR_SIZE
-  else if baseKind = 1 then
+  else if (baseKind = 1) or (baseKind = 4) then
     elSize := TARGET_PTR_SIZE
   else if baseKind = 3 then
     elSize := UClsSize_[baseRec - REC_UCLASS_BASE]
@@ -2857,7 +2850,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     pAnsiAlloc, pAnsiShared, pAnsiTooSmall, pAnsiNoZeroGrow, pAnsiFastDone: Integer;
     pAnsiUseNeededNil, pAnsiUseNeededSmall, pAnsiMinDone, pAnsiCapDone: Integer;
     pDynZero, pDynNoOld, pDynKeepCopy, pDynNoRetain, pDynNoRetainCount: Integer;
-    slDepth, slElemSize, slRetainTop, pSlRetainDone, slBaseRec: Integer;
+    slDepth, slElemSize, slRetainTop, pSlRetainDone, slBaseRec, slMek, slProcIdx: Integer;
     slBaseTk: TTypeKind;
     wid, decs: Integer;
     arg1Node, arg2Node, arg3Node, val1Node, val2Node: Integer;
@@ -5998,10 +5991,8 @@ begin
               end;
             EmitB($F3); EmitB($A4);          { rep movsb }
             Patch32(pDynNoOld, CodeLen - (pDynNoOld + 4));
-            if Syms[symIdx].IsArray and
-               ((IntToTypeKind(SymTR[symIdx].ElemTk) = tyAnsiString) or
-                ((IntToTypeKind(SymTR[symIdx].ElemTk) = tyRecord) and
-                 RecordHasManagedFields(SymTR[symIdx].ElemRec))) then
+            slMek := ManagedElemKindLocked(SymTR[symIdx].ElemTk, SymTR[symIdx].ElemRec);
+            if Syms[symIdx].IsArray and (slMek <> 0) then
             begin
               { The copied array prefix owns its own references. }
               EmitB($48); EmitB($8B); EmitB($3C); EmitB($24);           { mov rdi, [rsp] = new data }
@@ -6017,10 +6008,26 @@ begin
               EmitB($48); EmitB($85); EmitB($C9);                       { test rcx, rcx }
               EmitB($0F); EmitB($84); pDynNoRetainCount := CodeLen; EmitI32(0);
               pDynKeepCopy := CodeLen;
-              if IntToTypeKind(SymTR[symIdx].ElemTk) = tyAnsiString then
+              if slMek = 1 then
               begin
                 EmitB($48); EmitB($8B); EmitB($07);                     { mov rax, [rdi] }
                 EmitAnsiStrRetainLocked;
+              end
+              else if slMek = 4 then
+              begin
+                { COM interface element: _AddRef every SURVIVOR, so that the
+                  blanket release of the old block below nets out to exactly the
+                  elements SetLength dropped. Only reachable when the heap lock
+                  is a no-op — ManagedElemKindLocked refuses kind 4 otherwise. }
+                EmitB($51);                                             { push rcx }
+                EmitB($57);                                             { push rdi }
+                EmitB($48); EmitB($C7); EmitB($C6);
+                EmitI32(ManagedElemRef(SymTR[symIdx].ElemTk, SymTR[symIdx].ElemRec));  { mov rsi, ifaceId }
+                slProcIdx := FindProc('PXXIntfAddRef');
+                if slProcIdx < 0 then Error('compiler error: PXXIntfAddRef not found');
+                EmitCallProc(slProcIdx);
+                EmitB($5F);                                             { pop rdi }
+                EmitB($59);                                             { pop rcx }
               end
               else
               begin
@@ -6032,7 +6039,7 @@ begin
                 EmitB($59);                                             { pop rcx }
               end;
               EmitB($48); EmitB($81); EmitB($C7);
-              if IntToTypeKind(SymTR[symIdx].ElemTk) = tyRecord then EmitI32(RecSize(SymTR[symIdx].ElemRec))
+              if slMek = 3 then EmitI32(RecSize(SymTR[symIdx].ElemRec))
               else EmitI32(8);                                         { add rdi, element size }
               EmitB($48); EmitB($FF); EmitB($C9);                       { dec rcx }
               EmitB($0F); EmitB($85); EmitI32(pDynKeepCopy - (CodeLen + 4));
@@ -6620,9 +6627,8 @@ begin
         Patch32(pDynNoOld, CodeLen - (pDynNoOld + 4));
 
         { Retain copied sub-array handles or managed leaf values. }
-        if (slDepth > 1) or (slBaseTk = tyAnsiString) or
-           ((slBaseTk = tyRecord) and
-            RecordHasManagedFields(slBaseRec)) then
+        slMek := ManagedElemKindLocked(Ord(slBaseTk), slBaseRec);   { this whole sequence runs under the heap lock }
+        if (slDepth > 1) or (slMek <> 0) then
         begin
           EmitB($48); EmitB($8B); EmitB($74); EmitB($24); EmitB($08); { mov rsi,[rsp+8] = old }
           EmitB($48); EmitB($85); EmitB($F6);                  { test rsi,rsi }
@@ -6642,10 +6648,28 @@ begin
             EmitB($48); EmitB($8B); EmitB($07);                { mov rax,[rdi] }
             EmitDynArrayRetainLocked;
           end
-          else if slBaseTk = tyAnsiString then
+          else if slMek = 1 then
           begin
             EmitB($48); EmitB($8B); EmitB($07);                { mov rax,[rdi] }
             EmitAnsiStrRetainLocked;
+          end
+          else if slMek = 4 then
+          begin
+            { COM interface element (kind 4). _AddRef every SURVIVING element;
+              the whole old block is released below, so a survivor nets zero and
+              a dropped tail element nets one release — which is what makes
+              SetLength shrink destroy exactly the elements it drops.
+              bug-a-setlength-shrink-does-not-release-dropped-interface-elements }
+            EmitB($51);                                         { push rcx }
+            EmitB($57);                                         { push rdi }
+            EmitB($48); EmitB($89); EmitB($FF);                { mov rdi,rdi (slot addr = arg0) }
+            EmitB($48); EmitB($C7); EmitB($C6);
+            EmitI32(ManagedElemRef(Ord(slBaseTk), slBaseRec));  { mov rsi, ifaceId }
+            slProcIdx := FindProc('PXXIntfAddRef');
+            if slProcIdx < 0 then Error('compiler error: PXXIntfAddRef not found');
+            EmitCallProc(slProcIdx);
+            EmitB($5F);                                         { pop rdi }
+            EmitB($59);                                         { pop rcx }
           end
           else
           begin
