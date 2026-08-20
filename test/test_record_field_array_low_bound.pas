@@ -32,10 +32,19 @@ type
   TRI = record g1: Integer; c: array[1..3] of Integer; g2: Integer; end;
   TRT = record g1: Integer; c: TNamed;                 g2: Integer; end;
   TR2 = record g1: Byte;    m: array[-1..1, -2..0] of Byte; g2: Byte; end;
+  { the VARIANT part is a third declaration site for a field array, and it kept
+    the bug after the fixed part was fixed: `v.arr[1]` read the HIGH half of the
+    other branch's first field }
+  TV  = record
+          tag: Integer;
+          case Integer of
+            0: (i: Integer; j: Integer);
+            1: (arr: array[1..2] of SmallInt);
+        end;
   TC  = class  g1: Byte;    c: array[-2..2] of Byte;   g2: Byte; end;
 
 var
-  r1: TR1; r5: TR5; rn: TRN; r0: TR0; ri: TRI; rt: TRT; r2: TR2; o: TC;
+  r1: TR1; r5: TR5; rn: TRN; r0: TR0; ri: TRI; rt: TRT; r2: TR2; v: TV; o: TC;
   ok, total, i, j: Integer;
   pb: ^Byte;
 
@@ -93,6 +102,13 @@ begin
   for i := -1 to 1 do for j := -2 to 0 do r2.m[i, j] := (i + 2) * 10 + (j + 3);
   for i := -1 to 1 do for j := -2 to 0 do Chk('r2', r2.m[i, j], (i + 2) * 10 + (j + 3));
   Chk('r2.g1', r2.g1, 90);  Chk('r2.g2', r2.g2, 91);
+
+  { a field array inside a VARIANT part overlays the other branch, so a shifted
+    index reads the wrong half of it }
+  v.tag := 3; v.i := 65536; v.j := 5;
+  Chk('v.tag', v.tag, 3);  Chk('v.i', v.i, 65536);  Chk('v.j', v.j, 5);
+  Chk('v.arr1', v.arr[1], 0);   { low half of 65536 }
+  Chk('v.arr2', v.arr[2], 1);   { high half }
 
   { a CLASS field: the bytes before it are the object's own header }
   o := TC.Create;

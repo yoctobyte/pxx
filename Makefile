@@ -4199,7 +4199,7 @@ test-core: $(COMPILER)
 	# Reads shifted with the writes, so the field looked self-consistent -- the
 	# guards on either side are the assertion. All 53 values are FPC 3.2.2's.
 	./$(COMPILER) test/test_record_field_array_low_bound.pas $(TESTTMP)/test_fldarrlo26
-	test "$$($(TESTTMP)/test_fldarrlo26 | tail -1)" = "total ok 53 / 53"
+	test "$$($(TESTTMP)/test_fldarrlo26 | tail -1)" = "total ok 58 / 58"
 	./$(COMPILER) test/test_strict_fpc_shift_widths.pas $(TESTTMP)/test_nativeshift26
 	test "$$($(TESTTMP)/test_nativeshift26 | head -5 | tr '\n' '|')" = "1099511627776|9223372036854775804|2147483648|8796093022208|8796093022208|"
 	test "$$($(TESTTMP)/test_nativeshift26 | tail -4 | head -3 | tr '\n' '|')" = "9223372036854775804|9223372036854775804|9223372036854775804|"

@@ -27274,6 +27274,14 @@ begin
         UFldIsArray[UFldCount-1] := isArr;
         UFldArrLen[UFldCount-1] := arrLen;
         UFldDynDepth[UFldCount-1] := 0;
+        { …and its LOW BOUND, exactly as the fixed part records it. This site is
+          the third copy of the same concept (the comment on the bounds parse
+          above says so) and it was the copy that still indexed from the raw
+          index: `case Integer of 1: (arr: array[1..2] of SmallInt)` overlaid the
+          branch two bytes into the tag's neighbour, so `v.arr[1]` read the HIGH
+          half of the 0-branch's first field.
+          bug-p-record-field-array-with-a-non-zero-low-bound-writes-out-of-bounds }
+        if isArr then UFldArrDimLo[(UFldCount-1) * MAX_ARR_DIMS] := loVal;
         branchFieldOff := branchFieldOff + fSize;
       end;
       if fAlign > classAlign then classAlign := fAlign;

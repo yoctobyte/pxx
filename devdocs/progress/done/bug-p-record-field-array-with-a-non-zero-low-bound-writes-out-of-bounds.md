@@ -85,3 +85,18 @@ their recorded expectations.
 
 ## Log
 - 2026-08-20 — resolved, commit 6fa645073.
+
+
+## Follow-up, same day — a THIRD declaration site
+
+The same FPC differential probe that found this then found the variant part
+still doing it: `case Integer of 1: (arr: array[1..2] of SmallInt)` overlaid the
+branch two bytes in, so `v.arr[1]` read the HIGH half of the 0-branch's first
+field (`v.i := 65536` gave `arr[1] = 1, arr[2] = 5` where FPC gives `0, 1`).
+
+`ParseRecordVariantPart` registers branch fields itself and was not touched by
+the first commit. The comment on its own array-bounds parse already said this —
+*"this was the same concept's third copy"* — which is the whole lesson: the
+first fix went to the two sites a grep for `fNDims >= 2` found, and the site
+that never had the N-D code was invisible to that grep. The test now covers it;
+`total ok` moves 53 -> 58.
