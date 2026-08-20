@@ -237,3 +237,45 @@ its own sitting; the diagnosis above is what it needs to start, and the refusal
 in the meantime is loud.
 
 **Remaining scope: dynamic-array results only, qualified and unqualified.**
+
+## 2026-08-20 — the scope is wider than INDEXING, and the shared root has a name
+
+Measured at `27232bed4` with `function MakeArr: TIntArr` (a plain unqualified
+paramless call returning `array of Integer`):
+
+| expression | FPC | pxx |
+| --- | --- | --- |
+| `Length(MakeArr)` | 3 | **3** — works |
+| `MakeArr[1]` | 20 | refused: *cannot index the result of an array-returning function directly* |
+| `High(MakeArr)` | 2 | refused: **`undefined variable (MakeArr)`** |
+| `Copy(MakeArr, 1, 2)` | *(an array)* | refused: *dynamic-array Copy needs a dynamic-array first argument* |
+| `SumOf(MakeArr)` — `const x: array of Integer` | 60 | refused: *by-reference argument must be a variable* |
+| `SumOf(Copy(a, 1, 2))` — open array from an intrinsic | 5 | refused, same message |
+| `for i in MakeArr` | 60 | refused |
+
+So this ticket's title undersells it: a dynamic-array call result is not a
+first-class dynamic-array EXPRESSION anywhere. Indexing is the spelling that got
+a ticket; `High`, `Copy` and every open-array parameter fail the same way, and
+`SumOf(Copy(a, 1, 2))` — passing a slice straight to a function — is the one
+most likely to show up in ordinary code.
+
+**The shared root is `NodeDynDepth` (`ir.inc:653`), which has no `AN_CALL`
+case.** It answers 0 for every call result, so every site that asks "is this a
+dynamic array?" is told no. `Length` works only because it does not ask it. That
+is one fact to add — a per-proc return dyn-depth, the sibling of the
+`ProcRetArrAi` the fixed-array half needed — and it is what makes the
+materialisation point above reach all seven rows instead of one.
+
+The by-ref argument check (`parser.inc` ~16210) is worth reading while doing
+this: it carries FIVE hand-written exceptions to "an argument bound by reference
+must be an lvalue" — const/by-value records, fixed-array call results, promo
+ints, const variants, array constructors — each added by its own ticket. A dyn
+call result is the sixth, and a list of six exceptions is the signal that the
+rule is stated wrong: what these all mean is *"a temporary is fine when the
+callee will not write back"*, and that predicate could be written once.
+
+Still refusing rather than miscompiling everywhere, so still a gap, not a
+corruption. Found by an FPC differential probe over procedures, parameters and
+open arrays (default params, overloads, var/out/const, `array of const`,
+procedural variables and recursion were all otherwise identical).
+
