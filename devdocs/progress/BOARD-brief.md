@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:17 blocked:8 backlog:243 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2116 rejected:40`
+`urgent:1 unfinished:17 blocked:8 backlog:243 experimental:20 rainy-day:40 float:19 done-followup:3 decided:95 done:2117 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -57,6 +57,7 @@ _none — no lane is locked._
 - `[p 65] [T]` bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-oop
+- `[p 60] [C]` bug-c-a-compound-assignment-evaluates-its-lvalue-twice
 - `[p 60] [N]` bug-n-inferred-return-type-of-true-division-is-int
 - `[p 60] [T]` bug-t-the-push-rate-starves-breadth-coverage-entirely
 - `[p 60] [O]` feature-opt-store-reload-elimination
@@ -77,6 +78,5 @@ _none — no lane is locked._
 - `[p 55] [A]` feature-a-declaration-phase
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 55] [E]` feature-demo-portable-userland
-- `[p 55] [O]` feature-opt-heap-per-thread-cache
 
 _200 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

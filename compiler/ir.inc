@@ -575,7 +575,7 @@ begin
   IRDropManagedStrResult := IRAppend(IR_STORE_SYM, tmp, irNode, -1, 0, Ord(tyAnsiString));
 end;
 
-procedure IRDiscardValue(irNode: Integer);
+procedure IRDiscardValue(astNode, irNode: Integer);
 { A value computed at STATEMENT level and thrown away -- but which must still be
   EVALUATED, because the expression may contain calls.
 
@@ -600,6 +600,25 @@ procedure IRDiscardValue(irNode: Integer);
 var mkTk: TTypeKind; mkTmp: Integer;
 begin
   if (irNode < 0) or (irNode >= IRCount) then Exit;
+  { An ASSIGNMENT used as a statement (or as a comma's left operand) needs
+    NOTHING marked: its own store -- IR_STORE_SYM / IR_STORE_MEM / IR_COPY_REC /
+    IR_VAR_STORE -- is a statement root the emit loop runs itself, and that root
+    already drags the whole destination and value tree in with it. What arrives
+    here is the load-back C's "an assignment is an expression yielding the stored
+    value" rule appends, and it is dead at statement level.
+
+    Marking it made the DESTINATION run a second time whenever the destination
+    had a side effect: `*f() = 7;` marked the load's address operand, which IS
+    the call, so f() was emitted once as the store's operand and again as a
+    statement -- and `*sbump() = v;` did the same one level up, where the
+    discarded root is that call node itself. gcc calls f once
+    (bug-c-a-dereferenced-call-on-the-left-of-an-assignment-runs-twice).
+
+    C-mode only, so Pascal's byte-identical self-build is untouched -- and in
+    Pascal an assignment statement's result is the store itself, which every
+    branch below already ignores. }
+  if CProgramMode and (astNode >= 0) and (astNode < ASTNodeCount) and
+     (ASTKind[astNode] = AN_ASSIGN) then Exit;
   IRMarkStatementNode(irNode);
   if not CProgramMode then Exit;
   { Wrap ONLY a pure value node -- an operator whose result is thrown away but whose
@@ -1753,6 +1772,63 @@ begin
     Result := IRLowerAST(node)
   else
     Result := IRAppend(IR_UNSUPPORTED, ASTKind[node], ASTLeft[node], ASTRight[node], ASTIVal[node], ASTTk[node]);
+end;
+
+function IRAddrMayCall(n, depth: Integer): Boolean;
+{ Does evaluating this ADDRESS node RUN something? Only calls matter: every other
+  address shape here is a load or an arithmetic node over one, and re-walking
+  those is free and idempotent (`*p++` parks its increment in a separate
+  statement, which is why that shape was never affected).
+
+  The walk is kind-aware on purpose. IRA is a NODE index for some opcodes and a
+  SYMBOL/PROC index for others (IR_LEA, IR_LOAD_SYM, IR_CALL), so a blind
+  three-operand recursion would read a symbol number as a node number and answer
+  from an unrelated part of the arena. Unknown kinds answer False — that is
+  today's behaviour, so a shape this list misses stays exactly as it was rather
+  than growing a temp nobody asked for. }
+begin
+  Result := False;
+  if (n < 0) or (n >= IRCount) or (depth > 12) then Exit;
+  case IRKind[n] of
+    IR_CALL, IR_CALL_IND, IR_VIRTUAL_CALL:
+      Result := True;
+    IR_LOAD_MEM, IR_NEG, IR_NOT:
+      Result := IRAddrMayCall(IRA[n], depth + 1);
+    IR_INDEX, IR_FIELD, IR_BINOP:
+      begin
+        Result := IRAddrMayCall(IRA[n], depth + 1);
+        if not Result then Result := IRAddrMayCall(IRB[n], depth + 1);
+      end;
+  end;
+end;
+
+function IRLowerDestAddress(node: Integer): Integer;
+{ The destination address of an assignment, evaluated EXACTLY ONCE.
+
+  The IR is emitted by WALKING each statement root's operand tree, with no value
+  cache, so a node reachable from two roots is evaluated twice. A destination
+  address is normally a pure load and nobody notices — but in C it can be a CALL:
+  `*f() = 6` builds store_mem(call, 6), and the load-back C needs for "an
+  assignment is an expression yielding the stored value" gives that same call a
+  SECOND consumer. Once the load-back is itself consumed (`t = (*f() = 6)`, or a
+  struct's `IRA[copy_rec]` result), two roots reach the one call and f() ran
+  twice with correct values -- the failure no output comparison catches
+  (bug-c-a-dereferenced-call-on-the-left-of-an-assignment-runs-twice).
+
+  So park a call-bearing address in a pointer temp: the store is its own
+  statement root and runs the call once, and the loads that replace it are pure.
+  Only when a call is actually in there, so ordinary C keeps its exact IR.
+
+  C-mode only -- Pascal has no assignment-as-expression, so its self-build stays
+  byte-identical. }
+var addrTmp: Integer;
+begin
+  Result := IRLowerAddress(node);
+  if not CProgramMode then Exit;
+  if not IRAddrMayCall(Result, 0) then Exit;
+  addrTmp := AllocVar('', tyPointer);
+  IRAppend(IR_STORE_SYM, addrTmp, Result, -1, 0, Ord(tyPointer));
+  Result := IRAppend(IR_LOAD_SYM, addrTmp, -1, -1, 0, Ord(tyPointer));
 end;
 
 function IRBuildHiddenDest(procIdx: Integer): Integer;
@@ -3125,7 +3201,7 @@ begin
       walked from its roots, so a node evaluated purely for its side effects has to be
       marked or it is an orphan and never gets emitted at all -- `f((bump(), s))` would
       silently not call bump(). }
-    IRDiscardValue(IRLowerAST(ASTLeft[argAST]));
+    IRDiscardValue(ASTLeft[argAST], IRLowerAST(ASTLeft[argAST]));
     argAST := ASTRight[argAST];
   end;
 
@@ -7893,7 +7969,7 @@ begin
         Right-nested, so peel one operand at a time. }
       while ASTKind[ASTRight[node]] = AN_COMMA do
       begin
-        IRDiscardValue(IRLowerAST(ASTLeft[ASTRight[node]]));
+        IRDiscardValue(ASTLeft[ASTRight[node]], IRLowerAST(ASTLeft[ASTRight[node]]));
         ASTRight[node] := ASTRight[ASTRight[node]];
       end;
 
@@ -7982,7 +8058,7 @@ begin
            ((ASTKind[ASTLeft[node]] = AN_IDENT) and Syms[ASTIVal[ASTLeft[node]]].IsArray and
             not (Syms[ASTIVal[ASTLeft[node]]].ArrLen = -1)) then
         begin
-          leftAddr := IRLowerAddress(ASTLeft[node]);
+          leftAddr := IRLowerDestAddress(ASTLeft[node]);
           if lhsTk = tyRecord then
           begin
             idx := ResolveNodeRec(ASTLeft[node]);
@@ -8017,7 +8093,7 @@ begin
             Result := IRAppend(IR_STORE_SYM, ASTIVal[ASTLeft[node]], value, -1, 0, ASTTk[ASTLeft[node]])
           else
           begin
-            leftAddr := IRLowerAddress(ASTLeft[node]);
+            leftAddr := IRLowerDestAddress(ASTLeft[node]);
             Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, Ord(lhsStoreTk));
           end;
         end;
@@ -8262,7 +8338,7 @@ begin
           directly — Code at field+0, Data at field+TARGET_PTR_SIZE (8 on
           64-bit, 4 on i386/arm32, matching the user TMethod's Data offset). }
         left := ASTRight[node];
-        leftAddr := IRLowerAddress(ASTLeft[node]);
+        leftAddr := IRLowerDestAddress(ASTLeft[node]);
         value := IRMethodRefCode(left);   { VMT-resolved for a virtual method }
         IRAppend(IR_STORE_MEM, leftAddr, value, -1, 0, Ord(tyPointer));
         right := IRLowerAddress(ASTLeft[node]);
@@ -8285,7 +8361,7 @@ begin
           slot. Every set-returning function therefore answered the EMPTY set —
           silently, on every target, whatever the body did.
           bug-a-set-and-array-function-results-come-back-empty }
-        leftAddr := IRLowerAddress(ASTLeft[node]);
+        leftAddr := IRLowerDestAddress(ASTLeft[node]);
         right := IRLowerAST(ASTRight[node]);
         Result := IRAppend(IR_SET_COPY, leftAddr, right, -1, 0, Ord(tySet));
       end
@@ -8332,7 +8408,7 @@ begin
           ABIRetViaHiddenDestProc), so this is the same IR_COPY_REC the
           array-to-array case emits, sourced from the call instead of from an
           address-of. bug-a-set-and-array-function-results-come-back-empty }
-        leftAddr := IRLowerAddress(ASTLeft[node]);
+        leftAddr := IRLowerDestAddress(ASTLeft[node]);
         right := IRLowerAST(ASTRight[node]);
         Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
                            ProcRetFixedArrBytes[ASTIVal[ASTRight[node]]],
@@ -8366,7 +8442,7 @@ begin
                 RecordHasManagedFields(Syms[i].ElemRecName) then waBaseKind := 3;
         if waBaseKind = 0 then
         begin
-          leftAddr := IRLowerAddress(ASTLeft[node]);
+          leftAddr := IRLowerDestAddress(ASTLeft[node]);
           right := IRLowerAddress(ASTRight[node]);
           Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
                              Syms[i].ArrLen * elemSize, Ord(tyRecord));
@@ -8401,7 +8477,7 @@ begin
                 RecordHasManagedFields(UFldRec_[faFldIdx]) then waBaseKind := 3;
         if waBaseKind = 0 then
         begin
-          leftAddr := IRLowerAddress(ASTLeft[node]);
+          leftAddr := IRLowerDestAddress(ASTLeft[node]);
           right := IRLowerAddress(ASTRight[node]);
           Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
                              UFldArrLen[faFldIdx] * elemSize, Ord(tyRecord));
@@ -8425,7 +8501,7 @@ begin
         i := ASTIVal[ASTLeft[ASTLeft[node]]];
         if Syms[i].ElemType = tyRecord then elemSize := RecSize(Syms[i].ElemRecName)
         else elemSize := TypeSize(Syms[i].ElemType);
-        leftAddr := IRLowerAddress(ASTLeft[node]);
+        leftAddr := IRLowerDestAddress(ASTLeft[node]);
         right := IRLowerAddress(ASTRight[node]);
         Result := IRAppend(IR_COPY_REC, leftAddr, right, -1,
                            SymDynElemRowLen[i] * elemSize, Ord(tyRecord));
@@ -8460,7 +8536,7 @@ begin
           bare handle store (share-semantics) for now; the new op is x86-64-only,
           so they never see it. }
         value := IRLowerAST(ASTRight[node]);
-        leftAddr := IRLowerAddress(ASTLeft[node]);
+        leftAddr := IRLowerDestAddress(ASTLeft[node]);
         if TargetArch = TARGET_X86_64 then
         begin
           Result := IRAppend(IR_STORE_DYN, leftAddr, value,
@@ -8479,7 +8555,7 @@ begin
           (`FuncName := rec`) leaves the LHS ASTTk unset (0), so fall back to
           the symbol's TypeKind; without this the scalar store path below
           copies only the first qword and truncates the record. }
-        leftAddr := IRLowerAddress(ASTLeft[node]);
+        leftAddr := IRLowerDestAddress(ASTLeft[node]);
         if rhsIsLValue then
           right := IRLowerAddress(ASTRight[node])
         else
@@ -8508,7 +8584,7 @@ begin
           a Variant FUNCTION forwarding another Variant call's result kept only
           whatever rax held: VType garbage, payload lost
           (bug-a-variant-fn-return-forward-nrvo-corruption). }
-        leftAddr := IRLowerAddress(ASTLeft[node]);
+        leftAddr := IRLowerDestAddress(ASTLeft[node]);
         if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTRight[node]])) then
         begin
           { promotable int -> variant. An INLINE value becomes an ordinary
@@ -8622,7 +8698,7 @@ begin
         end
         else
         begin
-          leftAddr := IRLowerAddress(ASTLeft[node]);
+          leftAddr := IRLowerDestAddress(ASTLeft[node]);
           Result := IRAppend(IR_STORE_MEM, leftAddr, value, -1, lhsStrCap, Ord(lhsStoreTk));
           if CProgramMode then
             Result := IRAppend(IR_LOAD_MEM, leftAddr, -1, -1, 0, Ord(lhsStoreTk));
@@ -8656,8 +8732,15 @@ begin
         called bump twice — quickjs's interpreter pushes with `*sp++ = <JSValue>`
         on every single opcode, so `1+2` evaluated to 2 and every literal to 0.
         The scalar arms above have always done it this way (one `leftAddr` node
-        feeding both the store and the load-back), which is also the proof that
-        one node with two consumers is emitted once.
+        feeding both the store and the load-back).
+
+        That is NOT proof that one node with two consumers is emitted once — it
+        holds only while one consumer sits inside the other. Once the load-back
+        is itself consumed, two statement ROOTS reach the one node and the
+        tree-walking emitter, which has no value cache, runs it twice. That is
+        why `leftAddr` now comes from IRLowerDestAddress, which parks a
+        call-bearing address in a temp
+        (bug-c-a-dereferenced-call-on-the-left-of-an-assignment-runs-twice).
         bug-c-quickjs-runner-segfaults-with-zero-output-on-the-full-smoke-js }
       if CProgramMode and (Result >= 0) and
          ((IRKind[Result] = IR_COPY_REC) or (IRKind[Result] = IR_COPY_REC_MANAGED)) then
@@ -10057,7 +10140,7 @@ begin
     begin
       { C comma operator: evaluate Left for its side effects (discard the value),
         yield Right. Right-nested, so each Left peels one operand off the front. }
-      IRDiscardValue(IRLowerAST(ASTLeft[node]));
+      IRDiscardValue(ASTLeft[node], IRLowerAST(ASTLeft[node]));
       Result := IRLowerAST(ASTRight[node]);
     end;
 
@@ -10808,13 +10891,13 @@ begin
         if ASTKind[seq] = AN_SEQ then
         begin
           item := IRDropManagedStrResult(IRLowerAST(ASTLeft[seq]));
-          IRDiscardValue(item);
+          IRDiscardValue(ASTLeft[seq], item);
           seq := ASTRight[seq];
         end
         else
         begin
           item := IRDropManagedStrResult(IRLowerAST(seq));
-          IRDiscardValue(item);
+          IRDiscardValue(seq, item);
           seq := -1;
         end;
         if first < 0 then first := item;

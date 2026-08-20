@@ -4987,6 +4987,13 @@ test-core: $(COMPILER)
 	# `*sp++ = <JSValue>` on every opcode -- `1+2` evaluated to 2.
 	./$(COMPILER) test/cstruct_assign_dest_side_effects.c $(TESTTMP)/cstruct_assign_dest26
 	test "$$($(TESTTMP)/cstruct_assign_dest26)" = "ok"
+	# ...and the CALL destination, which survived both of those fixes: `*f() = v`
+	# ran f twice. Discarded, the statement-level discard marked the load-back's
+	# address operand -- the call -- as a statement the store already dragged in;
+	# consumed, two statement roots reached the one call node and the tree-walking
+	# emitter has no value cache. The index and field forms were always right.
+	./$(COMPILER) test/cassign_dest_call_once.c $(TESTTMP)/cassign_dest_call26
+	test "$$($(TESTTMP)/cassign_dest_call26)" = "ok"
 	./$(COMPILER) test/cnested_union_b44.c $(TESTTMP)/cnested_union_b4426
 	$(TESTTMP)/cnested_union_b4426; test "$$?" = "42"
 	./$(COMPILER) test/canon_agg_global_b45.c $(TESTTMP)/canon_agg_global_b4526
