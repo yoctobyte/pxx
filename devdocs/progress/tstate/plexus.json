@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-19T18:33:29Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "832a42d026cd8a2a2294ed3609ea86c14ff4b67d",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-19T18:43:38Z",
    "fixed": [],
    "new_red": [],
@@ -421,12 +413,20 @@
    "sha": "4fe054d88c8d6db6c1eb9283f80e4236b2f1264c",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-20T10:49:22Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "252084d705ceb743d55b2d91459f5adc0e022acf",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "test-core#src:test/test_asm_emit.pas": "ok: $TMP  [code=95698B  data=2800B  bss=9532B  procs=203]",
-  "test-core#src:test/test_integer_longint_overload.pas": "+++ -\t2026-08-20 12:27:47.596228118 +0200 | @@ -1,3 +1,3 @@ | FFFFFFFF FFFFFFFF FFFFFFFF | -FFFFFFFFFFFFFFFF FFFFFFFF | +FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF | longint longint int64 longword",
+  "test-core#src:test/test_integer_longint_overload.pas": "+++ -\t2026-08-20 12:46:55.920469420 +0200 | @@ -1,3 +1,3 @@ | FFFFFFFF FFFFFFFF FFFFFFFF | -FFFFFFFFFFFFFFFF FFFFFFFF | +FFFFFFFFFFFFFFFF FFFFFFFFFFFFFFFF | longint longint int64 longword",
   "test-core#src:test/test_strict_overload_width.pas@1": "ok: $TMP  [code=293112B  data=9124B  bss=53920B  procs=586]",
   "test-core#src:test/test_strict_overload_width.pas@2": "ok: $TMP  [code=293112B  data=9124B  bss=53920B  procs=586]",
   "test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy": "ok: $TMP  [code=2568790B  data=74180B  bss=52788B  procs=2020]"
@@ -993,6 +993,7 @@
   "test-core#src:test/carray_param_b37.c": "native",
   "test-core#src:test/carray_typedef_element_init.c": "native",
   "test-core#src:test/carrow_on_array_call_rhs_b136.c": "native",
+  "test-core#src:test/cassign_compound_lvalue_once.c": "native",
   "test-core#src:test/cassign_dest_call_once.c": "native",
   "test-core#src:test/cassign_value_b43.c": "native",
   "test-core#src:test/cauto_pull_crtl_math_b111.c": "native",
@@ -3369,6 +3370,7 @@
   "test-core#src:test/carray_param_b37.c": "pass",
   "test-core#src:test/carray_typedef_element_init.c": "pass",
   "test-core#src:test/carrow_on_array_call_rhs_b136.c": "pass",
+  "test-core#src:test/cassign_compound_lvalue_once.c": "pass",
   "test-core#src:test/cassign_dest_call_once.c": "pass",
   "test-core#src:test/cassign_value_b43.c": "pass",
   "test-core#src:test/cauto_pull_crtl_math_b111.c": "pass",
@@ -4668,11 +4670,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-20T10:34:15Z",
-  "sha": "4fe054d88c8d6db6c1eb9283f80e4236b2f1264c",
+  "date": "2026-08-20T10:49:22Z",
+  "sha": "252084d705ceb743d55b2d91459f5adc0e022acf",
   "tier": "native",
   "verdict": "RED",
-  "wall": 400.5
+  "wall": 424.5
  },
  "last_bench": {
   "conf_rows": 550,
