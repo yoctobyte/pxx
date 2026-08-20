@@ -149,4 +149,4 @@ fails identically, so this was never a HEAD regression. It has been latent
 since the RHS fix.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit b6847fd44.
