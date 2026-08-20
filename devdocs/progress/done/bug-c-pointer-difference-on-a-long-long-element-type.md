@@ -135,4 +135,4 @@ quickjs's smoke stays byte-exact, and the ten pointer/array C tests named one by
 one during the work are green.
 
 ## Log
-- 2026-08-20 — resolved, commit PENDING-COMMIT.
+- 2026-08-20 — resolved, commit c4907dd34.
