@@ -107,4 +107,4 @@ byte-equal to the native oracle on riscv32, plus `test_exceptions`,
 is Track T's, against this sha.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 4c8886cb1.
