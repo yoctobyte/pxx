@@ -138,4 +138,4 @@ needed the temp EARLY, for the same reason: FPC. There is no policy to choose,
 only an oracle to match, per construct. No `decide-*` filed.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 4c3f76f35.
