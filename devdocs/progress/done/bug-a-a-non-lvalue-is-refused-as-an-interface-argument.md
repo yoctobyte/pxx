@@ -143,4 +143,4 @@ into the core list: 12/12 accepted, and the `var` refusal asserted with
 that row exists to catch. Corpus breadth is Track T's, against this sha.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 722149e7d.
