@@ -83,4 +83,4 @@ test still prints `total ok 25 / 25` with and without `TESTTMP` set, and FPC
 expectations it encodes are untouched.
 
 Gate: `tools/gate.sh quick` GREEN.
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit b7d26e906.
