@@ -393,7 +393,7 @@ var
   retPtrElemTk, retPtrElemRec : Integer;
   savedSC, savedFS, savedCurProc : Integer;
   savedGLC, savedGFC, j, savedVisVarSeq: Integer;
-  cleanupJnePatch, cleanupJmpPatch: Integer;
+  cleanupJnePatch: Integer;
   patchPos : Integer;
   depth    : Integer;
   doneArgs, doneParam, isArr, isByRef, isConst, declOverload, declFlexColumn, isClassKeyword, isStaticMethod, declInline: Boolean;
@@ -1875,19 +1875,18 @@ begin
     Eat(tkSemicolon);
   end;
 
-  needsProcCleanupFrame := (TargetArch = TARGET_X86_64) and ExceptionUsed and
+  { A proc holding managed locals that can be unwound PAST needs a landing pad
+    of its own: neither its epilogue nor the eventual handler's frame runs, so
+    without one the locals are never released. The gate used to read
+    `TargetArch = TARGET_X86_64`, which is why an interface held across a raise
+    leaked on every other target, silently — an unwind leak prints nothing.
+    The sequence itself is each backend's own IR_EXC_ENTER, lifted into
+    ir_codegen.inc; xtensa is the one target still without it. }
+  needsProcCleanupFrame := TargetHasProcCleanupFrame and ExceptionUsed and
                            (not isAsmFunc) and ProcHasManagedLocalCleanup(procIdx, -1);
   if needsProcCleanupFrame then
   begin
-    EmitB($48); EmitB($83); EmitB($EC); EmitB(EXC_FRAME_SIZE);
-    EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
-    EmitB($48); EmitB($89); EmitB($04); EmitB($24);
-    EmitB($48); EmitB($89); EmitB($E0);
-    EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
-    EmitB($48); EmitB($8D); EmitB($7C); EmitB($24); EmitB(EXC_JMP_OFFSET);
-    IREmitCodeCall(ExcSetJmpAddr);
-    EmitB($85); EmitB($C0);
-    EmitB($0F); EmitB($85); cleanupJnePatch := CodeLen; EmitI32(0);
+    EmitProcCleanupFrameEnterForTarget(cleanupJnePatch);
     ProcExceptionCleanupFrameActive := True;
   end;
 
@@ -1991,14 +1990,7 @@ begin
   end;
 
   if needsProcCleanupFrame then
-  begin
-    EmitB($E9); cleanupJmpPatch := CodeLen; EmitI32(0);
-    Patch32(cleanupJnePatch, CodeLen - (cleanupJnePatch + 4));
-    EmitLeaveExceptionFrameX64;
-    EmitManagedLocalCleanup(-1);
-    IREmitCodeCall(ExcRaiseAddr);
-    Patch32(cleanupJmpPatch, CodeLen - (cleanupJmpPatch + 4));
-  end;
+    EmitProcCleanupLandingPadForTarget(cleanupJnePatch);
 
   { Verify all forward goto fixups were resolved }
   for i := 0 to GotoLabelCount - 1 do

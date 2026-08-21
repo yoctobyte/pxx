@@ -90,6 +90,12 @@ procedure EmitManagedLocalCleanup(retSymIdx: Integer); forward;
   ir_codegen.inc — see the note there for why the six arms had to be one
   procedure. }
 procedure EmitManagedLocalCleanupForTarget(retSymIdx: Integer); forward;
+{ Normal-return cleanup: unchain this proc's exception cleanup frame (when it
+  has one) and then release its managed locals. Body in ir_codegen.inc. }
+procedure EmitProcScopeExitCleanupForTarget(retSymIdx: Integer); forward;
+function TargetHasProcCleanupFrame: Boolean; forward;
+procedure EmitProcCleanupFrameEnterForTarget(var landPatch: Integer); forward;
+procedure EmitProcCleanupLandingPadForTarget(landPatch: Integer); forward;
 function ProcHasManagedLocalCleanup(procIdx, retSymIdx: Integer): Boolean; forward;
 procedure EmitLeaveExceptionFrameX64; forward;
 
@@ -8611,7 +8617,7 @@ var sz, i, procIdx, mek: Integer;
 begin
   if TargetArch = TARGET_I386 then
   begin
-    EmitManagedLocalCleanupForTarget(retSymIdx);
+    EmitProcScopeExitCleanupForTarget(retSymIdx);
 
     { Ordinal or pointer-sized (AnsiString/pointer/class handle) results.
       Legacy fixed string returns the address of its inline buffer. }
@@ -8714,7 +8720,7 @@ begin
 {$ifndef PXX_NO_ARM32}
   if TargetArch = TARGET_ARM32 then
   begin
-    EmitManagedLocalCleanupForTarget(retSymIdx);
+    EmitProcScopeExitCleanupForTarget(retSymIdx);
 
     if retSymIdx >= 0 then
     begin
@@ -8796,7 +8802,7 @@ begin
 {$ifndef PXX_NO_AARCH64}
   if TargetArch = TARGET_AARCH64 then
   begin
-    EmitManagedLocalCleanupForTarget(retSymIdx);
+    EmitProcScopeExitCleanupForTarget(retSymIdx);
     if retSymIdx >= 0 then
     begin
       if ABIRetViaHiddenDestProc(CurProc) and
@@ -8897,7 +8903,7 @@ begin
 {$endif}
   if TargetArch = TARGET_XTENSA then
   begin
-    EmitManagedLocalCleanupForTarget(retSymIdx);
+    EmitProcScopeExitCleanupForTarget(retSymIdx);
     if retSymIdx >= 0 then
     begin
       if ABIRetViaHiddenDestProc(CurProc) and
@@ -8978,7 +8984,7 @@ begin
   end;
   if TargetArch = TARGET_RISCV32 then
   begin
-    EmitManagedLocalCleanupForTarget(retSymIdx);
+    EmitProcScopeExitCleanupForTarget(retSymIdx);
     if retSymIdx >= 0 then
     begin
       if ABIRetViaHiddenDestProc(CurProc) and
@@ -9065,9 +9071,7 @@ begin
     Exit;
   end;
   { Release local managed variables before returning }
-  if ProcExceptionCleanupFrameActive then
-    EmitLeaveExceptionFrameX64;
-  EmitManagedLocalCleanupForTarget(retSymIdx);
+  EmitProcScopeExitCleanupForTarget(retSymIdx);
 
   if retSymIdx >= 0 then
   begin

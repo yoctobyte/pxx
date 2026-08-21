@@ -9577,3 +9577,257 @@ begin
     Exit;
   end;
 end;
+
+{ ===== The proc-level exception cleanup frame, on every hosted target =====
+
+  A proc that holds managed locals and can be unwound PAST — the exception was
+  raised below it and caught above it, so neither its epilogue nor the handler's
+  frame ever runs — needs somewhere to release those locals. The mechanism is a
+  setjmp landing pad of its own: chain a frame onto BSS_EXC_TOP at proc entry,
+  and when a raise longjmps into it, unchain, release the locals, and re-raise
+  so the search continues at the next frame out.
+
+  x86-64 has had this since exceptions landed. The other five did not, and the
+  gate `needsProcCleanupFrame` said so in one clause — `TargetArch =
+  TARGET_X86_64` — so an interface held across a raise leaked on every cross
+  target, silently: an unwind leak prints nothing.
+
+  Nothing here is new machinery. Every target already emits this exact sequence
+  for a `try` block (its IR_EXC_ENTER arm) and already has a leave helper
+  (IREmitLeaveExceptionFrames*), because a `try` frame and a proc cleanup frame
+  are the same frame with different landing pads. What follows is those two
+  pieces called from the proc driver instead of from the statement lowering.
+
+  xtensa is deliberately absent: it is the one target whose exception runtime
+  exists only under the Call0 ABI, and its managed-local arm handles AnsiString
+  alone. That is ESP-campaign work, tracked on the ticket, not a silent skip. }
+
+function TargetHasProcCleanupFrame: Boolean;
+begin
+  Result := (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386) or
+            (TargetArch = TARGET_ARM32) or (TargetArch = TARGET_AARCH64) or
+            (TargetArch = TARGET_RISCV32);
+end;
+
+procedure EmitProcCleanupFrameLeaveForTarget;
+{ Unchain: BSS_EXC_TOP := [sp], then pop the frame. Reuses each backend's
+  IR_EXC_LEAVE helper with count=1 so the proc path and the try path cannot
+  drift apart. }
+begin
+  if TargetArch = TARGET_X86_64 then EmitLeaveExceptionFrameX64
+{$ifndef PXX_NO_I386}
+  else if TargetArch = TARGET_I386 then IREmitLeaveExceptionFrames386(1)
+{$endif}
+{$ifndef PXX_NO_ARM32}
+  else if TargetArch = TARGET_ARM32 then IREmitLeaveExceptionFramesArm32(1)
+{$endif}
+{$ifndef PXX_NO_AARCH64}
+  else if TargetArch = TARGET_AARCH64 then IREmitLeaveExceptionFramesAarch64(1)
+{$endif}
+  else if TargetArch = TARGET_RISCV32 then IREmitLeaveExceptionFramesRISCV32(1)
+  else Error('compiler error: no proc exception cleanup frame for this target');
+end;
+
+procedure EmitProcCleanupFrameEnterForTarget(var landPatch: Integer);
+{ Push + chain the frame and setjmp into it. Returns in landPatch the position
+  of the not-taken-on-entry branch, to be resolved by
+  EmitProcCleanupFramePatchLanding once the landing pad's address is known. }
+begin
+  if TargetArch = TARGET_X86_64 then
+  begin
+    EmitB($48); EmitB($83); EmitB($EC); EmitB(EXC_FRAME_SIZE);   { sub rsp, 80 }
+    EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
+    EmitB($48); EmitB($89); EmitB($04); EmitB($24);              { mov [rsp], rax }
+    EmitB($48); EmitB($89); EmitB($E0);                          { mov rax, rsp }
+    EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_EXC_TOP);
+    EmitB($48); EmitB($8D); EmitB($7C); EmitB($24); EmitB(EXC_JMP_OFFSET);
+    IREmitCodeCall(ExcSetJmpAddr);
+    EmitB($85); EmitB($C0);                                      { test eax, eax }
+    EmitB($0F); EmitB($85); landPatch := CodeLen; EmitI32(0);    { jne landing }
+    Exit;
+  end;
+{$ifndef PXX_NO_I386}
+  if TargetArch = TARGET_I386 then
+  begin
+    EmitB($83); EmitB($EC); EmitB(EXC_FRAME_SIZE_386);           { sub esp, 32 }
+    EmitB($A1); EmitGlobRef(BSS_EXC_TOP);                        { mov eax, [EXC_TOP] }
+    EmitB($89); EmitB($04); EmitB($24);                          { mov [esp], eax }
+    EmitB($89); EmitB($E0);                                      { mov eax, esp }
+    EmitB($A3); EmitGlobRef(BSS_EXC_TOP);                        { mov [EXC_TOP], eax }
+    EmitB($8D); EmitB($44); EmitB($24); EmitB(EXC_JMP_OFFSET_386);
+    EmitB($E8); EmitI32(ExcSetJmpAddr - (CodeLen + 4));
+    EmitB($85); EmitB($C0);                                      { test eax, eax }
+    EmitB($0F); EmitB($85); landPatch := CodeLen; EmitI32(0);    { jne landing }
+    Exit;
+  end;
+{$endif}
+{$ifndef PXX_NO_ARM32}
+  if TargetArch = TARGET_ARM32 then
+  begin
+    EmitI32($E24DD030);                                          { sub sp, sp, #48 }
+    EmitI32($E59F1000);                                          { ldr r1, [pc] }
+    EmitI32($EA000000);                                          { b .+8 }
+    EmitGlobRef(BSS_EXC_TOP);
+    EmitI32($E5912000);                                          { ldr r2, [r1] }
+    EmitI32($E58D2000);                                          { str r2, [sp] }
+    EmitI32($E1A0200D);                                          { mov r2, sp }
+    EmitI32($E5812000);                                          { str r2, [r1] }
+    EmitI32($E28D0008);                                          { add r0, sp, #8 }
+    EmitI32($EB000000 or ((((ExcSetJmpAddr - CodeLen) div 4) - 2) and $00ffffff));
+    EmitI32($E3500000);                                          { cmp r0, #0 }
+    landPatch := CodeLen; EmitI32($1A000000);                    { bne landing }
+    Exit;
+  end;
+{$endif}
+{$ifndef PXX_NO_AARCH64}
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    EmitI32($D10203FF);                                          { sub sp, sp, #128 }
+    EmitI32($18000041);                                          { ldr w1, [pc+8] }
+    EmitI32($14000002);                                          { b [pc+8] }
+    EmitGlobRef(BSS_EXC_TOP);
+    EmitI32($F9400022);                                          { ldr x2, [x1] }
+    EmitI32($F90003E2);                                          { str x2, [sp] }
+    EmitI32($910003E2);                                          { mov x2, sp }
+    EmitI32($F9000022);                                          { str x2, [x1] }
+    EmitI32($910043E0);                                          { add x0, sp, #16 }
+    EmitI32($94000000 or (((ExcSetJmpAddr - CodeLen) div 4) and $03ffffff));
+    landPatch := CodeLen; EmitI32($B5000000);                    { cbnz x0, landing }
+    Exit;
+  end;
+{$endif}
+  if TargetArch = TARGET_RISCV32 then
+  begin
+    rv32_addi(reg_sp, reg_sp, -EXC_FRAME_SIZE_RV32);
+    EmitLoadGlobAddrRISCV32(reg_t1, BSS_EXC_TOP);
+    rv32_lw(reg_t2, reg_t1, 0);
+    rv32_sw(reg_t2, reg_sp, 0);
+    rv32_sw(reg_sp, reg_t1, 0);
+    rv32_addi(reg_a0, reg_sp, EXC_JMP_OFFSET_RV32);
+    EmitI32(EncodeRISCVJAL(reg_ra, ExcSetJmpAddr - CodeLen));
+    { beq skips the jal on the NORMAL return (a0 = 0); the jal is the taken
+      edge, so the landing pad can sit arbitrarily far away. }
+    rv32_beq(reg_a0, reg_zero, 8);
+    landPatch := CodeLen; EmitI32(EncodeRISCVJAL(reg_zero, 0));
+    Exit;
+  end;
+  Error('compiler error: no proc exception cleanup frame for this target');
+end;
+
+procedure CheckProcCleanupBranchRange(delta, limit: Integer);
+{ The entry branch and the skip branch both span a WHOLE PROC BODY, and the
+  fixed-width encodings below mask the displacement rather than trapping — a
+  body past the limit would silently branch somewhere else. x86-64 and i386 use
+  rel32 and cannot reach it; aarch64's cbnz (+-1 MB) and riscv32's jal (+-1 MB)
+  can in principle, so say so instead of emitting a wrong branch. The IR_EXC_ENTER
+  arms these were lifted from carry the same hazard unguarded; that is worth the
+  same check, and is noted on
+  bug-a-exception-unwind-releases-one-interface-too-few-on-every-cross-target. }
+begin
+  if (delta > limit) or (delta < -limit) then
+    Error('proc exception cleanup frame: body too large for the landing-pad '
+          + 'branch on this target (' + AIntToStr(delta) + ' bytes)');
+end;
+
+procedure EmitProcCleanupFramePatchLanding(landPatch: Integer);
+{ Resolve the entry branch to land HERE. }
+begin
+  if (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386) then
+    Patch32(landPatch, CodeLen - (landPatch + 4))
+  else if TargetArch = TARGET_ARM32 then
+  begin
+    CheckProcCleanupBranchRange(CodeLen - landPatch, 33554432);
+    Patch32(landPatch, $1A000000 or ((((CodeLen - landPatch) div 4) - 2) and $00ffffff));
+  end
+  else if TargetArch = TARGET_AARCH64 then
+  begin
+    CheckProcCleanupBranchRange(CodeLen - landPatch, 1048576);
+    Patch32(landPatch, $B5000000 or ((((CodeLen - landPatch) div 4) and $7ffff) shl 5));
+  end
+  else if TargetArch = TARGET_RISCV32 then
+  begin
+    CheckProcCleanupBranchRange(CodeLen - landPatch, 1048576);
+    Patch32(landPatch, EncodeRISCVJAL(reg_zero, CodeLen - landPatch));
+  end
+  else
+    Error('compiler error: no proc exception cleanup frame for this target');
+end;
+
+procedure EmitProcCleanupFrameSkipForTarget(var skipPatch: Integer);
+{ Unconditional jump over the landing pad, taken by the normal control flow
+  that falls out of the body. }
+begin
+  if (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386) then
+    begin EmitB($E9); skipPatch := CodeLen; EmitI32(0); end
+  else if TargetArch = TARGET_ARM32 then
+    begin skipPatch := CodeLen; EmitI32($EA000000); end
+  else if TargetArch = TARGET_AARCH64 then
+    begin skipPatch := CodeLen; EmitI32($14000000); end
+  else if TargetArch = TARGET_RISCV32 then
+    begin skipPatch := CodeLen; EmitI32(EncodeRISCVJAL(reg_zero, 0)); end
+  else
+    Error('compiler error: no proc exception cleanup frame for this target');
+end;
+
+procedure EmitProcCleanupFramePatchSkip(skipPatch: Integer);
+begin
+  if (TargetArch = TARGET_X86_64) or (TargetArch = TARGET_I386) then
+    Patch32(skipPatch, CodeLen - (skipPatch + 4))
+  else if TargetArch = TARGET_ARM32 then
+    Patch32(skipPatch, $EA000000 or ((((CodeLen - skipPatch) div 4) - 2) and $00ffffff))
+  else if TargetArch = TARGET_AARCH64 then
+    Patch32(skipPatch, $14000000 or (((CodeLen - skipPatch) div 4) and $03ffffff))
+  else if TargetArch = TARGET_RISCV32 then
+  begin
+    CheckProcCleanupBranchRange(CodeLen - skipPatch, 1048576);
+    Patch32(skipPatch, EncodeRISCVJAL(reg_zero, CodeLen - skipPatch));
+  end
+  else
+    Error('compiler error: no proc exception cleanup frame for this target');
+end;
+
+procedure EmitProcCleanupFrameReRaiseForTarget;
+{ Continue the unwind at the next frame out. BSS_EXC_OBJ / BSS_EXC_CLS still
+  hold the in-flight exception, so this is a bare re-entry into the raise path
+  and never returns. }
+begin
+  if TargetArch = TARGET_X86_64 then IREmitCodeCall(ExcRaiseAddr)
+{$ifndef PXX_NO_I386}
+  else if TargetArch = TARGET_I386 then
+    begin EmitB($E8); EmitI32(ExcRaiseAddr - (CodeLen + 4)); end
+{$endif}
+{$ifndef PXX_NO_ARM32}
+  else if TargetArch = TARGET_ARM32 then
+    EmitI32($EB000000 or ((((ExcRaiseAddr - CodeLen) div 4) - 2) and $00ffffff))
+{$endif}
+{$ifndef PXX_NO_AARCH64}
+  else if TargetArch = TARGET_AARCH64 then
+    EmitI32($94000000 or (((ExcRaiseAddr - CodeLen) div 4) and $03ffffff))
+{$endif}
+  else if TargetArch = TARGET_RISCV32 then
+    EmitI32(EncodeRISCVJAL(reg_ra, ExcRaiseAddr - CodeLen))
+  else
+    Error('compiler error: no proc exception cleanup frame for this target');
+end;
+
+procedure EmitProcCleanupLandingPadForTarget(landPatch: Integer);
+{ The whole tail: jump over the pad, place the pad, unchain, release every
+  managed local, re-raise. Emitted once, after the body and before the ordinary
+  epilogue. }
+var skipPatch: Integer;
+begin
+  EmitProcCleanupFrameSkipForTarget(skipPatch);
+  EmitProcCleanupFramePatchLanding(landPatch);
+  EmitProcCleanupFrameLeaveForTarget;
+  EmitManagedLocalCleanupForTarget(-1);
+  EmitProcCleanupFrameReRaiseForTarget;
+  EmitProcCleanupFramePatchSkip(skipPatch);
+end;
+
+procedure EmitProcScopeExitCleanupForTarget(retSymIdx: Integer);
+{ The NORMAL-return half: unchain the cleanup frame (if this proc has one),
+  then release the managed locals. One call for all six epilogue branches. }
+begin
+  if ProcExceptionCleanupFrameActive then EmitProcCleanupFrameLeaveForTarget;
+  EmitManagedLocalCleanupForTarget(retSymIdx);
+end;
