@@ -73,4 +73,4 @@ guard there would have silently papered over this and over the next omission of
 the same shape; i386's refusal is the diagnostic that found it in one step.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit ba398c9b1.

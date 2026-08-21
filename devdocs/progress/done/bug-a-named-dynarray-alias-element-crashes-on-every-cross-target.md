@@ -114,4 +114,4 @@ the tyUnknown symbol. Pre-existing on `pinned`.
 | riscv32 | no output | **26 / 26** |
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit ba398c9b1.
