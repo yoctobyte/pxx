@@ -4,7 +4,7 @@ prio: 55
 type: feature
 blocked-by: []
 summary: "A nil receiver, a nil procvar call or a nil interface call dies as a raw memory fault today — on Linux via the MMU, on ESP not at all. Emit the check at the site instead: PXXNilRef + PXXNilRefHook, the fifth member of the PXXDivZero/Overflow/RangeError/IoError family, so sysutils upgrades it to a catchable EAccessViolation. The payload is catchability and a named line, not a nicer message."
-status: working
+status: done
 owner: claude-A
 ---
 
@@ -375,3 +375,6 @@ Remaining, and both are optimisations rather than coverage:
 - `p.ClassName` and friends still fault: they lower to a direct VMT read, not to
   a call with a `Self` param, so no arm's key sees them. Filed separately if it
   ever bites — it is the same shape as class 4 and would want the same default.
+
+## Log
+- 2026-08-21 — resolved, commit PENDING-COMMIT.
