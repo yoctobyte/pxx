@@ -4746,6 +4746,23 @@ test-core: $(COMPILER)
 	# under a "bare-metal" comment that did not apply to its hosted profile —
 	# a lost exit code, so every caller branching on $$? took the wrong branch
 	# in silence. bug-a-halt-n-exits-zero-on-hosted-riscv32
+	# --mimic-fpc-compiler: the build-config define profile FPC's makefile
+	# injects when compiling FPC's own COMPILER. Three rows because three
+	# separate things can break. Plain --mimic-fpc must NOT define the CPU
+	# (it is a different profile, and conflating them is what made the FPC
+	# compiler tree unreachable); the compiler profile must still carry the
+	# FPC identity (an early version guarded that and produced something
+	# strictly WORSE than --mimic-fpc, losing `unix`); and the derived-leak
+	# line must never appear, because cpu64bitalu is one of ~40 names
+	# fpcdefs.inc DERIVES from the one CPU define — hand-listing them would be
+	# a second copy of FPC's derivation, wrong the day upstream changes it.
+	# feature-mimic-fpc-compiler-define-profile
+	./$(COMPILER) test/test_mimic_fpc_compiler_profile.pas $(TESTTMP)/test_mimicfpcc_none
+	test "$$($(TESTTMP)/test_mimicfpcc_none)" = "$$(printf 'fpc=NO\nunix=NO\nend')"
+	./$(COMPILER) --mimic-fpc test/test_mimic_fpc_compiler_profile.pas $(TESTTMP)/test_mimicfpcc_fpc
+	test "$$($(TESTTMP)/test_mimicfpcc_fpc)" = "$$(printf 'fpc=yes\nunix=yes\nend')"
+	./$(COMPILER) --mimic-fpc-compiler test/test_mimic_fpc_compiler_profile.pas $(TESTTMP)/test_mimicfpcc
+	test "$$($(TESTTMP)/test_mimicfpcc)" = "$$(printf 'fpc=yes\nunix=yes\ncpu=x86_64\nend')"
 	./$(COMPILER) test/test_halt_exit_code.pas $(TESTTMP)/test_halt_exit26
 	test "$$($(TESTTMP)/test_halt_exit26; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) test/test_signal_sp_rewrite.pas $(TESTTMP)/test_signal_sprw26
@@ -8752,6 +8769,9 @@ test-aarch64: $(COMPILER)
 	# the guard page. Depth is not printed: it depends on RLIMIT_STACK.
 	./$(COMPILER) --target=aarch64 test/test_stack_overflow_raise.pas $(TESTTMP)/test_aarch64_sovf
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sovf)" = "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
+	# ... and the CPU half of the profile follows --target, not the host.
+	./$(COMPILER) --target=aarch64 --mimic-fpc-compiler test/test_mimic_fpc_compiler_profile.pas $(TESTTMP)/test_aarch64_mimicfpcc
+	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_mimicfpcc)" = "$$(printf 'fpc=yes\nunix=yes\ncpu=aarch64\nend')"
 	./$(COMPILER) --target=aarch64 test/test_halt_exit_code.pas $(TESTTMP)/test_aarch64_halt
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=aarch64 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_aarch64_sprw

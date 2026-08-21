@@ -906,6 +906,65 @@ begin
   PasSetDefineValue('FPC_FULLVERSION', 30202);
 end;
 
+procedure PasApplyMimicCompilerDefines;
+var name: AnsiString;
+begin
+  { --mimic-fpc-compiler / {$MIMIC FPCCOMPILER}: what --mimic-fpc gives, PLUS
+    the build-config define profile FPC's own makefile injects when it compiles
+    FPC's COMPILER.
+
+    FPC's compiler is not standalone source. Every unit begins
+    `{$i fpcdefs.inc}`, and that file is a pure derivation from ONE build-time
+    define: the CPU. Without it every branch is dead and the include resolves to
+    a configuration with no CPU class at all — measured under plain
+    --mimic-fpc, cpu64bitalu / cpu64bitaddr / x86 / cpuextended /
+    cputargethasfixedstack all absent, where a real `fpc -dx86_64` has every one
+    of them.
+
+    So this is ONE define, not a curated list, and that is the finding rather
+    than a shortcut: fpcdefs.inc derives the other forty from it, and hand-
+    listing them would be a second copy of FPC's own derivation, wrong the day
+    they change it. Verified against the oracle: with the CPU define supplied,
+    pxx and `fpc -dx86_64` agree on all seven probed derivations.
+
+    The CPU comes from the TARGET rather than being hardcoded x86_64, so a
+    corpus probe cross-compiling FPC's compiler gets the right profile without a
+    second flag. The spellings are FPC's own (`arm`, not `arm32`; `x86_64`, not
+    `CPUX86_64` — the CPUxxx family is a different, RTL-facing set that FPC's
+    own compiler build does not use here).
+
+    riscv32 and xtensa are REFUSED rather than silently profiled: FPC 3.2.2's
+    fpcdefs.inc has no branch for either (its CPU gates are i8086, i386, x86_64,
+    sparc, sparc64, powerpc, powerpc64, arm, m68k, avr, mipsel, mips, jvm,
+    aarch64, llvm), so any define we invented would select nothing and hand back
+    the same no-CPU-class nonsense this flag exists to prevent.
+
+    Implies --mimic-fpc: the profile is meaningless without the FPC identity
+    defines underneath it, and requiring both flags is a way to be half
+    configured. }
+  MimicFpc := True;
+  { UNCONDITIONALLY, not `if not MimicFpc` — the CLI flag sets MimicFpc before
+    calling here, so a guard on it skips the identity defines entirely and the
+    profile comes out WORSE than plain --mimic-fpc (measured: `unix` missing, so
+    fpcdefs.inc's cpawaremessages gate went dead while the CPU gates came
+    alive). PasDefine skips duplicates, so calling it twice is free. }
+  PasApplyMimicDefines;
+  if TargetArch = TARGET_X86_64 then name := 'x86_64'
+  else if TargetArch = TARGET_I386 then name := 'i386'
+  else if TargetArch = TARGET_AARCH64 then name := 'aarch64'
+  else if TargetArch = TARGET_ARM32 then name := 'arm'
+  else
+  begin
+    Error('--mimic-fpc-compiler has no FPC build profile for this target: '
+          + 'FPC 3.2.2''s fpcdefs.inc has no branch for it, so every CPU '
+          + 'derivation would stay dead and the profile would be the same '
+          + 'no-CPU-class configuration the flag exists to fix '
+          + '(feature-mimic-fpc-compiler-define-profile)');
+    Exit;
+  end;
+  PasDefine(name);
+end;
+
 procedure PasDefineCommandOption(first: Integer);
 var name: AnsiString;
 begin
@@ -1791,7 +1850,15 @@ begin
         Only FPC is a valid target; {$MIMIC DELPHI} is reserved (unimplemented). }
       if CaseEqual(name, 'fpc') then
       begin MimicFpc := True; IChecksVal := True; PasApplyMimicDefines; end
-      else Error('unknown {$MIMIC} target (only FPC is supported): ' + name);
+      else if CaseEqual(name, 'fpccompiler') then
+      begin
+        { {$MIMIC FPCCOMPILER}: FPC's own compiler sources, which need the
+          build-config CPU define on top of the FPC identity — see
+          PasApplyMimicCompilerDefines. Implies FPC, so it sets both. }
+        MimicFpcCompiler := True; IChecksVal := True; PasApplyMimicCompilerDefines;
+      end
+      else Error('unknown {$MIMIC} target (only FPC and FPCCOMPILER are '
+                 + 'supported): ' + name);
     end
     else if CaseEqual(command, 'asmmode') then
     begin

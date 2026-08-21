@@ -730,6 +730,23 @@ begin
       NoShims := True;
       Inc(i);
     end
+    else if option = '--mimic-fpc-compiler' then
+    begin
+      { --mimic-fpc PLUS the build-config define profile FPC's makefile injects
+        when compiling FPC's own COMPILER. Its sources are parameterised: every
+        unit does `{$i fpcdefs.inc}`, which derives ~40 cpu* / SUPPORT_* defines
+        from ONE build-time CPU define and derives nothing at all without it.
+        The defines land at PasApplyMimicCompilerDefines below, once the target
+        is known — the profile follows --target, so a cross probe gets the right
+        one. Checked, not tested by proxy: pxx under this flag and a real
+        `fpc -dx86_64` agree on all seven probed derivations.
+        feature-mimic-fpc-compiler-define-profile }
+      MimicFpcCompiler := True;
+      MimicFpc := True;
+      EnableStrictFpc;
+      IChecksVal := True;
+      Inc(i);
+    end
     else if option = '--mimic-fpc' then
     begin
       MimicFpc := True;
@@ -896,14 +913,17 @@ begin
   end;
   PasApplyTargetDefines;
   PasApplyPlatformDefines;
-  if MimicFpc then PasApplyMimicDefines;
+  { AFTER PasApplyTargetDefines and after the target is settled: the compiler
+    profile picks its CPU define from TargetArch. }
+  if MimicFpcCompiler then PasApplyMimicCompilerDefines
+  else if MimicFpc then PasApplyMimicDefines;
   { -g (DWARF Tier-1) implies -O0 unless the user explicitly chose an -O level:
     opt passes (inline, DCE, jump threading) relocate/elide source lines and small
     functions, so breakpoints and single-step break. `-g -O2` is still honoured for
     users who accept degraded debug info. See feature-optimization-levels. }
   if DebugInfo and not OptLevelExplicit then OptLevel := 0;
   if ParamCount < i then
-    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--strict-operator] [--strict-case] [--strict-python] [--fpc-mem-errors] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
+    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--strict-operator] [--strict-case] [--strict-python] [--mimic-fpc] [--mimic-fpc-compiler] [--fpc-mem-errors] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
 
   inFile  := ParamStr(i);
 {$ifdef FPC}

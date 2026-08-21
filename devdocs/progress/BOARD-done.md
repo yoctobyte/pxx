@@ -1681,6 +1681,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-member-access-on-call-result | B | 50 | feature | Member access on a function-call result (`f(args).field`) | — |
 | feature-metaclass-construct-dispatch | A | 50 | feature | feature: metaclass-dispatched construction — `classRef.Create` (virtual ctor via a `class of`) | — |
 | feature-metaclass-descendant-enforcement | A | 50 | feature | Metaclass alias descendant-constraint enforcement | — |
+| feature-mimic-fpc-compiler-define-profile | A | 50 | feature | FPC-compiler define profile (`fpcdefs.inc` build-config gates) | — |
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-mode-delphi | A | 50 | feature | `{$mode delphi}` support — incl. the @-optional proc-pointer disambiguation | — |
 | feature-multidim-const-array | A | 50 | feature | feature: multidimensional typed-constant arrays | — |
