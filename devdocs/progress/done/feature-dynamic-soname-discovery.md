@@ -100,4 +100,4 @@ the same shape as `bug-a-fpc-seed-drift-emitasmx64-forward`.
 
 Worth noting because the canary is the only layer that catches it: the
 bootstrap seed is the one consumer that cannot be tested by running pxx.
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 9818547e6.
