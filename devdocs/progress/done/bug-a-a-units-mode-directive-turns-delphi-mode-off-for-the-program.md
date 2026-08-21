@@ -117,3 +117,26 @@ the two new ones + `tools/gate.sh quick`.
 
 ## Log
 - 2026-08-21 — resolved, commit 59cddd3b7.
+
+## Follow-up measurement: it covered four more reds
+
+After the fix landed, the three remaining delphi-shaped open regressions in
+`TSTATE.md` were re-checked at HEAD and are green too — they were the same bug
+reported by a different job (`test-nilpy`, whose row set includes these `.pas`
+tests), with a much wider bisect range (`bad 23becd24b8e5`, 109 commits) that
+never named the real commit:
+
+- `test_pascal_at_procvar_mode.pas@1`
+- `test_pascal_mode_switch_cli.pas@2`
+- `test_pascal_self_result_delphi.pas@1` and `@2`
+
+All nine of their Makefile assertions verified by hand against their exact
+expected output, including the two that must DIFFER between `-Mdelphi` and
+`-Mobjfpc` (a mode flag that is ignored fails those by construction) and the
+warn-count row that must be 0 in delphi mode.
+
+Worth recording for the shape, not the count: **one cause, three bisect ranges,
+five commits / 109 commits / 3 commits wide.** A wide range is not weak
+evidence of a different bug, it is often the same bug on a job that runs less
+often — so re-measuring every open red at HEAD after a fix costs one command
+and closed four extra rows here.
