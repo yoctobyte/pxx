@@ -3819,8 +3819,7 @@ begin
       dispatch) before parsing the unit body, so the unit's Assign/Reset/Rewrite/
       Close resolve. Same gating as the program-level default surface; idempotent
       via the CompiledUnits guard, so an explicit `uses textfile` is harmless. }
-    if unitNeedsText and (not NoDefaultRtl) and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+    if unitNeedsText and (not NoDefaultRtl) and (not TargetIsEspClass) then
     begin
       ParseUsesUnitAmbient('builtin');
       ParseUsesUnitAmbient('textfile');

@@ -41,3 +41,35 @@ begin
   for i := Length(rev) downto 1 do AppendChar(res, rev[i]);
   Result := res;
 end;
+
+function TargetIsEspClass: Boolean;
+{ True for the ESP-class bare-metal targets — the ones that have no hosted OS
+  under them and therefore no full RTL: xtensa ALWAYS, riscv32 only under
+  `--esp-profile=bare`. riscv32 is dual-role (bare ESP32-C3 or hosted Linux),
+  which is exactly why the profile has to be part of the test and why writing it
+  out by hand is a trap.
+
+  It was written out by hand, 21 times, all identical:
+
+    (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot))
+
+  20 in pasparser_prog.inc and 1 in pasparser_proc.inc, every one of them
+  guarding "may I pull this RTL unit". Adding a target means editing all 21 or
+  being silently wrong at whichever one is missed — and being wrong here does
+  not crash, it silently drags an uncompilable unit into a bare-metal build or
+  silently omits Str/Val from a hosted one. Found while scoping
+  feature-a-riscv64-as-a-hosted-first-class-target, where it is a prerequisite.
+
+  NOT to be confused with the OTHER spelling in the tree,
+  `(TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32)` with no
+  profile test (13 sites: emit.inc, elfwriter.inc, exception_emit.inc,
+  pasparser_decl.inc, lexer.inc, pasparser_prog.inc). Those are deliberately
+  left alone: they look like one concept and are several — "no DWARF", "the
+  only two --emit-obj targets", "Real is Single", "no hardware FPU" — so
+  collapsing them into one predicate would assert a sameness that is not there.
+  They are also where riscv64 must NOT simply be added: each needs its own
+  answer. The list is in the riscv64 ticket. }
+begin
+  Result := (TargetArch = TARGET_XTENSA) or
+            ((TargetArch = TARGET_RISCV32) and EspBareBoot);
+end;

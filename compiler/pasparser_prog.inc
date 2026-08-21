@@ -482,8 +482,7 @@ begin
     writeln to stdout uses builtins, not the textfile RTL). A length pre-check
     avoids building a string for every token. An explicit `uses textfile` still
     loads it regardless (handled in the token loop below). }
-  if (not NoDefaultRtl) and
-     (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+  if (not NoDefaultRtl) and (not TargetIsEspClass) then
   begin
     usesTextfile := False;
     for i := 0 to TokCount - 1 do
@@ -512,8 +511,7 @@ begin
     for a bare use of one of the System-surface names and add the unit.
     A user routine of the same name still shadows at the call site, exactly as
     with the textfile names. }
-  if (not NoDefaultRtl) and
-     (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+  if (not NoDefaultRtl) and (not TargetIsEspClass) then
   begin
     { Require a following '(' — these are all functions, and `ln` in
       particular is a plausible variable name (a line number). Without the
@@ -736,7 +734,7 @@ begin
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+       (not TargetIsEspClass) then
       needsBuiltin := True;
     { A VARIANT anywhere in the program pulls the builtin unit, because assigning
       a variant to a scalar lowers to VariantToInt64/Double/Bool/Char/Str and
@@ -750,7 +748,7 @@ begin
       exclusions as the Str/Val pull above — those targets cannot compile the
       unit, and there a variant program fails at the call site instead. }
     if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'variant') and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+       (not TargetIsEspClass) then
       needsBuiltin := True;
     { Bare `Copy(...)` on a string lowers to the __pxxStrCopy substring helper in
       the builtin unit (see ParseFactor). Pull the unit so the helper resolves;
@@ -758,7 +756,7 @@ begin
       Copy just leaves the extra helper unused. ESP can't compile builtin. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and CaseEqual(GetTokenStr(i), 'copy') and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+       (not TargetIsEspClass) then
       needsBuiltin := True;
     { A `WideChar(x)` value cast may need the UTF-8 conversion helpers
       (__pxxWideCharToUTF8 / the pair form) when the value flows into a string
@@ -767,7 +765,7 @@ begin
       leaving the helpers unused. }
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and CaseEqual(GetTokenStr(i), 'widechar') and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+       (not TargetIsEspClass) then
       needsBuiltin := True;
     { UCS4Char, the same shape — but pulled on ANY mention, not just a `(` cast,
       because unlike WideChar it is a declarable TYPE: `var c: UCS4Char` needs
@@ -775,7 +773,7 @@ begin
       where it will usually be spelled. }
     if (Tokens[i].Kind = tkIdent) and
        (CaseEqual(GetTokenStr(i), 'ucs4char') or CaseEqual(GetTokenStr(i), 'unicodechar')) and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+       (not TargetIsEspClass) then
       needsBuiltin := True;
     { The hardware-entropy intrinsics (__pxxCpuHasHwRandom / __pxxHwRandom64)
       live in the builtin unit, and lib/rtl/random.pas is required to call them
@@ -785,8 +783,7 @@ begin
       feature-a-rdrand-cpuid-compiler-builtins }
     if (Tokens[i].Kind = tkIdent) and
        (CaseEqual(GetTokenStr(i), '__pxxcpuhashwrandom') or
-        CaseEqual(GetTokenStr(i), '__pxxhwrandom64')) and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+        CaseEqual(GetTokenStr(i), '__pxxhwrandom64')) and (not TargetIsEspClass) then
       needsBuiltin := True;
     { `obj.MethodAddress(name)` / `obj.MethodName(addr)` lower to __pxxMethodAddress /
       __pxxMethodName in the builtin unit (see ParseLValueAST) — FPC has them on
@@ -795,8 +792,7 @@ begin
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'methodaddress') or CaseEqual(GetTokenStr(i), 'methodname') or
-        CaseEqual(GetTokenStr(i), 'getinterface')) and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+        CaseEqual(GetTokenStr(i), 'getinterface')) and (not TargetIsEspClass) then
       needsBuiltin := True;
     { `x.ClassName` lowers to __pxxClassName (+ __pxxRttiOf for an instance) — see
       GenMakeClassNameCall. Unlike the helpers above it takes NO arguments, so it is
@@ -809,8 +805,7 @@ begin
           TClass value (runtime, helper) is not knowable from the tokens, so the
           soft-keyword `is` pulls the unit. An unused helper is dropped by the linker
           path anyway; a missing one would silently disable the operator. }
-        CaseEqual(GetTokenStr(i), 'is')) and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+        CaseEqual(GetTokenStr(i), 'is')) and (not TargetIsEspClass) then
       needsBuiltin := True;
     { A write/writeln with a VARIABLE field width pre-formats through
       StrInt/StrFloat/StrChar/StrStrW/StrBool, which live in the builtin unit —
@@ -821,7 +816,7 @@ begin
       bug-a-a-variable-field-width-is-refused-for-strings-and-needs-an-rtl-unit }
     if ((Tokens[i].Kind = tkwrite) or (Tokens[i].Kind = tkwriteln)) and
        (i + 1 < TokCount) and (Tokens[i + 1].Kind = tkLParen) and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+       (not TargetIsEspClass) then
     begin
       wdDepth := 0;
       j := i + 1;
@@ -846,7 +841,7 @@ begin
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'delete') or CaseEqual(GetTokenStr(i), 'insert')) and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+       (not TargetIsEspClass) then
       needsBuiltin := True;
     { `InterLocked*(...)` resolve to the wrappers in the builtin unit — FPC
       declares them in `system`, so real FPC source calls them with NO uses
@@ -857,7 +852,7 @@ begin
        (Tokens[i + 1].Kind = tkLParen) and
        (Length(GetTokenStr(i)) >= 11) and
        CaseEqual(Copy(GetTokenStr(i), 1, 11), 'InterLocked') and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+       (not TargetIsEspClass) then
       needsBuiltin := True;
     { Bare `Abs(...)` / `Sqr(...)` lower to the __pxxAbs*/__pxxSqr* helpers in the
       builtin unit (see ParseFactor). Pull the unit so they resolve; a user
@@ -865,7 +860,7 @@ begin
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'abs') or CaseEqual(GetTokenStr(i), 'sqr')) and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+       (not TargetIsEspClass) then
       needsBuiltin := True;
     { Bare `UpCase(...)` / `Pos(...)` lower to __pxxUpCase / __pxxPos in the
       builtin unit (see ParseFactor); pull it so they resolve. ESP can't. }
@@ -874,7 +869,7 @@ begin
        (CaseEqual(GetTokenStr(i), 'upcase') or CaseEqual(GetTokenStr(i), 'pos') or
         CaseEqual(GetTokenStr(i), 'roldword') or CaseEqual(GetTokenStr(i), 'rordword') or
         CaseEqual(GetTokenStr(i), 'rolqword') or CaseEqual(GetTokenStr(i), 'rorqword')) and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+       (not TargetIsEspClass) then
       needsBuiltin := True;
     { Bare `Move(...)` / `FillChar(...)`: System memory primitives live in the
       builtin unit (FPC keeps them in System, no `uses` needed). Pull the unit
@@ -886,7 +881,7 @@ begin
         CaseEqual(GetTokenStr(i), 'move') or CaseEqual(GetTokenStr(i), 'fillchar') or
         CaseEqual(GetTokenStr(i), 'fillbyte') or CaseEqual(GetTokenStr(i), 'filldword') or
         CaseEqual(GetTokenStr(i), 'comparebyte') or CaseEqual(GetTokenStr(i), 'comparechar')) and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+       (not TargetIsEspClass) then
       needsBuiltin := True;
     { FPC System surface living in builtin as plain Pascal: the PRNG
       (Random/Randomize/RandSeed) plus HexStr/RunError/UniqueString. Call-shaped
@@ -901,7 +896,7 @@ begin
           CaseEqual(GetTokenStr(i), 'lo') or CaseEqual(GetTokenStr(i), 'hi') or
           CaseEqual(GetTokenStr(i), 'swap'))) or
         CaseEqual(GetTokenStr(i), 'randseed') or CaseEqual(GetTokenStr(i), 'randomize')) and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+       (not TargetIsEspClass) then
       needsBuiltin := True;
     { Variant use needs VariantToStr (in builtin) for variant writes — on
       x86-64. Cross targets serve variants from builtinheap (PXXVar* helpers)
@@ -909,8 +904,7 @@ begin
     if (Tokens[i].Kind = tkIdent) and CaseEqual(GetTokenStr(i), 'Variant') and
        (TargetArch = TARGET_X86_64) then
       needsBuiltin := True;
-    if (Tokens[i].Kind = tkUses) and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+    if (Tokens[i].Kind = tkUses) and (not TargetIsEspClass) then
       needsBuiltin := True;
     { A PChar/PAnsiChar in scope may be converted to string — implicitly in a
       `string` assignment or string-param call, or explicitly via string(pc).
@@ -920,7 +914,7 @@ begin
       builtins) never drags in builtin.pas. ESP can't compile builtin. }
     if (not NoDefaultRtl) and (Tokens[i].Kind = tkIdent) and
        (CaseEqual(GetTokenStr(i), 'pchar') or CaseEqual(GetTokenStr(i), 'pansichar')) and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+       (not TargetIsEspClass) then
       needsBuiltin := True;
     { …and the same rule for a static `array of Char`, which IS a string in both
       directions and lowers to __pxxCharArrayToStr / __pxxStrToCharArray (also
@@ -929,8 +923,7 @@ begin
       appears in almost every program and would drag builtin.pas into all of
       them. bug-p-a-char-array-is-not-a-string-in-any-direction }
     if (not NoDefaultRtl) and (Tokens[i].Kind = tkOf) and (i + 1 < TokCount) and
-       (Tokens[i + 1].Kind = tkChar_T) and
-       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+       (Tokens[i + 1].Kind = tkChar_T) and (not TargetIsEspClass) then
       needsBuiltin := True;
     Inc(i);
   end;

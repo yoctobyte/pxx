@@ -302,3 +302,67 @@ explicitly asks for.
    oracle. `tools/run_target.sh riscv64` already works.
 
 Nothing above is blocked. Step 1 is separable and lands on its own.
+
+---
+
+## Step 1 landed: `TargetIsEspClass`, and the hazard list it revealed
+
+`compiler/util.inc` now carries
+
+```pascal
+function TargetIsEspClass: Boolean;
+begin
+  Result := (TargetArch = TARGET_XTENSA) or
+            ((TargetArch = TARGET_RISCV32) and EspBareBoot);
+end;
+```
+
+replacing all 21 hand-written copies (20 `pasparser_prog.inc`, 1
+`pasparser_proc.inc`). Verified as a pure refactor, not just by reading: the
+pre-change and post-change compilers were both built from source and made to
+emit the same programs for seven target configurations — native, i386, arm32,
+aarch64, hosted riscv32, bare riscv32, xtensa — **byte-identical output on every
+one that compiles, identical refusal on every one that does not.** (De Morgan
+makes it provable too, but the repo's rule is measure, not reason.)
+
+### The 13 sites deliberately NOT folded in
+
+There is a second spelling, `(TargetArch = TARGET_XTENSA) or (TargetArch =
+TARGET_RISCV32)` with **no** profile test. It looks like the same concept and is
+at least four different ones, so a shared predicate would assert a sameness that
+is not there. Each needs its own answer before riscv64 is added — and two of
+them are already wrong for *hosted riscv32*, today, without riscv64 in the
+picture:
+
+| site | what it really means | riscv64 answer | status |
+| --- | --- | --- | --- |
+| `emit.inc:106` (EmitDataRef) | "pointer is 4 bytes" — the disjunction is i386/arm32/xtensa/riscv32 | **NO** (8-byte ref) | should be `TARGET_PTR_SIZE = 4`, which already exists as a runtime var |
+| `pasparser_prog.inc:124` (float pulls heap) | same "32-bit target" concept | **NO** | same normalisation |
+| `pasparser_decl.inc:133`, `:271` | "no hardware double" → `Real = Single` | **NO** | **wrong for hosted riscv32 today** — [[bug-a-real-is-single-on-hosted-riscv32]] |
+| `emit.inc:149` (EmitwriteSyscall) | "bare metal, no write(2)" — but tests the arch, not the profile, and silently `Exit`s | **NO** | dead for riscv32 in practice (only the 386/arm32/aarch64/x64 backends call it) but it is a silent no-op wearing a bare-metal comment |
+| `emit.inc:219` (EmitMmapArena) | "bare metal, no mmap" — same mis-keying, but Errors rather than no-ops | **NO** | loud, so harmless; still mis-keyed |
+| `exception_emit.inc:425` | "windowed ABI, no longjmp unwind" | **NO** | **unreachable for riscv32** — the real arm is at `:317` ("hosted AND ESP bare"), earlier in the same `else if` chain |
+| `elfwriter.inc:1829` | no DWARF `-g` | probably NO (riscv64 hosted should get `-g`) | |
+| `elfwriter.inc:2306` | the only two `--emit-obj` targets | NO | |
+| `lexer.inc:727` | ESP-IDF heap (already profile-qualified with `not EspBareBoot`) | NO | correct as written |
+| `pasparser_prog.inc:608`, `:655` | RTL pulls, unqualified variant of the 21 | NO | check against `TargetIsEspClass` |
+| `emit.inc:251`, `pasparser_prog.inc:643` | xtensa-only | N/A | |
+
+**The pattern is one mistake made repeatedly: `TARGET_RISCV32` used as a proxy
+for "small, bare, soft-float, no OS".** That was true when riscv32 existed only
+for the ESP32-C3 and stopped being true when it became dual-role. riscv64
+inherits nothing from those sites, so the port must add itself to each one
+consciously — which is exactly why they are listed rather than collapsed.
+
+`e_machine` is worth one line of its own: `elfwriter.inc` writes **243** for
+riscv32 (`:1955`, `:2063`, `:2326`), and 243 is `EM_RISCV`, which is
+XLEN-agnostic. riscv64 reuses it unchanged; what differs is the ELF **class**
+byte and the 64-bit header/section layout, i.e. `writeELF` vs `writeELF32`.
+
+### Remaining sequence
+
+2. Encoder layer: RV64 `ld`/`sd`/`lwu`, the W family, and 6-bit-shamt shift
+   encoders as siblings (not a widening — see the decision above).
+3. `ir_codegen_riscv64.inc` + `TARGET_RISCV64` + `--target=riscv64` + ELFCLASS64.
+4. Functional verification under `qemu-riscv64` (installed here; no local riscv
+   assembler exists, so running the code is the oracle).
