@@ -58,4 +58,4 @@ riscv32 and i386 under qemu. Regression guard added as `test/c_main_no_return.c`
 with a Makefile row that checks the EXIT STATUS (the only visible symptom):
 straight-through, out of a nested block, and via a goto to a trailing label,
 byte-identical to gcc -std=c99 and exiting 255 on the pre-fix compiler.
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit e80af42d3.
