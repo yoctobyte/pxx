@@ -7,7 +7,7 @@ blocked-by: []
 summary: "`Halt(7)` exits 0 on hosted riscv32 and 7 on every other target and on FPC. The IR_TERMINATE arm emitted an unconditional exit(0) and never evaluated its argument, under a comment claiming bare-metal — an ESP assumption applied to the hosted profile of the same arch. A program's failure signal vanished with no diagnostic."
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: 28f03b881
 ---
 
 # `Halt(n)` exits 0 on hosted riscv32
