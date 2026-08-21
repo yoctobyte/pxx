@@ -5114,6 +5114,21 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/hello26)" = "Hello, World!"
 	./$(COMPILER) test/hello.c $(TESTTMP)/hello_c26
 	test "$$($(TESTTMP)/hello_c26)" = "Hello, World!"
+	# MAX_STRS: a C program with more distinct string literals than the table
+	# holds was refused with `string table overflow` naming line 2 of an injected
+	# unit — nothing wrong at line 2, the table was simply full of the user's
+	# literals by then. csmith --paranoid gets there because it emits an assertion
+	# with its own message text at every pointer operation, so literal count
+	# scales with the program. GENERATED here rather than committed: the point is
+	# the COUNT, and a 9500-line source in test/ would be 9500 lines of noise.
+	# No backslash escapes in the generated C, deliberately — they would have to
+	# survive make, the shell and python quoting in that order, and the first
+	# draft of this row lost one layer and produced a source gcc could not parse.
+	# gcc -O0 oracle. bug-a-string-table-cap-refuses-a-14k-line-c-program
+	@python3 tools/gen_manylit_c.py 9500 $(TESTTMP)/manylit.c
+	./$(COMPILER) $(TESTTMP)/manylit.c $(TESTTMP)/manylit26
+	gcc -O0 -o $(TESTTMP)/manylit_gcc $(TESTTMP)/manylit.c
+	test "$$($(TESTTMP)/manylit26)" = "$$($(TESTTMP)/manylit_gcc)"
 	# Calling through a function-pointer TABLE failed to PARSE in two shapes while
 	# four neighbouring spellings worked: a LOCAL `binop tab[2]` declared through a
 	# typedef never got SymElemProcSig (the `tab[i](args)` channel) though the

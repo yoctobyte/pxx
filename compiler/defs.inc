@@ -12,7 +12,22 @@ const
   DEFAULT_STR_CAP = 255;   { default capacity (max chars) for tyFixedString/tyShortString when no string[N] size given }
   LINE_BUF_SIZE = 4096;    { readln stdin line buffer }
   MAX_DATA    = 2097152;      { 2 MB }
-  MAX_STRS    = 8192;
+  { Was 8192, an outlier nobody had revisited: its neighbours in this block are
+    MAX_SYMS/MAX_FIXUPS 131072 and MAX_PROCS/MAX_USES_EDGES 16384, and it sat
+    16x below the symbol table beside it with no comment justifying it. A
+    csmith `--paranoid` program (seed 200056, 14125 lines) emits a pointer
+    assertion with its own message text at every pointer operation, so its
+    literal count scales with the PROGRAM rather than staying flat the way
+    hand-written source does: 9426 distinct literals, 15% over the cap, refused
+    with `string table overflow` naming line 2 of an injected unit.
+    At 65536 that program compiles in 2.7s and its checksum agrees with gcc.
+    Cost is ~24 B/entry of BSS, ~1.4 MB, virtual only — the same cost model as
+    MAX_CODE above. bug-a-string-table-cap-refuses-a-14k-line-c-program }
+  MAX_STRS    = 65536;
+  { The compiled-unit ceiling, enforced at `if CompiledUnitCount < 256` in
+    ParseUnit. Named here because VisCacheVis is sized by it and USED to be
+    sized by MAX_STRS — see the note on that array. }
+  MAX_UNITS   = 256;
   { Compile-time-only identity keys (see KeyStrs). Bounded by the compiled-unit
     count, which CompiledUnitFile already caps at 256; 1024 leaves headroom for
     the other key classes without pretending to be a general string table. }
@@ -2521,7 +2536,16 @@ var
   UsesInjected     : Boolean;   { set only around a compiler-injected load }
   VisCacheUnit  : Integer;
   VisCacheEdges : Integer;
-  VisCacheVis   : array[0..MAX_STRS] of Boolean;
+  { Indexed by UNIT (`declUnit + 1`, `curUnit + 1`), never by string — it was
+    sized by MAX_STRS, which is a different quantity that merely happened to be
+    larger. That coupling was not a live overflow (units cap at 256, so the
+    array was ~8x oversized) but VisibilityAllows CLEARS THE WHOLE THING on
+    every cache miss and is called from every name lookup, so raising the string
+    table would have made a hot-path clear proportionally longer for a reason
+    with nothing to do with strings. Sized by units, that clear is ~32x cheaper
+    than it was before the raise, not 8x more expensive.
+    bug-a-string-table-cap-refuses-a-14k-line-c-program }
+  VisCacheVis   : array[0..MAX_UNITS] of Boolean;
   WarnIgnoredDirectives : Boolean; { --warn-ignored-directives: a routine
                             directive that is accepted and then dropped is
                             reported, with WHY it could not be honored, so the

@@ -741,6 +741,18 @@ begin
     bug-c-sibling-translation-units-cannot-see-each-other }
   if UnitIsCTranslationUnit(curUnit) and UnitIsCTranslationUnit(declUnit) then
   begin VisibilityAllows := True; Exit; end;
+  { Beyond the cache's range: answer directly, without memoizing. Unreachable
+    while ParseUnit caps CompiledUnitCount at 256, and present so that raising
+    that cap is a one-line change rather than a silent out-of-bounds read —
+    which is exactly the failure the MAX_STRS coupling was one step away from. }
+  if (curUnit + 1 > MAX_UNITS) or (declUnit + 1 > MAX_UNITS) then
+  begin
+    for i := 0 to UsesEdgeCount - 1 do
+      if (UsesEdgeFrom[i] = curUnit) and (UsesEdgeTo[i] = declUnit) then
+      begin VisibilityAllows := True; Exit; end;
+    VisibilityAllows := False;
+    Exit;
+  end;
   if (VisCacheUnit = curUnit) and (VisCacheEdges = UsesEdgeCount) then
   begin
     VisibilityAllows := VisCacheVis[declUnit + 1];
@@ -748,7 +760,7 @@ begin
   end;
   VisCacheUnit := curUnit;
   VisCacheEdges := UsesEdgeCount;
-  for i := 0 to MAX_STRS do VisCacheVis[i] := False;
+  for i := 0 to MAX_UNITS do VisCacheVis[i] := False;
   VisCacheVis[curUnit + 1] := True;
   { the whole rule: the units curUnit itself named, either section }
   for i := 0 to UsesEdgeCount - 1 do

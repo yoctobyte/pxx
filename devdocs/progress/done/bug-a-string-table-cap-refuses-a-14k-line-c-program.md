@@ -2,7 +2,8 @@
 track: A
 prio: 45
 type: bug
-status: open
+status: done
+owner: claude-A
 ---
 
 # `VisCacheVis` is sized by the string-table constant — and the cap it is tied to is too low
@@ -125,3 +126,73 @@ size, so the fixedpoint is the real check), plus seed 200056 compiling and
 agreeing with gcc. Measure the `compiler.pas` self-compile time before and
 after on an idle box — the point of step 1 is that it should get FASTER, not
 merely not-slower.
+
+## Resolution (2026-08-21)
+
+Both steps, in the order the ticket asked for.
+
+### 1. `VisCacheVis` is sized by units now
+
+`array[0..MAX_UNITS]` (257 slots) instead of `array[0..MAX_STRS]`, with a new
+`MAX_UNITS = 256` naming the ceiling `ParseUnit` already enforces at
+`if CompiledUnitCount < 256`. The hot-path clear in `VisibilityAllows` — run on
+every cache miss, from every name lookup — went from **8193 iterations to 257**,
+and would have gone to 65537 had step 2 landed alone.
+
+Added with it: an explicit out-of-range arm in `VisibilityAllows` that answers
+from the edge table directly instead of indexing the cache. It is unreachable
+today; it is there so that raising the unit cap is a one-line change rather than
+a silent out-of-bounds read, which is the failure the old coupling stood one
+step away from.
+
+### 2. `MAX_STRS` 8192 → 65536
+
+With the arithmetic in a comment, in `MAX_CODE`'s style.
+
+### Measured
+
+**The repro reproduces, and the fix fixes it.** A generated C program with 9500
+distinct literals, against the binary from before this change and after:
+
+```
+old: pascal26:2: error: string table overflow / near: >>> unit builtinheap
+new: ok   46146250        gcc -O0 oracle: 46146250
+```
+
+Note the old error names line 2 and an injected unit — exactly the misleading
+message in the report, reproduced.
+
+**On the self-compile timing, the honest answer is "no signal".** Three runs
+before and three after suggested 26.7s → 21.8s, but interleaving the two
+binaries under the same load gave 24.8/26.4/28.9 (before) against
+26.4/28.9/28.0 (after), with load climbing through the run — Track T is on this
+box. So: **the 8x raise did not make the self-compile measurably slower, and the
+claimed speedup does not survive an interleaved measurement.** The argument for
+step 1 is the iteration count above, which is arithmetic, not a wall-clock
+claim.
+
+### Not done
+
+Step 3 (`InternStr`'s linear scan, O(n²) in distinct literals) is deliberately
+left alone — the ticket flagged it as a note for whoever raises the cap much
+further, and at 9500 literals it does not show above noise. It stays a note.
+
+### Regression guard
+
+`tools/gen_manylit_c.py` generates the program into `TESTTMP` and the C block
+compares against gcc. Generated rather than committed: the point is the COUNT,
+and a 9500-line source in `test/` would be 9500 lines of noise. The generated C
+is free of backslash escapes on purpose — they would have to survive make, the
+shell and python quoting in that order, and the first draft lost one layer and
+produced a source gcc could not parse.
+
+## Gate
+
+`tools/gate.sh quick` GREEN (self-host fixedpoint 110s — the real check here,
+since this changes a core constant and an array size). 9500-literal C program
+compiles and matches the gcc oracle; the pre-change binary refuses it. csmith
+seed 200056 itself was not re-run (csmith is not installed on this box); the
+generated program reproduces the same ceiling.
+
+## Log
+- 2026-08-21 — resolved, commit PENDING-COMMIT.
