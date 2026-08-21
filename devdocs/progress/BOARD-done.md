@@ -1613,6 +1613,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-eliah-perspectives | B | 50 | feature | feature: Eliah perspectives — saved layouts (Code / Design / Split) + compacting | feature-eliah-layout-tree, feature-eliah-pane-collapse |
 | feature-eliah-selection-link | B | 50 | feature | feature: Eliah shared selection model — designer ↔ editor link (+ AI rail) | — |
 | feature-eliah-shell | B | 50 | feature | feature: Eliah shell — perspective-based IDE (one window, splitter-tree layout) | — |
+| feature-emission-size-dce | A | 45 | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
 | feature-empty-class-shorthand | A | 50 | feature | Empty class descendant shorthand | — |
 | feature-enum-explicit-values | A | 50 | feature | feature: enumerated type with explicit ordinal values | — |
 | feature-eof-stdin-builtin | A | 50 | feature | `Eof` (standard input) not recognized | — |
