@@ -1,5 +1,8 @@
 # Test files deliberately not wired into any build rule, one per line as
 #   <path>  <reason>
+# A reason may not start with `#` — everything from a `#` is stripped as a
+# comment, so `foo.c  #include <x.h> ...` reads as a reason-less line and is
+# REFUSED (loudly, which is the right call — it just costs a rewrite).
 # An entry with no reason is REFUSED by tools/check_test_wiring.py — an
 # unexplained exemption is the invisible-work problem the checker exists to
 # remove, one level down.
@@ -45,3 +48,21 @@ test/manual/synapse_smoke_synsock.pas  Synapse compile inventory; run by hand vi
 test/gamelib/cglm_probe.c  game-library ladder probe; needs a cglm checkout (#include <cglm/cglm.h>)
 test/gamelib/enet_probe.c  game-library ladder probe; needs an enet checkout
 test/gamelib/zengl_probe1.pas  game-library ladder probe; needs a ZenGL checkout
+
+# --- oracle probes and display-bound apps: correct that nothing runs them ---
+test/fpcv.pas  FPC oracle probe, not a test: `{$mode objfpc}` + SysUtils/Variants, written to be compiled BY FPC to record what FPC does when a Variant holding '42'/'abc'/'2.5'/'' is read as Integer/Double/Boolean. It has no expectation of its own and pxx is not its subject; the pxx-side behaviour is asserted by the wired variant tests
+test/t_rw.pas  GTK3 form app (`{$R TMainForm t_rw.lfm}` + Application.Run): needs a display and blocks in an event loop, so it cannot assert anything in a suite. The LFM streaming it demonstrates IS covered headlessly by test/test_lfm.pas and test/test_wildcard_lfm.pas (both wired, incl. the i386 cross row)
+test/manual/test_pylexer.pas  under test/manual/ and deliberately hand-run: it {$include}s compiler/defs.inc + lexer.inc + pylexer.inc under FPC and DUMPS the token stream for eyeballing — a debugging instrument with no pass/fail
+
+# --- need the gitignored sqlite amalgamation ($(SQLITE_SRC)/sqlite3.c) ---
+# Same dependency as csqlite_file_probe.c above and as the graceful-SKIP rules
+# test-sqlite-parity / test-cjson / test-sqlite-threads. A skipping rule is the
+# better end state for these five than an exemption, but it cannot be WRITTEN
+# honestly from a checkout that has no amalgamation to run it against, and the
+# sweep does not record expectations it did not see produced. See
+# chore-a-sweep-the-unwired-tests-into-the-suite.
+test/csqlite_suite.c  includes sqlite3.c itself (the amalgamation, gitignored); runs a SQL script through sqlite3_exec and is diffed against the system sqlite3 `.mode list` oracle
+test/csqlite_extended_test.c  includes sqlite3.h plus the crtl unity sources; needs the gitignored amalgamation to link
+test/csqlite_layout_gcc.c  gcc-side half of a struct-layout differential over sqlite3.h; needs the gitignored amalgamation, and its oracle is a gcc build rather than a recorded expectation
+test/csqlite_layout_probe.c  pxx-side half of that same struct-layout differential; needs the gitignored amalgamation
+test/csqlite_schema_exec_probe.c  schema/exec bringup probe over the crtl unity build; needs the gitignored amalgamation

@@ -10678,6 +10678,145 @@ test-emit-obj: $(COMPILER)
 	  $$XT -nostartfiles -Wl,-e,main $(TESTTMP)/test_emit_obj_shim.c $(TESTTMP)/test_emit_obj_xt.o -o $(TESTTMP)/test_emit_obj_xt.elf && echo "xtensa .o links ok"; \
 	  $$XT -nostartfiles -Wl,-e,main $(TESTTMP)/test_emit_obj_shim.c $(TESTTMP)/test_emit_obj_xt_windowed.o -o $(TESTTMP)/test_emit_obj_xt_windowed.elf && echo "xtensa windowed .o links ok"; \
 	else echo "xtensa-esp32s3-elf-gcc not installed; link check skipped"; fi
+	# ---- the 19 test_esp_* programs nothing ran (sweep batch 4) ----
+	# Every one of these was written during the ESP bringup and then left
+	# unwired: no target named them, so a backend change could break all 19
+	# and the suite stayed green. They cost ~14s here and need NO qemu and NO
+	# ESP-IDF, which is why they belong in test-emit-obj rather than in
+	# test-esp-bare (Espressif qemu) or test-esp-idf (a full IDF checkout) --
+	# those two skip themselves on this box, and a check that skips is a check
+	# that does not run.
+	#
+	# Two things are asserted per program, and they are different questions:
+	#   1. the x86-64 ORACLE RUN. Each file compiles unchanged for the host
+	#      (PutC becomes a write(2) syscall), and its own comments state what
+	#      it must print -- `{ 14 }`, `{ Qxx }`, `{ 1 }` per line. Those
+	#      comments are the expectation transcribed below; nothing here is a
+	#      recording of what the binary happens to emit today.
+	#   2. it still BUILDS for both ESP ISAs. That is the half a host run
+	#      cannot cover: the ESP branch of every {$$ifdef} is dead code on
+	#      x86-64, and the xtensa/riscv32 backends are where it is not.
+	#
+	# The two ESP invocations are NOT interchangeable, and each file picks one
+	# by which symbol its own {$$ifdef} tests. PXX_ESP -> esp_rom_printf, an
+	# external the IDF links, so it needs --platform=esp --emit-obj (an
+	# ET_REL for the IDF to link). PXX_ESP_BARE -> a UART MMIO store, so it
+	# needs --esp-profile=bare (a self-contained ET_EXEC at the SRAM map).
+	# Using the wrong one fails with a real-looking error that is entirely an
+	# artifact of the invocation: bare refuses the externals
+	# ("external (dynamic) symbols not yet supported"), and the IDF profile
+	# compiles the HOST branch and dies on `unsupported node: syscall`.
+	./$(COMPILER) test/test_esp_hello.pas $(TESTTMP)/esp_hello26
+	test "$$($(TESTTMP)/esp_hello26)" = "$$(printf 'PXX\nOK')"
+	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_hello.pas $(TESTTMP)/esp_hello_xt.o
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_hello.pas $(TESTTMP)/esp_hello_rv.o
+	./$(COMPILER) test/test_esp_print.pas $(TESTTMP)/esp_print26
+	test "$$($(TESTTMP)/esp_print26)" = "$$(printf '1\n2\n3\n4\n5\n15')"
+	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_print.pas $(TESTTMP)/esp_print_xt.o
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_print.pas $(TESTTMP)/esp_print_rv.o
+	./$(COMPILER) test/test_esp_cast.pas $(TESTTMP)/esp_cast26
+	test "$$($(TESTTMP)/esp_cast26)" = "ABZ!"
+	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_cast.pas $(TESTTMP)/esp_cast_xt.o
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_cast.pas $(TESTTMP)/esp_cast_rv.o
+	# div/mod with a NEGATIVE operand: Pascal truncates toward zero, so
+	# -100 div 7 = -14 and 100 mod -7 = +2. Both ESP ISAs reach these through
+	# a soft-division helper, which is exactly where a sign convention gets
+	# borrowed from C's or from a floor-division and nobody notices.
+	./$(COMPILER) test/test_esp_softdiv.pas $(TESTTMP)/esp_softdiv26
+	test "$$($(TESTTMP)/esp_softdiv26)" = "$$(printf '14\n2\n-14\n-2\n-14\n2\n156\n372\n0')"
+	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_softdiv.pas $(TESTTMP)/esp_softdiv_xt.o
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_softdiv.pas $(TESTTMP)/esp_softdiv_rv.o
+	./$(COMPILER) test/test_esp_aoc.pas $(TESTTMP)/esp_aoc26
+	test "$$($(TESTTMP)/esp_aoc26)" = "$$(printf '1 2 3\n42 -7 100 999')"
+	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_aoc.pas $(TESTTMP)/esp_aoc_xt.o
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_aoc.pas $(TESTTMP)/esp_aoc_rv.o
+	./$(COMPILER) test/test_esp_heap.pas $(TESTTMP)/esp_heap26
+	test "$$($(TESTTMP)/esp_heap26)" = "$$(printf '100\n20\n3\n123')"
+	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_heap.pas $(TESTTMP)/esp_heap_xt.o
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_heap.pas $(TESTTMP)/esp_heap_rv.o
+	./$(COMPILER) test/test_esp_dynarray.pas $(TESTTMP)/esp_dynarray26
+	test "$$($(TESTTMP)/esp_dynarray26)" = "$$(printf '5\n150\n2\n30')"
+	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_dynarray.pas $(TESTTMP)/esp_dynarray_xt.o
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_dynarray.pas $(TESTTMP)/esp_dynarray_rv.o
+	./$(COMPILER) test/test_esp_string.pas $(TESTTMP)/esp_string26
+	test "$$($(TESTTMP)/esp_string26)" = "$$(printf '3\nPXX\nPXX')"
+	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_string.pas $(TESTTMP)/esp_string_xt.o
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_string.pas $(TESTTMP)/esp_string_rv.o
+	./$(COMPILER) test/test_esp_strcat.pas $(TESTTMP)/esp_strcat26
+	test "$$($(TESTTMP)/esp_strcat26)" = "$$(printf 'PXX rocks\nPXX rocks!\nfoo')"
+	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_strcat.pas $(TESTTMP)/esp_strcat_xt.o
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_strcat.pas $(TESTTMP)/esp_strcat_rv.o
+	./$(COMPILER) test/test_esp_strcmp.pas $(TESTTMP)/esp_strcmp26
+	test "$$($(TESTTMP)/esp_strcmp26)" = "$$(printf 'Y\nN\nY\nY\nN')"
+	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_strcmp.pas $(TESTTMP)/esp_strcmp_xt.o
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_strcmp.pas $(TESTTMP)/esp_strcmp_rv.o
+	# copy-on-write on the ESP arena: s[2] := 'Y' while t shares the buffer
+	# must clone, leaving t at QXX. A missing COW prints QYX twice and looks
+	# like a print bug.
+	./$(COMPILER) test/test_esp_strmut.pas $(TESTTMP)/esp_strmut26
+	test "$$($(TESTTMP)/esp_strmut26)" = "$$(printf 'QXX\nQYX\nQXX\nQY')"
+	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_strmut.pas $(TESTTMP)/esp_strmut_xt.o
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_strmut.pas $(TESTTMP)/esp_strmut_rv.o
+	./$(COMPILER) test/test_esp_strscope.pas $(TESTTMP)/esp_strscope26
+	test "$$($(TESTTMP)/esp_strscope26)" = "$$(printf 'OK4\nkept')"
+	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_strscope.pas $(TESTTMP)/esp_strscope_xt.o
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_strscope.pas $(TESTTMP)/esp_strscope_rv.o
+	./$(COMPILER) test/test_esp_iram.pas $(TESTTMP)/esp_iram26
+	test "$$($(TESTTMP)/esp_iram26)" = "$$(printf 'S\nABC\nABCDE\nE')"
+	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_iram.pas $(TESTTMP)/esp_iram_xt.o
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_iram.pas $(TESTTMP)/esp_iram_rv.o
+	# `iram;` is only meaningful in the object: it routes the body into
+	# .iram1.text, and the flash-to-IRAM call has to become an indirect
+	# literal-slot call. Assert the SECTION exists, since a silently-ignored
+	# directive leaves a program that runs correctly here and misses its
+	# deadline on the board.
+	readelf -S $(TESTTMP)/esp_iram_xt.o | grep -q '\.iram1\.text'
+	readelf -S $(TESTTMP)/esp_iram_rv.o | grep -q '\.iram1\.text'
+	# hardware-validation program (the one tools/esp_flash.sh diffs against a
+	# real board): 3^20 by repeated multiply, Int64 div/mod, a 9-argument
+	# by-value record return (the xtensa windowed ABI's first casualty), and
+	# an 8-char managed string built with +.
+	./$(COMPILER) test/test_esp_hw_validation.pas $(TESTTMP)/esp_hwval26
+	test "$$($(TESTTMP)/esp_hwval26)" = "$$(printf 'pxx esp hw validation\npow3^20 3486784401\nint64min+1 -9223372036854775807\ndivmod -9223344366821 -675344\nvec 7000011 4199 120\nstring ABCDEFGH 8\nok')"
+	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_hw_validation.pas $(TESTTMP)/esp_hwval_xt.o
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_hw_validation.pas $(TESTTMP)/esp_hwval_rv.o
+	# ISR registration: no output by design -- @MyIsr is handed to
+	# esp_intr_alloc, and the whole assertion is STRUCTURAL, exactly as the
+	# file's own header states it: the .o must carry an absolute relocation
+	# against MyIsr for the IDF linker to fill, and MyIsr must live in
+	# .iram1.text (an ISR in flash faults when the cache is disabled).
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_isr_register.pas $(TESTTMP)/esp_isr_rv.o
+	readelf -r $(TESTTMP)/esp_isr_rv.o | grep -q 'R_RISCV_32.*MyIsr + 0'
+	readelf -sW $(TESTTMP)/esp_isr_rv.o | grep 'FUNC.*MyIsr' | grep -q ' 3 MyIsr'
+	readelf -SW $(TESTTMP)/esp_isr_rv.o | grep -q '\[ 3\] \.iram1\.text'
+	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_isr_register.pas $(TESTTMP)/esp_isr_xt.o
+	readelf -r $(TESTTMP)/esp_isr_xt.o | grep -q 'R_XTENSA_32.*MyIsr + 0'
+	# `interrupt;` -- a raw hardware vector -- has NO x86-64 oracle: the host
+	# backend refuses the directive outright ("raw hardware-vector codegen
+	# implemented for riscv32 and xtensa Call0 only"), which is the correct
+	# answer and not a gap. So this one is an ESP-build check only.
+	./$(COMPILER) --target=xtensa --platform=esp --emit-obj test/test_esp_interrupt.pas $(TESTTMP)/esp_interrupt_xt.o
+	./$(COMPILER) --target=riscv32 --platform=esp --emit-obj test/test_esp_interrupt.pas $(TESTTMP)/esp_interrupt_rv.o
+	# ---- the three PXX_ESP_BARE programs: --esp-profile=bare, not the IDF ----
+	./$(COMPILER) test/test_esp_procaddr.pas $(TESTTMP)/esp_procaddr26
+	test "$$($(TESTTMP)/esp_procaddr26)" = "$$(printf '1\n1\n1')"
+	./$(COMPILER) --esp-profile=bare --target=riscv32 test/test_esp_procaddr.pas $(TESTTMP)/esp_procaddr_rv
+	./$(COMPILER) --esp-profile=bare --target=xtensa test/test_esp_procaddr.pas $(TESTTMP)/esp_procaddr_xt
+	# every line's expected 1/0 is written next to it in the source; the two
+	# 0s (d > e and d >= e for d=3.0, e=4.0) are what make this a real
+	# transcription rather than "all ones"
+	./$(COMPILER) test/test_esp_float_probe.pas $(TESTTMP)/esp_floatprobe26
+	test "$$($(TESTTMP)/esp_floatprobe26)" = "$$(printf '1\n1\n0\n1\n0\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1\n1')"
+	./$(COMPILER) --esp-profile=bare --target=xtensa test/test_esp_float_probe.pas $(TESTTMP)/esp_floatprobe_xt
+	./$(COMPILER) --esp-profile=bare --target=riscv32 test/test_esp_float_probe.pas $(TESTTMP)/esp_floatprobe_rv
+	# {$$FASTDOUBLES ON} + --xtensa-fpu: Double +,-,* go through the hardware
+	# SINGLE fpu. Only integer-valued doubles are used, which are exact in
+	# single, so the host oracle and the lossy fast path must agree.
+	./$(COMPILER) test/test_esp_fastdoubles.pas $(TESTTMP)/esp_fastdoubles26
+	test "$$($(TESTTMP)/esp_fastdoubles26)" = "$$(printf '1\n1\n1\n1\n1')"
+	./$(COMPILER) --esp-profile=bare --target=xtensa --xtensa-fpu test/test_esp_fastdoubles.pas $(TESTTMP)/esp_fastdoubles_xt
+	./$(COMPILER) --esp-profile=bare --target=riscv32 test/test_esp_fastdoubles.pas $(TESTTMP)/esp_fastdoubles_rv
+	@echo "esp: 19 previously-unrun test_esp_* programs ok (x86-64 oracle + xtensa/riscv32 build)"
 	@echo "emit-obj ok (ET_REL sections/symbols/relocs sane on riscv32 + xtensa call0/windowed)"
 
 # Bare-metal ESP32 boot (feature-esp32-bare-boot). Links a self-contained

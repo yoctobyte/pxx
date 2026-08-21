@@ -289,8 +289,78 @@ before wiring.
 All five verified by reading the consumer, then exempted with the consumer named
 — an exemption whose reason cites a specific wired caller stays checkable.
 
+## Batch 4 — the 19 ESP programs, and the invocation that made them look broken (42 → 15)
+
+All 19 `test_esp_*` wired into **`test-emit-obj`**, plus 8 more exemptions.
+`test-emit-obj` and not `test-esp-bare`/`test-esp-idf` deliberately: those two
+need Espressif qemu and a full IDF checkout, so on any ordinary box they SKIP —
+and a check that skips is a check that does not run. These need neither, cost
+~14s, and `test-emit-obj` is already in the `limited` and `full` tiers, so
+Track T starts running them at the next sweep with no testmgr change (which is
+T's file anyway).
+
+Two assertions per program, answering different questions: the **x86-64 oracle
+run** (every file compiles unchanged for the host — `PutC` becomes a `write(2)`
+syscall — and its own comments state what it must print), and **it still builds
+for both ESP ISAs**, which is the half the host run cannot cover because the
+ESP branch of every `{$ifdef}` is dead code on x86-64.
+
+Every expectation is transcribed from the author's own per-line comments
+(`{ 14 }`, `{ Qxx }`, `{ 1 }`), or derived and checked: 3^20 = 3486784401,
+`-9223372036854775807 div 1000003 = -9223344366821 rem -675344` (truncating
+toward zero, both negative), `MakeVec(7,11,13,17,19,23,29,31,37)` →
+`7000011 4199 120`. `test_esp_float_probe`'s 33 lines include two **0**s
+(`d > e` and `d >= e` for d=3.0, e=4.0) — the tell that it is a transcription
+and not "all ones".
+
+Three that are not a plain run-and-diff, each for a stated reason:
+- `test_esp_isr_register` prints nothing by design, so the assertion is the
+  **structural** one its own header specifies: an absolute reloc against
+  `MyIsr` for the IDF linker to fill, and `MyIsr` in `.iram1.text`.
+- `test_esp_interrupt` has **no** x86-64 oracle — the host backend refuses
+  `interrupt;` outright, which is the correct answer and not a gap — so it is
+  an ESP-build check only.
+- `test_esp_iram` additionally asserts `.iram1.text` EXISTS in both objects: a
+  silently-ignored `iram;` leaves a program that runs correctly here and misses
+  its deadline on the board.
+
+### The finding worth keeping: a wrong invocation forges a compiler bug
+
+The first pass built every file with `--target=xtensa --platform=esp
+--emit-obj` and reported three "backend gaps": `unsupported node in IR codegen:
+syscall` on xtensa for `test_esp_procaddr`/`_fastdoubles`/`_float_probe`, and
+`undefined variable (PXXVarBinOp)` on riscv32. **All three were artifacts of my
+own command line.** Those files test `PXX_ESP_BARE`, not `PXX_ESP`, so the IDF
+profile compiled their HOST branch — the `__pxxrawsyscall` `PutC` — and the
+xtensa backend correctly refused a Linux syscall node. Built as their headers
+say (`--esp-profile=bare`), all three compile for both ISAs.
+
+The two invocations are not interchangeable and each file picks one by the
+symbol its own `{$ifdef}` tests: `PXX_ESP` → `esp_rom_printf`, an external the
+IDF links, needs `--platform=esp --emit-obj`; `PXX_ESP_BARE` → a UART MMIO
+store, needs `--esp-profile=bare`. Using the wrong one fails with a real-looking
+error in the *backend*. That is a ticket I nearly filed against Track A, and
+the reason I did not is the playbook's rule — read what the file asks for and
+re-measure before writing a conclusion down. It is now a comment in the recipe
+so the next reader spends zero minutes on it.
+
+### Exemptions added (8)
+`fpcv.pas` (an FPC oracle probe, not a test — it exists to be compiled BY FPC),
+`t_rw.pas` (a GTK3 form app that blocks in an event loop; the LFM streaming it
+shows is covered headlessly by the wired `test_lfm` pair),
+`manual/test_pylexer.pas` (a hand-run token dumper with no pass/fail), and the
+five `csqlite_*` files that need the gitignored amalgamation. For those five a
+graceful-SKIP rule (the shape `test-sqlite-parity` already uses) is the better
+end state than an exemption — but it cannot be written honestly from a checkout
+with no amalgamation to run it against, and this sweep does not record
+expectations it did not see produced.
+
+Also documented in `UNWIRED.txt`: a reason may not START with `#`, or the
+comment strip eats it and the line is refused as reason-less.
+
 ### Left for the next batch
-The ~18 `test_esp_*` (need `--target=xtensa` and a flashing/qemu story), the 14
-`test_pyeval_*`/`test_pyexec_*` (Track N deferred by the user), the 2
-`test_softfloat_*` (Track F, parked by definition), the `csqlite_*` probes that
-need the amalgamation, and `t_rw.pas` / `fpcv.pas` / `manual/test_pylexer.pas`.
+Exactly the two deferred categories and nothing else: the 13
+`test_pyeval_*`/`test_pyexec_*` (Track N, deferred by the user) and the 2
+`test_softfloat_*` (Track F, parked by definition). Every other test file in
+the repo is now either run by a rule or exempted with a reason naming what runs
+it instead.
