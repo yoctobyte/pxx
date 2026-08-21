@@ -126,4 +126,4 @@ C and NilPy sources all still compile after the `ExpandPasMacros` narrowing.
 Gate: `make compiler/pascal26` + `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 89b5c896e.
