@@ -68,6 +68,15 @@ gate each must stay green** — it is NOT an ontology of the codebase. So:
   dialect stays deliberately lax by default; FPC-parity strictness lives
   behind per-feature strict flags, and the conformance sweep runs with them
   on (see pxx.skip's `dialect-pass` entries).
+  **A strict flag's scope is COMPILATION, not death** (user, 2026-08-21):
+  `--strict-fpc` / `--mimic-fpc` govern how source is compiled and how output is
+  formatted — number rendering included — and may extend to cosmetic parity such
+  as an RTTI type name. They do NOT govern how a program DIES: runtime-error
+  numbers, exit codes and fault messages stay ours by default, with FPC's
+  conventions opt-in behind the `--fpc-*-errors` flags. *"We seek LANGUAGE
+  compliance, not error-handling compliance"* — so parity work whose subject is
+  error REPORTING is low prio by that same call, the way float accuracy is low
+  prio by Track F's.
 
 Two axes cut the repo, and the tracks follow them:
 
