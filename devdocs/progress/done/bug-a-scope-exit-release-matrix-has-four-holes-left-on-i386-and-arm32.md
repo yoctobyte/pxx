@@ -133,4 +133,4 @@ FALSE→TRUE on i386 for the two arms that were missing. Cross-target breadth is
 Track T's, against this sha.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 421ef927b.
