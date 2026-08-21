@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T16:02:13Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "1b9b43e5b511d53e9fbe55f3366e6ce9158ee0b9",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-20T16:41:29Z",
    "fixed": [
     "test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy"
@@ -457,6 +449,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "f6b86d58796dea5d9db3cd0ca18ead1610be5054",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-21T07:03:02Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "177a07b9da6f80460a216b5c573fc883a1e98d0e",
    "tier": "native",
    "verdict": "RED"
   }
@@ -1669,6 +1669,7 @@
   "test-core#src:test/test_fpc_compat_batch2.pas": "native",
   "test-core#src:test/test_fpc_float_errors.pas@1": "native",
   "test-core#src:test/test_fpc_float_errors.pas@2": "native",
+  "test-core#src:test/test_fpc_mem_errors.pas": "native",
   "test-core#src:test/test_free_designator.pas": "native",
   "test-core#src:test/test_freeandnil_destructor_b300.pas": "native",
   "test-core#src:test/test_freemem.pas": "native",
@@ -4551,6 +4552,7 @@
   "test-core#src:test/test_fpc_compat_batch2.pas": "pass",
   "test-core#src:test/test_fpc_float_errors.pas@1": "pass",
   "test-core#src:test/test_fpc_float_errors.pas@2": "pass",
+  "test-core#src:test/test_fpc_mem_errors.pas": "pass",
   "test-core#src:test/test_free_designator.pas": "pass",
   "test-core#src:test/test_freeandnil_destructor_b300.pas": "pass",
   "test-core#src:test/test_freemem.pas": "pass",
@@ -6238,11 +6240,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-21T06:53:22Z",
-  "sha": "f6b86d58796dea5d9db3cd0ca18ead1610be5054",
+  "date": "2026-08-21T07:03:02Z",
+  "sha": "177a07b9da6f80460a216b5c573fc883a1e98d0e",
   "tier": "native",
   "verdict": "RED",
-  "wall": 468.2
+  "wall": 492.6
  },
  "last_bench": {
   "conf_rows": 550,
