@@ -5699,26 +5699,13 @@ begin
                       (ASTKind[exprNode] = AN_DEREF) or IsVarArgLvalueCast(exprNode) or
                       (ASTKind[exprNode] = AN_METHODREF)) then
               begin
-                { A `const` OR plain by-value record param accepts a non-lvalue
-                  temporary (>8-byte records are by-ref only for ABI; the callee
-                  copies). Only a genuine `var`/`out` record needs a true lvalue.
-                  `@obj.Method` is materialised into a method-pointer record temp. }
-                { const Variant: non-lvalue boxed at IR lowering (see above) }
-                { A FIXED-ARRAY call result is sound for the same reason the
-                  by-value record above is — the callee returns into a
-                  caller-owned scratch, so the argument has an address. This is
-                  the OVERLOADED-call twin of the check further up; both had to
-                  learn it.
-                  bug-a-a-fixed-array-call-result-is-refused-as-a-const-byref-argument }
-                if not (((IntToTypeKind(ASTTk[exprNode]) = tyRecord) and
-                        (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
-                         not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) or
-                        ((ASTKind[exprNode] = AN_CALL) and (ASTIVal[exprNode] >= 0) and
-                         (ProcRetFixedArrBytes[ASTIVal[exprNode]] > 0) and
-                         (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
-                          not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) or
-                        ((Procs[procIdx].Params[i].TypeKind = tyVariant) and
-                         ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i])) then
+                { The OVERLOADED-call twin of the check in pasparser_expr.inc,
+                  and the reason both now call one predicate: the two copies had
+                  already diverged — this one never learned the promo-int arm,
+                  so `f(g())` for a promotable-int parameter was accepted at one
+                  call site and refused at the other.
+                  bug-a-a-non-lvalue-is-refused-as-an-interface-argument }
+                if ByRefArgNeedsLvalue(procIdx, i) then
                   Error('by-reference argument must be a variable');
               end;
             end;

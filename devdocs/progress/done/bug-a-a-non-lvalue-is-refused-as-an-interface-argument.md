@@ -4,8 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`TakeVal(TFoo.Create)` and `TakeVal(IFoo(o))` are refused with `by-reference argument must be a variable`, for both by-value and `const` interface parameters, while the same call with a named variable or an ordinary function result compiles. FPC accepts all four. Passing a freshly constructed object straight into a call is a common idiom, so this rejects working FPC code at compile time."
-status: backlog
-owner: unassigned
+status: done
+owner: claude-A
 ---
 
 # A non-lvalue is refused as an interface argument
@@ -73,3 +73,74 @@ Track A: `make compiler/pascal26` (fixedpoint) + `tools/gate.sh quick`. Because
 the inversion widens what is ACCEPTED, the risk is a previously-rejected shape
 now lowering to a bad address — cover `var`/`out` refusal explicitly in the test,
 and let Track T sweep the corpora.
+
+## Resolution (2026-08-21)
+
+Done the way the ticket's root-cause note asked: **inverted, not extended**. The
+five-armed disjunction is gone and one predicate replaces it, in `symtab.inc`:
+
+```pascal
+function ByRefArgNeedsLvalue(procIdx, argNo: Integer): Boolean;
+begin
+  Result := ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + argNo] and
+            not ProcParamIsConst[procIdx * MAX_PROC_PARAMS + argNo];
+end;
+```
+
+That is the whole rule. Everything else reaching the guard is by-ref for the ABI
+only — a >8-byte record the callee copies, a `const Variant` boxed into a hidden
+temp, a promo int copied with `PXXPromoCopy`, a fixed-array result already in a
+caller-owned scratch — so the argument HAS an address and no write-back is
+expected. The question never depended on the argument's type kind, which is
+exactly why a constructor-call node (CLASS kind) and an `IFoo(o)` cast node (no
+kind) could not be covered by any length of list.
+
+**The two copies had already diverged**, which is the confirmation the note was
+right: `pasparser_stmt.inc`'s overloaded-call twin never learned the promo-int
+arm, so `f(g())` for a promotable-int parameter was accepted at one call site
+and refused at the other. Both now call the one predicate.
+
+### Measured against FPC 3.2.2 (`-O- -Mobjfpc`), both directions
+
+Accepted — `test/test_byref_arg_lvalue_rule.pas`, **12/12 on pxx and 12/12 on
+FPC**, same values. The four rows that were refused before are
+`TakeVal(TFoo.Create)`, `TakeConst(TFoo.Create)`, `TakeVal(IFoo(o))`,
+`TakeConst(IFoo(o))`; the other eight are the shapes that already worked plus
+the four aggregates whose special cases the one rule replaced.
+
+(FPC needs `uses variants` to RUN the `const Variant` row — without it that row
+dies with runtime error 217. pxx's variant support is built in. Compile-time
+acceptance, which is what this ticket is about, is identical either way.)
+
+Refused — five `var`/`out` shapes, all still refused by pxx and all refused by
+FPC:
+
+| shape | pxx | FPC |
+| --- | --- | --- |
+| `var TBig` ← call result | refused | `Can't take the address of constant expressions` |
+| `out TBig` ← call result | refused | same |
+| `var Integer` ← literal | refused | `Variable identifier expected` |
+| `var IFoo` ← `TFoo.Create` | refused | `Can't take the address of constant expressions` |
+| `var IFoo` ← call result | refused | same |
+
+`test/test_byref_arg_lvalue_refused.pas` pins one of them (the interface +
+constructor shape) as a must-fail row; there is one code path now, so the other
+four reach the same line.
+
+### Noted, not touched
+
+`ParseCallArg` in `pasparser_lval.inc:3316` is a **third** copy of this guard —
+`if CurTok.Kind <> tkIdent then Error(...)`, the crudest version of all — and it
+has no callers anywhere in the compiler. Left alone rather than deleted: it is
+unreachable, so it cannot be wrong, and removing dead code is not this ticket.
+Whoever next touches that file should delete it.
+
+## Gate
+
+`tools/gate.sh quick` GREEN (self-host fixedpoint 110s). Both new tests wired
+into the core list: 12/12 accepted, and the `var` refusal asserted with
+`! $(COMPILER)` plus a grep for the message — the widening direction is what
+that row exists to catch. Corpus breadth is Track T's, against this sha.
+
+## Log
+- 2026-08-21 — resolved, commit PENDING-COMMIT.

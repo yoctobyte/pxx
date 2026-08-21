@@ -6463,45 +6463,12 @@ begin
                     (ASTKind[exprNode] = AN_METHODREF) or
                     (ASTKind[exprNode] = AN_VARREC_ARRAY) or (ASTKind[exprNode] = AN_ARRAY_CTOR)) then
             begin
-              { A record param passed by-ref may bind a non-lvalue temporary (e.g.
-                a function result) when it is `const` OR plain by-value (>8-byte
-                records are passed by-ref only for ABI; the callee copies, so a
-                hidden-local temp is sound). Only a genuine `var`/`out` record
-                (explicitly declared by-ref) still needs a true lvalue for
-                write-back. An array-constructor literal ([...]) is itself the
-                open-array temp. `@obj.Method` is materialised into a method-pointer
-                record temp at IR lowering, so it too is a valid non-lvalue record
-                argument. }
-              { A `const Variant` param likewise accepts a non-lvalue: the
-                scalar is boxed into a hidden variant temp at IR lowering
-                (IRLowerCallArg) and the temp's address is passed. }
-              { A PROMO param is the same case as the by-value record above: it
-                is by-ref for ABI only ({tag, payload} is 8 or 16 bytes and the
-                rvalue IS the slot address), and IRLowerCallArg copies it into a
-                hidden temp with PXXPromoCopy before the call — the callee always
-                gets its own slot. So a non-lvalue is sound, and rejecting it
-                made `f(g())` fail for a promo parameter while every other
-                numeric parameter type accepts it.
-                bug-a-promoint-parameter-rejects-literals-and-call-results }
-              { A FIXED-ARRAY call result is the same case as the by-value /
-                `const` record above, and was the one aggregate still refused:
-                the callee already returns into a caller-owned scratch
-                (IRBuildHiddenDest sizes it from ProcRetFixedArrBytes), so the
-                argument HAS an address to pass and no write-back is expected.
-                A genuine `var`/`out` array parameter still needs a real lvalue
-                — FPC refuses a call result there too.
-                bug-a-a-fixed-array-call-result-is-refused-as-a-const-byref-argument }
-              if not (((IntToTypeKind(ASTTk[exprNode]) = tyRecord) and
-                      (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
-                       not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) or
-                      ((ASTKind[exprNode] = AN_CALL) and (ASTIVal[exprNode] >= 0) and
-                       (ProcRetFixedArrBytes[ASTIVal[exprNode]] > 0) and
-                       (ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] or
-                        not ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i])) or
-                      TypeIsPromoInt(Procs[procIdx].Params[i].TypeKind) or
-                      ((Procs[procIdx].Params[i].TypeKind = tyVariant) and
-                       ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i])) then
-  Error('by-reference argument must be a variable');
+              { ONE rule, not a list of type kinds: only an explicit `var`/`out`
+                needs a true lvalue. See ByRefArgNeedsLvalue for why the
+                five-armed disjunction that used to live here was the wrong
+                question. bug-a-a-non-lvalue-is-refused-as-an-interface-argument }
+              if ByRefArgNeedsLvalue(procIdx, i) then
+                Error('by-reference argument must be a variable');
             end;
           end;
           currArg := ASTRight[currArg];

@@ -6166,6 +6166,17 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_interfaces_multi_secondary26)" = "$$(printf 'direct\nTitle\nSome content\nSome content\nTitle\nSome content')"
 	./$(COMPILER) test/test_interface_arc.pas $(TESTTMP)/test_interface_arc26
 	test "$$($(TESTTMP)/test_interface_arc26)" = "$$(printf 'hello\nhello\nhello\nfreed=3')"
+	# The by-ref argument rule: only an explicit `var`/`out` needs a true lvalue.
+	# The guard used to answer with a list of TYPE KINDS, grown once per aggregate;
+	# a constructor-call node carries the CLASS kind and an `IFoo(o)` cast carries
+	# neither, so no length of list could cover them. Both directions asserted —
+	# twelve shapes FPC accepts must compile and run, and the `var` refusal must
+	# stay a refusal. bug-a-a-non-lvalue-is-refused-as-an-interface-argument
+	./$(COMPILER) test/test_byref_arg_lvalue_rule.pas $(TESTTMP)/test_byref_lvalue26
+	test "$$($(TESTTMP)/test_byref_lvalue26 | tail -1)" = "total ok 12 / 12"
+	! ./$(COMPILER) test/test_byref_arg_lvalue_refused.pas $(TESTTMP)/test_byref_refused26 \
+	    > $(TESTTMP)/test_byref_refused.log 2>&1
+	grep -q "by-reference argument must be a variable" $(TESTTMP)/test_byref_refused.log
 	./$(COMPILER) test/test_managed_local_release_reuse.pas $(TESTTMP)/test_mlrr26
 	test "$$($(TESTTMP)/test_mlrr26)" = "$$(printf 'ok   ansistring local\nok   record with managed field\nok   variant local\nok   static array of string\nok   dynamic array of string\ntotal ok 5 / 5')"
 	./$(COMPILER) test/test_interface_arc_exc.pas $(TESTTMP)/test_interface_arc_exc26

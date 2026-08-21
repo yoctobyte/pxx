@@ -5878,6 +5878,39 @@ begin
   Result := (rec >= REC_UCLASS_BASE) and UClsIsInterface[rec - REC_UCLASS_BASE];
 end;
 
+function ByRefArgNeedsLvalue(procIdx, argNo: Integer): Boolean;
+{ Does parameter `argNo` REQUIRE its argument to be a true lvalue?
+
+  Only a genuine `var`/`out` does. That is the whole rule, and it replaces a
+  five-armed disjunction that had been extended once per aggregate kind — a
+  by-value/`const` record, a `const Variant`, a promotable int, a fixed-array
+  call result, and (the one that opened this) an interface. Each arm was added
+  after a user hit the refusal, each was written twice (the plain-call site and
+  the overloaded-call site), and the two copies had already diverged: the
+  overloaded one never learned the promo-int arm.
+  devdocs/dev/root-cause-over-microfix.md calls two a smell and three a design
+  flaw; this was five.
+
+  The question the guard was really asking is "will IRLowerCallArg materialise a
+  temp with an address for this argument?" — and the answer never depended on
+  the argument's TYPE KIND at all. Everything else that reaches here is by-ref
+  for the ABI only: a >8-byte record is copied by the callee, a `const Variant`
+  is boxed into a hidden temp, a promo int is copied with PXXPromoCopy, a
+  fixed-array result already lands in a caller-owned scratch. In every one of
+  those the argument HAS an address and no write-back is expected, so a
+  non-lvalue is sound. Only an explicit `var`/`out` needs to write back through
+  the caller's storage, and FPC refuses a non-lvalue there too.
+
+  Asking it this way is also what makes `TakeVal(TFoo.Create)` and
+  `TakeVal(IFoo(o))` work: a constructor-call node carries the CLASS type kind
+  and an explicit interface-cast node carries neither, so neither could ever
+  have matched a type-kind list, however many arms it grew.
+  bug-a-a-non-lvalue-is-refused-as-an-interface-argument }
+begin
+  Result := ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + argNo] and
+            not ProcParamIsConst[procIdx * MAX_PROC_PARAMS + argNo];
+end;
+
 function HasExactCaseSensitiveProc(const name: AnsiString): Boolean;
 var i: Integer;
 begin
