@@ -6,8 +6,8 @@ track: A
 # Move / FillChar as compiler intrinsics (future optimization)
 
 - **Type:** feature (compiler optimization) — future
-- **Status:** backlog (Track A; Track B provides the plain-Pascal versions now)
-- **Owner:** — (Track A when picked up)
+- **Status:** working
+- **Owner:** agent-A
 - **Opened:** 2026-06-24
 - **Relation:** [[feature-synapse-compile-check]] needs `Move`/`FillChar` as plain
   RTL now (synacode etc.); this ticket is the *optimization* follow-up, not the

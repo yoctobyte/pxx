@@ -4697,6 +4697,9 @@ test-core: $(COMPILER)
 	# Move/FillChar with no uses (builtin home, FPC System parity; overlap-safe Move pinned)
 	./$(COMPILER) test/test_move_fillchar_nouses.pas $(TESTTMP)/test_move_fillchar_nouses26
 	test "$$($(TESTTMP)/test_move_fillchar_nouses26 | tail -1)" = "total ok 4 / 4"
+	# Move/FillChar bulk paths: every alignment x size x overlap direction, against a byte-loop oracle
+	./$(COMPILER) test/test_move_fillchar_bulk.pas $(TESTTMP)/test_move_fillchar_bulk26
+	test "$$($(TESTTMP)/test_move_fillchar_bulk26 | tail -1)" = "total ok 8886 / 8886"
 	# literal/char concat in a loop must not eat stack (managed typing; frozen carve documented)
 	./$(COMPILER) test/test_concat_loop_stack.pas $(TESTTMP)/test_concat_loop_stack26
 	test "$$($(TESTTMP)/test_concat_loop_stack26)" = "$$(printf 'pI\nab0z\nbad=0')"

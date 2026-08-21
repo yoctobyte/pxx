@@ -661,25 +661,104 @@ begin
   else Result := (v shr n) or (v shl (64 - n));
 end;
 
+type
+  { Machine-word access at an arbitrary address. Declared rather than spelled
+    `PNativeInt`, because the built-in pointer names are only registered from
+    a TYPE position -- a bare cast in an expression does not reach
+    EnsureBuiltinPtrAlias. builtinheap spells the same type `PWord`. }
+  PMachineWord = ^NativeInt;
+
+{ May the bulk loops below move a whole machine word at a time? x86 loads and
+  stores at any address, so there the answer is only "is there a word to move";
+  every other target we emit for either faults on a misaligned access or pays
+  more for it than the byte loop costs, so there both ends must be aligned.
+  Mirrors builtinheap's PXXWordCopyOk -- same rule, different unit (builtin has
+  no `uses`). }
+function __pxxWordsOk(d: Int64; s: Int64; n: Int64): Boolean;
+begin
+{$ifdef CPUX86_64}
+  __pxxWordsOk := n >= SizeOf(NativeInt);
+{$else}
+{$ifdef CPU_I386}
+  __pxxWordsOk := n >= SizeOf(NativeInt);
+{$else}
+  __pxxWordsOk := (n >= SizeOf(NativeInt)) and
+                  (((d or s) and (SizeOf(NativeInt) - 1)) = 0);
+{$endif}
+{$endif}
+end;
+
 procedure __pxxMove(const Source; var Dest; Count: Integer);
-var s, d: PByte; i: Integer;
+var s, d, i, w: Int64;
 begin
   if Count <= 0 then Exit;
-  s := PByte(@Source);
-  d := PByte(@Dest);
+  s := Int64(@Source);
+  d := Int64(@Dest);
+  w := SizeOf(NativeInt);
   { Overlap-safe: when Dest is above Source and the ranges overlap, copy
     backward so we don't clobber not-yet-copied bytes (memmove, not memcpy). }
-  if (Int64(d) > Int64(s)) and (Int64(d) < Int64(s) + Count) then
-    for i := Count - 1 downto 0 do d[i] := s[i]
+  if (d > s) and (d < s + Count) then
+  begin
+    { Backward. Take the trailing bytes first so the word loop only ever
+      touches d+i with i a multiple of w -- i.e. d's own alignment, which is
+      what __pxxWordsOk was asked about. }
+    i := Count;
+    while (i > 0) and ((i and (w - 1)) <> 0) do
+    begin
+      i := i - 1;
+      PByte(d + i)^ := PByte(s + i)^;
+    end;
+    if __pxxWordsOk(d, s, Count) then
+      while i >= w do
+      begin
+        i := i - w;
+        PMachineWord(d + i)^ := PMachineWord(s + i)^;
+      end;
+    while i > 0 do
+    begin
+      i := i - 1;
+      PByte(d + i)^ := PByte(s + i)^;
+    end;
+  end
   else
-    for i := 0 to Count - 1 do d[i] := s[i];
+  begin
+    i := 0;
+    if __pxxWordsOk(d, s, Count) then
+      while i + w <= Count do
+      begin
+        PMachineWord(d + i)^ := PMachineWord(s + i)^;
+        i := i + w;
+      end;
+    while i < Count do
+    begin
+      PByte(d + i)^ := PByte(s + i)^;
+      i := i + 1;
+    end;
+  end;
 end;
 
 procedure __pxxFillChar(var X; Count: Integer; Value: Byte);
-var d: PByte; i: Integer;
+var d, i, k, w, wv: Int64;
 begin
-  d := PByte(@X);
-  for i := 0 to Count - 1 do d[i] := Value;
+  if Count <= 0 then Exit;
+  d := Int64(@X);
+  w := SizeOf(NativeInt);
+  i := 0;
+  if __pxxWordsOk(d, d, Count) then
+  begin
+    wv := 0;
+    for k := 1 to w do wv := (wv shl 8) or Int64(Value);
+    while i + w <= Count do
+    begin
+      PMachineWord(d + i)^ := wv;
+      i := i + w;
+    end;
+  end;
+  while i < Count do
+  begin
+    PByte(d + i)^ := Value;
+    i := i + 1;
+  end;
 end;
 
 procedure __pxxFillDWord(var X; Count: Integer; Value: Cardinal);
