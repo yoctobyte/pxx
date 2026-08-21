@@ -158,4 +158,4 @@ in the first place and why the RSS numbers above are the real gate.
 confirms the x86-64 refactor changed no code).
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 88d5ba8e1.
