@@ -208,4 +208,4 @@ grows a cross target. Filed as a note here rather than a ticket because there is
 no defect to observe until that happens.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 992c207aa.
