@@ -105,4 +105,4 @@ TERMINATES with those zero counts. Lifting it is
 Gate: `make compiler/pascal26` (fixedpoint) + `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 7a9450ea8.
