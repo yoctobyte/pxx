@@ -248,6 +248,22 @@ type
     object's children recursively. nil = no finalizer (plain free). }
   TPXXObjFinalize = procedure(objp: Pointer; rawKind: NativeInt);
 var
+  { System.ExitCode. FPC declares it in System scope, so it is spelled without
+    a unit qualifier anywhere in a program; builtinheap is linked into every
+    binary and its interface names resolve bare, which makes this the cheapest
+    honest home for it. Semantics, all four measured against FPC 3.2.2
+    (feature-pascal-exitcode-finalization-halt):
+
+      Halt(n)          ExitCode := n, then finalizations, then exit(ExitCode)
+      Halt             ExitCode := 0 — it is Halt(0), NOT "exit with the
+                       current ExitCode". The ticket asserted the latter;
+                       `ExitCode := 9; Halt;` proves otherwise.
+      falling off main finalizations, then exit(ExitCode)
+      a finalization writing ExitCode CHANGES the process exit status — that
+                       is the whole erroru.pp idiom: check the recorded code,
+                       then zero it so an expected halt(100) exits 0. }
+  ExitCode: Longint;
+
   PXXObjFinalizeHook: TPXXObjFinalize;
 function PXXObjAlloc(size: NativeInt): Pointer;
 function PXXObjAllocRaw(size: NativeInt): Pointer;
@@ -355,6 +371,15 @@ procedure PXXWriteVariant(v: Pointer);
   by a digit). See PxxSciDigits17's own header. }
 procedure PxxSciDigits17(value: Double; var mant17: Int64; var decExp: Integer);
 {$endif}
+{ The program's normal exit path: run the unit finalizations and terminate with
+  whatever ExitCode holds AFTERWARDS. Written as Pascal, and called from the
+  main body's epilogue instead of a raw exit-syscall emission, so that
+  "terminate with the value of a global" needs NO new per-arch emitter — the
+  AN_HALT lowering already terminates with a computed value on all six
+  backends, and this routine is just a Halt. The finalization runner is
+  run-once guarded, so a Halt reached from inside a finalization does not
+  re-enter it; it simply exits with the newer code, which is what FPC does. }
+procedure PXXExitProcess;
 implementation
 
 
@@ -3265,6 +3290,11 @@ var
   on an MCU halting is usually wrong, and printing is usually fine but NOT
   always — a program driving a protocol-sensitive serial link has to be able to
   say "not on my UART". Default nil keeps FPC-without-sysutils behaviour. }
+procedure PXXExitProcess;
+begin
+  Halt(ExitCode);
+end;
+
 procedure PXXNilRef;
 begin
   if PXXNilRefHook <> nil then PXXNilRefHook();

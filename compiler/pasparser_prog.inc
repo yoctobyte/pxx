@@ -405,6 +405,7 @@ var jmpPatch, i, j, wdDepth: Integer; needsPromoInt: Boolean;
     usesMath, needsMath: Boolean;
     usesTextfile: Boolean; tnm: AnsiString;
     savedUnitIdx, afterDeclTok: Integer;
+    exitPi: Integer;   { PXXExitProcess — the main-body epilogue, see the end of this routine }
     dummyNames: array[0..7] of AnsiString;
     dummyTypes: array[0..7] of TTypeKind;
 begin
@@ -1237,12 +1238,26 @@ begin
     end;
 
   EmitMainBodyIntfTempRelease;
-  { Unit finalization sections, in REVERSE init order — after the main body,
-    like FPC (bug-unit-finalization-not-executed). Halt sites call the same
-    runner; the guard inside makes whichever path runs first the only one. }
-  if (FiniProcCount > 0) or (FiniRunnerProc >= 0) then
+  { Falling off the end of main is FPC's `Halt(ExitCode)`: run the unit
+    finalization sections in REVERSE init order, then exit with whatever
+    ExitCode holds AFTER them — a finalization is allowed to change it, and
+    that is the whole erroru.pp idiom.
+
+    Routed through the Pascal PXXExitProcess (`Halt(ExitCode)`) rather than a
+    raw exit-syscall emission, because "terminate with the value of a global"
+    would otherwise need a new emitter in each of six backends, while
+    terminating with a computed VALUE is something the AN_HALT lowering already
+    does on all of them. PXXExitProcess's own Halt calls the finalization
+    runner, so the explicit call here would be redundant — it stays only for
+    the build that has no builtinheap, where PXXExitProcess does not exist.
+    The runner's run-once guard makes whichever path arrives first the only
+    one. feature-pascal-exitcode-finalization-halt }
+  exitPi := FindProc('PXXExitProcess');
+  if exitPi >= 0 then
+    EmitCallProc(exitPi)
+  else if (FiniProcCount > 0) or (FiniRunnerProc >= 0) then
     EmitCallProc(GetFiniRunnerProc);
-  EmitExit(0);
+  EmitExit(0);   { unreachable once PXXExitProcess is in — it does not return }
   EmitFinalizerRunnerBody;
   ApplyCallFixups;
 end;

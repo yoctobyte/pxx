@@ -8078,6 +8078,36 @@ test-core: $(COMPILER)
 	@# fault on. Verified identical to FPC 3.2.2 and on all four cross targets.
 	./$(COMPILER) test/test_const_array_in_data.pas $(TESTTMP)/test_const_array_in_data26
 	test "$$($(TESTTMP)/test_const_array_in_data26)" = "$$(printf '1234605616436508552 0 18446744073709551615 7 \n-1 9223372036854775807 -9223372036854775808 0 \n3735928559 0 1 4294967295 \n0 65535 258 7 \n0 255 128 1 \n-128 127 0 -1 \nTRUE TRUE TRUE TRUE TRUE\nTRUE TRUE TRUE TRUE\n-2147483648 2147483647 0 -1 \nTRUE FALSE TRUE TRUE \n97 90 0 126 \n2 0 1 \n1 2 3 4 5 6 \none two three \n1/2 3/4 \n10 20 30 \n10 99 30 ')"
+	@# System.ExitCode + finalization + Halt, all four corners, every exit STATUS
+	@# verified identical to FPC 3.2.2. The status is the contract here, not the
+	@# printed line: FPC does not flush stdout after its unit finalizations, so
+	@# its own `fini sees N` never appears -- pxx's does, which is a superset,
+	@# not a divergence to chase.
+	@#   normal end      body sets 9 -> fini sees 9, stores 10 -> exit 10
+	@#   Halt(100)       ExitCode set BEFORE the finis, so fini sees 100 and
+	@#                   zeroes it -> exit 0. Terminating with the ARGUMENT
+	@#                   instead would exit 100 and this is the row that says so.
+	@#   bare Halt       is Halt(0): it RESETS ExitCode. Measured; the ticket
+	@#                   claimed the opposite ("exit with the current code"), and
+	@#                   the difference is invisible unless the body set it first.
+	@#   Halt in a fini  exits with its own code and does not re-enter the
+	@#                   runner -- the run-once guard is what terminates it.
+	./$(COMPILER) -Futest/exitcodeunits test/test_exitcode_normal_end.pas $(TESTTMP)/test_exitcode_normal_end26
+	@out=$$($(TESTTMP)/test_exitcode_normal_end26); rc=$$?; \
+	 test "$$out" = "$$(printf 'init\nbody\nfini sees 9')" && test "$$rc" = "10" \
+	  || { echo "test_exitcode_normal_end: FAIL - got rc=$$rc out=[$$out]"; exit 1; }
+	./$(COMPILER) -Futest/exitcodeunits test/test_exitcode_halt_arg.pas $(TESTTMP)/test_exitcode_halt_arg26
+	@out=$$($(TESTTMP)/test_exitcode_halt_arg26); rc=$$?; \
+	 test "$$out" = "$$(printf 'init\nbody\nfini sees 100')" && test "$$rc" = "0" \
+	  || { echo "test_exitcode_halt_arg: FAIL - got rc=$$rc out=[$$out]"; exit 1; }
+	./$(COMPILER) -Futest/exitcodeunits test/test_exitcode_halt_bare.pas $(TESTTMP)/test_exitcode_halt_bare26
+	@out=$$($(TESTTMP)/test_exitcode_halt_bare26); rc=$$?; \
+	 test "$$out" = "$$(printf 'init\nbody\nfini sees 0')" && test "$$rc" = "1" \
+	  || { echo "test_exitcode_halt_bare: FAIL - got rc=$$rc out=[$$out]"; exit 1; }
+	./$(COMPILER) -Futest/exitcodeunits test/test_exitcode_halt_in_finalization.pas $(TESTTMP)/test_exitcode_halt_in_fini26
+	@out=$$($(TESTTMP)/test_exitcode_halt_in_fini26); rc=$$?; \
+	 test "$$out" = "body" && test "$$rc" = "77" \
+	  || { echo "test_exitcode_halt_in_finalization: FAIL - got rc=$$rc out=[$$out]"; exit 1; }
 	@# --no-nil-check on BOTH, and it is load-bearing: this file's subject is the
 	@# SIGNAL path, and since feature-a-emitted-nil-checks the compiler catches
 	@# `nilproc` at the call site before any fault happens — so without the flag

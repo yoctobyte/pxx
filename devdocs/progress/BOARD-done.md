@@ -1824,6 +1824,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-pascal-corpus-fpcunit | P | 55 | feature | Pascal corpus: fpcunit — OOP + RTTI test framework (and the harness for the rest) | — |
 | feature-pascal-corpus-fpjson | P | 58 | feature | fpjson (fcl-json) — rung 2 of the Pascal OOP corpus | — |
 | feature-pascal-delphi-generics-syntax | P | 56 | feature | Mode-Delphi generics syntax: `TFoo<T> = class`, inline `TFoo<LongInt>` | — |
+| feature-pascal-exitcode-finalization-halt | A | 45 | feature | ExitCode global + unit finalization execution + FPC Halt semantics (Halt sets ExitCode, runs finalizations, exits with ExitCode) | — |
 | feature-pascal-generic-nonclass-templates | P | 50 | feature | Generic templates beyond classes: records, arrays, procvars | — |
 | feature-pascal-initialize-finalize-intrinsics | A | 50 | feature | `Initialize()` / `Finalize()` standard procedures (managed-type intrinsics) | — |
 | feature-pascal-io-checks-i-plus | A | 40 | feature | {$I+} I/O checking: EInOutError / RE on failed Text ops — third sibling of the landed {$Q+}/{$R+}; carries a DIALECT-DEFAULT question for the user | — |

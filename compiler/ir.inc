@@ -5362,6 +5362,7 @@ end;
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     seqBase, seqCur: Integer;       { iterative AN_SEQ spine walk — see the arm }
+    ecSym: Integer;                 { System.ExitCode, when builtinheap is linked — see AN_HALT }
     cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
     miArg, miRec, miPi, miArgN: Integer;   { Initialize/Finalize }
     miTk: TTypeKind; miIsFin: Boolean;
@@ -9441,12 +9442,38 @@ begin
           value := IRLowerAST(ASTLeft[node])
         else
           value := -1;
+        { ExitCode is the exit status, and the ORDER here is the whole feature.
+          FPC: Halt(n) sets ExitCode := n, THEN runs the finalizations, and a
+          finalization may overwrite ExitCode — which is exactly the erroru.pp
+          idiom (check the recorded code, then zero it so an expected halt(100)
+          exits 0). So the argument is stored BEFORE the runner and the status
+          is re-READ after it; terminating with the argument would make a
+          finalization's write invisible.
+
+          A bare `Halt` stores 0, not "leave ExitCode alone". Measured against
+          FPC 3.2.2: `ExitCode := 9; Halt;` exits as if the code were 0, so
+          `Halt` is `Halt(0)`. The ticket asserted the opposite.
+
+          Without builtinheap (a bare/ESP build has no ExitCode symbol) this
+          falls back to the previous behaviour: terminate with the argument.
+          feature-pascal-exitcode-finalization-halt }
+        ecSym := FindSym('ExitCode');
+        if (ecSym >= 0) and (Syms[ecSym].Kind = skGlobal) and
+           TypeIsOrdinal(Syms[ecSym].TypeKind) then
+        begin
+          if value = -1 then
+            value := IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyInteger));
+          IRAppend(IR_STORE_SYM, ecSym, value, -1, 0, Ord(Syms[ecSym].TypeKind));
+          value := -2;   { marker: re-read after the runner, below }
+        end;
         { FPC runs unit finalization sections on Halt too. The runner shell is
           registered lazily (this Halt may lower before later units parse);
           its body — reverse-order finalizers behind a run-once guard — is
           emitted after the main body (bug-unit-finalization-not-executed). }
         last := IRAppendCall(GetFiniRunnerProc, -1, -1, Ord(tyInteger));
         IRIVal[last] := 1;   { statement-level: side-effect call }
+        if value = -2 then
+          value := IRAppend(IR_LOAD_SYM, ecSym, -1, -1, 0, Ord(Syms[ecSym].TypeKind));
         last := IRAppend(IR_TERMINATE, value, -1, -1, AN_HALT, 0);
       end
       else if (CurProc < 0) and (ASTLeft[node] <> -1) then
