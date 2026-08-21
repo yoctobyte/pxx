@@ -998,6 +998,10 @@ begin
   isF90 := (n >= 5) and (inFile[n] = '0') and (inFile[n-1] = '9') and (inFile[n-2] = 'f') and (inFile[n-3] = '.');
   isAlgol := (n >= 5) and (inFile[n] = 'g') and (inFile[n-1] = 'l') and (inFile[n-2] = 'a') and (inFile[n-3] = '.');
   isErl := (n >= 5) and (inFile[n] = 'l') and (inFile[n-1] = 'r') and (inFile[n-2] = 'e') and (inFile[n-3] = '.');
+  { The ONE spelling of "this source is Pascal". See defs.inc for what the
+    hand-copied negation chains cost. }
+  IsPascalFrontend := not (isC or isBasic or isNilPy or isAsm or isRust or isAda
+                           or isZig or isLol or isWs or isF90 or isAlgol or isErl);
 
   { The MAIN input must EXIST. LoadFile answers "" for an unopenable path, which
     is indistinguishable from a genuinely empty file — and an empty NilPy source
@@ -1063,9 +1067,14 @@ begin
   InInterface := False;
   PreScanPass := False;
   DeclItemCount := 0;
-  if (not isC) and (not isBasic) and (not isNilPy) and (not isAsm) and (not isAda) and (not isZig) and (not isLol) and (not isWs) and (not isF90) and (not isAlgol) and (not isErl) then
+  { Pascal-only, and BOTH calls are — the missing begin/end meant the macro
+    pre-pass ran for every frontend regardless of the guard directly above it,
+    which is exactly the shape the indentation claimed was already true. }
+  if IsPascalFrontend then
+  begin
     ExpandIncludes(Source, SourceFileDir, DbgSrcName);
     ExpandPasMacros(Source);
+  end;
   if DebugTrace then writeln('After include expansion: ', Length(Source));
 
   SrcPos   := 1; SrcLine  := 1;
@@ -1316,7 +1325,7 @@ begin
   end;
   { NilPy included: isinstance() resolves class identity through the same
     RTTI backlink chain (__pxxInheritsFrom) the Pascal `is` operator uses. }
-  if (not isC) and (not isBasic) and (not isAsm) and (not isRust) and (not isAda) and (not isZig) and (not isLol) and (not isWs) and (not isF90) and (not isAlgol) and (not isErl) then
+  if IsPascalFrontend or isNilPy then
   begin
     EmitRTTI;
     { After EmitRTTI so it shares the same static-data region and the same

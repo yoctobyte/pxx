@@ -226,7 +226,7 @@ begin
   if TargetArch <> TARGET_X86_64 then why := 'target is not x86-64'
   else if EmitObjMode or EmitSharedMode then why := '-c / --shared carry their own code-offset relocations'
   else if DebugInfo then why := '-g line/frame tables carry code offsets'
-  else if isC or isBasic or isNilPy or isAsm or isRust or isAda or isZig or isLol or isWs or isF90 or isAlgol or isErl then
+  else if not IsPascalFrontend then
     why := 'only the Pascal frontend is wired up so far'
   else if AsmEntryOff <> 0 then why := 'the .asm frontend overrides the entry point';
   if why <> '' then begin DceReportLine('off: ' + why); Exit; end;

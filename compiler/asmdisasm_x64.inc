@@ -439,6 +439,30 @@ begin
     end;
 
     if opc2 = $05 then begin text := 'syscall'; Result := (p + 2) - pos; Exit; end;
+    { cpuid (0F A2) and the RDRAND/RDSEED group (0F C7 /6, /7 — REX.W picks the
+      64-bit destination). Both arrived with __pxxCpuidRdrand/__pxxHwRandom64
+      and neither was decodable, which is how `-S compiler/compiler.pas` grew
+      four `db` lines. RDRAND was the worse of the two: `db 48 / db 0f` then
+      resynchronised ONE BYTE LATE and printed a plausible `mov eax, imm32`
+      built out of the C7 F0 that follows — a wrong instruction reads as real
+      output, an unknown byte does not. }
+    if opc2 = $A2 then begin text := 'cpuid'; Result := (p + 2) - pos; Exit; end;
+    if opc2 = $C7 then
+    begin
+      if not DisParseModRM(p + 2, len, rexR, rexX, rexB, mrm) then begin text := 'db ' + DisHexByte(Code[pos]); Result := 1; Exit; end;
+      if mrm.IsReg and ((mrm.RegField and 7) = 6) then
+      begin
+        text := 'rdrand ' + DisReg(mrm.RmReg, sz, hasRex);
+        Result := (p + 2 + mrm.Consumed) - pos; Exit;
+      end;
+      if mrm.IsReg and ((mrm.RegField and 7) = 7) then
+      begin
+        text := 'rdseed ' + DisReg(mrm.RmReg, sz, hasRex);
+        Result := (p + 2 + mrm.Consumed) - pos; Exit;
+      end;
+      { /1 is cmpxchg8b/16b on MEMORY — not emitted here; fall through to the
+        db path rather than guess. }
+    end;
     if (opc2 >= $80) and (opc2 <= $8F) then
     begin
       if p + 6 > len then begin text := 'db ' + DisHexByte(Code[pos]); Result := 1; Exit; end;

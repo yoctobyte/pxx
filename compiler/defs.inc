@@ -4309,6 +4309,15 @@ const
 
 var
   isC, isBasic, isNilPy, isAsm, isRust, isAda, isZig, isLol, isWs, isF90, isAlgol, isErl: Boolean;
+  { NOT one of the above — i.e. the source is Pascal. Spelled ONCE, in
+    compiler.pas beside the extension tests, because the hand-written
+    negation chain was maintained in three places and had already drifted:
+    the {$I}-expansion guard listed NilPy but not Rust, so every .rs file
+    was handed to the Pascal include pre-pass, which since the -g line
+    markers landed prepends `# 1 "path"` — and the Rust lexer reads a
+    leading # as an attribute. Eleven jobs went red on one missing term.
+    Add a frontend by adding a term to the ONE assignment. }
+  IsPascalFrontend: Boolean;
   { PyLexAll is APPENDING to the token stream (a `.py` MODULE pulled in by an
     import) rather than lexing the main program: it must not reset TokCount or
     the shared token-char buffer (feature-nilpy-py-module-loader). }
