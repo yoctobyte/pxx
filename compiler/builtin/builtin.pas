@@ -1989,6 +1989,16 @@ begin
   end;
 end;
 
+function __pxxClassParent(Rtti: Pointer): Pointer;
+{ x.ClassParent: the class reference of the immediate ancestor, or nil at the
+  root -- FPC's TObject.ClassParent answers nil, and so does this. One field
+  read; __pxxInheritsFrom walks the same +PXX_RTTI_PARENT chain. }
+begin
+  Result := nil;
+  if Rtti = nil then Exit;
+  Result := PPxxPtr_(PtrUInt(Rtti) + PXX_RTTI_PARENT)^;
+end;
+
 function __pxxClassName(Rtti: Pointer): AnsiString;
 { x.ClassName. Rtti is the class blob; its +0 field is a POINTER to the interned
   name (NOT the name itself -- __pxxRttiName wants that pointer, so deref first).

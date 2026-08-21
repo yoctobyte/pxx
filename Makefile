@@ -3847,6 +3847,15 @@ test-core: $(COMPILER)
 	# pushed), not the nil stub it used to be (b340)
 	./$(COMPILER) test/test_exceptaddr_b340.pas $(TESTTMP)/test_exceptaddr_b34026
 	test "$$($(TESTTMP)/test_exceptaddr_b34026 | tail -1)" = "PASS"
+	# ClassParent -- the fourth class-reference operation, beside ClassName /
+	# ClassType / InheritsFrom, which already shared one resolver. It answers a
+	# class REFERENCE, so ParseClassRefOpTail chains onto it and
+	# `d.ClassParent.ClassName` (the shape it is actually used in) works. Rows
+	# cover the instance, metaclass-value, TClass-variable and static-class-name
+	# receivers, nil at the root, and a same-named MEMBER still outranking it.
+	./$(COMPILER) test/test_classparent.pas $(TESTTMP)/test_classparent26
+	@test "$$($(TESTTMP)/test_classparent26)" = "$$(printf 'TC\nTB\nTA\nTrue\nTrue\nTB\nTB True\nTB\nshadowed')" \
+	  || { echo "test_classparent: FAIL"; $(TESTTMP)/test_classparent26; exit 1; }
 	# `classRef.Create` when the hierarchy declares NO constructor -- the implicit
 	# TObject.Create. The static `TFoo.Create` spelling always accepted it; both
 	# metaclass spellings (a `class of T` variable and an inline metaclass cast)

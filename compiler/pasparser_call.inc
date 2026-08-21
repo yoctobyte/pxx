@@ -894,6 +894,15 @@ begin
     if pi < 0 then Exit;
     outTk := tyAnsiString;
   end
+  else if CaseEqual(op, 'ClassParent') then
+  begin
+    { Answers a class reference, so outTk is tyPointer and ParseClassRefOpTail
+      will happily chain further operations onto it --
+      `d.ClassParent.ClassName`, which is the shape it is actually used in. }
+    pi := FindProc('__pxxClassParent');
+    if pi < 0 then Exit;
+    outTk := tyPointer;
+  end
   else if CaseEqual(op, 'InheritsFrom') then
   begin
     pi := FindProc('__pxxInheritsFrom');
@@ -930,13 +939,13 @@ begin
   Result := callNode;
 end;
 
-{ True for the three names GenMakeClassRefOp handles. }
+{ True for the four names GenMakeClassRefOp handles. }
 function IsClassRefOpName(const nm: AnsiString): Boolean;
 var m: AnsiString;
 begin
   m := MapNilPyClassRefOpName(nm);
   IsClassRefOpName := CaseEqual(m, 'ClassName') or CaseEqual(m, 'ClassType') or
-                      CaseEqual(m, 'InheritsFrom');
+                      CaseEqual(m, 'InheritsFrom') or CaseEqual(m, 'ClassParent');
 end;
 
 { The class RTTI blob of an INSTANCE expression. An IR node, not a builtin call:
