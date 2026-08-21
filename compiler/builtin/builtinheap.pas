@@ -1271,8 +1271,20 @@ end;
 { Are both ends word-aligned, and is there enough to be worth the setup? }
 function PXXWordCopyOk(d: Int64; s: Int64; n: Int64): Boolean;
 begin
+{$ifdef CPUX86_64}
+  { x86 loads and stores a word at any address, so the alignment question does
+    not arise -- only whether a whole word is left to move. Refusing the word
+    loop on a misaligned pair here cost every Copy() of a byte array at an odd
+    offset an 8x slower byte loop, for nothing. }
+  PXXWordCopyOk := n >= SizeOf(NativeInt);
+{$else}
+{$ifdef CPU_I386}
+  PXXWordCopyOk := n >= SizeOf(NativeInt);
+{$else}
   PXXWordCopyOk := (n >= SizeOf(NativeInt)) and
                    (((d or s) and (SizeOf(NativeInt) - 1)) = 0);
+{$endif}
+{$endif}
 end;
 
 { The high bit of every byte in a machine word — the word-wise form of the
@@ -3123,14 +3135,11 @@ end;
 { Raw forward byte copy. Copy always writes into a freshly allocated block, so
   source and destination never overlap. }
 function PXXMemCopy(dest: Pointer; src: Pointer; n: NativeInt): Pointer;
-var i: Int64;
 begin
-  i := 0;
-  while i < n do
-  begin
-    PByte(Int64(dest) + i)^ := PByte(Int64(src) + i)^;
-    i := i + 1;
-  end;
+  { One forward block copy in this unit, not two: PXXBlockCopy already moves a
+    word at a time with a byte tail. Its return value is the ASCII scan the
+    string paths ask for; nothing here wants it. }
+  PXXBlockCopy(Int64(dest), Int64(src), n);
   Result := dest;
 end;
 
