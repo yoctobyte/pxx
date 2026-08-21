@@ -58,4 +58,4 @@ being closed as not-reproducible rather than fixed: there is nothing to fix in
 the Pascal frontend, and a red that survives in the queue at prio 70 costs every
 agent that pulls from the top. If it recurs on an idle box, reopen — that would
 make it a real intermittent and worth a different hunt.
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 9828f56a4.
