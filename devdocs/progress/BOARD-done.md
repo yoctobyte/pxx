@@ -2069,6 +2069,8 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-asyncecho | T | 70 | regression | regression: test-core#src:test/test_asyncecho.pas red at 60502ed0c353 (auto-filed by twatch) | — |
 | regression-test-core-test-basic-comprehensive | T | 70 | regression | regression: test-core#src:test/test_basic_comprehensive.bas red at 3f2828476c6c (auto-filed by twatch) | — |
 | regression-test-core-test-c-cross-ns-arity | T | 70 | regression | regression: test-core#src:test/test_c_cross_ns_arity.pas red at 60502ed0c353 (auto-filed by twatch) | — |
+| regression-test-core-test-c-gtk-call | T | 70 | regression | regression: test-core#src:test/test_c_gtk_call.pas red at ef7f17d45caa (auto-filed by twatch) | — |
+| regression-test-core-test-c-gtk-window | T | 70 | regression | regression: test-core#src:test/test_c_gtk_window.pas red at ef7f17d45caa (auto-filed by twatch) | — |
 | regression-test-core-test-c-macro-soup | T | 70 | regression | regression: test-core#src:test/test_c_macro_soup.pas red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-core-test-c-packed-aligned | T | 70 | regression | regression: test-core#src:test/test_c_packed_aligned.pas red at 42786f141ea7 (auto-filed by twatch) | — |
 | regression-test-core-test-c-preprocess | T | 70 | regression | regression: test-core#src:test/test_c_preprocess.pas@1 red at 34c41bde6fd6 (auto-filed by twatch) | — |
@@ -2174,6 +2176,9 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-nilpy-test-nilpy-qualifier-vs-cproc | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_qualifier_vs_cproc.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-sqlite-crud | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_sqlite_crud.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-str-isnumeric-istitle | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_str_isnumeric_istitle.npy red at 0d6de0cbeae1 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-pascal-at-procvar-mode | P | 70 | regression | regression: test-nilpy#src:test/test_pascal_at_procvar_mode.pas@1 red at 23becd24b8e5 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-pascal-mode-switch-cli | P | 70 | regression | regression: test-nilpy#src:test/test_pascal_mode_switch_cli.pas@2 red at 23becd24b8e5 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-pascal-self-result-delphi | P | 70 | regression | regression: test-nilpy#src:test/test_pascal_self_result_delphi.pas@1 red at 23becd24b8e5 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-uses-order-pylib-exception-a | T | 70 | regression | regression: test-nilpy#src:test/test_uses_order_pylib_exception_a.pas red at be7f80936b0c (auto-filed by twatch) | — |
 | regression-test-opt-c-inline-strlit-arg | T | 70 | regression | regression: test-opt#src:test/c_inline_strlit_arg.c red at 36d1bffda39d (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard4-6 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 red at 61e2448bac6d (auto-filed by twatch) | — |

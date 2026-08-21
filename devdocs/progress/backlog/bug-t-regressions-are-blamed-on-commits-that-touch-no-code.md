@@ -83,3 +83,30 @@ verdict every time -> cause 1. Verdict varies -> cause 2.
   the report so a dev lane can see whether a finding is solid or a coin flip.
 - Surface `(N in range)` more loudly when N is large: 132 is not a bisect
   result, it is an unnarrowed window, and it should not read like an answer.
+
+## Second sighting — 2026-08-21 (agent-A)
+
+Four more, and this time the mechanism is visible in tstate's own header. The
+jobs
+
+  test-nilpy#src:test/test_pascal_at_procvar_mode.pas@1
+  test-nilpy#src:test/test_pascal_mode_switch_cli.pas@2
+  test-nilpy#src:test/test_pascal_self_result_delphi.pas@1
+  test-nilpy#src:test/test_pascal_self_result_delphi.pas@2
+
+all went red together at `23becd24b8e5` -- a one-line ticket edit -- and all four
+pass at HEAD when re-run one at a time (verified expectation by expectation,
+both dialect modes, at 2c2ba74e40fa).
+
+The header line for that run reads `full through 23becd24b8e5 RED ... 3600.3s`.
+**3600.3 seconds is the hour wall, not a duration.** So the run did not finish;
+it was cut off, and every source the cut-off job owned was recorded as failing
+with the blame on whatever sha was under test. That is the same shape as the
+first sighting, with the cause now named: a job that dies at the wall is
+indistinguishable, in the published report, from a job whose tests failed.
+
+Worth fixing at the source: a run that hits its wall should publish TIMEOUT (or
+publish nothing) for the jobs it did not finish, never RED. A RED that is really
+"the box was busy" costs a dev agent a full triage cycle each time it reaches the
+top of the ranked queue -- four tickets at prio 70 this time -- and it trains
+everyone to distrust the queue, which is the expensive part.
