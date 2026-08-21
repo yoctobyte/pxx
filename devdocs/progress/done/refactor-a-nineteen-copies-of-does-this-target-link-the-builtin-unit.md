@@ -128,4 +128,4 @@ bare-metal profiles (riscv32 `--esp-profile=bare`, xtensa) building clean.
 `gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 8f851204d.
