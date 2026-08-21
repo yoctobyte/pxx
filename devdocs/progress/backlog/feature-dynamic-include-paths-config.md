@@ -5,7 +5,7 @@ prio: 45  # auto
 # Dynamic Include Paths, Configuration Files, and System Scanner
 
 - **Type:** feature
-- **Status:** backlog
+- **Status:** backlog (config-FILE slice landed 2026-08-21; manifests + scanner open)
 - **Owner:** —
 - **Opened:** 2026-06-14 (from ESP-IDF auto-import analysis)
 
@@ -150,3 +150,60 @@ principle.
 Other named manifest consumers from the original design — IDF, gtk, usr-include — are
 unaffected and are ordinary justifications. Synapse may still be listed as a *user*; it
 just cannot be the reason.
+
+
+---
+
+## 2026-08-21 — the `pxx.cfg` slice landed; manifests and the scanner are what remain
+
+Tier 3 of the search-path order now exists, and the whole order is inspectable:
+
+    -Fu / -I  >  PXX_HOME / PXX_LIBPATH  >  pxx.cfg  >  exe-dir defaults
+
+`pxx --where` (landed the same night under `feature-toolchain-cli-ux`) prints all
+four as RESOLVED, each root marked `[MISSING]` when it does not exist, by calling
+the same routines a real compile calls. That is the half of this ticket that made
+the rest debuggable: the original complaint was hardcoded paths, but the cost was
+always that a path resolving to *nothing* reported itself as a hundred missing
+symbols far from the cause.
+
+**What `pxx.cfg` accepts:** `home <dir>` (an install root, exactly like
+`PXX_HOME`), `unitpath <dir>`, `incpath <dir>`. `#` and `;` comment to end of
+line.
+
+**Where it is looked for**, first one that exists wins — `$PXX_CONFIG`, then
+`./pxx.cfg`, then `~/.config/pxx/pxx.cfg`, then `<exe dir>/pxx.cfg`. One file
+wins rather than merging four, because a merge makes "where did this path come
+from" answerable only by knowing an order. `$PXX_CONFIG` naming a file that
+cannot be read WARNS instead of silently falling through to a different config
+file — the wrong config file is the hardest kind of wrong to see.
+
+**Unknown / argless directives warn with `file:line` and compilation continues.**
+A config file is read by a binary the user did not build, so a newer file must
+still work on an older `pxx`; but silence is how a typo'd `unitpaths` costs an
+afternoon.
+
+Verified end to end, not reasoned: a compiler copied to a directory with no
+libraries above it compiles a program that needs the RTL (via `home`) *and* a
+project unit reachable only via `unitpath`. Rows in `test-quick` lock all of it,
+including that the env tier outranks the file tier, and that the same source
+compiled with and without a config in effect emits **identical bytes** (the
+config tier is a third door onto `bug-a-the-compilers-output-depends-on-argv0`).
+
+### Deliberately NOT in this slice
+`define` / `undef` / `mode` in `pxx.cfg`. Those are the per-directory library
+manifest above, and their entire value is that they are **scoped to a library's
+own tree** — a global define switch is the viral-leak shape the manifest design
+exists to avoid, and shipping one here first would turn the scoped version into
+a migration instead of a design. The `PasApplyMimicDefines` landmine ("NEVER
+call during a self-build") is still enforced by remembering.
+
+### Still open
+- Per-directory library manifests (`pxxlib.cfg`): the stackable define scope,
+  nearest-ancestor lookup, the manifest parser. **This is the load-bearing one.**
+- `tools/pxx-scan` (probe host / IDF trees, emit a config).
+- Dynamic system-library soname mapping (`uses sqlite3` -> `libsqlite3.so.0`)
+  out of the compiler and into config.
+- The hardcoded `/usr/include...` fallback chain in `cpreproc.inc` — still
+  present, still native-gated. `incpath` now gives a way to not need it, but
+  nothing removes it yet.

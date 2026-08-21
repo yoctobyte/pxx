@@ -10895,6 +10895,33 @@ test-quick: $(COMPILER)
 	./$(COMPILER) test/quick_canary_argv0.pas $(TESTTMP)/cliux_noenv26
 	PXX_HOME=$(CURDIR) ./$(COMPILER) test/quick_canary_argv0.pas $(TESTTMP)/cliux_withenv26
 	cmp $(TESTTMP)/cliux_noenv26 $(TESTTMP)/cliux_withenv26
+	# feature-dynamic-include-paths-config, tier 3: pxx.cfg. The whole slice in
+	# one shape — a compiler whose own directory contains no libraries, a project
+	# unit that only a `unitpath` line can find, and an RTL that only a `home`
+	# line can find. If either tier silently did nothing this program does not
+	# build, which is the point: the previous failure mode was a search path
+	# that resolved to nothing and reported it as a hundred missing symbols.
+	rm -rf $(TESTTMP)/cliux_cfg && mkdir -p $(TESTTMP)/cliux_cfg/bin $(TESTTMP)/cliux_cfg/mylib
+	cp $(COMPILER) $(TESTTMP)/cliux_cfg/bin/pxx
+	cp test/cliux_cfg_unit.pas $(TESTTMP)/cliux_cfg/mylib/cliux_cfg_unit.pas
+	cp test/cliux_cfg_prog.pas $(TESTTMP)/cliux_cfg/prog.pas
+	printf 'home %s\nunitpath ./mylib\n' "$(CURDIR)" > $(TESTTMP)/cliux_cfg/pxx.cfg
+	cd $(TESTTMP)/cliux_cfg && ./bin/pxx prog.pas out26
+	test "$$($(TESTTMP)/cliux_cfg/out26)" = "cliux cfg unit 42"
+	cd $(TESTTMP)/cliux_cfg && ./bin/pxx --where | grep -q '^    unitpath  ./mylib/'
+	# An unknown or argless directive WARNS with file:line and keeps going: a
+	# config file is read by a binary the user did not build, so a newer file
+	# must still compile on an older pxx — but never in silence, which is how a
+	# typo'd `unitpaths` costs an afternoon.
+	printf 'bogusdirective x\nincpath\n' >> $(TESTTMP)/cliux_cfg/pxx.cfg
+	cd $(TESTTMP)/cliux_cfg && ./bin/pxx --where 2>&1 | grep -q 'pxx.cfg:3: warning: unknown directive'
+	cd $(TESTTMP)/cliux_cfg && ./bin/pxx --where 2>&1 | grep -q 'pxx.cfg:4: warning: `incpath` needs an argument'
+	# ...and PXX_CONFIG naming a file that is not there is a TYPO, not a silent
+	# fallback to a DIFFERENT config file.
+	cd $(TESTTMP)/cliux_cfg && PXX_CONFIG=/nonexistent-pxx.cfg ./bin/pxx --where 2>&1 | grep -q 'warning: PXX_CONFIG names'
+	# The env tier outranks the file tier: PXX_HOME wins over `home`, and it is
+	# the whole root that switches, not a field of it.
+	cd $(TESTTMP)/cliux_cfg && PXX_HOME=/nonexistent-pxx-home ./bin/pxx --where | grep -q '/nonexistent-pxx-home/lib/rtl/'
 
 # test-smoke: the pre-commit iteration gate = test-quick + the full self-host
 # byte-identity chain (the artifacts stabilize-core pins). Catches self-host

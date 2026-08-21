@@ -124,8 +124,11 @@ compiled with and without `PXX_HOME` emits **identical bytes** — the env tier 
 a second door onto `bug-a-the-compilers-output-depends-on-argv0`, and it is shut.
 
 ### Still open (why this returns to backlog, not done)
-- Tier 3, the **config file** (`pxx.cfg` next to the binary / `~/.config/pxx/`).
-  `--where`'s closing lines say plainly that no config tier exists yet.
+- ~~Tier 3, the config file~~ — landed the same night under
+  `feature-dynamic-include-paths-config`: `pxx.cfg` with `home` / `unitpath` /
+  `incpath`, found via `$PXX_CONFIG`, `./pxx.cfg`, `~/.config/pxx/pxx.cfg`,
+  `<exe dir>/pxx.cfg` (first wins), and reported by `--where`. Scoped
+  `define`/`mode` manifests stay with that ticket.
 - `--config` as a separate spelling — `--where` currently answers both.
 - Step 3: `--list-libraries`, `--doctor`.
 - Step 4: `--selfcheck` (needs `feature-release-packaging`'s manifest).

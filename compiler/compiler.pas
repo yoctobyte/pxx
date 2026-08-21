@@ -220,12 +220,18 @@ begin
     end;
   end;
 
+  { Tier 3: pxx.cfg `unitpath` lines, below the env tier and above the defaults. }
+  PxxCfgLoad;
+  for i := 0 to PxxCfgUnitCount - 1 do
+    AddPasUnitDir(PxxCfgUnitPaths[i]);
+
   if NoDefaultRtl or TargetIsEspClass then Exit;
 
   { Tier 2b: PXX_HOME's PAL dir, matching ResolveToolchainDirs' override. Same
     all-or-nothing rule — when PXX_HOME is set, the exe-dir guesses below are
     not appended as a silent second chance. }
   home := PxxGetEnv('PXX_HOME');
+  if Length(home) = 0 then home := PxxCfgHome;   { tier 3, same all-or-nothing }
   if Length(home) > 0 then
   begin
     if home[Length(home)] <> '/' then home := home + '/';
@@ -332,6 +338,9 @@ var i: Integer;
 begin
   whereExe := ParamStr(0);
   ExeDir := GetFilePath(whereExe);
+  { Before the first line of the report, so a config file's own warnings sit
+    above the report rather than inside it. }
+  PxxCfgLoad;
   WriteLn('binary:      ', whereExe);
   if ExeDir = '' then
     WriteLn('exe dir:     (none — invoked by bare name; all roots fall back to CWD-relative)')
@@ -350,6 +359,29 @@ begin
     WriteLn('  PXX_LIBPATH  (unset)')
   else
     WriteLn('  PXX_LIBPATH  ', whereExe, '   [colon-separated extra unit roots]');
+  whereExe := PxxGetEnv('PXX_CONFIG');
+  if Length(whereExe) = 0 then
+    WriteLn('  PXX_CONFIG   (unset)   [else ./pxx.cfg, ~/.config/pxx/pxx.cfg, <exe dir>/pxx.cfg]')
+  else
+    WriteLn('  PXX_CONFIG   ', whereExe);
+  WriteLn;
+
+  PxxCfgLoad;
+  WriteLn('Config file (tier 3 — first of the four candidates that exists wins):');
+  if Length(PxxCfgPath) = 0 then
+    WriteLn('  (none found — exe-dir defaults in effect)')
+  else
+  begin
+    WriteLn('  ', PxxCfgPath);
+    if Length(PxxCfgHome) > 0 then
+      WriteLn('    home      ', PxxCfgHome);
+    for i := 0 to PxxCfgUnitCount - 1 do
+      WriteLn('    unitpath  ', PxxCfgUnitPaths[i]);
+    for i := 0 to PxxCfgIncCount - 1 do
+      WriteLn('    incpath   ', PxxCfgIncPaths[i]);
+    if (Length(PxxCfgHome) = 0) and (PxxCfgUnitCount = 0) and (PxxCfgIncCount = 0) then
+      WriteLn('    (no directives — nothing from this file is in effect)');
+  end;
   WriteLn;
 
   ResolveToolchainDirs(cdir, bdir, rtldir, lcldir, asmdir);
@@ -379,8 +411,9 @@ begin
   WriteLn;
 {$endif}
 
-  WriteLn('There is no config-file tier yet — flags plus the exe-dir defaults above');
-  WriteLn('are everything that is consulted (feature-dynamic-include-paths-config).');
+  WriteLn('Tier order: -Fu/-I  >  PXX_HOME/PXX_LIBPATH  >  pxx.cfg  >  exe-dir defaults.');
+  WriteLn('pxx.cfg knows home/unitpath/incpath; per-library define/mode manifests are');
+  WriteLn('not implemented yet (feature-dynamic-include-paths-config).');
   WriteLn('Note: -Fu / -I given BEFORE --where on this command line are listed;');
   WriteLn('ones given after it are not, because --where answers where it is read.');
 end;
@@ -419,6 +452,7 @@ begin
   WriteLn('  PXX_HOME=<root>       install root; its lib/ and compiler/builtin/ replace');
   WriteLn('                        the ones guessed from the binary''s own directory');
   WriteLn('  PXX_LIBPATH=a:b       extra Pascal unit roots, after -Fu, before the defaults');
+  WriteLn('  PXX_CONFIG=<file>     use this pxx.cfg instead of searching for one');
   WriteLn('  PXXDBG=<topics>       compiler-internal probes; PXXDBG=help lists the form');
   WriteLn('  --where prints every one of these as resolved, so start there.');
   WriteLn;

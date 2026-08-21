@@ -1968,7 +1968,7 @@ end;
   user -I roots (registered at option-parse time), so -I still wins. Suppressed
   by -nostdinc. }
 procedure AddDefaultCIncludeDirs;
-var d, hdir: AnsiString;
+var d, hdir: AnsiString; ci: Integer;
 begin
   if NoStdInc then Exit;
   { Idempotent: a C source pulled as a UNIT calls this too (the main program may
@@ -1976,10 +1976,17 @@ begin
     be pulled many times over one compile. }
   if DefaultCIncludeDirsAdded then Exit;
   DefaultCIncludeDirsAdded := True;
+  { Tier 3: pxx.cfg `incpath` lines — below any user -I (registered already, at
+    option-parse time) and above the defaults below. }
+  PxxCfgLoad;
+  for ci := 0 to PxxCfgIncCount - 1 do
+    AddCIncludeDir(PxxCfgIncPaths[ci]);
   { Tier 2: PXX_HOME, the same explicit install root ResolveToolchainDirs and
     AddDefaultPasUnitDirs honour, and with the same all-or-nothing rule — an
-    override that is half-applied is the one nobody can read. }
+    override that is half-applied is the one nobody can read. pxx.cfg's `home`
+    is the same switch one tier down. }
   hdir := PxxGetEnv('PXX_HOME');
+  if Length(hdir) = 0 then hdir := PxxCfgHome;   { tier 3, same all-or-nothing }
   if Length(hdir) > 0 then
   begin
     if hdir[Length(hdir)] <> '/' then hdir := hdir + '/';

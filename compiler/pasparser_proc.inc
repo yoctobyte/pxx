@@ -2631,6 +2631,14 @@ begin
     is the failure mode nobody can read, and `pxx --where` prints each root with
     [MISSING] so a typo shows up as a typo. }
   home := PxxGetEnv('PXX_HOME');
+  if Length(home) = 0 then
+  begin
+    { Tier 3: pxx.cfg's `home`. Same all-or-nothing rule, one tier lower — an
+      env var is a deliberate act for this one run, a config file is standing
+      policy, so the run-specific one wins. }
+    PxxCfgLoad;
+    home := PxxCfgHome;
+  end;
   if Length(home) > 0 then
   begin
     if home[Length(home)] <> '/' then home := home + '/';

@@ -4118,6 +4118,31 @@ var
   PxxEnvBlock  : AnsiString;
   PxxEnvLoaded : Boolean;
 
+{ ===== pxx.cfg — tier 3 of the search-path order ===========================
+
+  Tiers, highest first: CLI flags (-Fu/-I) > env (PXX_HOME/PXX_LIBPATH) >
+  pxx.cfg > the defaults guessed from the binary's own directory. `pxx --where`
+  prints all four as resolved, which is the only way any of this is debuggable.
+
+  ONE file wins — the first found of $PXX_CONFIG, ./pxx.cfg,
+  $HOME/.config/pxx/pxx.cfg, <ExeDir>pxx.cfg — rather than a merge across all
+  four. A merge means the answer to "where did this path come from" is "several
+  places, in an order you have to know", and this project has paid for that shape
+  before (feature-dynamic-include-paths-config).
+
+  Deliberately PATHS ONLY for now: `home`, `unitpath`, `incpath`. Defines, undefs
+  and dialect mode belong to the per-directory library manifest slice of the same
+  ticket, where they are scoped to a library's own tree — a GLOBAL define switch
+  is the viral-leak shape that slice exists to avoid, and shipping it here first
+  would make the scoped version a migration instead of a design. }
+  PxxCfgLoaded    : Boolean;
+  PxxCfgPath      : AnsiString;   { the file in effect, '' when none was found }
+  PxxCfgHome      : AnsiString;   { `home <dir>` — a config-file PXX_HOME }
+  PxxCfgUnitPaths : array[0..MAX_PAS_UNIT_DIRS-1] of AnsiString;
+  PxxCfgUnitCount : Integer;
+  PxxCfgIncPaths  : array[0..MAX_C_INCLUDE_DIRS-1] of AnsiString;
+  PxxCfgIncCount  : Integer;
+
 { PXXDBG=help. Deliberately does NOT enumerate the topics: a list duplicated in
   source drifts from the real probes, and a drifted list is worse than none.
   devdocs/dev/debug-switches.md is the authority. }
@@ -4260,6 +4285,144 @@ begin
     end;
     i := j + 1;
   end;
+end;
+
+{ A whole small file through the same intrinsics PxxEnvLoad uses. 16 KB is the
+  cap on purpose: this reads CONFIG, and a pxx.cfg that does not fit in 16 KB is
+  a bug in the config, not a limit worth engineering around. Returns False for
+  "not there", which is the normal case for every candidate but one. }
+function PxxReadSmallFile(const path: AnsiString; var dst: AnsiString): Boolean;
+var buf: array[0..16383] of Byte; fd, n, i: Integer; pth: AnsiString;
+begin
+  PxxReadSmallFile := False;
+  dst := '';
+  if Length(path) = 0 then Exit;
+  pth := path;                   { sysopen takes a string VAR, not a literal }
+  fd := sysopen(pth, 0);
+  if fd < 0 then Exit;
+  n := sysread(fd, buf, SizeOf(buf));
+  sysclose(fd);
+  if n < 0 then n := 0;
+  for i := 0 to n - 1 do dst := dst + Chr(buf[i]);
+  PxxReadSmallFile := True;      { an EMPTY pxx.cfg still counts as "in effect" }
+end;
+
+{ `directive argument` per line, '#' or ';' to end of line is a comment, blank
+  lines ignored. An unknown directive WARNS rather than dying: a config file is
+  read by a binary the user did not build, so a newer file meeting an older pxx
+  must still compile — but it must not do so in silence, which is how a typo'd
+  `unitpaths` costs an afternoon. }
+procedure PxxCfgApplyLine(const line: AnsiString; lineNo: Integer);
+var i, n: Integer; word_, arg: AnsiString;
+begin
+  n := Length(line);
+  i := 1;
+  while (i <= n) and ((line[i] = ' ') or (line[i] = Chr(9))) do Inc(i);
+  if (i > n) or (line[i] = '#') or (line[i] = ';') then Exit;
+  word_ := '';
+  while (i <= n) and (line[i] <> ' ') and (line[i] <> Chr(9)) do
+  begin
+    word_ := word_ + line[i];
+    Inc(i);
+  end;
+  while (i <= n) and ((line[i] = ' ') or (line[i] = Chr(9))) do Inc(i);
+  arg := '';
+  while (i <= n) and (line[i] <> '#') and (line[i] <> ';') do
+  begin
+    arg := arg + line[i];
+    Inc(i);
+  end;
+  { trailing whitespace off the argument }
+  while (Length(arg) > 0) and ((arg[Length(arg)] = ' ') or (arg[Length(arg)] = Chr(9))) do
+    arg := Copy(arg, 1, Length(arg) - 1);
+  if Length(arg) = 0 then
+  begin
+    WriteLn(PxxCfgPath, ':', lineNo, ': warning: `', word_, '` needs an argument — ignored');
+    Exit;
+  end;
+  if arg[Length(arg)] <> '/' then arg := arg + '/';
+  if word_ = 'home' then
+    PxxCfgHome := arg
+  else if word_ = 'unitpath' then
+  begin
+    if PxxCfgUnitCount < MAX_PAS_UNIT_DIRS then
+    begin
+      PxxCfgUnitPaths[PxxCfgUnitCount] := arg;
+      Inc(PxxCfgUnitCount);
+    end;
+  end
+  else if word_ = 'incpath' then
+  begin
+    if PxxCfgIncCount < MAX_C_INCLUDE_DIRS then
+    begin
+      PxxCfgIncPaths[PxxCfgIncCount] := arg;
+      Inc(PxxCfgIncCount);
+    end;
+  end
+  else
+    WriteLn(PxxCfgPath, ':', lineNo, ': warning: unknown directive `', word_,
+            '` — this pxx knows home/unitpath/incpath');
+end;
+
+procedure PxxCfgLoad;
+var body, line, cand: AnsiString; i, n, lineNo: Integer; got: Boolean;
+begin
+  if PxxCfgLoaded then Exit;
+  PxxCfgLoaded := True;
+  PxxCfgPath := '';
+  PxxCfgHome := '';
+  PxxCfgUnitCount := 0;
+  PxxCfgIncCount := 0;
+  { First found wins — see the header note on why this is not a merge. }
+  cand := PxxGetEnv('PXX_CONFIG');
+  got := False;
+  if Length(cand) > 0 then
+  begin
+    got := PxxReadSmallFile(cand, body);
+    { A named file that is not there is a TYPO, not a fallback. Falling through
+      to ./pxx.cfg silently would answer a question the user did not ask, and
+      the wrong config file is the hardest kind of wrong to see. }
+    if not got then
+      WriteLn('warning: PXX_CONFIG names ', cand,
+              ', which cannot be read — searching the default candidates instead');
+  end;
+  if not got then
+  begin
+    cand := 'pxx.cfg';
+    got := PxxReadSmallFile(cand, body);
+  end;
+  if not got then
+  begin
+    cand := PxxGetEnv('HOME');
+    if Length(cand) > 0 then
+    begin
+      if cand[Length(cand)] <> '/' then cand := cand + '/';
+      cand := cand + '.config/pxx/pxx.cfg';
+      got := PxxReadSmallFile(cand, body);
+    end;
+  end;
+  if (not got) and (Length(ExeDir) > 0) then
+  begin
+    cand := ExeDir + 'pxx.cfg';
+    got := PxxReadSmallFile(cand, body);
+  end;
+  if not got then Exit;
+  PxxCfgPath := cand;
+  n := Length(body);
+  line := '';
+  lineNo := 1;
+  for i := 1 to n do
+  begin
+    if body[i] = Chr(10) then
+    begin
+      PxxCfgApplyLine(line, lineNo);
+      line := '';
+      Inc(lineNo);
+    end
+    else if body[i] <> Chr(13) then
+      line := line + body[i];
+  end;
+  if Length(line) > 0 then PxxCfgApplyLine(line, lineNo);
 end;
 
 procedure PxxDbgLoad;
