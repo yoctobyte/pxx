@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T15:04:59Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "186850ab2046070d78feb5c695b294371d7f9896",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-20T15:28:39Z",
    "fixed": [],
    "new_red": [],
@@ -459,6 +451,14 @@
    "sha": "6f6324e4a46c704c303fdba97bc326d1579c9494",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-21T06:18:00Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "dc03fe372e16105b85c1a56e15df0a0b83916fd2",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -468,11 +468,11 @@
   "test-c-conformance-aarch64#shard1/6": "FAIL 00206.c \u2014 exit code 215 (want 0) | FAIL 00212.c \u2014 exit code 70 (want 0) | test-c-conformance-aarch64: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-aarch64: FAILURES: 00206.c(exit=215) 00212.c(exit=70)",
   "test-c-conformance-arm32#shard1/6": "FAIL 00206.c \u2014 exit code 64 (want 0) | FAIL 00212.c \u2014 exit code 64 (want 0) | test-c-conformance-arm32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-arm32: FAILURES: 00206.c(exit=64) 00212.c(exit=64)",
   "test-c-conformance-riscv32#shard1/6": "FAIL 00206.c \u2014 exit code 144 (want 0) | FAIL 00212.c \u2014 exit code 144 (want 0) | test-c-conformance-riscv32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-riscv32: FAILURES: 00206.c(exit=144) 00212.c(exit=144)",
-  "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas": "ok: $TMP  [code=59738B  data=1888B  bss=42492B  procs=122] | Segmentation fault (core dumped)",
+  "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas": "ok: $TMP  [code=59792B  data=1888B  bss=42492B  procs=122] | Segmentation fault (core dumped)",
   "test-core#src:test/test_mode_delphi.pas": "pascal26:25: warning: bare own name 'Gate' reads the result of parameterless function Gate; write Gate() for a recursive call, or Result to read the result | pascal26:36: error: undefined variable (Dbl) | near: end  begin p  Dbl >>>  WriteLn",
   "test-core#src:test/test_mode_delphi_callarg.pas": "pascal26:51: error: undefined variable (Dbl) | near:  ApplyFn=  ApplyFn  Dbl >>>",
   "test-core#src:test/test_mode_delphi_methptr.pas": "pascal26:39: error: \"TCounter.Add\" is a procedure and has no result to use in an expression | near:  e  c  Add >>>  e",
-  "test-core#src:test/test_procvar_value_context.pas": "ok: $TMP  [code=59555B  data=1608B  bss=42516B  procs=126]",
+  "test-core#src:test/test_procvar_value_context.pas": "ok: $TMP  [code=59609B  data=1608B  bss=42516B  procs=126]",
   "test-core#src:test/test_record_helper_for_string_b331.pas": "pascal26:71: error: undefined variable (BITS) | near:  Writeln  bits:     BITS >>>   end",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter",
   "test-nilpy#src:test/test_pascal_at_procvar_mode.pas@1": "ok: $TMP  [code=58611B  data=1560B  bss=42476B  procs=121]",
@@ -6236,11 +6236,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-21T05:33:50Z",
-  "sha": "6f6324e4a46c704c303fdba97bc326d1579c9494",
+  "date": "2026-08-21T06:18:00Z",
+  "sha": "dc03fe372e16105b85c1a56e15df0a0b83916fd2",
   "tier": "native",
   "verdict": "RED",
-  "wall": 482.9
+  "wall": 469.7
  },
  "last_bench": {
   "conf_rows": 550,
