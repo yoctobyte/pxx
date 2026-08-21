@@ -7838,6 +7838,22 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_exception_unhandled.pas $(TESTTMP)/test_exception_unhandled26
 	! $(TESTTMP)/test_exception_unhandled26 > $(TESTTMP)/test_exception_unhandled.out 2> $(TESTTMP)/test_exception_unhandled.log
 	grep -q "Unhandled exception" $(TESTTMP)/test_exception_unhandled.log
+	# --fpc-mem-errors: every memory fault shape reports FPC's runtime error 216
+	# and exits 216. Asserted per shape, and asserted BOTH ways: without the flag
+	# the same binary must still die silently on 139, because that default is a
+	# live decision (decide-segv-runtime-error-default) and a silent flip of it
+	# is exactly what this row exists to catch.
+	./$(COMPILER) --fpc-mem-errors test/test_fpc_mem_errors.pas $(TESTTMP)/test_fpc_mem_errors26
+	./$(COMPILER) test/test_fpc_mem_errors.pas $(TESTTMP)/test_fpc_mem_errors_off26
+	@for m in nilread nilwrite nilproc nilmethod wildstore; do \
+	  out=$$($(TESTTMP)/test_fpc_mem_errors26 $$m 2>&1); rc=$$?; \
+	  test "$$rc" = "216" || { echo "FAIL --fpc-mem-errors $$m: exit $$rc, want 216"; exit 1; }; \
+	  case "$$out" in *"Runtime error 216 (access violation"*) ;; \
+	    *) echo "FAIL --fpc-mem-errors $$m: [$$out]"; exit 1;; esac; \
+	  case "$$out" in before*) ;; *) echo "FAIL $$m faulted before 'before'"; exit 1;; esac; \
+	  out=$$($(TESTTMP)/test_fpc_mem_errors_off26 $$m 2>&1); rc=$$?; \
+	  test "$$rc" = "139" || { echo "FAIL default (no flag) $$m: exit $$rc, want 139"; exit 1; }; \
+	done
 	./$(COMPILER) --threadsafe test/test_multithreading.pas $(TESTTMP)/test_multithreading26
 	$(TESTTMP)/test_multithreading26 | grep -q "multithreading test completed successfully"
 	# pxx's thread pointer must not evict libc's. The main-thread TLS block was

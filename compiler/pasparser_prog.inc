@@ -965,6 +965,19 @@ begin
             + 'that turns the trap into a runtime error (drop --no-signals)');
     EmitFpcFloatErrStub;
   end;
+  { --fpc-mem-errors decoder stub: same placement and same reason — it IS a
+    signal hook. bug-a-a-memory-fault-is-a-raw-sigsegv-not-runtime-error-216 }
+  if FpcMemErrors then
+  begin
+    if TargetArch <> TARGET_X86_64 then
+      Error('--fpc-mem-errors is x86-64 only so far: the si_code/si_addr parking '
+            + 'the decoder reads is the SA_SIGINFO dispatch, which the other '
+            + 'signal runtimes shape differently');
+    if NoSignals then
+      Error('--fpc-mem-errors needs the signal runtime; it is the SIGSEGV/SIGBUS '
+            + 'hook that turns the fault into a runtime error (drop --no-signals)');
+    EmitFpcMemErrStub;
+  end;
   if hasExceptions then EnableExceptionRuntime;
   if hasCoroutine then EnableCoroutineRuntime;
 
@@ -1135,6 +1148,21 @@ begin
     The mask value is FPC's own, measured with GetExceptionMask under FPC 3.x
     rather than assumed: masked = {exDenormalized, exUnderflow, exPrecision}
     = bits 1|4|5 = 50, i.e. invalid / zero-divide / overflow UNMASKED. }
+  { --fpc-mem-errors: hook SIGSEGV and SIGBUS. SigSetHook falls through into
+    SigInstall, so one call per signal both records the hook and registers the
+    dispatch handler — and the dispatch handler is what parks si_code/si_addr
+    the decoder reads. }
+  if FpcMemErrors then
+  begin
+    EmitAsmX64(['mov edi, %', 11]);                      { SIGSEGV }
+    EmitCodeAbsToRdx(FpcMemErrStubAddr);
+    EmitAsmX64(['mov rsi, rdx']);
+    IREmitCodeCall(SigSetHookAddr);
+    EmitAsmX64(['mov edi, %', 7]);                       { SIGBUS }
+    EmitCodeAbsToRdx(FpcMemErrStubAddr);
+    EmitAsmX64(['mov rsi, rdx']);
+    IREmitCodeCall(SigSetHookAddr);
+  end;
   if FpcFloatErrors then
   begin
     EmitAsmX64(['mov edi, %', 8]);                       { SIGFPE }

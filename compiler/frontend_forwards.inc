@@ -15,6 +15,7 @@ procedure RegisterCMacroConsts; forward;
 procedure EmitAnsiStringRuntime; forward;
 procedure EmitDiv0Stub; forward;
 procedure EmitFpcFloatErrStub; forward;
+procedure EmitFpcMemErrStub; forward;
 procedure EmitCodeAbsToRdx(targetOff: Integer); forward;   { ir_codegen.inc is included AFTER this file, and the FPC seed build (only it) enforces that — bug-a-fpc-seed-drift-emitasmx64-forward }
 procedure EmitPyBitFloatErrStub; forward;
 procedure EmitSignalRuntime; forward;

@@ -4,8 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "Every memory fault — nil read, nil write, a call through a nil procvar, a method on a nil object, a wild array store — kills a pxx binary with a bare `Segmentation fault` and exit 139. FPC prints `Runtime error 216` and exits 216. No message, no line, no exit-code convention, and `try..except` cannot see it."
-status: backlog
-owner: unassigned
+status: done
+owner: claude-A
 ---
 
 # A memory fault dies silently, where FPC reports runtime error 216
@@ -91,3 +91,73 @@ half-implementing all five.
 test asserting exit code 216 and the message for each of the five fault shapes
 above (a `.expected` cannot carry an exit code, so assert it in the Makefile
 recipe like the other `!`-guarded rows do).
+
+## Resolution — tier 1, opt-in (2026-08-21)
+
+All five fault shapes in the table now report FPC's number and exit code, behind
+the new `--fpc-mem-errors`:
+
+| program | before | after (`--fpc-mem-errors`) |
+| --- | --- | --- |
+| `p := nil; writeln(p^)` | *(nothing)*, exit 139 | `Runtime error 216 (access violation: address not mapped)`, exit **216** |
+| `p := nil; p^ := 1` | exit 139 | 216 |
+| nil procedure variable, called | exit 139 | 216 |
+| virtual method on a nil object | exit 139 | 216 |
+| `a[wild] := 5` on `array[0..3]` | exit 139 | 216 |
+
+Without the flag every one of them still dies on 139, unchanged.
+
+### Opt-in, because the default is not mine to pick
+
+The ticket's own open question — default-on or a flag — is
+[[decide-segv-runtime-error-default]] and is unresolved. So this ships as
+`--fpc-mem-errors`, the exact shape of the closest precedent
+(`--fpc-float-errors`), and the decision stays a one-line change to the default
+whenever the user makes it. Nothing about the flag's existence pre-empts it.
+
+The Makefile row asserts **both** directions — 216 with the flag, 139 without —
+precisely so that flipping the default later is a deliberate act that shows up
+as a failing row rather than a silent behaviour change.
+
+### What it is built from
+
+Nothing new, as the ticket predicted. `EmitFpcMemErrStub` is
+`EmitFpcFloatErrStub`'s shape: a parameterless signal hook reading the parked
+`BSS_SIG_NUM` and `BSS_SIG_CODE`, writing the message with `sys_write` and
+leaving via `exit_group(216)`. Pure syscalls, no unit dependency, never returns
+(returning resumes the faulting instruction, forever).
+
+Install is two `SigSetHook` calls — one for SIGSEGV(11), one for SIGBUS(7).
+`SigSetHookAddr` falls through into `SigInstallAddr`, so each call both records
+the hook and registers the SA_SIGINFO dispatch handler, which is what parks the
+`si_code` the decoder reads.
+
+SIGBUS gets its own message rather than being folded into "access violation":
+it is a different fault (misaligned or invalid mapping, not an unmapped
+address), and printing the plausible-but-wrong one is what this dialect refuses.
+FPC numbers both 216.
+
+### Known gaps, stated rather than hidden
+
+- **Tier 2 is not done.** `try..except` is still blind: this reports and dies,
+  it does not raise a catchable `EAccessViolation`. That is the ticket's own
+  second tier and its own sitting — it means unwinding out of signal context
+  into the exception machinery.
+- **A STACK OVERFLOW reports 216, where FPC reports 202.** It arrives here as an
+  ordinary `SEGV_MAPERR` on the guard page; telling it apart means comparing
+  `si_addr` against the stack region. Belongs with
+  [[bug-a-stack-overflow-fault-to-raise-loops-forever-without-an-sp-reset]],
+  which is where the stack-fault machinery is being worked out.
+- **x86-64 only**, as the ticket's per-arch note asked for. The other four
+  signal runtimes shape the SA_SIGINFO parking differently; the flag errors on
+  them by name rather than half-working.
+
+## Gate
+
+`tools/gate.sh quick` GREEN (self-host fixedpoint 104s). New
+`test/test_fpc_mem_errors.pas` — one source, five fault shapes selected by
+argv[1] — wired into the core list asserting exit code, message and that the
+fault happened after `before` printed, in both flag states.
+
+## Log
+- 2026-08-21 — resolved, commit PENDING-COMMIT.

@@ -1907,6 +1907,84 @@ begin
   ]);
 end;
 
+procedure EmitFpcMemErrStub;
+{ --fpc-mem-errors: the SIGSEGV/SIGBUS hook that turns a memory fault into
+  FPC's runtime error 216 instead of a silent kernel kill.
+
+  Every memory fault there is — a nil read, a nil write, a call through a nil
+  procvar, a virtual method on a nil object, a wild array store — killed a pxx
+  binary with a bare `Segmentation fault` and exit 139: no message, no exit-code
+  convention, nothing a user or a script could act on. FPC prints
+  `Runtime error 216` and exits 216. Division by zero was already right (200,
+  with a better message than FPC's); memory faults were the gap, and they are
+  the most common runtime fault there is.
+  bug-a-a-memory-fault-is-a-raw-sigsegv-not-runtime-error-216
+
+  Shape copied from EmitFpcFloatErrStub above: an ordinary parameterless signal
+  hook, so it reads the parked signal number out of BSS_SIG_NUM and the si_code
+  out of BSS_SIG_CODE — which is the only carrier of WHICH fault occurred. Pure
+  syscalls, no unit dependency.
+
+  It never returns, and must not: returning would resume the faulting
+  instruction, which faults again, forever.
+
+  SIGBUS gets its own line because it is a genuinely different fault (a
+  misaligned or unmapped-file access, not an unmapped address) and printing
+  "access violation" for it would be the plausible-wrong-answer this dialect
+  refuses. FPC numbers both 216.
+
+  KNOWN GAP, stated rather than hidden: a STACK OVERFLOW arrives here as an
+  ordinary SEGV_MAPERR on the guard page and reports 216, where FPC reports 202.
+  Telling them apart means comparing si_addr against the stack region, and the
+  handler only runs at all because of the alt stack — see
+  bug-a-stack-overflow-fault-to-raise-loops-forever-without-an-sp-reset, which
+  is where that belongs.
+
+  One EmitAsmX64 call, deliberately: its label table is per-call, so every arm
+  and the shared .print tail must be in the same one. }
+var mMap, mAcc, mSeg, mBus: AnsiString;
+    sMap, sAcc, sSeg, sBus: Integer;
+begin
+  FpcMemErrStubAddr := CodeLen;
+  mMap := 'Runtime error 216 (access violation: address not mapped)' + Chr(10);
+  mAcc := 'Runtime error 216 (access violation: invalid permissions)' + Chr(10);
+  mSeg := 'Runtime error 216 (access violation)' + Chr(10);
+  mBus := 'Runtime error 216 (bus error: misaligned or invalid memory access)' + Chr(10);
+  sMap := InternStr(mMap); sAcc := InternStr(mAcc);
+  sSeg := InternStr(mSeg); sBus := InternStr(mBus);
+  EmitAsmX64([
+    'mov rax, [@glob]', BSS_SIG_NUM,
+    'cmp rax, %', 7,                        { SIGBUS }
+    'jne .segv',
+    'mov rsi, @data', Strs[sBus].Offset + 8,
+    'mov rdx, %', Strs[sBus].Len,
+    'jmp .print',
+    '.segv:',
+    'mov rax, [@glob]', BSS_SIG_CODE,
+    'cmp rax, %', 1,                        { SEGV_MAPERR }
+    'jne .n1',
+    'mov rsi, @data', Strs[sMap].Offset + 8,
+    'mov rdx, %', Strs[sMap].Len,
+    'jmp .print',
+    '.n1:',
+    'cmp rax, %', 2,                        { SEGV_ACCERR }
+    'jne .n2',
+    'mov rsi, @data', Strs[sAcc].Offset + 8,
+    'mov rdx, %', Strs[sAcc].Len,
+    'jmp .print',
+    '.n2:',
+    'mov rsi, @data', Strs[sSeg].Offset + 8,
+    'mov rdx, %', Strs[sSeg].Len,
+    '.print:',
+    'mov rax, %', 1,                        { sys_write }
+    'mov rdi, %', 1,                        { stdout, where every runtime error here goes }
+    'syscall',
+    'mov rax, %', 231,                      { sys_exit_group }
+    'mov rdi, %', 216,                      { FPC's number for a memory fault }
+    'syscall'
+  ]);
+end;
+
 procedure EmitPyBitFloatErrStub;
 { Shared NilPy bitwise-on-float TypeError abort stub: a bitwise operator
   (& | ^ << >>) with a float variant operand raises TypeError in Python rather

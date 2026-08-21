@@ -191,6 +191,7 @@ begin
   DebugTrace := False;
   DebugInfo := False;
   FpcFloatErrors := False;
+  FpcMemErrors := False;
   DbgMainTokEnd := MAX_TOKENS;
   CCharSignedOpt := -1;   { -1 = follow the target psABI; see CPlainCharSigned }
   DumpIR := False;
@@ -549,6 +550,24 @@ begin
       FpcFloatErrors := True;
       Inc(i);
     end
+    else if option = '--fpc-mem-errors' then
+    begin
+      { Emulate FPC's MEMORY fault behaviour: hook SIGSEGV/SIGBUS so a nil read,
+        a nil write, a call through a nil procvar, a method on a nil object or a
+        wild array store prints `Runtime error 216 (...)` and exits 216, the way
+        FPC does — instead of dying on the kernel default with no message at all
+        and exit 139.
+
+        OPT-IN, exactly like --fpc-float-errors above and for the same reason:
+        installing a SIGSEGV handler changes how EVERY pxx binary dies, and
+        suppresses the core dump a debugger would want. Whether it should become
+        the DEFAULT is a live question for the user, parked as
+        decide-segv-runtime-error-default; this flag is what makes the behaviour
+        available either way.
+        bug-a-a-memory-fault-is-a-raw-sigsegv-not-runtime-error-216 }
+      FpcMemErrors := True;
+      Inc(i);
+    end
     else if option = '--no-div-check' then
     begin
       { Opt out of the integer div/mod pre-divide zero check (default on, FPC
@@ -884,7 +903,7 @@ begin
     users who accept degraded debug info. See feature-optimization-levels. }
   if DebugInfo and not OptLevelExplicit then OptLevel := 0;
   if ParamCount < i then
-    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--strict-operator] [--strict-case] [--strict-python] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
+    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--strict-operator] [--strict-case] [--strict-python] [--fpc-mem-errors] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
 
   inFile  := ParamStr(i);
 {$ifdef FPC}
