@@ -220,3 +220,20 @@ begin
   else if ASTKind[node] = AN_INDEX then
     Result := NodeDynBaseSym(ASTLeft[node]);
 end;
+
+{ May a dynamic-array TARGET be read and then written back through the same
+  expression? Delete/Insert build a fresh array from the old one and assign the
+  result back, so the target expression is evaluated twice; anything with a
+  side effect -- a call, or an index whose subscript is computed -- would run
+  both times. A pure name / field / dereference path has none, and that is the
+  shape real code uses (`obj.Items`, `p^.list`). Indexed targets (`m[i]`) are
+  deliberately not here: they are re-readable only when the subscript is, and
+  answering that needs a purity walk this does not have. }
+function DynTargetIsRereadable(node: Integer): Boolean;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then Result := True
+  else if (ASTKind[node] = AN_FIELD) or (ASTKind[node] = AN_DEREF) then
+    Result := DynTargetIsRereadable(ASTLeft[node]);
+end;

@@ -5014,24 +5014,29 @@ begin
           takes the AN_DYN_DELETE path below instead. }
         Next; Expect(tkLParen, '(');
         ParseExpr; valNode := CurASTNode;
-        if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) and
-           Syms[ASTIVal[valNode]].IsArray and (Syms[ASTIVal[valNode]].ArrLen = -1) then
+        if NodeDynDepth(valNode) >= 1 then
         begin
           { Delete(arr, index, count) on a dynamic array: build a fresh array
             with the range removed (AN_DYN_DELETE, AN_DYN_COPY's template) and
-            assign it back onto arr — the dyn-array IR_STORE_SYM path retains
-            the new handle and releases the old one, and the temp's scope-exit
-            release balances the retain. First cut: non-managed, depth-1
-            element types only (a raw byte copy shares element handles with
-            the OLD buffer, whose element-aware release would dangle them). }
-          i := ASTIVal[valNode];
+            assign it back onto arr — the dyn-array store path retains the new
+            handle and releases the old one, and the temp's scope-exit release
+            balances the retain. The target is any dyn-array LVALUE, not just a
+            bare name: `obj.Items` and `p^.list` are what real code writes.
+            Non-managed, depth-1 element types only (a raw byte copy shares
+            element handles with the OLD buffer, whose element-aware release
+            would dangle them). }
+          { Only meaningful for a bare name; the guards below that use it are
+            gated on ASTKind = AN_IDENT for exactly that reason. }
+          if ASTKind[valNode] = AN_IDENT then i := ASTIVal[valNode] else i := -1;
+          if not DynTargetIsRereadable(valNode) then
+            Error('Delete: dynamic-array target must be a name, field or dereference (it is read and written back)');
           { AnsiString and managed-field record elements are supported: the
             lowering retains the kept elements in the fresh buffer (records:
             field-walk via the layout descriptor) to balance the old buffer's
             element-aware release (feature-dynarray-insert-delete-managed-
             elements). Frozen strings / nested arrays are still deferred. }
-          if (Syms[i].ElemType = tyString) or
-             (SymDynDepth[i] > 1) or (SymElemDynDepth[i] > 0) then
+          if (NodeDynBaseTk(valNode) = tyString) or (NodeDynDepth(valNode) > 1) or
+             ((ASTKind[valNode] = AN_IDENT) and (SymElemDynDepth[i] > 0)) then
             Error('Delete: frozen-string or nested element type not yet supported for dynamic-array Delete');
           Expect(tkComma, ','); ParseExpr; opNode := CurASTNode;       { index }
           Expect(tkComma, ','); ParseExpr; stepsNode := CurASTNode;    { count }
@@ -5045,8 +5050,12 @@ begin
           ASTRight[argSeq] := lastArg;
           ASTRight[exprNode] := argSeq;
           ASTTk[exprNode] := Ord(tyPointer);
-          argIdx := AllocNode(AN_IDENT);
-          ASTIVal[argIdx] := i; ASTTk[argIdx] := Ord(tyPointer);
+          { Write-back target: the SAME lvalue expression, cloned so the two
+            occurrences do not alias one node. A bare name is retagged
+            tyPointer, which is the handle-store shape the ident path has
+            always used; a field/deref keeps the type the field resolves to. }
+          argIdx := CloneAST(valNode);
+          if ASTKind[argIdx] = AN_IDENT then ASTTk[argIdx] := Ord(tyPointer);
           node := AllocNode(AN_ASSIGN);
           ASTLeft[node] := argIdx; ASTRight[node] := exprNode;
         end
@@ -5075,22 +5084,25 @@ begin
         Next; Expect(tkLParen, '(');
         ParseExpr; exprNode := CurASTNode;                            { src }
         Expect(tkComma, ','); ParseExpr; valNode := CurASTNode;       { s (dest) }
-        if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) and
-           Syms[ASTIVal[valNode]].IsArray and (Syms[ASTIVal[valNode]].ArrLen = -1) then
+        if NodeDynDepth(valNode) >= 1 then
         begin
           { Insert(value, arr, index) on a dynamic array: fresh (len+1)-element
             array filled around a gap at the clamped index, value stored into
             the gap, assigned back onto arr (same shape and element-type
             restrictions as dynamic-array Delete above; records/sets need a
             memory store, deferred with them). }
-          i := ASTIVal[valNode];
+          { Only meaningful for a bare name; the guards below that use it are
+            gated on ASTKind = AN_IDENT for exactly that reason. }
+          if ASTKind[valNode] = AN_IDENT then i := ASTIVal[valNode] else i := -1;
           { AnsiString and managed-field record elements supported (see Delete
             above; the managed-record gap store is an ARC-correct
             IR_COPY_REC_MANAGED). Non-managed record and set elements too
             (memory-copied into the gap; the value must be addressable).
             Frozen strings / nested arrays still deferred. }
-          if (Syms[i].ElemType = tyString) or
-             (SymDynDepth[i] > 1) or (SymElemDynDepth[i] > 0) then
+          if not DynTargetIsRereadable(valNode) then
+            Error('Insert: dynamic-array destination must be a name, field or dereference (it is read and written back)');
+          if (NodeDynBaseTk(valNode) = tyString) or (NodeDynDepth(valNode) > 1) or
+             ((ASTKind[valNode] = AN_IDENT) and (SymElemDynDepth[i] > 0)) then
             Error('Insert: frozen-string or nested element type not yet supported for dynamic-array Insert');
           { FPC's array-SPLICE form Insert(srcArr, arr, index): the first
             argument is itself a dynamic array and ALL of its elements go in.
@@ -5105,15 +5117,14 @@ begin
              Syms[ASTIVal[exprNode]].IsArray and (Syms[ASTIVal[exprNode]].ArrLen = -1) then
           begin
             insSrcSym := ASTIVal[exprNode];
-            if (Syms[insSrcSym].ElemType <> Syms[i].ElemType) or
-               ((Syms[i].ElemType = tyRecord) and
-                (Syms[insSrcSym].ElemRecName <> Syms[i].ElemRecName)) or
-               (SymDynDepth[insSrcSym] <> SymDynDepth[i]) or
-               (SymElemDynDepth[insSrcSym] <> SymElemDynDepth[i]) then
+            if (Syms[insSrcSym].ElemType <> NodeDynBaseTk(valNode)) or
+               ((NodeDynBaseTk(valNode) = tyRecord) and
+                (Syms[insSrcSym].ElemRecName <> NodeDynBaseRec(valNode))) or
+               (SymDynDepth[insSrcSym] <> NodeDynDepth(valNode)) then
               Error('Insert: the source array''s element type differs from the destination''s');
           end;
           if (insSrcSym < 0) and
-             ((Syms[i].ElemType = tyRecord) or (Syms[i].ElemType = tySet)) and
+             ((NodeDynBaseTk(valNode) = tyRecord) or (NodeDynBaseTk(valNode) = tySet)) and
              not (ASTKind[exprNode] in [AN_IDENT, AN_FIELD, AN_INDEX, AN_DEREF]) then
             Error('Insert: record/set value must be a variable, field, element or dereference (addressable)');
           Expect(tkComma, ','); ParseExpr; opNode := CurASTNode;      { index }
@@ -5130,8 +5141,8 @@ begin
           ASTRight[argSeq] := lastArg;
           ASTRight[stepsNode] := argSeq;
           ASTTk[stepsNode] := Ord(tyPointer);
-          argIdx := AllocNode(AN_IDENT);
-          ASTIVal[argIdx] := i; ASTTk[argIdx] := Ord(tyPointer);
+          argIdx := CloneAST(valNode);   { see Delete's write-back note }
+          if ASTKind[argIdx] = AN_IDENT then ASTTk[argIdx] := Ord(tyPointer);
           node := AllocNode(AN_ASSIGN);
           ASTLeft[node] := argIdx; ASTRight[node] := stepsNode;
         end

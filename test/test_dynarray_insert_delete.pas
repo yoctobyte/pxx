@@ -300,6 +300,65 @@ begin
           (dWe in qa[2]) and not (dTh in qa[0]));
 end;
 
+{ ---- non-IDENT targets: record field, nested field, class field, deref ---- }
+{ The lowering reads the target's handle and assigns the fresh array back
+  through the SAME lvalue, so the target expression is evaluated twice -- which
+  is why a name/field/dereference path is allowed and an indexed one is not. }
+type
+  TInnerT = record items: array of Integer; end;
+  TOuterT = record inner: TInnerT; names: array of AnsiString; end;
+  PInnerT = ^TInnerT;
+  TFieldCls = class
+    data: array of Integer;
+  end;
+procedure FieldTargets;
+var o: TOuterT; p: PInnerT; c: TFieldCls; i, k: Integer;
+begin
+  SetLength(o.inner.items, 5);
+  for i := 0 to 4 do o.inner.items[i] := (i + 1) * 10;
+  Delete(o.inner.items, 1, 2);
+  Chk(50, (Length(o.inner.items) = 3) and (o.inner.items[0] = 10) and
+          (o.inner.items[1] = 40) and (o.inner.items[2] = 50));
+  Insert(99, o.inner.items, 1);
+  Chk(51, (Length(o.inner.items) = 4) and (o.inner.items[1] = 99) and
+          (o.inner.items[2] = 40));
+  { managed elements through a field }
+  SetLength(o.names, 3);
+  o.names[0] := 'aa'; o.names[1] := 'bb'; o.names[2] := 'cc';
+  Delete(o.names, 1, 1);
+  Chk(52, (Length(o.names) = 2) and (o.names[0] = 'aa') and (o.names[1] = 'cc'));
+  Insert('ZZ', o.names, 1);
+  Chk(53, (Length(o.names) = 3) and (o.names[1] = 'ZZ') and (o.names[2] = 'cc'));
+  { through a pointer dereference }
+  p := @o.inner;
+  Delete(p^.items, 0, 1);
+  Chk(54, (Length(p^.items) = 3) and (p^.items[0] = 99));
+  Insert(7, p^.items, 0);
+  Chk(55, (Length(p^.items) = 4) and (p^.items[0] = 7) and (p^.items[1] = 99));
+  { a class field }
+  c := TFieldCls.Create;
+  SetLength(c.data, 4);
+  for i := 0 to 3 do c.data[i] := i + 1;
+  Delete(c.data, 2, 1);
+  Chk(56, (Length(c.data) = 3) and (c.data[2] = 4));
+  Insert(50, c.data, 3);
+  Chk(57, (Length(c.data) = 4) and (c.data[3] = 50));
+  c.Free;
+  { churn through a managed-element field: the write-back is an ARC store, so
+    neither the old buffer nor its elements may leak or be freed twice }
+  k := 0;
+  for i := 1 to 20000 do
+  begin
+    SetLength(o.names, 3);
+    o.names[0] := 'aa'; o.names[1] := 'bb'; o.names[2] := 'cc';
+    Delete(o.names, 1, 1);
+    Insert('ZZ', o.names, 1);
+    k := k + Length(o.names) + Length(o.names[1]);
+  end;
+  Chk(58, (k = 100000) and (o.names[0] = 'aa') and (o.names[1] = 'ZZ') and
+          (o.names[2] = 'cc'));
+end;
+
 begin
   okCount := 0;
   DeleteBasics;
@@ -317,5 +376,6 @@ begin
   SpliceInts;
   SpliceManaged;
   SpliceRecsAndSets;
-  writeln('total ok ', okCount, ' / 49');
+  FieldTargets;
+  writeln('total ok ', okCount, ' / 58');
 end.

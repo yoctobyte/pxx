@@ -6011,18 +6011,24 @@ begin
         element types only (parser-enforced): the raw byte copy shares element
         handles with the old buffer, whose element-aware release would dangle
         them. }
-      dcSrcSym := ASTIVal[ASTLeft[node]];
-      dcElemTk := Syms[dcSrcSym].ElemType;
-      dcElemRec := Syms[dcSrcSym].ElemRecName;
+      dcSrcAst := ASTLeft[node];
+      dcElemTk := NodeDynBaseTk(dcSrcAst);
+      dcElemRec := NodeDynBaseRec(dcSrcAst);
       if dcElemTk = tyRecord then dcElemSz := RecSize(dcElemRec)
       else dcElemSz := TypeSize(dcElemTk);
       dcIdxAst := ASTLeft[ASTRight[node]];
       dcCntAst := ASTLeft[ASTRight[ASTRight[node]]];
 
-      { Materialize source data pointer, index and count once. }
+      { Materialize source data pointer, index and count once. For a SYMBOL,
+        IR_LEA in read context loads the handle = data pointer; for a FIELD or
+        an element, an ordinary read of a dyn-array-typed lvalue IS its handle.
+        Same two arms AN_DYN_COPY uses. }
       dcSrcTmp := AllocVar('', tyPointer);
-      IRAppend(IR_STORE_SYM, dcSrcTmp,
-        IRAppend(IR_LEA, dcSrcSym, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+      if ASTKind[dcSrcAst] = AN_IDENT then
+        IRAppend(IR_STORE_SYM, dcSrcTmp,
+          IRAppend(IR_LEA, ASTIVal[dcSrcAst], -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer))
+      else
+        IRAppend(IR_STORE_SYM, dcSrcTmp, IRLowerAST(dcSrcAst), -1, 0, Ord(tyPointer));
       dcIdxTmp := AllocVar('', tyInteger);
       IRAppend(IR_STORE_SYM, dcIdxTmp, IRLowerAST(dcIdxAst), -1, 0, Ord(tyInteger));
       dcCntTmp := AllocVar('', tyInteger);
@@ -6157,9 +6163,9 @@ begin
         at the clamped index (PXXDynInsFill returns the gap's address), value
         stored into the gap. Scalar/pointer element types only
         (parser-enforced). Right = AN_ARG chain [value, index]. }
-      dcSrcSym := ASTIVal[ASTLeft[node]];
-      dcElemTk := Syms[dcSrcSym].ElemType;
-      dcElemRec := Syms[dcSrcSym].ElemRecName;
+      dcSrcAst := ASTLeft[node];
+      dcElemTk := NodeDynBaseTk(dcSrcAst);
+      dcElemRec := NodeDynBaseRec(dcSrcAst);
       if dcElemTk = tyRecord then dcElemSz := RecSize(dcElemRec)
       else dcElemSz := TypeSize(dcElemTk);
       dcCntAst := ASTLeft[ASTRight[node]];               { value }
@@ -6196,8 +6202,11 @@ begin
       end;
 
       dcSrcTmp := AllocVar('', tyPointer);
-      IRAppend(IR_STORE_SYM, dcSrcTmp,
-        IRAppend(IR_LEA, dcSrcSym, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+      if ASTKind[dcSrcAst] = AN_IDENT then
+        IRAppend(IR_STORE_SYM, dcSrcTmp,
+          IRAppend(IR_LEA, ASTIVal[dcSrcAst], -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer))
+      else
+        IRAppend(IR_STORE_SYM, dcSrcTmp, IRLowerAST(dcSrcAst), -1, 0, Ord(tyPointer));
       dcIdxTmp := AllocVar('', tyInteger);
       IRAppend(IR_STORE_SYM, dcIdxTmp, IRLowerAST(dcIdxAst), -1, 0, Ord(tyInteger));
 
