@@ -2847,9 +2847,19 @@ begin
 end;
 {$endif}
 
-function ResolveCaseInsensitivePath(const path: AnsiString; var resolved: AnsiString): Boolean;
-var dir, scanDir, want, entry, candidate: AnsiString;
-    matches, fd, n, off, reclen: Integer;
+{ THE directory scanner. Fills DirEntNames/DirEntCount with dir's entries
+  ('.' and '..' dropped), and sets DirEntTruncated when there were more than
+  MAX_DIRENT of them.
+
+  One scanner, two callers (the case-insensitive path fallback below and
+  `--list-libraries`), because a second copy of a getdents walk is exactly the
+  duplicated path devdocs/dev/normalise-dont-special-case.md is about: the two
+  would drift, and the one nobody runs is the one that breaks. The FPC arm
+  exists because the seed build has no raw syscalls; both arms produce the same
+  DirEntNames, so everything above this line is target-agnostic. }
+procedure PxxListDir(const dir: AnsiString);
+var scanDir, entry: AnsiString;
+    fd, n, off, reclen: Integer;
 {$ifdef FPC}
     sr: TSearchRec;
 {$else}
@@ -2857,30 +2867,23 @@ var dir, scanDir, want, entry, candidate: AnsiString;
     b: Byte;
 {$endif}
 begin
-  Result := False;
-  resolved := path;
-  dir := GetFilePath(path);
-  want := '';
-  if Length(path) = 0 then Exit;
-  for off := Length(dir) + 1 to Length(path) do
-    AppendChar(want, path[off]);
-  if Length(want) = 0 then Exit;
-
+  DirEntCount := 0;
+  DirEntTruncated := False;
   scanDir := dir;
   if Length(scanDir) = 0 then scanDir := '.';
-  matches := 0;
-
 {$ifdef FPC}
   if FindFirst(scanDir + '/*', faAnyFile, sr) = 0 then
   begin
     repeat
-      if (sr.Name <> '.') and (sr.Name <> '..') and CaseEqual(sr.Name, want) then
+      if (sr.Name <> '.') and (sr.Name <> '..') then
       begin
-        Inc(matches);
-        if Length(dir) = 0 then
-          candidate := sr.Name
+        if DirEntCount >= MAX_DIRENT then
+          DirEntTruncated := True
         else
-          ConcatThree(dir, sr.Name, '', candidate);
+        begin
+          DirEntNames[DirEntCount] := sr.Name;
+          Inc(DirEntCount);
+        end;
       end;
     until FindNext(sr) <> 0;
     FindClose(sr);
@@ -2894,6 +2897,7 @@ begin
     off := 0;
     while off < n do
     begin
+      { d_reclen at +16, the NUL-terminated d_name at +19 (d_type sits at +18) }
       reclen := Integer(buf[off + 16]) + Integer(buf[off + 17]) * 256;
       if reclen <= 0 then
         off := n
@@ -2908,22 +2912,61 @@ begin
           b := buf[off + 19];
         end;
         off := off - Length(entry);
-        if (entry <> '.') and (entry <> '..') and CaseEqual(entry, want) then
+        if (entry <> '.') and (entry <> '..') then
         begin
-          Inc(matches);
-          if Length(dir) = 0 then
-            candidate := entry
+          if DirEntCount >= MAX_DIRENT then
+            DirEntTruncated := True
           else
-            ConcatThree(dir, entry, '', candidate);
+          begin
+            DirEntNames[DirEntCount] := entry;
+            Inc(DirEntCount);
+          end;
         end;
         off := off + reclen;
       end;
     end;
-    if matches > 1 then Break;
     n := sysgetdents64(fd, buf, 4096);
   end;
   sysclose(fd);
 {$endif}
+end;
+
+{ 'lib/RTL/SysUtils.pas' -> 'lib/rtl/sysutils.pas', when EXACTLY ONE entry of
+  the directory matches case-insensitively. Two matches is not a resolution: on
+  a case-sensitive filesystem both are real files and picking either is a guess,
+  so it stays unresolved. }
+function ResolveCaseInsensitivePath(const path: AnsiString; var resolved: AnsiString): Boolean;
+var dir, want, candidate: AnsiString;
+    matches, i, off: Integer;
+begin
+  Result := False;
+  resolved := path;
+  dir := GetFilePath(path);
+  want := '';
+  if Length(path) = 0 then Exit;
+  for off := Length(dir) + 1 to Length(path) do
+    AppendChar(want, path[off]);
+  if Length(want) = 0 then Exit;
+
+  PxxListDir(dir);
+  { A truncated scan cannot answer this: the one entry that matches may be the
+    one past the cap, and "no match" would then read as "the file is missing"
+    when it is a case mismatch we simply did not look at. }
+  if DirEntTruncated then Exit;
+
+  matches := 0;
+  candidate := '';
+  for i := 0 to DirEntCount - 1 do
+  begin
+    if CaseEqual(DirEntNames[i], want) then
+    begin
+      Inc(matches);
+      if Length(dir) = 0 then
+        candidate := DirEntNames[i]
+      else
+        ConcatThree(dir, DirEntNames[i], '', candidate);
+    end;
+  end;
 
   if matches = 1 then
   begin

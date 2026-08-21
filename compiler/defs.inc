@@ -117,6 +117,7 @@ const
   MAX_CPREP_CHARS = 8388608;  { 8 MB }
   MAX_C_INCLUDE_DIRS = 64;    { user `-I` C include search roots }
   MAX_PAS_UNIT_DIRS  = 64;    { user `-Fu`/`-I` Pascal unit search roots }
+  MAX_DIRENT         = 4096;  { entries one PxxListDir scan reports; lib/rtl is 109 }
   { The compiler's own GENERATION number, tracking the pinned-stable line. ONE
     owner: the {$IF} preset PXX_VERSION (lexer.inc) and `pxx --version` both read
     it here, so the number cannot drift between what a program tests for and what
@@ -4161,6 +4162,16 @@ var
   can do. See feature-dynamic-soname-discovery. }
   LdCacheLoaded : Boolean;
   LdCacheBody   : AnsiString;
+
+{ ---- one directory scanner's output (PxxListDir, elfwriter.inc) ----------
+  A single global result buffer rather than a returned array: the two callers
+  are the case-insensitive path fallback and `--list-libraries`, neither
+  re-entrant and neither on a hot path. DirEntTruncated is not decoration — a
+  scan that silently stopped at the cap would make a MISSING unit look like a
+  case mismatch, so the fallback refuses to answer when it is set. }
+  DirEntNames     : array[0..MAX_DIRENT-1] of AnsiString;
+  DirEntCount     : Integer;
+  DirEntTruncated : Boolean;
 
   PxxCfgLoaded    : Boolean;
   PxxCfgPath      : AnsiString;   { the file in effect, '' when none was found }

@@ -176,7 +176,8 @@ function IRNodeOwnsManagedStr(n: Integer): Boolean; forward;
 {$ifndef PXX_NO_CFRONT}{$include cpreproc.inc}{$endif}
 {$include asmfront.inc}
 
-{ ===== Toolchain CLI: --version / --where / --list-targets / --help =====
+{ ===== Toolchain CLI: --version / --where / --list-targets / --list-libraries
+        / --doctor / --help =====
 
   Every one of these is a FLAG on the compiler binary rather than a helper
   script, because a flag is always present after an install, needs no PATH of its
@@ -418,6 +419,232 @@ begin
   WriteLn('ones given after it are not, because --where answers where it is read.');
 end;
 
+{ The first executable named `what` on $PATH, or '' — the whole of "is this
+  tool installed?", answered without execve (the self-hosted compiler has none).
+  sysopen(O_RDONLY) succeeds on an executable file, and a tool nobody may READ
+  is not one this compiler could hand work to either. }
+function WhichOnPath(const what: AnsiString): AnsiString;
+var pathVar, cand: AnsiString; i, start, f: Integer;
+begin
+  WhichOnPath := '';
+  pathVar := PxxGetEnv('PATH');
+  if Length(pathVar) = 0 then Exit;
+  start := 1;
+  for i := 1 to Length(pathVar) + 1 do
+  begin
+    if (i > Length(pathVar)) or (pathVar[i] = ':') then
+    begin
+      if i > start then
+      begin
+        cand := '';
+        while start < i do
+        begin
+          AppendChar(cand, pathVar[start]);
+          Inc(start);
+        end;
+        if cand[Length(cand)] <> '/' then AppendChar(cand, '/');
+        cand := cand + what;
+        f := sysopen(cand, 0);
+        if f >= 0 then
+        begin
+          sysclose(f);
+          WhichOnPath := cand;
+          Exit;
+        end;
+      end;
+      start := i + 1;
+    end;
+  end;
+end;
+
+{ DirEntNames[0..DirEntCount-1], sorted, keeping only names ending in `ext` and
+  with that extension stripped. Insertion sort: getdents order is the
+  filesystem's, so an unsorted listing would differ between two machines
+  holding identical trees, and a listing you cannot diff is a listing you
+  cannot check. }
+procedure DirEntKeepSorted(const ext: AnsiString);
+var i, j, n, elen, dlen: Integer; tmp, nm: AnsiString; keep: Boolean;
+begin
+  elen := Length(ext);
+  n := 0;
+  for i := 0 to DirEntCount - 1 do
+  begin
+    nm := DirEntNames[i];
+    dlen := Length(nm);
+    keep := dlen > elen;
+    if keep then
+      for j := 1 to elen do
+        if nm[dlen - elen + j] <> ext[j] then keep := False;
+    if keep then
+    begin
+      SetLength(nm, dlen - elen);
+      DirEntNames[n] := nm;
+      Inc(n);
+    end;
+  end;
+  DirEntCount := n;
+  for i := 1 to DirEntCount - 1 do
+  begin
+    tmp := DirEntNames[i];
+    j := i - 1;
+    while (j >= 0) and (DirEntNames[j] > tmp) do
+    begin
+      DirEntNames[j + 1] := DirEntNames[j];
+      Dec(j);
+    end;
+    DirEntNames[j + 1] := tmp;
+  end;
+end;
+
+{ The sorted names in five 16-wide columns. A name too wide for its column
+  ends the line rather than shifting every name after it: lib/pcl carries a
+  29-character `mimic_reportlab_lib_pagesizes`, and one such entry would
+  otherwise misalign the whole rest of the listing. }
+procedure PrintDirEntColumns;
+var i, col, pad: Integer; nm: AnsiString;
+begin
+  col := 0;
+  for i := 0 to DirEntCount - 1 do
+  begin
+    nm := DirEntNames[i];
+    Write('  ', nm);
+    if Length(nm) >= 15 then
+    begin
+      WriteLn;
+      col := 0;
+    end
+    else
+    begin
+      for pad := Length(nm) to 14 do Write(' ');
+      Inc(col);
+      if col = 5 then
+      begin
+        WriteLn;
+        col := 0;
+      end;
+    end;
+  end;
+  if col <> 0 then WriteLn;
+  if DirEntTruncated then
+    WriteLn('  ... (listing truncated at ', MAX_DIRENT, ' entries)');
+end;
+
+procedure ShowLibraryDir(const dir, what: AnsiString);
+begin
+  WriteLn;
+  if not WhereDirExists(dir) then
+  begin
+    WriteLn(what, ': ', dir, '   [MISSING]');
+    Exit;
+  end;
+  PxxListDir(dir);
+  DirEntKeepSorted('.pas');
+  WriteLn(what, ' — ', DirEntCount, ' units in ', dir);
+  PrintDirEntColumns;
+end;
+
+procedure PrintLibraries;
+{ What can I `uses`? Answered by SCANNING the directories the compiler actually
+  resolves, never from a list in this file: a hardcoded inventory drifts the
+  first time somebody adds a unit, and a drifted inventory is worse than none
+  because it is believed. The cost is that this says nothing about what each
+  unit DOES — that is docs/'s job, and a one-line purpose per unit kept here
+  would drift for the same reason. }
+var cdir, bdir, rtldir, lcldir, asmdir: AnsiString;
+begin
+  ExeDir := GetFilePath(ParamStr(0));
+  PxxCfgLoad;
+  ResolveToolchainDirs(cdir, bdir, rtldir, lcldir, asmdir);
+  WriteLn('libraries pxx can find from this binary');
+  WriteLn('  (paths and their resolution order: pxx --where)');
+  ShowLibraryDir(rtldir, 'RTL (Pascal runtime + stdlib)');
+  ShowLibraryDir(lcldir, 'PCL (widgets / GUI)');
+  ShowLibraryDir(bdir, 'builtin (linked into every program)');
+  WriteLn;
+  WriteLn('C: -I roots come from lib/crtl (headers in include/, sources in src/);');
+  WriteLn('   system libraries are resolved by soname through /etc/ld.so.cache.');
+  WriteLn;
+  WriteLn('external integrations (not units in this tree — each needs its own toolchain):');
+  WriteLn('  ESP-IDF     --target=xtensa|riscv32 --platform=esp --emit-obj, then build');
+  WriteLn('              the .o into an IDF component; see examples/esp32/.');
+  WriteLn('              bare-metal (no IDF) is --esp-profile=bare.');
+  WriteLn('  Synapse     networking via the Delphi/Posix path — in progress; needs a');
+  WriteLn('              Synapse checkout, see test/manual/try_synapse_compile.sh.');
+end;
+
+procedure ShowDoctorRow(const capability: AnsiString; have: Boolean;
+                        const detail, needs: AnsiString);
+var i: Integer;
+begin
+  Write('  ', capability);
+  for i := Length(capability) to 27 do Write(' ');
+  if have then Write('yes  ') else Write('NO   ');
+  if have then WriteLn(detail) else WriteLn(needs);
+end;
+
+procedure PrintDoctor;
+{ Capability, not inventory: every row is something you might TRY TO DO with
+  this compiler, and the answer is what happens when you do. A row that is NO
+  says what to install, because "qemu-aarch64: not found" three commands later
+  is the same information delivered at the worst moment.
+
+  Nothing here is fatal. pxx compiles and runs native programs with every row
+  below missing — which is why the first row is stated rather than probed. }
+var home, cdir, bdir, rtldir, lcldir, asmdir, p: AnsiString;
+    f: Integer;
+begin
+  ExeDir := GetFilePath(ParamStr(0));
+  PxxCfgLoad;
+  ResolveToolchainDirs(cdir, bdir, rtldir, lcldir, asmdir);
+  home := PxxGetEnv('HOME');
+  WriteLn('pxx doctor — what this box can do with this binary');
+  WriteLn;
+  WriteLn('compile and run, this host:');
+  ShowDoctorRow('native x86-64 programs', True, 'always — pxx emits ELF directly, no as/ld needed', '');
+  ShowDoctorRow('Pascal RTL units', WhereDirExists(rtldir), rtldir,
+                'RTL not found — set PXX_HOME, or `home <dir>` in pxx.cfg (pxx --where)');
+  ShowDoctorRow('builtin units', WhereDirExists(bdir), bdir,
+                'builtin/ not found — same fix as above; every program needs these');
+  ShowDoctorRow('C system headers', WhereDirExists('/usr/include'), '/usr/include',
+                'no /usr/include — the C frontend can still compile self-contained sources');
+  p := '/etc/ld.so.cache';
+  f := sysopen(p, 0);
+  if f >= 0 then sysclose(f);
+  ShowDoctorRow('C library discovery', f >= 0, '/etc/ld.so.cache (sonames resolved from it)',
+                'no /etc/ld.so.cache — `uses` of a C shared library falls back to a built-in table');
+  WriteLn;
+  WriteLn('run programs built for another target (`--target=`):');
+  p := WhichOnPath('qemu-i386');
+  ShowDoctorRow('i386', Length(p) > 0, p, 'qemu-i386 not on PATH (qemu-user); i386 binaries still EMIT fine');
+  p := WhichOnPath('qemu-aarch64');
+  ShowDoctorRow('aarch64', Length(p) > 0, p, 'qemu-aarch64 not on PATH (qemu-user)');
+  p := WhichOnPath('qemu-arm');
+  ShowDoctorRow('arm32', Length(p) > 0, p, 'qemu-arm not on PATH (qemu-user)');
+  p := WhichOnPath('qemu-riscv32');
+  ShowDoctorRow('riscv32', Length(p) > 0, p, 'qemu-riscv32 not on PATH (qemu-user)');
+  WriteLn;
+  WriteLn('ESP32 (xtensa / riscv32 SoC targets):');
+  ShowDoctorRow('ESP-IDF', WhereDirExists(home + '/esp/esp-idf'), home + '/esp/esp-idf',
+                'no ~/esp/esp-idf — needed only to LINK and FLASH; --emit-obj works without it');
+  ShowDoctorRow('Espressif toolchain', WhereDirExists(home + '/.espressif'), home + '/.espressif',
+                'no ~/.espressif — cross gcc/qemu for the SoCs, installed by the IDF setup');
+  WriteLn;
+  WriteLn('development of pxx itself:');
+  p := WhichOnPath('fpc');
+  ShowDoctorRow('FPC seed', Length(p) > 0, p,
+                'fpc not on PATH — needed ONLY for a cold bootstrap from source;');
+  if Length(p) = 0 then
+    WriteLn('                              `make compiler/pascal26` uses the pinned pxx binary');
+  p := WhichOnPath('gdb');
+  ShowDoctorRow('gdb (for -g)', Length(p) > 0, p, 'gdb not on PATH; -g still emits DWARF');
+  p := WhichOnPath('gcc');
+  ShowDoctorRow('gcc (differential oracle)', Length(p) > 0, p,
+                'gcc not on PATH; only the C-vs-gcc comparison tests need it');
+  WriteLn;
+  WriteLn('nothing above is required to compile and run a program: every NO row');
+  WriteLn('costs one capability, and the row says which.');
+end;
+
 procedure PrintHelp;
 begin
   PrintVersionInfo;
@@ -429,6 +656,8 @@ begin
   WriteLn('  --version             generation, frontends, host');
   WriteLn('  --where               every path the compiler resolves, and where each came from');
   WriteLn('  --list-targets        the --target= values, and which run on this host');
+  WriteLn('  --list-libraries      the units this binary can find, by directory');
+  WriteLn('  --doctor              what this box can do — cross-run, ESP, gdb, FPC seed');
   WriteLn;
   WriteLn('common options:');
   WriteLn('  -O0 -O1 -O2 -O3       optimisation level (-O2 is the proven default)');
@@ -681,6 +910,16 @@ begin
     else if option = '--list-targets' then
     begin
       PrintTargetList;
+      Halt(0);
+    end
+    else if option = '--list-libraries' then
+    begin
+      PrintLibraries;
+      Halt(0);
+    end
+    else if option = '--doctor' then
+    begin
+      PrintDoctor;
       Halt(0);
     end
     else if option = '--dump-rtti' then
@@ -1299,6 +1538,7 @@ begin
       writeln(StdErr, '  pxx --version       generation and frontends');
       writeln(StdErr, '  pxx --where         every path this binary resolves');
       writeln(StdErr, '  pxx --list-targets  the --target= values');
+      writeln(StdErr, '  pxx --doctor        what this box can do (cross-run, ESP, gdb)');
       Halt(1);
     end;
 

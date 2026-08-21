@@ -11161,6 +11161,34 @@ test-quick: $(COMPILER)
 	./$(COMPILER) --list-targets | grep -q '^xtensa'
 	./$(COMPILER) --help | grep -q 'usage: pxx'
 	./$(COMPILER) -h | grep -q -- '--list-targets'
+	# --list-libraries and --doctor (step 3 of the same ticket). Both SCAN
+	# rather than recite: the unit lists come from PxxListDir over the same
+	# directories the unit search resolves, so a new unit appears here the day
+	# it lands and a hardcoded inventory cannot go stale. Assert membership and
+	# structure, never the COUNT — a count is a tripwire that fires on every
+	# library commit and teaches people to edit the test rather than read it.
+	./$(COMPILER) --list-libraries | grep -q 'RTL (Pascal runtime + stdlib)'
+	./$(COMPILER) --list-libraries | grep -q 'sysutils'
+	./$(COMPILER) --list-libraries | grep -q 'tkinter'
+	./$(COMPILER) --list-libraries | grep -q 'promocore'
+	./$(COMPILER) --list-libraries | grep -q 'ESP-IDF'
+	# a directory that does not exist is REPORTED as missing, not omitted:
+	# an empty section reads as "no such library", which is the wrong diagnosis.
+	PXX_HOME=/nonexistent-pxx-home ./$(COMPILER) --list-libraries | grep -q 'RTL (Pascal runtime + stdlib): /nonexistent-pxx-home/lib/rtl/   \[MISSING\]'
+	# --doctor's rows are BOX-dependent (qemu, fpc, gdb may or may not be
+	# installed), so only the box-independent ones are asserted: the four
+	# section heads, and the two rows that must be yes for the repo checkout
+	# to work at all. Asserting `qemu-aarch64: yes` here would make the suite
+	# fail on a machine that is merely differently equipped.
+	./$(COMPILER) --doctor | grep -q '^pxx doctor'
+	./$(COMPILER) --doctor | grep -q "^run programs built for another target"
+	./$(COMPILER) --doctor | grep -q '^ESP32 (xtensa / riscv32 SoC targets):'
+	./$(COMPILER) --doctor | grep -q '^development of pxx itself:'
+	./$(COMPILER) --doctor | grep -q 'native x86-64 programs      yes'
+	./$(COMPILER) --doctor | grep -q 'Pascal RTL units            yes'
+	# ...and a NO row must say what to install rather than only that it is NO.
+	PXX_HOME=/nonexistent-pxx-home ./$(COMPILER) --doctor | grep -q 'Pascal RTL units            NO   RTL not found'
+	./$(COMPILER) -h | grep -q -- '--doctor'
 	# --where must report the roots RESOLVED by the same code the unit search
 	# uses (ResolveToolchainDirs / AddDefaultPasUnitDirs / AddDefaultCIncludeDirs),
 	# never a re-derivation. The [RTL] row therefore has to exist and NOT be

@@ -123,6 +123,53 @@ visible in `--where` from a fake two-levels-down install; and the same source
 compiled with and without `PXX_HOME` emits **identical bytes** — the env tier is
 a second door onto `bug-a-the-compilers-output-depends-on-argv0`, and it is shut.
 
+## Landed 2026-08-21 — step 3: `--list-libraries` and `--doctor`
+
+Both answer with no source file and exit 0, like the other four.
+
+**`--list-libraries` SCANS, it does not recite.** The unit lists come from a new
+`PxxListDir` over exactly the directories `ResolveToolchainDirs` resolves, so a
+unit appears the day it lands and a hardcoded inventory cannot go stale. The
+cost, stated rather than hidden: it says what you can `uses`, not what each unit
+DOES — a one-line purpose per unit kept in `compiler.pas` would drift for
+precisely the reason the scan exists. External integrations (ESP-IDF, Synapse)
+are a separate, curated section, because they are not units in this tree and
+their answer is a toolchain prerequisite rather than a filename.
+
+A directory that does not resolve is REPORTED as `[MISSING]`, never omitted: an
+empty section reads as "this library does not exist", which is the wrong
+diagnosis for what is nearly always a path problem.
+
+**`--doctor` reports CAPABILITY, not inventory.** Every row is something you
+might try to do — run an aarch64 binary, flash an ESP32, cold-bootstrap from
+FPC, step in gdb — and a NO row says what to install, because `qemu-aarch64:
+not found` three commands later is the same information delivered at the worst
+moment. Nothing in it is fatal and the last line says so: pxx compiles and runs
+native programs with every row missing.
+
+Probing without `execve` (the self-hosted compiler has none): `WhichOnPath`
+walks `$PATH` and `sysopen`s each candidate — a tool nobody may read is not one
+this compiler could hand work to either.
+
+### One directory scanner, not two
+
+`--list-libraries` needed a directory listing, and one already existed inside
+`ResolveCaseInsensitivePath` (elfwriter.inc) as an inline `getdents64` walk with
+an FPC `FindFirst` twin. Copying it would have been the smaller diff and the
+wrong move — `devdocs/dev/normalise-dont-special-case.md` is about exactly this,
+and the copy nobody runs is the one that rots (this session already found five
+such files in the sweep). So the walk became `PxxListDir`, and
+`ResolveCaseInsensitivePath` is now a `CaseEqual` loop over its result.
+
+Safe to share because the fallback is not a hot path: it runs only after
+`LoadFile` returned empty. Verified both directions afterwards — `uses myunit`
+resolving `MyUNIT.pas` through the fallback, and the exact-case file still
+resolving without it.
+
+`DirEntTruncated` is not decoration. A scan that silently stopped at the cap
+would make a MISSING unit look like a case mismatch, so the fallback refuses to
+answer when it is set.
+
 ### Still open (why this returns to backlog, not done)
 - ~~Tier 3, the config file~~ — landed the same night under
   `feature-dynamic-include-paths-config`: `pxx.cfg` with `home` / `unitpath` /
@@ -130,6 +177,6 @@ a second door onto `bug-a-the-compilers-output-depends-on-argv0`, and it is shut
   `<exe dir>/pxx.cfg` (first wins), and reported by `--where`. Scoped
   `define`/`mode` manifests stay with that ticket.
 - `--config` as a separate spelling — `--where` currently answers both.
-- Step 3: `--list-libraries`, `--doctor`.
+- ~~Step 3: `--list-libraries`, `--doctor`~~ — landed 2026-08-21 (above).
 - Step 4: `--selfcheck` (needs `feature-release-packaging`'s manifest).
 - User-facing docs for the four flags are a **Track D** job, not filed here.
