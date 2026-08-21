@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:21 blocked:9 backlog:260 experimental:20 rainy-day:41 float:20 done-followup:3 decided:99 done:2225 rejected:40`
+`urgent:1 working:1 unfinished:21 blocked:9 backlog:261 experimental:20 rainy-day:41 float:20 done-followup:3 decided:99 done:2226 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -51,18 +51,18 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 249, ranked
+## Ready — top 30 of 250, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-callable-to-str-param-fails
 - `[p 65] [B]` bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
 - `[p 65] [T]` bug-t-agents-kill-each-others-processes-with-pattern-pkill
-- `[p 65] [A]` feature-a-tobject-root-method-vmt-slots
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-oop
 - `[p 60] [A]` bug-a-a-record-copy-does-not-retain-an-interface-field
 - `[p 60] [N]` bug-n-inferred-return-type-of-true-division-is-int
+- `[p 60] [P]` bug-p-free-through-base-reference-skips-destroy
 - `[p 60] [T]` bug-t-the-push-rate-starves-breadth-coverage-entirely
 - `[p 58] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - `[p 58] [O]` feature-opt-o3-register-pressure
@@ -84,4 +84,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 50] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - `[p 50] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 
-_219 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_220 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

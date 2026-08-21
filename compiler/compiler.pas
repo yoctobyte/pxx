@@ -264,6 +264,8 @@ begin
   PlatformExplicit := False;
   NoUnhandledHandler := False;
   ThreadSafeMode := False;
+  CompactClasses := False;
+  CompactClassesExplicit := False;
   ProcExceptionCleanupFrameActive := False;
   EnableAutoVar := True;
   EnableLazyVar := True;
@@ -451,6 +453,13 @@ begin
     begin
       TargetPlatform := PLATFORM_ESP;
       PlatformExplicit := True;
+      { ESP IMPLIES --compact-classes: memory is precious on that target (user,
+        2026-08-21) and the root slots cost data per class declared. An explicit
+        --compact-classes / --no-compact-classes anywhere on the command line
+        wins, so an ESP build that wants a class-keyed default comparer can turn
+        it back on. Documented in docs/ — an implied flag that changes what
+        COMPILES is otherwise a surprise. }
+      if not CompactClassesExplicit then CompactClasses := True;
       Inc(i);
     end
     else if option = '--xtensa-abi=call0' then
@@ -753,6 +762,24 @@ begin
     else if option = '--threadsafe' then
     begin
       ThreadSafeMode := True;
+      Inc(i);
+    end
+    else if option = '--compact-classes' then
+    begin
+      { Reserve no leading VMT slots for TObject's root virtuals — the
+        pre-2026-08-21 layout, ~24-32 bytes per class DECLARED cheaper (not per
+        instance, not per call). Overriding Equals/GetHashCode/ToString is then
+        a compile error naming this flag, never a silent non-virtual dispatch.
+        Implied by --platform=esp; pass it after --platform=esp to opt back IN
+        via --no-compact-classes. }
+      CompactClasses := True;
+      CompactClassesExplicit := True;
+      Inc(i);
+    end
+    else if option = '--no-compact-classes' then
+    begin
+      CompactClasses := False;
+      CompactClassesExplicit := True;
       Inc(i);
     end
     else if option = '--no-shims' then

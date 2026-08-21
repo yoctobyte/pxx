@@ -1073,6 +1073,34 @@ begin
   end;
 end;
 
+{ How many leading VMT slots every class reserves for TObject's root virtuals.
+  ROOT_VMT_SLOTS normally; 0 under --compact-classes, which is exactly the
+  pre-2026-08-21 layout — so the opt-out path is the one that was already
+  shipping, not new untested code. The ONE place the count is decided; nothing
+  else in the compiler holds a VMT slot literal.
+  decide-tobject-root-methods-dispatch-model. }
+function RootVMTSlotCount: Integer;
+begin
+  if CompactClasses then RootVMTSlotCount := 0
+  else RootVMTSlotCount := ROOT_VMT_SLOTS;
+end;
+
+{ The fixed slot for a root-virtual NAME, or -1 for "not a root virtual, or not
+  reserved in this build". Case-insensitive: these are Pascal names, and NilPy
+  reaches the same table through its own spelling of the same methods. }
+function RootVMTSlotOf(const nm: AnsiString): Integer;
+var n: Integer;
+begin
+  RootVMTSlotOf := -1;
+  n := RootVMTSlotCount;
+  if n <= 0 then Exit;
+  if CaseEqual(nm, 'Destroy') then RootVMTSlotOf := ROOT_VMT_DESTROY
+  else if CaseEqual(nm, 'Equals') then RootVMTSlotOf := ROOT_VMT_EQUALS
+  else if CaseEqual(nm, 'GetHashCode') then RootVMTSlotOf := ROOT_VMT_GETHASHCODE
+  else if CaseEqual(nm, 'ToString') then RootVMTSlotOf := ROOT_VMT_TOSTRING;
+  if RootVMTSlotOf >= n then RootVMTSlotOf := -1;
+end;
+
 function FindUMeth(ci: Integer; const name: AnsiString): Integer;
 var i, base, cnt: Integer; lo, name2: AnsiString; curr: Integer; hit: Boolean;
 begin
@@ -1092,6 +1120,27 @@ begin
       Inc(i);
     end;
     curr := UClsParent[curr];
+  end;
+  { Implicit root. `class(TObject)` deliberately leaves parentCi = -1 (TObject is
+    excluded from the parent chain so its VMT never has to be relocated into
+    every descendant), so the chain walk above cannot see TObject's own rows —
+    which is where the four root virtuals live. Every class reserves their slots,
+    so resolving `p.ToString` on a DESCENDANT against TObject's row is not a
+    special case, it is the missing tail of the walk: the row carries the fixed
+    slot, and dispatch through it lands on whatever override the runtime class
+    put there. feature-a-tobject-root-method-vmt-slots }
+  if (ci >= 0) and (RootVMTSlotOf(name) >= 0) and
+     (not UClsIsRecord[ci]) and (not UClsIsInterface[ci]) and
+     (UClsVirtCount[ci] >= RootVMTSlotCount) then
+  begin
+    curr := FindUClass('TObject');
+    if (curr >= 0) and (curr <> ci) then
+    begin
+      base := UClsMBase[curr]; cnt := UClsMCount[curr];
+      for i := 0 to cnt - 1 do
+        if UMemberNameMatch(UMthNOff[base + i], UMthNLen[base + i], curr, name, lo) then
+        begin Result := base + i; Exit; end;
+    end;
   end;
 end;
 
@@ -1210,6 +1259,7 @@ begin
   UClsPCount[ci] := UClsPCount[ci] + 1;
   Result := pri;
 end;
+
 
 function AddUClass(off, len: Integer): Integer;
 begin
@@ -1424,6 +1474,13 @@ procedure AddUMeth(ci, noff, nlen, procIdx: Integer);
 var mi, k, src, dst: Integer;
 begin
   if UMthCount >= MAX_UMETH then Error('too many class/record methods (MAX_UMETH)');
+  { An EMPTY window's base is whatever UMthCount was when the class row was
+    added, which goes stale the moment another class registers a method first —
+    so a class that gets its first method LATE (TObject, whose row is minted at
+    startup and whose root methods arrive at the end of pass 1) would otherwise
+    claim someone else's row as its own. Re-base: an empty window can move for
+    free. feature-a-tobject-root-method-vmt-slots }
+  if UClsMCount[ci] = 0 then UClsMBase[ci] := UMthCount;
   { The method window [UClsMBase[ci] .. +UClsMCount[ci]) must stay contiguous
     (FindUMeth walks it as a range). A NESTED specialization inside a class
     body (fgl's `TFPGListEnumeratorSpec = specialize ...` class-local type)

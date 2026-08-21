@@ -2274,6 +2274,19 @@ test-nilpy: $(COMPILER)
 	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas $(TESTTMP)/test_pascal_dup_class26 2>&1 \
 	  | grep -q 'duplicate class name TFoo' \
 	  || { echo 'test_pascal_duplicate_class_fail: FAIL - expected a duplicate-class-name error'; exit 1; }
+	@# TObject's root virtuals live in RESERVED leading VMT slots, so a
+	@# descendant's `override Equals` is reachable through a receiver statically
+	@# typed TObject, and a class that overrides nothing still answers with the
+	@# defaults (identity / the pointer / the class name). Output matched against
+	@# FPC 3.2.2. feature-a-tobject-root-method-vmt-slots
+	./$(COMPILER) test/test_tobject_root_methods.pas $(TESTTMP)/test_tobject_root_methods26
+	test "$$($(TESTTMP)/test_tobject_root_methods26)" = "$$(printf 'direct TRUE FALSE\ndirecthash 93 124\ndirectstr TPoint(3)\nstatic TRUE FALSE\nstatichash 93\nstaticstr TPoint(3)\nquiet TRUE FALSE\nquietstr TQuiet TQuiet\nquiethash TRUE\nroot TRUE TObject')"
+	@# ...and --compact-classes (implied by --platform=esp) reserves none of those
+	@# slots, so the same override must be REFUSED by name rather than compiled
+	@# into a method nothing can dispatch to.
+	@./$(COMPILER) --compact-classes test/test_tobject_root_methods_compact_fail.pas $(TESTTMP)/test_tobject_root_compact26 2>&1 \
+	  | grep -q 'cannot override Equals' \
+	  || { echo 'test_tobject_root_methods_compact_fail: FAIL - expected a --compact-classes override refusal'; exit 1; }
 	@# a PARAMETERLESS function's bare own name read as a value means different
 	@# things in objfpc (its Result) and delphi (a recursive call), so it warns by
 	@# default. Exactly one site here is ambiguous; the explicit Result / F() /

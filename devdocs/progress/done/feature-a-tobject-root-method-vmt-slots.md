@@ -4,8 +4,8 @@ prio: 65
 type: feature
 blocked-by: []
 summary: "Reserve N=4 leading VMT slots (Destroy, Equals, GetHashCode, ToString) in every class so a static-TObject receiver can dispatch to a descendant's override, with --compact-classes opting out to today's behaviour and the ESP target defaulting to compact. Implements decide-tobject-root-methods-dispatch-model; unblocks feature-pascal-builtin-tobject-class and the generics corpus rung."
-status: backlog
-owner: unassigned
+status: done
+owner: agent-A
 ---
 
 # Reserved leading VMT slots for TObject's root methods
@@ -112,3 +112,66 @@ quick`. Tests: a descendant's `override Equals` dispatched through a static
 `Free`; a NilPy class and a Pascal class agreeing on the base; and a
 `--compact-classes` row asserting the **compile error**, not a wrong answer.
 Cross where a backend is touched — though nothing here should reach one.
+
+## What landed (2026-08-21)
+
+**N = 4, `--compact-classes` = N 0.** `RootVMTSlotCount` / `RootVMTSlotOf`
+(`compiler/symtab.inc`) are the ONE place the count and the name→slot map live;
+no VMT slot literal was added anywhere else. Sites:
+
+| file | change |
+| --- | --- |
+| `defs.inc` | `ROOT_VMT_*` constants, `CompactClasses` / `CompactClassesExplicit` |
+| `symtab.inc` | `RootVMTSlotCount` / `RootVMTSlotOf`; the implicit-root tail in `FindUMeth`; the empty-window re-base in `AddUMeth` |
+| `pasparser_decl.inc` | root class reserves `RootVMTSlotCount`; `override` of a root name takes its fixed slot; the `--compact-classes` refusal |
+| `pyparser.inc` | the same reservation for a root NilPy class |
+| `pasparser_prog.inc` | TObject's own VMT grown to N; `EnsureTObjectRootMethods`; `FillRootVMTSlotDefaults`; the `.Equals/.GetHashCode/.ToString` pre-scan trigger |
+| `builtin/builtin.pas` | `__pxxTObjectEquals` / `GetHashCode` / `ToString` — the defaults, in Pascal, so no per-backend work |
+| `compiler.pas` | `--compact-classes` / `--no-compact-classes`; `--platform=esp` implies compact unless stated |
+
+Two things the plan did not predict, both measured rather than reasoned:
+
+- **The defaults must be LAZY.** Forcing `builtin` into every class program costs
+  **+42 KB** at default `-O` (58,812 → 100,558 B), so the rows are minted at the
+  END of pass 1 (after every `uses`), not beside the ambient units, and the token
+  pre-scan pulls the unit only for a DOT-preceded `.Equals` / `.GetHashCode` /
+  `.ToString`. Without the builtin unit there are no rows and the call is the
+  ordinary "no such member" error — a refusal, never a nil dispatch.
+- **`AddUMeth` was mis-basing an empty method window.** `UClsMBase` is fixed at
+  class-mint time, so a class that gets its FIRST method later — exactly TObject,
+  minted at startup — claimed another class's row as its own. `Equals` landed at
+  the tail while the window still pointed at index 0, so `o.Equals(p)` reported
+  "no such member" while `o.ToString` worked. Latent for any late-first-method
+  class; fixed generically (re-base an empty window).
+
+`class(TObject)` still resolves to parentCi = -1, so the chain walk cannot see
+TObject's rows — `FindUMeth` gained the implicit-root tail for exactly the names
+that have a reserved slot. Dispatch is through the slot, so a descendant's
+override wins on a base-typed receiver.
+
+Verified: `test/test_tobject_root_methods.pas` output is IDENTICAL to FPC 3.2.2's
+on the same source, natively and under qemu on **aarch64 / arm32 / riscv32 /
+i386**. `--compact-classes` refuses the override by name
+(`test_tobject_root_methods_compact_fail.pas`). NilPy classes still dispatch
+(`Animal`/`Dog` overriding through a list). `gate.sh quick` GREEN.
+
+## Not done, deliberately — follow-ups filed
+
+- **The `Destroy`/`Create` materialisation hack is NOT deleted**, and this
+  write-up does not claim it: compact mode still reverts to N = 0, so the hack is
+  still the compact path. The N = 1 compact variant is unmeasured and left open.
+- **`Destroy` has no TObject row and slot 0 is left nil** when nothing overrides
+  it. That exposed a REAL pre-existing bug, filed separately: `b.Free` through a
+  base reference never runs the descendant's `Destroy` when the base declares
+  none — FPC runs it. See [[bug-p-free-through-base-reference-skips-destroy]].
+  The reserved slot 0 is what makes that fix cheap now.
+- **`--emit-obj` ABI split** not diagnosed: two objects with different N disagree
+  on slot numbers. Filed as [[feature-a-emit-obj-record-class-abi-mode]].
+- **Docs**: nothing in `docs/**` documents `--platform=esp` today, so there is no
+  page to extend without opening a Track D lane. The implication is recorded here
+  and in `compiler.pas` beside the flag.
+- The NilPy-vs-Pascal VMT emitter collapse (the `vmtSlots < 1` floor drift) is
+  still two implementations of one concept; untouched, still worth doing.
+
+## Log
+- 2026-08-21 — resolved, commit PENDING-COMMIT.

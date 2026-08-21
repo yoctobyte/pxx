@@ -369,7 +369,7 @@ procedure RegisterBuiltinTObject;
   (ClassName/GetHashCode/...) are a separate ticket. Kept an IMPLICIT parent
   for every other class (the `class(TObject)` guard checks by name), so this
   adds a usable row without relocating any VMT. feature-pascal-builtin-tobject-class. }
-var ci, i: Integer;
+var ci, i, vmtN: Integer;
 begin
   if FindUClass('TObject') >= 0 then Exit;
   ci := AddUClass(TokCharsAppend('TObject'), 7);
@@ -390,12 +390,111 @@ begin
     Inc(DataLen);
   end;
   UClsVMTOffset[ci] := DataLen;
-  for i := 0 to 7 do
+  { The root virtuals' reserved slots, same count every DECLARED class gets, so
+    TObject's own table is the base of the layout rather than an exception to
+    it. Still at least one word when nothing is reserved (--compact-classes),
+    which is the padding slot this always had.
+    feature-a-tobject-root-method-vmt-slots. }
+  UClsVirtCount[ci] := RootVMTSlotCount;
+  vmtN := RootVMTSlotCount;
+  if vmtN < 1 then vmtN := 1;
+  for i := 0 to vmtN * 8 - 1 do
   begin
     if DataLen >= MAX_DATA then Error('data overflow');
     Data[DataLen] := 0;
     Inc(DataLen);
   end;
+end;
+
+{ Give TObject's row its four root METHODS, so a receiver statically typed
+  TObject resolves `o.Equals(x)` / `o.GetHashCode` / `o.ToString` through the
+  ordinary member lookup and dispatches VIRTUALLY through the fixed slot — which
+  is the entire point of reserving the slots.
+
+  LAZY, and it has to be: the bodies are ordinary Pascal in the builtin unit, so
+  the procs do not exist until that unit is loaded, which happens after the
+  token pre-scan. Called once from ParseProgram right after the ambient units
+  are in. When the builtin unit is NOT linked the rows are simply not added, and
+  `o.Equals(x)` is the ordinary "no such member" compile error — a refusal, not
+  a nil dispatch. `Destroy` is deliberately not among them: `Free` calls Destroy
+  only for a class that declares one, and a direct `TObject.Destroy` has never
+  been a member here. }
+procedure AddTObjectRootMethod(ci, slot: Integer; const nm, helper: AnsiString);
+var pi, mi: Integer;
+begin
+  pi := FindProc(helper);
+  if pi < 0 then Exit;   { builtin not linked — see the note above }
+  AddUMeth(ci, TokCharsAppend(nm), Length(nm), pi);
+  mi := UMthCount - 1;
+  UMthVirSlot[mi] := slot;
+  { TObject's own VMT was emitted long before these rows existed (it is minted
+    in RegisterBuiltinTObject, at startup), so nothing else will ever fill its
+    slots — the decl-time fill loop only runs for a class the PARSER declares. }
+  if UClsVMTOffset[ci] >= 0 then
+  begin
+    if MethodFixCount >= MAX_METHFIX then Error('too many virtual method fixups');
+    MethodFixups[MethodFixCount].DataPos := UClsVMTOffset[ci] + slot * 8;
+    MethodFixups[MethodFixCount].ProcIdx := pi;
+    Inc(MethodFixCount);
+  end;
+end;
+
+procedure EnsureTObjectRootMethods;
+var ci, n: Integer;
+begin
+  n := RootVMTSlotCount;
+  if n <= 0 then Exit;
+  ci := FindUClass('TObject');
+  if ci < 0 then Exit;
+  if FindUMeth(ci, 'Equals') >= 0 then Exit;   { idempotent }
+  if ROOT_VMT_EQUALS < n then
+    AddTObjectRootMethod(ci, ROOT_VMT_EQUALS, 'Equals', '__pxxTObjectEquals');
+  if ROOT_VMT_GETHASHCODE < n then
+    AddTObjectRootMethod(ci, ROOT_VMT_GETHASHCODE, 'GetHashCode', '__pxxTObjectGetHashCode');
+  if ROOT_VMT_TOSTRING < n then
+    AddTObjectRootMethod(ci, ROOT_VMT_TOSTRING, 'ToString', '__pxxTObjectToString');
+end;
+
+{ Fill every class's UNRESOLVED reserved root slots with the default bodies.
+  Deferred to the end of compilation on purpose: a class's VMT is emitted when
+  the class is declared, and at that moment the builtin unit may not have been
+  parsed, so the default procs do not exist yet. MethodFixups are applied at
+  link time, so recording them late is fine — the DataPos is already reserved.
+
+  A slot the class (or an ancestor) DOES resolve is left alone: ResolveVMTSlotProc
+  already wired it. }
+procedure FillRootVMTSlotDefault(ci, slot: Integer; const helper: AnsiString);
+var hp: Integer;
+begin
+  if UClsVMTOffset[ci] < 0 then Exit;
+  if ResolveVMTSlotProc(ci, slot) >= 0 then Exit;
+  hp := FindProc(helper);
+  if hp < 0 then Exit;
+  if MethodFixCount >= MAX_METHFIX then Error('too many virtual method fixups');
+  MethodFixups[MethodFixCount].DataPos := UClsVMTOffset[ci] + slot * 8;
+  MethodFixups[MethodFixCount].ProcIdx := hp;
+  Inc(MethodFixCount);
+end;
+
+procedure FillRootVMTSlotDefaults;
+var ci, n: Integer;
+begin
+  n := RootVMTSlotCount;
+  if n <= 0 then Exit;
+  for ci := 0 to UClsCount - 1 do
+  begin
+    if UClsIsRecord[ci] or UClsIsInterface[ci] then Continue;
+    if UClsVirtCount[ci] < n then Continue;
+    if ROOT_VMT_EQUALS < n then
+      FillRootVMTSlotDefault(ci, ROOT_VMT_EQUALS, '__pxxTObjectEquals');
+    if ROOT_VMT_GETHASHCODE < n then
+      FillRootVMTSlotDefault(ci, ROOT_VMT_GETHASHCODE, '__pxxTObjectGetHashCode');
+    if ROOT_VMT_TOSTRING < n then
+      FillRootVMTSlotDefault(ci, ROOT_VMT_TOSTRING, '__pxxTObjectToString');
+  end;
+  { ROOT_VMT_DESTROY is deliberately left nil when nothing overrides it: Free
+    dispatches Destroy only for a class that declares one, so an unfilled slot 0
+    is unreachable rather than a trap waiting to fire. }
 end;
 
 procedure ParseProgram;
@@ -748,6 +847,16 @@ begin
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'str') or CaseEqual(GetTokenStr(i), 'val')) and
        (not TargetIsEspClass) then
+      needsBuiltin := True;
+    { `x.Equals(...)` / `x.GetHashCode` / `x.ToString` pulls the builtin unit:
+      the TObject root methods' default bodies (__pxxTObject*) live there, and
+      EnsureTObjectRootMethods only registers the rows when it can see the procs.
+      Dot-preceded on purpose — a class of your own that merely DECLARES a
+      ToString should not drag 42 KB in. feature-a-tobject-root-method-vmt-slots }
+    if (Tokens[i].Kind = tkIdent) and (i > 0) and (Tokens[i - 1].Kind = tkDot) and
+       (RootVMTSlotCount > 0) and (not TargetIsEspClass) and
+       (CaseEqual(GetTokenStr(i), 'equals') or CaseEqual(GetTokenStr(i), 'gethashcode')
+        or CaseEqual(GetTokenStr(i), 'tostring')) then
       needsBuiltin := True;
     { A VARIANT anywhere in the program pulls the builtin unit, because assigning
       a variant to a scalar lowers to VariantToInt64/Double/Bool/Char/Str and
@@ -1131,6 +1240,12 @@ begin
         doneDecls := True;
     end;
   PreScanPass := False;
+  { The root methods' bodies come from the `builtin` unit, so TObject's rows can
+    only be minted once every `uses` has been processed — which is the end of
+    pass 1, not the ambient-unit block above. Before pass 2, so a body's
+    `o.Equals(x)` on a static TObject sees the member.
+    feature-a-tobject-root-method-vmt-slots }
+  EnsureTObjectRootMethods;
   afterDeclTok := TokPos - 1;   { the program-body `begin` (re-read after pass 2) }
 
   { ===== Body pass (pass 2) =====
@@ -1259,5 +1374,6 @@ begin
     EmitCallProc(GetFiniRunnerProc);
   EmitExit(0);   { unreachable once PXXExitProcess is in — it does not return }
   EmitFinalizerRunnerBody;
+  FillRootVMTSlotDefaults;
   ApplyCallFixups;
 end;

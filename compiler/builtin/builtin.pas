@@ -2011,6 +2011,37 @@ begin
   Result := __pxxRttiName(PPxxPtr_(Rtti)^);
 end;
 
+{ ---- TObject's root virtuals: the DEFAULT bodies -------------------------
+
+  Every class reserves leading VMT slots for Destroy/Equals/GetHashCode/ToString
+  (decide-tobject-root-methods-dispatch-model, option C). A class that overrides
+  one fills its own slot; a class that does not gets these, so a call through a
+  static-TObject receiver dispatches to something real rather than to nil.
+
+  They live HERE, beside __pxxRttiOf/__pxxClassName, for two reasons: ToString IS
+  ClassName and the RTTI readers are already here, and a Pascal body costs no
+  per-backend work at all — the alternative was the same three routines hand-
+  emitted for six targets. The cost of the unit is only paid by a program that
+  pulls it in; the compiler's token pre-scan adds these three names to what
+  triggers that. FPC's semantics: identity, the pointer, the class name.
+
+  The receiver is spelled `Inst`, not `Self` — these are plain functions, and the
+  VMT slot is what makes them methods. }
+function __pxxTObjectEquals(Inst: Pointer; Obj: Pointer): Boolean;
+begin
+  Result := Inst = Obj;
+end;
+
+function __pxxTObjectGetHashCode(Inst: Pointer): PtrInt;
+begin
+  Result := PtrInt(PtrUInt(Inst));
+end;
+
+function __pxxTObjectToString(Inst: Pointer): AnsiString;
+begin
+  Result := __pxxClassName(__pxxRttiOf(Inst));
+end;
+
 function __pxxSameNameCI(const a, b: AnsiString): Boolean;
 var i: Integer;
 begin

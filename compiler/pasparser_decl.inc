@@ -3688,6 +3688,14 @@ begin
         else
         begin
           curFieldOff := 8; { reserve offset 0 for VMT pointer }
+          { ...and the leading VMT slots for TObject's root virtuals. A root
+            class's own virtuals therefore start at RootVMTSlotCount, and a
+            descendant inherits the count through the branch above, so the
+            reservation is made exactly once per hierarchy. 0 under
+            --compact-classes = today's layout.
+            feature-a-tobject-root-method-vmt-slots. }
+          if not UClsIsRecord[ci] and not UClsIsInterface[ci] then
+            UClsVirtCount[ci] := RootVMTSlotCount;
         end;
 
         { Implicit first section defaults to published, as Delphi/Lazarus do for
@@ -4123,6 +4131,12 @@ begin
             else if isOverride then
             begin
               slot := FindParentVirtualSlot(parentCi, mname);
+              { A root virtual has a slot number fixed at the ROOT, not one
+                allocated per hierarchy — that is the whole point of reserving
+                them, and it is what lets a static-TObject receiver dispatch.
+                Checked before the materialisation hack below, so `Destroy`
+                takes slot ROOT_VMT_DESTROY rather than a fresh one. }
+              if slot < 0 then slot := RootVMTSlotOf(mname);
               if (slot < 0) and (CaseEqual(mname, 'Destroy') or CaseEqual(mname, 'Create')) then
               begin
                 { FPC's TObject.Destroy (and TComponent-style virtual Create) are
@@ -4134,14 +4148,35 @@ begin
                   own `Destroy; override;` then finds THIS slot via
                   FindParentVirtualSlot and chains correctly. inherited Destroy /
                   Create at the root boundary is a no-op (ParseInheritedCallAST).
-                  See bug-tobject-destroy-not-virtual-override. }
+                  See bug-tobject-destroy-not-virtual-override.
+
+                  STILL REACHED, and deliberately: `Create` is not one of the
+                  reserved root virtuals (FPC's TObject.Create is not virtual —
+                  the virtual-constructor idiom is TComponent's), and under
+                  --compact-classes nothing is reserved at all, so this is the
+                  compact path for `Destroy` too. }
                 slot := UClsVirtCount[ci];
                 UClsVirtCount[ci] := UClsVirtCount[ci] + 1;
                 UMthVirSlot[mmi] := slot;
               end
               else
               begin
-                if slot < 0 then Error('cannot override: no virtual method found in parent chain: ' + mname);
+                if slot < 0 then
+                begin
+                  { …and the one place --compact-classes has to say so by name.
+                    Overriding Equals/GetHashCode/ToString needs a reserved root
+                    slot; without one there is nothing for a static-TObject call
+                    to dispatch through, and silently allocating a fresh
+                    per-hierarchy slot is exactly the wrong answer that got
+                    option A rejected. }
+                  if CompactClasses and (CaseEqual(mname, 'Equals') or
+                     CaseEqual(mname, 'GetHashCode') or CaseEqual(mname, 'ToString')) then
+                    Error('cannot override ' + mname +
+                          ': --compact-classes reserves no root VMT slots, so there is' +
+                          ' no TObject.' + mname + ' to override. Drop --compact-classes' +
+                          ' (it is implied by --platform=esp) to enable the root methods');
+                  Error('cannot override: no virtual method found in parent chain: ' + mname);
+                end;
                 UMthVirSlot[mmi] := slot;
               end;
             end;

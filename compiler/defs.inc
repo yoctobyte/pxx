@@ -177,6 +177,17 @@ const
   SPECIAL_IN  = 999;
 
   MAX_UCLASS      = 2048;  { user-defined class/record slots (incl. imported C structs) }
+  { TObject's root virtuals occupy FIXED leading VMT slots in EVERY class, so a
+    receiver whose STATIC type is TObject — which has no class row of its own —
+    can still dispatch to the dynamic class's override through a slot number
+    known at compile time. FPC's set, in FPC's order. A class's own virtuals
+    start at RootVMTSlotCount, which is 0 under --compact-classes.
+    decide-tobject-root-methods-dispatch-model, option C. }
+  ROOT_VMT_DESTROY     = 0;
+  ROOT_VMT_EQUALS      = 1;
+  ROOT_VMT_GETHASHCODE = 2;
+  ROOT_VMT_TOSTRING    = 3;
+  ROOT_VMT_SLOTS       = 4;
   MAX_UFIELD      = 262144; { field slots across all user classes/records }
   MAX_UMETH       = 8192;  { method slots across all user classes }
   MAX_IMT         = 512;   { per-(class,interface) interface method tables }
@@ -1891,6 +1902,13 @@ var
   StrictVisibility : Boolean;  { --strict-visibility / {$STRICT_VISIBILITY ON}: FPC-parity member access control -- enforce private/protected/strict private/strict protected. Default off: PXX's dialect parses the markers but grants access from anywhere (the deliberate lax ergonomics -- same-unit access and the cracker cast still work under FPC semantics when on). Scoping: private/protected are UNIT-scoped (declaring unit sees all), strict private is type-scoped (declaring class only), strict protected adds descendants. }
   DelphiMode : Boolean;  { {$mode delphi}: relaxes a bare function name bound to a procedural-value target to take its address (@F-optional). PXX's dialect is otherwise one objfpc-ish superset; this is the one behavioural delta. Default off. }
   ThreadSafeMode : Boolean;
+  { --compact-classes: reserve NO leading VMT slots for TObject's root methods,
+    i.e. exactly the pre-2026-08-21 layout. See RootVMTSlotCount. Implied by
+    --platform=esp (memory is precious there; documented in the ESP profile),
+    and an ABI-splitting switch for --emit-obj the same way ThreadSafeMode is:
+    two objects built with different reservations disagree about slot numbers. }
+  CompactClasses : Boolean;
+  CompactClassesExplicit : Boolean;  { the flag was named on the command line, so --platform=esp's implied default must not overwrite it (either direction) }
   MatchQuiet : Boolean;  { suppress MatchProcCall's mismatch diagnostics for a speculative overload probe (delphi @-relax call-first attempt). }
   MatchExactOnly : Boolean;  { restrict MatchProcCall* to its EXACT phase and return -1 otherwise — the literal-typed probe in MatchCallDelphiProcAddr, which must not fall through to the compatible phases with a re-typed argument. }
   { Record identity of each call argument, for overload matching. Filled by

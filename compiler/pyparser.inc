@@ -30011,7 +30011,13 @@ begin
     curOff := UClsSize_[UClsParent[ci]];
     if curOff < 8 then curOff := 8;
     UClsVirtCount[ci] := UClsVirtCount[UClsParent[ci]];
-  end;
+  end
+  else
+    { A root class reserves the same leading VMT slots the Pascal path does —
+      one symbol table, one layout, so the two MUST agree on the base or a
+      NilPy class and a Pascal class disagree about slot numbers.
+      feature-a-tobject-root-method-vmt-slots. }
+    UClsVirtCount[ci] := RootVMTSlotCount;
   align := 8;
   ownBS := bodyStart; ownBE := bodyEnd;
   mixIx := 0; inMixin := False;
