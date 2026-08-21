@@ -129,4 +129,4 @@ the ticket's own repro: `test/test_variant_string_arithmetic.pas` 27/27 under
 breadth is Track T's, against this sha.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit c937ad1e2.
