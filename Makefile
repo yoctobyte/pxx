@@ -3847,6 +3847,16 @@ test-core: $(COMPILER)
 	# pushed), not the nil stub it used to be (b340)
 	./$(COMPILER) test/test_exceptaddr_b340.pas $(TESTTMP)/test_exceptaddr_b34026
 	test "$$($(TESTTMP)/test_exceptaddr_b34026 | tail -1)" = "PASS"
+	# A NESTED inline `specialize` -- `specialize TBox<specialize TBox<Integer>>`
+	# -- was refused everywhere except a type section: var, local, record field,
+	# parameter and function result all reported `unknown type: specialize`,
+	# while FPC accepts all five. The use-rewriting sweep collapses a group only
+	# when its arguments are already plain idents, so nesting needs a second
+	# round, and CROSS-template nesting (TList over TPair) needs the earlier
+	# templates re-swept once the later one has collapsed the inner group.
+	./$(COMPILER) test/test_generic_nested_inline_specialize.pas $(TESTTMP)/test_generic_nested_spec26
+	@test "$$($(TESTTMP)/test_generic_nested_spec26)" = "$$(printf 'var:   7\nfield: 4\nparam: 7\nresult:5\nlocal: 9\ncross: 3/three n=1')" \
+	  || { echo "test_generic_nested_inline_specialize: FAIL"; $(TESTTMP)/test_generic_nested_spec26; exit 1; }
 	# `not` over a UNARY MINUS: bitwise, not boolean. `not -1` printed TRUE --
 	# an integer expression answering a Boolean -- because the authoritative-
 	# operand list that decides bitwise-vs-logical had grown one entry per

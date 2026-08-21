@@ -287,7 +287,12 @@ function BuiltinTypeNameTk(const nm: AnsiString): TTypeKind; forward;   { body i
   Guards: the name must match ti's, the `<...>` group must be a plain
   comma-separated list of type idents closed by `>`, and the arity must match
   — anything else (e.g. a real `a < b` comparison) is left untouched. }
-procedure DelphiRewriteGenericUses(ti, insertAt: Integer; delphiPattern: Boolean);
+procedure DelphiRewriteGenericUses(ti: Integer; var insertAt: Integer; delphiPattern: Boolean);
+{ insertAt is VAR so a caller can run this to a FIXED POINT: each round leaves it
+  past the alias declarations that round emitted, so the next round's aliases land
+  AFTER them -- which is the whole ordering requirement, since an outer alias
+  refers to an inner one. See the nested-specialization note at the call site.
+  bug-a-a-nested-inline-specialize-is-refused-outside-a-type-section }
 const MAX_DGEN_TUPLES = 512;
 var
   i, j, k, kk, na, np, seenCnt, insCnt, aOff, sOff, tOff: Integer;
@@ -463,6 +468,7 @@ procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm
 var
   templateName, nextStr: AnsiString;
   depth, startTok, cur, finalCur, np, gi, scan: Integer;
+  dgenAt, dgenRounds, dgenBefore, dgenT: Integer;   { the nested-specialize fixed point }
   pnames: array[0..MAX_TEMPLATE_PARAMS-1] of AnsiString;
   isOpener, doneParams, bodyless: Boolean;
 begin
@@ -636,6 +642,7 @@ begin
   for gi := 0 to np - 1 do
     TemplateParamNames[TemplateCount * MAX_TEMPLATE_PARAMS + gi] := pnames[gi];
   TemplateNParams[TemplateCount] := np;
+  TemplateIsDelphi[TemplateCount] := delphiForm;
   Templates[TemplateCount].TokStart := TemplateTokenCount;
   Templates[TemplateCount].TokCount := 0;
 
@@ -663,7 +670,36 @@ begin
     concrete use `TFoo<Args>` to a minted alias ident (registering the alias
     declaration tokens `alias = specialize TFoo<Args>;` right after this
     template), and strip `<T>` from method impls `procedure TFoo<T>.M`. }
-  DelphiRewriteGenericUses(TemplateCount - 1, finalCur, delphiForm);
+  { Run to a FIXED POINT, not once. One round can only collapse a `<...>` group
+    whose arguments are already plain idents, so
+    `specialize TBox<specialize TBox<Integer>>` needs two: round 1 rewrites the
+    INNER group (its own arguments are concrete) to the alias `TBox$Integer`,
+    which leaves the outer group in the collapsible shape for round 2. The
+    outer's arm bailed out on the inner `specialize` ident and left the literal
+    word in the stream, so every position except a type section reported
+    `unknown type: specialize` -- var, local, field, parameter and function
+    result alike, all five of which FPC accepts.
+
+    A round that rewrites nothing inserts no alias declaration, so an unchanged
+    TokCount is exactly "nothing left to collapse". The cap is a runaway guard,
+    not a real limit: depth is the nesting depth of the source expression.
+    bug-a-a-nested-inline-specialize-is-refused-outside-a-type-section }
+  dgenAt := finalCur;
+  dgenRounds := 0;
+  repeat
+    dgenBefore := TokCount;
+    { EVERY template each round, not just the one that was just parsed. The
+      nesting crosses templates as readily as it repeats one --
+      `specialize TList<specialize TPair<Integer, AnsiString>>` -- and TList's
+      own sweep ran before TPair existed, so it could not have collapsed the
+      inner group then. Re-sweeping the earlier templates once TPair's round has
+      turned the inner group into a plain ident is what finishes the outer one. }
+    for dgenT := 0 to TemplateCount - 1 do
+      DelphiRewriteGenericUses(dgenT, dgenAt, TemplateIsDelphi[dgenT]);
+    Inc(dgenRounds);
+    if dgenRounds > 16 then
+      Error('generic specialization nested deeper than 16 levels (or a rewrite loop)');
+  until TokCount = dgenBefore;
 
   TokPos := finalCur;
   Next;

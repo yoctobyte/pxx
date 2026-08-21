@@ -1690,6 +1690,12 @@ var
     to Templates[]/Specializations[] (flat ti*MAX_TEMPLATE_PARAMS+k layout). }
   TemplateParamNames : array[0..MAX_TEMPLATES*MAX_TEMPLATE_PARAMS-1] of AnsiString;
   TemplateNParams    : array[0..MAX_TEMPLATES-1] of Integer;
+  { Was this template written in the mode-Delphi surface (`TFoo<T> = class`)
+    rather than objfpc's `generic TFoo<T>`? Remembered per template because the
+    use-rewriting sweep is re-run over EARLIER templates once a later one
+    collapses a group they could not — and each sweep must use its own
+    template's spelling. bug-a-a-nested-inline-specialize-is-refused-outside-a-type-section }
+  TemplateIsDelphi   : array[0..MAX_TEMPLATES-1] of Boolean;
   { Nested generic prerequisites collected by ParseSpecialization for ONE
     deferral, plus the token buffer it emits them from. Global for the same
     reason the other parser side channels are: fill / consume / discard within
