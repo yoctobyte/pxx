@@ -116,4 +116,4 @@ quick` GREEN.
   runtime this ticket makes universally present.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit c681ee686.
