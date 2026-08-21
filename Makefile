@@ -4757,6 +4757,18 @@ test-core: $(COMPILER)
 	# fpcdefs.inc DERIVES from the one CPU define — hand-listing them would be
 	# a second copy of FPC's derivation, wrong the day upstream changes it.
 	# feature-mimic-fpc-compiler-define-profile
+	# Copy() on a NESTED dynamic array. Two runs, and the SECOND is the point:
+	# a missing element retain is invisible on a plain run (the freed bytes are
+	# still there until something reuses them) and shows up under
+	# -dPXX_HEAP_DEBUG, which fills them with $$DD. Measured with the retain
+	# removed: the after-copy-scope line reads g11=-572662307, i.e. $$DDDDDDDD,
+	# while the plain run stays perfect. h[1][1] is the stride assertion —
+	# h[0][0] passes even with the wrong stride, which is why the original bug
+	# looked like it worked. feature-dynarray-copy-nested-element-type
+	./$(COMPILER) test/test_dynarray_copy_nested.pas $(TESTTMP)/test_dyncopy_nested
+	test "$$($(TESTTMP)/test_dyncopy_nested)" = "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
+	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_dynarray_copy_nested.pas $(TESTTMP)/test_dyncopy_nested_hd
+	test "$$($(TESTTMP)/test_dyncopy_nested_hd)" = "$$($(TESTTMP)/test_dyncopy_nested)"
 	./$(COMPILER) test/test_mimic_fpc_compiler_profile.pas $(TESTTMP)/test_mimicfpcc_none
 	test "$$($(TESTTMP)/test_mimicfpcc_none)" = "$$(printf 'fpc=NO\nunix=NO\nend')"
 	./$(COMPILER) --mimic-fpc test/test_mimic_fpc_compiler_profile.pas $(TESTTMP)/test_mimicfpcc_fpc
@@ -8380,6 +8392,10 @@ test-i386: $(COMPILER)
 	# the guard page. Depth is not printed: it depends on RLIMIT_STACK.
 	./$(COMPILER) --target=i386 test/test_stack_overflow_raise.pas $(TESTTMP)/test_i386_sovf
 	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sovf)" = "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
+	# Nested-array Copy on this target too — the stride is TypeSize(tyPointer),
+	# so the ILP32 targets are the ones that catch a hardcoded 8.
+	./$(COMPILER) --target=i386 test/test_dynarray_copy_nested.pas $(TESTTMP)/test_i386_dyncopyn
+	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_dyncopyn)" = "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
 	./$(COMPILER) --target=i386 test/test_halt_exit_code.pas $(TESTTMP)/test_i386_halt
 	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=i386 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_i386_sprw
@@ -8772,6 +8788,10 @@ test-aarch64: $(COMPILER)
 	# ... and the CPU half of the profile follows --target, not the host.
 	./$(COMPILER) --target=aarch64 --mimic-fpc-compiler test/test_mimic_fpc_compiler_profile.pas $(TESTTMP)/test_aarch64_mimicfpcc
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_mimicfpcc)" = "$$(printf 'fpc=yes\nunix=yes\ncpu=aarch64\nend')"
+	# Nested-array Copy on this target too — the stride is TypeSize(tyPointer),
+	# so the ILP32 targets are the ones that catch a hardcoded 8.
+	./$(COMPILER) --target=aarch64 test/test_dynarray_copy_nested.pas $(TESTTMP)/test_aarch64_dyncopyn
+	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_dyncopyn)" = "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
 	./$(COMPILER) --target=aarch64 test/test_halt_exit_code.pas $(TESTTMP)/test_aarch64_halt
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=aarch64 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_aarch64_sprw
@@ -8938,6 +8958,10 @@ test-riscv32: $(COMPILER)
 	# spare stack. (On i386 this is also what tells REG_ESP from REG_UESP:
 	# they hold the same value at fault time and only one is restored.)
 	# Halt(n) exits WITH n on this target too — see the native row.
+	# Nested-array Copy on this target too — the stride is TypeSize(tyPointer),
+	# so the ILP32 targets are the ones that catch a hardcoded 8.
+	./$(COMPILER) --target=riscv32 test/test_dynarray_copy_nested.pas $(TESTTMP)/test_riscv32_dyncopyn
+	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_dyncopyn)" = "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
 	./$(COMPILER) --target=riscv32 test/test_halt_exit_code.pas $(TESTTMP)/test_riscv32_halt
 	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=riscv32 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_riscv32_sprw
@@ -9585,6 +9609,10 @@ test-arm32: $(COMPILER)
 	# the guard page. Depth is not printed: it depends on RLIMIT_STACK.
 	./$(COMPILER) --target=arm32 test/test_stack_overflow_raise.pas $(TESTTMP)/test_arm32_sovf
 	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sovf)" = "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
+	# Nested-array Copy on this target too — the stride is TypeSize(tyPointer),
+	# so the ILP32 targets are the ones that catch a hardcoded 8.
+	./$(COMPILER) --target=arm32 test/test_dynarray_copy_nested.pas $(TESTTMP)/test_arm32_dyncopyn
+	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_dyncopyn)" = "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
 	./$(COMPILER) --target=arm32 test/test_halt_exit_code.pas $(TESTTMP)/test_arm32_halt
 	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=arm32 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_arm32_sprw

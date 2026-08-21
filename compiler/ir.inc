@@ -5317,7 +5317,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     vrElemTk, vrBoxTk: TTypeKind;
     setAllConst: Boolean; setSym: Integer;
     dcSrcSym, dcElemRec, dcElemSz, dcIdxAst, dcCntAst, dcSrcTmp, dcIdxTmp: Integer;
-    dcRetData, dcSrcAst: Integer;
+    dcRetData, dcSrcAst, dcDepth: Integer;
     dcCntTmp, dcTempSym, dcTempIdent, dcCountIdent, dcSlArg1, dcSlArg2: Integer;
     dcSlCall, dcSetlenVal, dcDestData, dcSrcStart, dcNbytes, dcSavedRec: Integer;
     dcNewLenTmp, dcValTmp, dcGapTmp, dcZeroIdent: Integer;
@@ -5736,12 +5736,25 @@ begin
         support `SetLength(r.items, n)` and `SetLength(a[i], n)`. Reading it off
         `Syms[ASTIVal[...]]` is what forced the parser to demand a bare name
         (bug-p-copy-rejects-a-dynamic-array-expression-that-is-not-a-bare-name).
-        A nested SOURCE is still refused in the parser, so the elements here are
-        always base values, never sub-array handles. }
+        A NESTED source is supported since 2026-08-21
+        (feature-dynarray-copy-nested-element-type): when the source still has
+        `array of` levels left its elements are sub-array HANDLES, not base
+        values, and three things change together. Having one without the others
+        is what made this a segfault before it was a diagnostic. }
       dcSrcAst := ASTLeft[node];
       dcElemTk := NodeDynBaseTk(dcSrcAst);
       dcElemRec := NodeDynBaseRec(dcSrcAst);
-      if dcElemTk = tyRecord then dcElemSz := RecSize(dcElemRec)
+      dcDepth := NodeDynDepth(dcSrcAst);
+      if dcDepth < 1 then dcDepth := 1;
+      if dcDepth > 1 then
+        { (1) THE STRIDE. A nested array's elements are handles, so the copy
+          strides by a POINTER, not by the base element. Taking it from the base
+          type is the original crash: `array of array of Integer` strode by 4,
+          so element 0 was right by luck (offset 0) and element 1 onward read a
+          bogus handle. TypeSize(tyPointer), not a literal 8 — a handle is 4
+          bytes on i386 / arm32 / riscv32. }
+        dcElemSz := TypeSize(tyPointer)
+      else if dcElemTk = tyRecord then dcElemSz := RecSize(dcElemRec)
       else dcElemSz := TypeSize(dcElemTk);
       dcIdxAst := ASTLeft[ASTRight[node]];
       dcCntAst := ASTLeft[ASTRight[ASTRight[node]]];
@@ -5788,7 +5801,10 @@ begin
         itself. }
       dcSavedRec := LastTypeRecId;
       if dcElemTk = tyRecord then LastTypeRecId := dcElemRec;
-      dcTempSym := AllocDynArray('', dcElemTk, 1);
+      { (2) THE TEMP'S DEPTH. At the SOURCE's depth, not a hardcoded 1, so its
+        scope-exit release recurses through the levels instead of treating a
+        buffer of handles as a buffer of base values. }
+      dcTempSym := AllocDynArray('', dcElemTk, dcDepth);
       LastTypeRecId := dcSavedRec;
       SymIsHiddenArgTemp[dcTempSym] := True;
 
@@ -5868,7 +5884,21 @@ begin
         pointer is re-derived rather than reused: the PXXMemCopy call overwrote
         dcDestData with its own result to link the call into the statement
         stream. }
-      if (dcElemTk = tyAnsiString) or
+      { (3) THE RETAIN, and for a NESTED source it is not optional. The copied
+        sub-array handles arrive with no refcount adjustment, and the temp is
+        released element-aware at scope exit (2) — which would free blocks the
+        SOURCE still owns. PXXDynArrayRetainImmediate already takes `depth` and
+        already does the right thing with it: at depth > 1 it IncRefs every
+        handle in the buffer and ignores baseKind entirely. So this is the same
+        call with the real depth instead of a hardcoded 1, exactly as the ticket
+        predicted.
+
+        That is also the semantics FPC has and test_nested_alias.pas asserts:
+        Copy detaches ONE level. The result gets a fresh OUTER block whose
+        elements are the SAME sub-arrays, so `h[0][0] := 99` is visible through
+        `g[0][0]`. Retaining them is what makes that sharing safe instead of a
+        double free. }
+      if (dcDepth > 1) or (dcElemTk = tyAnsiString) or
          ((dcElemTk = tyRecord) and RecordHasManagedFields(dcElemRec)) then
       begin
         procIdx := FindProc('PXXDynArrayRetainImmediate');
@@ -5881,10 +5911,24 @@ begin
         last := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcCntTmp, -1, -1, 0, Ord(tyInteger)),
                   -1, -1, 0, Ord(tyInteger));
         IRB[first] := last;
-        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, dcDepth, Ord(tyInteger)),
                      -1, -1, 0, Ord(tyInteger));
-        IRB[last] := argNode; last := argNode;                 { depth = 1 }
-        if dcElemTk = tyAnsiString then
+        IRB[last] := argNode; last := argNode;                 { depth }
+        if dcDepth > 1 then
+        begin
+          { Nested: the RTL takes its depth > 1 path and never reads these two,
+            so pass a NEUTRAL baseKind rather than falling into the record arm
+            below — that one indexes the RTTI table with dcElemRec, which for
+            `array of array of Integer` is REC_NONE and would compute a garbage
+            data offset. The call needs five arguments either way. }
+          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyInteger)),
+                       -1, -1, 0, Ord(tyInteger));
+          IRB[last] := argNode; last := argNode;               { baseKind = 0 (unused) }
+          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
+                       -1, -1, 0, Ord(tyPointer));
+          IRB[last] := argNode;                                { baseRecDesc = nil }
+        end
+        else if dcElemTk = tyAnsiString then
         begin
           argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
                        -1, -1, 0, Ord(tyInteger));

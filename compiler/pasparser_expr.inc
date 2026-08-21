@@ -4938,11 +4938,17 @@ begin
             nested copy needs (feature-dynarray-copy-nested-element-type).
             Reproduced on pinned, so it is not a regression — just a crash nobody
             had asked for yet. }
-          if CopySrcDynDepth(exprNode) > 1 then
-            Error('Copy: nested element type not yet supported for dynamic-array Copy');
+          { The depth > 1 refusal is gone: AN_DYN_COPY learned the handle
+            stride, the temp's real depth and the element-aware retain
+            (feature-dynarray-copy-nested-element-type). The SymElemDynDepth
+            guard stays — a dyn array whose ELEMENT is a separately named
+            dyn-array type is a different shape from syntactic nesting, and
+            NodeDynDepth does not fold the two, so lifting it would go back to
+            striding by the wrong size. }
           if (ASTKind[exprNode] = AN_IDENT) and (ASTIVal[exprNode] >= 0) and
              (SymElemDynDepth[ASTIVal[exprNode]] > 0) then
-            Error('Copy: nested element type not yet supported for dynamic-array Copy');
+            Error('Copy: dynamic-array element type not yet supported for '
+                  + 'dynamic-array Copy (feature-dynarray-copy-nested-element-type)');
           if node = -1 then
           begin
             node := AllocNode(AN_INT_LIT);
@@ -6374,12 +6380,14 @@ begin
           if CaseEqual(name, 'Copy') and (nArgs >= 1) and (nArgs <= 3) and
              (CopySrcDynDepth(ASTLeft[argsHead]) >= 1) then
           begin
-            if CopySrcDynDepth(ASTLeft[argsHead]) > 1 then
-              Error('Copy: nested element type not yet supported for dynamic-array Copy');
+            { Same pair as the arm above, and they must stay in step — this is
+              the double case normalise-dont-special-case warns about, and the
+              two already drifted apart once. }
             if (ASTKind[ASTLeft[argsHead]] = AN_IDENT) and
                (ASTIVal[ASTLeft[argsHead]] >= 0) and
                (SymElemDynDepth[ASTIVal[ASTLeft[argsHead]]] > 0) then
-              Error('Copy: nested element type not yet supported for dynamic-array Copy');
+              Error('Copy: dynamic-array element type not yet supported for '
+                    + 'dynamic-array Copy (feature-dynarray-copy-nested-element-type)');
             node := AllocNode(AN_DYN_COPY);
             ASTLeft[node] := ASTLeft[argsHead];                 { source array }
             if nArgs >= 2 then
