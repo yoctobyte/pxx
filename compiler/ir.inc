@@ -8977,13 +8977,30 @@ begin
           (`field := tmp`) shares the handle, and the local's scope-exit release
           frees the data the field still points at — managed-element strings come
           back empty, and a shrinking rebuild segfaults
-          (bug-dynarray-managed-record-field-reassign). Other targets keep the
-          bare handle store (share-semantics) for now; the new op is x86-64-only,
-          so they never see it. }
+          (bug-dynarray-managed-record-field-reassign).
+
+          This used to be x86-64 ONLY, with every other backend taking the bare
+          IR_STORE_MEM handle share — "for now", which lasted until the missing
+          retain was measured as a use-after-free rather than a leak:
+
+              var m: array of array of Integer; r: array of Integer;
+              SetLength(r, 3); r[0] := 7;
+              SetLength(m, 2);
+              m[0] := r;            { shared r's block WITHOUT retaining }
+              SetLength(m, 3, 5);   { released row 0 -> freed r's block }
+
+          correct natively, SIGSEGV on arm32/aarch64, silent death on riscv32,
+          and i386 would not even compile it. A per-target IR SHAPE is the thing
+          devdocs/dev/ir-as-substrate.md exists to argue against: the ARC rule
+          belongs to the IR, and every backend now implements the op.
+          bug-a-named-dynarray-alias-element-crashes-on-every-cross-target }
         value := IRLowerAST(ASTRight[node]);
         leftAddr := IRLowerDestAddress(ASTLeft[node]);
-        if TargetArch = TARGET_X86_64 then
+        if TargetArch <> TARGET_XTENSA then
         begin
+          { xtensa is the one holdout: it is ESP-class, has neither this op nor
+            the scope-exit release arms the other five carry, and gets its own
+            pass rather than a copy of this one. }
           Result := IRAppend(IR_STORE_DYN, leftAddr, value,
                              NodeDynDepth(ASTLeft[node]), -1,
                              Ord(NodeDynBaseTk(ASTLeft[node])));

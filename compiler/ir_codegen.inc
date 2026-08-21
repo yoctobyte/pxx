@@ -305,12 +305,38 @@ begin
   symIdx := Integer(IRIVal[node]);
   if symIdx >= 0 then
   begin
-    Result := GetOrAllocSymRTTI(symIdx);
-    Exit;
+    { Symbol root. Reusing the SYMBOL's descriptor is only correct when the
+      target IS the whole symbol; for a NESTED target (`SetLength(m[0], n)` on
+      an `array of array of Integer`) the row has the same base element type but
+      ONE FEWER DIMENSION, and the symbol's descriptor says depth 2 with an
+      8-byte pointer stride.
+
+      Handing that to PXXDynSetLen made it allocate 5*8 instead of 5*4, copy
+      past the end of the old row, and then release the old block as if its
+      INTEGERS were sub-array pointers — `PXXDynArrayReleaseDepth(Pointer(7))`,
+      i.e. a dereference of address 7. Measured: correct on x86-64, SIGSEGV on
+      arm32 and aarch64, silent death on riscv32.
+
+      x86-64 was immune only because its IR_SETLEN_DYN is inline code that
+      derives depth and stride from the node itself and never consults this
+      function — a per-target divergence that hid a shared-IR bug, which is the
+      failure mode devdocs/dev/ir-as-substrate.md is about.
+      bug-a-named-dynarray-alias-element-crashes-on-every-cross-target }
+    if IRC[node] = SymTR[symIdx].DynDepth then
+    begin
+      Result := GetOrAllocSymRTTI(symIdx);
+      Exit;
+    end;
+    depth := IRC[node];
+    baseTk := SymTR[symIdx].ElemTk;    { the ULTIMATE element type — depth-independent }
+    baseRec := SymTR[symIdx].ElemRec;
+  end
+  else
+  begin
+    depth := IRC[node];
+    baseTk := IRTk[node];
+    baseRec := IRSetLenBaseRec[node];
   end;
-  depth := IRC[node];
-  baseTk := IRTk[node];
-  baseRec := IRSetLenBaseRec[node];
 
   if AnonDynArrayCount >= 8192 then Error('too many anonymous dynamic arrays');
   anonIdx := AnonDynArrayCount;

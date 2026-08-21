@@ -2,7 +2,7 @@
 track: A
 prio: 40
 type: bug
-blocked-by: [bug-a-i386-and-aarch64-dynamic-array-assignment-has-no-store-arm]
+blocked-by: []
 summary: "Only x86-64 releases a local DYNAMIC array at scope exit; the other four backends have no `ArrLen = -1` arm at all, so every local dyn array leaks its block there. Attempted 2026-08-21 and REVERTED: the release is only safe where every dyn-array STORE retains, and on those backends the class/record FIELD store (IR_STORE_DYN is x86-64 only) does not. Fix the retain sites first; the ticket now carries the audit list."
 status: backlog
 owner: unassigned
@@ -184,3 +184,20 @@ reasons. The two tests that caught this were
 `test_dynarray_managed_field_reassign` and `test_dynarray_of_interfaces_assign`;
 neither is in the quick tier, which is why the gate was green and the push was
 still wrong.
+
+## Unblocked 2026-08-21 — the retain half has landed
+
+`IR_STORE_DYN` (the ARC-correct whole-dyn-array store into a slot ADDRESS: a
+class/record field, a nested target) is now implemented on **i386, arm32,
+aarch64 and riscv32**, and `ir.inc` emits it for every target except xtensa —
+see `bug-a-named-dynarray-alias-element-crashes-on-every-cross-target`. That was
+the sole reason this ticket was reverted the first time: a scope-exit release is
+only safe when EVERY store that can put a handle into the local retains it, and
+the field store did not.
+
+Re-attempt is now in order, but re-run the audit rather than assuming: xtensa
+still takes the non-retaining `IR_STORE_MEM` share path, so it must NOT get the
+release arm, and `test_dynarray_managed_field_reassign` (the test that caught
+the first attempt, `1 1 1 1 1 1` -> `1 0 0 0 0 0` on arm32/riscv32) is **not in
+the quick tier** — run it per target under `tools/run_target.sh` by hand before
+pushing.

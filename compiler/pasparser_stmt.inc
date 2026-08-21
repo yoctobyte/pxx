@@ -3454,7 +3454,17 @@ begin
   ASTLeft[idxN] := CloneAST(target);
   ASTRight[idxN] := AllocNode(AN_IDENT); ASTIVal[ASTRight[idxN]] := loopVar;
   inner := BuildSetLenNest(idxN, k + 1);
+  { TYPE the synthesised limit. Every other synthesiser in this parser stamps
+    ASTTk on the AN_BINOP it mints (BuildFlatNDIndex is the model) because the
+    IR lowering copies ASTTk[node] into the IR node VERBATIM — it never infers
+    the type from the operands. Leaving it 0 handed the for-limit temp
+    (`AllocVar('', IntToTypeKind(IRTk[limitValNode]))` in the AN_FOR lowering)
+    the type tyUnknown, which x86-64 absorbed into its 8-byte slot and i386
+    rightly refused: "a compiler-minted temporary reached codegen with an
+    UNRESOLVED type". So `SetLength(m, 3, 5)` did not build for i386 at all.
+    bug-a-i386-multidim-setlength-mints-an-untyped-temporary }
   limitN := AllocNode(AN_BINOP); ASTIVal[limitN] := Ord(tkMinus);
+  ASTTk[limitN] := Ord(tyInteger);
   ASTLeft[limitN] := CloneAST(SetLenDimNode[k]);
   one := AllocNode(AN_INT_LIT); ASTIVal[one] := 1; ASTTk[one] := Ord(tyInteger);
   ASTRight[limitN] := one;
@@ -3482,7 +3492,9 @@ begin
   ASTLeft[idxN] := CloneAST(target);
   ASTRight[idxN] := AllocNode(AN_IDENT); ASTIVal[ASTRight[idxN]] := loopVar;
   inner := BuildSetLenNest(idxN, 1);
+  { the sibling arm of the same omission — see the note in BuildSetLenNest }
   limitN := AllocNode(AN_BINOP); ASTIVal[limitN] := Ord(tkMinus);
+  ASTTk[limitN] := Ord(tyInteger);
   ASTLeft[limitN] := CloneAST(SetLenDimNode[0]);
   one := AllocNode(AN_INT_LIT); ASTIVal[one] := 1; ASTTk[one] := Ord(tyInteger);
   ASTRight[limitN] := one;

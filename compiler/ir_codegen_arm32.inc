@@ -3270,6 +3270,54 @@ begin
           EmitI32($E5900000); { ldr r0, [r0] (4-byte) }
       end;
 
+    IR_STORE_DYN:
+      begin
+        { ARC-correct whole dyn-array store into a slot ADDRESS (record/class
+          field or nested sub-array). Was x86-64 ONLY — `defs.inc` said so
+          outright, and every other backend took the bare IR_STORE_MEM handle
+          share instead, which does not retain.
+
+          That is not a missing optimisation, it is a use-after-free waiting for
+          a second owner to go away. Minimal repro, correct natively and a
+          SIGSEGV on arm32/aarch64 (silent death on riscv32, and i386 refused to
+          compile it at all):
+
+              var m: array of array of Integer; r: array of Integer;
+              SetLength(r, 3); r[0] := 7;
+              SetLength(m, 2);
+              m[0] := r;              { shares r's block WITHOUT retaining }
+              SetLength(m, 3, 5);     { releases row 0 -> frees r's block }
+
+          It is also what blocks the scope-exit release on these backends
+          (bug-a-no-dyn-array-scope-exit-release-on-four-backends): releasing a
+          local is only safe once every store that publishes a handle retains.
+
+          Mirrors this backend's own IR_STORE_SYM dyn-array arm: retain the new
+          handle (unless it is a fresh user-function result already carrying the
+          +1), publish it into the slot, then element-aware release the old one
+          through the node-derived descriptor. }
+        IREmitNodeArm32(IRB[node]);           { r0 = new handle }
+        if not ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0)) then
+        begin
+          EmitI32($E92D0001);                 { push {r0} }
+          procIdx := FindProc('PXXDynArrayIncRef');
+          if procIdx < 0 then Error('compiler error: PXXDynArrayIncRef not found');
+          EmitCallProc(procIdx);
+          EmitI32($E8BD0001);                 { pop {r0} }
+        end;
+        EmitI32($E92D0001);                   { push {r0} new }
+        IREmitNodeArm32(IRA[node]);           { r0 = slot address }
+        EmitI32($E1A02000);                   { mov r2, r0 }
+        EmitI32($E5920000);                   { ldr r0, [r2] = old handle }
+        EmitI32($E59D1000);                   { ldr r1, [sp] = new }
+        EmitI32($E5821000);                   { str r1, [r2] — publish new }
+        EmitLoadDataRefArm32(1, GetOrAllocNodeDynDesc(node));  { r1 = desc }
+        procIdx := FindProc('PXXDynArrayRelease');
+        if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
+        EmitCallProc(procIdx);                { release(old, desc) — nil-safe }
+        EmitI32($E8BD0001);                   { pop {r0} new (statement value) }
+      end;
+
     IR_STORE_MEM:
       begin
         tk := IntToTypeKind(IRTk[node]);
