@@ -730,8 +730,9 @@ begin
   name := 'LINUX';
   PasDefine(name);
   { Valued preset so numeric {$IF X >= N} has something to evaluate without
-    mimic mode. PXX_VERSION tracks the pinned-stable generation (v26). }
-  PasSetDefineValue('PXX_VERSION', 26);
+    mimic mode. PXX_VERSION tracks the pinned-stable generation, and the number
+    lives in defs.inc as PXX_GENERATION so `pxx --version` reports the same one. }
+  PasSetDefineValue('PXX_VERSION', PXX_GENERATION);
 end;
 
 procedure PasApplyPlatformDefines;

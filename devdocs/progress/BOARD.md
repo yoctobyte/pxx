@@ -56,7 +56,7 @@ lives in git, not in a timestamp._
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (258)
+## backlog (259)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -155,6 +155,7 @@ lives in git, not in a timestamp._
 | docs-d-document-exec-eval-and-the-builtins-incompatibility | D | 40 | docs | docs/targets/nil-python.md tells the public `eval`/`exec` do not exist (\"No eval of runtime-constructed code\") — but the explicit-dict form has worked since 2026-07-31 via pyeval's tree-walker. Document what exec/eval DO support, the refused ambient form, and the decided __builtins__ incompatibility (decided 2026-08-19, permanent for now). | — |
 | docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out | D | 45 | docs | docs/language/name-resolution.md:47 and docs/targets/nil-python.md:260 quote the bare-import refusal message and state the rule with no carve-out. As of 2026-08-20 a unit declaring {$PYEXTENSION} and binding the cpyext runtime IS bare-importable, so both pages are now wrong in the direction that makes a working program look unsupported. | — |
 | docs-d-nilchecks-directive-and-flag | D | 40 | docs | {$NILCHECKS ON\|OFF} and --no-nil-check shipped 2026-08-21 and are not in docs/reference/directives.md or modes.md. The row is unusual enough to be worth a sentence: the directive is tri-state, so ON and OFF do different things depending on which site class you are looking at. | — |
+| docs-toolchain-cli-flags | D | 30 | docs | Document the toolchain information flags (--help / --version / --where / --list-targets, PXX_HOME, PXX_LIBPATH) | — |
 | feature-a-audit-strict-flags-against-dialectispxx | A | 20 | feature | `DialectIsPxx` now exists and only `--strict-overload` consults it. The other six strict flags apply everywhere, including to our own {$MODE PXX} RTL. Audit each one: does it WANT the ownership carve-out, or is it right to judge every file? | — |
 | feature-a-declaration-phase | N | 55 | feature | A real declaration phase: all decls before any body is typed | — |
 | feature-a-dynamic-array-of-frozen-strings | A | 30 | feature | In the FROZEN-string model (-uPXX_MANAGED_STRING, the self-host build), `array of string` is refused from SetLength up: the element is an inline fixed-capacity buffer and no path knows its stride. Delete/Insert refuse it downstream of that, which is why they carry a frozen-string exclusion. | — |
@@ -746,6 +747,7 @@ lives in git, not in a timestamp._
 - [p 30] [B] compat-pascal-ioresult-returns-a-negative-errno
 - [p 30] [P] compat-pascal-subrange-storage-size
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
+- [p 30] [D] docs-toolchain-cli-flags
 - [p 30] [A] feature-a-dynamic-array-of-frozen-strings
 - [p 30] [A] feature-a-emit-obj-record-class-abi-mode
 - [p 30] [A] feature-a-finalize-for-bare-dynarray-and-variant

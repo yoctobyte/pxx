@@ -2615,6 +2615,74 @@ begin
   UsesInjected := saved;
 end;
 
+procedure ResolveToolchainDirs(var cdir, bdir, rtldir, lcldir, asmdir: AnsiString);
+{ Where the compiler's own libraries live, resolved from the binary's location
+  (ExeDir) so a unit resolves regardless of CWD. ExeDir is e.g. <root>/compiler/,
+  so the RTL/PCL dirs are its siblings via '../lib/...'. Falls back to
+  CWD-relative when the binary path carried no directory (run via a bare name).
+
+  Extracted from ParseUsesUnit so `pxx --where` can print exactly what the search
+  will use, probe and all, instead of a second guess at the same rule. }
+var probeFile, probeContent, probePath, home: AnsiString;
+begin
+  { Tier 2: PXX_HOME — an explicit install root, for the layout the ExeDir rule
+    cannot guess (binary on PATH somewhere unrelated to its libraries). It wins
+    outright rather than merging with the ExeDir guess: a half-applied override
+    is the failure mode nobody can read, and `pxx --where` prints each root with
+    [MISSING] so a typo shows up as a typo. }
+  home := PxxGetEnv('PXX_HOME');
+  if Length(home) > 0 then
+  begin
+    if home[Length(home)] <> '/' then home := home + '/';
+    ConcatThree(home, 'compiler/', '', cdir);
+    ConcatThree(home, 'compiler/builtin/', '', bdir);
+    ConcatThree(home, 'lib/rtl/', '', rtldir);
+    ConcatThree(home, 'lib/pcl/', '', lcldir);
+    ConcatThree(home, 'lib/asmcore/', '', asmdir);
+    Exit;
+  end;
+  if ExeDir = '' then
+  begin
+    cdir := 'compiler/'; bdir := 'compiler/builtin/';
+    rtldir := 'lib/rtl/'; lcldir := 'lib/pcl/'; asmdir := 'lib/asmcore/';
+  end
+  else
+  begin
+    cdir := ExeDir;
+    ConcatThree(ExeDir, 'builtin/', '', bdir);   { ExeDir is <root>/compiler/ }
+    ConcatThree(ExeDir, '../lib/rtl/', '', rtldir);
+    ConcatThree(ExeDir, '../lib/pcl/', '', lcldir);
+    ConcatThree(ExeDir, '../lib/asmcore/', '', asmdir);
+    { '../lib' assumes the binary sits at <root>/compiler/. The STABLE binary
+      does not — it lives at <root>/stable_linux_amd64/<profile>/, two levels
+      down — so its '../lib/rtl' does not exist and every RTL unit missed. In
+      the repo that went unnoticed because the CWD-relative fallbacks below
+      rescue it; run the stable binary from any other directory and
+      `uses SysUtils` silently resolved to nothing, then every symbol it should
+      have supplied failed one by one, far from the cause
+      (bug-a-uses-sysutils-silently-no-ops-when-the-rtl-is-not-on-the-search-path).
+
+      Probe for a unit that is certainly there rather than guess a depth: if
+      '../lib/rtl/sysutils.pas' does not load, re-anchor one level higher. Done
+      once, so every rtldir/lcldir/asmdir use below is fixed at the same time. }
+    ConcatThree(rtldir, 'sysutils', '.pas', probeFile);
+    LoadFileCI(probeFile, probeContent);
+    if Length(probeContent) = 0 then
+    begin
+      ConcatThree(ExeDir, '../../lib/rtl/', '', probePath);
+      ConcatThree(probePath, 'sysutils', '.pas', probeFile);
+      LoadFileCI(probeFile, probeContent);
+      if Length(probeContent) > 0 then
+      begin
+        rtldir := probePath;
+        ConcatThree(ExeDir, '../../lib/pcl/', '', lcldir);
+        ConcatThree(ExeDir, '../../lib/asmcore/', '', asmdir);
+      end;
+    end;
+    probeContent := '';
+  end;
+end;
+
 procedure ParseUsesUnitBody(const name: AnsiString);
 var
   lo, cName, path: AnsiString;
@@ -3119,50 +3187,11 @@ begin
     Inc(i);
   end;
 
-  { Library directories, anchored to the compiler binary (ExeDir) so units
-    resolve regardless of CWD. ExeDir is e.g. <root>/compiler/, so the RTL/PCL
-    dirs are its siblings via '../lib/...'. Falls back to CWD-relative when the
-    binary path carried no directory (run via a bare name). }
-  if ExeDir = '' then
-  begin
-    cdir := 'compiler/'; bdir := 'compiler/builtin/';
-    rtldir := 'lib/rtl/'; lcldir := 'lib/pcl/'; asmdir := 'lib/asmcore/';
-  end
-  else
-  begin
-    cdir := ExeDir;
-    ConcatThree(ExeDir, 'builtin/', '', bdir);   { ExeDir is <root>/compiler/ }
-    ConcatThree(ExeDir, '../lib/rtl/', '', rtldir);
-    ConcatThree(ExeDir, '../lib/pcl/', '', lcldir);
-    ConcatThree(ExeDir, '../lib/asmcore/', '', asmdir);
-    { '../lib' assumes the binary sits at <root>/compiler/. The STABLE binary
-      does not — it lives at <root>/stable_linux_amd64/<profile>/, two levels
-      down — so its '../lib/rtl' does not exist and every RTL unit missed. In
-      the repo that went unnoticed because the CWD-relative fallbacks below
-      rescue it; run the stable binary from any other directory and
-      `uses SysUtils` silently resolved to nothing, then every symbol it should
-      have supplied failed one by one, far from the cause
-      (bug-a-uses-sysutils-silently-no-ops-when-the-rtl-is-not-on-the-search-path).
-
-      Probe for a unit that is certainly there rather than guess a depth: if
-      '../lib/rtl/sysutils.pas' does not load, re-anchor one level higher. Done
-      once, so every rtldir/lcldir/asmdir use below is fixed at the same time. }
-    ConcatThree(rtldir, 'sysutils', '.pas', probeFile);
-    LoadFileCI(probeFile, probeContent);
-    if Length(probeContent) = 0 then
-    begin
-      ConcatThree(ExeDir, '../../lib/rtl/', '', probePath);
-      ConcatThree(probePath, 'sysutils', '.pas', probeFile);
-      LoadFileCI(probeFile, probeContent);
-      if Length(probeContent) > 0 then
-      begin
-        rtldir := probePath;
-        ConcatThree(ExeDir, '../../lib/pcl/', '', lcldir);
-        ConcatThree(ExeDir, '../../lib/asmcore/', '', asmdir);
-      end;
-    end;
-    probeContent := '';
-  end;
+  { Library directories, anchored to the compiler binary. ONE owner, because
+    `pxx --where` has to report the same answer this search uses — a diagnostic
+    that re-derives the paths is a diagnostic that goes stale silently.
+    feature-toolchain-cli-ux }
+  ResolveToolchainDirs(cdir, bdir, rtldir, lcldir, asmdir);
 
   if Length(UnitContent) = 0 then
   begin

@@ -1968,7 +1968,7 @@ end;
   user -I roots (registered at option-parse time), so -I still wins. Suppressed
   by -nostdinc. }
 procedure AddDefaultCIncludeDirs;
-var d: AnsiString;
+var d, hdir: AnsiString;
 begin
   if NoStdInc then Exit;
   { Idempotent: a C source pulled as a UNIT calls this too (the main program may
@@ -1976,6 +1976,17 @@ begin
     be pulled many times over one compile. }
   if DefaultCIncludeDirsAdded then Exit;
   DefaultCIncludeDirsAdded := True;
+  { Tier 2: PXX_HOME, the same explicit install root ResolveToolchainDirs and
+    AddDefaultPasUnitDirs honour, and with the same all-or-nothing rule — an
+    override that is half-applied is the one nobody can read. }
+  hdir := PxxGetEnv('PXX_HOME');
+  if Length(hdir) > 0 then
+  begin
+    if hdir[Length(hdir)] <> '/' then hdir := hdir + '/';
+    ConcatThree(hdir, 'lib/crtl/include/', '', d);
+    AddCIncludeDir(d);
+    Exit;
+  end;
   { ExeDir-anchored (installed/normal: ExeDir = <root>/compiler/) ... }
   if ExeDir <> '' then
   begin

@@ -117,6 +117,11 @@ const
   MAX_CPREP_CHARS = 8388608;  { 8 MB }
   MAX_C_INCLUDE_DIRS = 64;    { user `-I` C include search roots }
   MAX_PAS_UNIT_DIRS  = 64;    { user `-Fu`/`-I` Pascal unit search roots }
+  { The compiler's own GENERATION number, tracking the pinned-stable line. ONE
+    owner: the {$IF} preset PXX_VERSION (lexer.inc) and `pxx --version` both read
+    it here, so the number cannot drift between what a program tests for and what
+    the binary reports. feature-toolchain-cli-ux }
+  PXX_GENERATION     = 26;
   MAX_CPREP_ARGS = 4096;
   STRING_CAP  = 8388608;      { 8 MB }
   MAX_TOKENS  = 2097152;
@@ -4105,6 +4110,14 @@ var
   PxxDbgTopics : AnsiString;
   PxxDbgLoaded : Boolean;
 
+{ The process environment, read ONCE from /proc/self/environ and kept as the
+  raw NUL-separated block. sysopen/sysread/sysclose are compiler INTRINSICS, so
+  this serves the FPC-bootstrap and self-hosted builds alike and needs no PAL
+  entry point. One owner: PXXDBG, PXX_HOME and PXX_LIBPATH all read through
+  PxxGetEnv rather than each hand-rolling the same scan. }
+  PxxEnvBlock  : AnsiString;
+  PxxEnvLoaded : Boolean;
+
 { PXXDBG=help. Deliberately does NOT enumerate the topics: a list duplicated in
   source drifts from the real probes, and a drifted list is worse than none.
   devdocs/dev/debug-switches.md is the authority. }
@@ -4196,37 +4209,64 @@ begin
   WriteLn('Topics are listed in devdocs/dev/debug-switches.md');
 end;
 
-procedure PxxDbgLoad;
-var buf: array[0..16383] of Byte; fd, n, i, j, k: Integer; nm, pth: AnsiString;
+procedure PxxEnvLoad;
+var buf: array[0..16383] of Byte; fd, n, i: Integer; pth: AnsiString;
 begin
-  if PxxDbgLoaded then Exit;
-  PxxDbgLoaded := True;
-  PxxDbgTopics := '';
+  if PxxEnvLoaded then Exit;
+  PxxEnvLoaded := True;
+  PxxEnvBlock := '';
   pth := '/proc/self/environ';   { sysopen takes a string VAR, not a literal }
   fd := sysopen(pth, 0);
   if fd < 0 then Exit;
   n := sysread(fd, buf, SizeOf(buf));
   sysclose(fd);                  { statement form, like elfwriter's LoadFile }
   if n <= 0 then Exit;
-  { NUL-separated NAME=VALUE records }
-  i := 0;
-  while i < n do
+  for i := 0 to n - 1 do PxxEnvBlock := PxxEnvBlock + Chr(buf[i]);
+end;
+
+{ One NAME=VALUE lookup over that block. Returns '' for absent AND for empty —
+  every caller here treats "set to nothing" as "not set", which is what a user
+  clearing a variable means. }
+function PxxGetEnv(const name: AnsiString): AnsiString;
+var i, j, k, n, nlen: Integer; ok: Boolean; val: AnsiString;
+begin
+  PxxGetEnv := '';
+  PxxEnvLoad;
+  n := Length(PxxEnvBlock);
+  nlen := Length(name);
+  if (n = 0) or (nlen = 0) then Exit;
+  i := 1;
+  while i <= n do
   begin
     j := i;
-    while (j < n) and (buf[j] <> 0) do Inc(j);
-    { does this record start with PXXDBG= ? }
-    if j - i > 7 then
+    while (j <= n) and (PxxEnvBlock[j] <> Chr(0)) do Inc(j);
+    { does this record read NAME=... ? }
+    if j - i > nlen then
     begin
-      nm := '';
-      for k := i to i + 5 do nm := nm + Chr(buf[k]);
-      if (nm = 'PXXDBG') and (buf[i + 6] = Ord('=')) then
+      ok := PxxEnvBlock[i + nlen] = '=';
+      k := 1;
+      while ok and (k <= nlen) do
       begin
-        PxxDbgTopics := '';
-        for k := i + 7 to j - 1 do PxxDbgTopics := PxxDbgTopics + Chr(buf[k]);
+        if PxxEnvBlock[i + k - 1] <> name[k] then ok := False;
+        Inc(k);
+      end;
+      if ok then
+      begin
+        val := '';
+        for k := i + nlen + 1 to j - 1 do val := val + PxxEnvBlock[k];
+        PxxGetEnv := val;
+        Exit;
       end;
     end;
     i := j + 1;
   end;
+end;
+
+procedure PxxDbgLoad;
+begin
+  if PxxDbgLoaded then Exit;
+  PxxDbgLoaded := True;
+  PxxDbgTopics := PxxGetEnv('PXXDBG');
   if PxxDbgTopics = 'help' then PxxDbgHelp;
 end;
 

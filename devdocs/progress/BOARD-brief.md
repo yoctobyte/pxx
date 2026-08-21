@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:21 blocked:9 backlog:258 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2228 rejected:40`
+`urgent:1 working:1 unfinished:21 blocked:9 backlog:259 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2228 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -51,7 +51,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 247, ranked
+## Ready — top 30 of 248, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree
@@ -84,4 +84,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 50] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - `[p 50] [T]` bug-t-track-ts-own-pushes-destroy-track-ts-own-breadth-coverage
 
-_217 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_218 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

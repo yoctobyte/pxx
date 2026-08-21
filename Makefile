@@ -10857,6 +10857,44 @@ test-quick: $(COMPILER)
 	test "$$($(TESTTMP)/smoke_tthread26 | tail -1)" = "TTHREAD SYNC OK"
 	./$(COMPILER) test/test_fwd_ptr_alias_field.pas $(TESTTMP)/smoke_fwdptralias26
 	test "$$($(TESTTMP)/smoke_fwdptralias26)" = "11 22"
+	# feature-toolchain-cli-ux: the information flags answer with NO source file
+	# and exit 0. They are the first thing a stuck user reaches for, so a
+	# regression that makes `pxx --where` demand an input, or die, is exactly
+	# the one that costs the most and shows up in no compile test.
+	./$(COMPILER) --version | grep -q '^pxx (pascal26)'
+	./$(COMPILER) --version | grep -q 'generation:  26'
+	./$(COMPILER) --list-targets | grep -q '^x86_64 (default)'
+	./$(COMPILER) --list-targets | grep -q '^xtensa'
+	./$(COMPILER) --help | grep -q 'usage: pxx'
+	./$(COMPILER) -h | grep -q -- '--list-targets'
+	# --where must report the roots RESOLVED by the same code the unit search
+	# uses (ResolveToolchainDirs / AddDefaultPasUnitDirs / AddDefaultCIncludeDirs),
+	# never a re-derivation. The [RTL] row therefore has to exist and NOT be
+	# marked [MISSING] when run from the repo, which is what proves the two
+	# owners are still one owner.
+	./$(COMPILER) --where | grep '\[RTL\]' | grep -qv MISSING
+	./$(COMPILER) --where | grep -q 'PXX_HOME     (unset)'
+	# ...and the env tier actually reroutes those roots. /nonexistent-pxx-home
+	# is deliberate: the value is honoured all-or-nothing, so the exe-dir guess
+	# must NOT reappear underneath it as a silent second chance.
+	PXX_HOME=/nonexistent-pxx-home ./$(COMPILER) --where > $(TESTTMP)/cliux_where.txt
+	grep -q '/nonexistent-pxx-home/lib/rtl/   \[MISSING\]   \[RTL\]' $(TESTTMP)/cliux_where.txt
+	! grep -q 'lib/rtl/platform/posix/$$' $(TESTTMP)/cliux_where.txt || \
+	  { echo "PXX_HOME did not replace the exe-dir PAL default"; exit 1; }
+	PXX_LIBPATH=/pxx_lp_a:/pxx_lp_b ./$(COMPILER) --where | grep -q '/pxx_lp_b/'
+	# The env tier's REASON to exist: a binary whose own directory says nothing
+	# about where its libraries are still compiles a `uses sysutils` program.
+	cp $(COMPILER) $(TESTTMP)/cliux_pxx
+	cd $(TESTTMP) && PXX_HOME=$(CURDIR) ./cliux_pxx $(CURDIR)/test/quick_canary_argv0.pas $(TESTTMP)/cliux_home26
+	test "$$($(TESTTMP)/cliux_home26)" = "argv0 canary ok 42"
+	# ...and the SAME source compiled with and without PXX_HOME must emit the
+	# same bytes. The env tier is a second way to feed the compiler a different
+	# library path for identical input, which is precisely how
+	# bug-a-the-compilers-output-depends-on-argv0 interned resolved paths into
+	# the emitted string pool. One door was closed; this checks the new one.
+	./$(COMPILER) test/quick_canary_argv0.pas $(TESTTMP)/cliux_noenv26
+	PXX_HOME=$(CURDIR) ./$(COMPILER) test/quick_canary_argv0.pas $(TESTTMP)/cliux_withenv26
+	cmp $(TESTTMP)/cliux_noenv26 $(TESTTMP)/cliux_withenv26
 
 # test-smoke: the pre-commit iteration gate = test-quick + the full self-host
 # byte-identity chain (the artifacts stabilize-core pins). Catches self-host

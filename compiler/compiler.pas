@@ -176,6 +176,255 @@ function IRNodeOwnsManagedStr(n: Integer): Boolean; forward;
 {$ifndef PXX_NO_CFRONT}{$include cpreproc.inc}{$endif}
 {$include asmfront.inc}
 
+{ ===== Toolchain CLI: --version / --where / --list-targets / --help =====
+
+  Every one of these is a FLAG on the compiler binary rather than a helper
+  script, because a flag is always present after an install, needs no PATH of its
+  own, and documents itself in --help. feature-toolchain-cli-ux.
+
+  They answer before any source file is required — `pxx --where` with no
+  arguments is exactly the case someone reaches for when units are not found. }
+
+procedure AddDefaultPasUnitDirs;
+{ The PAL search roots the default RTL needs (platform_backend lives under
+  lib/rtl/platform/<pal>/), appended AFTER any user -Fu so an explicit override
+  still wins. ESP targets pick their own backend and are excluded.
+
+  Extracted from the main body so `pxx --where` reports the same list a real
+  compile builds — a diagnostic that re-derives the search path is a diagnostic
+  that goes stale silently (feature-toolchain-cli-ux). Idempotent enough for
+  --where's purposes: it is called once per process either way. }
+var libpath, one, home: AnsiString;
+    i: Integer;
+begin
+  { Tier 2a: PXX_LIBPATH — colon-separated extra unit roots. Added HERE, which
+    puts them after any -Fu (parsed earlier) and before the exe-dir defaults
+    below: exactly the tier order the ticket specifies, with no sorting pass. }
+  libpath := PxxGetEnv('PXX_LIBPATH');
+  if Length(libpath) > 0 then
+  begin
+    one := '';
+    for i := 1 to Length(libpath) + 1 do
+    begin
+      if (i > Length(libpath)) or (libpath[i] = ':') then
+      begin
+        if Length(one) > 0 then
+        begin
+          if one[Length(one)] <> '/' then one := one + '/';
+          AddPasUnitDir(one);
+        end;
+        one := '';
+      end
+      else
+        one := one + libpath[i];
+    end;
+  end;
+
+  if NoDefaultRtl or TargetIsEspClass then Exit;
+
+  { Tier 2b: PXX_HOME's PAL dir, matching ResolveToolchainDirs' override. Same
+    all-or-nothing rule — when PXX_HOME is set, the exe-dir guesses below are
+    not appended as a silent second chance. }
+  home := PxxGetEnv('PXX_HOME');
+  if Length(home) > 0 then
+  begin
+    if home[Length(home)] <> '/' then home := home + '/';
+    AddPasUnitDir(home + 'lib/rtl/platform/posix/');
+    Exit;
+  end;
+
+  { ExeDir-anchored (the installed layout: <root>/compiler/ -> ../lib/...) plus
+    a CWD-relative fallback, mirroring ParseUsesUnit's own search chain. The
+    latter covers the self-host tests, which run a /tmp copy of the compiler
+    with CWD at the repo root, so ExeDir-relative ('/tmp/../lib/...') misses. }
+  if ExeDir <> '' then
+  begin
+    AddPasUnitDir(ExeDir + '../lib/rtl/platform/posix/');
+    { The STABLE binary lives at <root>/stable_linux_amd64/<profile>/, two
+      levels down, so its '../lib' misses. Add the two-levels-up spelling as
+      well rather than probe: an extra non-existent search dir costs one
+      failed open, and getting this wrong made `uses SysUtils` resolve and
+      then die on its own `uses platform_backend`
+      (bug-a-uses-sysutils-silently-no-ops-when-the-rtl-is-not-on-the-search-path). }
+    AddPasUnitDir(ExeDir + '../../lib/rtl/platform/posix/');
+  end;
+  AddPasUnitDir('lib/rtl/platform/posix/');
+end;
+
+procedure PrintVersionInfo;
+begin
+  WriteLn('pxx (pascal26) — self-hosting Pascal-dialect compiler');
+  WriteLn('  generation:  ', PXX_GENERATION, '   (the value {$IF PXX_VERSION >= n} tests)');
+  WriteLn('  frontends:   pascal c nilpy rust zig ada basic fortran algol erlang lolcode whitespace');
+  WriteLn('  host arch:   x86-64 linux');
+end;
+
+procedure PrintTargetList;
+{ Honest about the two ways a target can be missing: a backend can be COMPILED
+  OUT (-dPXX_NO_I386 / -dPXX_NO_ARM32), and a target that emits perfectly well
+  may still not RUN here. Both are things a user hits and neither is guessable. }
+var i: Integer;
+begin
+  WriteLn('target                  runs on this host   notes');
+  WriteLn('x86_64 (default)        yes                 native');
+{$ifdef PXX_NO_I386}
+  WriteLn('i386                    (not built)         backend compiled out (-dPXX_NO_I386)');
+{$else}
+  WriteLn('i386                    via qemu-i386       32-bit');
+{$endif}
+  WriteLn('aarch64                 via qemu-aarch64');
+{$ifdef PXX_NO_ARM32}
+  WriteLn('arm32                   (not built)         backend compiled out (-dPXX_NO_ARM32)');
+{$else}
+  WriteLn('arm32                   via qemu-arm');
+{$endif}
+  WriteLn('riscv32                 via qemu-riscv32');
+  WriteLn('xtensa                  no                  ESP32/S2/S3 — flash it');
+  WriteLn;
+  WriteLn('ESP SoC names (imply their arch, and --platform=esp):');
+  Write('  ');
+  for i := 1 to SOC_LAST do
+  begin
+    Write(SocName(i));
+    if i < SOC_LAST then Write(' ');
+  end;
+  WriteLn;
+end;
+
+function WhereDirExists(const dir: AnsiString): Boolean;
+{ open(O_RDONLY) on a directory succeeds on Linux — we never read it, so that is
+  the whole existence test, and it needs no new PAL surface. }
+var f: Integer;
+    p: AnsiString;
+begin
+  p := dir;
+  WhereDirExists := False;
+  if Length(p) = 0 then Exit;
+  f := sysopen(p, 0);
+  if f >= 0 then
+  begin
+    sysclose(f);
+    WhereDirExists := True;
+  end;
+end;
+
+procedure ShowWhereDir(const dir, tag: AnsiString);
+begin
+  Write('  ', dir);
+  if not WhereDirExists(dir) then Write('   [MISSING]');
+  if Length(tag) > 0 then Write('   ', tag);
+  WriteLn;
+end;
+
+procedure PrintWhere;
+{ What the compiler ACTUALLY resolves, not a second copy of the rule. Every path
+  below comes from calling the same routines a real compile calls
+  (AddDefaultPasUnitDirs / ResolveToolchainDirs / AddDefaultCIncludeDirs), so
+  this cannot drift from the search it describes — which is the whole value: a
+  "unit not found" is nearly always this list not containing what was expected,
+  and a stale diagnostic sends the reader hunting in the wrong place.
+
+  Non-existent entries are printed too, and marked. The two-levels-up spellings
+  exist because the pinned stable binary sits one directory deeper than
+  compiler/pascal26; seeing which of the pair resolved is the diagnosis. }
+var i: Integer;
+    whereExe, cdir, bdir, rtldir, lcldir, asmdir: AnsiString;
+begin
+  whereExe := ParamStr(0);
+  ExeDir := GetFilePath(whereExe);
+  WriteLn('binary:      ', whereExe);
+  if ExeDir = '' then
+    WriteLn('exe dir:     (none — invoked by bare name; all roots fall back to CWD-relative)')
+  else
+    WriteLn('exe dir:     ', ExeDir);
+  WriteLn;
+
+  WriteLn('Environment (tier 2 — overrides the exe-dir defaults, loses to -Fu/-I):');
+  whereExe := PxxGetEnv('PXX_HOME');
+  if Length(whereExe) = 0 then
+    WriteLn('  PXX_HOME     (unset)   [exe-dir defaults in effect]')
+  else
+    WriteLn('  PXX_HOME     ', whereExe);
+  whereExe := PxxGetEnv('PXX_LIBPATH');
+  if Length(whereExe) = 0 then
+    WriteLn('  PXX_LIBPATH  (unset)')
+  else
+    WriteLn('  PXX_LIBPATH  ', whereExe, '   [colon-separated extra unit roots]');
+  WriteLn;
+
+  ResolveToolchainDirs(cdir, bdir, rtldir, lcldir, asmdir);
+  WriteLn('Library roots (as ParseUsesUnit resolves them):');
+  ShowWhereDir(rtldir, '[RTL]');
+  ShowWhereDir(lcldir, '[PCL]');
+  ShowWhereDir(asmdir, '[asmcore]');
+  ShowWhereDir(bdir, '[builtin units]');
+  ShowWhereDir(cdir, '[compiler-local units]');
+  WriteLn;
+
+  AddDefaultPasUnitDirs;
+  WriteLn('Pascal unit search roots, in order (-Fu goes in FRONT of these):');
+  if PasUnitDirCount = 0 then
+    WriteLn('  (none — default RTL is off: --no-default-rtl, or an ESP target)');
+  for i := 0 to PasUnitDirCount - 1 do
+    ShowWhereDir(PasUnitDirs[i], '');
+  WriteLn;
+
+{$ifndef PXX_NO_CFRONT}
+  AddDefaultCIncludeDirs;
+  WriteLn('C <> include roots, in order (-I goes in FRONT of these):');
+  if CIncludeDirCount = 0 then
+    WriteLn('  (none — -nostdinc)');
+  for i := 0 to CIncludeDirCount - 1 do
+    ShowWhereDir(CIncludeDirs[i], '');
+  WriteLn;
+{$endif}
+
+  WriteLn('There is no config-file tier yet — flags plus the exe-dir defaults above');
+  WriteLn('are everything that is consulted (feature-dynamic-include-paths-config).');
+  WriteLn('Note: -Fu / -I given BEFORE --where on this command line are listed;');
+  WriteLn('ones given after it are not, because --where answers where it is read.');
+end;
+
+procedure PrintHelp;
+begin
+  PrintVersionInfo;
+  WriteLn;
+  WriteLn('usage: pxx [options] <source> [output]');
+  WriteLn;
+  WriteLn('information (no source file needed):');
+  WriteLn('  --help, -h            this text');
+  WriteLn('  --version             generation, frontends, host');
+  WriteLn('  --where               every path the compiler resolves, and where each came from');
+  WriteLn('  --list-targets        the --target= values, and which run on this host');
+  WriteLn;
+  WriteLn('common options:');
+  WriteLn('  -O0 -O1 -O2 -O3       optimisation level (-O2 is the proven default)');
+  WriteLn('  -g                    DWARF line info (x86-64)');
+  WriteLn('  --target=<t>          cross-compile; see --list-targets');
+  WriteLn('  -Fu<dir>              add a Pascal unit search root');
+  WriteLn('  -Fi<dir>              add a {$I} include search root');
+  WriteLn('  -I<dir>               add a C include search root');
+  WriteLn('  -d<NAME> -u<NAME>     define / undefine a conditional symbol');
+  WriteLn('  -Mobjfpc              FPC objfpc mode by default');
+  WriteLn('  --emit-obj            emit a relocatable .o instead of an executable');
+  WriteLn('  --shared              emit a shared library');
+  WriteLn('  --threadsafe          lock the heap and the I/O paths');
+  WriteLn;
+  WriteLn('diagnostics:');
+  WriteLn('  --strict-case --strict-overload --strict-operator --strict-python');
+  WriteLn('  --mimic-fpc           adopt FPC''s define set for identity-probing headers');
+  WriteLn('  --debug --dump-ir --dump-rtti --dump-cpp');
+  WriteLn;
+  WriteLn('environment:');
+  WriteLn('  PXX_HOME=<root>       install root; its lib/ and compiler/builtin/ replace');
+  WriteLn('                        the ones guessed from the binary''s own directory');
+  WriteLn('  PXX_LIBPATH=a:b       extra Pascal unit roots, after -Fu, before the defaults');
+  WriteLn('  PXXDBG=<topics>       compiler-internal probes; PXXDBG=help lists the form');
+  WriteLn('  --where prints every one of these as resolved, so start there.');
+  WriteLn;
+  WriteLn('The full option list lives in docs/; these are the ones worth remembering.');
+end;
+
 { ===== Main ===== }
 
 var inFile, outFile, option, exePath: AnsiString; readingOptions: Boolean; n, i, j, probeFd: Integer;
@@ -379,6 +628,26 @@ begin
         Off by default → self-host / bootstrap byte-identical path untouched. }
       DebugInfo := True;
       Inc(i);
+    end
+    else if (option = '--help') or (option = '-h') then
+    begin
+      PrintHelp;
+      Halt(0);
+    end
+    else if option = '--version' then
+    begin
+      PrintVersionInfo;
+      Halt(0);
+    end
+    else if option = '--where' then
+    begin
+      PrintWhere;
+      Halt(0);
+    end
+    else if option = '--list-targets' then
+    begin
+      PrintTargetList;
+      Halt(0);
     end
     else if option = '--dump-rtti' then
     begin
@@ -990,7 +1259,14 @@ begin
     at any -O level. compiler/dce.inc, feature-emission-size-dce }
   if (OptLevel >= 3) and not DceOff then DceEnabled := True;
   if ParamCount < i then
-    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--strict-operator] [--strict-case] [--strict-python] [--mimic-fpc] [--mimic-fpc-compiler] [--fpc-mem-errors] [--no-nil-check] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
+    begin
+      writeln(StdErr, 'usage: pxx [options] <source> [output]');
+      writeln(StdErr, '  pxx --help          the options worth remembering');
+      writeln(StdErr, '  pxx --version       generation and frontends');
+      writeln(StdErr, '  pxx --where         every path this binary resolves');
+      writeln(StdErr, '  pxx --list-targets  the --target= values');
+      Halt(1);
+    end;
 
   inFile  := ParamStr(i);
 {$ifdef FPC}
@@ -1062,25 +1338,7 @@ begin
     compiler binary so a plain `pxx foo.pas` finds it with no -Fu. Appended
     last, so an explicit user -Fu (e.g. a per-platform override) still wins.
     ESP targets select their own backend and are excluded from default RTL. }
-  if (not NoDefaultRtl) and (not TargetIsEspClass) then
-  begin
-    { ExeDir-anchored (the installed layout: <root>/compiler/ -> ../lib/...) plus
-      a CWD-relative fallback, mirroring ParseUsesUnit's own search chain. The
-      latter covers the self-host tests, which run a /tmp copy of the compiler
-      with CWD at the repo root, so ExeDir-relative ('/tmp/../lib/...') misses. }
-    if ExeDir <> '' then
-    begin
-      AddPasUnitDir(ExeDir + '../lib/rtl/platform/posix/');
-      { The STABLE binary lives at <root>/stable_linux_amd64/<profile>/, two
-        levels down, so its '../lib' misses. Add the two-levels-up spelling as
-        well rather than probe: an extra non-existent search dir costs one
-        failed open, and getting this wrong made `uses SysUtils` resolve and
-        then die on its own `uses platform_backend`
-        (bug-a-uses-sysutils-silently-no-ops-when-the-rtl-is-not-on-the-search-path). }
-      AddPasUnitDir(ExeDir + '../../lib/rtl/platform/posix/');
-    end;
-    AddPasUnitDir('lib/rtl/platform/posix/');
-  end;
+  AddDefaultPasUnitDirs;
   { lib/asmcore resolution (asmcore_base/asmcore_x64, both for the compiler's
     own .asm frontend / inline-asm branches and for any user program) is now a
     first-class peer of RTL/PCL in ParseUsesUnit's own search chain — no

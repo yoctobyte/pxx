@@ -5,8 +5,8 @@ prio: 45  # auto
 # Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck)
 
 - **Type:** feature (project infrastructure / user experience)
-- **Status:** backlog
-- **Owner:** —
+- **Status:** backlog (steps 1-2 landed 2026-08-21; 3-4 open)
+- **Owner:** agent-A
 - **Opened:** 2026-06-21 (user-tooling design discussion)
 - **Relation:** companion to `feature-release-packaging` — that ticket *produces &
   distributes* the artifacts; this one is the *user experience once installed*.
@@ -81,3 +81,52 @@ the result here via `--where`.)
 3. `pxx --list-libraries` + `pxx --doctor` — discoverability/diagnostics; grow the
    library registry as IDF/Synapse/etc. mature.
 4. `pxx --selfcheck` — with `feature-release-packaging` (needs the manifest).
+
+## Landed 2026-08-21 — steps 1 (partly) and 2
+
+Everything below is a flag on the binary, answering with **no source file** and
+exiting 0, and covered by rows in `test-quick` (so `gate.sh quick` sees them).
+
+- `--version` — generation, frontend list, host. The generation number now has
+  ONE owner: `PXX_GENERATION` in `defs.inc`, which `lexer.inc` also feeds to the
+  `PXX_VERSION` define, so `{$IF PXX_VERSION >= n}` and `--version` cannot
+  disagree.
+- `--list-targets` — every `--target=` value, which run on this host, and which
+  backends are compiled OUT (`-dPXX_NO_I386` / `-dPXX_NO_ARM32`); plus the ESP
+  SoC names.
+- `--help` / `-h` — usage, the information flags, the options worth remembering,
+  and the environment section below.
+- `--where` — every resolved path, tier by tier, each marked `[MISSING]` when it
+  does not exist. It calls the SAME routines a real compile calls
+  (`ResolveToolchainDirs`, `AddDefaultPasUnitDirs`, `AddDefaultCIncludeDirs`),
+  which is the whole point: the ticket asks for a diagnostic, and a diagnostic
+  that re-derives the search rule is one that goes stale silently and then sends
+  the reader hunting in the wrong place. Making that true required extracting
+  two blocks that had been inline (`ParseUsesUnit`'s library-dir resolution, the
+  main body's PAL-dir defaults) into named procedures — the diagnostic is now
+  physically unable to disagree with the search.
+- **Tier 2 of the config order: env.** `PXX_HOME=<root>` replaces the
+  ExeDir-guessed roots (`lib/rtl`, `lib/pcl`, `lib/asmcore`, `compiler/builtin`,
+  `lib/crtl/include`, the PAL dir); `PXX_LIBPATH=a:b` adds unit roots after
+  `-Fu` and before the defaults. `PXX_HOME` is honoured **all-or-nothing** — the
+  exe-dir guesses are not appended underneath it as a silent second chance,
+  because a half-applied override is the failure mode nobody can read, and
+  `--where` prints a typo as `[MISSING]`.
+- One env reader: `PxxGetEnv` in `defs.inc` reads `/proc/self/environ` once
+  through the sysopen/sysread intrinsics (so it serves the FPC-bootstrap and
+  self-hosted builds alike); `PXXDBG` now reads through it instead of
+  hand-rolling the same scan.
+
+Checked, not assumed: a binary copied outside the tree compiles `uses sysutils`
+under `PXX_HOME` and fails without it; the stable-layout probe re-anchor is
+visible in `--where` from a fake two-levels-down install; and the same source
+compiled with and without `PXX_HOME` emits **identical bytes** — the env tier is
+a second door onto `bug-a-the-compilers-output-depends-on-argv0`, and it is shut.
+
+### Still open (why this returns to backlog, not done)
+- Tier 3, the **config file** (`pxx.cfg` next to the binary / `~/.config/pxx/`).
+  `--where`'s closing lines say plainly that no config tier exists yet.
+- `--config` as a separate spelling — `--where` currently answers both.
+- Step 3: `--list-libraries`, `--doctor`.
+- Step 4: `--selfcheck` (needs `feature-release-packaging`'s manifest).
+- User-facing docs for the four flags are a **Track D** job, not filed here.
