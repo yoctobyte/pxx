@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T19:13:34Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "8e51c0c692d0ed48a59ab68bf474bbc0a7a45ebe",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-20T19:24:06Z",
    "fixed": [],
    "new_red": [],
@@ -466,6 +458,14 @@
    "sha": "e13c0c4d43661b50ba3652c5c8adefede45b0f92",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-21T11:19:49Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "0531b3b6735a464ce4fac8674212ceea50e4fae4",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -476,7 +476,7 @@
  },
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2543179B  data=60497B  bss=17852B  procs=1762] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
-  "test-asm#src:compiler/compiler.pas": "ok: $TMP  [-S disassembly] | ok: $TMP  [code=8808270B  data=233456B  bss=213126188B  procs=3031]",
+  "test-asm#src:compiler/compiler.pas": "ok: $TMP  [-S disassembly] | ok: $TMP  [code=8806170B  data=233376B  bss=213126188B  procs=3031]",
   "test-c-conformance#shard1/6": "FAIL 00206.c \u2014 exit code 254 (want 0) | FAIL 00212.c \u2014 exit code 255 (want 0) | test-c-conformance: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance: FAILURES: 00206.c(exit=254) 00212.c(exit=255)",
   "test-c-conformance-aarch64#shard1/6": "FAIL 00206.c \u2014 exit code 215 (want 0) | FAIL 00212.c \u2014 exit code 70 (want 0) | test-c-conformance-aarch64: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-aarch64: FAILURES: 00206.c(exit=215) 00212.c(exit=70)",
   "test-c-conformance-arm32#shard1/6": "FAIL 00206.c \u2014 exit code 64 (want 0) | FAIL 00212.c \u2014 exit code 64 (want 0) | test-c-conformance-arm32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-arm32: FAILURES: 00206.c(exit=64) 00212.c(exit=64)",
@@ -6295,11 +6295,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-21T11:10:53Z",
-  "sha": "e13c0c4d43661b50ba3652c5c8adefede45b0f92",
+  "date": "2026-08-21T11:19:49Z",
+  "sha": "0531b3b6735a464ce4fac8674212ceea50e4fae4",
   "tier": "native",
   "verdict": "RED",
-  "wall": 471.5
+  "wall": 429.9
  },
  "last_bench": {
   "conf_rows": 550,
