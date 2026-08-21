@@ -135,4 +135,4 @@ CPU; and no derived name leaks.
 `tools/gate.sh quick`. Cross-target breadth is Track T's, against this sha.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit bda942a0b.
