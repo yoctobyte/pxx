@@ -4589,14 +4589,61 @@ function IRWrapNilChk(ptrVal: Integer): Integer;
   a value the front end already knows is not nil — which is not modelled yet and
   is where the cost goes when it is (the ticket's own "unmeasured" list).
   feature-a-emitted-nil-checks }
-var pi, a1: Integer;
+var pi, tmp, chk, znode, isnil, endLbl, seq, tk: Integer;
 begin
   Result := ptrVal;
   if NoNilCheck then Exit;
-  pi := FindProc('PXXNilChkPtr');
+  pi := FindProc('PXXNilRef');
   if pi < 0 then Exit;
-  a1 := IRAppend(IR_ARG, ptrVal, -1, -1, 0, Ord(tyPointer));
-  Result := IRAppendCall(pi, a1, -1, Ord(tyPointer));
+  tk := IRTk[ptrVal];
+
+  { An INLINE test+branch, not a call to a guard function, and the difference is
+    not stylistic — it was measured. The first cut wrapped the value in
+    PXXNilChkPtr(p), which is how PXXRangeChkI64 works and reads much better; on
+    a loop of 60M method calls that cost 0.44s -> 0.65s, ~48%, because the guard
+    is a CALL and a call is what a method call already is. Marking the helper
+    `inline` does nothing: inline v1 only retains single-expression bodies with
+    no call in them (inline_expand.inc), and this body's whole point is the call
+    it makes when the pointer is nil.
+
+    So the compare and the branch are built here, and only the COLD arm is a
+    call. The IR ops are all target-independent — this is the same shape
+    IRBuildInheritsFrom uses inside an `is` expression — so every target still
+    gets the check without a line of backend code. }
+  tmp := -1;
+  if IRKind[ptrVal] = IR_LOAD_SYM then
+    { A plain variable load — `o.Foo`, the overwhelmingly common receiver — can
+      simply be READ AGAIN for the test: no side effect to double-evaluate, no
+      temp, and no frame slot per call site. That last part matters: a temp per
+      check would grow every frame in the program by the number of calls in it. }
+    chk := IRAppend(IR_LOAD_SYM, IRA[ptrVal], -1, -1, 0, tk)
+  else
+  begin
+    { Anything else may be a call, an index or a field load: evaluate ONCE into a
+      temp, test the temp, hand back the temp. }
+    tmp := AllocVar('', tyPointer);
+    IRAppend(IR_STORE_SYM, tmp, ptrVal, -1, 0, Ord(tyPointer));
+    chk := IRAppend(IR_LOAD_SYM, tmp, -1, -1, 0, tk);
+  end;
+
+  endLbl := IRNewLabel;
+  znode := IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer));
+  isnil := IRAppend(IR_BINOP, chk, znode, Ord(tkEq), 0, Ord(tyBoolean));
+  IRAppend(IR_JUMP_IF_FALSE, endLbl, isnil, -1, 0, 0);
+  seq := IRAppendCall(pi, -1, -1, Ord(tyUnknown));
+  IRIVal[seq] := 1;   { statement-level: side-effect call, result discarded }
+  IRAppend(IR_LABEL, -1, -1, -1, endLbl, 0);
+
+  { The value is re-read AFTER the label, deliberately, so nothing has to survive
+    the branch. PXXNilRef does not return in either of its configured shapes
+    (Halt, or a raise past it), but a user-installed hook is allowed to — that is
+    the whole reason it is a hook — and a value held in a caller-saved register
+    across that call would be the kind of bug that only appears on an MCU with a
+    custom handler. }
+  if tmp >= 0 then
+    Result := IRAppend(IR_LOAD_SYM, tmp, -1, -1, 0, tk)
+  else
+    Result := IRAppend(IR_LOAD_SYM, IRA[ptrVal], -1, -1, 0, tk);
 end;
 
 function IRWrapRangeChk(value: Integer; destTk: TTypeKind): Integer;
@@ -10128,6 +10175,28 @@ begin
           value := IRLowerCallArg(ctorArgCpi, pathIdx, ASTLeft[item], isRefArg);
         end;
 
+        { Site class 2 of feature-a-emitted-nil-checks, NON-virtual half — and the
+          one worth the most. A virtual call on a nil instance at least faults on
+          the VMT load, AT the call; a non-virtual one enters the method and
+          faults later, inside, on the first field touch, which is the
+          plausible-wrong-value shape this repo pays for. Worse, a method that
+          touches no field (`procedure Plain; begin writeln('plain') end`) RUNS TO
+          COMPLETION on a nil receiver and returns normally, so the program does
+          not misbehave until much later, somewhere else. Measured before this
+          check: `o := nil; o.Plain` printed `plain`.
+
+          The receiver is identified from the SIGNATURE, not from the call site:
+          a method's param 0 is named `Self` (pasparser_proc.inc), and only an
+          INSTANCE method's Self is `tyClass` by value — a class method's is a
+          metaclass pointer, a record's and a type helper's are by-reference, and
+          none of those three can be nil. That is why the test is on all three
+          properties rather than on the name alone. }
+        if (pathIdx = 0) and (cpi >= 0) and (Procs[cpi].ParamCount > 0) and
+           (Procs[cpi].Params[0].TypeKind = tyClass) and
+           (not Procs[cpi].Params[0].IsRef) and
+           CaseEqual(Procs[cpi].Params[0].Name, 'Self') then
+          value := IRWrapNilChk(value);
+
         { A materialised managed-string argument (a literal, concat, char/string
           coercion, or function result — anything that is not an existing lvalue)
           is refcount 1 with no owner, so passing it directly leaks one reference
@@ -11559,7 +11628,19 @@ begin
           marshal identically — a raw IRLowerAddress(literal) here produced a bad
           pointer (corrupt string length). See bug-mixed-signature-vmt-misdispatch. }
         if pathIdx = 0 then
-          value := IRLowerAST(ASTLeft[item])
+          { Site class 2 of feature-a-emitted-nil-checks: the RECEIVER. A virtual
+            call on a nil instance faults on the VMT load — at the call, which is
+            the readable case — but it faults in a signal, so nothing catches it
+            and a target without a signal runtime does not even get that. Checked
+            here instead, where the line is still known.
+
+            arg 0 of a class method or a constructor is a metaclass rather than an
+            instance and can never be nil, so the check is dead weight there; it
+            is left in rather than special-cased, because "which arg 0 is an
+            instance" is the same question the folding work in the ticket has to
+            answer properly (a provably-non-nil receiver — Self in a method chain,
+            a just-constructed object), and one predicate is the point. }
+          value := IRWrapNilChk(IRLowerAST(ASTLeft[item]))
         else
           value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
         { Same argument conversions as the direct AN_CALL path — the virtual

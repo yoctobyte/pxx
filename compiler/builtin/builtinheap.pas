@@ -3260,17 +3260,14 @@ begin
   Halt(216);
 end;
 
-{ The guard the compiler wraps a call target or a receiver in. Pure Pascal on
-  purpose — the same reason PXXRangeChkI64 is Pascal: every target gets the
-  check for free, including the ones with no signal runtime at all (xtensa
-  always, riscv32 under --esp-profile=bare), where an MMU fault is not a worse
-  mechanism but the ONLY alternative, and there isn't one. Returns the pointer
-  unchanged so it drops into an expression without reshaping the caller. }
-function PXXNilChkPtr(p: Pointer): Pointer;
-begin
-  if p = nil then PXXNilRef;
-  Result := p;
-end;
+{ NOTE there is no PXXNilChkPtr guard FUNCTION, and there was for one commit.
+  Wrapping the pointer in a call — the shape PXXRangeChkI64 uses, and much the
+  nicer code — costs a call on every checked site, which on a loop of 60M method
+  calls measured 0.44s -> 0.65s. `inline` does not rescue it: inline v1 retains
+  only single-expression bodies with no call in them, and the call is this body's
+  entire purpose. So the compare and branch are built as IR at the call site
+  (IRWrapNilChk in ir.inc) and only the cold arm lands here — 0.42s -> 0.43s.
+  feature-a-emitted-nil-checks }
 
 { {$R+} dynamic-array index guard: count lives at [data-8] (the dyn-array
   header), nil = length 0. Returns the index unchanged when in range. }

@@ -8036,6 +8036,16 @@ test-core: $(COMPILER)
 	 test "$$rc" = "139" || { echo "test_nil_check_procvar --no-nil-check: FAIL - exit $$rc, want 139"; exit 1; }
 	./$(COMPILER) test/test_nil_check_catchable.pas $(TESTTMP)/test_nil_check_catchable26
 	test "$$($(TESTTMP)/test_nil_check_catchable26)" = "$$(printf 'before\ncaught: Access violation (nil reference)\nstill running')"
+	@# Site class 2: the RECEIVER. The `plain` line is the point — a method that
+	@# touches no field RAN TO COMPLETION on a nil instance and returned
+	@# normally, so nothing faulted and the program misbehaved later somewhere
+	@# else. Virtual and non-virtual are both here because they lower through
+	@# different paths (AN_VIRTUAL_CALL / AN_CALL) and one can regress alone.
+	@# The class function `Make` must keep working: its arg 0 is a metaclass,
+	@# never an instance, and a check keyed on the param NAME alone would have
+	@# wrapped it too.
+	./$(COMPILER) test/test_nil_check_receiver.pas $(TESTTMP)/test_nil_check_receiver26
+	test "$$($(TESTTMP)/test_nil_check_receiver26)" = "$$(printf 'virt v=7\nplain\ncaught virtual: Access violation (nil reference)\ncaught plain: Access violation (nil reference)\nstill running')"
 	@# --no-nil-check on BOTH, and it is load-bearing: this file's subject is the
 	@# SIGNAL path, and since feature-a-emitted-nil-checks the compiler catches
 	@# `nilproc` at the call site before any fault happens — so without the flag
