@@ -108,4 +108,4 @@ a bigger array: the next person to lift the walker's depth limit should not
 inherit a stack smash.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 15ea57151.
