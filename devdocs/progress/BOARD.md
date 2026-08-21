@@ -56,7 +56,7 @@ lives in git, not in a timestamp._
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (261)
+## backlog (260)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -153,7 +153,6 @@ lives in git, not in a timestamp._
 | compat-pascal-uses-sysutils-withdraws-the-variadic-concat | P | 25 | compat | The variadic `Concat` intrinsic is shadowed by `sysutils`'s two-argument `Concat`, so `uses sysutils` breaks `Concat('a','b','c')` — which compiles fine without it. The shadow rule is `procIdx < 0`, i.e. ANY user Concat disables the intrinsic outright. Loud, not silent. | — |
 | decide-riscv64-vs-the-bug-queue-for-autonomous-nights | U | 50 | decide | feature-a-riscv64-as-a-hosted-first-class-target is the top-ranked Track A ticket at prio 50, and its own log says it was ranked 'as a strategic target rather than an urgent one'. It is a multi-session job. An unattended overnight Track A session keeps reaching it, skipping it, and taking a p40 bug instead — which may be right, but it is a decision being made silently every night. Make it once, out loud. | — |
 | decide-segv-runtime-error-default | U | 45 | decide | NARROWED 2026-08-21. The nil-detection half left as feature-a-emitted-nil-checks; what remains is only what the SIGSEGV handler does for the faults a check cannot catch (wild pointers, stack overflow). Fork is no longer default-on vs opt-in but report-and-RE-RAISE (message + core dump + exit 139, default-on) vs report-and-exit-216 (FPC parity, no core dump). Plus: should --mimic-fpc imply --fpc-mem-errors and --fpc-float-errors? | — |
-| decide-should-a-stack-overflow-raise-estackoverflow-by-itself | U | 35 | decide | Decide: should a stack overflow raise EStackOverflow by itself, or stay a hand-written hook? | — |
 | decide-typeinfo-scalar-name-spelling | U | 20 | decide | TypeInfo(Integer)^.Name: pxx says `Integer`, FPC says `LongInt`. pxx's tyInteger and tyInt32 are separate type kinds where FPC's Integer IS LongInt, so TypeInfoOrdName picks one canonical spelling per pxx kind and Integer keeps its own. Cosmetic today (nothing branches on the string), but it is a visible FPC-parity gap in a compat-sensitive API, and changing it later breaks whatever started reading it. | — |
 | docs-d-document-exec-eval-and-the-builtins-incompatibility | D | 40 | docs | docs/targets/nil-python.md tells the public `eval`/`exec` do not exist (\"No eval of runtime-constructed code\") — but the explicit-dict form has worked since 2026-07-31 via pyeval's tree-walker. Document what exec/eval DO support, the refused ambient form, and the decided __builtins__ incompatibility (decided 2026-08-19, permanent for now). | — |
 | docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out | D | 45 | docs | docs/language/name-resolution.md:47 and docs/targets/nil-python.md:260 quote the bare-import refusal message and state the rule with no carve-out. As of 2026-08-20 a unit declaring {$PYEXTENSION} and binding the cpyext runtime IS bare-importable, so both pages are now wrong in the direction that makes a working program look unsupported. | — |
@@ -347,7 +346,7 @@ lives in git, not in a timestamp._
 | feature-wasm-frontend | A | 45 | feature | WebAssembly frontend — statically typed, IR-shaped; experimental | — |
 | feature-zig-frontend | Z | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
 
-## rainy-day (40)
+## rainy-day (41)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -356,6 +355,7 @@ lives in git, not in a timestamp._
 | decide-abi-portable-vs-target-split | U | 60 | decide |  | — |
 | decide-ilja-tui-render-model | U | 45 | decide | Track U: four render/input questions Ilja (TUI IDE face) must answer before any code | — |
 | decide-nilpy-exec-injects-a-builtins-key | U | 40 | decide | CPython's exec(src, g, l) injects a `__builtins__` key into the globals dict; NilPy does not, because it has no module object to put there. So sorted(d.keys()) after an exec differs. Three options: leave it out (today), inject the key with a placeholder value, or inject a real minimal namespace. The fork is what a program that ITERATES the dict should see. | — |
+| decide-should-a-stack-overflow-raise-estackoverflow-by-itself | U | 15 | decide | Decide: should a stack overflow raise EStackOverflow by itself, or stay a hand-written hook? | — |
 | decide-which-minix-is-the-target | U | 58 | decide | MINIX 2 / early 3.1.x (small, plain, ACK-era C) versus MINIX 3.2+ (which imported the NetBSD userland and build system). These are close to different projects for our purposes, and the choice dominates the cost of the whole lighthouse. Recommendation: MINIX 2 / early 3.1.x. | — |
 | design-overloadable-intrinsics | A | 50 | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
 | design-record-copy-dynarray-field-semantics | A | 50 | design | Record copy with a dynamic-array field: PXX deep-copies, FPC shares (reference) | — |
@@ -711,7 +711,6 @@ lives in git, not in a timestamp._
 - [p 35] [P] bug-p-sizeof-rejects-a-pointer-deref-in-its-operand
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
-- [p 35] [U] decide-should-a-stack-overflow-raise-estackoverflow-by-itself
 - [p 35] [A] feature-a-io-lock-owner-from-tls-not-gettid
 - [p 35] [A] feature-a-unreferenced-class-rtti-keeps-every-method-alive
 - [p 35] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
