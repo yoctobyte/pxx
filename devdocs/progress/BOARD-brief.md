@@ -5,15 +5,16 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:21 blocked:9 backlog:270 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2236 rejected:40`
+`urgent:2 unfinished:21 blocked:9 backlog:270 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2236 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## urgent (1) — jump the queue
+## urgent (2) — jump the queue
 
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
+- `bug-t-the-native-tier-times-out-and-publishes-a-contentless-red` [T]
 
 ## unfinished (21) — parked mid-flight; re-claim, do not duplicate
 
@@ -51,9 +52,10 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 259, ranked
+## Ready — top 30 of 260, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
+- `[p 70] [T]` bug-t-the-native-tier-times-out-and-publishes-a-contentless-red
 - `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-callable-to-str-param-fails
 - `[p 65] [B]` bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
@@ -82,6 +84,5 @@ _none — no lane is locked._
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 50] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - `[p 50] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
-- `[p 50] [T]` bug-t-track-ts-own-pushes-destroy-track-ts-own-breadth-coverage
 
-_229 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_230 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
