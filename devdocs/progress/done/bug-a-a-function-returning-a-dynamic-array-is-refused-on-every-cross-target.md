@@ -135,4 +135,4 @@ and ESP-platform issues untouched by this change.
 `tools/gate.sh quick` GREEN (self-host fixedpoint byte-identical).
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 481c397c6.
