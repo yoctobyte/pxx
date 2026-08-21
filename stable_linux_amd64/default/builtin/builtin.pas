@@ -689,7 +689,7 @@ begin
 end;
 
 procedure __pxxMove(const Source; var Dest; Count: Integer);
-var s, d, i, w: Int64;
+var s, d, i, w, bmR: Int64;
 begin
   if Count <= 0 then Exit;
   s := Int64(@Source);
@@ -722,6 +722,10 @@ begin
   end
   else
   begin
+{$ifdef CPUX86_64}
+    { Forward is all `rep movsb` does, and forward is all that is left here. }
+    bmR := __pxxblockmove(d, s, Int64(Count));
+{$else}
     i := 0;
     if __pxxWordsOk(d, s, Count) then
       while i + w <= Count do
@@ -734,14 +738,18 @@ begin
       PByte(d + i)^ := PByte(s + i)^;
       i := i + 1;
     end;
+{$endif}
   end;
 end;
 
 procedure __pxxFillChar(var X; Count: Integer; Value: Byte);
-var d, i, k, w, wv: Int64;
+var d, i, k, w, wv, bmR: Int64;
 begin
   if Count <= 0 then Exit;
   d := Int64(@X);
+{$ifdef CPUX86_64}
+  bmR := __pxxblockfill(d, Int64(Count), Int64(Value));
+{$else}
   w := SizeOf(NativeInt);
   i := 0;
   if __pxxWordsOk(d, d, Count) then
@@ -759,6 +767,7 @@ begin
     PByte(d + i)^ := Value;
     i := i + 1;
   end;
+{$endif}
 end;
 
 procedure __pxxFillDWord(var X; Count: Integer; Value: Cardinal);
