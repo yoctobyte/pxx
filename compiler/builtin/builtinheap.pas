@@ -3237,6 +3237,41 @@ begin
   Result := v;
 end;
 
+var
+  { 5th of the family: installed by sysutils' initialization to turn a nil
+    dereference CAUGHT AT THE CALL SITE into a catchable EAccessViolation.
+    feature-a-emitted-nil-checks }
+  PXXNilRefHook: TPXXDivZeroProc;
+
+{ Nil-reference trap. 216 is FPC's code for a memory fault, and it is what
+  --fpc-mem-errors reports for a real SIGSEGV, so the emitted check and the
+  signal path agree on the number a program exits with — the difference is that
+  this one fires BEFORE the fault, from ordinary call context, so a hook can
+  raise past it and `try..except` runs.
+
+  A hook slot rather than a hardwired writeln+Halt, and that is not decoration:
+  on an MCU halting is usually wrong, and printing is usually fine but NOT
+  always — a program driving a protocol-sensitive serial link has to be able to
+  say "not on my UART". Default nil keeps FPC-without-sysutils behaviour. }
+procedure PXXNilRef;
+begin
+  if PXXNilRefHook <> nil then PXXNilRefHook();
+  writeln('Runtime error 216 (nil reference)');
+  Halt(216);
+end;
+
+{ The guard the compiler wraps a call target or a receiver in. Pure Pascal on
+  purpose — the same reason PXXRangeChkI64 is Pascal: every target gets the
+  check for free, including the ones with no signal runtime at all (xtensa
+  always, riscv32 under --esp-profile=bare), where an MMU fault is not a worse
+  mechanism but the ONLY alternative, and there isn't one. Returns the pointer
+  unchanged so it drops into an expression without reshaping the caller. }
+function PXXNilChkPtr(p: Pointer): Pointer;
+begin
+  if p = nil then PXXNilRef;
+  Result := p;
+end;
+
 { {$R+} dynamic-array index guard: count lives at [data-8] (the dyn-array
   header), nil = length 0. Returns the index unchanged when in range. }
 function PXXDynIdxChkI64(dataPtr: Pointer; idx: Int64): Int64;

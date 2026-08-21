@@ -4574,6 +4574,31 @@ begin
   Result := IRAppendCall(pi, a1, -1, Ord(tyInt64));
 end;
 
+function IRWrapNilChk(ptrVal: Integer): Integer;
+{ Wrap a call target in PXXNilChkPtr(p) — returns it unchanged unless it is nil,
+  in which case PXXNilRef reports (or, with sysutils in, raises a catchable
+  EAccessViolation) from ORDINARY call context, before the fault.
+
+  Pure-Pascal guard, exactly like IRWrapChkBounds above and for the same reason:
+  every target gets it for free, including the ones that have no signal runtime
+  to catch a fault with (xtensa always; riscv32 under --esp-profile=bare). There
+  the MMU is not a worse mechanism, it is an absent one.
+
+  Passthrough in three cases, all deliberate: --no-nil-check, a build without
+  builtinheap (FindProc misses, same lax fallthrough the range checks take), and
+  a value the front end already knows is not nil — which is not modelled yet and
+  is where the cost goes when it is (the ticket's own "unmeasured" list).
+  feature-a-emitted-nil-checks }
+var pi, a1: Integer;
+begin
+  Result := ptrVal;
+  if NoNilCheck then Exit;
+  pi := FindProc('PXXNilChkPtr');
+  if pi < 0 then Exit;
+  a1 := IRAppend(IR_ARG, ptrVal, -1, -1, 0, Ord(tyPointer));
+  Result := IRAppendCall(pi, a1, -1, Ord(tyPointer));
+end;
+
 function IRWrapRangeChk(value: Integer; destTk: TTypeKind): Integer;
 { {$R+} narrowing-assignment guard: wrap the assigned value in a
   PXXRangeChkI64(v, lo, hi) call when the DEST's ordinal range is narrower
@@ -10494,6 +10519,11 @@ begin
         callVal := IRAppend(IR_LOAD_MEM, IRLowerAddress(ASTRight[node]), -1, -1, 0, Ord(tyPointer))
       else
         callVal := IRLowerAST(ASTRight[node]);   { plain: load the code-address value }
+      { A nil procvar / method pointer is the worst of the nil derefs: the call
+        JUMPS TO ADDRESS 0, so there is no faulting PC, no frame, and a
+        backtrace that names nothing. Checked here — at the site, where the
+        compiler still knows the line. feature-a-emitted-nil-checks }
+      callVal := IRWrapNilChk(callVal);
       Result := IRAppend(IR_CALL_IND, callVal, first, ASTSLen[node], cpi, ASTTk[node]);
       if ABIRetViaHiddenDestProc(cpi) then
         IRCallDest[Result] := IRBuildHiddenDest(cpi);

@@ -4,8 +4,8 @@ prio: 55
 type: feature
 blocked-by: []
 summary: "A nil receiver, a nil procvar call or a nil interface call dies as a raw memory fault today — on Linux via the MMU, on ESP not at all. Emit the check at the site instead: PXXNilRef + PXXNilRefHook, the fifth member of the PXXDivZero/Overflow/RangeError/IoError family, so sysutils upgrades it to a catchable EAccessViolation. The payload is catchability and a named line, not a nicer message."
-status: backlog
-owner: unassigned
+status: working
+owner: claude-A
 ---
 
 # Emit nil checks at the site, so a nil deref is catchable
@@ -125,3 +125,92 @@ per site class asserting **both** that the check raises a catchable
 `EAccessViolation` with sysutils in, and that it prints `Runtime error 216` +
 exit 216 without it — plus a `--no-nil-check` row asserting the raw fault is
 back, in the shape `test_fpc_mem_errors.pas` already uses for its two directions.
+
+---
+
+## Landing 1 (2026-08-21): the runtime, plus the procvar site class
+
+Staged deliberately, one site class per commit, each green on its own. This one
+carries the whole runtime half, so the arms after it are call-site work only.
+
+### Runtime — the fifth member, as designed
+
+`builtinheap.pas`: `PXXNilRefHook` (BSS, nil by default), `PXXNilRef` (216 +
+`Halt(216)` when the hook is nil), and `PXXNilChkPtr(p: Pointer): Pointer` — the
+guard, which returns `p` unchanged unless it is nil.
+
+`sysutils.pas`: `SysRaiseAccessViolation` + one line in `initialization`.
+`EAccessViolation` was declared and unused; it now has something that raises it.
+
+216 on purpose: it is FPC's code for a memory fault and what `--fpc-mem-errors`
+reports for a real SIGSEGV, so the emitted check and the signal path agree on
+the number a program exits with. What differs is everything else — this one
+fires *before* the fault, from ordinary call context.
+
+### The guard is pure Pascal, and that is the design decision
+
+`IRWrapNilChk` wraps a call target in `PXXNilChkPtr(...)`, exactly as
+`IRWrapChkBounds` wraps a value in `PXXRangeChkI64(...)`. So **every target is
+done, not just x86-64** — including the ones the ticket says want it most
+(xtensa has no signal runtime at all; riscv32 under `--esp-profile=bare` the
+same), where an MMU fault is not a worse mechanism but an absent one.
+
+The ticket said "x86-64 first, say which arches are done". The answer is all of
+them, because the check never became machine code.
+
+### Site class 1: a call through a nil procvar / method pointer
+
+`AN_CALL_IND`'s callee, in `ir.inc`. The worst-behaved nil deref — the call
+jumps to address 0, so there is no faulting instruction inside the program, no
+frame, and a backtrace naming nothing.
+
+### `--no-nil-check`, default on
+
+`NoDivCheck`'s model, as the ticket argues, not `--fpc-float-errors`': a nil
+check does not change what a working program computes.
+
+### Measured, all three directions
+
+| build | result |
+| --- | --- |
+| no sysutils | `before` / `Runtime error 216 (nil reference)`, exit **216** |
+| `uses SysUtils` + `try..except on E: EAccessViolation` | caught, message printed, **program continues**, exit 0 |
+| `--no-nil-check` | raw fault, exit **139** |
+
+### Cost — measured, not argued
+
+- **Self-host binary: +830 bytes on 8.79 MB (0.009%)**, and the fixedpoint still
+  converges. The compiler barely calls through procvars.
+- **Microbenchmark, 50M indirect calls in a tight loop, `-O2`: 0.41 s → 0.49 s.**
+  That is ~1.6 ns per indirect call, i.e. the cost IS the call to the guard, and
+  on a loop that does nothing else it is ~20%. On real code it is invisible; on
+  a procvar-dispatch hot loop it is not, and saying so is better than repeating
+  the ticket's "noise next to a call", which was an argument, not a measurement.
+- Marking `PXXNilChkPtr` `inline` changed nothing measurable (0.49 → 0.48 s,
+  inside noise), so the marker was removed rather than left as decoration.
+  Removing the call needs an IR-level check node that backends lower to
+  test+branch — recorded below as the follow-up, not done here.
+
+### One existing test had to be told which mechanism it is testing
+
+`test_fpc_mem_errors.pas`'s `nilproc` mode is now caught by the emitted check in
+BOTH of its directions, so the row would have silently stopped testing the
+signal path it names. Both of its compiles now pass `--no-nil-check`, with the
+reason at the row. The same flag keeps its `nilmethod` mode honest when arm 2
+lands.
+
+### Still to do (this ticket stays open)
+
+1. **Instance receivers** — a method on a nil object, virtual and non-virtual.
+   `nilmethod` in `test_fpc_mem_errors.pas` is the waiting repro.
+2. **Interface calls** — the IMT load.
+3. **`{$nilchecks on/off}`** + the bare-pointer-deref class, default OFF. Needs
+   a per-token flag (`TokNilChecks`), the shape `TokRChecks` already has.
+4. **Folding provably-non-nil receivers** — the ticket's own open question, and
+   where the microbenchmark cost above would go.
+
+**Blocked, for arm 1's method-pointer half:** `ev := nil` on a
+`procedure(...) of object` SEGFAULTS AT THE ASSIGNMENT — before any call — on
+`pinned` as well as at HEAD, and regardless of `--no-nil-check`. Filed as
+`bug-a-assigning-nil-to-a-method-pointer-segfaults`. The guard is already on
+that path; it cannot be tested until a method pointer can be set to nil.

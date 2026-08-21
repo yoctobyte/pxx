@@ -4730,6 +4730,15 @@ begin
   raise EDivByZero.Create('Division by zero');
 end;
 
+procedure SysRaiseAccessViolation;
+begin
+  { A nil receiver / nil procvar call, caught at the site by the compiler's
+    emitted check, upgraded to a catchable exception. EAccessViolation has been
+    declared since the exception hierarchy landed and had nothing to raise it
+    until now (feature-a-emitted-nil-checks). }
+  raise EAccessViolation.Create('Access violation (nil reference)');
+end;
+
 initialization
   DefaultSystemCodePage := CP_UTF8;   { byte-transparent -- see the declaration }
   BackTraceStrFunc := @SysBackTraceStr;
@@ -4738,6 +4747,7 @@ initialization
   PXXDivZeroHook := @SysRaiseDivByZero;
   PXXRangeErrorHook := @SysRaiseRangeError;
   PXXIoErrorHook := @SysRaiseIoError;
+  PXXNilRefHook := @SysRaiseAccessViolation;
   TimeSeparator := ':';
   DateSeparator := '-';
   ShortDateFormat := 'd/m/y';

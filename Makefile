@@ -8008,8 +8008,32 @@ test-core: $(COMPILER)
 	# the same binary must still die silently on 139, because that default is a
 	# live decision (decide-segv-runtime-error-default) and a silent flip of it
 	# is exactly what this row exists to catch.
-	./$(COMPILER) --fpc-mem-errors test/test_fpc_mem_errors.pas $(TESTTMP)/test_fpc_mem_errors26
-	./$(COMPILER) test/test_fpc_mem_errors.pas $(TESTTMP)/test_fpc_mem_errors_off26
+	@# The emitted nil check, all three directions, because any two of them pass
+	@# with a broken flag. A call through a nil procvar jumps to address 0 — no
+	@# faulting instruction in the program, no frame, no backtrace — so the check
+	@# fires BEFORE the call, from ordinary call context. That last part is the
+	@# whole point: it is what lets the sysutils hook RAISE, which a signal
+	@# handler cannot do. feature-a-emitted-nil-checks
+	./$(COMPILER) test/test_nil_check_procvar.pas $(TESTTMP)/test_nil_check_procvar26
+	./$(COMPILER) --no-nil-check test/test_nil_check_procvar.pas $(TESTTMP)/test_nil_check_procvar_off26
+	@out=$$($(TESTTMP)/test_nil_check_procvar26 2>&1); rc=$$?; \
+	 test "$$rc" = "216" || { echo "test_nil_check_procvar: FAIL - exit $$rc, want 216"; exit 1; }; \
+	 test "$$out" = "$$(printf 'before\nRuntime error 216 (nil reference)')" \
+	  || { echo "test_nil_check_procvar: FAIL - [$$out]"; exit 1; }
+	@# ...and the opt-out puts the raw fault back. The default is the claim, so
+	@# both directions are pinned: a flag that silently stopped working would
+	@# otherwise leave the row above passing on the check it no longer emits.
+	@$(TESTTMP)/test_nil_check_procvar_off26 >/dev/null 2>&1; rc=$$?; \
+	 test "$$rc" = "139" || { echo "test_nil_check_procvar --no-nil-check: FAIL - exit $$rc, want 139"; exit 1; }
+	./$(COMPILER) test/test_nil_check_catchable.pas $(TESTTMP)/test_nil_check_catchable26
+	test "$$($(TESTTMP)/test_nil_check_catchable26)" = "$$(printf 'before\ncaught: Access violation (nil reference)\nstill running')"
+	@# --no-nil-check on BOTH, and it is load-bearing: this file's subject is the
+	@# SIGNAL path, and since feature-a-emitted-nil-checks the compiler catches
+	@# `nilproc` at the call site before any fault happens — so without the flag
+	@# this row would silently stop testing the shape it names and start testing
+	@# the other mechanism, in both of its two directions at once.
+	./$(COMPILER) --no-nil-check --fpc-mem-errors test/test_fpc_mem_errors.pas $(TESTTMP)/test_fpc_mem_errors26
+	./$(COMPILER) --no-nil-check test/test_fpc_mem_errors.pas $(TESTTMP)/test_fpc_mem_errors_off26
 	@for m in nilread nilwrite nilproc nilmethod wildstore; do \
 	  out=$$($(TESTTMP)/test_fpc_mem_errors26 $$m 2>&1); rc=$$?; \
 	  test "$$rc" = "216" || { echo "FAIL --fpc-mem-errors $$m: exit $$rc, want 216"; exit 1; }; \

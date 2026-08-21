@@ -10,9 +10,11 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method | N | 70 | bug | A callable value is silently accepted where `str` is declared, and no longer compares equal to itself — bisected to `9bbbbef6c` | — |
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| feature-a-emitted-nil-checks | A | 55 | feature | A nil receiver, a nil procvar call or a nil interface call dies as a raw memory fault today — on Linux via the MMU, on ESP not at all. Emit the check at the site instead: PXXNilRef + PXXNilRefHook, the fifth member of the PXXDivZero/Overflow/RangeError/IoError family, so sysutils upgrades it to a catchable EAccessViolation. The payload is catchability and a named line, not a nicer message. | — |
 
 ## unfinished (21)
 
@@ -61,6 +63,7 @@ _none_
 | bug-a-a-by-value-interface-param-is-released-at-caller-scope-exit | A | 35 | bug | pxx releases a by-value interface argument at the CALLER's scope exit; FPC releases it at CALLEE return. Every object is still destroyed exactly once, so this is a lifetime-timing divergence rather than a leak — but a destructor with side effects (closing a file, dropping a lock) runs later than the program says, and the last object of a batch stays alive until the calling routine returns. | — |
 | bug-a-a-record-copy-does-not-retain-an-interface-field | A | 60 | bug | `b := a` on a record holding a COM interface field copies the pointer with no retain, so the two records share one counted reference. Nilling either one destroys the object and the other is left dangling — a use-after-free that segfaults on the next member call. Present on pinned and on HEAD. | decide-interface-members-in-aggregates-lock-strategy |
 | bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data | A | 40 | bug | A typed const array is emitted as BSS plus generated code that fills it element by element at startup, instead of being stored as initialised data. Measured at ~29 bytes of code per element for UInt64; Int64, Double and Cardinal all do it too, so it is every typed const array, not a 64-bit case. A 696-entry table costs 20 KB of code and 0 bytes of data. A string constant of the same bytes costs ~0 code and lands in .data, so the data path exists — the array lowering just does not use it. | — |
+| bug-a-assigning-nil-to-a-method-pointer-segfaults | A | 65 | bug | `ev := nil` where `ev: procedure(x: Integer) of object` SEGFAULTS at the assignment. Not at the call — at the store. Reproduced on pinned and at HEAD, with and without --no-nil-check, in a 12-line program. A method pointer is a 16-byte {Code,Data} record, so `:= nil` almost certainly lowers as a record COPY from address 0. | — |
 | bug-a-findtypealias-failed-to-find-puint8-on-stderr | A | 20 | bug | `FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr during a compile that then SUCCEEDS. Either the lookup failure is real and something silently fell back to a wrong type, or the message is a stale debug print that should not be in a release build. Both readings are defects; which one it is has not been established. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
@@ -159,7 +162,6 @@ _none_
 | docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out | D | 45 | docs | docs/language/name-resolution.md:47 and docs/targets/nil-python.md:260 quote the bare-import refusal message and state the rule with no carve-out. As of 2026-08-20 a unit declaring {$PYEXTENSION} and binding the cpyext runtime IS bare-importable, so both pages are now wrong in the direction that makes a working program look unsupported. | — |
 | feature-a-audit-strict-flags-against-dialectispxx | A | 20 | feature | `DialectIsPxx` now exists and only `--strict-overload` consults it. The other six strict flags apply everywhere, including to our own {$MODE PXX} RTL. Audit each one: does it WANT the ownership carve-out, or is it right to judge every file? | — |
 | feature-a-declaration-phase | N | 55 | feature | A real declaration phase: all decls before any body is typed | — |
-| feature-a-emitted-nil-checks | A | 55 | feature | A nil receiver, a nil procvar call or a nil interface call dies as a raw memory fault today — on Linux via the MMU, on ESP not at all. Emit the check at the site instead: PXXNilRef + PXXNilRefHook, the fifth member of the PXXDivZero/Overflow/RangeError/IoError family, so sysutils upgrades it to a catchable EAccessViolation. The payload is catchability and a named line, not a nicer message. | — |
 | feature-a-error-does-not-halt-so-a-parse-can-be-speculative | A | 45 | feature | `Error()` calls `Halt` directly, so nothing in the compiler can trial-parse and back out. That blocks NilPy's type inference (which needs to read an as-yet-unseen name speculatively), and it is also why the compiler stops at the FIRST error. Make the error path recoverable; several unrelated wants fall out of the same change. | — |
 | feature-a-finalize-for-bare-dynarray-and-variant | A | 30 | feature | Initialize/Finalize work for records and AnsiStrings. A BARE dynamic-array or variant lvalue currently gets a clear compile error instead, because the dyn-array release helper needs a per-symbol element descriptor that has no IR-level dataref sentinel (SYM_RTTI_DATAREF_BASE is declared but has no fixup branch). A record CONTAINING either is fully handled, and `a := nil` is the one-line workaround, so the gap is narrow. | — |
 | feature-a-io-lock-owner-from-tls-not-gettid | A | 35 | feature | The --threadsafe I/O lock issues a gettid SYSCALL on every I/O statement (measured: 43% overhead, one syscall per Writeln; caching it in TLS removed the whole penalty). The naive version is WRONG -- foreign threads (glibc pthread_create) inherit the creator's block and would answer 'lock already mine', silently losing mutual exclusion. Needs the stack-bounds validation design recorded in the ticket. | — |
@@ -605,6 +607,7 @@ _none_
 - [p 70] [T] regression-test-pascal-conformance-shard4-6-2
 - [p 70] [T] regression-tools-devtest-00
 - [p 65] [U] decide-tobject-root-methods-dispatch-model (unblocks 1)
+- [p 65] [A] bug-a-assigning-nil-to-a-method-pointer-segfaults
 - [p 65] [B] bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
 - [p 65] [T] bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - [p 65] [C] feature-c-csmith-differential-fuzzing
@@ -626,7 +629,6 @@ _none_
 - [p 55] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 55] [U] decide-reduced-compiler-switch-spelling
 - [p 55] [N] feature-a-declaration-phase
-- [p 55] [A] feature-a-emitted-nil-checks
 - [p 55] [B] feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [O] feature-opt-heap-per-thread-cache

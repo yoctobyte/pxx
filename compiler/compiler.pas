@@ -578,6 +578,16 @@ begin
       NoDivCheck := True;
       Inc(i);
     end
+    else if option = '--no-nil-check' then
+    begin
+      { Opt out of the emitted nil check at call-shaped sites (default on).
+        The check turns a jump-to-address-0 into "Runtime error 216" — or, with
+        sysutils in, a catchable EAccessViolation — at a site the compiler
+        knows, instead of a fault with no usable PC.
+        feature-a-emitted-nil-checks }
+      NoNilCheck := True;
+      Inc(i);
+    end
     else if option = '--strict-ir' then
     begin
       { Now the default; kept as an accepted no-op for existing invocations. }
@@ -925,7 +935,7 @@ begin
     users who accept degraded debug info. See feature-optimization-levels. }
   if DebugInfo and not OptLevelExplicit then OptLevel := 0;
   if ParamCount < i then
-    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--strict-operator] [--strict-case] [--strict-python] [--mimic-fpc] [--mimic-fpc-compiler] [--fpc-mem-errors] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
+    begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--strict-operator] [--strict-case] [--strict-python] [--mimic-fpc] [--mimic-fpc-compiler] [--fpc-mem-errors] [--no-nil-check] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
 
   inFile  := ParamStr(i);
 {$ifdef FPC}
