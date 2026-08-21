@@ -7,7 +7,7 @@ blocked-by: []
 summary: "test-core's test_record_helper_for_string_b331 went red asserting a LEAK: an untyped const declared inside a helper was registered as an ordinary global, so `BITS` resolved bare at program scope. FPC 3.2.2 refuses that. ee388cf3a closed the hole as a side effect; the test was codifying the bug, so the assertion moved to what FPC does."
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: 3bf6f623f
 ---
 
 # A helper's const was visible as a bare global
