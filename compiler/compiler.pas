@@ -202,6 +202,7 @@ begin
   DumpProcMap := False;
   DceEnabled := False;
   DceReport := False;
+  DceOff := False;
   EmitMapFile := True;   { default on; --no-map suppresses }
   MeasureRegcall := False;
   RegcallProcsWithParams := 0;
@@ -295,6 +296,11 @@ begin
     begin
       { drop routine bodies nothing can reach — see compiler/dce.inc }
       DceEnabled := True;
+      Inc(i);
+    end
+    else if option = '--no-dce' then
+    begin
+      DceOff := True; DceEnabled := False;
       Inc(i);
     end
     else if option = '--dce-report' then
@@ -949,6 +955,13 @@ begin
     functions, so breakpoints and single-step break. `-g -O2` is still honoured for
     users who accept degraded debug info. See feature-optimization-levels. }
   if DebugInfo and not OptLevelExplicit then OptLevel := 0;
+  { -O3 turns dead-code elimination on, per the convention that a new pass lands
+    in the free tier first (-O2 stays the proven default). It also buys the one
+    thing the pass most needs: tools/optdiff.sh sweeps ~900 programs demanding
+    identical behaviour at -O0/-O2/-O3, so from here Track T's opt tier IS a
+    whole-corpus --dce differential. --no-dce opts back out; --dce turns it on
+    at any -O level. compiler/dce.inc, feature-emission-size-dce }
+  if (OptLevel >= 3) and not DceOff then DceEnabled := True;
   if ParamCount < i then
     begin writeln(StdErr,'usage: pascal26/PXX [--debug] [--dump-ir] [-dNAME] [-uNAME] [-Mobjfpc] [--strict-overload] [--strict-operator] [--strict-case] [--strict-python] [--mimic-fpc] [--mimic-fpc-compiler] [--fpc-mem-errors] [--no-nil-check] [--no-unhandled-handler] <src> [out]'); Halt(1); end;
 

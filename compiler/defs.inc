@@ -2020,6 +2020,7 @@ var
     Sized by MAX_PROCS: one entry per emitted routine, never per instruction. }
   DceEnabled    : Boolean;   { --dce: drop unreachable routine bodies }
   DceReport     : Boolean;   { --dce-report: print what it found (implies --dce) }
+  DceOff        : Boolean;   { --no-dce: keep every body even at -O3 }
   DceLive       : array[0..MAX_PROCS-1] of Boolean;
   DceWork       : array[0..MAX_PROCS-1] of Integer;   { mark worklist }
   DceWorkCount  : Integer;
