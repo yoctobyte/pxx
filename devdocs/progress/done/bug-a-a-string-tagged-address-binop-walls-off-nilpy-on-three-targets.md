@@ -136,4 +136,4 @@ and aarch64 while refusing xtensa and riscv32. Same disease as this ticket, one
 level up: a target dispatch that refuses some targets and lies to the rest.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 20a4cadf2.
