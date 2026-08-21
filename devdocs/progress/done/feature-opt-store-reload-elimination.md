@@ -254,4 +254,4 @@ reachable at all without cross-block reasoning, which is a different pass.
 Still `-O3` only, per the standing "new passes land on the free tier" policy.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 891bf30f6.
