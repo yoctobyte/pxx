@@ -1,25 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T16:41:29Z",
-   "fixed": [
-    "test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy"
-   ],
-   "new_red": [
-    "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy",
-    "test-c-conformance#shard1/6",
-    "test-c-conformance-aarch64#shard1/6",
-    "test-c-conformance-arm32#shard1/6",
-    "test-c-conformance-riscv32#shard1/6",
-    "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy",
-    "test-pascal-conformance#shard4/6",
-    "tools-devtest#00"
-   ],
-   "sha": "1b9b43e5b511d53e9fbe55f3366e6ce9158ee0b9",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-20T16:46:40Z",
    "fixed": [],
    "new_red": [],
@@ -457,6 +438,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "177a07b9da6f80460a216b5c573fc883a1e98d0e",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-21T07:12:45Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "2edda4e9a2f8fac68cf79097e7ae82eaf82a02c8",
    "tier": "native",
    "verdict": "RED"
   }
@@ -6240,11 +6229,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-21T07:03:02Z",
-  "sha": "177a07b9da6f80460a216b5c573fc883a1e98d0e",
+  "date": "2026-08-21T07:12:45Z",
+  "sha": "2edda4e9a2f8fac68cf79097e7ae82eaf82a02c8",
   "tier": "native",
   "verdict": "RED",
-  "wall": 492.6
+  "wall": 494.9
  },
  "last_bench": {
   "conf_rows": 550,
