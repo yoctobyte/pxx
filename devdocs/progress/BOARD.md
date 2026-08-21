@@ -56,7 +56,7 @@ lives in git, not in a timestamp._
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (262)
+## backlog (261)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -151,7 +151,6 @@ lives in git, not in a timestamp._
 | compat-pascal-subrange-storage-size | P | 30 | compat | Every subrange type gets the 4-byte default instead of the smallest type that holds it: SizeOf(10..20) is 4 where FPC says 1, so a `packed record` of subranges is 12 bytes where FPC lays out 3. Values are all correct — this is a layout divergence, not a wrong-value bug, and it breaks binary interop and costs 4x memory. | — |
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-uses-sysutils-withdraws-the-variadic-concat | P | 25 | compat | The variadic `Concat` intrinsic is shadowed by `sysutils`'s two-argument `Concat`, so `uses sysutils` breaks `Concat('a','b','c')` — which compiles fine without it. The shadow rule is `procIdx < 0`, i.e. ANY user Concat disables the intrinsic outright. Loud, not silent. | — |
-| decide-reduced-compiler-switch-spelling | U | 55 | decide | How does a reduced build get selected — subtractive (`omit-c`), positive-list (`only-pascal`), or a named-configuration file? And do frontend and target selection compose freely or only in blessed combinations? The user flagged the names in the parent ticket as placeholders. Recommendation: subtractive defines as the mechanism, named configurations as the tested surface. | — |
 | decide-riscv64-vs-the-bug-queue-for-autonomous-nights | U | 50 | decide | feature-a-riscv64-as-a-hosted-first-class-target is the top-ranked Track A ticket at prio 50, and its own log says it was ranked 'as a strategic target rather than an urgent one'. It is a multi-session job. An unattended overnight Track A session keeps reaching it, skipping it, and taking a p40 bug instead — which may be right, but it is a decision being made silently every night. Make it once, out loud. | — |
 | decide-segv-runtime-error-default | U | 45 | decide | NARROWED 2026-08-21. The nil-detection half left as feature-a-emitted-nil-checks; what remains is only what the SIGSEGV handler does for the faults a check cannot catch (wild pointers, stack overflow). Fork is no longer default-on vs opt-in but report-and-RE-RAISE (message + core dump + exit 139, default-on) vs report-and-exit-216 (FPC parity, no core dump). Plus: should --mimic-fpc imply --fpc-mem-errors and --fpc-float-errors? | — |
 | decide-should-a-stack-overflow-raise-estackoverflow-by-itself | U | 35 | decide | Decide: should a stack overflow raise EStackOverflow by itself, or stay a hand-written hook? | — |
@@ -426,7 +425,7 @@ lives in git, not in a timestamp._
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (97)
+## decided (98)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -502,6 +501,7 @@ lives in git, not in a timestamp._
 | decide-pyeval-bignum-strategy | U | 40 | decide | decide: how should pyeval handle arbitrary-precision (bignum) integers? | — |
 | decide-pylib-exception-vs-sysutils-exception | U | 55 | decide | pylib and sysutils both declare a class named Exception and the name is deliberately shared program-wide, so `except Exception:` catches either RTL's raise. The cost, measured: under `uses sysutils, pylib` pylib's OWN classes bind their ancestor to SYSUTILS' Exception, so pylib can never add a member sysutils lacks — which killed `e.args` after it had shipped. Decide who owns Exception before anything else is built on it. | — |
 | decide-re-pin-after-the-dynarray-aliasing-flip | U | 70 | decide | The dyn-array aliasing flip (937c51dc2) is a codegen change, so gate.sh quick reads RED on its pinned-seeded fixedpoint step for EVERY lane until `pinned` is refreshed. Re-pin now, or wait for T's full matrix? | — |
+| decide-reduced-compiler-switch-spelling | U | 55 | decide | How does a reduced build get selected — subtractive (`omit-c`), positive-list (`only-pascal`), or a named-configuration file? And do frontend and target selection compose freely or only in blessed combinations? The user flagged the names in the parent ticket as placeholders. Recommendation: subtractive defines as the mechanism, named configurations as the tested surface. | — |
 | decide-reprice-nilpy-ast-typing-module-scope | U | 55 | decide | feature-n-nilpy-ast-typing-module-scope sits at prio 55 — top of the ranked Track N queue after the META — but its own 2026-08-09 note concludes it is now an OPTIMISATION, not a correctness item, and asks to be re-priced. prio is the user's field, so: re-price, or leave it steering the queue? | — |
 | decide-rtl-math-correctly-rounded-vs-fast-tier | U | 35 | decide | lib/rtl/math.pas's transcendentals are correctly rounded and ~1000x slower than libm — MEASURED: Ln+Exp 16,480 ms per 1M pairs against glibc's 13 ms, and the new dd Sin/Cos 29,383 ms against a plain-double 673 ms. That is the SHIPPED standard today, not a proposal. Question: is one correctly-rounded tier the intended answer for a language whose demos draw graphics, or does the RTL want a fast tier alongside it? Three options, recommendation inside. | — |
 | decide-rtti-none-semantics | A | 40 | decide | decide: `--rtti=none` semantics — what happens to the FUNCTIONAL parts of the RTTI blob? | — |
@@ -601,7 +601,6 @@ lives in git, not in a timestamp._
 - [p 55] [N] bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
 - [p 55] [N] bug-nilpy-a-lambda-returned-directly-is-not-callable
 - [p 55] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
-- [p 55] [U] decide-reduced-compiler-switch-spelling
 - [p 55] [N] feature-a-declaration-phase
 - [p 55] [B] feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - [p 55] [E] feature-demo-portable-userland

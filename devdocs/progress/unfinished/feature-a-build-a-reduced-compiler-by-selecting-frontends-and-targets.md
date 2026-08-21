@@ -148,8 +148,11 @@ frontend work on the strength of the current wording.
 
 ## Open questions (do NOT guess — file `decide-*` or ask)
 
-- **Switch spelling and composition.** `only-pascal` vs `omit-c` vs a positive list; how
-  frontend and target selection compose. The user flagged the names as placeholders.
+- ~~**Switch spelling and composition.**~~ **ANSWERED** (user, 2026-08-21,
+  [[decide-reduced-compiler-switch-spelling]]): subtractive `PXX_OMIT` is the ONLY
+  mechanism — no positive list, no translation layer — plus a few sane prefab targets
+  in the Makefile that expand to an omit list. The placeholder names
+  (`only-pascal`, `only-esp-riscv`) are retired.
 - **What a reduced compiler must still self-host.** A Pascal-only build compiling
   `compiler.pas` is coherent; a **C-only** build cannot self-host at all, since the compiler
   is written in Pascal. So the self-host gate is meaningful for some configurations and
