@@ -154,7 +154,6 @@ lives in git, not in a timestamp._
 | decide-riscv64-vs-the-bug-queue-for-autonomous-nights | U | 50 | decide | feature-a-riscv64-as-a-hosted-first-class-target is the top-ranked Track A ticket at prio 50, and its own log says it was ranked 'as a strategic target rather than an urgent one'. It is a multi-session job. An unattended overnight Track A session keeps reaching it, skipping it, and taking a p40 bug instead — which may be right, but it is a decision being made silently every night. Make it once, out loud. | — |
 | decide-segv-runtime-error-default | U | 45 | decide | NARROWED 2026-08-21. The nil-detection half left as feature-a-emitted-nil-checks; what remains is only what the SIGSEGV handler does for the faults a check cannot catch (wild pointers, stack overflow). Fork is no longer default-on vs opt-in but report-and-RE-RAISE (message + core dump + exit 139, default-on) vs report-and-exit-216 (FPC parity, no core dump). Plus: should --mimic-fpc imply --fpc-mem-errors and --fpc-float-errors? | — |
 | decide-should-a-stack-overflow-raise-estackoverflow-by-itself | U | 35 | decide | Decide: should a stack overflow raise EStackOverflow by itself, or stay a hand-written hook? | — |
-| decide-should-from-accept-a-quoted-foreign-file | U | 45 | decide | A bare NilPy import resolves to Python only, and the escape is `import 'x.pas' as x`. There is no matching escape for `from x import Name` -- `from 'x.pas' import Name` is refused with \"expected a module name after from\". Decide whether the quoted form should be accepted after `from`, or whether the alias form is deliberately the only door. A test already lost an assertion to this. | — |
 | decide-typeinfo-scalar-name-spelling | U | 20 | decide | TypeInfo(Integer)^.Name: pxx says `Integer`, FPC says `LongInt`. pxx's tyInteger and tyInt32 are separate type kinds where FPC's Integer IS LongInt, so TypeInfoOrdName picks one canonical spelling per pxx kind and Integer keeps its own. Cosmetic today (nothing branches on the string), but it is a visible FPC-parity gap in a compat-sensitive API, and changing it later breaks whatever started reading it. | — |
 | docs-d-document-exec-eval-and-the-builtins-incompatibility | D | 40 | docs | docs/targets/nil-python.md tells the public `eval`/`exec` do not exist (\"No eval of runtime-constructed code\") — but the explicit-dict form has worked since 2026-07-31 via pyeval's tree-walker. Document what exec/eval DO support, the refused ambient form, and the decided __builtins__ incompatibility (decided 2026-08-19, permanent for now). | — |
 | docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out | D | 45 | docs | docs/language/name-resolution.md:47 and docs/targets/nil-python.md:260 quote the bare-import refusal message and state the rule with no carve-out. As of 2026-08-20 a unit declaring {$PYEXTENSION} and binding the cpyext runtime IS bare-importable, so both pages are now wrong in the direction that makes a working program look unsupported. | — |
@@ -202,6 +201,7 @@ lives in git, not in a timestamp._
 | feature-inline-nonleaf-and-branch-locals | O | 45 | feature | Inline expansion — remaining slices (branch-with-locals + non-leaf) | — |
 | feature-lib-mimic-string-template | B | 15 | feature | string.Template — the $-placeholder class (substitute, safe_substitute) — is the one member of Python's string module still missing, and it is what logging/__init__.py uses. Deliberately NOT urgent: `import logging` does not resolve at all today, so nothing can reach Template until a logging shim exists. Split out of feature-lib-mimic-string, which shipped every constant and both capwords forms. | — |
 | feature-n-a-quoted-from-import-reaches-another-language | A | 25 | feature | `import 'sysutils.pas' as su` works; `from 'sysutils.pas' import Trim` does not. The quoted cross-language import was built for the PLAIN arm only, because the from-arms thread impName/impRoot through member binding, alias recording and PyStdAliasRecord. Nothing needs it today — the refusal diagnostic points at the plain spelling, which works — so this is filed to be visible rather than to be urgent. | — |
+| feature-n-from-accepts-a-quoted-foreign-file | N | 45 | feature | `from 'basehook.pas' import ConfigBase` and `from 'basehook.pas' as bh import X, Y` are refused with \"expected a module name after from\", while `import 'basehook.pas' as bh` works. Both from-arms test tkIdent and never consider tkString. The semantics already exist — from-import discards its name list and importing a unit opens its namespace flat — so this is a parser change with no new resolution path. | — |
 | feature-n-nilpy-ast-typing-module-scope | N | 8 | feature | NilPy: type MODULE locals from the AST too | — |
 | feature-nested-routine-fixed-array-capture | A | 35 | feature | Nested routines: capture of fixed-size array locals not supported | — |
 | feature-networking | B | 20 | feature | Networking runtime | — |
@@ -425,7 +425,7 @@ lives in git, not in a timestamp._
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (98)
+## decided (99)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -509,6 +509,7 @@ lives in git, not in a timestamp._
 | decide-scope-hiding-vs-flat-overload-set | U | 60 | decide | One rule explains four separate symptoms: a declaration should HIDE a same-named one from an outer/earlier scope unless marked `overload`. pxx behaves as if everything were `overload` — one flat set, first-in-chain wins. Decide whether to adopt hiding, and which marker carries it: any {$mode}, --strict-overload/{$MIMIC FPC}, or the default | — |
 | decide-set-vs-array-of-const-at-the-same-overload-slot | U | 30 | decide | DECIDED 2026-08-16 (user): leave it — don't overload on a set and an array of const at one slot, give the function a decisive name; a cast-style `(set)[...]` was considered and rejected as non-standard Pascal. Docs footnote only. The separate bug-p-set-literal-elements-are-not-type-checked STAYS OPEN and is the real defect. Background: RE-SCOPED 2026-08-16 after re-measurement: the original table was wrong (pxx is NOT order-independent — it flips on all four bracket shapes, FPC only on the genuinely ambiguous one). Most of the difference is bug-p-set-literal-elements-are-not-type-checked, filed separately; fix that and content disambiguates as it does in FPC. What is left to decide is the true tie only: `[dTue]`, `[dMon, dWed]`, `[]`. | — |
 | decide-shift-operator-promotion-width | U | 45 | decide | Decide: what width do `shl` / `shr` happen at for a 32-bit operand? | — |
+| decide-should-from-accept-a-quoted-foreign-file | U | 45 | decide | A bare NilPy import resolves to Python only, and the escape is `import 'x.pas' as x`. There is no matching escape for `from x import Name` -- `from 'x.pas' import Name` is refused with \"expected a module name after from\". Decide whether the quoted form should be accepted after `from`, or whether the alias form is deliberately the only door. A test already lost an assertion to this. | — |
 | decide-should-the-gate-prove-self-compile-at-more-than-one-o-level | U | 55 | decide | A -O0-only self-compile failure passed the per-fix gate, the self-host fixedpoint, and every Track T tier — the class is structurally invisible. Widening the gate would catch it and would also lengthen the loop CLAUDE.md is emphatic about NOT widening. Genuine fork; coordinator must not settle gating policy. | — |
 | decide-sole-a-guard-for-unattended-sessions | U | 55 | decide | How should an UNATTENDED session satisfy the sole-A guard? | — |
 | decide-staff-track-c-to-unblock-own-language-first | U | 50 | decide | bug-c-definition-of-an-intrinsic-name-overwrites-the-pascal-routine (C, p55) is the only thing blocking feature-a-own-language-first-symbol-resolution, and Track C is unstaffed. Staff it, fold it into an existing session, or leave the chain parked? | — |
@@ -636,7 +637,6 @@ lives in git, not in a timestamp._
 - [p 45] [T] bug-t-two-devtests-measure-the-box-and-flake-the-fleet-job
 - [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
 - [p 45] [U] decide-segv-runtime-error-default
-- [p 45] [U] decide-should-from-accept-a-quoted-foreign-file
 - [p 45] [D] docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out
 - [p 45] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 45] [B] feature-b-rtl-gap-inventory-22-sysutils-strutils-symbols
@@ -648,6 +648,7 @@ lives in git, not in a timestamp._
 - [p 45] [P] feature-embed-pascal-script
 - [p 45] [S] feature-esp-hardware-flash-validation
 - [p 45] [O] feature-inline-nonleaf-and-branch-locals
+- [p 45] [N] feature-n-from-accepts-a-quoted-foreign-file
 - [p 45] [A] feature-nilpy-idf-import
 - [p 45] [N] feature-nilpy-lambda-compiled-closure
 - [p 45] [N] feature-nilpy-no-type-inference-switch
