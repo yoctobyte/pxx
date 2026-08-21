@@ -53,7 +53,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (274)
+## backlog (277)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -63,11 +63,14 @@ _none_
 | bug-a-a-record-copy-does-not-retain-an-interface-field | A | 60 | bug | `b := a` on a record holding a COM interface field copies the pointer with no retain, so the two records share one counted reference. Nilling either one destroys the object and the other is left dangling — a use-after-free that segfaults on the next member call. Present on pinned and on HEAD. | decide-interface-members-in-aggregates-lock-strategy |
 | bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data | A | 40 | bug | A typed const array is emitted as BSS plus generated code that fills it element by element at startup, instead of being stored as initialised data. Measured at ~29 bytes of code per element for UInt64; Int64, Double and Cardinal all do it too, so it is every typed const array, not a 64-bit case. A 696-entry table costs 20 KB of code and 0 bytes of data. A string constant of the same bytes costs ~0 code and lands in .data, so the data path exists — the array lowering just does not use it. | — |
 | bug-a-aintostr-returns-empty-for-negative-numbers | A | 40 | bug | AIntToStr(n) returns the EMPTY STRING for any n < 0 — `while n > 0` never enters. It is the compiler's own IntToStr, used in ~40 diagnostics across the Pascal, NilPy and C frontends and the C preprocessor, so a negative value silently drops out of an error message rather than being reported wrong-looking. | — |
+| bug-a-exception-unwind-releases-one-interface-too-few-on-every-cross-target | A | 45 | bug | `test_interface_arc_exc` reports `unwind freed=2` on i386, arm32 and aarch64 where x86-64 and FPC say 3. An interface reference held when an exception unwinds past its frame is never released on any cross target — one leak per unwind, silent. | — |
 | bug-a-findtypealias-failed-to-find-puint8-on-stderr | A | 20 | bug | `FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr during a compile that then SUCCEEDS. Either the lookup failure is real and something silently fell back to a wrong type, or the message is a stale debug print that should not be in a release build. Both readings are defects; which one it is has not been established. | — |
+| bug-a-i386-segfaults-on-an-interface-as-cast-temporary | A | 60 | bug | i386 SIGSEGVs (rc=139) on an interface `as`-cast temporary and on a single-pointer interface ABI shape. Four tests crash mid-output on i386 alone — arm32, aarch64, riscv32 and x86-64 all print the correct answer. A crash, not a wrong value, so it is loud; it is also the only cross target that dies. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
 | bug-a-only-the-pascal-driver-emits-the-signal-runtime | A | 45 | bug | The signal runtime (SIGSEGV/SIGFPE hook, restorer, sethook, install stubs) is emitted only by the Pascal driver in parser.inc. Every other frontend -- C, NilPy, Rust, Zig, Basic, Ada, Lua, the asm frontend -- produces a binary with no signal runtime, so a hardware fault there is an unhandled signal instead of a runtime error. Same shape as the I/O-lock gap that was already found and fixed. | — |
 | bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did | A | 45 | bug | i386, arm32 and aarch64 route variant binops through PXXVarBinOp in builtinheap.pas, which reimplements the same dispatch x86-64 hand-emits — and the same defect: a stringy operand's payload is read as a number. x86-64 was fixed 2026-08-20; those three targets still answer a heap address for `v('15') - 3`. | — |
+| bug-a-riscv32-drops-interface-releases-in-six-shapes | A | 45 | bug | riscv32 alone under-releases COM interface references in six distinct shapes — a by-value interface PARAMETER is never released (10/16 on test_interface_byval_param_no_leak), an as-cast temp outlives its expression, a self-returning call releases nothing, and a COM value param leaks. x86-64, i386, arm32 and aarch64 all agree with FPC; riscv32 is the outlier in every case. | — |
 | bug-a-stack-overflow-fault-to-raise-loops-forever-without-an-sp-reset | A | 45 | bug | Redirecting the ucontext PC to a raise stub turns a hardware fault into a catchable Pascal exception — except for a STACK OVERFLOW, where the resumed stub inherits the exhausted SP and re-faults at the identical address forever. A hang, not a crash. The fault-to-raise design needs an SP reset alongside the PC rewrite for this one signal. | — |
 | bug-a-string-table-cap-refuses-a-14k-line-c-program | A | 45 | bug | `VisCacheVis` is sized by the string-table constant — and the cap it is tied to is too low | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
@@ -604,6 +607,7 @@ _none_
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-oop
 - [p 60] [U] decide-interface-members-in-aggregates-lock-strategy (unblocks 1)
+- [p 60] [A] bug-a-i386-segfaults-on-an-interface-as-cast-temporary
 - [p 60] [N] bug-n-inferred-return-type-of-true-division-is-int
 - [p 60] [T] bug-t-the-push-rate-starves-breadth-coverage-entirely
 - [p 60] [O] feature-opt-store-reload-elimination
@@ -640,8 +644,10 @@ _none_
 - [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
 - [p 45] [A] bug-a-a-memory-fault-is-a-raw-sigsegv-not-runtime-error-216
 - [p 45] [A] bug-a-a-non-lvalue-is-refused-as-an-interface-argument
+- [p 45] [A] bug-a-exception-unwind-releases-one-interface-too-few-on-every-cross-target
 - [p 45] [A] bug-a-only-the-pascal-driver-emits-the-signal-runtime
 - [p 45] [A] bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did
+- [p 45] [A] bug-a-riscv32-drops-interface-releases-in-six-shapes
 - [p 45] [A] bug-a-stack-overflow-fault-to-raise-loops-forever-without-an-sp-reset
 - [p 45] [A] bug-a-string-table-cap-refuses-a-14k-line-c-program
 - [p 45] [B] bug-b-format-percent-u-prints-a-signed-value
