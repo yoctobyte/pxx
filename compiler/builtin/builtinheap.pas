@@ -2964,15 +2964,29 @@ end;
 { Forward byte copy (non-overlapping or dst < src). Used by cross backends that
   lack a single-instruction block move (e.g. ARM32) for whole-record copies. }
 procedure PXXMemMove(dst: Pointer; src: Pointer; n: NativeInt);
+{$ifdef CPUX86_64}
+var bmR: Int64;
+{$endif}
 begin
+{$ifdef CPUX86_64}
+  bmR := __pxxblockmove(Int64(dst), Int64(src), n);   { rep movsb }
+{$else}
   PXXBlockCopy(Int64(dst), Int64(src), n);   { the ASCII answer is not wanted here }
+{$endif}
 end;
 
 { Zero n bytes at dst. }
 procedure PXXMemZero(dst: Pointer; n: NativeInt);
 var d, i, w: Int64;
+{$ifdef CPUX86_64}
+    bmR: Int64;
+{$endif}
 begin
   d := Int64(dst);
+{$ifdef CPUX86_64}
+  bmR := __pxxblockfill(d, n, 0);   { rep stosb; a count <= 0 writes nothing }
+  Exit;
+{$endif}
   i := 0;
   w := SizeOf(NativeInt);
   { same alignment rule as PXXBlockCopy, with no source to agree with }
@@ -3136,11 +3150,16 @@ end;
   source and destination never overlap. }
 function PXXMemCopy(dest: Pointer; src: Pointer; n: NativeInt): Pointer;
 begin
-  { One forward block copy in this unit, not two: PXXBlockCopy already moves a
-    word at a time with a byte tail. Its return value is the ASCII scan the
+  { One forward block copy in this unit, not two: on x86-64 that is the
+    machine's own, and everywhere else PXXBlockCopy already moves a word at a
+    time with a byte tail. PXXBlockCopy's return value is the ASCII scan the
     string paths ask for; nothing here wants it. }
+{$ifdef CPUX86_64}
+  Result := Pointer(__pxxblockmove(Int64(dest), Int64(src), n));
+{$else}
   PXXBlockCopy(Int64(dest), Int64(src), n);
   Result := dest;
+{$endif}
 end;
 
 { Dynamic-array Delete/Insert support. The compiler lowers Delete/Insert on a
