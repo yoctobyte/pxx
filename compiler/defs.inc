@@ -475,6 +475,18 @@ const
   TLS_SLOT_SELF    = 0;   { the block's own address; what __pxxTlsBase reads }
   TLS_SLOT_FIRST_FREE = 1;
 
+  AN_BLOCK_MEM     = 98; { __pxxblockmove(dest, src, n) / __pxxblockfill(dest, n, byteval):
+                           an inline BULK memory op, args on the AN_ARG chain at Left.
+                           IVal 0 = move (FORWARD only -- the caller owns the overlap
+                           question), 1 = fill. Returns dest, so it links into a
+                           statement stream the way PXXMemCopy does. Exists so the RTL's
+                           Move/FillChar can reach the machine's block instruction
+                           instead of a word-at-a-time Pascal loop; on this box `rep
+                           movsb` copies 200 MB in 15 ms against the unrolled loop's
+                           78 ms. Lowering REFUSES any target whose backend has no arm
+                           (x86-64 today), so the RTL keeps the portable loop behind
+                           {$ifdef} and nothing silently degrades. }
+
   AN_MANAGED_INIT  = 97; { Initialize(x) / Finalize(x). Left = the lvalue; IVal 0 =
                            Initialize, 1 = Finalize. Statement position only.
                            Lowers per the lvalue's TYPE, not to a bespoke op:
@@ -680,6 +692,20 @@ const
                            restores the stack pointer from the frame pointer (x86-64 `leave`);
                            the other backends Error at codegen until ported
                            (feature-c-alloca-dynamic-stack). }
+
+  IR_BLOCK_MEM     = 74; { bulk memory op with a RUNTIME byte count. IRA = destination
+                           address, IRB = byte count, IRC = source address (move) or the
+                           fill byte (fill); IRIVal 0 = move, 1 = fill. The count is a
+                           node, which is the whole difference from IR_COPY_REC -- that
+                           one carries a compile-time record size in IRIVal and is what a
+                           record assignment lowers to. Both end up at `rep movsb` on
+                           x86-64. A count <= 0 must copy nothing (the byte count reaches
+                           rcx, where a negative would be four billion), so the emitted
+                           code tests it. FORWARD only: an overlapping upward move is the
+                           caller's problem, and builtin's __pxxMove still answers it in
+                           Pascal. x86-64 ONLY -- the frontend refuses the intrinsic
+                           elsewhere, so no other backend sees this op (same arrangement
+                           as IR_MULHI and IR_TLSBASE). }
 
   IR_TLSBASE       = 73; { __pxxTlsBase: load the calling thread's TLS base into the
                            accumulator. No operands. x86-64 = `mov rax, gs:[0]` (the base

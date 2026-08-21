@@ -7516,6 +7516,49 @@ begin
         EmitB($F3); EmitB($A4);                { rep movsb }
       end;
 
+    IR_BLOCK_MEM:
+      begin
+        { __pxxblockmove(dest, src, n) / __pxxblockfill(dest, n, byteval), inline.
+          IRA = dest, IRB = count, IRC = src (move) or fill byte; IRIVal picks.
+
+          The same `rep movsb` IR_COPY_REC uses for a record assignment, with the
+          count coming from a register instead of a constant -- which is the only
+          reason this op exists. Worth the arm: 200 MB through `rep movsb` is 15 ms
+          on this box against 78 ms for a four-way-unrolled 8-byte Pascal loop.
+
+          dest stays parked on the stack across the copy because `rep` advances
+          rdi, and the op's value is dest (memcpy's return, so it can be written
+          as an expression statement).
+
+          A 32-bit count is sign-extended first: it lands in rcx, where FPC's
+          `Count: Integer` holding -1 would otherwise ask for four billion bytes.
+          The explicit test then makes count <= 0 copy nothing, matching the
+          Pascal Move/FillChar it stands in for. }
+        IREmitNode(IRA[node]);                 { rax = dest }
+        EmitB($50);                            { push rax  -- dest stays here }
+        IREmitNode(IRC[node]);                 { rax = src, or the fill byte }
+        EmitB($50);                            { push rax }
+        IREmitNode(IRB[node]);                 { rax = byte count }
+        if TypeSize(IntToTypeKind(IRTk[IRB[node]])) <= 4 then
+          begin EmitB($48); EmitB($63); EmitB($C0); end;  { movsxd rax, eax }
+        EmitB($48); EmitB($89); EmitB($C1);    { mov rcx, rax }
+        EmitB($5E);                            { pop rsi (src / value) }
+        EmitB($48); EmitB($8B); EmitB($3C); EmitB($24); { mov rdi, [rsp] (dest) }
+        EmitB($48); EmitB($85); EmitB($C9);    { test rcx, rcx }
+        if IRIVal[node] = 0 then
+        begin
+          EmitB($7E); EmitB($02);              { jle +2 (past the rep movsb) }
+          EmitB($F3); EmitB($A4);              { rep movsb }
+        end
+        else
+        begin
+          EmitB($7E); EmitB($05);              { jle +5 (past the splat + rep) }
+          EmitB($48); EmitB($89); EmitB($F0);  { mov rax, rsi -- al = fill byte }
+          EmitB($F3); EmitB($AA);              { rep stosb }
+        end;
+        EmitB($58);                            { pop rax = dest (the op's value) }
+      end;
+
     IR_COPY_REC_MANAGED:
       begin
         { ARC-correct whole-record copy. Retain the source's managed fields,

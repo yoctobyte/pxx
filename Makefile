@@ -4700,6 +4700,9 @@ test-core: $(COMPILER)
 	# Move/FillChar bulk paths: every alignment x size x overlap direction, against a byte-loop oracle
 	./$(COMPILER) test/test_move_fillchar_bulk.pas $(TESTTMP)/test_move_fillchar_bulk26
 	test "$$($(TESTTMP)/test_move_fillchar_bulk26 | tail -1)" = "total ok 8886 / 8886"
+	# __pxxblockmove/__pxxblockfill (IR_BLOCK_MEM, rep movsb/stosb): exact byte count, guards, negative counts, returns dest
+	./$(COMPILER) test/test_block_mem_intrinsic.pas $(TESTTMP)/test_block_mem_intrinsic26
+	test "$$($(TESTTMP)/test_block_mem_intrinsic26 | tail -1)" = "total ok 4252 / 4252"
 	# literal/char concat in a loop must not eat stack (managed typing; frozen carve documented)
 	./$(COMPILER) test/test_concat_loop_stack.pas $(TESTTMP)/test_concat_loop_stack26
 	test "$$($(TESTTMP)/test_concat_loop_stack26)" = "$$(printf 'pI\nab0z\nbad=0')"

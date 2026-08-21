@@ -3976,6 +3976,42 @@ begin
         Exit;
       end;
 
+      if CaseEqual(name, '__pxxblockmove') or CaseEqual(name, '__pxxblockfill') then
+      begin
+        { __pxxblockmove(dest, src, n) / __pxxblockfill(dest, n, byteval): the
+          machine's bulk memory instruction, inline. Both return dest so they
+          can be written as an expression statement. The MOVE is forward-only --
+          overlap is the caller's question, and builtin's __pxxMove answers it
+          in Pascal before it gets here. x86-64 only; lowering refuses the rest,
+          which is why every caller keeps a {$ifdef}-guarded Pascal loop. }
+        node := AllocNode(AN_BLOCK_MEM);
+        ASTTk[node] := Ord(tyNativeInt);
+        if CaseEqual(name, '__pxxblockmove') then ASTIVal[node] := 0
+        else ASTIVal[node] := 1;
+        Next; { consume the intrinsic name }
+        Expect(tkLParen, '(');
+        lastArg := -1;
+        nArgs := 0;
+        repeat
+          ParseExpr;
+          exprNode := CurASTNode;
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := exprNode;
+          if lastArg = -1 then
+            ASTLeft[node] := argSeq
+          else
+            ASTRight[lastArg] := argSeq;
+          lastArg := argSeq;
+          Inc(nArgs);
+        until not Eat(tkComma);
+        Expect(tkRParen, ')');
+        if nArgs <> 3 then
+          Error('__pxxblockmove/__pxxblockfill: expects 3 arguments');
+        LastExprTk := tyNativeInt;
+        CurASTNode := node;
+        Exit;
+      end;
+
       if CaseEqual(name, '__pxxatomic_xchg') or CaseEqual(name, '__pxxatomic_cas')
          or CaseEqual(name, '__pxxatomic_add')
          or CaseEqual(name, '__pxxatomic_xchg64') or CaseEqual(name, '__pxxatomic_cas64')

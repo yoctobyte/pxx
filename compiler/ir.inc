@@ -131,6 +131,7 @@ begin
     IR_YIELD: Result := 'yield';
     IR_CALL_IND: Result := 'call_ind';
     IR_CONST_DATA: Result := 'const_data';
+    IR_BLOCK_MEM: Result := 'block_mem';
     IR_MULHI: Result := 'mulhi';
     IR_FRAME: Result := 'frame';
     IR_TLSBASE: Result := 'tlsbase';
@@ -502,6 +503,13 @@ begin
         begin
           IRRequireNode(IRA[i], 'mulhi a');
           IRRequireNode(IRB[i], 'mulhi b');
+        end;
+
+      IR_BLOCK_MEM:
+        begin
+          IRRequireNode(IRA[i], 'block_mem dest');
+          IRRequireNode(IRB[i], 'block_mem count');
+          IRRequireNode(IRC[i], 'block_mem src/value');
         end;
 
       IR_ALLOCA:
@@ -5363,6 +5371,7 @@ function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     seqBase, seqCur: Integer;       { iterative AN_SEQ spine walk — see the arm }
     ecSym: Integer;                 { System.ExitCode, when builtinheap is linked — see AN_HALT }
+    bmDest, bmSecond, bmThird: Integer;   { __pxxblockmove/fill operands — see AN_BLOCK_MEM }
     cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
     miArg, miRec, miPi, miArgN: Integer;   { Initialize/Finalize }
     miTk: TTypeKind; miIsFin: Boolean;
@@ -6710,6 +6719,30 @@ begin
         item := ASTRight[item];
       end;
       Result := IRAppend(IR_ATOMIC, first, -1, -1, ASTIVal[node], ASTTk[node]);
+    end;
+
+    AN_BLOCK_MEM:
+    begin
+      { __pxxblockmove(dest, src, n) / __pxxblockfill(dest, n, byteval).
+        Operands land in a fixed order the backends can rely on: IRA = dest,
+        IRB = count, IRC = src-or-value -- so the count is in the same slot for
+        both, and only IRC changes meaning. x86-64 is the only backend with an
+        arm; refusing here rather than emitting an op nobody handles is what
+        keeps the RTL's {$ifdef}-guarded Pascal loop honest. }
+      if TargetArch <> TARGET_X86_64 then
+        Error('__pxxblockmove/__pxxblockfill require the x86-64 target; use the Pascal loop');
+      item := ASTLeft[node];
+      bmDest := IRLowerAST(ASTLeft[item]);
+      item := ASTRight[item];
+      bmSecond := IRLowerAST(ASTLeft[item]);
+      item := ASTRight[item];
+      bmThird := IRLowerAST(ASTLeft[item]);
+      if ASTIVal[node] = 0 then
+        { move: (dest, src, n) as written -> IRB = n, IRC = src }
+        Result := IRAppend(IR_BLOCK_MEM, bmDest, bmThird, bmSecond, 0, Ord(tyNativeInt))
+      else
+        { fill: (dest, n, byteval) as written -> IRB = n, IRC = value }
+        Result := IRAppend(IR_BLOCK_MEM, bmDest, bmSecond, bmThird, 1, Ord(tyNativeInt));
     end;
 
     AN_MULHI:
