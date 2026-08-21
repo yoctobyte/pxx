@@ -4794,6 +4794,34 @@ test-core: $(COMPILER)
 	@# is the impostor unit doing its job and not something about this program.
 	./$(COMPILER) test/test_aintostr_negative.pas $(TESTTMP)/test_aintostr_ok26
 	test "$$($(TESTTMP)/test_aintostr_ok26)" = "ok"
+	@# Diagnostics have to say WHERE. Until 2026-08-21 a line number after a
+	@# {$$I} include was an offset into the include-EXPANDED text and named no
+	@# real line of any file — measured on FPC's own tree, an error at
+	@# globtype.pas:800 was reported as 1103, in an 843-line file, the 303 being
+	@# fpcdefs.inc's length — and the file was never named at all. The line
+	@# markers that fix it existed the whole time; they were gated on -g, so a
+	@# debug build was quietly correct and every other build was not.
+	@# Exact line numbers on purpose, not a grep for 'error': a number that is
+	@# merely CLOSE is the whole bug. bug-a-a-parse-error-in-a-used-unit-reports-a-line-in-no-file
+	@out=$$(./$(COMPILER) test/test_incdiag_main_fail.pas $(TESTTMP)/test_incdiag_main26 2>&1); \
+	 echo "$$out" | grep -q '^pascal26:10: error:' \
+	  || { echo 'test_incdiag_main_fail: FAIL - expected line 10 (pre-fix: 110)'; echo "$$out"; exit 1; }; \
+	 echo "$$out" | grep -q '^  in:' \
+	  && { echo 'test_incdiag_main_fail: FAIL - the MAIN source must not be named; the user typed it'; exit 1; }; \
+	 true
+	@out=$$(./$(COMPILER) test/test_incdiag_inc_fail.pas $(TESTTMP)/test_incdiag_inc26 2>&1); \
+	 echo "$$out" | grep -q '^pascal26:63: error:' \
+	  || { echo 'test_incdiag_inc_fail: FAIL - expected line 63 of the .inc (pre-fix: 66)'; echo "$$out"; exit 1; }; \
+	 echo "$$out" | grep -q '^  in: .*incdiag/badinc\.inc$$' \
+	  || { echo 'test_incdiag_inc_fail: FAIL - expected the diagnostic to name badinc.inc'; echo "$$out"; exit 1; }
+	@# The ticket's own shape: a unit that includes a file near its top and has
+	@# the error far below. 13 must resolve inside a 15-line file — pre-fix it
+	@# reported 113, and nothing anywhere named badunit.pas.
+	@out=$$(./$(COMPILER) -Futest/incdiag test/test_incdiag_unit_fail.pas $(TESTTMP)/test_incdiag_unit26 2>&1); \
+	 echo "$$out" | grep -q '^pascal26:13: error:' \
+	  || { echo 'test_incdiag_unit_fail: FAIL - expected line 13 of the unit (pre-fix: 113)'; echo "$$out"; exit 1; }; \
+	 echo "$$out" | grep -q '^  in: .*incdiag/badunit\.pas$$' \
+	  || { echo 'test_incdiag_unit_fail: FAIL - expected the diagnostic to name badunit.pas'; echo "$$out"; exit 1; }
 	./$(COMPILER) test/test_mimic_fpc_compiler_profile.pas $(TESTTMP)/test_mimicfpcc_none
 	test "$$($(TESTTMP)/test_mimicfpcc_none)" = "$$(printf 'fpc=NO\nunix=NO\nend')"
 	./$(COMPILER) --mimic-fpc test/test_mimic_fpc_compiler_profile.pas $(TESTTMP)/test_mimicfpcc_fpc

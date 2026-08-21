@@ -3775,9 +3775,13 @@ begin
       savedPasDefineValue[pdi] := PasDefineValue[pdi];
     end;
 
-    { '' = no -g line markers: a Pascal unit is deliberately absent from the
-      line table (see DbgMarkTokFile above), and a marker would opt it in. }
-    ExpandIncludes(UnitContent, GetFilePath(path), '');
+    { The unit names itself, so its own line markers are right and a diagnostic
+      inside it can say which file it is in. This passed '' until 2026-08-21, to
+      keep the unit out of the DWARF line table (the RTL would swamp it) — that
+      is now arranged by LexMarkDbgLines instead, because suppressing the
+      markers also suppressed correct LINE NUMBERS for every include the unit
+      pulls. bug-a-a-parse-error-in-a-used-unit-reports-a-line-in-no-file }
+    ExpandIncludes(UnitContent, GetFilePath(path), path);
     ExpandPasMacros(UnitContent);
 
     { This unit's name resolves the `*` in its own $R *.lfm (processed during

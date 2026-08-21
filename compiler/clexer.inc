@@ -878,6 +878,13 @@ begin
   end
   else
     unitStart := TokCount;
+  { Close whatever PASCAL source range was open, with a mark that names no file.
+    The Pascal ranges (PasSrcRange*, read by Error to say `in: <path>`) have a
+    start and no end, so without this a C token appended AFTER an ambiently
+    pulled Pascal unit would inherit that unit's path and the diagnostic would
+    blame builtinheap for a line of C. Empty = unknown = say nothing.
+    bug-a-a-parse-error-in-a-used-unit-reports-a-line-in-no-file }
+  PasMarkTokFile(unitStart, '');
 
   repeat
     CLexOne;

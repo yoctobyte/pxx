@@ -4,6 +4,8 @@
 
 procedure WriteTokenContext; forward;   { body sits after GetTokenStrFromRaw, which it uses }
 
+procedure WriteDiagSourceFile; forward;   { body sits after PasSrcOfTok is reachable; see below }
+
 procedure Error(const msg: AnsiString);
 begin
   { ErrorIdent names the symbol the diagnostic is about; when there is none, the
@@ -13,6 +15,7 @@ begin
     writeln('pascal26:', CurTok.Line, ': error: ', msg, ' (', ErrorIdent, ')')
   else
     writeln('pascal26:', CurTok.Line, ': error: ', msg);
+  WriteDiagSourceFile;
   WriteTokenContext;
   Halt(1);
 end;
@@ -29,6 +32,29 @@ begin
   else
     writeln('pascal26:', line, ': error: ', msg);
   Halt(1);
+end;
+
+{ `  in: <path>` under a diagnostic whose token did NOT come from the main
+  source — an included .inc, or a `uses`d unit. Silent for the main file, whose
+  name the user just typed.
+
+  A SEPARATE LINE, and the `pascal26:<line>:` prefix above is left exactly as it
+  was, deliberately. That first line is a parsed interface: apps/ide/garin's
+  builder.pas keys off "a number between the first two colons" to drive
+  jump-to-error, so folding the path in as `pascal26:<path>:<line>:` would make
+  every diagnostic in an include invisible to the IDE — trading one broken half
+  of "where" for another. An extra context line is additive, in the same shape
+  as the `near:` window that follows it, and anything that does not understand
+  it ignores it.
+  bug-a-a-parse-error-in-a-used-unit-reports-a-line-in-no-file }
+procedure WriteDiagSourceFile;
+var path: AnsiString; t: Integer;
+begin
+  if Lexing then t := TokCount
+  else if TokPos > 0 then t := TokPos - 1
+  else t := 0;
+  path := PasSrcOfTok(t);
+  if (path <> '') and (path <> DbgSrcName) then writeln('  in: ', path);
 end;
 
 procedure EnsureTokCapacity(need: Integer);
@@ -2108,7 +2134,6 @@ function PasAtLineMarker: Boolean;
 var p: Integer;
 begin
   PasAtLineMarker := False;
-  if not DebugInfo then Exit;
   if SrcPos > Length(Source) then Exit;
   if Source[SrcPos] <> '#' then Exit;
   if (SrcPos > 1) and (Source[SrcPos - 1] <> #10) then Exit;
@@ -2158,9 +2183,17 @@ begin
   if SrcPos <= Length(Source) then Inc(SrcPos);
   if not ok then Exit;
   SrcLine := n;
-  { Tokens from here belong to `path`. The main file keeps id 1; an .inc interns
-    its own, so its routines land in the line table as themselves instead of as
-    a wrong line of the .pas. }
+  { Tokens from here belong to `path` — recorded ALWAYS, so a diagnostic can
+    name the file (PasSrcOfTok). }
+  PasMarkTokFile(TokCount, path);
+  { The DWARF line table is a different question and keeps its old answer: only
+    under -g, and only for a source that was opted in. A `uses`d unit is
+    deliberately absent from it (the RTL would swamp the table), which used to
+    be arranged by giving units no markers at all — that is no longer available,
+    because the markers are now what makes line numbers right. The main file
+    keeps id 1; an .inc interns its own, so its routines land in the line table
+    as themselves instead of as a wrong line of the .pas. }
+  if not LexMarkDbgLines then Exit;
   if path = DbgSrcName then DbgMarkTokFile(TokCount, 1)
   else DbgMarkTokFile(TokCount, DbgFileId(path));
 end;
@@ -2454,6 +2487,11 @@ var len, i: Integer; sval: AnsiString;
 begin
   TokCharLen := 0;
   TokCount   := 0;
+  { The main source: its line markers are the ones the DWARF line table wants,
+    and an Error raised in here is at token TokCount rather than at the parser's
+    TokPos (the parser has not started). Both are cleared at the end. }
+  LexMarkDbgLines := True;
+  Lexing := True;
   repeat
     LexOne;
     EnsureTokCapacity(TokCount + 1);
@@ -2479,17 +2517,26 @@ begin
     end;
     Inc(TokCount); EnsureTokCapacity(TokCount+1);
   until CurTok.Kind = tkEOF;
+  Lexing := False;
 end;
 
 function LexAppend(const srcText: AnsiString): Integer;
 var
   savedSrcPos, savedSrcLine: Integer;
   len, i, unitStart: Integer;
+  savedMarkDbg, savedLexing: Boolean;
   sval: AnsiString;
 begin
   SavedLexSource := Source;
   savedSrcPos := SrcPos;
   savedSrcLine := SrcLine;
+  { A `uses`d unit stays OUT of the DWARF line table — see PasLexLineMarker.
+    Saved and restored rather than set to a constant: this runs re-entrantly
+    (a unit's own `uses` loads another unit mid-lex). }
+  savedMarkDbg := LexMarkDbgLines;
+  savedLexing := Lexing;
+  LexMarkDbgLines := False;
+  Lexing := True;
 
   Source := srcText;
   SrcPos := 1;
@@ -2532,6 +2579,8 @@ begin
   Source := SavedLexSource;
   SrcPos := savedSrcPos;
   SrcLine := savedSrcLine;
+  LexMarkDbgLines := savedMarkDbg;
+  Lexing := savedLexing;
   Result := unitStart;
 end;
 

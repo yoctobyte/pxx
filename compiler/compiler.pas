@@ -51,6 +51,8 @@ uses asmcore_base, asmcore_x64;
 {$include exdec.inc}
 function DbgFileId(const path: AnsiString): Integer; forward;   { real body in dbg_filetable.inc, included after lexer.inc and clexer.inc use it (regression-fpc-seed-drift-b1976-stale) }
 procedure DbgMarkTokFile(startTok, fileId: Integer); forward;   { real body in dbg_filetable.inc, ditto }
+procedure PasMarkTokFile(startTok: Integer; const path: AnsiString); forward;   { real body in dbg_filetable.inc; lexer.inc plants marks and Error reads them back }
+function PasSrcOfTok(t: Integer): AnsiString; forward;                          { ditto }
 procedure CMarkTokModule(startTok: Integer; const path: AnsiString); forward;    { real body in parser.inc; clexer.inc/cparser.inc call it (bug-a-fpc-seed-drift-emitasmx64-forward) }
 function CPathIsCModule(const path: AnsiString): Boolean; forward;   { ditto }
 procedure MarkUnitPxxDialect(unitIdx: Integer); forward;   { real body in symtab.inc; lexer.inc's {$MODE PXX} handler calls it (ditto) }

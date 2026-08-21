@@ -1480,6 +1480,9 @@ begin
   Source := src;
   PyExpandFStrings;            { operates on Source, like the main program's }
   Result := TokCount;
+  { See the CLexAppend twin: end any open Pascal source range so a NilPy token
+    is never attributed to a Pascal unit's file by Error's `in:` line. }
+  PasMarkTokFile(TokCount, '');
   PyLexAppending := True;
   PyLexAll(False);
   PyLexAppending := False;

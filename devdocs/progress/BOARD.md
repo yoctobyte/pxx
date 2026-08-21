@@ -54,12 +54,11 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (274)
+## backlog (275)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-by-value-interface-param-is-released-at-caller-scope-exit | A | 35 | bug | pxx releases a by-value interface argument at the CALLER's scope exit; FPC releases it at CALLEE return. Every object is still destroyed exactly once, so this is a lifetime-timing divergence rather than a leak — but a destructor with side effects (closing a file, dropping a lock) runs later than the program says, and the last object of a batch stays alive until the calling routine returns. | — |
-| bug-a-a-parse-error-in-a-used-unit-reports-a-line-in-no-file | A | 35 | bug | A parse error inside a `uses`d unit reports a line number that belongs to no file and never names the file. Measured: an error at globtype.pas:800 is reported as line 1103, in a file 843 lines long. The `near:` context is correct, so the token is findable — by grepping, not by navigating. | — |
 | bug-a-a-record-copy-does-not-retain-an-interface-field | A | 60 | bug | `b := a` on a record holding a COM interface field copies the pointer with no retain, so the two records share one counted reference. Nilling either one destroys the object and the other is left dangling — a use-after-free that segfaults on the next member call. Present on pinned and on HEAD. | decide-interface-members-in-aggregates-lock-strategy |
 | bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data | A | 40 | bug | A typed const array is emitted as BSS plus generated code that fills it element by element at startup, instead of being stored as initialised data. Measured at ~29 bytes of code per element for UInt64; Int64, Double and Cardinal all do it too, so it is every typed const array, not a 64-bit case. A 696-entry table costs 20 KB of code and 0 bytes of data. A string constant of the same bytes costs ~0 code and lands in .data, so the data path exists — the array lowering just does not use it. | — |
 | bug-a-findtypealias-failed-to-find-puint8-on-stderr | A | 20 | bug | `FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr during a compile that then SUCCEEDS. Either the lookup failure is real and something silently fell back to a wrong type, or the message is a stale debug print that should not be in a release build. Both readings are defects; which one it is has not been established. | — |
@@ -175,6 +174,7 @@ _none_
 | feature-b-random-tier1-consume-the-hw-entropy-intrinsics | B | 35 | feature | The compiler now exports __pxxCpuHasHwRandom / __pxxHwRandom64 (x86-64 RDRAND behind a CPUID probe), which is what lib/rtl/random.pas's tier-1 stub has been waiting for. The library still runs one tier below its design; wiring it is a Track B change of a few lines. | — |
 | feature-b-rtl-gap-inventory-22-sysutils-strutils-symbols | B | 45 | feature | Measured inventory: 22 sysutils/strutils/dateutils routines plus 3 type/alias names that FPC accepts and pxx rejects with `undefined variable`. Everything pxx DOES implement in this surface was verified byte-identical to FPC, so the gap is coverage, not correctness — a directory-walking or PChar-using program simply does not compile. | — |
 | feature-c-csmith-differential-fuzzing | C | 65 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
+| feature-c-diagnostics-name-the-module-they-are-in | C | 30 | feature | A Pascal diagnostic now prints `in: <path>` when the error is in an include or a `uses`d unit. The C frontend has the same information already — CModRange* is populated in every build, not just under -g — and prints nothing, so an error in a crtl module or an included header still reports a bare line number. | — |
 | feature-c-esp-conformance-coverage | S | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
 | feature-c-gtk3-header-final-wiring | C | 45 | feature | GTK3 header import final wiring | — |
 | feature-c-package-namespace-decision | A | 40 | feature | Decide the Pascal-import namespace for C packages (`uses zlib` collision) | — |
@@ -182,6 +182,7 @@ _none_
 | feature-cli-widgetset-flag | A | 20 | feature | CLI: --widgetset=<name> as sugar for -dWIDGETSET_<NAME>, so the flag reads like Lazarus' -ws | — |
 | feature-cross-frontend-interop-contract | A | 45 | feature | Cross-frontend interop contract — umbrella | — |
 | feature-crtl-implement-libc-assumptions | B | 10 | feature | crtl: implement the libc assumptions real-world C leans on | — |
+| feature-demo-ide-jump-into-includes-and-units | E | 25 | feature | garin's diagnostic parser keys off `a number between the first two colons` and carries no file, on the stated assumption that the compiler names one main unit. Since 2026-08-21 that is no longer true: a diagnostic in an include or a `uses`d unit is followed by an `in: <path>` line, which the IDE currently drops, so jump-to-error lands on the wrong file. | — |
 | feature-demo-nilpy-ide | E | 40 | feature | Landmark demo: a minimal IDE in Nil-Python via import tk — max functionality, minimal code | — |
 | feature-demo-portable-userland | E | 55 | feature | PXX portable userland (mini OS-personality) — one shell, any kernel | — |
 | feature-demo-songformatter-pxx-target | E | 50 | feature | songformatter as a pxx compile target (nilpy) — GUI editor + live preview | feature-lib-pxxpdf-reportlab-compat, feature-nilpy-re-module, feature-nilpy-tkinter-facade |
@@ -536,9 +537,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2195)
+## done (2196)
 
-2195 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2196 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -723,7 +724,6 @@ _none_
 - [p 40] [A] refactor-a-seven-frontends-borrow-rust-parser-helpers
 - [p 40] [D] task-d-document-own-language-first-in-the-language-reference
 - [p 35] [A] bug-a-a-by-value-interface-param-is-released-at-caller-scope-exit
-- [p 35] [A] bug-a-a-parse-error-in-a-used-unit-reports-a-line-in-no-file
 - [p 35] [A] bug-a-nilpy-double-star-in-a-mixed-argument-list
 - [p 35] [A] bug-a-real-is-single-on-hosted-riscv32
 - [p 35] [N] bug-n-abs-of-a-complex-raises-typeerror
@@ -771,6 +771,7 @@ _none_
 - [p 30] [P] compat-pascal-subrange-storage-size
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
 - [p 30] [A] feature-a-finalize-for-bare-dynarray-and-variant
+- [p 30] [C] feature-c-diagnostics-name-the-module-they-are-in
 - [p 30] [N] feature-nilpy-fstring-nested-spec-and-nested-fstring
 - [p 30] [N] feature-nilpy-hoist-constant-container-literals-out-of-a-loop-condition
 - [p 30] [N] feature-nilpy-list-sort-inplace-key-reverse
@@ -803,6 +804,7 @@ _none_
 - [p 25] [P] compat-pascal-set-storage-size-is-always-32-bytes
 - [p 25] [P] compat-pascal-string-n-is-not-a-shortstring
 - [p 25] [P] compat-pascal-uses-sysutils-withdraws-the-variadic-concat
+- [p 25] [E] feature-demo-ide-jump-into-includes-and-units
 - [p 25] [A] feature-n-a-quoted-from-import-reaches-another-language
 - [p 25] [N] feature-nilpy-a-genexpr-is-lazy-not-materialised
 - [p 25] [N] feature-nilpy-math-module-twelve-absent-names-measured

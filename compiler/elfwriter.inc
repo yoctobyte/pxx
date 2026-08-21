@@ -3285,9 +3285,16 @@ end;
   the directive — so a marker is an ABSOLUTE anchor and no drift accumulates
   between them.
 
-  Only under -g, and only for a source that asked for markers by passing a
-  non-empty selfPath. Without -g the expanded text is byte for byte what it
-  always was, which is what keeps the self-host fixedpoint honest. }
+  Emitted for any source that names itself by passing a non-empty selfPath.
+
+  This was gated on -g until 2026-08-21, which meant that without -g every line
+  number after an include was an offset into the SPLICED text and named no real
+  line of any file: an error at globtype.pas:800 was reported as `pascal26:1103`
+  in an 843-line file, the 303 being fpcdefs.inc's length. -g quietly fixed it,
+  which is how it hid — the markers were built for DWARF and the diagnostics
+  were getting them by accident. The C side has always emitted its markers
+  unconditionally (cpreproc.inc), and this is the Pascal side catching up.
+  bug-a-a-parse-error-in-a-used-unit-reports-a-line-in-no-file }
 function IncSmallIntStr(n: Integer): AnsiString;
 { Decimal text of a small non-negative int. elfwriter.inc is included before
   cpreproc.inc, so its CPSmallIntStr twin is not in scope here, and this
@@ -3369,9 +3376,15 @@ begin
   condCount := 0;
   active := True;
   SetLength(IncExpanded, 0);
-  wantMarkers := DebugInfo and (Length(selfPath) > 0);
+  wantMarkers := Length(selfPath) > 0;
   markLine := 1;
   markPos := 1;
+  { Name the source from its very first token, so a diagnostic in the text
+    BEFORE any include still knows which file it is in. Without this the first
+    range only starts at the first splice, and everything above it inherits
+    whatever file was marked last — which, for a `uses`d unit, is the previous
+    unit. Sets SrcLine := 1, which it already is, so numbering is untouched. }
+  if wantMarkers then IncEmitLineMarker(selfPath, 1);
   i := 1;
   while i <= Length(src) do
   begin

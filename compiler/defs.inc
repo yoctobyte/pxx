@@ -2536,6 +2536,18 @@ var
   CModRangeStart : array[0..MAX_DBG_RANGES-1] of Integer;
   CModRangeId    : array[0..MAX_DBG_RANGES-1] of Integer;   { KeyStrs[] index of the .c path — a compile-time key, never emitted (see KeyStrs) }
   CModRangeCount : Integer;
+  { PasSrcRange* — the same idea for PASCAL, and NOT gated on -g, because a
+    DIAGNOSTIC needs to name the file whether or not the user asked for debug
+    info. Filled from the same `# <line> "<path>"` markers, by PasLexLineMarker.
+    Kept separate from DbgRange* on purpose: that table decides what lands in
+    DWARF (the RTL is deliberately left out of it, or it swamps the line table),
+    and "which file do I blame in an error message" is a different question with
+    a different answer. bug-a-a-parse-error-in-a-used-unit-reports-a-line-in-no-file }
+  PasSrcRangeStart : array[0..MAX_DBG_RANGES-1] of Integer;
+  PasSrcRangeId    : array[0..MAX_DBG_RANGES-1] of Integer;   { KeyStrs[] index of the path — a compile-time key, never emitted (see KeyStrs) }
+  PasSrcRangeCount : Integer;
+  LexMarkDbgLines  : Boolean;   { while True, a consumed line marker ALSO registers a DWARF range. False while lexing a `uses`d unit — see PasLexLineMarker. }
+  Lexing           : Boolean;   { True inside LexAll/LexAppend: an Error raised here is at token TokCount, not at the parser's TokPos }
   DeclVisibilityProbe : Boolean;   { while True, DeclVisible answers True for everything. For DIAGNOSTICS ONLY -- asking "does a confusable name exist ANYWHERE" is a different question from "may this scope use it", and a compiler that refuses a call should still be able to say WHY. Never set around anything that RESOLVES. }
   UsesInjected     : Boolean;   { set only around a compiler-injected load }
   VisCacheUnit  : Integer;

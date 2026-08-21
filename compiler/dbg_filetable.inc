@@ -105,6 +105,45 @@ begin
     end;
 end;
 
+procedure PasMarkTokFile(startTok: Integer; const path: AnsiString);
+{ Tokens from `startTok` on come from the Pascal source `path`. CMarkTokModule's
+  twin, and deliberately NOT gated on DebugInfo: it exists so a diagnostic can
+  say which file it is talking about, which a build without -g needs just as
+  much. Same collapse rules — a repeat of the current path is a no-op, and a
+  second mark at the same token index overwrites rather than stacks.
+  InternKey, not InternStr: these paths must never reach the emitted string
+  pool, or a binary's bytes would depend on where its sources sat
+  (bug-a-the-compilers-output-depends-on-argv0). }
+var pathId: Integer;
+begin
+  if PasSrcRangeCount >= MAX_DBG_RANGES then Exit;
+  pathId := InternKey(path);
+  if (PasSrcRangeCount > 0) and (PasSrcRangeId[PasSrcRangeCount - 1] = pathId) then Exit;
+  if (PasSrcRangeCount > 0) and (PasSrcRangeStart[PasSrcRangeCount - 1] = startTok) then
+  begin
+    PasSrcRangeId[PasSrcRangeCount - 1] := pathId;
+    Exit;
+  end;
+  PasSrcRangeStart[PasSrcRangeCount] := startTok;
+  PasSrcRangeId[PasSrcRangeCount] := pathId;
+  Inc(PasSrcRangeCount);
+end;
+
+function PasSrcOfTok(t: Integer): AnsiString;
+{ The Pascal source a token came from, or '' when no range covers it (the main
+  file before its first marker, and every token of a frontend that plants no
+  marks). Backward scan, like CModuleOfTok. }
+var i: Integer;
+begin
+  PasSrcOfTok := '';
+  for i := PasSrcRangeCount - 1 downto 0 do
+    if t >= PasSrcRangeStart[i] then
+    begin
+      PasSrcOfTok := KeyStrs[PasSrcRangeId[i]];
+      Exit;
+    end;
+end;
+
 procedure DbgMarkTokFile(startTok, fileId: Integer);
 begin
   if not DebugInfo then Exit;
