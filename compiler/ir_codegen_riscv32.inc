@@ -1869,6 +1869,49 @@ begin
           Exit;
         end;
 
+        if ((op = Ord(tkLt)) or (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe))) and
+           ((IntToTypeKind(IRTk[left]) = tyAnsiString) or (IntToTypeKind(IRTk[right]) = tyAnsiString) or
+            TypeIsFrozenString(IntToTypeKind(IRTk[left])) or TypeIsFrozenString(IntToTypeKind(IRTk[right]))) then
+        begin
+          { ORDERED string compare -> PXXStrCmp3 -> -1/0/1. This arm did not
+            exist on ANY cross backend: only =/<> were special-cased, so `a < b`
+            fell through to the integer compare below and compared the two heap
+            HANDLES. `'zzz' < 'aaa'` then answered by allocation order — silent,
+            wrong, and on all four targets.
+            bug-a-ordered-string-comparison-of-a-parameter-compares-handles-on-every-cross-target
+            Deliberately a byte-for-byte clone of the equality arm above (same
+            operand normalisation, same temporary release) with only the callee
+            and the result tail changed. }
+          IREmitNodeRISCV32(left);  rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+          IREmitNodeRISCV32(right); rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);
+          EmitStrOperandRISCV32(IntToTypeKind(IRTk[right]), 0, reg_t1, reg_t2);  { lenB, srcB }
+          EmitStrOperandRISCV32(IntToTypeKind(IRTk[left]),  4, reg_a0, reg_a1);  { lenA, srcA }
+          rv32_addi(reg_a2, reg_t1, 0);    { a2 = lenB }
+          rv32_addi(reg_a3, reg_t2, 0);    { a3 = srcB }
+          procIdx := FindProc('PXXStrCmp3');
+          if procIdx < 0 then Error('compiler error: PXXStrCmp3 not found');
+          EmitCallProc(procIdx);                { a0 = -1/0/1 }
+          rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push result }
+          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          begin
+            rv32_lw(reg_a0, reg_sp, 8);
+            procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
+          end;
+          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          begin
+            rv32_lw(reg_a0, reg_sp, 4);
+            procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
+          end;
+          rv32_lw(reg_a0, reg_sp, 0); rv32_addi(reg_sp, reg_sp, 4);   { pop result }
+          rv32_addi(reg_sp, reg_sp, 8);                               { drop rhs, lhs }
+          { -1/0/1 -> 0/1, the same tail the soft-float compare uses }
+          if op = Ord(tkLt) then rv32_slti(reg_a0, reg_a0, 0)
+          else if op = Ord(tkLe) then rv32_slti(reg_a0, reg_a0, 1)
+          else if op = Ord(tkGt) then begin rv32_xori(reg_a0, reg_a0, 1); rv32_sltiu(reg_a0, reg_a0, 1); end
+          else rv32_sltiu(reg_a0, reg_a0, 2);   { tkGe: in {0,1} }
+          Exit;
+        end;
+
         { Float arithmetic/compare via the soft-float kernels. MUST precede the
           64-bit check below — Double is now Is64Bit (a0:a1 storage shape) but its
           arithmetic is soft-float, not integer. Key off the operands: a compare

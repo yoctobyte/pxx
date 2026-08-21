@@ -2375,6 +2375,77 @@ begin
           Exit;
         end;
 
+        if ((op = Ord(tkLt)) or (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe))) and
+           (IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString]) and
+           (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString]) then
+        begin
+          { ORDERED string compare -> PXXStrCmp3 -> -1/0/1. This arm did not
+            exist on ANY cross backend: only =/<> were special-cased, so `a < b`
+            fell through to the integer compare below and compared the two heap
+            HANDLES. `'zzz' < 'aaa'` then answered by allocation order — silent,
+            wrong, and identically wrong on all four targets.
+            bug-a-ordered-string-comparison-of-a-parameter-compares-handles-on-every-cross-target
+            Gated exactly as x86-64 gates EmitAnsiStrCmp3Reg (both operands a
+            managed or frozen string); a Char operand is wrapped into a string by
+            the AN_BINOP lowering before it reaches any backend. The operand
+            decomposition below is the equality arm's PXXStrEq branch verbatim. }
+          lhsTk := IntToTypeKind(IRTk[left]);
+          rhsTk := IntToTypeKind(IRTk[right]);
+          IREmitNode386(left);  EmitB($50);            { push lhs value }
+          IREmitNode386(right); EmitB($50);            { push rhs value }
+          { rhs at [esp] -> esi=srcB, edi=lenB }
+          EmitB($8B); EmitB($14); EmitB($24);          { mov edx, [esp] }
+          if rhsTk = tyAnsiString then
+          begin
+            EmitB($31); EmitB($C9); EmitB($85); EmitB($D2);
+            EmitB($74); EmitB($03); EmitB($8B); EmitB($4A); EmitB($F8);
+          end
+          else
+          begin
+            EmitB($8B); EmitB($0A); EmitB($83); EmitB($C2); EmitB($08);
+          end;
+          EmitB($89); EmitB($D6);                      { mov esi, edx }
+          EmitB($89); EmitB($CF);                      { mov edi, ecx }
+          { lhs at [esp+4] -> edx=srcA, ecx=lenA }
+          EmitB($8B); EmitB($54); EmitB($24); EmitB($04);
+          if lhsTk = tyAnsiString then
+          begin
+            EmitB($31); EmitB($C9); EmitB($85); EmitB($D2);
+            EmitB($74); EmitB($03); EmitB($8B); EmitB($4A); EmitB($F8);
+          end
+          else
+          begin
+            EmitB($8B); EmitB($0A); EmitB($83); EmitB($C2); EmitB($08);
+          end;
+          EmitB($51);                                  { push ecx (lenA) }
+          EmitB($52);                                  { push edx (srcA) }
+          EmitB($57);                                  { push edi (lenB) }
+          EmitB($56);                                  { push esi (srcB) }
+          procIdx := FindProc('PXXStrCmp3');
+          if procIdx < 0 then Error('compiler error: PXXStrCmp3 not found');
+          EmitCallProc(procIdx);                       { eax = -1/0/1 }
+          EmitB($81); EmitB($C4); EmitI32(16);         { add esp, 16 }
+          EmitB($83); EmitB($F8); EmitB($00);          { cmp eax, 0 }
+          if op = Ord(tkLt) then begin EmitB($0F); EmitB($9C); EmitB($C0); end       { setl  al }
+          else if op = Ord(tkLe) then begin EmitB($0F); EmitB($9E); EmitB($C0); end  { setle al }
+          else if op = Ord(tkGt) then begin EmitB($0F); EmitB($9F); EmitB($C0); end  { setg  al }
+          else begin EmitB($0F); EmitB($9D); EmitB($C0); end;                        { setge al }
+          EmitB($0F); EmitB($B6); EmitB($C0);          { movzx eax, al }
+
+          EmitB($50);                                  { push result }
+          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          begin
+            EmitB($8B); EmitB($44); EmitB($24); EmitB($08); EmitStrDecRef386;
+          end;
+          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          begin
+            EmitB($8B); EmitB($44); EmitB($24); EmitB($04); EmitStrDecRef386;
+          end;
+          EmitB($58);                                  { pop result }
+          EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
+          Exit;
+        end;
+
         lhsTk := IntToTypeKind(IRTk[left]);
         rhsTk := IntToTypeKind(IRTk[right]);
         if TypeIsFloat(lhsTk) or TypeIsFloat(rhsTk) or (op = Ord(tkSlash)) then

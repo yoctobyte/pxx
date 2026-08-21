@@ -302,6 +302,7 @@ type
 {$endif}
 function PXXStrUnique(strSlot: Pointer): Pointer;
 function PXXStrEq(lenA: NativeInt; srcA: Pointer; lenB: NativeInt; srcB: Pointer): Int64;
+function PXXStrCmp3(lenA: NativeInt; srcA: Pointer; lenB: NativeInt; srcB: Pointer): Int64;
 procedure PXXStrSetLen(strSlot: Pointer; newLen: NativeInt);
 procedure PXXMemMove(dst: Pointer; src: Pointer; n: NativeInt);
 procedure PXXMemZero(dst: Pointer; n: NativeInt);
@@ -2408,6 +2409,46 @@ begin
     i := i + 1;
   end;
   Result := 1;
+end;
+
+{ Three-way LEXICOGRAPHIC ordering for the cross targets' compare codegen —
+  the `<` `<=` `>` `>=` counterpart of PXXStrEq above, same pre-decomposed
+  (length, data) operand shape so managed handles and inline strings share it.
+  Returns -1, 0 or +1.
+
+  It exists because the four cross backends had NO ordered-string arm at all:
+  only `=` / `<>` were special-cased, so `a < b` fell through to the ordinary
+  integer compare and compared the two heap HANDLES. That is a silent wrong
+  answer — `'zzz' < 'aaa'` reported by allocation order — on i386, arm32,
+  aarch64 and riscv32 alike.
+  bug-a-ordered-string-comparison-of-a-parameter-compares-handles-on-every-cross-target
+
+  Bytes are compared UNSIGNED (x86-64's inline sequence uses repe cmpsb + the
+  unsigned setcc family), and the shorter string sorts first when one is a
+  prefix of the other. A nil handle arrives here as len 0, which is what makes
+  '' the least element without a special case. }
+function PXXStrCmp3(lenA: NativeInt; srcA: Pointer; lenB: NativeInt; srcB: Pointer): Int64;
+var i, n, a, b, ca, cb: Int64;
+begin
+  n := lenA;
+  if lenB < n then n := lenB;
+  a := Int64(srcA);
+  b := Int64(srcB);
+  i := 0;
+  while i < n do
+  begin
+    ca := PByte(a + i)^;
+    cb := PByte(b + i)^;
+    if ca <> cb then
+    begin
+      if ca < cb then Result := -1 else Result := 1;
+      Exit;
+    end;
+    i := i + 1;
+  end;
+  if lenA < lenB then Result := -1
+  else if lenA > lenB then Result := 1
+  else Result := 0;
 end;
 
 {$ifndef PXX_ESP}

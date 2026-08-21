@@ -4206,6 +4206,13 @@ test-core: $(COMPILER)
 	# dangled) for ONE reason: the element-kind policy had no case for an
 	# interface, written out in nine places. Counts are FPC's, from a
 	# differential run of this exact program.
+	# Lexicographic string ordering, cross-checked against FPC. The four cross
+	# backends had no ordered-string arm at all and compared heap HANDLES; the
+	# reversed-allocation and prefix cases are what a naive probe misses. The
+	# older test_string_ordering.pas above covers the same operators for a
+	# different (native) defect.
+	./$(COMPILER) test/test_string_ordering_cross.pas $(TESTTMP)/test_string_ordering_cross26
+	test "$$($(TESTTMP)/test_string_ordering_cross26)" = "$$(printf 'aaa vs zzz : lt le .. .. .. \nzzz vs aaa : .. .. gt ge .. \nabc vs abc : .. le .. ge eq \nab  vs abc : lt le .. .. .. \nabc vs ab  : .. .. gt ge .. \nempty vs a : lt le .. .. .. \na vs empty : .. .. gt ge .. \nempty x2   : .. le .. ge eq \nhi200 vs a : .. .. gt ge .. \nA vs a     : lt le .. .. .. \nvar x vs y : lt le .. .. .. \nvar y vs x : .. .. gt ge .. ')"
 	./$(COMPILER) test/test_interface_containers.pas $(TESTTMP)/test_interface_containers26
 	test "$$($(TESTTMP)/test_interface_containers26)" = "$$(printf 'strarr:  ok\nstatic:  3\ndyn:     2\nafter shrink: 2\nshrink:  4\nafter whole-copy nil-a: 0\nb still alive: pq\ncopy:    2')"
 	# ...and --threadsafe must still TERMINATE. Releasing an interface element

@@ -1565,6 +1565,55 @@ begin
           Exit;
         end;
 
+        if ((op = Ord(tkLt)) or (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe))) and
+           (IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString]) and
+           (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString]) then
+        begin
+          { ORDERED string compare -> PXXStrCmp3 -> -1/0/1. This arm did not
+            exist on ANY cross backend: only =/<> were special-cased, so `a < b`
+            fell through to the integer compare below and compared the two heap
+            HANDLES. `'zzz' < 'aaa'` then answered by allocation order — silent,
+            wrong, and identically wrong on all four targets.
+            bug-a-ordered-string-comparison-of-a-parameter-compares-handles-on-every-cross-target
+            Gated exactly as x86-64 gates EmitAnsiStrCmp3Reg (both operands a
+            managed or frozen string) — a Char operand is already wrapped into a
+            string by the AN_BINOP lowering before it reaches any backend.
+            Otherwise a byte-for-byte clone of the equality arm above. }
+          lhsTk := IntToTypeKind(IRTk[left]);
+          rhsTk := IntToTypeKind(IRTk[right]);
+          IREmitNodeAarch64(left);  EmitI32($F81F0FE0); { push lhs }
+          IREmitNodeAarch64(right); EmitI32($F81F0FE0); { push rhs }
+          EmitI32($F94003E0);                           { ldr x0, [sp] (rhs) }
+          EmitA64StringParts(0, 1, 2, rhsTk, 0);        { x1=srcB, x2=lenB }
+          EmitI32($F81F0FE1);                           { str x1, [sp,#-16]! (srcB) }
+          EmitI32($F81F0FE2);                           { str x2, [sp,#-16]! (lenB) }
+          EmitI32($F9401BE0);                           { ldr x0, [sp,#48] (lhs) }
+          EmitA64StringParts(0, 1, 2, lhsTk, 48);       { x1=srcA, x2=lenA }
+          EmitI32($AA0203E0);                           { mov x0, x2 (lenA) }
+          EmitI32($F9400BE3);                           { ldr x3, [sp,#16] (srcB) }
+          EmitI32($F94003E2);                           { ldr x2, [sp] (lenB) }
+          EmitI32($910083FF);                           { add sp, sp, #32 }
+          procIdx := FindProc('PXXStrCmp3');
+          if procIdx < 0 then Error('compiler error: PXXStrCmp3 not found');
+          EmitCallProc(procIdx);                        { x0 = -1/0/1 }
+          EmitAsmA64('cmp x0, #0');
+          EmitSetccA64(op);                             { signed cset -> 0/1 }
+          EmitI32($F81F0FE0);                           { push result }
+          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          begin
+            EmitI32($F94013E0);                         { ldr x0, [sp,#32] (lhs) }
+            EmitStrDecRefA64;
+          end;
+          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          begin
+            EmitI32($F9400BE0);                         { ldr x0, [sp,#16] (rhs) }
+            EmitStrDecRefA64;
+          end;
+          EmitI32($F84107E0);                           { ldr x0, [sp], #16 (result) }
+          EmitI32($910083FF);                           { add sp, sp, #32 }
+          Exit;
+        end;
+
         lhsTk := IntToTypeKind(IRTk[left]);
         rhsTk := IntToTypeKind(IRTk[right]);
         if TypeIsFloat(lhsTk) or TypeIsFloat(rhsTk) or (op = Ord(tkSlash)) then

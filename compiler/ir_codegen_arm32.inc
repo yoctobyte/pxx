@@ -1865,6 +1865,56 @@ begin
           Exit;
         end;
 
+        if ((op = Ord(tkLt)) or (op = Ord(tkLe)) or (op = Ord(tkGt)) or (op = Ord(tkGe))) and
+           (IntToTypeKind(IRTk[left]) in [tyAnsiString, tyString]) and
+           (IntToTypeKind(IRTk[right]) in [tyAnsiString, tyString]) then
+        begin
+          { ORDERED string compare -> PXXStrCmp3 -> -1/0/1. This arm did not
+            exist on ANY cross backend: only =/<> were special-cased, so `a < b`
+            fell through to the integer compare below and compared the two heap
+            HANDLES. `'zzz' < 'aaa'` then answered by allocation order — silent,
+            wrong, and identically wrong on all four targets.
+            bug-a-ordered-string-comparison-of-a-parameter-compares-handles-on-every-cross-target
+            Gated exactly as x86-64 gates EmitAnsiStrCmp3Reg (both operands a
+            managed or frozen string); a Char operand is wrapped into a string
+            by the AN_BINOP lowering before it reaches any backend. Otherwise a
+            byte-for-byte clone of the equality arm above. }
+          lhsTk := IntToTypeKind(IRTk[left]);
+          rhsTk := IntToTypeKind(IRTk[right]);
+          IREmitNodeArm32(left);  EmitI32($E92D0001); { push lhs }
+          IREmitNodeArm32(right); EmitI32($E92D0001); { push rhs }
+
+          EmitI32($E59D0000);                         { r0 = rhs value }
+          EmitArm32StringParts(0, 1, 2, rhsTk, 0);    { r1=srcB, r2=lenB }
+          EmitI32($E92D0006);                         { push {r1,r2} }
+          EmitI32($E59D000C);                         { r0 = lhs value }
+          EmitArm32StringParts(0, 1, 2, lhsTk, 12);   { r1=srcA, r2=lenA }
+          EmitI32($E1A00002);                         { mov r0, r2 (lenA) }
+          EmitI32($E59D3000);                         { r3 = srcB }
+          EmitI32($E59D2004);                         { r2 = lenB }
+          EmitI32($E28DD008);                         { add sp, sp, #8 }
+          procIdx := FindProc('PXXStrCmp3');
+          if procIdx < 0 then Error('compiler error: PXXStrCmp3 not found');
+          EmitCallProc(procIdx);                      { r0 = -1/0/1 }
+          EmitAsmArm32('cmp r0, #0');
+          EmitSetccArm32(op, True);                   { signed -> 0/1 }
+
+          EmitI32($E92D0001);                         { push result }
+          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          begin
+            EmitI32($E59D0008);                       { lhs }
+            EmitStrDecRefArm32;
+          end;
+          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          begin
+            EmitI32($E59D0004);                       { rhs }
+            EmitStrDecRefArm32;
+          end;
+          EmitI32($E8BD0001);                         { pop result }
+          EmitI32($E28DD008);                         { drop rhs,lhs }
+          Exit;
+        end;
+
         lhsTk := IntToTypeKind(IRTk[left]);
         rhsTk := IntToTypeKind(IRTk[right]);
         if TypeIsFloat(lhsTk) or TypeIsFloat(rhsTk) or (op = Ord(tkSlash)) then
