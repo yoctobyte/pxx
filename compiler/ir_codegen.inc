@@ -7125,6 +7125,11 @@ begin
                 EmitB($51);                                             { push rcx }
                 EmitB($57);                                             { push rdi }
                 EmitB($48); EmitB($89); EmitB($FB);                     { mov rbx, rdi }
+                { ...and the element's interface members, for the same reason
+                  the sibling SetLength arm gives: the blanket release below
+                  walks them, so a survivor that was not retained is destroyed.
+                  bug-a-array-of-records-with-interface-fields-leaks-the-interfaces }
+                EmitManagedRecordIntfWalk(SymTR[symIdx].ElemRec, 'PXXRecordRetainIntf');
                 EmitManagedRecordRetain(SymTR[symIdx].ElemRec);
                 EmitB($5F);                                             { pop rdi }
                 EmitB($59);                                             { pop rcx }
@@ -7818,6 +7823,12 @@ begin
             EmitB($51);                                         { push rcx }
             EmitB($57);                                         { push rdi }
             EmitB($48); EmitB($89); EmitB($FB);                { mov rbx,rdi }
+            { A record element's own interface members retain too, or the
+              release of the whole old block below (which DOES walk them)
+              over-releases every survivor — measured as a shrink destroying 4
+              of 4 instead of the 2 it dropped, then a dangling read.
+              bug-a-array-of-records-with-interface-fields-leaks-the-interfaces }
+            EmitManagedRecordIntfWalk(slBaseRec, 'PXXRecordRetainIntf');
             EmitManagedRecordRetain(slBaseRec);
             EmitB($5F);                                         { pop rdi }
             EmitB($59);                                         { pop rcx }

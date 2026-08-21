@@ -2576,6 +2576,16 @@ begin
           while i < len do
           begin
             itemAddr := Pointer(Int64(arrData) + i * elSize);
+{$ifndef PXX_TS_HARDLOCK}
+            { The record element's interface members. Skipped on x86-64
+              --threadsafe: several callers of this walk (IR_SETLEN_DYN,
+              IR_DYNUNIQUE) hold the codegen spinlock, and _Release re-enters it
+              through FreeMem — the identical residual, for the identical
+              reason, that ManagedElemKindLocked already keeps for kind-4
+              ELEMENTS. Leak, not hang.
+              bug-a-array-of-records-with-interface-fields-leaks-the-interfaces }
+            PXXRecordReleaseIntf(itemAddr, baseRecDesc);
+{$endif}
             PXXRecordRelease(itemAddr, baseRecDesc);
             i := i + 1;
           end;
@@ -2640,6 +2650,11 @@ begin
         while i < len do
         begin
           itemAddr := Pointer(Int64(arrData) + i * elSize);
+          { A record ELEMENT's own COM interface members: the same split the
+            scalar record copy uses. AddRef frees nothing, so the retain half
+            needs no lock guard.
+            bug-a-array-of-records-with-interface-fields-leaks-the-interfaces }
+          PXXRecordRetainIntf(itemAddr, baseRecDesc);
           PXXRecordRetain(itemAddr, baseRecDesc);
           i := i + 1;
         end;
@@ -2696,6 +2711,11 @@ begin
       while i < len do
       begin
         itemAddr := Pointer(Int64(arrData) + i * elSize);
+{$ifndef PXX_TS_HARDLOCK}
+        { The record element's interface members — see PXXDynArrayReleaseDepth
+          for why this one arm is gated on x86-64 --threadsafe. }
+        PXXRecordReleaseIntf(itemAddr, baseRecDesc);
+{$endif}
         PXXRecordRelease(itemAddr, baseRecDesc);
         i := i + 1;
       end;
