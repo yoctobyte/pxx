@@ -4739,6 +4739,15 @@ test-core: $(COMPILER)
 	# it can only be inside a BSS array because the kernel resumed it on the SP
 	# we wrote. Faults with a nil write rather than an overflow so the handler
 	# has a stack on all five targets.
+	# Halt(n) exits WITH n. The computed case is the one that matters: a
+	# constant could be satisfied by a smarter EmitExit, but Halt(code) where
+	# code is a variable only passes if the expression really reaches the
+	# syscall's first argument register. riscv32 used to discard it and exit 0
+	# under a "bare-metal" comment that did not apply to its hosted profile —
+	# a lost exit code, so every caller branching on $$? took the wrong branch
+	# in silence. bug-a-halt-n-exits-zero-on-hosted-riscv32
+	./$(COMPILER) test/test_halt_exit_code.pas $(TESTTMP)/test_halt_exit26
+	test "$$($(TESTTMP)/test_halt_exit26; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) test/test_signal_sp_rewrite.pas $(TESTTMP)/test_signal_sprw26
 	test "$$($(TESTTMP)/test_signal_sprw26)" = "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	# ... and the fault that needs BOTH rewrites: a real stack overflow caught
@@ -8345,6 +8354,9 @@ test-i386: $(COMPILER)
 	# so every target checks that the resumed proc really landed on the
 	# spare stack. (On i386 this is also what tells REG_ESP from REG_UESP:
 	# they hold the same value at fault time and only one is restored.)
+	# Halt(n) exits WITH n on this target too — see the native row.
+	./$(COMPILER) --target=i386 test/test_halt_exit_code.pas $(TESTTMP)/test_i386_halt
+	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=i386 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_i386_sprw
 	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sprw)" = "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	./$(COMPILER) --target=i386 test/test_cdecl_indirect.pas $(TESTTMP)/test_i386_cdeclind
@@ -8723,6 +8735,9 @@ test-aarch64: $(COMPILER)
 	# so every target checks that the resumed proc really landed on the
 	# spare stack. (On i386 this is also what tells REG_ESP from REG_UESP:
 	# they hold the same value at fault time and only one is restored.)
+	# Halt(n) exits WITH n on this target too — see the native row.
+	./$(COMPILER) --target=aarch64 test/test_halt_exit_code.pas $(TESTTMP)/test_aarch64_halt
+	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=aarch64 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_aarch64_sprw
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sprw)" = "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	# cdecl indirect call (dlsym'd C fn through a cdecl proc-type value) — b362
@@ -8886,6 +8901,9 @@ test-riscv32: $(COMPILER)
 	# so every target checks that the resumed proc really landed on the
 	# spare stack. (On i386 this is also what tells REG_ESP from REG_UESP:
 	# they hold the same value at fault time and only one is restored.)
+	# Halt(n) exits WITH n on this target too — see the native row.
+	./$(COMPILER) --target=riscv32 test/test_halt_exit_code.pas $(TESTTMP)/test_riscv32_halt
+	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=riscv32 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_riscv32_sprw
 	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sprw)" = "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	# by-value record params over 4 bytes (up to 8): both words must cross
@@ -9522,6 +9540,9 @@ test-arm32: $(COMPILER)
 	# so every target checks that the resumed proc really landed on the
 	# spare stack. (On i386 this is also what tells REG_ESP from REG_UESP:
 	# they hold the same value at fault time and only one is restored.)
+	# Halt(n) exits WITH n on this target too — see the native row.
+	./$(COMPILER) --target=arm32 test/test_halt_exit_code.pas $(TESTTMP)/test_arm32_halt
+	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=arm32 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_arm32_sprw
 	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sprw)" = "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	./$(COMPILER) --target=arm32 test/test_cdecl_indirect.pas $(TESTTMP)/test_arm32_cdeclind

@@ -2745,7 +2745,27 @@ begin
     IR_TERMINATE:
       begin
         if IRIVal[node] = AN_HALT then
-          EmitExit(0)                            { bare-metal: park in a self-loop }
+        begin
+          { Halt(n) must EXIT WITH n. This arm used to emit EmitExit(0)
+            unconditionally, with a comment claiming "bare-metal: park in a
+            self-loop" — true for ESP bare, and simply wrong for hosted riscv32
+            Linux, which is the same arch. The argument was evaluated nowhere
+            and discarded, so `Halt(7)` returned 0 while every other target and
+            FPC returned 7: a program's failure signal vanished with no
+            diagnostic. bug-a-halt-n-exits-zero-on-hosted-riscv32.
+
+            Mirrors the aarch64 arm: evaluate the code into the first argument
+            register, THEN load the syscall number, so computing it cannot
+            clobber a0. EmitExit's own encodings only cover a constant. }
+          if (IRA[node] <> -1) and (not EspBareBoot) then
+          begin
+            IREmitNodeRISCV32(IRA[node]);        { a0 = the exit code }
+            EmitI32($05E00893);                  { addi a7, x0, 94  (exit_group) }
+            EmitI32($00000073);                  { ecall }
+          end
+          else
+            EmitExit(0);                         { no argument, or ESP bare: park }
+        end
         else if CurProc >= 0 then
           EmitProcEpilog(Procs[CurProc].RetSymIdx) { early Exit via epilogue }
         else
