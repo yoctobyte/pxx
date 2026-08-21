@@ -1,18 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T12:08:54Z",
-   "fixed": [
-    "test-core#src:test/cfnptr_deref_call_b241.c",
-    "test-core#src:test/cfnptr_typedef_global_b166.c",
-    "test-core#src:test/cglobal_fnptr_addressof_b161.c"
-   ],
-   "new_red": [],
-   "sha": "a89d797163e437c28cc41b3897b5e6cf7566b42a",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-20T12:24:18Z",
    "fixed": [],
    "new_red": [],
@@ -460,6 +448,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "48d64f73bd0d935e6b6d26397edb3195b5e2555b",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-21T00:53:03Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "75f93112a3d4d649f98cc576d664e778a795baa0",
    "tier": "native",
    "verdict": "RED"
   }
@@ -6233,11 +6229,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-21T00:31:04Z",
-  "sha": "48d64f73bd0d935e6b6d26397edb3195b5e2555b",
+  "date": "2026-08-21T00:53:03Z",
+  "sha": "75f93112a3d4d649f98cc576d664e778a795baa0",
   "tier": "native",
   "verdict": "RED",
-  "wall": 462.5
+  "wall": 457.3
  },
  "last_bench": {
   "conf_rows": 550,
