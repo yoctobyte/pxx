@@ -4075,7 +4075,26 @@ begin
         else
           EmitLoadImmArm32(9, 0);
         EmitI32($E92D0200);                           { push {r9} (isCompare, 5th arg) }
-        procIdx := FindProc('PXXVarBinOp');
+        { PASCAL selects PXXVarBinOpPas — the raw dispatch with FPC's string
+          rule in front of it: `+` concatenates only when BOTH operands are
+          stringy, and every other operator converts a stringy operand to a
+          number instead of reading its payload raw (a VT_STRING's ANSISTRING
+          HANDLE, so `v('15') - 3` answered a heap address). x86-64 hand-emits
+          the same two halves in EmitVarBinOp.
+
+          NilPy keeps the raw dispatch: Python's rules for these pairs differ
+          in every case ('5' * 3 is '555'). Choosing WHICH helper to call is
+          how the language reaches a shared runtime that cannot see
+          PyProgramMode. Falls back to the raw one when no builtin unit is
+          loaded, rather than failing to compile.
+          bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did }
+        if PyProgramMode then
+          procIdx := FindProc('PXXVarBinOp')
+        else
+        begin
+          procIdx := FindProc('PXXVarBinOpPas');
+          if procIdx < 0 then procIdx := FindProc('PXXVarBinOp');
+        end;
         if procIdx < 0 then Error('compiler error: PXXVarBinOp not found');
         EmitCallProc(procIdx);
         EmitI32($E28DD004);                           { add sp, sp, #4 }

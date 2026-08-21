@@ -3428,7 +3428,16 @@ begin
     end;
   end;
 
-  { 2. Numeric path }
+  { 2. Numeric path.
+    Re-read both payloads as the full 8 bytes of the slot. The reads at the top
+    of this function go through PWord, which is pointer-sized — exactly right
+    for the string arms above, where the payload IS a handle, and exactly wrong
+    here: on a 32-bit target it takes 4 bytes, so -2 arrives as 4294967294 and
+    every negative operand or result comes back zero-extended. The double arm
+    already knew this (it reads through PDouble); the integer arm did not. }
+  lVal := PInt64(Int64(left) + 8)^;
+  rVal := PInt64(Int64(right) + 8)^;
+
   if (lTag = 3) or (rTag = 3) or (opTk = 73) then { VT_DOUBLE = 3, tkSlash = 73 }
   begin
     { Read double payloads straight from the slot: on 32-bit targets lVal
@@ -3462,7 +3471,7 @@ begin
       if PWord(dest)^ = 6 then
         PXXStrDecRef(Pointer(PWord(Int64(dest) + 8)^));
       PWord(dest)^ := 1;
-      PWord(Int64(dest) + 8)^ := resVal;
+      PInt64(Int64(dest) + 8)^ := resVal;   { full 8 bytes — see the note above }
       Result := Int64(dest);
       Exit;
     end
@@ -3505,7 +3514,7 @@ begin
       if PWord(dest)^ = 6 then
         PXXStrDecRef(Pointer(PWord(Int64(dest) + 8)^));
       PWord(dest)^ := 1;
-      PWord(Int64(dest) + 8)^ := resVal;
+      PInt64(Int64(dest) + 8)^ := resVal;   { full 8 bytes — see the note above }
       Result := Int64(dest);
       Exit;
     end;

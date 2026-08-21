@@ -104,6 +104,8 @@ function VariantToBool(const v: Variant): Boolean;
 function VariantToChar(const v: Variant): Char;
 { Pascal Variant ARITHMETIC operand coercion — see the implementation. }
 function PXXVarNumCoerce(src, dst: Pointer): Pointer;
+{ Pascal Variant binop: PXXVarBinOp with the Pascal string rule applied first. }
+function PXXVarBinOpPas(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
 { --strict-fpc ONLY: FPC's Variant->Char, which routes through the variant's
   STRING form and takes character 1 — Char(65) = '6', Char(122) = '1',
   Char(True) = 'T', Char(2.5) = '2'. The DEFAULT dialect uses VariantToChar
@@ -729,6 +731,54 @@ begin
   end;
   writeln('Runtime error: EVariantError, cannot convert string to a number');
   Halt(219);
+end;
+
+function PXXVarBinOpPas(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
+{ PASCAL's Variant binop. PXXVarBinOp is the raw dispatch that i386, arm32,
+  aarch64 and riscv32 call for IR_VAR_BINOP; this wrapper puts FPC's rule in
+  front of it, and the backends select it whenever the program is not NilPy.
+
+  The rule has two halves and the raw dispatch gets both wrong:
+
+    * `+` CONCATENATES only when BOTH operands are stringy. PXXVarBinOp takes
+      its concat arm when EITHER is, so `'5' + 3` was '5' and `5 + '3'` was
+      '3' — it rendered the stringy side and dropped the other.
+    * every OTHER arithmetic operator converts a stringy operand to a number.
+      PXXVarBinOp has no coercion at all, so `-`, `*` and `/` read the payload
+      raw: a VT_CHAR's ordinal (`'5' - 3` = 50) and, far worse, a VT_STRING's
+      ANSISTRING HANDLE — `'15' - 3` answered a heap address, a different one
+      every run, on every target that routes through here.
+
+  x86-64 hand-emits the same two halves in EmitVarBinOp and was fixed on
+  2026-08-20 (bug-p-variant-arithmetic-on-a-string-reads-the-payload-as-a-number);
+  this is the other four targets' half.
+
+  NilPy must NOT reach this: Python's rules for these pairs are different in
+  every case ('5' * 3 is '555', '5' + 3 is a TypeError). The choice is made at
+  EMIT time from PyProgramMode, which is exactly what a shared runtime helper
+  cannot see — so it is made by choosing WHICH helper to call, rather than by a
+  runtime flag the frontend would have to set.
+  bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did }
+var
+  la, ra: TVariantRecord;
+  lp, rp: Pointer;
+  lStr, rStr: Boolean;
+begin
+  lp := left;
+  rp := right;
+  if isCompare = 0 then
+  begin
+    lStr := (PVariantRecord(left)^.VType = 5) or (PVariantRecord(left)^.VType = 6);
+    rStr := (PVariantRecord(right)^.VType = 5) or (PVariantRecord(right)^.VType = 6);
+    { tkPlus = 70. Both stringy and `+` is the one case that stays a concat;
+      hand the raw dispatch the ORIGINAL operands so its string arm fires. }
+    if not ((opTk = 70) and lStr and rStr) then
+    begin
+      lp := PXXVarNumCoerce(left, @la);
+      rp := PXXVarNumCoerce(right, @ra);
+    end;
+  end;
+  Result := PXXVarBinOp(dest, lp, rp, opTk, isCompare);
 end;
 
 function VariantToInt64(const v: Variant): Int64;
