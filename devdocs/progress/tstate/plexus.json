@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T19:04:22Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e8034406c20fd43515de7bf54c8e7dfe3dd41a14",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-20T19:13:34Z",
    "fixed": [],
    "new_red": [],
@@ -466,6 +458,14 @@
    "sha": "ab3799f08610fba1289f7bc514423314ad910512",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-21T11:10:53Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "e13c0c4d43661b50ba3652c5c8adefede45b0f92",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -476,7 +476,7 @@
  },
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2543179B  data=60497B  bss=17852B  procs=1762] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
-  "test-asm#src:compiler/compiler.pas": "ok: $TMP  [-S disassembly] | ok: $TMP  [code=8804110B  data=233328B  bss=213126180B  procs=3026]",
+  "test-asm#src:compiler/compiler.pas": "ok: $TMP  [-S disassembly] | ok: $TMP  [code=8808270B  data=233456B  bss=213126188B  procs=3031]",
   "test-c-conformance#shard1/6": "FAIL 00206.c \u2014 exit code 254 (want 0) | FAIL 00212.c \u2014 exit code 255 (want 0) | test-c-conformance: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance: FAILURES: 00206.c(exit=254) 00212.c(exit=255)",
   "test-c-conformance-aarch64#shard1/6": "FAIL 00206.c \u2014 exit code 215 (want 0) | FAIL 00212.c \u2014 exit code 70 (want 0) | test-c-conformance-aarch64: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-aarch64: FAILURES: 00206.c(exit=215) 00212.c(exit=70)",
   "test-c-conformance-arm32#shard1/6": "FAIL 00206.c \u2014 exit code 64 (want 0) | FAIL 00212.c \u2014 exit code 64 (want 0) | test-c-conformance-arm32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-arm32: FAILURES: 00206.c(exit=64) 00212.c(exit=64)",
@@ -1540,6 +1540,7 @@
   "test-core#src:test/test_cond_comment_skip.pas": "native",
   "test-core#src:test/test_conformance_1.pas": "native",
   "test-core#src:test/test_conformance_2.pas": "native",
+  "test-core#src:test/test_const_array_in_data.pas": "native",
   "test-core#src:test/test_const_array_negative_low_bound.pas": "native",
   "test-core#src:test/test_const_array_of_record.pas": "native",
   "test-core#src:test/test_const_array_of_string.pas": "native",
@@ -4442,6 +4443,7 @@
   "test-core#src:test/test_cond_comment_skip.pas": "pass",
   "test-core#src:test/test_conformance_1.pas": "pass",
   "test-core#src:test/test_conformance_2.pas": "pass",
+  "test-core#src:test/test_const_array_in_data.pas": "pass",
   "test-core#src:test/test_const_array_negative_low_bound.pas": "pass",
   "test-core#src:test/test_const_array_of_record.pas": "pass",
   "test-core#src:test/test_const_array_of_string.pas": "pass",
@@ -6293,11 +6295,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-21T10:54:17Z",
-  "sha": "ab3799f08610fba1289f7bc514423314ad910512",
+  "date": "2026-08-21T11:10:53Z",
+  "sha": "e13c0c4d43661b50ba3652c5c8adefede45b0f92",
   "tier": "native",
   "verdict": "RED",
-  "wall": 453.4
+  "wall": 471.5
  },
  "last_bench": {
   "conf_rows": 550,
