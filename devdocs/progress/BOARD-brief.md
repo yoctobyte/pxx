@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:21 blocked:9 backlog:265 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2221 rejected:40`
+`urgent:1 working:1 unfinished:21 blocked:9 backlog:264 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2222 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -51,13 +51,12 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 253, ranked
+## Ready — top 30 of 252, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [T]` regression-cascade-8654c4d55b61
 - `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-callable-to-str-param-fails
-- `[p 70] [T]` regression-test-pascal-conformance-shard4-6-2
 - `[p 65] [U]` decide-tobject-root-methods-dispatch-model (unblocks 1)
 - `[p 65] [B]` bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
 - `[p 65] [T]` bug-t-agents-kill-each-others-processes-with-pattern-pkill
@@ -83,5 +82,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
+- `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
 
-_223 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_222 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

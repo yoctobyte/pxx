@@ -5079,6 +5079,9 @@ test-core: $(COMPILER)
 	# arity-overloaded class names: TD, TD<K>, TD<K,V> coexist; TD<K> inherits TD
 	./$(COMPILER) test/test_generic_name_overload.pas $(TESTTMP)/test_generic_name_overload26
 	test "$$($(TESTTMP)/test_generic_name_overload26)" = "$$(printf '0 1 2\n0')"
+	# two units, same specialization, same alias name, neither using the other
+	./$(COMPILER) -Futest/generic_spec_units test/test_generic_spec_per_unit.pas $(TESTTMP)/test_generic_spec_per_unit26
+	test "$$($(TESTTMP)/test_generic_spec_per_unit26 | tail -1)" = "total ok 4 / 4"
 	# parser gaps: impl-side `static;`/`reintroduce;` on a class function + PChar(expr)[i] indexing
 	./$(COMPILER) test/test_impl_static_and_pchar_index.pas $(TESTTMP)/test_impl_static_and_pchar_index26
 	test "$$($(TESTTMP)/test_impl_static_and_pchar_index26 | tail -1)" = "total ok 5 / 5"

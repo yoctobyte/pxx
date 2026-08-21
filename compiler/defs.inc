@@ -1666,6 +1666,14 @@ var
   SpecConcreteNames  : array[0..MAX_SPECIALIZATIONS*MAX_TEMPLATE_PARAMS-1] of AnsiString;
   SpecConcreteKinds  : array[0..MAX_SPECIALIZATIONS*MAX_TEMPLATE_PARAMS-1] of TTokenKind;
   SpecNParams        : array[0..MAX_SPECIALIZATIONS-1] of Integer;
+  { The unit each specialization was MATERIALISED in. The table is global;
+    the type it produces is not — SpecializeStream declares an ordinary
+    class/record in whatever unit is being parsed, and that declaration is
+    scoped by the same uses rule as any other. Two units that each write
+    `T = specialize TTest<LongInt>;` without using each other must each get
+    their own, so the already-declared shortcut has to ask whether the one
+    it found is reachable from here. tgeneric96. }
+  SpecUnitIdx        : array[0..MAX_SPECIALIZATIONS-1] of Integer;
   SpecializeTokens   : array[0..MAX_TEMPLATE_TOKENS-1] of TRawToken;
   TemplateTokenCount : Integer;
   { Nested routines (Approach B / lambda-lifting): a nested procedure/function is

@@ -50,11 +50,22 @@
   resolver of its own. }
 
 function FindSpecialization(const nm: AnsiString): Integer;
+{ VISIBILITY-AWARE, and it has to be. The table is one flat global list, but a
+  specialization is not a global fact: SpecializeStream declares an ordinary
+  class or record under `nm` in whatever unit is being parsed, and that
+  declaration obeys the same one-hop uses rule as every other type. So a row
+  written by a unit this scope cannot see is not an answer — reporting it made
+  the caller skip the declaration as "already declared" and the very next line,
+  `var lt: T;`, then failed with `unknown type` (tgeneric96: two units each
+  writing `T = specialize TTest<LongInt>;`, neither using the other).
+  Last visible row wins, matching FindUClass's rule that the later unit hides
+  the earlier one. }
 var i: Integer;
 begin
   Result := -1;
   for i := 0 to SpecializationCount - 1 do
-    if CaseEqual(Specializations[i].Name, nm) then Result := i;
+    if CaseEqual(Specializations[i].Name, nm) and DeclVisible(SpecUnitIdx[i]) then
+      Result := i;
 end;
 
 { Does TemplateTokens[ts + i] open a `specialize NAME<...>` group naming a
@@ -903,6 +914,7 @@ begin
     SpecConcreteNames[SpecializationCount * MAX_TEMPLATE_PARAMS + i] := cNames[i];
   end;
   SpecNParams[SpecializationCount] := nc;
+  SpecUnitIdx[SpecializationCount] := CurrentUnitIdx;
   Inc(SpecializationCount);
 
   { Stream the concrete class body inline so the fall-through binds the alias
