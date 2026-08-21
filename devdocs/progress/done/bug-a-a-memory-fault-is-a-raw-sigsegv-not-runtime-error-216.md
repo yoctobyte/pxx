@@ -160,4 +160,4 @@ argv[1] — wired into the core list asserting exit code, message and that the
 fault happened after `before` printed, in both flag states.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 6b5bbd6cc.
