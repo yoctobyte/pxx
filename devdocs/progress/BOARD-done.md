@@ -1693,6 +1693,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-mimic-fpc-compiler-define-profile | A | 50 | feature | FPC-compiler define profile (`fpcdefs.inc` build-config gates) | — |
 | feature-mimic-fpc | B | 50 | feature | `mimic FPC` compatibility mode | — |
 | feature-mode-delphi | A | 50 | feature | `{$mode delphi}` support — incl. the @-optional proc-pointer disambiguation | — |
+| feature-move-fillchar-intrinsics | A | 45 | feature | Move / FillChar as compiler intrinsics (future optimization) | — |
 | feature-multidim-const-array | A | 50 | feature | feature: multidimensional typed-constant arrays | — |
 | feature-multidim-fixed-arrays | A | 50 | feature | Multidimensional fixed arrays | — |
 | feature-n-a-callable-value-carries-its-signature-type | A | 88 | feature | DECIDED 2026-08-19. A boxed callable's VT_CALLABLE_TAG payload becomes ONE pointer to a static signature record {code address, ReqN, TotN, per-param default descriptor}. Static, so the slot still owns nothing and no refcount behaviour changes. One call-site helper reads it: check arity, fill defaults, call. Unblocks three tickets whose symptoms are SIGSEGV and silent wrong values. | — |
