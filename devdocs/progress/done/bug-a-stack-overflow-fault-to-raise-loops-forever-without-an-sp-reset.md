@@ -200,4 +200,4 @@ flag recommended and flagged as needing to be answered together with
 `tools/gate.sh quick`. Cross-target breadth is Track T's, against this sha.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 9c93264d3.
