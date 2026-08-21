@@ -3487,6 +3487,8 @@ begin
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
   SetLength(SymCLongRank, n);      SetLength(SymTR, n);
   SetLength(SymCellPtr, n);
+  { the two per-DIMENSION tables ride the same index, MAX_ARR_DIMS to a symbol }
+  SetLength(SymArrDimLo, n * MAX_ARR_DIMS);   SetLength(SymArrDimSpan, n * MAX_ARR_DIMS);
   SymCapacity := n;
 end;
 

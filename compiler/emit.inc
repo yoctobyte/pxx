@@ -154,8 +154,19 @@ end;
 
 procedure EmitGlobRef(bssOff: Integer);
 { Emit 4-byte placeholder for absolute BSS address }
+var gfN: Integer;
 begin
-  if GlobFixCount >= MAX_GLOBFIX then Error('global fixup overflow');
+  { Grows instead of capping. The old fixed table was 2 MB of BSS sized for the
+    --threadsafe self-host high-water mark, and the cap it enforced was hit by
+    that build 121 entries in (bug-a-threadsafe-self-host-exceeds-max-globfix-by-121)
+    -- a capacity limit that read as a mysterious failure in the last unit.
+    feature-dynamic-compiler-tables }
+  if GlobFixCount >= GlobFixCapacity then
+  begin
+    if GlobFixCapacity = 0 then gfN := 8192 else gfN := GlobFixCapacity * 2;
+    SetLength(GlobFix, gfN);
+    GlobFixCapacity := gfN;
+  end;
   GlobFix[GlobFixCount].CodePos := CodeLen;
   GlobFix[GlobFixCount].BSSoff  := bssOff;
   Inc(GlobFixCount); EmitI32(0);

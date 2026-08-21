@@ -84,6 +84,9 @@ const
 
     The +45% that --threadsafe costs is itself unexplained and may be a fixup per
     TLS access that could be deduped — feature-a-why-threadsafe-needs-45pct-more-global-fixups. }
+  { HISTORICAL: GlobFix is dynamic now (EmitGlobRef grows it) and this is no
+    longer a cap -- kept because the note above is the record of what the cap
+    cost. Do not reuse it as an index bound. }
   MAX_GLOBFIX = 262144;
   MAX_ASM_GLOBFIX = 4096;
   MAX_INLINE_ASM_LINES = 4096;
@@ -1992,8 +1995,9 @@ var
   Fixups   : array[0..MAX_FIXUPS-1]  of TFixup;
   FixCount : Integer;
 
-  GlobFix  : array[0..MAX_GLOBFIX-1] of TGlobFix;
+  GlobFix  : array of TGlobFix;
   GlobFixCount : Integer;
+  GlobFixCapacity : Integer;
 
   { EVERY internal direct call, not just the forward ones -- see CALLFIX_BASE.
     ApplyCallFixups re-patches the lot, which is a no-op for a call whose
@@ -2099,8 +2103,8 @@ var
     Horner( (i_d - lo_d) over span_d ). NDims=0 means single-dimension. Per-dim
     lo/span live in flat side tables indexed [sym*MAX_ARR_DIMS + d]. }
   SymArrNDims  : array of Integer;
-  SymArrDimLo  : array[0..MAX_SYMS*MAX_ARR_DIMS-1] of Integer;
-  SymArrDimSpan: array[0..MAX_SYMS*MAX_ARR_DIMS-1] of Integer;
+  SymArrDimLo  : array of Integer;
+  SymArrDimSpan: array of Integer;
   SymRTTIOff  : array of Integer; { Data[] offset of layout RTTI descriptor, -1 if none }
   SymStaticLocal     : array of Boolean; { routine-LOCAL typed const: BSS storage (FPC's local typed consts are static and persist across calls) while staying block-scoped for lookup; exempt from the decl-order gate, which only makes sense for file-scope globals }
   SymIsHiddenArgTemp : array of Boolean; { compiler-synthesised owning managed local created during IR lowering (materialised managed-string call argument, or an `array of const` TVarRec dyn-array temp); allocated after the parser's prologue zero-init pass, so codegen nil-inits it before the body }
@@ -3446,8 +3450,9 @@ var
     input, and an overflow REPORTS rather than crashing — the property the old
     code could not offer at any size.
     bug-n-the-module-locals-cap-hides-a-compiler-stack-overflow }
-  IRSeqSpine    : array[0..MAX_IR_SEQ_SPINE-1] of Integer;
+  IRSeqSpine    : array of Integer;
   IRSeqSpineTop : Integer;
+  IRSeqSpineCapacity : Integer;
   { C `lv OP= rhs` desugars in cparser to `lv = lv OP rhs` REUSING the one lvalue
     AST node, so lowering it twice ran its side effects twice (`*f() += 1` called
     f twice, `a[i++] += 1` stepped i twice). These pin that node to the address

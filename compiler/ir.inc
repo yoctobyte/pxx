@@ -5359,6 +5359,7 @@ end;
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     seqBase, seqCur: Integer;       { iterative AN_SEQ spine walk — see the arm }
+    spineN: Integer;            { spine table growth — see the arm }
     pcBase: Integer;                { pending by-value interface temps at statement start }
     ecSym: Integer;                 { System.ExitCode, when builtinheap is linked — see AN_HALT }
     bmDest, bmSecond, bmThird: Integer;   { __pxxblockmove/fill operands — see AN_BLOCK_MEM }
@@ -12148,8 +12149,15 @@ begin
           statement's own temps are still pending, and those belong to the outer
           boundary. }
         IRFlushPostCallIntf(pcBase);
-        if IRSeqSpineTop >= MAX_IR_SEQ_SPINE then
-          Error('statement sequence too long (MAX_IR_SEQ_SPINE)');
+        { Grows rather than capping: the spine is one entry per statement in one
+          sequence, so the old fixed 4 MB was sized for a generated source
+          nobody writes by hand. feature-dynamic-compiler-tables }
+        if IRSeqSpineTop >= IRSeqSpineCapacity then
+        begin
+          if IRSeqSpineCapacity = 0 then spineN := 4096 else spineN := IRSeqSpineCapacity * 2;
+          SetLength(IRSeqSpine, spineN);
+          IRSeqSpineCapacity := spineN;
+        end;
         IRSeqSpine[IRSeqSpineTop] := left;
         IRSeqSpineTop := IRSeqSpineTop + 1;
         seqCur := ASTRight[seqCur];
