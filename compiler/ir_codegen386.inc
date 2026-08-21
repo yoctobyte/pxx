@@ -4160,6 +4160,30 @@ begin
         EmitB($50);                                  { push src  ([esp+4]) }
         IREmitNode386(IRA[node]);                    { eax = dest }
         EmitB($50);                                  { push dest ([esp])  }
+        { COM interface members: their own pass, source retained before the
+          destination is released so `a := a` nets zero.
+          bug-a-a-record-copy-does-not-retain-an-interface-field }
+        if RecordHasComIntfFields(IRC[node]) then
+        begin
+          procIdx := FindProc('PXXRecordRetainIntf');
+          if procIdx >= 0 then
+          begin
+            EmitB($8B); EmitB($44); EmitB($24); EmitB($04); { mov eax, [esp+4] (src) }
+            EmitB($50);
+            EmitB($68); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+            EmitCallProc(procIdx);
+            EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
+          end;
+          procIdx := FindProc('PXXRecordReleaseIntf');
+          if procIdx >= 0 then
+          begin
+            EmitB($8B); EmitB($04); EmitB($24);          { mov eax, [esp] (dest) }
+            EmitB($50);
+            EmitB($68); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+            EmitCallProc(procIdx);
+            EmitB($81); EmitB($C4); EmitI32(8);          { add esp, 8 }
+          end;
+        end;
         procIdx := FindProc('PXXRecordRetain');
         if procIdx < 0 then Error('compiler error: PXXRecordRetain not found');
         EmitB($8B); EmitB($44); EmitB($24); EmitB($04); { mov eax, [esp+4] (src) }

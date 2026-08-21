@@ -4457,17 +4457,24 @@ test-core: $(COMPILER)
 	# lottery. The pinned binary SEGFAULTS on this file.
 	./$(COMPILER) test/test_interface_local_array_zero_init.pas $(TESTTMP)/test_ifarrzi26
 	test "$$($(TESTTMP)/test_ifarrzi26 | tail -1)" = "total ok 5 / 5"
-	# A local RECORD holding an interface field was never zero-initialised either,
-	# so the first `r.f := x` released stack garbage. RecordHasManagedFields
-	# deliberately excludes a COM interface field (finalizing one under the
-	# non-reentrant record heap lock deadlocks) and the documented trade was a
-	# benign LEAK -- but that one predicate was also answering the ZERO-INIT
-	# question, which takes no lock and cannot deadlock, so the intended leak was
-	# really a use-after-free. Split into RecordHasManagedFields (finalization,
-	# unchanged) and RecordNeedsZeroInit (counts interfaces). The leak remains BY
-	# DESIGN. The pinned binary SEGFAULTS on this file.
+	# A record holding an interface field, both halves of the same design fault:
+	# RecordHasManagedFields excluded a COM interface field because FINALIZING one
+	# under the non-reentrant record heap lock deadlocks -- and that single
+	# predicate then answered the ZERO-INIT question (cases 1-5: the first
+	# `r.f := x` released stack garbage) and the COPY question (cases 6-10:
+	# `b := a` copied the pointer with no retain, so nilling either record
+	# dangled the other). Neither had anything to do with the lock. Fixed for
+	# real once decide-interface-members-in-aggregates-lock-strategy chose a
+	# separate UNLOCKED interface pass (PXXRecordRetainIntf/ReleaseIntf run
+	# BEFORE EmitAcquireHeapLock), so copy, scope-exit release and the aggregate
+	# return all follow from one predicate again. Counts are FPC 3.2.2's on this
+	# same source. The pinned binary SEGFAULTS on this file.
 	./$(COMPILER) test/test_record_interface_field_zero_init.pas $(TESTTMP)/test_recifzi26
-	test "$$($(TESTTMP)/test_recifzi26 | tail -1)" = "total ok 5 / 5"
+	test "$$($(TESTTMP)/test_recifzi26 | tail -1)" = "total ok 10 / 10"
+	# ...and under --threadsafe it must still TERMINATE: the interface pass runs
+	# ahead of the lock, so there is no re-entry into the spinlock to hang on.
+	./$(COMPILER) --threadsafe test/test_record_interface_field_zero_init.pas $(TESTTMP)/test_recifzi_ts26
+	test "$$($(TESTTMP)/test_recifzi_ts26 | tail -1)" = "total ok 10 / 10"
 	# `b := a` on a dynamic array of INTERFACES was lowered as an ARC interface
 	# assign over the array HANDLE: an array's TypeKind IS its element kind, so
 	# the assignment path saw tyRecord + ResolveNodeRec = IFoo and emitted

@@ -2895,6 +2895,26 @@ begin
         rv32_sw(reg_a0, reg_sp, 4);              { [sp+4] = src }
         IREmitNodeRISCV32(IRA[node]);            { a0 = dest }
         rv32_sw(reg_a0, reg_sp, 0);              { [sp]   = dest }
+        { COM interface members: their own pass, source retained before the
+          destination is released so `a := a` nets zero (see the x86-64 arm).
+          bug-a-a-record-copy-does-not-retain-an-interface-field }
+        if RecordHasComIntfFields(IRC[node]) then
+        begin
+          procIdx := FindProc('PXXRecordRetainIntf');
+          if procIdx >= 0 then
+          begin
+            rv32_lw(reg_a0, reg_sp, 4);          { a0 = src }
+            EmitLoadDataRefRISCV32(reg_a1, -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+            EmitCallProc(procIdx);
+          end;
+          procIdx := FindProc('PXXRecordReleaseIntf');
+          if procIdx >= 0 then
+          begin
+            rv32_lw(reg_a0, reg_sp, 0);          { a0 = dest }
+            EmitLoadDataRefRISCV32(reg_a1, -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+            EmitCallProc(procIdx);
+          end;
+        end;
         procIdx := FindProc('PXXRecordRetain');
         if procIdx < 0 then Error('compiler error: PXXRecordRetain not found');
         rv32_lw(reg_a0, reg_sp, 4);              { a0 = src }

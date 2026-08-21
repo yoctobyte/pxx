@@ -59,6 +59,7 @@ procedure IREmitCodeCall(addr: Integer); forward;
 procedure EmitDynArrayReleaseForSym(symIdx: Integer); forward;
 procedure EmitVariantClear; forward;
 procedure EmitManagedRecordReleaseLocked(recId: Integer); forward;
+procedure EmitManagedRecordIntfWalk(recId: Integer; const helper: AnsiString); forward;  { the UNLOCKED interface half — real body in ir_codegen.inc }
 procedure EmitAcquireHeapLock; forward;
 procedure EmitReleaseHeapLock; forward;
 {$ifndef PXX_NO_AARCH64}procedure EmitLoadVarA64(idx: Integer); forward;{$endif}
@@ -2421,23 +2422,23 @@ begin
       retained on record copy, and released on finalization. }
     if UFldIsArray[base + i] and (UFldArrLen[base + i] = -1) then
       begin Result := True; Exit; end;
-    { A COM/ARC interface field is NOT "managed" for FINALIZATION purposes. It is
-      a refcounted handle, but finalizing it under the record heap lock
-      deadlocks: record-scope finalization holds the non-reentrant heap spinlock
-      and the interface's _Release -> Free -> FreeMem re-acquires it. Correct
-      field-level finalization needs the member released OUTSIDE the lock (a
-      reentrant heap lock, or a separate unlocked interface pass) — see
-      bug-a-class-managed-fields-not-finalized-on-destroy. Until then such a
-      field leaks, which is the deliberate benign-over-deadlock trade.
+    { `inclIntf` counts a COM/ARC interface field — a refcounted handle that a
+      copy must retain and a finalization must release. BOTH callers pass True
+      as of 2026-08-21; the parameter stays because it names the one distinction
+      that was real for a year and could become real again.
 
-      ZERO-INIT IS A DIFFERENT QUESTION, and answering both with this one
-      predicate is what turned that benign leak into a use-after-free. Nilling a
-      stack slot at routine entry takes no lock, calls no _Release and cannot
-      deadlock — and WITHOUT it `r.f := x` releases whatever stack garbage the
-      slot held and dispatches _Release through a junk IMT. So `inclIntf` counts
-      an interface field, and only the zero-init caller passes True:
-      RecordNeedsZeroInit. Finalization behaviour is unchanged.
-      bug-a-a-record-with-an-interface-field-is-not-zero-initialised }
+      The history is worth keeping, because it is a worked example of answering
+      two questions with one predicate. Finalizing an interface field under the
+      record heap lock DEADLOCKS (the release runs _Release -> Free -> FreeMem,
+      which re-acquires the non-reentrant spinlock), so the field was excluded
+      here — and that exclusion silently also answered the ZERO-INIT question
+      (bug-a-a-record-with-an-interface-field-is-not-zero-initialised: the slot
+      held stack garbage and the first assignment released it through a junk
+      IMT) and the COPY question (this ticket: two records sharing one counted
+      reference, a use-after-free). Neither had anything to do with the lock.
+      The lock objection itself is gone: the interface half of every walk now
+      runs BEFORE the lock is taken (PXXRecordRetainIntf/ReleaseIntf), which is
+      what decide-interface-members-in-aggregates-lock-strategy chose. }
     if inclIntf and RecIsComInterface(UFldRec_[base + i]) then
       begin Result := True; Exit; end;
     if (UFldTk[base + i] = Ord(tyRecord)) and (UFldRec_[base + i] <> recId) and
@@ -2447,11 +2448,51 @@ begin
 end;
 
 function RecordHasManagedFields(recId: Integer): Boolean;
-{ FINALIZATION question: does this record hold fields the scope-exit / destructor
-  walk must release? A COM interface field deliberately does NOT count — see the
-  note above. }
+{ Does this record hold fields an ARC copy / finalization walk must touch? COM
+  interface fields NOW COUNT (2026-08-21, decide-interface-members-in-aggregates-
+  lock-strategy answered (b): a separate UNLOCKED interface pass).
+
+  They were excluded while the only available release ran under the record heap
+  lock, which deadlocks — but that exclusion answered the copy question with the
+  finalization question's answer, and a record whose only refcounted member was
+  an interface therefore took the RAW byte copy: two records sharing one counted
+  reference, so nilling either dangled the other. A use-after-free traded for a
+  deadlock that no longer exists, because the interface half of every walk now
+  runs ahead of the lock (PXXRecordRetainIntf / PXXRecordReleaseIntf).
+  bug-a-a-record-copy-does-not-retain-an-interface-field }
 begin
-  Result := RecordHasManagedFieldsDepth2(recId, 0, False);
+  Result := RecordHasManagedFieldsDepth2(recId, 0, True);
+end;
+
+function RecordHasComIntfFieldsDepth(recId, depth: Integer): Boolean;
+var ci, base, cnt, i: Integer;
+begin
+  Result := False;
+  if depth > 64 then Exit;
+  if recId < REC_UCLASS_BASE then Exit;
+  ci := recId - REC_UCLASS_BASE;
+  if not UClsIsRecord[ci] then Exit;
+  base := UClsFBase[ci];
+  cnt := UClsFCount[ci];
+  for i := 0 to cnt - 1 do
+  begin
+    if RecIsComInterface(UFldRec_[base + i]) and not UFldIsArray[base + i] then
+      begin Result := True; Exit; end;
+    if (UFldTk[base + i] = Ord(tyRecord)) and (UFldRec_[base + i] <> recId) and
+       RecordHasComIntfFieldsDepth(UFldRec_[base + i], depth + 1) then
+      begin Result := True; Exit; end;
+  end;
+end;
+
+function RecordHasComIntfFields(recId: Integer): Boolean;
+{ Does this record (transitively) hold a COM interface FIELD — i.e. is there a
+  kind-4 member for the UNLOCKED half of the ARC walk to visit? Answering it
+  separately from RecordHasManagedFields keeps the extra call out of every
+  string-only record's copy: the two walks have different lock discipline and
+  different membership, so they get different questions.
+  bug-a-a-record-copy-does-not-retain-an-interface-field }
+begin
+  Result := RecordHasComIntfFieldsDepth(recId, 0);
 end;
 
 function ManagedElemKind(elemTk, elemRec: Integer): Integer;
@@ -2538,9 +2579,13 @@ end;
 
 function RecordNeedsZeroInit(recId: Integer): Boolean;
 { ZERO-INIT question: does this record hold any slot that must start nil so the
-  FIRST assignment's release sees an empty slot instead of stack garbage? Same
-  walk, plus COM interface fields, which are excluded from finalization but must
-  still be nilled. }
+  FIRST assignment's release sees an empty slot instead of stack garbage?
+
+  Identical to RecordHasManagedFields again, now that interface fields count
+  there too — the two questions were only ever split because finalization could
+  not handle an interface and zero-init always could. Kept as a NAME rather than
+  collapsed: the call sites say which question they are asking, and a future
+  member kind that needs one and not the other splits them again here. }
 begin
   Result := RecordHasManagedFieldsDepth2(recId, 0, True);
 end;
@@ -8776,10 +8821,19 @@ begin
       else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
               RecordHasManagedFields(SymTR[i].RecId) then
       begin
-        { Record value local with managed fields (AnsiString, dynamic-array, or
-          nested): release them under the heap lock. rbx = record address. }
+        { Record value local with managed fields (AnsiString, dynamic-array,
+          nested record, COM interface): rbx = record address.
+
+          TWO passes, split by lock discipline. The interface members go first
+          with NO lock held — their release runs a destructor chain and a
+          self-locking FreeMem — then the string/dynarray/record members under
+          the lock. Without the first pass a record local's interface field is
+          retained on copy and never released, which is a LEAK per copy rather
+          than the use-after-free that predates it.
+          bug-a-a-record-copy-does-not-retain-an-interface-field }
         x64_push_reg(rRBX);                                      { push rbx }
         x64_lea_reg_mem(8, rRBX, rRBP, Syms[i].Offset, True);     { lea rbx, [rbp+off] }
+        EmitManagedRecordIntfWalk(SymTR[i].RecId, 'PXXRecordReleaseIntf');
         EmitAcquireHeapLock;
         EmitManagedRecordReleaseLocked(SymTR[i].RecId);
         EmitReleaseHeapLock;
@@ -8984,6 +9038,20 @@ begin
         begin
           { A reused destination still holds the previous value's managed
             handles; release them before the raw copy orphans them. }
+          { The interface half first: its own pass, no lock (see
+            PXXRecordReleaseIntf). bug-a-a-record-copy-does-not-retain-an-interface-field }
+          if RecordHasComIntfFields(SymTR[retSymIdx].RecId) then
+          begin
+            procIdx := FindProc('PXXRecordReleaseIntf');
+            if procIdx >= 0 then
+            begin
+              EmitB($8B); EmitB($85); EmitI32(Syms[ProcAggregateDestSym[CurProc]].Offset);
+              EmitB($50);
+              EmitB($68); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (SymTR[retSymIdx].RecId - REC_UCLASS_BASE)));
+              EmitCallProc(procIdx);
+              EmitB($81); EmitB($C4); EmitI32(8);      { add esp, 8 }
+            end;
+          end;
           EmitB($8B); EmitB($85); EmitI32(Syms[ProcAggregateDestSym[CurProc]].Offset); { mov eax, [ebp+destOff] }
           EmitB($50);                                { push eax (arg0 recAddr) }
           EmitB($68); EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (SymTR[retSymIdx].RecId - REC_UCLASS_BASE))); { push desc }
@@ -9085,6 +9153,19 @@ begin
         begin
           { A reused destination still holds the previous value's managed
             handles; release them before the raw copy orphans them. }
+          { The interface half first: its own pass, no lock (see
+            PXXRecordReleaseIntf). bug-a-a-record-copy-does-not-retain-an-interface-field }
+          if RecordHasComIntfFields(SymTR[retSymIdx].RecId) then
+          begin
+            procIdx := FindProc('PXXRecordReleaseIntf');
+            if procIdx >= 0 then
+            begin
+              EmitLoadVarArm32(ProcAggregateDestSym[CurProc]);
+              EmitLoadDataRefArm32(1,
+                -(RECORD_RTTI_DATAREF_BASE + (SymTR[retSymIdx].RecId - REC_UCLASS_BASE)));
+              EmitCallProc(procIdx);
+            end;
+          end;
           EmitLoadVarArm32(ProcAggregateDestSym[CurProc]);  { r0 = dest ptr }
           EmitLoadDataRefArm32(1,
             -(RECORD_RTTI_DATAREF_BASE + (SymTR[retSymIdx].RecId - REC_UCLASS_BASE)));
@@ -9166,6 +9247,19 @@ begin
         begin
           { A reused destination still holds the previous value's managed
             handles; release them before the raw copy orphans them. }
+          { The interface half first: its own pass, no lock (see
+            PXXRecordReleaseIntf). bug-a-a-record-copy-does-not-retain-an-interface-field }
+          if RecordHasComIntfFields(SymTR[retSymIdx].RecId) then
+          begin
+            procIdx := FindProc('PXXRecordReleaseIntf');
+            if procIdx >= 0 then
+            begin
+              EmitLoadVarA64(ProcAggregateDestSym[CurProc]);
+              EmitLoadDataRefA64(1,
+                -(RECORD_RTTI_DATAREF_BASE + (SymTR[retSymIdx].RecId - REC_UCLASS_BASE)));
+              EmitCallProc(procIdx);
+            end;
+          end;
           EmitLoadVarA64(ProcAggregateDestSym[CurProc]);   { x0 = dest ptr }
           EmitLoadDataRefA64(1,
             -(RECORD_RTTI_DATAREF_BASE + (SymTR[retSymIdx].RecId - REC_UCLASS_BASE)));
@@ -9348,6 +9442,19 @@ begin
         begin
           { A reused destination still holds the previous value's managed
             handles; release them before the raw copy orphans them. }
+          { The interface half first: its own pass, no lock (see
+            PXXRecordReleaseIntf). bug-a-a-record-copy-does-not-retain-an-interface-field }
+          if RecordHasComIntfFields(SymTR[retSymIdx].RecId) then
+          begin
+            procIdx := FindProc('PXXRecordReleaseIntf');
+            if procIdx >= 0 then
+            begin
+              EmitLoadVarRISCV32(ProcAggregateDestSym[CurProc]);
+              EmitLoadDataRefRISCV32(reg_a1,
+                -(RECORD_RTTI_DATAREF_BASE + (SymTR[retSymIdx].RecId - REC_UCLASS_BASE)));
+              EmitCallProc(procIdx);
+            end;
+          end;
           EmitLoadVarRISCV32(ProcAggregateDestSym[CurProc]); { a0 = dest ptr }
           EmitLoadDataRefRISCV32(reg_a1,
             -(RECORD_RTTI_DATAREF_BASE + (SymTR[retSymIdx].RecId - REC_UCLASS_BASE)));
@@ -9441,6 +9548,7 @@ begin
         x64_push_reg(rRBX);
         EmitLoadVar(ProcAggregateDestSym[CurProc]);
         x64_mov_reg_reg(8, rRBX, rRAX);            { rbx = dest }
+        EmitManagedRecordIntfWalk(SymTR[retSymIdx].RecId, 'PXXRecordReleaseIntf');
         EmitAcquireHeapLock;
         EmitManagedRecordReleaseLocked(SymTR[retSymIdx].RecId);
         EmitReleaseHeapLock;

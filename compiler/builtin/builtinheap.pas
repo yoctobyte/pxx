@@ -351,6 +351,15 @@ function __pxx_modsi3(a: Integer; b: Integer): Integer;
 function PXXStrLoadFile(path: Pointer): Pointer;
 procedure PXXRecordRetain(recAddr: Pointer; desc: Pointer);
 procedure PXXRecordRelease(recAddr: Pointer; desc: Pointer);
+{ The COM-interface half of the same walk, split out because of LOCK DISCIPLINE,
+  not because interfaces are a different kind of member: releasing one runs the
+  object's destructor chain and a self-locking FreeMem, so it must happen with
+  NO heap lock held, while the string/dynarray/record half is emitted under it.
+  Codegen therefore calls these two BEFORE EmitAcquireHeapLock and
+  PXXRecordRetain/Release inside — the shape PXXClassFinalize already uses for a
+  class instance. bug-a-a-record-copy-does-not-retain-an-interface-field }
+procedure PXXRecordRetainIntf(recAddr: Pointer; desc: Pointer);
+procedure PXXRecordReleaseIntf(recAddr: Pointer; desc: Pointer);
 { Initialize(x) / Finalize(x) over the SAME layout descriptor the scope-exit
   release already walks. The pair exists because scope-exit cleanup only covers
   variables the compiler declared: a record conjured from GetMem is just bytes
@@ -2754,6 +2763,92 @@ begin
       j := j + 1;
     end;
 
+    memberPtr := memberPtr + 16;
+    i := i + 1;
+  end;
+end;
+
+procedure PXXRecordRetainIntf(recAddr: Pointer; desc: Pointer);
+{ Kind-4 (COM interface) members only, recursing through kind-3 sub-records so a
+  record holding a record holding an interface is counted once per copy. Runs
+  UNLOCKED — see the interface declaration. AddRef cannot free anything, so this
+  half is harmless in any order; it is split out to mirror the release side. }
+var
+  memberCount, i, j: Integer;
+  memberPtr: Int64;
+  offset, kind, arrayCount, typeRef: Integer;
+  memberAddr, itemAddr: Pointer;
+  subDesc: Pointer;
+  memberSize: Int64;
+begin
+  if (recAddr = nil) or (desc = nil) then Exit;
+  memberCount := PInt32(Int64(desc) + 8)^;
+  memberPtr := Int64(desc) + 12;
+  i := 0;
+  while i < memberCount do
+  begin
+    offset := PInt32(memberPtr)^;
+    kind := PInt32(memberPtr + 4)^;
+    arrayCount := PInt32(memberPtr + 8)^;
+    typeRef := PInt32(memberPtr + 12)^;
+    memberAddr := Pointer(Int64(recAddr) + offset);
+    if kind = 4 then
+      PXXIntfAddRef(memberAddr, typeRef)
+    else if kind = 3 then
+    begin
+      subDesc := Pointer(memberPtr + 12 + typeRef);
+      memberSize := PInt32(Int64(subDesc) + 4)^;
+      j := 0;
+      while j < arrayCount do
+      begin
+        itemAddr := Pointer(Int64(memberAddr) + j * memberSize);
+        PXXRecordRetainIntf(itemAddr, subDesc);
+        j := j + 1;
+      end;
+    end;
+    memberPtr := memberPtr + 16;
+    i := i + 1;
+  end;
+end;
+
+procedure PXXRecordReleaseIntf(recAddr: Pointer; desc: Pointer);
+{ The release half. Deliberately does NOT nil the slot: the copy path calls this
+  on the DESTINATION before the bulk copy, and for `a := a` the source is the
+  same memory — zeroing here would copy a nil over a live value. The caller
+  either overwrites the slot (copy) or is discarding the storage (scope exit). }
+var
+  memberCount, i, j: Integer;
+  memberPtr: Int64;
+  offset, kind, arrayCount, typeRef: Integer;
+  memberAddr, itemAddr: Pointer;
+  subDesc: Pointer;
+  memberSize: Int64;
+begin
+  if (recAddr = nil) or (desc = nil) then Exit;
+  memberCount := PInt32(Int64(desc) + 8)^;
+  memberPtr := Int64(desc) + 12;
+  i := 0;
+  while i < memberCount do
+  begin
+    offset := PInt32(memberPtr)^;
+    kind := PInt32(memberPtr + 4)^;
+    arrayCount := PInt32(memberPtr + 8)^;
+    typeRef := PInt32(memberPtr + 12)^;
+    memberAddr := Pointer(Int64(recAddr) + offset);
+    if kind = 4 then
+      PXXIntfRelease(memberAddr, typeRef)
+    else if kind = 3 then
+    begin
+      subDesc := Pointer(memberPtr + 12 + typeRef);
+      memberSize := PInt32(Int64(subDesc) + 4)^;
+      j := 0;
+      while j < arrayCount do
+      begin
+        itemAddr := Pointer(Int64(memberAddr) + j * memberSize);
+        PXXRecordReleaseIntf(itemAddr, subDesc);
+        j := j + 1;
+      end;
+    end;
     memberPtr := memberPtr + 16;
     i := i + 1;
   end;

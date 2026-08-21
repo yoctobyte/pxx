@@ -44,6 +44,16 @@ begin
     FieldIsComInterface := True;
 end;
 
+function RecordDescMember(fi: Integer): Boolean;
+{ RECORD-descriptor member predicate: the string/dynarray/nested-record members
+  PXXRecordRetain/Release walk under the heap lock, PLUS COM interface members
+  (kind 4), which PXXRecordRetainIntf/ReleaseIntf walk BEFORE it is taken. One
+  descriptor, two walks split by lock discipline — the same split a CLASS layout
+  descriptor has always had. bug-a-a-record-copy-does-not-retain-an-interface-field }
+begin
+  RecordDescMember := FieldIsManaged(fi) or FieldIsComInterface(fi);
+end;
+
 function ClassFieldNeedsFinal(fi: Integer): Boolean;
 { CLASS-descriptor member predicate: everything the record path manages, plus
   COM interface fields (kind 4) and Variant fields (kind 5 — a variant slot can
@@ -69,7 +79,7 @@ begin
   cnt := UClsFCount[ci];
   for i := 0 to cnt - 1 do
   begin
-    if FieldIsManaged(base + i) then Inc(managed);
+    if RecordDescMember(base + i) then Inc(managed);
   end;
   RecordManagedFieldCount := managed;
 end;
@@ -962,7 +972,7 @@ begin
       for i := 0 to cnt - 1 do
       begin
         fi := base + i;
-        if FieldIsManaged(fi) then
+        if RecordDescMember(fi) then
         begin
           Inc(mCount);
           if UFldIsArray[fi] and (UFldArrLen[fi] = -1) then
@@ -1028,7 +1038,7 @@ begin
       for i := 0 to cnt - 1 do
       begin
         fi := base + i;
-        if FieldIsManaged(fi) then
+        if RecordDescMember(fi) then
         begin
           mHdr := hdr + 12 + k * 16;
           PatchDataI32(mHdr + 0, UFldOff_[fi]); { Offset }
@@ -1037,6 +1047,8 @@ begin
             mKind := 1
           else if UFldIsArray[fi] and (UFldArrLen[fi] = -1) then
             mKind := 2
+          else if FieldIsComInterface(fi) then
+            mKind := 4
           else
             mKind := 3;
           PatchDataI32(mHdr + 4, mKind);
@@ -1099,7 +1111,12 @@ begin
             subCi := UFldRec_[fi] - REC_UCLASS_BASE;
             if (subCi >= 0) and (subCi < UClsCount) and (UClsRTTIOff[subCi] >= 0) then
               typeRef := UClsRTTIOff[subCi] - (mHdr + 12);
-          end;
+          end
+          else if mKind = 4 then
+            { COM interface member: typeRef carries the interface id, the key
+              PXXIntfAddRef/PXXIntfRelease dispatch on — the same discriminated
+              slot the CLASS layout descriptor uses. }
+            typeRef := UFldRec_[fi] - REC_UCLASS_BASE;
           PatchDataI32(mHdr + 12, typeRef);
 
           Inc(k);

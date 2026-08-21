@@ -223,6 +223,26 @@ begin
   EmitCallProc(procIdx);
 end;
 
+procedure EmitManagedRecordIntfWalk(recId: Integer; const helper: AnsiString);
+{ rbx = record address. The COM-interface half of a record's ARC walk, which
+  MUST be emitted with the heap lock NOT held: PXXIntfRelease runs the object's
+  destructor chain and a self-locking FreeMem, so under the lock it would hang
+  rather than leak. Same split PXXClassFinalize uses for a class instance.
+  bug-a-a-record-copy-does-not-retain-an-interface-field }
+var procIdx: Integer;
+begin
+  if recId < REC_UCLASS_BASE then Exit;
+  if not RecordHasComIntfFields(recId) then Exit;
+  procIdx := FindProc(helper);
+  if procIdx < 0 then Exit;   { no builtinheap in this build — nothing to walk }
+
+  EmitAsmX64([
+    'mov rdi, rbx',
+    'mov rsi, @data', -(RECORD_RTTI_DATAREF_BASE + (recId - REC_UCLASS_BASE))  { desc }
+  ]);
+  EmitCallProc(procIdx);
+end;
+
 procedure EmitManagedRecordReleaseLocked(recId: Integer);
 var procIdx: Integer;
 begin
@@ -7598,6 +7618,14 @@ begin
         EmitB($50);                            { push dest     [rsp+8 below]  }
         EmitB($53);                            { push rbx      [rsp]          }
 
+        { Interface members FIRST, with no lock held (see
+          EmitManagedRecordIntfWalk). Retain the source before releasing the
+          destination so `a := a` nets zero instead of destroying the value. }
+        EmitB($48); EmitB($8B); EmitB($5C); EmitB($24); EmitB($10); { mov rbx, [rsp+16] = src }
+        EmitManagedRecordIntfWalk(IRC[node], 'PXXRecordRetainIntf');
+        EmitB($48); EmitB($8B); EmitB($5C); EmitB($24); EmitB($08); { mov rbx, [rsp+8] = dest }
+        EmitManagedRecordIntfWalk(IRC[node], 'PXXRecordReleaseIntf');
+
         EmitAcquireHeapLock;
         EmitB($48); EmitB($8B); EmitB($5C); EmitB($24); EmitB($10); { mov rbx, [rsp+16] = src }
         EmitManagedRecordRetain(IRC[node]);
@@ -9439,7 +9467,24 @@ begin
                   RecordHasManagedFields(SymTR[i].RecId) then
           begin
             { Record-with-managed-fields local: release each managed field via
-              the portable helper. arg0 = record address, arg1 = descriptor. }
+              the portable helper. arg0 = record address, arg1 = descriptor.
+              COM interface members go through their own pass first — see
+              PXXRecordReleaseIntf's note; this target takes no codegen heap
+              lock, so the split here is about keeping ONE membership rule for
+              the descriptor, not about deadlock. }
+            if RecordHasComIntfFields(SymTR[i].RecId) then
+            begin
+              procIdx := FindProc('PXXRecordReleaseIntf');
+              if procIdx >= 0 then
+              begin
+                EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);  { lea eax, [ebp+off] }
+                EmitB($50);                                        { push arg0 = &rec }
+                EmitB($68);
+                EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
+                EmitCallProc(procIdx);
+                EmitB($81); EmitB($C4); EmitI32(8);                { add esp, 8 }
+              end;
+            end;
             procIdx := FindProc('PXXRecordRelease');
             if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
             EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);  { lea eax, [ebp+off] }
@@ -9578,7 +9623,21 @@ begin
                 RecordHasManagedFields(SymTR[i].RecId) then
         begin
           { Record-with-managed-fields local: release each managed field via the
-            portable helper. r0 = record address, r1 = layout descriptor. }
+            portable helper. r0 = record address, r1 = layout descriptor.
+            COM interface members first, through their own pass. }
+          if RecordHasComIntfFields(SymTR[i].RecId) then
+          begin
+            procIdx := FindProc('PXXRecordReleaseIntf');
+            if procIdx >= 0 then
+            begin
+              EmitLoadVarAddrArm32(i);
+              EmitLoadDataRefArm32(1,
+                -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
+              EmitI32($E92D000C);                      { push {r2,r3} }
+              EmitCallProc(procIdx);
+              EmitI32($E8BD000C);                      { pop {r2,r3} }
+            end;
+          end;
           EmitLoadVarAddrArm32(i);                     { r0 = record address }
           EmitLoadDataRefArm32(1,
             -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
@@ -9716,7 +9775,20 @@ begin
                 RecordHasManagedFields(SymTR[i].RecId) then
         begin
           { Record-with-managed-fields local: release each managed field via the
-            portable helper. x0 = record address, x1 = layout descriptor. }
+            portable helper. x0 = record address, x1 = layout descriptor.
+            COM interface members first, through their own pass. }
+          if RecordHasComIntfFields(SymTR[i].RecId) then
+          begin
+            procIdx := FindProc('PXXRecordReleaseIntf');
+            if procIdx >= 0 then
+            begin
+              EmitLoadImmA64(9, Syms[i].Offset);
+              EmitI32($8B0903A0);  { add x0, x29, x9 }
+              EmitLoadDataRefA64(1,
+                -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
+              EmitCallProc(procIdx);
+            end;
+          end;
           EmitLoadImmA64(9, Syms[i].Offset);
           EmitI32($8B0903A0);  { add x0, x29, x9  (x0 = record address) }
           EmitLoadDataRefA64(1,
@@ -9863,7 +9935,20 @@ begin
                 RecordHasManagedFields(SymTR[i].RecId) then
         begin
           { Record-with-managed-fields local: release each managed field via the
-            portable helper. a0 = record address, a1 = layout descriptor. }
+            portable helper. a0 = record address, a1 = layout descriptor.
+            COM interface members first, through their own pass (absent on the
+            ESP profile, where FindProc simply answers -1). }
+          if RecordHasComIntfFields(SymTR[i].RecId) then
+          begin
+            procIdx := FindProc('PXXRecordReleaseIntf');
+            if procIdx >= 0 then
+            begin
+              EmitSlotAddrRISCV32(reg_a0, i);
+              EmitLoadDataRefRISCV32(reg_a1,
+                -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
+              EmitCallProc(procIdx);
+            end;
+          end;
           EmitSlotAddrRISCV32(reg_a0, i);
           EmitLoadDataRefRISCV32(reg_a1,
             -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));

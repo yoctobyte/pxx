@@ -4,8 +4,8 @@ prio: 60
 type: bug
 blocked-by: []
 summary: "`b := a` on a record holding a COM interface field copies the pointer with no retain, so the two records share one counted reference. Nilling either one destroys the object and the other is left dangling — a use-after-free that segfaults on the next member call. Present on pinned and on HEAD."
-status: backlog
-owner: ""
+status: done
+owner: agent-A
 ---
 
 # A record copy does not retain an interface field
@@ -109,3 +109,69 @@ deadlock left to gate, hence no `ThreadSafeMode` refusal of the kind
 Consequence: the use-after-free is fixed in **every** build. Do not implement
 option (c) (retain-only, trading the UAF for a leak) — it was a fallback for the
 case where this decision stayed open, and it has not.
+
+## Resolution 2026-08-21 (Track A)
+
+Fixed in **every** build, native and cross, exactly as the unblocking note
+predicted: the interface half of the walk moved AHEAD of the lock, so widening
+the predicate no longer enables a locked release and there is nothing left to
+gate on `ThreadSafeMode`.
+
+**One predicate again.** `RecordHasManagedFields` counts COM interface fields
+(`inclIntf` is True from both callers), so `RecordNeedsZeroInit` is the same walk
+under a name that says which question it answers. That single flip is what routes
+an interface-only record through `IR_COPY_REC_MANAGED` instead of the raw byte
+copy — the actual bug.
+
+**Two walks, split by lock discipline, not by member kind.** The record layout
+descriptor now carries kind-4 members (`RecordDescMember` = `FieldIsManaged` or
+`FieldIsComInterface`; typeRef holds the interface id, the same discriminated
+slot the CLASS descriptor and the kind-4 array descriptors already use). New
+runtime helpers `PXXRecordRetainIntf` / `PXXRecordReleaseIntf` walk ONLY kind 4
+(recursing through kind-3 sub-records) and are emitted BEFORE
+`EmitAcquireHeapLock`; `PXXRecordRetain` / `PXXRecordRelease` keep kinds 1-3 and
+stay inside it. Same shape `PXXClassFinalize` has shipped with.
+`PXXRecordReleaseIntf` deliberately does NOT nil the slot: the copy path releases
+the DESTINATION before the bulk copy, and for `a := a` that is the same memory.
+
+**Sites**: the copy arm on all five backends that have one (x86-64 / i386 /
+arm32 / aarch64 / riscv32 — xtensa has no managed record copy), the record
+scope-exit arm on all five, and the aggregate-return destination release on all
+five. Scope exit is NOT optional here: retaining on copy without releasing at
+scope exit would trade the use-after-free for a leak per copy, which is worse
+than what it replaced.
+
+**Measured against FPC 3.2.2**, same program each time:
+
+| shape | FPC | pxx before | pxx after |
+| --- | --- | --- | --- |
+| `b := a`, then nil `a`, read `b.f.Name` | `x` | **SIGSEGV** | `x` |
+| destroyed after nilling both | 1 | 0 (dangling) | **1** |
+| `x := x` (self-assign) | alive, then 1 | alive, then 1 | **alive, then 1** |
+| nested `TNest.inner.f` copy | 1 | SIGSEGV | **1** |
+| copy over a live target | old dies immediately | never | **immediately** |
+| local copy released at scope exit | 1 | 0 | **1** |
+| mixed record (string + iface + dynarray + int) | all five values | — | **identical** |
+
+Cross-checked under qemu on **aarch64 / arm32 / i386 / riscv32**: the extended
+`test/test_record_interface_field_zero_init.pas` prints `total ok 10 / 10` on
+every one, and under `--threadsafe` it TERMINATES (10/10) — the property that
+would fail if the interface release had stayed under the spinlock.
+
+## Residuals, deliberately not folded in
+
+- **A by-value record argument's temp is released at the CALLER's scope exit,
+  not at the call's end.** FPC finalizes a value parameter in the callee, so a
+  destroy that FPC shows immediately after the call shows later here — visible
+  only when the caller is the main program body, where "later" is program exit.
+  A temp-lifetime divergence that predates this ticket and is not interface-
+  specific: filed as [[bug-a-by-value-record-arg-temp-outlives-the-call]].
+- **An ARRAY (static or dynamic) of records-with-interface-fields** still leaks
+  the interfaces: the element walk calls `PXXRecordRelease` (kinds 1-3) with no
+  interface pass. Same fix shape, one level out; filed as
+  [[bug-a-array-of-records-with-interface-fields-leaks-the-interfaces]].
+
+Gate: `make compiler/pascal26` (fixedpoint) + `tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-21 — resolved, commit PENDING-COMMIT.

@@ -3527,6 +3527,25 @@ begin
         EmitI32($E92D0001);                  { push {r0} src at [sp+4] later }
         IREmitNodeArm32(IRA[node]);          { r0 = dest }
         EmitI32($E92D0001);                  { push {r0} dest at [sp] }
+        { COM interface members: their own pass, source first (see the x86-64
+          arm). bug-a-a-record-copy-does-not-retain-an-interface-field }
+        if RecordHasComIntfFields(IRC[node]) then
+        begin
+          procIdx := FindProc('PXXRecordRetainIntf');
+          if procIdx >= 0 then
+          begin
+            EmitI32($E59D0004);              { ldr r0, [sp, #4] (src) }
+            EmitLoadDataRefArm32(1, -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+            EmitCallProc(procIdx);
+          end;
+          procIdx := FindProc('PXXRecordReleaseIntf');
+          if procIdx >= 0 then
+          begin
+            EmitI32($E59D0000);              { ldr r0, [sp] (dest) }
+            EmitLoadDataRefArm32(1, -(RECORD_RTTI_DATAREF_BASE + (IRC[node] - REC_UCLASS_BASE)));
+            EmitCallProc(procIdx);
+          end;
+        end;
         procIdx := FindProc('PXXRecordRetain');
         if procIdx < 0 then Error('compiler error: PXXRecordRetain not found');
         EmitI32($E59D0004);                  { ldr r0, [sp, #4] (src) }
