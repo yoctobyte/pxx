@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:21 blocked:9 backlog:273 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2190 rejected:40`
+`urgent:1 unfinished:21 blocked:9 backlog:274 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2190 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-a-riscv64-as-a-hosted-first-class-target` [A] — owner: claude-A
+_none — no lane is locked._
 
 ## urgent (1) — jump the queue
 
@@ -51,7 +51,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 261, ranked
+## Ready — top 30 of 262, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree
@@ -84,4 +84,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
 - `[p 55] [N]` bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence
 
-_231 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_232 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

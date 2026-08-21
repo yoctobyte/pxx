@@ -4,8 +4,8 @@ prio: 50
 type: feature
 blocked-by: []
 summary: "pxx has no riscv64 target at all — only riscv32, which exists for ESP-class bare metal. Real RISC-V hardware (notebooks, SBCs) is RV64GC running Linux, so today we cannot build for the machines RISC-V actually ships on. The harness is already ready: run_target.sh handles riscv64, install_qemu.sh installs qemu-riscv64, twatch_web lists it in CROSS_TARGETS — nothing can produce a binary for it."
-status: working
-owner: claude-A
+status: backlog
+owner: ""
 ---
 
 # riscv64 as a hosted, first-class target
@@ -366,3 +366,40 @@ byte and the 64-bit header/section layout, i.e. `writeELF` vs `writeELF32`.
 3. `ir_codegen_riscv64.inc` + `TARGET_RISCV64` + `--target=riscv64` + ELFCLASS64.
 4. Functional verification under `qemu-riscv64` (installed here; no local riscv
    assembler exists, so running the code is the oracle).
+
+## Parked back to backlog, with the scoping done (2026-08-21)
+
+Step 1 (`TargetIsEspClass`) **landed green and complete** — there is no
+half-applied compiler change here, which is why this returns to `backlog/`
+rather than `unfinished/`: nothing is in flight, the remaining work is simply
+not started.
+
+What stopped it from going further in one session is worth recording, because it
+kills the obvious decomposition:
+
+**There is no "minimal backend" increment.** The plan was to land the plumbing
+plus just enough codegen for `program p; begin Halt(7); end.`, verify it under
+qemu-riscv64, and then fill in nodes one testable increment at a time. That does
+not work: the smallest possible program pulls **116 procs** of RTL on x86-64 and
+**152** on riscv32 (measured), because builtinheap and friends come in
+unconditionally. So the RTL's own bodies must codegen before *anything* links,
+and the first runnable riscv64 binary needs a substantially complete
+`ir_codegen_riscv64.inc` — string ops, heap, memmove, calls, the lot. Roughly
+the 3120 non-pair lines of `ir_codegen_riscv32.inc`, transformed.
+
+That makes step 3 a single multi-hour unit of work rather than a series of
+green ones, and it should be picked up when there is room for it in one go.
+Everything it needs is decided and written down above: the split decision, the
+encoder inventory, the 13-site hazard table, and the verification method
+(functional, under qemu-riscv64, which is installed).
+
+Two riscv32 bugs were found *because* of this scoping and are already fixed or
+filed — both instances of the same mis-keying the hazard table describes:
+
+- [[bug-a-halt-n-exits-zero-on-hosted-riscv32]] — **fixed**, all five targets
+  now agree with FPC. Found because `Halt(n)` was going to be how the first
+  riscv64 increment proved itself.
+- [[bug-a-real-is-single-on-hosted-riscv32]] — filed, needs the `Real = Double`
+  call.
+
+Next actor: start at "Remaining sequence" step 2 above.
