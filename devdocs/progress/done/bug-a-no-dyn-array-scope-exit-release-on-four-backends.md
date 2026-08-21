@@ -277,4 +277,4 @@ The 53-test baseline also surfaced, all pre-existing:
 (a silent wrong answer).
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 190ddf1d3.
