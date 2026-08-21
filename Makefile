@@ -3847,6 +3847,14 @@ test-core: $(COMPILER)
 	# pushed), not the nil stub it used to be (b340)
 	./$(COMPILER) test/test_exceptaddr_b340.pas $(TESTTMP)/test_exceptaddr_b34026
 	test "$$($(TESTTMP)/test_exceptaddr_b34026 | tail -1)" = "PASS"
+	# `not` over a UNARY MINUS: bitwise, not boolean. `not -1` printed TRUE --
+	# an integer expression answering a Boolean -- because the authoritative-
+	# operand list that decides bitwise-vs-logical had grown one entry per
+	# reported shape and AN_NEG was never one of them. Boolean rows are here so
+	# a regression the other way shows too.
+	./$(COMPILER) test/test_not_of_negated_operand.pas $(TESTTMP)/test_not_of_negated26
+	@test "$$($(TESTTMP)/test_not_of_negated26)" = "$$(printf 'lit  = 0\npar  = 0\nsp   = 0\nneg2 = 1\nvar  = 4\nvarp = 4\ni64  = 4\np1   = -2\np0   = -1\npv   = -6\nbin  = 0\nadd  = -3\nbool = TRUE\ncmp  = FALSE')" \
+	  || { echo "test_not_of_negated_operand: FAIL"; $(TESTTMP)/test_not_of_negated26; exit 1; }
 	# An interface NAME used as a value means its GUID and nothing else. It used
 	# to fall through to the metaclass path, so `g := IHello` copied 16 bytes of
 	# the RTTI BLOB (a name pointer and a parent pointer) into the TGuid --

@@ -1125,6 +1125,15 @@ begin
            right. The tyBoolean guard above still keeps a genuine Boolean element logical. }
          (ASTKind[left] = AN_INDEX) or (ASTKind[left] = AN_FIELD) or
          (ASTKind[left] = AN_DEREF) or
+         { A unary MINUS, for exactly the reason the arithmetic-AN_BINOP arm at
+           the bottom gives: negation is unambiguously numeric, so it can never
+           be one of the logically-boolean expressions PXX mistags as integer.
+           Without it `not -1` and `not (-n)` became `xor rax,1` and printed
+           TRUE -- an integer expression answering a BOOLEAN, which is as loud a
+           wrong value as this list produces, and it survived because every
+           earlier entry was added for the shape that reported it.
+           bug-a-not-of-a-negated-operand-is-a-boolean-not }
+         (ASTKind[left] = AN_NEG) or
          { a nested BITWISE not: its integer tag (checked above) is ours to
            trust — `not(not(q))` flipped the outer one to boolean (tint642
            error 2701). An inner LOGICAL not is tyBoolean and never gets here. }
