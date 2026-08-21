@@ -1,7 +1,8 @@
 ---
-summary: "Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source"
+summary: "Populate pointer-element-type metadata consistently (additive, fallback-preserving) — kill the recurring silent PChar/WideChar-conversion class at its source. SLICE 1 LANDED 2026-08-21 (decl-side population + the AN_VIRTUAL_CALL/AN_INTF_CALL reader gap); slices 2-3 (node-side storage, WideChar) remain"
 type: refactor
 prio: 45
+
 ---
 
 # Populate pointer-element metadata consistently — the low-risk fix for the conversion class
@@ -9,7 +10,7 @@ prio: 45
 - **Type:** refactor / data-completeness (Track A — `parser.inc` registration + node
   creation, `ir.inc` predicates). **Additive and fallback-preserving — NOT a big-bang
   rewrite.**
-- **Status:** backlog
+- **Status:** backlog — slice 1 done (2026-08-21), slices 2-3 open
 - **Opened:** 2026-07-17, from a user observation ("we keep special-casing AnsiString,
   keep finding issues"). **Re-scoped 2026-07-18** after the user correctly pointed out the
   sane, low-risk shape: *just store the pointer type; C already does it.*
@@ -106,3 +107,62 @@ Do it at the pace that suits; the bleeding is already stopped.
 - **Not** removing the shape-enumeration walks — they stay as the fallback.
 - **Not** reworking the managed-string runtime/ABI — this is about *where the compiler
   records/reads the pointer element type*, nothing about how strings are represented.
+
+## Slice 1 landed 2026-08-21 — and the audit's "not reachable" was wrong
+
+The 2026-07-18 audit closed this ticket's first slice as *"defensive-only and NOT
+reachable by a normal call — no failing test is constructible"*, on the reasoning
+that a method with a BODY re-registers through the normal path. That reasoning is
+right and the conclusion did not follow: it covers every method **that has an
+implementation**, and the two shapes whose call resolves to the DECL and never to
+an implementation — an **abstract** method reached through the base class, and an
+**interface** method reached through the interface — have none to fall back on.
+
+Constructed in one try, and it is a silent wrong VALUE, not a crash:
+
+```pascal
+TBase = class function GetP: PChar; virtual; abstract; end;
+IGet  = interface function GetP: PChar; end;
+...
+s := AnsiString(b.GetP);    { FPC: 'abcde'   pxx: '' }
+s := AnsiString(g.GetP);    { FPC: 'abcde'   pxx: '' }
+```
+
+**Both halves were needed, which is the part worth recording.** Populating the
+metadata at the three decl sites changed nothing on its own, because the READER
+was shape-blind in the same way the ticket describes:
+
+1. `pasparser_decl.inc` — the record-method, interface-method and class-method
+   decl registrations now capture `LastTypePointerElem*` right after the return
+   type is parsed (same place `mRetRecId` is captured) and store
+   `ProcRetPtrElemTk/Rec`. This is the "finish the proc side" slice, verbatim.
+2. `ir.inc` — `IsNodePChar` enumerated `AN_CALL` and `AN_CALL_IND` only. All FOUR
+   call node kinds carry a `Procs[]` index in `IVal` (`AN_VIRTUAL_CALL` keeps the
+   slot in `ASTRight`, `AN_INTF_CALL` the IMT slot in `ASTSOffset`), so the
+   virtual and interface shapes now read the same way.
+
+**A second bug fell out of the same enumeration**, and it is NOT interface- or
+PChar-specific: `IRPointerStride`'s call arm read the element KIND and never the
+element's RECORD id, so for `function P: PRec` the tail computed
+`RecSize(REC_NONE)` = the pointer size. `P2 - P0` over a 24-byte record answered
+**6 instead of 2**, and `P0 + 2` landed inside element 0 — on plain functions as
+much as virtual ones, on `pinned` and on HEAD. Every other arm of that function
+sets the (kind, rec) pair together; this one set half. Fixed here rather than
+filed, because it is the same dropped-field pattern in the same predicate family
+and the test was already written.
+
+`test/test_pchar_result_decl_only_method.pas`: **9 / 9**, identical to FPC 3.2.2
+on the same source, natively and under qemu on aarch64 / arm32 / i386 / riscv32.
+`pinned` scores **1 / 9**. Gate: `make compiler/pascal26` (fixedpoint) +
+`tools/gate.sh quick` GREEN.
+
+**Still open, unchanged**: slice 2 (store the pointer-element type on pointer
+NODES at creation, C's pattern, shape-walk as fallback) and slice 3 (fold
+WideChar in). The ticket stays open for those; this closes slice 1 and the
+reader-enumeration gap it depended on.
+
+## Log
+- 2026-08-21 — slice 1 landed. Note for whoever reads the 2026-07-18 audit next:
+  "no failing test is constructible" was a claim about a search that stopped at
+  methods with bodies. When a ticket says a case is unreachable, the cheap check
+  is to try to reach it.

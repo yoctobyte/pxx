@@ -2207,11 +2207,24 @@ begin
       Result := IRPointerStride(ASTRight[ASTRight[node]]);
     Exit;
   end
-  else if ASTKind[node] = AN_CALL then
+  else if (ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
+          (ASTKind[node] = AN_INTF_CALL) then
   begin
+    { All three carry the Procs[] index in IVal — see IsNodePChar's arm 4 for why
+      the virtual/interface shapes belong in every one of these enumerations. }
     if (ASTIVal[node] >= 0) and
        (Procs[ASTIVal[node]].RetType = tyPointer) then
+    begin
       elemTk := IntToTypeKind(ProcRetPtrElemTk[ASTIVal[node]]);
+      { ...and the element's RECORD id, which this arm computed nowhere: for a
+        `function P: PRec`, elemTk is tyRecord and the tail below asks
+        RecSize(recId) — with recId left at REC_NONE that answered the pointer
+        size, so `P2 - P0` over a 24-byte record gave 6 instead of 2 and
+        `P0 + 2` landed inside element 0. Every other arm of this function sets
+        the pair together; this one set half of it.
+        refactor-centralize-managed-string-pchar-conversion }
+      recId := ProcRetPtrElemRec[ASTIVal[node]];
+    end;
   end
   else if ASTKind[node] = AN_INCDEC then
   begin
@@ -2348,10 +2361,21 @@ begin
     end;
   end;
 
-  { 4. If it's a function call (direct, or indirect through a proc-typed value:
-       AN_CALL_IND stores the signature's Procs[] index in IVal, so the return
-       pointer-element type reads the same way). }
-  if (ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_CALL_IND) then
+  { 4. If it's a function call. FOUR node kinds, and they all read the same way
+       because every one of them stores a Procs[] index in IVal: AN_CALL
+       (direct), AN_CALL_IND (through a proc-typed value, the signature's index),
+       AN_VIRTUAL_CALL (the slot is in ASTRight, the proc index is still here)
+       and AN_INTF_CALL (the IMT slot is in ASTSOffset, ditto).
+
+       The last two were missing, which is what made a DECL-only PChar method —
+       `function GetP: PChar; virtual; abstract;` called through the base, or an
+       interface method called through the interface — lower `AnsiString(x.GetP)`
+       as a raw pointer cast and produce an EMPTY string where FPC gives the
+       text. Populating ProcRetPtrElemTk at those declarations is necessary and
+       was not sufficient: the reader has to recognise the node shape too.
+       refactor-centralize-managed-string-pchar-conversion }
+  if (ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_CALL_IND) or
+     (ASTKind[node] = AN_VIRTUAL_CALL) or (ASTKind[node] = AN_INTF_CALL) then
   begin
     procIdx := ASTIVal[node];
     if (procIdx >= 0) and (procIdx < ProcCount) then

@@ -2515,6 +2515,13 @@ var
   isFunc, byref, sawConst, isCtor: Boolean;
   mname, recNm, fullNm: AnsiString;
   mnOff, mnLen, mpi, i, nP, startIdx, k: Integer;
+  retPtrElemTk, retPtrElemRec: Integer;   { A pointer RETURN type's element kind, captured at the declaration exactly like
+    mRetRecId above it. Without it a DECL-only PChar method — abstract, or an
+    interface method, the two shapes whose call resolves to the DECL's procIdx and
+    never to an implementation's — leaves ProcRetPtrElemTk = tyUnknown, IsNodePChar
+    answers False, and `AnsiString(ref.GetP())` lowers as a raw pointer cast:
+    an EMPTY string where FPC gives the text. Silent wrong value, no diagnostic.
+    refactor-centralize-managed-string-pchar-conversion }
   pn: array[0..MAX_PROC_PARAMS-1] of AnsiString;
   pt: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   ptRec: array[0..MAX_PROC_PARAMS-1] of Integer;
@@ -2639,10 +2646,14 @@ begin
 
   retTk := tyInteger;
   LastTypeRecId := REC_NONE;
+  retPtrElemTk := Ord(tyUnknown);
+  retPtrElemRec := REC_NONE;
   if isFunc then
   begin
     Expect(tkColon, ':');
     retTk := ParseTypeKind;
+    retPtrElemTk := Ord(LastTypePointerElemTk);
+    retPtrElemRec := LastTypePointerElemRec;
   end;
   Eat(tkSemicolon);
 
@@ -2687,6 +2698,11 @@ begin
 
   mpi := RegisterProc(fullNm, isFunc, retTk, nP, pn, pt);
   Procs[mpi].BodyAddr := -1;
+  if isFunc and (retTk = tyPointer) then
+  begin
+    ProcRetPtrElemTk[mpi] := retPtrElemTk;
+    ProcRetPtrElemRec[mpi] := retPtrElemRec;
+  end;
   for i := 0 to nP - 1 do
   begin
     Procs[mpi].Params[i].IsRef := pRef[i];
@@ -3206,6 +3222,13 @@ var
   mPDefaultIsFloat: array[0..MAX_PROC_PARAMS-1] of Boolean; { ...and for FLOAT defaults (`d: Double = 2.5`): mPDefaultVal holds the IEEE bits }
   mDefaultIsSet: Boolean;
   mRetRecId: Integer;      { the DECL's return-type class/record id (ProcRetRecId) }
+  mRetPtrElemTk, mRetPtrElemRec: Integer;   { A pointer RETURN type's element kind, captured at the declaration exactly like
+    mRetRecId above it. Without it a DECL-only PChar method — abstract, or an
+    interface method, the two shapes whose call resolves to the DECL's procIdx and
+    never to an implementation's — leaves ProcRetPtrElemTk = tyUnknown, IsNodePChar
+    answers False, and `AnsiString(ref.GetP())` lowers as a raw pointer cast:
+    an EMPTY string where FPC gives the text. Silent wrong value, no diagnostic.
+    refactor-centralize-managed-string-pchar-conversion }
   mPDefaultSOff: array[0..MAX_PROC_PARAMS-1] of Integer;
   mPDefaultSLen: array[0..MAX_PROC_PARAMS-1] of Integer;
   mHasDefault: Boolean;
@@ -3437,11 +3460,15 @@ begin
             Expect(tkRParen, ')');
           end;
           mRetRecId := REC_NONE;
+          mRetPtrElemTk := Ord(tyUnknown);
+          mRetPtrElemRec := REC_NONE;
           if mIsFunc then
           begin
             Expect(tkColon, ':');
             mRetType := ParseTypeKind;
             mRetRecId := LastTypeRecId;   { the return type's class/record id }
+            mRetPtrElemTk := Ord(LastTypePointerElemTk);
+            mRetPtrElemRec := LastTypePointerElemRec;
           end;
           Eat(tkSemicolon);
           while EatIntfMethodDirective do ;
@@ -3462,6 +3489,11 @@ begin
             result could not resolve. `.DumpJSON` silently degraded to a FIELD access, and the
             statement then demanded a ':='. }
           if (mRetType = tyClass) or (mRetType = tyRecord) then ProcRetRecId[mpi] := mRetRecId;
+          if mIsFunc and (mRetType = tyPointer) then
+          begin
+            ProcRetPtrElemTk[mpi] := mRetPtrElemTk;
+            ProcRetPtrElemRec[mpi] := mRetPtrElemRec;
+          end;
           for i := 0 to mNParams-1 do
           begin
             Procs[mpi].Params[i].IsArray := mPArr[i]; Procs[mpi].Params[i].IsRef := mPByRef[i];
@@ -3972,11 +4004,15 @@ begin
               Expect(tkRParen, ')');
             end;
 
+            mRetPtrElemTk := Ord(tyUnknown);
+            mRetPtrElemRec := REC_NONE;
             if mIsFunc then
             begin
               Expect(tkColon, ':');
               mRetType := ParseTypeKind;
               mRetRecId := LastTypeRecId;   { see the twin site above }
+              mRetPtrElemTk := Ord(LastTypePointerElemTk);
+              mRetPtrElemRec := LastTypePointerElemRec;
             end
             else
               mRetRecId := REC_NONE;
@@ -4041,6 +4077,11 @@ begin
                    ((mPTypes[i] = tyClass) or (mPTypes[i] = tyRecord)) then
                   ProcParamRecId[mpi * MAX_PROC_PARAMS + i] := mPTypesRec[i];
               if (mRetType = tyClass) or (mRetType = tyRecord) then ProcRetRecId[mpi] := mRetRecId;
+              if mIsFunc and (mRetType = tyPointer) then
+              begin
+                ProcRetPtrElemTk[mpi] := mRetPtrElemTk;
+                ProcRetPtrElemRec[mpi] := mRetPtrElemRec;
+              end;
               for i := 0 to mNParams-1 do
               begin
                 if (i < MAX_PROC_PARAMS) then ProcParamUntyped[mpi * MAX_PROC_PARAMS + i] := mPUntyped[i];

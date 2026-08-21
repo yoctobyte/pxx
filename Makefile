@@ -6948,6 +6948,19 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/string_to_pchar_auto26)" = "$$(printf 'open=0\nprepare=0\n1 alice\n2 bob\nfinalize=0\nclose=0')"
 	./$(COMPILER) test/test_pchar_to_string.pas $(TESTTMP)/test_pchar_to_string26
 	test "$$($(TESTTMP)/test_pchar_to_string26)" = "$$(printf '3\n3\nabc\n3')"
+	# A method whose call resolves to a DECLARATION and never to an implementation
+	# -- an ABSTRACT method through the base, an INTERFACE method through the
+	# interface -- returning a typed pointer. Two halves, both needed: the three
+	# method-decl registration paths never recorded ProcRetPtrElemTk/Rec, and
+	# IsNodePChar / IRPointerStride enumerated AN_CALL + AN_CALL_IND only, so
+	# AN_VIRTUAL_CALL and AN_INTF_CALL were unrecognised even once populated.
+	# `AnsiString(x.GetP)` therefore produced an EMPTY string -- silent wrong
+	# value. The PRec rows are the same metadata pair one step on: the call arm
+	# read the element KIND without the element's RECORD id, so a pointer
+	# difference over a 24-byte record answered 6 instead of 2 (plain functions
+	# too, not only virtual ones). Counts are FPC 3.2.2's; pinned scores 1 / 9.
+	./$(COMPILER) test/test_pchar_result_decl_only_method.pas $(TESTTMP)/test_pchar_decl_only26
+	test "$$($(TESTTMP)/test_pchar_decl_only26 | tail -1)" = "total ok 9 / 9"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; test "$$?" = "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26
