@@ -3239,6 +3239,32 @@ begin
   Result := Pointer(Int64(destData) + headB);
 end;
 
+{ Fill the fresh destination for FPC's array-SPLICE Insert(srcArr, arr, index):
+  head [0..pos) from the old buffer, then EVERY element of insData, then the
+  tail [pos..len). pos = index clamped to [0..len], same as the one-element
+  form. Returns destData -- there is no gap address to hand back, because the
+  inserted elements are already in place when this returns; the caller's
+  element retain then covers them along with the kept ones. }
+function PXXDynInsArrFill(destData: Pointer; srcData: Pointer; insData: Pointer;
+                          index: NativeInt; elemSize: NativeInt): Pointer;
+var len, insLen, headB, insB, tailB: Int64; dummy: Pointer;
+begin
+  len := PXXDynLen(srcData);
+  insLen := PXXDynLen(insData);
+  if index < 0 then index := 0;
+  if index > len then index := len;
+  headB := index * elemSize;
+  insB := insLen * elemSize;
+  tailB := (len - index) * elemSize;
+  if headB > 0 then dummy := PXXMemCopy(destData, srcData, headB);
+  if insB > 0 then
+    dummy := PXXMemCopy(Pointer(Int64(destData) + headB), insData, insB);
+  if tailB > 0 then
+    dummy := PXXMemCopy(Pointer(Int64(destData) + headB + insB),
+                        Pointer(Int64(srcData) + headB), tailB);
+  Result := destData;
+end;
+
 type
   TPXXDivZeroProc = procedure;
 var
