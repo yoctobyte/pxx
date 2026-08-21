@@ -4,7 +4,7 @@ prio: 50
 type: refactor
 blocked-by: []
 summary: "Three frontends have each independently grown a private piece of target machinery: the Pascal driver emits the signal runtime, the C frontend writes the _start stub as raw machine code, and Zig calls Rust's REmitParamRegSpill for raw x86-64 register spill. Two is a smell and three is a design flaw: there is no layer between the frontends and the backends, so each frontend built its own. Found by three unrelated omission probes, not by reading."
-status: working
+status: done
 owner: claude-A
 ---
 
@@ -147,3 +147,65 @@ unchanged (the one differing line is an ASLR address in a pre-existing FAIL).
 - The eight simple frontend drivers (`fparser`, `bparser`, `aparser`, `gparser`,
   `lparser`, `wparser`, `eparser`) still open-code an x86-64 entry stub; each has
   a slightly different tail, and all are x86-64-only today.
+
+## Resolution (2026-08-21)
+
+The layer exists and every row of the opening table is either moved into it or
+handed to the lane that owns the file.
+
+`ir_codegen.inc` now holds, as one group next to the two dispatchers that
+started this:
+
+| entry point | what it owns |
+| --- | --- |
+| `EmitIoLockStubsForTarget` | `--threadsafe` I/O lock stubs (pre-existing) |
+| `EmitSignalRuntimeForTarget` | per-arch signal runtime (pre-existing choice) |
+| **`EmitProgramRuntimeStubsForTarget`** | **THE finish-the-runtime step** — the two above, called once by every driver |
+| **`EnsureSignalBss`** | the `BSS_SIG_*` storage, beside its only reader |
+| **`EmitDefaultSignalInstallForTarget`** | SIGINT/SIGTERM install at program start |
+| **`EmitProgramEntryForTarget`** | the entry stub (+ optional mmap heap arena) |
+| **`PatchProgramEntryJump`** | its jump fixup — the half that was missed first |
+| **`EmitParamSpillsForTarget`** | parameter placement, all six arch arms |
+| **`EmitZeroLocalSlotForTarget`** | prologue slot zero-init |
+
+Row by row:
+
+| # | machinery | status |
+| --- | --- | --- |
+| 1 | Pascal's signal runtime | **done** — `bug-a-only-the-pascal-driver-emits-the-signal-runtime`, resolved with the shared finalisation step |
+| 2 | C's `_start` stub | **handed to Track C** — `bug-c-driver-misses-the-shared-runtime-finalisation-step`. `cparser.inc` is C's file-lane; the ticket carries both the one-line call and the entry-stub question |
+| 3 | Zig borrowing Rust's `REmitParamRegSpill` | **done** — deleted; both call the shared spill |
+| 4 | the entry stub + its jump patch | **done** |
+| 5 | NilPy's `PyEmitParamSpills` | **done** — deleted |
+| 5b | NilPy's Variant-local nil-init | **done** |
+| 6 | `EmitMmapArena` refusing two targets and lying to three | **done** — real i386/arm32/aarch64 arms |
+
+The ticket's own instruction — *"sweep first: the three above were each found by
+a different probe, so there is no reason to think three is the total"* — paid
+for itself immediately. Three became six, and the three new ones came from one
+probe: `--target=arm32` on a two-line `.npy`.
+
+### What the layer bought, measured
+
+NilPy on arm32, `.npy` tests matching the native oracle, over 52 runnable tests:
+
+```
+before   0 / 52     nothing compiled
+after   36 / 52     broke=0 at every step
+```
+
+And Pascal's own output never moved: 25 tests × 5 targets = 120 binaries
+byte-identical across both lifts.
+
+### Left open, deliberately
+
+The eight simple frontend drivers (`fparser`, `bparser`, `aparser`, `gparser`,
+`lparser`, `wparser`, `eparser`) still open-code an x86-64 entry stub. Each has
+a different tail — some emit no jump, some `call main` with their own exit
+sequence — and all are x86-64-only today, so converting them is churn without a
+gate. `EmitProgramEntryForTarget` is what they should call when one of them
+grows a cross target. Filed as a note here rather than a ticket because there is
+no defect to observe until that happens.
+
+## Log
+- 2026-08-21 — resolved, commit PENDING-COMMIT.
