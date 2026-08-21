@@ -10857,6 +10857,37 @@ test-quick: $(COMPILER)
 	test "$$($(TESTTMP)/smoke_tthread26 | tail -1)" = "TTHREAD SYNC OK"
 	./$(COMPILER) test/test_fwd_ptr_alias_field.pas $(TESTTMP)/smoke_fwdptralias26
 	test "$$($(TESTTMP)/smoke_fwdptralias26)" = "11 22"
+	# feature-dynamic-soname-discovery: an `external 'lib<x>.so'` for a library
+	# OUTSIDE the compiler's hardcoded eight-library table must come out as the
+	# host's versioned soname, which can only have come from reading
+	# /etc/ld.so.cache. Skipped, loudly, where the host has no cache or no
+	# libgcc_s entry — a silent skip would read as a pass.
+	./$(COMPILER) test/soname_host_discovery.pas $(TESTTMP)/soname_host26
+	test "$$($(TESTTMP)/soname_host26)" = "soname discovery ok"
+	@if [ -r /etc/ld.so.cache ] && command -v readelf >/dev/null 2>&1 && \
+	    grep -aq 'libgcc_s\.so\.1' /etc/ld.so.cache; then \
+	  readelf -d $(TESTTMP)/soname_host26 | grep -q "Shared library: \[libgcc_s.so.1\]" || \
+	    { echo "FAIL: host soname discovery did not versionise libgcc_s.so"; exit 1; }; \
+	else echo "SKIP soname discovery: no /etc/ld.so.cache entry for libgcc_s"; fi
+	# ...and a CROSS target must NOT consult this host's library set: what is
+	# installed here says nothing about the machine an aarch64 binary will run
+	# on, and a soname invented from the wrong box fails at load time, far away
+	# and with no clue pointing back here. Deterministic on any host.
+	./$(COMPILER) --target=aarch64 test/soname_host_discovery.pas $(TESTTMP)/soname_host_a6426
+	@if command -v readelf >/dev/null 2>&1; then \
+	  readelf -d $(TESTTMP)/soname_host_a6426 | grep -q "Shared library: \[libgcc_s.so\]" || \
+	    { echo "FAIL: cross target read the host ld.so.cache"; exit 1; }; \
+	fi
+	# The granular --system-libs selection reads a soname BACK to its stem. That
+	# used to be a second hardcoded table facing the other way, so any soname the
+	# host cache now supplies would have answered "not selected" and silently
+	# ignored the flag. Derived now; these two rows are the ones that would catch
+	# a bad derivation (each asserts the OTHER library is absent).
+	./$(COMPILER) --system-libs=m test/csystem_libs_granular_math_b112.c $(TESTTMP)/soname_stem_m26
+	@if command -v readelf >/dev/null 2>&1; then \
+	  readelf -d $(TESTTMP)/soname_stem_m26 | grep -q "Shared library: \[libm.so.6\]"; \
+	  ! readelf -d $(TESTTMP)/soname_stem_m26 | grep -q "Shared library: \[libc.so.6\]"; \
+	fi
 	# feature-toolchain-cli-ux: the information flags answer with NO source file
 	# and exit 0. They are the first thing a stuck user reaches for, so a
 	# regression that makes `pxx --where` demand an input, or die, is exactly

@@ -15,6 +15,12 @@
   What is shared between frontends is the AST and the IR, never the parser:
   devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md }
 
+{ Host soname discovery lives at the bottom of this file, next to the library
+  table it replaced — but the `external 'lib.so'` parser near the top calls it.
+  PXX resolves that itself; FPC does not, and the FPC seed canary is what caught
+  it (bug-a-fpc-seed-drift-emitasmx64-forward is the same shape). }
+function ResolveHostSoname(const unversioned: AnsiString): AnsiString; forward;
+
 { ===== Procedure/function parser ===== }
 
 procedure CompilePendingLocalInits;
@@ -1006,6 +1012,13 @@ begin
     extLib := '';
     extSym := '';
     if CurTok.Kind = tkString then begin extLib := CurTok.SVal; Next; end;
+    { `external 'libfoo.so'` names a library the way source code always spells
+      it — unversioned. The loader wants the versioned soname, and on a machine
+      with only the runtime package installed the unversioned name does not
+      exist at all. Ask the host; unchanged when it has no answer, and untouched
+      for a spelling that is already versioned (feature-dynamic-soname-discovery). }
+    if (Length(extLib) > 3) and (Copy(extLib, Length(extLib) - 2, 3) = '.so') then
+      extLib := ResolveHostSoname(extLib);
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'name') then
     begin
       Next;
@@ -2153,9 +2166,138 @@ begin
     Result := False;
 end;
 
+{ ===== Host soname discovery =================================================
+
+  A library name (`libz.so`) has to become the versioned DT_NEEDED name the
+  loader will actually accept (`libz.so.1`). Until now that came from a
+  hardcoded table of eight libraries, and everything else got the unversioned
+  spelling, which links against the -dev symlink when it exists and fails on a
+  machine that only has the runtime package.
+
+  The self-hosted compiler has no execve, so pkg-config / `ldconfig -p` are out
+  of reach. But the answer they would print is in /etc/ld.so.cache, which is a
+  plain file: the loader's own name -> path index. Reading it needs no new
+  capability and no host-specific configuration.
+
+  Format (glibc's `cache_file_new`, the only one glibc has written for years):
+
+    offset  size  field
+    0       17    magic "glibc-ld.so.cache"   (not NUL-terminated)
+    17      3     version "1.1"
+    20      4     nlibs
+    24      4     len_strings
+    28      4     flags/padding
+    32      4     extension_offset
+    36      12    unused
+    48      24*n  entries: int32 flags, uint32 key, uint32 value, uint32 osver,
+                  uint64 hwcap  — key/value are FILE-relative string offsets
+
+  `key` is the soname, `value` the resolved path. We want the key only: the
+  compiler emits a DT_NEEDED name, it never opens the library.
+
+  Every read is bounds-checked against the actual file length rather than
+  trusting the header — this parses a file written by something else, and a
+  compiler that segfaults on a truncated /etc/ld.so.cache would be a worse bug
+  than the one this fixes. }
+
+function LdCacheU32(off: Integer): Int64;
+{ Little-endian u32 at 1-based `off`. Returns -1 when the read would run past
+  the end, which every caller treats as "give up on the cache". }
+begin
+  LdCacheU32 := -1;
+  if (off < 1) or (off + 3 > Length(LdCacheBody)) then Exit;
+  LdCacheU32 := Int64(Ord(LdCacheBody[off])) +
+                Int64(Ord(LdCacheBody[off + 1])) * 256 +
+                Int64(Ord(LdCacheBody[off + 2])) * 65536 +
+                Int64(Ord(LdCacheBody[off + 3])) * 16777216;
+end;
+
+procedure LdCacheLoad;
+var pth: AnsiString;
+begin
+  if LdCacheLoaded then Exit;
+  LdCacheLoaded := True;
+  LdCacheBody := '';
+  { NATIVE ONLY. The host's library set says nothing about a cross target's, and
+    silently linking an aarch64 binary against this machine's soname list is the
+    kind of wrong answer that shows up as a runtime loader error on a different
+    machine. Same rule the C include-path defaults follow. }
+  if TargetArch <> TARGET_X86_64 then Exit;
+  pth := '/etc/ld.so.cache';
+  LoadFile(pth, LdCacheBody);
+end;
+
+function LdCacheStringAt(off: Integer; var out_: AnsiString): Boolean;
+{ The NUL-terminated string at 0-based FILE offset `off`. }
+var i, n: Integer;
+begin
+  LdCacheStringAt := False;
+  out_ := '';
+  n := Length(LdCacheBody);
+  i := off + 1;                       { 0-based file offset -> 1-based string }
+  if (i < 1) or (i > n) then Exit;
+  while (i <= n) and (LdCacheBody[i] <> Chr(0)) do
+  begin
+    out_ := out_ + LdCacheBody[i];
+    Inc(i);
+  end;
+  LdCacheStringAt := i <= n;          { unterminated => the file is truncated }
+end;
+
+function LdCacheFindSoname(const unversioned: AnsiString; var soname: AnsiString): Boolean;
+{ `libz.so` -> `libz.so.1` when the host has one. Only a VERSIONED key counts:
+  an exact `libz.so` hit is the -dev symlink, which is what we would have
+  emitted anyway, so it is not an answer worth preferring over the table. }
+var nlibs, i, entOff: Integer;
+    keyOff: Int64;
+    key, want: AnsiString;
+begin
+  LdCacheFindSoname := False;
+  LdCacheLoad;
+  if Length(LdCacheBody) < 48 then Exit;
+  if Copy(LdCacheBody, 1, 17) <> 'glibc-ld.so.cache' then Exit;
+  if Copy(LdCacheBody, 18, 3) <> '1.1' then Exit;
+  nlibs := Integer(LdCacheU32(21));
+  if (nlibs <= 0) or (48 + nlibs * 24 > Length(LdCacheBody)) then Exit;
+  want := unversioned + '.';          { the version suffix must be present }
+  for i := 0 to nlibs - 1 do
+  begin
+    entOff := 49 + i * 24;            { 1-based start of entry i }
+    keyOff := LdCacheU32(entOff + 4);
+    if keyOff < 0 then Exit;
+    if not LdCacheStringAt(Integer(keyOff), key) then Exit;
+    if (Length(key) > Length(want)) and (Copy(key, 1, Length(want)) = want) then
+    begin
+      soname := key;
+      LdCacheFindSoname := True;
+      Exit;
+    end;
+  end;
+end;
+
+function ResolveHostSoname(const unversioned: AnsiString): AnsiString;
+{ The one funnel: hand it the unversioned spelling, get back what the loader on
+  this machine actually answers to, or the same string when it cannot be found.
+  Callers do not branch on whether the library is "known" — that double case is
+  precisely what the hardcoded table was. }
+var found: AnsiString;
+begin
+  ResolveHostSoname := unversioned;
+  if LdCacheFindSoname(unversioned, found) then ResolveHostSoname := found;
+end;
+
 function CSonameForStem(const stem: AnsiString; var soname: AnsiString): Boolean;
+var unver: AnsiString;
 begin
   Result := True;
+  { HOST FIRST, table second. The table is eight libraries' worth of guess about
+    what a Linux box has; /etc/ld.so.cache is what this box actually has. Asking
+    the host first is also what removes the double case — "known library" and
+    "unknown library" stop being different code paths, so the next soname bump
+    (libz.so.1 -> .2) needs no edit here at all. Falls through to the table when
+    the cache is absent, unreadable, foreign, or cross-compiling. }
+  ConcatThree('lib', LowerCase(stem), '.so', unver);
+  if LdCacheFindSoname(unver, soname) then Exit;
   if CStemMatches(stem, 'c') then soname := 'libc.so.6'
   else if CStemMatches(stem, 'm') then soname := 'libm.so.6'
   else if CStemMatches(stem, 'pthread') then soname := 'libpthread.so.0'
@@ -2165,7 +2307,7 @@ begin
   else if CStemMatches(stem, 'rt') then soname := 'librt.so.1'
   else if CStemMatches(stem, 'z') then soname := 'libz.so.1'
   else if CStemMatches(stem, 'sqlite3') then soname := 'libsqlite3.so.0'
-  else ConcatThree('lib', LowerCase(stem), '.so', soname);
+  else soname := unver;
 end;
 
 function CSonameForHeader(const name: AnsiString; var soname: AnsiString): Boolean;
@@ -2200,19 +2342,36 @@ begin
     Result := CSystemLibStemSelected(stem);
 end;
 
+function CStemOfSoname(const soname: AnsiString): AnsiString;
+{ `libz.so.1` -> `z`, `libgtk-x11-2.0.so.0` -> `gtk-x11-2.0`, `libc.so.6` -> `c`.
+  Derived, not tabulated: this used to be a nine-line if-chain that listed the
+  same sonames as CSonameForStem's table in the opposite direction, so any
+  soname outside those nine — including every one the host cache can now supply,
+  and every future version bump — answered "not selected" and silently ignored
+  `--system-libs=<that lib>`. Deriving it is the only spelling that cannot drift
+  from its sibling (devdocs/dev/normalise-dont-special-case.md). }
+var i, cut: Integer;
+    body: AnsiString;
+begin
+  body := soname;
+  if (Length(body) > 3) and (Copy(body, 1, 3) = 'lib') then
+    body := Copy(body, 4, Length(body) - 3);
+  cut := 0;
+  for i := 1 to Length(body) - 2 do
+    if (body[i] = '.') and (body[i + 1] = 's') and (body[i + 2] = 'o') then
+    begin
+      cut := i;
+      Break;
+    end;
+  if cut > 0 then body := Copy(body, 1, cut - 1);
+  CStemOfSoname := body;
+end;
+
 function CSystemLibSelectedForSoname(const soname: AnsiString): Boolean;
 begin
   Result := CUseSystemLibs;
   if Result then Exit;
-  if CaseEqual(soname, 'libc.so.6') then Result := CSystemLibStemSelected('c')
-  else if CaseEqual(soname, 'libm.so.6') then Result := CSystemLibStemSelected('m')
-  else if CaseEqual(soname, 'libpthread.so.0') then Result := CSystemLibStemSelected('pthread')
-  else if CaseEqual(soname, 'libdl.so.2') then Result := CSystemLibStemSelected('dl')
-  else if CaseEqual(soname, 'librt.so.1') then Result := CSystemLibStemSelected('rt')
-  else if CaseEqual(soname, 'libz.so.1') then Result := CSystemLibStemSelected('z')
-  else if CaseEqual(soname, 'libsqlite3.so.0') then Result := CSystemLibStemSelected('sqlite3')
-  else if CaseEqual(soname, 'libgtk-3.so.0') then Result := CSystemLibStemSelected('gtk-3')
-  else if CaseEqual(soname, 'libgtk-x11-2.0.so.0') then Result := CSystemLibStemSelected('gtk-x11-2.0');
+  Result := CSystemLibStemSelected(CStemOfSoname(soname));
 end;
 
 procedure EnableExceptionRuntime;

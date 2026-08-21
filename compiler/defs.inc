@@ -4155,6 +4155,13 @@ var
   ticket, where they are scoped to a library's own tree — a GLOBAL define switch
   is the viral-leak shape that slice exists to avoid, and shipping it here first
   would make the scoped version a migration instead of a design. }
+{ /etc/ld.so.cache, read once and kept raw. The self-hosted compiler has no
+  execve, so pkg-config and ldconfig are not reachable — but the answer they
+  would give is sitting in a file the loader itself uses, and reading a file we
+  can do. See feature-dynamic-soname-discovery. }
+  LdCacheLoaded : Boolean;
+  LdCacheBody   : AnsiString;
+
   PxxCfgLoaded    : Boolean;
   PxxCfgPath      : AnsiString;   { the file in effect, '' when none was found }
   PxxCfgHome      : AnsiString;   { `home <dir>` — a config-file PXX_HOME }

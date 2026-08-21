@@ -1598,6 +1598,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-dns-resolver-library | B | 60 | feature | DNS resolver library (`dns.pas`) with selectable backends | — |
 | feature-dotted-unit-names | A | 50 | feature | Dotted / namespace unit names in `uses` | — |
 | feature-double-to-single-narrowing | A | 50 | feature | Double literal / value → Single narrowing on assign and argument | — |
+| feature-dynamic-soname-discovery | A | 45 | feature | Dynamic soname discovery (no execve) | — |
 | feature-dynarray-copy-nested-element-type | A | 45 | feature | Copy() on a NESTED dynamic array (`array of array of T`) is refused. It used to segfault: the raw byte copy moved sub-array handles using the DEEPEST element's size. FPC supports it. | — |
 | feature-dynarray-insert-delete-managed-elements | A | 45 | feature | Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets | — |
 | feature-dynarray-insert-delete | A | 50 | feature | `Insert` / `Delete` intrinsics for dynamic arrays | — |
