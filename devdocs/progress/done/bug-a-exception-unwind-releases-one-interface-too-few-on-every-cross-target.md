@@ -118,4 +118,4 @@ native oracle on all three targets. Cross-target breadth is Track T's, against
 this sha.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 3af365f10.
