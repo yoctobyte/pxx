@@ -917,9 +917,17 @@ procedure EmitZeroLocalSlotForTarget(symIdx, nbytes: Integer);
 
   A sibling of IR_ZERO_SYM rather than a caller of it: that one is an IR node
   handled inside each backend's statement switch, and this runs while the
-  prologue is being written. Whole words only, small counts; the caller is
-  expected to know the slot size.
-  refactor-a-the-missing-layer-between-frontends-and-backends }
+  prologue is being written. Small counts; the caller is expected to know the
+  slot size.
+
+  4-BYTE SLOTS ARE REAL. The 64-bit arms used to store whole 8-byte words and
+  nothing else, so `nbytes = 4` emitted NOTHING at all -- silently, since
+  `4 div 8` is 0. That is exactly the size of a C `int` result slot, and a local
+  of that size is 4-aligned with the NEXT local four bytes above it, so rounding
+  up to 8 would have been worse than emitting nothing: it would zero a
+  neighbour. Both 64-bit arms now finish with a 4-byte store when one is due.
+  refactor-a-the-missing-layer-between-frontends-and-backends,
+  bug-c-main-without-return-exits-with-stack-garbage }
 var k, off: Integer;
 begin
   if nbytes <= 0 then Exit;
@@ -944,6 +952,8 @@ begin
     EmitI32($D2800000);                       { movz x0, #0 }
     for k := 0 to (nbytes div 8) - 1 do
       EmitI32($F9000120 or (k shl 10));       { str x0, [x9, #8k] }
+    if (nbytes mod 8) >= 4 then
+      EmitI32($B9000120 or (((nbytes div 8) * 8 div 4) shl 10));  { str w0, [x9, #4k] }
   end
   else if TargetArch = TARGET_RISCV32 then
   begin
@@ -955,8 +965,12 @@ begin
     Error('target xtensa: prologue slot zero-init not implemented '
           + '(refactor-a-the-missing-layer-between-frontends-and-backends)')
   else
+  begin
     for k := 0 to (nbytes div 8) - 1 do
       begin EmitB($48); EmitB($C7); EmitB($85); EmitI32(off + k * 8); EmitI32(0); end;
+    if (nbytes mod 8) >= 4 then
+      begin EmitB($C7); EmitB($85); EmitI32(off + (nbytes div 8) * 8); EmitI32(0); end;  { mov dword [rbp+off], 0 }
+  end;
 end;
 
 procedure EmitParamSpillsForTarget(procIdx, nparams: Integer);

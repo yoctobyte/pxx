@@ -10919,6 +10919,28 @@ begin
     analogue of the Pascal program's pre-body CompilePendingGlobalInits. }
   if name = 'main' then
   begin
+    { C99 5.1.2.2.3: reaching the closing brace of main returns 0. pxx
+      returned whatever the uninitialised result slot happened to hold -- two
+      c-testsuite programs (00206, 00212) printed exactly the right output and
+      then exited 255 and 253, and the two numbers were DIFFERENT on a
+      differently-built compiler, which is the signature of stack garbage.
+
+      Zeroing the slot here rather than synthesising a `return 0` at the end of
+      the body is what makes an explicit `return n` still win: it stores over
+      this. It is also the only version that covers `exit()`-free fall-through
+      out of a nested block, a goto to a label at the end, and every other way
+      of reaching the closing brace.
+
+      main ONLY. For any other C function, falling off the end of a value
+      returning function is undefined behaviour and gcc leaves garbage too; main
+      is the one case the standard defines.
+      bug-c-main-without-return-exits-with-stack-garbage }
+    if (Procs[procIdx].RetSymIdx >= 0) and
+       (Syms[Procs[procIdx].RetSymIdx].TypeKind <> tyRecord) and
+       (not Syms[Procs[procIdx].RetSymIdx].IsArray) and
+       (TypeSize(Syms[Procs[procIdx].RetSymIdx].TypeKind) <= 8) then
+      EmitZeroLocalSlotForTarget(Procs[procIdx].RetSymIdx,
+                                 TypeSize(Syms[Procs[procIdx].RetSymIdx].TypeKind));
     CompilePendingGlobalInits;
     CEmitDeferredCAggInits;
   end;

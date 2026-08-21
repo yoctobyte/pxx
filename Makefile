@@ -6875,6 +6875,16 @@ test-core: $(COMPILER)
 	# i386/arm32/riscv32 -- rows 3 and 4 read 24/32/31 there, and a hard-coded
 	# 64 would have been wrong on three targets. ffs and parity are DEFINED at
 	# zero, so they are not routed through ctz/popcount. Matches gcc.
+	@# C99 5.1.2.2.3: reaching the closing brace of main is `return 0`. pxx
+	@# returned the uninitialised result slot -- right output, garbage EXIT CODE,
+	@# and a different one per compiler build. The `test` below checks the exit
+	@# status, which is the whole point: c-testsuite 00206 and 00212 fail this
+	@# way and nothing else. bug-c-main-without-return-exits-with-stack-garbage
+	./$(COMPILER) test/c_main_no_return.c $(TESTTMP)/c_main_no_return26
+	$(TESTTMP)/c_main_no_return26 > $(TESTTMP)/c_main_no_return26.out; \
+	  rc=$$?; test "$$rc" = "0" \
+	  || { echo "c_main_no_return: FAIL - fell off the end of main and exited $$rc, want 0"; exit 1; }
+	test "$$(cat $(TESTTMP)/c_main_no_return26.out)" = "$$(printf '1\n1\n1\ntail')"
 	./$(COMPILER) test/c_builtin_bits.c $(TESTTMP)/c_builtin_bits26
 	test "$$($(TESTTMP)/c_builtin_bits26)" = "$$(printf '8 20 4\n16 44 4\n56 7 1\n64 63\n0 1 9 0\n33 8\n0 1 0 1\n3412 44332211 8877665544332211')"
 	@./$(COMPILER) -Futest test/test_c_cross_ns_arity_fail.pas $(TESTTMP)/c_cross_ns_arity_fail26 2>&1 \
