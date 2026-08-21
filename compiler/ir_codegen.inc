@@ -9505,7 +9505,21 @@ begin
       Result handle is skipped (ownership transfers to the caller). }
     if CurProc >= 0 then
       for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
+        begin
+          { COM/ARC interface local: _Release the held reference (nil-safe).
+            riscv32 was the only target without this arm, which is why it
+            answered `freed=1` where every other target said 3, across seven
+            interface tests — a by-value interface parameter, an as-cast temp
+            and a call-result temp are all locals in a slot nothing walked.
+            bug-a-riscv32-drops-interface-releases-in-six-shapes }
+          EmitSlotAddrRISCV32(reg_a0, i);        { a0 = interface slot address }
+          EmitLoadImmRISCV32(reg_a1, SymTR[i].RecId - REC_UCLASS_BASE);
+          procIdx := FindProc('PXXIntfRelease');
+          if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
            Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
            (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
         begin
@@ -9535,6 +9549,40 @@ begin
           EmitLoadVarRISCV32(i);                 { a0 = handle }
           procIdx := FindProc('PXXStrDecRef');
           if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                (Syms[i].TypeKind = tyVariant) and not Syms[i].IsArray then
+        begin
+          { Variant local: clear (releases any managed payload). a0 = address. }
+          EmitSlotAddrRISCV32(reg_a0, i);
+          procIdx := FindProc('PXXVarClear');
+          if procIdx < 0 then Error('compiler error: PXXVarClear not found');
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
+        begin
+          { Promotable-int local/temp: release a heap-tier payload at scope exit
+            (bug-a-runtime-variant-heap-grows-unbounded). }
+          procIdx := FindProc('PXXPromoClear');
+          if procIdx >= 0 then
+          begin
+            EmitSlotAddrRISCV32(reg_a0, i);
+            EmitCallProc(procIdx);
+          end;
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+                RecordHasManagedFields(SymTR[i].RecId) then
+        begin
+          { Record-with-managed-fields local: release each managed field via the
+            portable helper. a0 = record address, a1 = layout descriptor. }
+          EmitSlotAddrRISCV32(reg_a0, i);
+          EmitLoadDataRefRISCV32(reg_a1,
+            -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
+          procIdx := FindProc('PXXRecordRelease');
+          if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
           EmitCallProc(procIdx);
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
