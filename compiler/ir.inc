@@ -6249,7 +6249,17 @@ begin
         ADDRESS (parser guarantees addressability) — safe across the rebuild:
         the old buffer stays intact until the assignment wrapper swaps the
         handle, so even `Insert(a[k], a, i)` reads valid memory. }
-      if (dcElemTk = tyRecord) or (dcElemTk = tySet) then
+      if ASTIVal[node] = 1 then
+      begin
+        { Array-SPLICE form: the "value" is a whole dynamic array, and what we
+          keep is its DATA pointer -- an rvalue dyn-array ident lowers to the
+          handle itself (see AN_IDENT). Nothing element-typed is captured
+          because nothing is stored into a gap; PXXDynInsArrFill lays the
+          source's elements straight into the fresh buffer. }
+        dcValTmp := AllocVar('', tyPointer);
+        IRAppend(IR_STORE_SYM, dcValTmp, IRLowerAST(dcCntAst), -1, 0, Ord(tyPointer));
+      end
+      else if (dcElemTk = tyRecord) or (dcElemTk = tySet) then
       begin
         dcValTmp := AllocVar('', tyPointer);
         IRAppend(IR_STORE_SYM, dcValTmp, IRLowerAddress(dcCntAst), -1, 0, Ord(tyPointer));
@@ -6275,6 +6285,18 @@ begin
       dcNewLenTmp := AllocVar('', tyInteger);
       IRAppend(IR_STORE_SYM, dcNewLenTmp, IRAppendCall(procIdx, first, -1, Ord(tyNativeInt)),
         -1, 0, Ord(tyInteger));
+      if ASTIVal[node] = 1 then
+      begin
+        { Splice: newLen := len(dest) + len(source). A nil source handle is
+          length 0 through PXXDynLen, so Insert of an empty array is a copy. }
+        first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcValTmp, -1, -1, 0, Ord(tyPointer)),
+                   -1, -1, 0, Ord(tyPointer));
+        IRAppend(IR_STORE_SYM, dcNewLenTmp,
+          IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, dcNewLenTmp, -1, -1, 0, Ord(tyInteger)),
+            IRAppendCall(procIdx, first, -1, Ord(tyNativeInt)), Ord(tkPlus), 0, Ord(tyInteger)),
+          -1, 0, Ord(tyInteger));
+      end
+      else
       IRAppend(IR_STORE_SYM, dcNewLenTmp,
         IRAppend(IR_BINOP, IRAppend(IR_LOAD_SYM, dcNewLenTmp, -1, -1, 0, Ord(tyInteger)),
           IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)), Ord(tkPlus), 0, Ord(tyInteger)),
@@ -6312,8 +6334,11 @@ begin
       dcSetlenVal := IRLowerAST(dcSlCall);
       IRIVal[dcSetlenVal] := 1;
 
-      { gap := PXXDynInsFill(destData, srcData, index, elemSize). }
-      procIdx := FindProc('PXXDynInsFill');
+      { gap := PXXDynInsFill(destData, srcData, index, elemSize), or for the
+        splice form PXXDynInsArrFill(destData, srcData, insData, index,
+        elemSize) -- same call shape with the source array threaded in third. }
+      if ASTIVal[node] = 1 then procIdx := FindProc('PXXDynInsArrFill')
+      else procIdx := FindProc('PXXDynInsFill');
       if procIdx < 0 then Error('compiler error: PXXDynInsFill not found');
       dcDestData := AllocVar('', tyPointer);
       IRAppend(IR_STORE_SYM, dcDestData,
@@ -6323,6 +6348,12 @@ begin
       last := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcSrcTmp, -1, -1, 0, Ord(tyPointer)),
                 -1, -1, 0, Ord(tyPointer));
       IRB[first] := last;
+      if ASTIVal[node] = 1 then
+      begin
+        argNode := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcValTmp, -1, -1, 0, Ord(tyPointer)),
+                     -1, -1, 0, Ord(tyPointer));
+        IRB[last] := argNode; last := argNode;             { insData }
+      end;
       argNode := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcIdxTmp, -1, -1, 0, Ord(tyInteger)),
                    -1, -1, 0, Ord(tyInteger));
       IRB[last] := argNode; last := argNode;
@@ -6385,7 +6416,13 @@ begin
         value for the array, releases the nil gap). Records/sets: raw
         element-size memory copy from the captured address (non-managed only,
         parser-enforced). }
-      if (dcElemTk = tyRecord) and RecordHasManagedFields(dcElemRec) then
+      if ASTIVal[node] = 1 then
+      begin
+        { Splice: the inserted elements are already in the buffer, and the
+          retain walk above covered them along with the kept ones. No gap
+          store, so nothing to do here. }
+      end
+      else if (dcElemTk = tyRecord) and RecordHasManagedFields(dcElemRec) then
         { Managed-field record: ARC-correct copy — retain the source's fields,
           release the destination's (the gap is fresh zeros, so nil-safe), then
           bulk-copy. The retain is what the new buffer's ownership needs. }

@@ -4262,6 +4262,7 @@ var
   valTmpSym, valTmpAssign, valTmpIdent: Integer;
   miArg, miEmpty: Integer; miIsFin: Boolean;   { Initialize/Finalize }
   pfIsPF: Boolean; pfK, pfDepth: Integer;
+  insSrcSym: Integer;   { Insert(srcArr, arr, i): the source array's symbol, else -1 }
 begin
   { `parallel for` soft keyword: `parallel` lexes as a plain ident, so it is a
     parallel-for only when followed by `for`, or by a policy clause `(...)` whose
@@ -5091,14 +5092,38 @@ begin
           if (Syms[i].ElemType = tyString) or
              (SymDynDepth[i] > 1) or (SymElemDynDepth[i] > 0) then
             Error('Insert: frozen-string or nested element type not yet supported for dynamic-array Insert');
-          if ((Syms[i].ElemType = tyRecord) or (Syms[i].ElemType = tySet)) and
+          { FPC's array-SPLICE form Insert(srcArr, arr, index): the first
+            argument is itself a dynamic array and ALL of its elements go in.
+            Before this existed the splice compiled as the one-element form and
+            stored the source's HANDLE as if it were an element -- `Insert(t, s,
+            1)` on two `array of Integer` printed `10 -1428160432 11 12` where
+            FPC prints `10 90 91 11 12`. Silent wrong output, so a source array
+            whose element type does NOT match is refused rather than left to
+            mean something plausible. }
+          insSrcSym := -1;
+          if (ASTKind[exprNode] = AN_IDENT) and (ASTIVal[exprNode] >= 0) and
+             Syms[ASTIVal[exprNode]].IsArray and (Syms[ASTIVal[exprNode]].ArrLen = -1) then
+          begin
+            insSrcSym := ASTIVal[exprNode];
+            if (Syms[insSrcSym].ElemType <> Syms[i].ElemType) or
+               ((Syms[i].ElemType = tyRecord) and
+                (Syms[insSrcSym].ElemRecName <> Syms[i].ElemRecName)) or
+               (SymDynDepth[insSrcSym] <> SymDynDepth[i]) or
+               (SymElemDynDepth[insSrcSym] <> SymElemDynDepth[i]) then
+              Error('Insert: the source array''s element type differs from the destination''s');
+          end;
+          if (insSrcSym < 0) and
+             ((Syms[i].ElemType = tyRecord) or (Syms[i].ElemType = tySet)) and
              not (ASTKind[exprNode] in [AN_IDENT, AN_FIELD, AN_INDEX, AN_DEREF]) then
             Error('Insert: record/set value must be a variable, field, element or dereference (addressable)');
           Expect(tkComma, ','); ParseExpr; opNode := CurASTNode;      { index }
           Expect(tkRParen, ')');
           if FindProc('PXXDynInsFill') < 0 then
             Error('Insert: dynamic-array helper unavailable (needs the builtin unit; not on ESP)');
+          if (insSrcSym >= 0) and (FindProc('PXXDynInsArrFill') < 0) then
+            Error('Insert: array-splice helper unavailable (needs the builtin unit; not on ESP)');
           stepsNode := AllocNode(AN_DYN_INSERT);
+          if insSrcSym >= 0 then ASTIVal[stepsNode] := 1 else ASTIVal[stepsNode] := 0;
           ASTLeft[stepsNode] := valNode;
           argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := exprNode;   { value }
           lastArg := AllocNode(AN_ARG); ASTLeft[lastArg] := opNode;   { index }

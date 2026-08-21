@@ -5107,7 +5107,7 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_div_zero_re20026 mod || echo "exit=$$?")" = "$$(printf '14 2 -14\nbefore\nRuntime error 200 (division by zero)\nexit=200')"
 	# dynamic-array Insert/Delete intrinsics (FPC clamp semantics, fresh-temp refcount balance)
 	./$(COMPILER) test/test_dynarray_insert_delete.pas $(TESTTMP)/test_dynarray_insert_delete26
-	test "$$($(TESTTMP)/test_dynarray_insert_delete26 | tail -1)" = "total ok 35 / 35"
+	test "$$($(TESTTMP)/test_dynarray_insert_delete26 | tail -1)" = "total ok 49 / 49"
 	# frozen-string Result is per-call (reentrant) on direct/virtual/indirect calls
 	./$(COMPILER) test/test_frozen_string_reentrant.pas $(TESTTMP)/test_frozen_string_reentrant26
 	test "$$($(TESTTMP)/test_frozen_string_reentrant26 | tail -1)" = "total ok 4 / 4"
@@ -10773,7 +10773,7 @@ test-quick: $(COMPILER)
 	./$(COMPILER) test/test_dynarray_torture.pas $(TESTTMP)/smoke_dyntorture26
 	test "$$($(TESTTMP)/smoke_dyntorture26 | tail -1)" = "total ok 27 / 27"
 	./$(COMPILER) test/test_dynarray_insert_delete.pas $(TESTTMP)/smoke_dynid26
-	test "$$($(TESTTMP)/smoke_dynid26 | tail -1)" = "total ok 35 / 35"
+	test "$$($(TESTTMP)/smoke_dynid26 | tail -1)" = "total ok 49 / 49"
 	./$(COMPILER) test/test_frozen_string_reentrant.pas $(TESTTMP)/smoke_frozen26
 	test "$$($(TESTTMP)/smoke_frozen26 | tail -1)" = "total ok 4 / 4"
 	./$(COMPILER) test/test_ansistring.pas $(TESTTMP)/smoke_ansistr26

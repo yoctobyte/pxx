@@ -1,11 +1,12 @@
 ---
 prio: 45  # auto
+owner: agent-A
 ---
 
 # Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets
 
 - **Type:** feature (compiler intrinsic — extension) — Track A
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-07-02, follow-up filed while landing
   [[feature-dynarray-insert-delete]] (v132) per its staged plan.
 

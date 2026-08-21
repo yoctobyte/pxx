@@ -10,9 +10,11 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method | N | 70 | bug | A callable value is silently accepted where `str` is declared, and no longer compares equal to itself — bisected to `9bbbbef6c` | — |
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| feature-dynarray-insert-delete-managed-elements | A | 45 | feature | Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets | — |
 
 ## unfinished (21)
 
@@ -54,7 +56,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (272)
+## backlog (271)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -193,7 +195,6 @@ _none_
 | feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-dynamic-include-paths-config | A | 45 | feature | Dynamic Include Paths, Configuration Files, and System Scanner | — |
 | feature-dynamic-soname-discovery | A | 45 | feature | Dynamic soname discovery (no execve) | — |
-| feature-dynarray-insert-delete-managed-elements | A | 45 | feature | Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets | — |
 | feature-embed-dwscript-rtti | P | 45 | feature | DWScript — compile under pxx + RTTI auto-bind (scripting stress test) | — |
 | feature-embed-pascal-script | P | 45 | feature | RemObjects Pascal Script — compile under pxx (embeddable scripting) | — |
 | feature-emission-size-dce | A | 45 | feature | Emission size — reachability-gated dead-code elimination (umbrella) | — |
@@ -661,7 +662,6 @@ _none_
 - [p 45] [A] feature-dynamic-compiler-tables
 - [p 45] [A] feature-dynamic-include-paths-config
 - [p 45] [A] feature-dynamic-soname-discovery
-- [p 45] [A] feature-dynarray-insert-delete-managed-elements
 - [p 45] [P] feature-embed-dwscript-rtti
 - [p 45] [P] feature-embed-pascal-script
 - [p 45] [A] feature-emission-size-dce

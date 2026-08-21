@@ -361,7 +361,14 @@ const
   AN_DYN_INSERT    = 75; { Insert(value, arr, index) over a dynamic array → fresh
                            array of T with value inserted (assigned back via
                            AN_ASSIGN like AN_DYN_DELETE). Left = source array
-                           ident; Right = AN_ARG chain [value, index]. }
+                           ident; Right = AN_ARG chain [value, index].
+                           IVal 1 = FPC's array-SPLICE form Insert(srcArr, arr,
+                           index): the "value" is a whole dynamic array of the
+                           same element type and every one of its elements goes
+                           in, so there is no gap and no gap store -- the fill
+                           helper is PXXDynInsArrFill and the retain walk over
+                           the fresh buffer covers the inserted elements along
+                           with the kept ones. IVal 0 = the one-element form. }
   AN_CLASS_CAST    = 63; { TClass(expr): hard reinterpret class typecast (no
                            runtime check, unlike AN_AS_CAST). Left = instance
                            expr; ASTIVal = target class ci. Classes are pointers

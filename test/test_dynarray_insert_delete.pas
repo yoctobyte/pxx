@@ -208,6 +208,98 @@ begin
   Chk(20, (Length(a) = 1) and (a[0] = 10));
 end;
 
+{ ---- FPC's array-SPLICE Insert(srcArr, arr, index) ---- }
+{ Before this form existed the splice compiled as the ONE-ELEMENT Insert and
+  stored the source array's HANDLE as if it were an element: two `array of
+  Integer` printed `10 <garbage> 11 12` where FPC prints `10 90 91 11 12`.
+  Silent wrong output, which is why the mismatched-element-type case is now a
+  compile error rather than something plausible. Every expectation below is
+  FPC 3.2.2's own output. }
+procedure SpliceInts;
+var a, b: array of Integer; idx: Integer;
+begin
+  { the whole clamping range: below 0, inside, past the end }
+  SetLength(a, 3); a[0] := 10; a[1] := 11; a[2] := 12;
+  SetLength(b, 2); b[0] := 90; b[1] := 91;
+  Insert(b, a, -2);
+  Chk(36, (Length(a) = 5) and (a[0] = 90) and (a[1] = 91) and (a[2] = 10) and (a[4] = 12));
+  SetLength(a, 3); a[0] := 10; a[1] := 11; a[2] := 12;
+  Insert(b, a, 1);
+  Chk(37, (Length(a) = 5) and (a[0] = 10) and (a[1] = 90) and (a[2] = 91) and
+          (a[3] = 11) and (a[4] = 12));
+  SetLength(a, 3); a[0] := 10; a[1] := 11; a[2] := 12;
+  Insert(b, a, 99);
+  Chk(38, (Length(a) = 5) and (a[2] = 12) and (a[3] = 90) and (a[4] = 91));
+  { an empty source inserts nothing; an empty destination becomes the source }
+  SetLength(a, 3); a[0] := 1; a[1] := 2; a[2] := 3;
+  SetLength(b, 0);
+  Insert(b, a, 1);
+  Chk(39, (Length(a) = 3) and (a[0] = 1) and (a[2] = 3));
+  SetLength(a, 0);
+  SetLength(b, 2); b[0] := 7; b[1] := 8;
+  Insert(b, a, 0);
+  Chk(40, (Length(a) = 2) and (a[0] = 7) and (a[1] = 8));
+  { self-splice: the old buffer stays intact until the handle swap, so the
+    source is still readable while the fresh one is being filled }
+  SetLength(a, 3); a[0] := 4; a[1] := 5; a[2] := 6;
+  Insert(a, a, 1);
+  Chk(41, (Length(a) = 6) and (a[0] = 4) and (a[1] = 4) and (a[2] = 5) and
+          (a[3] = 6) and (a[4] = 5) and (a[5] = 6));
+end;
+
+procedure SpliceManaged;
+var sa, sb: array of AnsiString; i, k: Integer;
+begin
+  SetLength(sa, 3); sa[0] := 'aa'; sa[1] := 'bb'; sa[2] := 'cc';
+  SetLength(sb, 2); sb[0] := 'XX'; sb[1] := 'YY';
+  Insert(sb, sa, 0);
+  Chk(42, (Length(sa) = 5) and (sa[0] = 'XX') and (sa[1] = 'YY') and (sa[2] = 'aa'));
+  SetLength(sa, 3); sa[0] := 'aa'; sa[1] := 'bb'; sa[2] := 'cc';
+  Insert(sb, sa, 1);
+  Chk(43, (Length(sa) = 5) and (sa[0] = 'aa') and (sa[1] = 'XX') and
+          (sa[2] = 'YY') and (sa[3] = 'bb') and (sa[4] = 'cc'));
+  SetLength(sa, 3); sa[0] := 'aa'; sa[1] := 'bb'; sa[2] := 'cc';
+  Insert(sb, sa, 3);
+  Chk(44, (Length(sa) = 5) and (sa[3] = 'XX') and (sa[4] = 'YY'));
+  SetLength(sa, 2); sa[0] := 'p'; sa[1] := 'q';
+  Insert(sa, sa, 1);
+  Chk(45, (Length(sa) = 4) and (sa[0] = 'p') and (sa[1] = 'p') and
+          (sa[2] = 'q') and (sa[3] = 'q'));
+  { churn: the inserted elements are retained by the fresh buffer along with
+    the kept ones, so 20000 splices neither leak nor double-free }
+  SetLength(sb, 2); sb[0] := 'z1'; sb[1] := 'z2';
+  k := 0;
+  for i := 1 to 20000 do
+  begin
+    SetLength(sa, 1); sa[0] := 'head';
+    Insert(sb, sa, 1);
+    k := k + Length(sa) + Length(sa[2]);
+  end;
+  Chk(46, (k = 100000) and (sa[0] = 'head') and (sa[1] = 'z1') and (sa[2] = 'z2'));
+end;
+
+procedure SpliceRecsAndSets;
+var
+  ma, mb: array of TMRec;
+  ra, rb: array of TPt;
+  qa, qb: array of TDays;
+begin
+  SetLength(ma, 2); ma[0].Id := 1; ma[0].Name := 'one'; ma[1].Id := 2; ma[1].Name := 'two';
+  SetLength(mb, 1); mb[0].Id := 9; mb[0].Name := 'nine';
+  Insert(mb, ma, 1);
+  Chk(47, (Length(ma) = 3) and (ma[0].Name = 'one') and (ma[1].Name = 'nine') and
+          (ma[1].Id = 9) and (ma[2].Name = 'two'));
+  SetLength(ra, 2); ra[0].x := 1; ra[0].y := 2; ra[1].x := 3; ra[1].y := 4;
+  SetLength(rb, 1); rb[0].x := 8; rb[0].y := 9;
+  Insert(rb, ra, 1);
+  Chk(48, (Length(ra) = 3) and (ra[1].x = 8) and (ra[1].y = 9) and (ra[2].x = 3));
+  SetLength(qa, 2); qa[0] := [dMo, dTu]; qa[1] := [dWe];
+  SetLength(qb, 1); qb[0] := [dTh, dFr];
+  Insert(qb, qa, 1);
+  Chk(49, (Length(qa) = 3) and (dMo in qa[0]) and (dTh in qa[1]) and (dFr in qa[1]) and
+          (dWe in qa[2]) and not (dTh in qa[0]));
+end;
+
 begin
   okCount := 0;
   DeleteBasics;
@@ -222,5 +314,8 @@ begin
   ManagedElems;
   ManagedRecElems;
   SetElems;
-  writeln('total ok ', okCount, ' / 35');
+  SpliceInts;
+  SpliceManaged;
+  SpliceRecsAndSets;
+  writeln('total ok ', okCount, ' / 49');
 end.
