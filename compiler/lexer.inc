@@ -71,6 +71,7 @@ begin
   while n < need do n := n * 2;
   SetLength(Tokens, n);          SetLength(TokPackRecords, n);  SetLength(TokQChecks, n);
   SetLength(TokRChecks, n);      SetLength(TokIChecks, n);      SetLength(TokScopedEnums, n);
+  SetLength(TokNChecks, n);
   SetLength(CAttrFlags, n);      SetLength(CAttrAlignValues, n);
   TokCapacity := n;
 end;
@@ -708,6 +709,8 @@ begin
   QChecksVal := False;
   RChecksVal := False;
   StmtRChecks := False;
+  NChecksVal := NILCHK_DEFAULT;
+  StmtNChecks := NILCHK_DEFAULT;
   { DEFAULT ON per the user's dialect call (2026-07-15): code expects FPC's
     {$I+} and can always turn it off — feature-pascal-io-checks-i-plus. }
   IChecksVal := True;
@@ -1661,6 +1664,16 @@ begin
       else if CaseEqual(name, 'off') then RChecksVal := False
       else Error('rangechecks requires on or off');
     end
+    else if CaseEqual(command, 'nilchecks') then
+    begin
+      { ON also turns on the site classes that are off by DEFAULT (bare `p^`);
+        OFF turns off the ones that are on by default (calls). There is no way
+        back to "default" mid-file and that is fine -- the author who wrote the
+        directive has an opinion. feature-a-emitted-nil-checks }
+      if CaseEqual(name, 'on') then NChecksVal := NILCHK_ON
+      else if CaseEqual(name, 'off') then NChecksVal := NILCHK_OFF
+      else Error('nilchecks requires on or off');
+    end
     else if CaseEqual(command, 'iochecks') then
     begin
       if CaseEqual(name, 'on') then IChecksVal := True
@@ -2502,6 +2515,7 @@ begin
     TokScopedEnums[TokCount] := ScopedEnumsVal;
     TokQChecks[TokCount] := QChecksVal;
     TokRChecks[TokCount] := RChecksVal;
+    TokNChecks[TokCount] := Byte(NChecksVal);
     TokIChecks[TokCount] := IChecksVal;
     sval := CurTok.SVal;
     len  := Length(sval);
@@ -2560,6 +2574,7 @@ begin
     TokScopedEnums[TokCount] := ScopedEnumsVal;
     TokQChecks[TokCount] := QChecksVal;
     TokRChecks[TokCount] := RChecksVal;
+    TokNChecks[TokCount] := Byte(NChecksVal);
     TokIChecks[TokCount] := IChecksVal;
     sval := CurTok.SVal;
     len  := Length(sval);

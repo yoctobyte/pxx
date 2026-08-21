@@ -521,6 +521,9 @@ function IRLowerVariantAsScalar(argAST: Integer; target: TTypeKind): Integer; fo
 function IRVariantAddr(argAST: Integer): Integer; forward;
 function IRMethodRefCode(mref: Integer): Integer; forward;
 function IRMaterializeIntfCast(node: Integer; doTrap: Boolean): Integer; forward;
+{ defined near IRWrapChkBounds, used from IRLowerAddress's AN_DEREF arm far above it
+  — the FPC seed needs the forward (bug-a-fpc-seed-drift-emitasmx64-forward). }
+function IRWrapNilChk(ptrVal, astNode: Integer; defaultOn: Boolean): Integer; forward;
 
 procedure IRLowerCleanupToDepth(targetDepth: Integer);
 var current, bodyNode, savedDepth: Integer;
@@ -1758,7 +1761,16 @@ begin
   end
   else if ASTKind[node] = AN_DEREF then
   begin
-    Result := IRLowerAST(ASTLeft[node]);
+    { Site class 4: a bare `p^`. Default OFF -- this is a test in whatever loop
+      the deref sits in, and on the PC targets the MMU already reports it at the
+      right instruction, so the check buys a message rather than a diagnosis.
+      {$NILCHECKS ON} turns it on where it is worth paying for: an MCU with no
+      signal runtime, or a region under suspicion.
+
+      ONE site covers reads, writes and bases (`p^`, `p^.f`, `p^[i]`), because
+      IRLowerDestAddress and the AN_INDEX/AN_FIELD/AN_DEREF value arm all route
+      their address through here -- see normalise-dont-special-case.md. }
+    Result := IRWrapNilChk(IRLowerAST(ASTLeft[node]), node, False);
   end
   else if ASTKind[node] = AN_PTR_CAST then
   begin
@@ -4574,17 +4586,40 @@ begin
   Result := IRAppendCall(pi, a1, -1, Ord(tyInt64));
 end;
 
-function IRWrapNilChk(ptrVal: Integer): Integer;
-{ Wrap a call target in PXXNilChkPtr(p) — returns it unchanged unless it is nil,
-  in which case PXXNilRef reports (or, with sysutils in, raises a catchable
+function NilChkWanted(astNode: Integer; defaultOn: Boolean): Boolean;
+{ Resolve {$NILCHECKS} against the SITE CLASS's default. The directive is
+  tri-state because one directive governs two classes whose defaults disagree:
+  a nil receiver / procvar / interface CALL is checked by default (~2% measured,
+  and the fault it replaces lands frames away from the call or nowhere at all),
+  a bare `p^` is not (a test in a possibly-tight loop, and the MMU already
+  catches it on the PC targets). --no-nil-check is the master off for both.
+  feature-a-emitted-nil-checks }
+begin
+  if NoNilCheck then begin Result := False; Exit; end;
+  if (astNode < 0) or (astNode >= ASTNodeCount) then begin Result := defaultOn; Exit; end;
+  if ASTNilChk[astNode] = NILCHK_ON then Result := True
+  else if ASTNilChk[astNode] = NILCHK_OFF then Result := False
+  else Result := defaultOn;
+end;
+
+function IRWrapNilChk(ptrVal, astNode: Integer; defaultOn: Boolean): Integer;
+{ Guard a pointer: returns it unchanged unless it is nil, in which case
+  PXXNilRef reports (or, with sysutils in, raises a catchable
   EAccessViolation) from ORDINARY call context, before the fault.
+
+  `astNode` is the site's AST node and `defaultOn` its site class's default;
+  together they answer NilChkWanted above. Passing the node rather than a
+  pre-computed Boolean keeps the {$NILCHECKS} lookup in ONE place — the four
+  call sites and the deref site would otherwise each own a copy of the same
+  three-way test.
 
   Pure-Pascal guard, exactly like IRWrapChkBounds above and for the same reason:
   every target gets it for free, including the ones that have no signal runtime
   to catch a fault with (xtensa always; riscv32 under --esp-profile=bare). There
   the MMU is not a worse mechanism, it is an absent one.
 
-  Passthrough in three cases, all deliberate: --no-nil-check, a build without
+  Passthrough in three cases, all deliberate: the check is not wanted here
+  (NilChkWanted: --no-nil-check, or {$NILCHECKS} disagreeing with the default), a build without
   builtinheap (FindProc misses, same lax fallthrough the range checks take), and
   a value the front end already knows is not nil — which is not modelled yet and
   is where the cost goes when it is (the ticket's own "unmeasured" list).
@@ -4592,7 +4627,7 @@ function IRWrapNilChk(ptrVal: Integer): Integer;
 var pi, tmp, chk, znode, isnil, endLbl, seq, tk: Integer;
 begin
   Result := ptrVal;
-  if NoNilCheck then Exit;
+  if not NilChkWanted(astNode, defaultOn) then Exit;
   pi := FindProc('PXXNilRef');
   if pi < 0 then Exit;
   tk := IRTk[ptrVal];
@@ -10195,7 +10230,7 @@ begin
            (Procs[cpi].Params[0].TypeKind = tyClass) and
            (not Procs[cpi].Params[0].IsRef) and
            CaseEqual(Procs[cpi].Params[0].Name, 'Self') then
-          value := IRWrapNilChk(value);
+          value := IRWrapNilChk(value, node, True);
 
         { A materialised managed-string argument (a literal, concat, char/string
           coercion, or function result — anything that is not an existing lvalue)
@@ -10619,7 +10654,7 @@ begin
         JUMPS TO ADDRESS 0, so there is no faulting PC, no frame, and a
         backtrace that names nothing. Checked here — at the site, where the
         compiler still knows the line. feature-a-emitted-nil-checks }
-      callVal := IRWrapNilChk(callVal);
+      callVal := IRWrapNilChk(callVal, node, True);
       Result := IRAppend(IR_CALL_IND, callVal, first, ASTSLen[node], cpi, ASTTk[node]);
       if ABIRetViaHiddenDestProc(cpi) then
         IRCallDest[Result] := IRBuildHiddenDest(cpi);
@@ -10672,7 +10707,7 @@ begin
         interface faults inside a runtime helper, where the fault names the
         helper and not the call site the programmer wrote. }
       IRAppend(IR_STORE_SYM, intfSelfSym,
-               IRWrapNilChk(IRAppend(IR_LOAD_MEM, IRLowerAddress(ASTRight[node]), -1, -1, 0, Ord(tyPointer))),
+               IRWrapNilChk(IRAppend(IR_LOAD_MEM, IRLowerAddress(ASTRight[node]), -1, -1, 0, Ord(tyPointer)), node, True),
                -1, 0, Ord(tyPointer));
       { imt := PXXIntfIMTOf(self, intfCi) — resolved from the instance's RTTI blob,
         which is what lets the VALUE stay a single pointer. Done BEFORE the explicit
@@ -11645,7 +11680,7 @@ begin
             instance" is the same question the folding work in the ticket has to
             answer properly (a provably-non-nil receiver — Self in a method chain,
             a just-constructed object), and one predicate is the point. }
-          value := IRWrapNilChk(IRLowerAST(ASTLeft[item]))
+          value := IRWrapNilChk(IRLowerAST(ASTLeft[item]), node, True)
         else
           value := IRLowerCallArg(cpi, pathIdx, ASTLeft[item], isRefArg);
         { Same argument conversions as the direct AN_CALL path — the virtual

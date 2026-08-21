@@ -8052,6 +8052,13 @@ test-core: $(COMPILER)
 	@# inside a runtime helper, frames away from the call the programmer wrote.
 	./$(COMPILER) test/test_nil_check_interface.pas $(TESTTMP)/test_nil_check_interface26
 	test "$$($(TESTTMP)/test_nil_check_interface26)" = "$$(printf 'go\nval=7\ncaught proc: Access violation (nil reference)\ncaught func: Access violation (nil reference)\ncorba=9\ncaught corba: Access violation (nil reference)\nstill running')"
+	@# Site class 4 + the {$NILCHECKS} directive. Four corners in one program:
+	@# deref default (unchecked), deref under {$nilchecks on} (read AND write
+	@# raise), call default (checked, class 2), call under {$nilchecks off}
+	@# (NOT checked -- the escape hatch a hot loop needs). The directive is
+	@# tri-state precisely because those two defaults disagree.
+	./$(COMPILER) test/test_nil_check_directive.pas $(TESTTMP)/test_nil_check_directive26
+	test "$$($(TESTTMP)/test_nil_check_directive26)" = "$$(printf '3\n3\ncaught read: Access violation (nil reference)\ncaught write: Access violation (nil reference)\ngo\ndone')"
 	@# --no-nil-check on BOTH, and it is load-bearing: this file's subject is the
 	@# SIGNAL path, and since feature-a-emitted-nil-checks the compiler catches
 	@# `nilproc` at the call site before any fault happens — so without the flag

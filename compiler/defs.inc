@@ -1457,6 +1457,12 @@ const
     string table -- so the headroom below costs a few KB of BSS, not the megabytes
     MAX_TEMPLATE_TOKENS costs. Raise these when a corpus hits them; leave the
     token buffers alone unless the token buffers are what overflowed. }
+  { {$NILCHECKS} tri-state. DEFAULT is a real third value, not "off": the two
+    site classes resolve it in opposite directions (see NChecksVal above). }
+  NILCHK_DEFAULT = 0;
+  NILCHK_ON      = 1;
+  NILCHK_OFF     = 2;
+
   MAX_TEMPLATES = 128;
   MAX_TEMPLATE_PARAMS = 4;   { type parameters per generic template (<TKey, TData>) }
   MAX_TEMPLATE_TOKENS = 65536;  { FPC fgl alone buffers ~14k tokens of generic method bodies }
@@ -3014,6 +3020,16 @@ var
   IChecksVal : Boolean;      { current {$I±} / {$IOCHECKS} lexer state (default off — pxx-lax; FPC defaults ON, flip pending the user) }
   StmtRChecks : Boolean;     { {$R} state AT THE CURRENT STATEMENT'S FIRST TOKEN — a directive between the RHS and the statement end must NOT govern that assign (FPC semantics, trange4.pp: `x:=y {$R+} end`). Set on ParseStatementAST entry; AllocNode(AN_ASSIGN) reads it. }
   StmtIChecks : Boolean;     { {$I} state at the current statement's first token (same anchor rule as StmtRChecks) }
+  { {$NILCHECKS ON/OFF} — TRI-state on purpose (NILCHK_DEFAULT/_ON/_OFF), unlike
+    every other check directive here, because one directive governs two site
+    classes with OPPOSITE defaults: a check on a CALL (nil receiver / procvar /
+    interface) is on by default and costs ~2% (measured), while a check on a bare
+    `p^` is off by default because it is a test in a possibly-tight loop and the
+    MMU already catches it on the PC targets. A plain Boolean cannot express
+    "the author said nothing", which is exactly the state those two defaults
+    disagree about. feature-a-emitted-nil-checks }
+  NChecksVal : Integer;      { current {$NILCHECKS} lexer state }
+  StmtNChecks : Integer;     { {$NILCHECKS} state at the current statement's first token (same anchor rule as StmtRChecks) }
   { Inside a STATEMENT that ParseStatementAST hands to the ordinary expression
     parser because the statement IS a call expression whose result is discarded:
     `(o as T).M;` and `GetBox.Poke;` (a selector chain on a function result).
@@ -3216,6 +3232,7 @@ var
   Tokens     : array of TRawToken;
   TokPackRecords : array of Integer;
   TokQChecks : array of Boolean; { {$Q+}/{$OVERFLOWCHECKS ON} state at this token — the parser reads it at BINOP creation so the switch is lexically scoped (tint642 flips it between sections) }
+  TokNChecks : array of Byte;    { {$NILCHECKS} tri-state at this token — read at AllocNode, lexically scoped like TokRChecks (feature-a-emitted-nil-checks) }
   TokRChecks : array of Boolean; { {$R+}/{$RANGECHECKS ON} state at this token — read at AN_ASSIGN creation (AllocNode), lexically scoped like TokQChecks (feature-pascal-range-checks-r-plus) }
   TokIChecks : array of Boolean; { {$I+}/{$IOCHECKS ON} state at this token — opt-in Text-I/O failure raising (feature-pascal-io-checks-i-plus; the FPC-DEFAULT flip is a user dialect call, see the ticket) }
   TokScopedEnums : array of Boolean;  { {$SCOPEDENUMS} state at each token }
@@ -3358,6 +3375,7 @@ var
   ASTLine    : array of Integer; { source line of this node (CurTok.Line at alloc), 0 if unknown — DWARF -g }
   ASTFile    : array of Integer; { .debug_line file index for that line (1 = main file); see DbgFileOfTok }
   ASTQChk    : array of Boolean; { arithmetic BINOP built inside a {$Q+} region: overflow-checked (+,-,*). Reset in AllocNode, copied by the AST deep-copy — feature-pascal-overflow-checks-q-plus }
+  ASTNilChk  : array of Byte;    { {$NILCHECKS} tri-state the node was born under (set centrally in AllocNode from StmtNChecks; copied by CloneAST) — read by IRWrapNilChk, which resolves it against the site class's default. feature-a-emitted-nil-checks }
   ASTRChk    : array of Boolean; { AN_ASSIGN built inside a {$R+} region: the value is range-checked against the DEST's ordinal bounds before the store (set centrally in AllocNode from TokRChecks; copied by CloneAST) — feature-pascal-range-checks-r-plus }
   { Was this node parsed from code the NilPy USER wrote (the .npy program or an
     imported .py module), as opposed to a Pascal RTL unit dragged into the same

@@ -56,7 +56,7 @@ lives in git, not in a timestamp._
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (277)
+## backlog (272)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -318,14 +318,9 @@ lives in git, not in a timestamp._
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 35 | refactor | Three separate places decide a NilPy local's class identity | — |
 | refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too | P | 45 | refactor | The parser carve-out is done, but Pascal still shares lexer.inc with Track A — so the A/P no-concurrent-edit rule still binds, now over 2,566 lines instead of 37,249. Carve the Pascal-specific lexing into paslexer.inc the way C, NilPy, Rust and Zig already have their own, and the A/P slot stops existing. | — |
 | refactor-p-three-hand-rolled-postfix-loops | P | 35 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
+| regression-cascade-8654c4d55b61 | T | 70 | regression | regression CASCADE: 11 jobs newly red in 4f526e338..8654c4d55 (241 commits) — auto-filed by twatch | — |
 | regression-lib-test-lib-mimic-xml-etree-elementtree | N | 70 | regression | regression: lib-test#src:test/lib_mimic_xml_etree_elementtree.npy red at 1b9b43e5b511 (auto-filed by twatch) | — |
 | regression-test-c-conformance-shard1-6 | T | 70 | regression | regression: test-c-conformance#shard1/6 red at 1b9b43e5b511 (auto-filed by twatch) | — |
-| regression-test-core-test-delphi-bare-alldefaulted-arg | P | 70 | regression | regression: test-core#src:test/test_delphi_bare_alldefaulted_arg.pas red at a2ae11a64191 (auto-filed by twatch) | — |
-| regression-test-core-test-mode-delphi-callarg | P | 70 | regression | regression: test-core#src:test/test_mode_delphi_callarg.pas red at a2ae11a64191 (auto-filed by twatch) | — |
-| regression-test-core-test-mode-delphi-methptr | P | 70 | regression | regression: test-core#src:test/test_mode_delphi_methptr.pas red at a2ae11a64191 (auto-filed by twatch) | — |
-| regression-test-core-test-mode-delphi | P | 70 | regression | regression: test-core#src:test/test_mode_delphi.pas red at a2ae11a64191 (auto-filed by twatch) | — |
-| regression-test-core-test-procvar-value-context-2 | P | 70 | regression | regression: test-core#src:test/test_procvar_value_context.pas red at a2ae11a64191 (auto-filed by twatch) | — |
-| regression-test-core-test-record-helper-for-string-b331 | P | 70 | regression | regression: test-core#src:test/test_record_helper_for_string_b331.pas red at 2e7286e499d1 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-callable-to-str-param-fails | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy red at 1b9b43e5b511 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-pascal-at-procvar-mode | P | 70 | regression | regression: test-nilpy#src:test/test_pascal_at_procvar_mode.pas@1 red at 23becd24b8e5 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-pascal-mode-switch-cli | P | 70 | regression | regression: test-nilpy#src:test/test_pascal_mode_switch_cli.pas@2 red at 23becd24b8e5 (auto-filed by twatch) | — |
@@ -541,9 +536,9 @@ lives in git, not in a timestamp._
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2199)
+## done (2205)
 
-2199 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2205 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -593,14 +588,9 @@ lives in git, not in a timestamp._
 ## Ready (no unmet blocker)
 
 - [urgent p 70] [N] bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
+- [p 70] [T] regression-cascade-8654c4d55b61
 - [p 70] [N] regression-lib-test-lib-mimic-xml-etree-elementtree
 - [p 70] [T] regression-test-c-conformance-shard1-6
-- [p 70] [P] regression-test-core-test-delphi-bare-alldefaulted-arg
-- [p 70] [P] regression-test-core-test-mode-delphi
-- [p 70] [P] regression-test-core-test-mode-delphi-callarg
-- [p 70] [P] regression-test-core-test-mode-delphi-methptr
-- [p 70] [P] regression-test-core-test-procvar-value-context-2
-- [p 70] [P] regression-test-core-test-record-helper-for-string-b331
 - [p 70] [N] regression-test-nilpy-test-nilpy-callable-to-str-param-fails
 - [p 70] [P] regression-test-nilpy-test-pascal-at-procvar-mode
 - [p 70] [P] regression-test-nilpy-test-pascal-mode-switch-cli

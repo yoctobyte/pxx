@@ -30,6 +30,7 @@ begin
   SetLength(ASTEnumId, n);     SetLength(ASTLine, n);      SetLength(ASTQChk, n);
   SetLength(ASTFile, n);
   SetLength(ASTRChk, n);       SetLength(ASTIChk, n);
+  SetLength(ASTNilChk, n);
   SetLength(ASTPyUser, n);
   ASTCapacity := n;
 end;
@@ -57,6 +58,10 @@ begin
   ASTRChk[ASTNodeCount]    := ((kind = AN_ASSIGN) or (kind = AN_INDEX)) and
                               StmtRChecks;
   ASTIChk[ASTNodeCount]    := (kind = AN_CALL) and StmtIChecks;
+  { Stamped on EVERY node, not on a chosen few: the sites that read it are call
+    nodes and deref nodes, and tagging both lists here would be the second place
+    to keep in step with ir.inc. It is one byte. feature-a-emitted-nil-checks }
+  ASTNilChk[ASTNodeCount]  := Byte(StmtNChecks);
   { the Python operator semantics apply to the USER's code, not to a Pascal RTL
     unit compiled into the same program — recorded at birth because the unit
     context is gone by IR lowering (see ASTPyUser in defs.inc) }
@@ -101,6 +106,7 @@ begin
   ASTQChk[Result]     := ASTQChk[node];
   ASTRChk[Result]     := ASTRChk[node];
   ASTIChk[Result]     := ASTIChk[node];
+  ASTNilChk[Result]   := ASTNilChk[node];
   ASTPyUser[Result]   := ASTPyUser[node];
   ASTLeft[Result]     := CloneAST(ASTLeft[node]);
   ASTRight[Result]    := CloneAST(ASTRight[node]);

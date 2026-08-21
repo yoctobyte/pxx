@@ -2068,6 +2068,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-call-result-member | P | 70 | regression | regression: test-core#src:test/test_call_result_member.pas red at a76303231306 (auto-filed by twatch) | — |
 | regression-test-core-test-conformance-1 | P | 70 | regression | test_conformance_1's expected output still encodes the OLD Variant-typecast behaviour: it asserts `v int=1` where `v := 123`. 24204e10d made `Integer(v)` convert rather than reinterpret, so the compiler is now right and the expectation is wrong — and it holds every full tier RED. | — |
 | regression-test-core-test-ctor-result-member | P | 70 | regression | regression: test-core#src:test/test_ctor_result_member.pas red at a76303231306 (auto-filed by twatch) | — |
+| regression-test-core-test-delphi-bare-alldefaulted-arg | P | 70 | regression | regression: test-core#src:test/test_delphi_bare_alldefaulted_arg.pas red at a2ae11a64191 (auto-filed by twatch) | — |
 | regression-test-core-test-dynarray-params | T | 70 | regression | regression: test-core#src:test/test_dynarray_params.pas red at 34670fe9b872 (auto-filed by twatch) | — |
 | regression-test-core-test-exception-unhandled | T | 70 | regression | regression: test-core#src:test/test_exception_unhandled.pas@1 red at 899e51cda3ba (auto-filed by twatch) | — |
 | regression-test-core-test-float-write | T | 70 | regression | regression: test-core#src:test/test_float_write.pas@1 red at ad8e212cf739 (auto-filed by twatch) | — |
@@ -2078,6 +2079,9 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-isas-open-world-b325 | P | 70 | regression | regression: test-core#src:test/test_isas_open_world_b325.pas red at a76303231306 (auto-filed by twatch) | — |
 | regression-test-core-test-local-typed-const | P | 70 | regression | RESOLVED. A real regression from 3ed3e2653 (routine-local typed const made static): a SCALAR local const read in an expression stopped compiling — invalid IR symbol reference in load_sym — while the array shapes and the counter idiom the fix targeted both worked. Bisected by Track T; root cause was SymRollbackTo handing the index back and the -O2 inliner still loading it. Fixed in 467a4e5da, carried by pin v342. | — |
 | regression-test-core-test-managed-block-meta | T | 70 | regression | regression: test-core#src:test/test_managed_block_meta.pas red at 86da0606d916 (auto-filed by twatch) | — |
+| regression-test-core-test-mode-delphi-callarg | P | 70 | regression | regression: test-core#src:test/test_mode_delphi_callarg.pas red at a2ae11a64191 (auto-filed by twatch) | — |
+| regression-test-core-test-mode-delphi-methptr | P | 70 | regression | regression: test-core#src:test/test_mode_delphi_methptr.pas red at a2ae11a64191 (auto-filed by twatch) | — |
+| regression-test-core-test-mode-delphi | P | 70 | regression | regression: test-core#src:test/test_mode_delphi.pas red at a2ae11a64191 (auto-filed by twatch) | — |
 | regression-test-core-test-nested-class-type-b348 | P | 70 | regression | regression: test-core#src:test/test_nested_class_type_b348.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
 | regression-test-core-test-nested-cow | T | 70 | regression | regression: test-core#src:test/test_nested_cow.pas red at 899e51cda3ba (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-augmented-assign-class-dunder | T | 70 | regression | regression: test-core#src:test/test_nilpy_augmented_assign_class_dunder.npy red at e8450c58d67e (auto-filed by twatch) | — |
@@ -2097,7 +2101,9 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-nilpy-star-methods-and-targets | T | 70 | regression | regression: test-core#src:test/test_nilpy_star_methods_and_targets.npy red at 89dae725b972 (auto-filed by twatch) | — |
 | regression-test-core-test-platform-defines | T | 70 | regression | regression: test-core#src:test/test_platform_defines.pas@2 red at 96147f570d29 (auto-filed by twatch) | — |
 | regression-test-core-test-procedure-as-value-ok | P | 70 | regression | regression: test-core#src:test/test_procedure_as_value_ok.pas red at a76303231306 (auto-filed by twatch) | — |
+| regression-test-core-test-procvar-value-context-2 | P | 70 | regression | regression: test-core#src:test/test_procvar_value_context.pas red at a2ae11a64191 (auto-filed by twatch) | — |
 | regression-test-core-test-procvar-value-context | P | 70 | regression | regression: test-core#src:test/test_procvar_value_context.pas red at 0e4ad46330ca (auto-filed by twatch) | — |
+| regression-test-core-test-record-helper-for-string-b331 | P | 70 | regression | regression: test-core#src:test/test_record_helper_for_string_b331.pas red at 2e7286e499d1 (auto-filed by twatch) | — |
 | regression-test-core-test-relpath-uses | T | 70 | regression | regression: test-core#src:test/test_relpath_uses.pas red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-core-test-set-literal-element-types | P | 70 | regression | regression: test-core#src:test/test_set_literal_element_types.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
 | regression-test-core-test-set-runtime | P | 70 | regression | regression: test-core#src:test/test_set_runtime.pas red at ce57db4cdda5 (auto-filed by twatch) | — |

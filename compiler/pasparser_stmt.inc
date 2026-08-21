@@ -4296,6 +4296,8 @@ begin
     StmtRChecks := TokRChecks[TokPos - 1];
   if (TokPos > 0) and (TokPos <= TokCount) then
     StmtIChecks := TokIChecks[TokPos - 1];
+  if (TokPos > 0) and (TokPos <= TokCount) then
+    StmtNChecks := Integer(TokNChecks[TokPos - 1]);
   node := -1;
   case CurTok.Kind of
     tkInteger_T, tkLongWord_T, tkChar_T, tkBoolean_T:

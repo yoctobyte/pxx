@@ -306,3 +306,72 @@ call lowering), so both are in the test rather than argued about.
 No measurement for this one, deliberately: the site already contains a call to
 `PXXIntfIMTOf`, so a test-and-branch in front of it cannot be a meaningful
 fraction of it. Test: `test/test_nil_check_interface.pas`.
+
+---
+
+## Landing 4 (2026-08-21): `{$NILCHECKS}` and the bare-deref site class
+
+This closes the ticket's design, including the part it warned against
+duplicating: *"do NOT grow a second mechanism for the second case ... only the
+default VALUE differs by site class."*
+
+### The directive is tri-state, and that is the whole design
+
+Every other check directive here (`{$R}`, `{$Q}`, `{$I}`) stamps a **Boolean**
+per token. `{$NILCHECKS}` stamps `NILCHK_DEFAULT / _ON / _OFF`, because one
+directive governs two site classes whose defaults **disagree**:
+
+| site class | default | reason |
+| --- | --- | --- |
+| call — nil receiver / procvar / interface | **on** | +2% measured; the fault it replaces lands frames from the call, or (no signal runtime) nowhere |
+| bare `p^` | **off** | a test inside whatever loop the deref is in; on a PC the MMU already reports it at the right instruction |
+
+A Boolean cannot represent *"the author said nothing"*, which is precisely the
+state those two defaults disagree about — so a Boolean would have forced either
+two directives or two flags, i.e. the second mechanism the ticket forbids.
+`NilChkWanted(astNode, defaultOn)` resolves the three-way state against the
+site's default in **one** place; the five call sites pass their default and
+nothing else knows the rule. `--no-nil-check` stays the master off for both.
+
+Plumbing follows `{$R+}`'s exactly: `NChecksVal` (lexer state) → `TokNChecks`
+(per token) → `StmtNChecks` (anchored at the **statement's first token**, so a
+directive between the RHS and the statement end cannot retro-apply) → `ASTNilChk`
+(stamped in `AllocNode`, copied by `CloneAST`).
+
+### Site class 4 is ONE line, because the address path is already normalised
+
+`IRLowerAddress`'s `AN_DEREF` arm. Reads, writes and bases (`p^`, `p^.f`,
+`p^[i]`) all route their address through it — `IRLowerDestAddress` delegates to
+it and the `AN_INDEX, AN_FIELD, AN_DEREF` value arm calls it — so there was no
+double case to find a sibling for. That is `normalise-dont-special-case.md`
+paying out rather than being applied.
+
+### Cost of the OFF-by-default class, measured anyway
+
+200M `p^` reads in a `-O2` loop that does nothing else: **0.630 s → 0.668 s
+(+6%)**, and code grows 58,093 → 68,803 bytes (the reporting machinery is pulled
+in whole). 6% is far less than expected for a per-iteration test, and is still
+the right default-off: the number to compare it against is 0, and the PC targets
+get the MMU's answer free.
+
+### FPC seed
+
+The new call site is at `ir.inc:1770` and the function is defined ~2,800 lines
+later; pxx accepts that and the FPC seed does not, so `IRWrapNilChk` now has a
+forward next to `IRMaterializeIntfCast`'s
+(`bug-a-fpc-seed-drift-emitasmx64-forward`). The gate caught it — the FPC seed
+canary is the only step in `gate.sh quick` that would have.
+
+Test: `test/test_nil_check_directive.pas` — all four corners in one program
+(deref default unchecked, deref `{$nilchecks on}` read **and** write raising,
+call default checked, call `{$nilchecks off}` **not** checked).
+
+### Status: all four site classes are in
+
+Remaining, and both are optimisations rather than coverage:
+
+- fold provably-non-nil receivers (`Self` inside a method, a just-constructed
+  object). At +2% the pressure is low.
+- `p.ClassName` and friends still fault: they lower to a direct VMT read, not to
+  a call with a `Self` param, so no arm's key sees them. Filed separately if it
+  ever bites — it is the same shape as class 4 and would want the same default.
