@@ -116,4 +116,4 @@ global`), still red, filed separately.
 the two new ones + `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 59cddd3b7.
