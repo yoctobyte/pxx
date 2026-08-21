@@ -3,6 +3,7 @@
 
 procedure EnsureSpaces; forward;
 procedure EmitLoadImmArm32(rd: Integer; v: Int32); forward;
+procedure EmitLoadImmA64(rd: Integer; v: Int64); forward;
 procedure EmitwriteSyscallArm32(dataOff, len: Integer); forward;
 procedure xtensa_j(offset: Integer); forward;
 procedure XtensaEmitLitHeader; forward;
@@ -160,15 +161,64 @@ begin
   MovRdxImm(len); EmitSyscall;
 end;
 
-procedure EmitMmapArena;
-{ Emit an anonymous mmap. Caller sets rsi = length; on return rax = base
-  address. Clobbers rax, rcx, r11, rdi, rdx, r10, r8, r9 (mmap syscall ABI);
-  rsi is preserved by the kernel. }
+procedure EmitMmapArena(len: Integer);
+{ Emit an anonymous mmap of `len` bytes. On return the base address is in the
+  target's first return register (rax / eax / r0 / x0 / a0).
+
+  It used to take its length in rsi and Error only for xtensa and riscv32,
+  which meant i386, arm32 and aarch64 fell through and were handed the x86-64
+  encoding VERBATIM — an ELF with `Machine: ARM` whose entry point was
+  `mov %rsp,0x82b5060; movabs $0x10000000,%rsi`. It refused two targets and
+  lied to three. The length is now a parameter because every non-x86-64 ABI
+  wants it in a different register, and hiding that in the caller is how the
+  lie was possible in the first place.
+  bug-a-nilpy-on-cross-targets-four-remaining-walls }
 begin
-  if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+  if TargetArch = TARGET_I386 then
   begin
-    Error('mmap not supported on bare-metal target');
+    { mmap2(192): ebx=addr ecx=len edx=prot esi=flags edi=fd ebp=pgoffset.
+      ebp is a callee-saved register the entry stub does not own -- save it. }
+    EmitB($31); EmitB($DB);                { xor ebx, ebx        (addr = NULL) }
+    EmitB($B9); EmitI32(len);              { mov ecx, len }
+    EmitB($BA); EmitI32(3);                { mov edx, PROT_READ|PROT_WRITE }
+    EmitB($BE); EmitI32($22);              { mov esi, MAP_PRIVATE|MAP_ANONYMOUS }
+    EmitB($BF); EmitI32(-1);               { mov edi, -1         (fd) }
+    EmitB($55);                            { push ebp }
+    EmitB($31); EmitB($ED);                { xor ebp, ebp        (pgoffset = 0) }
+    EmitB($B8); EmitI32(192);              { mov eax, __NR_mmap2 }
+    EmitB($CD); EmitB($80);                { int 0x80            -> eax = base }
+    EmitB($5D);                            { pop ebp }
+    Exit;
   end;
+  if TargetArch = TARGET_ARM32 then
+  begin
+    { mmap2(192), EABI: r0=addr r1=len r2=prot r3=flags r4=fd r5=pgoffset. }
+    EmitLoadImmArm32(0, 0);
+    EmitLoadImmArm32(1, len);
+    EmitLoadImmArm32(2, 3);
+    EmitLoadImmArm32(3, $22);
+    EmitI32($E3E04000);                    { mvn r4, #0          (fd = -1) }
+    EmitLoadImmArm32(5, 0);
+    EmitI32($E3A070C0);                    { mov r7, #192 }
+    EmitI32($EF000000);                    { svc #0              -> r0 = base }
+    Exit;
+  end;
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    { mmap(222): x0=addr x1=len x2=prot x3=flags x4=fd x5=offset (BYTES). }
+    EmitLoadImmA64(0, 0);
+    EmitLoadImmA64(1, len);
+    EmitLoadImmA64(2, 3);
+    EmitLoadImmA64(3, $22);
+    EmitI32($92800004);                    { movn x4, #0         (fd = -1) }
+    EmitLoadImmA64(5, 0);
+    EmitLoadImmA64(8, 222);
+    EmitI32($D4000001);                    { svc #0              -> x0 = base }
+    Exit;
+  end;
+  if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+    Error('mmap not supported on bare-metal target');
+  MovRsiImm(len);                        { length }
   MovRdiImm(0);                          { addr = NULL }
   MovRdxImm(3);                          { PROT_READ | PROT_WRITE }
   EmitB($49); EmitB($BA); EmitI64($22);  { mov r10, MAP_PRIVATE|MAP_ANONYMOUS }

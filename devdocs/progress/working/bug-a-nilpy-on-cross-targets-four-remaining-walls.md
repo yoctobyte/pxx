@@ -4,8 +4,8 @@ prio: 40
 type: bug
 blocked-by: []
 summary: "After the string-tagged-binop gate was lifted, NilPy still does not RUN on any cross target: arm32 builds and SIGILLs, i386 refuses on `symbol kind not supported yet (load)`, aarch64 on `aggregate result with more than 8 params`, riscv32 on bare-metal mmap. Four separate walls, one campaign — ~53 .npy tests are cross-blind until they fall."
-status: backlog
-owner: ""
+status: working
+owner: claude-A
 ---
 
 # NilPy on cross targets: four remaining walls
@@ -106,3 +106,60 @@ is worth a separate ticket once someone starts; this one is the index.
 
 Per wall: the probe builds and runs on that target; self-host fixedpoint +
 `tools/gate.sh quick`.
+
+## Progress — arm32 is GREEN (2026-08-21)
+
+Three defects, all the same disease, all fixed together:
+
+1. **`EmitProgramEntryForTarget`** (new, `ir_codegen.inc`, next to
+   `EmitIoLockStubsForTarget`) — the entry stub's six per-arch arms, lifted out
+   of the Pascal driver verbatim, plus an optional mmap heap arena for the NilPy
+   allocator model. The Pascal driver passes `False`, NilPy `True`.
+2. **`PatchProgramEntryJump`** (new, same place) — the *other* half. Missed on
+   the first pass: the NilPy driver kept its own
+   `Patch32(jmpPatch, CodeLen - (jmpPatch + 4))`, which wrote a raw byte offset
+   over an ARM branch word. The stub was correct and the program SIGILLed four
+   instructions later. The two halves are one thing and now live together.
+3. **`EmitMmapArena(len)`** (`emit.inc`) — real i386 / arm32 / aarch64 syscall
+   arms (mmap2(192) / mmap2(192) / mmap(222)). It used to Error for xtensa and
+   riscv32 and silently emit x86-64 for the other three. Length is a parameter
+   now, because every ABI wants it in a different register and hiding that in
+   the caller is what made the lie possible.
+4. **`EmitAnsiStringRuntime` is x86-64 machine code** and the NilPy driver
+   called it unguarded — the Pascal and C drivers both have
+   `and (TargetArch = TARGET_X86_64)`. The blob was never executed; its length
+   is not a multiple of 4, so it shifted every ARM instruction after it two
+   bytes out of alignment and the first real proc decoded as garbage. That was
+   the second SIGILL.
+
+### Measured
+
+- `def main(): print(1+2)` on arm32: **runs, prints 3**. First NilPy program
+  ever to execute on a cross target.
+- 60-test `.npy` differential vs the native oracle on arm32:
+  **8 match, 34 BUILDFAIL, 10 run-but-wrong** (8 of the 60 fail natively too and
+  are excluded). Was 0 match / 52 BUILDFAIL.
+- **All 34 remaining BUILDFAILs are one wall**:
+  `target arm32: IR op not yet supported: zero_sym`. Filed separately.
+- The Pascal driver's arm32 output is **byte-identical** across the extraction
+  (`cmp` on a hello-world arm32 binary built before and after) — the lift is a
+  pure refactor on that side.
+- Self-host fixedpoint + `tools/gate.sh quick` GREEN.
+
+### Still open
+
+| target | wall |
+| --- | --- |
+| arm32 | `IR op not yet supported: zero_sym` (34 of 52) — the one thing between here and broad NilPy-on-arm32 |
+| i386 | `symbol kind not supported yet (load)` |
+| aarch64 | `aggregate result with more than 8 params not supported` |
+| riscv32 | bare-metal profile has no mmap |
+
+The other eight frontend drivers (`fparser`, `bparser`, `aparser`, `gparser`,
+`lparser`, `wparser`, `eparser`, `rparser`, `zparser`) still open-code an
+x86-64 entry stub. They were NOT converted here: each has a different shape
+(some emit no jump at all, some `call main` with their own exit tail), they are
+all x86-64-only frontends today, and a blind sweep would be churn without a
+gate to catch it. The C driver has its own per-target case already. When one of
+those frontends grows a cross target, `EmitProgramEntryForTarget` is what it
+should call.

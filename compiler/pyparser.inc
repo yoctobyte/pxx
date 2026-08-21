@@ -34624,14 +34624,14 @@ begin
   BSS_HEAP_END    := BSSSize; Inc(BSSSize, 8);
   BSS_FREE_LIST   := BSSSize; Inc(BSSSize, 8);
   BSS_HEAP_LOCK   := BSSSize; Inc(BSSSize, 8);
-  EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
-  MovRsiImm(HEAP_ARENA_SIZE);
-  EmitMmapArena;
-  EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
-  EmitB($48); EmitB($89); EmitB($C2);
-  EmitB($48); EmitB($81); EmitB($C2); EmitI32(HEAP_ARENA_SIZE);
-  EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END);
-  EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
+  { Entry stub: save the initial sp, mmap the heap arena, jump to the main body.
+    This was eight lines of raw x86-64 with NO target dispatch at all, so a
+    `--target=arm32` NilPy build produced an ELF marked `Machine: ARM` whose
+    entry point was `mov %rsp, 0x82b5060` — SIGILL on instruction one, no
+    diagnostic. True = this driver's allocator wants a real arena (the Pascal
+    driver grows the break lazily and passes False).
+    bug-a-nilpy-on-cross-targets-four-remaining-walls }
+  EmitProgramEntryForTarget(True, jmpPatch);
   { Integer div-by-zero abort stub — same latent hole as the C driver: a
     builtinheap div site compiled before PXXDivZero registers fell back to a
     zero Div0StubAddr. Python '//'/'%' always need the check; unconditional. }
@@ -34654,7 +34654,16 @@ begin
     written out here and again in ParseProgram, and the C driver had neither —
     see the note on the shared helper. }
   RegisterEmittedStringRuntimeForwards;
-  EmitAnsiStringRuntime;
+  { EmitAnsiStringRuntime emits raw x86-64 machine code. The Pascal and C
+    drivers both guard it (`and (TargetArch = TARGET_X86_64)`); this one did
+    not, so a cross build spliced an x86-64 blob into the middle of the ARM /
+    i386 code stream. It was not even executed to fail: its length is not a
+    multiple of 4, so it shifted every ARM instruction after it two bytes out
+    of alignment and the first real proc decoded as garbage. The cross backends
+    call the builtinheap Pascal helpers directly instead — the same reason the
+    Pascal driver's guard exists.
+    bug-a-nilpy-on-cross-targets-four-remaining-walls }
+  if TargetArch = TARGET_X86_64 then EmitAnsiStringRuntime;
   { builtinheap declares TInterfacedObject/IInterface, whose signatures name
     TGuid and TObject — register the builtin rows first (idempotent), exactly
     like the Pascal and C paths. }
@@ -34874,7 +34883,7 @@ begin
     bug-n-the-last-class-in-a-module-reads-every-attribute-as-zero }
   mainNode := PyFlushHoist(mainNode);
   ASTArenaFloor := ASTNodeCount;
-  Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
+  PatchProgramEntryJump(jmpPatch);
   { Unit INITIALISATION, in dependency order, before the program's own body —
     the same thing ParseProgram does for Pascal. An imported `.py` module's
     top-level code lives in one of these (`settings.py` runs

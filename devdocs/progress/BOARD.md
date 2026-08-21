@@ -10,9 +10,11 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method | N | 70 | bug | A callable value is silently accepted where `str` is declared, and no longer compares equal to itself — bisected to `9bbbbef6c` | — |
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| bug-a-nilpy-on-cross-targets-four-remaining-walls | A | 40 | bug | After the string-tagged-binop gate was lifted, NilPy still does not RUN on any cross target: arm32 builds and SIGILLs, i386 refuses on `symbol kind not supported yet (load)`, aarch64 on `aggregate result with more than 8 params`, riscv32 on bare-metal mmap. Four separate walls, one campaign — ~53 .npy tests are cross-blind until they fall. | — |
 
 ## unfinished (20)
 
@@ -53,7 +55,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (280)
+## backlog (279)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -67,7 +69,6 @@ _none_
 | bug-a-findtypealias-failed-to-find-puint8-on-stderr | A | 20 | bug | `FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr during a compile that then SUCCEEDS. Either the lookup failure is real and something silently fell back to a wrong type, or the message is a stale debug print that should not be in a release build. Both readings are defects; which one it is has not been established. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
-| bug-a-nilpy-on-cross-targets-four-remaining-walls | A | 40 | bug | After the string-tagged-binop gate was lifted, NilPy still does not RUN on any cross target: arm32 builds and SIGILLs, i386 refuses on `symbol kind not supported yet (load)`, aarch64 on `aggregate result with more than 8 params`, riscv32 on bare-metal mmap. Four separate walls, one campaign — ~53 .npy tests are cross-blind until they fall. | — |
 | bug-a-only-the-pascal-driver-emits-the-signal-runtime | A | 45 | bug | The signal runtime (SIGSEGV/SIGFPE hook, restorer, sethook, install stubs) is emitted only by the Pascal driver in parser.inc. Every other frontend -- C, NilPy, Rust, Zig, Basic, Ada, Lua, the asm frontend -- produces a binary with no signal runtime, so a hardware fault there is an unhandled signal instead of a runtime error. Same shape as the I/O-lock gap that was already found and fixed. | — |
 | bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did | A | 45 | bug | i386, arm32 and aarch64 route variant binops through PXXVarBinOp in builtinheap.pas, which reimplements the same dispatch x86-64 hand-emits — and the same defect: a stringy operand's payload is read as a number. x86-64 was fixed 2026-08-20; those three targets still answer a heap address for `v('15') - 3`. | — |
 | bug-a-riscv32-drops-interface-releases-in-six-shapes | A | 45 | bug | riscv32 alone under-releases COM interface references in six distinct shapes — a by-value interface PARAMETER is never released (10/16 on test_interface_byval_param_no_leak), an as-cast temp outlives its expression, a self-returning call releases nothing, and a COM value param leaks. x86-64, i386, arm32 and aarch64 all agree with FPC; riscv32 is the outlier in every case. | — |
@@ -708,7 +709,6 @@ _none_
 - [p 40] [A] bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data
 - [p 40] [A] bug-a-aintostr-returns-empty-for-negative-numbers
 - [p 40] [A] bug-a-nilpy-leading-double-star-in-a-call-is-not-detected
-- [p 40] [A] bug-a-nilpy-on-cross-targets-four-remaining-walls
 - [p 40] [N] bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members
 - [p 40] [N] bug-n-inline-cast-deref-loses-a-pointer-fields-pointee
 - [p 40] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base

@@ -926,123 +926,14 @@ begin
     Inc(i);
   end;
 
-  if TargetArch = TARGET_I386 then
-  begin
-    { Cross-target i386: heap (New/Dispose/GetMem), managed strings, and exception runtime. }
-    { Entry stub: save esp for argv access, then jmp to main body.
-      mov [abs32], esp: 89 25 <GlobRef> }
-    EmitB($89); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
-    EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
-  end
-  else if TargetArch = TARGET_ARM32 then
-  begin
-    { ARM32 entry stub: save sp for argv access, then branch to main body. }
-    EmitI32($E59F1000);  { ldr r1, [pc] }
-    EmitI32($EA000000);  { b .+8 }
-    EmitGlobRef(BSS_INITIAL_RSP);
-    EmitI32($E581D000);  { str sp, [r1] }
-    jmpPatch := CodeLen;
-    EmitI32($EA000000);
-  end
-  else if TargetArch = TARGET_AARCH64 then
-  begin
-    { AArch64 entry stub: save sp for argv access, then branch to main body. }
-    EmitI32($18000041);  { ldr w1, [pc+8] }
-    EmitI32($14000002);  { b [pc+8] }
-    EmitGlobRef(BSS_INITIAL_RSP);
-    EmitI32($910003E0);  { mov x0, sp }
-    EmitI32($F9000020);  { str x0, [x1] }
-    jmpPatch := CodeLen;
-    EmitI32($14000000);
-  end
-  else if TargetArch = TARGET_XTENSA then
-  begin
-    { Bare-metal (Call0 only): no kernel set up a stack, so establish sp at the
-      top of SRAM before entering main. EmitLoadConstXtensa drops a literal
-      island for the 32-bit address. Must run before any call. }
-    if EspBareBoot then
-    begin
-      { The ESP32-S3 is dual-core, and under `qemu -kernel` (no ROM/bootloader
-        to park the APP core) BOTH cores execute this entry. Two cores racing
-        through one stack/BSS double-faulted into the empty ROM vector region
-        — total UART silence (bug-esp32s3-bare-boot-no-uart-output). Core 0's
-        PRID is $CDCD (Espressif convention); spin every other core here. }
-      xtensa_rsr_prid(reg_xtensa_a8);
-      EmitLoadConstXtensa(reg_xtensa_a9, $CDCD);
-      xtensa_beq(reg_xtensa_a8, reg_xtensa_a9, 6);  { core 0: skip the park }
-      xtensa_j(0);                                  { any other core: spin }
-      EmitLoadConstXtensa(reg_xtensa_sp, ESP_BARE_STACK_TOP);
-    end;
-    if XtensaABI = XTENSA_ABI_WINDOWED then
-    begin
-      { app_main: program-level vars are globals (BSS), so no stack locals --
-        but the body still uses the constant-sp expression stack, so reserve
-        the spill region up front (no patchable addi on this path). }
-      xtensa_entry(reg_xtensa_sp, 32 + XT_EXPR_REGION + XT_OUTARG_REGION);
-      xtensa_mov(reg_xtensa_a7, reg_xtensa_sp);
-      XtSpillDepth := XT_OUTARG_REGION;
-      XtSpillMax := XtSpillDepth;
-    end;
-    { Same shape as CPENABLE below, for the same reason: bare metal leaves
-      ATOMCTL at its reset value 0, and 0 means "raise an exception" for EVERY
-      memory class, so the first S32C1I traps into the ROM vector loop before
-      the program prints anything. 0x2A = "internal operation" for all three
-      classes (write-back / write-through / bypass), which is the one value
-      that works whichever class the part files internal SRAM under — measured:
-      under qemu -M esp32s3 only the write-back field is consulted, so 0x28
-      (the value that leaves it 0) still faults while 0x01 already suffices.
-      ESP-IDF never writes ATOMCTL, so this is a bare-boot need only; an IDF
-      image is entered by IDF's own startup and we emit no entry there.
-      bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 }
-    if EspBareBoot and SocHasAtomicISA(TargetSoc) then
-    begin
-      EmitLoadConstXtensa(reg_xtensa_a8, $2A);
-      xtensa_wsr_atomctl(reg_xtensa_a8);
-      xtensa_rsync;
-    end;
-    { Enable the FP coprocessor before any add.s/mul.s (bare metal leaves CPENABLE
-      clear -> FP would trap). Enable all CPs (harmless: no context switching). }
-    if XtensaHasFpu then
-    begin
-      EmitLoadConstXtensa(reg_xtensa_a8, $FF);
-      xtensa_wsr_cpenable(reg_xtensa_a8);
-      xtensa_rsync;
-    end;
-    { Xtensa entry stub: jump to main body. }
-    jmpPatch := CodeLen;
-    xtensa_j(0);
-  end
-  else if TargetArch = TARGET_RISCV32 then
-  begin
-    { Bare-metal: no kernel set up a stack, so establish sp at the top of SRAM
-      (grows down toward the image) before entering main. lui+addi covers any
-      low bits in the stack-top constant. }
-    if EspBareBoot then
-    begin
-      EmitI32((((ESP_BARE_STACK_TOP + $800) shr 12) shl 12) or (2 shl 7) or $37); { lui sp,hi }
-      EmitI32(((ESP_BARE_STACK_TOP and $FFF) shl 20) or (2 shl 15) or (2 shl 7) or $13); { addi sp,sp,lo }
-    end;
-    { Hosted: save the kernel-provided initial sp (points at argc) for
-      ParamCount/ParamStr, like the other hosted targets. }
-    if not EspBareBoot then
-    begin
-      rv32_auipc(reg_t1, 0);
-      rv32_jal(reg_zero, 8);
-      EmitGlobRef(BSS_INITIAL_RSP);
-      rv32_lw(reg_t1, reg_t1, 8);       { t1 = &BSS_INITIAL_RSP }
-      rv32_sw(reg_sp, reg_t1, 0);
-    end;
-    { RISC-V entry stub: jump to main body. }
-    jmpPatch := CodeLen;
-    EmitI32($0000006F);
-  end
-  else
-  begin
-    { Emit entry stub: save rsp then jmp to main body }
-    { mov [bss_initial_rsp], rsp: 48 89 24 25 <GlobRef(0)> }
-    EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
-    EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
-  end;
+  { The entry stub: save the initial sp, then jump to the main body. Its six
+    per-arch arms used to be spelled out right here, in the Pascal driver only
+    — which is why every other frontend open-coded the x86-64 one and nothing
+    else, and a NilPy arm32 binary began with x86-64 bytes. Same move as
+    EmitIoLockStubsForTarget below, for the same reason.
+    False = no mmap heap arena: the Pascal model grows the break lazily in
+    builtinheap. bug-a-nilpy-on-cross-targets-four-remaining-walls }
+  EmitProgramEntryForTarget(False, jmpPatch);
   { The emitted AnsiString runtime is x86-64 machine code; i386 string IR ops
     call the builtinheap Pascal helpers directly instead, so skip the shim
     emission there (its AnsiStr*Addr labels stay 0 and are never referenced). }
@@ -1237,16 +1128,7 @@ begin
   Next;
 
   { Patch jmp to point here (start of main body) }
-  if TargetArch = TARGET_ARM32 then
-    Patch32(jmpPatch, $EA000000 or ((((CodeLen - jmpPatch) div 4) - 2) and $00ffffff))
-  else if TargetArch = TARGET_AARCH64 then
-    Patch32(jmpPatch, $14000000 or (((CodeLen - jmpPatch) div 4) and $03ffffff))
-  else if TargetArch = TARGET_XTENSA then
-    Patch24(jmpPatch, EncodeXtensaJ(CodeLen - jmpPatch))
-  else if TargetArch = TARGET_RISCV32 then
-    Patch32(jmpPatch, EncodeRISCVJAL(0, CodeLen - jmpPatch))
-  else
-    Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
+  PatchProgramEntryJump(jmpPatch);
 
   { Install the default-managed signals (SIGINT, SIGTERM) at program start —
     graceful Ctrl-C / termination via the dispatch stub (no hook registered =

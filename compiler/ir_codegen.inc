@@ -807,6 +807,210 @@ begin
   ]);
 end;
 
+procedure EmitProgramEntryForTarget(withHeapArena: Boolean; var jmpPatch: Integer);
+{ THE one place that emits a program's entry stub. Every frontend driver calls
+  this; none of them may spell out the per-arch choice itself.
+
+  It does three things, in this order:
+    1. save the kernel-provided initial stack pointer to BSS_INITIAL_RSP, which
+       is what ParamCount/ParamStr read argv from;
+    2. when `withHeapArena`, mmap the heap arena and publish it as
+       BSS_HEAP_PTR / BSS_HEAP_END (the NilPy driver's allocator model — the
+       Pascal driver grows the break lazily instead and passes False);
+    3. emit a patchable jump to the main body, leaving the operand's offset in
+       `jmpPatch` for the caller to fix up.
+
+  Same reason EmitIoLockStubsForTarget exists, and the third time this exact
+  shape has bitten. The per-arch entry stub lived inline in the PASCAL driver
+  (ParseProgram) with six real arms; the other eight drivers each open-coded the
+  x86-64 one and nothing else. A NilPy program therefore built for arm32 as an
+  ELF with `Machine: ARM` whose first instruction was `mov %rsp, 0x82b5060` —
+  x86-64 bytes, SIGILL on the first instruction, and no diagnostic anywhere.
+  bug-a-nilpy-on-cross-targets-four-remaining-walls }
+begin
+  if TargetArch = TARGET_I386 then
+  begin
+    { mov [BSS_INITIAL_RSP], esp }
+    EmitB($89); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+    if withHeapArena then
+    begin
+      EmitMmapArena(HEAP_ARENA_SIZE);          { -> eax = base }
+      EmitB($A3); EmitGlobRef(BSS_HEAP_PTR);   { mov [BSS_HEAP_PTR], eax }
+      EmitB($05); EmitI32(HEAP_ARENA_SIZE);    { add eax, ARENA }
+      EmitB($A3); EmitGlobRef(BSS_HEAP_END);   { mov [BSS_HEAP_END], eax }
+    end;
+    EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
+    Exit;
+  end;
+  if TargetArch = TARGET_ARM32 then
+  begin
+    EmitI32($E59F1000);  { ldr r1, [pc] }
+    EmitI32($EA000000);  { b .+8 }
+    EmitGlobRef(BSS_INITIAL_RSP);
+    EmitI32($E581D000);  { str sp, [r1] }
+    if withHeapArena then
+    begin
+      EmitMmapArena(HEAP_ARENA_SIZE);          { -> r0 = base }
+      EmitI32($E59F1000); EmitI32($EA000000);  { ldr r1,[pc]; b .+8 }
+      EmitGlobRef(BSS_HEAP_PTR);
+      EmitI32($E5810000);                      { str r0, [r1] }
+      EmitLoadImmArm32(2, HEAP_ARENA_SIZE);
+      EmitI32($E0802002);                      { add r2, r0, r2 }
+      EmitI32($E59F1000); EmitI32($EA000000);  { ldr r1,[pc]; b .+8 }
+      EmitGlobRef(BSS_HEAP_END);
+      EmitI32($E5812000);                      { str r2, [r1] }
+    end;
+    jmpPatch := CodeLen;
+    EmitI32($EA000000);
+    Exit;
+  end;
+  if TargetArch = TARGET_AARCH64 then
+  begin
+    EmitI32($18000041);  { ldr w1, [pc+8] }
+    EmitI32($14000002);  { b [pc+8] }
+    EmitGlobRef(BSS_INITIAL_RSP);
+    EmitI32($910003E0);  { mov x0, sp }
+    EmitI32($F9000020);  { str x0, [x1] }
+    if withHeapArena then
+    begin
+      EmitMmapArena(HEAP_ARENA_SIZE);          { -> x0 = base }
+      EmitI32($18000041); EmitI32($14000002);  { ldr w1,[pc+8]; b [pc+8] }
+      EmitGlobRef(BSS_HEAP_PTR);
+      EmitI32($F9000020);                      { str x0, [x1] }
+      EmitLoadImmA64(2, HEAP_ARENA_SIZE);
+      EmitI32($8B020002);                      { add x2, x0, x2 }
+      EmitI32($18000041); EmitI32($14000002);  { ldr w1,[pc+8]; b [pc+8] }
+      EmitGlobRef(BSS_HEAP_END);
+      EmitI32($F9000022);                      { str x2, [x1] }
+    end;
+    jmpPatch := CodeLen;
+    EmitI32($14000000);
+    Exit;
+  end;
+  if TargetArch = TARGET_XTENSA then
+  begin
+    if withHeapArena then
+      Error('target xtensa: a heap arena needs mmap, which bare metal has not '
+            + '(bug-a-nilpy-on-cross-targets-four-remaining-walls)');
+    { Bare-metal (Call0 only): no kernel set up a stack, so establish sp at the
+      top of SRAM before entering main. EmitLoadConstXtensa drops a literal
+      island for the 32-bit address. Must run before any call. }
+    if EspBareBoot then
+    begin
+      { The ESP32-S3 is dual-core, and under `qemu -kernel` (no ROM/bootloader
+        to park the APP core) BOTH cores execute this entry. Two cores racing
+        through one stack/BSS double-faulted into the empty ROM vector region
+        — total UART silence (bug-esp32s3-bare-boot-no-uart-output). Core 0's
+        PRID is $CDCD (Espressif convention); spin every other core here. }
+      xtensa_rsr_prid(reg_xtensa_a8);
+      EmitLoadConstXtensa(reg_xtensa_a9, $CDCD);
+      xtensa_beq(reg_xtensa_a8, reg_xtensa_a9, 6);  { core 0: skip the park }
+      xtensa_j(0);                                  { any other core: spin }
+      EmitLoadConstXtensa(reg_xtensa_sp, ESP_BARE_STACK_TOP);
+    end;
+    if XtensaABI = XTENSA_ABI_WINDOWED then
+    begin
+      { app_main: program-level vars are globals (BSS), so no stack locals --
+        but the body still uses the constant-sp expression stack, so reserve
+        the spill region up front (no patchable addi on this path). }
+      xtensa_entry(reg_xtensa_sp, 32 + XT_EXPR_REGION + XT_OUTARG_REGION);
+      xtensa_mov(reg_xtensa_a7, reg_xtensa_sp);
+      XtSpillDepth := XT_OUTARG_REGION;
+      XtSpillMax := XtSpillDepth;
+    end;
+    { Same shape as CPENABLE below, for the same reason: bare metal leaves
+      ATOMCTL at its reset value 0, and 0 means "raise an exception" for EVERY
+      memory class, so the first S32C1I traps into the ROM vector loop before
+      the program prints anything. 0x2A = "internal operation" for all three
+      classes (write-back / write-through / bypass), which is the one value
+      that works whichever class the part files internal SRAM under — measured:
+      under qemu -M esp32s3 only the write-back field is consulted, so 0x28
+      (the value that leaves it 0) still faults while 0x01 already suffices.
+      ESP-IDF never writes ATOMCTL, so this is a bare-boot need only; an IDF
+      image is entered by IDF's own startup and we emit no entry there.
+      bug-s-xtensa-atomics-s32c1i-faults-on-esp32s3 }
+    if EspBareBoot and SocHasAtomicISA(TargetSoc) then
+    begin
+      EmitLoadConstXtensa(reg_xtensa_a8, $2A);
+      xtensa_wsr_atomctl(reg_xtensa_a8);
+      xtensa_rsync;
+    end;
+    { Enable the FP coprocessor before any add.s/mul.s (bare metal leaves CPENABLE
+      clear -> FP would trap). Enable all CPs (harmless: no context switching). }
+    if XtensaHasFpu then
+    begin
+      EmitLoadConstXtensa(reg_xtensa_a8, $FF);
+      xtensa_wsr_cpenable(reg_xtensa_a8);
+      xtensa_rsync;
+    end;
+    { Xtensa entry stub: jump to main body. }
+    jmpPatch := CodeLen;
+    xtensa_j(0);
+    Exit;
+  end;
+  if TargetArch = TARGET_RISCV32 then
+  begin
+    if withHeapArena then
+      Error('target riscv32: a heap arena needs mmap, which this profile has '
+            + 'not (bug-a-nilpy-on-cross-targets-four-remaining-walls)');
+    { Bare-metal: no kernel set up a stack, so establish sp at the top of SRAM
+      (grows down toward the image) before entering main. lui+addi covers any
+      low bits in the stack-top constant. }
+    if EspBareBoot then
+    begin
+      EmitI32((((ESP_BARE_STACK_TOP + $800) shr 12) shl 12) or (2 shl 7) or $37); { lui sp,hi }
+      EmitI32(((ESP_BARE_STACK_TOP and $FFF) shl 20) or (2 shl 15) or (2 shl 7) or $13); { addi sp,sp,lo }
+    end;
+    { Hosted: save the kernel-provided initial sp (points at argc) for
+      ParamCount/ParamStr, like the other hosted targets. }
+    if not EspBareBoot then
+    begin
+      rv32_auipc(reg_t1, 0);
+      rv32_jal(reg_zero, 8);
+      EmitGlobRef(BSS_INITIAL_RSP);
+      rv32_lw(reg_t1, reg_t1, 8);       { t1 = &BSS_INITIAL_RSP }
+      rv32_sw(reg_sp, reg_t1, 0);
+    end;
+    { RISC-V entry stub: jump to main body. }
+    jmpPatch := CodeLen;
+    EmitI32($0000006F);
+    Exit;
+  end;
+  { x86-64: save rsp then jmp to main body.
+    mov [bss_initial_rsp], rsp: 48 89 24 25 <GlobRef(0)> }
+  EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+  if withHeapArena then
+  begin
+    EmitMmapArena(HEAP_ARENA_SIZE);                            { -> rax = base }
+    EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(BSS_HEAP_PTR);
+    EmitB($48); EmitB($89); EmitB($C2);                        { mov rdx, rax }
+    EmitB($48); EmitB($81); EmitB($C2); EmitI32(HEAP_ARENA_SIZE);
+    EmitB($48); EmitB($89); EmitB($14); EmitB($25); EmitGlobRef(BSS_HEAP_END);
+  end;
+  EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
+end;
+
+procedure PatchProgramEntryJump(jmpPatch: Integer);
+{ The other half of EmitProgramEntryForTarget: fix its patchable jump up to the
+  main body, which starts at the current CodeLen. Same per-arch encoding, and it
+  lived in the same one driver — a caller that emitted the shared stub but kept
+  its own x86-64 `Patch32(jmpPatch, CodeLen - (jmpPatch + 4))` wrote a raw byte
+  offset over an ARM branch word and produced a fresh SIGILL four instructions
+  later. The two halves belong together.
+  bug-a-nilpy-on-cross-targets-four-remaining-walls }
+begin
+  if TargetArch = TARGET_ARM32 then
+    Patch32(jmpPatch, $EA000000 or ((((CodeLen - jmpPatch) div 4) - 2) and $00ffffff))
+  else if TargetArch = TARGET_AARCH64 then
+    Patch32(jmpPatch, $14000000 or (((CodeLen - jmpPatch) div 4) and $03ffffff))
+  else if TargetArch = TARGET_XTENSA then
+    Patch24(jmpPatch, EncodeXtensaJ(CodeLen - jmpPatch))
+  else if TargetArch = TARGET_RISCV32 then
+    Patch32(jmpPatch, EncodeRISCVJAL(0, CodeLen - jmpPatch))
+  else
+    Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
+end;
+
 procedure EmitIoLockStubsForTarget;
 { THE one place that decides which I/O-lock stubs a build needs. Every frontend
   driver calls this; none of them may spell out the per-arch choice itself.

@@ -31,6 +31,8 @@ procedure EmitIoLockStubsArm32; forward;
 { The per-arch dispatcher every frontend driver must call instead of picking a
   stub itself — see its body in ir_codegen.inc for why that is not optional. }
 procedure EmitIoLockStubsForTarget; forward;
+procedure EmitProgramEntryForTarget(withHeapArena: Boolean; var jmpPatch: Integer); forward;
+procedure PatchProgramEntryJump(jmpPatch: Integer); forward;
 procedure EmitSignalRuntimeForTarget; forward;   { its sibling: the one place the per-arch signal runtime is chosen }
 
 { pxx pre-scans declarations, so a routine may be CALLED above its definition; FPC
