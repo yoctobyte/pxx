@@ -1763,12 +1763,12 @@ begin
           EmitCallProc(procIdx);                           { r0 = result }
 
           EmitI32($E92D0001);                         { push result }
-          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
             EmitI32($E59D0008);                       { lhs }
             EmitStrDecRefArm32;
           end;
-          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
           begin
             EmitI32($E59D0004);                       { rhs }
             EmitStrDecRefArm32;
@@ -1850,12 +1850,12 @@ begin
             EmitI32($E2200001);                       { eor r0, r0, #1 }
 
           EmitI32($E92D0001);                         { push result }
-          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
             EmitI32($E59D0008);                       { lhs }
             EmitStrDecRefArm32;
           end;
-          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
           begin
             EmitI32($E59D0004);                       { rhs }
             EmitStrDecRefArm32;
@@ -1900,12 +1900,12 @@ begin
           EmitSetccArm32(op, True);                   { signed -> 0/1 }
 
           EmitI32($E92D0001);                         { push result }
-          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
             EmitI32($E59D0008);                       { lhs }
             EmitStrDecRefArm32;
           end;
-          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
           begin
             EmitI32($E59D0004);                       { rhs }
             EmitStrDecRefArm32;

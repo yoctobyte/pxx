@@ -2074,12 +2074,12 @@ begin
           EmitB($81); EmitB($C4); EmitI32(16);         { add esp, 16 }
           { release fresh BINOP operand temporaries; [esp]=rhs, [esp+4]=lhs }
           EmitB($50);                                  { push eax (save result) }
-          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
             EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov eax, [esp+8] (lhs) }
             EmitStrDecRef386;
           end;
-          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
           begin
             EmitB($8B); EmitB($44); EmitB($24); EmitB($04); { mov eax, [esp+4] (rhs) }
             EmitStrDecRef386;
@@ -2362,11 +2362,11 @@ begin
           end;
 
           EmitB($50);                                  { push result }
-          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
             EmitB($8B); EmitB($44); EmitB($24); EmitB($08); EmitStrDecRef386;
           end;
-          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
           begin
             EmitB($8B); EmitB($44); EmitB($24); EmitB($04); EmitStrDecRef386;
           end;
@@ -2433,11 +2433,11 @@ begin
           EmitB($0F); EmitB($B6); EmitB($C0);          { movzx eax, al }
 
           EmitB($50);                                  { push result }
-          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
             EmitB($8B); EmitB($44); EmitB($24); EmitB($08); EmitStrDecRef386;
           end;
-          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
           begin
             EmitB($8B); EmitB($44); EmitB($24); EmitB($04); EmitStrDecRef386;
           end;

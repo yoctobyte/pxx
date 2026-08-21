@@ -1460,12 +1460,12 @@ begin
           if procIdx < 0 then Error('compiler error: PXXStrConcat not found');
           EmitCallProc(procIdx);                             { x0 = result }
           EmitI32($F81F0FE0);                           { push result; [sp]=res,[sp+16]=rhs,[sp+32]=lhs }
-          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
             EmitI32($F94013E0);                         { ldr x0, [sp,#32] (lhs) }
             EmitStrDecRefA64;
           end;
-          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
           begin
             EmitI32($F9400BE0);                         { ldr x0, [sp,#16] (rhs) }
             EmitStrDecRefA64;
@@ -1550,12 +1550,12 @@ begin
           if op = Ord(tkNeq) then
             EmitI32($D2400000);                         { eor x0, x0, #1 }
           EmitI32($F81F0FE0);                           { push result }
-          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
             EmitI32($F94013E0);                         { ldr x0, [sp,#32] (lhs) }
             EmitStrDecRefA64;
           end;
-          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
           begin
             EmitI32($F9400BE0);                         { ldr x0, [sp,#16] (rhs) }
             EmitStrDecRefA64;
@@ -1599,12 +1599,12 @@ begin
           EmitAsmA64('cmp x0, #0');
           EmitSetccA64(op);                             { signed cset -> 0/1 }
           EmitI32($F81F0FE0);                           { push result }
-          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
             EmitI32($F94013E0);                         { ldr x0, [sp,#32] (lhs) }
             EmitStrDecRefA64;
           end;
-          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
           begin
             EmitI32($F9400BE0);                         { ldr x0, [sp,#16] (rhs) }
             EmitStrDecRefA64;

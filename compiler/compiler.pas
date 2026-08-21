@@ -138,6 +138,12 @@ procedure AddDefaultCIncludeDirs; forward;   { the C unit pull in pasparser_proc
 {$include ir.inc}
 function GetOrAllocNodeDynDesc(node: Integer): Integer; forward;
 function GetOrAllocDynUniqueDesc(node: Integer): Integer; forward;
+{ "does this operand already own its +1" — the ONE predicate for managed-string
+  ownership, body in ir_codegen.inc. Forwarded here because the cross backends
+  are included BEFORE it and each had hand-rolled a narrower copy that listed
+  IR_BINOP only, so every `'lit' + F(x)` leaked F's result on all four targets
+  (bug-a-a-string-function-result-in-a-concat-leaks-on-every-cross-target). }
+function IRNodeOwnsManagedStr(n: Integer): Boolean; forward;
 {$ifndef PXX_NO_AARCH64}{$include ir_codegen_aarch64.inc}{$endif}
 {$ifndef PXX_NO_I386}{$include ir_codegen386.inc}{$endif}
 {$ifndef PXX_NO_ARM32}{$include ir_codegen_arm32.inc}{$endif}

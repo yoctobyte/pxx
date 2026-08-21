@@ -4405,19 +4405,20 @@ begin
             equally a CALL result, which arrives at rc=1 by the function-result
             convention. Without the call arm every `"x" + f()` leaked f's
             result once per evaluation (uforth's wrapper build, ~3 strings per
-            PYTHON-word exec). Lvalues are borrows and stay. }
-          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and
-             ((IRKind[left] = IR_BINOP) or
-              ((IRKind[left] = IR_CALL) and (IRA[left] >= 0)) or
-              (IRKind[left] = IR_VIRTUAL_CALL) or (IRKind[left] = IR_CALL_IND)) then
+            PYTHON-word exec). Lvalues are borrows and stay.
+
+            Asked through IRNodeOwnsManagedStr rather than spelled out here: this
+            was the FIFTH hand-written copy of that predicate, and the four in
+            the cross backends listed IR_BINOP only — so the exact leak this
+            comment describes was still live on i386, arm32, aarch64 and
+            riscv32, at ~320 bytes per evaluation
+            (bug-a-a-string-function-result-in-a-concat-leaks-on-every-cross-target). }
+          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
             EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($10); { mov rax, [rsp+16] }
             IREmitCodeCall(AnsiStrReleaseAddr);
           end;
-          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and
-             ((IRKind[right] = IR_BINOP) or
-              ((IRKind[right] = IR_CALL) and (IRA[right] >= 0)) or
-              (IRKind[right] = IR_VIRTUAL_CALL) or (IRKind[right] = IR_CALL_IND)) then
+          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
           begin
             EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] }
             IREmitCodeCall(AnsiStrReleaseAddr);

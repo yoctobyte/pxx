@@ -1819,12 +1819,12 @@ begin
           EmitCallProc(procIdx);                { a0 = result handle }
           { release fresh tyAnsiString BINOP operands (nested concat temporaries) }
           rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push result; [sp+4]=rhs,[sp+8]=lhs }
-          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
             rv32_lw(reg_a0, reg_sp, 8);
             procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
           end;
-          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
           begin
             rv32_lw(reg_a0, reg_sp, 4);
             procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
@@ -1853,12 +1853,12 @@ begin
           EmitCallProc(procIdx);                { a0 = 1/0 }
           { release fresh operand temporaries }
           rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push result }
-          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
             rv32_lw(reg_a0, reg_sp, 8);
             procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
           end;
-          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
           begin
             rv32_lw(reg_a0, reg_sp, 4);
             procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
@@ -1892,12 +1892,12 @@ begin
           if procIdx < 0 then Error('compiler error: PXXStrCmp3 not found');
           EmitCallProc(procIdx);                { a0 = -1/0/1 }
           rv32_addi(reg_sp, reg_sp, -4); rv32_sw(reg_a0, reg_sp, 0);  { push result }
-          if (IRKind[left] = IR_BINOP) and (IntToTypeKind(IRTk[left]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[left]) = tyAnsiString) and IRNodeOwnsManagedStr(left) then
           begin
             rv32_lw(reg_a0, reg_sp, 8);
             procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
           end;
-          if (IRKind[right] = IR_BINOP) and (IntToTypeKind(IRTk[right]) = tyAnsiString) then
+          if (IntToTypeKind(IRTk[right]) = tyAnsiString) and IRNodeOwnsManagedStr(right) then
           begin
             rv32_lw(reg_a0, reg_sp, 4);
             procIdx := FindProc('PXXStrDecRef'); EmitCallProc(procIdx);
