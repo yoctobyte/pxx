@@ -1655,8 +1655,20 @@ begin
           Exit;
         end;
 
-        if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyUnknown)) then
-          Error('target aarch64: non-integer binop not yet supported');
+        { The result TAG does not choose the operation — the OPERANDS do. A frozen
+          string value IS its address (ir.inc AN_DEREF), so `PString(NativeInt(
+          pk[i]))^` arrives here as pointer arithmetic tagged tyString, and a
+          gate that read only `tk` refused it. x86-64 has no gate at all; these
+          three invented one, and it walled off the ENTIRE NilPy runtime on i386
+          and arm32 — every .npy program, on every 32-bit cross target.
+          bug-a-a-string-tagged-address-binop-walls-off-nilpy-on-three-targets }
+        if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyUnknown) or
+                (BinopOperandIsMachineWord(lhsTk) and
+                 BinopOperandIsMachineWord(rhsTk))) then
+          Error('target aarch64: non-integer binop not yet supported: ' +
+                TypeKindSpelling(tk) + ' (op token ' + AIntToStr(op) + ', operands ' +
+                TypeKindSpelling(lhsTk) + ', ' + TypeKindSpelling(rhsTk) + ')' +
+                CurProcNoteForError);
         IREmitNodeAarch64(left);
         EmitI32($F81F0FE0); { str x0, [sp, #-16]! }
         IREmitNodeAarch64(right);

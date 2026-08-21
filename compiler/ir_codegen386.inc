@@ -2509,8 +2509,20 @@ begin
 
         { tyUnknown: synthesized integer nodes (e.g. the for-loop increment)
           carry tk=0; x86-64 treats them as integers, so do we. }
-        if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyUnknown)) then
-          Error('target i386: non-integer binop not yet supported');
+        { The result TAG does not choose the operation — the OPERANDS do. A frozen
+          string value IS its address (ir.inc AN_DEREF), so `PString(NativeInt(
+          pk[i]))^` arrives here as pointer arithmetic tagged tyString, and a
+          gate that read only `tk` refused it. x86-64 has no gate at all; these
+          three invented one, and it walled off the ENTIRE NilPy runtime on i386
+          and arm32 — every .npy program, on every 32-bit cross target.
+          bug-a-a-string-tagged-address-binop-walls-off-nilpy-on-three-targets }
+        if not (TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyUnknown) or
+                (BinopOperandIsMachineWord(lhsTk) and
+                 BinopOperandIsMachineWord(rhsTk))) then
+          Error('target i386: non-integer binop not yet supported: ' +
+                TypeKindSpelling(tk) + ' (op token ' + AIntToStr(op) + ', operands ' +
+                TypeKindSpelling(lhsTk) + ', ' + TypeKindSpelling(rhsTk) + ')' +
+                CurProcNoteForError);
         IREmitNode386(left);
         EmitB($50);                                  { push eax }
         IREmitNode386(right);

@@ -6437,6 +6437,30 @@ begin
   end;
 end;
 
+function BinopOperandIsMachineWord(tk: TTypeKind): Boolean;
+{ May this operand take part in plain integer arithmetic in a register? Ordinals
+  and pointers obviously — and tyString / tySet too, because a frozen string or a
+  set VALUE *is* its address (ir.inc, AN_DEREF: "a frozen-string / set value IS
+  its address (no load)"), so the node holds a machine word however it is tagged. }
+begin
+  Result := TypeIsOrdinal(tk) or (tk = tyBoolean) or (tk = tyUnknown) or
+            (tk = tyString) or (tk = tySet) or (tk = tyPointer);
+end;
+
+function CurProcNoteForError: AnsiString;
+{ ' in <proc>' when a body is being emitted, '' at top level. Backend refusals
+  ("not yet supported on target X") name a construct but not WHERE it is, and
+  the `near:` context on a codegen-time Error is the LEXER's stale position —
+  it points at whatever was tokenised last, which is routinely a different unit
+  entirely. Without the proc name a cross-target wall in a builtin unit costs a
+  bisect to locate. }
+begin
+  if (CurProc >= 0) and (CurProc < ProcCount) then
+    Result := ' in ' + Procs[CurProc].Name
+  else
+    Result := '';
+end;
+
 function TypeIsMachineInt(tk: TTypeKind): Boolean;
 { The fixed-width integer kinds — deliberately NOT the whole of TypeIsOrdinal:
   Boolean, Char, Pointer, Bool8 and UCS4Char are ordinals that do not take part
