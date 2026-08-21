@@ -131,4 +131,4 @@ answer cannot vary by `--target`.
 positive control run green; `gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 0e452e1aa.
