@@ -32,3 +32,6 @@ Main loop exited cleanly
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-21 — auto-closed by the plexus watcher: `test-core#src:test/test_c_gtk_window.pas` passes at de2de369ea6a (tier native); it was red at ef7f17d45caa. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
