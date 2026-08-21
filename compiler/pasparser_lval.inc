@@ -2562,14 +2562,36 @@ function BuildMetaclassNew(crefNode, ci, mmi: Integer): Integer;
   metaclass-cast path `TFooClass(expr).Create` (ParseFactor). }
 var mpi, mcallNode, mlastArg, margSeq, margIdx, mexprNode, mai: Integer;
 begin
-  mpi := UMthProc_[mmi];
+  { mmi = -1 is the IMPLICIT root constructor: the class declares none anywhere up
+    its chain, so `Create` means FPC's empty TObject.Create. The static `TFoo.Create`
+    path has always accepted that shape; this one rejected it with "a pointer has no
+    members", so `cr.Create` compiled only for a hierarchy that happened to declare a
+    ctor -- the same double case normalise-dont-special-case describes, with the
+    unbuilt arm being the one that stayed broken.
+    bug-a-metaclass-create-needs-a-declared-constructor }
+  if mmi < 0 then mpi := -1 else mpi := UMthProc_[mmi];
   mcallNode := AllocNode(AN_METACLASS_NEW);
   ASTRight[mcallNode]   := crefNode;             { classref value }
-  ASTIVal[mcallNode]    := mpi;                  { ctor proc idx }
-  ASTSOffset[mcallNode] := UMthVirSlot[mmi];     { vmt slot, -1 if non-virtual }
+  ASTIVal[mcallNode]    := mpi;                  { ctor proc idx, -1 = implicit root }
+  if mmi < 0 then ASTSOffset[mcallNode] := -1
+  else ASTSOffset[mcallNode] := UMthVirSlot[mmi]; { vmt slot, -1 if non-virtual }
   ASTSLen[mcallNode]    := REC_UCLASS_BASE + ci; { result record id }
   ASTTk[mcallNode]      := Ord(tyClass);
   mlastArg := -1;
+  if mpi < 0 then
+  begin
+    { The root ctor takes nothing. Accept the empty parens FPC accepts and refuse
+      arguments here rather than silently dropping them. }
+    if CurTok.Kind = tkLParen then
+    begin
+      Next;
+      if CurTok.Kind <> tkRParen then
+        Error('this class declares no constructor, so Create takes no arguments');
+      Expect(tkRParen, ')');
+    end;
+    Result := mcallNode;
+    Exit;
+  end;
   if CurTok.Kind = tkLParen then
   begin
     Next;
@@ -3973,6 +3995,19 @@ begin
       Error('unknown class-reference operation: ' + fieldName);
     Result   := ParseClassRefOpTail(mcallNode, outTk);
     finished := True;
+    Exit;
+  end;
+  { No member of that name anywhere up the chain, but the name is `Create`: that
+    is the IMPLICIT root constructor every class inherits from TObject. The
+    static `TFoo.Create` spelling has always accepted it; a metaclass receiver
+    must too, or the factory idiom works only for classes that happen to declare
+    a ctor of their own. bug-a-metaclass-create-needs-a-declared-constructor }
+  if (mmi < 0) and CaseEqual(fieldName, 'Create') then
+  begin
+    Next;                            { consume `Create` }
+    Result := BuildMetaclassNew(node, mcCi, -1);
+    outTk  := tyClass;
+    outRec := REC_UCLASS_BASE + mcCi;
     Exit;
   end;
   if mmi < 0 then Exit;

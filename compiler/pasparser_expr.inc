@@ -5326,11 +5326,18 @@ begin
 
             The name is only consumed once it is known to BE a constructor, so a non-ctor
             member still falls through to the paths below. }
+          { ...or the name is `Create` and the class declares NO constructor at all:
+            the implicit root ctor. Same fallback the metaclass-VARIABLE receiver
+            grew in ParseMetaclassMemberTail -- both spellings reach the one
+            BuildMetaclassNew, so both must agree on what `Create` means.
+            bug-a-metaclass-create-needs-a-declared-constructor }
           if (IntToTypeKind(AliasElemTk[aliasIdx]) = tyClass) and
              (AliasElemRec[aliasIdx] >= REC_UCLASS_BASE) and
              (CurTok.Kind = tkDot) and (Tokens[TokPos].Kind = tkIdent) and
-             (FindUMeth(AliasElemRec[aliasIdx] - REC_UCLASS_BASE, GetTokenStr(TokPos)) >= 0) and
-             UMthIsCtor[FindUMeth(AliasElemRec[aliasIdx] - REC_UCLASS_BASE, GetTokenStr(TokPos))] then
+             (((FindUMeth(AliasElemRec[aliasIdx] - REC_UCLASS_BASE, GetTokenStr(TokPos)) >= 0) and
+               UMthIsCtor[FindUMeth(AliasElemRec[aliasIdx] - REC_UCLASS_BASE, GetTokenStr(TokPos))]) or
+              ((FindUMeth(AliasElemRec[aliasIdx] - REC_UCLASS_BASE, GetTokenStr(TokPos)) < 0) and
+               CaseEqual(GetTokenStr(TokPos), 'Create'))) then
           begin
             mcCtorCi := AliasElemRec[aliasIdx] - REC_UCLASS_BASE;
             mcCtorNm := GetTokenStr(TokPos);
@@ -5346,6 +5353,11 @@ begin
               LastExprTk := tyClass;
               Exit;
             end;
+            Next; { consume `Create`: the implicit root ctor, mmi = -1 }
+            node := BuildMetaclassNew(node, mcCtorCi, -1);
+            CurASTNode := node;
+            LastExprTk := tyClass;
+            Exit;
           end;
           { Run suffix loop: handle chains of ^, .field, and [i] on the cast result. }
           while CurTok.Kind in [tkCaret, tkDot, tkLBrack] do

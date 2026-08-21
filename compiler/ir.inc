@@ -12056,6 +12056,16 @@ begin
                IRAppend(IR_LOAD_SYM, mcInstSym, -1, -1, 0, Ord(tyPointer)),
                mcVmt, -1, 0, Ord(tyPointer));
 
+      { cpi = -1: the class declares no constructor, so `Create` is FPC's empty
+        TObject.Create. Allocating and stamping the VMT above IS the whole
+        construction — there is no body to call.
+        bug-a-metaclass-create-needs-a-declared-constructor }
+      if cpi < 0 then
+      begin
+        Result := IRAppend(IR_LOAD_SYM, mcInstSym, -1, -1, 0, ASTTk[node]);
+        Exit;
+      end;
+
       { Constructor call: Self (param 0) = inst, then the explicit args. }
       mcSelfArg := IRAppend(IR_ARG,
                      IRAppend(IR_LOAD_SYM, mcInstSym, -1, -1, 0, Ord(tyPointer)),

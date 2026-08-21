@@ -3847,6 +3847,15 @@ test-core: $(COMPILER)
 	# pushed), not the nil stub it used to be (b340)
 	./$(COMPILER) test/test_exceptaddr_b340.pas $(TESTTMP)/test_exceptaddr_b34026
 	test "$$($(TESTTMP)/test_exceptaddr_b34026 | tail -1)" = "PASS"
+	# `classRef.Create` when the hierarchy declares NO constructor -- the implicit
+	# TObject.Create. The static `TFoo.Create` spelling always accepted it; both
+	# metaclass spellings (a `class of T` variable and an inline metaclass cast)
+	# rejected it with "a pointer has no members", so the factory idiom worked
+	# only for classes that happened to declare a ctor of their own. Rows for the
+	# declared-virtual-ctor arm are here too, so a regression either way shows.
+	./$(COMPILER) test/test_metaclass_implicit_create.pas $(TESTTMP)/test_metaclass_impl_create26
+	@test "$$($(TESTTMP)/test_metaclass_impl_create26)" = "$$(printf 'B\nC\nA\ncast:B\nQ30\nP3\nloop0:B:TB\nloop1:C:TC')" \
+	  || { echo "test_metaclass_implicit_create: FAIL"; $(TESTTMP)/test_metaclass_impl_create26; exit 1; }
 	# ExceptObject = the exception OBJECT in flight, ExceptAddr's twin: the same
 	# BSS slot `on E: T do` binds from, reached through __pxxExceptObject. The
 	# shape it exists for is a BARE `except` -- no `on ... do` binding, which is
