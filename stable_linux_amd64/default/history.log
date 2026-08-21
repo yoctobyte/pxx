@@ -366,3 +366,4 @@
 2026-08-19T19:44:00Z  v366  5e48116ee780ae551d51f27d512fbd67a7eaa245e973009aa44d019ce93f7611  cabb5d5989f3b4fbcc1897da094f9ad2b9a1d645  docs(progress): record the shas the resolves landed as
 2026-08-19T21:34:48Z  v367  1479b663dd1551233c6d995c4bc8d150dc32676054e4e7437784d65747f89f0a  d47acfee770cf057000fa49861c3d04b46bc51a1  tstate(plexus): publish uncommitted state (plexus.json)
 2026-08-20T03:06:30Z  v368  e3394e9cf61b511aecc99aa67cd2ddc24968be4eeeea2bfdaf6beeca4bc7dd3c  21117f4152845a44e578a5eb04dc3af250a0b935  T: mark riscv64 in the csmith oracle table as a target with no backend
+2026-08-21T10:08:18Z  v369  9422a2848c7f04ed4b0568541bc8aae370e7c2668e3f475ce72d6bc78daa60f2  ef895b743c14227c77fe8068269008626e4c6227  feat(A): emitted nil checks on method-call receivers

@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit builtin;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { Conversion helpers backing the Str and Val built-ins. The compiler pulls this
   unit in automatically, but only when a program actually uses Str or Val (a
   token pre-scan in ParseProgram), so programs that never call them pay nothing
@@ -101,6 +102,10 @@ function VariantToInt64(const v: Variant): Int64;
 function VariantToDouble(const v: Variant): Double;
 function VariantToBool(const v: Variant): Boolean;
 function VariantToChar(const v: Variant): Char;
+{ Pascal Variant ARITHMETIC operand coercion — see the implementation. }
+function PXXVarNumCoerce(src, dst: Pointer): Pointer;
+{ Pascal Variant binop: PXXVarBinOp with the Pascal string rule applied first. }
+function PXXVarBinOpPas(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
 { --strict-fpc ONLY: FPC's Variant->Char, which routes through the variant's
   STRING form and takes character 1 — Char(65) = '6', Char(122) = '1',
   Char(True) = 'T', Char(2.5) = '2'. The DEFAULT dialect uses VariantToChar
@@ -110,6 +115,22 @@ function VariantToChar(const v: Variant): Char;
   bug-p-variant-to-int-and-char-conversion-diverges-from-fpc }
 function VariantToCharFPC(const v: Variant): Char;
 function PCharToString(p: PChar): AnsiString;
+
+{ A static `array[lo..hi] of Char` IS a string in FPC, in both directions, and
+  these two are that conversion. `cap` is the array's element count.
+
+  __pxxCharArrayToStr stops at the first #0 within cap and otherwise takes all
+  cap characters -- FPC's rule, verified against 3.2.2: an
+  `array[0..7] of Char` holding 'ABC'#0'EFGH' converts to the 3-character
+  'ABC', while the same array holding eight non-NUL characters converts to all
+  eight. So it is PCharToString with a hard length bound, not a plain memcpy.
+
+  __pxxStrToCharArray copies Min(Length(s), cap) characters and ZERO-fills the
+  rest, which is what makes `a := 'abc'` on an 8-element array leave
+  `97 98 99 0 0 0 0 0` rather than five bytes of whatever was there.
+  bug-p-a-char-array-is-not-a-string-in-any-direction }
+function __pxxCharArrayToStr(p: PChar; cap: Integer): AnsiString;
+procedure __pxxStrToCharArray(p: PChar; cap: Integer; const s: AnsiString);
 
 { WideChar -> UTF-8 conversion, backing the frontend's widechar-in-string-context
   lowering (`s := WideChar(u)`, `WideChar(u1)+WideChar(u2)`, a WideChar(x) passed
@@ -235,9 +256,39 @@ function __pxxCompareByte(const Buf1, Buf2; Len: Int64): Int64;
   names shadows, like the other System names in this unit. }
 var
   RandSeed: Cardinal;
+  HwRandomProbe: Integer;   { CPUID cache: 0 unknown, 1 has RDRAND, 2 has not }
 
 function Random(range: Int64): Int64;
 procedure Randomize;
+
+{ ---- Hardware entropy (tier 1) -----------------------------------------
+
+  lib/rtl/random.pas has a HARD design mandate: one elegant .pas file, no
+  per-arch {$ifdef} soup. Its tiers 2 (getrandom/urandom) and 3 (xoshiro256**)
+  satisfy that because neither needs a special instruction. Tier 1 does, so the
+  instruction lives behind these two entry points and the library reads as three
+  one-line tier selections. feature-a-rdrand-cpuid-compiler-builtins
+
+  __pxxHwRandom64 REPORTS SUCCESS rather than just handing back a value, and
+  that is the whole point of the signature: RDRAND can fail — under load or
+  entropy exhaustion it clears CF and leaves the destination ZERO. A caller that
+  read the value alone would take a silent zero for entropy, which in the one
+  context these instructions exist for is a catastrophic and invisible failure.
+  So: False means "no entropy this time, retry a bounded number of times, then
+  fall to tier 2".
+
+  __pxxCpuHasHwRandom probes CPUID leaf 1 ECX bit 30 and caches the answer.
+  The probe is mandatory, not decorative: the instruction is absent on plenty of
+  cores and executing it there is #UD.
+
+  x86-64 only so far. aarch64's MRS RNDR needs FEAT_RNG, which is OPTIONAL and
+  needs its own ID_AA64ISAR0_EL1 probe plus system-register support in the a64
+  assembler; arm32 and riscv32 have no user-mode instruction at all (the library
+  stays on tier 2 there); ESP's RNG register is a Track S item and is only truly
+  random with the RF clock enabled. Every non-x86-64 target answers False here,
+  which routes the library to tier 2 — the correct answer, not a stub. }
+function __pxxCpuHasHwRandom: Boolean;
+function __pxxHwRandom64(var v: UInt64): Boolean;
 
 { FPC System.HexStr(Val, cnt): Val as cnt hex digits, truncating on the left
   (HexStr($1234, 2) = '34'), zero-padding on the right ('0012'). }
@@ -354,6 +405,61 @@ begin
   { No clock on a bare target (PXX_ESP): ts stays zero and the stack address
     below is the only entropy — Randomize is still callable, just weak there. }
   RandSeed := Cardinal(ts[0] xor ts[1] xor r xor Int64(@ts[0]));
+end;
+
+{ ---- Hardware entropy (tier 1) — see the interface note ---------------- }
+
+{$ifdef CPUX86_64}
+function __pxxCpuidRdrand: Boolean; assembler;
+{$asmMode intel}
+asm
+  push rbx
+  mov eax, 1
+  xor ecx, ecx
+  cpuid
+  shr ecx, 30
+  and ecx, 1
+  mov eax, ecx
+  pop rbx
+end;
+
+function __pxxHwRandom64(var v: UInt64): Boolean; assembler;
+{$asmMode intel}
+asm
+  mov rcx, v
+  xor edx, edx
+  rdrand rax
+  setc dl
+  mov [rcx], rax
+  mov eax, edx
+end;
+{$endif}
+
+{$ifndef CPUX86_64}
+function __pxxCpuidRdrand: Boolean;
+begin
+  Result := False;
+end;
+
+function __pxxHwRandom64(var v: UInt64): Boolean;
+begin
+  { Not "unimplemented": no user-mode hardware RNG instruction exists on this
+    target, so False is the correct answer and routes the caller to tier 2. }
+  v := 0;
+  Result := False;
+end;
+{$endif}
+
+function __pxxCpuHasHwRandom: Boolean;
+begin
+  { Cached: CPUID is serialising and the library asks this on its dispatch
+    path. 0 = not probed yet, 1 = yes, 2 = no. Three states, one variable —
+    two Booleans that must agree is how one of them ends up stale. }
+  if HwRandomProbe = 0 then
+  begin
+    if __pxxCpuidRdrand then HwRandomProbe := 1 else HwRandomProbe := 2;
+  end;
+  Result := HwRandomProbe = 1;
 end;
 
 function HexStr(Val: Int64; cnt: Integer): AnsiString;
@@ -657,6 +763,107 @@ begin
   else if t = 7 then Result := 'an object'
   else if (t >= 8192) and (t <= 8199) then Result := 'a promotable integer'
   else Result := 'an unknown tag';
+end;
+
+{ Pascal Variant arithmetic converts a STRING or CHAR operand to a NUMBER, and
+  raises EVariantError when the text is not numeric -- FPC's rule, and the same
+  one VariantToInt64's VT_STRING arm below already implements for `i := v`. The
+  binop path never called it, so `v('15') - 3` read the ANSISTRING HANDLE as an
+  integer and answered a heap address, while `v('5') - 3` answered 50, the char
+  ordinal (bug-p-variant-arithmetic-on-a-string-reads-the-payload-as-a-number).
+
+  Returns src UNTOUCHED for every other tag, so the caller can call it
+  unconditionally on both operands; dst is a caller-owned 16-byte scratch
+  variant that outlives the operation. An integer-looking string coerces to
+  VT_INT64 and a fractional one to VT_DOUBLE, which is what makes `'5' + 2.5`
+  come out 7.5 rather than 7: the existing dispatch promotes to double as soon
+  as either side carries VT_DOUBLE.
+
+  NilPy does NOT come through here -- the emitter only calls it when
+  PyProgramMode is off -- because Python's rules are different in every one of
+  these cases ('5' * 3 is '555', '5' + 3 is a TypeError). }
+function PXXVarNumCoerce(src, dst: Pointer): Pointer;
+var
+  p, d: PVariantRecord;
+  txt: AnsiString;
+  iv: Int64;
+  dv: Double;
+  vcode: Integer;
+begin
+  Result := src;
+  p := PVariantRecord(src);
+  if (p^.VType <> 5) and (p^.VType <> 6) then Exit;   { not VT_CHAR / VT_STRING }
+  if p^.VType = 5 then
+    txt := Chr(Byte(p^.Payload))                      { VT_CHAR: its one character, as text }
+  else
+    txt := PAnsiString(@p^.Payload)^;                 { VT_STRING }
+  d := PVariantRecord(dst);
+  Val(txt, iv, vcode);
+  if vcode = 0 then
+  begin
+    d^.VType := 2;                                    { VT_INT64 }
+    d^.Payload := iv;
+    Result := dst;
+    Exit;
+  end;
+  ValFloat(txt, dv, vcode);
+  if vcode = 0 then
+  begin
+    d^.VType := 3;                                    { VT_DOUBLE }
+    PDouble(@d^.Payload)^ := dv;
+    Result := dst;
+    Exit;
+  end;
+  writeln('Runtime error: EVariantError, cannot convert string to a number');
+  Halt(219);
+end;
+
+function PXXVarBinOpPas(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
+{ PASCAL's Variant binop. PXXVarBinOp is the raw dispatch that i386, arm32,
+  aarch64 and riscv32 call for IR_VAR_BINOP; this wrapper puts FPC's rule in
+  front of it, and the backends select it whenever the program is not NilPy.
+
+  The rule has two halves and the raw dispatch gets both wrong:
+
+    * `+` CONCATENATES only when BOTH operands are stringy. PXXVarBinOp takes
+      its concat arm when EITHER is, so `'5' + 3` was '5' and `5 + '3'` was
+      '3' — it rendered the stringy side and dropped the other.
+    * every OTHER arithmetic operator converts a stringy operand to a number.
+      PXXVarBinOp has no coercion at all, so `-`, `*` and `/` read the payload
+      raw: a VT_CHAR's ordinal (`'5' - 3` = 50) and, far worse, a VT_STRING's
+      ANSISTRING HANDLE — `'15' - 3` answered a heap address, a different one
+      every run, on every target that routes through here.
+
+  x86-64 hand-emits the same two halves in EmitVarBinOp and was fixed on
+  2026-08-20 (bug-p-variant-arithmetic-on-a-string-reads-the-payload-as-a-number);
+  this is the other four targets' half.
+
+  NilPy must NOT reach this: Python's rules for these pairs are different in
+  every case ('5' * 3 is '555', '5' + 3 is a TypeError). The choice is made at
+  EMIT time from PyProgramMode, which is exactly what a shared runtime helper
+  cannot see — so it is made by choosing WHICH helper to call, rather than by a
+  runtime flag the frontend would have to set.
+  bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did }
+var
+  la, ra: TVariantRecord;
+  lp, rp: Pointer;
+  lStr, rStr: Boolean;
+begin
+  lp := left;
+  rp := right;
+  if isCompare = 0 then
+  begin
+    lStr := (PVariantRecord(left)^.VType = 5) or (PVariantRecord(left)^.VType = 6);
+    rStr := (PVariantRecord(right)^.VType = 5) or (PVariantRecord(right)^.VType = 6);
+    { tkPlus = 70. Both stringy and `+` is the one case that stays a concat;
+      hand the raw dispatch the ORIGINAL operands so its string arm fires. }
+    if not ((opTk = 70) and lStr and rStr) then
+    begin
+      lp := PXXVarNumCoerce(left, @la);
+      rp := PXXVarNumCoerce(right, @ra);
+    end;
+  end;
+  Result := PXXVarBinOp(dest, lp, rp, opTk, isCompare);
 end;
 
 function VariantToInt64(const v: Variant): Int64;
@@ -1441,6 +1648,38 @@ begin
       i := i + 1;
       c := p[i];
     end;
+  end;
+end;
+
+function __pxxCharArrayToStr(p: PChar; cap: Integer): AnsiString;
+var i: Integer;
+begin
+  Result := '';
+  if p = nil then Exit;
+  i := 0;
+  while (i < cap) and (p[i] <> #0) do
+  begin
+    Result := Result + p[i];
+    i := i + 1;
+  end;
+end;
+
+procedure __pxxStrToCharArray(p: PChar; cap: Integer; const s: AnsiString);
+var i, n: Integer;
+begin
+  if p = nil then Exit;
+  n := Length(s);
+  if n > cap then n := cap;
+  i := 0;
+  while i < n do
+  begin
+    p[i] := s[i + 1];
+    i := i + 1;
+  end;
+  while i < cap do
+  begin
+    p[i] := #0;
+    i := i + 1;
   end;
 end;
 

@@ -1,6 +1,7 @@
 { SPDX-License-Identifier: Zlib }
 unit builtinheap;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 { ESP (xtensa/bare riscv32) has no mmap and no OS heap of its own here; back the
   allocator with a fixed static arena instead. One marker for both ESP ISAs.
   HOSTED riscv32 (qemu-user linux) DOES have mmap and the linux syscall ABI (its
@@ -253,7 +254,7 @@ function PXXObjIsBoundPair(p: Pointer): Boolean;
 { COM/ARC interface ARC helpers dispatch through the IMT via an indirect call,
   which the ESP (xtensa/riscv32) backends cannot lower yet; ESP has no COM
   interfaces anyway, so exclude them there (their RegisterProc is likewise
-  gated in parser.inc). }
+  gated in pasparser_*.inc). }
 {$ifndef PXX_ESP}
 { An interface VALUE is ONE pointer: the instance (FPC's ABI). The IMT — and so
   the _AddRef/_Release slots — is recovered from the instance's class RTTI blob
@@ -273,7 +274,7 @@ procedure PXXIntfAssign(dest, src: Pointer; ifaceId: NativeInt);
   instead of silently building a parentless class whose ARC dispatch walks a
   garbage IMT slot (bug-pascal-tinterfacedobject-missing-silent-segfault).
   A COM-mode interface with no explicit parent implicitly derives IInterface
-  (parser.inc), which is what reserves IMT slots 0..2 for QueryInterface /
+  (pasparser_*.inc), which is what reserves IMT slots 0..2 for QueryInterface /
   _AddRef / _Release — ARC releases through slot 2.
   NOTE: a user declaration of either name lands on a LATER UCls row and is
   shadowed by this one (FindUClass is first-match); the shapes are identical to
@@ -301,6 +302,7 @@ type
 {$endif}
 function PXXStrUnique(strSlot: Pointer): Pointer;
 function PXXStrEq(lenA: NativeInt; srcA: Pointer; lenB: NativeInt; srcB: Pointer): Int64;
+function PXXStrCmp3(lenA: NativeInt; srcA: Pointer; lenB: NativeInt; srcB: Pointer): Int64;
 procedure PXXStrSetLen(strSlot: Pointer; newLen: NativeInt);
 procedure PXXMemMove(dst: Pointer; src: Pointer; n: NativeInt);
 procedure PXXMemZero(dst: Pointer; n: NativeInt);
@@ -321,6 +323,13 @@ function __pxx_modsi3(a: Integer; b: Integer): Integer;
 function PXXStrLoadFile(path: Pointer): Pointer;
 procedure PXXRecordRetain(recAddr: Pointer; desc: Pointer);
 procedure PXXRecordRelease(recAddr: Pointer; desc: Pointer);
+{ Initialize(x) / Finalize(x) over the SAME layout descriptor the scope-exit
+  release already walks. The pair exists because scope-exit cleanup only covers
+  variables the compiler declared: a record conjured from GetMem is just bytes
+  to it, so its AnsiString field holds garbage until something puts it in a
+  valid empty state. }
+procedure PXXRecordInitialize(recAddr: Pointer; desc: Pointer);
+procedure PXXRecordFinalize(recAddr: Pointer; desc: Pointer);
 procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);
 function PXXDynArrayUnique(arrSlot: Pointer; desc: Pointer): Pointer;
 function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
@@ -2056,6 +2065,92 @@ end;
 { Forward only where the BODY exists — PXXClassFinalize is itself inside
   {$ifndef PXX_ESP}, so an unconditional forward left it unresolved on the
   ESP profile (test-emit-obj: "unresolved forward: PXXClassFinalize"). }
+procedure PXXRecordZeroManaged(recAddr: Pointer; desc: Pointer);
+{ Store a valid EMPTY state into every managed member, releasing nothing.
+
+  Two callers with opposite reasons for wanting it, which is why it is its own
+  walk rather than folded into either:
+  - Initialize: the incoming bytes are NOT references. Releasing them would
+    decrement a refcount through whatever GetMem last left there.
+  - Finalize, after PXXRecordRelease: what makes a second Finalize decrement
+    nothing. Losing that turns the obvious double-Finalize into a heap
+    corruption instead of a no-op.
+
+  A zeroed slot IS the empty state for every managed kind here: a nil string
+  handle is '' , a nil dyn-array handle is length 0, a nil interface/object
+  reference is nil, and varEmpty is 0. Variants are zeroed as bytes rather than
+  PXXVarClear'd for the Initialize reason above -- PXXVarClear reads the tag
+  first, and on garbage that is a deref of a garbage pointer. }
+var
+  memberCount, i, j: Integer;
+  memberPtr: Int64;
+  offset, kind, arrayCount, typeRef: Integer;
+  memberAddr, itemAddr: Pointer;
+  subDesc: Pointer;
+  memberSize, k: Int64;
+begin
+  if (recAddr = nil) or (desc = nil) then Exit;
+  memberCount := PInt32(Int64(desc) + 8)^;
+  memberPtr := Int64(desc) + 12;
+  i := 0;
+  while i < memberCount do
+  begin
+    offset := PInt32(memberPtr)^;
+    kind := PInt32(memberPtr + 4)^;
+    arrayCount := PInt32(memberPtr + 8)^;
+    typeRef := PInt32(memberPtr + 12)^;
+    memberAddr := Pointer(Int64(recAddr) + offset);
+    subDesc := Pointer(memberPtr + 12 + typeRef);
+    if kind = 3 then memberSize := PInt32(Int64(subDesc) + 4)^
+    else if kind = 5 then memberSize := 16   { Variant slot: [tag:8][payload:8] }
+    else memberSize := SizeOf(Pointer);
+    j := 0;
+    while j < arrayCount do
+    begin
+      itemAddr := Pointer(Int64(memberAddr) + j * memberSize);
+      case kind of
+        1: PWord(itemAddr)^ := 0;                     { String handle }
+        2: PWord(itemAddr)^ := 0;                     { DynArray handle }
+        3: PXXRecordZeroManaged(itemAddr, subDesc);   { nested record }
+        4: PWord(itemAddr)^ := 0;                     { COM interface }
+        5: begin                                      { Variant: varEmpty = all zero }
+             k := 0;
+             while k < memberSize do
+             begin
+               PByte(Int64(itemAddr) + k)^ := 0;
+               k := k + 1;
+             end;
+           end;
+        6: PWord(itemAddr)^ := 0;                     { NilPy class reference }
+      end;
+      j := j + 1;
+    end;
+    memberPtr := memberPtr + 16;
+    i := i + 1;
+  end;
+end;
+
+procedure PXXRecordInitialize(recAddr: Pointer; desc: Pointer);
+{ Initialize(x): put the managed members into a valid empty state WITHOUT
+  releasing -- the incoming bytes are not references, which is the whole point.
+  Unmanaged members are left alone (FPC does the same); a caller who wants the
+  whole record cleared has FillChar, and FillChar over managed fields is the
+  hazard this intrinsic exists to replace. }
+begin
+  PXXRecordZeroManaged(recAddr, desc);
+end;
+
+procedure PXXRecordFinalize(recAddr: Pointer; desc: Pointer);
+{ Finalize(x): release each managed member's REFERENCE, then nil it.
+
+  Releases a reference, not the object: a string at refcount 3 because copies
+  exist goes to 2 and the copies stay valid. And it nils, so a second Finalize
+  on the same storage decrements nothing. }
+begin
+  PXXRecordRelease(recAddr, desc);
+  PXXRecordZeroManaged(recAddr, desc);
+end;
+
 procedure PXXClassFinalize(inst: Pointer); forward;
 {$endif}
 
@@ -2316,6 +2411,46 @@ begin
   Result := 1;
 end;
 
+{ Three-way LEXICOGRAPHIC ordering for the cross targets' compare codegen —
+  the `<` `<=` `>` `>=` counterpart of PXXStrEq above, same pre-decomposed
+  (length, data) operand shape so managed handles and inline strings share it.
+  Returns -1, 0 or +1.
+
+  It exists because the four cross backends had NO ordered-string arm at all:
+  only `=` / `<>` were special-cased, so `a < b` fell through to the ordinary
+  integer compare and compared the two heap HANDLES. That is a silent wrong
+  answer — `'zzz' < 'aaa'` reported by allocation order — on i386, arm32,
+  aarch64 and riscv32 alike.
+  bug-a-ordered-string-comparison-of-a-parameter-compares-handles-on-every-cross-target
+
+  Bytes are compared UNSIGNED (x86-64's inline sequence uses repe cmpsb + the
+  unsigned setcc family), and the shorter string sorts first when one is a
+  prefix of the other. A nil handle arrives here as len 0, which is what makes
+  '' the least element without a special case. }
+function PXXStrCmp3(lenA: NativeInt; srcA: Pointer; lenB: NativeInt; srcB: Pointer): Int64;
+var i, n, a, b, ca, cb: Int64;
+begin
+  n := lenA;
+  if lenB < n then n := lenB;
+  a := Int64(srcA);
+  b := Int64(srcB);
+  i := 0;
+  while i < n do
+  begin
+    ca := PByte(a + i)^;
+    cb := PByte(b + i)^;
+    if ca <> cb then
+    begin
+      if ca < cb then Result := -1 else Result := 1;
+      Exit;
+    end;
+    i := i + 1;
+  end;
+  if lenA < lenB then Result := -1
+  else if lenA > lenB then Result := 1
+  else Result := 0;
+end;
+
 {$ifndef PXX_ESP}
 { Managed-element dynarray + record retain/release (strings/records/nested
   arrays). Not on ESP yet -- the ESP dynarray (above) is unmanaged-element only. }
@@ -2387,6 +2522,22 @@ begin
             i := i + 1;
           end;
         end;
+      end
+      else if baseKind = 4 then
+      begin
+        { COM interface elements: _Release each slot. Nil-safe per element, so a
+          partly-filled array is fine, and UNLOCKED — _Release runs Destroy and
+          the self-locking FreeMem, so no heap lock may be held here. Every
+          caller of this walk is already outside the lock (scope-exit cleanup
+          and PXXDynSetLen both call it unwrapped), which is what let the array
+          family be fixed without the record/class lock-strategy decision. }
+        i := 0;
+        while i < len do
+        begin
+          itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+          PXXIntfRelease(itemAddr, Int64(baseRecDesc));
+          i := i + 1;
+        end;
       end;
     end;
     PXXFree(Pointer(PXXHdrBase(arrData)));
@@ -2435,6 +2586,20 @@ begin
           i := i + 1;
         end;
       end;
+    end
+    else if baseKind = 4 then
+    begin
+      { COM interface elements: _AddRef each slot. This is the half that makes
+        SetLength SHRINK release exactly the dropped tail — the survivors are
+        retained here, then the whole old array is released, so the net effect
+        on an element that survived is zero and on a dropped one is one release. }
+      i := 0;
+      while i < len do
+      begin
+        itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+        PXXIntfAddRef(itemAddr, Int64(baseRecDesc));
+        i := i + 1;
+      end;
     end;
   end;
 end;
@@ -2445,7 +2610,8 @@ end;
   decrements a header and may free the block) cannot serve it. Used by whole
   static-array assignment `b := a` to release the destination's old element
   handles before the bulk byte copy overwrites them.
-  baseKind: 1 = AnsiString elements, 3 = record elements (walked via desc). }
+  baseKind: 1 = AnsiString, 3 = record (walked via desc), 4 = COM interface
+  (baseRecDesc carries the interface id, not a pointer). }
 procedure PXXArrayReleaseImmediate(arrData: Pointer; len: NativeInt; baseKind: Integer; baseRecDesc: Pointer);
 var
   i: Int64;
@@ -2475,6 +2641,18 @@ begin
         PXXRecordRelease(itemAddr, baseRecDesc);
         i := i + 1;
       end;
+    end;
+  end
+  else if baseKind = 4 then
+  begin
+    { COM interface elements — the STATIC-array case: `keep: array[0..N] of IFoo`
+      at scope exit, and the destination side of a whole-array assignment. }
+    i := 0;
+    while i < len do
+    begin
+      itemAddr := Pointer(Int64(arrData) + i * SizeOf(Pointer));
+      PXXIntfRelease(itemAddr, Int64(baseRecDesc));
+      i := i + 1;
     end;
   end;
 end;
@@ -2659,6 +2837,17 @@ begin
   baseTypeRef := PInt32(Int64(desc) + 16)^;
   if baseKind = 3 then
     baseRecDesc := Pointer(Int64(desc) + 16 + baseTypeRef)
+  else if baseKind = 4 then
+    { Kind 4 = COM INTERFACE elements. There is no sub-descriptor to point at,
+      so the descriptor's typeRef word carries the INTERFACE ID instead — the
+      same discriminated slot a CLASS layout descriptor already uses for its
+      kind-4 members (rtti_emit.inc). It rides here in the baseRecDesc argument
+      so the four element-walk helpers keep the arity every backend's codegen
+      already emits.
+      NEVER nil-guard a kind-4 arm on baseRecDesc: interface id 0 is a real id
+      and would nil-check as "no descriptor". The kind-3 arms guard, kind 4
+      must not. }
+    baseRecDesc := Pointer(baseTypeRef)
   else
     baseRecDesc := nil;
 
@@ -2710,6 +2899,8 @@ begin
   baseTypeRef := PInt32(Int64(desc) + 16)^;
   if baseKind = 3 then
     baseRecDesc := Pointer(Int64(desc) + 16 + baseTypeRef)
+  else if baseKind = 4 then
+    baseRecDesc := Pointer(baseTypeRef)   { interface id, see PXXDynArrayRelease }
   else
     baseRecDesc := nil;
 
@@ -2773,6 +2964,8 @@ begin
   baseTypeRef := PInt32(Int64(desc) + 16)^;
   if baseKind = 3 then
     baseRecDesc := Pointer(Int64(desc) + 16 + baseTypeRef)
+  else if baseKind = 4 then
+    baseRecDesc := Pointer(baseTypeRef)   { interface id, see PXXDynArrayRelease }
   else
     baseRecDesc := nil;
 
@@ -3044,6 +3237,38 @@ begin
   Result := v;
 end;
 
+var
+  { 5th of the family: installed by sysutils' initialization to turn a nil
+    dereference CAUGHT AT THE CALL SITE into a catchable EAccessViolation.
+    feature-a-emitted-nil-checks }
+  PXXNilRefHook: TPXXDivZeroProc;
+
+{ Nil-reference trap. 216 is FPC's code for a memory fault, and it is what
+  --fpc-mem-errors reports for a real SIGSEGV, so the emitted check and the
+  signal path agree on the number a program exits with — the difference is that
+  this one fires BEFORE the fault, from ordinary call context, so a hook can
+  raise past it and `try..except` runs.
+
+  A hook slot rather than a hardwired writeln+Halt, and that is not decoration:
+  on an MCU halting is usually wrong, and printing is usually fine but NOT
+  always — a program driving a protocol-sensitive serial link has to be able to
+  say "not on my UART". Default nil keeps FPC-without-sysutils behaviour. }
+procedure PXXNilRef;
+begin
+  if PXXNilRefHook <> nil then PXXNilRefHook();
+  writeln('Runtime error 216 (nil reference)');
+  Halt(216);
+end;
+
+{ NOTE there is no PXXNilChkPtr guard FUNCTION, and there was for one commit.
+  Wrapping the pointer in a call — the shape PXXRangeChkI64 uses, and much the
+  nicer code — costs a call on every checked site, which on a loop of 60M method
+  calls measured 0.44s -> 0.65s. `inline` does not rescue it: inline v1 retains
+  only single-expression bodies with no call in them, and the call is this body's
+  entire purpose. So the compare and branch are built as IR at the call site
+  (IRWrapNilChk in ir.inc) and only the cold arm lands here — 0.42s -> 0.43s.
+  feature-a-emitted-nil-checks }
+
 { {$R+} dynamic-array index guard: count lives at [data-8] (the dyn-array
   header), nil = length 0. Returns the index unchanged when in range. }
 function PXXDynIdxChkI64(dataPtr: Pointer; idx: Int64): Int64;
@@ -3235,7 +3460,16 @@ begin
     end;
   end;
 
-  { 2. Numeric path }
+  { 2. Numeric path.
+    Re-read both payloads as the full 8 bytes of the slot. The reads at the top
+    of this function go through PWord, which is pointer-sized — exactly right
+    for the string arms above, where the payload IS a handle, and exactly wrong
+    here: on a 32-bit target it takes 4 bytes, so -2 arrives as 4294967294 and
+    every negative operand or result comes back zero-extended. The double arm
+    already knew this (it reads through PDouble); the integer arm did not. }
+  lVal := PInt64(Int64(left) + 8)^;
+  rVal := PInt64(Int64(right) + 8)^;
+
   if (lTag = 3) or (rTag = 3) or (opTk = 73) then { VT_DOUBLE = 3, tkSlash = 73 }
   begin
     { Read double payloads straight from the slot: on 32-bit targets lVal
@@ -3269,7 +3503,7 @@ begin
       if PWord(dest)^ = 6 then
         PXXStrDecRef(Pointer(PWord(Int64(dest) + 8)^));
       PWord(dest)^ := 1;
-      PWord(Int64(dest) + 8)^ := resVal;
+      PInt64(Int64(dest) + 8)^ := resVal;   { full 8 bytes — see the note above }
       Result := Int64(dest);
       Exit;
     end
@@ -3312,7 +3546,7 @@ begin
       if PWord(dest)^ = 6 then
         PXXStrDecRef(Pointer(PWord(Int64(dest) + 8)^));
       PWord(dest)^ := 1;
-      PWord(Int64(dest) + 8)^ := resVal;
+      PInt64(Int64(dest) + 8)^ := resVal;   { full 8 bytes — see the note above }
       Result := Int64(dest);
       Exit;
     end;

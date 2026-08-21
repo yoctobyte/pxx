@@ -41,6 +41,7 @@
   of the arc (feature-lib-pyexec build plan step 5). }
 unit pyeval;
 
+{$MODE PXX}   { our dialect; the FPC-parity strict-* flags do not judge this file }
 interface
 
 uses pylib, typinfo, promocore;
@@ -3367,7 +3368,7 @@ end;
   ParseUnary (not ParsePower) so it can itself start with a unary op
   (`2 ** -1`) while still getting right-associativity for `2 ** 3 ** 2`
   through that same recursion. Mirrors the compiled frontend's `**`
-  (parser.inc, ParseFactor) which lexes/parses the identical shape and lowers
+  (pasparser_expr.inc, ParseFactor) which lexes/parses the identical shape and lowers
   to the same pypow_v — this exec()-side grammar was simply missing
   (feature-pyeval-power-operator). }
 procedure ParsePower(var res: Variant);
