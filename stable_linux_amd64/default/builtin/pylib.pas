@@ -40,6 +40,15 @@ interface
 uses builtin, exceptions, pypal, promocore, typinfo;
 
 const
+  { MIRRORS compiler/defs.inc's VT_OBJ_FIRST / VT_OBJ_LAST — which variant tags
+    carry a refcounted object. A builtin unit cannot see defs.inc, so the two
+    numbers are written twice and MUST be changed together. A RANGE and not a
+    list of tags on purpose: the list used to be spelled out in four places and
+    a missed tag leaks silently, with RSS as the only symptom
+    (refactor-a-variant-object-tag-list-lives-in-four-places). }
+  VT_OBJ_FIRST = 7;
+  VT_OBJ_LAST  = 10;
+
   { An omitted slice bound, as emitted by the frontend for `b[:hi]` / `b[lo:]`.
     See the slice functions below for why a sentinel is safe here. }
   PY_SLICE_OMIT = 2147483647;
@@ -5180,10 +5189,12 @@ end;
   participate (feature-nilpy-object-reclamation slice 2). }
 function PyVarSlotIsObj(t: Int64): Boolean;
 begin
-  { 9 = pyeval closure, 10 = lifted bound-fn — both RAW2 blocks. 10 is here so a
-    closure stored IN a container is reclaimed with the container; the variant
-    clear/retain emitters cover the same tag for a plain slot. }
-  PyVarSlotIsObj := (t = 7) or (t = 8) or (t = 9) or (t = 10);
+  { The range covers VT_OBJECT, VT_BOUNDMETHOD, the pyeval closure and the
+    lifted bound-fn (both RAW2 blocks). The last of those is here so a closure
+    stored IN a container is reclaimed with the container; the variant
+    clear/retain emitters cover the same tags for a plain slot, which is why
+    both sides read one range instead of keeping two lists in step. }
+  PyVarSlotIsObj := (t >= VT_OBJ_FIRST) and (t <= VT_OBJ_LAST);
 end;
 
 function pyvarobj_owned(const v: Variant): Pointer;

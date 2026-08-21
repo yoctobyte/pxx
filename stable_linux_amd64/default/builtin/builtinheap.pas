@@ -216,6 +216,18 @@ const
   PXX_ENC_UCS4  = 3;
   PXX_ENC_SHIFT = 16;
 
+  { MIRRORS compiler/defs.inc's VT_OBJ_FIRST / VT_OBJ_LAST — which variant tags
+    carry a refcounted object. A builtin unit cannot see defs.inc, so the two
+    numbers are written twice and MUST be changed together; the range exists so
+    that is TWO numbers to keep in step instead of a list of four equality
+    tests, which is what silently drifted (see the note in defs.inc, and
+    PXXVarClear below for what the drift cost). }
+  VT_OBJ_FIRST = 7;
+  VT_OBJ_LAST  = 10;
+  VT_STRING_TAG = 6;
+  VT_PROMO_FIRST = 8192;   { promo-block tags ride as a managed AnsiString of the decimal }
+  VT_PROMO_LAST  = 8199;
+
   PXX_OBJ_MAGIC = $505942F1;   { low bits 001 — never an allocator size word }
   { RAW variant of the tag: a refcounted heap block that is NOT a class
     instance (no VMT at +0) — today only pybound_new's {code,recv} pairs.
@@ -236,6 +248,22 @@ type
     object's children recursively. nil = no finalizer (plain free). }
   TPXXObjFinalize = procedure(objp: Pointer; rawKind: NativeInt);
 var
+  { System.ExitCode. FPC declares it in System scope, so it is spelled without
+    a unit qualifier anywhere in a program; builtinheap is linked into every
+    binary and its interface names resolve bare, which makes this the cheapest
+    honest home for it. Semantics, all four measured against FPC 3.2.2
+    (feature-pascal-exitcode-finalization-halt):
+
+      Halt(n)          ExitCode := n, then finalizations, then exit(ExitCode)
+      Halt             ExitCode := 0 — it is Halt(0), NOT "exit with the
+                       current ExitCode". The ticket asserted the latter;
+                       `ExitCode := 9; Halt;` proves otherwise.
+      falling off main finalizations, then exit(ExitCode)
+      a finalization writing ExitCode CHANGES the process exit status — that
+                       is the whole erroru.pp idiom: check the recorded code,
+                       then zero it so an expected halt(100) exits 0. }
+  ExitCode: Longint;
+
   PXXObjFinalizeHook: TPXXObjFinalize;
 function PXXObjAlloc(size: NativeInt): Pointer;
 function PXXObjAllocRaw(size: NativeInt): Pointer;
@@ -343,6 +371,15 @@ procedure PXXWriteVariant(v: Pointer);
   by a digit). See PxxSciDigits17's own header. }
 procedure PxxSciDigits17(value: Double; var mant17: Int64; var decExp: Integer);
 {$endif}
+{ The program's normal exit path: run the unit finalizations and terminate with
+  whatever ExitCode holds AFTERWARDS. Written as Pascal, and called from the
+  main body's epilogue instead of a raw exit-syscall emission, so that
+  "terminate with the value of a global" needs NO new per-arch emitter — the
+  AN_HALT lowering already terminates with a computed value on all six
+  backends, and this routine is just a Halt. The finalization runner is
+  run-once guarded, so a Halt reached from inside a finalization does not
+  re-enter it; it simply exits with the newer code, which is what FPC does. }
+procedure PXXExitProcess;
 implementation
 
 
@@ -1234,8 +1271,20 @@ end;
 { Are both ends word-aligned, and is there enough to be worth the setup? }
 function PXXWordCopyOk(d: Int64; s: Int64; n: Int64): Boolean;
 begin
+{$ifdef CPUX86_64}
+  { x86 loads and stores a word at any address, so the alignment question does
+    not arise -- only whether a whole word is left to move. Refusing the word
+    loop on a misaligned pair here cost every Copy() of a byte array at an odd
+    offset an 8x slower byte loop, for nothing. }
+  PXXWordCopyOk := n >= SizeOf(NativeInt);
+{$else}
+{$ifdef CPU_I386}
+  PXXWordCopyOk := n >= SizeOf(NativeInt);
+{$else}
   PXXWordCopyOk := (n >= SizeOf(NativeInt)) and
                    (((d or s) and (SizeOf(NativeInt) - 1)) = 0);
+{$endif}
+{$endif}
 end;
 
 { The high bit of every byte in a machine word — the word-wise form of the
@@ -3086,14 +3135,11 @@ end;
 { Raw forward byte copy. Copy always writes into a freshly allocated block, so
   source and destination never overlap. }
 function PXXMemCopy(dest: Pointer; src: Pointer; n: NativeInt): Pointer;
-var i: Int64;
 begin
-  i := 0;
-  while i < n do
-  begin
-    PByte(Int64(dest) + i)^ := PByte(Int64(src) + i)^;
-    i := i + 1;
-  end;
+  { One forward block copy in this unit, not two: PXXBlockCopy already moves a
+    word at a time with a byte tail. Its return value is the ASCII scan the
+    string paths ask for; nothing here wants it. }
+  PXXBlockCopy(Int64(dest), Int64(src), n);
   Result := dest;
 end;
 
@@ -3253,6 +3299,11 @@ var
   on an MCU halting is usually wrong, and printing is usually fine but NOT
   always — a program driving a protocol-sensitive serial link has to be able to
   say "not on my UART". Default nil keeps FPC-without-sysutils behaviour. }
+procedure PXXExitProcess;
+begin
+  Halt(ExitCode);
+end;
+
 procedure PXXNilRef;
 begin
   if PXXNilRefHook <> nil then PXXNilRefHook();
@@ -3597,37 +3648,42 @@ end;
 
 procedure PXXVarClear(v: Pointer);
 { Release a string payload and zero the 16-byte slot (both words fully, so
-  32-bit targets leave no stale high halves behind). Object payloads
-  (VT_OBJECT 7 / VT_BOUNDMETHOD 8 / VT_PYCLOSURE 9 / VT_BOUNDFN 10) ride
-  PXXObjRelease, whose PXX_OBJ_MAGIC guard makes it a no-op on
-  manual-lifetime Pascal instances. A promo-block tag (8192..8199) rides in a
-  variant as a managed AnsiString of its decimal — same release as VT_STRING
-  (mirrors the x86-64 EmitVariantClear range test; this portable body
-  previously missed it, a cross-target leak).
+  32-bit targets leave no stale high halves behind). Object payloads ride
+  PXXObjRelease, whose PXX_OBJ_MAGIC guard makes it a no-op on manual-lifetime
+  Pascal instances. A promo-block tag rides in a variant as a managed
+  AnsiString of its decimal — same release as VT_STRING (this portable body
+  once missed that, a cross-target leak).
 
-  THE OBJECT-TAG LIST LIVES IN FOUR PLACES and they must agree — this pair,
-  the x86-64 EmitVariantClear/EmitVariantRetain (compiler/ir_codegen.inc),
-  and PyVarSlotIsObj (compiler/builtin/pylib.pas). A tag added to the emitters
-  but not here does not fail loudly: the slot is simply never released, and
-  the only symptom is RSS. Tag 10 was missed here exactly that way, and it is
-  what made an ESCAPING closure keep leaking after the object itself had been
-  given a refcount — the caller's hidden-destination temp for a
-  variant-returning call is re-prepared through this routine once per loop
-  iteration (bug-nilpy-bound-fn-closure-objects-are-never-freed). }
+  This is the PORTABLE half of a pair: x86-64 emits the same test inline
+  (EmitVariantClear, compiler/ir_codegen.inc) and every other target calls
+  here. So the two must agree, and they agree by both reading a RANGE whose
+  bounds are two named numbers rather than a list of tags.
+
+  What the old shape cost, since it is the reason for the range: the list used
+  to be spelled out in four places, and a tag added to the emitters but not
+  here does not fail loudly — the slot is simply never released and the only
+  symptom is RSS. Tag 10 was missed here exactly that way, which is what made
+  an ESCAPING closure keep leaking after the object itself had been given a
+  refcount: the caller's hidden-destination temp for a variant-returning call
+  is re-prepared through this routine once per loop iteration
+  (bug-nilpy-bound-fn-closure-objects-are-never-freed,
+  refactor-a-variant-object-tag-list-lives-in-four-places). }
 begin
-  if (PWord(v)^ = 6) or ((PWord(v)^ >= 8192) and (PWord(v)^ <= 8199)) then
+  if (PWord(v)^ = VT_STRING_TAG) or
+     ((PWord(v)^ >= VT_PROMO_FIRST) and (PWord(v)^ <= VT_PROMO_LAST)) then
     PXXStrDecRef(Pointer(PWord(Int64(v) + 8)^))
-  else if (PWord(v)^ >= 7) and (PWord(v)^ <= 10) then
+  else if (PWord(v)^ >= VT_OBJ_FIRST) and (PWord(v)^ <= VT_OBJ_LAST) then
     PXXObjRelease(Pointer(PWord(Int64(v) + 8)^));
   PXXMemZero(v, 16);
 end;
 
 procedure PXXVarRetain(v: Pointer);
-{ The exact mirror of PXXVarClear — see the four-places note there. }
+{ The exact mirror of PXXVarClear — see the note there. }
 begin
-  if (PWord(v)^ = 6) or ((PWord(v)^ >= 8192) and (PWord(v)^ <= 8199)) then
+  if (PWord(v)^ = VT_STRING_TAG) or
+     ((PWord(v)^ >= VT_PROMO_FIRST) and (PWord(v)^ <= VT_PROMO_LAST)) then
     PXXStrIncRef(Pointer(PWord(Int64(v) + 8)^))
-  else if (PWord(v)^ >= 7) and (PWord(v)^ <= 10) then
+  else if (PWord(v)^ >= VT_OBJ_FIRST) and (PWord(v)^ <= VT_OBJ_LAST) then
     PXXObjRetain(Pointer(PWord(Int64(v) + 8)^));
 end;
 
