@@ -491,11 +491,6 @@
   }
  ],
  "host": "plexus",
- "idle_yield": {
-  "aborts": 1,
-  "phase": "pin-verify",
-  "target": "d6299bebe9dc449ff174c018c15d5815c348e5e4"
- },
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2543179B  data=60497B  bss=17852B  procs=1762] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
   "test-c-conformance#shard1/6": "FAIL 00206.c \u2014 exit code 254 (want 0) | FAIL 00212.c \u2014 exit code 255 (want 0) | test-c-conformance: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance: FAILURES: 00206.c(exit=254) 00212.c(exit=255)",
