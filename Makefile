@@ -3847,6 +3847,18 @@ test-core: $(COMPILER)
 	# pushed), not the nil stub it used to be (b340)
 	./$(COMPILER) test/test_exceptaddr_b340.pas $(TESTTMP)/test_exceptaddr_b34026
 	test "$$($(TESTTMP)/test_exceptaddr_b34026 | tail -1)" = "PASS"
+	# An interface NAME used as a value means its GUID and nothing else. It used
+	# to fall through to the metaclass path, so `g := IHello` copied 16 bytes of
+	# the RTTI BLOB (a name pointer and a parent pointer) into the TGuid --
+	# silently, and GetInterface then answered False. Rows cover the GUID bytes
+	# in TGuid memory order, two interfaces staying distinct, the same one twice
+	# staying stable, a const-TGuid PARAMETER (which needs the node to carry
+	# TGuid's record id, not a bare pointer -- a REC_NONE fallback delivered
+	# eight good bytes and eight zeros), Supports' three-argument form, and the
+	# out-parameter rule that a FAILED query CLEARS the interface variable.
+	./$(COMPILER) test/test_interface_guid_and_supports.pas $(TESTTMP)/test_intf_guid_supports26
+	@test "$$($(TESTTMP)/test_intf_guid_supports26)" = "$$(printf '11111111222233334444555555555555\n99999999888877776666555544443333\ndistinct=True\nstable=True\nasarg=11111111222233334444555555555555\ngetintf=True True\nhit=True call=hello\nmiss=False nil=True\ncleared=False True\nnilinst=False True\ntwo=TrueFalse\niff=hello')" \
+	  || { echo "test_interface_guid_and_supports: FAIL"; $(TESTTMP)/test_intf_guid_supports26; exit 1; }
 	# ClassParent -- the fourth class-reference operation, beside ClassName /
 	# ClassType / InheritsFrom, which already shared one resolver. It answers a
 	# class REFERENCE, so ParseClassRefOpTail chains onto it and

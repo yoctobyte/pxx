@@ -926,6 +926,9 @@ begin
     if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
        (Tokens[i + 1].Kind = tkLParen) and
        (CaseEqual(GetTokenStr(i), 'methodaddress') or CaseEqual(GetTokenStr(i), 'methodname') or
+        { Supports(obj, IFoo, Intf) lowers to the same __pxxGetInterface — the
+          two-argument form does not, but an unused helper is dropped anyway. }
+        CaseEqual(GetTokenStr(i), 'supports') or
         CaseEqual(GetTokenStr(i), 'getinterface')) and (not TargetIsEspClass) then
       needsBuiltin := True;
     { `x.ClassName` lowers to __pxxClassName (+ __pxxRttiOf for an instance) — see

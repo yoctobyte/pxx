@@ -1311,6 +1311,16 @@ begin
     end;
     Exit;
   end;
+  { The address of a GUID constant IS the blob's address -- the node has no other
+    representation. This is what makes `g := IHello` an ordinary record copy and
+    `F(IHello)` an ordinary const-record argument, rather than two special cases.
+    bug-a-an-interface-name-as-a-guid-value-copies-rtti }
+  if ASTKind[node] = AN_GUIDCONST then
+  begin
+    Result := IRAppend(IR_CONST_DATA, -1, -1, -1,
+                Strs[ASTIVal[node]].Offset + 8, Ord(tyPointer));
+    Exit;
+  end;
   { `&function` — a function's address IS the function-pointer value (C `&f == f`).
     The AN_PROCADDR value node already yields the code address. }
   if ASTKind[node] = AN_PROCADDR then
@@ -7004,6 +7014,14 @@ begin
       if ABIRetViaHiddenDestProc(cpi) then
         IRCallDest[Result] := IRBuildHiddenDest(cpi);
     end;
+
+    AN_GUIDCONST:
+      { The interned 16-byte GUID blob's data address. Chars sit at Offset+8,
+        past InternStr's length prefix -- the same +8 every other consumer of an
+        interned blob uses. The caller's record assignment copies 16 bytes from
+        here, which is what makes `g := IHello` an ordinary record copy. }
+      Result := IRAppend(IR_CONST_DATA, -1, -1, -1,
+                  Strs[ASTIVal[node]].Offset + 8, Ord(tyPointer));
 
     AN_EXCEPTOBJ:
     begin

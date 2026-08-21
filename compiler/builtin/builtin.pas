@@ -2129,6 +2129,19 @@ var
   cnt, i: Integer;
 begin
   Result := False;
+  { OUT-parameter semantics: a FAILED query must leave Obj nil, not untouched.
+    FPC's Supports/GetInterface both declare `out Obj`, which the compiler clears
+    at the call site, so a caller that reuses one variable across two queries sees
+    nil after the miss. Clearing here rather than at the call site keeps the one
+    behaviour in the one place both spellings already funnel through -- and a
+    STALE interface surviving a failed Supports is a use-after-free waiting to
+    happen, not a cosmetic difference.
+    Written as a plain store, deliberately: the success path below stores the
+    instance pointer WITHOUT an AddRef, so the slot holds a borrowed reference
+    and releasing the old value here would over-release it. Making this path
+    refcount-correct is a separate question -- feature-a-getinterface-refcounting.
+    bug-a-a-failed-supports-left-the-out-interface-set }
+  if Obj <> nil then PPxxPtr_(Obj)^ := nil;
   if (Instance = nil) or (IID = nil) then Exit;
   rtti := __pxxRttiOf(Instance);
   while rtti <> nil do

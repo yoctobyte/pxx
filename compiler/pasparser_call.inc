@@ -841,6 +841,22 @@ begin
   UClsHasGuid[ci] := True;
 end;
 
+function InternGuidBlob(ci: Integer): Integer;
+{ The 16 GUID bytes of interface `ci`, interned as a data blob, returning the
+  string-table index -- AN_GUIDCONST's payload. Interning rather than emitting a
+  fresh blob per mention means the same interface named twice costs one copy, and
+  it reuses the one data-emission path that already exists.
+
+  The bytes are already in TGuid MEMORY order (ParseGuidLiteral put them there so
+  __pxxGetInterface can compare against a caller's TGuid without marshalling), so
+  this is a straight byte-for-byte copy. }
+var s: AnsiString; i: Integer;
+begin
+  s := '';
+  for i := 0 to 15 do s := s + Chr(UClsGuidB[ci * 16 + i]);
+  InternGuidBlob := InternStr(s);
+end;
+
 { NilPy spells `TFoo.ClassName` as `Foo.__name__` — the CLASS-side counterpart of
   `type(x).__name__`, which already answers through the same RTTI name. Mapped to
   the Pascal op rather than given a second lowering, so the two spellings cannot

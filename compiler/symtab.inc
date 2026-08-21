@@ -10212,6 +10212,14 @@ begin
       overload (it fell into numeric division), and the same blindness is what
       makes `Cls().method()` fail to resolve. }
     Result := ASTRight[node]
+  else if ASTKind[node] = AN_GUIDCONST then
+    { An interface name used as a GUID value: the record IS TGuid, parked in
+      ASTSLen when the node was built. Without this arm it resolved REC_NONE and
+      an argument temp was sized by the 8-byte fallback below -- the first
+      eightbyte of the GUID arrived and D4 came through as zeros, the exact
+      half-a-struct signature the AN_ASSIGN arm below describes.
+      bug-a-an-interface-name-as-a-guid-value-copies-rtti }
+    Result := ASTSLen[node]
   else if ASTKind[node] = AN_COMMA then
     { `(a, b)` yields b's value, so its record is b's. Without this a struct-valued
       comma resolved to REC_NONE and a call marshalled it as a SCALAR: csmith's

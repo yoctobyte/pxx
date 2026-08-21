@@ -259,6 +259,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     rndRawArg: Integer;      { round(x, n): the argument node before the float unbox }
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
+    supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
     nestCtorCi: Integer;   { `TOuter.TInner.Create` — the nested class, resolved by scope }
     nestScanCi, nestScanPos, nestDepth, nestI: Integer;   { …walking N levels of it }
     mthName: AnsiString;   { @TClass.Method — name read via GetTokenStr (may be a type keyword) }
@@ -4391,8 +4392,15 @@ begin
         Exit;
       end;
 
-      { `Supports(obj, IFoo): Boolean` — the function form of `obj is IFoo`.
-        Reuses the interface implementation query (AN_IS_TEST). }
+      { `Supports(obj, IFoo): Boolean` — the function form of `obj is IFoo` —
+        and `Supports(obj, IFoo, Intf)`, which ALSO hands back the interface.
+        The two-argument form reuses the interface implementation query
+        (AN_IS_TEST). The three-argument form is FPC's own definition spelled
+        out: `Result := (Instance <> nil) and Instance.GetInterface(IID, Intf)`,
+        so it lowers to the very call `obj.GetInterface(IFoo, Intf)` builds —
+        __pxxGetInterface(obj, @guid, @Intf) — rather than growing a second
+        interface-lookup path beside the one that already exists.
+        feature-a-supports-three-argument-form }
       if CaseEqual(name, 'Supports') and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
@@ -4402,6 +4410,39 @@ begin
         ci := FindUClass(CurTok.SVal);
         if (ci < 0) or not UClsIsInterface[ci] then Error('Supports: second argument must be an interface');
         Next;
+        if CurTok.Kind = tkComma then
+        begin
+          if not UClsHasGuid[ci] then
+            Error('Supports: the three-argument form needs the interface to declare a GUID');
+          supPi := FindProc('__pxxGetInterface');
+          if supPi < 0 then Error('Supports: the interface runtime is not linked');
+          Next;                                { consume the ',' }
+          node := AllocNode(AN_CALL);
+          ASTIVal[node] := supPi;
+          ASTTk[node] := Ord(Procs[supPi].RetType);
+          argSeq := AllocNode(AN_ARG);         { arg 0 = the instance }
+          ASTLeft[argSeq] := exprNode;
+          ASTLeft[node] := argSeq;
+          valNode := AllocNode(AN_ADDR);       { arg 1 = @<the GUID blob> }
+          ASTLeft[valNode] := AllocNode(AN_GUIDCONST);
+          ASTIVal[ASTLeft[valNode]] := InternGuidBlob(ci);
+          ASTTk[ASTLeft[valNode]] := Ord(tyRecord);
+          ASTSLen[ASTLeft[valNode]] := REC_UCLASS_BASE + FindUClass('TGuid');
+          ASTTk[valNode] := Ord(tyPointer);
+          exprNode := AllocNode(AN_ARG);
+          ASTLeft[exprNode] := valNode;
+          ASTRight[argSeq] := exprNode;
+          ParseExpr;                           { arg 2 = @<the interface variable> }
+          valNode := AllocNode(AN_ADDR);
+          ASTLeft[valNode] := CurASTNode;
+          ASTTk[valNode] := Ord(tyPointer);
+          argSeq := AllocNode(AN_ARG);
+          ASTLeft[argSeq] := valNode;
+          ASTRight[exprNode] := argSeq;
+          Expect(tkRParen, ')');
+          CurASTNode := node; LastExprTk := tyBoolean;
+          Exit;
+        end;
         Expect(tkRParen, ')');
         node := AllocNode(AN_IS_TEST);
         ASTLeft[node] := exprNode; ASTIVal[node] := ci; ASTTk[node] := Ord(tyBoolean);

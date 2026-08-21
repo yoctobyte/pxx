@@ -38,6 +38,7 @@ var
   isAssign: Boolean;
   selfClassCi, selfIdx, fldIdx, selfNode: Integer;
   cvIdx: Integer;
+  guidRec: Integer;   { REC id of the built-in TGuid, for an interface name used as a GUID value }
   helperTk: TTypeKind; helperAi: Integer;   { TARGET-type-name receiver for a type helper — `UInt32.GetSignMask` }
   w, withNode, recId: Integer;
   propFOff, propFLen: Integer;
@@ -653,6 +654,32 @@ begin
         begin
           if CurTok.Kind <> tkDot then
           begin
+            { An INTERFACE name used as a value is NOT a metaclass -- an interface
+              has no class reference. In Pascal it means its GUID, and nothing
+              else: `g := IHello`, `obj.GetInterface(IHello, f)`. Falling through
+              to AN_CLASSREF made the record copy read 16 bytes of the RTTI blob
+              (a name pointer and a parent pointer) into the caller's TGuid, with
+              no diagnostic and a plausible-looking result.
+              bug-a-an-interface-name-as-a-guid-value-copies-rtti }
+            if UClsIsInterface[ci] then
+            begin
+              if not UClsHasGuid[ci] then
+                Error('interface "' + fieldName + '" has no GUID, so it has no value form');
+              node := AllocNode(AN_GUIDCONST);
+              ASTIVal[node] := InternGuidBlob(ci);
+              { Typed as the RECORD TGuid, not as a pointer: that is what it is,
+                and it is what lets the ordinary record paths carry it -- copy on
+                assignment, by-address for a const parameter, overload matching
+                against `const IID: TGuid`. RegisterBuiltinTGuid mints the record
+                unconditionally, so the lookup cannot miss. }
+              guidRec := FindUClass('TGuid');
+              ASTTk[node] := Ord(tyRecord);
+              tk := tyRecord;
+              recName := REC_UCLASS_BASE + guidRec;
+              ASTSLen[node] := recName;
+              Result := node;
+              Exit;
+            end;
             { Class identifier used as a value (metaclass / class reference):
               `TForm1` passed to CreateForm etc. Yields the runtime address of
               the class's RTTI blob (PClassRTTI), resolved post-EmitRTTI. }

@@ -523,6 +523,15 @@ const
   TLS_SLOT_SELF    = 0;   { the block's own address; what __pxxTlsBase reads }
   TLS_SLOT_FIRST_FREE = 1;
 
+  AN_GUIDCONST     = 100; { an INTERFACE type name used as a VALUE -- which in Pascal means
+                           exactly one thing, its GUID: `g := IHello`, `Supports(o, IHello, f)`.
+                           ASTIVal = the interned-string index whose 16 bytes ARE the GUID in
+                           TGuid memory order; lowering yields that blob's data address, and
+                           the ordinary record copy reads 16 bytes from it. Before this the
+                           name fell through to AN_CLASSREF and the copy read the first 16
+                           bytes of the RTTI BLOB -- two pointers where a GUID belonged, with
+                           no diagnostic. bug-a-an-interface-name-as-a-guid-value-copies-rtti }
+
   AN_EXCEPTOBJ     = 99; { __pxxExceptObject: the exception OBJECT currently in flight, as an
                            untyped instance pointer. The exact twin of AN_EXCEPTADDR below —
                            the raise stub parks the object in BSS_EXC_OBJ, and IR_EXC_STORE's
