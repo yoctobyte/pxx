@@ -22,11 +22,21 @@ program test_stack_overflow_raise;
   printed — it depends on RLIMIT_STACK and on frame layout, exactly the kind of
   environment-dependent number that makes a test flap.
 
-  x86-64 only, because only x86-64 installs its handlers with SA_ONSTACK so far;
-  on the other four hosted targets the handler cannot run for THIS fault at all
-  (bug-a-four-hosted-targets-install-signal-handlers-without-an-altstack). The
-  per-arch SP offset is covered on all five by test_signal_sp_rewrite, which
-  faults in a way that leaves the handler a stack.
+  Four of the five hosted targets: x86-64, i386, arm32, aarch64. All four now
+  install with sigaltstack + SA_ONSTACK
+  (bug-a-four-hosted-targets-install-signal-handlers-without-an-altstack).
+
+  riscv32 is excluded and it is NOT the SP rewrite that fails there — its
+  registration is correct and verified (the sigaltstack syscall succeeds, and
+  the flags word assembles to $18000004 in the emitted binary), but the handler
+  still runs on the FAULTING stack under qemu-riscv32, so for a stack overflow
+  it never runs at all. The identical construction works under qemu-i386,
+  qemu-arm and qemu-aarch64 of the same build, which points at qemu-user's
+  riscv signal frame rather than at us; unverifiable without hardware. Filed as
+  bug-a-riscv32-sa-onstack-has-no-effect-under-qemu.
+
+  The per-arch SP offset itself is covered on all five by test_signal_sp_rewrite,
+  which faults in a way that leaves the handler a stack.
 
   Once the exception is caught, the unwind restores SP from the setjmp buffer of
   the frame owning the `except` — a frame on the ORIGINAL stack — so the

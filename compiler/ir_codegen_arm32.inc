@@ -367,6 +367,29 @@ begin
   SigInstallAddr := CodeLen;
   EmitI32($E92D4080);   { push {r7, lr}     r7 is callee-saved AND the syscall reg }
   EmitI32($E1A03000);   { mov r3, r0        save sig }
+  { sigaltstack(2) FIRST, then SA_ONSTACK in the flags below — neither works
+    alone. Without both, a stack-overflow SIGSEGV is unhandleable: the fault
+    happens BECAUSE there is no stack left, so the kernel cannot push a signal
+    frame onto the faulting stack and kills the process outright. Measured
+    before this: exit 139 with the hook never entered
+    (bug-a-four-hosted-targets-install-signal-handlers-without-an-altstack).
+
+    stack_t on a 32-bit target is { ss_sp(4), ss_flags(4), ss_size(4) } — half
+    the width of the 64-bit layout, which is why this cannot share code with
+    aarch64's. sigaltstack is EABI syscall 186. r3 holds the signal number
+    across the call and r7 is already framed by the push above; ip is reloaded
+    with &scratch afterwards, so clobbering it here is free. }
+  EmitI32($E59FC000); EmitI32($EA000000); EmitGlobRef(BSS_SIG_ALTSS);      { ip = &ss }
+  EmitI32($E59F1000); EmitI32($EA000000); EmitGlobRef(BSS_SIG_ALTSTK);     { r1 = base }
+  EmitI32($E58C1000);   { str r1, [ip]      ss_sp }
+  EmitI32($E3A01000);   { mov r1, #0 }
+  EmitI32($E58C1004);   { str r1, [ip, #4]  ss_flags = 0 }
+  EmitI32($E3A01C80);   { mov r1, #$8000    ss_size = SIG_ALTSTACK_SIZE (32768) }
+  EmitI32($E58C1008);   { str r1, [ip, #8]  ss_size }
+  EmitI32($E1A0000C);   { mov r0, ip        new }
+  EmitI32($E3A01000);   { mov r1, #0        old = nil }
+  EmitI32($E3A070BA);   { mov r7, #186      sigaltstack }
+  EmitI32($EF000000);   { svc #0 }
   EmitI32($E59FC000); EmitI32($EA000000); EmitGlobRef(BSS_SIG_SCRATCH);   { ip = &scratch }
   { handler = &dispatch, PC-relative (position independent) }
   movPos := CodeLen; EmitI32($E1A0200F);       { mov r2, pc   (r2 = movPos + 8) }
@@ -376,6 +399,7 @@ begin
   EmitI32($E58C0000);   { str r0, [ip]      handler = dispatch }
   EmitI32($E3A00305);   { mov r0, #$14000000  SA_RESTORER|SA_RESTART }
   EmitI32($E3800004);   { orr r0, r0, #4      ...or SA_SIGINFO -> $14000004 }
+  EmitI32($E3800408);   { orr r0, r0, #$08000000  ...or SA_ONSTACK -> $1C000004 }
   { SA_SIGINFO ($04) is what makes the kernel pass siginfo_t*/ucontext_t* in
     r1/r2 — without it the fault CAUSE is unknowable (si_code is the only
     carrier; see BSS_SIG_CODE). It is ALSO what selects the rt signal frame, so

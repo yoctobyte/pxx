@@ -8355,6 +8355,14 @@ test-i386: $(COMPILER)
 	# spare stack. (On i386 this is also what tells REG_ESP from REG_UESP:
 	# they hold the same value at fault time and only one is restored.)
 	# Halt(n) exits WITH n on this target too — see the native row.
+	# A real stack overflow, caught by an ordinary try/except and survived.
+	# Needs BOTH halves: sigaltstack+SA_ONSTACK to get the handler running at
+	# all, and the __pxxSigSPPtr rewrite so the raise stub the handler
+	# redirects to lands on a stack with room. hits=1 is the assertion — it is
+	# the difference between a redirect that took and an endless fault loop on
+	# the guard page. Depth is not printed: it depends on RLIMIT_STACK.
+	./$(COMPILER) --target=i386 test/test_stack_overflow_raise.pas $(TESTTMP)/test_i386_sovf
+	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sovf)" = "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
 	./$(COMPILER) --target=i386 test/test_halt_exit_code.pas $(TESTTMP)/test_i386_halt
 	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=i386 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_i386_sprw
@@ -8736,6 +8744,14 @@ test-aarch64: $(COMPILER)
 	# spare stack. (On i386 this is also what tells REG_ESP from REG_UESP:
 	# they hold the same value at fault time and only one is restored.)
 	# Halt(n) exits WITH n on this target too — see the native row.
+	# A real stack overflow, caught by an ordinary try/except and survived.
+	# Needs BOTH halves: sigaltstack+SA_ONSTACK to get the handler running at
+	# all, and the __pxxSigSPPtr rewrite so the raise stub the handler
+	# redirects to lands on a stack with room. hits=1 is the assertion — it is
+	# the difference between a redirect that took and an endless fault loop on
+	# the guard page. Depth is not printed: it depends on RLIMIT_STACK.
+	./$(COMPILER) --target=aarch64 test/test_stack_overflow_raise.pas $(TESTTMP)/test_aarch64_sovf
+	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sovf)" = "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
 	./$(COMPILER) --target=aarch64 test/test_halt_exit_code.pas $(TESTTMP)/test_aarch64_halt
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=aarch64 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_aarch64_sprw
@@ -9541,6 +9557,14 @@ test-arm32: $(COMPILER)
 	# spare stack. (On i386 this is also what tells REG_ESP from REG_UESP:
 	# they hold the same value at fault time and only one is restored.)
 	# Halt(n) exits WITH n on this target too — see the native row.
+	# A real stack overflow, caught by an ordinary try/except and survived.
+	# Needs BOTH halves: sigaltstack+SA_ONSTACK to get the handler running at
+	# all, and the __pxxSigSPPtr rewrite so the raise stub the handler
+	# redirects to lands on a stack with room. hits=1 is the assertion — it is
+	# the difference between a redirect that took and an endless fault loop on
+	# the guard page. Depth is not printed: it depends on RLIMIT_STACK.
+	./$(COMPILER) --target=arm32 test/test_stack_overflow_raise.pas $(TESTTMP)/test_arm32_sovf
+	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sovf)" = "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
 	./$(COMPILER) --target=arm32 test/test_halt_exit_code.pas $(TESTTMP)/test_arm32_halt
 	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_halt; echo "exit=$$?")" = "$$(printf 'working\nhalting with 5\nexit=5')"
 	./$(COMPILER) --target=arm32 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_arm32_sprw

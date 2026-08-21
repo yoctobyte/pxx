@@ -146,6 +146,28 @@ begin
   { --- install (a0 = sig): sigaction{dispatch, SA_RESTART, mask=0} --- }
   SigInstallAddr := CodeLen;
   rv32_addi(reg_t2, reg_a0, 0);                   { t2 = sig (syscalls clobber a0) }
+  { sigaltstack(2) FIRST, then SA_ONSTACK in the flags below — neither works
+    alone. Without both, a stack-overflow SIGSEGV is unhandleable: the fault
+    happens BECAUSE there is no stack left, so the kernel cannot push a signal
+    frame onto the faulting stack and kills the process outright. Measured
+    before this: exit 139 with the hook never entered
+    (bug-a-four-hosted-targets-install-signal-handlers-without-an-altstack).
+
+    stack_t here is { ss_sp(4), ss_flags(4), ss_size(4) }. riscv shares the
+    GENERIC syscall table with arm64, so sigaltstack is 132 — not i386/arm32's
+    186. Only a0 changes across an ecall, so t2 (the signal number) and t3
+    survive it. Hosted only: this stub is not emitted under --esp-profile=bare,
+    where there is no OS to deliver a signal at all. }
+  EmitLoadGlobAddrRISCV32(reg_t3, BSS_SIG_ALTSS);
+  EmitLoadGlobAddrRISCV32(reg_t4, BSS_SIG_ALTSTK);
+  rv32_sw(reg_t4, reg_t3, 0);                     { ss_sp = base of the buffer }
+  rv32_sw(reg_zero, reg_t3, 4);                   { ss_flags = 0 }
+  EmitLoadImmRISCV32(reg_t4, SIG_ALTSTACK_SIZE);
+  rv32_sw(reg_t4, reg_t3, 8);                     { ss_size }
+  rv32_addi(reg_a0, reg_t3, 0);                   { a0 = new }
+  rv32_addi(reg_a1, reg_zero, 0);                 { a1 = old = nil }
+  rv32_addi(reg_a7, reg_zero, 132);               { sigaltstack }
+  EmitI32($00000073);                             { ecall }
   EmitLoadGlobAddrRISCV32(reg_t1, BSS_SIG_SCRATCH);
   { t0 = absolute address of dispatch, PC-relative (auipc+addi) }
   rv32_auipc(reg_t0, 0);
@@ -154,8 +176,8 @@ begin
     Error('compiler error: signal dispatch stub out of addi range (riscv32)');
   rv32_addi(reg_t0, reg_t0, adrDelta);
   rv32_sw(reg_t0, reg_t1, 0);                     { handler = dispatch }
-  rv32_lui(reg_t0, $10000);                       { SA_RESTART = $10000000 (lui imm = val>>12) }
-  rv32_addi(reg_t0, reg_t0, 4);                   { ...or SA_SIGINFO -> $10000004 }
+  rv32_lui(reg_t0, $18000);                       { SA_RESTART|SA_ONSTACK = $18000000 (lui imm = val>>12) }
+  rv32_addi(reg_t0, reg_t0, 4);                   { ...or SA_SIGINFO -> $18000004 }
   { SA_SIGINFO ($04) is what makes the kernel pass siginfo_t*/ucontext_t* in
     a1/a2 — without it the fault CAUSE is unknowable (si_code is the only
     carrier; see BSS_SIG_CODE). Like arm64 and unlike i386/arm32, riscv has no

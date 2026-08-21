@@ -250,13 +250,35 @@ begin
   SigInstallAddr := CodeLen;
   EmitB($53);                                     { push ebx }
   EmitB($89); EmitB($C3);                         { mov ebx, eax        sig }
+  { sigaltstack(2) FIRST, then SA_ONSTACK in the flags below — neither works
+    alone. Without both, a stack-overflow SIGSEGV is unhandleable: the fault
+    happens BECAUSE there is no stack left, so the kernel cannot push a signal
+    frame onto the faulting stack and kills the process outright. Measured
+    before this: exit 139 with the hook never entered
+    (bug-a-four-hosted-targets-install-signal-handlers-without-an-altstack).
+
+    stack_t on i386 is { ss_sp(4), ss_flags(4), ss_size(4) }, and int 0x80
+    sigaltstack is 186 with ebx = new, ecx = old. ebx is BOTH the first syscall
+    argument and where the signal number is parked, so it has to go on the
+    stack across this call — the one place this differs from the other three
+    ports. }
+  EmitB($53);                                     { push ebx }
+  EmitB($BB); EmitGlobRef(BSS_SIG_ALTSS);         { mov ebx, &ss }
+  EmitB($B8); EmitGlobRef(BSS_SIG_ALTSTK);        { mov eax, base of the buffer }
+  EmitB($89); EmitB($03);                         { mov [ebx], eax        ss_sp }
+  EmitB($C7); EmitB($43); EmitB(4); EmitI32(0);   { mov dword [ebx+4], 0  ss_flags }
+  EmitB($C7); EmitB($43); EmitB(8); EmitI32(SIG_ALTSTACK_SIZE); { [ebx+8] = ss_size }
+  EmitB($31); EmitB($C9);                         { xor ecx, ecx          old = nil }
+  EmitB($B8); EmitI32(186);                       { mov eax, 186          sigaltstack }
+  EmitB($CD); EmitB($80);                         { int 0x80 }
+  EmitB($5B);                                     { pop ebx               sig back }
   EmitCodeAbsToEax386(dispatchAt);                { eax = &dispatch (absolute) }
   EmitB($A3); EmitGlobRef(BSS_SIG_SCRATCH + 0);   { mov [scratch+0], eax   handler }
   { SA_SIGINFO ($04) is what makes the kernel pass siginfo_t*/ucontext_t* — the
     fault CAUSE is unknowable without si_code (see BSS_SIG_CODE). It is ALSO
     what selects the rt signal frame, so it is inseparable from the restorer
     above: this constant, the 173, and the absent `pop eax` are one change. }
-  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 4); EmitI32($14000004); { flags = SA_RESTORER|SA_RESTART|SA_SIGINFO }
+  EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 4); EmitI32($1C000004); { flags = SA_RESTORER|SA_RESTART|SA_SIGINFO|SA_ONSTACK }
   EmitCodeAbsToEax386(restorerAt);                { eax = &restorer (absolute) }
   EmitB($A3); EmitGlobRef(BSS_SIG_SCRATCH + 8);   { mov [scratch+8], eax   restorer }
   EmitB($C7); EmitB($05); EmitGlobRef(BSS_SIG_SCRATCH + 12); EmitI32(0);  { mask lo }

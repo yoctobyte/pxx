@@ -501,17 +501,15 @@ procedure EmitSignalRuntime;
   The program entry installs dispatch for SIGINT(2) and SIGTERM(15). Hooks for
   any other signal 1..64 install on the first SetSignalHandler call. }
 begin
-  { The alt stack's STORAGE lives here, next to the only code that uses it —
-    the BSS_IO_OWNER lesson (see EmitIoLockStubsForTarget): storage allocated in
-    the Pascal driver is storage every other frontend leaves at 0, i.e. aliased
-    onto offset 0. x86-64 only, because this is the only target that sets
-    SA_ONSTACK so far. }
-  BSS_SIG_ALTSTK := BSSSize; Inc(BSSSize, SIG_ALTSTACK_SIZE);
-  BSS_SIG_ALTSS  := BSSSize; Inc(BSSSize, 24);
-  { …and the signal-number slot, here for the same reason rather than beside
-    BSS_SIG_CODE in the Pascal driver: allocating in ParseProgram is what left
-    every non-Pascal driver's copy at 0, aliased onto offset 0. This is the only
-    code that writes it. }
+  { The alt stack's storage (BSS_SIG_ALTSTK / _ALTSS) moved to EnsureSignalBss
+    on 2026-08-21, when the other four hosted targets started registering one
+    too — allocating it in ONE arch's emitter is exactly how it read 0, aliased
+    onto BSS[0], in every other.
+
+    The signal-number slot stays here, for the same reason it was moved out of
+    the Pascal driver: allocating in ParseProgram is what left every non-Pascal
+    driver's copy at 0, aliased onto offset 0. This is the only code that
+    writes it, and x86-64 is still its only target. }
   BSS_SIG_NUM    := BSSSize; Inc(BSSSize, 8);
 
   { --- restorer --- }
@@ -746,6 +744,23 @@ begin
   BSS_SIG_CODE    := BSSSize; Inc(BSSSize, 8);
   BSS_SIG_ADDR    := BSSSize; Inc(BSSSize, 8);
   BSS_SIG_CTX     := BSSSize; Inc(BSSSize, 8);
+  { The signal ALT STACK and its stack_t descriptor. Allocated HERE, for every
+    target, rather than inside x86-64's EmitSignalRuntime where they used to
+    live — which is the exact bug the rest of this function exists to prevent:
+    a slot allocated by one arch's emitter reads 0 on every other arch, i.e.
+    aliased onto BSS[0], so the first target to write it would corrupt whatever
+    lives there. That was harmless only as long as x86-64 was the sole user of
+    SA_ONSTACK; the other four hosted targets now register an alt stack too
+    (bug-a-four-hosted-targets-install-signal-handlers-without-an-altstack).
+
+    24 bytes covers stack_t on both widths: { ss_sp, ss_flags, ss_size } is
+    8+4(+4 pad)+8 on the 64-bit targets and 4+4+4 on the 32-bit ones.
+
+    Allocated even under --no-signals, like the slots above: it is zero-filled
+    BSS with no file cost, and making it conditional would put a condition on a
+    function whose whole contract is "idempotent, call it whenever". }
+  BSS_SIG_ALTSTK  := BSSSize; Inc(BSSSize, SIG_ALTSTACK_SIZE);
+  BSS_SIG_ALTSS   := BSSSize; Inc(BSSSize, 24);
 end;
 
 procedure EmitSignalRuntimeForTarget;

@@ -230,8 +230,42 @@ begin
   imm := dispatchAt - adrAt;                    { adr x10, dispatch (PC-relative) }
   EmitI32($10000000 or ((imm and 3) shl 29) or ((((imm div 4)) and $7FFFF) shl 5) or 10);
   EmitI32($F900012A);   { str  x10, [x9]       handler = dispatch }
+  { sigaltstack(2) FIRST, then SA_ONSTACK in the flags below — neither works
+    alone. Without both, a stack-overflow SIGSEGV is unhandleable on this
+    target: the fault happens BECAUSE there is no stack left, so the kernel
+    cannot push a signal frame onto the faulting stack and kills the process
+    outright. Measured before this: exit 139 with the hook never entered, on
+    all four non-x86-64 hosted targets
+    (bug-a-four-hosted-targets-install-signal-handlers-without-an-altstack).
+
+    stack_t here is { ss_sp(8), ss_flags(4 + 4 pad), ss_size(8) }. x12 holds
+    the signal number across the call — x0/x1 are the syscall's own arguments,
+    and reloading it afterwards is cheaper than a second save.
+
+    Re-registering on every install is deliberate, as on x86-64: sigaltstack is
+    idempotent with the same values, and one syscall per SetSignalHandler beats
+    carrying a "have we done this yet" flag. The registration is PER-THREAD, so
+    a hook installed from a clone(2) thread still gets only the main thread's —
+    the same known limit x86-64 carries. }
+  EmitLoadGlobAddrA64(13, BSS_SIG_ALTSS);
+  EmitLoadGlobAddrA64(14, BSS_SIG_ALTSTK);
+  EmitI32($F90001AE);   { str  x14, [x13]      ss_sp   = base of the buffer }
+  EmitI32($D280000A);   { mov  x10, #0 }
+  EmitI32($F90005AA);   { str  x10, [x13, #8]  ss_flags = 0 }
+  EmitLoadImmA64(10, SIG_ALTSTACK_SIZE);
+  EmitI32($F90009AA);   { str  x10, [x13, #16] ss_size }
+  EmitI32($AA0D03E0);   { mov  x0, x13         new }
+  EmitI32($D2800001);   { mov  x1, #0          old = nil }
+  EmitI32($D2801088);   { mov  x8, #132        sigaltstack }
+  EmitI32($D4000001);   { svc  #0 }
+  EmitLoadGlobAddrA64(9, BSS_SIG_SCRATCH);
   EmitI32($52A2000B);   { movz w11, #$1000, lsl #16   SA_RESTART (NO SA_RESTORER on arm64) }
   EmitI32($7280008B);   { movk w11, #4               ...or SA_SIGINFO -> $10000004 }
+  { orr w11, w11, #$08000000 — SA_ONSTACK, giving flags $18000004. Logical
+    immediate, so the constant is a bitmask pattern rather than a literal: for a
+    single set bit at position 27 in a 32-bit register, N=0, imms=0 (one bit)
+    and immr=5 (rotate bit 0 right by 32-27). }
+  EmitI32($3205016B);
   { SA_SIGINFO ($04) is what makes the kernel pass siginfo_t*/ucontext_t* in
     x1/x2 — without it the fault CAUSE is unknowable (si_code is the only
     carrier; see BSS_SIG_CODE). arm64 has no SA_RESTORER either way and the
