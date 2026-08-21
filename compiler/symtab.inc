@@ -86,6 +86,10 @@ procedure EmitLoadGlobAddrXtensa(rd: Integer; bssOff: Integer); forward;
 procedure EmitLoadDataRefXtensa(rd: Integer; dataOff: Integer); forward;
 procedure EmitCallProc(procIdx: Integer); forward;
 procedure EmitManagedLocalCleanup(retSymIdx: Integer); forward;
+{ Scope-exit release of a proc's managed locals on ANY target. Body in
+  ir_codegen.inc — see the note there for why the six arms had to be one
+  procedure. }
+procedure EmitManagedLocalCleanupForTarget(retSymIdx: Integer); forward;
 function ProcHasManagedLocalCleanup(procIdx, retSymIdx: Integer): Boolean; forward;
 procedure EmitLeaveExceptionFrameX64; forward;
 
@@ -8607,108 +8611,7 @@ var sz, i, procIdx, mek: Integer;
 begin
   if TargetArch = TARGET_I386 then
   begin
-    { Release local managed variables before returning }
-    if CurProc >= 0 then
-    begin
-      for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-      begin
-        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) then
-        begin
-          if SymIsComInterface(i) then
-          begin
-            { COM/ARC interface local: _Release the held reference (nil-safe). }
-            EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);  { lea eax, [ebp+off] }
-            EmitB($50);                                        { push eax   (arg1 = slot) }
-            EmitB($B8); EmitI32(SymTR[i].RecId - REC_UCLASS_BASE);  { mov eax, ifaceId }
-            EmitB($50);                                        { push eax   (arg2 = id) }
-            procIdx := FindProc('PXXIntfRelease');
-            if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
-            EmitCallProc(procIdx);
-            EmitB($81); EmitB($C4); EmitI32(8);                { add esp, 8 }
-          end
-          else if Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
-                  (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
-          begin
-          { STATIC array with MANAGED ELEMENTS: release EVERY element at scope
-            exit. Without this arm an `array[0..N] of string` either fell into
-            the scalar arm below and released element 0 ONLY (i386/arm32, like
-            x86-64 did), or was skipped entirely (riscv32) — leaking silently
-            and linearly either way. N-D arrays are stored flat, so ArrLen is
-            the right count.
-            bug-a-local-static-array-of-string-never-released-at-scope-exit }
-            procIdx := FindProc('PXXArrayReleaseImmediate');
-            if procIdx < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
-            EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);   { lea eax, [ebp+off] }
-            EmitB($50);                                        { push arg0 = &arr }
-            EmitB($68); EmitI32(Syms[i].ArrLen);               { push arg1 = count }
-            mek := ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec);
-            EmitB($68); EmitI32(mek);                          { push arg2 = baseKind }
-            if mek = 3 then
-            begin
-              EmitB($68);
-              EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)));
-            end
-            else
-            begin  { kinds 1/4: immediate — 0, or the interface id }
-              EmitB($68); EmitI32(ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
-            end;
-            EmitCallProc(procIdx);
-            EmitB($81); EmitB($C4); EmitI32(16);               { add esp, 16 }
-          end
-          else if (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
-          begin
-            { A SCALAR AnsiString local. `not IsArray` is load-bearing: an
-              array's TypeKind IS its element kind, so without it a local
-              `array of string` was claimed here and its DATA POINTER handed to
-              the string releaser — the x86-64 bug
-              bug-a-local-dynamic-array-of-string-is-released-as-a-string-handle,
-              which i386 and arm32 shared. }
-            EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);   { mov eax, [ebp+off] }
-            EmitB($50);                                        { push eax }
-            procIdx := FindProc('PXXStrDecRef');
-            if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
-            EmitCallProc(procIdx);
-            { add esp, 4 }
-            EmitB($81); EmitB($C4); EmitI32(4);
-          end
-          else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
-          begin
-            { LOCAL DYNAMIC ARRAY: element-aware release of the block at scope
-            exit. Only x86-64 had this arm; the other four leaked the whole
-            allocation on every call — silently, because a leak prints nothing
-            and cross-target tests assert printed output.
-
-            Landing it took three attempts, and the reason is the rule: a
-            scope-exit release is safe only when EVERY store that can publish a
-            handle into this local RETAINS it. There are two such stores, not
-            one — `b := a` (IR_STORE_SYM) and `obj.f := a` / a nested target
-            (IR_STORE_DYN) — and IR_STORE_DYN was x86-64-only until
-            bug-a-named-dynarray-alias-element-crashes-on-every-cross-target
-            implemented it here. Releasing before that landed turned a silent
-            leak into a double free (measured: aarch64 SIGSEGV, and
-            test_dynarray_managed_field_reassign printing 1 0 0 0 0 0).
-
-            UNLOCKED on purpose: EmitAcquireHeapLock is the x86-64 codegen BSS
-            spinlock and does not exist on these backends, so there is nothing
-            to hold and ManagedElemKindLocked's --threadsafe refusal (which
-            exists to avoid re-entering that lock through _Release -> Destroy ->
-            FreeMem) does not apply.
-
-            xtensa deliberately still has NO arm: it is the one target that
-            keeps the non-retaining IR_STORE_MEM share path, so the retain half
-            is genuinely absent there.
-            bug-a-no-dyn-array-scope-exit-release-on-four-backends }
-            procIdx := FindProc('PXXDynArrayRelease');
-            if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
-            EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);  { mov eax, [ebp+off] }
-            EmitB($50);                                       { push arg0 = data }
-            EmitB($68); EmitDataRef(GetOrAllocSymRTTI(i));    { push arg1 = desc }
-            EmitCallProc(procIdx);
-            EmitB($81); EmitB($C4); EmitI32(8);               { add esp, 8 }
-          end;
-        end;
-      end;
-    end;
+    EmitManagedLocalCleanupForTarget(retSymIdx);
 
     { Ordinal or pointer-sized (AnsiString/pointer/class handle) results.
       Legacy fixed string returns the address of its inline buffer. }
@@ -8811,129 +8714,7 @@ begin
 {$ifndef PXX_NO_ARM32}
   if TargetArch = TARGET_ARM32 then
   begin
-    { Release local managed variables before returning. }
-    if CurProc >= 0 then
-    begin
-      for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-      begin
-        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
-        begin
-          { COM/ARC interface local: _Release the held reference (nil-safe). }
-          EmitLoadVarAddrArm32(i);                     { r0 = interface slot address }
-          EmitI32($E92D000E);                          { push {r1,r2,r3} }
-          EmitLoadImmArm32(1, SymTR[i].RecId - REC_UCLASS_BASE);   { r1 = interface id }
-          procIdx := FindProc('PXXIntfRelease');
-          if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
-          EmitCallProc(procIdx);
-          EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
-        end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
-                (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
-        begin
-          { STATIC array with MANAGED ELEMENTS: release EVERY element at scope
-            exit. Without this arm an `array[0..N] of string` either fell into
-            the scalar arm below and released element 0 ONLY (i386/arm32, like
-            x86-64 did), or was skipped entirely (riscv32) — leaking silently
-            and linearly either way. N-D arrays are stored flat, so ArrLen is
-            the right count.
-            bug-a-local-static-array-of-string-never-released-at-scope-exit }
-          procIdx := FindProc('PXXArrayReleaseImmediate');
-          if procIdx < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
-          EmitLoadImmArm32(0, Syms[i].Offset);
-          EmitI32($E08B0000);                          { add r0, fp, r0 = &arr }
-          EmitLoadImmArm32(1, Syms[i].ArrLen);         { r1 = count }
-          mek := ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec);
-          EmitLoadImmArm32(2, mek);                    { r2 = baseKind }
-          if mek = 3 then
-            EmitLoadDataRefArm32(3,
-              -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)))
-          else  { kinds 1/4: immediate — 0, or the interface id }
-            EmitLoadImmArm32(3, ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
-          EmitCallProc(procIdx);
-        end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-           (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
-        begin
-          { `not IsArray`: see the i386 arm — arm32 shared that bug. }
-          EmitLoadVarArm32(i);                         { r0 = handle }
-          EmitI32($E92D000E);                          { push {r1,r2,r3} }
-          procIdx := FindProc('PXXStrDecRef');
-          if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
-          EmitCallProc(procIdx);
-          EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
-        end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                (Syms[i].TypeKind = tyVariant) then
-        begin
-          { Variant local: clear (releases any managed payload). r0 = address. }
-          EmitLoadVarAddrArm32(i);                     { r0 = variant address }
-          EmitI32($E92D000E);                          { push {r1,r2,r3} }
-          procIdx := FindProc('PXXVarClear');
-          if procIdx < 0 then Error('compiler error: PXXVarClear not found');
-          EmitCallProc(procIdx);
-          EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
-        end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-                RecordHasManagedFields(SymTR[i].RecId) then
-        begin
-          { Record-with-managed-fields local: release each managed field via the
-            portable helper. r0 = record address, r1 = layout descriptor. }
-          EmitLoadVarAddrArm32(i);                     { r0 = record address }
-          EmitLoadDataRefArm32(1,
-            -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
-          EmitI32($E92D000C);                          { push {r2,r3} }
-          procIdx := FindProc('PXXRecordRelease');
-          if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
-          EmitCallProc(procIdx);
-          EmitI32($E8BD000C);                          { pop {r2,r3} }
-        end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                Syms[i].IsArray and (Syms[i].ArrLen = -1) then
-        begin
-          { LOCAL DYNAMIC ARRAY: element-aware release of the block at scope
-            exit. Only x86-64 had this arm; the other four leaked the whole
-            allocation on every call — silently, because a leak prints nothing
-            and cross-target tests assert printed output.
-
-            Landing it took three attempts, and the reason is the rule: a
-            scope-exit release is safe only when EVERY store that can publish a
-            handle into this local RETAINS it. There are two such stores, not
-            one — `b := a` (IR_STORE_SYM) and `obj.f := a` / a nested target
-            (IR_STORE_DYN) — and IR_STORE_DYN was x86-64-only until
-            bug-a-named-dynarray-alias-element-crashes-on-every-cross-target
-            implemented it here. Releasing before that landed turned a silent
-            leak into a double free (measured: aarch64 SIGSEGV, and
-            test_dynarray_managed_field_reassign printing 1 0 0 0 0 0).
-
-            UNLOCKED on purpose: EmitAcquireHeapLock is the x86-64 codegen BSS
-            spinlock and does not exist on these backends, so there is nothing
-            to hold and ManagedElemKindLocked's --threadsafe refusal (which
-            exists to avoid re-entering that lock through _Release -> Destroy ->
-            FreeMem) does not apply.
-
-            xtensa deliberately still has NO arm: it is the one target that
-            keeps the non-retaining IR_STORE_MEM share path, so the retain half
-            is genuinely absent there.
-            bug-a-no-dyn-array-scope-exit-release-on-four-backends }
-          procIdx := FindProc('PXXDynArrayRelease');
-          if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
-          { Loaded at POINTER width by hand rather than through
-            EmitLoadVarArm32, which sizes by TypeSize(Syms[].TypeKind) — and an
-            array's TypeKind is its ELEMENT kind, so `array of Char` would come
-            back through an ldrb with the handle's top three bytes gone. That is
-            the same truncation EmitLoadVarA64 had. }
-          EmitLoadImmArm32(9, Syms[i].Offset);
-          EmitI32($E08B9009);                          { add r9, fp, r9 }
-          EmitI32($E5990000);                          { ldr r0, [r9] = handle }
-          EmitLoadDataRefArm32(1, GetOrAllocSymRTTI(i));  { r1 = desc }
-          EmitI32($E92D000C);                          { push {r2,r3} }
-          EmitCallProc(procIdx);
-          EmitI32($E8BD000C);                          { pop {r2,r3} }
-        end;
-      end;
-    end;
+    EmitManagedLocalCleanupForTarget(retSymIdx);
 
     if retSymIdx >= 0 then
     begin
@@ -9015,126 +8796,7 @@ begin
 {$ifndef PXX_NO_AARCH64}
   if TargetArch = TARGET_AARCH64 then
   begin
-    { Release local managed variables before returning (mirrors the arm32 arm
-      set: COM interface, AnsiString, Variant, record-with-managed-fields).
-      Must precede the result load: each call clobbers x0. }
-    if CurProc >= 0 then
-      for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-      begin
-        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and SymIsComInterface(i) then
-        begin
-          EmitLoadImmA64(9, Syms[i].Offset);
-          EmitI32($8B0903A0);  { add x0, x29, x9  (x0 = interface slot address) }
-          EmitLoadImmA64(1, SymTR[i].RecId - REC_UCLASS_BASE);   { x1 = interface id }
-          procIdx := FindProc('PXXIntfRelease');
-          if procIdx < 0 then Error('compiler error: PXXIntfRelease not found');
-          EmitCallProc(procIdx);
-        end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
-                (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
-        begin
-          { STATIC array with MANAGED ELEMENTS — every arm here guards
-            `not IsArray`, so an array of strings/managed records was simply
-            SKIPPED and leaked every element at scope exit. Same gap and same
-            fix as the x86-64 EmitManagedLocalCleanup arm; N-D arrays are flat
-            so ArrLen is the right count.
-            bug-a-local-static-array-of-string-never-released-at-scope-exit }
-          EmitLoadImmA64(9, Syms[i].Offset);
-          EmitI32($8B0903A0);                      { add x0, x29, x9 = &arr }
-          EmitLoadImmA64(1, Syms[i].ArrLen);       { x1 = count }
-          mek := ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec);
-          EmitLoadImmA64(2, mek);                  { x2 = baseKind }
-          if mek = 3 then
-            EmitLoadDataRefA64(3,
-              -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)))
-          else  { kinds 1/4: immediate — 0, or the interface id }
-            EmitLoadImmA64(3, ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
-          procIdx := FindProc('PXXArrayReleaseImmediate');
-          if procIdx < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
-          EmitCallProc(procIdx);
-        end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
-        begin
-          EmitLoadVarA64(i);                       { x0 = handle }
-          procIdx := FindProc('PXXStrDecRef');
-          if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
-          EmitCallProc(procIdx);
-        end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                (Syms[i].TypeKind = tyVariant) and not Syms[i].IsArray then
-        begin
-          { Variant local: clear (releases any managed payload). x0 = address. }
-          EmitLoadImmA64(9, Syms[i].Offset);
-          EmitI32($8B0903A0);  { add x0, x29, x9  (x0 = variant address) }
-          procIdx := FindProc('PXXVarClear');
-          if procIdx < 0 then Error('compiler error: PXXVarClear not found');
-          EmitCallProc(procIdx);
-        end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
-        begin
-          { Promotable-int local/temp: release a heap-tier payload at scope
-            exit (mirrors the x86-64 EmitManagedLocalCleanup arm; see
-            bug-a-runtime-variant-heap-grows-unbounded). }
-          procIdx := FindProc('PXXPromoClear');
-          if procIdx >= 0 then
-          begin
-            EmitLoadImmA64(9, Syms[i].Offset);
-            EmitI32($8B0903A0);  { add x0, x29, x9  (x0 = slot address) }
-            EmitCallProc(procIdx);
-          end;
-        end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
-                RecordHasManagedFields(SymTR[i].RecId) then
-        begin
-          { Record-with-managed-fields local: release each managed field via the
-            portable helper. x0 = record address, x1 = layout descriptor. }
-          EmitLoadImmA64(9, Syms[i].Offset);
-          EmitI32($8B0903A0);  { add x0, x29, x9  (x0 = record address) }
-          EmitLoadDataRefA64(1,
-            -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
-          procIdx := FindProc('PXXRecordRelease');
-          if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
-          EmitCallProc(procIdx);
-        end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                Syms[i].IsArray and (Syms[i].ArrLen = -1) then
-        begin
-          { LOCAL DYNAMIC ARRAY: element-aware release of the block at scope
-            exit. Only x86-64 had this arm; the other four leaked the whole
-            allocation on every call — silently, because a leak prints nothing
-            and cross-target tests assert printed output.
-
-            Landing it took three attempts, and the reason is the rule: a
-            scope-exit release is safe only when EVERY store that can publish a
-            handle into this local RETAINS it. There are two such stores, not
-            one — `b := a` (IR_STORE_SYM) and `obj.f := a` / a nested target
-            (IR_STORE_DYN) — and IR_STORE_DYN was x86-64-only until
-            bug-a-named-dynarray-alias-element-crashes-on-every-cross-target
-            implemented it here. Releasing before that landed turned a silent
-            leak into a double free (measured: aarch64 SIGSEGV, and
-            test_dynarray_managed_field_reassign printing 1 0 0 0 0 0).
-
-            UNLOCKED on purpose: EmitAcquireHeapLock is the x86-64 codegen BSS
-            spinlock and does not exist on these backends, so there is nothing
-            to hold and ManagedElemKindLocked's --threadsafe refusal (which
-            exists to avoid re-entering that lock through _Release -> Destroy ->
-            FreeMem) does not apply.
-
-            xtensa deliberately still has NO arm: it is the one target that
-            keeps the non-retaining IR_STORE_MEM share path, so the retain half
-            is genuinely absent there.
-            bug-a-no-dyn-array-scope-exit-release-on-four-backends }
-          procIdx := FindProc('PXXDynArrayRelease');
-          if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
-          EmitLoadVarA64(i);                       { x0 = handle (ptr-width) }
-          EmitLoadDataRefA64(1, GetOrAllocSymRTTI(i));   { x1 = desc }
-          EmitCallProc(procIdx);
-        end;
-      end;
+    EmitManagedLocalCleanupForTarget(retSymIdx);
     if retSymIdx >= 0 then
     begin
       if ABIRetViaHiddenDestProc(CurProc) and
@@ -9235,21 +8897,7 @@ begin
 {$endif}
   if TargetArch = TARGET_XTENSA then
   begin
-    { Release local managed strings before returning (ARC scope-exit DecRef).
-      Must precede the result load: each DecRef call clobbers a2. The returned
-      Result handle is skipped (ownership transfers to the caller). }
-    if CurProc >= 0 then
-      for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-           (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
-        begin
-          EmitLoadVarXtensa(i);                  { a2 = handle }
-          procIdx := FindProc('PXXStrDecRef');
-          if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
-          if XtensaABI = XTENSA_ABI_WINDOWED then
-            xtensa_mov(reg_xtensa_a10, reg_xtensa_a2);
-          EmitCallProc(procIdx);
-        end;
+    EmitManagedLocalCleanupForTarget(retSymIdx);
     if retSymIdx >= 0 then
     begin
       if ABIRetViaHiddenDestProc(CurProc) and
@@ -9330,80 +8978,7 @@ begin
   end;
   if TargetArch = TARGET_RISCV32 then
   begin
-    { Release local managed strings before returning (ARC scope-exit DecRef).
-      Must precede the result load: each DecRef call clobbers a0. The returned
-      Result handle is skipped (ownership transfers to the caller). }
-    if CurProc >= 0 then
-      for i := Procs[CurProc].ScopeBase to SymCount - 1 do
-        if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-           Syms[i].IsArray and (Syms[i].ArrLen >= 0) and (SymElemDynDepth[i] = 0) and
-           (ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec) <> 0) then
-        begin
-          { STATIC array with MANAGED ELEMENTS: release EVERY element at scope
-            exit, as the other four backends do. This arm was held back while
-            riscv32's indexed char write left array-element handles malformed
-            (walking them segfaulted); that is fixed
-            (bug-a-riscv32-setlength-on-string-array-element-loses-length), so
-            riscv32 joins the rest.
-            bug-a-local-static-array-of-string-never-released-at-scope-exit }
-          procIdx := FindProc('PXXArrayReleaseImmediate');
-          if procIdx < 0 then Error('compiler error: PXXArrayReleaseImmediate not found');
-          EmitSlotAddrRISCV32(reg_a0, i);        { a0 = &arr }
-          EmitLoadImmRISCV32(reg_a1, Syms[i].ArrLen);
-          mek := ManagedElemKind(Ord(Syms[i].TypeKind), SymTR[i].ElemRec);
-          EmitLoadImmRISCV32(reg_a2, mek);
-          if mek = 3 then
-            EmitLoadDataRefRISCV32(reg_a3,
-              -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].ElemRec - REC_UCLASS_BASE)))
-          else  { kinds 1/4: immediate — 0, or the interface id }
-            EmitLoadImmRISCV32(reg_a3, ManagedElemRef(Ord(Syms[i].TypeKind), SymTR[i].ElemRec));
-          EmitCallProc(procIdx);
-        end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-           (Syms[i].TypeKind = tyAnsiString) and not Syms[i].IsArray then
-        begin
-          EmitLoadVarRISCV32(i);                 { a0 = handle }
-          procIdx := FindProc('PXXStrDecRef');
-          if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
-          EmitCallProc(procIdx);
-        end
-        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
-                Syms[i].IsArray and (Syms[i].ArrLen = -1) then
-        begin
-          { LOCAL DYNAMIC ARRAY: element-aware release of the block at scope
-            exit. Only x86-64 had this arm; the other four leaked the whole
-            allocation on every call — silently, because a leak prints nothing
-            and cross-target tests assert printed output.
-
-            Landing it took three attempts, and the reason is the rule: a
-            scope-exit release is safe only when EVERY store that can publish a
-            handle into this local RETAINS it. There are two such stores, not
-            one — `b := a` (IR_STORE_SYM) and `obj.f := a` / a nested target
-            (IR_STORE_DYN) — and IR_STORE_DYN was x86-64-only until
-            bug-a-named-dynarray-alias-element-crashes-on-every-cross-target
-            implemented it here. Releasing before that landed turned a silent
-            leak into a double free (measured: aarch64 SIGSEGV, and
-            test_dynarray_managed_field_reassign printing 1 0 0 0 0 0).
-
-            UNLOCKED on purpose: EmitAcquireHeapLock is the x86-64 codegen BSS
-            spinlock and does not exist on these backends, so there is nothing
-            to hold and ManagedElemKindLocked's --threadsafe refusal (which
-            exists to avoid re-entering that lock through _Release -> Destroy ->
-            FreeMem) does not apply.
-
-            xtensa deliberately still has NO arm: it is the one target that
-            keeps the non-retaining IR_STORE_MEM share path, so the retain half
-            is genuinely absent there.
-            bug-a-no-dyn-array-scope-exit-release-on-four-backends }
-          procIdx := FindProc('PXXDynArrayRelease');
-          if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
-          { Pointer-width load by hand: EmitLoadVarRISCV32 sizes by the
-            symbol's TypeKind, which for an array is its ELEMENT kind. }
-          EmitSlotAddrRISCV32(reg_a0, i);        { a0 = &slot }
-          rv32_lw(reg_a0, reg_a0, 0);            { a0 = handle }
-          EmitLoadDataRefRISCV32(reg_a1, GetOrAllocSymRTTI(i));   { a1 = desc }
-          EmitCallProc(procIdx);
-        end;
+    EmitManagedLocalCleanupForTarget(retSymIdx);
     if retSymIdx >= 0 then
     begin
       if ABIRetViaHiddenDestProc(CurProc) and
@@ -9492,8 +9067,7 @@ begin
   { Release local managed variables before returning }
   if ProcExceptionCleanupFrameActive then
     EmitLeaveExceptionFrameX64;
-  if CurProc >= 0 then
-    EmitManagedLocalCleanup(retSymIdx);
+  EmitManagedLocalCleanupForTarget(retSymIdx);
 
   if retSymIdx >= 0 then
   begin

@@ -4,8 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`test_interface_arc_exc` reports `unwind freed=2` on i386, arm32 and aarch64 where x86-64 and FPC say 3. An interface reference held when an exception unwinds past its frame is never released on any cross target — one leak per unwind, silent."
-status: backlog
-owner: ""
+status: working
+owner: claude-A
 ---
 
 # Exception unwind releases one interface too few on every cross target
