@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:20 blocked:9 backlog:277 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2176 rejected:40`
+`urgent:1 unfinished:20 blocked:9 backlog:279 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2177 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -50,7 +50,7 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 265, ranked
+## Ready — top 30 of 267, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree
@@ -62,6 +62,9 @@ _none — no lane is locked._
 - `[p 70] [P]` regression-test-core-test-procvar-value-context-2
 - `[p 70] [P]` regression-test-core-test-record-helper-for-string-b331
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-callable-to-str-param-fails
+- `[p 70] [P]` regression-test-nilpy-test-pascal-at-procvar-mode
+- `[p 70] [P]` regression-test-nilpy-test-pascal-mode-switch-cli
+- `[p 70] [P]` regression-test-nilpy-test-pascal-self-result-delphi
 - `[p 70] [T]` regression-test-pascal-conformance-shard4-6-2
 - `[p 70] [T]` regression-tools-devtest-00
 - `[p 65] [U]` decide-tobject-root-methods-dispatch-model (unblocks 1)
@@ -70,7 +73,6 @@ _none — no lane is locked._
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-oop
 - `[p 60] [U]` decide-interface-members-in-aggregates-lock-strategy (unblocks 1)
-- `[p 60] [A]` bug-a-i386-segfaults-on-an-interface-as-cast-temporary
 - `[p 60] [N]` bug-n-inferred-return-type-of-true-division-is-int
 - `[p 60] [T]` bug-t-the-push-rate-starves-breadth-coverage-entirely
 - `[p 60] [O]` feature-opt-store-reload-elimination
@@ -80,7 +82,5 @@ _none — no lane is locked._
 - `[p 55] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - `[p 55] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
 - `[p 55] [N]` bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence
-- `[p 55] [N]` bug-n-hasattr-through-an-untyped-parameter-is-always-false
-- `[p 55] [N]` bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
 
-_235 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_237 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

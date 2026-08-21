@@ -1350,10 +1350,11 @@ begin
           EmitLoadVariantAddr386(node);
           Exit;
         end;
-        if tk = tyRecord then
+        if (tk = tyRecord) and
+           (Syms[si].IsArray or (RecSize(SymTR[si].RecId) > 8)) then
         begin
-          { Record in value position = its slot address (by-reference value model,
-            like x86-64). The slot holds the record storage itself. }
+          { A record LARGER than one machine pair in value position = its slot
+            address (by-reference value model). The slot holds the storage. }
           if Syms[si].Kind = skGlobal then
             begin EmitB($B8); EmitGlobRef(Syms[si].Offset); end          { mov eax, slot addr }
           else if (Syms[si].Kind = skParam) and Syms[si].IsRef then
@@ -1362,7 +1363,22 @@ begin
             begin EmitB($8D); EmitB($85); EmitI32(Syms[si].Offset); end; { lea eax, [ebp+off] }
           Exit;
         end;
-        if Is64Bit386(tk) then
+        { A record of at most 8 bytes loads its VALUE into edx:eax, like every
+          other backend. i386 used to return the slot ADDRESS for EVERY record —
+          its comment claimed that mirrored x86-64, and it does not: x86-64 has no
+          tyRecord arm at all and falls through to the 8-byte value load, arm32
+          and riscv32 both added an explicit 5..8-byte value arm
+          (bug-arm32-record-byvalue-over-4-bytes-abi-gap,
+          bug-riscv32-byval-record-param-one-word). i386 was the only outlier.
+
+          It mattered because a COM INTERFACE is a one-word record: `a as IB`
+          lowers to IR_LOAD_SYM of the interface variable, so i386 handed
+          PXXIntfAddRef the SLOT ADDRESS where every other target hands it the
+          handle. One extra level of indirection, so the RTTI walk read
+          [instance-8] as a class-RTTI pointer, got 16, and dereferenced 0x60 —
+          SIGSEGV, on four tests, on i386 alone.
+          bug-a-i386-segfaults-on-an-interface-as-cast-temporary }
+        if Is64Bit386(tk) or (tk = tyRecord) then
         begin
           { Full 8-byte load -> edx:eax (edx = high dword). }
           if Syms[si].Kind = skGlobal then
