@@ -60,6 +60,15 @@ end;
 
 {$include ../compiler/x64enc.inc}
 
+{ Resolves x64enc.inc's `AsmRecordGlobalFixup` forward declaration — the real
+  body lives in compiler/asmenc.inc, which this harness does not include. The
+  encoder grew that forward after this harness was written and the harness
+  stopped compiling ("unresolved forward"), silently, because no build rule ran
+  it (chore-a-sweep-the-unwired-tests-into-the-suite). Same resolution
+  test_asm_emit_x64.pas already uses: route it to the mock sink, which the
+  GlobRef assertions below then read. }
+procedure AsmRecordGlobalFixup(bssOff: Integer); begin EmitGlobRef(bssOff); end;
+
 { Test helpers }
 procedure ClearMock;
 begin

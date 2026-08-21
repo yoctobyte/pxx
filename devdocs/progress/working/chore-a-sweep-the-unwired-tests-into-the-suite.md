@@ -242,8 +242,55 @@ file needs the gitignored sqlite amalgamation, like its `csqlite_*_probe`
 siblings. The previous reason ("used by csqlite_parity_selfcompiled.c") was
 false — that file only names it in a comment.
 
+## Batch 3 — the assembler harnesses, and the helpers that were never gaps (65 → 42)
+
+Six subjects wired, five exempted with reasons. The two halves are different
+work: the first half found **rotted harnesses**, the second found **files that
+were never unwired at all**.
+
+### The five asm harnesses had stopped compiling
+
+`test_asm_emit_386`, `_a64`, `_arm32`, `_rv32` each `{$include}` their backend's
+`asmtext_*.inc` and drive it directly, with no compiler around it. All four
+failed at compile time on `undefined variable (InlineAsmLineHoleN)`, and
+`test_x64enc` on `unresolved forward: AsmRecordGlobalFixup`. Nothing regressed:
+the emitters grew an inline-asm line pool and a global-fixup sink *after* these
+harnesses were written, and since nothing ran them, nothing said so. That is the
+exact failure mode the sweep exists to end — an unrun test does not fail, it
+just stops being true.
+
+Each got an honest **mock**, not a copy of the real thing: the four line-pool
+arrays as empty state the emitter can read (`MOCK_INLINE_ASM_LINES = 4`), and
+`AsmRecordGlobalFixup` routed to `EmitGlobRef`, which its own GlobRef rows
+already assert against. A mock that lies would be worse than the unwired file.
+
+All six now run under `test-asm` with `-Fucompiler`, each row verified verbatim
+before wiring.
+
+### Two subjects with real oracles
+
+- `test_ecdsa_sign` — self-asserting and wired as-is (`-Fulib/rtl`). It prints a
+  1 per property and the reject rows are the half that matters: a verifier that
+  answers true for everything passes sign+verify and fails `reject: msg/sig/key`.
+- `test_residency_coswitch` — asserts the **property**, not the numbers. It
+  builds at -O0/-O2/-O3 and requires the three outputs identical plus a 4-line
+  count. Generators are a pxx extension, so FPC cannot be the oracle and nothing
+  else states what `s=/x=/acc=/chk=` should be; recording today's values would
+  defend whatever they are. The cross-`-O` identity IS the file's stated
+  contract, and is what the float-spill bug it guards would break.
+
+### The five "unwired" files that were wired all along
+
+`c_def_hijack.c` and `olf_cmath.c` are C units a wired Pascal test `uses`;
+`kwarg_overload_unit.pas` and `qualified_default_unit.pas` are units a wired
+`.npy` imports; `test_exc_resident_param.pas` is **run at four -O levels** by
+`test-opt`, which names it as a bare stem in a `for t in ...` loop and builds
+`test/$$t.pas`, so no literal `test/…` token exists for the checker to match.
+All five verified by reading the consumer, then exempted with the consumer named
+— an exemption whose reason cites a specific wired caller stays checkable.
+
 ### Left for the next batch
 The ~18 `test_esp_*` (need `--target=xtensa` and a flashing/qemu story), the 14
-`test_pyeval_*`/`test_pyexec_*` (Track N deferred by the user), the 5
-`test_asm_emit_*`, the 2 `test_softfloat_*` (Track F, parked by definition), and
-the `csqlite_*` probes that need the amalgamation.
+`test_pyeval_*`/`test_pyexec_*` (Track N deferred by the user), the 2
+`test_softfloat_*` (Track F, parked by definition), the `csqlite_*` probes that
+need the amalgamation, and `t_rw.pas` / `fpcv.pas` / `manual/test_pylexer.pas`.

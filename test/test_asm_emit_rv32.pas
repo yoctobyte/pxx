@@ -205,6 +205,23 @@ end;
 { Include the target encoders and text assemblers }
 {$include ../compiler/rv32enc.inc}
 type PHoleI64 = ^Int64;  { mock: real def lives in asmtext.inc }
+
+{ Mock inline-asm line pool. The real definitions are in compiler/defs.inc; the
+  emitter's Asm<arch>ProcessInlineLine REPLAYS a parse-time-captured line from
+  this pool, and nothing in this harness captures one — so an empty pool is the
+  honest mock, not a stub with fake contents. Added 2026-08-21: the emitter grew
+  that entry point after this harness was written, and the harness stopped
+  compiling with `undefined variable (InlineAsmLineHoleN)` — silently, because
+  no build rule ran it (chore-a-sweep-the-unwired-tests-into-the-suite). }
+const
+  MOCK_INLINE_ASM_LINES = 4;
+  MOCK_INLINE_ASM_HOLES = 8;
+var
+  InlineAsmLine: array[0..MOCK_INLINE_ASM_LINES-1] of AnsiString;
+  InlineAsmLineHole0: array[0..MOCK_INLINE_ASM_LINES-1] of Integer;
+  InlineAsmLineHoleN: array[0..MOCK_INLINE_ASM_LINES-1] of Integer;
+  InlineAsmHoleVal: array[0..MOCK_INLINE_ASM_HOLES-1] of Int64;
+
 {$include ../compiler/asmtext_rv32.inc}
 
 { Test runner }

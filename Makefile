@@ -3495,6 +3495,34 @@ test-threads: $(COMPILER)
 # encoded through lib/asmcore -> ET_EXEC; exit code carries the computed result.
 # Gives Track B a run-it-and-check path for lib/asmcore. x86-64.
 test-asm: $(COMPILER)
+	# --- chore-a-sweep-the-unwired-tests-into-the-suite, batch 3 -------------
+	# The five text-assembler oracle harnesses: each mocks the byte sink, then
+	# INCLUDES the real shipped encoder (compiler/asmtext*.inc, x64enc.inc) and
+	# asserts every instruction against the exact bytes `llvm-mc -triple=<arch>`
+	# emits. The oracle is baked into the file, and each one refuses its own
+	# failure — so the whole expectation is "exit 0 and say PASSED".
+	#
+	# They ran nowhere, and four of them had stopped COMPILING: the emitters
+	# grew Asm<arch>ProcessInlineLine (an inline-asm replay path) after the
+	# harnesses were written, and the mock environment never gained the line
+	# pool it reads. That is the cost of an unwired test exactly — it does not
+	# fail, it rots, and it rots silently. The mocks are added in this batch.
+	./$(COMPILER) -Fucompiler test/test_asm_emit_x64.pas $(TESTTMP)/sweep_asmemit_x6426
+	test "$$($(TESTTMP)/sweep_asmemit_x6426 | tail -1)" = "ALL X64 ASM EMIT TESTS PASSED"
+	./$(COMPILER) -Fucompiler test/test_asm_emit_386.pas $(TESTTMP)/sweep_asmemit_38626
+	test "$$($(TESTTMP)/sweep_asmemit_38626 | tail -1)" = "ALL I386 ASM EMIT TESTS PASSED"
+	./$(COMPILER) -Fucompiler test/test_asm_emit_a64.pas $(TESTTMP)/sweep_asmemit_a6426
+	test "$$($(TESTTMP)/sweep_asmemit_a6426 | tail -1)" = "ALL AARCH64 ASM EMIT TESTS PASSED"
+	./$(COMPILER) -Fucompiler test/test_asm_emit_arm32.pas $(TESTTMP)/sweep_asmemit_arm3226
+	test "$$($(TESTTMP)/sweep_asmemit_arm3226 | tail -1)" = "ALL ARM32 ASM EMIT TESTS PASSED"
+	./$(COMPILER) -Fucompiler test/test_asm_emit_rv32.pas $(TESTTMP)/sweep_asmemit_rv3226
+	test "$$($(TESTTMP)/sweep_asmemit_rv3226 | tail -1)" = "ALL RISC-V ASM EMIT TESTS PASSED"
+	# ...and the x86-64 ENCODER's own harness (x64enc.inc without the text
+	# assembler on top). Same rot, different symptom: it had stopped compiling
+	# on an "unresolved forward" for AsmRecordGlobalFixup, whose real body lives
+	# in asmenc.inc. Resolved to the mock sink, which its own GlobRef rows read.
+	./$(COMPILER) -Fucompiler test/test_x64enc.pas $(TESTTMP)/sweep_x64enc26
+	test "$$($(TESTTMP)/sweep_x64enc26 | tail -1)" = "ALL ENCODER TESTS PASSED."
 	./$(COMPILER) test/test_asm_mvp.asm $(TESTTMP)/test_asm_mvp26
 	$(TESTTMP)/test_asm_mvp26; test "$$?" = "42"
 	./$(COMPILER) test/test_asmcore_x64.pas $(TESTTMP)/test_asmcore_x64_26
@@ -7295,6 +7323,28 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/sweep_rtti_field26)" = "$$(printf 'class=TThing\nCount=42 kind=1\nTag=99 kind=13\nTag(after set)=123\nBuddy=self kind=6\nInner.a=7 kind=5\nabsent=ok\nDONE')"
 	./$(COMPILER) -Fulib/rtl test/test_rtti_method_call_by_name.pas $(TESTTMP)/sweep_rtti_method26
 	test "$$($(TESTTMP)/sweep_rtti_method26)" = "$$(printf 'Add arity=2 retKind=13\nAdd param0kind=6 param1kind=13\nAdd(42)=142\nBump arity=1 retKind=0\nBase(after Bump)=101\nabsent=ok\nDONE')"
+	# -O3 residency across a COROUTINE switch: CoSwitch saves only the GPR
+	# callee-saved set, so the float pool has to be spilled around IR_COSWITCH
+	# or the generator's own float code corrupts the consumer's residents.
+	# Deliberately asserts the PROPERTY and the line COUNT, not the four
+	# numbers: generators are a pxx extension, so FPC cannot be the oracle here
+	# and nothing else states what the values should be. Recording them would
+	# defend whatever they are, which is the one rule the sweep does not bend
+	# (chore-a-sweep-the-unwired-tests-into-the-suite). The property is the
+	# file's own stated contract and is what the bug it guards would break.
+	./$(COMPILER) test/test_residency_coswitch.pas $(TESTTMP)/sweep_coswitch_O0 >/dev/null
+	./$(COMPILER) -O2 test/test_residency_coswitch.pas $(TESTTMP)/sweep_coswitch_O2 >/dev/null
+	./$(COMPILER) -O3 test/test_residency_coswitch.pas $(TESTTMP)/sweep_coswitch_O3 >/dev/null
+	test "$$($(TESTTMP)/sweep_coswitch_O0)" = "$$($(TESTTMP)/sweep_coswitch_O3)"
+	test "$$($(TESTTMP)/sweep_coswitch_O2)" = "$$($(TESTTMP)/sweep_coswitch_O3)"
+	test "$$($(TESTTMP)/sweep_coswitch_O3 | wc -l)" = "4"
+	# ECDSA sign/verify over the RTL's own bignum path. Self-asserting: it
+	# prints a 1 per property (keygen, sign+verify, and three REJECT cases --
+	# wrong message, wrong signature, wrong key) and the OK line last. The
+	# reject rows are the half that matters: a verifier that returns true for
+	# everything passes a sign+verify test and fails these.
+	./$(COMPILER) -Fulib/rtl test/test_ecdsa_sign.pas $(TESTTMP)/sweep_ecdsa26
+	test "$$($(TESTTMP)/sweep_ecdsa26)" = "$$(printf 'keygen=1 sign+verify=1 reject: msg=1 sig=1 key=1\nECDSA SIGN OK')"
 	./$(COMPILER) test/test_pascal_directives.pas $(TESTTMP)/test_pascal_directives26
 	test "$$($(TESTTMP)/test_pascal_directives26)" = "$$(printf '1\n0\n1\n1\n1\n0\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_comment_directive.pas $(TESTTMP)/test_comment_directive26
