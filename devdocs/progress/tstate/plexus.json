@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T15:53:14Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "4a12acf6e7f01362cf96f53f1bccbdccc20f5b8e",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-20T16:02:13Z",
    "fixed": [],
    "new_red": [],
@@ -457,6 +449,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "afafdddf8225f76e7ac9912a2b7436787b846893",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-21T06:53:22Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "f6b86d58796dea5d9db3cd0ca18ead1610be5054",
    "tier": "native",
    "verdict": "RED"
   }
@@ -1783,6 +1783,7 @@
   "test-core#src:test/test_managed_block_header.pas": "native",
   "test-core#src:test/test_managed_block_meta.pas": "native",
   "test-core#src:test/test_managed_exception_cleanup.pas": "native",
+  "test-core#src:test/test_managed_local_release_reuse.pas": "native",
   "test-core#src:test/test_managed_record_assign.pas": "native",
   "test-core#src:test/test_managed_record_exit.pas": "native",
   "test-core#src:test/test_managed_record_field_string_ops.pas": "native",
@@ -4664,6 +4665,7 @@
   "test-core#src:test/test_managed_block_header.pas": "pass",
   "test-core#src:test/test_managed_block_meta.pas": "pass",
   "test-core#src:test/test_managed_exception_cleanup.pas": "pass",
+  "test-core#src:test/test_managed_local_release_reuse.pas": "pass",
   "test-core#src:test/test_managed_record_assign.pas": "pass",
   "test-core#src:test/test_managed_record_exit.pas": "pass",
   "test-core#src:test/test_managed_record_field_string_ops.pas": "pass",
@@ -6236,11 +6238,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-21T06:44:08Z",
-  "sha": "afafdddf8225f76e7ac9912a2b7436787b846893",
+  "date": "2026-08-21T06:53:22Z",
+  "sha": "f6b86d58796dea5d9db3cd0ca18ead1610be5054",
   "tier": "native",
   "verdict": "RED",
-  "wall": 462.5
+  "wall": 468.2
  },
  "last_bench": {
   "conf_rows": 550,
