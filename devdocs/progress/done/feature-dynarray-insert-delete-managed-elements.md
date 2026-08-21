@@ -261,4 +261,4 @@ riscv32 bring-up (noted in the 2026-07-03 entry). The riscv32 run above confirms
 it: 71/71 under qemu.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 34c46db12.
