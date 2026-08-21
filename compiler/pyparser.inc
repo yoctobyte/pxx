@@ -43719,7 +43719,7 @@ begin
         { ANY dyn-array-typed expression, not just a bare name: `Copy(g[0])` and
           `Copy(r.items)` are what a per-level deep copy is spelled with, and FPC
           accepts both. }
-        if CopySrcDynDepth(exprNode) >= 1 then
+        if NodeDynDepth(exprNode) >= 1 then
         begin
           { NESTED source: the raw byte copy in AN_DYN_COPY would move SUB-ARRAY
             HANDLES with the base element's size — TypeSize of the deepest type, 4
@@ -43730,7 +43730,7 @@ begin
             nested copy needs (feature-dynarray-copy-nested-element-type).
             Reproduced on pinned, so it is not a regression — just a crash nobody
             had asked for yet. }
-          if CopySrcDynDepth(exprNode) > 1 then
+          if NodeDynDepth(exprNode) > 1 then
             Error('Copy: nested element type not yet supported for dynamic-array Copy');
           if (ASTKind[exprNode] = AN_IDENT) and (ASTIVal[exprNode] >= 0) and
              (SymElemDynDepth[ASTIVal[exprNode]] > 0) then
@@ -45060,9 +45060,9 @@ begin
             double case stays half-broken
             (devdocs/dev/normalise-dont-special-case.md). }
           if CaseEqual(name, 'Copy') and (nArgs >= 1) and (nArgs <= 3) and
-             (CopySrcDynDepth(ASTLeft[argsHead]) >= 1) then
+             (NodeDynDepth(ASTLeft[argsHead]) >= 1) then
           begin
-            if CopySrcDynDepth(ASTLeft[argsHead]) > 1 then
+            if NodeDynDepth(ASTLeft[argsHead]) > 1 then
               Error('Copy: nested element type not yet supported for dynamic-array Copy');
             if (ASTKind[ASTLeft[argsHead]] = AN_IDENT) and
                (ASTIVal[ASTLeft[argsHead]] >= 0) and

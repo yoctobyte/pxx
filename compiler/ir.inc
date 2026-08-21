@@ -662,56 +662,6 @@ begin
   end;
 end;
 
-function NodeDynDepth(node: Integer): Integer;
-{ Dynamic-array nesting of an expression's value: 0 if not a dyn array, else the
-  remaining `array of` levels. m (array of array of T) is 2; m[i] is 1; m[i][j]
-  is 0 (a base value). }
-var bd: Integer;
-begin
-  Result := 0;
-  if node < 0 then Exit;
-  case ASTKind[node] of
-    AN_IDENT:
-      if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen = -1) then
-        Result := SymDynDepth[ASTIVal[node]];
-    AN_FIELD:
-      Result := RecFieldDynDepth(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));
-    AN_INDEX:
-      begin
-        bd := NodeDynDepth(ASTLeft[node]);
-        if bd > 0 then Result := bd - 1
-        else if (ASTKind[ASTLeft[node]] = AN_IDENT) and
-                (Syms[ASTIVal[ASTLeft[node]]].IsArray) and
-                (Syms[ASTIVal[ASTLeft[node]]].ArrLen <> -1) and
-                (SymElemDynDepth[ASTIVal[ASTLeft[node]]] > 0) then
-          { Indexing a FIXED array whose element is a dynamic array
-            (`array[..] of TA`): the element is a dyn array of this depth. }
-          Result := SymElemDynDepth[ASTIVal[ASTLeft[node]]];
-      end;
-  end;
-end;
-
-function NodeDynBaseTk(node: Integer): TTypeKind;
-{ Base element type of a (possibly nested) dynamic-array expression, walking to
-  the root symbol or field. tyUnknown if not a dynamic array. }
-begin
-  Result := tyUnknown;
-  if node < 0 then Exit;
-  if ASTKind[node] = AN_IDENT then
-  begin
-    if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen = -1) then
-      Result := Syms[ASTIVal[node]].ElemType
-    else if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen <> -1) and
-            (SymElemDynDepth[ASTIVal[node]] > 0) then
-      { fixed array of a dyn-array element: element base type lives in ElemType }
-      Result := Syms[ASTIVal[node]].ElemType;
-  end
-  else if ASTKind[node] = AN_FIELD then
-    Result := RecFieldType(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
-  else if ASTKind[node] = AN_INDEX then
-    Result := NodeDynBaseTk(ASTLeft[node]);
-end;
-
 function NodeIsManagedString(node: Integer): Boolean;
 { True if the lvalue node denotes a managed AnsiString (a string symbol, record/
   class field, indexed element, or pointer deref of one). Drives the address-
@@ -747,32 +697,6 @@ begin
   end;
 end;
 
-function NodeDynBaseRec(node: Integer): Integer;
-{ Base element record id of a (possibly nested) dynamic-array expression. }
-begin
-  Result := REC_NONE;
-  if node < 0 then Exit;
-  if ASTKind[node] = AN_IDENT then
-    Result := Syms[ASTIVal[node]].ElemRecName
-  else if ASTKind[node] = AN_FIELD then
-    Result := RecFieldRecId(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
-  else if ASTKind[node] = AN_INDEX then
-    Result := NodeDynBaseRec(ASTLeft[node]);
-end;
-
-function NodeDynBaseSym(node: Integer): Integer;
-{ Root dynamic-array symbol of a (possibly nested) index expression, or -1. }
-begin
-  Result := -1;
-  if node < 0 then Exit;
-  if ASTKind[node] = AN_IDENT then
-  begin
-    if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen = -1) then
-      Result := ASTIVal[node];
-  end
-  else if ASTKind[node] = AN_INDEX then
-    Result := NodeDynBaseSym(ASTLeft[node]);
-end;
 
 function DynElemSize(depth: Integer; baseTk: TTypeKind; baseRec: Integer): Integer;
 { Stride of one element of a dynamic array at the given depth. depth>1 holds

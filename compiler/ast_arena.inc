@@ -127,3 +127,96 @@ begin
   ASTLeft[Result]     := CloneAST(ASTLeft[node]);
   ASTRight[Result]    := CloneAST(ASTRight[node]);
 end;
+
+{ ---- Dynamic-array SHAPE of an expression --------------------------------
+
+  These four answer "is this expression a dynamic array, and of what" for any
+  lvalue shape -- a bare name, a record/class field, an element of a nested
+  array. They live HERE, next to the AST arrays they walk, rather than in
+  ir.inc, because both sides need them: the PARSER has to decide whether
+  Copy/Delete/Insert are looking at a dynamic array before it builds a node,
+  and pasparser_*.inc is included long before ir.inc. That ordering is what
+  produced CopySrcDynDepth, a hand-kept mirror of NodeDynDepth that answered
+  0 for shapes the real one knew (bug-p-copy-rejects-a-dynamic-array-
+  expression-that-is-not-a-bare-name was its second half). One walker, one
+  answer -- devdocs/dev/normalise-dont-special-case.md.
+
+  They depend only on symtab.inc (RecField*, ResolveNodeRec) and the AST
+  arrays, both of which are in scope here. ---------------------------------}
+
+function NodeDynDepth(node: Integer): Integer;
+{ Dynamic-array nesting of an expression's value: 0 if not a dyn array, else the
+  remaining `array of` levels. m (array of array of T) is 2; m[i] is 1; m[i][j]
+  is 0 (a base value). }
+var bd: Integer;
+begin
+  Result := 0;
+  if node < 0 then Exit;
+  case ASTKind[node] of
+    AN_IDENT:
+      if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen = -1) then
+        Result := SymDynDepth[ASTIVal[node]];
+    AN_FIELD:
+      Result := RecFieldDynDepth(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));
+    AN_INDEX:
+      begin
+        bd := NodeDynDepth(ASTLeft[node]);
+        if bd > 0 then Result := bd - 1
+        else if (ASTKind[ASTLeft[node]] = AN_IDENT) and
+                (Syms[ASTIVal[ASTLeft[node]]].IsArray) and
+                (Syms[ASTIVal[ASTLeft[node]]].ArrLen <> -1) and
+                (SymElemDynDepth[ASTIVal[ASTLeft[node]]] > 0) then
+          { Indexing a FIXED array whose element is a dynamic array
+            (`array[..] of TA`): the element is a dyn array of this depth. }
+          Result := SymElemDynDepth[ASTIVal[ASTLeft[node]]];
+      end;
+  end;
+end;
+
+function NodeDynBaseTk(node: Integer): TTypeKind;
+{ Base element type of a (possibly nested) dynamic-array expression, walking to
+  the root symbol or field. tyUnknown if not a dynamic array. }
+begin
+  Result := tyUnknown;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen = -1) then
+      Result := Syms[ASTIVal[node]].ElemType
+    else if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen <> -1) and
+            (SymElemDynDepth[ASTIVal[node]] > 0) then
+      { fixed array of a dyn-array element: element base type lives in ElemType }
+      Result := Syms[ASTIVal[node]].ElemType;
+  end
+  else if ASTKind[node] = AN_FIELD then
+    Result := RecFieldType(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
+  else if ASTKind[node] = AN_INDEX then
+    Result := NodeDynBaseTk(ASTLeft[node]);
+end;
+
+function NodeDynBaseRec(node: Integer): Integer;
+{ Base element record id of a (possibly nested) dynamic-array expression. }
+begin
+  Result := REC_NONE;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+    Result := Syms[ASTIVal[node]].ElemRecName
+  else if ASTKind[node] = AN_FIELD then
+    Result := RecFieldRecId(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
+  else if ASTKind[node] = AN_INDEX then
+    Result := NodeDynBaseRec(ASTLeft[node]);
+end;
+
+function NodeDynBaseSym(node: Integer): Integer;
+{ Root dynamic-array symbol of a (possibly nested) index expression, or -1. }
+begin
+  Result := -1;
+  if node < 0 then Exit;
+  if ASTKind[node] = AN_IDENT then
+  begin
+    if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen = -1) then
+      Result := ASTIVal[node];
+  end
+  else if ASTKind[node] = AN_INDEX then
+    Result := NodeDynBaseSym(ASTLeft[node]);
+end;

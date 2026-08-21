@@ -193,36 +193,6 @@ begin
   PyReflectedDunder := PyCallMeth1(ci, rname, right, left);
 end;
 
-{ Is `node` a DYNAMIC-ARRAY-typed expression, and at what nesting depth?
-  Copy's parse sites need the answer before ir.inc's NodeDynDepth exists (pasparser_*.inc
-  is included first), and they need it for more than a bare name: an element of a
-  nested array (`g[0]`), a record/class field (`r.items`). Deliberately a small
-  mirror of NodeDynDepth's ident / field / index arms rather than a general type
-  walker — anything it cannot recognise answers 0 and Copy falls through to its
-  existing string/error paths, which is the safe direction
-  (bug-p-copy-rejects-a-dynamic-array-expression-that-is-not-a-bare-name). }
-function CopySrcDynDepth(node: Integer): Integer;
-var si, bd: Integer;
-begin
-  Result := 0;
-  if node < 0 then Exit;
-  case ASTKind[node] of
-    AN_IDENT:
-      begin
-        si := ASTIVal[node];
-        if (si >= 0) and Syms[si].IsArray and (Syms[si].ArrLen = -1) then
-          Result := SymDynDepth[si];
-      end;
-    AN_FIELD:
-      Result := RecFieldDynDepth(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));
-    AN_INDEX:
-      begin
-        bd := CopySrcDynDepth(ASTLeft[node]);
-        if bd > 0 then Result := bd - 1;
-      end;
-  end;
-end;
-
 { May this argument be duplicated for a by-value OPEN ARRAY parameter?
 
   Two source shapes carry a length header at [data-8] and so can be copied: a
@@ -4963,7 +4933,7 @@ begin
         { ANY dyn-array-typed expression, not just a bare name: `Copy(g[0])` and
           `Copy(r.items)` are what a per-level deep copy is spelled with, and FPC
           accepts both. }
-        if CopySrcDynDepth(exprNode) >= 1 then
+        if NodeDynDepth(exprNode) >= 1 then
         begin
           { NESTED source: the raw byte copy in AN_DYN_COPY would move SUB-ARRAY
             HANDLES with the base element's size — TypeSize of the deepest type, 4
@@ -6414,7 +6384,7 @@ begin
             double case stays half-broken
             (devdocs/dev/normalise-dont-special-case.md). }
           if CaseEqual(name, 'Copy') and (nArgs >= 1) and (nArgs <= 3) and
-             (CopySrcDynDepth(ASTLeft[argsHead]) >= 1) then
+             (NodeDynDepth(ASTLeft[argsHead]) >= 1) then
           begin
             { Same pair as the arm above, and they must stay in step — this is
               the double case normalise-dont-special-case warns about, and the
