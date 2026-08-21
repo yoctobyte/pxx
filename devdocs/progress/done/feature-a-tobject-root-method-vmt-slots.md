@@ -174,4 +174,4 @@ i386**. `--compact-classes` refuses the override by name
   still two implementations of one concept; untouched, still worth doing.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit fa6c5cecb.
