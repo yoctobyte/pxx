@@ -109,4 +109,4 @@ prints `total ok 4 / 4` under pxx and under FPC 3.2.2, and fails to compile on
 the pinned pre-fix binary.
 
 Gate: `make compiler/pascal26` + `tools/gate.sh quick` GREEN.
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit d30d3e1fc.
