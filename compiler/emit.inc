@@ -23,9 +23,32 @@ begin
         + 'still overflow at -O0.');
 end;
 
-procedure EmitB(b: Byte); inline;
+{ Kept out of EmitB for the same reason ErrorCodeOverflow is: the hot path is a
+  compare and a store, and it runs once per emitted BYTE.
+
+  Code[] used to be a fixed 16 MB array -- the single biggest static buffer left
+  in the compiler, reserved in full to compile `writeln('hello')`. Doubling from
+  64 KB reaches the self-host's 8.8 MB in eight reallocations. MAX_CODE stays the
+  hard cap so ErrorCodeOverflow still means what it says.
+
+  The 16 bytes of slack past the capacity are for READERS, not writers: the -S
+  disassembler decodes a ModRM/SIB/disp32 tail by reading Code[i+1..i+3] and can
+  run a few bytes past the last instruction. Under a fixed 16 MB array that was
+  harmless; with an exactly-sized buffer it would be a read off the end.
+  feature-dynamic-compiler-tables }
+procedure GrowCode;
+var n: Integer;
 begin
   if CodeLen >= MAX_CODE then ErrorCodeOverflow;
+  if CodeCapacity = 0 then n := 65536 else n := CodeCapacity * 2;
+  if n > MAX_CODE then n := MAX_CODE;
+  SetLength(Code, n + 16);
+  CodeCapacity := n;
+end;
+
+procedure EmitB(b: Byte); inline;
+begin
+  if CodeLen >= CodeCapacity then GrowCode;
   Code[CodeLen] := b; Inc(CodeLen);
 end;
 

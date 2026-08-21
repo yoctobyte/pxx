@@ -1966,8 +1966,9 @@ var
   PasCondCount     : Integer;
   PasCommandOption : AnsiString;
 
-  Code    : array[0..MAX_CODE-1] of Byte;
+  Code    : array of Byte;
   CodeLen : Integer;
+  CodeCapacity : Integer;   { allocated bytes of Code[] — see GrowCode in emit.inc }
 
   Data    : array[0..MAX_DATA-1] of Byte;
   DataLen      : Integer;
