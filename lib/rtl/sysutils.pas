@@ -2243,15 +2243,20 @@ end;
   float parser this code is part of.
 
   WHAT THE TABLE COSTS, since it is paid by every binary that links sysutils
-  and not only by ones that parse floats: +42 KB of CODE and +11 KB of bss,
-  and about +22 us of startup. Only ~11 KB of that is the table's own bytes —
-  the other ~31 KB is the compiler emitting a typed const array as
-  fill-it-at-startup code rather than as initialised data
-  ([[bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data]]).
-  Encoding the table as a string blob dodges that and was deliberately NOT
-  done: it would hide the compiler bug and make the table unauditable, which
-  the platonic-code rule forbids. When that bug is fixed this unit gets ~31 KB
-  smaller with no edit here.
+  and not only by ones that parse floats: **+11 KB of DATA**, which is the
+  table's own bytes, and nothing else.
+
+  It used to cost +42 KB of CODE and +11 KB of bss and ~22 us of startup,
+  because the compiler emitted a typed const array as fill-it-at-startup code
+  (~29 bytes of machine code per element) instead of as initialised data.
+  Encoding the table as a string blob would have dodged that and was
+  deliberately NOT done — it would have hidden the compiler bug and made the
+  table unauditable, which the platonic-code rule forbids. The bug was fixed
+  instead (2026-08-21,
+  [[bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data]])
+  and this unit lost **40.7 KB of code and 11 KB of bss with no edit here** —
+  which is the whole argument for not working around a compiler bug, written
+  out as a measurement.
 
   It also costs about 5% on the Clinger fast path above — measured, interleaved
   A/B, and attributable to code layout rather than to any added work on that

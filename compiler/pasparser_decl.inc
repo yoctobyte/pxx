@@ -1412,6 +1412,8 @@ var name: AnsiString; v: Int64;
     scOff, scLen, si, sci2, cCi, cAi: Integer;
     savedCCi, savedCVis: Integer;
     cnDimLo, cnDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
+    cBssBefore, cBssAfter, cFirstPI: Integer;   { typed-const-array -> .data promotion, see TryBakeConstArrayIntoData }
+    cBaked: Boolean;
 begin
   savedCCi := ParsingClassConstCi; savedCVis := ParsingClassConstVis;
   ParsingClassConstCi := clsCi; ParsingClassConstVis := clsVis;
@@ -1549,7 +1551,9 @@ begin
         end;
         cHi := cLo + cFlatLen - 1;
         AllocStaticLocal := constIsStatic;
+        cBssBefore := BSSSize;
         cIdx := AllocArray(name, cElemTk, cLo, cHi);
+        cBssAfter := BSSSize;
         AllocStaticLocal := False;
         if cElemTk = tyRecord then
         begin
@@ -1570,6 +1574,7 @@ begin
           array is one paren level; an N-D one nests one level per dimension, but
           the flat store fills in order regardless of nesting depth. }
         Expect(tkLParen, '(');
+        cFirstPI := PendingInitCount;
         cDepth := 1; cElem := 0;
         while cDepth > 0 do
         begin
@@ -1774,6 +1779,17 @@ begin
           end;
         end;
         if cElem <> cFlatLen then Error('wrong number of array constant elements');
+        { The whole extent is now recorded as one pending store per element. If
+          every one of them is a plain ordinal/float literal, bake the bytes
+          into .data instead and drop the stores -- see
+          TryBakeConstArrayIntoData for the measurement that made this worth
+          doing, and for why it fails closed. }
+        cBaked := False;
+        if not isLocalConst then
+          cBaked := TryBakeConstArrayIntoData(cIdx, cFirstPI, cBssBefore, cBssAfter);
+        if cBaked and PxxDbgEnabled('a.constdata') then
+          writeln('PXXDBG a.constdata baked ', name, ' n=', Syms[cIdx].ArrLen,
+                  ' elemsize=', TypeSize(cElemTk), ' dataoff=', Syms[cIdx].Offset - DATA_SYM_BIAS);
       end
       else
       begin

@@ -1459,6 +1459,17 @@ const
     token buffers alone unless the token buffers are what overflowed. }
   { {$NILCHECKS} tri-state. DEFAULT is a real third value, not "off": the two
     site classes resolve it in opposite directions (see NChecksVal above). }
+  { A global symbol's Offset is a BSS offset. A symbol whose storage lives in
+    .data instead carries `DATA_SYM_BIAS + dataOffset`, and the ELF writers'
+    fixup loops decode it. The bias exists so that NOTHING between here and the
+    writer has to change: every backend already reaches a global through
+    EmitGlobRef(Syms[i].Offset) -- ~280 call sites across six of them -- and
+    offset ARITHMETIC (`Offset + 8` for a field, an array element) survives a
+    bias but would not survive a negative sentinel. Chosen well above any real
+    BSS size and well below 2^31 so Integer arithmetic on it cannot overflow.
+    feature/bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data }
+  DATA_SYM_BIAS = $20000000;
+
   NILCHK_DEFAULT = 0;
   NILCHK_ON      = 1;
   NILCHK_OFF     = 2;
@@ -1883,6 +1894,7 @@ var
   SpacesOffset : Integer;  { -1 = not yet allocated; set lazily on first :width use }
 
   BSSSize : Integer;
+  DbgDataBase : Integer; { absolute address of .data, for a DWARF location on a data-resident global (see DATA_SYM_BIAS); set beside DbgBssBase by the ELF writer }
 
   Strs     : array[0..MAX_STRS-1]    of TStrEntry;
   StrCount : Integer;

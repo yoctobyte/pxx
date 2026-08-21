@@ -8068,6 +8068,16 @@ test-core: $(COMPILER)
 	@# Output verified identical to FPC 3.2.2.
 	./$(COMPILER) test/test_nil_argument_positions.pas $(TESTTMP)/test_nil_argument_positions26
 	test "$$($(TESTTMP)/test_nil_argument_positions26)" = "$$(printf 'class\nintf\nplain\nptr\npchar\ndyn\ntake nil\nH 1\ntake set\ndef nil\ndef nil\ndef set\nconst n=4\nconst ev nil')"
+	@# A typed const array is stored as initialised .data, not built by ~29
+	@# bytes of startup code PER ELEMENT. Values, not sizes -- a wrong byte is
+	@# the failure that matters, and every baked width is its own chance to be
+	@# wrong. Single is the trap (a float literal carries the DOUBLE's bits, so
+	@# copying the low 4 bytes gives garbage); array[-2..1] checks element order
+	@# against a negative low bound; the string/record arrays must NOT bake and
+	@# must still work; WR is written to, which a read-only placement would
+	@# fault on. Verified identical to FPC 3.2.2 and on all four cross targets.
+	./$(COMPILER) test/test_const_array_in_data.pas $(TESTTMP)/test_const_array_in_data26
+	test "$$($(TESTTMP)/test_const_array_in_data26)" = "$$(printf '1234605616436508552 0 18446744073709551615 7 \n-1 9223372036854775807 -9223372036854775808 0 \n3735928559 0 1 4294967295 \n0 65535 258 7 \n0 255 128 1 \n-128 127 0 -1 \nTRUE TRUE TRUE TRUE TRUE\nTRUE TRUE TRUE TRUE\n-2147483648 2147483647 0 -1 \nTRUE FALSE TRUE TRUE \n97 90 0 126 \n2 0 1 \n1 2 3 4 5 6 \none two three \n1/2 3/4 \n10 20 30 \n10 99 30 ')"
 	@# --no-nil-check on BOTH, and it is load-bearing: this file's subject is the
 	@# SIGNAL path, and since feature-a-emitted-nil-checks the compiler catches
 	@# `nilproc` at the call site before any fault happens — so without the flag

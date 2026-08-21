@@ -1179,7 +1179,10 @@ begin
   if DbgVarIsGlobal[vi] then
   begin
     DbgPutB($03);                 { DW_OP_addr }
-    DbgPutAddr(DbgBssBase + DbgVarOff[vi]);
+    if SymOffIsData(DbgVarOff[vi]) then
+      DbgPutAddr(DbgDataBase + SymOffDataPart(DbgVarOff[vi]))
+    else
+      DbgPutAddr(DbgBssBase + DbgVarOff[vi]);
   end
   else
   begin
@@ -1562,6 +1565,7 @@ begin
   if doDebug then
   begin
     DbgBssBase := bssBase;
+    DbgDataBase := dataBase;   { a data-resident global's DWARF location — DATA_SYM_BIAS }
     BuildDwarfSections(entry, CodeLen);
     dbgFileBase := filesz;
     shoff := dbgFileBase + DbgLen;
@@ -1579,7 +1583,13 @@ begin
   { Apply global fixups (4-byte absolute) }
   for i := 0 to GlobFixCount-1 do
   begin
-    addr := bssBase + GlobFix[i].BSSoff;
+    { A data-resident global (a typed const array baked into .data) carries a
+      BIASED offset -- the one decode point for all of them, because every
+      backend reaches a global through the same EmitGlobRef. See DATA_SYM_BIAS. }
+    if SymOffIsData(GlobFix[i].BSSoff) then
+      addr := dataBase + SymOffDataPart(GlobFix[i].BSSoff)
+    else
+      addr := bssBase + GlobFix[i].BSSoff;
     Patch32(GlobFix[i].CodePos, addr);
   end;
   if ExternalCount > 0 then
@@ -1700,6 +1710,7 @@ begin
   if doDebug then
   begin
     DbgBssBase := bssBase;
+    DbgDataBase := dataBase;   { a data-resident global's DWARF location — DATA_SYM_BIAS }
     BuildDwarfSections(entry, CodeLen);
     dbgFileBase := filesz;
     shoff := dbgFileBase + DbgLen;
@@ -1717,7 +1728,13 @@ begin
   { Apply global fixups (4-byte absolute) }
   for i := 0 to GlobFixCount-1 do
   begin
-    addr := bssBase + GlobFix[i].BSSoff;
+    { A data-resident global (a typed const array baked into .data) carries a
+      BIASED offset -- the one decode point for all of them, because every
+      backend reaches a global through the same EmitGlobRef. See DATA_SYM_BIAS. }
+    if SymOffIsData(GlobFix[i].BSSoff) then
+      addr := dataBase + SymOffDataPart(GlobFix[i].BSSoff)
+    else
+      addr := bssBase + GlobFix[i].BSSoff;
     Patch32(GlobFix[i].CodePos, addr);
   end;
   if ExternalCount > 0 then
@@ -1876,6 +1893,7 @@ begin
   if doDebug then
   begin
     DbgBssBase := bssBase;
+    DbgDataBase := dataBase;   { a data-resident global's DWARF location — DATA_SYM_BIAS }
     BuildDwarfSections(entry, CodeLen);
     dbgFileBase := filesz;
     shoff32 := dbgFileBase + DbgLen;
@@ -1893,7 +1911,13 @@ begin
   { Global (BSS) fixups: 4-byte absolute, same as x86-64. }
   for i := 0 to GlobFixCount-1 do
   begin
-    addr := bssBase + GlobFix[i].BSSoff;
+    { A data-resident global (a typed const array baked into .data) carries a
+      BIASED offset -- the one decode point for all of them, because every
+      backend reaches a global through the same EmitGlobRef. See DATA_SYM_BIAS. }
+    if SymOffIsData(GlobFix[i].BSSoff) then
+      addr := dataBase + SymOffDataPart(GlobFix[i].BSSoff)
+    else
+      addr := bssBase + GlobFix[i].BSSoff;
     Patch32(GlobFix[i].CodePos, addr);
   end;
 

@@ -3711,6 +3711,120 @@ begin
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
+function DoubleBitsToSingleBits(bits: Int64): Integer;
+{ Narrow an IEEE-754 double's BITS to a single's bits, by letting the host do
+  the conversion. A float const literal is recorded as the DOUBLE's bit
+  pattern whatever the declared element type is, so baking a `array of Single`
+  by copying the low 4 bytes of that pattern produces garbage -- measured:
+  (0.0, -1.5, 2.5, 1e30) read back as (0, 0, 0, 3.06e-4).
+
+  The host's narrowing is the right oracle rather than a hand-rolled
+  exponent/mantissa rebias: every host this compiler builds on is IEEE-754
+  round-to-nearest-even, which is exactly what the target's cvtsd2ss (or its
+  equivalent) would have done on the startup-store path this replaces. }
+var d: Double; f: Single; pd: ^Int64; pf: ^Integer;
+begin
+  pd := @d; pd^ := bits;
+  f := d;
+  pf := @f; Result := pf^;
+end;
+
+function TypedConstBakeable(tk: TTypeKind): Boolean;
+{ Can an element of this type be written into .data as raw little-endian bytes
+  from the ordinal the const parser recorded? Deliberately a SHORT list: an
+  ordinal or a float, nothing whose value is a handle, an address or a
+  layout. A string element is a heap handle built at startup, a record element
+  is a field list, a pointer element is a fixup -- each of those needs the
+  existing per-element init path and gets it, because promotion is all-or-
+  nothing per array. }
+begin
+  Result := TypeIsOrdinal(tk) or (tk = tyDouble) or (tk = tySingle);
+  if Result and (TypeSize(tk) <> 1) and (TypeSize(tk) <> 2) and
+     (TypeSize(tk) <> 4) and (TypeSize(tk) <> 8) then
+    Result := False;
+end;
+
+function TryBakeConstArrayIntoData(symIdx, firstPI, bssBefore, bssAfterAlloc: Integer): Boolean;
+{ Turn a just-parsed typed const ARRAY from "BSS + one generated store per
+  element at startup" into initialised .data.
+
+  Measured before this existed: a 696-entry `array of UInt64` cost **+20,152
+  bytes of CODE** and zero bytes of data -- ~29 bytes of machine code per
+  element, run at program start, in every binary that links the unit, whether
+  or not it ever reads the array. Int64, Double and Cardinal all did the same,
+  so it was every typed const array, not a 64-bit case. sysutils' 696-entry
+  Eisel-Lemire power-of-ten table alone carried ~31 KB of that
+  (bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data).
+  It is worst exactly where it hurts most: on xtensa a 10 KB table became
+  ~40 KB of flash plus a boot-time fill.
+
+  The storage moves to .data via DATA_SYM_BIAS -- see that constant for why a
+  bias rather than a flag or a sentinel. .data is WRITABLE here (one RWX
+  PT_LOAD), which is required, not incidental: FPC's {$J+} writable typed
+  constants are a real feature and a read-only section would turn a working
+  program into a fault.
+
+  All-or-nothing per array, and it fails CLOSED: any element the const parser
+  recorded as something other than a plain ordinal/float literal (a string, a
+  `@proc`, a class ref, a record field list, a set) leaves the whole array on
+  the existing startup-store path. Rejecting is always correct; promoting
+  something unbakeable would be silent wrong data.
+
+  Refused for object/shared output: those writers emit RELOCATIONS against a
+  section symbol rather than patching an absolute address, so a data-resident
+  global needs a different section index there. Not done yet, and refusing is
+  what keeps that honest. }
+var k, n, esz, base, b: Integer; v: Int64; elemTk: TTypeKind;
+begin
+  Result := False;
+  if EmitObjMode or EmitSharedMode then Exit;
+  if (symIdx < 0) or not Syms[symIdx].IsArray then Exit;
+  if Syms[symIdx].Kind <> skGlobal then Exit;
+  n := Syms[symIdx].ArrLen;
+  if n <= 0 then Exit;
+  if PendingInitCount - firstPI <> n then Exit;
+  elemTk := Syms[symIdx].ElemType;
+  if not TypedConstBakeable(elemTk) then Exit;
+  if SymElemDynDepth[symIdx] > 0 then Exit;
+  if SymIsSub[symIdx] then Exit;    { a subrange element still stores its ordinal, but leave the narrow cases alone until one is measured }
+  esz := TypeSize(elemTk);
+
+  { Every recorded init must be a plain literal for THIS array, in element
+    order, covering the whole extent. Kind 0 is an ordinal, kind 3 a float
+    whose IEEE bits are already in Val. Anything else -> refuse. }
+  for k := firstPI to PendingInitCount - 1 do
+  begin
+    if PendingInitSym[k] <> symIdx then Exit;
+    if PendingInitFOff[k] <> -1 then Exit;
+    if (PendingInitKind[k] <> 0) and (PendingInitKind[k] <> 3) then Exit;
+    if PendingInitElem[k] <> Syms[symIdx].ConstVal + (k - firstPI) then Exit;
+  end;
+
+  base := AlignTo(DataLen, TypeAlign(elemTk));
+  if base + n * esz >= MAX_DATA then Exit;   { out of data space: keep the old path rather than fail the compile }
+  for k := firstPI to PendingInitCount - 1 do
+  begin
+    v := PendingInitVal[k];
+    { A float literal always arrives as the DOUBLE's bits; a Single element
+      needs them narrowed, not truncated. }
+    if elemTk = tySingle then v := DoubleBitsToSingleBits(v);
+    for b := 0 to esz - 1 do
+      Data[base + (k - firstPI) * esz + b] := Byte((v shr (8 * b)) and $FF);
+  end;
+  DataLen := base + n * esz;
+
+  Syms[symIdx].Offset := DATA_SYM_BIAS + base;
+  PendingInitCount := firstPI;
+  { Reclaim the BSS the array was already given -- otherwise the fix would
+    trade 20 KB of code for 5.5 KB of dead BSS and the RAM half of the ticket
+    would still be open. Only when the array is still the LAST thing allocated:
+    the const initialiser parse allocates no globals today, but rolling back
+    over something that did would alias two symbols onto one address, and that
+    is a bug nothing would report. Not reclaiming merely wastes space. }
+  if BSSSize = bssAfterAlloc then BSSSize := bssBefore;
+  Result := True;
+end;
+
 function AllocArray(const name: AnsiString; elemType: TTypeKind; lo, hi: Integer): Integer;
 var elemSize, totalSize, align: Integer;
 begin

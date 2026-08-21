@@ -109,6 +109,20 @@ begin
     EmitI64(0);
 end;
 
+function SymOffIsData(off: Integer): Boolean;
+{ Is this global symbol offset a .data offset rather than a BSS one? See
+  DATA_SYM_BIAS. Ask this, never the raw comparison -- the ELF writers, the
+  DWARF location emitter and any future consumer must agree on one decoding. }
+begin
+  Result := off >= DATA_SYM_BIAS;
+end;
+
+function SymOffDataPart(off: Integer): Integer;
+{ The .data offset inside a biased symbol offset. }
+begin
+  Result := off - DATA_SYM_BIAS;
+end;
+
 procedure EmitGlobRef(bssOff: Integer);
 { Emit 4-byte placeholder for absolute BSS address }
 begin
