@@ -6191,11 +6191,6 @@ begin
       dcSrcAst := ASTLeft[node];
       dcElemTk := NodeDynBaseTk(dcSrcAst);
       dcElemRec := NodeDynBaseRec(dcSrcAst);
-      { Always 1 today -- the parser still refuses a NESTED destination for
-        Insert, because the inserted sub-array handle would need its own retain
-        and the gap store runs AFTER the buffer-wide retain walk. Read from the
-        node anyway so this arm says what it means and the depth-aware code
-        below (shared with Delete, where nesting IS allowed) stays honest. }
       dcDepth := NodeDynDepth(dcSrcAst);
       if dcDepth < 1 then dcDepth := 1;
       if dcDepth > 1 then dcElemSz := TypeSize(tyPointer)
@@ -6219,6 +6214,14 @@ begin
           handle itself (see AN_IDENT). Nothing element-typed is captured
           because nothing is stored into a gap; PXXDynInsArrFill lays the
           source's elements straight into the fresh buffer. }
+        dcValTmp := AllocVar('', tyPointer);
+        IRAppend(IR_STORE_SYM, dcValTmp, IRLowerAST(dcCntAst), -1, 0, Ord(tyPointer));
+      end
+      else if dcDepth > 1 then
+      begin
+        { NESTED destination, one-element form: the element IS a sub-array
+          handle, so what we capture is that handle -- an rvalue dyn-array
+          ident lowers to it, same as the splice arm above. }
         dcValTmp := AllocVar('', tyPointer);
         IRAppend(IR_STORE_SYM, dcValTmp, IRLowerAST(dcCntAst), -1, 0, Ord(tyPointer));
       end
@@ -6414,6 +6417,36 @@ begin
         { Splice: the inserted elements are already in the buffer, and the
           retain walk above covered them along with the kept ones. No gap
           store, so nothing to do here. }
+      end
+      else if dcDepth > 1 then
+      begin
+        { NESTED, one-element: store the sub-array handle raw, then give it the
+          ONE reference the new buffer owns. The buffer-wide retain above ran
+          before this store and saw a still-nil gap, so it could not have
+          covered it; rather than reorder the two (the managed-string arm needs
+          the other order), retain exactly the one handle here. At depth > 1
+          PXXDynArrayRetainImmediate is a shallow IncRef per handle, so len=1
+          over the gap address is precisely that. }
+        IRAppend(IR_STORE_MEM, IRAppend(IR_LOAD_SYM, dcGapTmp, -1, -1, 0, Ord(tyPointer)),
+          IRAppend(IR_LOAD_SYM, dcValTmp, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
+        procIdx := FindProc('PXXDynArrayRetainImmediate');
+        if procIdx < 0 then Error('compiler error: PXXDynArrayRetainImmediate not found');
+        first := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcGapTmp, -1, -1, 0, Ord(tyPointer)),
+                   -1, -1, 0, Ord(tyPointer));
+        last := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+                  -1, -1, 0, Ord(tyInteger));
+        IRB[first] := last;
+        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, dcDepth, Ord(tyInteger)),
+                     -1, -1, 0, Ord(tyInteger));
+        IRB[last] := argNode; last := argNode;                 { depth }
+        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyInteger)),
+                     -1, -1, 0, Ord(tyInteger));
+        IRB[last] := argNode; last := argNode;                 { baseKind unused }
+        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
+                     -1, -1, 0, Ord(tyPointer));
+        IRB[last] := argNode;                                  { baseRecDesc nil }
+        dcSetlenVal := IRAppendCall(procIdx, first, -1, Ord(tyNativeInt));
+        IRIVal[dcSetlenVal] := 1;
       end
       else if (dcElemTk = tyRecord) and RecordHasManagedFields(dcElemRec) then
         { Managed-field record: ARC-correct copy — retain the source's fields,

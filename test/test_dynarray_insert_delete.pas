@@ -443,6 +443,57 @@ begin
   Chk(66, (Length(d) = 2) and (dTh in d[0]) and (dFr in d[0]) and (dMo in d[1]));
 end;
 
+{ ---- nested elements: Insert on `array of array of T` ---- }
+{ Two forms, and they are told apart by DEPTH, not by shape: a source one level
+  shallower than the destination is an ordinary one-element insert of a
+  sub-array; a source at the SAME depth is the splice. The one-element form is
+  the case that needs care -- the buffer-wide retain walk runs before the gap
+  store and so sees a still-nil gap, which is why the inserted handle gets its
+  one reference from a separate len=1 retain over the gap address. }
+procedure NestedInsert;
+var m, n2: array of array of Integer; row: array of Integer; i, j, k: Integer;
+begin
+  SetLength(m, 2);
+  for i := 0 to 1 do
+  begin
+    SetLength(m[i], 2);
+    for j := 0 to 1 do m[i][j] := i * 10 + j;
+  end;
+  SetLength(row, 2); row[0] := 77; row[1] := 88;
+  Insert(row, m, 1);
+  Chk(67, (Length(m) = 3) and (m[0][0] = 0) and (m[1][0] = 77) and
+          (m[1][1] = 88) and (m[2][0] = 10));
+  { the inserted row is SHARED with `row`, not copied -- FPC's semantics }
+  row[0] := 99;
+  Chk(68, m[1][0] = 99);
+  { splice of two nested arrays }
+  SetLength(n2, 2);
+  for i := 0 to 1 do
+  begin
+    SetLength(n2[i], 1); n2[i][0] := 500 + i;
+  end;
+  Insert(n2, m, 0);
+  Chk(69, (Length(m) = 5) and (m[0][0] = 500) and (m[1][0] = 501) and
+          (m[2][0] = 0) and (m[3][0] = 99) and (m[4][0] = 10));
+  { the inserted row outlives the array it was put into: it was retained once
+    for the new buffer and released once when that buffer went }
+  SetLength(m, 0);
+  Chk(70, (Length(row) = 2) and (row[0] = 99) and (row[1] = 88));
+  k := 0;
+  for i := 1 to 20000 do
+  begin
+    SetLength(m, 2);
+    for j := 0 to 1 do
+    begin
+      SetLength(m[j], 1); m[j][0] := j;
+    end;
+    SetLength(row, 1); row[0] := 7;
+    Insert(row, m, 1);
+    k := k + Length(m) + m[1][0];
+  end;
+  Chk(71, k = 200000);
+end;
+
 begin
   okCount := 0;
   DeleteBasics;
@@ -463,5 +514,6 @@ begin
   FieldTargets;
   NestedDelete;
   RvalueInsertValues;
-  writeln('total ok ', okCount, ' / 66');
+  NestedInsert;
+  writeln('total ok ', okCount, ' / 71');
 end.

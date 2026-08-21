@@ -5105,9 +5105,9 @@ begin
             Frozen strings / nested arrays still deferred. }
           if not DynTargetIsRereadable(valNode) then
             Error('Insert: dynamic-array destination must be a name, field or dereference (it is read and written back)');
-          if (NodeDynBaseTk(valNode) = tyString) or (NodeDynDepth(valNode) > 1) or
+          if (NodeDynBaseTk(valNode) = tyString) or
              ((ASTKind[valNode] = AN_IDENT) and (SymElemDynDepth[i] > 0)) then
-            Error('Insert: frozen-string or nested element type not yet supported for dynamic-array Insert');
+            Error('Insert: frozen-string element type not yet supported for dynamic-array Insert');
           { FPC's array-SPLICE form Insert(srcArr, arr, index): the first
             argument is itself a dynamic array and ALL of its elements go in.
             Before this existed the splice compiled as the one-element form and
@@ -5123,10 +5123,23 @@ begin
             insSrcSym := ASTIVal[exprNode];
             if (Syms[insSrcSym].ElemType <> NodeDynBaseTk(valNode)) or
                ((NodeDynBaseTk(valNode) = tyRecord) and
-                (Syms[insSrcSym].ElemRecName <> NodeDynBaseRec(valNode))) or
-               (SymDynDepth[insSrcSym] <> NodeDynDepth(valNode)) then
+                (Syms[insSrcSym].ElemRecName <> NodeDynBaseRec(valNode))) then
               Error('Insert: the source array''s element type differs from the destination''s');
+            { Same depth = the SPLICE. One level shallower = an ordinary
+              one-element insert of a sub-array into a nested destination
+              (`Insert(row, matrix, i)`), which is not a splice at all. Any
+              other relation is a type error. }
+            if SymDynDepth[insSrcSym] = NodeDynDepth(valNode) - 1 then
+              insSrcSym := -1
+            else if SymDynDepth[insSrcSym] <> NodeDynDepth(valNode) then
+              Error('Insert: the source array''s nesting differs from the destination''s');
           end;
+          { A nested destination's elements are sub-array handles, so a plain
+            scalar/record value cannot be one of them. }
+          if (NodeDynDepth(valNode) > 1) and (insSrcSym < 0) and
+             not ((ASTKind[exprNode] = AN_IDENT) and (ASTIVal[exprNode] >= 0) and
+                  Syms[ASTIVal[exprNode]].IsArray) then
+            Error('Insert: a nested dynamic array takes a sub-ARRAY as the inserted value');
           { A record/set VALUE no longer has to be an lvalue: those types are
             address-valued in the IR, so a function result or a set expression
             lowers to an address the gap copy can read, live for the statement.
