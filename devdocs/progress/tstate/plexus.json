@@ -452,12 +452,12 @@
  ],
  "host": "plexus",
  "infra": {
-  "count": 28,
-  "last": "2026-08-21T07:44:49Z",
+  "count": 29,
+  "last": "2026-08-21T07:45:52Z",
   "reason": "compiler build failed (see log); no test was run",
-  "sha": "dcf13fd81e56192abd1e116f5c79d992d3811761",
+  "sha": "9ea0cb8f675e9cec95d35d9f9003f5a10e4be382",
   "since": "2026-08-21T07:23:24Z",
-  "tier": "full"
+  "tier": "native"
  },
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2543179B  data=60497B  bss=17852B  procs=1762] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
