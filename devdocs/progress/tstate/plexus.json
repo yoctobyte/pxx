@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T20:44:16Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "2b4086a99c314f7af7ecd0a40d8689a543799fe3",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-20T20:53:07Z",
    "fixed": [],
    "new_red": [],
@@ -469,6 +461,16 @@
    "sha": "de2de369ea6ae73475c996635d07f6c9902f294c",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-21T15:30:22Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/cstatic_same_module_dup.c"
+   ],
+   "sha": "99dcac2a2ade0352ceb8fe8fc8aadbc2071ca422",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -479,7 +481,7 @@
  },
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2543179B  data=60497B  bss=17852B  procs=1762] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
-  "test-asm#src:compiler/compiler.pas": "ok: $TMP  [-S disassembly] | ok: $TMP  [code=8837852B  data=234248B  bss=213127228B  procs=3035]",
+  "test-asm#src:compiler/compiler.pas": "ok: $TMP  [-S disassembly] | ok: $TMP  [code=8876143B  data=236808B  bss=75879340B  procs=3050]",
   "test-c-conformance#shard1/6": "FAIL 00206.c \u2014 exit code 254 (want 0) | FAIL 00212.c \u2014 exit code 255 (want 0) | test-c-conformance: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance: FAILURES: 00206.c(exit=254) 00212.c(exit=255)",
   "test-c-conformance-aarch64#shard1/6": "FAIL 00206.c \u2014 exit code 215 (want 0) | FAIL 00212.c \u2014 exit code 70 (want 0) | test-c-conformance-aarch64: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-aarch64: FAILURES: 00206.c(exit=215) 00212.c(exit=70)",
   "test-c-conformance-arm32#shard1/6": "FAIL 00206.c \u2014 exit code 64 (want 0) | FAIL 00212.c \u2014 exit code 64 (want 0) | test-c-conformance-arm32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-arm32: FAILURES: 00206.c(exit=64) 00212.c(exit=64)",
@@ -4218,7 +4220,7 @@
   "test-core#src:test/cstatic_init_cast_intdouble_b159.c": "pass",
   "test-core#src:test/cstatic_local_init_once_b139.c": "pass",
   "test-core#src:test/cstatic_ptr_array_b51.c": "pass",
-  "test-core#src:test/cstatic_same_module_dup.c": "pass",
+  "test-core#src:test/cstatic_same_module_dup.c": "fail",
   "test-core#src:test/cstatic_two_modules.c": "pass",
   "test-core#src:test/cstmt_c.c": "pass",
   "test-core#src:test/cstr_concat_b18.c": "pass",
@@ -6304,11 +6306,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-21T14:28:49Z",
-  "sha": "de2de369ea6ae73475c996635d07f6c9902f294c",
+  "date": "2026-08-21T15:30:22Z",
+  "sha": "99dcac2a2ade0352ceb8fe8fc8aadbc2071ca422",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.3
+  "wall": 3600.4
  },
  "last_bench": {
   "conf_rows": 550,
@@ -8106,6 +8108,29 @@
     "8654c4d55b61605fc5dea51a38887e713d5b9fc0"
    ],
    "src": ""
+  },
+  {
+   "bad": "99dcac2a2ade0352ceb8fe8fc8aadbc2071ca422",
+   "good": "de2de369ea6ae73475c996635d07f6c9902f294c",
+   "job": "test-core#src:test/cstatic_same_module_dup.c",
+   "name": "test-core#588",
+   "opened": "2026-08-21T15:30:22Z",
+   "pin_built": false,
+   "range": [
+    "8cc9666fcc8664945eb69fae37f6edf185100fcb",
+    "e33e10a144940ae42d88025b2fa411c207a483bf",
+    "e47988d52bc232e8057fb9ff540551a4a46f5636",
+    "d332df43fcc65c9c75ebe6ea6233e74147f62dbb",
+    "9b48a7aff49b5b1cbbd1cd53033f7bbb2e9c3057",
+    "e4c31bc096b0b0ad565e222b919426aaeb1c8dd1",
+    "84dd9cbd4bc64f5536e0df64357c4c245abad79a",
+    "c965e5a6a4a8bfadd3d85a04172559e688198a9a",
+    "48d87825672ddf61a2269f5bc72de2639cff6c8b",
+    "d2dbbb21e392e3ad3ecf4247c4247acb46573727",
+    "99dcac2a2ade0352ceb8fe8fc8aadbc2071ca422"
+   ],
+   "src": "test/cstatic_same_module_dup.c",
+   "status": "fail"
   }
  ],
  "pin_baseline": {

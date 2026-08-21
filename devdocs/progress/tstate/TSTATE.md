@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `de2de369ea6a` | 2026-08-21T14:28:49Z | RED (native) | 3600.3s | `23becd24b8e5` RED |
+| plexus | `99dcac2a2ade` | 2026-08-21T15:30:22Z | RED (native) | 3600.4s | `23becd24b8e5` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -34,3 +34,4 @@
   - `test-core#src:test/test_rust_struct_array.rs`
   - `test-core#src:test/test_rust_tuple_struct.rs`
   </details>
+- **test-core#src:test/cstatic_same_module_dup.c** — test/cstatic_same_module_dup.c (plexus): bad `99dcac2a2ade`, last good `de2de369ea6a`, 11 commit(s) in range
