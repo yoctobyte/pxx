@@ -8046,6 +8046,12 @@ test-core: $(COMPILER)
 	@# wrapped it too.
 	./$(COMPILER) test/test_nil_check_receiver.pas $(TESTTMP)/test_nil_check_receiver26
 	test "$$($(TESTTMP)/test_nil_check_receiver26)" = "$$(printf 'virt v=7\nplain\ncaught virtual: Access violation (nil reference)\ncaught plain: Access violation (nil reference)\nstill running')"
+	@# Site class 3: a nil INTERFACE, both flavours (COM and CORBA share the
+	@# AN_INTF_CALL path). The check is on the instance pointer, not the IMT --
+	@# PXXIntfIMTOf(nil, ci) walks the instance's RTTI, so this used to fault
+	@# inside a runtime helper, frames away from the call the programmer wrote.
+	./$(COMPILER) test/test_nil_check_interface.pas $(TESTTMP)/test_nil_check_interface26
+	test "$$($(TESTTMP)/test_nil_check_interface26)" = "$$(printf 'go\nval=7\ncaught proc: Access violation (nil reference)\ncaught func: Access violation (nil reference)\ncorba=9\ncaught corba: Access violation (nil reference)\nstill running')"
 	@# --no-nil-check on BOTH, and it is load-bearing: this file's subject is the
 	@# SIGNAL path, and since feature-a-emitted-nil-checks the compiler catches
 	@# `nilproc` at the call site before any fault happens — so without the flag

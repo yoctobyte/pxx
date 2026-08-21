@@ -10666,8 +10666,13 @@ begin
       { An interface value is ONE pointer: the instance. Self = [iface]. }
       intfCallCi := ResolveNodeRec(ASTRight[node]) - REC_UCLASS_BASE;
       intfSelfSym := AllocVar('', tyPointer);
+      { Site class 3 of feature-a-emitted-nil-checks: a nil interface. Checked
+        HERE, on the instance pointer, and not one line later on the IMT --
+        because PXXIntfIMTOf(nil, ci) walks the instance's RTTI blob, so a nil
+        interface faults inside a runtime helper, where the fault names the
+        helper and not the call site the programmer wrote. }
       IRAppend(IR_STORE_SYM, intfSelfSym,
-               IRAppend(IR_LOAD_MEM, IRLowerAddress(ASTRight[node]), -1, -1, 0, Ord(tyPointer)),
+               IRWrapNilChk(IRAppend(IR_LOAD_MEM, IRLowerAddress(ASTRight[node]), -1, -1, 0, Ord(tyPointer))),
                -1, 0, Ord(tyPointer));
       { imt := PXXIntfIMTOf(self, intfCi) — resolved from the instance's RTTI blob,
         which is what lets the VALUE stay a single pointer. Done BEFORE the explicit

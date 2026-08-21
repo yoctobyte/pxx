@@ -280,3 +280,29 @@ pinned binary. Filed as [[bug-t-gate-quick-cannot-see-a-broken-pinned-rtl]].
   `Self` param, so neither arm-2 key sees it. Same class as arm 4.
 - **Folding provably-non-nil receivers** (`Self` inside a method, a
   just-constructed object). At +2% the pressure to do this is now low.
+
+---
+
+## Landing 3 (2026-08-21): the interface site class
+
+`AN_INTF_CALL`, one line, and the interesting part is **where** the check goes.
+
+An interface VALUE is a single pointer — the instance — and the IMT is resolved
+from it at the call by `PXXIntfIMTOf(self, ci)`, which walks the instance's RTTI
+blob. So a nil interface did fault today on a PC, but *inside a runtime helper*:
+the faulting PC named `PXXIntfIMTOf`, several frames from the `i.Go` the
+programmer wrote. Checking the instance pointer before the helper call is what
+moves the report back to the call site — and on a target with no signal runtime
+it is the difference between a diagnosis and nothing at all.
+
+COM and CORBA interfaces share this path (they differ in refcounting, not in
+call lowering), so both are in the test rather than argued about.
+
+| build | result |
+| --- | --- |
+| default | `caught proc` / `caught func` / `caught corba`, program continues, exit 0 |
+| `--no-nil-check` | raw fault, exit **139** |
+
+No measurement for this one, deliberately: the site already contains a call to
+`PXXIntfIMTOf`, so a test-and-branch in front of it cannot be a meaningful
+fraction of it. Test: `test/test_nil_check_interface.pas`.
