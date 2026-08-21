@@ -731,8 +731,14 @@ test-nilpy: $(COMPILER)
 	./$(COMPILER) test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O0 >/dev/null
 	./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3 >/dev/null
 	test "$$($(TESTTMP)/test_opt_sr_O0)" = "$$($(TESTTMP)/test_opt_sr_O3)"
-	test "$$($(TESTTMP)/test_opt_sr_O0)" = "$$(printf 'int   5 10\nshort -56 -112\nword  4464 8928\nulong 5 10\nint64 8589934602\nptr   0\nconstl 25\nbetween\nafter  12')"
-	test "$$(PXXDBG='a.reload:*' ./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3b 2>&1 | grep -c 'a.reload marked')" -ge 6
+	test "$$($(TESTTMP)/test_opt_sr_O0)" = "$$(printf 'int   5 10\nshort -56 -112\nword  4464 8928\nulong 5 10\nint64 8589934602\nptr   0\nconstl 25\nbetween\nafter  12\nbr shortint neg\nbr word small\nbr ulong small\nbr bool true\nbr constl GT\nbr between\nbr after neg\nmem   -112 -112 -110')"
+	PXXDBG='a.reload:*' ./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3b 2>&1 | grep 'a.reload marked' > $(TESTTMP)/test_opt_sr_marks.log
+	test "$$(grep -c 'a.reload marked' $(TESTTMP)/test_opt_sr_marks.log)" -ge 6
+	# ...and the two WIDENED statement kinds each fired: `bo` is only ever
+	# reloaded by a non-fused conditional branch, and `c` by the fused compare
+	# plus the three IR_STORE_MEM destinations (array elem / field / deref).
+	test "$$(grep -c ' bo$$' $(TESTTMP)/test_opt_sr_marks.log)" -ge 1
+	test "$$(grep -c ' c$$' $(TESTTMP)/test_opt_sr_marks.log)" -ge 5
 	# A NilPy class may be NAMED after the imported class it derives from. The
 	# unit's declaration used to fill the forward row the shell pre-pass had
 	# registered for the program's own class -- one row for two classes, so the
@@ -7751,8 +7757,14 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O0 >/dev/null
 	./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3 >/dev/null
 	test "$$($(TESTTMP)/test_opt_sr_O0)" = "$$($(TESTTMP)/test_opt_sr_O3)"
-	test "$$($(TESTTMP)/test_opt_sr_O0)" = "$$(printf 'int   5 10\nshort -56 -112\nword  4464 8928\nulong 5 10\nint64 8589934602\nptr   0\nconstl 25\nbetween\nafter  12')"
-	test "$$(PXXDBG='a.reload:*' ./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3b 2>&1 | grep -c 'a.reload marked')" -ge 6
+	test "$$($(TESTTMP)/test_opt_sr_O0)" = "$$(printf 'int   5 10\nshort -56 -112\nword  4464 8928\nulong 5 10\nint64 8589934602\nptr   0\nconstl 25\nbetween\nafter  12\nbr shortint neg\nbr word small\nbr ulong small\nbr bool true\nbr constl GT\nbr between\nbr after neg\nmem   -112 -112 -110')"
+	PXXDBG='a.reload:*' ./$(COMPILER) -O3 test/test_opt_store_reload.pas $(TESTTMP)/test_opt_sr_O3b 2>&1 | grep 'a.reload marked' > $(TESTTMP)/test_opt_sr_marks.log
+	test "$$(grep -c 'a.reload marked' $(TESTTMP)/test_opt_sr_marks.log)" -ge 6
+	# ...and the two WIDENED statement kinds each fired: `bo` is only ever
+	# reloaded by a non-fused conditional branch, and `c` by the fused compare
+	# plus the three IR_STORE_MEM destinations (array elem / field / deref).
+	test "$$(grep -c ' bo$$' $(TESTTMP)/test_opt_sr_marks.log)" -ge 1
+	test "$$(grep -c ' c$$' $(TESTTMP)/test_opt_sr_marks.log)" -ge 5
 	# A NilPy class may be NAMED after the imported class it derives from. The
 	# unit's declaration used to fill the forward row the shell pre-pass had
 	# registered for the program's own class -- one row for two classes, so the

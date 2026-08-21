@@ -37,6 +37,10 @@ var
   u: LongWord;
   p: Pointer;
   q: PtrUInt;
+  bo: Boolean;
+  arr: array[0..1] of Integer;
+  rec: record f: Integer; end;
+  pi: ^Integer;
 begin
   big := 4294967296 + 5 + ParamCount;
 
@@ -58,4 +62,56 @@ begin
   i := Integer(big) + 1;
   WriteLn('between');
   r := i * 2;                                    WriteLn('after  ', r);
+
+  { 4. THE STATEMENT AFTER THE STORE IS A BRANCH, not another store
+    (feature-opt-store-reload-elimination). A conditional branch reaches its
+    condition before emitting anything, so the same run continues into it —
+    but the fused compare-into-branch has its OWN operand-order chain, which
+    is why IRStmtFirstEvaluated exists beside IRFirstEvaluated.
+
+    Every case below is a WIDTH oracle, not just a control-flow one: the
+    truncated store and the untruncated rax straddle the comparison's
+    threshold, so a missing re-extension flips the branch and prints the
+    other word. ShortInt(200) is -56 (rax holds 200), Word(70000) is 4464
+    (rax holds 70000), LongWord(2^32+5) is 5 (rax holds 2^32+5). }
+  c := ShortInt(200 + ParamCount);
+  if c < 0 then WriteLn('br shortint neg') else WriteLn('br shortint POS');
+  w := Word(70000 + ParamCount);
+  if w > 60000 then WriteLn('br word BIG') else WriteLn('br word small');
+  u := LongWord(big);
+  if u > 100 then WriteLn('br ulong BIG') else WriteLn('br ulong small');
+
+  { a NON-fused condition: the branch tests a Boolean value, so the mirror
+    falls through to the ordinary value-tree answer }
+  bo := (Integer(big) > 3) and (ParamCount = 0);
+  if bo then WriteLn('br bool true') else WriteLn('br bool false');
+
+  { the const-LEFT negative case again, in branch position: `5 > i` puts a
+    leaf sym on the RIGHT, so the fusion loads the CONST first and the reload
+    must stand }
+  i := Integer(big);
+  if 5 > i then WriteLn('br constl le') else WriteLn('br constl GT');
+
+  { a call between the store and the branch ends the run, exactly as it does
+    between two stores }
+  c := ShortInt(200 + ParamCount);
+  WriteLn('br between');
+  if c < 0 then WriteLn('br after neg') else WriteLn('br after POS');
+
+  { 5. the statement after the store writes through an ADDRESS — an array
+    element, a record field, a pointer deref. IR_STORE_MEM's generic arm
+    evaluates the VALUE first and computes the destination address after it,
+    so the run continues into it exactly as it does into another plain store.
+    Same width oracle: ShortInt(200) is -56, so -112 here and 400 if the
+    re-extension went missing. }
+  c := ShortInt(200 + ParamCount);
+  arr[0] := c * 2;
+  c := ShortInt(200 + ParamCount);
+  rec.f := c * 2;
+  c := ShortInt(200 + ParamCount);
+  pi := @arr[1];
+  pi^ := 0;                 { the store to pi^ is not the one under test }
+  c := ShortInt(201 + ParamCount);
+  pi^ := c * 2;
+  WriteLn('mem   ', arr[0], ' ', rec.f, ' ', arr[1]);
 end.

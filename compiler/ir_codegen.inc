@@ -5184,6 +5184,10 @@ begin
         end
         else
         begin
+          { VALUE FIRST, destination address second. MUST MOVE TOGETHER WITH
+            IRStmtFirstEvaluated's IR_STORE_MEM arm, which marks a reload in
+            this value expression redundant precisely because nothing is
+            emitted before it. }
           IREmitNode(valueNode);
           EmitB($50); { push rax -- value }
 
@@ -8229,6 +8233,72 @@ begin
   end;
 end;
 
+{ The node the TOP-LEVEL statement `stmt` would emit first, or -1 for "cannot
+  say". IRFirstEvaluated answers that for a value TREE; this answers it for a
+  statement, which is a second dispatch — IREmitMachineCode's own case arm
+  decides what runs before the value expression is reached, and for a fused
+  compare that is a different guard chain from IR_BINOP's.
+
+  MUST MOVE TOGETHER WITH IREmitMachineCode's arms for the kinds listed here.
+  Unknown is always safe: it costs a missed mark and nothing else. }
+function IRStmtFirstEvaluated(stmt: Integer): Integer;
+var cond, cLeft, cRight: Integer;
+    stk: TTypeKind;
+begin
+  IRStmtFirstEvaluated := -1;
+  if stmt < 0 then Exit;
+  case IRKind[stmt] of
+    IR_STORE_SYM:
+      { The destination decides whether the VALUE is the first thing evaluated:
+        a record/set/managed destination takes an earlier arm that emits a
+        destination address (or a release-of-old) before the value is reached.
+        ReloadElimSym is exactly the set that does not. }
+      if ReloadElimSym(IRA[stmt]) then
+        IRStmtFirstEvaluated := IRFirstEvaluated(IRB[stmt]);
+    IR_STORE_MEM:
+      begin
+        { `p^ := ...`, `a[i] := ...`, `r.f := ...`. The generic arm evaluates the
+          VALUE first and only then the destination address (it pushes the value
+          and computes the address into rax), so the value expression is reached
+          with nothing emitted before it — the same property IR_STORE_SYM has.
+          The two managed arms above it are excluded: tyString and tyAnsiString
+          both run retain/release machinery of their own. }
+        stk := IntToTypeKind(IRTk[stmt]);
+        if (stk <> tyString) and (stk <> tyAnsiString) and
+           (TypeIsOrdinal(stk) or (stk = tyPointer)) then
+          IRStmtFirstEvaluated := IRFirstEvaluated(IRB[stmt]);
+      end;
+    IR_JUMP_IF_FALSE:
+      begin
+        cond := IRB[stmt];
+        if (OptLevel >= 1) and (TargetArch <> TARGET_I386) and
+           (IRKind[cond] = IR_BINOP) and CmpFusible(cond) then
+        begin
+          { the compare-into-branch fusion has its OWN operand-order chain,
+            parallel to IR_BINOP's but not the same one — no imm-fold arm, and
+            the -O3 scratch arms both evaluate LEFT first. Only the -O2 W1
+            mirror reorders, and its `not InLValueWrite` guard is the same
+            runtime flag IRFirstEvaluated cannot see, so it answers unknown for
+            the same reason. }
+          cLeft := IRA[cond];
+          cRight := IRB[cond];
+          if IRKind[cRight] = IR_CONST_INT then
+            IRStmtFirstEvaluated := IRFirstEvaluated(cLeft)
+          else if LeafSymRcxLoadable(cRight) then
+            IRStmtFirstEvaluated := IRFirstEvaluated(cLeft)
+          else if (OptLevel >= 2) and
+                  ((IRKind[cLeft] = IR_CONST_INT) or
+                   (LeafSymRcxLoadable(cLeft) and ScratchSafeSubtree(cRight))) then
+            Exit
+          else
+            IRStmtFirstEvaluated := IRFirstEvaluated(cLeft);
+        end
+        else
+          IRStmtFirstEvaluated := IRFirstEvaluated(cond);
+      end;
+  end;
+end;
+
 { Per body: mark every reload that the statement immediately before it already
   left in rax. x86-64 only and -O3 only (a new pass lands on the free tier and
   promotes per-pass after the full gate); -g forces -O0, so the DWARF line
@@ -8249,15 +8319,16 @@ begin
       stored value in rax }
     sym := IRA[i];
     if not ReloadElimSym(sym) then Continue;
-    { the next thing the top-level loop ACTS on. Anything but a plain scalar
-      store — a label, a jump, a call, a write, an exception boundary — ends
-      the run, because then something IS emitted in between. }
+    { the next thing the top-level loop ACTS on. Its kind decides whether the
+      value expression is the first thing it emits — IRStmtFirstEvaluated
+      answers that for the kinds it knows (a plain scalar store, a conditional
+      branch) and -1 for every other, so a label, a jump, a call, a write or an
+      exception boundary ends the run because then something IS emitted in
+      between. }
     j := i + 1;
     while (j < IRCount) and not IRTopLevelStmt(j) do Inc(j);
     if j >= IRCount then Continue;
-    if IRKind[j] <> IR_STORE_SYM then Continue;
-    if not ReloadElimSym(IRA[j]) then Continue;
-    f := IRFirstEvaluated(IRB[j]);
+    f := IRStmtFirstEvaluated(j);
     if f < 0 then Continue;
     if IRKind[f] <> IR_LOAD_SYM then Continue;
     if IRA[f] <> sym then Continue;
@@ -8412,7 +8483,11 @@ begin
               leaf-const / leaf-sym direct-load forms), emit the bare `cmp`, then
               jump to the label on the INVERTED condition (branch taken when the
               comparison is FALSE). Drops the setcc/movzx/test the generic path
-              would emit before the jz. }
+              would emit before the jz.
+
+              MUST MOVE TOGETHER WITH IRStmtFirstEvaluated's IR_JUMP_IF_FALSE
+              arm — it mirrors THIS chain (not IR_BINOP's) to decide whether a
+              reload in the condition is redundant. }
             cLeft := IRA[condNode];
             cRight := IRB[condNode];
             if IRKind[cRight] = IR_CONST_INT then
