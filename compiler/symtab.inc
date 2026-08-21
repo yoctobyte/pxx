@@ -8727,6 +8727,25 @@ begin
         else
           Error('target i386: only local/global string function results supported yet');
       end
+      else if Syms[retSymIdx].IsArray and (Syms[retSymIdx].ArrLen = -1) and
+              (Syms[retSymIdx].Kind = skLocal) then
+      begin
+        { DYNAMIC-ARRAY result: the slot holds one pointer-sized heap
+          handle, exactly like the tyAnsiString case below — not an aggregate.
+          All four cross epilogues refused it outright on `IsArray`, so a
+          function returning `array of T` did not BUILD for any non-x86-64
+          target (three whole tests unbuildable). A STATIC array result IS the
+          unsupported case and still errors below.
+
+          Loaded at POINTER width by hand: EmitLoadVar* sizes by
+          TypeSize(Syms[].TypeKind), and an array's TypeKind is its ELEMENT
+          kind, so `array of Char` would come back through a byte load with the
+          handle's top bytes gone — the truncation EmitLoadVarA64 carried until
+          today. Ownership transfers to the caller, which is why every managed-
+          local cleanup above already skips retSymIdx.
+          bug-a-a-function-returning-a-dynamic-array-is-refused-on-every-cross-target }
+        EmitB($8B); EmitB($85); EmitI32(Syms[retSymIdx].Offset);   { mov eax, [ebp+off] }
+      end
       else
       begin
         if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
@@ -8926,6 +8945,27 @@ begin
           global lives in BSS, a local on the frame (mirrors the x86-64 path).
           Managed tyAnsiString results stay pointer-sized handles below. }
         EmitLoadVarAddrArm32(retSymIdx)
+      else if Syms[retSymIdx].IsArray and (Syms[retSymIdx].ArrLen = -1) and
+              (Syms[retSymIdx].Kind = skLocal) then
+      begin
+        { DYNAMIC-ARRAY result: the slot holds one pointer-sized heap
+          handle, exactly like the tyAnsiString case below — not an aggregate.
+          All four cross epilogues refused it outright on `IsArray`, so a
+          function returning `array of T` did not BUILD for any non-x86-64
+          target (three whole tests unbuildable). A STATIC array result IS the
+          unsupported case and still errors below.
+
+          Loaded at POINTER width by hand: EmitLoadVar* sizes by
+          TypeSize(Syms[].TypeKind), and an array's TypeKind is its ELEMENT
+          kind, so `array of Char` would come back through a byte load with the
+          handle's top bytes gone — the truncation EmitLoadVarA64 carried until
+          today. Ownership transfers to the caller, which is why every managed-
+          local cleanup above already skips retSymIdx.
+          bug-a-a-function-returning-a-dynamic-array-is-refused-on-every-cross-target }
+        EmitLoadImmArm32(9, Syms[retSymIdx].Offset);
+        EmitI32($E08B9009);                          { add r9, fp, r9 }
+        EmitI32($E5990000);                          { ldr r0, [r9] = handle }
+      end
       else
       begin
         if Syms[retSymIdx].IsArray or (Syms[retSymIdx].Kind <> skLocal) or
@@ -9114,6 +9154,25 @@ begin
         end
         else
           Error('target aarch64: only local/global string function results supported yet');
+      end
+      else if Syms[retSymIdx].IsArray and (Syms[retSymIdx].ArrLen = -1) and
+              (Syms[retSymIdx].Kind = skLocal) then
+      begin
+        { DYNAMIC-ARRAY result: the slot holds one pointer-sized heap
+          handle, exactly like the tyAnsiString case below — not an aggregate.
+          All four cross epilogues refused it outright on `IsArray`, so a
+          function returning `array of T` did not BUILD for any non-x86-64
+          target (three whole tests unbuildable). A STATIC array result IS the
+          unsupported case and still errors below.
+
+          Loaded at POINTER width by hand: EmitLoadVar* sizes by
+          TypeSize(Syms[].TypeKind), and an array's TypeKind is its ELEMENT
+          kind, so `array of Char` would come back through a byte load with the
+          handle's top bytes gone — the truncation EmitLoadVarA64 carried until
+          today. Ownership transfers to the caller, which is why every managed-
+          local cleanup above already skips retSymIdx.
+          bug-a-a-function-returning-a-dynamic-array-is-refused-on-every-cross-target }
+        EmitLoadVarA64(retSymIdx);   { the ArrLen = -1 arm loads full ptr width }
       end
       else
       begin
@@ -9349,6 +9408,26 @@ begin
         if procIdx < 0 then Error('compiler error: PXXMemMove not found');
         EmitCallProc(procIdx);
         EmitLoadVarRISCV32(ProcAggregateDestSym[CurProc]);   { a0 = dest (return value) }
+      end
+      else if Syms[retSymIdx].IsArray and (Syms[retSymIdx].ArrLen = -1) and
+              (Syms[retSymIdx].Kind = skLocal) then
+      begin
+        { DYNAMIC-ARRAY result: the slot holds one pointer-sized heap
+          handle, exactly like the tyAnsiString case below — not an aggregate.
+          All four cross epilogues refused it outright on `IsArray`, so a
+          function returning `array of T` did not BUILD for any non-x86-64
+          target (three whole tests unbuildable). A STATIC array result IS the
+          unsupported case and still errors below.
+
+          Loaded at POINTER width by hand: EmitLoadVar* sizes by
+          TypeSize(Syms[].TypeKind), and an array's TypeKind is its ELEMENT
+          kind, so `array of Char` would come back through a byte load with the
+          handle's top bytes gone — the truncation EmitLoadVarA64 carried until
+          today. Ownership transfers to the caller, which is why every managed-
+          local cleanup above already skips retSymIdx.
+          bug-a-a-function-returning-a-dynamic-array-is-refused-on-every-cross-target }
+        EmitSlotAddrRISCV32(reg_a0, retSymIdx);
+        rv32_lw(reg_a0, reg_a0, 0);                  { a0 = handle }
       end
       else
       begin

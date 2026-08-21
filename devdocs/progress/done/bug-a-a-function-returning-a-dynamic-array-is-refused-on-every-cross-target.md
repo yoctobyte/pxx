@@ -4,8 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "A function whose RESULT is a dynamic array compiles natively and is REFUSED by all four cross backends — each epilogue errors on `Syms[retSymIdx].IsArray` with 'only ordinal/pointer/string function results supported yet'. One missing arm, four copies, three whole tests unbuildable on every non-x86-64 target."
-status: backlog
-owner: ""
+status: done
+owner: claude-A
 ---
 
 # A function returning a dynamic array is refused on every cross target
@@ -82,3 +82,57 @@ stops recurring.
 The three tests above pass under `tools/run_target.sh` on i386 / arm32 /
 aarch64 / riscv32 with the native output; a static-array result still errors;
 self-host fixedpoint + `tools/gate.sh quick`.
+
+## RESOLVED 2026-08-21
+
+One arm per cross epilogue, placed before the `IsArray` refusal:
+
+```pascal
+else if Syms[retSymIdx].IsArray and (Syms[retSymIdx].ArrLen = -1) and
+        (Syms[retSymIdx].Kind = skLocal) then
+```
+
+loading the handle at POINTER width by hand rather than through `EmitLoadVar*`
+— which sizes by `TypeSize(Syms[].TypeKind)`, and an array's TypeKind is its
+ELEMENT kind, so `array of Char` would have come back through a byte load with
+most of the handle gone. (aarch64 uses `EmitLoadVarA64`, whose `ArrLen = -1`
+arm was taught pointer width earlier the same day.)
+
+Mirrors x86-64's arm exactly, comment and all — it already documented the same
+reasoning: *"a narrow EmitLoadVar keyed on the element type would truncate (and
+sign-extend) the pointer."*
+
+### Static arrays were never the problem
+
+Checked rather than assumed: a `function F: array[0..3] of Integer` builds and
+runs correctly on all four cross targets both before and after, because it goes
+through `ABIRetViaHiddenDestProc` long before the branch this ticket touched.
+The `IsArray` refusal was catching only the dynamic case, which is the one that
+did not need catching.
+
+### Measured
+
+| test | i386 | arm32 | aarch64 | riscv32 |
+| --- | --- | --- | --- | --- |
+| `test_dynarray_torture` | BUILDFAIL -> **ok** | same | same | same |
+| `test_length_dynarray_call` | BUILDFAIL -> **ok** | same | same | same |
+| `test_setlength_dynarray_result` | BUILDFAIL -> **ok** | same | same | same |
+| `test_dynarray_result` | BUILDFAIL -> **ok** | same | same | same |
+
+`test_dynarray_result` was not in the ticket's list — it turned up in the
+differential, which is the argument for running one rather than checking the
+three files the ticket names.
+
+### Cross differential
+
+53-test dyn-array + interface family, each target against the native answer,
+versus the previous commit's baseline: **broke 0, fixed 16** (four tests x four
+targets). The 18 disagreements that remain are all pre-existing interface-ARC
+and ESP-platform issues untouched by this change.
+
+### Gate
+
+`tools/gate.sh quick` GREEN (self-host fixedpoint byte-identical).
+
+## Log
+- 2026-08-21 — resolved, commit PENDING-COMMIT.
