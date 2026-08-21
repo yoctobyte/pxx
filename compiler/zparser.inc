@@ -1794,10 +1794,11 @@ begin
 
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
-  { spill the SysV integer arg registers into the frame slots — shared with
-    the Rust frontend (REmitParamRegSpill handles r8/r9 via REX.R for the
-    5th/6th param; the old inline case i of 0..3 miscompiled those). }
-  REmitParamRegSpill(procIdx, nparams);
+  { Spill the incoming arg registers into the frame slots. Was Rust's
+    REmitParamRegSpill — a frontend borrowing another frontend's raw x86-64,
+    which is what named the missing layer; now the shared per-target one.
+    refactor-a-the-missing-layer-between-frontends-and-backends }
+  EmitParamSpillsForTarget(procIdx, nparams);
 
   ZDeferCount := 0;
   Expect(tkBegin, '{');

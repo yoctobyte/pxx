@@ -134,11 +134,13 @@ unchanged (the one differing line is an ASLR address in a pre-existing FAIL).
 
 ### Still open on this ticket
 
-- **Row 3 (Rust/Zig `REmitParamRegSpill`)** — not migrated. `EmitParamSpillsForTarget`
-  is now the thing to call; the encodings are close but not identical (Rust
-  stores straight from the arg register at 4/8 widths, the shared arm also
-  handles 1/2 and the tySingle narrow), so it needs the Rust and Zig suites, not
-  just a byte diff. Doing it is what finally makes `PXX_NO_RUST` stand alone.
+- ~~Row 3 (Rust/Zig `REmitParamRegSpill`)~~ — **done, same day.** Both frontends
+  call `EmitParamSpillsForTarget`; `REmitParamRegSpill` is deleted. Verified by
+  running all 14 Rust and Zig tests before and after: **output identical, line
+  for line** (`test_rust_else_if` keeps its pre-existing rc=20). They now also
+  get 1- and 2-byte params, the tySingle narrow, the >6-param all-stack path,
+  and every cross target's arm for free. Zig borrowing Rust's raw x86-64 was
+  the instance that named this ticket; that borrow no longer exists.
 - **Row 2 (C `_start` stub)** — `cparser.inc` has its own per-target case and is
   Track C's file-lane; `EmitProgramEntryForTarget` does not yet cover its
   argc/argv + initializer/finalizer shape.

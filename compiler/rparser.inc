@@ -2442,28 +2442,12 @@ end;
   register rather than the old rdi..rcx-only `case`. sz<8 stores the low dword
   (matching the historic rdi..rcx behaviour); >6 params are rejected at parse
   time so no stack-arg read is needed here. }
-procedure REmitParamRegSpill(procIdx, count: Integer);
-var i, idx, rex: Integer;
-begin
-  for i := 0 to count - 1 do
-  begin
-    idx := Procs[procIdx].Params[i].SymIdx;
-    rex := 0;
-    if ParamSize(idx) = 8 then rex := rex or $08;   { REX.W }
-    if i >= 4 then rex := rex or $04;               { REX.R — r8/r9 }
-    if rex <> 0 then EmitB($40 or rex);
-    EmitB($89);
-    case i of
-      0: EmitB($BD);   { rdi -> [rbp+disp32] }
-      1: EmitB($B5);   { rsi }
-      2: EmitB($95);   { rdx }
-      3: EmitB($8D);   { rcx }
-      4: EmitB($85);   { r8  (with REX.R) }
-      5: EmitB($8D);   { r9  (with REX.R) }
-    end;
-    EmitI32(Syms[idx].Offset);
-  end;
-end;
+{ REmitParamRegSpill lived here — raw x86-64 SysV register spill, borrowed by
+  the Zig frontend too, and one of the three instances that named the missing
+  frontend/backend layer. Replaced by EmitParamSpillsForTarget (ir_codegen.inc),
+  which has arms for every target instead of one, handles 1- and 2-byte params
+  and the tySingle narrow, and takes the all-stack path when a proc has more
+  than six parameters. refactor-a-the-missing-layer-between-frontends-and-backends }
 
 { `impl [Trait for] Type { fn method(&self, ...) -> RetType { .. } ... }` —
   methods were already RegisterProc'd (mangled "Type::method") by
@@ -2550,7 +2534,7 @@ begin
 
     patchPos := EmitProcPrologue;
     Procs[procIdx].FramePatch := patchPos;
-    REmitParamRegSpill(procIdx, nparams + selfBase);
+    EmitParamSpillsForTarget(procIdx, nparams + selfBase);
 
     Expect(tkBegin, '{');
     bodyNode := RParseBlock;
@@ -2659,7 +2643,7 @@ begin
 
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
-  REmitParamRegSpill(procIdx, nparams);
+  EmitParamSpillsForTarget(procIdx, nparams);
 
   Expect(tkBegin, '{');
   bodyNode := RParseBlock;
