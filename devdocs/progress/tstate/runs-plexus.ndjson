@@ -1415,3 +1415,4 @@
 {"date": "2026-08-21T20:38:47Z", "fixed": [], "full": false, "new_red": ["test-core#src:test/fpcv.pas@2"], "sha": "16a540b759c53a2be03c3013751d90741ef38e40", "still_red": [], "tier": "native", "verdict": "RED", "wall": 3600.1}
 {"date": "2026-08-21T21:40:22Z", "fixed": [], "full": false, "new_red": [], "sha": "f74df41e851cf669e0dfa56c30f9c768f900e244", "still_red": ["test-core#src:test/fpcv.pas@2"], "tier": "native", "verdict": "RED", "wall": 3600.4}
 {"date": "2026-08-21T22:41:51Z", "fixed": [], "full": false, "new_red": ["test-core#src:test/test_c_gtk_call.pas", "test-core#src:test/test_generic_inherit_delphi.pas"], "sha": "98ed382022547bbe6624c779ee024a3ad1dea518", "still_red": ["test-core#src:test/fpcv.pas@2"], "tier": "native", "verdict": "RED", "wall": 3600.5}
+{"date": "2026-08-21T23:43:51Z", "fixed": [], "full": true, "new_red": [], "pin": "v372", "sha": "d6299bebe9dc449ff174c018c15d5815c348e5e4", "tier": "full", "verdict": "RED", "wall": 3600.4}

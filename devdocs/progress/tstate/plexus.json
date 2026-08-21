@@ -8054,13 +8054,31 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-20T03:20:06Z",
+  "date": "2026-08-21T23:43:51Z",
   "red": [
-   "selfhost-fixedpoint#src:tools/selfhost_fixedpoint.sh"
+   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy",
+   "test-core#src:test/test_rust_else_if.rs@1",
+   "test-core#src:test/test_rust_else_if.rs@2",
+   "test-core#src:test/test_rust_advanced.rs",
+   "test-core#src:test/test_rust_chess_perft.rs",
+   "test-core#src:test/test_rust_struct_array.rs",
+   "test-core#src:test/test_rust_chess_perft_full.rs",
+   "test-core#src:test/test_rust_chess_engine.rs",
+   "test-core#src:test/test_rust_chess_search.rs",
+   "test-core#src:test/test_rust_tuple_struct.rs",
+   "test-core#src:test/test_rust_assoc_fns.rs",
+   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy",
+   "test-c-conformance#shard1/6",
+   "test-c-conformance-aarch64#shard1/6",
+   "test-c-conformance-arm32#shard1/6",
+   "test-c-conformance-riscv32#shard1/6",
+   "test-pascal-conformance#shard4/6",
+   "test-asm#src:compiler/compiler.pas",
+   "tools-devtest#00"
   ],
-  "sha": "21117f4152845a44e578a5eb04dc3af250a0b935",
+  "sha": "d6299bebe9dc449ff174c018c15d5815c348e5e4",
   "tier": "full",
-  "ver": "v368",
+  "ver": "v372",
   "verdict": "RED"
  },
  "renamed_from": [
