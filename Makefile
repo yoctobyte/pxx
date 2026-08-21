@@ -4418,7 +4418,7 @@ test-core: $(COMPILER)
 	# what hid it. Now PXXIntfAssign does the retain/release/copy in the safe
 	# order. The pinned binary scores 12 / 16.
 	./$(COMPILER) test/test_interface_byval_param_no_leak.pas $(TESTTMP)/test_ifbyval26
-	test "$$($(TESTTMP)/test_ifbyval26 | tail -1)" = "total ok 16 / 16"
+	test "$$($(TESTTMP)/test_ifbyval26 | tail -1)" = "total ok 25 / 25"
 	# `f := b as IFoo` moved the interface pointer with NO retain: the ARC assign
 	# path routes through PXXIntfAssign only for an ENUMERATED list of RHS node
 	# kinds and AN_AS_CAST was not in it, so it fell through to the generic record

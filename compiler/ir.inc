@@ -21,6 +21,10 @@ begin
     rest so a lowering that stopped early (an Error) cannot leak slots into the
     next one }
   IRSeqSpineTop := 0;
+  { Same reasoning as the spine: pending by-value interface temps name symbols
+    in THIS body's frame, so a lowering that stopped early must not leave one
+    for the next body to release. }
+  PostCallIntfCount := 0;
   IRCompoundLvAST := -1;
   IRCompoundLvAddr := -1;
   IRCompoundLvVal := -1;
@@ -560,6 +564,58 @@ begin
       IRIVal[irNode] := 1
     else if (IRKind[irNode] = IR_VIRTUAL_CALL) or (IRKind[irNode] = IR_CALL_IND) then
       IRStmtRoot[irNode] := True;
+  end;
+end;
+
+{ Release the by-value INTERFACE argument temps pushed since `base`, and nil
+  their slots.
+
+  FPC gives the CALLEE the reference: the caller retains, the callee releases on
+  return. pxx models the by-value argument as a caller-side temp, and released
+  it at the caller's SCOPE exit -- so an object passed to a procedure outlived
+  the `f := nil` that should have been its last reference, and in a loop it
+  survived until the next iteration overwrote the temp. Nothing leaked (the
+  counts always reconciled) but a destructor with side effects -- closing a
+  file, dropping a lock -- ran at the wrong moment, and the last object of a
+  batch ran after the program's last statement.
+
+  The exact-FPC point is "when the callee returns", and that is NOT reachable
+  here: this IR is a linear list emitted in APPEND order, and a call node is
+  emitted through its statement root, which is appended AFTER it. Anything
+  appended between the two therefore runs BEFORE the call. So the release goes
+  after the statement root instead -- end of the statement containing the call.
+  That is one step later than FPC and observationally the same in every shape
+  measured: the temp is gone before the next statement runs, which is what the
+  divergence was about.
+
+  Nil'ing the slot afterwards is what makes this safe to do PARTIALLY. A temp
+  that is flushed here is nil by the time EmitManagedLocalCleanup (or the
+  main-body pass) reaches it, and PXXIntfRelease is nil-safe -- so a call site
+  whose statement never flushes keeps exactly the old behaviour instead of
+  double-releasing. The store is an IR_STORE_MEM through the slot address, not
+  an IR_STORE_SYM: a raw pointer-width write, with no ARC store logic to
+  release the slot a second time. }
+procedure IRFlushPostCallIntf(base: Integer);
+var sym, pi, a0, a1, c: Integer;
+begin
+  pi := FindProc('PXXIntfRelease');
+  while PostCallIntfCount > base do
+  begin
+    PostCallIntfCount := PostCallIntfCount - 1;
+    sym := PostCallIntfSym[PostCallIntfCount];
+    if pi >= 0 then
+    begin
+      a0 := IRAppend(IR_ARG, IRAppend(IR_LEA, sym, -1, -1, 0, Ord(tyPointer)),
+              -1, -1, 0, Ord(tyPointer));
+      a1 := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1,
+              Syms[sym].RecName - REC_UCLASS_BASE, Ord(tyNativeInt)),
+              -1, -1, 0, Ord(tyNativeInt));
+      IRB[a0] := a1;
+      c := IRAppendCall(pi, a0, -1, Ord(tyNativeInt));
+      IRIVal[c] := 1;   { statement: emit for effect }
+    end;
+    IRAppend(IR_STORE_MEM, IRAppend(IR_LEA, sym, -1, -1, 0, Ord(tyPointer)),
+      IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)), -1, 0, Ord(tyPointer));
   end;
 end;
 
@@ -3453,6 +3509,15 @@ begin
         MainBodyIntfTempSym[MainBodyIntfTempCount] := tmpSym;
         Inc(MainBodyIntfTempCount);
       end;
+      { And queue the END-OF-STATEMENT release (IRFlushPostCallIntf), which is
+        what makes the object die when FPC says it does rather than at the
+        caller's scope exit. The main-body registration above stays as the
+        backstop: it is a no-op once this flush has nil'd the slot, and it is
+        the only release for a call site whose statement never flushes. }
+      if PostCallIntfCount > High(PostCallIntfSym) then
+        Error('too many pending by-value interface argument temps');
+      PostCallIntfSym[PostCallIntfCount] := tmpSym;
+      Inc(PostCallIntfCount);
     end
     else if RecordHasManagedFields(argRecId) then
       IRAppend(IR_COPY_REC_MANAGED, tmpAddr, srcAddr, argRecId, RecSize(argRecId), Ord(tyRecord))
@@ -5294,6 +5359,7 @@ end;
 function IRLowerAST(node: Integer): Integer;
 var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argVal, intCallNode, intArgSeq, argNode2, zeroVal, procIdx, zeroBytes: Integer;
     seqBase, seqCur: Integer;       { iterative AN_SEQ spine walk — see the arm }
+    pcBase: Integer;                { pending by-value interface temps at statement start }
     ecSym: Integer;                 { System.ExitCode, when builtinheap is linked — see AN_HALT }
     bmDest, bmSecond, bmThird: Integer;   { __pxxblockmove/fill operands — see AN_BLOCK_MEM }
     cfPi, cfArg, cfCall: Integer;   { class managed-field finalize before FreeMem }
@@ -12073,8 +12139,15 @@ begin
       while (seqCur >= 0) and
             ((ASTKind[seqCur] = AN_SEQ) or (ASTKind[seqCur] = AN_PAIR)) do
       begin
+        pcBase := PostCallIntfCount;
         left := IRDropManagedStrResult(IRLowerAST(ASTLeft[seqCur]));
         IRMarkStatementNode(left);
+        { The statement is complete: release the by-value interface temps it
+          created. A BASE rather than a blanket flush, because an inner sequence
+          (a compound statement in a branch) lowers while the enclosing
+          statement's own temps are still pending, and those belong to the outer
+          boundary. }
+        IRFlushPostCallIntf(pcBase);
         if IRSeqSpineTop >= MAX_IR_SEQ_SPINE then
           Error('statement sequence too long (MAX_IR_SEQ_SPINE)');
         IRSeqSpine[IRSeqSpineTop] := left;
@@ -12082,8 +12155,10 @@ begin
         seqCur := ASTRight[seqCur];
       end;
       { seqCur is the TAIL — the first node that is not itself a sequence. }
+      pcBase := PostCallIntfCount;
       right := IRDropManagedStrResult(IRLowerAST(seqCur));
       IRMarkStatementNode(right);
+      IRFlushPostCallIntf(pcBase);
       while IRSeqSpineTop > seqBase do
       begin
         IRSeqSpineTop := IRSeqSpineTop - 1;

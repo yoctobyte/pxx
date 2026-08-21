@@ -2798,6 +2798,14 @@ var
     (bug-pascal-mainbody-ascast-temp-finalization-timing). }
   MainBodyIntfTempSym : array[0..1023] of Integer;
   MainBodyIntfTempCount : Integer;
+  { By-value INTERFACE argument temps whose end-of-statement release has not
+    been emitted yet. A STACK, not a list: entries are pushed while an
+    expression's arguments are lowered and popped when the statement containing
+    them is finished, so `f(a, g(b))` releases g's temp and f's temp at the same
+    boundary rather than releasing one mid-expression. IRReset clears it per
+    body, so nothing can name a symbol from another stack frame. }
+  PostCallIntfSym : array[0..255] of Integer;
+  PostCallIntfCount : Integer;
   SourceFileDir : AnsiString;
   { The DOTTED spelling of the NilPy module path the next ParseUsesUnit call is
     about to resolve — `mypkg.core.bus` for the unit name `mypkg_core_bus`.
