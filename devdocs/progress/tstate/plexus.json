@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T20:34:12Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e590b3039c32c88bd3deb325deae08c63d9f13c3",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-20T20:44:16Z",
    "fixed": [],
    "new_red": [],
@@ -469,6 +461,14 @@
    "sha": "a6105d12bd152acc5ac95eba798f55893f608613",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-21T14:28:49Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "de2de369ea6ae73475c996635d07f6c9902f294c",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -479,13 +479,11 @@
  },
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2543179B  data=60497B  bss=17852B  procs=1762] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
-  "test-asm#src:compiler/compiler.pas": "ok: $TMP  [-S disassembly] | ok: $TMP  [code=8836539B  data=234184B  bss=213126196B  procs=3034]",
+  "test-asm#src:compiler/compiler.pas": "ok: $TMP  [-S disassembly] | ok: $TMP  [code=8837852B  data=234248B  bss=213127228B  procs=3035]",
   "test-c-conformance#shard1/6": "FAIL 00206.c \u2014 exit code 254 (want 0) | FAIL 00212.c \u2014 exit code 255 (want 0) | test-c-conformance: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance: FAILURES: 00206.c(exit=254) 00212.c(exit=255)",
   "test-c-conformance-aarch64#shard1/6": "FAIL 00206.c \u2014 exit code 215 (want 0) | FAIL 00212.c \u2014 exit code 70 (want 0) | test-c-conformance-aarch64: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-aarch64: FAILURES: 00206.c(exit=215) 00212.c(exit=70)",
   "test-c-conformance-arm32#shard1/6": "FAIL 00206.c \u2014 exit code 64 (want 0) | FAIL 00212.c \u2014 exit code 64 (want 0) | test-c-conformance-arm32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-arm32: FAILURES: 00206.c(exit=64) 00212.c(exit=64)",
   "test-c-conformance-riscv32#shard1/6": "FAIL 00206.c \u2014 exit code 144 (want 0) | FAIL 00212.c \u2014 exit code 144 (want 0) | test-c-conformance-riscv32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-riscv32: FAILURES: 00206.c(exit=144) 00212.c(exit=144)",
-  "test-core#src:test/test_c_gtk_call.pas": "pascal26:2: warning: #include <alloca.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave | pascal26:2: warning: #include <dirent.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave | pascal26:2: warning: #include <featur\u2026",
-  "test-core#src:test/test_c_gtk_window.pas": "pascal26:2: warning: #include <linux/limits.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave | ok: $TMP  [code=138886B  data=3868B  bss=42476B  procs=14041] | Successfully created window | Starting gtk_main loop... | AutoQuit called from GTK main loop! | Main loop exited cleanly",
   "test-core#src:test/test_rust_advanced.rs": "pascal26:1: error: Rust: expected [ after # (attribute)",
   "test-core#src:test/test_rust_assoc_fns.rs": "pascal26:1: error: Rust: expected [ after # (attribute)",
   "test-core#src:test/test_rust_chess_engine.rs": "pascal26:1: error: Rust: expected [ after # (attribute)",
@@ -1474,9 +1472,6 @@
   "test-core#src:test/test_c_enum.pas": "native",
   "test-core#src:test/test_c_float.pas": "native",
   "test-core#src:test/test_c_gtk.pas": "native",
-  "test-core#src:test/test_c_gtk_call.pas": "native",
-  "test-core#src:test/test_c_gtk_types.pas": "native",
-  "test-core#src:test/test_c_gtk_window.pas": "native",
   "test-core#src:test/test_c_header_case_sensitive_import.pas": "native",
   "test-core#src:test/test_c_import.pas": "native",
   "test-core#src:test/test_c_macro_soup.pas": "native",
@@ -4383,9 +4378,6 @@
   "test-core#src:test/test_c_enum.pas": "pass",
   "test-core#src:test/test_c_float.pas": "pass",
   "test-core#src:test/test_c_gtk.pas": "pass",
-  "test-core#src:test/test_c_gtk_call.pas": "timeout",
-  "test-core#src:test/test_c_gtk_types.pas": "pass",
-  "test-core#src:test/test_c_gtk_window.pas": "timeout",
   "test-core#src:test/test_c_header_case_sensitive_import.pas": "pass",
   "test-core#src:test/test_c_import.pas": "pass",
   "test-core#src:test/test_c_macro_soup.pas": "pass",
@@ -6312,11 +6304,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-21T13:24:40Z",
-  "sha": "a6105d12bd152acc5ac95eba798f55893f608613",
+  "date": "2026-08-21T14:28:49Z",
+  "sha": "de2de369ea6ae73475c996635d07f6c9902f294c",
   "tier": "native",
   "verdict": "RED",
-  "wall": 2181.8
+  "wall": 3600.3
  },
  "last_bench": {
   "conf_rows": 550,
@@ -8114,38 +8106,6 @@
     "8654c4d55b61605fc5dea51a38887e713d5b9fc0"
    ],
    "src": ""
-  },
-  {
-   "bad": "ef7f17d45caae7d515cccd2dfee82fc68148e36b",
-   "good": "0531b3b6735a464ce4fac8674212ceea50e4fae4",
-   "job": "test-core#src:test/test_c_gtk_call.pas",
-   "name": "test-core#1117",
-   "opened": "2026-08-21T11:33:37Z",
-   "pin_built": false,
-   "range": [
-    "6b9f354e9367ede1ab5e8e76df59149d49014f88",
-    "9a2c8e75e1aa327f5e3d984a11733b3d5f790f7d",
-    "17cb2cde400f318df74700a622efd4a4787604ad",
-    "ef7f17d45caae7d515cccd2dfee82fc68148e36b"
-   ],
-   "src": "test/test_c_gtk_call.pas",
-   "status": "timeout"
-  },
-  {
-   "bad": "ef7f17d45caae7d515cccd2dfee82fc68148e36b",
-   "good": "0531b3b6735a464ce4fac8674212ceea50e4fae4",
-   "job": "test-core#src:test/test_c_gtk_window.pas",
-   "name": "test-core#1119",
-   "opened": "2026-08-21T11:33:37Z",
-   "pin_built": false,
-   "range": [
-    "6b9f354e9367ede1ab5e8e76df59149d49014f88",
-    "9a2c8e75e1aa327f5e3d984a11733b3d5f790f7d",
-    "17cb2cde400f318df74700a622efd4a4787604ad",
-    "ef7f17d45caae7d515cccd2dfee82fc68148e36b"
-   ],
-   "src": "test/test_c_gtk_window.pas",
-   "status": "timeout"
   }
  ],
  "pin_baseline": {
