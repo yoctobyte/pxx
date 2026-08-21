@@ -8646,6 +8646,41 @@ begin
             EmitCallProc(procIdx);
             { add esp, 4 }
             EmitB($81); EmitB($C4); EmitI32(4);
+          end
+          else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+          begin
+            { LOCAL DYNAMIC ARRAY: element-aware release of the block at scope
+            exit. Only x86-64 had this arm; the other four leaked the whole
+            allocation on every call — silently, because a leak prints nothing
+            and cross-target tests assert printed output.
+
+            Landing it took three attempts, and the reason is the rule: a
+            scope-exit release is safe only when EVERY store that can publish a
+            handle into this local RETAINS it. There are two such stores, not
+            one — `b := a` (IR_STORE_SYM) and `obj.f := a` / a nested target
+            (IR_STORE_DYN) — and IR_STORE_DYN was x86-64-only until
+            bug-a-named-dynarray-alias-element-crashes-on-every-cross-target
+            implemented it here. Releasing before that landed turned a silent
+            leak into a double free (measured: aarch64 SIGSEGV, and
+            test_dynarray_managed_field_reassign printing 1 0 0 0 0 0).
+
+            UNLOCKED on purpose: EmitAcquireHeapLock is the x86-64 codegen BSS
+            spinlock and does not exist on these backends, so there is nothing
+            to hold and ManagedElemKindLocked's --threadsafe refusal (which
+            exists to avoid re-entering that lock through _Release -> Destroy ->
+            FreeMem) does not apply.
+
+            xtensa deliberately still has NO arm: it is the one target that
+            keeps the non-retaining IR_STORE_MEM share path, so the retain half
+            is genuinely absent there.
+            bug-a-no-dyn-array-scope-exit-release-on-four-backends }
+            procIdx := FindProc('PXXDynArrayRelease');
+            if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
+            EmitB($8B); EmitB($85); EmitI32(Syms[i].Offset);  { mov eax, [ebp+off] }
+            EmitB($50);                                       { push arg0 = data }
+            EmitB($68); EmitDataRef(GetOrAllocSymRTTI(i));    { push arg1 = desc }
+            EmitCallProc(procIdx);
+            EmitB($81); EmitB($C4); EmitI32(8);               { add esp, 8 }
           end;
         end;
       end;
@@ -8810,6 +8845,49 @@ begin
           if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
           EmitCallProc(procIdx);
           EmitI32($E8BD000C);                          { pop {r2,r3} }
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+        begin
+          { LOCAL DYNAMIC ARRAY: element-aware release of the block at scope
+            exit. Only x86-64 had this arm; the other four leaked the whole
+            allocation on every call — silently, because a leak prints nothing
+            and cross-target tests assert printed output.
+
+            Landing it took three attempts, and the reason is the rule: a
+            scope-exit release is safe only when EVERY store that can publish a
+            handle into this local RETAINS it. There are two such stores, not
+            one — `b := a` (IR_STORE_SYM) and `obj.f := a` / a nested target
+            (IR_STORE_DYN) — and IR_STORE_DYN was x86-64-only until
+            bug-a-named-dynarray-alias-element-crashes-on-every-cross-target
+            implemented it here. Releasing before that landed turned a silent
+            leak into a double free (measured: aarch64 SIGSEGV, and
+            test_dynarray_managed_field_reassign printing 1 0 0 0 0 0).
+
+            UNLOCKED on purpose: EmitAcquireHeapLock is the x86-64 codegen BSS
+            spinlock and does not exist on these backends, so there is nothing
+            to hold and ManagedElemKindLocked's --threadsafe refusal (which
+            exists to avoid re-entering that lock through _Release -> Destroy ->
+            FreeMem) does not apply.
+
+            xtensa deliberately still has NO arm: it is the one target that
+            keeps the non-retaining IR_STORE_MEM share path, so the retain half
+            is genuinely absent there.
+            bug-a-no-dyn-array-scope-exit-release-on-four-backends }
+          procIdx := FindProc('PXXDynArrayRelease');
+          if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
+          { Loaded at POINTER width by hand rather than through
+            EmitLoadVarArm32, which sizes by TypeSize(Syms[].TypeKind) — and an
+            array's TypeKind is its ELEMENT kind, so `array of Char` would come
+            back through an ldrb with the handle's top three bytes gone. That is
+            the same truncation EmitLoadVarA64 had. }
+          EmitLoadImmArm32(9, Syms[i].Offset);
+          EmitI32($E08B9009);                          { add r9, fp, r9 }
+          EmitI32($E5990000);                          { ldr r0, [r9] = handle }
+          EmitLoadDataRefArm32(1, GetOrAllocSymRTTI(i));  { r1 = desc }
+          EmitI32($E92D000C);                          { push {r2,r3} }
+          EmitCallProc(procIdx);
+          EmitI32($E8BD000C);                          { pop {r2,r3} }
         end;
       end;
     end;
@@ -8956,6 +9034,40 @@ begin
             -(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
           procIdx := FindProc('PXXRecordRelease');
           if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+        begin
+          { LOCAL DYNAMIC ARRAY: element-aware release of the block at scope
+            exit. Only x86-64 had this arm; the other four leaked the whole
+            allocation on every call — silently, because a leak prints nothing
+            and cross-target tests assert printed output.
+
+            Landing it took three attempts, and the reason is the rule: a
+            scope-exit release is safe only when EVERY store that can publish a
+            handle into this local RETAINS it. There are two such stores, not
+            one — `b := a` (IR_STORE_SYM) and `obj.f := a` / a nested target
+            (IR_STORE_DYN) — and IR_STORE_DYN was x86-64-only until
+            bug-a-named-dynarray-alias-element-crashes-on-every-cross-target
+            implemented it here. Releasing before that landed turned a silent
+            leak into a double free (measured: aarch64 SIGSEGV, and
+            test_dynarray_managed_field_reassign printing 1 0 0 0 0 0).
+
+            UNLOCKED on purpose: EmitAcquireHeapLock is the x86-64 codegen BSS
+            spinlock and does not exist on these backends, so there is nothing
+            to hold and ManagedElemKindLocked's --threadsafe refusal (which
+            exists to avoid re-entering that lock through _Release -> Destroy ->
+            FreeMem) does not apply.
+
+            xtensa deliberately still has NO arm: it is the one target that
+            keeps the non-retaining IR_STORE_MEM share path, so the retain half
+            is genuinely absent there.
+            bug-a-no-dyn-array-scope-exit-release-on-four-backends }
+          procIdx := FindProc('PXXDynArrayRelease');
+          if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
+          EmitLoadVarA64(i);                       { x0 = handle (ptr-width) }
+          EmitLoadDataRefA64(1, GetOrAllocSymRTTI(i));   { x1 = desc }
           EmitCallProc(procIdx);
         end;
       end;
@@ -9170,6 +9282,43 @@ begin
           EmitLoadVarRISCV32(i);                 { a0 = handle }
           procIdx := FindProc('PXXStrDecRef');
           if procIdx < 0 then Error('compiler error: PXXStrDecRef not found');
+          EmitCallProc(procIdx);
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                Syms[i].IsArray and (Syms[i].ArrLen = -1) then
+        begin
+          { LOCAL DYNAMIC ARRAY: element-aware release of the block at scope
+            exit. Only x86-64 had this arm; the other four leaked the whole
+            allocation on every call — silently, because a leak prints nothing
+            and cross-target tests assert printed output.
+
+            Landing it took three attempts, and the reason is the rule: a
+            scope-exit release is safe only when EVERY store that can publish a
+            handle into this local RETAINS it. There are two such stores, not
+            one — `b := a` (IR_STORE_SYM) and `obj.f := a` / a nested target
+            (IR_STORE_DYN) — and IR_STORE_DYN was x86-64-only until
+            bug-a-named-dynarray-alias-element-crashes-on-every-cross-target
+            implemented it here. Releasing before that landed turned a silent
+            leak into a double free (measured: aarch64 SIGSEGV, and
+            test_dynarray_managed_field_reassign printing 1 0 0 0 0 0).
+
+            UNLOCKED on purpose: EmitAcquireHeapLock is the x86-64 codegen BSS
+            spinlock and does not exist on these backends, so there is nothing
+            to hold and ManagedElemKindLocked's --threadsafe refusal (which
+            exists to avoid re-entering that lock through _Release -> Destroy ->
+            FreeMem) does not apply.
+
+            xtensa deliberately still has NO arm: it is the one target that
+            keeps the non-retaining IR_STORE_MEM share path, so the retain half
+            is genuinely absent there.
+            bug-a-no-dyn-array-scope-exit-release-on-four-backends }
+          procIdx := FindProc('PXXDynArrayRelease');
+          if procIdx < 0 then Error('compiler error: PXXDynArrayRelease not found');
+          { Pointer-width load by hand: EmitLoadVarRISCV32 sizes by the
+            symbol's TypeKind, which for an array is its ELEMENT kind. }
+          EmitSlotAddrRISCV32(reg_a0, i);        { a0 = &slot }
+          rv32_lw(reg_a0, reg_a0, 0);            { a0 = handle }
+          EmitLoadDataRefRISCV32(reg_a1, GetOrAllocSymRTTI(i));   { a1 = desc }
           EmitCallProc(procIdx);
         end;
     if retSymIdx >= 0 then

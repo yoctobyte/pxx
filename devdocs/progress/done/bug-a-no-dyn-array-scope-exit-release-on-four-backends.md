@@ -4,8 +4,8 @@ prio: 40
 type: bug
 blocked-by: []
 summary: "Only x86-64 releases a local DYNAMIC array at scope exit; the other four backends have no `ArrLen = -1` arm at all, so every local dyn array leaks its block there. Attempted 2026-08-21 and REVERTED: the release is only safe where every dyn-array STORE retains, and on those backends the class/record FIELD store (IR_STORE_DYN is x86-64 only) does not. Fix the retain sites first; the ticket now carries the audit list."
-status: backlog
-owner: unassigned
+status: done
+owner: claude-A
 ---
 
 # Four backends never release a local dynamic array at scope exit
@@ -201,3 +201,80 @@ release arm, and `test_dynarray_managed_field_reassign` (the test that caught
 the first attempt, `1 1 1 1 1 1` -> `1 0 0 0 0 0` on arm32/riscv32) is **not in
 the quick tier** — run it per target under `tools/run_target.sh` by hand before
 pushing.
+
+## RESOLVED 2026-08-21 (third attempt, and this one measured before it landed)
+
+All four backends now release a local dynamic array at scope exit —
+i386, arm32, aarch64, riscv32 — unlocked, because `EmitAcquireHeapLock` is the
+x86-64 codegen BSS spinlock and does not exist on these targets. **xtensa
+deliberately still has no arm**: it is the one target that keeps the
+non-retaining `IR_STORE_MEM` share path, so the retain half is genuinely absent
+there and a release would double-free.
+
+### The audit, answered rather than assumed
+
+1. `IR_STORE_SYM`, whole dyn array — retains on all four (the last two landed in
+   `bug-a-i386-and-aarch64-dynamic-array-assignment-has-no-store-arm`).
+2. `IR_STORE_DYN`, field / nested target — **now retains on all four**
+   (`bug-a-named-dynarray-alias-element-crashes-on-every-cross-target`). This
+   was the blocker that made attempts one and two land a double free.
+3. Every other publish path — answered by measurement, not by reading: the
+   53-test cross differential below covers function-result assignment
+   (`test_dynarray_result`, `test_interface_call_result_move`), `SetLength`
+   through a by-ref param (`test_dynarray_params`), open-array marshalling and
+   record/class field destinations. Nothing regressed on any of them.
+
+### Gate — a differential, not a spot check
+
+Built every test in the dyn-array + interface family (53 files) for native and
+all four cross targets, ran each under `tools/run_target.sh`, and diffed against
+the native answer. Baseline captured on the parent commit, re-run after:
+
+```
+broke = 0     fixed = 4     otherwise changed = 0
+```
+
+The four fixed are `test_interface_containers` on i386 / arm32 / aarch64 /
+riscv32 — `dyn: 0` became `dyn: 2`, matching FPC and x86-64. Nothing else in the
+family moved in either direction. (The driver is
+`xdiff.py` in the session scratchpad; the 44-disagreement baseline it captured
+is what the three new tickets below were filed from.)
+
+### Leak, measured
+
+200k calls of a routine with a local 8-element `array of Integer`, peak RSS
+(`/usr/bin/time -f %M`; the emulator's own floor is ~7 MB):
+
+| target | pinned | HEAD |
+| --- | --- | --- |
+| i386 | 137.7 MB | **7.4 MB** |
+| arm32 | 146.4 MB | **7.7 MB** |
+| aarch64 | 163.9 MB | **8.0 MB** |
+| riscv32 | — | **7.4 MB** |
+
+Flat, at the floor.
+
+### One arm loaded by hand, and why
+
+arm32 and riscv32 load the handle with an explicit pointer-width load instead of
+`EmitLoadVarArm32` / `EmitLoadVarRISCV32`, because both size the load by
+`TypeSize(Syms[].TypeKind)` — and an array's TypeKind is its ELEMENT kind, so
+`array of Char` would come back through a byte load with the handle's top three
+bytes gone. That is the same truncation `EmitLoadVarA64` carried until today.
+
+### Found while measuring, filed separately
+
+The leak probe used `a[i] := 'element-' + IntToStr(i)` and stayed linear after
+the array leak closed. That residual is not an array bug at all:
+[[bug-a-a-string-function-result-in-a-concat-leaks-on-every-cross-target]] —
+`s := 'lit' + F(x)` leaks ~320 bytes per evaluation on all four cross targets,
+flat on x86-64, and neither half leaks alone.
+
+The 53-test baseline also surfaced, all pre-existing:
+[[bug-a-a-function-returning-a-dynamic-array-is-refused-on-every-cross-target]]
+(three tests unbuildable on all four) and
+[[bug-a-ordered-string-comparison-of-a-parameter-compares-handles-on-every-cross-target]]
+(a silent wrong answer).
+
+## Log
+- 2026-08-21 — resolved, commit PENDING-COMMIT.
