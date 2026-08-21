@@ -405,8 +405,12 @@ end;
 procedure EmitPySignatures;
 var pi, k, nUser, reqN, dfltOff, firstUser, slot, pend, namesOff: Integer;
 begin
-  for pi := 0 to MAX_PROCS - 1 do ProcSigOff[pi] := -1;
-  for pi := 0 to MAX_PROCS - 1 do ProcSigDfltOff[pi] := -1;
+  { ProcCapacity, not MAX_PROCS: these tables are allocated to fit (see
+    EnsureProcCapacity) and a loop to the old fixed bound now writes off the end
+    of the heap block. Every ALLOCATED slot is still initialised, so the -1
+    sentinel means the same thing it always did. }
+  for pi := 0 to ProcCapacity - 1 do ProcSigOff[pi] := -1;
+  for pi := 0 to ProcCapacity - 1 do ProcSigDfltOff[pi] := -1;
   { NilPy compiles only. Without this a PASCAL program emits a record per
     main-program proc: measured +170 KB of .data on the compiler's own
     self-build, for records nothing can ever reach -- a callable value is a

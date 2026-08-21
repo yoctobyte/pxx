@@ -7375,6 +7375,66 @@ begin
 end;
 
 
+{ Grow the 90 parallel per-ROUTINE tables so index `need-1` is in bounds.
+
+  One chokepoint (RegisterProc) because there is one: every Proc*/ProcParam*
+  array is written there for the routine being registered, and nothing else
+  appends. The families grow in LOCKSTEP -- the per-proc ones to n, the
+  per-parameter ones to n*MAX_PROC_PARAMS, the capture/inline-local ones to
+  their own stride -- because a missed one is a silent out-of-bounds, not an
+  error. The list is generated from the declarations in defs.inc rather than
+  typed out, for the same reason.
+
+  `Procs` itself stays a fixed array[0..MAX_PROCS-1]: it is an array of RECORDS
+  holding managed strings, which is a different (and much less proven) SetLength
+  path than these scalar tables, and keeping it fixed keeps MAX_PROCS a real
+  bound on everything here. That conversion is its own step.
+
+  Costs measured: 38 MB of BSS reservation, the largest remaining family in the
+  compiler after the token/sym/AST/IR conversions. feature-dynamic-compiler-tables }
+procedure EnsureProcCapacity(need: Integer);
+var n: Integer;
+begin
+  if need <= ProcCapacity then Exit;
+  if ProcCapacity = 0 then n := 1024 else n := ProcCapacity;
+  while n < need do n := n * 2;
+  if n > MAX_PROCS then n := MAX_PROCS;
+  SetLength(ProcBodyIRNodes, n);  SetLength(ProcBodyMakesCall, n);  SetLength(ProcBodyEarlyExit, n);
+  SetLength(ProcBodyAddrTakenParam, n);  SetLength(ProcBodyCompiled, n);  SetLength(InlineCallSites, n);
+  SetLength(ProcInline, n);  SetLength(InlineBodyRoot, n);  SetLength(InlineParamCnt, n);
+  SetLength(InlineBodyIsStmt, n);  SetLength(InlineLocalCnt, n);  SetLength(InlineBodyHasCall, n);
+  SetLength(ProcFrameSensitive, n);  SetLength(DceLive, n);  SetLength(DceWork, n);
+  SetLength(DceOrder, n);  SetLength(DceLimit, n);  SetLength(DceRemStart, n);
+  SetLength(DceRemEnd, n);  SetLength(ProcHashNext, n);  SetLength(ProcOverloadDirective, n);
+  SetLength(ProcFlexColumn, n);  SetLength(ProcExternal, n);  SetLength(ProcCModule, n);
+  SetLength(ProcCaseSensitive, n);  SetLength(ProcLibrary, n);  SetLength(ProcExtName, n);
+  SetLength(ProcCdecl, n);  SetLength(ProcVariadic, n);  SetLength(ProcNamedGP, n);
+  SetLength(ProcNamedFP, n);  SetLength(ProcUnitIdx, n);  SetLength(ProcPyDefTok, n);
+  SetLength(ProcHdrTok, n);  SetLength(ProcRetRecId, n);  SetLength(ProcAggregateDestSym, n);
+  SetLength(ProcRetIsDynArray, n);  SetLength(ProcRetFixedArrBytes, n);  SetLength(ProcRetArrAi, n);
+  SetLength(ProcIsAsync, n);  SetLength(ProcIsGenerator, n);  SetLength(ProcIsStackless, n);
+  SetLength(ProcIram, n);  SetLength(ProcIsInterrupt, n);  SetLength(ProcBodyEnd, n);
+  SetLength(ProcDbgMain, n);  SetLength(ProcGenElemTk, n);  SetLength(ProcGenElemRec, n);
+  SetLength(ProcGenParamCnt, n);  SetLength(ProcGenInstSize, n);  SetLength(ProcRetElemTk, n);
+  SetLength(ProcRetElemRec, n);  SetLength(ProcRetPtrElemTk, n);  SetLength(ProcRetProcSig, n);
+  SetLength(CProcHasLocalDef, n);  SetLength(ProcRetPtrElemRec, n);  SetLength(PyCapCount, n);
+  SetLength(PyDefTokOf, n);  SetLength(ProcPyStarIdx, n);  SetLength(ProcPyKwIdx, n);
+  SetLength(ProcSigOff, n);  SetLength(ProcSigDfltOff, n);  SetLength(ObjProcStrOff, n);
+  SetLength(ObjProcSymIdx, n);  SetLength(ObjProcIramOff, n);
+  SetLength(InlineLocalTk, n*MAX_INLINE_LOCALS);
+  SetLength(DceEdgeHead, n+1);
+  SetLength(ProcParamPtrDepth, n*MAX_PROC_PARAMS);  SetLength(ProcParamRecId, n*MAX_PROC_PARAMS);  SetLength(ProcParamSetEnumId, n*MAX_PROC_PARAMS);
+  SetLength(ProcParamDynDepth, n*MAX_PROC_PARAMS);  SetLength(ProcParamIsConst, n*MAX_PROC_PARAMS);  SetLength(ProcParamExplicitByRef, n*MAX_PROC_PARAMS);
+  SetLength(ProcParamCapRef, n*MAX_PROC_PARAMS);  SetLength(ProcParamProcSig, n*MAX_PROC_PARAMS);  SetLength(ProcParamUntyped, n*MAX_PROC_PARAMS);
+  SetLength(ProcParamHasDefault, n*MAX_PROC_PARAMS);  SetLength(ProcParamElemRowLen, n*MAX_PROC_PARAMS);  SetLength(ProcParamElemRowLo, n*MAX_PROC_PARAMS);
+  SetLength(ProcParamDefaultVal, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultIsStr, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultIsNone, n*MAX_PROC_PARAMS);
+  SetLength(ProcParamDefaultIsFloat, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultIsBool, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultSym, n*MAX_PROC_PARAMS);
+  SetLength(ProcParamDefaultGName, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultIsSet, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultSOff, n*MAX_PROC_PARAMS);
+  SetLength(ProcParamDefaultSLen, n*MAX_PROC_PARAMS);
+  SetLength(PyCapName, n*PY_MAX_CAPS);
+  ProcCapacity := n;
+end;
+
 function RegisterProc(const name: AnsiString; isFunc: Boolean;
   retType: TTypeKind; nParams: Integer;
   const pnames: array of AnsiString; const ptypes: array of TTypeKind): Integer;
@@ -7382,6 +7442,7 @@ var i: Integer;
 begin
   if ProcCount >= MAX_PROCS then Error('too many procedures');
   if nParams > MAX_PROC_PARAMS then Error('too many procedure parameters');
+  EnsureProcCapacity(ProcCount + 1);
   Procs[ProcCount].Name       := name;
   ProcHashInsert(ProcCount);
   Procs[ProcCount].IsFunc     := isFunc;
@@ -9445,7 +9506,7 @@ begin
     invisible and so turned pipe2 into a real external; the over-broad guard is
     latent without it, not introduced by it.
     bug-pascal-uses-is-transitive / task-t-strict-uses-corpus-sweep }
-  if (procIdx >= 0) and (procIdx < MAX_PROCS) then
+  if (procIdx >= 0) and (procIdx < ProcCount) then
   begin
     enm := Procs[procIdx].Name;
     if ((Copy(enm, 1, 14) = '__pxx_pthread_') or

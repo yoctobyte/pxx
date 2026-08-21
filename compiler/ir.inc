@@ -9227,7 +9227,7 @@ begin
               ((ASTKind[ASTRight[node]] = AN_CALL) or
                (ASTKind[ASTRight[node]] = AN_VIRTUAL_CALL)) and
               (ASTIVal[ASTRight[node]] >= 0) and
-              (ASTIVal[ASTRight[node]] < MAX_PROCS) and
+              (ASTIVal[ASTRight[node]] < ProcCount) and
               (ProcRetFixedArrBytes[ASTIVal[ASTRight[node]]] > 0) then
       begin
         { `a := MkArr` — a whole static array from a CALL. The arm below wants an
@@ -9840,7 +9840,7 @@ begin
         splicing a body away deletes a frame — so a body that itself uses an
         intrinsic, or that calls anything (which may reach one), stays a real
         call. Leaf retained bodies still inline: they add no frame to delete. }
-      if (OptLevel >= 2) and (cpi >= 0) and (cpi < MAX_PROCS) and
+      if (OptLevel >= 2) and (cpi >= 0) and (cpi < ProcCount) and
          (InlineBodyRoot[cpi] >= 0) and
          (not (FrameIntrinsicUsed and
                (ProcFrameSensitive[cpi] or InlineBodyHasCall[cpi]))) and

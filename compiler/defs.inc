@@ -1820,29 +1820,29 @@ var
     facts; per direct call target counts the call sites. Summary printed at end of
     compile; no codegen change. }
   MeasureInline          : Boolean;
-  ProcBodyIRNodes        : array[0..MAX_PROCS-1] of Integer; { IR node count of the body }
-  ProcBodyMakesCall      : array[0..MAX_PROCS-1] of Boolean; { body contains any call → non-leaf }
-  ProcBodyEarlyExit      : array[0..MAX_PROCS-1] of Boolean; { body has an explicit Exit (IR_TERMINATE) → multi-exit }
-  ProcBodyAddrTakenParam : array[0..MAX_PROCS-1] of Boolean; { a param's address is taken in the body }
-  ProcBodyCompiled       : array[0..MAX_PROCS-1] of Boolean; { CompileAST ran for this proc (has a real body) }
-  InlineCallSites        : array[0..MAX_PROCS-1] of Integer; { direct internal-call sites targeting this proc }
+  ProcBodyIRNodes        : array of Integer; { IR node count of the body }
+  ProcBodyMakesCall      : array of Boolean; { body contains any call → non-leaf }
+  ProcBodyEarlyExit      : array of Boolean; { body has an explicit Exit (IR_TERMINATE) → multi-exit }
+  ProcBodyAddrTakenParam : array of Boolean; { a param's address is taken in the body }
+  ProcBodyCompiled       : array of Boolean; { CompileAST ran for this proc (has a real body) }
+  InlineCallSites        : array of Integer; { direct internal-call sites targeting this proc }
   { Inline routine expansion (feature-inline-routines), -O2. A proc marked
     `inline;` (or auto-selected) whose body is a single `Result := E` pure
     expression over scalar-by-value params has E retained in the reserved AST
     region; at a direct call site the body is cloned in with params substituted by
     fresh arg temps and lowered in place of the call. }
-  ProcInline       : array[0..MAX_PROCS-1] of Boolean; { `inline;` directive seen }
-  InlineBodyRoot   : array[0..MAX_PROCS-1] of Integer; { retained E root in [0..INLINE_AST_RESERVE), or -1 if not inlinable }
-  InlineParamCnt   : array[0..MAX_PROCS-1] of Integer; { param count of the retained body }
+  ProcInline       : array of Boolean; { `inline;` directive seen }
+  InlineBodyRoot   : array of Integer; { retained E root in [0..INLINE_AST_RESERVE), or -1 if not inlinable }
+  InlineParamCnt   : array of Integer; { param count of the retained body }
   InlineASTNext    : Integer;   { next free slot in the reserved inline AST region }
   InliningActive   : Integer;   { >0 while splicing an inline body (recursion/nesting guard) }
   InlineArgAST     : array[0..MAX_PROC_PARAMS-1] of Integer; { arg AST per param index during a splice }
   { Slice 2b (-O3): straight-line multi-statement bodies with scalar ordinal
     locals + a single Result. The retained body is the whole AN_SEQ chain, with
     param/local/Result idents rewritten to placeholders. }
-  InlineBodyIsStmt : array[0..MAX_PROCS-1] of Boolean; { retained body is a statement seq (needs locals + result temp), not a value expr }
-  InlineLocalCnt   : array[0..MAX_PROCS-1] of Integer; { number of callee locals in the retained body }
-  InlineLocalTk    : array[0..MAX_PROCS*MAX_INLINE_LOCALS-1] of Integer; { TypeKind ord per (proc, local index) }
+  InlineBodyIsStmt : array of Boolean; { retained body is a statement seq (needs locals + result temp), not a value expr }
+  InlineLocalCnt   : array of Integer; { number of callee locals in the retained body }
+  InlineLocalTk    : array of Integer; { TypeKind ord per (proc, local index) }
   { Retention context (set while cloning a body into the region): map from a callee
     local/Result sym to its placeholder index. }
   RetLocalCnt      : Integer;
@@ -1856,9 +1856,9 @@ var
   InlineResultDef    : Boolean; { slice 2c: Result definitely (all paths) assigned so far — gates Result-READ inside the body (Clamp-style `if Result < lo then ...`) }
   InlineRetentionSawCall : Boolean; { non-leaf slice: an AN_CALL was accepted somewhere in the body being validated for retention }
   InlineRetentionSawGlobal : Boolean; { ...and a GLOBAL variable was read somewhere in it. Diagnostic only (PXXDBG=a.inline): unlike an argument, a body's global read is cloned IN PLACE and cannot move across the body's inner call — measured, see InlineExprSimple. skConst does not set it. }
-  InlineBodyHasCall  : array[0..MAX_PROCS-1] of Boolean; { retained body contains a call — the splice must temp-capture EVERY arg (a direct-substituted pure arg would otherwise be re-read after the inner call's side effects) }
+  InlineBodyHasCall  : array of Boolean; { retained body contains a call — the splice must temp-capture EVERY arg (a direct-substituted pure arg would otherwise be re-read after the inner call's side effects) }
   FrameIntrinsicUsed : Boolean; { the unit named get_frame / get_pc_addr / get_caller_stackinfo anywhere. Those intrinsics read the LIVE saved-fp chain, so the number of physical frames between a walker and its target is observable — inlining a routine deletes a frame and silently shifts every walk that passes through it (bug: test_stack_frame_intrinsics_b270 at -O3, per-site return addresses collapsed to one). Set at parse, read at the IR inline gate: known for the whole unit by then, so it is order-independent. }
-  ProcFrameSensitive : array[0..MAX_PROCS-1] of Boolean; { this proc itself uses a frame intrinsic — never inline it, its walk is anchored to its own frame }
+  ProcFrameSensitive : array of Boolean; { this proc itself uses a frame intrinsic — never inline it, its walk is anchored to its own frame }
   DumpCpp : Boolean;  { --dump-cpp: print the C-preprocessed source to stdout and exit }
   NoStdInc : Boolean;  { -nostdinc: do not auto-search pxx's crtl headers nor the /usr/include host fallback }
   StrictOverload : Boolean;
@@ -2017,14 +2017,14 @@ var
   DceEnabled    : Boolean;   { --dce: drop unreachable routine bodies }
   DceReport     : Boolean;   { --dce-report: print what it found (implies --dce) }
   DceOff        : Boolean;   { --no-dce: keep every body even at -O3 }
-  DceLive       : array[0..MAX_PROCS-1] of Boolean;
-  DceWork       : array[0..MAX_PROCS-1] of Integer;   { mark worklist }
+  DceLive       : array of Boolean;
+  DceWork       : array of Integer;   { mark worklist }
   DceWorkCount  : Integer;
-  DceOrder      : array[0..MAX_PROCS-1] of Integer;   { bodied procs, sorted by BodyAddr }
+  DceOrder      : array of Integer;   { bodied procs, sorted by BodyAddr }
   DceOrderCount : Integer;
-  DceLimit      : array[0..MAX_PROCS-1] of Integer;   { next body's start, per DceOrder slot }
-  DceRemStart   : array[0..MAX_PROCS-1] of Integer;   { removed code ranges, ascending, disjoint }
-  DceRemEnd     : array[0..MAX_PROCS-1] of Integer;
+  DceLimit      : array of Integer;   { next body's start, per DceOrder slot }
+  DceRemStart   : array of Integer;   { removed code ranges, ascending, disjoint }
+  DceRemEnd     : array of Integer;
   DceRemCount   : Integer;
   { Distinct code offsets that something jumps or calls WITHOUT naming a proc --
     the runtime stubs and the entry jump, gathered from CodeRefTarget. A range
@@ -2039,7 +2039,7 @@ var
     shifting the array. }
   DceCallOwner  : array of Integer;
   DceEdgeTo     : array of Integer;
-  DceEdgeHead   : array[0..MAX_PROCS] of Integer;
+  DceEdgeHead   : array of Integer;
 
   { @proc: code-side `mov rax, imm64` placeholders patched at finalize with the
     absolute runtime address of an internal proc (entry + BodyAddr). }
@@ -2131,7 +2131,7 @@ var
     append-only (ProcCount never rolls back), so there is no unlink path. }
   ProcHashHead : array[0..PROC_HASH_SIZE-1] of Integer;
   ProcHashTail : array[0..PROC_HASH_SIZE-1] of Integer;
-  ProcHashNext : array[0..MAX_PROCS-1] of Integer;
+  ProcHashNext : array of Integer;
   { FindSym hash index: same folded-name bucketing, but chains are NEWEST-
     FIRST (head = most recent) because FindSym scans innermost-scope-out —
     walking head->older is exactly the linear `downto` order. Scope exits
@@ -2140,23 +2140,24 @@ var
     never hold dead indices. }
   SymHashHead : array[0..SYM_HASH_SIZE-1] of Integer;
   SymHashPrev : array of Integer;   { next-older same-bucket idx }
-  ProcOverloadDirective : array[0..MAX_PROCS-1] of Boolean;
-  ProcFlexColumn : array[0..MAX_PROCS-1] of Boolean; { `flexcolumn` directive: call args accept write-style `:width[:decimals]` modifiers; each value arg expands to three actuals (value, width, decimals; defaults 0 / -1), so the routine declares (v; w, d) triples. }
+  ProcOverloadDirective : array of Boolean;
+  ProcFlexColumn : array of Boolean; { `flexcolumn` directive: call args accept write-style `:width[:decimals]` modifiers; each value arg expands to three actuals (value, width, decimals; defaults 0 / -1), so the routine declares (v; w, d) triples. }
   ProcCount : Integer;
+  ProcCapacity : Integer;   { allocated length of the parallel Proc*/ProcParam* tables — see EnsureProcCapacity }
   CurProc   : Integer;   { -1 = main }
   BlockParent: array[0..32767] of Integer;
   BlockCount: Integer;
   CurBlockId: Integer;
-  ProcExternal : array[0..MAX_PROCS-1] of Boolean;
-  ProcCModule : array[0..MAX_PROCS-1] of Integer;   { the C .c MODULE whose text defined this proc's body (KeyStrs[] index, -1 = the main source / not C). Two definitions from different modules are not a same-TU duplicate -- see CModRange* below. bug-c-static-functions-in-different-crtl-modules-collide }
-  ProcCaseSensitive : array[0..MAX_PROCS-1] of Boolean; { match this proc name case-sensitively (C imports, or Pascal in case-sensitive mode) }
-  ProcLibrary  : array[0..MAX_PROCS-1] of Integer; { Strs[] entry for DT_NEEDED name }
-  ProcExtName  : array[0..MAX_PROCS-1] of Integer; { Strs[] link symbol from `external 'lib' name 'sym'`; -1 = use the Pascal routine name }
-  ProcCdecl    : array[0..MAX_PROCS-1] of Boolean; { signature uses the C (System V AMD64) convention. Set for a `... cdecl` PROC TYPE so an INDIRECT call through it marshals SysV (int->rdi.., float->xmm0..) instead of PXX's internal all-integer convention — needed for dlsym'd C functions with float args. }
-  ProcVariadic : array[0..MAX_PROCS-1] of Boolean; { C function with a trailing `...` — needs the System V register-save prologue so va_arg can read the variadic args. }
-  ProcNamedGP  : array[0..MAX_PROCS-1] of Integer; { count of named (non-variadic) GP params, for va_start's initial gp_offset }
-  ProcNamedFP  : array[0..MAX_PROCS-1] of Integer; { count of named (non-variadic) FP/XMM params, for va_start's initial fp_offset }
-  ProcUnitIdx : array[0..MAX_PROCS-1] of Integer; { Strs[] unit name, or -1 for main }
+  ProcExternal : array of Boolean;
+  ProcCModule : array of Integer;   { the C .c MODULE whose text defined this proc's body (KeyStrs[] index, -1 = the main source / not C). Two definitions from different modules are not a same-TU duplicate -- see CModRange* below. bug-c-static-functions-in-different-crtl-modules-collide }
+  ProcCaseSensitive : array of Boolean; { match this proc name case-sensitively (C imports, or Pascal in case-sensitive mode) }
+  ProcLibrary  : array of Integer; { Strs[] entry for DT_NEEDED name }
+  ProcExtName  : array of Integer; { Strs[] link symbol from `external 'lib' name 'sym'`; -1 = use the Pascal routine name }
+  ProcCdecl    : array of Boolean; { signature uses the C (System V AMD64) convention. Set for a `... cdecl` PROC TYPE so an INDIRECT call through it marshals SysV (int->rdi.., float->xmm0..) instead of PXX's internal all-integer convention — needed for dlsym'd C functions with float args. }
+  ProcVariadic : array of Boolean; { C function with a trailing `...` — needs the System V register-save prologue so va_arg can read the variadic args. }
+  ProcNamedGP  : array of Integer; { count of named (non-variadic) GP params, for va_start's initial gp_offset }
+  ProcNamedFP  : array of Integer; { count of named (non-variadic) FP/XMM params, for va_start's initial fp_offset }
+  ProcUnitIdx : array of Integer; { Strs[] unit name, or -1 for main }
   { The token index of a NilPy module-level `def` that SHADOWS a builtin, or 0.
     Python rebinds the name when the `def` STATEMENT runs, so a call ABOVE it
     still reaches the builtin — `print(min(3,1,2))` before a `def min(a,b,c,d,e)`
@@ -2166,12 +2167,12 @@ var
     A parallel array rather than a TProc field, per project_tsymbol_field_landmine.
     Deliberately NOT ProcHdrTok: that one is compared against CurBodyHdrTok under
     RequireForward and means something else. }
-  ProcPyDefTok: array[0..MAX_PROCS-1] of Integer;
-  ProcHdrTok  : array[0..MAX_PROCS-1] of Integer; { SOffset of a MAIN-program top-level header (pre-scan/forward stamp); 0 = always visible (builtins, units, interface, methods, nested). Compared against CurBodyHdrTok under RequireForward. }
-  ProcRetRecId : array[0..MAX_PROCS-1] of Integer; { record id for tyRecord results }
-  ProcAggregateDestSym : array[0..MAX_PROCS-1] of Integer; { hidden caller-result pointer local, or -1 }
-  ProcRetIsDynArray : array[0..MAX_PROCS-1] of Boolean; { result is `array of T` (pointer-sized heap handle) }
-  ProcRetFixedArrBytes : array[0..MAX_PROCS-1] of Integer; { result is a FIXED array (`array[0..N] of T`): its byte size, returned via the hidden caller destination like a record. 0 = not one. See abi.inc / bug-a-set-and-array-function-results-come-back-empty }
+  ProcPyDefTok: array of Integer;
+  ProcHdrTok  : array of Integer; { SOffset of a MAIN-program top-level header (pre-scan/forward stamp); 0 = always visible (builtins, units, interface, methods, nested). Compared against CurBodyHdrTok under RequireForward. }
+  ProcRetRecId : array of Integer; { record id for tyRecord results }
+  ProcAggregateDestSym : array of Integer; { hidden caller-result pointer local, or -1 }
+  ProcRetIsDynArray : array of Boolean; { result is `array of T` (pointer-sized heap handle) }
+  ProcRetFixedArrBytes : array of Integer; { result is a FIXED array (`array[0..N] of T`): its byte size, returned via the hidden caller destination like a record. 0 = not one. See abi.inc / bug-a-set-and-array-function-results-come-back-empty }
   { ...and WHICH array type it is. ProcRetFixedArrBytes keeps only a byte
     count, which is enough to return the value and not enough to SHAPE a
     temp like it -- indexing a call result needs the element kind and the
@@ -2179,42 +2180,42 @@ var
     computes this as retArrAi; it simply was not stored per-proc. -1 = the
     result is not an array type.
     feature-a-index-an-array-returning-call-directly }
-  ProcRetArrAi : array[0..MAX_PROCS-1] of Integer;
-  ProcIsAsync     : array[0..MAX_PROCS-1] of Boolean;   { `; async;` routine — non-viral hint; legalises `await` in the body (stackful: documentary; stackless transform later) }
-  ProcIsGenerator : array[0..MAX_PROCS-1] of Boolean;   { `; generator;` routine — compiled as a stackful-coroutine body (see coroutine.pas) }
-  ProcIsStackless : array[0..MAX_PROCS-1] of Boolean;   { `; generator; stackless;` — compiled as a state-machine step fn (see slgen.pas) }
-  ProcIram        : array[0..MAX_PROCS-1] of Boolean;   { `; iram;` — body placed in the ELF .iram1.text section (ESP IRAM) }
-  ProcIsInterrupt : array[0..MAX_PROCS-1] of Boolean;   { `; interrupt;` — raw hardware interrupt handler (reserved; full reg-save/iret not yet emitted) }
-  ProcBodyEnd     : array[0..MAX_PROCS-1] of Integer;   { Code[] offset just past this proc's body (set at proc end); the iram byte-range is [BodyAddr, ProcBodyEnd) }
-  ProcDbgMain     : array[0..MAX_PROCS-1] of Boolean;   { DWARF -g: proc defined in the main source file (gets a DW_TAG_subprogram DIE) }
-  ProcGenElemTk   : array[0..MAX_PROCS-1] of TTypeKind; { stackless: declared (yielded) element type; the proc's own RetType is Boolean (has-next) }
-  ProcGenElemRec  : array[0..MAX_PROCS-1] of Integer;   { stackless: record id when the element type is a record (REC_NONE otherwise); CURRENT then holds a POINTER to a record region at the instance tail }
-  ProcGenParamCnt : array[0..MAX_PROCS-1] of Integer;   { stackless: declared param count (the ABI param is the single hidden instance ptr) }
-  ProcGenInstSize : array[0..MAX_PROCS-1] of Integer;   { stackless: instance byte size (header + persistent slots) }
-  ProcRetElemTk : array[0..MAX_PROCS-1] of TTypeKind;    { element type of a dyn-array result }
-  ProcRetElemRec : array[0..MAX_PROCS-1] of Integer;     { element record id of a dyn-array result }
-  ProcRetPtrElemTk : array[0..MAX_PROCS-1] of Integer;   { pointed-at TTypeKind ord when the result is a typed pointer (tyUnknown otherwise) }
-  ProcRetProcSig   : array[0..MAX_PROCS-1] of Integer;   { call signature when the result is itself a function pointer (`fty go(void)`), so `go()(args)` is an indirect call; -1 otherwise }
-  CProcHasLocalDef : array[0..MAX_PROCS-1] of Boolean;   { a local (in-TU) function body for this proc was seen in pass 1; a later redundant prototype (guardless header re-included by several .c) must NOT re-mark it external — keeps the pass-2 forward call internal, not a dynamic import }
-  ProcRetPtrElemRec : array[0..MAX_PROCS-1] of Integer;  { pointed-at record id when the result is a typed pointer-to-struct }
-  ProcParamPtrDepth : array[0..MAX_PARAM_DEPTHS-1] of Integer; { C interop: pointer depth for parameters }
-  ProcParamRecId : array[0..MAX_PARAM_DEPTHS-1] of Integer; { record/class/interface rec id per param (param syms are reused across procs, so this must persist); REC_NONE if not a record/class }
-  ProcParamSetEnumId : array[0..MAX_PARAM_DEPTHS-1] of Integer; { `set of TEnum` param: the element enum type index, -1 otherwise. A PARALLEL ARRAY rather than a TParam field, and durable for the same reason ProcParamRecId is: RegisterProc leaves Params[].SymIdx = -1 and a param symbol does not outlive the callee's scope, so a CALLER parsing `f([...])` cannot ask the symbol what the set's element type is. Read by the set-literal element check. }
-  ProcParamDynDepth : array[0..MAX_PARAM_DEPTHS-1] of Integer; { named dynamic-array param: dyn nesting depth (>0); 0 = not a named dynarray param. Persists because param syms are reused across procs. Distinguishes a resizable `TDynArr=array of T` param from an open `array of T` param at the call site. }
-  ProcParamIsConst : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param declared `const` (read-only by-ref). Persists because param syms are reused across procs. At a call site, a `const` record param may bind a non-lvalue temporary (FPC behaviour) — the temp is materialized into a hidden local and its address passed; a `var`/`out` param still requires a true lvalue for write-back. }
-  ProcParamExplicitByRef : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param was EXPLICITLY declared by-ref (`var`/`out`/`const`) at the source level, before the >8-byte record ABI forces IsRef. Lets a call site tell a genuine `var`/`out` record param (needs a real lvalue for write-back) from a plain by-value record passed by-ref only for ABI (a temporary is fine — the callee copies). const records carry their own ProcParamIsConst flag. }
-  ProcParamCapRef : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { NilPy: this trailing CAPTURE parameter stands for an enclosing local the nested body declares `nonlocal`, so it is passed by REFERENCE and a write lands in the enclosing frame. Persists because the def's body is parsed later, and that parse rebuilds Params[].IsRef from the header types alone. }
-  ProcParamProcSig : array[0..MAX_PARAM_DEPTHS-1] of Integer; { param is PROCEDURAL: signature Procs[] index, -1 = not proc-typed. A PARALLEL ARRAY rather than a TParam field, following ProcParamUntyped below — and because a param SYMBOL cannot answer this from a caller: RegisterProc leaves Params[].SymIdx = -1 and the symbol does not outlive the callee's scope. Read by IRProcVarAutoCall's call-argument sink. }
-  ProcParamUntyped : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param declared untyped (`var x`/`const x`/`out x`, no type) — an untyped by-ref param. Overload matching accepts ANY argument type for this slot; the caller passes the argument's address. Underpins Move/FillChar-style routines. }
-  ProcParamHasDefault : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { param has a default value (`b: Integer = 10`). Trailing params only. A call omitting trailing args supplies these; overload matching accepts nArgs in [required..ParamCount]. }
-  ProcParamElemRowLen : array[0..MAX_PARAM_DEPTHS-1] of Integer; { open-array param whose element is a named FIXED array (`a: array of T`): the row's flattened element count; 0 = scalar element. Drives the call-site `[..]` ctor stride and static-array copy-in count. }
-  ProcParamElemRowLo  : array[0..MAX_PARAM_DEPTHS-1] of Integer; { the row's low bound, paired with ProcParamElemRowLen }
-  ProcParamDefaultVal : array[0..MAX_PARAM_DEPTHS-1] of Int64;   { the constant-folded default ordinal value (when ProcParamHasDefault). }
-  ProcParamDefaultIsStr : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { default is a STRING literal (`msg: string = ''`), not an ordinal; the text is (SOff,SLen) below. }
-  ProcParamDefaultIsNone: array[0..MAX_PARAM_DEPTHS-1] of Boolean;
-  ProcParamDefaultIsFloat: array[0..MAX_PARAM_DEPTHS-1] of Boolean; { the default is a FLOAT; DefaultVal holds its IEEE 754 bits, as a float TOKEN does. } { NilPy `= None` (or a non-constant default, which is treated as one) — distinct from the ordinal 0 a False/absent default records. }
-  ProcParamDefaultIsBool : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { NilPy: default is a BOOLEAN (`b=True`), not the ordinal 1 it is recorded as — a variant parameter must be boxed tyBoolean or `print(b)` says 1. }
-  ProcParamDefaultSym : array[0..MAX_PARAM_DEPTHS-1] of Integer;  { NilPy: symbol of the hidden global holding a NON-CONSTANT default's def-time value (-1 = none). Python evaluates such a default ONCE, where the def stands, which is what makes the shared-mutable-default idiom observable; the call site therefore reads this global rather than rebuilding a value. A PARALLEL ARRAY, not a TSymbol/Proc field — see project_tsymbol_field_landmine. }
+  ProcRetArrAi : array of Integer;
+  ProcIsAsync     : array of Boolean;   { `; async;` routine — non-viral hint; legalises `await` in the body (stackful: documentary; stackless transform later) }
+  ProcIsGenerator : array of Boolean;   { `; generator;` routine — compiled as a stackful-coroutine body (see coroutine.pas) }
+  ProcIsStackless : array of Boolean;   { `; generator; stackless;` — compiled as a state-machine step fn (see slgen.pas) }
+  ProcIram        : array of Boolean;   { `; iram;` — body placed in the ELF .iram1.text section (ESP IRAM) }
+  ProcIsInterrupt : array of Boolean;   { `; interrupt;` — raw hardware interrupt handler (reserved; full reg-save/iret not yet emitted) }
+  ProcBodyEnd     : array of Integer;   { Code[] offset just past this proc's body (set at proc end); the iram byte-range is [BodyAddr, ProcBodyEnd) }
+  ProcDbgMain     : array of Boolean;   { DWARF -g: proc defined in the main source file (gets a DW_TAG_subprogram DIE) }
+  ProcGenElemTk   : array of TTypeKind; { stackless: declared (yielded) element type; the proc's own RetType is Boolean (has-next) }
+  ProcGenElemRec  : array of Integer;   { stackless: record id when the element type is a record (REC_NONE otherwise); CURRENT then holds a POINTER to a record region at the instance tail }
+  ProcGenParamCnt : array of Integer;   { stackless: declared param count (the ABI param is the single hidden instance ptr) }
+  ProcGenInstSize : array of Integer;   { stackless: instance byte size (header + persistent slots) }
+  ProcRetElemTk : array of TTypeKind;    { element type of a dyn-array result }
+  ProcRetElemRec : array of Integer;     { element record id of a dyn-array result }
+  ProcRetPtrElemTk : array of Integer;   { pointed-at TTypeKind ord when the result is a typed pointer (tyUnknown otherwise) }
+  ProcRetProcSig   : array of Integer;   { call signature when the result is itself a function pointer (`fty go(void)`), so `go()(args)` is an indirect call; -1 otherwise }
+  CProcHasLocalDef : array of Boolean;   { a local (in-TU) function body for this proc was seen in pass 1; a later redundant prototype (guardless header re-included by several .c) must NOT re-mark it external — keeps the pass-2 forward call internal, not a dynamic import }
+  ProcRetPtrElemRec : array of Integer;  { pointed-at record id when the result is a typed pointer-to-struct }
+  ProcParamPtrDepth : array of Integer; { C interop: pointer depth for parameters }
+  ProcParamRecId : array of Integer; { record/class/interface rec id per param (param syms are reused across procs, so this must persist); REC_NONE if not a record/class }
+  ProcParamSetEnumId : array of Integer; { `set of TEnum` param: the element enum type index, -1 otherwise. A PARALLEL ARRAY rather than a TParam field, and durable for the same reason ProcParamRecId is: RegisterProc leaves Params[].SymIdx = -1 and a param symbol does not outlive the callee's scope, so a CALLER parsing `f([...])` cannot ask the symbol what the set's element type is. Read by the set-literal element check. }
+  ProcParamDynDepth : array of Integer; { named dynamic-array param: dyn nesting depth (>0); 0 = not a named dynarray param. Persists because param syms are reused across procs. Distinguishes a resizable `TDynArr=array of T` param from an open `array of T` param at the call site. }
+  ProcParamIsConst : array of Boolean; { param declared `const` (read-only by-ref). Persists because param syms are reused across procs. At a call site, a `const` record param may bind a non-lvalue temporary (FPC behaviour) — the temp is materialized into a hidden local and its address passed; a `var`/`out` param still requires a true lvalue for write-back. }
+  ProcParamExplicitByRef : array of Boolean; { param was EXPLICITLY declared by-ref (`var`/`out`/`const`) at the source level, before the >8-byte record ABI forces IsRef. Lets a call site tell a genuine `var`/`out` record param (needs a real lvalue for write-back) from a plain by-value record passed by-ref only for ABI (a temporary is fine — the callee copies). const records carry their own ProcParamIsConst flag. }
+  ProcParamCapRef : array of Boolean; { NilPy: this trailing CAPTURE parameter stands for an enclosing local the nested body declares `nonlocal`, so it is passed by REFERENCE and a write lands in the enclosing frame. Persists because the def's body is parsed later, and that parse rebuilds Params[].IsRef from the header types alone. }
+  ProcParamProcSig : array of Integer; { param is PROCEDURAL: signature Procs[] index, -1 = not proc-typed. A PARALLEL ARRAY rather than a TParam field, following ProcParamUntyped below — and because a param SYMBOL cannot answer this from a caller: RegisterProc leaves Params[].SymIdx = -1 and the symbol does not outlive the callee's scope. Read by IRProcVarAutoCall's call-argument sink. }
+  ProcParamUntyped : array of Boolean; { param declared untyped (`var x`/`const x`/`out x`, no type) — an untyped by-ref param. Overload matching accepts ANY argument type for this slot; the caller passes the argument's address. Underpins Move/FillChar-style routines. }
+  ProcParamHasDefault : array of Boolean; { param has a default value (`b: Integer = 10`). Trailing params only. A call omitting trailing args supplies these; overload matching accepts nArgs in [required..ParamCount]. }
+  ProcParamElemRowLen : array of Integer; { open-array param whose element is a named FIXED array (`a: array of T`): the row's flattened element count; 0 = scalar element. Drives the call-site `[..]` ctor stride and static-array copy-in count. }
+  ProcParamElemRowLo  : array of Integer; { the row's low bound, paired with ProcParamElemRowLen }
+  ProcParamDefaultVal : array of Int64;   { the constant-folded default ordinal value (when ProcParamHasDefault). }
+  ProcParamDefaultIsStr : array of Boolean; { default is a STRING literal (`msg: string = ''`), not an ordinal; the text is (SOff,SLen) below. }
+  ProcParamDefaultIsNone: array of Boolean;
+  ProcParamDefaultIsFloat: array of Boolean; { the default is a FLOAT; DefaultVal holds its IEEE 754 bits, as a float TOKEN does. } { NilPy `= None` (or a non-constant default, which is treated as one) — distinct from the ordinal 0 a False/absent default records. }
+  ProcParamDefaultIsBool : array of Boolean; { NilPy: default is a BOOLEAN (`b=True`), not the ordinal 1 it is recorded as — a variant parameter must be boxed tyBoolean or `print(b)` says 1. }
+  ProcParamDefaultSym : array of Integer;  { NilPy: symbol of the hidden global holding a NON-CONSTANT default's def-time value (-1 = none). Python evaluates such a default ONCE, where the def stands, which is what makes the shared-mutable-default idiom observable; the call site therefore reads this global rather than rebuilding a value. A PARALLEL ARRAY, not a TSymbol/Proc field — see project_tsymbol_field_landmine. }
   { NilPy: the interned NAME of that hidden global, captured where it is
     AUTHORITATIVE -- at the header parse, before any rollback can recycle the
     symbol index. ProcParamDefaultSym alone is not a safe key for anything
@@ -2225,10 +2226,10 @@ var
     slot and the first reported "no recorded default" for an ordinary
     `s="hi"`. Same recycled-index landmine as
     project_tsymbol_field_landmine, one level up. }
-  ProcParamDefaultGName : array[0..MAX_PARAM_DEPTHS-1] of Integer;
-  ProcParamDefaultIsSet : array[0..MAX_PARAM_DEPTHS-1] of Boolean; { default is a SET (`opts: TOpts = []` / `= DefaultFormat`), not an ordinal: ProcParamDefaultVal holds the Data[] OFFSET of the baked 32-byte mask, and the call rebuilds an AN_SET_CONST_REF from it. }
-  ProcParamDefaultSOff  : array[0..MAX_PARAM_DEPTHS-1] of Integer; { char-pool offset of the string default's text. }
-  ProcParamDefaultSLen  : array[0..MAX_PARAM_DEPTHS-1] of Integer; { its length. }
+  ProcParamDefaultGName : array of Integer;
+  ProcParamDefaultIsSet : array of Boolean; { default is a SET (`opts: TOpts = []` / `= DefaultFormat`), not an ordinal: ProcParamDefaultVal holds the Data[] OFFSET of the baked 32-byte mask, and the call rebuilds an AN_SET_CONST_REF from it. }
+  ProcParamDefaultSOff  : array of Integer; { char-pool offset of the string default's text. }
+  ProcParamDefaultSLen  : array of Integer; { its length. }
   CurrentCLibrary : AnsiString;
   CTypeIsVoid : Boolean; { last ParseCDeclType saw bare void (no pointer) }
   CTypeBaseIsEnum : Boolean; { last ParseCDeclType's BASE type was an `enum` (which we map to
@@ -2432,7 +2433,7 @@ var
     name at CALL time, and a nested def is only callable from inside its parent
     here, so passing the value at each call site is exactly Python's answer for
     reads. Writes need `nonlocal` and are not this. }
-  PyCapCount : array[0..MAX_PROCS-1] of Integer;
+  PyCapCount : array of Integer;
   { The `global` / `nonlocal` names declared by the def body CURRENTLY being
     parsed. Python's scoping rule is that assigning a name anywhere in a
     function makes it local for the whole function UNLESS one of these
@@ -2450,7 +2451,7 @@ var
     def taken AS A VALUE (`target.native = does_runtime`) can be re-lowered as
     a pyeval closure binding its default-arg/captured values at that point
     (uforth's DOES>). }
-  PyDefTokOf : array[0..MAX_PROCS-1] of Integer;
+  PyDefTokOf : array of Integer;
   { A nested def REDEFINED in the same scope. Python rebinds the name, so the
     later body wins from its `def` statement onward; pxx registered the first
     under `outer.name` and every later one collided with it, so the second body
@@ -2479,8 +2480,8 @@ var
     one TPyList and one TPyDict parameter — and these say which, so each CALL
     site can pack its surplus positional arguments into the list and its
     unmatched keyword arguments into the dict (PyPackStarArgs). }
-  ProcPyStarIdx : array[0..MAX_PROCS-1] of Integer;
-  ProcPyKwIdx   : array[0..MAX_PROCS-1] of Integer;
+  ProcPyStarIdx : array of Integer;
+  ProcPyKwIdx   : array of Integer;
   { Data[] offset of proc pi's SIGNATURE record (PYSIG_SIZE bytes), -1 = none.
     Emitted by EmitPySignatures for every NilPy `def`, so a callable VALUE can
     carry ONE pointer and still answer "how many parameters, which are required,
@@ -2493,9 +2494,9 @@ var
     passing the def as an argument and calling it short SEGFAULTED. Supplying
     every argument worked precisely because nothing had to be filled in.
     feature-n-a-callable-value-carries-its-signature-type }
-  ProcSigOff    : array[0..MAX_PROCS-1] of Integer;
+  ProcSigOff    : array of Integer;
   { Data[] offset of proc pi's defaults ARRAY (TotN variants), -1 = none. }
-  ProcSigDfltOff: array[0..MAX_PROCS-1] of Integer;
+  ProcSigDfltOff: array of Integer;
   { One entry per default that cannot be baked into .data as a constant: a
     string (its payload is a managed AnsiString ref, built at run time) or any
     non-constant expression. PyDfltPendSym is the interned NAME of the hidden `$pdef.*` global that
@@ -2547,7 +2548,7 @@ var
   PyRdAtCount : Integer;
   PyRdScanned : Boolean;
   PyRdOverflow: Boolean;   { table full — answer conservatively, never silently }
-  PyCapName  : array[0..MAX_PROCS*PY_MAX_CAPS-1] of AnsiString;
+  PyCapName  : array of AnsiString;
   { Scratch for PyCollectCalleeCaps — the names a call to a sibling nested def
     must forward, computed from TOKENS so a callee defined LATER in the same
     body answers as well as one already registered
@@ -2979,10 +2980,10 @@ var
   NoDefaultRtl : Boolean;
   { writeELF32Rel scratch: per-proc / per-external .strtab name offsets
     (globals, not locals — 64KB each would strain the self-hosted stack). }
-  ObjProcStrOff : array[0..MAX_PROCS-1] of Integer;
+  ObjProcStrOff : array of Integer;
   ObjExtStrOff  : array[0..MAX_EXTERNAL-1] of Integer;
-  ObjProcSymIdx : array[0..MAX_PROCS-1] of Integer; { .symtab index of each proc (extended iram writer) }
-  ObjProcIramOff: array[0..MAX_PROCS-1] of Integer; { offset of an iram proc's body within .iram1.text }
+  ObjProcSymIdx : array of Integer; { .symtab index of each proc (extended iram writer) }
+  ObjProcIramOff: array of Integer; { offset of an iram proc's body within .iram1.text }
   { Directory of the compiler binary itself (from ParamStr(0)); RTL/LCL units are
     located relative to it so the compiler works from any CWD, not just the repo
     root. Empty if the path has no directory part (then CWD-relative is used). }

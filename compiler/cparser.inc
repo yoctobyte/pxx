@@ -9199,7 +9199,7 @@ begin
   for i := 0 to ExternalCount - 1 do
   begin
     procIdx := ExternalProc[i];
-    if (procIdx < 0) or (procIdx >= MAX_PROCS) then continue;
+    if (procIdx < 0) or (procIdx >= ProcCount) then continue;
     soname := Strs[ProcLibrary[procIdx]].Text;
     if not (CaseEqual(soname, 'libc.so.6') or CaseEqual(soname, 'libm.so.6')) then continue;
     if CSystemLibSelectedForSoname(soname) then continue;

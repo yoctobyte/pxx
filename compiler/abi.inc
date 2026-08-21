@@ -149,7 +149,7 @@ begin
   { A FIXED-ARRAY result: the byte count is the whole array, recorded per-proc
     because the Result symbol's KIND is only its element type.
     bug-a-set-and-array-function-results-come-back-empty }
-  if (CurProc >= 0) and (CurProc < MAX_PROCS) and
+  if (CurProc >= 0) and (CurProc < ProcCount) and
      (ProcRetFixedArrBytes[CurProc] > 0) then
   begin
     Result := ProcRetFixedArrBytes[CurProc];
@@ -174,7 +174,7 @@ end;
 function ABIRetViaHiddenDestProc(procIdx: Integer): Boolean;
 begin
   ABIRetViaHiddenDestProc := False;
-  if (procIdx < 0) or (procIdx >= MAX_PROCS) then Exit;
+  if (procIdx < 0) or (procIdx >= ProcCount) then Exit;
   ABIRetViaHiddenDestProc := RetViaHiddenDest(Procs[procIdx].RetType) or
                              (ProcRetFixedArrBytes[procIdx] > 0);
 end;

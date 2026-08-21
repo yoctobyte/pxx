@@ -111,7 +111,7 @@ begin
         if OptLevel < 3 then Exit;
         if ASTRight[node] <> -1 then Exit;         { plain call shape only }
         cpi2 := ASTIVal[node];
-        if (cpi2 < 0) or (cpi2 >= MAX_PROCS) or (cpi2 >= ProcCount) then Exit;
+        if (cpi2 < 0) or (cpi2 >= ProcCount) then Exit;
         if ProcExternal[cpi2] or ProcCdecl[cpi2] or ProcVariadic[cpi2] then Exit;
         if ProcIsGenerator[cpi2] or ProcIsStackless[cpi2] then Exit;
         if not Procs[cpi2].IsFunc then Exit;

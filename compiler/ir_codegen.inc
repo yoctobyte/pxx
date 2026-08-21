@@ -9040,7 +9040,7 @@ begin
     if (IRKind[k] = IR_TERMINATE) and (IRIVal[k] <> AN_HALT) then
       ProcBodyEarlyExit[CurProc] := True;
     { direct internal call site → tally against the target proc }
-    if (IRKind[k] = IR_CALL) and (IRA[k] >= 0) and (IRA[k] < MAX_PROCS) then
+    if (IRKind[k] = IR_CALL) and (IRA[k] >= 0) and (IRA[k] < ProcCount) then
     begin
       tgt := IRA[k];
       if not (ProcExternal[tgt] or ProcCdecl[tgt]) then
