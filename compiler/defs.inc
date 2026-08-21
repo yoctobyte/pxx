@@ -3039,6 +3039,7 @@ var
   BSS_PEEK_BYTE   : Integer;  { the held pushback byte (consumed by next read) }
   BSS_IO_OWNER    : Integer;  { --threadsafe I/O statement lock: owning thread id (gettid), 0 = free }
   BSS_IO_DEPTH    : Integer;  { --threadsafe I/O statement lock: reentrancy depth of the owner }
+  SigBssAllocated : Boolean;  { EnsureSignalBss ran — the BSS_SIG_* block is allocated. Every frontend driver reaches it through EmitProgramRuntimeStubsForTarget, but the Pascal driver also allocates early to keep its BSS layout, so the call must be idempotent. }
   BSS_SIG_HOOKS   : Integer;  { 64 qword slots: user handler proc address per signal 1..64 (slot = (sig-1)*8), 0 = none. Written by SetSignalHandler, read by the emitted signal dispatch stub. }
   BSS_SIG_SCRATCH : Integer;  { 32-byte kernel struct sigaction build area for the install/redefault stubs (handler, flags, restorer, mask) }
   BSS_SIG_CODE    : Integer;  { siginfo_t.si_code of the signal currently being dispatched, sign-extended to 64 bits (SA_SIGINFO, x86-64). Written by the dispatch stub BEFORE the hook runs, read by __pxxSigCode. THE reason SA_SIGINFO exists here: it is the only carrier of WHICH fault occurred — the MXCSR status flags read 0x00 in a handler because Linux hands it a clean FP state (measured, see feature-float-exception-mask-control). }

@@ -36,6 +36,9 @@ procedure PatchProgramEntryJump(jmpPatch: Integer); forward;
 procedure EmitParamSpillsForTarget(procIdx, nparams: Integer); forward;
 procedure EmitZeroLocalSlotForTarget(symIdx, nbytes: Integer); forward;
 procedure EmitSignalRuntimeForTarget; forward;   { its sibling: the one place the per-arch signal runtime is chosen }
+procedure EnsureSignalBss; forward;                        { the BSS_SIG_* block, idempotent }
+procedure EmitDefaultSignalInstallForTarget; forward;       { SIGINT/SIGTERM install at program start }
+procedure EmitProgramRuntimeStubsForTarget; forward;        { THE finish-the-runtime step every driver calls }
 
 { pxx pre-scans declarations, so a routine may be CALLED above its definition; FPC
   cannot, and the cold-bootstrap seed is built by FPC. Anything defined later in this

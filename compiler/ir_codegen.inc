@@ -728,6 +728,26 @@ begin
   ]);
 end;
 
+procedure EnsureSignalBss;
+{ The signal runtime's STORAGE, allocated next to the only code that reads it —
+  the lesson EmitIoLockStubsForTarget records one function below ("Splitting the
+  two is what turned the first fix into a second bug"). Only the Pascal driver
+  ever allocated these, so in every other frontend BSS_SIG_HOOKS / _CODE / _ADDR
+  / _CTX were 0, i.e. all aliased onto the same eight bytes.
+
+  Allocated even under --no-signals: the signal-info builtins still lower to
+  these slots (ir.inc, IRC 2/3/4), and a 0 offset there would read BSS[0].
+  Idempotent, so a driver may call it early and the runtime emitter late. }
+begin
+  if SigBssAllocated then Exit;
+  SigBssAllocated := True;
+  BSS_SIG_HOOKS   := BSSSize; Inc(BSSSize, 64 * 8);
+  BSS_SIG_SCRATCH := BSSSize; Inc(BSSSize, 32);
+  BSS_SIG_CODE    := BSSSize; Inc(BSSSize, 8);
+  BSS_SIG_ADDR    := BSSSize; Inc(BSSSize, 8);
+  BSS_SIG_CTX     := BSSSize; Inc(BSSSize, 8);
+end;
+
 procedure EmitSignalRuntimeForTarget;
 { THE one place that decides which signal runtime a build needs — the sibling of
   EmitIoLockStubsForTarget below, and added for the same reason: the per-arch
@@ -735,16 +755,17 @@ procedure EmitSignalRuntimeForTarget;
   how a backend name leaked into a shared file and how a per-arch decision ends
   up made in one frontend only.
 
-  NOTE, deliberately unchanged here: only the Pascal driver calls this at all, so
-  the other frontends still ship without a signal runtime — the same gap the I/O
-  lock had. Moving the choice is a pure refactor; making every frontend call it
-  is a behaviour change, filed separately as
-  bug-a-only-the-pascal-driver-emits-the-signal-runtime.
+  Every frontend driver reaches this through EmitProgramRuntimeStubsForTarget
+  below — do not call it directly, and do not add a tenth private copy.
+  (Until 2026-08-21 only the Pascal driver called it, so every other frontend
+  shipped with no signal runtime at all: the same gap the I/O lock had, filed
+  and fixed as bug-a-only-the-pascal-driver-emits-the-signal-runtime.)
 
   xtensa has no sibling stub on purpose (see pasparser_*.inc's note at the AN_WRITE
   lowering); riscv32 skips it under --esp-profile=bare, where there is no OS to
   deliver a signal. }
 begin
+  EnsureSignalBss;
   if NoSignals then Exit;
   if      TargetArch = TARGET_X86_64  then EmitSignalRuntime
 {$ifndef PXX_NO_AARCH64}
@@ -760,6 +781,70 @@ begin
   begin
     if not EspBareBoot then EmitSignalRuntimeRISCV32;
   end;
+end;
+
+procedure EmitDefaultSignalInstallForTarget;
+{ Install the default-managed signals at PROGRAM START. The stubs alone are
+  inert: this is the call that makes Ctrl-C graceful. Per-arch because the
+  call sequence is, and it lived in the Pascal driver next to the stub choice —
+  so the other frontends had neither half.
+  bug-a-only-the-pascal-driver-emits-the-signal-runtime }
+begin
+  { Install the default-managed signals (SIGINT, SIGTERM) at program start —
+    graceful Ctrl-C / termination via the dispatch stub (no hook registered =
+    redefault + re-raise, so unhandled signals still kill with proper
+    killed-by-signal status). }
+  if (TargetArch = TARGET_X86_64) and not NoSignals then
+  begin
+    EmitAsmX64(['mov edi, %', 2]);   IREmitCodeCall(SigInstallAddr);   { SIGINT }
+    EmitAsmX64(['mov edi, %', 15]);  IREmitCodeCall(SigInstallAddr);   { SIGTERM }
+  end;
+  if (TargetArch = TARGET_I386) and not NoSignals then
+  begin
+    EmitB($B8); EmitI32(2);                                            { mov eax, 2 (SIGINT) }
+    EmitB($E8); EmitI32(SigInstallAddr - (CodeLen + 4));
+    EmitB($B8); EmitI32(15);                                           { mov eax, 15 (SIGTERM) }
+    EmitB($E8); EmitI32(SigInstallAddr - (CodeLen + 4));
+  end;
+  if (TargetArch = TARGET_ARM32) and not NoSignals then
+  begin
+    EmitLoadImmArm32(0, 2);                                            { SIGINT }
+    EmitI32($EB000000 or ((((SigInstallAddr - CodeLen - 8) div 4)) and $FFFFFF));   { bl install }
+    EmitLoadImmArm32(0, 15);                                           { SIGTERM }
+    EmitI32($EB000000 or ((((SigInstallAddr - CodeLen - 8) div 4)) and $FFFFFF));
+  end;
+  if (TargetArch = TARGET_RISCV32) and not NoSignals and (not EspBareBoot) then
+  begin
+    rv32_addi(reg_a0, reg_zero, 2);                                    { SIGINT }
+    rv32_jal(reg_ra, SigInstallAddr - CodeLen);
+    rv32_addi(reg_a0, reg_zero, 15);                                   { SIGTERM }
+    rv32_jal(reg_ra, SigInstallAddr - CodeLen);
+  end;
+  if (TargetArch = TARGET_AARCH64) and not NoSignals then
+  begin
+    EmitLoadImmA64(0, 2);                                              { SIGINT }
+    EmitI32($94000000 or (((SigInstallAddr - CodeLen) div 4) and $03FFFFFF));
+    EmitLoadImmA64(0, 15);                                             { SIGTERM }
+    EmitI32($94000000 or (((SigInstallAddr - CodeLen) div 4) and $03FFFFFF));
+  end;
+end;
+
+procedure EmitProgramRuntimeStubsForTarget;
+{ THE one "finish the runtime" step every frontend driver must call, once, after
+  its entry stub and before user code. Add a new per-target runtime stub HERE,
+  never in a driver.
+
+  It exists because the drivers kept diverging one stub at a time: the I/O lock
+  was spelled out in the Pascal driver and eight frontends shipped without it
+  (bug-a-threadsafe-segfaults-on-every-nilpy-program); the fix moved the per-arch
+  CHOICE into EmitIoLockStubsForTarget but left every driver to remember the
+  CALL, so when the signal runtime got the same treatment it kept the same hole
+  (bug-a-only-the-pascal-driver-emits-the-signal-runtime). Two mechanisms serving
+  one concept is the smell devdocs/dev/root-cause-over-microfix.md names; this is
+  the single step that replaces them. }
+begin
+  EmitSignalRuntimeForTarget;
+  EmitIoLockStubsForTarget;
 end;
 
 procedure EmitTlsMainInstall;

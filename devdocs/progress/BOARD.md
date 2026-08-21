@@ -70,7 +70,6 @@ lives in git, not in a timestamp._
 | bug-a-findtypealias-failed-to-find-puint8-on-stderr | A | 20 | bug | `FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr during a compile that then SUCCEEDS. Either the lookup failure is real and something silently fell back to a wrong type, or the message is a stale debug print that should not be in a release build. Both readings are defects; which one it is has not been established. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
-| bug-a-only-the-pascal-driver-emits-the-signal-runtime | A | 45 | bug | The signal runtime (SIGSEGV/SIGFPE hook, restorer, sethook, install stubs) is emitted only by the Pascal driver in parser.inc. Every other frontend -- C, NilPy, Rust, Zig, Basic, Ada, Lua, the asm frontend -- produces a binary with no signal runtime, so a hardware fault there is an unhandled signal instead of a runtime error. Same shape as the I/O-lock gap that was already found and fixed. | — |
 | bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did | A | 45 | bug | i386, arm32 and aarch64 route variant binops through PXXVarBinOp in builtinheap.pas, which reimplements the same dispatch x86-64 hand-emits — and the same defect: a stringy operand's payload is read as a number. x86-64 was fixed 2026-08-20; those three targets still answer a heap address for `v('15') - 3`. | — |
 | bug-a-riscv32-drops-interface-releases-in-six-shapes | A | 45 | bug | riscv32 alone under-releases COM interface references in six distinct shapes — a by-value interface PARAMETER is never released (10/16 on test_interface_byval_param_no_leak), an as-cast temp outlives its expression, a self-returning call releases nothing, and a COM value param leaks. x86-64, i386, arm32 and aarch64 all agree with FPC; riscv32 is the outlier in every case. | — |
 | bug-a-stack-overflow-fault-to-raise-loops-forever-without-an-sp-reset | A | 45 | bug | Redirecting the ucontext PC to a raise stub turns a hardware fault into a catchable Pascal exception — except for a STACK OVERFLOW, where the resumed stub inherits the exhausted SP and re-faults at the identical address forever. A hang, not a crash. The fault-to-raise design needs an SP reset alongside the PC rewrite for this one signal. | — |
@@ -78,6 +77,7 @@ lives in git, not in a timestamp._
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-format-percent-u-prints-a-signed-value | B | 45 | bug | `Format('%u', [q])` on a QWord prints -1: sysutils' formatter aliases 'u' to 'd' and runs both through the signed IntToStr. FPC prints 18446744073709551615. The same line makes `%u` of Integer(-1) print -1 where FPC prints 4294967295. Filed from Track A+C+P — B owns lib/rtl. | — |
 | bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line | B | 65 | bug | `read(f, n)` / `readln(f, n)` on a Text file reads the whole LINE and Vals it, so any line with two numbers, or one number plus trailing spaces, silently yields 0. `readln(t, n, m)` on '42 3' gives 0 0 where FPC gives 42 3. Works only when the line holds exactly one number and nothing else. | — |
+| bug-c-driver-misses-the-shared-runtime-finalisation-step | C | 40 | bug | The C driver calls EmitIoLockStubsForTarget directly instead of the shared EmitProgramRuntimeStubsForTarget, so a C program still ships with no signal runtime. Every other frontend was moved over on 2026-08-21; C was left alone because cparser.inc is Track C's file-lane. One line. | — |
 | bug-n-a-class-base-that-is-an-expression-does-not-compile | N | 45 | bug | A class base which is a NAME bound to a type, or a call, does not compile: `B = object; class P(B)` fails where `class P(object)` and `class P(SomeClass)` both work. Blocks six.with_metaclass, which html5lib's parser spells as `class Phase(with_metaclass(...))` — the single remaining wall on html5parser.py. | — |
 | bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function | N | 50 | bug | `g = f` BOXES the function on the heap; every other path (a dict value, a return value, the bare name) keeps the raw code pointer. So `g == f` and `g is f` are False, two assignments of the same function are unequal to each other, and `id(g)` is a heap address while `id(f)` is the code address. CPython answers True to all of it. | — |
 | bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through | N | 45 | bug | sys.version_info throws at RUNTIME with a message admitting its own guard failed: 'the code guarding that (the flag its except-branch sets) let this call through anyway'. Two defects — the member is missing, and the compile-time guard meant to catch that does not fire. A guard that reports its own failure and continues is worse than no guard. | — |
@@ -542,9 +542,9 @@ lives in git, not in a timestamp._
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2178)
+## done (2179)
 
-2178 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2179 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -650,7 +650,6 @@ lives in git, not in a timestamp._
 - [p 45] [A] bug-a-a-memory-fault-is-a-raw-sigsegv-not-runtime-error-216
 - [p 45] [A] bug-a-a-non-lvalue-is-refused-as-an-interface-argument
 - [p 45] [A] bug-a-exception-unwind-releases-one-interface-too-few-on-every-cross-target
-- [p 45] [A] bug-a-only-the-pascal-driver-emits-the-signal-runtime
 - [p 45] [A] bug-a-pxxvarbinop-carries-the-same-string-arithmetic-defect-as-x86-64-did
 - [p 45] [A] bug-a-riscv32-drops-interface-releases-in-six-shapes
 - [p 45] [A] bug-a-stack-overflow-fault-to-raise-loops-forever-without-an-sp-reset
@@ -708,6 +707,7 @@ lives in git, not in a timestamp._
 - [p 40] [A] bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data
 - [p 40] [A] bug-a-aintostr-returns-empty-for-negative-numbers
 - [p 40] [A] bug-a-nilpy-leading-double-star-in-a-call-is-not-detected
+- [p 40] [C] bug-c-driver-misses-the-shared-runtime-finalisation-step
 - [p 40] [N] bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members
 - [p 40] [N] bug-n-inline-cast-deref-loses-a-pointer-fields-pointee
 - [p 40] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base

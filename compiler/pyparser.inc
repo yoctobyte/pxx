@@ -34601,7 +34601,11 @@ begin
     AN_WRITE lowering under --threadsafe calls code offset 0 -- the ELF entry
     point -- which jumps back to main and hangs until the stack is gone
     (bug-a-threadsafe-segfaults-on-every-nilpy-program). }
-  EmitIoLockStubsForTarget;
+  { THE finish-the-runtime step (signal runtime + --threadsafe I/O lock stubs).
+    Was EmitIoLockStubsForTarget alone, so this frontend shipped with no signal
+    runtime at all — the same gap the I/O lock had, one stub later.
+    bug-a-only-the-pascal-driver-emits-the-signal-runtime }
+  EmitProgramRuntimeStubsForTarget;
   { Bitwise-on-float TypeError abort stub — EmitVarBinOp's double path calls it
     when a bitwise op has a float variant operand (Python raises, we abort like
     pylib's PyTypeError). bug-nilpy-bitwise-on-float-variant-truncates. }
@@ -34844,6 +34848,14 @@ begin
   mainNode := PyFlushHoist(mainNode);
   ASTArenaFloor := ASTNodeCount;
   PatchProgramEntryJump(jmpPatch);
+  { Install the default-managed signals (SIGINT/SIGTERM), the same call the
+    Pascal driver makes at the top of its main body — the stubs alone are
+    inert, this is what makes Ctrl-C graceful. It fits here because this driver
+    uses the jump-to-main-body entry model; the call/exit-style drivers
+    (Rust, Zig, BASIC, Erlang, Ada, Whitespace) emit their `call main` before
+    the stubs exist, so they get the runtime but not the default install yet.
+    bug-a-only-the-pascal-driver-emits-the-signal-runtime }
+  EmitDefaultSignalInstallForTarget;
   { Unit INITIALISATION, in dependency order, before the program's own body —
     the same thing ParseProgram does for Pascal. An imported `.py` module's
     top-level code lives in one of these (`settings.py` runs

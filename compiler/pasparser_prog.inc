@@ -448,11 +448,9 @@ begin
     Allocating them here meant every non-Pascal driver left both at 0 — i.e.
     aliased onto the same eight bytes — which is a second, independent way for
     --threadsafe to break (bug-a-threadsafe-segfaults-on-every-nilpy-program). }
-  BSS_SIG_HOOKS   := BSSSize; Inc(BSSSize, 64 * 8);
-  BSS_SIG_SCRATCH := BSSSize; Inc(BSSSize, 32);
-  BSS_SIG_CODE    := BSSSize; Inc(BSSSize, 8);
-  BSS_SIG_ADDR    := BSSSize; Inc(BSSSize, 8);
-  BSS_SIG_CTX     := BSSSize; Inc(BSSSize, 8);
+  EnsureSignalBss;   { the BSS_SIG_* block — allocated here to keep this driver's
+                       layout; idempotent, and every other frontend gets it from
+                       EmitProgramRuntimeStubsForTarget instead }
   ExceptionUsed := False;
   CoroutineUsed := False;
   CloneStubAddr := 0;        { 0 = clone+trampoline stub not yet emitted (lazy) }
@@ -950,11 +948,11 @@ begin
     The trim targets exactly the unit-free division-free Pascal program. }
   if (TargetArch = TARGET_X86_64) and (needsDivStub or needsHeap or CProgramMode) then
     EmitDiv0Stub;
-  { Signal runtime (restorer/dispatch/sethook/install stubs): default on for
-    the PC target, --no-signals opts out (user decision: no auto-detection —
-    predictable process behavior beats size sniffing; the whole runtime is
-    ~200 bytes). See feature-signal-handlers. }
-  EmitSignalRuntimeForTarget;
+  { The one "finish the runtime" step: signal runtime (restorer / dispatch /
+    sethook / install stubs; --no-signals opts out) plus the --threadsafe I/O
+    lock stubs. Both used to be spelled out here, in the Pascal driver only,
+    which is precisely why the other eight frontends shipped without either. }
+  EmitProgramRuntimeStubsForTarget;
   { --fpc-float-errors decoder stub (feature-float-exception-mask-control):
     emitted next to the signal runtime because it IS a signal hook. }
   if FpcFloatErrors then
@@ -967,10 +965,6 @@ begin
             + 'that turns the trap into a runtime error (drop --no-signals)');
     EmitFpcFloatErrStub;
   end;
-  { --threadsafe statement-atomic I/O lock stubs. The per-arch choice used to be
-    spelled out here, in the Pascal driver only, which is precisely why the
-    other eight frontends shipped without it. }
-  EmitIoLockStubsForTarget;
   if hasExceptions then EnableExceptionRuntime;
   if hasCoroutine then EnableCoroutineRuntime;
 
@@ -1130,15 +1124,10 @@ begin
   { Patch jmp to point here (start of main body) }
   PatchProgramEntryJump(jmpPatch);
 
-  { Install the default-managed signals (SIGINT, SIGTERM) at program start —
-    graceful Ctrl-C / termination via the dispatch stub (no hook registered =
-    redefault + re-raise, so unhandled signals still kill with proper
-    killed-by-signal status). }
-  if (TargetArch = TARGET_X86_64) and not NoSignals then
-  begin
-    EmitAsmX64(['mov edi, %', 2]);   IREmitCodeCall(SigInstallAddr);   { SIGINT }
-    EmitAsmX64(['mov edi, %', 15]);  IREmitCodeCall(SigInstallAddr);   { SIGTERM }
-  end;
+  { Default signal install (SIGINT/SIGTERM) — six arch arms, lifted into
+    EmitDefaultSignalInstallForTarget so the other frontends get it too.
+    bug-a-only-the-pascal-driver-emits-the-signal-runtime }
+  EmitDefaultSignalInstallForTarget;
   { --fpc-float-errors: hook SIGFPE, then UNMASK what FPC unmasks. In that
     order — the hook must be installed before the first trap can fire, and the
     mask write is the thing that makes traps possible at all.
@@ -1160,34 +1149,6 @@ begin
     EmitB($0D); EmitB($00); EmitB($19); EmitB($00); EmitB($00);   { or eax, $1900 }
     EmitB($89); EmitB($44); EmitB($24); EmitB($F8);               { mov [rsp-8], eax }
     EmitB($0F); EmitB($AE); EmitB($54); EmitB($24); EmitB($F8);   { ldmxcsr [rsp-8] }
-  end;
-  if (TargetArch = TARGET_I386) and not NoSignals then
-  begin
-    EmitB($B8); EmitI32(2);                                            { mov eax, 2 (SIGINT) }
-    EmitB($E8); EmitI32(SigInstallAddr - (CodeLen + 4));
-    EmitB($B8); EmitI32(15);                                           { mov eax, 15 (SIGTERM) }
-    EmitB($E8); EmitI32(SigInstallAddr - (CodeLen + 4));
-  end;
-  if (TargetArch = TARGET_ARM32) and not NoSignals then
-  begin
-    EmitLoadImmArm32(0, 2);                                            { SIGINT }
-    EmitI32($EB000000 or ((((SigInstallAddr - CodeLen - 8) div 4)) and $FFFFFF));   { bl install }
-    EmitLoadImmArm32(0, 15);                                           { SIGTERM }
-    EmitI32($EB000000 or ((((SigInstallAddr - CodeLen - 8) div 4)) and $FFFFFF));
-  end;
-  if (TargetArch = TARGET_RISCV32) and not NoSignals and (not EspBareBoot) then
-  begin
-    rv32_addi(reg_a0, reg_zero, 2);                                    { SIGINT }
-    rv32_jal(reg_ra, SigInstallAddr - CodeLen);
-    rv32_addi(reg_a0, reg_zero, 15);                                   { SIGTERM }
-    rv32_jal(reg_ra, SigInstallAddr - CodeLen);
-  end;
-  if (TargetArch = TARGET_AARCH64) and not NoSignals then
-  begin
-    EmitLoadImmA64(0, 2);                                              { SIGINT }
-    EmitI32($94000000 or (((SigInstallAddr - CodeLen) div 4) and $03FFFFFF));
-    EmitLoadImmA64(0, 15);                                             { SIGTERM }
-    EmitI32($94000000 or (((SigInstallAddr - CodeLen) div 4) and $03FFFFFF));
   end;
 
   { Constant global/class initializers FIRST — before any user code runs.

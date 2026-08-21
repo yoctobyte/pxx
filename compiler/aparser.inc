@@ -371,7 +371,11 @@ begin
       AN_WRITE lowering under --threadsafe calls code offset 0 -- the ELF entry
       point -- which jumps back to main and hangs until the stack is gone
       (bug-a-threadsafe-segfaults-on-every-nilpy-program). }
-    EmitIoLockStubsForTarget;
+    { THE finish-the-runtime step (signal runtime + --threadsafe I/O lock stubs).
+      Was EmitIoLockStubsForTarget alone, so this frontend shipped with no signal
+      runtime at all — the same gap the I/O lock had, one stub later.
+      bug-a-only-the-pascal-driver-emits-the-signal-runtime }
+    EmitProgramRuntimeStubsForTarget;
     Patch32(adaStubJmp, CodeLen - (adaStubJmp + 4));
   end;
 
