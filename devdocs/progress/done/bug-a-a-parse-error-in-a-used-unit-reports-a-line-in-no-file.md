@@ -163,4 +163,4 @@ tree, **both seeded by `pinned`**, and have each compile the same sources.
 NilPy diagnostics checked for leakage + `gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 09aaae653.
