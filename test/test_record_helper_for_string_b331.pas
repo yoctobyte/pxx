@@ -68,5 +68,14 @@ begin
   n := 7;
   Writeln('sq:     ', n.Squared);
   Writeln('mask:   ', TU32Helper.GetSignMask);   { static via the helper's name }
-  Writeln('bits:   ', BITS);                     { helper const (global scope) }
+  { QUALIFIED, not bare. This read was `BITS` until 2026-08-21, with the comment
+    "helper const (global scope)" — codifying a leak: an untyped const declared
+    inside a helper was registered as an ordinary global, so its name was
+    visible everywhere. FPC 3.2.2 refuses the bare form
+    (`Identifier not found "BITS"`, measured), and ee388cf3a closed the leak as
+    a side effect of giving typed class/record consts their own backing symbol.
+    The test went red asserting the old behaviour, so the assertion moved to
+    what FPC actually does. bug-a-a-units-mode-directive-... is the sibling
+    story: the commit that exposes a divergence is not the one that caused it. }
+  Writeln('bits:   ', TU32Helper.BITS);          { helper const, qualified by its owner }
 end.

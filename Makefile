@@ -3712,6 +3712,14 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_esc_kw_b33226)" = "$$(printf 'tag=late\nesc=42\nkw=5\nvar=9\noct=511')"
 	# record helper for <type> v1: instance methods on plain-typed values,
 	# Self = target by reference (generics' ALeft.ToLower shape)
+	@# A helper's const is not a global. The bare read below must be REFUSED —
+	@# it resolved until 2026-08-21, and test_record_helper_for_string_b331 was
+	@# asserting the leak. Both arms: untyped (folded as a literal) and typed
+	@# (real storage, mangled backing name) reach the const through different
+	@# machinery, so a regression can come back on either.
+	@./$(COMPILER) test/test_helper_const_not_global_fail.pas $(TESTTMP)/test_helper_const_ng26 2>&1 \
+	  | grep -q 'undefined variable (BITS)' \
+	  || { echo 'test_helper_const_not_global_fail: FAIL - a helper const must not be visible as a bare global'; exit 1; }
 	./$(COMPILER) test/test_record_helper_for_string_b331.pas $(TESTTMP)/test_rec_helper_b33126
 	test "$$($(TESTTMP)/test_rec_helper_b33126)" = "$$(printf 'lower:  hello\ndouble: HeLLoHeLLo\nbang:   HeLLo!\nparam: mixed\nsq:     49\nmask:   2147483648\nbits:   32')"
 	./$(COMPILER) test/test_type_helper_for_spelling.pas $(TESTTMP)/test_type_helper_spelling26
