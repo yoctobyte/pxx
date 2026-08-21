@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `777bc43feb30` | 2026-08-21T16:31:55Z | RED (native) | 3600.3s | `23becd24b8e5` RED |
+| plexus | `13f7e0a1cda1` | 2026-08-21T17:33:21Z | RED (native) | 3600.5s | `23becd24b8e5` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -19,4 +19,3 @@
 - **test-nilpy#src:test/test_pascal_mode_switch_cli.pas@2** — test/test_pascal_mode_switch_cli.pas (plexus): bad `23becd24b8e5`, last good `1b9b43e5b511`, 109 commit(s) in range
 - **test-nilpy#src:test/test_pascal_self_result_delphi.pas@1** — test/test_pascal_self_result_delphi.pas (plexus): bad `23becd24b8e5`, last good `1b9b43e5b511`, 109 commit(s) in range
 - **test-nilpy#src:test/test_pascal_self_result_delphi.pas@2** — test/test_pascal_self_result_delphi.pas (plexus): bad `23becd24b8e5`, last good `1b9b43e5b511`, 109 commit(s) in range
-- **test-core#src:test/cstatic_same_module_dup.c** — test/cstatic_same_module_dup.c (plexus): bad `99dcac2a2ade`, last good `de2de369ea6a`, 11 commit(s) in range
