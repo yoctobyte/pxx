@@ -5127,10 +5127,11 @@ begin
                (SymDynDepth[insSrcSym] <> NodeDynDepth(valNode)) then
               Error('Insert: the source array''s element type differs from the destination''s');
           end;
-          if (insSrcSym < 0) and
-             ((NodeDynBaseTk(valNode) = tyRecord) or (NodeDynBaseTk(valNode) = tySet)) and
-             not (ASTKind[exprNode] in [AN_IDENT, AN_FIELD, AN_INDEX, AN_DEREF]) then
-            Error('Insert: record/set value must be a variable, field, element or dereference (addressable)');
+          { A record/set VALUE no longer has to be an lvalue: those types are
+            address-valued in the IR, so a function result or a set expression
+            lowers to an address the gap copy can read, live for the statement.
+            The old restriction was a limitation of the lowering, not of the
+            language -- FPC accepts Insert(MakeP(8, 9), pts, 1). }
           Expect(tkComma, ','); ParseExpr; opNode := CurASTNode;      { index }
           Expect(tkRParen, ')');
           if FindProc('PXXDynInsFill') < 0 then

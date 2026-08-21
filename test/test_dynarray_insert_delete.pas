@@ -401,6 +401,48 @@ begin
   Chk(62, k = 80000);
 end;
 
+{ ---- an RVALUE record/set as the inserted value ---- }
+{ Records and sets are address-valued in the IR -- a record assignment builds
+  its source operand with an ordinary lower, not an address-of -- so a function
+  result needs no spill: the callee's hidden destination is live for exactly as
+  long as the copy into the gap. The old "must be addressable" refusal was a
+  limitation of the lowering, not of the language; FPC accepts
+  Insert(MakeP(8, 9), pts, 1). }
+type TRvRec = record x, y: Integer; end;
+type TRvMan = record k: Integer; s: AnsiString; end;
+function MakeRvP(a, b: Integer): TRvRec;
+begin
+  Result.x := a; Result.y := b;
+end;
+function MakeRvM(a: Integer; const t: AnsiString): TRvMan;
+begin
+  Result.k := a; Result.s := t;
+end;
+procedure RvalueInsertValues;
+var p: array of TRvRec; m: array of TRvMan; d: array of TDays; ds: TDays; i: Integer;
+begin
+  SetLength(p, 2); p[0].x := 1; p[0].y := 2; p[1].x := 3; p[1].y := 4;
+  Insert(MakeRvP(8, 9), p, 1);
+  Chk(63, (Length(p) = 3) and (p[1].x = 8) and (p[1].y = 9) and (p[2].x = 3));
+  { a MANAGED-field record rvalue: the gap store is an ARC copy, so the
+    callee's temp has to be released exactly once }
+  SetLength(m, 1); m[0].k := 1; m[0].s := 'one';
+  Insert(MakeRvM(5, 'five'), m, 0);
+  Chk(64, (Length(m) = 2) and (m[0].k = 5) and (m[0].s = 'five') and (m[1].s = 'one'));
+  for i := 1 to 20000 do
+  begin
+    SetLength(m, 1); m[0].k := 1; m[0].s := 'one';
+    Insert(MakeRvM(5, 'five'), m, 0);
+  end;
+  Chk(65, (Length(m) = 2) and (m[0].s = 'five') and (m[1].s = 'one'));
+  { a set expression assigned first -- FPC reads a bare `[a, b]` argument as an
+    open-array literal and refuses it, so this is the shape both accept }
+  SetLength(d, 1); d[0] := [dMo];
+  ds := [dTh, dFr];
+  Insert(ds, d, 0);
+  Chk(66, (Length(d) = 2) and (dTh in d[0]) and (dFr in d[0]) and (dMo in d[1]));
+end;
+
 begin
   okCount := 0;
   DeleteBasics;
@@ -420,5 +462,6 @@ begin
   SpliceRecsAndSets;
   FieldTargets;
   NestedDelete;
-  writeln('total ok ', okCount, ' / 62');
+  RvalueInsertValues;
+  writeln('total ok ', okCount, ' / 66');
 end.

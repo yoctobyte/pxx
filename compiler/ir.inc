@@ -6224,8 +6224,18 @@ begin
       end
       else if (dcElemTk = tyRecord) or (dcElemTk = tySet) then
       begin
+        { Records and sets are ADDRESS-valued: IR_COPY_REC's source operand is
+          an address, and a record assignment builds it with IRLowerAST. So an
+          RVALUE -- a function result, a set expression -- needs no spill temp
+          here; the callee's hidden destination (or the expression's temp) is
+          live for the statement, which is exactly as long as the copy into the
+          gap below. IRLowerAddress stays the path for the lvalue shapes it
+          already served, because that is what the existing tests exercise. }
         dcValTmp := AllocVar('', tyPointer);
-        IRAppend(IR_STORE_SYM, dcValTmp, IRLowerAddress(dcCntAst), -1, 0, Ord(tyPointer));
+        if ASTKind[dcCntAst] in [AN_IDENT, AN_FIELD, AN_INDEX, AN_DEREF] then
+          IRAppend(IR_STORE_SYM, dcValTmp, IRLowerAddress(dcCntAst), -1, 0, Ord(tyPointer))
+        else
+          IRAppend(IR_STORE_SYM, dcValTmp, IRLowerAST(dcCntAst), -1, 0, Ord(tyPointer));
       end
       else
       begin
