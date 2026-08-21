@@ -2038,6 +2038,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-c-conformance-riscv32-shard0-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard0/6 red at ba5b85d6122d (auto-filed by twatch) | — |
 | regression-test-c-conformance-riscv32-shard2-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard2/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
 | regression-test-c-conformance-riscv32-shard5-6 | T | 70 | regression | regression: test-c-conformance-riscv32#shard5/6 red at 96b6bac331d9 (auto-filed by twatch) | — |
+| regression-test-c-conformance-shard1-6 | T | 70 | regression | regression: test-c-conformance#shard1/6 red at 1b9b43e5b511 (auto-filed by twatch) | — |
 | regression-test-c-conformance-shard2-6 | T | 70 | regression | regression: test-c-conformance#shard2/6 red at ff1a30aae401 (auto-filed by twatch) | — |
 | regression-test-core-131 | T | 70 | regression | regression: test-core#131 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-test-core-600 | T | 70 | regression | regression: test-core#600 red at e0ccfaebfe91 (auto-filed by twatch) | — |
