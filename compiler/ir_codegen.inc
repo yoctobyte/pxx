@@ -9179,6 +9179,46 @@ begin
             { add esp, 4 }
             EmitB($81); EmitB($C4); EmitI32(4);
           end
+          else if (Syms[i].TypeKind = tyVariant) and not Syms[i].IsArray then
+          begin
+            { Variant local: clear (releases any managed payload). arg0 = address.
+              i386 had no variant, promotable-int or record arm at all, so each
+              was a silent leak per call on this target alone.
+              bug-a-scope-exit-release-matrix-has-four-holes-left-on-i386-and-arm32 }
+            procIdx := FindProc('PXXVarClear');
+            if procIdx < 0 then Error('compiler error: PXXVarClear not found');
+            EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);  { lea eax, [ebp+off] }
+            EmitB($50);                                        { push arg0 = &v }
+            EmitCallProc(procIdx);
+            EmitB($81); EmitB($C4); EmitI32(4);                { add esp, 4 }
+          end
+          else if TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
+          begin
+            { Promotable-int local/temp: release a heap-tier payload at scope
+              exit (bug-a-runtime-variant-heap-grows-unbounded). }
+            procIdx := FindProc('PXXPromoClear');
+            if procIdx >= 0 then
+            begin
+              EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset); { lea eax, [ebp+off] }
+              EmitB($50);                                       { push arg0 = &slot }
+              EmitCallProc(procIdx);
+              EmitB($81); EmitB($C4); EmitI32(4);               { add esp, 4 }
+            end;
+          end
+          else if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+                  RecordHasManagedFields(SymTR[i].RecId) then
+          begin
+            { Record-with-managed-fields local: release each managed field via
+              the portable helper. arg0 = record address, arg1 = descriptor. }
+            procIdx := FindProc('PXXRecordRelease');
+            if procIdx < 0 then Error('compiler error: PXXRecordRelease not found');
+            EmitB($8D); EmitB($85); EmitI32(Syms[i].Offset);  { lea eax, [ebp+off] }
+            EmitB($50);                                        { push arg0 = &rec }
+            EmitB($68);
+            EmitDataRef(-(RECORD_RTTI_DATAREF_BASE + (SymTR[i].RecId - REC_UCLASS_BASE)));
+            EmitCallProc(procIdx);
+            EmitB($81); EmitB($C4); EmitI32(8);                { add esp, 8 }
+          end
           else if Syms[i].IsArray and (Syms[i].ArrLen = -1) then
           begin
             { LOCAL DYNAMIC ARRAY: element-aware release of the block at scope
@@ -9286,6 +9326,22 @@ begin
           if procIdx < 0 then Error('compiler error: PXXVarClear not found');
           EmitCallProc(procIdx);
           EmitI32($E8BD000E);                          { pop {r1,r2,r3} }
+        end
+        else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
+                TypeIsPromoInt(Syms[i].TypeKind) and not Syms[i].IsArray then
+        begin
+          { Promotable-int local/temp: release a heap-tier payload at scope exit
+            (bug-a-runtime-variant-heap-grows-unbounded). arm32 was the last
+            target without this arm once riscv32 got its four.
+            bug-a-scope-exit-release-matrix-has-four-holes-left-on-i386-and-arm32 }
+          procIdx := FindProc('PXXPromoClear');
+          if procIdx >= 0 then
+          begin
+            EmitLoadVarAddrArm32(i);                   { r0 = slot address }
+            EmitI32($E92D000E);                        { push {r1,r2,r3} }
+            EmitCallProc(procIdx);
+            EmitI32($E8BD000E);                        { pop {r1,r2,r3} }
+          end;
         end
         else if (Syms[i].Kind = skLocal) and (i <> retSymIdx) and
                 (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and

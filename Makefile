@@ -6151,6 +6151,8 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_interfaces_multi_secondary26)" = "$$(printf 'direct\nTitle\nSome content\nSome content\nTitle\nSome content')"
 	./$(COMPILER) test/test_interface_arc.pas $(TESTTMP)/test_interface_arc26
 	test "$$($(TESTTMP)/test_interface_arc26)" = "$$(printf 'hello\nhello\nhello\nfreed=3')"
+	./$(COMPILER) test/test_managed_local_release_reuse.pas $(TESTTMP)/test_mlrr26
+	test "$$($(TESTTMP)/test_mlrr26)" = "$$(printf 'ok   ansistring local\nok   record with managed field\nok   variant local\nok   static array of string\nok   dynamic array of string\ntotal ok 5 / 5')"
 	./$(COMPILER) test/test_interface_arc_exc.pas $(TESTTMP)/test_interface_arc_exc26
 	test "$$($(TESTTMP)/test_interface_arc_exc26)" = "$$(printf 'reassign created=2 freed=2\ncaught\nunwind freed=3')"
 	./$(COMPILER) test/test_interface_com_value_param.pas $(TESTTMP)/test_interface_com_value_param26
@@ -8174,6 +8176,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/test_interface_arc.pas $(TESTTMP)/test_i386_iarc
 	./$(COMPILER) test/test_interface_arc.pas $(TESTTMP)/test_i386_iarc_x64
 	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_iarc)" = "$$($(TESTTMP)/test_i386_iarc_x64)"
+	./$(COMPILER) --target=i386 test/test_managed_local_release_reuse.pas $(TESTTMP)/test_i386_mlrr
+	./$(COMPILER) test/test_managed_local_release_reuse.pas $(TESTTMP)/test_i386_mlrr_x64
+	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_mlrr)" = "$$($(TESTTMP)/test_i386_mlrr_x64)"
 	./$(COMPILER) --target=i386 test/test_uint64_ops.pas $(TESTTMP)/test_i386_u64
 	./$(COMPILER) test/test_uint64_ops.pas $(TESTTMP)/test_i386_u64_x64
 	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_u64)" = "$$($(TESTTMP)/test_i386_u64_x64)"
@@ -8543,6 +8548,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) --target=aarch64 test/test_interface_arc.pas $(TESTTMP)/test_aarch64_iarc
 	./$(COMPILER) test/test_interface_arc.pas $(TESTTMP)/test_aarch64_iarc_x64
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_iarc)" = "$$($(TESTTMP)/test_aarch64_iarc_x64)"
+	./$(COMPILER) --target=aarch64 test/test_managed_local_release_reuse.pas $(TESTTMP)/test_aarch64_mlrr
+	./$(COMPILER) test/test_managed_local_release_reuse.pas $(TESTTMP)/test_aarch64_mlrr_x64
+	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_mlrr)" = "$$($(TESTTMP)/test_aarch64_mlrr_x64)"
 	./$(COMPILER) --target=aarch64 test/test_uint64_ops.pas $(TESTTMP)/test_aarch64_u64
 	./$(COMPILER) test/test_uint64_ops.pas $(TESTTMP)/test_aarch64_u64_x64
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_u64)" = "$$($(TESTTMP)/test_aarch64_u64_x64)"
@@ -9322,6 +9330,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) --target=arm32 test/test_interface_arc.pas $(TESTTMP)/test_arm32_iarc
 	./$(COMPILER) test/test_interface_arc.pas $(TESTTMP)/test_arm32_iarc_x64
 	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_iarc)" = "$$($(TESTTMP)/test_arm32_iarc_x64)"
+	./$(COMPILER) --target=arm32 test/test_managed_local_release_reuse.pas $(TESTTMP)/test_arm32_mlrr
+	./$(COMPILER) test/test_managed_local_release_reuse.pas $(TESTTMP)/test_arm32_mlrr_x64
+	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_mlrr)" = "$$($(TESTTMP)/test_arm32_mlrr_x64)"
 	./$(COMPILER) --target=arm32 test/test_uint64_ops.pas $(TESTTMP)/test_arm32_u64
 	./$(COMPILER) test/test_uint64_ops.pas $(TESTTMP)/test_arm32_u64_x64
 	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_u64)" = "$$($(TESTTMP)/test_arm32_u64_x64)"
