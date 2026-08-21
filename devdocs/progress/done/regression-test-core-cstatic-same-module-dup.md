@@ -72,4 +72,4 @@ A `--dce`-built compiler still emits byte-identical output for the whole
 compiler source.
 
 Gate: `make compiler/pascal26` + `tools/gate.sh quick` GREEN.
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit a09add3cd.
