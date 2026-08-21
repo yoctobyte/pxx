@@ -192,4 +192,4 @@ Identical to FPC 3.2.2, and identical on i386/arm32/aarch64/riscv32.
 `PXXDBG=a.constdata` lists what got baked (documented in `devdocs/dev/debug-switches.md`).
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit e34687fe2.
