@@ -54,7 +54,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (272)
+## backlog (273)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -151,6 +151,7 @@ _none_
 | compat-pascal-uses-sysutils-withdraws-the-variadic-concat | P | 25 | compat | The variadic `Concat` intrinsic is shadowed by `sysutils`'s two-argument `Concat`, so `uses sysutils` breaks `Concat('a','b','c')` — which compiles fine without it. The shadow rule is `procIdx < 0`, i.e. ANY user Concat disables the intrinsic outright. Loud, not silent. | — |
 | decide-interface-members-in-aggregates-lock-strategy | U | 60 | decide | SIX open Track A tickets (two of them use-after-frees) are all the same missing capability: a COM interface held inside an aggregate is invisible to every container-level retain/release walk. The one fix is blocked on a heap-lock question that was attempted once and reverted. Which strategy — reentrant lock, unlocked interface pass, or a copy-site-only stopgap — and who validates it against the threading stress tests? | — |
 | decide-reduced-compiler-switch-spelling | U | 55 | decide | How does a reduced build get selected — subtractive (`omit-c`), positive-list (`only-pascal`), or a named-configuration file? And do frontend and target selection compose freely or only in blessed combinations? The user flagged the names in the parent ticket as placeholders. Recommendation: subtractive defines as the mechanism, named configurations as the tested surface. | — |
+| decide-riscv64-vs-the-bug-queue-for-autonomous-nights | U | 50 | decide | feature-a-riscv64-as-a-hosted-first-class-target is the top-ranked Track A ticket at prio 50, and its own log says it was ranked 'as a strategic target rather than an urgent one'. It is a multi-session job. An unattended overnight Track A session keeps reaching it, skipping it, and taking a p40 bug instead — which may be right, but it is a decision being made silently every night. Make it once, out loud. | — |
 | decide-segv-runtime-error-default | U | 45 | decide | NARROWED 2026-08-21. The nil-detection half left as feature-a-emitted-nil-checks; what remains is only what the SIGSEGV handler does for the faults a check cannot catch (wild pointers, stack overflow). Fork is no longer default-on vs opt-in but report-and-RE-RAISE (message + core dump + exit 139, default-on) vs report-and-exit-216 (FPC parity, no core dump). Plus: should --mimic-fpc imply --fpc-mem-errors and --fpc-float-errors? | — |
 | decide-should-a-stack-overflow-raise-estackoverflow-by-itself | U | 35 | decide | Decide: should a stack overflow raise EStackOverflow by itself, or stay a hand-written hook? | — |
 | decide-should-from-accept-a-quoted-foreign-file | U | 45 | decide | A bare NilPy import resolves to Python only, and the escape is `import 'x.pas' as x`. There is no matching escape for `from x import Name` -- `from 'x.pas' import Name` is refused with \"expected a module name after from\". Decide whether the quoted form should be accepted after `from`, or whether the alias form is deliberately the only door. A test already lost an assertion to this. | — |
@@ -626,6 +627,7 @@ _none_
 - [p 50] [N] bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - [p 50] [T] bug-t-track-ts-own-pushes-destroy-track-ts-own-breadth-coverage
 - [p 50] [P] chore-p-read-text-char-test-hardcodes-tmp-paths
+- [p 50] [U] decide-riscv64-vs-the-bug-queue-for-autonomous-nights
 - [p 50] [A] feature-a-riscv64-as-a-hosted-first-class-target
 - [p 50] [E] feature-demo-songformatter-pxx-target
 - [p 50] [A] feature-nilpy-collections-and-string-methods
