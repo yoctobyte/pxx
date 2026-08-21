@@ -84,3 +84,25 @@ owner/depth check cheap in the case that remains.
 because this is heap-critical and threading-shaped — the threading stress tests
 via Track T's heavier tiers rather than the native quick tier alone. That
 requirement is what the original decision named and it survives the split.
+
+## User's position, 2026-08-21 — do not re-litigate the reentrancy half unprompted
+
+Asked directly, after walking through why
+[[decide-interface-members-in-aggregates-lock-strategy]] took (b):
+
+> *"i'm good and if we ever encounter a real world project that has an issue, we
+> will look at it again."*
+
+So the **unlocked-pass discipline is accepted as the design**, not tolerated as a
+stopgap. The standing objection to it — that every future release site must
+remember to run outside the lock, where a reentrant lock would delete the hazard
+class — is real, recorded, and deliberately not acted on.
+
+**Unpark trigger: a real-world project hitting it.** A deadlock, or a new managed
+member kind whose release cannot be hoisted out of the lock. Not "it would be
+tidier".
+
+This does NOT park the ticket. **Per-thread arenas stand on their own merit** —
+the allocator serialises every thread through one lock, which is a measured
+ceiling (see the TTAS table above), and that is a performance ticket, not a
+correctness one. Reentrancy is the half the user set aside.
