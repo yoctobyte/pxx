@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T21:11:05Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "716e53a07afa60fb77b2ff52cbf104578a697375",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-20T21:20:03Z",
    "fixed": [],
    "new_red": [],
@@ -483,6 +475,14 @@
    ],
    "new_red": [],
    "sha": "13f7e0a1cda136c90169c1475f989511a78103f3",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-21T18:35:50Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "d7b5113da47e1743b1428e4600df8a5d4d9ca866",
    "tier": "native",
    "verdict": "RED"
   }
@@ -2066,6 +2066,7 @@
   "test-core#src:test/test_pascal_directives.pas@2": "native",
   "test-core#src:test/test_pascal_macro_comment_nesting.pas": "native",
   "test-core#src:test/test_pascal_system_qualified_intrinsic.pas": "native",
+  "test-core#src:test/test_pchar_result_decl_only_method.pas": "native",
   "test-core#src:test/test_pchar_to_string.pas": "native",
   "test-core#src:test/test_platform_defines.pas@1": "native",
   "test-core#src:test/test_platform_defines.pas@2": "native",
@@ -2117,7 +2118,8 @@
   "test-core#src:test/test_record_copy.pas": "native",
   "test-core#src:test/test_record_ctor_expr_tails_b333.pas": "native",
   "test-core#src:test/test_record_field_array_low_bound.pas": "native",
-  "test-core#src:test/test_record_interface_field_zero_init.pas": "native",
+  "test-core#src:test/test_record_interface_field_zero_init.pas@1": "native",
+  "test-core#src:test/test_record_interface_field_zero_init.pas@2": "native",
   "test-core#src:test/test_record_layout_stress.pas": "native",
   "test-core#src:test/test_record_method_open_array_b334.pas": "native",
   "test-core#src:test/test_record_multifield.pas": "native",
@@ -4972,6 +4974,7 @@
   "test-core#src:test/test_pascal_directives.pas@2": "pass",
   "test-core#src:test/test_pascal_macro_comment_nesting.pas": "pass",
   "test-core#src:test/test_pascal_system_qualified_intrinsic.pas": "pass",
+  "test-core#src:test/test_pchar_result_decl_only_method.pas": "pass",
   "test-core#src:test/test_pchar_to_string.pas": "pass",
   "test-core#src:test/test_platform_defines.pas@1": "pass",
   "test-core#src:test/test_platform_defines.pas@2": "pass",
@@ -5023,7 +5026,8 @@
   "test-core#src:test/test_record_copy.pas": "pass",
   "test-core#src:test/test_record_ctor_expr_tails_b333.pas": "pass",
   "test-core#src:test/test_record_field_array_low_bound.pas": "pass",
-  "test-core#src:test/test_record_interface_field_zero_init.pas": "pass",
+  "test-core#src:test/test_record_interface_field_zero_init.pas@1": "pass",
+  "test-core#src:test/test_record_interface_field_zero_init.pas@2": "pass",
   "test-core#src:test/test_record_layout_stress.pas": "pass",
   "test-core#src:test/test_record_method_open_array_b334.pas": "pass",
   "test-core#src:test/test_record_multifield.pas": "pass",
@@ -6313,11 +6317,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-21T17:33:21Z",
-  "sha": "13f7e0a1cda136c90169c1475f989511a78103f3",
+  "date": "2026-08-21T18:35:50Z",
+  "sha": "d7b5113da47e1743b1428e4600df8a5d4d9ca866",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.5
+  "wall": 3600.3
  },
  "last_bench": {
   "conf_rows": 550,
