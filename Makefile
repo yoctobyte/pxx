@@ -8059,6 +8059,15 @@ test-core: $(COMPILER)
 	@# tri-state precisely because those two defaults disagree.
 	./$(COMPILER) test/test_nil_check_directive.pas $(TESTTMP)/test_nil_check_directive26
 	test "$$($(TESTTMP)/test_nil_check_directive26)" = "$$(printf '3\n3\ncaught read: Access violation (nil reference)\ncaught write: Access violation (nil reference)\ngo\ndone')"
+	@# `nil` in every position a reference-shaped type is expected. Three
+	@# mechanisms, each broken in its own way: overload matching (class,
+	@# interface and method-pointer params all refused nil), the trailing
+	@# DEFAULT fill (`TakeDef;` segfaulted while `TakeDef(nil)` worked), and a
+	@# record CONST field (`ev: nil` faulted in startup code before main, so
+	@# the record's other fields never initialised either).
+	@# Output verified identical to FPC 3.2.2.
+	./$(COMPILER) test/test_nil_argument_positions.pas $(TESTTMP)/test_nil_argument_positions26
+	test "$$($(TESTTMP)/test_nil_argument_positions26)" = "$$(printf 'class\nintf\nplain\nptr\npchar\ndyn\ntake nil\nH 1\ntake set\ndef nil\ndef nil\ndef set\nconst n=4\nconst ev nil')"
 	@# --no-nil-check on BOTH, and it is load-bearing: this file's subject is the
 	@# SIGNAL path, and since feature-a-emitted-nil-checks the compiler catches
 	@# `nilproc` at the call site before any fault happens — so without the flag

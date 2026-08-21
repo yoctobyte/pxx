@@ -4830,6 +4830,21 @@ begin
   end;
   MatchArgRecValid := True;
 
+  { ...and, beside it, which arguments are the literal `nil`. Same single entry
+    point, same freshness guarantee across the retry matches below. Kept as its
+    own channel rather than folded into MatchArgRec because it answers a
+    different question -- not "which record is this" but "may this bind a
+    nil-able parameter of ANY of the nil-able kinds".
+    bug-a-nil-is-not-accepted-as-a-method-pointer-argument }
+  currArg := argsHead;
+  for i := 0 to nArgs-1 do
+  begin
+    if i < MAX_PROC_PARAMS then
+      MatchArgNil[i] := IsNilLiteralNode(ASTLeft[currArg]);
+    currArg := ASTRight[currArg];
+  end;
+  MatchArgNilValid := True;
+
   { ...and, beside it, whether the argument is DEFINITELY a scalar value, which
     disqualifies an ARRAY parameter. argTypes cannot answer that: a fixed-array
     parameter and a fixed-array argument both present their ELEMENT kind, so an

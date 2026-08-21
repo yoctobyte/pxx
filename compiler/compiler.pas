@@ -56,6 +56,7 @@ function PasSrcOfTok(t: Integer): AnsiString; forward;                          
 procedure CMarkTokModule(startTok: Integer; const path: AnsiString); forward;    { real body in parser.inc; clexer.inc/cparser.inc call it (bug-a-fpc-seed-drift-emitasmx64-forward) }
 function CPathIsCModule(const path: AnsiString): Boolean; forward;   { ditto }
 procedure MarkUnitPxxDialect(unitIdx: Integer); forward;   { real body in symtab.inc; lexer.inc's {$MODE PXX} handler calls it (ditto) }
+function IsNilLiteralNode(node: Integer): Boolean; forward;   { real body in ast_arena.inc; symtab.inc's overload matcher asks it about a call argument (ditto) }
 {$include lexer.inc}
 {$include util.inc}   { shared helpers owned by no frontend/backend — AIntToStr lived in aparser.inc until 2026-08-19. AFTER lexer.inc, not before: AppendChar is defined there. }
 {$ifndef PXX_NO_CFRONT}{$include clexer.inc}{$endif}

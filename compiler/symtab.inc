@@ -5911,6 +5911,77 @@ begin
             not ProcParamIsConst[procIdx * MAX_PROC_PARAMS + argNo];
 end;
 
+function ProcParamIsNilable(procIdx, j: Integer): Boolean;
+{ Is parameter j REFERENCE-shaped — one of the types `nil` is assignment-
+  compatible with? Pointer, class, interface, method pointer. The last two are
+  the reason this cannot be a kind test: both present as tyRecord, and a plain
+  record is NOT nil-able, so the record identity has to be consulted.
+
+  ONE predicate, asked from two directions that had answered it differently:
+  overload matching (may `nil` bind this parameter?) and the trailing-default
+  fill (what NODE does `e: TEv = nil` become?). The second was the segfault —
+  it built the literal 0 tagged with the parameter's own kind, so lowering read
+  an aggregate off address 0 — and it is precisely the shape of the tyVariant
+  note already sitting in DefaultArgValueNode. Two is a smell; this is the
+  place they meet instead.
+  bug-a-nil-is-not-accepted-as-a-method-pointer-argument }
+var pTk: TTypeKind; rec: Integer;
+begin
+  Result := False;
+  if (procIdx < 0) or (j < 0) or (j >= MAX_PROC_PARAMS) then Exit;
+  if j >= Procs[procIdx].ParamCount then Exit;
+  pTk := Procs[procIdx].Params[j].TypeKind;
+  if (pTk = tyPointer) or (pTk = tyClass) then begin Result := True; Exit; end;
+  if pTk <> tyRecord then Exit;
+  rec := ProcParamRecId[procIdx * MAX_PROC_PARAMS + j];
+  if (rec = MethodPtrRecId) and (rec <> REC_NONE) then begin Result := True; Exit; end;
+  Result := (rec >= REC_UCLASS_BASE) and UClsIsInterface[rec - REC_UCLASS_BASE];
+end;
+
+function MatchArgNilOk(i, j: Integer): Boolean;
+{ May the literal `nil` at argument j bind parameter j of candidate i?
+
+  FPC's rule, and it is about the DESTINATION, not the argument: nil is
+  assignment-compatible with every reference-shaped type. pxx types nil as a
+  tyPointer literal, so the kind channel let it through to a Pointer or a PChar
+  parameter and stopped at the three that are not tyPointer -- a class, an
+  interface (a record), and a method pointer (also a record). `P(o: TObject)`
+  refusing `P(nil)` is the everyday half of that; the method-pointer half is
+  what the ticket was filed about.
+
+  Deliberately NOT extended to `var`/`out`: those need an lvalue, and nil is
+  not one. That question is ByRefArgNeedsLvalue's, not Params[j].IsRef's --
+  IsRef is TRUE for an ordinary by-VALUE record parameter (>8 bytes is passed
+  by reference for the ABI), so asking it refused nil for exactly the two cases
+  this ticket is about. Same trap, same answer as
+  bug-a-a-non-lvalue-is-refused-as-an-interface-argument.
+  bug-a-nil-is-not-accepted-as-a-method-pointer-argument }
+begin
+  Result := False;
+  if not MatchArgNilValid then Exit;
+  if (j < 0) or (j >= MAX_PROC_PARAMS) then Exit;
+  if not MatchArgNil[j] then Exit;
+  if PxxDbgEnabled('a.nilarg') then
+    writeln('PXXDBG a.nilarg ', Procs[i].Name, ' param ', j, ' kind=', Ord(Procs[i].Params[j].TypeKind),
+            ' rec=', ProcParamRecId[i * MAX_PROC_PARAMS + j], ' methodptrrec=', MethodPtrRecId,
+            ' needslvalue=', ByRefArgNeedsLvalue(i, j), ' nilable=', ProcParamIsNilable(i, j));
+  if ByRefArgNeedsLvalue(i, j) then Exit;
+  if Procs[i].Params[j].IsArray then Exit;
+  Result := ProcParamIsNilable(i, j);
+end;
+
+function MatchParamCompatible(i, j: Integer; aTk: TTypeKind): Boolean;
+{ "Does argument j work for parameter j of candidate i?" — the ONE place the
+  compatible phases of overload matching ask that. It exists because the answer
+  is no longer a pure function of the two TYPE KINDS: the nil rule needs the
+  argument's SHAPE and the parameter's record identity. Adding that at the seven
+  `not (TypesCompatible(...) or ProcParamUntyped[...])` sites instead is how the
+  previous additions went in, and two of them are already spelled slightly
+  differently from the others. normalise-dont-special-case.md. }
+begin
+  Result := TypesCompatible(Procs[i].Params[j].TypeKind, aTk) or MatchArgNilOk(i, j);
+end;
+
 function HasExactCaseSensitiveProc(const name: AnsiString): Boolean;
 var i: Integer;
 begin
@@ -6852,7 +6923,7 @@ begin
           else if (argTypes[j] = tyVariant) and
                   (Procs[i].Params[j].TypeKind <> tyVariant) then
             match := False
-          else if not TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) then
+          else if not MatchParamCompatible(i, j, argTypes[j]) then
             match := False;
           if MatchArgRecMismatch(i, j, argTypes[j]) then match := False;
         end;
@@ -6909,7 +6980,7 @@ begin
             { untyped: neutral }
           else if TypeIsMachineInt(argTypes[j]) and
                   TypeIsMachineInt(Procs[i].Params[j].TypeKind) and
-                  TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) and
+                  MatchParamCompatible(i, j, argTypes[j]) and
                   ((pass = 1) or
                    not ArgNarrowsInt(Procs[i].Params[j].TypeKind, argTypes[j])) then
             match := True
@@ -6980,7 +7051,7 @@ begin
         match := True;
         for j := 0 to nArgs-1 do
         begin
-          if (not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
+          if (not (MatchParamCompatible(i, j, argTypes[j]) or
                   ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or
              MatchArgRecMismatch(i, j, argTypes[j]) or
              (ArgNarrowsInt(Procs[i].Params[j].TypeKind, argTypes[j]) and
@@ -7008,7 +7079,7 @@ begin
         match := True;
         for j := 0 to nArgs-1 do
         begin
-          if (not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
+          if (not (MatchParamCompatible(i, j, argTypes[j]) or
                   ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or
              MatchArgRecMismatch(i, j, argTypes[j]) then
             match := False;
@@ -7034,7 +7105,7 @@ begin
         match := True;
         for j := 0 to nArgs-1 do
         begin
-          if (not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
+          if (not (MatchParamCompatible(i, j, argTypes[j]) or
                   ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or
              MatchArgRecMismatch(i, j, argTypes[j]) then
             match := False;
@@ -7060,7 +7131,7 @@ begin
       match := True;
       for j := 0 to nArgs-1 do
       begin
-        if (not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or
+        if (not (MatchParamCompatible(i, j, argTypes[j]) or
                 (ProcParamIsInterface(i, j) and (argTypes[j] = tyClass)) or
                 ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or
            MatchArgRecMismatch(i, j, argTypes[j]) then
@@ -7160,7 +7231,7 @@ begin
     begin
       match := True;
       for j := 0 to nArgs - 1 do
-        if (not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or MatchArgRecMismatch(i, j, argTypes[j]) then match := False;
+        if (not (MatchParamCompatible(i, j, argTypes[j]) or ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or MatchArgRecMismatch(i, j, argTypes[j]) then match := False;
       if match then
       begin
         Result := i;
@@ -7178,7 +7249,7 @@ begin
     begin
       match := True;
       for j := 0 to nArgs - 1 do
-        if (not (TypesCompatible(Procs[i].Params[j].TypeKind, argTypes[j]) or ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or MatchArgRecMismatch(i, j, argTypes[j]) then match := False;
+        if (not (MatchParamCompatible(i, j, argTypes[j]) or ProcParamUntyped[i * MAX_PROC_PARAMS + j])) or MatchArgRecMismatch(i, j, argTypes[j]) then match := False;
       if match then
       begin
         Result := i;

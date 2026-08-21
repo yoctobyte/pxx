@@ -35,6 +35,22 @@ begin
   ASTCapacity := n;
 end;
 
+function IsNilLiteralNode(node: Integer): Boolean;
+{ Is this AST node the literal `nil`?
+
+  ONE predicate, because the question is asked from two directions that had
+  already answered it differently: the assignment path (ir.inc's AN_ASSIGN /
+  tyRecord arm, which zeroes a method pointer) and the overload matcher
+  (symtab.inc, deciding whether `nil` may bind a class / interface /
+  method-pointer parameter). The parser types `nil` as an INT_LIT 0 tagged
+  tyPointer -- three facts, none of them obvious, and a third open-coded copy
+  is how the two arms drift. normalise-dont-special-case.md. }
+begin
+  Result := (node >= 0) and (node < ASTNodeCount) and
+            (ASTKind[node] = AN_INT_LIT) and (ASTIVal[node] = 0) and
+            (IntToTypeKind(ASTTk[node]) = tyPointer);
+end;
+
 function AllocNode(kind: Integer): Integer;
 begin
   EnsureASTCapacity(ASTNodeCount + 1);

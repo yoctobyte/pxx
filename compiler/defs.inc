@@ -1800,6 +1800,17 @@ var
     (rec-blind legacy behavior), so paths that never fill the array are safe. }
   MatchArgRec : array[0..MAX_PROC_PARAMS-1] of Integer;
   MatchArgRecValid : Boolean;
+  { Call arg j is the literal `nil`. Filled beside MatchArgRec, from the same
+    single entry point, and for the same reason: the TYPE channel cannot answer
+    it. `nil` parses as an integer literal 0 typed tyPointer, so by kind alone
+    it is indistinguishable from any other pointer value — and a nil-able
+    parameter (class, interface, method pointer) is NOT compatible with an
+    arbitrary pointer, only with nil. Without this channel the matcher had to
+    choose between rejecting `P(nil)` and accepting `P(anyPointer)`; it chose
+    the first, so `P(o: TObject)`, `P(i: IFoo)` and `P(e: TNotifyEvent)` all
+    refused nil. bug-a-nil-is-not-accepted-as-a-method-pointer-argument }
+  MatchArgNil : array[0..MAX_PROC_PARAMS-1] of Boolean;
+  MatchArgNilValid : Boolean;
   { Call arg j is DEFINITELY a non-aggregate scalar value (an ordinal/float
     literal, arithmetic expression, non-array variable, or scalar-returning
     call), so it cannot bind an ARRAY parameter. Filled beside MatchArgRec from

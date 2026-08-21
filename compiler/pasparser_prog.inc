@@ -318,6 +318,18 @@ begin
       valNode := AllocNode(AN_INT_LIT);
       ASTIVal[valNode] := PendingInitVal[i];
       ASTTk[valNode] := initTk;
+      { A RECORD-typed slot reaching the scalar-literal path means the source
+        wrote a scalar where a record lives, and `nil` is the only one the
+        record-constant parser accepts there: a method-pointer field (the
+        16-byte {Code,Data} record) or an interface field. Tagged tyRecord the
+        literal 0 is an ADDRESS to copy 16 bytes from, so `const R: TRec = (n:
+        4; ev: nil)` segfaulted in startup code before main ran -- and the
+        record's OTHER fields never got initialised either, so the failure did
+        not look like it was about `ev`. Tagged tyPointer it is the same node a
+        written `ev := nil` builds, and AN_ASSIGN's tyRecord arm zeroes the
+        field's full width. bug-a-nil-is-not-accepted-as-a-method-pointer-argument }
+      if (initTk = Ord(tyRecord)) and (PendingInitVal[i] = 0) then
+        ASTTk[valNode] := Ord(tyPointer);
     end;
 
     assignNode := AllocNode(AN_ASSIGN);

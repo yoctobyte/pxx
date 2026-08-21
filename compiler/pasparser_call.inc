@@ -522,6 +522,17 @@ begin
     exprNode := AllocNode(AN_INT_LIT);
     ASTIVal[exprNode] := ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k];
     ASTTk[exprNode] := Ord(Procs[mpi].Params[k].TypeKind);
+    { A REFERENCE-shaped parameter's only constant default is `nil`, and the
+      node has to be the one a WRITTEN nil argument builds -- INT_LIT 0 tagged
+      tyPointer -- not the literal 0 wearing the parameter's own kind. Tagged
+      tyRecord (a method pointer, an interface) or tyClass, IRLowerCallArg read
+      it as an aggregate and dereferenced address 0: `TakeDef;` on `procedure
+      TakeDef(e: TEv = nil)` segfaulted while `TakeDef(nil)` two lines up was
+      fine. Same shape as the tyVariant case below, one type family over.
+      bug-a-nil-is-not-accepted-as-a-method-pointer-argument }
+    if ProcParamIsNilable(mpi, k) and
+       (ProcParamDefaultVal[mpi * MAX_PROC_PARAMS + k] = 0) then
+      ASTTk[exprNode] := Ord(tyPointer);
     { A VARIANT parameter takes the literal as an INTEGER, so IRLowerCallArg
       boxes it into a variant temp and passes the temp's address. Tagged with
       the parameter's own type it looked like a variant already, the boxing was
