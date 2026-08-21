@@ -169,6 +169,7 @@ function IRNodeOwnsManagedStr(n: Integer): Boolean; forward;
 {$ifndef PXX_NO_FORTRAN}{$include fparser.inc}{$endif}
 {$ifndef PXX_NO_ALGOL}{$include gparser.inc}{$endif}
 {$ifndef PXX_NO_ERLANG}{$include eparser.inc}{$endif}
+{$include dce.inc}      { reachability-gated dead-code elimination — after every emitter, before the writer }
 {$include elfwriter.inc}
 {$include rtti_emit.inc}
 {$include resources_emit.inc}
@@ -199,6 +200,8 @@ begin
   CCharSignedOpt := -1;   { -1 = follow the target psABI; see CPlainCharSigned }
   DumpIR := False;
   DumpProcMap := False;
+  DceEnabled := False;
+  DceReport := False;
   EmitMapFile := True;   { default on; --no-map suppresses }
   MeasureRegcall := False;
   RegcallProcsWithParams := 0;
@@ -286,6 +289,17 @@ begin
     else if option = '--proc-map' then
     begin
       DumpProcMap := True;
+      Inc(i);
+    end
+    else if option = '--dce' then
+    begin
+      { drop routine bodies nothing can reach — see compiler/dce.inc }
+      DceEnabled := True;
+      Inc(i);
+    end
+    else if option = '--dce-report' then
+    begin
+      DceEnabled := True; DceReport := True;
       Inc(i);
     end
     else if option = '--no-map' then
@@ -1053,6 +1067,7 @@ begin
   StrCount := 0; FixCount := 0;
   KeyCount := 0;
   GlobFixCount := 0; CallFixCount := 0; ProcAddrFixCount := 0;
+  CodeRefCount := 0;
   IramCallFixCount := 0;
   SymCount := 0; ProcCount := 0;
   ProcHashReset;   { heads/tails to -1 (BSS zero is a valid proc idx) }
@@ -1400,6 +1415,11 @@ begin
     end;
     Inc(i);
   end;
+  { Dead-code elimination: after every emitter (RTTI included — its method
+    slots are roots), before anything reads a final code offset. Off unless
+    --dce; see compiler/dce.inc for what turns it off again. }
+  DceRun;
+
   if DebugTrace then
     for i := 0 to ProcCount - 1 do
       writeln('proc ', i, ': ', Procs[i].Name, ' at ', Procs[i].BodyAddr);

@@ -9606,6 +9606,25 @@ begin
   EmitI32($E12FFF3C);   { blx  ip }
 end;
 
+{ Record an internal direct call for relocation.
+
+  EVERY internal direct call, not only the forward ones. The old rule was "record
+  it when the callee's address is not known yet, otherwise write the displacement
+  and forget" -- which is exactly right until a body between the caller and the
+  callee is dropped, at which point the forgotten displacement points into the
+  middle of whatever slid into that gap. Recording unconditionally makes the
+  table both the complete call graph the DCE pass reads and the complete set of
+  call sites it can re-patch; ApplyCallFixups then rewrites displacements that
+  were already correct, which costs a pass over an array and changes no byte.
+  feature-emission-size-dce }
+procedure RecordInternalCall(procIdx: Integer);
+begin
+  if CallFixCount >= MAX_INTCALLFIX then Error('call fixup overflow');
+  CallFix[CallFixCount].CodePos := CodeLen;
+  CallFix[CallFixCount].ProcIdx := procIdx;
+  Inc(CallFixCount);
+end;
+
 procedure EmitCallProc(procIdx: Integer);
 var extIdx, rvHi, rvLo: Integer;
 begin
@@ -9698,34 +9717,25 @@ begin
     end;
   if TargetArch = TARGET_ARM32 then
   begin
+    RecordInternalCall(procIdx);
     if Procs[procIdx].BodyAddr >= 0 then
       EmitI32($EB000000 or ((((Procs[procIdx].BodyAddr - CodeLen) div 4) - 2) and $00ffffff))
     else
-    begin
-      if CallFixCount >= MAX_CALLFIX then Error('call fixup overflow');
-      CallFix[CallFixCount].CodePos := CodeLen;
-      CallFix[CallFixCount].ProcIdx := procIdx;
-      Inc(CallFixCount);
       EmitI32($EB000000);
-    end;
     Exit;
   end;
   if TargetArch = TARGET_AARCH64 then
   begin
+    RecordInternalCall(procIdx);
     if Procs[procIdx].BodyAddr >= 0 then
       EmitI32($94000000 or (((Procs[procIdx].BodyAddr - CodeLen) div 4) and $03ffffff))
     else
-    begin
-      if CallFixCount >= MAX_CALLFIX then Error('call fixup overflow');
-      CallFix[CallFixCount].CodePos := CodeLen;
-      CallFix[CallFixCount].ProcIdx := procIdx;
-      Inc(CallFixCount);
       EmitI32($94000000);
-    end;
     Exit;
   end;
   if TargetArch = TARGET_XTENSA then
   begin
+    RecordInternalCall(procIdx);
     if Procs[procIdx].BodyAddr >= 0 then
     begin
       if XtensaABI = XTENSA_ABI_WINDOWED then
@@ -9735,10 +9745,6 @@ begin
     end
     else
     begin
-      if CallFixCount >= MAX_CALLFIX then Error('call fixup overflow');
-      CallFix[CallFixCount].CodePos := CodeLen;
-      CallFix[CallFixCount].ProcIdx := procIdx;
-      Inc(CallFixCount);
       if XtensaABI = XTENSA_ABI_WINDOWED then
         xtensa_call8(0)
       else
@@ -9751,6 +9757,7 @@ begin
     { auipc+jalr (full 32-bit range) rather than a single JAL (+/-1MB) — a large
       binary like cross lua (1.75MB code) places callees beyond JAL's reach, so a
       truncated offset jumped to garbage. reg_t0 is a caller-saved scratch. }
+    RecordInternalCall(procIdx);
     if Procs[procIdx].BodyAddr >= 0 then
     begin
       RISCVPcrelSplit(Procs[procIdx].BodyAddr - CodeLen, rvHi, rvLo);
@@ -9759,26 +9766,17 @@ begin
     end
     else
     begin
-      if CallFixCount >= MAX_CALLFIX then Error('call fixup overflow');
-      CallFix[CallFixCount].CodePos := CodeLen;
-      CallFix[CallFixCount].ProcIdx := procIdx;
-      Inc(CallFixCount);
       rv32_auipc(reg_t0, 0);
       rv32_jalr(reg_ra, reg_t0, 0);
     end;
     Exit;
   end;
   EmitB($E8);
+  RecordInternalCall(procIdx);
   if Procs[procIdx].BodyAddr >= 0 then
     EmitI32(Procs[procIdx].BodyAddr - (CodeLen + 4))
   else
-  begin
-    if CallFixCount >= MAX_CALLFIX then Error('call fixup overflow');
-    CallFix[CallFixCount].CodePos := CodeLen;
-    CallFix[CallFixCount].ProcIdx := procIdx;
-    Inc(CallFixCount);
     EmitI32(0);
-  end;
 end;
 
 procedure ApplyCallFixups;

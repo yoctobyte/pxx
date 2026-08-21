@@ -27,6 +27,9 @@ begin
           + '(code offset 0 is the ELF entry point). A frontend driver is '
           + 'missing its stub-emission call for the current flags/target.');
   EmitB($E8);
+  { The displacement is finished here and correct until something moves. It is
+    recorded because DCE moves things -- see RecordCodeRef. }
+  RecordCodeRef(addr);
   EmitI32(addr - (CodeLen + 4));
 end;
 
@@ -1738,6 +1741,12 @@ procedure PatchProgramEntryJump(jmpPatch: Integer);
   later. The two halves belong together.
   bug-a-nilpy-on-cross-targets-four-remaining-walls }
 begin
+  { The one code->code reference that is not a call: recorded so DCE can move
+    the main body up over the dead unit bodies this jump exists to skip.
+    Recorded for every target -- only x86-64 consumes it today, and a table that
+    is only filled in on the target that reads it is the one that breaks when a
+    second target starts reading it. feature-emission-size-dce }
+  RecordCodeRefAt(jmpPatch, CodeLen);
   if TargetArch = TARGET_ARM32 then
     Patch32(jmpPatch, $EA000000 or ((((CodeLen - jmpPatch) div 4) - 2) and $00ffffff))
   else if TargetArch = TARGET_AARCH64 then

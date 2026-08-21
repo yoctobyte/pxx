@@ -29,6 +29,30 @@ begin
   Code[CodeLen] := b; Inc(CodeLen);
 end;
 
+{ Record a code->code rel32 reference at the CURRENT emission point.
+
+  Call it immediately before writing the 4-byte displacement, so CodeLen is the
+  displacement's own offset -- the same convention CallFix uses.
+
+  It exists because a finished rel32 is only correct while nothing moves, and
+  dead-code elimination moves things. Every reference NOT recorded somewhere is
+  a reference that silently rots the moment a body ahead of it is dropped, which
+  is why the recording lives at the emission points rather than in a table
+  someone has to remember to extend. feature-emission-size-dce }
+procedure RecordCodeRefAt(pos, target: Integer);
+begin
+  if CodeRefCount >= MAX_CODEREF then
+    Error('code-reference overflow (MAX_CODEREF, see compiler/defs.inc)');
+  CodeRefPos[CodeRefCount] := pos;
+  CodeRefTarget[CodeRefCount] := target;
+  Inc(CodeRefCount);
+end;
+
+procedure RecordCodeRef(target: Integer);
+begin
+  RecordCodeRefAt(CodeLen, target);
+end;
+
 procedure EmitI32(v: Int64);
 begin
   EmitB(Byte(v and $FF)); EmitB(Byte((v shr 8) and $FF));

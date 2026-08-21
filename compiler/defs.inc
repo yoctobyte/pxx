@@ -57,6 +57,24 @@ const
   MAX_CALL_ARGS = 128;
   MAX_PARAM_DEPTHS = MAX_PROCS * MAX_PROC_PARAMS;
   MAX_CALLFIX = 16384;
+  { Internal direct calls recorded for RELOCATION (CallFix). Far larger than
+    MAX_CALLFIX because it is no longer "forward calls only": EmitCallProc
+    records EVERY internal direct call, backward ones included, so the table is
+    a complete call graph AND the complete set of code->code call sites. The
+    self-host build is the high-water mark; a call every ~40 emitted bytes of a
+    ~3 MB image is the sizing. Costs 8 bytes of BSS RESERVATION per slot, which
+    is not resident. feature-emission-size-dce }
+  MAX_INTCALLFIX = 1048576;
+  { Code->code references that are NOT calls to a Procs[] entry: the ~50 direct
+    calls to lazily emitted runtime STUBS (IREmitCodeCall) and the program
+    entry's jump over the unit bodies. They are emitted as a finished rel32 the
+    moment they are written, which is correct until something MOVES -- and the
+    whole point of dead-code elimination is that things move. Recorded here so
+    the one pass that moves code can re-patch them. feature-emission-size-dce }
+  MAX_CODEREF = 1048576;
+  { Distinct non-proc code targets (runtime stubs + the entry jump) one image
+    can hold. Around 50 today; the pass refuses to run rather than truncate. }
+  MAX_DCE_STUBS = 4096;
   { Absolute BSS-address fixups in one emitted image. The SELF-HOST build under
     --threadsafe is the high-water mark — every global reference in the compiler's
     own code costs one — so this grows with the compiler and had been sitting just
@@ -1983,8 +2001,48 @@ var
   GlobFix  : array[0..MAX_GLOBFIX-1] of TGlobFix;
   GlobFixCount : Integer;
 
-  CallFix  : array[0..MAX_CALLFIX-1] of TCallFix;
+  { EVERY internal direct call, not just the forward ones -- see MAX_INTCALLFIX.
+    ApplyCallFixups re-patches the lot, which is a no-op for a call whose
+    displacement was already right, and the one thing that makes a body
+    relocatable when it is not. }
+  CallFix  : array[0..MAX_INTCALLFIX-1] of TCallFix;
   CallFixCount : Integer;
+
+  { Code->code rel32 references to a fixed code OFFSET rather than to a proc:
+    stub calls and the entry jump. CodeRefPos is the offset of the 4-byte
+    displacement field; CodeRefTarget is the absolute code offset it names.
+    Recorded by RecordCodeRef at the point of emission. }
+  CodeRefPos    : array[0..MAX_CODEREF-1] of Integer;
+  CodeRefTarget : array[0..MAX_CODEREF-1] of Integer;
+  CodeRefCount  : Integer;
+
+  { --- reachability-gated dead-code elimination (dce.inc) --------------------
+    Sized by MAX_PROCS: one entry per emitted routine, never per instruction. }
+  DceEnabled    : Boolean;   { --dce: drop unreachable routine bodies }
+  DceReport     : Boolean;   { --dce-report: print what it found (implies --dce) }
+  DceLive       : array[0..MAX_PROCS-1] of Boolean;
+  DceWork       : array[0..MAX_PROCS-1] of Integer;   { mark worklist }
+  DceWorkCount  : Integer;
+  DceOrder      : array[0..MAX_PROCS-1] of Integer;   { bodied procs, sorted by BodyAddr }
+  DceOrderCount : Integer;
+  DceLimit      : array[0..MAX_PROCS-1] of Integer;   { next body's start, per DceOrder slot }
+  DceRemStart   : array[0..MAX_PROCS-1] of Integer;   { removed code ranges, ascending, disjoint }
+  DceRemEnd     : array[0..MAX_PROCS-1] of Integer;
+  DceRemCount   : Integer;
+  { Distinct code offsets that something jumps or calls WITHOUT naming a proc --
+    the runtime stubs and the entry jump, gathered from CodeRefTarget. A range
+    holding one of these is never removed, whoever emitted it: that is what
+    keeps the pass safe against a stub kind nobody remembered to list here. }
+  DceStubTgt    : array[0..MAX_DCE_STUBS-1] of Integer;
+  DceStubCount  : Integer;
+  { The call graph, materialised by counting sort: DceCallOwner is the proc that
+    contains each CallFix site (-1 = the always-live region), DceEdgeTo holds the
+    callees grouped by caller, and DceEdgeHead[p] is the END of p's group (p-1's
+    is its start) -- the standard counting-sort layout read backwards instead of
+    shifting the array. }
+  DceCallOwner  : array[0..MAX_INTCALLFIX-1] of Integer;
+  DceEdgeTo     : array[0..MAX_INTCALLFIX-1] of Integer;
+  DceEdgeHead   : array[0..MAX_PROCS] of Integer;
 
   { @proc: code-side `mov rax, imm64` placeholders patched at finalize with the
     absolute runtime address of an internal proc (entry + BodyAddr). }

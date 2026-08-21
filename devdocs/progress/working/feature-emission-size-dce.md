@@ -1,11 +1,12 @@
 ---
 prio: 45  # auto
+owner: agent-A
 ---
 
 # Emission size — reachability-gated dead-code elimination (umbrella)
 
 - **Type:** feature (codegen / optimization) — Track A
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-06-30 (merge of feature-lazy-standard-unit-emission +
   chore-runtime-emission-size, found redundant in triage)
 - **Relation:** the concrete passes here would be hosted by
