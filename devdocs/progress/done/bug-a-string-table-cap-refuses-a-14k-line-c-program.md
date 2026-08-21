@@ -195,4 +195,4 @@ seed 200056 itself was not re-run (csmith is not installed on this box); the
 generated program reproduces the same ceiling.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit c7e6a86ca.
