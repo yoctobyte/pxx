@@ -246,6 +246,11 @@ begin
     Inc(i);
   end;
 
+  { The two graph tables are sized to THIS image's call sites, not to a cap --
+    they are the only place the pass allocates anything big. }
+  SetLength(DceCallOwner, CallFixCount + 1);
+  SetLength(DceEdgeTo, CallFixCount + 1);
+
   { --- roots ------------------------------------------------------------- }
   i := 0;
   while i < ProcCount do begin DceLive[i] := False; Inc(i); end;

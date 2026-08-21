@@ -40,9 +40,14 @@ end;
   is why the recording lives at the emission points rather than in a table
   someone has to remember to extend. feature-emission-size-dce }
 procedure RecordCodeRefAt(pos, target: Integer);
+var n: Integer;
 begin
-  if CodeRefCount >= MAX_CODEREF then
-    Error('code-reference overflow (MAX_CODEREF, see compiler/defs.inc)');
+  if CodeRefCount >= CodeRefCapacity then
+  begin
+    if CodeRefCapacity = 0 then n := CODEREF_BASE else n := CodeRefCapacity * 2;
+    SetLength(CodeRefPos, n); SetLength(CodeRefTarget, n);
+    CodeRefCapacity := n;
+  end;
   CodeRefPos[CodeRefCount] := pos;
   CodeRefTarget[CodeRefCount] := target;
   Inc(CodeRefCount);

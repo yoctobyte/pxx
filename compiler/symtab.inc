@@ -9618,8 +9618,14 @@ end;
   were already correct, which costs a pass over an array and changes no byte.
   feature-emission-size-dce }
 procedure RecordInternalCall(procIdx: Integer);
+var n: Integer;
 begin
-  if CallFixCount >= MAX_INTCALLFIX then Error('call fixup overflow');
+  if CallFixCount >= CallFixCapacity then
+  begin
+    if CallFixCapacity = 0 then n := CALLFIX_BASE else n := CallFixCapacity * 2;
+    SetLength(CallFix, n);
+    CallFixCapacity := n;
+  end;
   CallFix[CallFixCount].CodePos := CodeLen;
   CallFix[CallFixCount].ProcIdx := procIdx;
   Inc(CallFixCount);
