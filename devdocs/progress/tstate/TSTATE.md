@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `4f526e338205` | 2026-08-21T07:22:26Z | RED (native) | 493.9s | `23becd24b8e5` RED |
+| plexus | `8654c4d55b61` | 2026-08-21T10:18:59Z | RED (native) | 467.9s | `23becd24b8e5` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -15,13 +15,22 @@
 - **test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy** — test/test_nilpy_callable_to_str_param_fails.npy test/test_nilpy_float_repeat_typeerror.npy (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range
 - **test-pascal-conformance#shard4/6** — tools/run_pascal_conformance.sh (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range
 - **tools-devtest#00** (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range
-- **test-core#src:test/test_record_helper_for_string_b331.pas** — test/test_record_helper_for_string_b331.pas (plexus): bad `2e7286e499d1`, last good `9ac7e74e367b`, 3 commit(s) in range
-- **test-core#src:test/test_delphi_bare_alldefaulted_arg.pas** — test/test_delphi_bare_alldefaulted_arg.pas (plexus): bad `a2ae11a64191`, last good `6ab56d11a9aa`, 5 commit(s) in range
-- **test-core#src:test/test_mode_delphi.pas** — test/test_mode_delphi.pas (plexus): bad `a2ae11a64191`, last good `6ab56d11a9aa`, 5 commit(s) in range
-- **test-core#src:test/test_mode_delphi_callarg.pas** — test/test_mode_delphi_callarg.pas (plexus): bad `a2ae11a64191`, last good `6ab56d11a9aa`, 5 commit(s) in range
-- **test-core#src:test/test_mode_delphi_methptr.pas** — test/test_mode_delphi_methptr.pas (plexus): bad `a2ae11a64191`, last good `6ab56d11a9aa`, 5 commit(s) in range
-- **test-core#src:test/test_procvar_value_context.pas** — test/test_procvar_value_context.pas (plexus): bad `a2ae11a64191`, last good `6ab56d11a9aa`, 5 commit(s) in range
 - **test-nilpy#src:test/test_pascal_at_procvar_mode.pas@1** — test/test_pascal_at_procvar_mode.pas (plexus): bad `23becd24b8e5`, last good `1b9b43e5b511`, 109 commit(s) in range
 - **test-nilpy#src:test/test_pascal_mode_switch_cli.pas@2** — test/test_pascal_mode_switch_cli.pas (plexus): bad `23becd24b8e5`, last good `1b9b43e5b511`, 109 commit(s) in range
 - **test-nilpy#src:test/test_pascal_self_result_delphi.pas@1** — test/test_pascal_self_result_delphi.pas (plexus): bad `23becd24b8e5`, last good `1b9b43e5b511`, 109 commit(s) in range
 - **test-nilpy#src:test/test_pascal_self_result_delphi.pas@2** — test/test_pascal_self_result_delphi.pas (plexus): bad `23becd24b8e5`, last good `1b9b43e5b511`, 109 commit(s) in range
+- **CASCADE 11 jobs** (plexus): bad `8654c4d55b61`, last good `4f526e338205`, 241 commit(s) in range
+  <details><summary>jobs</summary>
+
+  - `test-asm#src:compiler/compiler.pas`
+  - `test-core#src:test/test_rust_advanced.rs`
+  - `test-core#src:test/test_rust_assoc_fns.rs`
+  - `test-core#src:test/test_rust_chess_engine.rs`
+  - `test-core#src:test/test_rust_chess_perft.rs`
+  - `test-core#src:test/test_rust_chess_perft_full.rs`
+  - `test-core#src:test/test_rust_chess_search.rs`
+  - `test-core#src:test/test_rust_else_if.rs@1`
+  - `test-core#src:test/test_rust_else_if.rs@2`
+  - `test-core#src:test/test_rust_struct_array.rs`
+  - `test-core#src:test/test_rust_tuple_struct.rs`
+  </details>
