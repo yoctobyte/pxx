@@ -128,4 +128,4 @@ opt tier is now a whole-corpus `--dce` differential.
 - Default-on: not until the corpus evidence is the full matrix's, not mine.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit e47988d52.
