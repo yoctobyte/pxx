@@ -6,7 +6,7 @@ owner: agent-A
 # Dynarray Insert/Delete: managed elements, record/set Insert, field/element targets
 
 - **Type:** feature (compiler intrinsic — extension) — Track A
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-02, follow-up filed while landing
   [[feature-dynarray-insert-delete]] (v132) per its staged plan.
 
@@ -147,3 +147,118 @@ prologue nil-init listed as item 5 landed separately in the v155-era
 riscv32 bring-up — both walkers have the loop now.)
 
 - 2026-07-19 (backlog sweep note) Items 1–2 landed and pinned (AnsiString c0105931 v141; managed-record 929f57f6/361b8685 v162). Live remainder per parser.inc:15323–15405 rejections: nested/frozen element types, non-IDENT targets (obj.field, a[i]), FPC array-splice form, riscv32/xtensa prologue nil-init.
+
+## Progress — 2026-08-21: every remaining item closed except one, which was not this ticket's
+
+Five landings. `test_dynarray_insert_delete.pas` grew **35 -> 71 cases**, all
+diffed against FPC 3.2.2 as whole-program output (not recorded hashes), and all
+re-run under qemu on **i386, aarch64, arm32 and riscv32**. Each item's churn loop
+holds at **392 kB RSS** over 20000 iterations.
+
+### The array-splice form was a BUG, not a missing feature (abc045945)
+
+Item 4 was listed as unimplemented. It was not — it compiled, and compiled to
+the wrong thing:
+
+```
+pxx: len=4 : 10 -1428160432 11 12
+fpc: len=5 : 10 90 91 11 12
+```
+
+`Insert(t, s, 1)` on two `array of Integer` took the source array's HANDLE and
+stored it as if it were an element. Silent wrong output with no diagnostic —
+CLAUDE.md's escape rule: a compat gap that means wrong behaviour is a bug in the
+owning lane, not a feature in a backlog.
+
+The splice reuses the whole fresh-temp shape; three things differ, carried on
+`AN_DYN_INSERT`'s IVal: `newLen` is `len(dest) + len(source)`;
+`PXXDynInsArrFill` lays head/source/tail in so there is no gap and no gap store;
+and **the retain walk that already ran over the fresh buffer covers the inserted
+elements along with the kept ones** — managed elements needed no new machinery
+at all. A source array whose element type does not match is now a compile error.
+
+### Non-IDENT targets (553ac01e8), after a refactor that made them cheap (e2c4eae54)
+
+`Delete(obj.Items, i, n)` was refused. The restriction lived in two places and
+neither needed to exist once **one walker** answered the shape question:
+`NodeDynDepth` / `NodeDynBaseTk` / `NodeDynBaseRec` / `NodeDynBaseSym` moved from
+`ir.inc` to `ast_arena.inc`, where the parser can reach them — the parser had
+grown `CopySrcDynDepth`, a hand-kept mirror its own comment admitted to, that
+answered 0 for shapes the real walker knew. The mirror is deleted and its seven
+call sites now call `NodeDynDepth`. Pure relocation first: the move alone
+rebuilt the compiler byte-for-byte identical.
+
+The lowering then uses AN_DYN_COPY's two arms (IR_LEA for a symbol, an ordinary
+read otherwise — a read of a dyn-array lvalue IS its handle), and the write-back
+is the same lvalue cloned. Which is why the target must be **re-readable**: it is
+evaluated twice, so `DynTargetIsRereadable` admits name / field / dereference and
+refuses anything that could carry a side effect. Indexed targets stay out —
+they are safe only when the subscript is, and answering that needs a purity walk.
+Covered: record field, nested record field, managed-element field, class field,
+`p^.items`.
+
+### Nested `array of array of T` — Delete (950baa9ce) then Insert (5659bc304)
+
+AN_DYN_COPY had already worked out that three things change together, and having
+one without the others is what makes this a segfault rather than a diagnostic:
+stride by a POINTER (`TypeSize(tyPointer)`, not 8 — a handle is 4 bytes on the
+32-bit targets), temp allocated at the SOURCE's depth so its scope-exit release
+recurses, and the retain walk at that depth, where the RTL IncRefs every handle
+and ignores `baseKind` — so it is passed a NEUTRAL 0/nil rather than falling into
+the record arm, which would index the RTTI table with a `REC_NONE` element id.
+
+Insert's two forms are told apart by **depth**: a source one level shallower is
+an ordinary one-element insert of a sub-array; a source at the same depth is the
+splice. The one-element form is the one that needed care — the buffer-wide
+retain runs *before* the gap store and so sees a still-nil gap. Reordering was
+the obvious move and the wrong one (the managed-string arm needs the existing
+order, where the ARC store does its own retain), so the handle gets its one
+reference from a separate `len=1` retain over the gap address: at depth > 1
+`PXXDynArrayRetainImmediate` is a shallow IncRef per handle, so len=1 is
+precisely one handle.
+
+Ownership is pinned from both ends rather than assumed: a row REMOVED by Delete
+is still readable through an earlier alias (released once, not twice); an
+INSERTED row is SHARED with the variable it came from (`row[0] := 99` shows
+through `m[1][0]`, FPC's semantics) and outlives the array — after
+`SetLength(m, 0)` it is still readable.
+
+### Rvalue record/set insert values (e3daa7b15)
+
+`Insert(MakeP(8, 9), pts, 1)` was refused as "not addressable". FPC accepts it,
+and so does the lowering once you notice records and sets are already
+ADDRESS-valued in this IR — a record assignment builds its source operand with an
+ordinary `IRLowerAST`, not an address-of. No spill temp: the callee's hidden
+destination is live for exactly as long as the copy into the gap. The refusal was
+a limitation of the lowering, not of the language. Managed-field record rvalues
+work too, and that is the case pinned: the gap store is `IR_COPY_REC_MANAGED`,
+which retains the source's fields, so the callee's temp must be released exactly
+once.
+
+One shape stays a pxx extension rather than parity: a bare `[a, b]` argument.
+FPC reads it as an open-array literal and refuses the call.
+
+### Frozen-string elements: NOT this ticket's gap — re-filed
+
+The last open item turned out to be downstream of something bigger. In the
+frozen model (`-uPXX_MANAGED_STRING`) a program cannot even
+`SetLength(a, 3)` on an `array of string`:
+
+```
+pascal26:5: error: SetLength: dynamic array of record/string not yet supported
+```
+
+The element is an inline fixed-capacity buffer and no path knows its stride, so
+Delete/Insert could never have been *reached* with one. Fixing it here would have
+been a microfix on a symptom; it is now
+[[feature-a-dynamic-array-of-frozen-strings]] (prio 30), which owns the stride
+work and the removal of both exclusions.
+
+### Also gone: item 5
+
+The riscv32/xtensa `SymIsHiddenArgTemp` prologue nil-init landed in the v155-era
+riscv32 bring-up (noted in the 2026-07-03 entry). The riscv32 run above confirms
+it: 71/71 under qemu.
+
+## Log
+- 2026-08-21 — resolved, commit PENDING-COMMIT.
