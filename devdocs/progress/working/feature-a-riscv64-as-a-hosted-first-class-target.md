@@ -4,8 +4,8 @@ prio: 50
 type: feature
 blocked-by: []
 summary: "pxx has no riscv64 target at all — only riscv32, which exists for ESP-class bare metal. Real RISC-V hardware (notebooks, SBCs) is RV64GC running Linux, so today we cannot build for the machines RISC-V actually ships on. The harness is already ready: run_target.sh handles riscv64, install_qemu.sh installs qemu-riscv64, twatch_web lists it in CROSS_TARGETS — nothing can produce a binary for it."
-status: backlog
-owner: ""
+status: working
+owner: claude-A
 ---
 
 # riscv64 as a hosted, first-class target
@@ -166,3 +166,139 @@ mine to fix).
 The question the ticket asks first is answered; the implementation is a
 multi-session job and is not started. Back to `backlog` with the plan above
 rather than held in a lock nobody is working.
+
+---
+
+## The first question, measured (2026-08-21)
+
+The ticket says the one thing to establish first is **widening vs new backend**,
+and that it is a measurement rather than a judgement. Here is the measurement.
+
+### 1. The cheapest evidence: how the other two 32/64 pairs were split
+
+Both were split into **separate backends**, and not narrowly:
+
+| family | 32-bit | 64-bit |
+| --- | --- | --- |
+| x86 | `ir_codegen386.inc`, 5063 lines | inside `ir_codegen.inc` (the default backend) |
+| arm | `ir_codegen_arm32.inc`, 4409 lines | `ir_codegen_aarch64.inc`, 3906 lines |
+| riscv | `ir_codegen_riscv32.inc`, 3561 lines | — |
+
+That precedent is weaker than it looks for arm (A32 and A64 are different
+instruction encodings, so there was never a choice) but it is **not** weak for
+x86: i386 and x86-64 share an encoding family the way RV32 and RV64 do, and they
+were still split. Which raises the useful question — split on account of *what*?
+
+### 2. What actually differs: the register-pair layer, and it is deletion
+
+Every 32-bit backend carries an isomorphic Int64-as-register-**pair** layer, and
+no 64-bit backend has one at all:
+
+```
+i386      Is64Bit386      EmitNode64_386    EmitBinop64_386    EmitUDivMod64Core_386  EmitIDivMod64Core_386
+arm32     Is64BitArm32    EmitNode64Arm32   EmitBinop64Arm32   EmitUDivMod64Arm32     EmitIDivMod64Arm32
+riscv32   Is64BitRISCV32  EmitNode64RISCV32 EmitBinop64RISCV32 EmitUDivMod64RISCV32   EmitIDivMod64RISCV32
+```
+
+In `ir_codegen_riscv32.inc` that is **lines 423-863 — 441 lines — plus 36 call
+sites** spread through the node emitter. On RV64 an `Int64` is one register, so
+every one of those disappears.
+
+**This is the finding that decides it.** The difference between RV32 and RV64
+codegen is not a width constant to thread through; it is 441 lines and 36 call
+sites that must be *absent*. Parameterising means keeping both paths alive under
+an XLEN test — a second path through every binop, divmod, load and store, taken
+only on one target. That is exactly the shape
+`devdocs/dev/normalise-dont-special-case.md` calls the path that stays broken,
+and it is why both existing pairs split.
+
+### 3. What is genuinely shared: the encoder, and it is small
+
+`rv32enc.inc` is **208 lines, 44 mnemonic encoders** plus six field packers
+(`EmitRType`/`IType`/`SType`/`BType`/`UType`/`JType`). RV64I keeps every RV32I
+base encoding unchanged, so **41 of the 44 are shared verbatim**.
+
+The three that are not are a warning, not a detail:
+
+```pascal
+procedure rv32_slli(rd, rs1, sh: Integer);  begin EmitIType(sh and $1F, rs1, 1, rd, $13); end;
+procedure rv32_srli(rd, rs1, sh: Integer);  begin EmitIType(sh and $1F, rs1, 5, rd, $13); end;
+procedure rv32_srai(rd, rs1, sh: Integer);  begin EmitIType((sh and $1F) or $400, rs1, 5, rd, $13); end;
+```
+
+RV64 shifts take a **6-bit** shamt. Reusing these as-is silently truncates any
+shift of 32..63 — a wrong VALUE far from the cause, the failure mode this repo
+pays most for. So the encoder is shared, but the shift encoders get explicit
+RV64 siblings rather than a widened common one; a blind `and $3F` would make the
+RV32 side accept a shift it cannot encode.
+
+RV64 then ADDS: `ld` / `sd` / `lwu`, and the W family (`addw` `subw` `sllw`
+`srlw` `sraw` `addiw` `slliw` `srliw` `sraiw` `mulw` `divw` `divuw` `remw`
+`remuw`) — none of which exist on RV32, so they are pure addition, not a change.
+
+### 4. The ticket's worry about ESP contamination does not hold up
+
+`ir_codegen_riscv32.inc` has **15** ESP/bare-metal mentions in 3561 lines, and
+the substantive ones are few and localised: the `EspBareBoot` boot path
+(mtvec + `esp_intr_alloc`), the atomics capability check (`SocCoreCount > 1`
+with no A extension is refused), and two "ESP has no managed records yet" skips.
+Bare metal is **not** woven through this backend; it is a handful of guards. The
+hypothesis in the section above ("riscv32's bare-metal assumptions are woven
+through it deeply enough that sharing costs more than it saves") was worth
+stating and is measurably false — the reason to split is item 2, not this.
+
+### 5. The frontend is already parameterised
+
+`TARGET_PTR_SIZE` is a runtime `Integer` in `defs.inc`, already consulted by
+`cparser.inc`, `ast_syminfer.inc` and `rtti_emit.inc`. The ILP32/LP64 split above
+the backend therefore costs a value, not a port.
+
+### 6. The plumbing cost is smaller than the site count suggests
+
+105 `TARGET_RISCV32` sites across 17 files — but **21 of them are one predicate
+written out inline**:
+
+```pascal
+(TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot))
+```
+
+(20 in `pasparser_prog.inc`, 1 in `pasparser_proc.inc`.) That is "is this target
+hosted?" spelled out 21 times, and adding ANY new target means editing all 21 or
+getting a silently wrong answer at whichever one is missed. Factoring it into a
+`TargetIsHosted` function is a prerequisite for this ticket, not a nicety — and
+it belongs to [[meta-constant-normalisation]], which is already ranked at p45.
+Doing it first makes riscv64 (and the target after it) nearly free at those
+sites.
+
+For scale: `TARGET_AARCH64`, the last 64-bit target added, has 73 sites.
+
+## Decision
+
+**A new backend, `ir_codegen_riscv64.inc`, over a shared encoder layer.** Not a
+widening of `ir_codegen_riscv32.inc`.
+
+- Shared: `rv32enc.inc`'s six field packers and 41 of its 44 encoders, unchanged.
+- Explicitly not shared: the three shift encoders (5-bit vs 6-bit shamt — a
+  silent wrong value if merged), plus RV64's `ld`/`sd`/`lwu` and the W family as
+  additions.
+- Not carried over at all: the 441-line register-pair layer and its 36 call
+  sites. On RV64 they are not parameterised, they are gone.
+
+This is the same answer both existing 32/64 pairs reached, for the same reason,
+and it keeps riscv32's open bug list off riscv64's back — which the ticket
+explicitly asks for.
+
+## Sequencing
+
+1. `TargetIsHosted` (the 21 inline copies) — [[meta-constant-normalisation]]'s
+   lane, and a prerequisite here.
+2. Encoder layer: RV64 shift/`ld`/`sd`/`lwu`/W encoders alongside the RV32 ones.
+3. `ir_codegen_riscv64.inc` + `TARGET_RISCV64` + `--target=riscv64` + ELFCLASS64
+   with `e_machine` 243 (the value riscv32 already writes — it is XLEN-agnostic;
+   the class byte is what differs).
+4. Verification is functional, under `qemu-riscv64`, which **is installed on
+   this box** — there is no local riscv assembler, so the byte-exact-against-`as`
+   method used for other encoders is unavailable and running the code is the
+   oracle. `tools/run_target.sh riscv64` already works.
+
+Nothing above is blocked. Step 1 is separable and lands on its own.
