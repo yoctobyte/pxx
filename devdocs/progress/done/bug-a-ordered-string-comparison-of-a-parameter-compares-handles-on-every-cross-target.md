@@ -172,4 +172,4 @@ prints `cmp -1 1 6` / `cls -1 1 6` on all four, matching x86-64.
 `tools/gate.sh quick` GREEN (self-host fixedpoint byte-identical).
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 58bb69e0e.
