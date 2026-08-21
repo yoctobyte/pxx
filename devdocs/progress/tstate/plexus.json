@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T12:00:02Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "f14d5d48792a526e7014e0bdfe9344e2801a5223",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-20T12:08:54Z",
    "fixed": [
     "test-core#src:test/cfnptr_deref_call_b241.c",
@@ -460,6 +452,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "0b7be93c9f7c1596ef306765dcea4ec7206bdf2e",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-21T00:31:04Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "48d64f73bd0d935e6b6d26397edb3195b5e2555b",
    "tier": "native",
    "verdict": "RED"
   }
@@ -6233,11 +6233,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-21T00:06:05Z",
-  "sha": "0b7be93c9f7c1596ef306765dcea4ec7206bdf2e",
+  "date": "2026-08-21T00:31:04Z",
+  "sha": "48d64f73bd0d935e6b6d26397edb3195b5e2555b",
   "tier": "native",
   "verdict": "RED",
-  "wall": 472.1
+  "wall": 462.5
  },
  "last_bench": {
   "conf_rows": 550,
