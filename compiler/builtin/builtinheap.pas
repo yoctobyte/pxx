@@ -216,6 +216,18 @@ const
   PXX_ENC_UCS4  = 3;
   PXX_ENC_SHIFT = 16;
 
+  { MIRRORS compiler/defs.inc's VT_OBJ_FIRST / VT_OBJ_LAST — which variant tags
+    carry a refcounted object. A builtin unit cannot see defs.inc, so the two
+    numbers are written twice and MUST be changed together; the range exists so
+    that is TWO numbers to keep in step instead of a list of four equality
+    tests, which is what silently drifted (see the note in defs.inc, and
+    PXXVarClear below for what the drift cost). }
+  VT_OBJ_FIRST = 7;
+  VT_OBJ_LAST  = 10;
+  VT_STRING_TAG = 6;
+  VT_PROMO_FIRST = 8192;   { promo-block tags ride as a managed AnsiString of the decimal }
+  VT_PROMO_LAST  = 8199;
+
   PXX_OBJ_MAGIC = $505942F1;   { low bits 001 — never an allocator size word }
   { RAW variant of the tag: a refcounted heap block that is NOT a class
     instance (no VMT at +0) — today only pybound_new's {code,recv} pairs.
@@ -3597,37 +3609,42 @@ end;
 
 procedure PXXVarClear(v: Pointer);
 { Release a string payload and zero the 16-byte slot (both words fully, so
-  32-bit targets leave no stale high halves behind). Object payloads
-  (VT_OBJECT 7 / VT_BOUNDMETHOD 8 / VT_PYCLOSURE 9 / VT_BOUNDFN 10) ride
-  PXXObjRelease, whose PXX_OBJ_MAGIC guard makes it a no-op on
-  manual-lifetime Pascal instances. A promo-block tag (8192..8199) rides in a
-  variant as a managed AnsiString of its decimal — same release as VT_STRING
-  (mirrors the x86-64 EmitVariantClear range test; this portable body
-  previously missed it, a cross-target leak).
+  32-bit targets leave no stale high halves behind). Object payloads ride
+  PXXObjRelease, whose PXX_OBJ_MAGIC guard makes it a no-op on manual-lifetime
+  Pascal instances. A promo-block tag rides in a variant as a managed
+  AnsiString of its decimal — same release as VT_STRING (this portable body
+  once missed that, a cross-target leak).
 
-  THE OBJECT-TAG LIST LIVES IN FOUR PLACES and they must agree — this pair,
-  the x86-64 EmitVariantClear/EmitVariantRetain (compiler/ir_codegen.inc),
-  and PyVarSlotIsObj (compiler/builtin/pylib.pas). A tag added to the emitters
-  but not here does not fail loudly: the slot is simply never released, and
-  the only symptom is RSS. Tag 10 was missed here exactly that way, and it is
-  what made an ESCAPING closure keep leaking after the object itself had been
-  given a refcount — the caller's hidden-destination temp for a
-  variant-returning call is re-prepared through this routine once per loop
-  iteration (bug-nilpy-bound-fn-closure-objects-are-never-freed). }
+  This is the PORTABLE half of a pair: x86-64 emits the same test inline
+  (EmitVariantClear, compiler/ir_codegen.inc) and every other target calls
+  here. So the two must agree, and they agree by both reading a RANGE whose
+  bounds are two named numbers rather than a list of tags.
+
+  What the old shape cost, since it is the reason for the range: the list used
+  to be spelled out in four places, and a tag added to the emitters but not
+  here does not fail loudly — the slot is simply never released and the only
+  symptom is RSS. Tag 10 was missed here exactly that way, which is what made
+  an ESCAPING closure keep leaking after the object itself had been given a
+  refcount: the caller's hidden-destination temp for a variant-returning call
+  is re-prepared through this routine once per loop iteration
+  (bug-nilpy-bound-fn-closure-objects-are-never-freed,
+  refactor-a-variant-object-tag-list-lives-in-four-places). }
 begin
-  if (PWord(v)^ = 6) or ((PWord(v)^ >= 8192) and (PWord(v)^ <= 8199)) then
+  if (PWord(v)^ = VT_STRING_TAG) or
+     ((PWord(v)^ >= VT_PROMO_FIRST) and (PWord(v)^ <= VT_PROMO_LAST)) then
     PXXStrDecRef(Pointer(PWord(Int64(v) + 8)^))
-  else if (PWord(v)^ >= 7) and (PWord(v)^ <= 10) then
+  else if (PWord(v)^ >= VT_OBJ_FIRST) and (PWord(v)^ <= VT_OBJ_LAST) then
     PXXObjRelease(Pointer(PWord(Int64(v) + 8)^));
   PXXMemZero(v, 16);
 end;
 
 procedure PXXVarRetain(v: Pointer);
-{ The exact mirror of PXXVarClear — see the four-places note there. }
+{ The exact mirror of PXXVarClear — see the note there. }
 begin
-  if (PWord(v)^ = 6) or ((PWord(v)^ >= 8192) and (PWord(v)^ <= 8199)) then
+  if (PWord(v)^ = VT_STRING_TAG) or
+     ((PWord(v)^ >= VT_PROMO_FIRST) and (PWord(v)^ <= VT_PROMO_LAST)) then
     PXXStrIncRef(Pointer(PWord(Int64(v) + 8)^))
-  else if (PWord(v)^ >= 7) and (PWord(v)^ <= 10) then
+  else if (PWord(v)^ >= VT_OBJ_FIRST) and (PWord(v)^ <= VT_OBJ_LAST) then
     PXXObjRetain(Pointer(PWord(Int64(v) + 8)^));
 end;
 

@@ -1434,7 +1434,23 @@ end;
 { Release whatever the destination variant currently holds, leaving the payload
   word ZERO. Writing a managed string straight over the old payload would treat
   whatever was there — an integer, say — as an AnsiString ref and release
-  garbage, which is exactly how the first version segfaulted. }
+  garbage, which is exactly how the first version segfaulted.
+
+  KNOWN GAP, deliberately left: an OBJECT payload (a tag in defs.inc's
+  VT_OBJ_FIRST..VT_OBJ_LAST range) is dropped here without a release, unlike
+  every other variant-clear path in the tree. It looks wrong by inspection and
+  is not a confirmed bug: a fix was written during
+  bug-nilpy-bound-fn-closure-objects-are-never-freed, measured, found to change
+  nothing on that repro because this routine is not on that path, and REVERTED
+  rather than shipped — an unmeasured change to a shared runtime clear path is
+  how that ticket accumulated two "fixed, verified" commits that fixed nothing.
+
+  What it needs before anything changes here: a repro that actually REACHES
+  this routine with a promo-tagged slot that has held an object. Note promocore
+  is a leaf unit and cannot see builtinheap, so a release would have to arrive
+  as a hook, the way PXXObjFinalizeHook already does — i.e. the fix is not one
+  line even once it is justified.
+  refactor-a-variant-object-tag-list-lives-in-four-places }
 procedure ClearVariantSlot(dstVar: Pointer);
 var tagW, payW: PVarWord;
     sp: PPromoStr;

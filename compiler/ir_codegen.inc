@@ -2344,7 +2344,7 @@ procedure EmitVariantClear;
   reset the slot to VT_EMPTY. Preserves the slot address in rax. The jne
   target is patched manually (not via EmitAsmX64's `.label` form) because it
   jumps past IREmitCodeCall -- see EmitDynArrayReleaseLocked. }
-var pDone, pDone2, pHit, pObj, pObj2, pObj3, pObj4, pSkip: Integer;
+var pDone, pDone2, pHit, pObj, pObj2, pSkip: Integer;
 begin
   { Managed payload = VT_STRING, or ANY tag in the promotable-int block: a promo
     too large for the inline tier rides in a variant as a managed AnsiString of
@@ -2357,14 +2357,15 @@ begin
     release blob serves — guarded by the [p-8] population tag so a
     manual-lifetime Pascal instance in a variant is left alone
     (feature-nilpy-object-reclamation slice 2). }
-  EmitAsmX64(['cmp rcx, %', VT_OBJECT]);
-  EmitB($0F); EmitB($84); pObj := CodeLen; EmitI32(0);   { je objchk }
-  EmitAsmX64(['cmp rcx, %', VT_BOUNDMETHOD]);
-  EmitB($0F); EmitB($84); pObj2 := CodeLen; EmitI32(0);  { je objchk }
-  EmitAsmX64(['cmp rcx, %', VT_PYCLOSURE_TAG]);
-  EmitB($0F); EmitB($84); pObj3 := CodeLen; EmitI32(0);  { je objchk }
-  EmitAsmX64(['cmp rcx, %', VT_BOUNDFN_TAG]);
-  EmitB($0F); EmitB($84); pObj4 := CodeLen; EmitI32(0);  { je objchk }
+  { The object tags are a RANGE (VT_OBJ_FIRST..VT_OBJ_LAST), not four equality
+    tests — see defs.inc for why one list beats four. Tags above the range
+    (classref / callable / builtin-type) fall through to the promo test and out,
+    which is exactly what they need: none of them owns a heap block. }
+  EmitAsmX64(['cmp rcx, %', VT_OBJ_FIRST]);
+  EmitB($0F); EmitB($8C); pObj2 := CodeLen; EmitI32(0);  { jl notobj }
+  EmitAsmX64(['cmp rcx, %', VT_OBJ_LAST]);
+  EmitB($0F); EmitB($8E); pObj := CodeLen; EmitI32(0);   { jle objchk }
+  Patch32(pObj2, CodeLen - (pObj2 + 4));                 { notobj: }
   EmitAsmX64(['cmp rcx, %', VT_PROMO_BASE]);
   EmitB($0F); EmitB($8C); pDone := CodeLen; EmitI32(0);  { jl done }
   EmitAsmX64(['cmp rcx, %', VT_PROMO_LAST]);
@@ -2376,9 +2377,6 @@ begin
   { objchk: release via the object blob — the Pascal callee carries the nil
     check, the population-tag guard AND the recursive finalizer hook }
   Patch32(pObj, CodeLen - (pObj + 4));
-  Patch32(pObj2, CodeLen - (pObj2 + 4));
-  Patch32(pObj3, CodeLen - (pObj3 + 4));
-  Patch32(pObj4, CodeLen - (pObj4 + 4));
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(ObjReleaseBlobAddr);
   Patch32(pDone, CodeLen - (pDone + 4));
@@ -2418,20 +2416,21 @@ end;
 procedure EmitVariantRetain;
 { rax = address of a variant slot. Retain a managed payload. Preserves rax.
   See EmitVariantClear for why the jne target is patched manually. }
-var pDone, pDone2, pHit, pObj, pObj2, pObj3, pObj4, pSkip: Integer;
+var pDone, pDone2, pHit, pObj, pObj2, pSkip: Integer;
 begin
   { Same managed-payload test as EmitVariantClear — see there, including the
     object-tag arm and its population-tag guard. }
   EmitAsmX64(['push rax', 'mov rcx, [rax]', 'cmp rcx, %', VT_STRING]);
   EmitB($0F); EmitB($84); pHit := CodeLen; EmitI32(0);   { je retain }
-  EmitAsmX64(['cmp rcx, %', VT_OBJECT]);
-  EmitB($0F); EmitB($84); pObj := CodeLen; EmitI32(0);   { je objchk }
-  EmitAsmX64(['cmp rcx, %', VT_BOUNDMETHOD]);
-  EmitB($0F); EmitB($84); pObj2 := CodeLen; EmitI32(0);  { je objchk }
-  EmitAsmX64(['cmp rcx, %', VT_PYCLOSURE_TAG]);
-  EmitB($0F); EmitB($84); pObj3 := CodeLen; EmitI32(0);  { je objchk }
-  EmitAsmX64(['cmp rcx, %', VT_BOUNDFN_TAG]);
-  EmitB($0F); EmitB($84); pObj4 := CodeLen; EmitI32(0);  { je objchk }
+  { The object tags are a RANGE (VT_OBJ_FIRST..VT_OBJ_LAST), not four equality
+    tests — see defs.inc for why one list beats four. Tags above the range
+    (classref / callable / builtin-type) fall through to the promo test and out,
+    which is exactly what they need: none of them owns a heap block. }
+  EmitAsmX64(['cmp rcx, %', VT_OBJ_FIRST]);
+  EmitB($0F); EmitB($8C); pObj2 := CodeLen; EmitI32(0);  { jl notobj }
+  EmitAsmX64(['cmp rcx, %', VT_OBJ_LAST]);
+  EmitB($0F); EmitB($8E); pObj := CodeLen; EmitI32(0);   { jle objchk }
+  Patch32(pObj2, CodeLen - (pObj2 + 4));                 { notobj: }
   EmitAsmX64(['cmp rcx, %', VT_PROMO_BASE]);
   EmitB($0F); EmitB($8C); pDone := CodeLen; EmitI32(0);  { jl done }
   EmitAsmX64(['cmp rcx, %', VT_PROMO_LAST]);
@@ -2443,9 +2442,6 @@ begin
   { objchk: retain via the object blob — the Pascal callee carries the nil
     check and the population-tag guard }
   Patch32(pObj, CodeLen - (pObj + 4));
-  Patch32(pObj2, CodeLen - (pObj2 + 4));
-  Patch32(pObj3, CodeLen - (pObj3 + 4));
-  Patch32(pObj4, CodeLen - (pObj4 + 4));
   EmitAsmX64(['mov rax, [rax+8]']);
   IREmitCodeCall(ObjRetainBlobAddr);
   Patch32(pDone, CodeLen - (pDone + 4));

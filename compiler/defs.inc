@@ -809,6 +809,38 @@ const
     exists so the slot is reclaimed. }
   VT_BOUNDFN_TAG = 10;
 
+  { WHICH VARIANT TAGS CARRY A REFCOUNTED OBJECT — the one list, as a range.
+
+    It was FOUR independent lists (the x86-64 EmitVariantClear/EmitVariantRetain
+    in ir_codegen.inc, the portable PXXVarClear/PXXVarRetain in builtinheap.pas,
+    PyVarSlotIsObj in pylib.pas, and promocore's ClearVariantSlot which knew
+    none of them). They agreed only because a bug had just been through and made
+    them agree. **The failure mode is silent**: a tag added to the emitters and
+    missed in the portable twin does not crash, produces no wrong value, and
+    fails no test — the slot is simply never released and the only symptom is
+    RSS. That is how VT_BOUNDFN_TAG survived four investigation rounds and two
+    "fixed, verified" commits that did not move the slope
+    (bug-nilpy-bound-fn-closure-objects-are-never-freed,
+    refactor-a-variant-object-tag-list-lives-in-four-places).
+
+    The tags are contiguous on purpose. **Keep them contiguous**: a new
+    object-carrying tag goes at VT_OBJ_LAST + 1 and bumps this bound, which is
+    one edit instead of four.
+
+    What must stay OUT, and why the range has an upper bound at all:
+    VT_CLASSREF_TAG (11) is a static RTTI address, VT_CALLABLE_TAG (12) a code
+    address or a BORROWED heap callable, VT_BTYPE_TAG (13) a plain integer code.
+    None of them owns a heap block, and retaining one would read a refcount
+    header that does not exist.
+
+    Mirrored — necessarily, since a builtin unit cannot see this file — in
+    compiler/builtin/builtinheap.pas and compiler/builtin/pylib.pas. ONE mirror
+    per unit, each carrying the "must match defs.inc" note; that is still four
+    copies of two NUMBERS, which a reader can diff, rather than four copies of a
+    LIST, which nobody noticed had drifted. }
+  VT_OBJ_FIRST = 7;    { = VT_OBJECT }
+  VT_OBJ_LAST  = 10;   { = VT_BOUNDFN_TAG }
+
   { payload = a class's RTTI blob address — a NilPy CLASS used as a VALUE
     (`cls = A`, `{"a": A}[k](x)`, `A` passed as an argument). Its own tag rather
     than a bare integer because that is the whole point: a compiled def, a
