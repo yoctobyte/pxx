@@ -145,4 +145,4 @@ this ticket. They are a candidate for the same treatment on their own terms, not
 part of this one.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit ac779bf7c.
