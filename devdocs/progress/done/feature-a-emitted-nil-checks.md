@@ -377,4 +377,4 @@ Remaining, and both are optimisations rather than coverage:
   ever bites — it is the same shape as class 4 and would want the same default.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 3217f6954.
