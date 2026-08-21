@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T20:25:18Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "24b6d2515c8231dc2e9ba3a48f176adf07fd8970",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-20T20:34:12Z",
    "fixed": [],
    "new_red": [],
@@ -469,6 +461,14 @@
    "sha": "f4dab5ffeaab5563c17b94cd67687479f66d3ee6",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-21T13:24:40Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "a6105d12bd152acc5ac95eba798f55893f608613",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -479,13 +479,13 @@
  },
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2543179B  data=60497B  bss=17852B  procs=1762] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
-  "test-asm#src:compiler/compiler.pas": "ok: $TMP  [-S disassembly] | ok: $TMP  [code=8827740B  data=233728B  bss=213126196B  procs=3033]",
+  "test-asm#src:compiler/compiler.pas": "ok: $TMP  [-S disassembly] | ok: $TMP  [code=8836539B  data=234184B  bss=213126196B  procs=3034]",
   "test-c-conformance#shard1/6": "FAIL 00206.c \u2014 exit code 254 (want 0) | FAIL 00212.c \u2014 exit code 255 (want 0) | test-c-conformance: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance: FAILURES: 00206.c(exit=254) 00212.c(exit=255)",
   "test-c-conformance-aarch64#shard1/6": "FAIL 00206.c \u2014 exit code 215 (want 0) | FAIL 00212.c \u2014 exit code 70 (want 0) | test-c-conformance-aarch64: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-aarch64: FAILURES: 00206.c(exit=215) 00212.c(exit=70)",
   "test-c-conformance-arm32#shard1/6": "FAIL 00206.c \u2014 exit code 64 (want 0) | FAIL 00212.c \u2014 exit code 64 (want 0) | test-c-conformance-arm32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-arm32: FAILURES: 00206.c(exit=64) 00212.c(exit=64)",
   "test-c-conformance-riscv32#shard1/6": "FAIL 00206.c \u2014 exit code 144 (want 0) | FAIL 00212.c \u2014 exit code 144 (want 0) | test-c-conformance-riscv32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-riscv32: FAILURES: 00206.c(exit=144) 00212.c(exit=144)",
   "test-core#src:test/test_c_gtk_call.pas": "pascal26:2: warning: #include <alloca.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave | pascal26:2: warning: #include <dirent.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave | pascal26:2: warning: #include <featur\u2026",
-  "test-core#src:test/test_c_gtk_window.pas": "pascal26:2: warning: #include <linux/limits.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave | ok: $TMP  [code=138833B  data=3868B  bss=42476B  procs=14040] | Successfully created window | Starting gtk_main loop... | AutoQuit called from GTK main loop! | Main loop exited cleanly",
+  "test-core#src:test/test_c_gtk_window.pas": "pascal26:2: warning: #include <linux/limits.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave | ok: $TMP  [code=138886B  data=3868B  bss=42476B  procs=14041] | Successfully created window | Starting gtk_main loop... | AutoQuit called from GTK main loop! | Main loop exited cleanly",
   "test-core#src:test/test_rust_advanced.rs": "pascal26:1: error: Rust: expected [ after # (attribute)",
   "test-core#src:test/test_rust_assoc_fns.rs": "pascal26:1: error: Rust: expected [ after # (attribute)",
   "test-core#src:test/test_rust_chess_engine.rs": "pascal26:1: error: Rust: expected [ after # (attribute)",
@@ -6312,11 +6312,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-21T12:46:47Z",
-  "sha": "f4dab5ffeaab5563c17b94cd67687479f66d3ee6",
+  "date": "2026-08-21T13:24:40Z",
+  "sha": "a6105d12bd152acc5ac95eba798f55893f608613",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3266.6
+  "wall": 2181.8
  },
  "last_bench": {
   "conf_rows": 550,
