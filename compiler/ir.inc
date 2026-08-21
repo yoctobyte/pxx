@@ -3838,6 +3838,46 @@ begin
   else Result := -1;   { unreachable: the parser refused this target already }
 end;
 
+function UContextSPOffset: Integer;
+{ Byte offset of the saved STACK POINTER inside that same `ucontext_t` — the
+  sibling of UContextPCOffset, and the other half of turning a fault into a
+  catchable raise. Rewriting the PC alone is not enough when the fault WAS the
+  stack: the kernel resumes the redirect target on the faulting frame's SP, so a
+  stack overflow re-faults on the raise stub's own prologue, forever. Writing
+  this word too moves the resumed code onto a stack that has room.
+
+  MEASURED the same way, and by the same rule that two sources must agree
+  (bug-a-stack-overflow-fault-to-raise-loops-forever-without-an-sp-reset,
+  2026-08-21). A probe faulted from a frame carrying a 4096-byte pad and dumped
+  every ucontext word within 16K of that pad's address: the stack pointer sits a
+  few bytes from it and the FRAME pointer a whole pad away, so the two are told
+  apart by their delta rather than assumed. Each answer also equals what the
+  kernel's sigcontext structs predict:
+
+    x86-64   160 = uc_mcontext(40) + gregs[REG_RSP=15]*8
+    aarch64  432 = uc_mcontext(176) + fault_address(8) + regs[31]*8
+    arm32     84 = uc_mcontext(20)  + arm_sp(64)
+    i386      48 = uc_mcontext(20)  + gregs[REG_ESP=7]*4
+    riscv32  168 = uc_mcontext(160) + sc_regs.sp, its third field
+
+  i386 is the one the dump could NOT settle: gregs[REG_ESP=7] and
+  gregs[REG_UESP=17] (offsets 48 and 88) hold the same value at fault time, so
+  no amount of scanning tells you which one sigreturn actually restores. The
+  differential does: writing 48 lands the resumed proc on the spare stack, and
+  writing 88 leaves it on the old one (measured, both under i386 qemu, which is
+  also what the kernel struct says — it names index 17 `sp_at_signal` and
+  restore_sigcontext ignores it). test_signal_sp_rewrite is that check, run on
+  all five targets, so a wrong entry here fails loudly rather than quietly
+  clobbering an unrelated register. }
+begin
+  if TargetArch = TARGET_X86_64 then Result := 160
+  else if TargetArch = TARGET_AARCH64 then Result := 432
+  else if TargetArch = TARGET_ARM32 then Result := 84
+  else if TargetArch = TARGET_I386 then Result := 48
+  else if TargetArch = TARGET_RISCV32 then Result := 168
+  else Result := -1;   { unreachable: the parser refused this target already }
+end;
+
 { OPEN-WORLD is-a, at RUNTIME: given a symbol already holding an instance pointer,
   emit IR computing a Boolean temp = inst is a `targetCi` (or any descendant),
   by walking the RTTI blobs' PARENT CHAIN — the same __pxxInheritsFrom machinery
@@ -6601,9 +6641,10 @@ begin
 
         ASTIVal 3 (__pxxSigPCPtr) is the ucontext slot PLUS the per-arch byte
         offset of the saved PC inside it — a plain pointer add on the loaded
-        slot, so it still costs no backend anything. }
+        slot, so it still costs no backend anything. ASTIVal 5
+        (__pxxSigSPPtr) is the same shape over UContextSPOffset. }
       eaSym := AllocVar('', IntToTypeKind(ASTTk[node]));
-      if ASTIVal[node] = 3 then
+      if (ASTIVal[node] = 3) or (ASTIVal[node] = 5) then
         IRAppend(IR_EXC_STORE, eaSym, -1, 4, 0, 0)      { the ucontext pointer }
       else if ASTIVal[node] = 4 then
         IRAppend(IR_EXC_STORE, eaSym, -1, 5, 0, 0)      { __pxxSigNum }
@@ -6613,6 +6654,10 @@ begin
       if ASTIVal[node] = 3 then
         Result := IRAppend(IR_BINOP, Result,
                     IRAppend(IR_CONST_INT, -1, -1, -1, UContextPCOffset, Ord(tyPointer)),
+                    Ord(tkPlus), 0, Ord(tyPointer))
+      else if ASTIVal[node] = 5 then
+        Result := IRAppend(IR_BINOP, Result,
+                    IRAppend(IR_CONST_INT, -1, -1, -1, UContextSPOffset, Ord(tyPointer)),
                     Ord(tkPlus), 0, Ord(tyPointer));
     end;
 

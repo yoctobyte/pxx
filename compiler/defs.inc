@@ -453,7 +453,10 @@ const
                            [Self + 0]) cannot be reused. }
   AN_SIGINFO       = 92; { __pxxSigCode / __pxxSigAddr / __pxxSigContext: a field of the siginfo_t
                            (or the ucontext pointer) of the signal currently being dispatched.
-                           ASTIVal selects WHICH: 0 = si_code, 1 = si_addr, 2 = ucontext*. The
+                           ASTIVal selects WHICH: 0 = si_code, 1 = si_addr, 2 = ucontext*,
+                           3 = &saved PC, 4 = signo, 5 = &saved SP (3 and 5 are the ucontext
+                           slot plus a per-arch offset; rewriting BOTH is what makes a stack
+                           overflow catchable, since the resumed PC runs on the faulting SP). The
                            dispatch stub parks all three in BSS before calling the hook, so this
                            node is just a slot LOAD — it reuses IR_EXC_STORE (whose IRC already
                            selects among status slots via IRExcStoreSlot), which is why it needs

@@ -3634,8 +3634,34 @@ begin
         Meaningful only while a handler is running (ctx is nil otherwise, so the
         pointer would be a small bogus address) — same caller-must-know contract
         as si_addr being a pid for a kill()-delivered signal. }
+      { __pxxSigSPPtr is its other half, and exists because rewriting the PC
+        alone is not enough when the fault WAS the stack. The kernel resumes the
+        redirect target on the FAULTING frame's stack pointer, which after a
+        stack overflow is by definition a stack with nothing left — so the raise
+        stub re-faults on its own prologue, is redirected again, and the process
+        spins on the guard page until the watchdog kills it (measured:
+        bug-a-stack-overflow-fault-to-raise-loops-forever-without-an-sp-reset).
+        Handing back the address of the saved SP lets a handler move the resumed
+        code onto a stack that has room:
+
+          PPtrUInt(__pxxSigSPPtr)^ := PtrUInt(@spare[High(spare)-64]) and not 15;
+          PPtrUInt(__pxxSigPCPtr)^ := PtrUInt(@Raiser);
+
+        where `spare` is an ordinary global array — the compiler deliberately
+        supplies no stack of its own, because how much room a recovery path
+        needs, and whether it is per-thread, is a program's call, not a
+        compiler's. (An altstack does NOT solve this: SA_ONSTACK gives the
+        HANDLER a stack, and the handler was never the problem — it is what the
+        kernel resumes on AFTER sigreturn that re-faults.)
+
+        The exception runtime stays consistent across the switch: ExcLongJmp
+        restores SP from the setjmp buffer of the frame that owns the `except`,
+        not from the resumed context, so the shadow chain (BSS_EXC_TOP) unwinds
+        to a frame on the ORIGINAL stack and the borrowed one is simply
+        abandoned. The raise stub only ever needs room to reach ExcRaise. }
       if (CaseEqual(name, '__pxxSigCode') or CaseEqual(name, '__pxxSigAddr') or
           CaseEqual(name, '__pxxSigContext') or CaseEqual(name, '__pxxSigPCPtr') or
+          CaseEqual(name, '__pxxSigSPPtr') or
           CaseEqual(name, '__pxxSigNum')) and
          (FindProc(name) < 0) and (FindSym(name) < 0) then
       begin
@@ -3687,6 +3713,10 @@ begin
         else if CaseEqual(name, '__pxxSigPCPtr') then
         begin
           ASTIVal[node] := 3; ASTTk[node] := Ord(tyPointer);
+        end
+        else if CaseEqual(name, '__pxxSigSPPtr') then
+        begin
+          ASTIVal[node] := 5; ASTTk[node] := Ord(tyPointer);
         end
         else
         begin

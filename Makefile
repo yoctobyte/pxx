@@ -4731,6 +4731,23 @@ test-core: $(COMPILER)
 	# clobber an unrelated register instead.
 	./$(COMPILER) test/test_signal_pc_rewrite.pas $(TESTTMP)/test_signal_pcrw26
 	test "$$($(TESTTMP)/test_signal_pcrw26)" = "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
+	# SP rewrite: __pxxSigPCPtr's sibling. Rewriting the PC alone resumes the
+	# redirect target on the FAULTING frame's stack pointer, which for a stack
+	# overflow is a stack with nothing left -- the raise stub re-faults on its
+	# own prologue and the process spins on the guard page. The spare-stack
+	# line is the assertion: the raise stub reports its own frame address, and
+	# it can only be inside a BSS array because the kernel resumed it on the SP
+	# we wrote. Faults with a nil write rather than an overflow so the handler
+	# has a stack on all five targets.
+	./$(COMPILER) test/test_signal_sp_rewrite.pas $(TESTTMP)/test_signal_sprw26
+	test "$$($(TESTTMP)/test_signal_sprw26)" = "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
+	# ... and the fault that needs BOTH rewrites: a real stack overflow caught
+	# by an ordinary try/except and survived. hits=1 is the whole point -- it
+	# is the difference between a redirect that took and the fault loop.
+	# x86-64 only: the other four hosted targets install without SA_ONSTACK, so
+	# their handler cannot run for THIS fault at all.
+	./$(COMPILER) test/test_stack_overflow_raise.pas $(TESTTMP)/test_stack_ovf_raise26
+	test "$$($(TESTTMP)/test_stack_ovf_raise26)" = "$$(printf 'recursing\ncaught a stack overflow, hits=1\nand execution continued, after=1000')"
 	# Float-exception mask control (feature-float-exception-mask-control):
 	# the default stays quiet IEEE (Inf/NaN propagate -- a deliberate decision,
 	# so this half is a PIN test), the mask round-trips, and with a cause
@@ -8323,6 +8340,13 @@ test-i386: $(COMPILER)
 	# clobber an unrelated register instead.
 	./$(COMPILER) --target=i386 test/test_signal_pc_rewrite.pas $(TESTTMP)/test_i386_pcrw
 	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_pcrw)" = "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
+	# ... and the SP half. The per-arch ucontext SP offset is a five-entry
+	# table where one wrong entry silently clobbers an unrelated register,
+	# so every target checks that the resumed proc really landed on the
+	# spare stack. (On i386 this is also what tells REG_ESP from REG_UESP:
+	# they hold the same value at fault time and only one is restored.)
+	./$(COMPILER) --target=i386 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_i386_sprw
+	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_sprw)" = "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	./$(COMPILER) --target=i386 test/test_cdecl_indirect.pas $(TESTTMP)/test_i386_cdeclind
 	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"
 	./$(COMPILER) --target=i386 test/test_extern_c.pas $(TESTTMP)/test_i386_extern
@@ -8694,6 +8718,13 @@ test-aarch64: $(COMPILER)
 	# clobber an unrelated register instead.
 	./$(COMPILER) --target=aarch64 test/test_signal_pc_rewrite.pas $(TESTTMP)/test_aarch64_pcrw
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_pcrw)" = "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
+	# ... and the SP half. The per-arch ucontext SP offset is a five-entry
+	# table where one wrong entry silently clobbers an unrelated register,
+	# so every target checks that the resumed proc really landed on the
+	# spare stack. (On i386 this is also what tells REG_ESP from REG_UESP:
+	# they hold the same value at fault time and only one is restored.)
+	./$(COMPILER) --target=aarch64 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_aarch64_sprw
+	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_sprw)" = "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	# cdecl indirect call (dlsym'd C fn through a cdecl proc-type value) — b362
 	./$(COMPILER) --target=aarch64 test/test_cdecl_indirect.pas $(TESTTMP)/test_aarch64_cdeclind
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"
@@ -8850,6 +8881,13 @@ test-riscv32: $(COMPILER)
 	# clobber an unrelated register instead.
 	./$(COMPILER) --target=riscv32 test/test_signal_pc_rewrite.pas $(TESTTMP)/test_riscv32_pcrw
 	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_pcrw)" = "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
+	# ... and the SP half. The per-arch ucontext SP offset is a five-entry
+	# table where one wrong entry silently clobbers an unrelated register,
+	# so every target checks that the resumed proc really landed on the
+	# spare stack. (On i386 this is also what tells REG_ESP from REG_UESP:
+	# they hold the same value at fault time and only one is restored.)
+	./$(COMPILER) --target=riscv32 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_riscv32_sprw
+	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_riscv32_sprw)" = "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	# by-value record params over 4 bytes (up to 8): both words must cross
 	# (they silently truncated to word 1 -- bug-riscv32-byval-record-param-one-word)
 	./$(COMPILER) --target=riscv32 test/test_arm32_record_byval_wide.pas $(TESTTMP)/test_riscv32_recwide
@@ -9479,6 +9517,13 @@ test-arm32: $(COMPILER)
 	# clobber an unrelated register instead.
 	./$(COMPILER) --target=arm32 test/test_signal_pc_rewrite.pas $(TESTTMP)/test_arm32_pcrw
 	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_pcrw)" = "$$(printf 'pc-is-the-fault=TRUE\ncode=1 addr=3735879680\ncaught a fault as an exception, hits=1\nand execution continued')"
+	# ... and the SP half. The per-arch ucontext SP offset is a five-entry
+	# table where one wrong entry silently clobbers an unrelated register,
+	# so every target checks that the resumed proc really landed on the
+	# spare stack. (On i386 this is also what tells REG_ESP from REG_UESP:
+	# they hold the same value at fault time and only one is restored.)
+	./$(COMPILER) --target=arm32 test/test_signal_sp_rewrite.pas $(TESTTMP)/test_arm32_sprw
+	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_sprw)" = "$$(printf 'caught, hits=1\nraiser-ran-on-the-spare-stack=TRUE\nand execution continued')"
 	./$(COMPILER) --target=arm32 test/test_cdecl_indirect.pas $(TESTTMP)/test_arm32_cdeclind
 	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_cdeclind)" = "$$(printf '4.0\n1024.0\n12.0')"
 	./$(COMPILER) --target=arm32 test/test_extern_c.pas $(TESTTMP)/test_arm32_extern
