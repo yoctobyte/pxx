@@ -8008,6 +8008,15 @@ test-core: $(COMPILER)
 	# the same binary must still die silently on 139, because that default is a
 	# live decision (decide-segv-runtime-error-default) and a silent flip of it
 	# is exactly what this row exists to catch.
+	@# `OnClick := nil` segfaulted AT THE STORE — a method pointer is a 16-byte
+	@# {Code,Data} record and `nil` is a pointer literal, so the assignment fell
+	@# through to the whole-record copy and did `rep movsb` from address 0. The
+	@# interface arm one `if` above had exactly this fixed; the sibling had not.
+	@# Four shapes, each re-armed and CALLED first so Assigned() is reading a
+	@# real value rather than always-false.
+	@# bug-a-assigning-nil-to-a-method-pointer-segfaults
+	./$(COMPILER) test/test_methodptr_nil_assign.pas $(TESTTMP)/test_methodptr_nil26
+	test "$$($(TESTTMP)/test_methodptr_nil26)" = "$$(printf 'hit 1\nvar    assigned=FALSE\nhit 2\nfield  assigned=FALSE\nhit 3\nelem   assigned=FALSE\nvarpar assigned=FALSE\nloop ok')"
 	@# The emitted nil check, all three directions, because any two of them pass
 	@# with a broken flag. A call through a nil procvar jumps to address 0 — no
 	@# faulting instruction in the program, no frame, no backtrace — so the check

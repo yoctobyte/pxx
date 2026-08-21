@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:21 blocked:9 backlog:276 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2198 rejected:40`
+`urgent:1 working:1 unfinished:21 blocked:9 backlog:276 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2199 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -69,7 +69,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` regression-test-pascal-conformance-shard4-6-2
 - `[p 70] [T]` regression-tools-devtest-00
 - `[p 65] [U]` decide-tobject-root-methods-dispatch-model (unblocks 1)
-- `[p 65] [A]` bug-a-assigning-nil-to-a-method-pointer-segfaults
 - `[p 65] [B]` bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
 - `[p 65] [T]` bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
@@ -83,5 +82,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [T]` feature-t-freebsd-image-and-runner (unblocks 1)
 - `[p 55] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - `[p 55] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
+- `[p 55] [N]` bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence
 
 _234 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

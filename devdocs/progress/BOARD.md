@@ -63,8 +63,8 @@ lives in git, not in a timestamp._
 | bug-a-a-by-value-interface-param-is-released-at-caller-scope-exit | A | 35 | bug | pxx releases a by-value interface argument at the CALLER's scope exit; FPC releases it at CALLEE return. Every object is still destroyed exactly once, so this is a lifetime-timing divergence rather than a leak — but a destructor with side effects (closing a file, dropping a lock) runs later than the program says, and the last object of a batch stays alive until the calling routine returns. | — |
 | bug-a-a-record-copy-does-not-retain-an-interface-field | A | 60 | bug | `b := a` on a record holding a COM interface field copies the pointer with no retain, so the two records share one counted reference. Nilling either one destroys the object and the other is left dangling — a use-after-free that segfaults on the next member call. Present on pinned and on HEAD. | decide-interface-members-in-aggregates-lock-strategy |
 | bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data | A | 40 | bug | A typed const array is emitted as BSS plus generated code that fills it element by element at startup, instead of being stored as initialised data. Measured at ~29 bytes of code per element for UInt64; Int64, Double and Cardinal all do it too, so it is every typed const array, not a 64-bit case. A 696-entry table costs 20 KB of code and 0 bytes of data. A string constant of the same bytes costs ~0 code and lands in .data, so the data path exists — the array lowering just does not use it. | — |
-| bug-a-assigning-nil-to-a-method-pointer-segfaults | A | 65 | bug | `ev := nil` where `ev: procedure(x: Integer) of object` SEGFAULTS at the assignment. Not at the call — at the store. Reproduced on pinned and at HEAD, with and without --no-nil-check, in a 12-line program. A method pointer is a 16-byte {Code,Data} record, so `:= nil` almost certainly lowers as a record COPY from address 0. | — |
 | bug-a-findtypealias-failed-to-find-puint8-on-stderr | A | 20 | bug | `FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr during a compile that then SUCCEEDS. Either the lookup failure is real and something silently fell back to a wrong type, or the message is a stale debug print that should not be in a release build. Both readings are defects; which one it is has not been established. | — |
+| bug-a-nil-is-not-accepted-as-a-method-pointer-argument | A | 40 | bug | `Take(nil)` where `Take(e: TEv)` and `TEv = procedure(x: Integer) of object` is refused with 'no overload of Take matches these arguments: (Pointer)'. FPC accepts it. Assignment of nil to a method pointer works (that was the segfault fixed in bug-a-assigning-nil-to-a-method-pointer-segfaults); only the ARGUMENT position does not. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
 | bug-a-real-is-single-on-hosted-riscv32 | A | 35 | bug | `Real` is Single (4 bytes) on hosted riscv32 Linux and Double (8) on every other target and on FPC. The type is keyed on the ARCH, not on the ESP profile, so a target with no ESP in it inherits an ESP decision — silently halving the precision of every `Real` in a ported program. | — |
@@ -540,9 +540,9 @@ lives in git, not in a timestamp._
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2198)
+## done (2199)
 
-2198 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2199 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -607,7 +607,6 @@ lives in git, not in a timestamp._
 - [p 70] [T] regression-test-pascal-conformance-shard4-6-2
 - [p 70] [T] regression-tools-devtest-00
 - [p 65] [U] decide-tobject-root-methods-dispatch-model (unblocks 1)
-- [p 65] [A] bug-a-assigning-nil-to-a-method-pointer-segfaults
 - [p 65] [B] bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
 - [p 65] [T] bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - [p 65] [C] feature-c-csmith-differential-fuzzing
@@ -694,6 +693,7 @@ lives in git, not in a timestamp._
 - [p 45] [A] refactor-centralize-managed-string-pchar-conversion
 - [p 45] [P] refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too
 - [p 40] [A] bug-a-a-typed-const-array-is-built-by-startup-code-not-stored-as-data
+- [p 40] [A] bug-a-nil-is-not-accepted-as-a-method-pointer-argument
 - [p 40] [A] bug-a-nilpy-leading-double-star-in-a-call-is-not-detected
 - [p 40] [C] bug-c-driver-misses-the-shared-runtime-finalisation-step
 - [p 40] [N] bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members

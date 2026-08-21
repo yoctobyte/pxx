@@ -8746,6 +8746,33 @@ begin
                              -1, REC_NONE, RecSize(varIdx), Ord(tyRecord));
           Exit;
         end;
+        { ANY OTHER record-shaped destination := nil — same reasoning as the
+          interface arm directly above, which is the point: `nil` is an
+          AN_INT_LIT 0 typed tyPointer, so falling through to the whole-record
+          copy below emits `rep movsb` READING FROM ADDRESS 0.
+
+          The interface case was fixed and its sibling was not, which is the
+          shape devdocs/dev/normalise-dont-special-case.md is about. The one that
+          stayed broken is the one people actually write: a method pointer
+          (`procedure(...) of object`) is a 16-byte {Code,Data} record, so
+          `OnClick := nil` — how you DETACH an event handler — segfaulted at the
+          store, before any call, on a program with no unsafe construct in it.
+
+          Zero-fill is the right answer and not merely the non-crashing one: nil
+          for a method pointer means both fields nil, which is what FPC stores
+          and what Assigned() then reports. A record type for which `:= nil` is
+          meaningless gets a defined zero instead of a fault; FPC refuses that
+          assignment outright, and a strict-mode diagnostic is the place for
+          that, not a memcpy from a null pointer.
+          bug-a-assigning-nil-to-a-method-pointer-segfaults }
+        if (ASTKind[ASTRight[node]] = AN_INT_LIT) and (ASTIVal[ASTRight[node]] = 0) and
+           (IntToTypeKind(ASTTk[ASTRight[node]]) = tyPointer) and
+           (varIdx <> REC_NONE) then
+        begin
+          Result := IRAppend(IR_DEFAULT_MEM, IRLowerDestAddress(ASTLeft[node]),
+                             -1, REC_NONE, RecSize(varIdx), Ord(tyRecord));
+          Exit;
+        end;
         if (varIdx >= REC_UCLASS_BASE) and UClsIsInterface[varIdx - REC_UCLASS_BASE] and
            (IntToTypeKind(ASTTk[ASTRight[node]]) = tyClass) then
         begin

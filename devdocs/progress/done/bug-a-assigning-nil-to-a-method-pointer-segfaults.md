@@ -5,7 +5,8 @@ prio: 65
 type: bug
 blocked-by: []
 summary: "`ev := nil` where `ev: procedure(x: Integer) of object` SEGFAULTS at the assignment. Not at the call — at the store. Reproduced on pinned and at HEAD, with and without --no-nil-check, in a 12-line program. A method pointer is a 16-byte {Code,Data} record, so `:= nil` almost certainly lowers as a record COPY from address 0."
-status: backlog
+status: done
+owner: claude-A
 ---
 
 # `ev := nil` on a method pointer segfaults
@@ -83,3 +84,90 @@ that is dead on the spot.
 `make compiler/pascal26` (fixedpoint) + a test covering the four shapes in the
 grep-for-the-sibling list above, each asserting `Assigned(x)` is False after,
 plus the existing method-pointer call tests still green. `tools/gate.sh quick`.
+
+---
+
+## Resolution (2026-08-21)
+
+### Confirmed by disassembly, not by reading
+
+```
+Program received signal SIGSEGV
+  ev := nil;
+  ...
+  movabs $0x10,%rcx
+=> rep movsb (%rsi),(%rdi)
+```
+
+16 bytes, `rep movsb`, source `%rsi`. Exactly the record copy the ticket
+predicted, from a null source.
+
+### The sibling was one `if` away
+
+`ir.inc`'s `AN_ASSIGN` / `lhsTk = tyRecord` block already had this fixed **for
+interfaces**, with a comment that states the whole bug:
+
+> *interface := nil — zero the whole fat pointer {nil, nil}. The RHS is a
+> pointer/ordinal nil, not a class or interface, so it never reaches the
+> record-copy path (which would dereference a bogus source).*
+
+The method-pointer arm sits in the same block, is the same 16-byte record, takes
+the same nil, and was never checked. `devdocs/dev/normalise-dont-special-case.md`
+names this exactly — and the arm that stayed broken is the one people write.
+
+### Fix
+
+One arm beside the interface one: a record-shaped destination assigned a nil
+POINTER LITERAL is `IR_DEFAULT_MEM` (zero-fill of `RecSize`), not a copy.
+
+Matched precisely — `AN_INT_LIT` + value 0 + `tyPointer`, which is exactly what
+`tkNil` produces (`pasparser_expr.inc:370`) — rather than by the interface arm's
+broader "RHS is not a class and not a record". The broader condition is arguably
+the real normalisation and would also catch `r := 5`, but that changes behaviour
+for shapes no test covers, and there was no evidence to spend. The narrow form
+cannot make anything worse: every input it catches is a program that segfaulted.
+
+Zero-fill is right rather than merely non-crashing: nil for a method pointer
+means both fields nil, which is what FPC stores and what `Assigned()` then
+reports.
+
+### Four shapes, because the simple one is not the one that ships
+
+`test/test_methodptr_nil_assign.pas`: a variable, a **field** (`c.OnHit := nil`
+— what event-handler code actually does), an **array element**, and a `var`
+parameter nilled by the callee, plus a loop. Each slot is armed and **called**
+before it is cleared, so `Assigned()` is reading a real value and not answering
+False by default.
+
+`pinned` segfaults on this program after the first `hit 1`. Clean negative
+control.
+
+### Checked for collateral
+
+Every interface test in the tree runs green (`test_interface_arc`, `_arc_exc`,
+`_as_cast_retains`, `_ascast_dead_branch_temp`, `_ascast_temp_lifetime`,
+`test_dynarray_of_interfaces_assign`, `test_getinterface_guid_b257`,
+`test_interfaces`, `test_interface_byval_param_no_leak`) plus
+`test_record_copy` — the arm above mine and the arm below it.
+
+### Unblocks
+
+[[feature-a-emitted-nil-checks]] arm 1's method-pointer half, which could not be
+tested at all: `ev := nil; ev(2)` now reports
+`caught methptr: Access violation (nil reference)` and the program continues.
+
+### One residue, filed separately
+
+`Take(nil)` where `Take(e: TEv)` is REFUSED — *"no overload of Take matches
+these arguments: (Pointer)"*. FPC accepts it. Not a crash and not this bug (the
+store is fixed; this is argument type-matching), so it is
+[[bug-a-nil-is-not-accepted-as-a-method-pointer-argument]] rather than scope
+creep here.
+
+### Gate
+
+`make compiler/pascal26` (byte-identical fixedpoint, 1 round) + the four shapes
++ the interface/record neighbours + `tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-21 — resolved, commit PENDING-COMMIT.
