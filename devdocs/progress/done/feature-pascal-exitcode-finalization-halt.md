@@ -128,8 +128,10 @@ prints. That is a superset, not a divergence, and the tests therefore assert on
 the exit STATUS — which matches FPC exactly — while treating the printed line as
 pxx's own. Copying the quirk would be copying a bug.
 
-Also noticed and not chased: `Flush` is not declared in pxx's RTL at all
-(`undefined variable (Flush)`), which is a Track B gap, not this one.
+(An earlier read of this said `Flush` was missing from pxx's RTL. It is not —
+`Flush(Output)` compiles and works; the probe unit simply had no `uses
+textfile`, where both live. The only difference from FPC is scope: FPC puts
+them in System, so they need no uses clause. Not chased.)
 
 ### Gate
 
