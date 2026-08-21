@@ -30,3 +30,6 @@ pascal26:71: error: undefined variable (BITS)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-21 — auto-closed by the plexus watcher: `test-core#src:test/test_record_helper_for_string_b331.pas` passes at 8654c4d55b61 (tier native); it was red at 2e7286e499d1. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.

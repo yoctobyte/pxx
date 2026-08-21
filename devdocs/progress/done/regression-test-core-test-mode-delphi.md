@@ -31,3 +31,6 @@ pascal26:36: error: undefined variable (Dbl)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-21 — auto-closed by the plexus watcher: `test-core#src:test/test_mode_delphi.pas` passes at 8654c4d55b61 (tier native); it was red at a2ae11a64191. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
