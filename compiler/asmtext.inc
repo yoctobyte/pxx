@@ -442,6 +442,21 @@ begin
     Exit;
   end;
 
+  { rdrand / rdseed reg: 0F C7 /6 and /7. Kept in step with asmenc.inc's copy —
+    same instructions, two encoders. CF is the result: set = the destination
+    holds entropy, clear = it does not and the destination is zero.
+    feature-a-rdrand-cpuid-compiler-builtins }
+  if (Length(op1) = 0) and (CaseEqual(mnem, 'rdrand') or CaseEqual(mnem, 'rdseed')) then
+  begin
+    if AsmTextOperand(op0, holes, holeCur, r0, s0, mb0, md0, imm0) <> 0 then
+      Error('EmitAsmX64: ' + mnem + ' expects a register');
+    if CaseEqual(mnem, 'rdrand') then i := 6 else i := 7;
+    EncPrefixAndREX(s0, i, r0, False);
+    EncB($0F); EncB($C7);
+    EncModRMReg(i, r0);
+    Exit;
+  end;
+
   { call reg (indirect) }
   if CaseEqual(mnem, 'call') then
   begin

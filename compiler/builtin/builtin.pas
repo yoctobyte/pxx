@@ -256,9 +256,39 @@ function __pxxCompareByte(const Buf1, Buf2; Len: Int64): Int64;
   names shadows, like the other System names in this unit. }
 var
   RandSeed: Cardinal;
+  HwRandomProbe: Integer;   { CPUID cache: 0 unknown, 1 has RDRAND, 2 has not }
 
 function Random(range: Int64): Int64;
 procedure Randomize;
+
+{ ---- Hardware entropy (tier 1) -----------------------------------------
+
+  lib/rtl/random.pas has a HARD design mandate: one elegant .pas file, no
+  per-arch {$ifdef} soup. Its tiers 2 (getrandom/urandom) and 3 (xoshiro256**)
+  satisfy that because neither needs a special instruction. Tier 1 does, so the
+  instruction lives behind these two entry points and the library reads as three
+  one-line tier selections. feature-a-rdrand-cpuid-compiler-builtins
+
+  __pxxHwRandom64 REPORTS SUCCESS rather than just handing back a value, and
+  that is the whole point of the signature: RDRAND can fail — under load or
+  entropy exhaustion it clears CF and leaves the destination ZERO. A caller that
+  read the value alone would take a silent zero for entropy, which in the one
+  context these instructions exist for is a catastrophic and invisible failure.
+  So: False means "no entropy this time, retry a bounded number of times, then
+  fall to tier 2".
+
+  __pxxCpuHasHwRandom probes CPUID leaf 1 ECX bit 30 and caches the answer.
+  The probe is mandatory, not decorative: the instruction is absent on plenty of
+  cores and executing it there is #UD.
+
+  x86-64 only so far. aarch64's MRS RNDR needs FEAT_RNG, which is OPTIONAL and
+  needs its own ID_AA64ISAR0_EL1 probe plus system-register support in the a64
+  assembler; arm32 and riscv32 have no user-mode instruction at all (the library
+  stays on tier 2 there); ESP's RNG register is a Track S item and is only truly
+  random with the RF clock enabled. Every non-x86-64 target answers False here,
+  which routes the library to tier 2 — the correct answer, not a stub. }
+function __pxxCpuHasHwRandom: Boolean;
+function __pxxHwRandom64(var v: UInt64): Boolean;
 
 { FPC System.HexStr(Val, cnt): Val as cnt hex digits, truncating on the left
   (HexStr($1234, 2) = '34'), zero-padding on the right ('0012'). }
@@ -375,6 +405,61 @@ begin
   { No clock on a bare target (PXX_ESP): ts stays zero and the stack address
     below is the only entropy — Randomize is still callable, just weak there. }
   RandSeed := Cardinal(ts[0] xor ts[1] xor r xor Int64(@ts[0]));
+end;
+
+{ ---- Hardware entropy (tier 1) — see the interface note ---------------- }
+
+{$ifdef CPUX86_64}
+function __pxxCpuidRdrand: Boolean; assembler;
+{$asmMode intel}
+asm
+  push rbx
+  mov eax, 1
+  xor ecx, ecx
+  cpuid
+  shr ecx, 30
+  and ecx, 1
+  mov eax, ecx
+  pop rbx
+end;
+
+function __pxxHwRandom64(var v: UInt64): Boolean; assembler;
+{$asmMode intel}
+asm
+  mov rcx, v
+  xor edx, edx
+  rdrand rax
+  setc dl
+  mov [rcx], rax
+  mov eax, edx
+end;
+{$endif}
+
+{$ifndef CPUX86_64}
+function __pxxCpuidRdrand: Boolean;
+begin
+  Result := False;
+end;
+
+function __pxxHwRandom64(var v: UInt64): Boolean;
+begin
+  { Not "unimplemented": no user-mode hardware RNG instruction exists on this
+    target, so False is the correct answer and routes the caller to tier 2. }
+  v := 0;
+  Result := False;
+end;
+{$endif}
+
+function __pxxCpuHasHwRandom: Boolean;
+begin
+  { Cached: CPUID is serialising and the library asks this on its dispatch
+    path. 0 = not probed yet, 1 = yes, 2 = no. Three states, one variable —
+    two Booleans that must agree is how one of them ends up stale. }
+  if HwRandomProbe = 0 then
+  begin
+    if __pxxCpuidRdrand then HwRandomProbe := 1 else HwRandomProbe := 2;
+  end;
+  Result := HwRandomProbe = 1;
 end;
 
 function HexStr(Val: Int64; cnt: Integer): AnsiString;

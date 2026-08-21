@@ -777,6 +777,17 @@ begin
        (CaseEqual(GetTokenStr(i), 'ucs4char') or CaseEqual(GetTokenStr(i), 'unicodechar')) and
        (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
       needsBuiltin := True;
+    { The hardware-entropy intrinsics (__pxxCpuHasHwRandom / __pxxHwRandom64)
+      live in the builtin unit, and lib/rtl/random.pas is required to call them
+      with no per-arch anything of its own — that mandate is the whole reason
+      they are compiler-side. Bare-name match: the probe takes no arguments, so
+      it is normally written without parentheses.
+      feature-a-rdrand-cpuid-compiler-builtins }
+    if (Tokens[i].Kind = tkIdent) and
+       (CaseEqual(GetTokenStr(i), '__pxxcpuhashwrandom') or
+        CaseEqual(GetTokenStr(i), '__pxxhwrandom64')) and
+       (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+      needsBuiltin := True;
     { `obj.MethodAddress(name)` / `obj.MethodName(addr)` lower to __pxxMethodAddress /
       __pxxMethodName in the builtin unit (see ParseLValueAST) — FPC has them on
       TObject in System, so they must work with no `uses`. A class with a method of

@@ -6172,6 +6172,14 @@ test-core: $(COMPILER)
 	# neither, so no length of list could cover them. Both directions asserted —
 	# twelve shapes FPC accepts must compile and run, and the `var` refusal must
 	# stay a refusal. bug-a-a-non-lvalue-is-refused-as-an-interface-argument
+	# Hardware-entropy intrinsics for lib/rtl/random.pas's tier 1. The assertions
+	# hold on a CPU that HAS RDRAND and on one that does not — what must be true
+	# is the RELATIONSHIP between the probe and the draw, never the presence of
+	# the instruction, so this row is honest on any build host.
+	# feature-a-rdrand-cpuid-compiler-builtins
+	./$(COMPILER) test/test_hw_random_intrinsics.pas $(TESTTMP)/test_hwrandom26
+	$(TESTTMP)/test_hwrandom26 > $(TESTTMP)/test_hwrandom.out
+	! grep -q FAIL $(TESTTMP)/test_hwrandom.out
 	./$(COMPILER) test/test_byref_arg_lvalue_rule.pas $(TESTTMP)/test_byref_lvalue26
 	test "$$($(TESTTMP)/test_byref_lvalue26 | tail -1)" = "total ok 12 / 12"
 	! ./$(COMPILER) test/test_byref_arg_lvalue_refused.pas $(TESTTMP)/test_byref_refused26 \

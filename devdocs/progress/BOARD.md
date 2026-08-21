@@ -163,7 +163,6 @@ _none_
 | feature-a-io-lock-owner-from-tls-not-gettid | A | 35 | feature | The --threadsafe I/O lock issues a gettid SYSCALL on every I/O statement (measured: 43% overhead, one syscall per Writeln; caching it in TLS removed the whole penalty). The naive version is WRONG -- foreign threads (glibc pthread_create) inherit the creator's block and would answer 'lock already mine', silently losing mutual exclusion. Needs the stack-bounds validation design recorded in the ticket. | — |
 | feature-a-operator-table-keyed-on-both-operands | A | 40 | feature | Implement the 2026-08-10 decision: key the operator-overload table on BOTH operand types. Until then `operator + (a: Double; b: TCx)` stays refused ('cannot determine operand type' / 'predefined for built-in operand types') where FPC accepts it. Relaxing only the guard would MISCOMPILE plain `3 * 5`. | — |
 | feature-a-promoint-variant-esp-targets | S | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
-| feature-a-rdrand-cpuid-compiler-builtins | A | 35→45 | feature | lib/rtl/random.pas cites `feature-rdrand-cpuid-compiler-builtins` in a source comment for its tier-1 hardware entropy path — and that ticket was never filed. Tiers 2 and 3 ship; tier 1 needs compiler intrinsics for CPUID + RDRAND (x86), MRS RNDR (aarch64) and the ESP RNG register, because the library's design mandate keeps per-arch instructions OUT of the .pas. | — |
 | feature-a-riscv64-as-a-hosted-first-class-target | A | 50 | feature | pxx has no riscv64 target at all — only riscv32, which exists for ESP-class bare metal. Real RISC-V hardware (notebooks, SBCs) is RV64GC running Linux, so today we cannot build for the machines RISC-V actually ships on. The harness is already ready: run_target.sh handles riscv64, install_qemu.sh installs qemu-riscv64, twatch_web lists it in CROSS_TARGETS — nothing can produce a binary for it. | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 15 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
 | feature-a-typeref-migrate-consumers | A | 40 | feature | TypeRef: migrate consumers lane by lane | — |
@@ -171,6 +170,7 @@ _none_
 | feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise | B | 55 | feature | The ladder's three corpora are ONE FAMILY, not three samples — same domain, overlapping lineage, and tinycss2 literally imports webencodings. Two days of NilPy ranking rest on it. Measure an idiom-distant fourth corpus and report against the prediction: either the walls generalise, or some of what we rank at 70 is a webencodings-shaped preference. | — |
 | feature-b-a-real-minidom-is-an-implementation-not-a-shim | B | 15 | feature | Question 2 of the xml.dom row, re-filed on its own as that ticket said it should be. html5lib/treebuilders/dom.py wants a document you can build and mutate — ~25 DOM methods, getDOMImplementation().createDocument(), weakref.proxy(), and a reach into minidom's PRIVATE _child_node_types. That is a DOM implementation, not a compatibility alias. It unblocks exactly one corpus file and should be ranked as an implementation project, not alongside shims. | — |
 | feature-b-fpc-signal-compat-unit | B | 40 | feature | FPC's `Signal(sig, handler)` / `fpSignal` surface, where the handler takes the signal NUMBER, on top of pxx's parameterless SetSignalHandler intrinsic. The compiler half landed (__pxxSigNum, so one hook can tell which signal fired); what is missing is the RTL unit, which is lib/rtl and therefore Track B's. | — |
+| feature-b-random-tier1-consume-the-hw-entropy-intrinsics | B | 35 | feature | The compiler now exports __pxxCpuHasHwRandom / __pxxHwRandom64 (x86-64 RDRAND behind a CPUID probe), which is what lib/rtl/random.pas's tier-1 stub has been waiting for. The library still runs one tier below its design; wiring it is a Track B change of a few lines. | — |
 | feature-b-rtl-gap-inventory-22-sysutils-strutils-symbols | B | 45 | feature | Measured inventory: 22 sysutils/strutils/dateutils routines plus 3 type/alias names that FPC accepts and pxx rejects with `undefined variable`. Everything pxx DOES implement in this surface was verified byte-identical to FPC, so the gap is coverage, not correctness — a directory-walking or PChar-using program simply does not compile. | — |
 | feature-c-csmith-differential-fuzzing | C | 65 | feature | C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live | — |
 | feature-c-esp-conformance-coverage | S | 35 | feature | C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare) | — |
@@ -534,9 +534,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2187)
+## done (2188)
 
-2187 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2188 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -638,7 +638,6 @@ _none_
 - [p 50] [A] feature-release-checksums-repro
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [A] feature-a-rdrand-cpuid-compiler-builtins (unblocks 1)
 - [p 45] [A] bug-a-stack-overflow-fault-to-raise-loops-forever-without-an-sp-reset
 - [p 45] [B] bug-b-format-percent-u-prints-a-signed-value
 - [p 45] [N] bug-n-a-class-base-that-is-an-expression-does-not-compile
@@ -736,6 +735,7 @@ _none_
 - [p 35] [P] compat-pascal-inline-generic-specialization
 - [p 35] [A] feature-a-io-lock-owner-from-tls-not-gettid
 - [p 35] [A] feature-a-why-threadsafe-needs-45pct-more-global-fixups
+- [p 35] [B] feature-b-random-tier1-consume-the-hw-entropy-intrinsics
 - [p 35] [S] feature-c-esp-conformance-coverage
 - [p 35] [S] feature-dns-esp-backend
 - [p 35] [A] feature-nested-routine-fixed-array-capture
@@ -859,7 +859,6 @@ _none_
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **1** — decide-tobject-root-methods-dispatch-model
 - **1** — decide-xml-etree-thin-tree-model-or-a-real-xml-library
-- **1** — feature-a-rdrand-cpuid-compiler-builtins
 - **1** — feature-nilpy-object-reclamation
 - **1** — feature-nilpy-parallel-for-in
 - **1** — feature-os-targets-bsd-mac

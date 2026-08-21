@@ -4,6 +4,8 @@ prio: 35
 type: feature
 blocked-by: []
 summary: "lib/rtl/random.pas cites `feature-rdrand-cpuid-compiler-builtins` in a source comment for its tier-1 hardware entropy path — and that ticket was never filed. Tiers 2 and 3 ship; tier 1 needs compiler intrinsics for CPUID + RDRAND (x86), MRS RNDR (aarch64) and the ESP RNG register, because the library's design mandate keeps per-arch instructions OUT of the .pas."
+status: done
+owner: claude-A
 ---
 
 # Compiler intrinsics for hardware entropy (CPUID / RDRAND / RNDR / ESP RNG)
@@ -74,3 +76,76 @@ carries the tier-1 stub and still names this ticket in the comment
 the library is still running one tier below its design. The dangling-reference
 problem the ticket was filed to fix is resolved — the ticket exists now — and
 the work behind it has not landed.
+
+## Resolution — x86-64 (2026-08-21)
+
+Both entry points exist and work, with the ticket's exact suggested shape:
+
+```pascal
+function __pxxCpuHasHwRandom: Boolean;
+function __pxxHwRandom64(var v: UInt64): Boolean;   { False = failed, retry / fall back }
+```
+
+They live in the compiler's `builtin` unit and are pulled in by the name
+pre-scan in `ParseProgram`, so **`lib/rtl/random.pas` needs neither a `uses` nor
+an `{$ifdef}`** — which is the mandate this ticket exists to satisfy.
+
+### Both landmines are built in, as the ticket asked
+
+- **RDRAND can fail.** `setc` is the only thing read: the instruction clears CF
+  and leaves the destination ZERO on failure, so a caller reading the value
+  alone would take a silent zero for entropy. The `Boolean` is the guard.
+- **The probe is mandatory.** `__pxxCpuHasHwRandom` runs CPUID leaf 1 and tests
+  ECX bit 30, and caches the answer in a three-state variable (`0` unknown /
+  `1` yes / `2` no — one variable rather than two Booleans that must agree).
+
+### Two assembler mnemonics, in both encoders
+
+`rdrand` and `rdseed` were not in either assembler. Added to `asmenc.inc` (the
+`asm ... end` encoder) and `asmtext.inc` (`EmitAsmX64`), per that file's own
+rule that a mnemonic lands in both or the reason is written down. They are
+`0F C7 /6` and `/7` — not part of the F6/F7 unary group, they share a two-byte
+opcode with `cmpxchg8b` keyed by the ext digit.
+
+**Verified byte-exact against GNU `as`**, all seven forms including REX.B
+extended registers and the 32-bit encodings:
+
+```
+48 0f c7 f0  rdrand rax     0f c7 f0     rdrand eax
+48 0f c7 f1  rdrand rcx     41 0f c7 f1  rdrand r9d
+49 0f c7 f4  rdrand r12     48 0f c7 f8  rdseed rax
+                            48 0f c7 fb  rdseed rbx
+```
+
+The 27-byte sequence `as` produces for those seven appears verbatim in a pxx
+binary compiled from the same seven lines.
+
+### Staged, and the other targets say so honestly
+
+x86-64 only, which is what the ticket's per-arch note asked for. Every other
+target's `__pxxCpuHasHwRandom` answers **False** — and that is the correct
+answer, not a stub: arm32 and riscv32 have no user-mode instruction, aarch64's
+`MRS RNDR` needs the optional FEAT_RNG plus an `ID_AA64ISAR0_EL1` probe and
+system-register support in the a64 assembler, and ESP's RNG register is Track S
+and is only truly random with the RF clock enabled. False routes the library to
+tier 2, which is exactly where those targets belong.
+
+### Not done here
+
+Wiring `lib/rtl/random.pas` is a **Track B** change and is filed as
+[[feature-b-random-tier1-consume-the-hw-entropy-intrinsics]]. The library's
+tier-1 stub and its comment naming this ticket are still in place.
+
+## Gate
+
+`tools/gate.sh quick` GREEN (self-host fixedpoint 110s).
+`test/test_hw_random_intrinsics.pas`: 3/3 on x86-64 (probe TRUE, 32/32 draws,
+values distinct) and 2/2 on i386 / arm32 / aarch64 / riscv32 (probe FALSE, 0
+draws — the relationship holds in both directions, which is what the test
+asserts rather than the presence of the instruction).
+`test/lib_random.pas` and `test/lib_randomstate.pas` produce output
+**byte-identical to `pinned`'s** — the seeded stream is untouched, as the
+ticket's gate required.
+
+## Log
+- 2026-08-21 — resolved, commit PENDING-COMMIT.

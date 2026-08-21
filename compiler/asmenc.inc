@@ -1059,6 +1059,26 @@ begin
     AsmModRM(ext, 0);
     Exit;
   end;
+  { ---- rdrand / rdseed: 0F C7 /6 and /7, register destination only ----
+    Not part of the F6/F7 unary group above: they share a two-byte opcode with
+    cmpxchg8b, keyed by the ext digit. Both set CF on SUCCESS and clear it on
+    failure, leaving the destination zero — which is why a hardware-entropy
+    intrinsic has to report success rather than hand back a value. A silent zero
+    from an exhausted RNG would be a catastrophic and invisible failure in the
+    one context these instructions exist for.
+    feature-a-rdrand-cpuid-compiler-builtins }
+  if CaseEqual(mn,'rdrand') or CaseEqual(mn,'rdseed') then
+  begin
+    ext := 6; if CaseEqual(mn,'rdseed') then ext := 7;
+    if (nops <> 1) or (AsmOpKind[0] <> AOP_REG) then
+      Error('asm: ' + mn + ' takes exactly one register operand');
+    opSize := AsmOpSizeOf(1);
+    if opSize = 1 then Error('asm: ' + mn + ' has no 8-bit form');
+    AsmPrefixAndREX(opSize, ext, 0, 0);
+    AsmB($0F); AsmB($C7);
+    AsmModRM(ext, 0);
+    Exit;
+  end;
   if CaseEqual(mn,'inc') or CaseEqual(mn,'dec') then
   begin
     ext := 0; if CaseEqual(mn,'dec') then ext := 1;
