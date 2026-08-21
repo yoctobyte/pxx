@@ -147,4 +147,4 @@ half is done. The conformance skip-list entries the ticket names
 re-tried now — that is Track T's sweep, not this session's.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 9a2c8e75e.
