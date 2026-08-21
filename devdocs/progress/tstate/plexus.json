@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T21:33:46Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:test/test_record_helper_for_string_b331.pas"
-   ],
-   "sha": "2e7286e499d1993717b2b5f139254bf5736c695a",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-20T21:43:42Z",
    "fixed": [],
    "new_red": [],
@@ -485,6 +475,16 @@
    "sha": "69e61a7bfda94e206afb90f9003a36342e456973",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-21T20:38:47Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/fpcv.pas@2"
+   ],
+   "sha": "16a540b759c53a2be03c3013751d90741ef38e40",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -499,6 +499,7 @@
   "test-c-conformance-aarch64#shard1/6": "FAIL 00206.c \u2014 exit code 215 (want 0) | FAIL 00212.c \u2014 exit code 70 (want 0) | test-c-conformance-aarch64: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-aarch64: FAILURES: 00206.c(exit=215) 00212.c(exit=70)",
   "test-c-conformance-arm32#shard1/6": "FAIL 00206.c \u2014 exit code 64 (want 0) | FAIL 00212.c \u2014 exit code 64 (want 0) | test-c-conformance-arm32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-arm32: FAILURES: 00206.c(exit=64) 00212.c(exit=64)",
   "test-c-conformance-riscv32#shard1/6": "FAIL 00206.c \u2014 exit code 144 (want 0) | FAIL 00212.c \u2014 exit code 144 (want 0) | test-c-conformance-riscv32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-riscv32: FAILURES: 00206.c(exit=144) 00212.c(exit=144)",
+  "test-core#src:test/fpcv.pas@2": "ok: $TMP  [code=272689B  data=21384B  bss=75860B  procs=614]",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter",
   "test-nilpy#src:test/test_pascal_at_procvar_mode.pas@1": "ok: $TMP  [code=58611B  data=1560B  bss=42476B  procs=121]",
   "test-nilpy#src:test/test_pascal_mode_switch_cli.pas@2": "pascal26:31: warning: bare own name 'CountDown' reads the result of parameterless function CountDown; write CountDown() for a recursive call, or Result to read the result | ok: $TMP  [code=58003B  data=1528B  bss=42424B  procs=117]",
@@ -1403,6 +1404,7 @@
   "test-core#src:test/dotted/test_dotted_uses.pas": "native",
   "test-core#src:test/fileio.pas@1": "native",
   "test-core#src:test/fileio.pas@2": "native",
+  "test-core#src:test/fpcv.pas@2": "native",
   "test-core#src:test/gamelib/crtl_inet_smoke.c": "native",
   "test-core#src:test/gamelib/crtl_mathf_smoke.c": "native",
   "test-core#src:test/gamelib/crtl_net_headers_smoke.c": "native",
@@ -2077,6 +2079,7 @@
   "test-core#src:test/test_pascal_directives.pas@2": "native",
   "test-core#src:test/test_pascal_macro_comment_nesting.pas": "native",
   "test-core#src:test/test_pascal_system_qualified_intrinsic.pas": "native",
+  "test-core#src:test/test_pchar_concat_and_array_element.pas": "native",
   "test-core#src:test/test_pchar_result_decl_only_method.pas": "native",
   "test-core#src:test/test_pchar_to_string.pas": "native",
   "test-core#src:test/test_platform_defines.pas@1": "native",
@@ -2293,6 +2296,7 @@
   "test-core#src:test/test_uint64_ops.pas": "native",
   "test-core#src:test/test_unary_minus_constant_keeps_longint.pas": "native",
   "test-core#src:test/test_unary_minus_widens_to_int64.pas": "native",
+  "test-core#src:test/test_unhandled_exception_exit_code.pas": "native",
   "test-core#src:test/test_unicodestring_alias.pas": "native",
   "test-core#src:test/test_unit_const_vs_field.pas": "native",
   "test-core#src:test/test_unit_finalization.pas": "native",
@@ -2322,6 +2326,7 @@
   "test-core#src:test/test_variant.pas": "native",
   "test-core#src:test/test_variant_arg_prefers_variant_overload.pas": "native",
   "test-core#src:test/test_variant_byvalue_param.pas": "native",
+  "test-core#src:test/test_variant_conversion_failure_is_catchable.pas": "native",
   "test-core#src:test/test_variant_div.pas": "native",
   "test-core#src:test/test_variant_fn_return_forward.pas": "native",
   "test-core#src:test/test_variant_literal_concat_arg.pas": "native",
@@ -2348,6 +2353,7 @@
   "test-core#src:test/test_warn_self_result.pas@2": "native",
   "test-core#src:test/test_warn_stack_frame.pas@1": "native",
   "test-core#src:test/test_warn_stack_frame.pas@2": "native",
+  "test-core#src:test/test_widechar_no_cast_in_program.pas": "native",
   "test-core#src:test/test_widechar_to_utf8_b319.pas": "native",
   "test-core#src:test/test_widechar_var_concat.pas": "native",
   "test-core#src:test/test_widechar_var_to_string.pas": "native",
@@ -3350,6 +3356,10 @@
   "test-riscv32#src:test/test_uint64_ops.pas": "full",
   "test-smoke#00": "native",
   "test-smoke#19": "native",
+  "test-smoke#20": "native",
+  "test-smoke#21": "native",
+  "test-smoke#22": "native",
+  "test-smoke#23": "native",
   "test-smoke#src:compiler/compiler.pas": "native",
   "test-smoke#src:test/csystem_libs_granular_math_b112.c": "native",
   "test-smoke#src:test/quick_canary_argv0.pas@2": "native",
@@ -4338,6 +4348,7 @@
   "test-core#src:test/dotted/test_dotted_uses.pas": "pass",
   "test-core#src:test/fileio.pas@1": "pass",
   "test-core#src:test/fileio.pas@2": "pass",
+  "test-core#src:test/fpcv.pas@2": "fail",
   "test-core#src:test/gamelib/crtl_inet_smoke.c": "pass",
   "test-core#src:test/gamelib/crtl_mathf_smoke.c": "pass",
   "test-core#src:test/gamelib/crtl_net_headers_smoke.c": "pass",
@@ -5010,6 +5021,7 @@
   "test-core#src:test/test_pascal_directives.pas@2": "pass",
   "test-core#src:test/test_pascal_macro_comment_nesting.pas": "pass",
   "test-core#src:test/test_pascal_system_qualified_intrinsic.pas": "pass",
+  "test-core#src:test/test_pchar_concat_and_array_element.pas": "pass",
   "test-core#src:test/test_pchar_result_decl_only_method.pas": "pass",
   "test-core#src:test/test_pchar_to_string.pas": "pass",
   "test-core#src:test/test_platform_defines.pas@1": "pass",
@@ -5226,6 +5238,7 @@
   "test-core#src:test/test_uint64_ops.pas": "pass",
   "test-core#src:test/test_unary_minus_constant_keeps_longint.pas": "pass",
   "test-core#src:test/test_unary_minus_widens_to_int64.pas": "pass",
+  "test-core#src:test/test_unhandled_exception_exit_code.pas": "pass",
   "test-core#src:test/test_unicodestring_alias.pas": "pass",
   "test-core#src:test/test_unit_const_vs_field.pas": "pass",
   "test-core#src:test/test_unit_finalization.pas": "pass",
@@ -5255,6 +5268,7 @@
   "test-core#src:test/test_variant.pas": "pass",
   "test-core#src:test/test_variant_arg_prefers_variant_overload.pas": "pass",
   "test-core#src:test/test_variant_byvalue_param.pas": "pass",
+  "test-core#src:test/test_variant_conversion_failure_is_catchable.pas": "pass",
   "test-core#src:test/test_variant_div.pas": "pass",
   "test-core#src:test/test_variant_fn_return_forward.pas": "pass",
   "test-core#src:test/test_variant_literal_concat_arg.pas": "pass",
@@ -5281,6 +5295,7 @@
   "test-core#src:test/test_warn_self_result.pas@2": "pass",
   "test-core#src:test/test_warn_stack_frame.pas@1": "pass",
   "test-core#src:test/test_warn_stack_frame.pas@2": "pass",
+  "test-core#src:test/test_widechar_no_cast_in_program.pas": "pass",
   "test-core#src:test/test_widechar_to_utf8_b319.pas": "pass",
   "test-core#src:test/test_widechar_var_concat.pas": "pass",
   "test-core#src:test/test_widechar_var_to_string.pas": "pass",
@@ -6274,6 +6289,10 @@
   "test-riscv32#src:test/test_uint64_ops.pas": "pass",
   "test-smoke#00": "pass",
   "test-smoke#19": "pass",
+  "test-smoke#20": "pass",
+  "test-smoke#21": "pass",
+  "test-smoke#22": "pass",
+  "test-smoke#23": "pass",
   "test-smoke#src:compiler/compiler.pas": "pass",
   "test-smoke#src:test/csystem_libs_granular_math_b112.c": "pass",
   "test-smoke#src:test/quick_canary_argv0.pas@2": "pass",
@@ -6367,11 +6386,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-21T19:37:18Z",
-  "sha": "69e61a7bfda94e206afb90f9003a36342e456973",
+  "date": "2026-08-21T20:38:47Z",
+  "sha": "16a540b759c53a2be03c3013751d90741ef38e40",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.2
+  "wall": 3600.1
  },
  "last_bench": {
   "conf_rows": 550,
@@ -7904,6 +7923,30 @@
     "23becd24b8e5a952d29006a6efbab7e4a6068a0d"
    ],
    "src": "test/test_pascal_self_result_delphi.pas",
+   "status": "fail"
+  },
+  {
+   "bad": "16a540b759c53a2be03c3013751d90741ef38e40",
+   "good": "69e61a7bfda94e206afb90f9003a36342e456973",
+   "job": "test-core#src:test/fpcv.pas@2",
+   "name": "test-core#299",
+   "opened": "2026-08-21T20:38:47Z",
+   "pin_built": false,
+   "range": [
+    "43a3e0b240a2b8160560334321a66269f2c0c9a2",
+    "d67ce653e8946f9fd6007dc37b69ca8d2b670b0a",
+    "99d9313f35c3be1048fdfecfa97c78c0ae078e46",
+    "aab83f8918f3d533b599316382d144db9ea3b573",
+    "359df033df8f9dc4a47304dbb6cc92bd11667374",
+    "f9291800661b0ddcef2501439fa4823c460a71fb",
+    "ad27e6915f88eaa2143949f42a61b33159a66189",
+    "ba5791c02ce32a0962a551c9e8d0a5a848791fd6",
+    "f3acfdabf53c12070af980ad285bf7be708ea3b7",
+    "5d185043c8dc9459595478769fb443cff6eff7d3",
+    "90429d1b135d79689ad2e768892a5a604f7664e6",
+    "16a540b759c53a2be03c3013751d90741ef38e40"
+   ],
+   "src": "test/fpcv.pas",
    "status": "fail"
   }
  ],

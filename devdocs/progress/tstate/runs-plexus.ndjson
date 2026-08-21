@@ -1412,3 +1412,4 @@
 {"date": "2026-08-21T17:33:21Z", "fixed": ["test-core#src:test/cstatic_same_module_dup.c"], "full": false, "new_red": [], "sha": "13f7e0a1cda136c90169c1475f989511a78103f3", "still_red": [], "tier": "native", "verdict": "RED", "wall": 3600.5}
 {"date": "2026-08-21T18:35:50Z", "fixed": [], "full": false, "new_red": [], "sha": "d7b5113da47e1743b1428e4600df8a5d4d9ca866", "still_red": [], "tier": "native", "verdict": "RED", "wall": 3600.3}
 {"date": "2026-08-21T19:37:18Z", "fixed": [], "full": false, "new_red": [], "sha": "69e61a7bfda94e206afb90f9003a36342e456973", "still_red": [], "tier": "native", "verdict": "RED", "wall": 3600.2}
+{"date": "2026-08-21T20:38:47Z", "fixed": [], "full": false, "new_red": ["test-core#src:test/fpcv.pas@2"], "sha": "16a540b759c53a2be03c3013751d90741ef38e40", "still_red": [], "tier": "native", "verdict": "RED", "wall": 3600.1}
