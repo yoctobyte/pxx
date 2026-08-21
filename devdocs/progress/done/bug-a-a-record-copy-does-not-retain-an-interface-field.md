@@ -174,4 +174,4 @@ would fail if the interface release had stayed under the spinlock.
 Gate: `make compiler/pascal26` (fixedpoint) + `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 6510a77d5.
