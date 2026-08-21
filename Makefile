@@ -8345,6 +8345,22 @@ test-core: $(COMPILER)
 	@out=$$($(TESTTMP)/test_exitcode_halt_in_fini26); rc=$$?; \
 	 test "$$out" = "body" && test "$$rc" = "77" \
 	  || { echo "test_exitcode_halt_in_finalization: FAIL - got rc=$$rc out=[$$out]"; exit 1; }
+	@# An UNHANDLED exception must exit 217 -- the FPC/Delphi runtime-error code
+	@# for it. It exited 1 until bug-a-unhandled-exception-exits-1-not-217:
+	@# RunError(217) was already right, only the exception runtime's own terminal
+	@# path disagreed, so a shell could not tell an unhandled raise from a
+	@# program that deliberately returned failure. `divzero` is the row that
+	@# matters most in practice -- with sysutils linked, a division by zero
+	@# BECOMES an exception, so it must exit 217 like FPC and not 200.
+	./$(COMPILER) test/test_unhandled_exception_exit_code.pas $(TESTTMP)/test_unhandled_exc_rc26
+	@for m in plain proc divzero; do \
+	  out=$$($(TESTTMP)/test_unhandled_exc_rc26 $$m 2>&1); rc=$$?; \
+	  test "$$rc" = "217" || { echo "FAIL unhandled-exc $$m: exit $$rc, want 217"; exit 1; }; \
+	  case "$$out" in before*) ;; *) echo "FAIL unhandled-exc $$m: [$$out]"; exit 1;; esac; \
+	  case "$$out" in *"Unhandled exception"*) ;; \
+	    *) echo "FAIL unhandled-exc $$m: no message [$$out]"; exit 1;; esac; \
+	done
+	@echo "  test_unhandled_exception_exit_code: 3 modes exit 217"
 	@# --no-nil-check on BOTH, and it is load-bearing: this file's subject is the
 	@# SIGNAL path, and since feature-a-emitted-nil-checks the compiler catches
 	@# `nilproc` at the call site before any fault happens — so without the flag

@@ -115,7 +115,7 @@ begin
       EmitB($48); EmitB($BE); EmitDataRef(NEWLINE_OFFSET);
       MovRdxImm(1); EmitSyscall;
     end;
-    EmitExit(1);
+    EmitExit(EXITCODE_UNHANDLED_EXCEPTION);
   end
   else if TargetArch = TARGET_I386 then
   begin
@@ -167,7 +167,7 @@ begin
       EmitB($BA); EmitI32(1);
       EmitB($CD); EmitB($80);
     end;
-    EmitExit(1);
+    EmitExit(EXITCODE_UNHANDLED_EXCEPTION);
   end
   else if TargetArch = TARGET_ARM32 then
   begin
@@ -237,7 +237,7 @@ begin
       EmitI32($E3A02001);                                       { mov r2, #1 }
       EmitI32($EF000000);                                       { svc #0 }
     end;
-    EmitExit(1);
+    EmitExit(EXITCODE_UNHANDLED_EXCEPTION);
   end
   else if TargetArch = TARGET_AARCH64 then
   begin
@@ -312,7 +312,7 @@ begin
       EmitI32($D2800002 + (1 shl 5));                           { movz x2, #1 }
       EmitI32($D4000001);                                       { svc #0 }
     end;
-    EmitExit(1);
+    EmitExit(EXITCODE_UNHANDLED_EXCEPTION);
   end
   else if TargetArch = TARGET_RISCV32 then
   begin
@@ -377,7 +377,7 @@ begin
       rv32_addi(reg_a7, reg_zero, 64);
       EmitI32($00000073);
     end;
-    EmitExit(1);
+    EmitExit(EXITCODE_UNHANDLED_EXCEPTION);
   end
   else if (TargetArch = TARGET_XTENSA) and (XtensaABI = XTENSA_ABI_CALL0) then
   begin
@@ -388,7 +388,8 @@ begin
       point's. Stubs are entered via call0, whose target must be 4-aligned
       (3-byte instructions), hence the nop padding before each entry. There
       is no hosted xtensa, so no unhandled-message write — an unhandled
-      raise parks via EmitExit(1), same as the old stub. }
+      raise parks via EmitExit(EXITCODE_UNHANDLED_EXCEPTION), same as the
+      old stub. }
     while (CodeLen mod 4) <> 0 do xtensa_nop;
     ExcSetJmpAddr := CodeLen;
     xtensa_s32i(reg_xtensa_a15, reg_xtensa_a2, 0);
@@ -420,7 +421,7 @@ begin
     xtensa_beq(reg_xtensa_a2, reg_xtensa_a4, 9);                { no handler -> park }
     xtensa_addi(reg_xtensa_a2, reg_xtensa_a2, EXC_JMP_OFFSET_XT);
     xtensa_j(ExcLongJmpAddr - CodeLen);
-    EmitExit(1);
+    EmitExit(EXITCODE_UNHANDLED_EXCEPTION);
   end
   else if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
   begin
@@ -430,6 +431,6 @@ begin
     ExcSetJmpAddr := CodeLen;
     ExcLongJmpAddr := CodeLen;
     ExcRaiseAddr := CodeLen;
-    EmitExit(1);
+    EmitExit(EXITCODE_UNHANDLED_EXCEPTION);
   end;
 end;

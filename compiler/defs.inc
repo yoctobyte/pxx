@@ -1040,6 +1040,14 @@ const
   PYSEQ_SET   = 2;
   PYSEQ_FROZENSET = 3;   { a frozenset: the same value as a set, its own kind because repr, type() and isinstance all SHOW the difference }
 
+  { Exit status of a program killed by an UNHANDLED exception. 217 is the FPC /
+    Delphi runtime-error code for it, and shells and test harnesses branch on
+    it — exiting 1 made an unhandled raise indistinguishable from an ordinary
+    program that chose to return failure. RunError(217) already exited 217; only
+    the exception runtime's own terminal path disagreed.
+    bug-a-unhandled-exception-exits-1-not-217 }
+  EXITCODE_UNHANDLED_EXCEPTION = 217;
+
   EXC_FRAME_SIZE = 80;
   EXC_JMP_OFFSET = 8;
   EXC_FRAME_SIZE_386 = 32;
