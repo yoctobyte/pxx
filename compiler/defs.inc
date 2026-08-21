@@ -523,6 +523,13 @@ const
   TLS_SLOT_SELF    = 0;   { the block's own address; what __pxxTlsBase reads }
   TLS_SLOT_FIRST_FREE = 1;
 
+  AN_EXCEPTOBJ     = 99; { __pxxExceptObject: the exception OBJECT currently in flight, as an
+                           untyped instance pointer. The exact twin of AN_EXCEPTADDR below —
+                           the raise stub parks the object in BSS_EXC_OBJ, and IR_EXC_STORE's
+                           DEFAULT slot (IRC=0) is already that one, so this node costs no
+                           backend anything. Reserved-prefix name; sysutils.ExceptObject is a
+                           one-line wrapper, exactly as ExceptAddr is over __pxxExceptAddr. }
+
   AN_BLOCK_MEM     = 98; { __pxxblockmove(dest, src, n) / __pxxblockfill(dest, n, byteval):
                            an inline BULK memory op, args on the AN_ARG chain at Left.
                            IVal 0 = move (FORWARD only -- the caller owns the overlap

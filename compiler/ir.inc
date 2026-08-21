@@ -7005,6 +7005,17 @@ begin
         IRCallDest[Result] := IRBuildHiddenDest(cpi);
     end;
 
+    AN_EXCEPTOBJ:
+    begin
+      { IR_EXC_STORE's default slot (IRC=0) IS the exception object — the same
+        load `on E: T do` already performs to bind its handler variable. So this
+        arm is the AN_EXCEPTADDR arm below with the slot selector left at 0, and
+        no backend learns anything new. }
+      eaSym := AllocVar('', tyPointer);
+      IRAppend(IR_EXC_STORE, eaSym, -1, 0, 0, 0);
+      Result := IRAppend(IR_LOAD_SYM, eaSym, -1, -1, 0, Ord(tyPointer));
+    end;
+
     AN_EXCEPTADDR:
     begin
       { The raise stub already parked the raise site in BSS_EXC_ADDR. Reading it is the

@@ -3551,6 +3551,28 @@ begin
         (rtti_emit.inc) and read generically by typinfo.pas regardless of category. No
         FPC byte-layout parity is implied or needed (see feature-pascal-corpus-generics
         "NO DECISION NEEDED" recon note) -- typinfo.pas owns the whole translation. }
+      { __pxxExceptObject: the exception OBJECT in flight — the same shape as
+        __pxxExceptAddr below in every respect, and deliberately written as its
+        twin rather than as a variant of it. sysutils.ExceptObject wraps it and
+        casts the result to TObject; keeping the intrinsic UNTYPED is what lets
+        the wrapper live in the RTL, where TObject is in scope, instead of
+        teaching the parser about a class it does not otherwise know. }
+      if CaseEqual(name, '__pxxExceptObject') and (FindProc(name) < 0) and (FindSym(name) < 0) then
+      begin
+        Next;
+        if (TokPos <= TokCount) and (CurTok.Kind = tkLParen) then
+        begin
+          Next;
+          Expect(tkRParen, ')');
+        end;
+        EnableExceptionRuntime;   { readable without this unit ever raising }
+        node := AllocNode(AN_EXCEPTOBJ);
+        ASTTk[node] := Ord(tyPointer);
+        LastExprTk := tyPointer;
+        CurASTNode := node;
+        Exit;
+      end;
+
       { __pxxExceptAddr: the raise site of the exception in flight. Zero-arg, and the
         reserved prefix keeps it out of the user's namespace — sysutils.ExceptAddr is a
         one-line wrapper over it. Parens optional, like any zero-arg Pascal function. }

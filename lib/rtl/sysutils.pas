@@ -159,18 +159,24 @@ var
   { Replaceable; defaults to SysBackTraceStr below. }
   BackTraceStrFunc: TBackTraceStrFunc;
 
-{ FPC System.ExceptAddr: the address at which the CURRENT exception was raised.
+{ FPC System.ExceptAddr / System.ExceptObject: the address at which the CURRENT
+  exception was raised, and the object being raised. Both are real now -- the
+  raise stub parks each in its own BSS slot and a compiler intrinsic reads it.
+  (The comment here used to say ExceptAddr was a nil stub; that was true until
+  bug-pascal-exceptaddr-returns-nil closed.)
 
-  THIS RETURNS NIL TODAY, and that is a stub, not an implementation -- we do not record
-  the raise site. It is declared because FPC code calls it, and because its callers are
-  diagnostic: fpcunit feeds it to AddFailure, whose AddrsToStr prints 'n/a' for a nil
-  address, so a nil lands on the unit's own sanctioned "no address known" path rather
-  than lying with a plausible-looking pointer. Pass/fail is unaffected.
+  Both answer nil when no exception is in flight, and both stay valid only for as
+  long as the exception is: inside an `except` block, or in a routine the handler
+  calls. ExceptObject is the way to reach the object from a handler written WITHOUT
+  an `on E: T do` binding --
 
-  The honest fix is cheap and filed (bug-pascal-exceptaddr-returns-nil): IR_RAISE
-  already stores the exception object and class into BSS slots, and the CALL to the
-  raise stub pushes the raise site itself -- so the address is right there to capture. }
+    except
+      WriteLn('caught ', ExceptObject.ClassName);
+    end;
+
+  -- which is exactly the shape FPC code that predates `on ... do` uses. }
 function ExceptAddr: Pointer;
+function ExceptObject: TObject;
 
 { The default BackTraceStrFunc: '  $00000000004012AB'. A nil address renders as
   $0, which is what the callers' "no address known" path already expects. }
@@ -4698,6 +4704,16 @@ begin
     the exception-address BSS slot; __pxxExceptAddr is the compiler intrinsic that
     reads it. nil when no exception is in flight. }
   Result := __pxxExceptAddr;
+end;
+
+function ExceptObject: TObject;
+begin
+  { The twin of ExceptAddr: the raise stub parks the object itself in the
+    exception-object BSS slot -- the very slot `on E: T do` loads to bind its
+    handler variable -- and __pxxExceptObject reads it. The intrinsic is untyped
+    on purpose, so the cast to TObject happens HERE, where TObject exists, rather
+    than in the parser. nil when no exception is in flight. }
+  Result := TObject(__pxxExceptObject);
 end;
 
 procedure SysAssertError(const msg: AnsiString);

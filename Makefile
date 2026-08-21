@@ -3847,6 +3847,14 @@ test-core: $(COMPILER)
 	# pushed), not the nil stub it used to be (b340)
 	./$(COMPILER) test/test_exceptaddr_b340.pas $(TESTTMP)/test_exceptaddr_b34026
 	test "$$($(TESTTMP)/test_exceptaddr_b34026 | tail -1)" = "PASS"
+	# ExceptObject = the exception OBJECT in flight, ExceptAddr's twin: the same
+	# BSS slot `on E: T do` binds from, reached through __pxxExceptObject. The
+	# shape it exists for is a BARE `except` -- no `on ... do` binding, which is
+	# what pre-`on` FPC code uses -- plus reading the object from a routine the
+	# handler CALLS. Byte-identical to fpc 3.2.2, nil-when-idle row included.
+	./$(COMPILER) test/test_exceptobject_intrinsic.pas $(TESTTMP)/test_exceptobject26
+	@test "$$($(TESTTMP)/test_exceptobject26)" = "$$(printf 'idle: nil\nbare: EConvertError/m1\nbound: EMy/m2\nsame: True\nreport: EMy/m3\nin: EConvertError/inner\nout: EMy/outer\nend')" \
+	  || { echo "test_exceptobject_intrinsic: FAIL"; $(TESTTMP)/test_exceptobject26; exit 1; }
 	# WideChar values in STRING contexts (assign, +concat, string param) convert to
 	# UTF-8 via builtin helpers; surrogate PAIR -> one 4-byte code point (fpjson \uXXXX);
 	# was silently retained as a string POINTER -> memory corruption + crash
