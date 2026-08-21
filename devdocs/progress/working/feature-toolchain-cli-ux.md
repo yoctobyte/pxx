@@ -5,7 +5,7 @@ prio: 45  # auto
 # Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck)
 
 - **Type:** feature (project infrastructure / user experience)
-- **Status:** backlog (steps 1-2 landed 2026-08-21; 3-4 open)
+- **Status:** working
 - **Owner:** agent-A
 - **Opened:** 2026-06-21 (user-tooling design discussion)
 - **Relation:** companion to `feature-release-packaging` — that ticket *produces &

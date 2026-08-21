@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 55
+prio: 20
 type: chore
 owner: —
 blocked-by: []
@@ -288,6 +288,17 @@ before wiring.
 `test/$$t.pas`, so no literal `test/…` token exists for the checker to match.
 All five verified by reading the consumer, then exempted with the consumer named
 — an exemption whose reason cites a specific wired caller stays checkable.
+
+## Prio dropped 55 → 20 on 2026-08-21 (not a judgement on the work)
+
+55 was right while ~60 files were unrun. With 15 left, every one of them in a
+lane the user has explicitly deferred (N) or parked by definition (F), the
+ranker was handing this back as the top Track A item on every `next` — a queue
+that recommends work nobody may do. The number is the only lever that says so:
+`ready`/`next` scan backlog, and there is no "deferred" state short of
+inventing a blocker ticket that does not exist. Raise it back to 55 the moment
+Track N or Track F reopens; the remaining work is 15 mechanical files, not a
+design problem.
 
 ## Batch 4 — the 19 ESP programs, and the invocation that made them look broken (42 → 15)
 
