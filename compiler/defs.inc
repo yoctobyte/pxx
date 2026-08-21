@@ -3064,8 +3064,15 @@ var
     here" lookup table, one entry per possible Code[] position. A LOCAL
     `array of Integer` (SetLength-based) here previously triggered pxx's
     oversized-stack-frame warning at ~8MB (MAX_CODE) -- a global sidesteps
-    it entirely (BSS, not stack), matching the warning's own suggestion. }
-  AsmDisProcAtPos: array[0..MAX_CODE] of Integer;
+    it entirely (BSS, not stack), matching the warning's own suggestion.
+
+    DYNAMIC, and sized to the code actually emitted rather than to MAX_CODE.
+    Fixed, it was the single biggest static table in the compiler -- 67 MB of
+    BSS reservation, 4 bytes per POSSIBLE code byte -- to serve one debug flag
+    that no ordinary compile passes. WriteDisassemblyX64 SetLengths it; nothing
+    else touches it, so it stays a nil handle in every other compile.
+    feature-dynamic-compiler-tables }
+  AsmDisProcAtPos: array of Integer;
   { Inline-asm operand scratch (slot 0 = dest, slot 1 = src, slot 2 = imm8).
     THREE slots, not two: the packed-SSE compare and shuffle forms take a
     trailing imm8 selector (`cmppd xmm0, xmm1, 2` = CMPLEPD, `shufpd x, y, 1`),

@@ -878,6 +878,7 @@ begin
     a per-instruction or per-branch linear scan over ProcCount would be
     O(CodeLen * ProcCount), far too slow for a multi-MB self-compile. }
   
+  SetLength(AsmDisProcAtPos, CodeLen + 1);
   for i := 0 to CodeLen do AsmDisProcAtPos[i] := -1;
   for i := 0 to ProcCount - 1 do
     if (Procs[i].BodyAddr >= 0) and (Procs[i].BodyAddr <= CodeLen) then

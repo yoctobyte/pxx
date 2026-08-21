@@ -5,8 +5,8 @@ prio: 45  # auto
 # Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood)
 
 - **Type:** feature (compiler architecture / capacity) — Track A
-- **Status:** backlog — parked 2026-07-19 sweep; landed slices green, remaining scope below
-- **Owner:** opus-A
+- **Status:** working
+- **Owner:** agent-A
 - **Opened:** 2026-06-27
 - **Relation:** forced into view by [[feature-c-desktop-lua-sqlite-path]] M5 —
   sqlite's 257k-line amalgamation blew `MAX_TOKENS` (512K) and needed a bump to
