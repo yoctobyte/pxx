@@ -56,7 +56,7 @@ lives in git, not in a timestamp._
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (276)
+## backlog (277)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -120,6 +120,7 @@ lives in git, not in a timestamp._
 | bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio | T | 45 | bug | Float-accuracy assertions in the gated suites make a one-ulp move a CI RED, and a red job is worked at the priority of BEING RED - which overrides the owner's standing rule that float accuracy is low prio. Parking the tickets in float/ does not close this door; only the tests can. | — |
 | bug-t-a-pin-verifys-reds-carry-no-reasons | T | 45 | bug | A pin verify's reds carry no reasons | — |
 | bug-t-agents-kill-each-others-processes-with-pattern-pkill | T | 65 | bug | Two csmith batches were killed mid-run from outside their own session. Pattern-pkill (pkill -f <name>) cannot distinguish two agents running the same tool, and this repo ALREADY hit and solved this class once in tools/gui_shot.sh — the rule was written into that one script and never generalised, while devdocs/dev/debugging-playbook.md still actively teaches `pkill -9 -f <path>`. | — |
+| bug-t-gate-quick-cannot-see-a-broken-pinned-rtl | T | 45 | bug | A Track A change that adds a builtin and uses it from lib/rtl breaks every $(PXX_STABLE) build the moment it lands, because stable_linux_amd64/default/builtin/ is a FROZEN copy — and gate.sh quick is green through it, because the quick gate never builds anything with the pinned binary. It happened on 2026-08-21 and Track B/D/E were dead on master until the next pin. A ~1s canary closes it. | — |
 | bug-t-the-push-rate-starves-breadth-coverage-entirely | T | 60 | bug | SHAPE 2 SHIPPED AND DID NOTHING (see the 2026-08-19 correction: 9 saved, 0 carried, 100% loss — fixed under bug-t-a-saved-partial-is-evicted-by-the-next-run-of-different-work); this closes on carried_runs leaving zero, not on more code. Zero full-tier runs on HEAD in the 5h13m between 9bfb7fcfac03 (10:31:57Z) and ~15:45Z, while cross-target coverage read as fine because every native verdict was green. RE-MEASURED: the watcher is idle 54% of that window (~2.8h, 8x what a full tier needs) — breadth is not starved by pushes, it is queued behind pin verify, which needs a contiguous 21 minutes, gets idle slices with a median of 299s, and discards 100% on every abort. Breadth ran within minutes of pin verify finally retiring. Fix is resumability plus bounding consecutive idle, NOT reserving a slot. | — |
 | bug-t-track-ts-own-pushes-destroy-track-ts-own-breadth-coverage | T | 50 | bug | NOTEST_PREFIXES is ('devdocs/', 'docs/'), so tools/** is testable — correct, since a testmgr change can change results. The consequence is that Track T is the only lane whose ordinary work systematically destroys its own coverage: any T tooling push aborts an in-flight idle-phase full tier and discards 100% of it. Measured 2026-08-19: one twatch push killed the first breadth run in 5h13m at ~207/2765 jobs. Batching by hand is a habit, not a property. | — |
 | bug-t-twatch-web-lists-a-target-that-cannot-be-built | T | 25 | bug | tools/twatch_web.py lists riscv64 in CROSS_TARGETS, but no compiler backend can produce a riscv64 binary and the test manager never mentions the target. The dashboard therefore carries a column that is structurally empty, and an empty column reads as 'no news' rather than 'impossible'. | — |
@@ -656,6 +657,7 @@ lives in git, not in a timestamp._
 - [p 45] [T] bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence
 - [p 45] [T] bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio
 - [p 45] [T] bug-t-a-pin-verifys-reds-carry-no-reasons
+- [p 45] [T] bug-t-gate-quick-cannot-see-a-broken-pinned-rtl
 - [p 45] [T] bug-t-two-devtests-measure-the-box-and-flake-the-fleet-job
 - [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
 - [p 45] [U] decide-segv-runtime-error-default

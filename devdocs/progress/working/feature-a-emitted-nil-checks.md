@@ -214,3 +214,69 @@ lands.
 `pinned` as well as at HEAD, and regardless of `--no-nil-check`. Filed as
 `bug-a-assigning-nil-to-a-method-pointer-segfaults`. The guard is already on
 that path; it cannot be tested until a method pointer can be set to nil.
+
+---
+
+## Landing 2 (2026-08-21): the receiver site class — and the guard stops being a call
+
+### Site class 2: a method on a nil instance
+
+Both lowering paths, because they are genuinely two paths and either can regress
+alone:
+
+- `AN_VIRTUAL_CALL` — faults on the VMT load, so the MMU catches it today on a
+  PC and nowhere else;
+- the plain `AN_CALL` path — this is the one worth the ticket. A method that
+  touches no field **ran to completion on a nil instance and returned normally**.
+  Nothing faulted; the program carried on and misbehaved later somewhere else.
+  That is exactly the plausible-wrong-value-far-from-the-cause shape
+  `devdocs/dev/debugging-playbook.md` opens with.
+
+The key is *"param 0 is named `Self`, is `tyClass`, and is not by-ref"*, not
+`Name = 'Self'` alone. A **class** method's `Self` is a metaclass pointer
+(`tyPointer`) and a record's / type helper's is by-ref; wrapping either is wrong,
+and the name-only key would have wrapped every `class function` in the tree.
+`test_nil_check_receiver.pas` carries a `class function Make` for precisely this.
+
+### The guard is no longer a call, and the pure-Pascal claim above is now wrong
+
+Landing 1 wrapped the pointer in `PXXNilChkPtr`, mirroring `IRWrapChkBounds` /
+`PXXRangeChkI64`. That is the nicer code and it does not survive contact with a
+receiver check, because a receiver check is on *every method call*:
+
+| shape | 60M method calls, `-O2` |
+| --- | --- |
+| baseline (no checks) | 0.42 s |
+| guard as a call (`PXXNilChkPtr`) | **0.65 s** (+48%) |
+| guard as inline IR (test + branch) | **0.43 s** (+2%) |
+
+`inline` does not rescue the call form: inline v1 (`inline_expand.inc`) retains
+only single-expression bodies with **no call in them**, and the call is this
+body's entire purpose. So `IRWrapNilChk` now builds the compare and the
+conditional branch as IR at the site and leaves only the cold arm (`PXXNilRef`)
+in a routine. `PXXNilChkPtr` is deleted, with the measurement recorded in
+`builtinheap.pas` where it stood, so the next reader does not re-derive it.
+
+Landing 1's *"the check never became machine code, so every target is done"*
+is therefore superseded: it is IR now, which lowers on every backend anyway —
+the portability conclusion holds, the reasoning for it does not.
+
+### Cross-lane fallout, and the gate hole it exposed
+
+Landing 1 added `PXXNilRefHook` to `builtinheap.pas` and used it from
+`lib/rtl/sysutils.pas`. `stable_linux_amd64/default/builtin/` holds a **frozen**
+copy of the builtin sources, so from `97b1812fe` until the v369 pin every
+`$(PXX_STABLE)` build — all of Track B/D/E, `make lib-test`, `make demos` —
+failed with `undefined variable (PXXNilRefHook)`. `tools/gate.sh quick` was green
+throughout and structurally cannot see this: it never builds anything with the
+pinned binary. Filed as [[bug-t-gate-quick-cannot-see-a-broken-pinned-rtl]].
+
+### Not covered yet
+
+- **Interface method calls** (the IMT load) — arm 3.
+- **Bare pointer derefs** behind `{$nilchecks on}`, default off — arm 4.
+- **Intrinsic-ish members on a nil instance**: `p.ClassName` still segfaults,
+  because it lowers to a direct VMT/field read rather than to a call with a
+  `Self` param, so neither arm-2 key sees it. Same class as arm 4.
+- **Folding provably-non-nil receivers** (`Self` inside a method, a
+  just-constructed object). At +2% the pressure to do this is now low.
