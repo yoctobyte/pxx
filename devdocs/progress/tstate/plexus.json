@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T12:24:18Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "2319ee08235a3c6157184d947037ccc26068e6e5",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-20T12:35:13Z",
    "fixed": [],
    "new_red": [],
@@ -458,6 +450,14 @@
    "sha": "75f93112a3d4d649f98cc576d664e778a795baa0",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-21T01:06:34Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "374297d8c9c699accaee818a3e10ed23dd4db0f7",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -467,11 +467,11 @@
   "test-c-conformance-aarch64#shard1/6": "FAIL 00206.c \u2014 exit code 39 (want 0) | FAIL 00212.c \u2014 exit code 11 (want 0) | test-c-conformance-aarch64: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-aarch64: FAILURES: 00206.c(exit=39) 00212.c(exit=11)",
   "test-c-conformance-arm32#shard1/6": "FAIL 00206.c \u2014 exit code 64 (want 0) | FAIL 00212.c \u2014 exit code 64 (want 0) | test-c-conformance-arm32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-arm32: FAILURES: 00206.c(exit=64) 00212.c(exit=64)",
   "test-c-conformance-riscv32#shard1/6": "FAIL 00206.c \u2014 exit code 144 (want 0) | FAIL 00212.c \u2014 exit code 144 (want 0) | test-c-conformance-riscv32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-riscv32: FAILURES: 00206.c(exit=144) 00212.c(exit=144)",
-  "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas": "ok: $TMP  [code=59256B  data=1888B  bss=42492B  procs=121] | Segmentation fault (core dumped)",
+  "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas": "ok: $TMP  [code=59738B  data=1888B  bss=42492B  procs=122] | Segmentation fault (core dumped)",
   "test-core#src:test/test_mode_delphi.pas": "pascal26:25: warning: bare own name 'Gate' reads the result of parameterless function Gate; write Gate() for a recursive call, or Result to read the result | pascal26:36: error: undefined variable (Dbl) | near: end  begin p  Dbl >>>  WriteLn",
   "test-core#src:test/test_mode_delphi_callarg.pas": "pascal26:51: error: undefined variable (Dbl) | near:  ApplyFn=  ApplyFn  Dbl >>>",
   "test-core#src:test/test_mode_delphi_methptr.pas": "pascal26:39: error: \"TCounter.Add\" is a procedure and has no result to use in an expression | near:  e  c  Add >>>  e",
-  "test-core#src:test/test_procvar_value_context.pas": "ok: $TMP  [code=59073B  data=1608B  bss=42516B  procs=125]",
+  "test-core#src:test/test_procvar_value_context.pas": "ok: $TMP  [code=59555B  data=1608B  bss=42516B  procs=126]",
   "test-core#src:test/test_record_helper_for_string_b331.pas": "pascal26:71: error: undefined variable (BITS) | near:  Writeln  bits:     BITS >>>   end",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter",
   "test-pascal-conformance#shard4/6": "SKIP toperator9.pp \u2014 gap: operator overload for `in` on a record type not supported by the parser | SKIP tprocvar1.pp \u2014 gap: method pointers (`procedure(l:longint) of object`), @Class.Method, typed-const procvars | SKIP tsealed6.pp \u2014 gap: `object abstract` / `object sealed` modifiers in object declarations | SKIP tstring4.pp \u2014 wontfix: reads ansistring refcount/length header words \u2014 FPC internal \u2026",
@@ -2173,6 +2173,7 @@
   "test-core#src:test/test_string_delete_insert.pas": "native",
   "test-core#src:test/test_string_of_pchar.pas": "native",
   "test-core#src:test/test_string_ordering.pas": "native",
+  "test-core#src:test/test_string_ordering_cross.pas": "native",
   "test-core#src:test/test_string_sized.pas": "native",
   "test-core#src:test/test_string_to_pchar_auto.pas": "native",
   "test-core#src:test/test_succ_pred_odd.pas": "native",
@@ -5052,6 +5053,7 @@
   "test-core#src:test/test_string_delete_insert.pas": "pass",
   "test-core#src:test/test_string_of_pchar.pas": "pass",
   "test-core#src:test/test_string_ordering.pas": "pass",
+  "test-core#src:test/test_string_ordering_cross.pas": "pass",
   "test-core#src:test/test_string_sized.pas": "pass",
   "test-core#src:test/test_string_to_pchar_auto.pas": "pass",
   "test-core#src:test/test_succ_pred_odd.pas": "pass",
@@ -6229,11 +6231,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-21T00:53:03Z",
-  "sha": "75f93112a3d4d649f98cc576d664e778a795baa0",
+  "date": "2026-08-21T01:06:34Z",
+  "sha": "374297d8c9c699accaee818a3e10ed23dd4db0f7",
   "tier": "native",
   "verdict": "RED",
-  "wall": 457.3
+  "wall": 478.3
  },
  "last_bench": {
   "conf_rows": 550,
