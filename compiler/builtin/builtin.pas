@@ -902,8 +902,7 @@ begin
     Result := dst;
     Exit;
   end;
-  writeln('Runtime error: EVariantError, cannot convert string to a number');
-  Halt(219);
+  PXXVariantError('cannot convert string to a number');
 end;
 
 function PXXVarBinOpPas(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
@@ -985,9 +984,8 @@ begin
     { VT_PROMO_INT64 holds a value that did NOT fit the inline tier, so by
       construction it does not fit an Int64 either. Truncating it is the defect
       the promotable int exists to remove — assign to a PromoInt instead. }
-    writeln('Runtime error: EVariantError, promotable integer ',
-            PAnsiString(@p^.Payload)^, ' does not fit an Int64');
-    Halt(219);
+    PXXVariantError('promotable integer ' + PAnsiString(@p^.Payload)^ +
+                    ' does not fit an Int64');
   end
   else if p^.VType = 6 then
   begin
@@ -997,16 +995,12 @@ begin
       any string); this helper is the Pascal path and follows Pascal. }
     Val(PAnsiString(@p^.Payload)^, Result, vcode);
     if vcode <> 0 then
-    begin
-      writeln('Runtime error: EVariantError, cannot convert string to integer');
-      Halt(219);
-    end;
+      PXXVariantError('cannot convert string to integer');
   end
   else
   begin
-    writeln('Runtime error: variant holds ', VariantTagName(p^.VType),
-            ', an integer was required');
-    Halt(219);
+    PXXVariantError('variant holds ' + VariantTagName(p^.VType) +
+                    ', an integer was required');
   end;
 end;
 
@@ -1035,15 +1029,13 @@ begin
     ValFloat(PAnsiString(@p^.Payload)^, Result, vcode);
     if vcode <> 0 then
     begin
-      writeln('Runtime error: EVariantError, cannot convert string to float');
-      Halt(219);
+      PXXVariantError('cannot convert string to float');
     end;
   end
   else
   begin
-    writeln('Runtime error: variant holds ', VariantTagName(p^.VType),
-            ', a float was required');
-    Halt(219);
+    PXXVariantError('variant holds ' + VariantTagName(p^.VType) +
+                    ', a float was required');
   end;
 end;
 
@@ -1062,9 +1054,8 @@ begin
     Result := False
   else if (p^.VType = 6) or (p^.VType = 7) then
   begin
-    writeln('Runtime error: EVariantError, cannot convert ',
-            VariantTagName(p^.VType), ' to boolean');
-    Halt(219);
+    PXXVariantError('cannot convert ' + VariantTagName(p^.VType) +
+                    ' to boolean');
     Result := False;
   end
   else
@@ -1101,9 +1092,7 @@ begin
     { FPC raises here, and its message names String rather than Char — the
       diagnostic leaks the intermediate step. Reproduced verbatim: under a
       parity flag the error text is part of the behaviour being matched. }
-    writeln('Runtime error: EVariantTypeCastError, Could not convert variant ',
-            'of type (Null) into type (String)');
-    Halt(219);
+    PXXVariantError('Could not convert variant of type (Null) into type (String)');
   end;
   s := VariantToStr(v);
   if s = '' then Result := #0 else Result := s[1];

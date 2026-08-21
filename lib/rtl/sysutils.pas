@@ -135,6 +135,14 @@ type
   ENotImplemented   = class(Exception) end;
   EArgumentException = class(Exception) end;
   EListError        = class(Exception) end;
+  { Raised when a Variant cannot be brought to the requested type — text that
+    is not numeric read as a number, a Null read as a string. Declared HERE and
+    not in `variants` (which is where it used to live, and which re-exports it)
+    for one reason: the builtin units raise it through PXXVariantErrorHook, and
+    the hook has to be installed by a unit that is present. `uses variants` is
+    optional in pxx — variant support is in the compiler — while sysutils is
+    what every program that catches anything already has. }
+  EVariantError     = class(Exception) end;
 
   { The metaclass of Exception. FPC declares it in System, but our Exception lives
     here, so here is where `class of` it can be formed. Code that catches by class
@@ -4735,6 +4743,16 @@ begin
   raise EDivByZero.Create('Division by zero');
 end;
 
+procedure SysRaiseVariantError(const msg: AnsiString);
+begin
+  { A failed Variant conversion upgraded from print-and-Halt(219) to a
+    catchable exception. FPC catches `try i := v; except on E: Exception`
+    here and the program continues; pxx used to die inside the helper, which
+    made the ordinary "parse it, fall back if it isn't a number" shape
+    impossible to write. bug-a-variant-conversion-failure-is-uncatchable }
+  raise EVariantError.Create(msg);
+end;
+
 procedure SysRaiseAccessViolation;
 begin
   { A nil receiver / nil procvar call, caught at the site by the compiler's
@@ -4753,6 +4771,7 @@ initialization
   PXXRangeErrorHook := @SysRaiseRangeError;
   PXXIoErrorHook := @SysRaiseIoError;
   PXXNilRefHook := @SysRaiseAccessViolation;
+  PXXVariantErrorHook := @SysRaiseVariantError;
   TimeSeparator := ':';
   DateSeparator := '-';
   ShortDateFormat := 'd/m/y';

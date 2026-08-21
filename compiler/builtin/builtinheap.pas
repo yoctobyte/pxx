@@ -3400,6 +3400,34 @@ begin
   Halt(200);
 end;
 
+type
+  TPXXVariantErrorProc = procedure(const msg: AnsiString);
+var
+  { Installed by sysutils' initialization to turn a failed Variant conversion
+    into a raised, catchable EVariantError — the same hook design as
+    PXXDivZeroHook, for the same reason: the conversion helpers live in the
+    builtin units, which have no exception class to raise, while the unit that
+    HAS one cannot be assumed present. Default nil = print-and-halt, which is
+    what every one of those sites did unconditionally before. }
+  PXXVariantErrorHook: TPXXVariantErrorProc;
+
+{ The one exit for "this Variant conversion cannot be done". Eight sites in
+  builtin.pas each did `writeln(...); Halt(219)` inline, so a program doing the
+  ordinary `try i := v; except on E: Exception do ... end` DIED instead of
+  taking its handler — FPC catches it there, and the whole point of that try is
+  that the text may not be numeric.
+
+  msg is the text AFTER "EVariantError, " so both paths can shape it: the hook
+  raises it as the exception message, and the fallback prints the line the
+  sites used to print themselves. Never returns when a hook is installed —
+  the raise leaves through the exception machinery. }
+procedure PXXVariantError(const msg: AnsiString);
+begin
+  if PXXVariantErrorHook <> nil then PXXVariantErrorHook(msg);
+  writeln('Runtime error: EVariantError, ', msg);
+  Halt(219);
+end;
+
 var
   { Installed by sysutils' initialization to convert a {$Q+} arithmetic
     overflow into a raised, catchable EIntOverflow — same design as

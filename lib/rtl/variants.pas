@@ -45,7 +45,11 @@ type
     to comparing the two as strings, then to a raw memory compare. Answering
     vrNotEqual instead would silently take that fallback away and return an
     ordering derived from emptiness, which neither side is. }
-  EVariantError = class(Exception) end;
+  { RE-EXPORTED, not declared: the class itself moved to sysutils on
+    2026-08-21 so the builtin units' PXXVariantErrorHook has something to raise
+    in every program, `uses variants` being optional in pxx. Same class object,
+    so `on E: EVariantError` written against either unit catches both. }
+  EVariantError = sysutils.EVariantError;
 
 { FPC's Null / Unassigned variant values.
 

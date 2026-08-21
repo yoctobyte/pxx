@@ -5121,6 +5121,25 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_nested_type_methods.pas $(TESTTMP)/test_nested_type_methods26
 	test "$$($(TESTTMP)/test_nested_type_methods26)" = "$$(printf 'nested 42 12 10\nNESTED TYPE METHODS OK')"
 	# RTL names FPC code calls: CompareMemRange, DynArraySize, Wide/UnicodeCompare*, CompareValue, HRESULTs
+	# A failed Variant conversion must RAISE, not kill the process. The whole
+	# reason `try i := v; except ... end` is written is that the text may not
+	# be numeric -- and the builtin conversion helper used to print
+	# "Runtime error: EVariantError, ..." and Halt(219) from inside, so the
+	# handler was unreachable and the program died at the first bad input.
+	# sysutils now installs PXXVariantErrorHook exactly as it already did for
+	# div-by-zero / overflow / range / I/O / nil-ref. Every line but the last
+	# is byte-identical to fpc 3.2.2; the last differs in WORDING only (FPC:
+	# "Invalid variant type cast", pxx names the conversion).
+	./$(COMPILER) -Fulib/rtl test/test_variant_conversion_failure_is_catchable.pas $(TESTTMP)/test_variant_catchable26
+	test "$$($(TESTTMP)/test_variant_catchable26)" = "$$(printf '42\n7\nEVariantError\nEVariantError\nexc EVariantError\nfloat raised\nbool raised\ncannot convert string to integer\nstill alive')"
+	# ...and test/fpcv.pas, which sat unwired for exactly this reason: it was
+	# written as an FPC ORACLE probe (what does FPC do when a Variant holding
+	# '42' / 'abc' / '2.5' / '' is read as Integer/Double/Boolean?) and pxx
+	# could not match it, because two of its five lines require catching the
+	# raise. It now agrees with fpc 3.2.2 line for line, so the probe becomes
+	# the test.
+	./$(COMPILER) -Fulib/rtl test/fpcv.pas $(TESTTMP)/fpcv26
+	test "$$($(TESTTMP)/fpcv26)" = "$$(printf 'int of ''42''  = 42\nint of ''abc'' EXC: EVariantError\ndbl of ''2.5'' = 2.50\nbool of ''''    EXC: EVariantError\nbool of 0.0   = FALSE')"
 	./$(COMPILER) -Fulib/rtl test/test_rtl_fpc_compat_helpers.pas $(TESTTMP)/test_rtl_fpc_compat_helpers26
 	test "$$($(TESTTMP)/test_rtl_fpc_compat_helpers26 | tail -1)" = "total ok 23 / 23"
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
