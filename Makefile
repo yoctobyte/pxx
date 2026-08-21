@@ -6462,6 +6462,21 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_mode_delphi_callarg26)" = "$$(printf 'ApplyFn=42\nlog=20\nCallNul=14')"
 	./$(COMPILER) test/test_mode_delphi_methptr.pas $(TESTTMP)/test_mode_delphi_methptr26
 	test "$$($(TESTTMP)/test_mode_delphi_methptr26)" = "$$(printf 'total=12\nkicked=1')"
+	@# A unit's {$$mode} directive stops at the unit boundary — BOTH directions.
+	@# ParseUsesUnitBody saved NestedComments across a unit load and not
+	@# DelphiMode, and one line in lexer.inc's {$$mode} handler sets both, so half
+	@# the directive leaked. Invisible until 136 lib/rtl units gained {$$MODE PXX}
+	@# and every `uses` of the RTL turned {$$mode delphi} off for the rest of the
+	@# program; the four rows above went red at once.
+	@# The uses ORDER in the first test is the control: naming the {$$MODE PXX}
+	@# unit LAST is what makes a leaking compiler fail it — the other way round,
+	@# delphidial's own {$$mode delphi} leaks ON and hides the bug.
+	@# bug-a-a-units-mode-directive-turns-delphi-mode-off-for-the-program
+	./$(COMPILER) -Futest/modeunits test/test_mode_delphi_unit_leak.pas $(TESTTMP)/test_mode_leak26
+	test "$$($(TESTTMP)/test_mode_leak26)" = "$$(printf 'p7=14\npxx=42 delphi=7')"
+	@./$(COMPILER) -Futest/modeunits test/test_mode_delphi_unit_leak_off_fail.pas $(TESTTMP)/test_mode_leakoff26 2>&1 \
+	  | grep -q 'undefined variable (Dbl)' \
+	  || { echo 'test_mode_delphi_unit_leak_off_fail: FAIL - a {$$mode delphi} UNIT must not turn delphi mode on for the program'; exit 1; }
 	./$(COMPILER) test/test_mimic_fpc.pas $(TESTTMP)/test_mimic_fpc_off26
 	test "$$($(TESTTMP)/test_mimic_fpc_off26)" = "fpc=no"
 	./$(COMPILER) --mimic-fpc test/test_mimic_fpc.pas $(TESTTMP)/test_mimic_fpc_on26

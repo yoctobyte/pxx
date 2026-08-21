@@ -2654,7 +2654,7 @@ var
   pyDotted: AnsiString;
   pyDottedIsPath: Boolean;   { it has >1 segment, so it names a file under a root }
   pyRootIdx: Integer;   { NilPy .py/.npy search over the library roots — see below }
-  savedNestedComments: Boolean;
+  savedNestedComments, savedDelphiMode: Boolean;
   unitNeedsText: Boolean;
   savedPasDefineCount, savedPasDefineCharLen, pdi: Integer;
   savedPasDefineActive: array[0..MAX_PAS_DEFINES-1] of Boolean;
@@ -3725,9 +3725,19 @@ begin
       a unit's {$MODE DELPHI} / {$NESTEDCOMMENTS OFF} must not change how
       LATER units' comments lex (Synapse's jedi.inc sets MODE DELPHI and
       every lib/rtl unit lexed after it broke on nested-brace doc comments —
-      bug-unit-mode-directives-leak). }
+      bug-unit-mode-directives-leak).
+
+      DelphiMode moves with NestedComments and always has to: ONE line in
+      lexer.inc's {$mode} handler sets both, so scoping one and not the other
+      leaves half a directive leaking. It leaked for months without being
+      noticed, because every mode a unit actually declared happened to set
+      DelphiMode to its default value — until {$MODE PXX} was added to 136
+      lib/rtl units, and from then on any `uses` of the RTL silently turned
+      {$mode delphi} OFF for the rest of the program.
+      bug-a-a-units-mode-directive-turns-delphi-mode-off-for-the-program }
     savedCaseMode := CaseSensitiveMode;
     savedNestedComments := NestedComments;
+    savedDelphiMode := DelphiMode;
     { A PASCAL unit is parsed with PASCAL expression rules, whoever pulled it
       in. NilPy turns on Python's and/or/not precedence for its own body, and a
       `.py` MODULE that imports a Pascal unit (settings.py -> configparser)
@@ -3855,6 +3865,7 @@ begin
     CurUnitDir := savedUnitDir;
     CaseSensitiveMode := savedCaseMode;
     NestedComments := savedNestedComments;
+    DelphiMode := savedDelphiMode;
     PyExprMode := savedPyExprMode;
     CurrentUnitIdx := savedCurrentUnitIdx;
     CurrentCLibrary := savedCurrentCLibrary;
