@@ -991,8 +991,7 @@ begin
     compiler binary so a plain `pxx foo.pas` finds it with no -Fu. Appended
     last, so an explicit user -Fu (e.g. a per-platform override) still wins.
     ESP targets select their own backend and are excluded from default RTL. }
-  if (not NoDefaultRtl) and (TargetArch <> TARGET_XTENSA) and
-     ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+  if (not NoDefaultRtl) and (not TargetIsEspClass) then
   begin
     { ExeDir-anchored (the installed layout: <root>/compiler/ -> ../lib/...) plus
       a CWD-relative fallback, mirroring ParseUsesUnit's own search chain. The

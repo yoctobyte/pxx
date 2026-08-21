@@ -9568,8 +9568,7 @@ begin
     through — it exit_group's), so the unit bodies sit after it, reached only via
     call. Guarded like the Pascal default-RTL pull: skip on bare-metal ESP and
     when default RTL is opted out. }
-  if (not NoDefaultRtl) and (TargetArch <> TARGET_XTENSA) and
-     ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+  if (not NoDefaultRtl) and (not TargetIsEspClass) then
   begin
     { builtinheap declares TInterfacedObject/IInterface (Pascal classes), whose
       signatures name TGuid and TObject — builtin rows the Pascal ParseProgram

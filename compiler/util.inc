@@ -49,13 +49,19 @@ function TargetIsEspClass: Boolean;
   which is exactly why the profile has to be part of the test and why writing it
   out by hand is a trap.
 
-  It was written out by hand, 21 times, all identical:
+  It was written out by hand, 24 times, all identical:
 
     (TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot))
 
-  20 in pasparser_prog.inc and 1 in pasparser_proc.inc, every one of them
-  guarding "may I pull this RTL unit". Adding a target means editing all 21 or
-  being silently wrong at whichever one is missed — and being wrong here does
+  20 in pasparser_prog.inc, 2 in pasparser_proc.inc, 1 in cparser.inc and 1 in
+  compiler.pas's own body, every one of them guarding "may I pull this RTL
+  unit". The last three were found by the ticket's grep-for-the-sibling pass
+  after the first 21 were replaced, and they are the argument in miniature: the
+  C frontend and the -Fu default-path setup ask the identical question and had
+  drifted into their own copies, each with its own comment saying "same guard as
+  the Pascal default-RTL pull" — the sameness was documented in prose and not in
+  code. Adding a target means editing all 24 or being silently wrong at
+  whichever one is missed — and being wrong here does
   not crash, it silently drags an uncompilable unit into a bare-metal build or
   silently omits Str/Val from a hosted one. Found while scoping
   feature-a-riscv64-as-a-hosted-first-class-target, where it is a prerequisite.

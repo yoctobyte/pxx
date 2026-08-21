@@ -54,7 +54,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (276)
+## backlog (275)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -303,7 +303,6 @@ _none_
 | perf-c-parse-codegen-large-file-superlinear | A | 30 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 30 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-a-backend-machine-code-lives-in-six-shared-files | A | 35 | refactor | A backend is not ir_codegen_<arch>.inc + asmtext_<arch>.inc. Six shared files emit or name per-arch machine code: symtab.inc (three full function epilogues), asmenc.inc (inline-asm text for all five targets), ir_codegen.inc (the shared -O pipeline calls two aarch64 passes by name), asmfront.inc, exception_emit.inc, and -- the one that crosses a lane -- cparser.inc, the C FRONTEND, which writes the C _start entry stub as raw rv32_/a64_/arm32_ emission. Measured by the omission defines, which turn every one of these into a compile error. | — |
-| refactor-a-nineteen-copies-of-does-this-target-link-the-builtin-unit | A | 40 | refactor | `(TargetArch <> TARGET_XTENSA) and ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot))` appears verbatim NINETEEN times in parser.inc, always answering one question: does this target link the builtin RTL unit at all? Give it a name. The duplication is the mechanism by which the next ESP-adjacent target gets it wrong in some of the nineteen and right in the rest. | — |
 | refactor-a-search-path-helpers-live-in-the-c-preprocessor | A | 25 | refactor | AddPasUnitDir / AddPasIncDir / AddCIncludeDir are generic search-path functions that live in cpreproc.inc, so compiler.pas's own -Fu/-I handling depends on the C frontend. Six of the eleven errors from omitting the C frontend are this misplacement, not coupling: moving them drops omit-c from 11 sites to about 4. | — |
 | refactor-a-seven-frontends-borrow-rust-parser-helpers | A | 40 | refactor | Zig, ALGOL, Erlang, Fortran, LOLCODE and Whitespace all call five helpers whose bodies live in rparser.inc, so PXX_NO_RUST alone fails with 198 errors and Rust can only be omitted together with all six. Three different layers are marooned under one R prefix: AST constructors (share, wrong file), RWiden (numeric widening — SEMANTICS, should not be shared at all), and REmitParamRegSpill (raw x86-64 emission in a frontend). | — |
 | refactor-a-the-greenfield-frontends-share-each-others-parser-helpers | A | 30 | refactor | Omitting rparser.inc breaks zparser.inc in 123 places, plus gparser/eparser/fparser — the greenfield frontends call each other's support functions, which is exactly what the-substrate-is-ast-and-ir-not-the-parser.md says not to do. Costs nothing today; makes R and Z individually unomittable and couples two language specs. | — |
@@ -538,9 +537,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2193)
+## done (2194)
 
-2193 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2194 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -723,7 +722,6 @@ _none_
 - [p 40] [T] feature-twatch-full-tier-coverage-age
 - [p 40] [A] feature-unicodestring-model
 - [p 40] [T] meta-t-dev-throughput-and-track-a-t-integration
-- [p 40] [A] refactor-a-nineteen-copies-of-does-this-target-link-the-builtin-unit
 - [p 40] [A] refactor-a-seven-frontends-borrow-rust-parser-helpers
 - [p 40] [D] task-d-document-own-language-first-in-the-language-reference
 - [p 35] [A] bug-a-a-by-value-interface-param-is-released-at-caller-scope-exit

@@ -3655,8 +3655,7 @@ begin
       had the same cause: something the C-PROGRAM path registered and the
       pulled-from-a-unit path did not.
       bug-pascal-uses-is-transitive }
-    if (not NoDefaultRtl) and (TargetArch <> TARGET_XTENSA) and
-       ((TargetArch <> TARGET_RISCV32) or (not EspBareBoot)) then
+    if (not NoDefaultRtl) and (not TargetIsEspClass) then
     begin
       { UnitContent is a GLOBAL holding the C source we are about to
         preprocess, and a nested unit load overwrites it with ITS source. The
