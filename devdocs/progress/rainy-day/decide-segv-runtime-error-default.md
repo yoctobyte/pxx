@@ -1,10 +1,10 @@
 ---
 track: U
-prio: 45
+prio: 10
 type: decide
 blocked-by: []
 summary: "NARROWED 2026-08-21. The nil-detection half left as feature-a-emitted-nil-checks; what remains is only what the SIGSEGV handler does for the faults a check cannot catch (wild pointers, stack overflow). Fork is no longer default-on vs opt-in but report-and-RE-RAISE (message + core dump + exit 139, default-on) vs report-and-exit-216 (FPC parity, no core dump). Plus: should --mimic-fpc imply --fpc-mem-errors and --fpc-float-errors?"
-status: backlog
+status: rainy-day
 owner: unassigned
 ---
 
@@ -87,3 +87,19 @@ today (216 with the flag, 139 without) precisely so a default flip shows up as a
 failing row rather than a silent change. Under A the no-flag row keeps exit 139
 and gains the message, so it is an edit to the expected output, not a deleted
 assertion. Release-note the new default line on stderr.
+
+## PARKED 2026-08-21 (user) — see the cluster meta ticket
+
+> *"i'm not bothered by it and hunting this down at this stage of development is
+> a waste of time. we could make a meta ticket about this for rainy days"*
+
+The narrowed fork above (report-and-re-raise vs exit 216) is **not answered** and
+is parked unanswered, deliberately. Everything needed to answer it is written
+down here; nothing is blocked on it, because `--fpc-mem-errors` already ships and
+the default is simply today's behaviour plus no message.
+
+Cluster: [[meta-fpc-error-reporting-parity-cluster]].
+
+Note the principle recorded in CLAUDE.md the same day — *a strict flag's scope is
+COMPILATION, not death* — points at report-and-re-raise if this is ever picked
+up, but the user declined to spend the call now and that is the record.

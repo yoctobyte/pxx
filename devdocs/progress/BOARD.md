@@ -56,7 +56,7 @@ lives in git, not in a timestamp._
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (261)
+## backlog (260)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -153,7 +153,6 @@ lives in git, not in a timestamp._
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-uses-sysutils-withdraws-the-variadic-concat | P | 25 | compat | The variadic `Concat` intrinsic is shadowed by `sysutils`'s two-argument `Concat`, so `uses sysutils` breaks `Concat('a','b','c')` — which compiles fine without it. The shadow rule is `procIdx < 0`, i.e. ANY user Concat disables the intrinsic outright. Loud, not silent. | — |
 | decide-riscv64-vs-the-bug-queue-for-autonomous-nights | U | 50 | decide | feature-a-riscv64-as-a-hosted-first-class-target is the top-ranked Track A ticket at prio 50, and its own log says it was ranked 'as a strategic target rather than an urgent one'. It is a multi-session job. An unattended overnight Track A session keeps reaching it, skipping it, and taking a p40 bug instead — which may be right, but it is a decision being made silently every night. Make it once, out loud. | — |
-| decide-segv-runtime-error-default | U | 45 | decide | NARROWED 2026-08-21. The nil-detection half left as feature-a-emitted-nil-checks; what remains is only what the SIGSEGV handler does for the faults a check cannot catch (wild pointers, stack overflow). Fork is no longer default-on vs opt-in but report-and-RE-RAISE (message + core dump + exit 139, default-on) vs report-and-exit-216 (FPC parity, no core dump). Plus: should --mimic-fpc imply --fpc-mem-errors and --fpc-float-errors? | — |
 | docs-d-document-exec-eval-and-the-builtins-incompatibility | D | 40 | docs | docs/targets/nil-python.md tells the public `eval`/`exec` do not exist (\"No eval of runtime-constructed code\") — but the explicit-dict form has worked since 2026-07-31 via pyeval's tree-walker. Document what exec/eval DO support, the refused ambient form, and the decided __builtins__ incompatibility (decided 2026-08-19, permanent for now). | — |
 | docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out | D | 45 | docs | docs/language/name-resolution.md:47 and docs/targets/nil-python.md:260 quote the bare-import refusal message and state the rule with no carve-out. As of 2026-08-20 a unit declaring {$PYEXTENSION} and binding the cpyext runtime IS bare-importable, so both pages are now wrong in the direction that makes a working program look unsupported. | — |
 | docs-d-nilchecks-directive-and-flag | D | 40 | docs | {$NILCHECKS ON\|OFF} and --no-nil-check shipped 2026-08-21 and are not in docs/reference/directives.md or modes.md. The row is unusual enough to be worth a sentence: the directive is tri-state, so ON and OFF do different things depending on which site class you are looking at. | — |
@@ -347,7 +346,7 @@ lives in git, not in a timestamp._
 | feature-wasm-frontend | A | 45 | feature | WebAssembly frontend — statically typed, IR-shaped; experimental | — |
 | feature-zig-frontend | Z | 45 | feature | Zig frontend — THEORETIC COMPLETION reached (frontend-side); experimental | — |
 
-## rainy-day (41)
+## rainy-day (43)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -356,6 +355,7 @@ lives in git, not in a timestamp._
 | decide-abi-portable-vs-target-split | U | 60 | decide |  | — |
 | decide-ilja-tui-render-model | U | 45 | decide | Track U: four render/input questions Ilja (TUI IDE face) must answer before any code | — |
 | decide-nilpy-exec-injects-a-builtins-key | U | 40 | decide | CPython's exec(src, g, l) injects a `__builtins__` key into the globals dict; NilPy does not, because it has no module object to put there. So sorted(d.keys()) after an exec differs. Three options: leave it out (today), inject the key with a placeholder value, or inject a real minimal namespace. The fork is what a program that ITERATES the dict should see. | — |
+| decide-segv-runtime-error-default | U | 10 | decide | NARROWED 2026-08-21. The nil-detection half left as feature-a-emitted-nil-checks; what remains is only what the SIGSEGV handler does for the faults a check cannot catch (wild pointers, stack overflow). Fork is no longer default-on vs opt-in but report-and-RE-RAISE (message + core dump + exit 139, default-on) vs report-and-exit-216 (FPC parity, no core dump). Plus: should --mimic-fpc imply --fpc-mem-errors and --fpc-float-errors? | — |
 | decide-should-a-stack-overflow-raise-estackoverflow-by-itself | U | 15 | decide | Decide: should a stack overflow raise EStackOverflow by itself, or stay a hand-written hook? | — |
 | decide-which-minix-is-the-target | U | 58 | decide | MINIX 2 / early 3.1.x (small, plain, ACK-era C) versus MINIX 3.2+ (which imported the NetBSD userland and build system). These are close to different projects for our purposes, and the choice dominates the cost of the whole lighthouse. Recommendation: MINIX 2 / early 3.1.x. | — |
 | design-overloadable-intrinsics | A | 50 | design | Design question: overloadable compiler intrinsics (the `Copy` precedent) | — |
@@ -392,6 +392,7 @@ lives in git, not in a timestamp._
 | idea-p-named-parameters-in-the-pascal-dialect | P | 15 | idea | DESIGN SUGGESTION, deliberately parked. Let Pascal calls write `f(name := value)`, reusing the keyword binder NilPy already has. Rejected for now on the grounds that no existing Pascal code can ever use it — the only consumers would be pxx-authored wrappers of Python-shaped APIs, and those can simply BE Python | — |
 | idea-unit-rename-import | B | 50 | idea | `uses X as Y` unit-rename import (dialect extension) | — |
 | idea-visibility-enforcement | B | 50 | idea | Enforce private/protected visibility | — |
+| meta-fpc-error-reporting-parity-cluster | U | 10 | meta | Parking lot for the whole FPC error-REPORTING parity cluster: the SEGV default, stack overflow's 202, --mimic-fpc not implying the --fpc-*-errors flags, tier-2 catchable EAccessViolation, and the per-arch gap. All low prio by the recorded principle that a strict flag governs compilation, not death. NOT in scope: emitted nil checks, which are language-level catchability and stay ranked. | — |
 
 ## float (20)
 
@@ -638,7 +639,6 @@ lives in git, not in a timestamp._
 - [p 45] [T] bug-t-regressions-are-blamed-on-commits-that-touch-no-code
 - [p 45] [T] bug-t-two-devtests-measure-the-box-and-flake-the-fleet-job
 - [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
-- [p 45] [U] decide-segv-runtime-error-default
 - [p 45] [D] docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out
 - [p 45] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 45] [B] feature-b-rtl-gap-inventory-22-sysutils-strutils-symbols
