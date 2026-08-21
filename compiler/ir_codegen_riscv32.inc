@@ -3281,7 +3281,7 @@ begin
 end;
 
 procedure IREmitMachineCodeRISCV32;
-var i, lblId, pos, targetOffset, f, si, procIdx: Integer;
+var i, lblId, pos, targetOffset, f, si, procIdx, sz: Integer;
     LabelFixupCount: Integer;
 begin
   { Nil-init hidden owning locals synthesised for materialised managed-string
@@ -3491,6 +3491,35 @@ begin
         begin
           if IRStmtRoot[i] then
             IREmitNodeRISCV32(i);
+        end;
+
+      IR_ZERO_SYM:
+        begin
+      { Nil-init a managed local so an early-exit / epilogue cleanup never
+          DecRefs stale stack bytes. Scalars (and dyn-array handles) are one
+          pointer; arrays of AnsiString / records-with-managed-fields zero the
+          whole span through PXXMemZero. Mirrors the x86-64 and i386 arms —
+          those two had it and the other three raised
+          `IR op not yet supported: zero_sym`, which was the single wall behind
+          34 of the 52 NilPy tests on arm32.
+          bug-a-nilpy-on-cross-targets-four-remaining-walls }
+          si := IRA[i];
+          if (Syms[si].Kind = skLocal) and SymNeedsZeroing(si, sz) then
+          begin
+            if sz = TARGET_PTR_SIZE then
+            begin
+              EmitSlotAddrRISCV32(reg_t0, si);
+              rv32_sw(reg_zero, reg_t0, 0);
+            end
+            else if sz > 0 then
+            begin
+              EmitSlotAddrRISCV32(reg_a0, si);
+              EmitLoadImmRISCV32(reg_a1, sz);
+              procIdx := FindProc('PXXMemZero');
+              if procIdx < 0 then Error('compiler error: PXXMemZero not found');
+              EmitCallProc(procIdx);
+            end;
+          end;
         end;
 
       IR_STORE_SYM, IR_WRITE, IR_WRITELN:

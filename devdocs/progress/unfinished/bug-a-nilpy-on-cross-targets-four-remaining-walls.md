@@ -4,7 +4,7 @@ prio: 40
 type: bug
 blocked-by: []
 summary: "After the string-tagged-binop gate was lifted, NilPy still does not RUN on any cross target: arm32 builds and SIGILLs, i386 refuses on `symbol kind not supported yet (load)`, aarch64 on `aggregate result with more than 8 params`, riscv32 on bare-metal mmap. Four separate walls, one campaign — ~53 .npy tests are cross-blind until they fall."
-status: working
+status: unfinished
 owner: claude-A
 ---
 
@@ -163,3 +163,42 @@ all x86-64-only frontends today, and a blind sweep would be churn without a
 gate to catch it. The C driver has its own per-target case already. When one of
 those frontends grows a cross target, `EmitProgramEntryForTarget` is what it
 should call.
+
+## Progress — `zero_sym`, and the wall behind it (2026-08-21)
+
+`IR_ZERO_SYM` existed on x86-64 and i386 only; arm32, aarch64 and riscv32 all
+raised `IR op not yet supported: zero_sym`. Added to all three (pointer-width
+store for a scalar / dyn-array handle, `PXXMemZero` for a managed span), cloned
+from the two arms that had it.
+
+- 60-test `.npy` differential on arm32: **broke=0**, every one of the 34
+  BUILDFAILs now BUILDS. Match went 8 -> 9.
+- 53-test dyn-array + interface differential over all four cross targets:
+  **broke=0 fixed=0** — the new arms never fire for Pascal, which zero-inits
+  through the parser's prologue pass instead.
+- Self-host fixedpoint + `tools/gate.sh quick` GREEN.
+
+### The wall behind it: NilPy's PROC PROLOGUE is raw x86-64
+
+Of the 52 runnable `.npy` tests on arm32: **9 match, 1 BUILDFAIL, 42 wrong — and
+38 of those 42 are `rc=-4` (SIGILL) with no output at all.** Same signature as
+before: `qemu-arm -d in_asm` shows the instruction stream two bytes out of
+alignment, i.e. an odd-length x86-64 blob spliced into the ARM code.
+
+The source this time is the NilPy function prologue. `PyEmitParamSpills`
+(`pyparser.inc:17433`) and `PyInitVariantLocals` (`pyparser.inc:1924`) emit raw
+x86-64 — `mov rax, rdi` (3 bytes, hence the 2-byte drift), `mov [rbp+off], rax`,
+`mov qword [rbp+off], 0` — and are called unguarded from **three** proc-emission
+sites (`pyparser.inc:28113`, `28561`, `31624`). `v1.npy` survives only because
+`main()` takes no parameters.
+
+This is NOT a small guard like the last three. The Pascal driver does not have a
+shared param-spill to call: `pasparser_proc.inc:1842` onward is several hundred
+lines of per-target spill logic living *inside the driver*, which is exactly
+what **`refactor-a-the-missing-layer-between-frontends-and-backends`** (prio 50,
+Track A) exists to fix. NilPy-on-cross needs that layer; bolting a fourth
+per-target copy into `pyparser.inc` would be the wrong fix and would make the
+refactor harder.
+
+**Parked here.** The campaign's next step is the refactor ticket, not another
+patch in this one.

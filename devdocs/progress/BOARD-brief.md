@@ -5,18 +5,19 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:20 blocked:9 backlog:279 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2178 rejected:40`
+`urgent:1 unfinished:21 blocked:9 backlog:279 experimental:20 rainy-day:40 float:20 done-followup:3 decided:95 done:2178 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A] — owner: claude-A
+_none — no lane is locked._
 
 ## urgent (1) — jump the queue
 
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
 
-## unfinished (20) — parked mid-flight; re-claim, do not duplicate
+## unfinished (21) — parked mid-flight; re-claim, do not duplicate
 
+- `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name` [N]
 - `bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults` [N]

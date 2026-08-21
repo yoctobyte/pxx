@@ -4314,6 +4314,40 @@ begin
           EmitI32($E5810000);                                         { str r0, [r1] }
         end;
 
+      IR_ZERO_SYM:
+        begin
+      { Nil-init a managed local so an early-exit / epilogue cleanup never
+          DecRefs stale stack bytes. Scalars (and dyn-array handles) are one
+          pointer; arrays of AnsiString / records-with-managed-fields zero the
+          whole span through PXXMemZero. Mirrors the x86-64 and i386 arms —
+          those two had it and the other three raised
+          `IR op not yet supported: zero_sym`, which was the single wall behind
+          34 of the 52 NilPy tests on arm32.
+          bug-a-nilpy-on-cross-targets-four-remaining-walls }
+          si := IRA[i];
+          if (Syms[si].Kind = skLocal) and SymNeedsZeroing(si, sz) then
+          begin
+            if sz = TARGET_PTR_SIZE then
+            begin
+              EmitLoadImmArm32(9, Syms[si].Offset);
+              EmitI32($E08B9009);                 { add r9, fp, r9 }
+              EmitI32($E3A00000);                 { mov r0, #0 }
+              EmitI32($E5890000);                 { str r0, [r9]  (pointer width) }
+            end
+            else if sz > 0 then
+            begin
+              EmitLoadImmArm32(0, Syms[si].Offset);
+              EmitI32($E08B0000);                 { add r0, fp, r0 (dest) }
+              EmitLoadImmArm32(1, sz);            { r1 = count }
+              procIdx := FindProc('PXXMemZero');
+              if procIdx < 0 then Error('compiler error: PXXMemZero not found');
+              EmitI32($E92D000C);                 { push {r2,r3} }
+              EmitCallProc(procIdx);
+              EmitI32($E8BD000C);                 { pop {r2,r3} }
+            end;
+          end;
+        end;
+
       IR_STORE_SYM, IR_WRITE, IR_WRITELN:
         IREmitNodeArm32(i);
 

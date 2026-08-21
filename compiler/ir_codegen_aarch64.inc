@@ -3559,7 +3559,7 @@ begin
 end;
 
 procedure IREmitMachineCodeAarch64;
-var i, lblId, pos, targetOffset, f, si, classIdx, procIdx, excSkip: Integer;
+var i, lblId, pos, targetOffset, f, si, classIdx, procIdx, excSkip, sz: Integer;
     LabelFixupCount: Integer;
 begin
   { Clear only this body's labels ([0, IRLabelCount) — see IREmitMachineCode). }
@@ -3803,6 +3803,38 @@ begin
           EmitI32($14000002);                                         { b [pc+8] }
           EmitGlobRef(BSS_EXC_ADDR);
           EmitI32($F9000020);                                         { str x0, [x1] }
+        end;
+
+      IR_ZERO_SYM:
+        begin
+      { Nil-init a managed local so an early-exit / epilogue cleanup never
+          DecRefs stale stack bytes. Scalars (and dyn-array handles) are one
+          pointer; arrays of AnsiString / records-with-managed-fields zero the
+          whole span through PXXMemZero. Mirrors the x86-64 and i386 arms —
+          those two had it and the other three raised
+          `IR op not yet supported: zero_sym`, which was the single wall behind
+          34 of the 52 NilPy tests on arm32.
+          bug-a-nilpy-on-cross-targets-four-remaining-walls }
+          si := IRA[i];
+          if (Syms[si].Kind = skLocal) and SymNeedsZeroing(si, sz) then
+          begin
+            if sz = TARGET_PTR_SIZE then
+            begin
+              EmitLoadImmA64(9, Syms[si].Offset);
+              EmitI32($8B0903A9);                 { add x9, x29, x9 }
+              EmitI32($D2800000);                 { movz x0, #0 }
+              EmitI32($F9000120);                 { str x0, [x9]  (pointer width) }
+            end
+            else if sz > 0 then
+            begin
+              EmitLoadImmA64(9, Syms[si].Offset);
+              EmitI32($8B0903A0);                 { add x0, x29, x9 (dest) }
+              EmitLoadImmA64(1, sz);              { x1 = count }
+              procIdx := FindProc('PXXMemZero');
+              if procIdx < 0 then Error('compiler error: PXXMemZero not found');
+              EmitCallProc(procIdx);
+            end;
+          end;
         end;
 
       IR_STORE_SYM, IR_WRITE, IR_WRITELN:
