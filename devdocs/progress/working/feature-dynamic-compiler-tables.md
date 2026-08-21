@@ -216,3 +216,83 @@ arrays (MAX_IR-sized), smaller MAX_ tables (CTypedef/CPrep*/DBG_VARS).
   365→146 MB, 5 hard caps gone. REMAINING: Code/Data/CPrepChars byte buffers
   (held-address audit critical), MAX_IR-sized label arrays, smaller MAX_
   tables (CTypedef/CPrep*/DBG_VARS).
+
+## Update 2026-08-21 (agent-A) — six more families, and a MEASUREMENT that contradicts the ticket's premise
+
+Landed, each its own commit, each with the self-host fixedpoint byte-identical:
+
+| family | arrays | BSS freed |
+| --- | --- | --- |
+| `AsmDisProcAtPos` | 1 | 67.1 MB |
+| CallFix + CodeRef + the DCE graph tables | 5 | 33.5 MB |
+| the per-ROUTINE family (`Proc*`, `ProcParam*`, `PyCapName`, `InlineLocalTk`) | 90 | 38.8 MB |
+| `SymArrDimLo` / `SymArrDimSpan` | 2 | 6.3 MB |
+| `GlobFix` | 1 | 2.1 MB |
+| `IRSeqSpine` | 1 | 4.2 MB |
+| `Code` | 1 | 16.8 MB |
+
+Compiler BSS **246.8 MB -> 75.9 MB**. (It was 146 MB when this ticket was parked;
+the rise since was ordinary growth plus ~28 MB I added earlier the same day for
+[[feature-emission-size-dce]], which is why that one is in the table.)
+
+Three caps are gone with the reservations: `MAX_GLOBFIX` — the one measured to
+have been hit for real, by the `--threadsafe` self-host, 121 entries in —
+`MAX_IR_SEQ_SPINE`, and the internal call/code-reference tables. `MAX_CODE` and
+`MAX_PROCS` stay as hard caps on purpose.
+
+### The premise does not survive measurement
+
+The ticket's performance framing was that the fixed tables are *"touched/cache-
+thrashed and reserved worst-case on every compile"*. They are reserved
+worst-case; they are **not touched**. BSS is demand-zero — an untouched page
+never becomes resident — so the reservation was free, and replacing it with heap
+is not.
+
+Max RSS, same inputs, pre-session binary vs HEAD:
+
+| compiling | before | after |
+| --- | --- | --- |
+| `hello.pas` | 24.2 MB | 26.3 MB |
+| a NilPy module | 55.3 MB | 66.2 MB |
+| `compiler.pas` (self-compile) | 453.1 MB | 497.0 MB |
+
+Wall time is unchanged (self-compile 26.9s both ways), so the extra indirection
+per element does not show. But **RSS went UP, by ~10%**, which is the opposite of
+what the ticket predicted and the opposite of what a reader would assume from
+"BSS 246 MB -> 76 MB".
+
+### Why, exactly
+
+Not the live data — that is the same bytes either way. It is the GROWTH:
+`SetLength` is allocate-copy-free, and the freed block cannot serve the next
+doubling, because the large-block free list is first-fit on `size >= request`
+and every subsequent request is BIGGER. So each table leaves behind the whole
+geometric series of its previous buffers — about one final-size worth of
+garbage per table, permanently unreusable by that table.
+
+That is the root cause, it is in the allocator rather than in any table, and it
+costs every pxx program that grows a dynamic array, not just the compiler. Filed
+as [[feature-opt-dynarray-grows-in-place]]: give the scalar-array SetLength path
+the in-place-when-unique + geometric-headroom treatment the AnsiString path
+already has, three arms away in the same case statement.
+
+### What is left here
+
+`Procs` (8.4 MB, an array of RECORDS holding managed strings — a different
+SetLength path), `TokChars` / `LoadFileBuf` / `CPrepChars` (8.4 MB each),
+`Data` (2.1 MB, ~20 unguarded append sites), the `TemplateTokens` /
+`SpecializeTokens` pair (1.8 MB each), the MAX_IR-sized label arrays.
+
+**Do the allocator ticket before any of them.** Converting more tables now buys
+a smaller number in the `bss=` line and pays for it in resident memory; after
+in-place growth lands, the same conversions are close to free.
+
+### The trap, for whoever picks this up
+
+`MAX_PROCS` was also being used as an INDEX bound in nine places —
+`for pi := 0 to MAX_PROCS - 1 do ProcSigOff[pi] := -1` in rtti_emit.inc became a
+write off the end of a heap block the moment the table stopped being that long.
+The self-host gate did NOT catch it (it happens to sit in NilPy's signature
+emitter). Grep every `MAX_<FAMILY>` after converting a family, and treat each
+remaining use as a question: is this a capacity bound (fine) or an index bound
+(now wrong)?

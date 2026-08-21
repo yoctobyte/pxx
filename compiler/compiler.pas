@@ -1085,7 +1085,7 @@ begin
   IramCallFixCount := 0;
   SymCount := 0; ProcCount := 0;
   { bootstrap the per-routine tables before anything can index them }
-  ProcCapacity := 0; EnsureProcCapacity(1024);
+  ProcCapacity := 0; EnsureProcCapacity(128);
   ProcHashReset;   { heads/tails to -1 (BSS zero is a valid proc idx) }
   SymHashReset;
   CurrentUnitIdx := -1;

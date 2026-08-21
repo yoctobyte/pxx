@@ -7398,7 +7398,7 @@ procedure EnsureProcCapacity(need: Integer);
 var n: Integer;
 begin
   if need <= ProcCapacity then Exit;
-  if ProcCapacity = 0 then n := 1024 else n := ProcCapacity;
+  if ProcCapacity = 0 then n := 128 else n := ProcCapacity;
   while n < need do n := n * 2;
   if n > MAX_PROCS then n := MAX_PROCS;
   SetLength(ProcBodyIRNodes, n);  SetLength(ProcBodyMakesCall, n);  SetLength(ProcBodyEarlyExit, n);
