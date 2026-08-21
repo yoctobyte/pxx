@@ -5,8 +5,8 @@ prio: 45  # auto
 # Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck)
 
 - **Type:** feature (project infrastructure / user experience)
-- **Status:** working
-- **Owner:** agent-A
+- **Status:** backlog (steps 1-3 landed 2026-08-21; step 4 `--selfcheck` waits on `feature-release-packaging`)
+- **Owner:** —
 - **Opened:** 2026-06-21 (user-tooling design discussion)
 - **Relation:** companion to `feature-release-packaging` — that ticket *produces &
   distributes* the artifacts; this one is the *user experience once installed*.
@@ -176,7 +176,10 @@ answer when it is set.
   `incpath`, found via `$PXX_CONFIG`, `./pxx.cfg`, `~/.config/pxx/pxx.cfg`,
   `<exe dir>/pxx.cfg` (first wins), and reported by `--where`. Scoped
   `define`/`mode` manifests stay with that ticket.
-- `--config` as a separate spelling — `--where` currently answers both.
+- ~~`--config` as a separate spelling~~ — landed 2026-08-21 as an ALIAS, not a
+  second report: `--config` and `--where` print the same page, asserted
+  byte-identical in test-quick. Two reports where one answers both questions is
+  how the pair drifts, and the drifted one is always the one you are reading.
 - ~~Step 3: `--list-libraries`, `--doctor`~~ — landed 2026-08-21 (above).
 - Step 4: `--selfcheck` (needs `feature-release-packaging`'s manifest).
 - User-facing docs for the four flags are a **Track D** job, not filed here.

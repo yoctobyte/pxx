@@ -3,7 +3,7 @@ prio: 30  # auto
 track: D
 ---
 
-# Document the toolchain information flags (--help / --version / --where / --list-targets, PXX_HOME, PXX_LIBPATH)
+# Document the toolchain information flags (--help / --version / --where / --config / --list-targets / --list-libraries / --doctor, PXX_HOME, PXX_LIBPATH, pxx.cfg)
 
 - **Type:** docs
 - **Status:** backlog
@@ -23,6 +23,16 @@ track: D
 - `--list-targets` — the `--target=` values, which run on this host, which
   backends are compiled out, and the ESP SoC names.
 - `--where` — every resolved path with the tier it came from, `[MISSING]` marked.
+- `--config` — an ALIAS for `--where` (byte-identical output, asserted in
+  test-quick), for when the question is "which pxx.cfg is in effect?".
+- `--list-libraries` — the units this binary can actually find, grouped by
+  directory, plus a curated "external integrations" section (ESP-IDF, Synapse)
+  with prerequisites. Scanned, never recited: it lists what you can `uses`, and
+  deliberately says nothing about what each unit DOES — that part is this
+  ticket's job, in docs/, where it can be written once and reviewed.
+- `--doctor` — capability report: native compile, RTL/builtin/headers found,
+  cross-run per target (qemu), ESP-IDF + Espressif toolchain, FPC seed, gdb,
+  gcc. Every NO row says what to install. Nothing in it is fatal.
 
 Plus the environment tier:
 
@@ -31,6 +41,9 @@ Plus the environment tier:
   `lib/crtl/include`, and the PAL dir). Honoured **all-or-nothing**: the exe-dir
   guesses are NOT kept underneath it as a fallback.
 - `PXX_LIBPATH=a:b` — extra Pascal unit roots; after `-Fu`, before the defaults.
+- `PXX_CONFIG=<file>` and the `pxx.cfg` search order (`$PXX_CONFIG`, `./pxx.cfg`,
+  `~/.config/pxx/pxx.cfg`, `<exe dir>/pxx.cfg`, first wins) with the three
+  directives that exist today: `home`, `unitpath`, `incpath`.
 
 ## Where it belongs
 

@@ -11196,6 +11196,13 @@ test-quick: $(COMPILER)
 	# owners are still one owner.
 	./$(COMPILER) --where | grep '\[RTL\]' | grep -qv MISSING
 	./$(COMPILER) --where | grep -q 'PXX_HOME     (unset)'
+	# --config is the SAME report under the name somebody types when the
+	# question is "which pxx.cfg is in effect?". Asserted byte-identical, so a
+	# future "let's make --config shorter" has to notice it is splitting one
+	# report into two that will drift.
+	./$(COMPILER) --where > $(TESTTMP)/cliux_where_a.txt
+	./$(COMPILER) --config > $(TESTTMP)/cliux_where_b.txt
+	cmp $(TESTTMP)/cliux_where_a.txt $(TESTTMP)/cliux_where_b.txt
 	# ...and the env tier actually reroutes those roots. /nonexistent-pxx-home
 	# is deliberate: the value is honoured all-or-nothing, so the exe-dir guess
 	# must NOT reappear underneath it as a silent second chance.

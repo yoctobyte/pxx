@@ -654,7 +654,7 @@ begin
   WriteLn('information (no source file needed):');
   WriteLn('  --help, -h            this text');
   WriteLn('  --version             generation, frontends, host');
-  WriteLn('  --where               every path the compiler resolves, and where each came from');
+  WriteLn('  --where, --config     every path the compiler resolves, and where each came from');
   WriteLn('  --list-targets        the --target= values, and which run on this host');
   WriteLn('  --list-libraries      the units this binary can find, by directory');
   WriteLn('  --doctor              what this box can do — cross-run, ESP, gdb, FPC seed');
@@ -902,8 +902,12 @@ begin
       PrintVersionInfo;
       Halt(0);
     end
-    else if option = '--where' then
+    else if (option = '--where') or (option = '--config') then
     begin
+      { One report, two names. `--config` is what somebody types when the
+        question is "which pxx.cfg is in effect?" and `--where` when it is
+        "where are my units?" — but the answer is the same page, and a second
+        report printing a subset of the first is how the two drift. }
       PrintWhere;
       Halt(0);
     end
