@@ -125,6 +125,15 @@ const
   MAX_CPREP_ARGS = 4096;
   STRING_CAP  = 8388608;      { 8 MB }
   MAX_TOKENS  = 2097152;
+  { "No bound" for a TOKEN INDEX — MainProgramTokCount before the main program's
+    extent is known, DbgMainTokEnd when every token is still main-file. It used
+    to be spelled MAX_TOKENS, which worked only while that was a real ceiling;
+    the token arrays are dynamic now and sqlite's amalgamation already reaches
+    2 M, so the "unreachable" sentinel became one large translation unit away
+    from being a real count — read as "unset" or as "these tokens belong to a
+    unit", both silently.
+    bug-a-dynamic-tables-left-their-fixed-size-shadows-behind }
+  TOK_UNBOUNDED = 2147483647;   { High(Integer): no token index can reach it }
   MAX_UNIT_ALIASES = 256;   { unit aliases: `import x as y`, and every shim substitution }
   MAX_AST     = 524288;   { legacy sizing constant; the AST arrays are now dynamic }
   { LOW slice of the (now dynamic) AST pool reserved for retained inline-routine
@@ -2626,6 +2635,17 @@ var
     these were array[0..MAX_IR-1] (512 KB each, ~1.5 MB/frame) in EVERY backend,
     bloating the compiler's own frames (feature-warn-oversized-stack-frame). }
   LabelPositions : array[0..MAX_IR-1] of Integer;
+  { One growable flag-per-index scratch, shared by the IR passes that need a
+    "seen this index" bit vector (IRVerify over label ids, IRDump over node
+    indices). Contract: the USER clears the range it is about to read, and no
+    two users are live at once — IRVerify runs to completion before IRDump.
+    It exists because both were `array[0..MAX_IR-1] of Boolean` STACK locals,
+    which is 256 KB per call and, now that the IR tables are dynamic and
+    IRNewLabel has no cap, an out-of-bounds write rather than a hard error
+    (bug-a-dynamic-tables-left-their-fixed-size-shadows-behind). }
+  IRScratchFlag : array of Boolean;
+  IRScratchCapacity : Integer;
+
   LabelFixupPos : array[0..MAX_IR-1] of Integer;
   LabelFixupTarget : array[0..MAX_IR-1] of Integer;
   MaxStackFrameSize : Integer; { effective oversized-stack-frame warn threshold in

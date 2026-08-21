@@ -5,8 +5,8 @@ prio: 45  # auto
 # Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood)
 
 - **Type:** feature (compiler architecture / capacity) — Track A
-- **Status:** working
-- **Owner:** agent-A
+- **Status:** unfinished (campaign mid-flight; no agent holds it)
+- **Owner:** —
 - **Opened:** 2026-06-27
 - **Relation:** forced into view by [[feature-c-desktop-lua-sqlite-path]] M5 —
   sqlite's 257k-line amalgamation blew `MAX_TOKENS` (512K) and needed a bump to
@@ -296,3 +296,34 @@ The self-host gate did NOT catch it (it happens to sit in NilPy's signature
 emitter). Grep every `MAX_<FAMILY>` after converting a family, and treat each
 remaining use as a question: is this a capacity bound (fine) or an index bound
 (now wrong)?
+
+
+## Progress log — 2026-08-21 (agent-A): the REMAINING list above is STALE
+
+Read the source before picking an item from it. Measured today:
+
+| family | list above says | actually |
+| --- | --- | --- |
+| Tokens (`MAX_TOKENS`) | remaining, #1 | **done** — `Tokens`/`TokPackRecords`/`Tok*Checks`/`CAttr*` are `array of`, grown by `EnsureTokCapacity` |
+| Syms (`MAX_SYMS`) | remaining, #2 | **done** — `Syms` + the ~30 `Sym*` arrays grown by `EnsureSymCapacity` |
+| UField (`MAX_UFIELD`) | remaining, #3 | **done** — 26 arrays grown by `EnsureUFieldCapacity` |
+| IR / AST | done | done |
+
+**Still genuinely fixed:** `Data` (`MAX_DATA`), `Strs` (`MAX_STRS`), `CPrepChars`
+(`MAX_CPREP_CHARS`), `TokChars`/`LoadFileBuf` (`STRING_CAP`, 8 MB each),
+`LabelFixupPos`/`LabelFixupTarget` (`MAX_IR` — 1 MB each), `UCls*`
+(`MAX_UCLASS` = 2048), `Procs` itself (deliberate, see `EnsureProcCapacity`'s
+note). `Code` is already dynamic.
+
+**The conversion has a second half nobody ran**, and it is where the remaining
+risk sits: *deleting a cap does not delete the code that assumed it.* Four
+sites had taken `MAX_X` to mean "a number the count can never reach" and were
+left behind — one of them an out-of-bounds stack write in `IRVerify`, which runs
+on every body. Filed and fixed as
+[[bug-a-dynamic-tables-left-their-fixed-size-shadows-behind]].
+
+**So: before converting the next family, grep for its `MAX_` name across
+`compiler/**` and read every hit.** A hit that is not the array declaration is
+either a real remaining cap (fine — `LabelFixup*` still is one) or a shadow that
+the conversion has just made wrong. That grep is now part of the pattern, not
+an afterthought.

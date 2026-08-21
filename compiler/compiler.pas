@@ -479,7 +479,7 @@ begin
   DebugInfo := False;
   FpcFloatErrors := False;
   FpcMemErrors := False;
-  DbgMainTokEnd := MAX_TOKENS;
+  DbgMainTokEnd := TOK_UNBOUNDED;   { every token is main-file until a unit is appended }
   CCharSignedOpt := -1;   { -1 = follow the target psABI; see CPlainCharSigned }
   DumpIR := False;
   DumpProcMap := False;
@@ -1422,7 +1422,7 @@ begin
   ExternalCount := 0; DynCallCount := 0; CurrentCLibrary := '';
   FrameSize := 0; CurProc := -1;
   TokCount := 0; TokPos := 0; TokCharLen := 0;
-  MainProgramTokCount := MAX_TOKENS;
+  MainProgramTokCount := TOK_UNBOUNDED;   { = not set yet; the frontends overwrite it }
   BLabelCount := 0;
   BFixupCount := 0;
   ASTArenaFloor := INLINE_AST_RESERVE;
@@ -1476,7 +1476,7 @@ begin
     PyExpandFStrings;
     PyLexAll(False);
     { -g: main-file token boundary, exactly as the Pascal branch below sets it.
-      Without it DbgMainTokEnd stayed MAX_TOKENS, so every appended unit token
+      Without it DbgMainTokEnd stayed TOK_UNBOUNDED, so every appended unit token
       counted as main-file and stamped ITS line number onto the nodes — a
       19-line .py reported `dbg1.py:5754` (a pylib line) for every frame, which
       made the line table useless and stepping meaningless. }

@@ -10,13 +10,11 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method | N | 70 | bug | A callable value is silently accepted where `str` is declared, and no longer compares equal to itself — bisected to `9bbbbef6c` | — |
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
+_none_
 
-## unfinished (21)
+## unfinished (22)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -32,6 +30,7 @@ lives in git, not in a timestamp._
 | feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets | A | 55 | feature | Build-time selection of frontends and targets, so `only-pascal` + `only-esp-riscv` yields a small Pascal-for-ESP compiler instead of the megalith. The umbrella build stays the default. Filed with a measurement: C is nearly separable already (16 references in shared files), NilPy is NOT (1281) — so this doubles as a falsifiable test of the frontend-separation design, and NilPy already fails it. | — |
 | feature-b-the-module-shim-batch-blocking-the-python-corpus | B | 62 | feature | RE-MEASURED on pinned v352: the batch this ticket was filed to attack no longer exists — six, warnings, codecs, colorsys, copy, bisect, xml.sax.*, urllib.parse, six.moves, urllib.request and xml.dom all shipped during 2026-08-18 and are gated by make lib-test. Eight missing-module files remain and none is a thin stdlib shim: xml.etree (4, now a Track U decision), genshi_core (2) and lxml (1) are third-party packages, weakref (1) is a runtime facility. The language walls are 32, with yield alone at 18 — Track N is the bottleneck for this ladder again. | decide-xml-etree-thin-tree-model-or-a-real-xml-library |
 | feature-c-import-a-pascal-unit-under-a-mangled-name | C | 50 | feature | Give C an explicit import site for a Pascal unit: `#include \"math.pas\"` declares its routines under mangled C identifiers (`math_pas_Sqrt`), case preserved from the Pascal declaration, path-qualified on collision. Overloads resolve by the declared C signature. AnsiString-bearing signatures are refused by name. Design settled by the user 2026-08-19; this ticket is a SPEC, not a discussion. | — |
+| feature-dynamic-compiler-tables | A | 45 | feature | Dynamic compiler tables — kill the fixed `array[0..MAX_*]` ceilings (+ dynarray dogfood) | — |
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
@@ -533,9 +532,9 @@ lives in git, not in a timestamp._
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2228)
+## done (2229)
 
-2228 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2229 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 

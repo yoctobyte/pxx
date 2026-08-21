@@ -12203,8 +12203,6 @@ begin
   UClsFBase[ci] := UFldCount;
   for k := 0 to bfCount - 1 do
   begin
-    if UFldCount >= MAX_UFIELD - 1 then
-      Error('C struct field pool exhausted (MAX_UFIELD) — raise the cap');   { was a SILENT drop }
     LastTypePointerElemTk := IntToTypeKind(bfElemTk[k]);
     LastTypePointerElemRec := bfElemRec[k];
     LastTypePointerAlias := -1;   { C struct fields carry their pointee directly; never re-read from the Pascal alias table }
@@ -12293,14 +12291,19 @@ begin
       tagName := CurTok.SVal; hasTag := True; Next;
     end;
     if (CurTok.Kind = tkBegin) and
-       ((UClsCount >= MAX_UCLASS - 1) or (UFldCount >= MAX_UFIELD - 128) or
+       ((UClsCount >= MAX_UCLASS - 1) or
         (not CStructBodyIsSimple(TokPos - 1))) then
     begin
-      { Fall back to an opaque pointer when either (a) record-table headroom is
-        low (C structs share the MAX_UCLASS/MAX_UFIELD tables with Pascal), or
-        (b) the body uses a construct we cannot lay out without silently-wrong
-        offsets (bitfields, nested/anonymous aggregates, struct/union/enum-tag
-        fields). Plain POD bodies take the record path below. }
+      { Fall back to an opaque pointer when either (a) CLASS-table headroom is low
+        (C structs share the fixed MAX_UCLASS table with Pascal), or (b) the body
+        uses a construct we cannot lay out without silently-wrong offsets
+        (bitfields, nested/anonymous aggregates, struct/union/enum-tag fields).
+        Plain POD bodies take the record path below.
+        The FIELD pool is no longer part of this test: UFld* became dynamic
+        (AddUField -> EnsureUFieldCapacity), so `UFldCount >= MAX_UFIELD - 128`
+        was a dead cap that could only ever have thrown a struct's layout away
+        silently — the exact failure this fallback is otherwise careful to avoid.
+        bug-a-dynamic-tables-left-their-fixed-size-shadows-behind }
       SkipBraceBlock;
       while CurTok.Kind = tkStar do Next;
       if CurTok.Kind = tkIdent then
@@ -12601,7 +12604,7 @@ begin
           producing a self-referential record that hangs RecordHasManagedFields
           (SIGSEGV). Keep the first definition; skip the duplicate body. }
         SkipBraceBlock
-      else if (UFldCount < MAX_UFIELD - 128) and CStructBodyIsSimple(TokPos - 1) then
+      else if CStructBodyIsSimple(TokPos - 1) then   { field pool is dynamic — no cap term }
         ParseCStructInto(ci, isUnion)
       else
         SkipBraceBlock;   { opaque: keep the tag, drop the layout }

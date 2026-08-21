@@ -191,15 +191,33 @@ begin
   Result := r;
 end;
 
+procedure EnsureIRScratch(need: Integer);
+{ Grow the shared IR flag scratch so index `need-1` is in bounds. Doubling from
+  a small base; capacity never shrinks. Callers clear the range they read — the
+  buffer is reused across bodies precisely so nobody pays a MAX_IR-sized memset
+  for a ten-node body. }
+var n: Integer;
+begin
+  if need <= IRScratchCapacity then Exit;
+  if IRScratchCapacity = 0 then n := 4096 else n := IRScratchCapacity;
+  while n < need do n := n * 2;
+  SetLength(IRScratchFlag, n);
+  IRScratchCapacity := n;
+end;
+
 procedure IRVerify;
 var i, lblId, op: Integer;
-    seenLabel: array[0..MAX_IR-1] of Boolean;
 begin
-  { Only [0, IRLabelCount) can be read: seenLabel is indexed by label id and
-    IRNewLabel hands out ids in that range (IRReset zeroes IRLabelCount per body).
-    Clearing the full MAX_IR array was a 128KB per-body memset for nothing. }
+  { Only [0, IRLabelCount) can be read: the scratch is indexed by label id and
+    IRNewLabel hands out ids in that range (IRReset zeroes IRLabelCount per body),
+    so clear exactly that range — a MAX_IR-wide clear was a 256 KB per-body memset
+    for nothing. The array is GROWN to IRLabelCount rather than fixed at MAX_IR:
+    IRNewLabel has no cap, and the fixed spelling made a big generated body a
+    stack SMASH instead of an error
+    (bug-a-dynamic-tables-left-their-fixed-size-shadows-behind). }
+  EnsureIRScratch(IRLabelCount);
   for i := 0 to IRLabelCount - 1 do
-    seenLabel[i] := False;
+    IRScratchFlag[i] := False;
 
   { Pass 1: populate seen labels and verify uniqueness }
   for i := 0 to IRCount - 1 do
@@ -214,11 +232,13 @@ begin
     if IRKind[i] = IR_LABEL then
     begin
       lblId := Integer(IRIVal[i]);
-      if (lblId < 0) or (lblId >= MAX_IR) then
+      { IRLabelCount is the REAL bound — every id came from IRNewLabel. MAX_IR
+        was the old spelling and is no longer a bound on anything. }
+      if (lblId < 0) or (lblId >= IRLabelCount) then
         Error('IR label ID out of bounds');
-      if seenLabel[lblId] then
+      if IRScratchFlag[lblId] then
         Error('duplicate IR label definition');
-      seenLabel[lblId] := True;
+      IRScratchFlag[lblId] := True;
     end;
   end;
 
@@ -340,18 +360,18 @@ begin
       IR_JUMP:
       begin
         lblId := IRA[i];
-        if (lblId < 0) or (lblId >= MAX_IR) then
+        if (lblId < 0) or (lblId >= IRLabelCount) then
           Error('invalid IR jump target out of bounds');
-        if not seenLabel[lblId] then
+        if not IRScratchFlag[lblId] then
           Error('invalid IR jump target (label not defined)');
       end;
 
       IR_JUMP_IF_FALSE:
       begin
         lblId := IRA[i];
-        if (lblId < 0) or (lblId >= MAX_IR) then
+        if (lblId < 0) or (lblId >= IRLabelCount) then
           Error('invalid IR conditional jump target out of bounds');
-        if not seenLabel[lblId] then
+        if not IRScratchFlag[lblId] then
           Error('invalid IR conditional jump target (label not defined)');
         IRRequireNode(IRB[i], 'jump condition');
       end;
@@ -417,9 +437,9 @@ begin
       IR_EXC_ENTER, IR_EXC_MATCH, IR_EXC_MATCH_HIT:
       begin
         lblId := IRA[i];
-        if (lblId < 0) or (lblId >= MAX_IR) then
+        if (lblId < 0) or (lblId >= IRLabelCount) then
           Error('invalid IR exception jump target out of bounds');
-        if not seenLabel[lblId] then
+        if not IRScratchFlag[lblId] then
           Error('invalid IR exception jump target (label not defined)');
       end;
 
@@ -12206,23 +12226,29 @@ end;
 
 procedure IRDump;
 var i, blockNum: Integer;
-    isLeader: array[0..MAX_IR-1] of Boolean;
     symIdx: Integer;
 begin
-  for i := 0 to MAX_IR - 1 do
-    isLeader[i] := False;
+  { Basic-block leaders, one flag per IR NODE. Same shared scratch as IRVerify
+    (which has finished by the time a dump runs), grown to IRCount and cleared
+    only over it — the fixed array[0..MAX_IR-1] local this replaces was both a
+    256 KB stack frame for a ten-node body and, with dynamic IR arrays, an
+    out-of-bounds write once IRCount passed MAX_IR.
+    bug-a-dynamic-tables-left-their-fixed-size-shadows-behind }
+  EnsureIRScratch(IRCount);
+  for i := 0 to IRCount - 1 do
+    IRScratchFlag[i] := False;
 
   if IRCount > 0 then
-    isLeader[0] := True;
+    IRScratchFlag[0] := True;
 
   for i := 0 to IRCount - 1 do
   begin
     if IRKind[i] = IR_LABEL then
-      isLeader[i] := True;
+      IRScratchFlag[i] := True;
     if (IRKind[i] = IR_JUMP) or (IRKind[i] = IR_JUMP_IF_FALSE) then
     begin
       if i + 1 < IRCount then
-        isLeader[i + 1] := True;
+        IRScratchFlag[i + 1] := True;
     end;
   end;
 
@@ -12230,7 +12256,7 @@ begin
   blockNum := 0;
   for i := 0 to IRCount - 1 do
   begin
-    if isLeader[i] then
+    if IRScratchFlag[i] then
     begin
       Inc(blockNum);
       writeln('--- BASIC BLOCK BB', blockNum, ' ---');
