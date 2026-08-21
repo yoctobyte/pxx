@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `99dcac2a2ade` | 2026-08-21T15:30:22Z | RED (native) | 3600.4s | `23becd24b8e5` RED |
+| plexus | `777bc43feb30` | 2026-08-21T16:31:55Z | RED (native) | 3600.3s | `23becd24b8e5` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -19,19 +19,4 @@
 - **test-nilpy#src:test/test_pascal_mode_switch_cli.pas@2** — test/test_pascal_mode_switch_cli.pas (plexus): bad `23becd24b8e5`, last good `1b9b43e5b511`, 109 commit(s) in range
 - **test-nilpy#src:test/test_pascal_self_result_delphi.pas@1** — test/test_pascal_self_result_delphi.pas (plexus): bad `23becd24b8e5`, last good `1b9b43e5b511`, 109 commit(s) in range
 - **test-nilpy#src:test/test_pascal_self_result_delphi.pas@2** — test/test_pascal_self_result_delphi.pas (plexus): bad `23becd24b8e5`, last good `1b9b43e5b511`, 109 commit(s) in range
-- **CASCADE 11 jobs** (plexus): bad `8654c4d55b61`, last good `4f526e338205`, 241 commit(s) in range
-  <details><summary>jobs</summary>
-
-  - `test-asm#src:compiler/compiler.pas`
-  - `test-core#src:test/test_rust_advanced.rs`
-  - `test-core#src:test/test_rust_assoc_fns.rs`
-  - `test-core#src:test/test_rust_chess_engine.rs`
-  - `test-core#src:test/test_rust_chess_perft.rs`
-  - `test-core#src:test/test_rust_chess_perft_full.rs`
-  - `test-core#src:test/test_rust_chess_search.rs`
-  - `test-core#src:test/test_rust_else_if.rs@1`
-  - `test-core#src:test/test_rust_else_if.rs@2`
-  - `test-core#src:test/test_rust_struct_array.rs`
-  - `test-core#src:test/test_rust_tuple_struct.rs`
-  </details>
 - **test-core#src:test/cstatic_same_module_dup.c** — test/cstatic_same_module_dup.c (plexus): bad `99dcac2a2ade`, last good `de2de369ea6a`, 11 commit(s) in range
