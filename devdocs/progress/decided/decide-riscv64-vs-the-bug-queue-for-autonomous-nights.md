@@ -4,7 +4,7 @@ prio: 50
 type: decide
 blocked-by: []
 summary: "feature-a-riscv64-as-a-hosted-first-class-target is the top-ranked Track A ticket at prio 50, and its own log says it was ranked 'as a strategic target rather than an urgent one'. It is a multi-session job. An unattended overnight Track A session keeps reaching it, skipping it, and taking a p40 bug instead — which may be right, but it is a decision being made silently every night. Make it once, out loud."
-status: backlog
+status: decided
 ---
 
 # Should an autonomous Track A night start riscv64, or keep clearing the bug queue?
@@ -73,3 +73,20 @@ is exactly the kind of silent-wrong-encoding bug that wants a human near it.
 - 2026-08-21 — filed by the overnight Track A session, on the third consecutive
   time it declined the top of its own queue. Filed rather than guessed, per the
   escalate-don't-guess rule.
+
+## ANSWER (user, 2026-08-21) — keep clearing the bug queue
+
+> *"nice idea, totally deferred for rainy days"*
+
+**[[feature-a-riscv64-as-a-hosted-first-class-target]] is parked to rainy-day**,
+so it leaves the ranked queues entirely and an autonomous Track A night simply
+takes the top bug. The nightly skip this ticket described is no longer a silent
+decision — there is nothing left to skip.
+
+The user's three reasons, all cost rather than merit: no native hardware (qemu is
+a model, not a machine), a multi-session job whose shape is not even settled, and
+a permanent additional cost to every Track T sweep for a target nobody can run
+natively.
+
+This ticket was right that the ranker was making a real call silently every
+night. The fix was to move the ticket, not to change the ranking.

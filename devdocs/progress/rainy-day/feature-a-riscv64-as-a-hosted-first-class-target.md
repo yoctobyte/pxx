@@ -1,10 +1,10 @@
 ---
 track: A
-prio: 50
+prio: 10
 type: feature
 blocked-by: []
 summary: "pxx has no riscv64 target at all — only riscv32, which exists for ESP-class bare metal. Real RISC-V hardware (notebooks, SBCs) is RV64GC running Linux, so today we cannot build for the machines RISC-V actually ships on. The harness is already ready: run_target.sh handles riscv64, install_qemu.sh installs qemu-riscv64, twatch_web lists it in CROSS_TARGETS — nothing can produce a binary for it."
-status: backlog
+status: rainy-day
 owner: ""
 ---
 
@@ -403,3 +403,58 @@ filed — both instances of the same mis-keying the hazard table describes:
   call.
 
 Next actor: start at "Remaining sequence" step 2 above.
+
+
+---
+
+## DEFERRED to rainy-day (user, 2026-08-21)
+
+> *"nice idea, totally deferred for rainy days"*
+
+Three reasons, all of which are about cost rather than merit — the target itself
+is still wanted:
+
+1. **No native hardware.** Verification would be qemu-only, and qemu is a model,
+   not a machine. Every result would carry that caveat.
+2. **Serious development time.** A multi-session job by its own scoping, and the
+   shape question below is not even settled yet.
+3. **It would slow Track T gating further.** Another cross target in the matrix
+   costs every sweep, permanently, for a target nobody can run natively.
+
+Also answers [[decide-riscv64-vs-the-bug-queue-for-autonomous-nights]]: an
+autonomous Track A night keeps clearing the bug queue. This ticket is out of the
+ranked queues entirely now, so the nightly skip is no longer a silent decision.
+
+## STILL OPEN when unparked: the two write-ups above CONTRADICT each other
+
+Do not read this ticket as having settled its own first question. It contains two
+analyses from 2026-08-21 that reach **opposite** answers, and both are still here:
+
+| write-up | answer | evidence |
+| --- | --- | --- |
+| *"the first question, ANSWERED by measurement"* | **widen** `ir_codegen_riscv32.inc` | 140 `rv32_*` emitter calls live OUTSIDE the backend — symtab 47, cparser 37, exception_emit 31, pasparser_proc 17, pasparser_prog 8 — and **87 are the width-sensitive `lw`/`sw`**. A fork "buys a duplicated 3441-line file and solves none of the actual problem". Explicitly rejects the arm32/aarch64 precedent: those are different ISAs, RV32/RV64 are one ISA with XLEN as a parameter |
+| *"Decision"* | **a new `ir_codegen_riscv64.inc`**, sharing the encoder layer | the register-pair layer is deletion not parameterisation; the shift encoders differ (5- vs 6-bit shamt) and merging them is a silent wrong value; cites the arm32/aarch64 precedent as "the same answer both existing 32/64 pairs reached" |
+
+**The second does not answer the first.** Its section 6 counts `TARGET_RISCV32`
+*predicate* sites (105 across 17 files) — a different metric from the 140 `rv32_*`
+*emitter* calls. Under a separate backend those 140 sites still emit RV32
+instructions and still need an XLEN answer. That is write-up 1's whole argument
+and it is unaddressed.
+
+Resolving it is cheap next to implementing the wrong shape: one person reading
+those 140 call sites. **Do that first when this is unparked.**
+
+## Two things that are NOT parked with this
+
+- **[[meta-constant-normalisation]] stays ranked (p45).** `TargetIsHosted` — the
+  same predicate written out inline 21 times, where adding any new target means
+  editing all 21 or getting a silently wrong answer at whichever is missed — is
+  worth doing for its own sake. It was listed here as a prerequisite; it is not a
+  riscv64 dependency, riscv64 is just one beneficiary.
+- **The testability gap is worth closing cheaply whenever.** `qemu-riscv32` and
+  `qemu-riscv64` are both installed and `tools/run_target.sh riscv64` already
+  works, but there is **no riscv assembler and no riscv gcc** on the box — so the
+  byte-exact-against-`as` check used for other encoders is unavailable and there
+  is no gcc differential oracle. A `riscv64-linux-gnu-binutils` install buys the
+  byte-exact check back for the price of a package, and would apply to riscv32
+  today.
