@@ -472,6 +472,11 @@
   }
  ],
  "host": "plexus",
+ "idle_yield": {
+  "aborts": 1,
+  "phase": "pin-verify",
+  "target": "ef895b743c14227c77fe8068269008626e4c6227"
+ },
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2543179B  data=60497B  bss=17852B  procs=1762] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
   "test-asm#src:compiler/compiler.pas": "ok: $TMP  [-S disassembly] | ok: $TMP  [code=8808206B  data=233424B  bss=213126196B  procs=3032]",
