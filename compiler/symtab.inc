@@ -9687,10 +9687,13 @@ begin
   begin
     if CallFixCapacity = 0 then n := CALLFIX_BASE else n := CallFixCapacity * 2;
     SetLength(CallFix, n);
+    SetLength(CallFixTarget, n);
     CallFixCapacity := n;
   end;
   CallFix[CallFixCount].CodePos := CodeLen;
   CallFix[CallFixCount].ProcIdx := procIdx;
+  { snapshot the body this site is being aimed at — see CallFixTarget }
+  CallFixTarget[CallFixCount] := Procs[procIdx].BodyAddr;
   Inc(CallFixCount);
 end;
 
@@ -9849,7 +9852,7 @@ begin
 end;
 
 procedure ApplyCallFixups;
-var i, procIdx, rvHi, rvLo: Integer;
+var i, procIdx, rvHi, rvLo, tgt: Integer;
 begin
   if DebugTrace then
     for i := 0 to ProcCount-1 do
@@ -9857,28 +9860,33 @@ begin
   for i := 0 to CallFixCount-1 do
   begin
     procIdx := CallFix[i].ProcIdx;
-    if Procs[procIdx].BodyAddr < 0 then
+    { a site that was already aimed at a body keeps that body; only a genuine
+      forward reference resolves through the (mutable) proc row. See
+      CallFixTarget for the C duplicate-static case this exists for. }
+    tgt := CallFixTarget[i];
+    if tgt < 0 then tgt := Procs[procIdx].BodyAddr;
+    if tgt < 0 then
       Error('unresolved forward: ' + Procs[procIdx].Name);
     if TargetArch = TARGET_ARM32 then
-      Patch32(CallFix[i].CodePos, $EB000000 or ((((Procs[procIdx].BodyAddr - CallFix[i].CodePos) div 4) - 2) and $00ffffff))
+      Patch32(CallFix[i].CodePos, $EB000000 or ((((tgt - CallFix[i].CodePos) div 4) - 2) and $00ffffff))
     else if TargetArch = TARGET_AARCH64 then
-      Patch32(CallFix[i].CodePos, $94000000 or (((Procs[procIdx].BodyAddr - CallFix[i].CodePos) div 4) and $03ffffff))
+      Patch32(CallFix[i].CodePos, $94000000 or (((tgt - CallFix[i].CodePos) div 4) and $03ffffff))
     else if TargetArch = TARGET_XTENSA then
     begin
       if XtensaABI = XTENSA_ABI_WINDOWED then
-        Patch24(CallFix[i].CodePos, EncodeXtensaCall8(CallFix[i].CodePos, Procs[procIdx].BodyAddr))
+        Patch24(CallFix[i].CodePos, EncodeXtensaCall8(CallFix[i].CodePos, tgt))
       else
-        Patch24(CallFix[i].CodePos, EncodeXtensaCall0(CallFix[i].CodePos, Procs[procIdx].BodyAddr));
+        Patch24(CallFix[i].CodePos, EncodeXtensaCall0(CallFix[i].CodePos, tgt));
     end
     else if TargetArch = TARGET_RISCV32 then
     begin
       { auipc+jalr pair (see EmitCallProc): patch both words. }
-      RISCVPcrelSplit(Procs[procIdx].BodyAddr - CallFix[i].CodePos, rvHi, rvLo);
+      RISCVPcrelSplit(tgt - CallFix[i].CodePos, rvHi, rvLo);
       Patch32(CallFix[i].CodePos, EncodeRISCVAuipc(reg_t0, rvHi));
       Patch32(CallFix[i].CodePos + 4, EncodeRISCVJalr(reg_ra, reg_t0, rvLo));
     end
     else
-      Patch32(CallFix[i].CodePos, Procs[procIdx].BodyAddr - (CallFix[i].CodePos + 4));
+      Patch32(CallFix[i].CodePos, tgt - (CallFix[i].CodePos + 4));
   end;
 end;
 

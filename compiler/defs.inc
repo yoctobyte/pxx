@@ -2013,6 +2013,18 @@ var
     displacement was already right, and the one thing that makes a body
     relocatable when it is not. }
   CallFix  : array of TCallFix;
+  { …and WHICH BODY each site was bound to. Parallel to CallFix (a separate
+    array rather than a third field, so ProcAddrFix/IramCallFix — both static,
+    both MAX_CALLFIX-sized, neither needing this — do not grow by a third).
+    -1 means "the callee had no body yet, resolve from Procs[ProcIdx].BodyAddr".
+    Anything else is the address the call was ALREADY emitted against, and it
+    has to be remembered because Procs[].BodyAddr is not immutable: a C file
+    with two same-named file-scope statics compiles both and the later body
+    overwrites the row. Re-resolving every site from the row then re-aimed the
+    FIRST function's callers at the SECOND body — which is how
+    test/cstatic_same_module_dup.c went from "2 11" to "11 11" the moment
+    already-resolved calls started being recorded here for DCE's sake. }
+  CallFixTarget : array of Integer;
   CallFixCount : Integer;
   CallFixCapacity : Integer;
 

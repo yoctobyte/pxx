@@ -432,6 +432,13 @@ begin
     begin
       CallFix[j].CodePos := DceNewOff(CallFix[i].CodePos);
       CallFix[j].ProcIdx := CallFix[i].ProcIdx;
+      { the snapshot is a CODE OFFSET, so it moves with the code exactly like
+        the site does. -1 (a genuine forward reference) stays -1 —
+        ApplyCallFixups resolves those through the already-remapped proc row. }
+      if CallFixTarget[i] < 0 then
+        CallFixTarget[j] := -1
+      else
+        CallFixTarget[j] := DceNewOff(CallFixTarget[i]);
       Inc(j);
     end;
     Inc(i);
