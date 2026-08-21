@@ -7002,6 +7002,16 @@ test-core: $(COMPILER)
 	# the pointer as a number, `const AnsiString` param refusing it).
 	# Every line below is byte-identical to fpc 3.2.2 on the same source;
 	# pinned does not even compile it.
+	# A WideChar reaching a string context in a program with NO `WideChar(`
+	# cast anywhere: the builtin unit carrying __pxxWideCharToUTF8 was pulled
+	# only for a CAST, so this was a hard compile ERROR on code FPC accepts.
+	# It needs the ABSENCE of a construct to fail, which is why every existing
+	# WideChar test missed it — they all happened to write the cast. ASCII on
+	# purpose: a non-ASCII code unit differs from FPC by design (pxx encodes
+	# UTF-8, FPC uses the system codepage) and would make this a test of the
+	# encoding policy instead of the unit pull.
+	./$(COMPILER) test/test_widechar_no_cast_in_program.pas $(TESTTMP)/test_widechar_nocast26
+	test "$$($(TESTTMP)/test_widechar_nocast26)" = "$$(printf '1 A\n2 xA\n2 Ax\n1 B\n2 yC\n1 A')"
 	./$(COMPILER) test/test_pchar_concat_and_array_element.pas $(TESTTMP)/test_pchar_concat26
 	test "$$($(TESTTMP)/test_pchar_concat26)" = "$$(printf 'xyabcde\nxabcde\nabcdetail\nQabcde\nabcdeQ\nzabcde\nbcde\ncde\nabcde\ncde\npabcde\n5\neq\nabcde\ncde\nbcde\nqe\nbcde')"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26

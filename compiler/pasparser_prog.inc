@@ -880,21 +880,33 @@ begin
        (Tokens[i + 1].Kind = tkLParen) and CaseEqual(GetTokenStr(i), 'copy') and
        (not TargetIsEspClass) then
       needsBuiltin := True;
-    { A `WideChar(x)` value cast may need the UTF-8 conversion helpers
-      (__pxxWideCharToUTF8 / the pair form) when the value flows into a string
-      context — pull the builtin unit so they resolve. Same shape as the Copy
-      pull above; a variable/type named widechar shadows at the cast site,
-      leaving the helpers unused. }
-    if (Tokens[i].Kind = tkIdent) and (i + 1 < TokCount) and
-       (Tokens[i + 1].Kind = tkLParen) and CaseEqual(GetTokenStr(i), 'widechar') and
-       (not TargetIsEspClass) then
-      needsBuiltin := True;
-    { UCS4Char, the same shape — but pulled on ANY mention, not just a `(` cast,
-      because unlike WideChar it is a declarable TYPE: `var c: UCS4Char` needs
-      __pxxUCS4ToUTF8 just as much as `UCS4Char(x)` does, and the variable is
-      where it will usually be spelled. }
+    { WideChar / UCS4Char / UnicodeChar: pulled on ANY mention, because each is
+      a declarable TYPE and the conversion helpers (__pxxWideCharToUTF8 and the
+      pair form, __pxxUCS4ToUTF8) are needed wherever such a value reaches a
+      string context — which is not only at a cast.
+
+      WideChar used to be pulled ONLY for a `widechar(` CAST, on the reasoning
+      spelled out for UCS4Char right here: "unlike WideChar it is a declarable
+      TYPE". That reasoning was simply wrong — `var w: WideChar` is as ordinary
+      as `var c: UCS4Char` — and the consequence was a HARD COMPILE ERROR on
+      code FPC accepts:
+
+          var w: WideChar; s: AnsiString;
+          begin w := 'A'; s := w; end.
+          -> "WideChar->string conversion: __pxxWideCharToUTF8 helper not loaded"
+
+      and it failed only when the program contained no `WideChar(` cast
+      anywhere, which is why it survived: every test that exercised the
+      conversion happened to write the cast. Found by a WideChar-source x
+      string-context differential against FPC
+      (refactor-centralize-managed-string-pchar-conversion).
+
+      The cost is a builtin unit pulled by a program that merely NAMES the type
+      and never converts — the same cost this arm already accepted for
+      UCS4Char, and the same failure mode as not pulling it is a build abort. }
     if (Tokens[i].Kind = tkIdent) and
-       (CaseEqual(GetTokenStr(i), 'ucs4char') or CaseEqual(GetTokenStr(i), 'unicodechar')) and
+       (CaseEqual(GetTokenStr(i), 'widechar') or CaseEqual(GetTokenStr(i), 'ucs4char') or
+        CaseEqual(GetTokenStr(i), 'unicodechar')) and
        (not TargetIsEspClass) then
       needsBuiltin := True;
     { The hardware-entropy intrinsics (__pxxCpuHasHwRandom / __pxxHwRandom64)

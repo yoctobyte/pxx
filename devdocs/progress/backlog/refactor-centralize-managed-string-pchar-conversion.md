@@ -222,6 +222,41 @@ extended the reader instead), slice 3 (WideChar), and `pp[i]` where `pp: PPChar`
 — an element of a POINTER to pointers, which the new arm deliberately does not
 cover because `IsArray` is false there and no differential row exercised it.
 
+## The WideChar half of the same differential, same night
+
+Same method, 6 WideChar sources (local var, record field, array element,
+function result, `WideChar(n)` cast, and an ASCII local) × 5 contexts (assign,
+concat either side, `const AnsiString` argument, `WriteLn`). **30 programs, 30
+divergences** — and they collapse into exactly three facts:
+
+1. **A hard COMPILE ERROR on code FPC accepts**, fixed here. A WideChar
+   reaching a string context in a program containing no `WideChar(` CAST
+   anywhere failed with *"WideChar->string conversion: __pxxWideCharToUTF8
+   helper not loaded"*. The token pre-scan pulled the builtin unit for a
+   `widechar(` cast only, on the reasoning written into the comment beside it:
+   *"unlike WideChar it [UCS4Char] is a declarable TYPE"*. `var w: WideChar` is
+   as declarable as `var c: UCS4Char`, so the premise was simply false. It
+   survived because the failure needs the ABSENCE of a construct — every
+   existing WideChar test happens to write the cast, and no test asserts an
+   absence by accident. Now pulled on any mention, exactly as UCS4Char already
+   was. `test/test_widechar_no_cast_in_program.pas`, identical to FPC; pinned
+   does not compile it.
+
+2. **`WriteLn(w)` prints the ordinal** — 65 for `'A'` where FPC prints `A`.
+   Filed as [[bug-a-writeln-of-a-widechar-prints-its-ordinal]] rather than
+   patched: WideChar has no type kind of its own (it collapses to `tyUInt16`),
+   and the other contexts only work because "any tyUInt16 in a string context"
+   is a safe guess THERE — `WriteLn` cannot guess, because `WriteLn(someWord)`
+   must print the number. The fix is a `tyWideChar` kind, mirroring the
+   `tyUCS4Char` that exists for this exact reason, and a new kind touches
+   shared `defs.inc` numbering. Diagnosis banked, not half-applied.
+
+3. **A non-ASCII code unit is 2 bytes under pxx, 1 under FPC** — pxx encodes
+   UTF-8, FPC converts through the system codepage. Consistent at every
+   conversion site, deliberate, not a defect. It belongs in user-facing docs,
+   and is recorded in the ticket above so the next reader of this diff does not
+   re-file it.
+
 ## Log
 - 2026-08-21 — slice 1 landed. Note for whoever reads the 2026-07-18 audit next:
   "no failing test is constructible" was a claim about a search that stopped at
