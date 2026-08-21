@@ -6989,6 +6989,21 @@ test-core: $(COMPILER)
 	# too, not only virtual ones). Counts are FPC 3.2.2's; pinned scores 1 / 9.
 	./$(COMPILER) test/test_pchar_result_decl_only_method.pas $(TESTTMP)/test_pchar_decl_only26
 	test "$$($(TESTTMP)/test_pchar_decl_only26 | tail -1)" = "total ok 9 / 9"
+	# The same class one layer out: the two CONTEXTS that had no PChar
+	# conversion at all. `+` was wrong in two unrelated ways at once --
+	# 'xy' + p read the POINTER as string data and appended one garbage byte,
+	# while 'x' + p (a one-char literal is an ORDINAL) was claimed by the
+	# `ordinal + pointer` arm and became pointer ARITHMETIC, offsetting by 120
+	# and yielding ''. `p + 1` must stay arithmetic, which is where the line
+	# is drawn: a char/string operand means concat, an integer means
+	# arithmetic -- FPC's rule, measured, not assumed. And an element of an
+	# array of PChar was one unrecognised SHAPE breaking every context at
+	# once (cast/assign/concat/compare -> '', Length -> 0, WriteLn printing
+	# the pointer as a number, `const AnsiString` param refusing it).
+	# Every line below is byte-identical to fpc 3.2.2 on the same source;
+	# pinned does not even compile it.
+	./$(COMPILER) test/test_pchar_concat_and_array_element.pas $(TESTTMP)/test_pchar_concat26
+	test "$$($(TESTTMP)/test_pchar_concat26)" = "$$(printf 'xyabcde\nxabcde\nabcdetail\nQabcde\nabcdeQ\nzabcde\nbcde\ncde\nabcde\ncde\npabcde\n5\neq\nabcde\ncde\nbcde\nqe\nbcde')"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; test "$$?" = "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26

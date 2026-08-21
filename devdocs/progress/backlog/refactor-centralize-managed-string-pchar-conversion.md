@@ -161,6 +161,67 @@ NODES at creation, C's pattern, shape-walk as fallback) and slice 3 (fold
 WideChar in). The ticket stays open for those; this closes slice 1 and the
 reader-enumeration gap it depended on.
 
+## Slice 2's first real instalment, 2026-08-21 — found by a 84-shape differential
+
+The ticket's own acceptance line asks for "a fuzz pass finds no new
+PChar/WideChar-conversion divergence". Ran the equivalent, deliberately as a
+CROSS PRODUCT rather than a list: 12 PChar SOURCES (plain function, called
+function, record field, array element, local var, pointer arithmetic, proc-typed
+value, class method, instance method, virtual, abstract-through-base,
+interface-through-interface) × 7 CONTEXTS (`AnsiString()` cast, assign, concat,
+`WriteLn`, a `const s: AnsiString` argument, `Length`, `=`), each a program of
+its own, each diffed against fpc 3.2.2. **18 of the 84 diverged.** All 18 are
+now identical to FPC, from two fixes.
+
+**1. `+` had no PChar conversion at all — and was wrong in two unrelated ways.**
+Which one you got depended on the OTHER operand, which is why it never looked
+like one bug:
+
+| expression | pxx before | FPC |
+| --- | --- | --- |
+| `'xy' + p` | `xy?` — one garbage byte | `xyabcde` |
+| `'x' + p` | `` (empty) | `xabcde` |
+| `p + 'tail'` | `?tail` | `abcdetail` |
+| `c + p`, `p + c` (char VAR) | `` (empty) | `Qabcde` / `abcdeQ` |
+| `p + 1` | `bcde` | `bcde` ✓ |
+
+With a multi-char literal the node typed as a string concat and the concat
+codegen read the POINTER as string data. With a ONE-char literal — `tyChar`, an
+ordinal — the `ordinal + pointer` arm claimed the expression first and it became
+pointer arithmetic: the pointer moved 120 bytes and the result was ''. Same
+expression shape, two different silent wrong answers, no diagnostic in either.
+
+Fixed by normalising the OPERAND in `pasparser_expr.inc`, immediately next to
+the WideChar wrap that was already doing exactly this — not by adding a third
+arm to the typing chain below it. Downstream then sees two string operands and
+needs to know nothing about PChar. The rule matches FPC and was measured, not
+assumed: a char/string operand means concat, an integer operand stays pointer
+arithmetic. Excluded in C mode, where `p + 'x'` genuinely IS arithmetic.
+
+**2. An array-of-PChar ELEMENT was an unrecognised SHAPE.** `IsNodePChar`
+enumerated cast / ident / field / call / binop and had no `AN_INDEX` arm, so
+`arr[0]` was wrong in EVERY context at once — cast, assign, concat and `=`
+produced '', `Length` answered 0, `WriteLn` printed the pointer as a decimal
+number, and `Show(arr[0])` was refused outright with *"argument types:
+(Pointer)"*. That spread is the tell: one broken context is a context bug, seven
+broken contexts is an unrecognised shape.
+
+Note what was NOT wrong: `AllocArray` and `AllocDynArray` both already record
+the element pointee in `Syms[].PtrElemTk`. **The metadata was there and only the
+reader was missing** — the mirror image of slice 1, where the reader was right
+and the metadata was missing, and together they are the argument for this
+ticket's whole framing.
+
+`test/test_pchar_concat_and_array_element.pas`, 18 lines, byte-identical to fpc
+3.2.2 on the same source. `pinned` does not compile it (the `const AnsiString`
+argument is refused). Gate: `make compiler/pascal26` fixedpoint +
+`tools/gate.sh quick` GREEN.
+
+**Still open**: the node-side storage that is slice 2 proper (this instalment
+extended the reader instead), slice 3 (WideChar), and `pp[i]` where `pp: PPChar`
+— an element of a POINTER to pointers, which the new arm deliberately does not
+cover because `IsArray` is false there and no differential row exercised it.
+
 ## Log
 - 2026-08-21 — slice 1 landed. Note for whoever reads the 2026-07-18 audit next:
   "no failing test is constructible" was a claim about a search that stopped at

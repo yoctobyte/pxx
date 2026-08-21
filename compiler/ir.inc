@@ -2410,6 +2410,30 @@ begin
     end;
   end;
 
+  { 6. An ELEMENT of an array of typed pointers — `arr[i]` where
+       `arr: array[..] of PChar` (fixed or dynamic; both allocators record it).
+
+       The metadata was never missing here: AllocArray/AllocDynArray already
+       store the element pointee in Syms[].PtrElemTk. Only the reader was, so
+       EVERY context was wrong at once for this one shape — cast, assign,
+       concat and compare produced '', Length answered 0, WriteLn printed the
+       POINTER as a number, and passing it to `const s: AnsiString` was
+       refused outright as "argument types: (Pointer)". That spread is the tell
+       that a shape is unrecognised rather than a context being broken.
+       refactor-centralize-managed-string-pchar-conversion }
+  if (ASTKind[node] = AN_INDEX) and (ASTKind[ASTLeft[node]] = AN_IDENT) then
+  begin
+    symId := ASTIVal[ASTLeft[node]];
+    if (symId >= 0) and (symId < SymCount) and Syms[symId].IsArray and
+       (Syms[symId].ElemType = tyPointer) and
+       ((Syms[symId].PtrElemTk = tyChar) or (Syms[symId].PtrElemTk = tyUInt8) or
+        (Syms[symId].PtrElemTk = tyInt8)) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+
   { 5. If it's a binop pointer expression }
   if ASTKind[node] = AN_BINOP then
   begin

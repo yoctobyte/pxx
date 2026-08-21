@@ -7849,6 +7849,37 @@ begin
        ((ASTTk[left] = Ord(tyAnsiString)) or (ASTTk[left] = Ord(tyString)) or
         (ASTTk[left] = Ord(tyChar))) then
       right := WrapWideCharToUTF8(right);
+    { A PChar operand of `+` whose OTHER side is a string or a char is a CONCAT
+      operand, not pointer arithmetic — `s := 'Error: ' + strerror(e)` is the
+      shape, and it is FPC's answer too (measured: PChar+Char = 'abcdeQ',
+      Char+PChar = 'Qabcde', while PChar+Integer stays pointer arithmetic).
+
+      pxx got BOTH halves wrong, silently, in the two directions that look
+      least alike. With a multi-char literal the node typed as tyString and the
+      concat codegen read the POINTER as string data, appending one garbage
+      byte ('xy' + p -> 'xy?'). With a single-char literal — tyChar, an ordinal
+      — the `ordinal + pointer` arm below claimed it first and the whole
+      expression became pointer arithmetic: 'x' + p offset the pointer by 120
+      bytes and produced ''. One expression, two unrelated wrong answers, no
+      diagnostic in either.
+
+      Normalising HERE rather than adding a third arm below is the point: every
+      downstream arm then sees two string operands and needs to know nothing
+      about PChar. It sits next to the WideChar wrap above for the same reason —
+      same problem, same place, one shape. Excluded in C mode, where `p + 'x'`
+      genuinely IS pointer arithmetic (a char is an int there).
+      refactor-centralize-managed-string-pchar-conversion }
+    if (op = tkPlus) and not CProgramMode then
+    begin
+      if IsNodePChar(left) and
+         ((ASTTk[right] = Ord(tyAnsiString)) or (ASTTk[right] = Ord(tyString)) or
+          (ASTTk[right] = Ord(tyChar))) then
+        left := WrapPCharToString(left)
+      else if IsNodePChar(right) and
+         ((ASTTk[left] = Ord(tyAnsiString)) or (ASTTk[left] = Ord(tyString)) or
+          (ASTTk[left] = Ord(tyChar))) then
+        right := WrapPCharToString(right);
+    end;
     node := AllocNode(AN_BINOP); ASTIVal[node] := Ord(op); ASTLeft[node] := left; ASTRight[node] := right;
     { {$Q+} region: + and - are overflow-checked (feature-pascal-overflow-checks-q-plus) }
     if ((op = tkPlus) or (op = tkMinus)) and TokQChecks[TokPos - 1] then
