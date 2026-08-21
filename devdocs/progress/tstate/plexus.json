@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T21:53:18Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "b05f1835f67178c02e0e574444975a81e054785d",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-20T22:02:33Z",
    "fixed": [],
    "new_red": [],
@@ -485,6 +477,17 @@
    "sha": "f74df41e851cf669e0dfa56c30f9c768f900e244",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-21T22:41:51Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_c_gtk_call.pas",
+    "test-core#src:test/test_generic_inherit_delphi.pas"
+   ],
+   "sha": "98ed382022547bbe6624c779ee024a3ad1dea518",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -500,6 +503,8 @@
   "test-c-conformance-arm32#shard1/6": "FAIL 00206.c \u2014 exit code 64 (want 0) | FAIL 00212.c \u2014 exit code 64 (want 0) | test-c-conformance-arm32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-arm32: FAILURES: 00206.c(exit=64) 00212.c(exit=64)",
   "test-c-conformance-riscv32#shard1/6": "FAIL 00206.c \u2014 exit code 144 (want 0) | FAIL 00212.c \u2014 exit code 144 (want 0) | test-c-conformance-riscv32: 35 pass, 2 fail, 0 skip (of 37) | test-c-conformance-riscv32: FAILURES: 00206.c(exit=144) 00212.c(exit=144)",
   "test-core#src:test/fpcv.pas@2": "ok: $TMP  [code=272900B  data=21384B  bss=75860B  procs=616]",
+  "test-core#src:test/test_c_gtk_call.pas": "pascal26:2: warning: #include <alloca.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave | pascal26:2: warning: #include <dirent.h> resolved from the host system (/usr/include), not pxx's own headers \u2014 ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave | pascal26:2: warning: #include <featur\u2026",
+  "test-core#src:test/test_generic_inherit_delphi.pas": "pascal26:10: error: generic specialization nested deeper than 16 levels (or a rewrite loop) | near: type TBox  T   >>> class V",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter",
   "test-nilpy#src:test/test_pascal_at_procvar_mode.pas@1": "ok: $TMP  [code=58611B  data=1560B  bss=42476B  procs=121]",
   "test-nilpy#src:test/test_pascal_mode_switch_cli.pas@2": "pascal26:31: warning: bare own name 'CountDown' reads the result of parameterless function CountDown; write CountDown() for a recursive call, or Result to read the result | ok: $TMP  [code=58003B  data=1528B  bss=42424B  procs=117]",
@@ -1026,11 +1031,11 @@
   "test-cjson#src:test/cjson/runner.c": "full",
   "test-core#00": "native",
   "test-core#129": "full",
-  "test-core#154": "native",
   "test-core#155": "native",
   "test-core#156": "native",
   "test-core#157": "native",
   "test-core#158": "native",
+  "test-core#159": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
   "test-core#src:examples/tk/callbacks.npy": "native",
@@ -1487,6 +1492,7 @@
   "test-core#src:test/test_c_enum.pas": "native",
   "test-core#src:test/test_c_float.pas": "native",
   "test-core#src:test/test_c_gtk.pas": "native",
+  "test-core#src:test/test_c_gtk_call.pas": "native",
   "test-core#src:test/test_c_header_case_sensitive_import.pas": "native",
   "test-core#src:test/test_c_import.pas": "native",
   "test-core#src:test/test_c_macro_soup.pas": "native",
@@ -1735,6 +1741,7 @@
   "test-core#src:test/test_generic_multiparam.pas": "native",
   "test-core#src:test/test_generic_name_overload.pas": "native",
   "test-core#src:test/test_generic_nested_diamond.pas": "native",
+  "test-core#src:test/test_generic_nested_inline_specialize.pas": "native",
   "test-core#src:test/test_generic_nonclass.pas": "native",
   "test-core#src:test/test_generic_spec_per_unit.pas": "native",
   "test-core#src:test/test_getinterface_guid_b257.pas": "native",
@@ -3975,11 +3982,11 @@
   "test-c-conformance-riscv32#shard5/6": "pass",
   "test-cjson#src:test/cjson/runner.c": "pass",
   "test-core#00": "pass",
-  "test-core#154": "pass",
   "test-core#155": "pass",
   "test-core#156": "pass",
   "test-core#157": "pass",
   "test-core#158": "pass",
+  "test-core#159": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
@@ -4436,6 +4443,7 @@
   "test-core#src:test/test_c_enum.pas": "pass",
   "test-core#src:test/test_c_float.pas": "pass",
   "test-core#src:test/test_c_gtk.pas": "pass",
+  "test-core#src:test/test_c_gtk_call.pas": "timeout",
   "test-core#src:test/test_c_header_case_sensitive_import.pas": "pass",
   "test-core#src:test/test_c_import.pas": "pass",
   "test-core#src:test/test_c_macro_soup.pas": "pass",
@@ -4679,10 +4687,11 @@
   "test-core#src:test/test_generic_class_methods.pas": "pass",
   "test-core#src:test/test_generic_func.pas": "pass",
   "test-core#src:test/test_generic_inherit.pas": "pass",
-  "test-core#src:test/test_generic_inherit_delphi.pas": "pass",
+  "test-core#src:test/test_generic_inherit_delphi.pas": "fail",
   "test-core#src:test/test_generic_multiparam.pas": "pass",
   "test-core#src:test/test_generic_name_overload.pas": "pass",
   "test-core#src:test/test_generic_nested_diamond.pas": "pass",
+  "test-core#src:test/test_generic_nested_inline_specialize.pas": "pass",
   "test-core#src:test/test_generic_nonclass.pas": "pass",
   "test-core#src:test/test_generic_spec_per_unit.pas": "pass",
   "test-core#src:test/test_getinterface_guid_b257.pas": "pass",
@@ -6396,11 +6405,11 @@
   "tools-devtest#00": "fail"
  },
  "last": {
-  "date": "2026-08-21T21:40:22Z",
-  "sha": "f74df41e851cf669e0dfa56c30f9c768f900e244",
+  "date": "2026-08-21T22:41:51Z",
+  "sha": "98ed382022547bbe6624c779ee024a3ad1dea518",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.4
+  "wall": 3600.5
  },
  "last_bench": {
   "conf_rows": 550,
@@ -7957,6 +7966,34 @@
     "16a540b759c53a2be03c3013751d90741ef38e40"
    ],
    "src": "test/fpcv.pas",
+   "status": "fail"
+  },
+  {
+   "bad": "98ed382022547bbe6624c779ee024a3ad1dea518",
+   "good": "f74df41e851cf669e0dfa56c30f9c768f900e244",
+   "job": "test-core#src:test/test_c_gtk_call.pas",
+   "name": "test-core#1145",
+   "opened": "2026-08-21T22:41:51Z",
+   "pin_built": false,
+   "range": [
+    "5179c4d4350bcb775841ce7b7283c1a367abe035",
+    "98ed382022547bbe6624c779ee024a3ad1dea518"
+   ],
+   "src": "test/test_c_gtk_call.pas",
+   "status": "timeout"
+  },
+  {
+   "bad": "98ed382022547bbe6624c779ee024a3ad1dea518",
+   "good": "f74df41e851cf669e0dfa56c30f9c768f900e244",
+   "job": "test-core#src:test/test_generic_inherit_delphi.pas",
+   "name": "test-core#298",
+   "opened": "2026-08-21T22:41:51Z",
+   "pin_built": false,
+   "range": [
+    "5179c4d4350bcb775841ce7b7283c1a367abe035",
+    "98ed382022547bbe6624c779ee024a3ad1dea518"
+   ],
+   "src": "test/test_generic_inherit_delphi.pas",
    "status": "fail"
   }
  ],
