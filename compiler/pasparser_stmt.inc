@@ -5035,9 +5035,13 @@ begin
             field-walk via the layout descriptor) to balance the old buffer's
             element-aware release (feature-dynarray-insert-delete-managed-
             elements). Frozen strings / nested arrays are still deferred. }
-          if (NodeDynBaseTk(valNode) = tyString) or (NodeDynDepth(valNode) > 1) or
+          { NESTED targets (`array of array of T`) are allowed: the lowering
+            strides by a handle, gives the temp the source's depth, and retains
+            at that depth -- the three things AN_DYN_COPY has to change
+            together. Frozen strings are still deferred. }
+          if (NodeDynBaseTk(valNode) = tyString) or
              ((ASTKind[valNode] = AN_IDENT) and (SymElemDynDepth[i] > 0)) then
-            Error('Delete: frozen-string or nested element type not yet supported for dynamic-array Delete');
+            Error('Delete: frozen-string element type not yet supported for dynamic-array Delete');
           Expect(tkComma, ','); ParseExpr; opNode := CurASTNode;       { index }
           Expect(tkComma, ','); ParseExpr; stepsNode := CurASTNode;    { count }
           Expect(tkRParen, ')');

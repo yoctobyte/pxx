@@ -6014,7 +6014,15 @@ begin
       dcSrcAst := ASTLeft[node];
       dcElemTk := NodeDynBaseTk(dcSrcAst);
       dcElemRec := NodeDynBaseRec(dcSrcAst);
-      if dcElemTk = tyRecord then dcElemSz := RecSize(dcElemRec)
+      dcDepth := NodeDynDepth(dcSrcAst);
+      if dcDepth < 1 then dcDepth := 1;
+      { A NESTED array's elements are sub-array HANDLES, so the head/tail
+        copies stride by a POINTER, not by the base element -- the same three
+        things AN_DYN_COPY has to change together (stride, temp depth, retain
+        depth). TypeSize(tyPointer), not 8: a handle is 4 bytes on the 32-bit
+        targets. }
+      if dcDepth > 1 then dcElemSz := TypeSize(tyPointer)
+      else if dcElemTk = tyRecord then dcElemSz := RecSize(dcElemRec)
       else dcElemSz := TypeSize(dcElemTk);
       dcIdxAst := ASTLeft[ASTRight[node]];
       dcCntAst := ASTLeft[ASTRight[ASTRight[node]]];
@@ -6055,7 +6063,10 @@ begin
         SetLength(temp, newLen) via the -102 dyn-array SetLength call. }
       dcSavedRec := LastTypeRecId;
       if dcElemTk = tyRecord then LastTypeRecId := dcElemRec;
-      dcTempSym := AllocDynArray('', dcElemTk, 1);
+      { At the SOURCE's depth, so the temp's scope-exit release recurses
+        through the levels instead of treating a buffer of handles as a buffer
+        of base values (AN_DYN_COPY's (2)). }
+      dcTempSym := AllocDynArray('', dcElemTk, dcDepth);
       LastTypeRecId := dcSavedRec;
       SymIsHiddenArgTemp[dcTempSym] := True;
       dcTempIdent := AllocNode(AN_IDENT); ASTIVal[dcTempIdent] := dcTempSym;
@@ -6113,7 +6124,7 @@ begin
         array's handle). Kept elements gain the ref the new buffer owns; the
         deleted range gains none, so the old-buffer release frees exactly those. Mirrors PXXDynSetLen's
         RetainImmediate-after-copy pattern. }
-      if (dcElemTk = tyAnsiString) or
+      if (dcDepth > 1) or (dcElemTk = tyAnsiString) or
          ((dcElemTk = tyRecord) and RecordHasManagedFields(dcElemRec)) then
       begin
         procIdx := FindProc('PXXDynArrayRetainImmediate');
@@ -6123,10 +6134,24 @@ begin
         last := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcNewLenTmp, -1, -1, 0, Ord(tyInteger)),
                   -1, -1, 0, Ord(tyInteger));
         IRB[first] := last;
-        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, dcDepth, Ord(tyInteger)),
                      -1, -1, 0, Ord(tyInteger));
-        IRB[last] := argNode; last := argNode;                 { depth = 1 }
-        if dcElemTk = tyAnsiString then
+        IRB[last] := argNode; last := argNode;                 { depth }
+        if dcDepth > 1 then
+        begin
+          { Nested: the RTL's depth > 1 path IncRefs every handle and never
+            reads these two, so pass a NEUTRAL baseKind rather than falling
+            into the record arm, which would index the RTTI table with a
+            REC_NONE element id and compute a garbage offset. The call needs
+            five arguments either way. }
+          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyInteger)),
+                       -1, -1, 0, Ord(tyInteger));
+          IRB[last] := argNode; last := argNode;               { baseKind = 0 (unused) }
+          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
+                       -1, -1, 0, Ord(tyPointer));
+          IRB[last] := argNode;                                { baseRecDesc = nil }
+        end
+        else if dcElemTk = tyAnsiString then
         begin
           argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
                        -1, -1, 0, Ord(tyInteger));
@@ -6166,7 +6191,15 @@ begin
       dcSrcAst := ASTLeft[node];
       dcElemTk := NodeDynBaseTk(dcSrcAst);
       dcElemRec := NodeDynBaseRec(dcSrcAst);
-      if dcElemTk = tyRecord then dcElemSz := RecSize(dcElemRec)
+      { Always 1 today -- the parser still refuses a NESTED destination for
+        Insert, because the inserted sub-array handle would need its own retain
+        and the gap store runs AFTER the buffer-wide retain walk. Read from the
+        node anyway so this arm says what it means and the depth-aware code
+        below (shared with Delete, where nesting IS allowed) stays honest. }
+      dcDepth := NodeDynDepth(dcSrcAst);
+      if dcDepth < 1 then dcDepth := 1;
+      if dcDepth > 1 then dcElemSz := TypeSize(tyPointer)
+      else if dcElemTk = tyRecord then dcElemSz := RecSize(dcElemRec)
       else dcElemSz := TypeSize(dcElemTk);
       dcCntAst := ASTLeft[ASTRight[node]];               { value }
       dcIdxAst := ASTLeft[ASTRight[ASTRight[node]]];     { index }
@@ -6240,7 +6273,10 @@ begin
         element REC id on the temp (descriptor / element size). }
       dcSavedRec := LastTypeRecId;
       if dcElemTk = tyRecord then LastTypeRecId := dcElemRec;
-      dcTempSym := AllocDynArray('', dcElemTk, 1);
+      { At the SOURCE's depth, so the temp's scope-exit release recurses
+        through the levels instead of treating a buffer of handles as a buffer
+        of base values (AN_DYN_COPY's (2)). }
+      dcTempSym := AllocDynArray('', dcElemTk, dcDepth);
       LastTypeRecId := dcSavedRec;
       SymIsHiddenArgTemp[dcTempSym] := True;
       dcTempIdent := AllocNode(AN_IDENT); ASTIVal[dcTempIdent] := dcTempSym;
@@ -6303,7 +6339,7 @@ begin
         array's handle). Kept elements gain the ref the new buffer owns; the
         still-nil gap is a no-op for the retain walk (the ARC-aware gap store below adds the inserted value's ref itself). Mirrors PXXDynSetLen's
         RetainImmediate-after-copy pattern. }
-      if (dcElemTk = tyAnsiString) or
+      if (dcDepth > 1) or (dcElemTk = tyAnsiString) or
          ((dcElemTk = tyRecord) and RecordHasManagedFields(dcElemRec)) then
       begin
         procIdx := FindProc('PXXDynArrayRetainImmediate');
@@ -6313,10 +6349,24 @@ begin
         last := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcNewLenTmp, -1, -1, 0, Ord(tyInteger)),
                   -1, -1, 0, Ord(tyInteger));
         IRB[first] := last;
-        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
+        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, dcDepth, Ord(tyInteger)),
                      -1, -1, 0, Ord(tyInteger));
-        IRB[last] := argNode; last := argNode;                 { depth = 1 }
-        if dcElemTk = tyAnsiString then
+        IRB[last] := argNode; last := argNode;                 { depth }
+        if dcDepth > 1 then
+        begin
+          { Nested: the RTL's depth > 1 path IncRefs every handle and never
+            reads these two, so pass a NEUTRAL baseKind rather than falling
+            into the record arm, which would index the RTTI table with a
+            REC_NONE element id and compute a garbage offset. The call needs
+            five arguments either way. }
+          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyInteger)),
+                       -1, -1, 0, Ord(tyInteger));
+          IRB[last] := argNode; last := argNode;               { baseKind = 0 (unused) }
+          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
+                       -1, -1, 0, Ord(tyPointer));
+          IRB[last] := argNode;                                { baseRecDesc = nil }
+        end
+        else if dcElemTk = tyAnsiString then
         begin
           argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
                        -1, -1, 0, Ord(tyInteger));

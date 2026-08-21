@@ -359,6 +359,48 @@ begin
           (o.names[2] = 'cc'));
 end;
 
+{ ---- nested elements: Delete on `array of array of T` ---- }
+{ The elements are sub-array HANDLES, so three things change together (the same
+  three AN_DYN_COPY needs): the head/tail copies stride by a pointer, the fresh
+  temp is allocated at the source's depth so its scope-exit release recurses,
+  and the retain walk runs at that depth so kept rows gain the ref the new
+  buffer owns while deleted rows gain none. Getting one without the others is
+  what makes this a segfault rather than a diagnostic. Insert on a nested
+  destination is still refused -- see the ticket. }
+procedure NestedDelete;
+var m: array of array of Integer; keep: array of Integer; i, j, k: Integer;
+begin
+  SetLength(m, 4);
+  for i := 0 to 3 do
+  begin
+    SetLength(m[i], 2);
+    for j := 0 to 1 do m[i][j] := i * 10 + j;
+  end;
+  keep := m[2];                { alias a row that the delete REMOVES }
+  Delete(m, 1, 2);
+  Chk(59, (Length(m) = 2) and (m[0][0] = 0) and (m[0][1] = 1) and
+          (m[1][0] = 30) and (m[1][1] = 31));
+  { the removed row must still be alive: the old buffer's element-aware
+    release ran, and `keep` is the only owner left }
+  Chk(60, (Length(keep) = 2) and (keep[0] = 20) and (keep[1] = 21));
+  { a SURVIVING row is the same block, not a copy }
+  m[1][0] := 777;
+  Chk(61, m[1][0] = 777);
+  { churn: rows must neither leak nor be freed twice }
+  k := 0;
+  for i := 1 to 20000 do
+  begin
+    SetLength(m, 3);
+    for j := 0 to 2 do
+    begin
+      SetLength(m[j], 2); m[j][0] := j; m[j][1] := j + 1;
+    end;
+    Delete(m, 1, 1);
+    k := k + Length(m) + m[1][0];
+  end;
+  Chk(62, k = 80000);
+end;
+
 begin
   okCount := 0;
   DeleteBasics;
@@ -377,5 +419,6 @@ begin
   SpliceManaged;
   SpliceRecsAndSets;
   FieldTargets;
-  writeln('total ok ', okCount, ' / 58');
+  NestedDelete;
+  writeln('total ok ', okCount, ' / 62');
 end.
