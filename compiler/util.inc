@@ -23,20 +23,38 @@
   invisible while every frontend is always built, which is exactly why the
   omission defines keep finding things reading the code does not.
 
-  KNOWN DEFECT, moved verbatim rather than fixed here so that this move stays
-  provably mechanical: `while n > 0` means a NEGATIVE n yields the empty string
-  ('' , not '-5'). Filed as bug-a-aintostr-returns-empty-for-negative-numbers. }
+  Until 2026-08-21 a NEGATIVE n yielded the EMPTY STRING — `while n > 0` never
+  entered, so AIntToStr(-5) was '', with no sign and no digits. Every caller
+  passes a count, an index, a parameter number or a version, so the failure
+  mode was never a wrong number: it was a diagnostic with a HOLE in it
+  ('takes at most  arguments'), which reads as a formatting slip rather than a
+  value bug. That is why it survived ~40 call sites.
+  bug-a-aintostr-returns-empty-for-negative-numbers
+
+  The digits are accumulated on the NEGATIVE side, which is the whole trick:
+  negating first would work for every input except Low(Integer), whose
+  magnitude has no positive representation, so `n := -n` on it silently yields
+  Low(Integer) again and the loop never terminates. There is no such asymmetry
+  going downward — `n div 10` truncates toward zero, so the magnitude only
+  shrinks. Pascal's `mod` takes the sign of the dividend, hence the -(n mod 10)
+  to get a 0..9 digit.
+
+  The '-' is appended LAST because the buffer is built backwards and reversed
+  below, which puts the sign in front. }
 function AIntToStr(n: Integer): AnsiString;
-var rev, res: AnsiString; i: Integer;
+var rev, res: AnsiString; i: Integer; neg: Boolean;
 begin
+  neg := n < 0;
+  if not neg then n := -n;      { work in the negative half — see above }
   rev := '';
   if n = 0 then AppendChar(rev, '0')
   else
-    while n > 0 do
+    while n < 0 do
     begin
-      AppendChar(rev, Chr(Ord('0') + (n mod 10)));
+      AppendChar(rev, Chr(Ord('0') - (n mod 10)));
       n := n div 10;
     end;
+  if neg then AppendChar(rev, '-');
   res := '';
   for i := Length(rev) downto 1 do AppendChar(res, rev[i]);
   Result := res;

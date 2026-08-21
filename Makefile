@@ -4769,6 +4769,31 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_dyncopy_nested)" = "$$(printf 'lenh=2 h00=1 h11=4\none-level-detach g00=99\ninner=4\nafter-copy-scope g11=4 g22=6\nt3 len=2 u111=7 u010=2\nstr v00=row v11=end\nsource-survives s11=end')"
 	./$(COMPILER) -dPXX_HEAP_DEBUG test/test_dynarray_copy_nested.pas $(TESTTMP)/test_dyncopy_nested_hd
 	test "$$($(TESTTMP)/test_dyncopy_nested_hd)" = "$$($(TESTTMP)/test_dyncopy_nested)"
+	@# AIntToStr — the compiler's own IntToStr — returned the EMPTY STRING for
+	@# every n < 0, so a diagnostic carrying a negative had a HOLE in it rather
+	@# than a wrong number ('at most  arguments'), which reads as a formatting
+	@# slip and is why it survived ~40 call sites. Not one of those sites can
+	@# pass a negative today, so the test needs a prop:
+	@# test/aintostr_units/builtinheap.pas is an impostor RTL unit that drives
+	@# the layout-version guard, the one diagnostic reachable from the CLI that
+	@# prints a number a user controls. Read that file before touching this.
+	@# Four values, each a different way for a sign fix to be wrong: -1 (single
+	@# digit), -12345 (ordinary), 0 (the branch the digit loop cannot produce),
+	@# and Low(Integer) — whose magnitude has no positive representation, so a
+	@# fix that negates first HANGS here while passing the other three.
+	@# bug-a-aintostr-returns-empty-for-negative-numbers
+	@for d in ':-1' 'LAYOUT_ORD:-12345' 'LAYOUT_ZERO:0' 'LAYOUT_LOW:-2147483648'; do \
+	   def=$${d%%:*}; want=$${d##*:}; \
+	   ./$(COMPILER) $${def:+-d$$def} -Futest/aintostr_units \
+	     test/test_aintostr_negative.pas $(TESTTMP)/test_aintostr_neg26 2>&1 \
+	     | grep -q "implements version $$want\." \
+	     || { echo "test_aintostr_negative: FAIL - expected 'implements version $$want.'" \
+	          " (an empty number there means the bug is back)"; exit 1; }; \
+	 done
+	@# ...and the same program with no -Fu must build and run, so a failure above
+	@# is the impostor unit doing its job and not something about this program.
+	./$(COMPILER) test/test_aintostr_negative.pas $(TESTTMP)/test_aintostr_ok26
+	test "$$($(TESTTMP)/test_aintostr_ok26)" = "ok"
 	./$(COMPILER) test/test_mimic_fpc_compiler_profile.pas $(TESTTMP)/test_mimicfpcc_none
 	test "$$($(TESTTMP)/test_mimicfpcc_none)" = "$$(printf 'fpc=NO\nunix=NO\nend')"
 	./$(COMPILER) --mimic-fpc test/test_mimic_fpc_compiler_profile.pas $(TESTTMP)/test_mimicfpcc_fpc
