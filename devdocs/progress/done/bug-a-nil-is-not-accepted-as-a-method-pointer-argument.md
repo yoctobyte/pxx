@@ -149,4 +149,4 @@ The FPC seed needed the function order fixed (`MatchArgNilOk` calls
 `ByRefArgNeedsLvalue`); the seed canary caught it.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit de4693979.
