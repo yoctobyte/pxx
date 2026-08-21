@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:21 blocked:9 backlog:263 experimental:20 rainy-day:40 float:20 done-followup:3 decided:96 done:2224 rejected:40`
+`urgent:1 working:1 unfinished:21 blocked:9 backlog:263 experimental:20 rainy-day:40 float:20 done-followup:3 decided:97 done:2224 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -51,7 +51,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 251, ranked
+## Ready — top 30 of 252, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree
@@ -62,7 +62,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [A]` feature-a-tobject-root-method-vmt-slots
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-oop
-- `[p 60] [U]` decide-interface-members-in-aggregates-lock-strategy (unblocks 1)
+- `[p 60] [A]` bug-a-a-record-copy-does-not-retain-an-interface-field
 - `[p 60] [N]` bug-n-inferred-return-type-of-true-division-is-int
 - `[p 60] [T]` bug-t-the-push-rate-starves-breadth-coverage-entirely
 - `[p 58] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
@@ -84,4 +84,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 
-_221 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_222 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

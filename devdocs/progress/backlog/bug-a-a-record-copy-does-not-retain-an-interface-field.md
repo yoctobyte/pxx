@@ -2,7 +2,7 @@
 track: A
 prio: 60
 type: bug
-blocked-by: [decide-interface-members-in-aggregates-lock-strategy]
+blocked-by: []
 summary: "`b := a` on a record holding a COM interface field copies the pointer with no retain, so the two records share one counted reference. Nilling either one destroys the object and the other is left dangling — a use-after-free that segfaults on the next member call. Present on pinned and on HEAD."
 status: backlog
 owner: ""
@@ -90,3 +90,22 @@ it turns on both halves at once, and the finalization half is what deadlocks.
 Still `blocked-by: decide-interface-members-in-aggregates-lock-strategy`. That
 decision is now the ONLY thing standing between this family and completeness,
 which raises its value: everything around it has landed.
+
+## 2026-08-21 — UNBLOCKED: the decision landed, and it is (b)
+
+[[decide-interface-members-in-aggregates-lock-strategy]] was answered by the
+user: **a separate unlocked interface pass**, the shape already shipping for
+class fields (`PXXClassFinalize` runs its kind-4 pass first, unlocked).
+
+That dissolves the objection recorded above rather than gating around it. The
+note said this ticket had no escape route because *"the record descriptor's
+managed-field predicate is shared with FINALIZATION — so widening it turns on
+both halves at once, and the finalization half is what deadlocks."* Under (b)
+the interface retain **and** release both move ahead of `EmitAcquireHeapLock`,
+so widening the predicate no longer enables a *locked* release. There is no
+deadlock left to gate, hence no `ThreadSafeMode` refusal of the kind
+`ManagedElemKindLocked` needed for dynamic arrays.
+
+Consequence: the use-after-free is fixed in **every** build. Do not implement
+option (c) (retain-only, trading the UAF for a leak) — it was a fallback for the
+case where this decision stayed open, and it has not.

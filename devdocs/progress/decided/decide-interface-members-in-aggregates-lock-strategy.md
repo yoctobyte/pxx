@@ -4,8 +4,8 @@ prio: 60
 type: decide
 blocked-by: []
 summary: "SIX open Track A tickets (two of them use-after-frees) are all the same missing capability: a COM interface held inside an aggregate is invisible to every container-level retain/release walk. The one fix is blocked on a heap-lock question that was attempted once and reverted. Which strategy — reentrant lock, unlocked interface pass, or a copy-site-only stopgap — and who validates it against the threading stress tests?"
-status: backlog
-owner: unassigned
+status: decided
+owner: user
 ---
 
 # Interface members in aggregates: which lock strategy?
@@ -135,3 +135,59 @@ the tree, which should make the choice cheaper than when this was filed:
 Recommendation: **(b) for the containers** (it is the proven shape and needs no
 allocator change), and evaluate (a) separately as an allocator question now that
 TLS exists, rather than as a prerequisite for this family.
+
+## ANSWER (user, 2026-08-21)
+
+**(b) — a separate unlocked interface pass, for the containers AND the record
+case. (a) is split out as its own allocator ticket, aimed at what it is actually
+for.**
+
+Implementation: [[bug-a-a-record-copy-does-not-retain-an-interface-field]]
+(unblocked by this answer; it is the only family member still open).
+The allocator question: [[feature-a-reentrant-heap-lock-and-per-thread-arenas]].
+
+### Why (b) closes the record case, which had "no escape route"
+
+The record ticket's 2026-08-21 note says it cannot use the dyn-array gate
+because *"the record descriptor's managed-field predicate is shared with
+FINALIZATION — so widening it turns on both halves at once, and the
+finalization half is what deadlocks."*
+
+Under (b) that reasoning stops applying: the interface retain **and** release
+both move ahead of `EmitAcquireHeapLock`, so widening the predicate no longer
+enables a *locked* release. The deadlock is removed rather than gated around,
+which means the record case needs no `ThreadSafeMode` refusal of its own and
+the use-after-free is fixed in every build — not traded for a leak the way
+option (c) proposed.
+
+### Why (a) is not the prerequisite, measured
+
+Two facts checked on 2026-08-21 (static reading, not a build):
+
+- **(a)'s stated blast radius was overstated.** `EmitAcquireHeapLock` opens with
+  `if ThreadSafeMode then` — a default build emits **no heap lock at all**. So a
+  reentrant lock does not "change the allocator's core locking for all code"; it
+  changes it for `--threadsafe` builds, which already pay for the lock. The
+  uncontended cost of an owner+depth check is a few instructions against one
+  `lock xchg`.
+- **But (a) must be built twice.** x86-64 uses a hand-emitted TTAS+PAUSE blob in
+  `ir_codegen.inc`; i386 uses an entirely separate Pascal spinlock
+  (`PXXHeapSpin`, under `PXX_TS_SOFTLOCK`) because it has no lock blobs. One
+  concept, two implementations, which would have to stay in step.
+
+The decisive point is that **(a)'s real payoff was never this bug family**.
+`EmitAcquireHeapLock`'s own comment names the actual prize: *"it does NOT make
+the allocator scale — that needs per-thread arenas, which needs real TLS, which
+this runtime does not have yet."* That comment is **stale** — TLS landed
+2026-08-20 — and per-thread arenas are a far larger win than closing one leak.
+Gating a memory-safety fix on an allocator redesign gets neither; doing (b) now
+frees (a) to be judged on what it is for.
+
+### Correction to this ticket's own framing
+
+The 2026-08-21 update above describes the residual as *"a record's interface
+field is neither copied with a retain nor finalized"*, which reads as a benign
+leak. It is not: the missing **retain on copy** is a real use-after-free, it is
+**not** confined to `--threadsafe`, and the frontmatter summary calling it that
+is correct. Only the dyn-array element leak is threadsafe-only. Do not let the
+"everything else landed" framing downgrade the one that is left.

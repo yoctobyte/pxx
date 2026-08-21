@@ -60,7 +60,7 @@ lives in git, not in a timestamp._
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-a-record-copy-does-not-retain-an-interface-field | A | 60 | bug | `b := a` on a record holding a COM interface field copies the pointer with no retain, so the two records share one counted reference. Nilling either one destroys the object and the other is left dangling — a use-after-free that segfaults on the next member call. Present on pinned and on HEAD. | decide-interface-members-in-aggregates-lock-strategy |
+| bug-a-a-record-copy-does-not-retain-an-interface-field | A | 60 | bug | `b := a` on a record holding a COM interface field copies the pointer with no retain, so the two records share one counted reference. Nilling either one destroys the object and the other is left dangling — a use-after-free that segfaults on the next member call. Present on pinned and on HEAD. | — |
 | bug-a-findtypealias-failed-to-find-puint8-on-stderr | A | 20 | bug | `FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr during a compile that then SUCCEEDS. Either the lookup failure is real and something silently fell back to a wrong type, or the message is a stale debug print that should not be in a release build. Both readings are defects; which one it is has not been established. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
@@ -151,7 +151,6 @@ lives in git, not in a timestamp._
 | compat-pascal-subrange-storage-size | P | 30 | compat | Every subrange type gets the 4-byte default instead of the smallest type that holds it: SizeOf(10..20) is 4 where FPC says 1, so a `packed record` of subranges is 12 bytes where FPC lays out 3. Values are all correct — this is a layout divergence, not a wrong-value bug, and it breaks binary interop and costs 4x memory. | — |
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-uses-sysutils-withdraws-the-variadic-concat | P | 25 | compat | The variadic `Concat` intrinsic is shadowed by `sysutils`'s two-argument `Concat`, so `uses sysutils` breaks `Concat('a','b','c')` — which compiles fine without it. The shadow rule is `procIdx < 0`, i.e. ANY user Concat disables the intrinsic outright. Loud, not silent. | — |
-| decide-interface-members-in-aggregates-lock-strategy | U | 60 | decide | SIX open Track A tickets (two of them use-after-frees) are all the same missing capability: a COM interface held inside an aggregate is invisible to every container-level retain/release walk. The one fix is blocked on a heap-lock question that was attempted once and reverted. Which strategy — reentrant lock, unlocked interface pass, or a copy-site-only stopgap — and who validates it against the threading stress tests? | — |
 | decide-reduced-compiler-switch-spelling | U | 55 | decide | How does a reduced build get selected — subtractive (`omit-c`), positive-list (`only-pascal`), or a named-configuration file? And do frontend and target selection compose freely or only in blessed combinations? The user flagged the names in the parent ticket as placeholders. Recommendation: subtractive defines as the mechanism, named configurations as the tested surface. | — |
 | decide-riscv64-vs-the-bug-queue-for-autonomous-nights | U | 50 | decide | feature-a-riscv64-as-a-hosted-first-class-target is the top-ranked Track A ticket at prio 50, and its own log says it was ranked 'as a strategic target rather than an urgent one'. It is a multi-session job. An unattended overnight Track A session keeps reaching it, skipping it, and taking a p40 bug instead — which may be right, but it is a decision being made silently every night. Make it once, out loud. | — |
 | decide-segv-runtime-error-default | U | 45 | decide | NARROWED 2026-08-21. The nil-detection half left as feature-a-emitted-nil-checks; what remains is only what the SIGSEGV handler does for the faults a check cannot catch (wild pointers, stack overflow). Fork is no longer default-on vs opt-in but report-and-RE-RAISE (message + core dump + exit 139, default-on) vs report-and-exit-216 (FPC parity, no core dump). Plus: should --mimic-fpc imply --fpc-mem-errors and --fpc-float-errors? | — |
@@ -169,6 +168,7 @@ lives in git, not in a timestamp._
 | feature-a-io-lock-owner-from-tls-not-gettid | A | 35 | feature | The --threadsafe I/O lock issues a gettid SYSCALL on every I/O statement (measured: 43% overhead, one syscall per Writeln; caching it in TLS removed the whole penalty). The naive version is WRONG -- foreign threads (glibc pthread_create) inherit the creator's block and would answer 'lock already mine', silently losing mutual exclusion. Needs the stack-bounds validation design recorded in the ticket. | — |
 | feature-a-operator-table-keyed-on-both-operands | A | 40 | feature | Implement the 2026-08-10 decision: key the operator-overload table on BOTH operand types. Until then `operator + (a: Double; b: TCx)` stays refused ('cannot determine operand type' / 'predefined for built-in operand types') where FPC accepts it. Relaxing only the guard would MISCOMPILE plain `3 * 5`. | — |
 | feature-a-promoint-variant-esp-targets | S | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
+| feature-a-reentrant-heap-lock-and-per-thread-arenas | A+O | 40 | feature | Split out of decide-interface-members-in-aggregates-lock-strategy, where a reentrant heap lock was proposed as a means to fix an ARC leak. That is not what it is for: EmitAcquireHeapLock's own comment says the allocator does not scale because the lock is global, and that per-thread arenas need TLS the runtime lacked. TLS landed 2026-08-20, so both are now open — judged as allocator work, not as a prerequisite for a bug fix. | — |
 | feature-a-riscv64-as-a-hosted-first-class-target | A | 50 | feature | pxx has no riscv64 target at all — only riscv32, which exists for ESP-class bare metal. Real RISC-V hardware (notebooks, SBCs) is RV64GC running Linux, so today we cannot build for the machines RISC-V actually ships on. The harness is already ready: run_target.sh handles riscv64, install_qemu.sh installs qemu-riscv64, twatch_web lists it in CROSS_TARGETS — nothing can produce a binary for it. | — |
 | feature-a-shrink-managed-header-on-32-bit | A | 15 | feature | On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits | — |
 | feature-a-tobject-root-method-vmt-slots | A | 65 | feature | Reserve N=4 leading VMT slots (Destroy, Equals, GetHashCode, ToString) in every class so a static-TObject receiver can dispatch to a descendant's override, with --compact-classes opting out to today's behaviour and the ESP target defaulting to compact. Implements decide-tobject-root-methods-dispatch-model; unblocks feature-pascal-builtin-tobject-class and the generics corpus rung. | — |
@@ -427,7 +427,7 @@ lives in git, not in a timestamp._
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (96)
+## decided (97)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -453,6 +453,7 @@ lives in git, not in a timestamp._
 | decide-how-a-compiled-def-carries-its-signature-when-boxed | U | 88 | decide | A compiled NilPy `def` boxed into a variant is a bare CODE ADDRESS (VT_CALLABLE_TAG), carrying no arity and no defaults — so every call through a procedural value skips default-filling AND arity checking, and the ordinary callback shapes SIGSEGV. A lambda is correct because it takes the owned-callable path, which already carries ReqN..TotN. Fixing it means changing what a def-as-value OWNS, which the current representation deliberately avoids. That ownership call is the decision. | — |
 | decide-how-python-shaped-shims-should-be-shipped | U | 70 | decide | A shim whose content is Python-level aliases (six: `text_type = str`) cannot be written in the mimic_<name>.pas slot, and the working alternative — a NilPy .py in a library root — silently defeats --no-shims. Three options, recommendation is to let the shim lookup also probe mimic_<name>.py. | — |
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
+| decide-interface-members-in-aggregates-lock-strategy | U | 60 | decide | SIX open Track A tickets (two of them use-after-frees) are all the same missing capability: a COM interface held inside an aggregate is invisible to every container-level retain/release walk. The one fix is blocked on a heap-lock question that was attempted once and reverted. Which strategy — reentrant lock, unlocked interface pass, or a copy-site-only stopgap — and who validates it against the threading stress tests? | — |
 | decide-ipv6-dualstack-and-aaaa-ordering | U | 40 | decide | Policy: IPV6_V6ONLY on a :: listener, and which address wins when a host has both A and AAAA | — |
 | decide-may-agents-fetch-thirdparty-sources-as-oracles | U | 50 | decide | Several ranked Track B tickets need a third-party package present on the box — as a differential oracle (reportlab) or as the compile target itself (html5lib, tinycss2, webencodings). None is installed here and fetching one is a supply-chain action, so the lane is stalled on a policy answer, not on work | — |
 | decide-may-uses-math-cost-the-heap-and-exception-runtime | U | 30 | decide | Making Floor/Ceil raise EInvalidOp like FPC needs `uses sysutils` in math's implementation — measured, that is the ONLY way to raise anything, since Exception is not visible otherwise. That makes every `uses math` program require the heap + exception runtime: test/test_math.pas stops compiling today. Fork: pay it (and fix the prescan in A), saturate silently, or leave the wrong values. Blocks bug-b-floor-of-an-out-of-range-double-returns-0-where-fpc-raises. | — |
@@ -588,7 +589,7 @@ lives in git, not in a timestamp._
 - [p 65] [A] feature-a-tobject-root-method-vmt-slots
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-oop
-- [p 60] [U] decide-interface-members-in-aggregates-lock-strategy (unblocks 1)
+- [p 60] [A] bug-a-a-record-copy-does-not-retain-an-interface-field
 - [p 60] [N] bug-n-inferred-return-type-of-true-division-is-int
 - [p 60] [T] bug-t-the-push-rate-starves-breadth-coverage-entirely
 - [p 58] [N] bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
@@ -681,6 +682,7 @@ lives in git, not in a timestamp._
 - [p 40] [D] docs-d-nilchecks-directive-and-flag
 - [p 40] [A] feature-a-operator-table-keyed-on-both-operands
 - [p 40] [S] feature-a-promoint-variant-esp-targets
+- [p 40] [A+O] feature-a-reentrant-heap-lock-and-per-thread-arenas
 - [p 40] [A] feature-a-typeref-migrate-consumers
 - [p 40] [B] feature-b-fpc-signal-compat-unit
 - [p 40] [A] feature-c-package-namespace-decision
@@ -838,7 +840,6 @@ lives in git, not in a timestamp._
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
 - **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
-- **1** — decide-interface-members-in-aggregates-lock-strategy
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
