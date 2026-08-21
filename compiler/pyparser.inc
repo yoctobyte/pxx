@@ -1927,8 +1927,10 @@ begin
   for i := scopeBase to SymCount - 1 do
     if (Syms[i].Kind = skLocal) and (Syms[i].TypeKind = tyVariant) then
     begin
-      EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset); EmitI32(0);
-      EmitB($48); EmitB($C7); EmitB($85); EmitI32(Syms[i].Offset + 8); EmitI32(0);
+      { Was two raw x86-64 `mov qword [rbp+off], 0` stores, unguarded, so a
+        cross build wrote 20 bytes of x86-64 into the ARM/RISC-V stream.
+        refactor-a-the-missing-layer-between-frontends-and-backends }
+      EmitZeroLocalSlotForTarget(i, TypeSize(tyVariant));
     end;
 end;
 
@@ -17411,55 +17413,13 @@ function PyParseStatement: Integer; forward;
 procedure PyParseImportRun; forward;   { `import` / `from ... import`, wherever it appears (pyparser.inc) }
 procedure PyParseOneImport; forward;   { ONE import statement, inside a block (pyparser.inc) }
 
-{ Spill incoming integer args into their frame slots, following the internal
-  x86-64 call convention: up to 6 params arrive in rdi rsi rdx rcx r8 r9;
-  a proc with MORE than 6 params receives ALL of them on the caller's stack,
-  pushed left-to-right, so param i sits at [rbp+16+(nparams-1-i)*8]. }
-{ Store rax into [rbp+off] with the width of the given size (1/2/4/8 bytes).
-  A too-wide store would clobber the neighbouring 1-byte/2-byte slots (a bool
-  param spilled as a dword smashed the adjacent param — silent wrong values,
-  then SIGSEGV once the clobber reached self). }
-procedure PyEmitStoreRaxWidth(off, size: Integer);
-begin
-  case size of
-    1: begin EmitB($88); EmitB($85); end;               { mov [rbp+off], al }
-    2: begin EmitB($66); EmitB($89); EmitB($85); end;   { mov [rbp+off], ax }
-    4: begin EmitB($89); EmitB($85); end;               { mov [rbp+off], eax }
-    else begin EmitB($48); EmitB($89); EmitB($85); end; { mov [rbp+off], rax }
-  end;
-  EmitI32(off);
-end;
-
-procedure PyEmitParamSpills(procIdx, nparams: Integer);
-var i, idx, sz: Integer;
-begin
-  for i := 0 to nparams - 1 do
-  begin
-    idx := Procs[procIdx].Params[i].SymIdx;
-    { a BY-REF param holds an ADDRESS, whatever it points at: spilling it at the
-      pointee's width truncated a 64-bit stack address to 32 bits and the first
-      write through it faulted (a `nonlocal` capture of an int local). }
-    if Syms[idx].IsRef then sz := 8 else sz := TypeSize(Syms[idx].TypeKind);
-    if nparams > 6 then
-    begin
-      { all-stack convention: load via rax }
-      EmitB($48); EmitB($8B); EmitB($85); EmitI32(16 + 8 * (nparams - 1 - i));
-    end
-    else
-    begin
-      { mov rax, <arg reg i> }
-      case i of
-        0: begin EmitB($48); EmitB($89); EmitB($F8); end; { mov rax, rdi }
-        1: begin EmitB($48); EmitB($89); EmitB($F0); end; { mov rax, rsi }
-        2: begin EmitB($48); EmitB($89); EmitB($D0); end; { mov rax, rdx }
-        3: begin EmitB($48); EmitB($89); EmitB($C8); end; { mov rax, rcx }
-        4: begin EmitB($4C); EmitB($89); EmitB($C0); end; { mov rax, r8 }
-        else begin EmitB($4C); EmitB($89); EmitB($C8); end; { mov rax, r9 }
-      end;
-    end;
-    PyEmitStoreRaxWidth(Syms[idx].Offset, sz);
-  end;
-end;
+{ PyEmitStoreRaxWidth / PyEmitParamSpills lived here: a private, raw-x86-64
+  copy of the parameter spill the Pascal driver already had six arch arms for.
+  Deleted in favour of EmitParamSpillsForTarget (ir_codegen.inc). The copy is
+  why a NilPy program built for arm32 SIGILLed with no output — a 3-byte
+  `mov rax, rdi` shifted every following ARM instruction two bytes out of
+  alignment. It also silently lacked the tySingle narrow the shared arm has.
+  refactor-a-the-missing-layer-between-frontends-and-backends }
 
 { Is this a `list * int` pair (either operand order)? }
 function PyNodeIsPyList(n: Integer): Boolean;
@@ -28110,7 +28070,7 @@ begin
     "a lambda crashes the second time it runs"
     (bug-nilpy-nested-def-capture-sets-are-not-final, face 2). }
   EmitAggregateDestStash(procIdx);
-  PyEmitParamSpills(procIdx, nparams);
+  EmitParamSpillsForTarget(procIdx, nparams);
   PyInitVariantLocals(Procs[procIdx].ScopeBase);
   EmitManagedLocalsZeroInit(Procs[procIdx].ScopeBase);
   if bStart = -1 then
@@ -28558,7 +28518,7 @@ begin
   patchPos := EmitProcPrologue;
   Procs[procIdx].FramePatch := patchPos;
   EmitAggregateDestStash(procIdx);
-  PyEmitParamSpills(procIdx, nparams);
+  EmitParamSpillsForTarget(procIdx, nparams);
   PyInitVariantLocals(Procs[procIdx].ScopeBase);
   { Managed locals must start nil, exactly as in the Pascal routine body — a
     NilPy string local is a MANAGED AnsiString now, and without this the first
@@ -31621,7 +31581,7 @@ begin
   savedLam := PyPendLamCount;
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
   EmitAggregateDestStash(procIdx);
-  PyEmitParamSpills(procIdx, nparams);
+  EmitParamSpillsForTarget(procIdx, nparams);
   PyInitVariantLocals(Procs[procIdx].ScopeBase);
   { Managed locals must start nil, exactly as in the Pascal routine body — a
     NilPy string local is a MANAGED AnsiString now, and without this the first
@@ -31827,7 +31787,7 @@ begin
   end;
   Procs[procIdx].BodyAddr := CodeLen;
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
-  PyEmitParamSpills(procIdx, nparams);
+  EmitParamSpillsForTarget(procIdx, nparams);
   seqHead := -1;
   for i := 1 to nparams - 1 do
   begin
@@ -31931,7 +31891,7 @@ begin
   gIdx := AllocVar('', tyPointer);
   Procs[procIdx].BodyAddr := CodeLen;
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
-  PyEmitParamSpills(procIdx, 1);
+  EmitParamSpillsForTarget(procIdx, 1);
 
   instLit := GenMakeIntLit(ProcGenInstSize[genPi]);
   allocCall := GenMakeCall6(FindProc('SlNew'), tyPointer, instLit, -1, -1, -1, -1, -1);
@@ -31996,7 +31956,7 @@ begin
   Syms[idx].Kind := skLocal;
   Procs[procIdx].BodyAddr := CodeLen;
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
-  PyEmitParamSpills(procIdx, 2);
+  EmitParamSpillsForTarget(procIdx, 2);
   acc := -1;
   for i := 0 to UClsFCount[ci] - 1 do
   begin
@@ -32097,7 +32057,7 @@ begin
   Syms[idx].Kind := skLocal;
   Procs[procIdx].BodyAddr := CodeLen;
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
-  PyEmitParamSpills(procIdx, 2);
+  EmitParamSpillsForTarget(procIdx, 2);
   acc := AllocNode(AN_BOOL_LIT);
   if baseTrue then ASTIVal[acc] := 1 else ASTIVal[acc] := 0;
   ASTTk[acc] := Ord(tyBoolean);
@@ -32194,7 +32154,7 @@ begin
   Syms[idx].Kind := skLocal;
   Procs[procIdx].BodyAddr := CodeLen;
   patchPos := EmitProcPrologue; Procs[procIdx].FramePatch := patchPos;
-  PyEmitParamSpills(procIdx, 1);
+  EmitParamSpillsForTarget(procIdx, 1);
   acc := PyExcFoldLit(clsName + '(');
   for i := 0 to UClsFCount[ci] - 1 do
   begin

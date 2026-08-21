@@ -4,6 +4,8 @@ prio: 50
 type: refactor
 blocked-by: []
 summary: "Three frontends have each independently grown a private piece of target machinery: the Pascal driver emits the signal runtime, the C frontend writes the _start stub as raw machine code, and Zig calls Rust's REmitParamRegSpill for raw x86-64 register spill. Two is a smell and three is a design flaw: there is no layer between the frontends and the backends, so each frontend built its own. Found by three unrelated omission probes, not by reading."
+status: working
+owner: claude-A
 ---
 
 # The missing layer between the frontends and the backends
@@ -80,3 +82,66 @@ by reading `aparser.inc`, because nobody has a reason to read `aparser.inc`.
 The size win is real but modest and lopsided (nine frontends: −4.4 %; three host
 backends: −20.7 %). The structural findings have already produced five tickets. Rank
 the feature accordingly.
+
+## Progress — the layer exists now, three pieces moved into it (2026-08-21)
+
+Found the fourth and fifth instances of the class first, both in the NilPy
+driver, both by the same probe: `--target=arm32` on a two-line `.npy`.
+
+| # | private target machinery | frontend | status |
+| --- | --- | --- | --- |
+| 4 | the program **entry stub** and its **jump patch** — six arch arms in the Pascal driver, an x86-64 open-code in every other | NilPy (+ 8 more) | **moved** → `EmitProgramEntryForTarget` / `PatchProgramEntryJump` |
+| 5 | **parameter spill** — ~570 lines of arch arms in the Pascal driver, `PyEmitParamSpills` in NilPy, `REmitParamRegSpill` in Rust/Zig | NilPy | **moved** → `EmitParamSpillsForTarget` |
+| 5b | prologue **slot zero-init** (NilPy's Variant locals) | NilPy | **moved** → `EmitZeroLocalSlotForTarget` |
+
+So the count is not three, it is at least five, and the sweep the ticket asked
+for is what turned up 4 and 5. `EmitMmapArena` was a sixth in a weaker form: it
+*Errored* for xtensa and riscv32 and silently emitted x86-64 for the other
+three. It now has real i386/arm32/aarch64 arms.
+
+All four new entry points live in `ir_codegen.inc` beside
+`EmitIoLockStubsForTarget` and `EmitSignalRuntimeForTarget`, forwarded from
+`frontend_forwards.inc` — the ticket's "recognise the dispatcher shape as the
+layer" in literal form.
+
+### Evidence the extraction is behaviour-preserving
+
+25 Pascal tests × 5 targets = **120 binaries, all byte-identical** before and
+after the param-spill lift (built from a stashed tree and `cmp`'d; the only
+files that differed were `.map` files, which embed the output path). The
+Pascal driver's local `parr` / `pbyref` / `ptypes` arrays were replaced by the
+`Procs[procIdx].Params[]` fields the driver mirrors them into, and the byte
+comparison is what proves that substitution is exact.
+
+### Evidence it was worth doing
+
+NilPy on arm32, 52 runnable `.npy` tests matching the native oracle:
+
+```
+session start   0 / 52     (nothing compiled at all)
+entry stub      9 / 52
+zero_sym       10 / 52     (34 BUILDFAILs cleared; then SIGILL)
+param spill    36 / 52     broke=0, fixed=27
+```
+
+The jump from 10 to 36 is one deletion: NilPy's private x86-64 param spill. A
+3-byte `mov rax, rdi` shifted every following ARM instruction two bytes out of
+alignment, so every NilPy function taking a parameter SIGILLed with no output.
+NilPy also picked up the `tySingle` narrow its copy never had.
+
+Self-host fixedpoint + `tools/gate.sh quick` GREEN; native x86-64 `.npy` output
+unchanged (the one differing line is an ASLR address in a pre-existing FAIL).
+
+### Still open on this ticket
+
+- **Row 3 (Rust/Zig `REmitParamRegSpill`)** — not migrated. `EmitParamSpillsForTarget`
+  is now the thing to call; the encodings are close but not identical (Rust
+  stores straight from the arg register at 4/8 widths, the shared arm also
+  handles 1/2 and the tySingle narrow), so it needs the Rust and Zig suites, not
+  just a byte diff. Doing it is what finally makes `PXX_NO_RUST` stand alone.
+- **Row 2 (C `_start` stub)** — `cparser.inc` has its own per-target case and is
+  Track C's file-lane; `EmitProgramEntryForTarget` does not yet cover its
+  argc/argv + initializer/finalizer shape.
+- The eight simple frontend drivers (`fparser`, `bparser`, `aparser`, `gparser`,
+  `lparser`, `wparser`, `eparser`) still open-code an x86-64 entry stub; each has
+  a slightly different tail, and all are x86-64-only today.

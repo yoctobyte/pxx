@@ -33,6 +33,8 @@ procedure EmitIoLockStubsArm32; forward;
 procedure EmitIoLockStubsForTarget; forward;
 procedure EmitProgramEntryForTarget(withHeapArena: Boolean; var jmpPatch: Integer); forward;
 procedure PatchProgramEntryJump(jmpPatch: Integer); forward;
+procedure EmitParamSpillsForTarget(procIdx, nparams: Integer); forward;
+procedure EmitZeroLocalSlotForTarget(symIdx, nbytes: Integer); forward;
 procedure EmitSignalRuntimeForTarget; forward;   { its sibling: the one place the per-arch signal runtime is chosen }
 
 { pxx pre-scans declarations, so a routine may be CALLED above its definition; FPC
