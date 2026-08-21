@@ -145,4 +145,4 @@ cross rows environment-sensitive for no extra coverage, since
 `tools/gate.sh quick`. Cross-target breadth is Track T's, against this sha.
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 8b2d2d7c5.
