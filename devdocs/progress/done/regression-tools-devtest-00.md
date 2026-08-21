@@ -1,5 +1,6 @@
 ---
 prio: 70
+status: done
 ---
 
 > **origin/master has advanced 2 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
@@ -60,3 +61,26 @@ Read the directory from the environment instead ($TESTTMP, which the sweep alrea
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Resolved — 2026-08-21 (agent-A)
+
+Not a compiler regression at all: `tools/testmgr_hardcoded_tmp_devtest.py` is a
+**ratchet**, and `test/test_read_text_char.pas` (landed inside the 132-commit
+range) was the new entry that tripped it. It wrote
+`/tmp/test_read_text_char_a.txt` and `_b.txt` at RUNTIME, so no Makefile sweep
+could reach them — two concurrent runs of the suite would have shared one
+scratch file, which is exactly what the devtest exists to prevent.
+
+Fixed the way the devtest's own message asks for: the program now reads
+`$TESTTMP` (`GetEnvironmentVariable`, defaulting to `/tmp`, which is the
+sweep's own default so the behaviour is unchanged when it is unset) and builds
+both paths from it. No entry added to `KNOWN`/`ALLOWED_PATHS` — the ratchet
+stays where it is.
+
+Verified: `testmgr_hardcoded_tmp_devtest.py` green (61 known, 0 unlisted); the
+test still prints `total ok 25 / 25` with and without `TESTTMP` set, and FPC
+3.2.2 compiles the edited source and prints the same line — so the FPC-derived
+expectations it encodes are untouched.
+
+Gate: `tools/gate.sh quick` GREEN.
+- 2026-08-21 — resolved, commit PENDING-COMMIT.

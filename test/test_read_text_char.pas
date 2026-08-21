@@ -17,10 +17,13 @@ program test_read_text_char;
   read and readln differ observably here.
   feature-p-read-text-into-a-char-arm }
 
+uses sysutils;
+
 type
   TRec = record C: Char; end;
 
 var
+  tmpdir: string;
   f: Text;
   c, d: Char;
   s: string;
@@ -28,6 +31,7 @@ var
   arr: array[0..3] of Char;
   r: TRec;
   acc: string;
+  pathA, pathB: string;
 
 procedure Check(const nm: string; got, want: Integer);
 begin
@@ -51,11 +55,17 @@ end;
 
 begin
   ok := 0; tot := 0;
-  MakeFile('/tmp/test_read_text_char_a.txt', 'ab' + Chr(10) + 'cd' + Chr(10));
-  MakeFile('/tmp/test_read_text_char_b.txt', 'a' + Chr(13) + Chr(10) + 'b' + Chr(10));
+  { two concurrent test runs must not share one scratch file — the sweep
+    exports TESTTMP, and its default is /tmp so this stays byte-identical }
+  tmpdir := GetEnvironmentVariable('TESTTMP');
+  if tmpdir = '' then tmpdir := '/tmp';
+  pathA := tmpdir + '/test_read_text_char_a.txt';
+  pathB := tmpdir + '/test_read_text_char_b.txt';
+  MakeFile(pathA, 'ab' + Chr(10) + 'cd' + Chr(10));
+  MakeFile(pathB, 'a' + Chr(13) + Chr(10) + 'b' + Chr(10));
 
   { one character at a time — the newline IS a character }
-  Assign(f, '/tmp/test_read_text_char_a.txt'); Reset(f);
+  Assign(f, pathA); Reset(f);
   read(f, c); Check('read 1', Ord(c), 97);
   read(f, c); Check('read 2', Ord(c), 98);
   read(f, c); Check('read 3 (eoln)', Ord(c), 10);
@@ -63,33 +73,33 @@ begin
   Close(f);
 
   { two destinations in one read, then the REST of the line }
-  Assign(f, '/tmp/test_read_text_char_a.txt'); Reset(f);
+  Assign(f, pathA); Reset(f);
   read(f, c, d); Check('read c,d first', Ord(c), 97); Check('read c,d second', Ord(d), 98);
   readln(f, s); CheckS('rest of line after 2 chars', s, '');
   readln(f, s); CheckS('next whole line', s, 'cd');
   Close(f);
 
   { read then readln: s gets what is LEFT of the line, not the whole line }
-  Assign(f, '/tmp/test_read_text_char_a.txt'); Reset(f);
+  Assign(f, pathA); Reset(f);
   read(f, c); Check('read before readln', Ord(c), 97);
   readln(f, s); CheckS('readln after read', s, 'b');
   read(f, c); Check('read after readln', Ord(c), 99);
   Close(f);
 
   { readln(f, c) reads ONE character and then skips to the next line }
-  Assign(f, '/tmp/test_read_text_char_a.txt'); Reset(f);
+  Assign(f, pathA); Reset(f);
   readln(f, c); Check('readln char 1', Ord(c), 97);
   readln(f, c); Check('readln char 2', Ord(c), 99);
   Close(f);
 
   { a bare readln(f) consumes a whole line }
-  Assign(f, '/tmp/test_read_text_char_a.txt'); Reset(f);
+  Assign(f, pathA); Reset(f);
   readln(f);
   readln(f, s); CheckS('after bare readln(f)', s, 'cd');
   Close(f);
 
   { drain with the ordinary loop, then read PAST end of file }
-  Assign(f, '/tmp/test_read_text_char_a.txt'); Reset(f);
+  Assign(f, pathA); Reset(f);
   n := 0; acc := '';
   while not Eof(f) do
   begin
@@ -104,17 +114,17 @@ begin
   Close(f);
 
   { CR is NOT swallowed by read, even though readln strips it }
-  Assign(f, '/tmp/test_read_text_char_b.txt'); Reset(f);
+  Assign(f, pathB); Reset(f);
   read(f, c); Check('crlf: char', Ord(c), 97);
   read(f, c); Check('crlf: cr survives', Ord(c), 13);
   read(f, c); Check('crlf: lf', Ord(c), 10);
   Close(f);
-  Assign(f, '/tmp/test_read_text_char_b.txt'); Reset(f);
+  Assign(f, pathB); Reset(f);
   readln(f, s); CheckS('crlf: readln strips cr', s, 'a');
   Close(f);
 
   { destinations that are not plain variables }
-  Assign(f, '/tmp/test_read_text_char_a.txt'); Reset(f);
+  Assign(f, pathA); Reset(f);
   for i := 0 to 3 do read(f, arr[i]);
   Check('array elem 0', Ord(arr[0]), 97);
   Check('array elem 3', Ord(arr[3]), 99);
