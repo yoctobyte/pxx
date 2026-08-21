@@ -2,7 +2,7 @@
 track: A
 prio: 55
 type: chore
-owner: frankonpiler-an
+owner: agent-A
 blocked-by: []
 summary: "DECIDED 2026-08-19: SWEEP the ~61 unwired test files into the suite — one job, not 61 tickets. Track A, not T, precisely because A can FIX a red in place; T would have had to file one per red. These are repro tests from fix commits that were never wired, so the bug already has a ticket in done/ — reference it, do not re-file. Never record current output as the expectation."
 status: working
@@ -171,3 +171,79 @@ judgement half: mostly compiler-internal Pascal (`test_x64enc`, `test_asm_emit_*
 commit read for what the right answer is. Expect step 4 (park the file, do not
 guess) to bite here in a way it never did in batch 1. Whoever resumes: the
 oracle-settled work is already done, so do not go looking for more of it.
+
+
+---
+
+## Batch 2 — 2026-08-21 (agent-A). 65 -> 55 unwired.
+
+Batch 1 left 65. This batch takes the **-O3 optimisation repro tests**, which
+are coherent as a group for the reason that makes them wirable: each one's own
+header says *"output must be identical at every -O level"*, so the file carries
+a property, not just a recording.
+
+All ten go into **`test-core`**, which is in the watcher's `native` tier — so
+from the pushed sha onward they run on every sweep, which is the payoff.
+
+### 6 wired with FPC 3.2.2 as the oracle (or the file's own stated rule)
+
+`test_inline_nonleaf`, `test_inline_branch_locals`, `test_inline_depth_reentry`,
+`test_residency_unified`, `test_residency_boundaries` — each compiled and run
+under FPC and **byte-identical to pxx at -O0, -O1, -O2 and -O3**. Both halves
+are asserted: the cross-O property AND the values, because a differential that
+compares a wrong answer to the same wrong answer passes while asserting nothing.
+
+`test_regcall_arg_order` is the one where FPC is **not** the oracle, and the
+difference is a decided dialect rule rather than a defect: pxx evaluates
+arguments strictly left-to-right; FPC prints `t1=6010003`, reading the global
+*after* the position-2 call mutates it. ISO Pascal leaves the order unspecified,
+so neither is wrong — only one is ours. Every expected value was recomputed from
+the rule the file's own comments state (`t1 = 5*1000000 + 10*1000 + 3`), not
+copied off a run.
+
+`test_inline_depth_reentry` deserves its own line: it is 21 fuzz-found
+miscompiles reduced to one file, guarding a splice that re-enters the expander
+from an argument list. Invisible at -O0. Nothing had run it since the day it was
+written.
+
+### 4 more, same batch
+
+- `test_promoint_bitwise` — FPC cannot compile it (`PromoInt` is ours, and FPC
+  refuses to `writeln` one), but the file states every expected value in a
+  trailing comment, so the expectation is the author's, transcribed.
+- `test_writeln_mix` — FPC prints the same line.
+- `test_rtti_field_get_by_name`, `test_rtti_method_call_by_name` — both already
+  halt(1) on their own failures; the rows add the values, each derived (Base=100
+  so Add(42)=142, Bump leaves 101) and each `kind=` checked against
+  `compiler/defs.inc`'s `TTypeKind` rather than accepted.
+
+### One ticket filed, deliberately
+
+Checking those `kind=` numbers turned up
+[[bug-a-rtti-kind-numbers-are-the-compilers-not-the-typinfo-enum-the-unit-documents]]:
+`typinfo.pas` documents `RetKind`/`TypeKind` as `Ord(TTypeKind)` and declares
+`TTypeKind` in **FPC's** order (Int64 = 19), while the compiler fills those
+fields with its **own** enum (Int64 = 13) — and the unit's own `TypeKindSize`
+already decodes the compiler's numbering. `if mi^.RetKind = Ord(tkInt64)` reads
+as obviously correct and is silently wrong. Genuinely new, genuinely deep, out
+of scope for a wiring sweep: exactly the ticket the method allows.
+
+### Finding 3 for Track T — the checker, still not the bug
+
+`test/csqlite_file_probe.c` is reported as a STALE exemption because
+`wired_paths()` is textual over `tools/*.py`, and
+`tools/testmgr_hardcoded_tmp_devtest.py:95` names the path as **test DATA** (a
+table of hardcoded `/tmp` paths). A tool's own fixture table is not a build rule.
+Same over-report direction as findings 1 and 2 — safe, but it costs sweep time,
+and here it argues for DELETING a legitimate exemption.
+
+Its reason line was wrong on its own terms and is corrected in this batch: the
+file needs the gitignored sqlite amalgamation, like its `csqlite_*_probe`
+siblings. The previous reason ("used by csqlite_parity_selfcompiled.c") was
+false — that file only names it in a comment.
+
+### Left for the next batch
+The ~18 `test_esp_*` (need `--target=xtensa` and a flashing/qemu story), the 14
+`test_pyeval_*`/`test_pyexec_*` (Track N deferred by the user), the 5
+`test_asm_emit_*`, the 2 `test_softfloat_*` (Track F, parked by definition), and
+the `csqlite_*` probes that need the amalgamation.

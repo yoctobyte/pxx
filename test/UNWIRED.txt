@@ -21,7 +21,7 @@ test/my_pas_lib.pas  helper library compiled by test/test_basic_comprehensive.ba
 test/test_pal_signal.pas  helper unit for test/test_signal_handler_callback_b336.pas (wired)
 test/carray_field_decay_exprlist_b120.c  included by test/carray_field_decay_nested_item_b120.c (wired)
 test/cbridge_via_unit.c  pulled in by test/unit_c_bridge.pas via `uses './cbridge_via_unit.c'`
-test/csqlite_file_probe.c  used by test/csqlite_parity_selfcompiled.c (wired)
+test/csqlite_file_probe.c  needs the gitignored sqlite amalgamation ($(SQLITE_SRC)/sqlite3.c), like the other csqlite_*_probe files; the earlier reason here ("used by csqlite_parity_selfcompiled.c") was wrong — that file only NAMES it in a comment, it does not include it
 
 # --- deliberately manual: needs a checkout this repo does not vendor ---
 test/manual/synapse_smoke_blcksock.pas  Synapse compile inventory; run by hand via test/manual/try_synapse_compile.sh, needs a Synapse checkout

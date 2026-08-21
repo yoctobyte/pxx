@@ -5,17 +5,17 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 unfinished:22 blocked:9 backlog:258 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2230 rejected:40`
+`urgent:1 working:1 unfinished:21 blocked:9 backlog:259 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2230 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `chore-a-sweep-the-unwired-tests-into-the-suite` [A] — owner: agent-A
 
 ## urgent (1) — jump the queue
 
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
 
-## unfinished (22) — parked mid-flight; re-claim, do not duplicate
+## unfinished (21) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -24,7 +24,6 @@ _none — no lane is locked._
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `bug-p-cannot-call-directly-through-a-procedural-type-cast` [P]
-- `chore-a-sweep-the-unwired-tests-into-the-suite` [A]
 - `docs-devnotes-ai-assisted-build` [D]
 - `feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets` [A]
 - `feature-b-the-module-shim-batch-blocking-the-python-corpus` [B] — blocked-by: decide-xml-etree-thin-tree-model-or-a-real-xml-library
@@ -52,7 +51,7 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 247, ranked
+## Ready — top 30 of 248, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree
@@ -85,4 +84,4 @@ _none — no lane is locked._
 - `[p 50] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - `[p 50] [T]` bug-t-track-ts-own-pushes-destroy-track-ts-own-breadth-coverage
 
-_217 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_218 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

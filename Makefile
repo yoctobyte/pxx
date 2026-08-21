@@ -7221,6 +7221,80 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_math_parens26)" = "14"
 	./$(COMPILER) test/test_inline_register.pas $(TESTTMP)/test_inline_register26
 	test "$$($(TESTTMP)/test_inline_register26 | tail -1)" = "all inline/register tests completed!"
+	# --- chore-a-sweep-the-unwired-tests-into-the-suite, batch 2 -------------
+	# Six -O3 inline/residency/regcall repro tests that shipped WITH their fix
+	# commits and were never wired: nothing has run them since the day they were
+	# written. Each says in its own header "output must be identical at every -O
+	# level", so both halves are asserted here — the cross-O property AND the
+	# values, because a differential that compares a wrong answer to the same
+	# wrong answer passes while asserting nothing.
+	#
+	# THE VALUES ARE FPC 3.2.2's, not a recording of ours: each of these five
+	# was compiled and run under FPC and matches byte for byte at -O0..-O3
+	# (feature-inline-nonleaf-and-branch-locals / -opt-pxx-internal-abi-unified-
+	# residency). That is what makes them expectations rather than snapshots.
+	./$(COMPILER) test/test_inline_nonleaf.pas $(TESTTMP)/sweep_inl_nonleaf_O0 >/dev/null
+	./$(COMPILER) -O3 test/test_inline_nonleaf.pas $(TESTTMP)/sweep_inl_nonleaf_O3 >/dev/null
+	test "$$($(TESTTMP)/sweep_inl_nonleaf_O0)" = "$$($(TESTTMP)/sweep_inl_nonleaf_O3)"
+	test "$$($(TESTTMP)/sweep_inl_nonleaf_O3)" = "$$(printf 's=14548398\nt=50016000000\nu=7693850\ng=100000')"
+	./$(COMPILER) test/test_inline_branch_locals.pas $(TESTTMP)/sweep_inl_branch_O0 >/dev/null
+	./$(COMPILER) -O3 test/test_inline_branch_locals.pas $(TESTTMP)/sweep_inl_branch_O3 >/dev/null
+	test "$$($(TESTTMP)/sweep_inl_branch_O0)" = "$$($(TESTTMP)/sweep_inl_branch_O3)"
+	test "$$($(TESTTMP)/sweep_inl_branch_O3)" = "$$(printf 's=24745149\nt=32001520\nu=71428\nw=15285127\nq=12700000')"
+	# The reentrancy repro: 21 fuzz-found miscompiles reduced to one file, and
+	# the shape it guards (a splice re-entering the expander from an argument)
+	# is invisible at -O0, so the -O3 row is the whole point.
+	./$(COMPILER) test/test_inline_depth_reentry.pas $(TESTTMP)/sweep_inl_reentry_O0 >/dev/null
+	./$(COMPILER) -O3 test/test_inline_depth_reentry.pas $(TESTTMP)/sweep_inl_reentry_O3 >/dev/null
+	test "$$($(TESTTMP)/sweep_inl_reentry_O0)" = "$$($(TESTTMP)/sweep_inl_reentry_O3)"
+	test "$$($(TESTTMP)/sweep_inl_reentry_O3)" = "$$(printf 'cs=13127050266571306376\ns=6650214\ng=50000')"
+	./$(COMPILER) test/test_residency_unified.pas $(TESTTMP)/sweep_resid_uni_O0 >/dev/null
+	./$(COMPILER) -O3 test/test_residency_unified.pas $(TESTTMP)/sweep_resid_uni_O3 >/dev/null
+	test "$$($(TESTTMP)/sweep_resid_uni_O0)" = "$$($(TESTTMP)/sweep_resid_uni_O3)"
+	test "$$($(TESTTMP)/sweep_resid_uni_O3)" = "$$(printf 'a=20000100001\nb=19109247906\nc=94447603\nd=1333342075511077\nx=2500000\ny=1736843\nz=6388173')"
+	./$(COMPILER) test/test_residency_boundaries.pas $(TESTTMP)/sweep_resid_bnd_O0 >/dev/null
+	./$(COMPILER) -O3 test/test_residency_boundaries.pas $(TESTTMP)/sweep_resid_bnd_O3 >/dev/null
+	test "$$($(TESTTMP)/sweep_resid_bnd_O0)" = "$$($(TESTTMP)/sweep_resid_bnd_O3)"
+	test "$$($(TESTTMP)/sweep_resid_bnd_O3)" = "$$(printf 'x=2500000\ny=2214536\ncap=10000\ns=2001001\nt=1685819\nhits=500\nglob=6020')"
+	# regcall arg order is the ONE of the six where FPC is NOT the oracle, and
+	# the difference is a decided dialect rule rather than a defect: pxx
+	# evaluates arguments strictly LEFT TO RIGHT, FPC does not (it prints
+	# t1=6010003, reading the global AFTER the position-2 call mutates it).
+	# ISO Pascal leaves the order unspecified, so neither is wrong — but only
+	# one of them is ours. Every value below is computed from the rule the
+	# file's own comments state, e.g. t1 = g(=5, read before the bump)*1000000
+	# + BumpG(1)(=10)*1000 + loc(=3) = 5010003.
+	./$(COMPILER) test/test_regcall_arg_order.pas $(TESTTMP)/sweep_regcall_O0 >/dev/null
+	./$(COMPILER) -O3 test/test_regcall_arg_order.pas $(TESTTMP)/sweep_regcall_O3 >/dev/null
+	test "$$($(TESTTMP)/sweep_regcall_O0)" = "$$($(TESTTMP)/sweep_regcall_O3)"
+	test "$$($(TESTTMP)/sweep_regcall_O3)" = "$$(printf 't1=5010003 g=6\nt2=10007007 g=7\nt3=945031 g=9\nt4=107030107 aliased=107\nt5=10100011 g=11')"
+	# PromoInt bitwise, the uforth DO/LOOP unsigned-mask idiom. FPC cannot be
+	# the oracle here — PromoInt is ours, and FPC refuses to write one — but the
+	# file states every expected value in a trailing comment on its own line, so
+	# the expectation below is the AUTHOR's, transcribed, not our output
+	# recorded. Both halves of the 2^64 boundary are in it: masking a negative
+	# to 18446744073709551615 and shifting past 64 bits to 18446744073709551616.
+	./$(COMPILER) test/test_promoint_bitwise.pas $(TESTTMP)/sweep_promoint26
+	test "$$($(TESTTMP)/sweep_promoint26)" = "$$(printf '18446744073709551615\n0\ncrossed\n18446744073709551616\n255\n255\n15')"
+	# Writeln with literals and a global interleaved — the shape a preproc-era
+	# AnsiString-temp flattening broke. FPC 3.2.2 prints the same line.
+	./$(COMPILER) test/test_writeln_mix.pas $(TESTTMP)/sweep_writeln_mix26
+	test "$$($(TESTTMP)/sweep_writeln_mix26)" = "literal1 global literal2 42"
+	# RTTI field/method reflection by name (feature-rtti-field-reflection and the
+	# method side of the feature-lib-pyexec bridge). Both files already refuse
+	# their own failures — a missing member halts(1) rather than printing — so
+	# what these rows add is the VALUES, and every value is derived, not
+	# recorded: Base starts at 100 so Add(42)=142 and Bump leaves 101, and each
+	# `kind=` is checked against compiler/defs.inc's TTypeKind (1 tyInteger,
+	# 5 tyRecord, 6 tyClass, 13 tyInt64), which is what the RTTI blob carries.
+	# That last point is itself a trap, filed as
+	# bug-a-rtti-kind-numbers-are-the-compilers-not-the-typinfo-enum-the-unit-documents:
+	# typinfo.pas documents these fields as its own FPC-ordered TTypeKind, where
+	# 13 means tkRecord. If that ticket is taken, these two rows change with it.
+	./$(COMPILER) -Fulib/rtl test/test_rtti_field_get_by_name.pas $(TESTTMP)/sweep_rtti_field26
+	test "$$($(TESTTMP)/sweep_rtti_field26)" = "$$(printf 'class=TThing\nCount=42 kind=1\nTag=99 kind=13\nTag(after set)=123\nBuddy=self kind=6\nInner.a=7 kind=5\nabsent=ok\nDONE')"
+	./$(COMPILER) -Fulib/rtl test/test_rtti_method_call_by_name.pas $(TESTTMP)/sweep_rtti_method26
+	test "$$($(TESTTMP)/sweep_rtti_method26)" = "$$(printf 'Add arity=2 retKind=13\nAdd param0kind=6 param1kind=13\nAdd(42)=142\nBump arity=1 retKind=0\nBase(after Bump)=101\nabsent=ok\nDONE')"
 	./$(COMPILER) test/test_pascal_directives.pas $(TESTTMP)/test_pascal_directives26
 	test "$$($(TESTTMP)/test_pascal_directives26)" = "$$(printf '1\n0\n1\n1\n1\n0\n1\n1\n1\n1\n1\n1')"
 	./$(COMPILER) test/test_comment_directive.pas $(TESTTMP)/test_comment_directive26
