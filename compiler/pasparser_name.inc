@@ -480,6 +480,8 @@ function GenMakeStringValueIndex(valNode: Integer): Integer; forward;
 function ParseProcTypeSignature: Integer; forward;
 procedure EatProcTypeCdecl(mpi: Integer); forward;
 procedure ParseRecordFields(ci: Integer; isPackedRecord: Boolean); forward;
+function IsHintDirectiveName(const nm: AnsiString): Boolean; forward;
+procedure SkipHintDirectives; forward;  { body in pasparser_decl.inc; the var-section and record-field skips CALL it above that body, which FPC's declaration order needs }
 procedure ParseRecordMethodDecl(ci: Integer); forward;
 var RecordMethodClassPrefix: Boolean = False;  { `class function` in a record/helper body }
 procedure ParseRecordPropertyDecl(ci: Integer); forward;

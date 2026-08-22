@@ -969,7 +969,12 @@ begin
       else
       while not (CurTok.Kind in [tkSemicolon, tkEq, tkBegin, tkVar, tkConst, tkType,
                  tkProcedure, tkFunction, tkEnd, tkEOF]) and
-            not ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'absolute')) do
+            not ((CurTok.Kind = tkIdent) and
+                 (CaseEqual(CurTok.SVal, 'absolute') or
+                  { …and at a HINT DIRECTIVE, for the same reason `absolute`
+                    stops it: both are plain identifiers, and handing one to
+                    ParseTypeKind reads it as a second type name. }
+                  IsHintDirectiveName(CurTok.SVal))) do
       begin
         VDTk := ParseTypeKind;
       end;
@@ -1091,6 +1096,15 @@ begin
       names it always had. }
     isArr := VDIsArr; isDyn := VDIsDyn; arrLo := VDArrLo; arrHi := VDArrHi;
     elemTk := VDElemTk; tk := VDTk;
+
+    { `var v: Integer deprecated;` -- a HINT DIRECTIVE on a variable. `type` and
+      `const` declarations and routine headers already skipped these; a var
+      declaration did not, and answered `unknown type: deprecated` because the
+      leftover identifier was read as the next declaration. fpc takes a hint
+      before `absolute`, after it, and around an `= value` clause alike, so the
+      skip runs here and again before the terminating `;`. Both calls are
+      no-ops when there is nothing to skip. }
+    SkipHintDirectives;
 
     { `b: Integer absolute a;` — b SHARES a's storage (a classic Pascal overlay).
       `absolute` was not recognised at all and was silently swallowed, so b became an
@@ -1297,6 +1311,7 @@ begin
 	        Inc(PendingInitCount);
 	      end;
 	    end;
+	    SkipHintDirectives;   { `absolute w deprecated;` / `= 5 deprecated;` }
 	    Eat(tkSemicolon);
 	  end;
 	end;
@@ -1532,14 +1547,24 @@ end;
   ignores them (no code effect). Soft identifiers in this dialect, so consume a
   run of them here rather than choke. `deprecated` takes an optional string
   message. See feature-hint-directives-deprecated-platform. }
+function IsHintDirectiveName(const nm: AnsiString): Boolean;
+{ The hint directives, in ONE place. They are plain identifiers, so anything
+  that scans for "a type name follows" has to know to stop at them -- the var
+  section's type loop did not, and `var v: Integer deprecated;` answered
+  `unknown type: deprecated` because the loop handed the directive to
+  ParseTypeKind as a second type. Same list SkipHintDirectives consumes;
+  keeping the two in step is the point of the function. }
+begin
+  Result := CaseEqual(nm, 'deprecated') or
+            CaseEqual(nm, 'platform') or
+            CaseEqual(nm, 'experimental') or
+            CaseEqual(nm, 'unimplemented') or
+            CaseEqual(nm, 'library');
+end;
+
 procedure SkipHintDirectives;
 begin
-  while (CurTok.Kind = tkIdent) and
-        (CaseEqual(CurTok.SVal, 'deprecated') or
-         CaseEqual(CurTok.SVal, 'platform') or
-         CaseEqual(CurTok.SVal, 'experimental') or
-         CaseEqual(CurTok.SVal, 'unimplemented') or
-         CaseEqual(CurTok.SVal, 'library')) do
+  while (CurTok.Kind = tkIdent) and IsHintDirectiveName(CurTok.SVal) do
   begin
     if CaseEqual(CurTok.SVal, 'deprecated') then
     begin
@@ -3284,6 +3309,8 @@ begin
         curFieldOff := curFieldOff + fSize;
       end;
       if fAlign > classAlign then classAlign := fAlign;
+      SkipHintDirectives;   { `f: Integer deprecated;` -- a hint on a FIELD, the
+                              record/class twin of the var-section skip }
       Eat(tkSemicolon);
     end
     else if CurTok.Kind = tkCase then
@@ -4858,6 +4885,10 @@ begin
               curFieldOff := curFieldOff + fSize;
             end;
             if fAlign > classAlign then classAlign := fAlign;
+            SkipHintDirectives;   { `f: Integer deprecated;` on a CLASS field --
+                                    the class-body twin of the record-field and
+                                    var-section skips. A class body has its own
+                                    field parser, so it needed its own call. }
             Eat(tkSemicolon);
           end
           else
