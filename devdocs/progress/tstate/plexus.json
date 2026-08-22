@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T01:15:58Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "fbd589da02a4dc930fae7531ca236c3e10e2bab5",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T01:28:15Z",
    "fixed": [],
    "new_red": [],
@@ -468,15 +460,24 @@
    "sha": "29a518312e66f2ffccec849963d08590399f8e07",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-22T17:56:48Z",
+   "fixed": [
+    "test-core#src:test/test_classref.pas",
+    "test-core#src:test/test_fpc_compat_batch.pas",
+    "test-core#src:test/test_rtti.pas"
+   ],
+   "new_red": [],
+   "sha": "fc7ede94565a3ea17a42d889caa4baa363388c14",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "demos#00": "OK    examples/sudoku/sudoku.pas | OK    examples/tk/uses_tkinter_and_configparser.pas | FAIL  examples/tui/menudemo.pas  --   near: PXXNilRefHook   SysRaiseAccessViolation  PXXVariantErrorHook >>>   SysRaiseVariantError | FAIL  examples/vm/vmdemo.pas  --   near: PXXNilRefHook   SysRaiseAccessViolation  PXXVariantErrorHook >>>   SysRaiseVariantError | === demos: 7/35 built into build/demos/ (esp3\u2026",
   "lib-test#src:tools/crtl_reachability.py": "in: stable_linux_amd64/default/../../lib/rtl/sysutils.pas | near: PXXNilRefHook   SysRaiseAccessViolation  PXXVariantErrorHook >>>   SysRaiseVariantError | lib-units: FAIL x509 | pascal26:4790: error: undefined variable (PXXVariantErrorHook) | in: stable_linux_amd64/default/../../lib/rtl/sysutils.pas | near: PXXNilRefHook   SysRaiseAccessViolation  PXXVariantErrorHook >>>   SysRaiseVariantError",
-  "test-core#src:test/test_classref.pas": "ok: $TMP  [code=113781B  data=4272B  bss=42524B  procs=254] | Segmentation fault (core dumped)",
-  "test-core#src:test/test_fpc_compat_batch.pas": "pascal26:132: error: undefined variable (LongWord) | near:  SizeOf  System  LongWord >>>   SizeOf",
-  "test-core#src:test/test_rtti.pas": "ok: $TMP  [code=119230B  data=6124B  bss=46756B  procs=255] | Segmentation fault (core dumped)",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter",
   "test-pascal-conformance#shard0/6": "SKIP tover1.pp \u2014 gap: overload resolution across shortstring/ansistring/widestring/pchar params | SKIP tprocvar3.pp \u2014 gap: delphi-mode procvar of object, @-less proc assignment, codepointer method addresses | SKIP tset2a.pp \u2014 gap: explicit enum ordinal values (dA:=8) + {$packset 1} packed-set semantics | SKIP tstring11.pp \u2014 gap: overload resolution RawByteString vs UnicodeString (char/array/pchar\u2026",
   "test-pascal-conformance#shard4/6": "SKIP toperator9.pp \u2014 gap: operator overload for `in` on a record type not supported by the parser | SKIP tprocvar1.pp \u2014 gap: method pointers (`procedure(l:longint) of object`), @Class.Method, typed-const procvars | SKIP tsealed6.pp \u2014 gap: `object abstract` / `object sealed` modifiers in object declarations | SKIP tstring4.pp \u2014 wontfix: reads ansistring refcount/length header words \u2014 FPC internal \u2026"
@@ -1406,6 +1407,7 @@
   "test-core#src:test/strict_fpc_case_fail.pas": "native",
   "test-core#src:test/string_compare.pas@1": "native",
   "test-core#src:test/strings.pas@1": "native",
+  "test-core#src:test/test_a_record_field_named_like_a_class_operation.pas": "native",
   "test-core#src:test/test_abs_sqr.pas": "native",
   "test-core#src:test/test_absolute_array_overlay.pas": "native",
   "test-core#src:test/test_absolute_overlay_b265.pas": "native",
@@ -2089,6 +2091,8 @@
   "test-core#src:test/test_pascal_directive_messages.pas": "native",
   "test-core#src:test/test_pascal_directives.pas@1": "native",
   "test-core#src:test/test_pascal_directives.pas@2": "native",
+  "test-core#src:test/test_pascal_free_through_base_destroy.pas@1": "native",
+  "test-core#src:test/test_pascal_free_through_base_destroy.pas@2": "native",
   "test-core#src:test/test_pascal_macro_comment_nesting.pas": "native",
   "test-core#src:test/test_pascal_system_qualified_intrinsic.pas": "native",
   "test-core#src:test/test_pchar_concat_and_array_element.pas": "native",
@@ -2098,6 +2102,7 @@
   "test-core#src:test/test_platform_defines.pas@2": "native",
   "test-core#src:test/test_pointer_arith_deref_keeps_pointee.pas": "native",
   "test-core#src:test/test_pointer_deref_depth.pas": "native",
+  "test-core#src:test/test_pointer_difference_is_a_number.pas": "native",
   "test-core#src:test/test_pointers.pas": "native",
   "test-core#src:test/test_proc_const_record.pas": "native",
   "test-core#src:test/test_procaddr.pas": "native",
@@ -4249,6 +4254,7 @@
   "test-core#src:test/strict_fpc_case_fail.pas": "pass",
   "test-core#src:test/string_compare.pas@1": "pass",
   "test-core#src:test/strings.pas@1": "pass",
+  "test-core#src:test/test_a_record_field_named_like_a_class_operation.pas": "pass",
   "test-core#src:test/test_abs_sqr.pas": "pass",
   "test-core#src:test/test_absolute_array_overlay.pas": "pass",
   "test-core#src:test/test_absolute_overlay_b265.pas": "pass",
@@ -4376,7 +4382,7 @@
   "test-core#src:test/test_class_var_section_b244.pas": "pass",
   "test-core#src:test/test_classname_b271.pas": "pass",
   "test-core#src:test/test_classparent.pas": "pass",
-  "test-core#src:test/test_classref.pas": "fail",
+  "test-core#src:test/test_classref.pas": "pass",
   "test-core#src:test/test_classref_array_const_b285.pas": "pass",
   "test-core#src:test/test_classref_op_chained_b296.pas": "pass",
   "test-core#src:test/test_classtype_inheritsfrom_b274.pas": "pass",
@@ -4548,7 +4554,7 @@
   "test-core#src:test/test_forward_class_base.pas": "pass",
   "test-core#src:test/test_forward_ptr_record_field.pas": "pass",
   "test-core#src:test/test_forward_use.pas": "pass",
-  "test-core#src:test/test_fpc_compat_batch.pas": "fail",
+  "test-core#src:test/test_fpc_compat_batch.pas": "pass",
   "test-core#src:test/test_fpc_compat_batch2.pas": "pass",
   "test-core#src:test/test_fpc_float_errors.pas@1": "pass",
   "test-core#src:test/test_fpc_float_errors.pas@2": "pass",
@@ -4929,6 +4935,8 @@
   "test-core#src:test/test_pascal_directive_messages.pas": "pass",
   "test-core#src:test/test_pascal_directives.pas@1": "pass",
   "test-core#src:test/test_pascal_directives.pas@2": "pass",
+  "test-core#src:test/test_pascal_free_through_base_destroy.pas@1": "pass",
+  "test-core#src:test/test_pascal_free_through_base_destroy.pas@2": "pass",
   "test-core#src:test/test_pascal_macro_comment_nesting.pas": "pass",
   "test-core#src:test/test_pascal_system_qualified_intrinsic.pas": "pass",
   "test-core#src:test/test_pchar_concat_and_array_element.pas": "pass",
@@ -4938,6 +4946,7 @@
   "test-core#src:test/test_platform_defines.pas@2": "pass",
   "test-core#src:test/test_pointer_arith_deref_keeps_pointee.pas": "pass",
   "test-core#src:test/test_pointer_deref_depth.pas": "pass",
+  "test-core#src:test/test_pointer_difference_is_a_number.pas": "pass",
   "test-core#src:test/test_pointers.pas": "pass",
   "test-core#src:test/test_proc_const_record.pas": "pass",
   "test-core#src:test/test_procaddr.pas": "pass",
@@ -5005,7 +5014,7 @@
   "test-core#src:test/test_resource.pas": "pass",
   "test-core#src:test/test_rtl_fpc_compat_helpers.pas": "pass",
   "test-core#src:test/test_rtl_math_float_frexp.pas": "pass",
-  "test-core#src:test/test_rtti.pas": "fail",
+  "test-core#src:test/test_rtti.pas": "pass",
   "test-core#src:test/test_rtti_emit.pas@1": "pass",
   "test-core#src:test/test_rtti_emit.pas@2": "pass",
   "test-core#src:test/test_rtti_field_get_by_name.pas": "pass",
@@ -6341,8 +6350,8 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-22T16:53:59Z",
-  "sha": "29a518312e66f2ffccec849963d08590399f8e07",
+  "date": "2026-08-22T17:56:48Z",
+  "sha": "fc7ede94565a3ea17a42d889caa4baa363388c14",
   "tier": "native",
   "verdict": "RED",
   "wall": 3600.4
@@ -6860,59 +6869,6 @@
     "5179c4d4350bcb775841ce7b7283c1a367abe035"
    ],
    "src": "tools/run_pascal_conformance.sh",
-   "status": "fail"
-  },
-  {
-   "bad": "392ea5d94545cafd1bb085c21eb66b0d4a6f4592",
-   "good": "766e6ea5b4d622933a9eecc59056476aaa7b7376",
-   "job": "test-core#src:test/test_classref.pas",
-   "name": "test-core#1068",
-   "opened": "2026-08-22T10:37:29Z",
-   "pin_built": false,
-   "range": [
-    "5cdebf0f5c1585610503ea41ef0f7a3b7f070f41",
-    "e7d8667c37eea4c4c9cf26a206a012fa3e089490",
-    "c8b6c6690a91a79fbec6783a034979df561430d0",
-    "392ea5d94545cafd1bb085c21eb66b0d4a6f4592"
-   ],
-   "src": "test/test_classref.pas",
-   "status": "fail"
-  },
-  {
-   "bad": "392ea5d94545cafd1bb085c21eb66b0d4a6f4592",
-   "good": "766e6ea5b4d622933a9eecc59056476aaa7b7376",
-   "job": "test-core#src:test/test_rtti.pas",
-   "name": "test-core#1067",
-   "opened": "2026-08-22T10:37:29Z",
-   "pin_built": false,
-   "range": [
-    "5cdebf0f5c1585610503ea41ef0f7a3b7f070f41",
-    "e7d8667c37eea4c4c9cf26a206a012fa3e089490",
-    "c8b6c6690a91a79fbec6783a034979df561430d0",
-    "392ea5d94545cafd1bb085c21eb66b0d4a6f4592"
-   ],
-   "src": "test/test_rtti.pas",
-   "status": "fail"
-  },
-  {
-   "bad": "1021bbdece658fd8b34c9190ee8a8ed66c703671",
-   "good": "9cebdbb1f02c6c62656d4f3ea610c86ab05d33f6",
-   "job": "test-core#src:test/test_fpc_compat_batch.pas",
-   "name": "test-core#338",
-   "opened": "2026-08-22T14:49:34Z",
-   "pin_built": false,
-   "range": [
-    "0b77e2bea1817cd333c83da6df68d475aeea2c56",
-    "7081a25c2e92180fe79936aace1ffb1b3df0ae03",
-    "fa549a7751c9d6c98829538aaa36e61434024929",
-    "7b2736e82f44ec176395dc61e071e4026665ccdc",
-    "3d521d909c7e5c92df5bbe1b0c74f829d27db597",
-    "ffaba7b1ff0520485569fbda3cd8a3542624b60e",
-    "47fc2c383784250908b755e4345c69f30513c85b",
-    "1ac6458b328dd050d9153bf7f02147081d85fc7b",
-    "1021bbdece658fd8b34c9190ee8a8ed66c703671"
-   ],
-   "src": "test/test_fpc_compat_batch.pas",
    "status": "fail"
   }
  ],
