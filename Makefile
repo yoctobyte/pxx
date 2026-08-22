@@ -5263,6 +5263,19 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Fulib/rtl test/test_anonymous_procedural_type.pas $(TESTTMP)/test_anon_proctype26
 	test "$$($(TESTTMP)/test_anon_proctype26)" = "$$(printf 's1 10\nassigned TRUE\nassigned FALSE\ncdecl 108\ns1 12\ns2 13\nfield 25\nmeth 14\nafter 11\ns1 16\nnested 15\n4 9 \napply 49\ns1 1\ns2 2\nhi\nlocalfn 16\ns1 6\nsizes 48 56')"
 
+	# --strict-fpc reproduces FPC's shift widths, INCLUDING that a narrow `shr`
+	# keeps the operand's SIGNEDNESS: `Integer(-16) shr 0` is -16, not 4294967280.
+	# Only a count of zero can show it — any count >= 1 clears bit 31, so the
+	# sign-extend is a no-op there. Compiled twice on purpose: the c0/v0/l0/s0/b0/
+	# q0/p0 rows must agree across dialects (a shift by nothing is identity), and
+	# the d1/d4/d31/d33 rows must DIFFER (default = native width per
+	# decide-shift-operator-promotion-width; strict = FPC's declared width). The
+	# strict output is byte-identical to fpc 3.2.2.
+	./$(COMPILER) test/test_strict_fpc_shr_keeps_the_sign.pas $(TESTTMP)/test_shr_sign_native26
+	test "$$($(TESTTMP)/test_shr_sign_native26)" = "$$(printf 'c0 -16\nv0 -16\nl0 -16\ns0 -16\nb0 -16\nq0 -16\np0 16 4\nd1 9223372036854775800\nd4 1152921504606846975\nd31 2147483648\nd33 8589934592')"
+	./$(COMPILER) --strict-fpc test/test_strict_fpc_shr_keeps_the_sign.pas $(TESTTMP)/test_shr_sign_strict26
+	test "$$($(TESTTMP)/test_shr_sign_strict26)" = "$$(printf 'c0 -16\nv0 -16\nl0 -16\ns0 -16\nb0 -16\nq0 -16\np0 16 4\nd1 2147483640\nd4 268435455\nd31 -2147483648\nd33 2')"
+
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"

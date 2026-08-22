@@ -55,7 +55,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (279)
+## backlog (281)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -71,6 +71,7 @@ _none_
 | bug-a-setlength-on-a-2d-dynarray-var-param-is-lost | A | 35 | bug | `procedure P(var d: TD2); begin SetLength(d, 2); d[0] := nil; end;` on `TD2 = array of array of Integer` leaves Length(d) = 0 in the caller where FPC gives 2 — the SetLength took and was then undone by the `d[0] := nil` that follows it. Every backend. Found by the same differential as bug-a-a-whole-dynarray-assignment-to-a-var-parameter-is-discarded and NOT fixed by it. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-format-percent-u-prints-a-signed-value | B | 45 | bug | `Format('%u', [q])` on a QWord prints -1: sysutils' formatter aliases 'u' to 'd' and runs both through the signed IntToStr. FPC prints 18446744073709551615. The same line makes `%u` of Integer(-1) print -1 where FPC prints 4294967295. Filed from Track A+C+P — B owns lib/rtl. | — |
+| bug-b-inttostr-of-a-qword-above-2-63-renders-negative | B | 45 | bug | `IntToStr` of a QWord above 2^63 renders it negative | — |
 | bug-b-inttostr-of-a-qword-prints-it-signed | B | 40 | bug | IntToStr(q) where q: QWord >= 2^63 prints a NEGATIVE number — IntToStr(High(QWord)) answers -1 — because sysutils declares only IntToStr(Int64) and the QWord argument is passed through it. WriteLn(q) is correct, so the same value prints two different ways in one program. UIntToStr does not exist at all. Overload resolution on QWord vs Int64 already works, so this is purely two RTL functions. | — |
 | bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line | B | 65 | bug | `read(f, n)` / `readln(f, n)` on a Text file reads the whole LINE and Vals it, so any line with two numbers, or one number plus trailing spaces, silently yields 0. `readln(t, n, m)` on '42 3' gives 0 0 where FPC gives 42 3. Works only when the line holds exactly one number and nothing else. | — |
 | bug-b-sysutils-string-gaps-found-by-differential | B | 35 | bug | Four sysutils gaps from one 22-program string differential against FPC 3.2.2: Concat takes exactly two AnsiStrings (FPC's is variadic and takes Chars), AnsiQuotedStr and SameStr do not exist, and the TryStr* family leaves its value untouched on failure where FPC zeroes it. Everything else in the family — Copy/Pos/Delete/Insert bounds, StringReplace, Format, Trim, comparison, PChar interop, ShortString — was byte-identical. | — |
@@ -156,6 +157,7 @@ _none_
 | compat-pascal-ioresult-returns-a-negative-errno | B | 30 | compat | IOResult returns the raw negative errno (-2 for a missing file, -13 for permission denied) where FPC returns the positive DOS-style code (2, 5). Code written as `if IOResult = 2` silently takes the wrong branch. | — |
 | compat-pascal-method-impl-without-declaration | P | 20 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
 | compat-pascal-not-of-a-cast-constant-keeps-its-width | P | 10 | compat | `not Byte(0)` folds to 255 in pxx and to -1 in FPC — FPC evaluates a constant `not` in the Int64 domain and drops the cast's width. pxx matches Delphi. Variables agree; only the constant-folded form differs. | — |
+| compat-pascal-overload-prefers-signed-for-an-unsigned-argument | A | 15 | compat | Overload resolution picks the signed arm for an unsigned argument | — |
 | compat-pascal-set-storage-size-is-always-32-bytes | P | 25 | compat | Every set type is 32 bytes, whatever its element range: SizeOf(set of TE8) is 32 where FPC says 4, and a record holding one is 48 bytes where FPC lays out 12. Values are all correct — a layout divergence like compat-pascal-subrange-storage-size, and it costs 8x memory on small sets as well as breaking binary interop. | — |
 | compat-pascal-strict-fpc-should-reject-a-duplicate-identifier-in-one-scope | A | 20 | compat | pxx compiles `var p: Pointer;` and `procedure P(...)` in the SAME scope and resolves both correctly — bare p is the variable, P(x) the routine. FPC rejects it ('overloaded identifier \"p\" isn't a function'), since Pascal is case-insensitive and those are one identifier. Assumed to be dialect laxness rather than a defect, on the precedent set for overload widening; --strict-fpc should reject it. Not filed as a bug: nothing resolves wrongly. | — |
 | compat-pascal-string-n-is-not-a-shortstring | P | 25 | compat | `string[20]` is a managed string with a length CAP, not a Turbo/FPC shortstring: SizeOf is 8 (a handle) where FPC says 21, and `ss[0]` — the length byte — reads #0 instead of Chr(Length(ss)). Truncation to the declared length does work, and every character operation agrees. | — |
@@ -552,9 +554,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2251)
+## done (2252)
 
-2251 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2252 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -643,6 +645,7 @@ _none_
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [B] bug-b-format-percent-u-prints-a-signed-value
+- [p 45] [B] bug-b-inttostr-of-a-qword-above-2-63-renders-negative
 - [p 45] [N] bug-n-a-class-base-that-is-an-expression-does-not-compile
 - [p 45] [N] bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through
 - [p 45] [N] bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name
@@ -857,6 +860,7 @@ _none_
 - [p 15] [C] compat-c-printf-p-of-null-prints-0x0-not-nil
 - [p 15] [P] compat-p-system-integer-is-smallint-in-fpc
 - [p 15] [A] compat-pascal-binop-operand-eval-order
+- [p 15] [A] compat-pascal-overload-prefers-signed-for-an-unsigned-argument
 - [p 15] [A] feature-a-shrink-managed-header-on-32-bit
 - [p 15] [B] feature-b-a-real-minidom-is-an-implementation-not-a-shim
 - [p 15] [B] feature-lib-mimic-string-template

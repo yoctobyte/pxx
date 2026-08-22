@@ -5770,6 +5770,17 @@ begin
                   begin EmitB($89); EmitB($C0); end;          { mov eax, eax (zero-extend) }
               end;
               EmitB($48); EmitB($D3); EmitB($E8);             { shr rax, cl }
+              { A NARROW result of a SIGNED operand keeps the operand's type, so
+                the 32-bit answer must be read back as signed — that is what FPC
+                does (`LongInt shr n` is a LongInt). Only a count of ZERO can
+                show it: any count >= 1 clears bit 31, so the sign-extend is a
+                no-op there. `Integer(-16) shr 0` under --strict-fpc answered
+                4294967280 instead of -16 for exactly that reason.
+                bug-a-strict-fpc-shr-by-zero-drops-the-sign }
+              if (TypeSize(IntToTypeKind(IRTk[left])) < 8) and
+                 (TypeSize(IntToTypeKind(IRTk[node])) < 8) and
+                 TypeSigned(IntToTypeKind(IRTk[left])) then
+                begin EmitB($48); EmitB($98); end;            { cdqe }
             end;
           { C signed `>>` (bug-c-signed-arith-shift-right): arithmetic shift,
             sign-extending. Mirrors the logical `shr` case above but with a

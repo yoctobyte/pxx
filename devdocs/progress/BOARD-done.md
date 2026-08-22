@@ -180,6 +180,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-a-static-array-of-managed-whole-assign-loses-data | A | 80 | bug | b := a on a static array with managed elements copies NOTHING — every element comes out empty, silently; elementwise copy and the same array inside a record both work | — |
 | bug-a-str-boxed-into-variant-does-not-own-bytes | A | 80 | bug | A `str` boxed into a Variant does not OWN its bytes — silent wrong values | — |
 | bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths | A | 30 | bug | `--strict-fpc` does not reproduce FPC's shift widths | — |
+| bug-a-strict-fpc-shr-by-zero-drops-the-sign | A | 30 | bug | `--strict-fpc`: a narrow `shr` by zero loses the operand's sign | — |
 | bug-a-string-n-type-alias-loses-its-capacity | A | 60 | bug | A `string[N]` TYPE ALIAS loses its capacity, so nothing truncates | — |
 | bug-a-string-table-cap-refuses-a-14k-line-c-program | A | 45 | bug | `VisCacheVis` is sized by the string-table constant — and the cap it is tied to is too low | — |
 | bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert | A | 50 | bug | A Synapse TLS client handshake segfaults inside libcrypto's X509_verify_cert with RIP pointing INTO THE STACK (rax == rip — a tail call through a function pointer holding a stack address). The byte-identical program built with FPC completes the handshake. The loader, the dlsym'd symbols and C->Pascal callbacks are each separately proven working, so the fault is ours and is narrower than any of them. | — |
