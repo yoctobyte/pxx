@@ -5209,6 +5209,15 @@ test-core: $(COMPILER)
 	# divergence that would make the oracle useless here.
 	./$(COMPILER) test/test_widechar_writeln_prints_the_character.pas $(TESTTMP)/test_widechar_writeln26
 	test "$$($(TESTTMP)/test_widechar_writeln26)" = "$$(printf 'A\nB\nC\nD\nE\nFF\n[G]\nH\n65\nTRUE TRUE\nTRUE\n66\n64\n65 63\nis-b\n66\n2 2\n65 66 67 \n1 A\nxA\nAx\nP\n80\nQ')"
+	# A whole-array assignment to a var/out DYNAMIC-ARRAY parameter must reach the
+	# caller. x86-64's IR_STORE_SYM dynarray arm read/wrote the frame slot
+	# directly, which for a by-ref param holds the ADDRESS of the caller's handle
+	# — so d := e / nil / Copy(e) / F() were all silently discarded. SetLength and
+	# element stores route through IR_LEA and always worked, which is what hid it.
+	# The last row is the ARC check: without the retain, nilling d frees the block
+	# `e` still points at. Byte-identical to fpc 3.2.2.
+	./$(COMPILER) test/test_dynarray_assign_to_a_var_parameter.pas $(TESTTMP)/test_dynarray_var_param26
+	test "$$($(TESTTMP)/test_dynarray_var_param26)" = "$$(printf 'nil     0\nasg     2\ncopy    2\nout     2\nfnres   4\ndynstr  2\nsetlen  3\nelem    99\nrecfld  2\nsurvive 3 11 22 33')"
 
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26

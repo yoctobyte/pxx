@@ -4495,17 +4495,49 @@ begin
           if not ((IRKind[IRB[node]] = IR_CALL) and (IRA[IRB[node]] >= 0)) then
             EmitDynArrayRetain;
           EmitB($50);                             { push new data pointer }
-          if Syms[symIdx].Kind = skGlobal then
-            begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+          if (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
+          begin
+            { A by-ref (var/out) dynarray param: the frame slot holds the ADDRESS
+              of the caller's handle, not the handle. Reading and writing
+              [rbp+off] directly — what the arms below do — therefore released
+              the caller's slot ADDRESS as if it were a heap block and published
+              the new handle over the callee's copy of the pointer, so every
+              whole-array assignment to a `var`/`out` dynarray parameter was
+              silently discarded: `d := e`, `d := nil`, `d := Copy(e)`,
+              `d := F()`, `out` as well as `var`, and from a nested routine too.
+              `SetLength(d, n)` and `d[0] := x` always worked (both go through
+              IR_LEA, which has had the by-ref arm all along), which is what made
+              dynarrays through `var` look like they worked.
+
+              x86-64 ONLY: i386, aarch64, arm32 and riscv32 were all measured
+              CORRECT here before this fix, so the IR shape was never the
+              problem and must not be changed to route around this — the same
+              deref belongs here, exactly as EmitPublishManagedString has carried
+              it for the AnsiString case in this very file.
+              bug-a-a-whole-dynarray-assignment-to-a-var-parameter-is-discarded }
+            EmitAsmX64([
+              'mov rcx, [rbp+%]', Syms[symIdx].Offset,   { rcx = &caller_slot }
+              'mov rax, [rcx]',                          { rax = old handle }
+              'push rax',                                { [rsp]=old, [rsp+8]=new }
+              'mov rax, [rsp+8]',                        { rax = new }
+              'mov [rcx], rax',                          { publish into the CALLER }
+              'pop rax'                                  { rax = old; [rsp]=new }
+            ]);
+          end
           else
-            begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
-          EmitB($50);                             { push old data pointer }
-          EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] }
-          if Syms[symIdx].Kind = skGlobal then
-            begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
-          else
-            begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
-          EmitB($58);                             { pop rax = old data pointer }
+          begin
+            if Syms[symIdx].Kind = skGlobal then
+              begin EmitB($48); EmitB($8B); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+            else
+              begin EmitB($48); EmitB($8B); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+            EmitB($50);                             { push old data pointer }
+            EmitB($48); EmitB($8B); EmitB($44); EmitB($24); EmitB($08); { mov rax, [rsp+8] }
+            if Syms[symIdx].Kind = skGlobal then
+              begin EmitB($48); EmitB($89); EmitB($04); EmitB($25); EmitGlobRef(Syms[symIdx].Offset); end
+            else
+              begin EmitB($48); EmitB($89); EmitB($85); EmitI32(Syms[symIdx].Offset); end;
+            EmitB($58);                             { pop rax = old data pointer }
+          end;
           EmitDynArrayReleaseForSym(symIdx);
           EmitB($58);                             { pop rax = new data pointer }
         end

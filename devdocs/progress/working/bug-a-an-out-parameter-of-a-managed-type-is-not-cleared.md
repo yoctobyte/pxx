@@ -4,13 +4,14 @@ prio: 35
 type: bug
 blocked-by: []
 summary: "`out s: AnsiString` is parsed as a plain `var`: the callee's entry does not finalize-and-nil the caller's variable, so a routine that assigns on only some paths leaves the caller's OLD string visible. FPC clears managed out parameters (and only managed ones — an ordinal `out` behaves like `var` there too, measured). pxx has no IsOut flag at all; `out` and `var` are the same token arm."
+owner: trackA-night
 ---
 
 # An `out` parameter of a managed type is not cleared on entry
 
 - **Type:** bug (silent stale VALUE across a call boundary) — Track A
   (`compiler/pasparser_proc.inc` + the body-head managed-init path).
-- **Status:** backlog
+- **Status:** working
 - **Opened:** 2026-08-21, from a string-RTL differential against FPC 3.2.2.
 
 ## Measurement
