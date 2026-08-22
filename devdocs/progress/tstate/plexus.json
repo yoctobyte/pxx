@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T00:06:05Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "0b7be93c9f7c1596ef306765dcea4ec7206bdf2e",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T00:31:04Z",
    "fixed": [],
    "new_red": [],
@@ -466,14 +458,22 @@
    "sha": "8d8df55ca1a474862294e78904a5220c0345ebe6",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-22T13:47:33Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "9cebdbb1f02c6c62656d4f3ea610c86ab05d33f6",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "demos#00": "OK    examples/sudoku/sudoku.pas | OK    examples/tk/uses_tkinter_and_configparser.pas | FAIL  examples/tui/menudemo.pas  --   near: PXXNilRefHook   SysRaiseAccessViolation  PXXVariantErrorHook >>>   SysRaiseVariantError | FAIL  examples/vm/vmdemo.pas  --   near: PXXNilRefHook   SysRaiseAccessViolation  PXXVariantErrorHook >>>   SysRaiseVariantError | === demos: 7/35 built into build/demos/ (esp3\u2026",
   "lib-test#src:tools/crtl_reachability.py": "in: stable_linux_amd64/default/../../lib/rtl/sysutils.pas | near: PXXNilRefHook   SysRaiseAccessViolation  PXXVariantErrorHook >>>   SysRaiseVariantError | lib-units: FAIL x509 | pascal26:4790: error: undefined variable (PXXVariantErrorHook) | in: stable_linux_amd64/default/../../lib/rtl/sysutils.pas | near: PXXNilRefHook   SysRaiseAccessViolation  PXXVariantErrorHook >>>   SysRaiseVariantError",
-  "test-core#src:test/test_classref.pas": "ok: $TMP  [code=113447B  data=4272B  bss=42524B  procs=254] | Segmentation fault (core dumped)",
-  "test-core#src:test/test_rtti.pas": "ok: $TMP  [code=118896B  data=6124B  bss=46756B  procs=255] | Segmentation fault (core dumped)",
+  "test-core#src:test/test_classref.pas": "ok: $TMP  [code=113781B  data=4272B  bss=42524B  procs=254] | Segmentation fault (core dumped)",
+  "test-core#src:test/test_rtti.pas": "ok: $TMP  [code=119230B  data=6124B  bss=46756B  procs=255] | Segmentation fault (core dumped)",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter",
   "test-pascal-conformance#shard0/6": "SKIP tover1.pp \u2014 gap: overload resolution across shortstring/ansistring/widestring/pchar params | SKIP tprocvar3.pp \u2014 gap: delphi-mode procvar of object, @-less proc assignment, codepointer method addresses | SKIP tset2a.pp \u2014 gap: explicit enum ordinal values (dA:=8) + {$packset 1} packed-set semantics | SKIP tstring11.pp \u2014 gap: overload resolution RawByteString vs UnicodeString (char/array/pchar\u2026",
   "test-pascal-conformance#shard4/6": "SKIP toperator9.pp \u2014 gap: operator overload for `in` on a record type not supported by the parser | SKIP tprocvar1.pp \u2014 gap: method pointers (`procedure(l:longint) of object`), @Class.Method, typed-const procvars | SKIP tsealed6.pp \u2014 gap: `object abstract` / `object sealed` modifiers in object declarations | SKIP tstring4.pp \u2014 wontfix: reads ansistring refcount/length header words \u2014 FPC internal \u2026"
@@ -1460,6 +1460,7 @@
   "test-core#src:test/test_builtin_tobject.pas": "native",
   "test-core#src:test/test_byref_arg_lvalue_rule.pas": "native",
   "test-core#src:test/test_byval_record_temp.pas": "native",
+  "test-core#src:test/test_byvalue_record_arg_lifetime.pas": "native",
   "test-core#src:test/test_byvalue_record_managed_copy.pas": "native",
   "test-core#src:test/test_c_cross_ns_arity.pas": "native",
   "test-core#src:test/test_c_cross_ns_arity_fail.pas": "native",
@@ -1508,6 +1509,7 @@
   "test-core#src:test/test_char_arg_ansistring.pas": "native",
   "test-core#src:test/test_char_array_is_a_string.pas": "native",
   "test-core#src:test/test_char_to_string.pas": "native",
+  "test-core#src:test/test_char_variant_converts_as_text.pas": "native",
   "test-core#src:test/test_class.pas": "native",
   "test-core#src:test/test_class_cast_field.pas": "native",
   "test-core#src:test/test_class_const_b263.pas": "native",
@@ -4292,6 +4294,7 @@
   "test-core#src:test/test_builtin_tobject.pas": "pass",
   "test-core#src:test/test_byref_arg_lvalue_rule.pas": "pass",
   "test-core#src:test/test_byval_record_temp.pas": "pass",
+  "test-core#src:test/test_byvalue_record_arg_lifetime.pas": "pass",
   "test-core#src:test/test_byvalue_record_managed_copy.pas": "pass",
   "test-core#src:test/test_c_cross_ns_arity.pas": "pass",
   "test-core#src:test/test_c_cross_ns_arity_fail.pas": "pass",
@@ -4339,6 +4342,7 @@
   "test-core#src:test/test_char_arg_ansistring.pas": "pass",
   "test-core#src:test/test_char_array_is_a_string.pas": "pass",
   "test-core#src:test/test_char_to_string.pas": "pass",
+  "test-core#src:test/test_char_variant_converts_as_text.pas": "pass",
   "test-core#src:test/test_class.pas": "pass",
   "test-core#src:test/test_class_cast_field.pas": "pass",
   "test-core#src:test/test_class_const_b263.pas": "pass",
@@ -6316,11 +6320,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-22T12:44:24Z",
-  "sha": "8d8df55ca1a474862294e78904a5220c0345ebe6",
+  "date": "2026-08-22T13:47:33Z",
+  "sha": "9cebdbb1f02c6c62656d4f3ea610c86ab05d33f6",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.3
+  "wall": 3600.1
  },
  "last_bench": {
   "conf_rows": 550,
