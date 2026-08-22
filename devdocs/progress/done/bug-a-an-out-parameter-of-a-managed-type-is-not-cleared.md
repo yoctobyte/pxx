@@ -188,4 +188,4 @@ three negative controls, the plumbing shapes, and the ARC round trip.
 quick`.
 
 ## Log
-- 2026-08-22 — resolved, commit PENDING-COMMIT.
+- 2026-08-22 — resolved, commit 33159f7ea.
