@@ -63,3 +63,42 @@ Cardinal width (rows 4 and 5 agree today and must keep agreeing).
 
 **Status: NOT yet decided** — `decide-assertion-default-vs-fpc` is open. Listed
 here so a differential run recognises the shape, not because it is settled.
+
+## `Abs` / `Sqr` of a 32-bit Integer: native width, same as shifts
+
+Measured 2026-08-22 (`fpc -Mobjfpc -O1` 3.2.2 vs pxx `80bbe2f38`). Same rule as
+the shift section above, reached independently: **pxx evaluates at native width
+and does not truncate to the operand's declared type.**
+
+| expression (`i: Integer`) | FPC | pxx default | pxx `--strict-fpc` |
+| --- | --- | --- | --- |
+| `Abs(i)`, `i = Low(Integer)` | -2147483648 | **2147483648** | 2147483648 |
+| `Sqr(i)`, `i = Low(Integer)` | 0 | **4611686018427387904** | 4611686018427387904 |
+| `Sqr(i)`, `i = 65536` | 0 | **4294967296** | 4294967296 |
+| `i * i`, `i = 65536` | 4294967296 | same | same |
+| `-i`, `i = Low(Integer)` | 2147483648 | same | same |
+| `Abs(sm)`, `sm = Low(SmallInt)` | 32768 | same | same |
+| `Abs(q)`, `q = Low(Int64)` | -9223372036854775808 | same | same |
+
+Read the table as a whole and FPC's own rule is visibly inconsistent, which is
+why the default stays ours:
+
+- `i * i` **widens** to Int64, so 65536*65536 is 4294967296 — but `Sqr(i)`,
+  which means the same thing, keeps Integer and answers **0**. Nobody writes
+  `Sqr(65536)` intending zero.
+- `-i` widens (that is the same unary-minus promotion the shift ticket's
+  row 1 turns on), but `Abs(i)` does not — so `-Low(Integer)` and
+  `Abs(Low(Integer))` differ in sign in FPC and agree in pxx.
+- The narrower and wider types are not affected either way: `Abs(SmallInt)`
+  promotes to Integer in both, `Abs(Int64)` wraps in both. Only the exactly
+  32-bit case diverges, which is the same shape as rows 2/3/9 of the shift
+  table.
+
+So this is the shift decision's rule applied to two more operators, and here it
+is also the arithmetically correct answer rather than merely the convenient one.
+Not a bug — do not "fix" it toward FPC in the default dialect.
+
+**`--strict-fpc` does NOT yet cover these two.** That gap mirrors the one
+`bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths` closed for shifts, and is
+filed as `compat-pascal-strict-fpc-abs-and-sqr-widths`. Until it lands, a port
+of FPC bit-twiddling can pin shift width with the flag but not `Abs`/`Sqr`.

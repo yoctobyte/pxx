@@ -1,39 +1,81 @@
 ---
+track: P
 prio: 30
+type: feature
+blocked-by: []
+summary: "`SizeOf` accepts only a type name or an lvalue (variable, field, `a[i]`) — `SizeOf(i + 1)`, `SizeOf(Abs(i))`, `SizeOf(p^)`, `SizeOf('abc')` are all compile errors. FPC takes any expression, and it is the only portable way to ask what type an expression actually has."
+status: backlog
 ---
 
-# `SizeOf` of an EXPRESSION is refused
+# `SizeOf(<expression>)` is refused
 
-- **Type:** feature (Pascal frontend) — tag: compat
-- **Track:** P (shared `parser.inc` — A-gated)
-- **Status:** backlog
+Found 2026-08-22 by an FPC differential sweep over ordinal arithmetic
+(`fpc -Mobjfpc -O1` 3.2.2 vs pxx `80bbe2f38`).
 
-## Symptom
+## The measurement
 
-    var b: Byte;
-    writeln(SizeOf(-b));
+`var i: Integer; p: ^Integer; a: array[0..3] of Byte; r: record a, b: Integer; end;`
 
-    pxx:  error: SizeOf: expected type name
-    FPC:  8
+| expression | FPC | pxx |
+| --- | --- | --- |
+| `SizeOf(Integer)` | 4 | 4 |
+| `SizeOf(i)` | 4 | 4 |
+| `SizeOf(r.a)` | 4 | 4 |
+| `SizeOf(a[0])` | 1 | 1 |
+| `SizeOf(p^)` | 4 | **compile error** |
+| `SizeOf(i + 1)` | 8 | **compile error** |
+| `SizeOf(i * 2)` | 8 | **compile error** |
+| `SizeOf(-i)` | 8 | **compile error** |
+| `SizeOf(i shl 1)` | 4 | **compile error** |
+| `SizeOf(Abs(i))` | 4 | **compile error** |
+| `SizeOf(@i)` | 8 | **compile error** |
+| `SizeOf('abc')` | 3 | **compile error** |
+| `SizeOf(1)` | 1 | **compile error** |
+| `SizeOf(Length(a))` | 8 | **compile error** |
 
-FPC's `SizeOf` accepts any expression and answers the size of its static type;
-pxx accepts a type name and a variable, but not an expression built from one.
+Two different messages depending on shape:
 
-## Why it matters more than it looks
+```
+error: SizeOf: unknown type or variable      { SizeOf(Abs(i)) }
+error: unexpected token, Expected: )         { SizeOf(i shl 1) }
+```
 
-It is the natural instrument for asking "what type did the compiler infer
-here", which is exactly the question
-[[bug-p-unary-minus-on-an-unsigned-operand-truncates-to-32-bits]] turned on —
-every width in that ticket's table was measured under FPC because pxx could
-not be asked. `PXXDBG` covers the compiler-internals side; this is the same
-question from inside a test program, where it can be an assertion.
+The second one is the tell: the argument is parsed as a *name*, not as an
+expression, so the parser stops at the first operator rather than at the `)`.
 
-## Note
+## Why it matters beyond the missing rows
 
-Carried out of the parent ticket's "side finding" section, where it sat unfiled
-through two sessions. Not a blocker for anything; small and self-contained.
+`SizeOf(<expr>)` is the only portable way to ask **what type an expression
+actually has** — there is no `TypeOf` to print. The table above is exactly how
+the shift/`Abs`/`Sqr` width rules in `devdocs/dev/pascal-dialect-divergences.md`
+were confirmed against FPC: `SizeOf(i + 1)` = 8 and `SizeOf(i shl 1)` = 4 states
+FPC's promotion rule in one line each. That probe cannot be written against pxx
+today, so every future width question has to be answered indirectly by
+overflowing a value and reading the wrap — which is what
+[[compat-pascal-strict-fpc-abs-and-sqr-widths]] had to do.
+
+It is also ordinary in real code: `GetMem(p, n * SizeOf(p^))` and
+`Move(src, dst, SizeOf(rec.field))` are the idiomatic spellings, and `p^` is
+already refused.
+
+## Scope
+
+Track P (`compiler/pasparser_*.inc`). The fix is to parse the argument as a full
+expression and take `ASTTk`'s size when it is not a type name, keeping the
+existing type-name arm first (`SizeOf(Integer)` must not resolve `Integer` as an
+identifier). Two care points:
+
+- **Do not evaluate the operand.** `SizeOf(f(x))` must not call `f` — FPC
+  discards the expression and keeps only its type. Lower to a constant and drop
+  the subtree.
+- `SizeOf('abc')` is 3, not the size of a string handle: a string *literal* is
+  typed as its own `array[1..3] of Char` here. Getting this row wrong is
+  harmless-looking and wrong everywhere, so it belongs in the test.
+
+Sibling `BitSizeOf` (if present) and `High`/`Low` of an expression are the same
+parse shape; check them in the same pass rather than filing three tickets.
 
 ## Gate
 
-`SizeOf` of an expression answering FPC 3.2.2's value for each integer type and
-for a float; `make compiler/pascal26`; `tools/gate.sh quick`.
+Every row above matching `fpc -O1`, plus a test asserting no side effect from
+`SizeOf(SideEffectingFunction)`, and self-host byte-identical.

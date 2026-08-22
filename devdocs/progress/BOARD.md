@@ -55,7 +55,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (285)
+## backlog (286)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -160,6 +160,7 @@ _none_
 | compat-pascal-not-of-a-cast-constant-keeps-its-width | P | 10 | compat | `not Byte(0)` folds to 255 in pxx and to -1 in FPC — FPC evaluates a constant `not` in the Int64 domain and drops the cast's width. pxx matches Delphi. Variables agree; only the constant-folded form differs. | — |
 | compat-pascal-overload-prefers-signed-for-an-unsigned-argument | A | 15 | compat | Overload resolution picks the signed arm for an unsigned argument | — |
 | compat-pascal-set-storage-size-is-always-32-bytes | P | 25 | compat | Every set type is 32 bytes, whatever its element range: SizeOf(set of TE8) is 32 where FPC says 4, and a record holding one is 48 bytes where FPC lays out 12. Values are all correct — a layout divergence like compat-pascal-subrange-storage-size, and it costs 8x memory on small sets as well as breaking binary interop. | — |
+| compat-pascal-strict-fpc-abs-and-sqr-widths | A | 20 | compat | `--strict-fpc` reproduces FPC's shift widths but not its `Abs`/`Sqr` widths, so `Abs(Low(Integer))` and `Sqr(65536)` keep the native-width answer under the flag. Completes the strict-mode escape hatch the shift decision promised. | — |
 | compat-pascal-strict-fpc-should-reject-a-duplicate-identifier-in-one-scope | A | 20 | compat | pxx compiles `var p: Pointer;` and `procedure P(...)` in the SAME scope and resolves both correctly — bare p is the variable, P(x) the routine. FPC rejects it ('overloaded identifier \"p\" isn't a function'), since Pascal is case-insensitive and those are one identifier. Assumed to be dialect laxness rather than a defect, on the precedent set for overload widening; --strict-fpc should reject it. Not filed as a bug: nothing resolves wrongly. | — |
 | compat-pascal-string-n-is-not-a-shortstring | P | 25 | compat | `string[20]` is a managed string with a length CAP, not a Turbo/FPC shortstring: SizeOf is 8 (a handle) where FPC says 21, and `ss[0]` — the length byte — reads #0 instead of Chr(Length(ss)). Truncation to the declared length does work, and every character operation agrees. | — |
 | compat-pascal-subrange-storage-size | P | 30 | compat | Every subrange type gets the 4-byte default instead of the smallest type that holds it: SizeOf(10..20) is 4 where FPC says 1, so a `packed record` of subranges is 12 bytes where FPC lays out 3. Values are all correct — this is a layout divergence, not a wrong-value bug, and it breaks binary interop and costs 4x memory. | — |
@@ -273,7 +274,7 @@ _none_
 | feature-p-nested-record-field-in-a-typed-record-constant | P | 40 | feature | `const CN: TNest = (p: (x: 1; y: 2); tag: 'k');` is rejected with `error: not a constant` when a field is itself a RECORD. Array-valued fields and array-of-record constants both work; only a record-typed field is missing. Loud (a compile error, never a wrong value). | — |
 | feature-p-packrecords-c-directive | P | 30 | feature | `{$packrecords c}` is refused with 'invalid packrecords value: c'. It means 'lay records out the way this platform's C compiler does', which is what every FPC header binding to a C library uses — and it is what blocks the arm profile of --mimic-fpc-compiler, since fpcdefs.inc's arm branch sets it. | — |
 | feature-p-record-const-with-an-array-of-record-field | P | 35 | feature | A record typed constant whose FIELD is an array of records is refused (`not a constant`): `CR: TR = (a: ((x:1;y:2),(x:3;y:4)))`. The kind-7 array-valued-field path handles scalar elements only; FPC compiles it. | — |
-| feature-p-sizeof-of-an-expression | P | 30 | feature | `SizeOf` of an EXPRESSION is refused | — |
+| feature-p-sizeof-of-an-expression | P | 30 | feature | `SizeOf` accepts only a type name or an lvalue (variable, field, `a[i]`) — `SizeOf(i + 1)`, `SizeOf(Abs(i))`, `SizeOf(p^)`, `SizeOf('abc')` are all compile errors. FPC takes any expression, and it is the only portable way to ask what type an expression actually has. | — |
 | feature-p-tobject-api-classparent-instancesize-tostring | P | 35 | feature | Six TObject members FPC has and pxx rejects at compile time: ClassParent, InstanceSize, ClassInfo, ToString, Equals, GetHashCode. Loud failures (not wrong values), found by the same probe as bug-p-a-class-does-not-inherit-from-tobject-at-run-time. | — |
 | feature-p-uses-a-unit-in-an-explicit-file | P | 30 | feature | `uses mymod in 'mymod.pas';` — the FPC/Delphi spelling for naming a unit's source file — does not parse. pxx has the quoted-path form (`uses './mymod.pas' as m;`, shipped 2026-06-30) but not the standard `in` one, so ordinary FPC project sources are refused at the uses clause. | — |
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
@@ -857,6 +858,7 @@ _none_
 - [p 20] [A] chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments
 - [p 20] [A] chore-a-sweep-the-unwired-tests-into-the-suite
 - [p 20] [P] compat-pascal-method-impl-without-declaration
+- [p 20] [A] compat-pascal-strict-fpc-abs-and-sqr-widths
 - [p 20] [A] compat-pascal-strict-fpc-should-reject-a-duplicate-identifier-in-one-scope
 - [p 20] [A] feature-a-audit-strict-flags-against-dialectispxx
 - [p 20] [A] feature-a-typeinfo-integer-name-under-strict-fpc
