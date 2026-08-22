@@ -5326,6 +5326,13 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_for_in_over_a_named_set_type.pas $(TESTTMP)/test_forin_namedset26
 	test "$$(timeout 30 $(TESTTMP)/test_forin_namedset26)" = "$$(printf 'ace\n136\n02\n9 200 \nae\n16')"
 
+	# `absolute` over a FIXED array — the byte-view idiom. Arrays were excluded
+	# from the overlay SILENTLY: the array kept its own slot, so it read 0 and
+	# swallowed writes. Global and local, array-over-scalar and array-over-array,
+	# with a record overlay row as the control.
+	./$(COMPILER) test/test_absolute_array_overlay.pas $(TESTTMP)/test_absolute_array26
+	test "$$($(TESTTMP)/test_absolute_array26)" = "$$(printf 'glob 1 2 3 4 5 6 7 8\nrec 513 1027\nwrite 578437695752307299\nview 1 2 3 4 5 6 7 8\nlocal 1 2 3 4\nwords 513 1027\nback -16580095')"
+
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"

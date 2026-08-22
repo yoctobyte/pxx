@@ -1040,6 +1040,8 @@ begin
         Error('absolute: a local cannot overlay a global');
       if (CurProc < 0) and (Syms[absTarget].Kind <> skGlobal) then
         Error('absolute: a global can only overlay a global');
+      if VDIsDyn then
+        Error('absolute: a dynamic array cannot overlay a variable');
       Next;
     end;
 
@@ -1049,9 +1051,16 @@ begin
 	      if declTypeNOff <> 0 then begin SymDeclTypeNOff[idx] := declTypeNOff; SymDeclTypeNLen[idx] := declTypeNLen; end;
 	      { `absolute` overlay: take the target's storage instead of our own. The alloc
 	        already reserved a slot; we simply never use it, which costs a few bytes and
-	        keeps every other invariant (scope, rollback, slot recycling) intact. Arrays
-	        never carried an overlay and still do not. }
-	      if (absTarget >= 0) and (not isArr) then Syms[idx].Offset := Syms[absTarget].Offset;
+	        keeps every other invariant (scope, rollback, slot recycling) intact.
+	        A FIXED array overlays exactly the same way — its Offset is the base of
+	        its contiguous storage — and `b: array[0..3] of Byte absolute i` is the
+	        canonical byte-view idiom, so it is included. It used to be excluded and
+	        the exclusion was SILENT: the array kept its own slot, read 0 and swallowed
+	        writes. A DYNAMIC array is refused instead, loudly: its slot holds a heap
+	        handle, so overlaying it would reinterpret the target's bytes as a pointer
+	        and free them.
+	        bug-a-an-absolute-array-overlay-is-silently-ignored }
+	      if (absTarget >= 0) and (not isDyn) then Syms[idx].Offset := Syms[absTarget].Offset;
 	    end;
 	    if Eat(tkEq) then
 	    begin
