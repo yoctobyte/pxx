@@ -315,9 +315,9 @@ skip	tgeneric65.pp	tgeneric	gap	generic record with nested `object` type
 skip	tgeneric66.pp	tgeneric	gap	generic `object` type with nested record
 skip	tgeneric67.pp	tgeneric	gap	generic `object` type with nested class
 skip	tgeneric68.pp	tgeneric	gap	generic `object` type with nested `object`
-fail	tgeneric69.pp	tgeneric	-	compile error
+pass	tgeneric69.pp	tgeneric	-	
 skip	tgeneric6.pp	tgeneric	gap	objfpc generic syntax + nested record/pointer types inside a generic class
-fail	tgeneric70.pp	tgeneric	-	compile error
+pass	tgeneric70.pp	tgeneric	-	
 pass	tgeneric71.pp	tgeneric	-	
 pass	tgeneric72.pp	tgeneric	-	
 pass	tgeneric73.pp	tgeneric	-	
@@ -501,7 +501,7 @@ skip	tover1.pp	tover	gap	overload resolution across shortstring/ansistring/wides
 pass	tover2.pp	tover	-	
 skip	tover3.pp	tover	wontfix	dialect-pass — overload ambiguity — PXX deterministically ranks (picks longint for cardinal arg) by design; FPC-parity ambiguity errors belong to --strict-overload
 skip	tover4.pp	tover	gap	80-bit extended/cextended float type and overload resolution across single/double/extended
-skip	tprocvar1.pp	tprocvar	gap	method pointers (`procedure(l:longint) of object`), @Class.Method, typed-const procvars
+skip	tprocvar1.pp	tprocvar	gap	old-style `object` types with constructor/virtual methods (same gap as tobject2.pp / tsealed6.pp). Its procvar content passes now — the previous reason named three gaps (method pointers, @Class.Method, typed-const procvars) and a fourth found chasing it (anonymous procedural types); all are fixed, and unskipping shows `object constructor init` is what is left.
 skip	tprocvar2.pp	tprocvar	gap	typed const procvar initialized with bare proc name (TP mode), procvar via move()
 skip	tprocvar3.pp	tprocvar	gap	delphi-mode procvar of object, @-less proc assignment, codepointer method addresses
 skip	tprop1.pp	tprop	gap	global `property` section in a program (FPC-mode global properties)
