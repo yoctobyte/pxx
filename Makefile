@@ -5333,6 +5333,14 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_absolute_array_overlay.pas $(TESTTMP)/test_absolute_array26
 	test "$$($(TESTTMP)/test_absolute_array26)" = "$$(printf 'glob 1 2 3 4 5 6 7 8\nrec 513 1027\nwrite 578437695752307299\nview 1 2 3 4 5 6 7 8\nlocal 1 2 3 4\nwords 513 1027\nback -16580095')"
 
+	# A whole-record hard cast `TQ(r)` with no trailing accessor. It stayed a
+	# POINTER cast, so `q := TQ(r)` copied a record from whatever address r's
+	# first bytes spelled — SEGFAULT. `TQ(r).field` took the value-reinterpret
+	# path and worked, which is why the shape without the accessor survived.
+	# The `ptr` row pins that `PR(pp)^` still derefs the VALUE.
+	./$(COMPILER) test/test_whole_record_hard_cast.pas $(TESTTMP)/test_whole_rec_cast26
+	test "$$($(TESTTMP)/test_whole_rec_cast26 | tr -s ' ')" = "$$(printf 'assign 8589934593\nfield 8589934593\nlvalue 7 0\nptr 7\np->i 67305985\ni->p 4 3 2 1\nb->q 578437695752307201\nbyref 16909060\ncall 1')"
+
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"

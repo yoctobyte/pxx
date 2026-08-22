@@ -5229,7 +5229,18 @@ begin
         ASTIVal[node] := 0;          { plain pointer reinterpret (no char +8 adapter) }
         ASTTk[node]   := Ord(tyPointer);
         tk := tyPointer; recName := baseRec;
-        if CurTok.Kind = tkDot then
+        { A VALUE typecast of a RECORD is an in-place reinterpret in FPC, and it
+          is one whether or not a `.field` follows. `TRec(q).high` took this
+          branch; bare `TQ(r)` — the whole-record reinterpret, `q := TQ(r)` —
+          did not, so it stayed a POINTER cast: the assignment copied a record
+          from whatever address r's first 8 bytes happened to spell, and
+          segfaulted. Same construct, two shapes, and the shape without the
+          trailing accessor is the one that was wrong.
+          bug-a-a-whole-record-hard-cast-is-lowered-as-a-pointer-cast
+          `^` still means the pointer path — `TRec(p)^` derefs the VALUE. }
+        if (CurTok.Kind = tkDot) or
+           ((CurTok.Kind <> tkCaret) and
+            (IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord)) then
         begin
           { VALUE typecast used directly with `.field` — `TRec(q).high` — is
             FPC's in-place reinterpret: the field lives at @q + offset. Build a
