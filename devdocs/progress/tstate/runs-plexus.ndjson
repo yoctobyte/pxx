@@ -1421,3 +1421,4 @@
 {"date": "2026-08-22T00:59:39Z", "fixed": [], "full": false, "new_red": [], "sha": "98ed382022547bbe6624c779ee024a3ad1dea518", "still_red": [], "tier": "opt", "verdict": "GREEN", "wall": 488.0}
 {"date": "2026-08-22T06:27:38Z", "fixed": [], "full": false, "new_red": [], "sha": "0d0a12a09757193933b41cb921ad6de3efda3aaa", "still_red": ["test-core#src:test/fpcv.pas@2", "test-core#src:test/test_generic_inherit_delphi.pas"], "tier": "native", "verdict": "RED", "wall": 3600.1}
 {"date": "2026-08-22T08:31:21Z", "fixed": ["test-core#src:test/fpcv.pas@2", "test-core#src:test/test_generic_inherit_delphi.pas"], "full": false, "new_red": [], "sha": "d7e5e44b0f6cb800a4bcbdbd3f1efb39309c9147", "still_red": [], "tier": "native", "verdict": "RED", "wall": 3600.4}
+{"date": "2026-08-22T09:35:28Z", "fixed": [], "full": false, "new_red": [], "sha": "766e6ea5b4d622933a9eecc59056476aaa7b7376", "still_red": [], "tier": "native", "verdict": "RED", "wall": 3600.2}

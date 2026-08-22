@@ -1,20 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T23:09:01Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas",
-    "test-core#src:test/test_mode_delphi.pas",
-    "test-core#src:test/test_mode_delphi_callarg.pas",
-    "test-core#src:test/test_mode_delphi_methptr.pas",
-    "test-core#src:test/test_procvar_value_context.pas"
-   ],
-   "sha": "a2ae11a641911bbec759e4ccd454b9a6aca38ea6",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-20T23:33:39Z",
    "fixed": [],
    "new_red": [],
@@ -467,6 +453,14 @@
    ],
    "new_red": [],
    "sha": "d7e5e44b0f6cb800a4bcbdbd3f1efb39309c9147",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-22T09:35:28Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "766e6ea5b4d622933a9eecc59056476aaa7b7376",
    "tier": "native",
    "verdict": "RED"
   }
@@ -1413,6 +1407,7 @@
   "test-core#src:test/test_aintostr_negative.pas@2": "native",
   "test-core#src:test/test_algol_skeleton.alg": "native",
   "test-core#src:test/test_alloca.c": "native",
+  "test-core#src:test/test_anonymous_procedural_type.pas": "native",
   "test-core#src:test/test_anonymous_record.pas": "native",
   "test-core#src:test/test_ansistring.pas": "native",
   "test-core#src:test/test_ansistring_cast_extern_pchar.pas": "native",
@@ -2232,6 +2227,8 @@
   "test-core#src:test/test_strict_dialect_reject.pas@2": "native",
   "test-core#src:test/test_strict_fpc_shift_widths.pas@1": "native",
   "test-core#src:test/test_strict_fpc_shift_widths.pas@2": "native",
+  "test-core#src:test/test_strict_fpc_shr_keeps_the_sign.pas@1": "native",
+  "test-core#src:test/test_strict_fpc_shr_keeps_the_sign.pas@2": "native",
   "test-core#src:test/test_strict_overload.pas": "native",
   "test-core#src:test/test_strict_overload_width.pas@1": "native",
   "test-core#src:test/test_strict_overload_width.pas@2": "native",
@@ -4232,6 +4229,7 @@
   "test-core#src:test/test_aintostr_negative.pas@2": "pass",
   "test-core#src:test/test_algol_skeleton.alg": "pass",
   "test-core#src:test/test_alloca.c": "pass",
+  "test-core#src:test/test_anonymous_procedural_type.pas": "pass",
   "test-core#src:test/test_anonymous_record.pas": "pass",
   "test-core#src:test/test_ansistring.pas": "pass",
   "test-core#src:test/test_ansistring_cast_extern_pchar.pas": "pass",
@@ -5048,6 +5046,8 @@
   "test-core#src:test/test_strict_dialect_reject.pas@2": "pass",
   "test-core#src:test/test_strict_fpc_shift_widths.pas@1": "pass",
   "test-core#src:test/test_strict_fpc_shift_widths.pas@2": "pass",
+  "test-core#src:test/test_strict_fpc_shr_keeps_the_sign.pas@1": "pass",
+  "test-core#src:test/test_strict_fpc_shr_keeps_the_sign.pas@2": "pass",
   "test-core#src:test/test_strict_overload.pas": "pass",
   "test-core#src:test/test_strict_overload_width.pas@1": "pass",
   "test-core#src:test/test_strict_overload_width.pas@2": "pass",
@@ -6291,11 +6291,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-22T08:31:21Z",
-  "sha": "d7e5e44b0f6cb800a4bcbdbd3f1efb39309c9147",
+  "date": "2026-08-22T09:35:28Z",
+  "sha": "766e6ea5b4d622933a9eecc59056476aaa7b7376",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.4
+  "wall": 3600.2
  },
  "last_bench": {
   "conf_rows": 550,
