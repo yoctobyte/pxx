@@ -886,7 +886,7 @@
         {
           "args": [
             "--seed",
-            "82571",
+            "82750",
             "--vars",
             "10",
             "--funcs",
@@ -930,21 +930,19 @@
             "--consts",
             "1"
           ],
-          "seed": 82571,
+          "seed": 82750,
           "sha": "98ed38202254"
         }
       ],
-      "first_seed": 82571,
+      "first_seed": 82750,
       "first_sha": "98ed38202254",
-      "fixed": "2026-08-22T02:09:23Z",
-      "fixed_sha": "98ed38202254",
       "hits": 1,
       "kind": "undefined-variable-pxxblockmove",
       "note": "pxx REJECTED a program FPC accepts -- frontend gap or regression (Track A/P)",
-      "opened": "2026-08-22T01:13:43Z",
-      "reopened_from_fixed": false,
+      "opened": "2026-08-22T02:22:12Z",
+      "reopened_from_fixed": true,
       "sig": "pxx-reject_undefined-variable-pxxblockmove",
-      "status": "fixed",
+      "status": "open",
       "ticket": null
     },
     "pxx-vs-fpc_?": {
