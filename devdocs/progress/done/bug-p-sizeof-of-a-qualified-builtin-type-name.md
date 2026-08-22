@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: d0fcf625b
 summary: "`SizeOf(System.LongWord)` failed with `undefined variable (LongWord)`. The name-vs-expression token scan added by feature-p-sizeof-of-an-expression accepted a builtin type name for the FIRST token of the operand but tested tkIdent alone for the rest of the run, so a qualified name whose tail is a reserved TYPE token was routed to the expression path — where it is not a value. Resolves regression-test-core-test-fpc-compat-batch."
 ---
 

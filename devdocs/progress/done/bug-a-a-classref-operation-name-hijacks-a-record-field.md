@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: d0fcf625b
 summary: "Adding `InstanceSize` to the TObject class-reference operation set broke every RTTI program: typinfo's TClassRTTI HAS an InstanceSize field, and the `obj.ClassName / obj.InheritsFrom(C)` arm never asked whether the receiver was a RECORD or whether it had a FIELD of that name. `cls^.InstanceSize` became __pxxRttiOf(cls^) — the record's first word read as an object's class pointer — and segfaulted. Resolves regression-test-core-test-rtti and regression-test-core-test-classref."
 ---
 

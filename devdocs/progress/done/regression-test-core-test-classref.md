@@ -31,7 +31,7 @@ Segmentation fault (core dumped)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
-- 2026-08-22 — resolved, commit PENDING-COMMIT.
+- 2026-08-22 — resolved, commit d0fcf625b.
 
 Resolved by `bug-a-a-classref-operation-name-hijacks-a-record-field` — same
 cause as `regression-test-core-test-rtti`; this test reaches the same arm
