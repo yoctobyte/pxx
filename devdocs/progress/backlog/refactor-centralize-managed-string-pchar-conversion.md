@@ -262,3 +262,38 @@ divergences** — and they collapse into exactly three facts:
   "no failing test is constructible" was a claim about a search that stopped at
   methods with bodies. When a ticket says a case is unreachable, the cheap check
   is to try to reach it.
+
+## Slice 3's premise expired on 2026-08-22 — WideChar now HAS a marker
+
+Slice 3 reads *"Fold WideChar in. Same treatment (WideChar==tyUInt16 has no
+marker; the safe contexts are already handled)."* That parenthesis is no longer
+true. [[bug-a-writeln-of-a-widechar-prints-its-ordinal]] gave WideChar its own
+type kind — **`tyWideChar`, kind 31** — for the reason this ticket is about: a
+node-level marker is lost through a variable, and `WriteLn` is the one context
+where the "any tyUInt16 in a string context must be a widechar" fallback cannot
+be used, because `WriteLn(someWord)` must print the number.
+
+So the WideChar half of this refactor got what it wanted, by the route
+`tyUCS4Char` and `tyBool8` took rather than by node-side storage:
+
+- `NodeIsWideCharVal` now answers on **either** the `-3` cast marker **or**
+  `ASTTk = tyWideChar`, so it is already the "prefer stored metadata, keep the
+  shape-walk as fallback" shape this ticket asks for — one level up, on the type
+  kind rather than on a node side-channel.
+- the `...or the operand is tyUInt16` clauses beside its call sites were
+  deliberately LEFT IN, which is exactly this ticket's additive rule.
+- `PWideChar`'s element type is `tyWideChar` too, so `p^` carries it.
+
+Measured after that change: 63 WideChar programs, source shape × context, against
+fpc 3.2.2 — every remaining divergence is the deliberate UTF-8-vs-codepage
+encoding one, none is a missed recognition. The **"arg residual open"** noted
+above against [[bug-pascal-widechar-var-to-string-other-contexts]] is closed: a
+`w: WideChar` variable bound to a string parameter converts.
+
+**What this leaves for slice 3:** re-scope it, or drop it. The remaining question
+is whether PChar wants the same treatment — a `tyPChar` kind rather than
+node-side element storage — which is a genuinely different call, because unlike
+WideChar a PChar's element type is variable (`PWideChar`, `PByte`, `PInteger`…)
+and a kind per pointee does not scale. That asymmetry is worth stating in the
+ticket before anyone starts, since "do what WideChar did" is now the obvious and
+probably wrong instinct.

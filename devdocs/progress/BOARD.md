@@ -55,7 +55,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (277)
+## backlog (279)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -73,6 +73,7 @@ _none_
 | bug-b-inttostr-of-a-qword-prints-it-signed | B | 40 | bug | IntToStr(q) where q: QWord >= 2^63 prints a NEGATIVE number — IntToStr(High(QWord)) answers -1 — because sysutils declares only IntToStr(Int64) and the QWord argument is passed through it. WriteLn(q) is correct, so the same value prints two different ways in one program. UIntToStr does not exist at all. Overload resolution on QWord vs Int64 already works, so this is purely two RTL functions. | — |
 | bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line | B | 65 | bug | `read(f, n)` / `readln(f, n)` on a Text file reads the whole LINE and Vals it, so any line with two numbers, or one number plus trailing spaces, silently yields 0. `readln(t, n, m)` on '42 3' gives 0 0 where FPC gives 42 3. Works only when the line holds exactly one number and nothing else. | — |
 | bug-b-sysutils-string-gaps-found-by-differential | B | 35 | bug | Four sysutils gaps from one 22-program string differential against FPC 3.2.2: Concat takes exactly two AnsiStrings (FPC's is variadic and takes Chars), AnsiQuotedStr and SameStr do not exist, and the TryStr* family leaves its value untouched on failure where FPC zeroes it. Everything else in the family — Copy/Pos/Delete/Insert bounds, StringReplace, Format, Trim, comparison, PChar interop, ShortString — was byte-identical. | — |
+| bug-b-varisstr-is-false-for-a-one-character-string | B | 40 | bug | VarIsStr answers FALSE for a ONE-CHARACTER string variant. It tests `VarType(V) = 6` (VT_STRING) and a single char is tagged VT_CHAR = 5, so `v := \'x\'; VarIsStr(v)` is False while `v := \'xy\'` and `v := \'\'` are both True. The same unit already has the right predicate three lines below — IsTextTag(t) = (t = VT_STRING) or (t = VT_CHAR) — and VarCompareValue uses it and gets the one-char case right. Two mechanisms for one concept, disagreeing. | — |
 | bug-b-vartostr-is-missing-from-variants | B | 35 | bug | variants.pas has no VarToStr, so `WriteLn(VarToStr(v))` — the ordinary way to print a Variant in FPC/Delphi code — fails with `undefined variable (VarToStr)`. The unit already has the whole implementation as a private helper (`AsText`), so this is an export, not a feature. Found while writing the differential for bug-a-an-out-parameter-of-a-managed-type-is-not-cleared, which could not be written against the FPC oracle until VarToStr was removed from it. | — |
 | bug-c-driver-misses-the-shared-runtime-finalisation-step | C | 40 | bug | The C driver calls EmitIoLockStubsForTarget directly instead of the shared EmitProgramRuntimeStubsForTarget, so a C program still ships with no signal runtime. Every other frontend was moved over on 2026-08-21; C was left alone because cparser.inc is Track C's file-lane. One line. | — |
 | bug-n-a-class-base-that-is-an-expression-does-not-compile | N | 45 | bug | A class base which is a NAME bound to a type, or a call, does not compile: `B = object; class P(B)` fails where `class P(object)` and `class P(SomeClass)` both work. Blocks six.with_metaclass, which html5lib's parser spells as `class Phase(with_metaclass(...))` — the single remaining wall on html5parser.py. | — |
@@ -166,6 +167,7 @@ _none_
 | docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out | D | 45 | docs | docs/language/name-resolution.md:47 and docs/targets/nil-python.md:260 quote the bare-import refusal message and state the rule with no carve-out. As of 2026-08-20 a unit declaring {$PYEXTENSION} and binding the cpyext runtime IS bare-importable, so both pages are now wrong in the direction that makes a working program look unsupported. | — |
 | docs-d-nilchecks-directive-and-flag | D | 40 | docs | {$NILCHECKS ON\|OFF} and --no-nil-check shipped 2026-08-21 and are not in docs/reference/directives.md or modes.md. The row is unusual enough to be worth a sentence: the directive is tri-state, so ON and OFF do different things depending on which site class you are looking at. | — |
 | docs-toolchain-cli-flags | D | 30 | docs | Document the toolchain information flags (--help / --version / --where / --config / --list-targets / --list-libraries / --doctor, PXX_HOME, PXX_LIBPATH, pxx.cfg) | — |
+| feature-a-a-variant-has-no-null-tag | A | 30 | feature | pxx has one no-value variant tag (VT_EMPTY), so VarIsNull and VarIsEmpty are the same question and `v := Null; VarIsEmpty(v)` answers True where FPC says False. variants.pas states the approximation in its header and asks for a ticket rather than a silent guess — this is that ticket. A VT_NULL tag is a compiler change, and decide-variant-tag-space-is-a-language-wide-commitment already settled that the tag space is Track A\'s to renumber freely. | — |
 | feature-a-audit-strict-flags-against-dialectispxx | A | 20 | feature | `DialectIsPxx` now exists and only `--strict-overload` consults it. The other six strict flags apply everywhere, including to our own {$MODE PXX} RTL. Audit each one: does it WANT the ownership carve-out, or is it right to judge every file? | — |
 | feature-a-declaration-phase | N | 55 | feature | A real declaration phase: all decls before any body is typed | — |
 | feature-a-dynamic-array-of-frozen-strings | A | 30 | feature | In the FROZEN-string model (-uPXX_MANAGED_STRING, the self-host build), `array of string` is refused from SetLength up: the element is an inline fixed-capacity buffer and no path knows its stride. Delete/Insert refuse it downstream of that, which is why they carry a frozen-string exclusion. | — |
@@ -689,6 +691,7 @@ _none_
 - [p 40] [U] decide-rtti-kind-numbering (unblocks 1)
 - [p 40] [A] bug-a-nilpy-leading-double-star-in-a-call-is-not-detected
 - [p 40] [B] bug-b-inttostr-of-a-qword-prints-it-signed
+- [p 40] [B] bug-b-varisstr-is-false-for-a-one-character-string
 - [p 40] [C] bug-c-driver-misses-the-shared-runtime-finalisation-step
 - [p 40] [N] bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members
 - [p 40] [N] bug-n-inline-cast-deref-loses-a-pointer-fields-pointee
@@ -780,6 +783,7 @@ _none_
 - [p 30] [P] compat-pascal-subrange-storage-size
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
 - [p 30] [D] docs-toolchain-cli-flags
+- [p 30] [A] feature-a-a-variant-has-no-null-tag
 - [p 30] [A] feature-a-dynamic-array-of-frozen-strings
 - [p 30] [A] feature-a-emit-obj-record-class-abi-mode
 - [p 30] [A] feature-a-finalize-for-bare-dynarray-and-variant
