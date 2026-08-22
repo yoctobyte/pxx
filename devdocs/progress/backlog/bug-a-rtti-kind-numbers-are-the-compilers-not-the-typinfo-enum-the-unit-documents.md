@@ -2,7 +2,7 @@
 track: A
 prio: 40
 type: bug
-blocked-by: []
+blocked-by: [decide-rtti-kind-numbering]
 summary: "typinfo.pas documents RetKind / TypeKind / ParamKinds as Ord(TTypeKind) and declares TTypeKind as FPC's enum (Int64 = 19), but the compiler fills those fields with its OWN internal TTypeKind (Int64 = 13). A user comparing a reported kind against the enum in the same unit gets a silently wrong answer; the unit's own TypeKindSize/TypeKindSigned already decode the compiler numbering, so the two halves of one file disagree."
 ---
 
@@ -53,7 +53,7 @@ plausible wrong value. `if mi^.RetKind = Ord(tkInt64)` reads as obviously
 correct, and is obviously wrong, and the compiler and the RTL will both keep
 insisting they are right.
 
-## The fork (state it, do not guess)
+## The fork (state it, do not guess) — ESCALATED to [[decide-rtti-kind-numbering]] on 2026-08-22
 
 1. **Make the RTTI fields carry FPC's numbering** — map at emit time in
    `rtti_emit.inc`. Best for FPC-source compatibility, which is the stated

@@ -5198,6 +5198,18 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/fpcv26)" = "$$(printf 'int of ''42''  = 42\nint of ''abc'' EXC: EVariantError\ndbl of ''2.5'' = 2.50\nbool of ''''    EXC: EVariantError\nbool of 0.0   = FALSE')"
 	./$(COMPILER) -Fulib/rtl test/test_rtl_fpc_compat_helpers.pas $(TESTTMP)/test_rtl_fpc_compat_helpers26
 	test "$$($(TESTTMP)/test_rtl_fpc_compat_helpers26 | tail -1)" = "total ok 23 / 23"
+	# WriteLn of a WideChar prints the CHARACTER, not its ordinal. WideChar used
+	# to collapse to tyUInt16, and every string context but writeln could work
+	# around that ("a Word here can only mean a widechar"); writeln cannot,
+	# because WriteLn(someWord) must print the number. tyWideChar makes the two
+	# decidable. The second half is the ORDINAL battery — the new kind must not
+	# cost WideChar its comparisons, Inc/Dec, Ord, case, Succ/Pred or SizeOf —
+	# and the tail is the PWideChar sibling arm. ASCII only: pxx converts a
+	# WideChar as UTF-8 where FPC uses the system codepage, an intended
+	# divergence that would make the oracle useless here.
+	./$(COMPILER) test/test_widechar_writeln_prints_the_character.pas $(TESTTMP)/test_widechar_writeln26
+	test "$$($(TESTTMP)/test_widechar_writeln26)" = "$$(printf 'A\nB\nC\nD\nE\nFF\n[G]\nH\n65\nTRUE TRUE\nTRUE\n66\n64\n65 63\nis-b\n66\n2 2\n65 66 67 \n1 A\nxA\nAx\nP\n80\nQ')"
+
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"

@@ -15,6 +15,8 @@ type
   TRec = record w: WideChar; end;
 var
   w, w2: WideChar;
+  pw: PWideChar;
+  buf: array[0..3] of WideChar;
   r: TRec;
   arr: array[1..3] of WideChar;
   i: Integer;
@@ -59,4 +61,14 @@ begin
   w := 'A';  s := w;        WriteLn(Length(s), ' ', s);
   s := 'x' + w;             WriteLn(s);
   s := w + 'x';             WriteLn(s);
+
+  { the sibling arm: the ELEMENT of a PWideChar is a WideChar, so p^ prints the
+    character too. This said tyUInt16 until the same grep that closed the bug
+    above found it (normalise-dont-special-case: fix one arm, check the other). }
+  buf[0] := 'P'; buf[1] := 'Q'; buf[2] := WideChar(0);
+  pw := @buf[0];
+  WriteLn(pw^);
+  WriteLn(Ord(pw^));
+  Inc(pw);
+  WriteLn(pw^);
 end.

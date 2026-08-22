@@ -318,7 +318,13 @@ begin
       else if (not tnHasAlias) and (CaseEqual(lo, 'olevariant')) then Result := tyVariant
       else if (not tnHasAlias) and (CaseEqual(lo, 'pwidechar')) then
       begin
-        LastTypePointerElemTk := tyUInt16;
+        { tyWideChar, not tyUInt16 — the element of a PWideChar IS a WideChar,
+          and `WriteLn(p^)` printed the ordinal for exactly as long as this said
+          otherwise. Found by grepping for the sibling arm of
+          bug-a-writeln-of-a-widechar-prints-its-ordinal, per
+          normalise-dont-special-case. Width is unchanged (TypeSize 31 = 2), so
+          pointer arithmetic still steps by two bytes. }
+        LastTypePointerElemTk := tyWideChar;
         Result := tyPointer;
       end
       { The built-in pointer names — PInteger, PByte, PDouble, ...
