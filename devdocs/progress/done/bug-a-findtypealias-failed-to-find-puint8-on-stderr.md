@@ -3,6 +3,8 @@ track: A
 prio: 20
 type: bug
 blocked-by: []
+status: done
+commit: 9d230105b
 summary: "`FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr during a compile that then SUCCEEDS. Either the lookup failure is real and something silently fell back to a wrong type, or the message is a stale debug print that should not be in a release build. Both readings are defects; which one it is has not been established."
 ---
 
@@ -43,3 +45,25 @@ and read what it does with the failure. Do not infer it from the wording.
 
 Not yet reduced — seen only in the full rtl-generics drive. Reducing it is the
 first task; `grep -rn "failed to find" compiler/` locates the print.
+
+## Resolved — it was already fixed, two days before this ticket was read
+
+**Reading 2 was right, and the fix landed on 2026-08-20 as `9d230105b`, "remove
+the leftover puint8 debug dump from FindTypeAlias".** Nothing in the tree prints
+it today: `grep -rn "failed to find" compiler/ lib/ tools/` is empty.
+
+From that commit's own message: *"A lookup miss there is normal — puint8
+resolves through the pointer-alias path afterwards — but the miss printed the
+whole alias table to STDOUT first."* So the ticket's question is answered on
+both halves: the miss is not a wrong type (the pointer-alias path takes over),
+and the message was noise. The ticket's own priority note ("if reading 1, the
+priority above is too low") does not apply.
+
+One correction to the ticket, worth keeping because it affected how the
+symptom was described: the dump went to **stdout**, not stderr. That is why it
+was seen at all — it landed in build output rather than in a stream people
+filter.
+
+Closed as done citing the existing commit rather than re-fixed. The
+"establish which before fixing" instruction was the right call and cost nothing
+to honour: `git log -S "failed to find"` answered it in one command.
