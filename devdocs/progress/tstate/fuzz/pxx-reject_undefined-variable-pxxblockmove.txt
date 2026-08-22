@@ -1,0 +1,13 @@
+sig=pxx-reject_undefined-variable-pxxblockmove
+seed=82571
+sha=98ed38202254
+compiler=/home/neo/trackt-watch/compiler/pascal26
+note=pxx REJECTED a program FPC accepts -- frontend gap or regression (Track A/P)
+
+fpc-O0       12398858163467281164
+fpc-O2       12398858163467281164
+pxx-O0       <compile-fail>
+pxx-O2       <compile-fail>
+pxx-O3       <compile-fail>
+
+repro: tools/pasmith.py --seed 82571 --vars 10 --funcs 3 --stmts 20 --depth 3 --classes 4 --objs 3 --strs 3 --recs 2 --arrs 2 --enums 2 --shorts 2 --excepts 3 --modeprocs 2 --intfs 0 --hier 4 --mptrs 0 --props 3 --exdtor 3 --clsm 3 --checks 1 --consts 1
