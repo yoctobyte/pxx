@@ -55,7 +55,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (292)
+## backlog (290)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -273,6 +273,7 @@ _none_
 | feature-p-const-evaluator-carries-unsigned-64-bit | P | 30 | feature | `High(QWord)`, `Low(UInt64)`, `High(NativeUInt)` and `High(PtrUInt)` are rejected at compile time — the const evaluator carries Int64, which cannot hold 2^64-1. Every other integer type name folds. Idiomatic FPC code that spells a machine-word bound this way does not compile. | — |
 | feature-p-defineglobal-a-define-that-crosses-unit-boundaries | P | 40 | feature | `{$DEFINEGLOBAL xyz}` — a conditional define that outlives the unit that sets it. Measured: pxx matches FPC today, a unit's {$DEFINE} does not reach the program, which is correct Pascal and is also why two units cannot coordinate. The motivating case is 'first implementation loaded claims the name, second skips itself' — the shape that would have dissolved the pylib/sysutils Exception problem. | — |
 | feature-p-delphi-string-helpers | P | 45 | feature | feature(P): Delphi's TStringHelper surface — `s.Length`, `s.ToUpper`, `s.Trim`, `s.Substring` | — |
+| feature-p-dynamic-array-concatenation | P | 40 | feature | `Concat(a, b)` and `a + b` over dynamic arrays are refused with `arithmetic operator not supported for dynamic arrays`. FPC supports both — Concat in objfpc mode, `+` under {$modeswitch arrayoperators} and in Delphi mode. The diagnostic is honest (it replaced a silent wild-pointer miscompile), but the feature is ordinary and the machinery for it already exists. | — |
 | feature-p-fpc-assigned-enum-ordinals-with-colon-equals | P | 40 | feature | An enum with explicit ordinals written FPC-style — `(ms_on := 1, ms_off := 2)` — is refused. objfpc mode spells assigned enum values with `:=` where Delphi mode uses `=`; pxx accepts only the Delphi spelling. Second wall behind the FPC-compiler define profile: globtype.pas:800, which cclasses pulls in. | — |
 | feature-p-fpc-global-operator-overload-declarations | P | 40 | feature | `operator := (const u:qword):Tconstexprint;` — FPC's UNIT-SCOPE operator overload declaration — is not parsed. It is the first wall behind the FPC-compiler define profile: constexp.pas:58, and constexp is what cutils and cstreams pull in first. | — |
 | feature-p-nested-record-field-in-a-typed-record-constant | P | 40 | feature | `const CN: TNest = (p: (x: 1; y: 2); tag: 'k');` is rejected with `error: not a constant` when a field is itself a RECORD. Array-valued fields and array-of-record constants both work; only a record-typed field is missing. Loud (a compile error, never a wrong value). | — |
@@ -341,9 +342,6 @@ _none_
 | refactor-p-three-hand-rolled-postfix-loops | P | 35 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | regression-demos-00 | T | 40 | regression | advisory: demos#00 red at 98ed38202254 (auto-filed by twatch) | — |
 | regression-lib-test-crtl-reachability-2 | C | 70 | regression | regression: lib-test#src:tools/crtl_reachability.py red at 98ed38202254 (auto-filed by twatch) | — |
-| regression-test-core-test-classref | P | 70 | regression | regression: test-core#src:test/test_classref.pas red at 392ea5d94545 (auto-filed by twatch) | — |
-| regression-test-core-test-fpc-compat-batch | P | 70 | regression | regression: test-core#src:test/test_fpc_compat_batch.pas red at 1021bbdece65 (auto-filed by twatch) | — |
-| regression-test-core-test-rtti | P | 70 | regression | regression: test-core#src:test/test_rtti.pas red at 392ea5d94545 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-callable-to-str-param-fails | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy red at 1b9b43e5b511 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard0-6 | T | 70 | regression | regression: test-pascal-conformance#shard0/6 red at 98ed38202254 (auto-filed by twatch) | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 25 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
@@ -565,9 +563,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2275)
+## done (2280)
 
-2275 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2280 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -619,9 +617,6 @@ _none_
 - [urgent p 70] [N] bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - [urgent p 70] [T] bug-t-the-native-tier-times-out-and-publishes-a-contentless-red
 - [p 70] [C] regression-lib-test-crtl-reachability-2
-- [p 70] [P] regression-test-core-test-classref
-- [p 70] [P] regression-test-core-test-fpc-compat-batch
-- [p 70] [P] regression-test-core-test-rtti
 - [p 70] [N] regression-test-nilpy-test-nilpy-callable-to-str-param-fails
 - [p 70] [T] regression-test-pascal-conformance-shard0-6
 - [p 65] [B] bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
@@ -737,6 +732,7 @@ _none_
 - [p 40] [O] feature-opt-rtti-emit-on-use
 - [p 40] [P] feature-p-assertions-directive-and-position
 - [p 40] [P] feature-p-defineglobal-a-define-that-crosses-unit-boundaries
+- [p 40] [P] feature-p-dynamic-array-concatenation
 - [p 40] [P] feature-p-fpc-assigned-enum-ordinals-with-colon-equals
 - [p 40] [P] feature-p-fpc-global-operator-overload-declarations
 - [p 40] [P] feature-p-nested-record-field-in-a-typed-record-constant

@@ -82,6 +82,15 @@ begin
     question -- recorded here because this is where it becomes visible. }
   Chk('lengthret', SizeOf(Length(a)), 4);
 
+  { a QUALIFIED TYPE NAME whose tail is a reserved type token stays a NAME —
+    the token scan that picks name-vs-expression tested tkIdent alone for the
+    tail, so `System.LongWord` went down the expression path and failed with
+    `undefined variable (LongWord)`.
+    bug-p-sizeof-of-a-qualified-builtin-type-name }
+  Chk('qual-longword', SizeOf(System.LongWord), SizeOf(LongWord));
+  Chk('qual-pointer',  SizeOf(System.Pointer),  SizeOf(Pointer));
+  Chk('qual-int64',    SizeOf(System.Int64),    8);
+
   { the operand is never evaluated }
   Chk('nosideeffect', SizeOf(F(i)), 4);
   Chk('callcount', calls, 0);

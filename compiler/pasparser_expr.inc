@@ -3200,8 +3200,17 @@ begin
               else if szBd = 0 then
               begin
                 if Tokens[szScan].Kind = tkRParen then Break;
+                { A qualified TYPE name is `ident (. name)*`, and the trailing
+                  name may be a reserved TYPE token rather than a plain
+                  identifier — `SizeOf(System.LongWord)`, `SizeOf(System.Pointer)`.
+                  Testing tkIdent alone sent those down the expression path,
+                  where `System.LongWord` is not a value: `undefined variable
+                  (LongWord)`. The FIRST token already accepted a builtin type
+                  name (the arm above); the rest of the run did not.
+                  bug-p-sizeof-of-a-qualified-builtin-type-name }
                 if (szScan > TokPos - 1) and
-                   (not (Tokens[szScan].Kind in [tkIdent, tkDot])) then
+                   (not (Tokens[szScan].Kind in [tkIdent, tkDot])) and
+                   (BuiltinTypeNameTk(GetTokenStr(szScan)) = tyUnknown) then
                   szIsExpr := True;
               end;
               Inc(szScan);

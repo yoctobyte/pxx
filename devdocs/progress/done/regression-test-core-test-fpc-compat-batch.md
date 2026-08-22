@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: P
+status: done
 ---
 
 > **Track guessed as P** from the test source. The ranker reads frontmatter, so an unset track parks a stub in Track T's queue regardless of what the body says -- correct the `track:` line if this is wrong.
@@ -30,3 +31,8 @@ pascal26:132: error: undefined variable (LongWord)
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+- 2026-08-22 — resolved, commit PENDING-COMMIT.
+
+Resolved by `bug-p-sizeof-of-a-qualified-builtin-type-name` — the SizeOf
+name-vs-expression token scan tested tkIdent alone for the tail of a qualified
+name, so `SizeOf(System.LongWord)` went down the expression path.

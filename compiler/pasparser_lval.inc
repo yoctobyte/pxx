@@ -2063,7 +2063,8 @@ begin
         by the token pre-scan). Only when the class has NO method of that name, so a
         user's own MethodAddress still wins. }
       { obj.GetInterface(IID, Obj) — the GUID lookup, same builtin-shadowing rule }
-      if (mmi < 0) and (mci >= 0) and (CurTok.Kind = tkIdent) and
+      if (mmi < 0) and (mci >= 0) and (not UClsIsRecord[mci]) and
+         (CurTok.Kind = tkIdent) and
          (Tokens[TokPos].Kind = tkLParen) and
          CaseEqual(fieldName, 'GetInterface') and
          (FindProc('__pxxGetInterface') >= 0) then
@@ -2081,9 +2082,21 @@ begin
 
       { obj.ClassName / obj.ClassType / obj.InheritsFrom(C) -- FPC has them on TObject
         in System. An instance reaches its blob through __pxxRttiOf. Only when the
-        class has no member of that name, so a user's own still wins. }
+        class has no member of that name, so a user's own still wins.
+
+        A RECORD receiver is excluded, and a real FIELD of that name outranks the
+        operation — the same two tests the sibling sites (the chained-value arm
+        below, and the implicit-Self arm in pasparser_expr.inc) already make. This
+        arm asked neither, which was invisible while the names were ClassName /
+        ClassType / InheritsFrom / ClassParent — nobody calls a record field that.
+        `InstanceSize` joined the set and IS a field of typinfo's TClassRTTI, so
+        `cls^.InstanceSize` stopped being a field read at offset 16 and became
+        __pxxRttiOf(cls^) — reading the record's first word as an object's class
+        pointer. Every RTTI program segfaulted.
+        bug-a-a-classref-operation-name-hijacks-a-record-field }
       if (mmi < 0) and (mci >= 0) and (CurTok.Kind = tkIdent) and
-         IsClassRefOpName(fieldName) then
+         IsClassRefOpName(fieldName) and
+         (not UClsIsRecord[mci]) and (FindUField(mci, fieldName) < 0) then
       begin
         mblobNode := GenMakeRttiOfCall(node);
         if mblobNode >= 0 then
@@ -2099,7 +2112,13 @@ begin
         end;
       end;
 
-      if (mmi < 0) and (mci >= 0) and (CurTok.Kind = tkIdent) and
+      { …and the same record exclusion as the two arms above: these are TObject
+        operations, and a RECORD has none of them. Both require a following `(`,
+        so no field READ could reach them — but a proc-typed field called as
+        `r.MethodAddress(x)` would, for the same reason
+        `cls^.InstanceSize` did (bug-a-a-classref-operation-name-hijacks-a-record-field). }
+      if (mmi < 0) and (mci >= 0) and (not UClsIsRecord[mci]) and
+         (CurTok.Kind = tkIdent) and
          (Tokens[TokPos].Kind = tkLParen) and
          (CaseEqual(fieldName, 'MethodAddress') or CaseEqual(fieldName, 'MethodName')) then
       begin
