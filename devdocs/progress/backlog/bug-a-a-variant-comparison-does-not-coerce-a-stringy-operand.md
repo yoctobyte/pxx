@@ -88,3 +88,40 @@ Found by the Variant differential family, 2026-08-22, alongside
 Track A's, plus the four rows above matching fpc 3.2.2, and a cross-target run
 (the two implementations must agree with each other, which is the property that
 has already failed once).
+
+## Read this before choosing option 2 — four prior substitutions failed
+
+`compiler/ir.inc` around `IRPyVarEqFallback` already carries the warning, from
+someone who tried:
+
+> `IR_VAR_BINOP` is not a routine to be swapped out. On x86-64 it is INLINE
+> emitted code (EmitVarBinOp) carrying its own None-equality arm, its own
+> char/string arms and its own numeric double-dispatch; builtinheap's
+> PXXVarBinOp is a DIFFERENT implementation of the same operator for the other
+> backends. Substituting either one for the whole fallback broke, in order:
+> promotable ints, `is` vs `==`, char-vs-string, and `0 == None`.
+
+So the two implementations are not merely duplicated, they are **not
+equivalent**, and the x86-64 one is load-bearing for NilPy — which is also where
+variants are hot, since NilPy uses them as its universal value type. That is the
+real reason the hand-emitted version exists, and it is a good one.
+
+This changes the recommendation's shape without changing its direction:
+
+- **Do not** replace `IR_VAR_BINOP` wholesale. That is the move that failed four
+  times.
+- **Do** split by language at the lowering seam, which is where every other
+  Pascal-vs-NilPy variant divergence is already decided (`IRLowerVariantAsScalar`
+  picks its helper set there; i386 picks `PXXVarBinOpPas` vs `PXXVarBinOp`
+  there). Pascal routes to the helper; NilPy keeps the inline emitter and its
+  performance. Then the Pascal rule exists once, `pasPlus` and the other
+  `not PyProgramMode` arms inside `EmitVarBinOp` become dead and can be removed
+  in a separate, purely subtractive commit.
+- Measure first: confirm no Pascal-side test loses meaningfully on a variant-
+  heavy loop. Pascal variants are cold in a way NilPy's are not, which is the
+  asymmetry that makes this safe on one side and not the other.
+
+Investigated to this depth on 2026-08-22 and deliberately NOT attempted in that
+session: the entanglement above is exactly the "the overhaul is often the
+smaller job — except when it is not" case in
+`devdocs/dev/root-cause-over-microfix.md`. Diagnosis banked, work parked.
