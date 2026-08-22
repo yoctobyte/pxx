@@ -143,4 +143,4 @@ oracle useless.
 `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-22 — resolved, commit PENDING-COMMIT.
+- 2026-08-22 — resolved, commit 7d725f0d8.

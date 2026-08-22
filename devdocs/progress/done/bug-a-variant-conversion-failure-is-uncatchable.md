@@ -102,4 +102,4 @@ GREEN, plus the six variant/promoint tests re-run by hand and
 `variants`, which is what proves the re-export works).
 
 ## Log
-- 2026-08-21 — resolved, commit PENDING-COMMIT.
+- 2026-08-21 — resolved, commit 7d725f0d8.
