@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: 3b980e9f0
 summary: "`type TFD = array[0..1] of TRow; var f: TFD;` then `SetLength(f[0], 1)` was refused with `SetLength expects an array variable in IR codegen`, while the identical INLINE declaration compiled — the array-type table had no ArrTypeElemDynDepth, so the named spelling lost the element's dyn depth. Passing either spelling to an open array then copied only half the slots, because the copy-in sized elements by the ROW's base type."
 ---
 
