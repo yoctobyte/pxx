@@ -5359,6 +5359,17 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Fulib/rtl test/test_source_type_beats_unit_function.pas $(TESTTMP)/test_type_beats_fn26
 	test "$$($(TESTTMP)/test_type_beats_fn26 | tail -1)" = "total ok 4 / 4"
 
+	# Indexing a by-ref dynamic-array parameter. IR_SLOTADDR is the address of
+	# the LOCAL slot; a var param's slot holds the ADDRESS of the caller's
+	# handle, so every nested index aimed one indirection short — `d[0] := nil`
+	# nulled the ROOT and `SetLength(d[0], 3)` RESIZED the root. SetLength on the
+	# root was always right (IR_LEA), so two halves of one statement disagreed
+	# about what `d` meant. Depth 2 and 3, read and write, const-param read,
+	# depth-1 control, and an array-of-AnsiString row that must release exactly
+	# once.
+	./$(COMPILER) test/test_dynarray_var_param_nested_index.pas $(TESTTMP)/test_dynvarparam26
+	test "$$($(TESTTMP)/test_dynvarparam26 | tail -1)" = "total ok 7 / 7"
+
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"

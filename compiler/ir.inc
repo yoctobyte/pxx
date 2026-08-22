@@ -1484,7 +1484,32 @@ begin
         slot in the object; for a sub-array it is the element address in the
         parent's data (its own IR_DYNUNIQUE chain, so COW recurses upward). }
       if ASTKind[baseNode] = AN_IDENT then
-        slotAddrNode := IRAppend(IR_SLOTADDR, ASTIVal[baseNode], -1, -1, 0, Ord(tyPointer))
+      begin
+        { IR_SLOTADDR is the address of the LOCAL slot, by contract and by every
+          backend's implementation. For a `var`/`out` parameter that slot does
+          not hold the handle — it holds the ADDRESS of the caller's handle — so
+          the address IR_DYNUNIQUE wants is the slot's CONTENTS, one indirection
+          in from where SLOTADDR points.
+
+          Without this, every nested index on a by-ref dynarray param aimed at
+          the parameter's own slot: `d[0] := nil` on `var d: array of array of
+          Integer` nulled the ROOT handle (caller saw Length 0, not 7), and
+          `SetLength(d[0], 3)` RESIZED THE ROOT (Length 3, then a segfault
+          walking rows that were never rows). SetLength on the root was correct
+          throughout, because it comes in through IR_LEA, whose write mode
+          already loads the slot — so the two halves of one statement disagreed
+          about what `d` meant.
+
+          IR_LEA cannot be used here: its READ mode derefs once more to the data
+          pointer, and IR_DYNUNIQUE needs the slot address in both modes (that
+          is why IR_SLOTADDR exists at all). LOAD_MEM of the slot address is the
+          same answer in both, on every target, with no backend change.
+          bug-a-setlength-on-a-2d-dynarray-var-param-is-lost }
+        slotAddrNode := IRAppend(IR_SLOTADDR, ASTIVal[baseNode], -1, -1, 0, Ord(tyPointer));
+        if (ASTIVal[baseNode] >= 0) and (ASTIVal[baseNode] < SymCount) and
+           (Syms[ASTIVal[baseNode]].Kind = skParam) and Syms[ASTIVal[baseNode]].IsRef then
+          slotAddrNode := IRAppend(IR_LOAD_MEM, slotAddrNode, -1, -1, 0, Ord(tyPointer));
+      end
       else
         slotAddrNode := IRLowerAddress(baseNode);
       baseAddr := IRAppend(IR_DYNUNIQUE, slotAddrNode, baseDynDepth, dynBaseRec,
