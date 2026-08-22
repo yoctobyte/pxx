@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: 015bbbaf2
 summary: "A routine with its own `label` section overwrote the enclosing program's label table — entering a body reset GotoLabelCount to 0 and restored the COUNT on exit but not the slot CONTENTS. The program's own `la:` then failed with `AN_LABEL: undeclared label`. Fixed alongside numeric labels (`label 1;`), which were refused outright."
 ---
 
