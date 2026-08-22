@@ -4185,6 +4185,35 @@ begin
          (FindUClassInUnit(name, -1) >= 0) and PyIsClassTypeExact(name) then
         procIdx := -1;
 
+      { The Pascal twin of the rule above: a TYPE declared HERE beats a ROUTINE
+        of the same name imported from a used unit. `type PI = ^Integer;` then
+        `PI(pp)^` bound to System/math's paramless `Pi` and died with
+        "no overload of PI matches these arguments — candidates: PI()", an error
+        about arguments for a construct that has none, which sends the reader
+        looking at the cast instead of at the name.
+
+        Innermost declaration wins is the ordinary Pascal rule, and it is
+        already applied here for routines (bug-p-program-function-does-not-shadow-
+        used-unit) and for NilPy classes above. Types were the arm nobody wrote,
+        so the only names that could collide were the ones an RTL unit happens
+        to export as a function — `Pi` being the one people actually hit,
+        because `PI` is the conventional spelling of `^Integer`.
+
+        Deliberately narrow: only when the alias is declared in the unit being
+        compiled AND the routine is not, and only in front of `(`, which is the
+        one position where a type name is a CAST rather than a value. A type and
+        a routine of one name in ONE scope is illegal, so this cannot pick
+        between two local declarations.
+        bug-a-a-source-type-alias-loses-to-a-used-units-function-in-a-cast }
+      if (not NilPyUserCode) and (qUnit < 0) and (procIdx >= 0) and (idx < 0) and
+         (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+      begin
+        aliasIdx := FindTypeAlias(name);
+        if (aliasIdx >= 0) and (AliasUnitIdx[aliasIdx] = CurrentUnitIdx) and
+           (ProcUnitIdx[procIdx] <> CurrentUnitIdx) then
+          procIdx := -1;
+      end;
+
       { A NilPy module-level `def` is NOT bound above its own `def` statement —
         Python rebinds the name when that statement RUNS, so a module-body call
         that precedes it still reaches whatever the name meant before.

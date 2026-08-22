@@ -5350,6 +5350,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Fulib/rtl test/test_failed_as_downcast_is_catchable.pas $(TESTTMP)/test_failed_as26
 	test "$$($(TESTTMP)/test_failed_as26 | tail -1)" = "total ok 4 / 4"
 
+	# A TYPE declared in the program beats a same-named ROUTINE from a used unit
+	# in front of `(`, the position where a type name is a CAST. `type PI =
+	# ^Integer` bound PI(pp) to math's paramless Pi and failed with "no overload
+	# of PI matches these arguments" — an error about arguments for a construct
+	# that has none. Row 3 pins that the routine stays reachable by its own name
+	# (pxx is lax here; FPC's shadowing is total and rejects that row).
+	./$(COMPILER) -Fulib/rtl test/test_source_type_beats_unit_function.pas $(TESTTMP)/test_type_beats_fn26
+	test "$$($(TESTTMP)/test_type_beats_fn26 | tail -1)" = "total ok 4 / 4"
+
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"
