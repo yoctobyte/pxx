@@ -6342,13 +6342,12 @@
   },
   {
    "bad": "f3acfdabf53c12070af980ad285bf7be708ea3b7",
-   "good": "ad27e6915f88eaa2143949f42a61b33159a66189",
+   "good": "ba5791c02ce32a0962a551c9e8d0a5a848791fd6",
    "job": "test-core#src:test/fpcv.pas@2",
    "name": "test-core#299",
    "opened": "2026-08-21T20:38:47Z",
    "pin_built": false,
    "range": [
-    "ba5791c02ce32a0962a551c9e8d0a5a848791fd6",
     "f3acfdabf53c12070af980ad285bf7be708ea3b7"
    ],
    "src": "test/fpcv.pas",

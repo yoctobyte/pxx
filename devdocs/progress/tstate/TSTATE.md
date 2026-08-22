@@ -9,7 +9,7 @@
 ## Open regressions
 - **test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy** — test/test_nilpy_callable_to_str_param_fails.npy test/test_nilpy_float_repeat_typeerror.npy (plexus): bad `e96a698f1f29`, last good `57b9b7148d32`, 1 commit(s) in range
 - **test-pascal-conformance#shard4/6** — tools/run_pascal_conformance.sh (plexus): bad `74d84a6ba449`, last good `8ccc8f05c42a`, 1 commit(s) in range
-- **test-core#src:test/fpcv.pas@2** — test/fpcv.pas (plexus): bad `f3acfdabf53c`, last good `ad27e6915f88`, 2 commit(s) in range
+- **test-core#src:test/fpcv.pas@2** — test/fpcv.pas (plexus): bad `f3acfdabf53c`, last good `ba5791c02ce3`, 1 commit(s) in range
 - **test-core#src:test/test_generic_inherit_delphi.pas** — test/test_generic_inherit_delphi.pas (plexus): bad `98ed38202254`, last good `f74df41e851c`, 2 commit(s) in range
 - **demos#00** (plexus): bad `98ed38202254`, last good `23becd24b8e5`, 423 commit(s) in range
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +2 (plexus): bad `98ed38202254`, last good `23becd24b8e5`, 423 commit(s) in range
