@@ -27,8 +27,14 @@ begin
   Counted := 'xyz';
 end;
 
+type
+  TRec = record sa: array[0..2] of AnsiString; s: AnsiString; end;
+
 var
   a: array[0..3] of Integer;
+  sa: array[0..2] of AnsiString;
+  ss: ShortString;
+  rr: TRec;
 begin
   s := 'abcd';
 
@@ -59,4 +65,22 @@ begin
   WriteLn('direct', ' ', s[1], s[3]);
   for i := 0 to 3 do a[i] := i * 2;
   WriteLn('arr   ', (a)[2], ' ', a[3]);
+
+  { The discrimination this needs, and the trap that a first pass fell into: an
+    ARRAY node carries its ELEMENT kind in ASTTk, so `array of AnsiString` and a
+    plain AnsiString read identically there. Testing the tag alone sends
+    `(sa)[2]` down the string path and yields the wrong value. Both spellings
+    must work, for a plain variable AND for a record field. }
+  sa[2] := 'zz';
+  WriteLn('astr  ', (sa)[2], ' ', (sa[2])[1]);
+  rr.sa[2] := 'yy';
+  rr.s := 'abcd';
+  WriteLn('fld   ', (rr.sa)[2], ' ', (rr.s)[2]);
+
+  { the other two string flavours that fell through to the array path: a
+    parenthesised LITERAL is tagged tyString and printed a chunk of the data
+    segment; a ShortString is tyShortString and printed nothing }
+  WriteLn('plit  ', ('hello')[2]);
+  ss := 'abcd';
+  WriteLn('short ', (ss)[2]);
 end.

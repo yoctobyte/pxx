@@ -757,7 +757,7 @@ begin
         end
         else if CurTok.Kind = tkLBrack then
         begin
-          if IntToTypeKind(ASTTk[node]) = tyAnsiString then
+          if NodeIsIndexableStringValue(node) then
           begin
             { A grouped STRING has no addressable base, so a raw AN_INDEX over
               it indexes the string HANDLE rather than a slot holding one:

@@ -96,6 +96,45 @@ and a variable index over a literal in a loop.
 `make compiler/pascal26` fixedpoint converged in 1 round; `tools/gate.sh quick`
 green.
 
+## Follow-up in the same ticket: the first fix was too broad, and regressed one row
+
+The first commit (`e7d8667c3`) tested `IntToTypeKind(ASTTk[node]) = tyAnsiString`
+to decide "this is a string value". That is not a sound test, and a
+grouped-expression sweep run immediately afterwards caught it:
+
+**An ARRAY node carries its ELEMENT kind in `ASTTk`.** So an
+`array of AnsiString` and a plain `AnsiString` read *identically* there, and
+`(sa)[2]` — indexing an array of strings — went down the materialise-into-a-
+string-temp path and produced the wrong value. It had worked before. Fixed
+within the hour, in `NodeIsIndexableStringValue`:
+
+- an **identifier** is decided by its symbol (`Syms[].IsArray`);
+- a record **field** by its declaration (`RecFieldIsArray`, keyed on the same
+  source span codegen re-resolves it by);
+- every other node kind that can reach here with a string tag *is* a string
+  value — a literal, a concatenation, a call result, an element already selected
+  out of an array.
+
+The same sweep surfaced two more pre-existing rows in the same arm, both
+confirmed against the **pinned** compiler, both now fixed by widening the kind
+test rather than by adding arms:
+
+| shape | before | why |
+| --- | --- | --- |
+| `('hello')[2]` | printed a **chunk of the data segment** | a parenthesised literal is tagged `tyString`, not `tyAnsiString` |
+| `(ss)[2]` (ShortString) | printed nothing | tagged `tyShortString` |
+| `(r.s)[2]` (string field) | **segfault** | `AN_FIELD` was never considered |
+
+So the arm had four broken spellings and one correct one, and the correct one
+(`(a)[i]` over an array) is what the code had been written for. Materialising
+through an `AnsiString` temp is right for every string flavour, so all four go
+through one path.
+
+Lesson worth keeping: **a type TAG is not a type.** `ASTTk` answers "what kind
+of value does indexing this yield", which is the element kind for an array and
+the string kind for a string — the very question being asked collapses the two.
+The symbol table is what distinguishes them.
+
 ## Found by
 
 A 37-program string differential — concatenation, `Copy` with out-of-range /

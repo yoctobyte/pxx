@@ -4382,6 +4382,44 @@ end;
   and then SEGFAULTED at run time (`(s)[3]`) because the base it indexed was the
   string handle rather than a slot holding one.
   bug-a-indexing-a-parenthesised-string-compiles-and-segfaults }
+{ True when `(node)[i]` means "the i'th CHARACTER of a string value" rather than
+  "the i'th ELEMENT of an array".
+
+  ASTTk alone cannot tell them apart: an array node carries its ELEMENT kind, so
+  an `array of AnsiString` and a plain AnsiString both read tyAnsiString there.
+  Testing the tag alone sent `(sa)[2]` — indexing an array of strings — down the
+  materialise-into-a-string-temp path and yielded the wrong value. The symbol is
+  what actually knows, so an identifier is asked; every other node kind that can
+  reach here with a string tag is a string VALUE (a literal, a concatenation, a
+  call result, an element already selected out of an array).
+  bug-a-indexing-a-parenthesised-string-compiles-and-segfaults }
+function NodeIsIndexableStringValue(n: Integer): Boolean;
+var fRec: Integer;
+begin
+  Result := False;
+  if n < 0 then Exit;
+  { every string flavour, not just tyAnsiString: a parenthesised LITERAL is
+    tagged tyString and a ShortString variable tyShortString, and both used to
+    fall through to the array path — `('hello')[2]` printed a chunk of the data
+    segment and `(ss)[2]` printed nothing. Materialising through an AnsiString
+    temp is correct for all of them, and one path beats three. }
+  if not (IntToTypeKind(ASTTk[n]) in
+          [tyAnsiString, tyString, tyShortString, tyFixedString]) then Exit;
+  if (ASTKind[n] = AN_IDENT) and (ASTIVal[n] >= 0) and
+     (ASTIVal[n] < SymCount) and Syms[ASTIVal[n]].IsArray then Exit;
+  { …and a record FIELD the same way: `(r.sa)[2]` selects an array element and
+    `(r.s)[2]` a character, and again only the declaration knows which. The
+    field is identified by its source span, which is how codegen re-resolves it
+    too, so this asks the same question the same way. }
+  if ASTKind[n] = AN_FIELD then
+  begin
+    fRec := ResolveNodeRec(ASTLeft[n]);
+    if (fRec >= REC_UCLASS_BASE) and
+       RecFieldIsArray(fRec, GetTokenStrFromRaw(ASTSOffset[n], ASTSLen[n])) then Exit;
+  end;
+  Result := True;
+end;
+
 function GenMakeStringValueIndex(valNode: Integer): Integer;
 var tmpSym, tmpN, asgn, idx, comma: Integer;
 begin

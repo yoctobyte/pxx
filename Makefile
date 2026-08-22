@@ -5294,8 +5294,14 @@ test-core: $(COMPILER)
 	# named constant and a string-returning call both worked. The `once` row is
 	# the one that justifies the temp: the value must be evaluated exactly once.
 	# The named/fncall/direct/arr rows are the shapes that already worked.
+	# The astr/fld rows are the discrimination a first pass got wrong: an ARRAY
+	# node carries its ELEMENT kind in ASTTk, so `array of AnsiString` reads the
+	# same as a plain AnsiString there and the tag alone cannot decide — the
+	# symbol, or for a field the declaration, is what knows. plit/short are the
+	# other two string flavours that fell to the array path: a parenthesised
+	# literal printed a chunk of the data segment, a ShortString printed nothing.
 	./$(COMPILER) -Fulib/rtl test/test_indexing_a_string_value.pas $(TESTTMP)/test_str_value_index26
-	test "$$($(TESTTMP)/test_str_value_index26)" = "$$(printf 'grp   b\ngrp2  c\nexpr  ef\ncall  A\nlit   ho\nhello\nlidx  l\nonce  y 1\nnamed ho\nfncall AB\ndirect ac\narr   4 6')"
+	test "$$($(TESTTMP)/test_str_value_index26)" = "$$(printf 'grp   b\ngrp2  c\nexpr  ef\ncall  A\nlit   ho\nhello\nlidx  l\nonce  y 1\nnamed ho\nfncall AB\ndirect ac\narr   4 6\nastr  zz z\nfld   yy b\nplit  e\nshort b')"
 
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
