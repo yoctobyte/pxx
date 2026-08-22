@@ -3,7 +3,7 @@ slug: bug-a-a-char-variant-converts-to-its-ordinal-not-its-text
 track: A
 prio: 55
 status: done
-commit: PENDING-COMMIT
+commit: 189ca5410
 ---
 
 # One value, two spellings, two numbers
