@@ -120,6 +120,67 @@ begin
   LocalInitCount := 0;
 end;
 
+{ FPC finalizes a MANAGED `out` parameter on entry — and only a managed one.
+  Measured against fpc 3.2.2, `out v: Integer` and `out c: Char` behave exactly
+  like `var` (the caller's value survives), `out s: ShortString` likewise (a
+  shortstring is not managed), while `out` of an AnsiString, a dynamic array, an
+  interface, a Variant or a managed record hands the callee an EMPTY value. That
+  matters because a callee which assigns on only some paths otherwise returns the
+  caller its own previous value, with no way to tell — the same silent
+  stale-value shape as bug-a-a-failed-supports-left-the-out-interface-set.
+
+  Emitted as an ordinary ASSIGNMENT of the empty value rather than as a new
+  finalize-through-pointer emitter, which is the whole reason this is short: a
+  managed assignment ALREADY releases the old value before storing the new one,
+  and assigning through a by-ref parameter already stores into the CALLER. So
+  "finalize on entry" is exactly `s := ''` / `d := nil` / `f := nil` written at
+  the top of the body, and every backend gets it from paths it already has.
+  (`d := nil` through a var param only started working in
+  bug-a-a-whole-dynarray-assignment-to-a-var-parameter-is-discarded — this pass
+  would have been silently inert on dynarrays before that.)
+
+  Returns True when it emitted a clear. Variant and managed-record `out` params
+  are NOT handled yet and are listed in the ticket: neither has an empty-value
+  assignment to synthesise here (`v := Unassigned` renders as "None", not the
+  empty FPC prints, and a record has no empty literal at all), so they need the
+  finalize primitive this pass was written to avoid.
+  bug-a-an-out-parameter-of-a-managed-type-is-not-cleared }
+function ClearManagedOutParam(symIdx: Integer): Boolean;
+var identNode, valNode: Integer;
+begin
+  Result := False;
+  if symIdx < 0 then Exit;
+  identNode := AllocNode(AN_IDENT);
+  ASTIVal[identNode] := symIdx;
+  ASTTk[identNode] := Ord(Syms[symIdx].TypeKind);
+  if Syms[symIdx].IsArray and (Syms[symIdx].ArrLen = -1) then
+  begin
+    { dynamic array -> nil: releases the caller's handle, stores nil }
+    valNode := AllocNode(AN_INT_LIT);
+    ASTIVal[valNode] := 0;
+    ASTTk[valNode] := Ord(tyPointer);
+  end
+  else if (Syms[symIdx].TypeKind = tyAnsiString) and not Syms[symIdx].IsArray then
+  begin
+    valNode := AllocNode(AN_STR_LIT);
+    ASTSOffset[valNode] := 0;
+    ASTSLen[valNode] := 0;
+    ASTTk[valNode] := Ord(tyString);
+  end
+  else if SymIsComInterface(symIdx) then
+  begin
+    { the fat pointer {IMT, instance} is zeroed by the interface := nil arm,
+      which releases the old reference first }
+    valNode := AllocNode(AN_INT_LIT);
+    ASTIVal[valNode] := 0;
+    ASTTk[valNode] := Ord(tyPointer);
+  end
+  else
+    Exit;   { not managed, or a kind with no empty literal — see the note above }
+  CompileAST(GenMakeAssign(identNode, valNode));
+  Result := True;
+end;
+
 procedure PreScanSkipRoutineBody;
 { Declaration pre-scan helper (pass 1). On entry CurTok is the first token after a
   routine's header + directives (i.e. the start of its local-declaration part or
@@ -367,6 +428,7 @@ var
   parr      : array[0..MAX_PROC_PARAMS-1] of Boolean;
   pbyref    : array[0..MAX_PROC_PARAMS-1] of Boolean;
   pconst    : array[0..MAX_PROC_PARAMS-1] of Boolean;  { param declared `const` (read-only by-ref) — lets a temporary bind to it }
+  pout      : array[0..MAX_PROC_PARAMS-1] of Boolean;  { param declared `out` rather than `var`. The two are the same by-REFERENCE mechanism and pxx modelled them as one token arm for years, which is correct for every ordinal — FPC treats an `out Integer` exactly like a `var Integer`, measured. It is wrong for a MANAGED type: FPC finalizes an `out AnsiString`/dynarray/interface/Variant/managed-record on entry, so a callee that assigns on only some paths hands back the empty value rather than the caller's previous one. bug-a-an-out-parameter-of-a-managed-type-is-not-cleared }
   puntyped  : array[0..MAX_PROC_PARAMS-1] of Boolean;  { param declared untyped (var/const/out, no type) — matches any arg type, address passed }
   pdefault  : array[0..MAX_PROC_PARAMS-1] of Boolean;  { param has a default value (`b: Integer = 10`) }
   pdefaultval : array[0..MAX_PROC_PARAMS-1] of Int64;  { the constant-folded default ordinal }
@@ -402,7 +464,7 @@ var
   cleanupJnePatch: Integer;
   patchPos : Integer;
   depth    : Integer;
-  doneArgs, doneParam, isArr, isByRef, isConst, declOverload, declFlexColumn, isClassKeyword, isStaticMethod, declInline: Boolean;
+  doneArgs, doneParam, isArr, isByRef, isConst, isOut, declOverload, declFlexColumn, isClassKeyword, isStaticMethod, declInline: Boolean;
   isUntyped : Boolean;
   needsProcCleanupFrame, savedProcCleanupFrameActive: Boolean;
   isAsmFunc: Boolean;
@@ -576,6 +638,7 @@ begin
     begin
       isByRef := False;
       isConst := False;
+      isOut := False;
       hasDefault := False; defaultVal := 0;
       defaultIsStr := False; defaultIsFloat := False; defaultIsSet := False;
       defaultSOff := 0; defaultSLen := 0;
@@ -583,6 +646,7 @@ begin
          ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
       begin
         isByRef := True;
+        isOut := CurTok.Kind <> tkVar;   { `out` and `var` differ only for MANAGED types }
         Next;
       end
       else if IsConstParamTok then
@@ -741,6 +805,7 @@ begin
         parr[i] := isArr;
         pbyref[i] := isByRef;
         pconst[i] := isConst;
+        pout[i] := isOut;
         pdefault[i] := hasDefault;
         pdefaultval[i] := defaultVal;
         pdefaultisstr[i] := defaultIsStr;
@@ -977,6 +1042,7 @@ begin
       ptypesPtrElemTk[nparams] := tyUnknown; ptypesPtrElemRec[nparams] := REC_NONE;
       ptypesProcSig[nparams] := -1;
       parr[nparams] := False; pbyref[nparams] := False; pconst[nparams] := False;
+      pout[nparams] := False;
       pNDims[nparams] := 0; pDynDepth[nparams] := 0;
       pElemRowLen[nparams] := 0; pElemRowLo[nparams] := 0;
       Inc(nparams);
@@ -994,6 +1060,7 @@ begin
       parr[nparams] := LiftCapArr[lcb + i];
       pbyref[nparams] := True;            { captured by reference }
       pconst[nparams] := False;
+      pout[nparams] := False;
       pNDims[nparams] := 0;
       pDynDepth[nparams] := LiftCapDyn[lcb + i];
       pElemRowLen[nparams] := 0;
@@ -1101,6 +1168,7 @@ begin
         method impl with a const parameter, not just Variant ones.
         bug-a-const-variant-arg-expression-fails-outside-pyexprmode }
       pconst[i] := pconst[i-1];
+      pout[i] := pout[i-1];   { shifts like pconst — see the note above it }
       pNDims[i] := pNDims[i-1];
       pDynDepth[i] := pDynDepth[i-1];
       pElemRowLen[i] := pElemRowLen[i-1];
@@ -1124,6 +1192,7 @@ begin
     end;
     pnames[0] := 'Self';
     pconst[0] := False;   { Self is never a `const` parameter }
+    pout[0] := False;     { ...nor an `out` one }
     if isStaticMethod and (methOwnerCi >= 0) and (UClsHelperTk[methOwnerCi] >= 0) then
     begin
       { a HELPER's `class function ...; static;`: Self = the target BY VALUE
@@ -1227,6 +1296,7 @@ begin
         method impl with a const parameter, not just Variant ones.
         bug-a-const-variant-arg-expression-fails-outside-pyexprmode }
       pconst[i] := pconst[i-1];
+      pout[i] := pout[i-1];   { shifts like pconst — see the note above it }
       pNDims[i] := pNDims[i-1];
       pDynDepth[i] := pDynDepth[i-1];
       pElemRowLen[i] := pElemRowLen[i-1];
@@ -1239,6 +1309,7 @@ begin
     end;
     pnames[0] := '__genself';
     pconst[0] := False;
+    pout[0] := False;
     ptypes[0] := tyPointer;
     ptypesRec[0] := REC_NONE;
     ptypesPtrElemTk[0] := tyUnknown;
@@ -1871,6 +1942,13 @@ begin
     locals are nil'd, emit the recorded initializer assignments into the
     prologue (re-run on each call). }
   CompilePendingLocalInits;
+  { ...and FINALIZE the managed `out` parameters, for the same reason and in the
+    same place: the body must not be able to observe (or hand back) whatever the
+    caller's variable happened to hold. Managed kinds only — an ordinal `out` is
+    indistinguishable from `var` in FPC too. See ClearManagedOutParam. }
+  for i := 0 to nparams - 1 do
+    if pout[i] and (i < MAX_PROC_PARAMS) then
+      ClearManagedOutParam(Procs[procIdx].Params[i].SymIdx);
   { label declarations: label foo, bar; }
   while (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'label') do
   begin

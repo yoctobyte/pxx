@@ -5218,6 +5218,15 @@ test-core: $(COMPILER)
 	# `e` still points at. Byte-identical to fpc 3.2.2.
 	./$(COMPILER) test/test_dynarray_assign_to_a_var_parameter.pas $(TESTTMP)/test_dynarray_var_param26
 	test "$$($(TESTTMP)/test_dynarray_var_param26)" = "$$(printf 'nil     0\nasg     2\ncopy    2\nout     2\nfnres   4\ndynstr  2\nsetlen  3\nelem    99\nrecfld  2\nsurvive 3 11 22 33')"
+	# FPC finalizes a MANAGED out parameter on entry, and only a managed one.
+	# pxx read `out` as a spelling of `var` everywhere, so it cleared neither —
+	# which made the ordinal rows accidentally right and left the managed ones
+	# handing the caller back its own previous value. The int/char/shortstring
+	# rows are negative controls: FPC does NOT clear those, so clearing them
+	# would be a divergence the other way. Last row is the ARC check — the clear
+	# releases the caller's reference, so a second owner must survive it.
+	./$(COMPILER) -Fulib/rtl test/test_out_parameter_of_a_managed_type_is_cleared.pas $(TESTTMP)/test_out_param_cleared26
+	test "$$($(TESTTMP)/test_out_param_cleared26)" = "$$(printf 'str      []\ndyn      0\nintf     TRUE\nassigned [set]\nint      42\nvarint   42\nchar     [z]\nshortstr [y]\nmethod   []\nclassm   []\ntwoout   [][B][C]\nmixed    []\nfuncout  [] 1\nnested   []\nuntyped  5\nsurvive  [payload-] 7 bad=0')"
 
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
