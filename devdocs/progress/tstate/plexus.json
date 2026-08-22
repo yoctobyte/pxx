@@ -6368,15 +6368,12 @@
   },
   {
    "bad": "f3acfdabf53c12070af980ad285bf7be708ea3b7",
-   "good": "d67ce653e8946f9fd6007dc37b69ca8d2b670b0a",
+   "good": "359df033df8f9dc4a47304dbb6cc92bd11667374",
    "job": "demos#00",
    "name": "demos#00",
    "opened": "2026-08-22T00:45:54Z",
    "pin_built": false,
    "range": [
-    "99d9313f35c3be1048fdfecfa97c78c0ae078e46",
-    "aab83f8918f3d533b599316382d144db9ea3b573",
-    "359df033df8f9dc4a47304dbb6cc92bd11667374",
     "f9291800661b0ddcef2501439fa4823c460a71fb",
     "ad27e6915f88eaa2143949f42a61b33159a66189",
     "ba5791c02ce32a0962a551c9e8d0a5a848791fd6",
