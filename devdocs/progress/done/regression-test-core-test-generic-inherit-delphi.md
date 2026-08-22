@@ -30,3 +30,6 @@ pascal26:10: error: generic specialization nested deeper than 16 levels (or a re
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-22 — auto-closed by the plexus watcher: `test-core#src:test/test_generic_inherit_delphi.pas` passes at b3594b8af2ff (tier native); it was red at 5179c4d4350b. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.

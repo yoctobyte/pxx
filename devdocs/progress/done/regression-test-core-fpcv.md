@@ -27,3 +27,6 @@ ok: /tmp/testmgr-scratch-780297/fpcv26  [code=272689B  data=21384B  bss=75860B  
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-22 — auto-closed by the plexus watcher: `test-core#src:test/fpcv.pas@2` passes at b3594b8af2ff (tier native); it was red at f3acfdabf53c. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
