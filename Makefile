@@ -5398,6 +5398,8 @@ test-core: $(COMPILER)
 	# and Double targets, the raise on a non-numeric character, and VarIsStr.
 	./$(COMPILER) -Fulib/rtl test/test_char_variant_converts_as_text.pas $(TESTTMP)/test_char_variant26
 	test "$$($(TESTTMP)/test_char_variant26 | tail -1)" = "total ok 10 / 10"
+	./$(COMPILER) -Fulib/rtl test/test_sizeof_of_an_expression.pas $(TESTTMP)/test_sizeofexpr26
+	test "$$($(TESTTMP)/test_sizeofexpr26 | grep -c ' ok$$')" = "29"
 
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26

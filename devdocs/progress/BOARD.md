@@ -274,7 +274,7 @@ _none_
 | feature-p-nested-record-field-in-a-typed-record-constant | P | 40 | feature | `const CN: TNest = (p: (x: 1; y: 2); tag: 'k');` is rejected with `error: not a constant` when a field is itself a RECORD. Array-valued fields and array-of-record constants both work; only a record-typed field is missing. Loud (a compile error, never a wrong value). | — |
 | feature-p-packrecords-c-directive | P | 30 | feature | `{$packrecords c}` is refused with 'invalid packrecords value: c'. It means 'lay records out the way this platform's C compiler does', which is what every FPC header binding to a C library uses — and it is what blocks the arm profile of --mimic-fpc-compiler, since fpcdefs.inc's arm branch sets it. | — |
 | feature-p-record-const-with-an-array-of-record-field | P | 35 | feature | A record typed constant whose FIELD is an array of records is refused (`not a constant`): `CR: TR = (a: ((x:1;y:2),(x:3;y:4)))`. The kind-7 array-valued-field path handles scalar elements only; FPC compiles it. | — |
-| feature-p-sizeof-of-an-expression | P | 30 | feature | `SizeOf` accepts only a type name or an lvalue (variable, field, `a[i]`) — `SizeOf(i + 1)`, `SizeOf(Abs(i))`, `SizeOf(p^)`, `SizeOf('abc')` are all compile errors. FPC takes any expression, and it is the only portable way to ask what type an expression actually has. | — |
+| feature-p-sizeof-of-a-literal | P | 20 | feature | `SizeOf(1)`, `SizeOf('abc')`, `SizeOf(3.5)`, `SizeOf(nil)` are compile errors — the remaining half of feature-p-sizeof-of-an-expression, split out because fpc types a literal by its VALUE (SizeOf(1)=1, SizeOf(256)=2) rather than by the expression's type, so it needs its own rule. | — |
 | feature-p-tobject-api-classparent-instancesize-tostring | P | 35 | feature | Six TObject members FPC has and pxx rejects at compile time: ClassParent, InstanceSize, ClassInfo, ToString, Equals, GetHashCode. Loud failures (not wrong values), found by the same probe as bug-p-a-class-does-not-inherit-from-tobject-at-run-time. | — |
 | feature-p-uses-a-unit-in-an-explicit-file | P | 30 | feature | `uses mymod in 'mymod.pas';` — the FPC/Delphi spelling for naming a unit's source file — does not parse. pxx has the quoted-path form (`uses './mymod.pas' as m;`, shipped 2026-06-30) but not the standard `in` one, so ordinary FPC project sources are refused at the uses clause. | — |
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
@@ -559,9 +559,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2265)
+## done (2266)
 
-2265 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2266 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -814,7 +814,6 @@ _none_
 - [p 30] [O] feature-opt-arch-level-and-dispatch
 - [p 30] [P] feature-p-const-evaluator-carries-unsigned-64-bit
 - [p 30] [P] feature-p-packrecords-c-directive
-- [p 30] [P] feature-p-sizeof-of-an-expression
 - [p 30] [P] feature-p-uses-a-unit-in-an-explicit-file
 - [p 30] [S] feature-pal-esp-posix-fd-semantics
 - [p 30] [D] idea-public-status-page
@@ -864,6 +863,7 @@ _none_
 - [p 20] [A] feature-a-typeinfo-integer-name-under-strict-fpc
 - [p 20] [A] feature-cli-widgetset-flag
 - [p 20] [B] feature-networking
+- [p 20] [P] feature-p-sizeof-of-a-literal
 - [p 20] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 15] [A] bug-a-numeric-goto-labels-are-not-supported
 - [p 15] [N] bug-nilpy-delattr-globals-and-locals-are-absent

@@ -276,6 +276,9 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     isLiftedCall: Boolean;
     bitNot, opIsArith: Boolean; notOp: Integer; notOrdTk: TTypeKind;
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec, szQUnit: Integer;
+    szScan, szBd, szExprNode: Integer;
+    szIsExpr: Boolean;
+    szExprTk: TTypeKind;
     mcCi: Integer; mcFin: Boolean;   { metaclass receiver at the end of a cast-deref chain }
  szElemTk: TTypeKind; szBTk: TTypeKind;
     seEtid, seOrd: Integer;
@@ -3138,6 +3141,95 @@ begin
       begin
         Next; { consume 'SizeOf' }
         Expect(tkLParen, '(');
+        { ---- SizeOf(<expression>) ----
+          Everything below this block reads the operand as a NAME (optionally
+          `.field` and one `[...]`), never as an expression, which is why
+          `SizeOf(p^)`, `SizeOf(i + 1)`, `SizeOf(Abs(i))` and `SizeOf(@i)` were
+          compile errors while `SizeOf(i)` worked. FPC takes any expression and
+          answers with its static type, and that is the only portable way to ask
+          what type an expression actually HAS -- there is no TypeOf to print.
+          The width rules in devdocs/dev/pascal-dialect-divergences.md were
+          confirmed against FPC exactly this way (`SizeOf(i + 1)` = 8 and
+          `SizeOf(i shl 1)` = 4 state the promotion rule in one line each), and
+          the probe could not be written against pxx.
+
+          Dispatch, not replacement: the name path below carries a pile of hard-
+          won cases (a variable's DECLARED type rather than its element type, an
+          N-D subscript naming a row vs a scalar, a dynamic handle being pointer
+          width) that an expression's ASTTk does not model, so it stays the
+          path for anything shaped like a name. This block only decides which
+          one to use, by scanning the operand's tokens to the closing ')':
+          anything at bracket-depth 0 that is not an identifier or a '.' means
+          the operand is an expression.
+
+          Deliberately NOT routed here: a LITERAL operand. FPC types an integer
+          literal as the smallest type that holds it (SizeOf(1) = 1,
+          SizeOf(256) = 2), a real literal as Single (SizeOf(3.5) = 4) and a
+          string literal by its length (SizeOf('abc') = 3) -- none of which the
+          expression's own type reproduces, so routing them here would answer 8
+          and 8 and 8 silently. They keep the existing error until someone
+          models the rule; feature-p-sizeof-of-an-expression holds the table. }
+        szIsExpr := False;
+        szScan := TokPos - 1;
+        if (szScan >= 0) and (szScan < TokCount) then
+        begin
+          if Tokens[szScan].Kind in [tkAt, tkMinus, tkPlus, tkNot, tkLParen] then
+            szIsExpr := True
+          else if (Tokens[szScan].Kind = tkIdent) or
+                  (BuiltinTypeNameTk(GetTokenStr(szScan)) <> tyUnknown) then
+          begin
+            szBd := 0;
+            while (not szIsExpr) and (szScan < TokCount) do
+            begin
+              if Tokens[szScan].Kind = tkLBrack then
+              begin
+                { The name path indexes only a genuine ARRAY symbol. `s[1]` on a
+                  string reaches it too and dies on the '[' with "expected )",
+                  so a subscript on anything else is an expression. }
+                if (szBd = 0) and (szScan > 0) and
+                   (Tokens[szScan - 1].Kind = tkIdent) then
+                begin
+                  szRec := FindSym(GetTokenStr(szScan - 1));
+                  if (szRec >= 0) and (not Syms[szRec].IsArray) then szIsExpr := True;
+                end;
+                Inc(szBd);
+              end
+              else if Tokens[szScan].Kind = tkRBrack then Dec(szBd)
+              else if szBd = 0 then
+              begin
+                if Tokens[szScan].Kind = tkRParen then Break;
+                if (szScan > TokPos - 1) and
+                   (not (Tokens[szScan].Kind in [tkIdent, tkDot])) then
+                  szIsExpr := True;
+              end;
+              Inc(szScan);
+            end;
+          end;
+        end;
+        if szIsExpr then
+        begin
+          ParseExpr;
+          szExprNode := CurASTNode;
+          szExprTk := IntToTypeKind(ASTTk[szExprNode]);
+          { A record-typed expression needs a record id to be sized and the AST
+            does not carry one on a general node, so refuse rather than answer
+            TypeSize(tyRecord). Same for an operand whose type we failed to
+            infer: a wrong size reaches GetMem and Move, so a diagnostic beats
+            a plausible number. }
+          if (szExprTk = tyUnknown) or (szExprTk = tyRecord) then
+            Error('SizeOf: cannot size this expression (record or untyped) -- name the type or the variable instead');
+          prevTok := TypeSize(szExprTk);
+          Expect(tkRParen, ')');
+          { The operand subtree is DROPPED, so nothing in it is ever lowered and
+            `SizeOf(F(x))` cannot call F -- FPC discards the expression too and
+            keeps only its type. }
+          node := AllocNode(AN_INT_LIT);
+          ASTIVal[node] := prevTok;
+          ASTTk[node] := Ord(tyInteger);
+          CurASTNode := node;
+          LastExprTk := tyInteger;
+          Exit;
+        end;
         { Peek at the type token to determine the kind }
         name := CurTok.SVal;
         { `SizeOf(System.TMethod)` / `SizeOf(System.LongWord)` — and any OTHER
