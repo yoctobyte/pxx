@@ -3,7 +3,7 @@ slug: bug-a-strict-fpc-shr-by-zero-drops-the-sign
 track: A
 prio: 30
 status: done
-resolved: PENDING-COMMIT
+commit: 708e2e1e6
 ---
 
 # `--strict-fpc`: a narrow `shr` by zero loses the operand's sign

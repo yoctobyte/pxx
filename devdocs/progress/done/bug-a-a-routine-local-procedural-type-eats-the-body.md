@@ -3,7 +3,7 @@ slug: bug-a-a-routine-local-procedural-type-eats-the-body
 track: A
 prio: 45
 status: done
-resolved: PENDING-COMMIT
+commit: 1c7a96ff6
 ---
 
 # A routine-local procedural type makes the parser consume the rest of the program

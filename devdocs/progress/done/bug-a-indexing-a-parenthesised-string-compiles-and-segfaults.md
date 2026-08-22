@@ -3,7 +3,7 @@ slug: bug-a-indexing-a-parenthesised-string-compiles-and-segfaults
 track: A
 prio: 50
 status: done
-resolved: PENDING-COMMIT
+commit: c8b6c6690
 ---
 
 # Indexing a parenthesised string compiles clean and segfaults

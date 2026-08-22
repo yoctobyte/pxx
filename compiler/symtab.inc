@@ -339,15 +339,19 @@ begin
       begin Result := i; Exit; end;
 end;
 
-procedure RegisterSetAlias(noff, nlen, elemEnumId: Integer);
+procedure RegisterSetAlias(noff, nlen, elemEnumId, elemTk: Integer);
 { Named set type: TFooSet = set of TFoo. Stored in the alias table with
-  AliasTk=tySet; AliasElemTk holds the element enum id (or -1). }
+  AliasTk=tySet; AliasElemTk holds the element enum id (or -1) and
+  AliasSetElemTk the element TTypeKind ordinal — a `set of Char` or
+  `set of 0..7` has no enum id, and losing its element KIND is what made
+  `for c in cs` unusable over a named set type. }
 begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
   AliasNOff[AliasCount] := noff;
   AliasNLen[AliasCount] := nlen;
   AliasTk[AliasCount] := Ord(tySet);
   AliasElemTk[AliasCount] := elemEnumId;
+  AliasSetElemTk[AliasCount] := elemTk;
   AliasElemRec[AliasCount] := REC_NONE;
   AliasPtrDepth[AliasCount] := 0;
   AliasPtrBaseTk[AliasCount] := Ord(tyUnknown);

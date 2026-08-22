@@ -3995,6 +3995,7 @@ var
   AliasNLen    : array[0..MAX_TYPEALIAS-1] of Integer;
   AliasTk      : array[0..MAX_TYPEALIAS-1] of Integer;  { resolved TTypeKind ordinal }
   AliasElemTk  : array[0..MAX_TYPEALIAS-1] of Integer;  { pointer element TTypeKind ordinal }
+  AliasSetElemTk : array[0..MAX_TYPEALIAS-1] of Integer;  { set alias: element TTypeKind ordinal (AliasElemTk holds the enum id there) }
   AliasElemRec : array[0..MAX_TYPEALIAS-1] of Integer;  { pointer element record/class id }
   AliasPtrDepth : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias depth, 0 for non-pointer/unknown }
   AliasPtrBaseTk : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias ultimate base TTypeKind ordinal }

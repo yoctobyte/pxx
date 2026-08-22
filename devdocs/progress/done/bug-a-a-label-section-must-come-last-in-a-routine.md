@@ -3,7 +3,7 @@ slug: bug-a-a-label-section-must-come-last-in-a-routine
 track: A
 prio: 45
 status: done
-resolved: PENDING-COMMIT
+commit: f9f1a42bc
 ---
 
 # A routine's `label` section must come last, or the routine will not parse

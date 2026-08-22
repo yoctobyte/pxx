@@ -3,7 +3,7 @@ slug: bug-a-continue-in-a-for-in-loop-never-advances
 track: A
 prio: 55
 status: done
-resolved: PENDING-COMMIT
+commit: 91b8f862f
 ---
 
 # `Continue` inside a `for-in` loop hangs the program

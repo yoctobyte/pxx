@@ -5317,6 +5317,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_continue_in_a_for_in_loop.pas $(TESTTMP)/test_forin_continue26
 	test "$$(timeout 30 $(TESTTMP)/test_forin_continue26)" = "$$(printf '024 dyn\n024 fixed\n10 14 16 static\nacde str\n02 enum\n02 set\n13 sctor\n012 break\nall 5\nempty 0\none 1 9\nestr 0')"
 
+	# `for x in <var of a NAMED set type>`. A named `TS = set of Char` recorded
+	# only the element ENUM id (there is none), so its element KIND was lost and
+	# for-in was refused with an error naming the very kinds it refused. The
+	# inline `var s: set of Char` form always worked — the alias path was a
+	# second, reduced copy of the element parse. Char / integer-subrange / enum /
+	# Byte element sets, plus Continue in two of them. TIMEOUT-GUARDED.
+	./$(COMPILER) test/test_for_in_over_a_named_set_type.pas $(TESTTMP)/test_forin_namedset26
+	test "$$(timeout 30 $(TESTTMP)/test_forin_namedset26)" = "$$(printf 'ace\n136\n02\n9 200 \nae\n16')"
+
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"

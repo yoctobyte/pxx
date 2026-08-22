@@ -3,7 +3,7 @@ slug: bug-a-a-typed-procvar-constant-cannot-be-called
 track: A
 prio: 40
 status: done
-resolved: PENDING-COMMIT
+commit: 03d1ab08b
 ---
 
 # A typed procvar constant can be declared and assigned, but never called

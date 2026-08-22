@@ -3,7 +3,7 @@ slug: bug-a-an-anonymous-procedural-type-is-not-accepted
 track: A
 prio: 40
 status: done
-resolved: PENDING-COMMIT
+commit: 1c7a96ff6
 ---
 
 # An anonymous procedural type is not accepted anywhere

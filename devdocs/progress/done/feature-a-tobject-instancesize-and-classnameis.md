@@ -3,7 +3,7 @@ slug: feature-a-tobject-instancesize-and-classnameis
 track: A
 prio: 35
 status: done
-resolved: PENDING-COMMIT
+commit: 5cdebf0f5
 ---
 
 # TObject.InstanceSize and TObject.ClassNameIs

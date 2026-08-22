@@ -3,7 +3,7 @@ track: A
 prio: 60
 type: regression
 summary: "the -S disassembler had no comisd or xorpd, so the Trunc/Round saturation sequence printed `db 66 / db 0f / db 2f` and test-asm's no-undecoded-bytes check went red on hello.pas and compiler.pas"
-resolved: PENDING-COMMIT
+commit: 2e267df1a
 ---
 
 # `-S` could not decode the saturation sequence

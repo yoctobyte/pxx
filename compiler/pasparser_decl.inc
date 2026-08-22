@@ -16,6 +16,37 @@
 
 { ===== Declaration parsing ===== }
 
+{ Parse the element spec of `set of <X>` — CurTok is the token after `of`.
+  Records BOTH halves of the element identity in the LastTypeSet* globals:
+  the enum id (or -1) and the element TTypeKind ordinal. Shared by the inline
+  `var s: set of X` path and the named-alias `TS = set of X` path, which used
+  to keep its own reduced copy that recorded ONLY the enum id — so a named
+  `set of Char` or `set of 0..7` lost its element kind and `for c in cs` was
+  refused with an error naming the very kinds it refused.
+  bug-a-for-in-over-a-set-variable-refuses-the-kinds-its-error-message-claims }
+procedure ParseSetElemSpec;
+var elemTk: TTypeKind;
+begin
+  LastTypeEnumId := -1;
+  if CurTok.Kind = tkInteger then
+  begin
+    { `set of <subrange>` e.g. `set of 1..10` — consume lo..hi (the element
+      is an integer subrange). Without this the `..hi` leaked and the
+      type-skip loop in ParseVarSection corrupted the variable's type away
+      from tySet, so set ops/membership read garbage. }
+    ConstEval;
+    Expect(tkDotDot, '..');
+    ConstEval;
+    elemTk := tyInteger;
+  end
+  else
+    elemTk := ParseTypeKind();
+  { the element parse records the enum identity in LastTypeEnumId; carry it
+    as the set's element enum for RTTI. }
+  LastTypeSetEnumId := LastTypeEnumId;
+  LastTypeSetElemTk := Ord(elemTk);
+end;
+
 function ParseTypeKind: TTypeKind;
 var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
     qtOuter, qtNested: Integer;   { `TOuter.TInner` — the nested-type lookup }
@@ -241,24 +272,7 @@ begin
       begin
         Next;
         Expect(tkOf, 'of');
-        LastTypeEnumId := -1;
-        if CurTok.Kind = tkInteger then
-        begin
-          { `set of <subrange>` e.g. `set of 1..10` — consume lo..hi (the element
-            is an integer subrange). Without this the `..hi` leaked and the
-            type-skip loop in ParseVarSection corrupted the variable's type away
-            from tySet, so set ops/membership read garbage. }
-          ConstEval;
-          Expect(tkDotDot, '..');
-          ConstEval;
-          elemTk := tyInteger;
-        end
-        else
-          elemTk := ParseTypeKind();
-        { inline `set of TFoo`: the element parse records the enum identity in
-          LastTypeEnumId; carry it as the set's element enum for RTTI. }
-        LastTypeSetEnumId := LastTypeEnumId;
-        LastTypeSetElemTk := Ord(elemTk);
+        ParseSetElemSpec;
         Result := tySet;
         Exit;
       end;
@@ -502,6 +516,7 @@ begin
                   exposed as LastTypeEnumId, so the property kind stays SET.
                   Expose it as LastTypeSetEnumId for RTTI typeRef. }
                 LastTypeSetEnumId := AliasElemTk[aliasIdx];
+                LastTypeSetElemTk := AliasSetElemTk[aliasIdx];
                 Result := tySet;
               end
               else if AliasTk[aliasIdx] = Ord(tyPointer) then
@@ -4938,8 +4953,8 @@ begin
         { Named set type: TFooSet = set of TFoo }
         Next;
         Expect(tkOf, 'of');
-        propEnumId := FindEnumType(CurTok.SVal);
-        RegisterSetAlias(tnOff, tnLen, propEnumId);
+        ParseSetElemSpec;
+        RegisterSetAlias(tnOff, tnLen, LastTypeSetEnumId, LastTypeSetElemTk);
         while not (CurTok.Kind in [tkSemicolon,tkEOF]) do Next;
       end
       else if CurTok.Kind = tkArray then
