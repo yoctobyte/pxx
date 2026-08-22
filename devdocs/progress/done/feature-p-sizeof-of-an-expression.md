@@ -146,4 +146,4 @@ GREEN. Test `test/test_sizeof_of_an_expression.pas`, 29 assertions, wired into
 `test-core`.
 
 ## Log
-- 2026-08-22 — resolved, commit PENDING-COMMIT.
+- 2026-08-22 — resolved, commit 0b77e2bea.
