@@ -279,3 +279,26 @@ corruption. Found by an FPC differential probe over procedures, parameters and
 open arrays (default params, overloads, var/out/const, `array of const`,
 procedural variables and recursion were all otherwise identical).
 
+
+## Re-measured 2026-08-22 (parameter-passing differential)
+
+Still exactly as banked. `function RA: TA` (`TA = array of Integer`) then
+`WriteLn(RA[0], RA[1])`:
+
+```
+error: cannot index the result of an array-returning function directly — assign it to a variable first
+```
+
+FPC accepts it. The FIXED-array case works (that arm landed with
+`feature-a-index-an-array-returning-call-directly`); only the DYNAMIC result is
+refused, which is this ticket.
+
+Recorded here rather than filed again because the refusal is deliberate and the
+reason is already measured on this page — a dyn result is a heap handle with an
+ownership story, and the half-fixes both produce something worse than the error:
+letting it through the aggregate arm gives a SILENT wrong value
+(`0x600000005` — elements 0 and 1 read as one word), and materialising a temp
+inside `IRLowerAddress` leaks one array per call.
+
+No new information, one new confirmation: the loud refusal is still loud, and
+nothing has drifted into silently answering.
