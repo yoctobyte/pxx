@@ -1,32 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T22:12:22Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:test/test_ansistring_cast_extern_pchar.pas",
-    "test-core#src:test/test_ansistring_cast_fnptr.pas",
-    "test-core#src:test/test_c_dlopen.pas",
-    "test-core#src:test/test_c_gtk_call.pas",
-    "test-core#src:test/test_c_gtk_types.pas",
-    "test-core#src:test/test_c_gtk_window.pas",
-    "test-core#src:test/test_cdecl_indirect.pas",
-    "test-core#src:test/test_dynlib.pas@2",
-    "test-core#src:test/test_exception_unhandled.pas@1",
-    "test-core#src:test/test_exception_unhandled.pas@3",
-    "test-core#src:test/test_multithreading.pas@1",
-    "test-core#src:test/test_nilpy_c_pointer.npy",
-    "test-core#src:test/test_shared_object.pas",
-    "test-core#src:test/test_sqlite_crud.pas",
-    "test-core#src:test/test_sqlite_crud_autotyped.pas",
-    "test-core#src:test/test_sqlite_crud_lazy.pas",
-    "test-core#src:test/test_string_to_pchar_auto.pas"
-   ],
-   "sha": "426b90021634e43b6bce171691dd4f772767feb1",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-20T22:27:35Z",
    "fixed": [
     "test-core#src:test/test_ansistring_cast_extern_pchar.pas",
@@ -502,6 +476,14 @@
    "sha": "98ed382022547bbe6624c779ee024a3ad1dea518",
    "tier": "full",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-22T00:51:17Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "98ed382022547bbe6624c779ee024a3ad1dea518",
+   "tier": "slow",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -6316,11 +6298,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-22T00:45:54Z",
+  "date": "2026-08-22T00:51:17Z",
   "sha": "98ed382022547bbe6624c779ee024a3ad1dea518",
-  "tier": "full",
-  "verdict": "RED",
-  "wall": 3600.3
+  "tier": "slow",
+  "verdict": "GREEN",
+  "wall": 306.3
  },
  "last_bench": {
   "conf_rows": 550,
