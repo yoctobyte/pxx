@@ -5,15 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:3 unfinished:21 blocked:9 backlog:277 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2244 rejected:40`
+`urgent:2 unfinished:21 blocked:9 backlog:277 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2245 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## urgent (3) — jump the queue
+## urgent (2) — jump the queue
 
-- `bug-a-the-pinned-compiler-cannot-build-librtl-sysutils` [A]
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
 - `bug-t-the-native-tier-times-out-and-publishes-a-contentless-red` [T]
 
@@ -53,9 +52,8 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 267, ranked
+## Ready — top 30 of 266, ranked
 
-- `[p 95] [A]` bug-a-the-pinned-compiler-cannot-build-librtl-sysutils
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [T]` bug-t-the-native-tier-times-out-and-publishes-a-contentless-red
 - `[p 70] [C]` regression-lib-test-crtl-reachability-2
@@ -85,5 +83,6 @@ _none — no lane is locked._
 - `[p 55] [N]` feature-a-declaration-phase
 - `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - `[p 55] [E]` feature-demo-portable-userland
+- `[p 55] [O]` feature-opt-heap-per-thread-cache
 
-_237 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_236 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

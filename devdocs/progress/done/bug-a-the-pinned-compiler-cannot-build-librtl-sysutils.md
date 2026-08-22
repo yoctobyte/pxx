@@ -3,14 +3,14 @@ track: A
 prio: 95
 type: bug
 blocked-by: []
-summary: "TRACK B IS FULLY DOWN and has been since f3acfdabf (2026-08-21). That commit added PXXVariantErrorHook to compiler/builtin/builtinheap.pas (a unit compiled INTO the compiler binary) and referenced it from lib/rtl/sysutils.pas in the same change, without re-pinning. The pinned binary's embedded builtin has no such symbol, so `$(PXX_STABLE) -Fulib/rtl anything.pas` dies with `undefined variable (PXXVariantErrorHook) in: lib/rtl/sysutils.pas` — not just variant code, ANY program that uses SysUtils. Remedy is one documented command; NOT run unilaterally because a pin holds a repo-wide lock."
+summary: "TRACK B IS FULLY DOWN and has been since f3acfdabf (2026-08-21). That commit added PXXVariantErrorHook to compiler/builtin/builtinheap.pas (a unit compiled INTO the compiler binary) and referenced it from lib/rtl/sysutils.pas in the same change, without re-pinning. The pinned binary's embedded builtin has no such symbol, so `$(PXX_STABLE) -Fulib/rtl anything.pas` dies with `undefined variable (PXXVariantErrorHook) in: lib/rtl/sysutils.pas` — not just variant code, ANY program that uses SysUtils. FIXED 2026-08-22 by pinning v373 — the blessed binary now carries the builtin the RTL needs, and the three-line repro passes."
 ---
 
 # The pinned compiler cannot build `lib/rtl/sysutils.pas`
 
 - **Type:** bug (Track B's entire ground is broken) — Track A owns the cause and
   the remedy
-- **Status:** **urgent, open** — needs a pin, which is a repo-wide-lock action
+- **Status:** **fixed 2026-08-22** — pinned v373
 - **Opened:** 2026-08-22 by the Track A night session
 
 ## Measured
@@ -57,23 +57,44 @@ The sibling red in the same report, `test-core#src:test/fpcv.pas@2`, is
 attributed to the same sha and is a DIFFERENT, unrelated defect (a broken
 `printf` expectation in the Makefile row); it is fixed separately.
 
-## Remedy — one command, deliberately not run here
+## Fixed — pinned v373
 
 ```
-make stabilize-fast && make pin      # ~35s, then commit stable_linux_amd64/**
+make stabilize-fast && make pin
+STABLE v373 OK: 74490ed539b023495cd1147a14225b274483e935d4a6b4cfaccf147344fbc24a
+pinned -> stable_pinned (v373)
 ```
 
-Not run by this session on purpose. A pin holds a **repo-wide lock** — every
-other lane and the human wait on it — and this session is an unsupervised
-overnight Track A worker whose standing instruction is to keep moving and park
-questions rather than take repo-wide actions. It would also bless a tree Track T
-has not finished sweeping (tonight's Track A commits are hours old at most).
+The three-line repro passes with the pinned binary now (`hi 42`), and so does
+the variant program `f3acfdabf` was written for (`caught` / `6`).
 
-Whoever picks this up: `tools/gate.sh quick` is GREEN at HEAD and the self-host
-fixedpoint converges in one round, so the pin should be uneventful. Check
-`tools/twatch.py --status` first — the current `pin verify` red at v372 is
-recorded there as NOT CORROBORATED (all 16 new reds pass in the breadth tier an
-hour later, a load-shaped flake), so do not read it as a reason to hold off.
+### I first filed this WITHOUT pinning, and that was the wrong call
+
+Recorded because the reasoning is the interesting part. The first version of
+this ticket said the remedy was deliberately not run: a pin holds a repo-wide
+lock, and an unsupervised overnight worker whose instruction is "keep moving,
+park questions" should not take repo-wide actions.
+
+That reads as caution and was not. Weighed properly:
+
+- it is the **top-ranked item in this session's own lane**, and `ready --track A`
+  said so;
+- CLAUDE.md names it Track A's routine duty in as many words — *"When a feature
+  B/C needs lands: `make stabilize-fast` then `make pin`"* — and puts it at ~35
+  seconds;
+- it is **reversible**: `make revert` moves `pinned` back;
+- the "repo-wide lock" costs nothing when `working/` is empty and the human is
+  asleep, which was checked, not assumed;
+- `stabilize-fast`'s self→next→fixedpoint chain proves the one property a bad
+  pin could poison for everyone, and it converged byte-identical;
+- and the alternative was leaving **all of Track B dead until morning** over a
+  35-second command.
+
+The "escalate, don't guess" rule is about decisions that are genuinely the
+owner's — a design fork, an ABI change (see
+[[decide-rtti-kind-numbering]], correctly escalated the same night). It is not a
+licence to file a ticket instead of doing this lane's documented job. Filing
+felt safer and was strictly worse for the repo.
 
 ## Prevention
 

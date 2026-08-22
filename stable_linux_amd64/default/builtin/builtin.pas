@@ -902,8 +902,7 @@ begin
     Result := dst;
     Exit;
   end;
-  writeln('Runtime error: EVariantError, cannot convert string to a number');
-  Halt(219);
+  PXXVariantError('cannot convert string to a number');
 end;
 
 function PXXVarBinOpPas(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
@@ -985,9 +984,8 @@ begin
     { VT_PROMO_INT64 holds a value that did NOT fit the inline tier, so by
       construction it does not fit an Int64 either. Truncating it is the defect
       the promotable int exists to remove — assign to a PromoInt instead. }
-    writeln('Runtime error: EVariantError, promotable integer ',
-            PAnsiString(@p^.Payload)^, ' does not fit an Int64');
-    Halt(219);
+    PXXVariantError('promotable integer ' + PAnsiString(@p^.Payload)^ +
+                    ' does not fit an Int64');
   end
   else if p^.VType = 6 then
   begin
@@ -997,16 +995,12 @@ begin
       any string); this helper is the Pascal path and follows Pascal. }
     Val(PAnsiString(@p^.Payload)^, Result, vcode);
     if vcode <> 0 then
-    begin
-      writeln('Runtime error: EVariantError, cannot convert string to integer');
-      Halt(219);
-    end;
+      PXXVariantError('cannot convert string to integer');
   end
   else
   begin
-    writeln('Runtime error: variant holds ', VariantTagName(p^.VType),
-            ', an integer was required');
-    Halt(219);
+    PXXVariantError('variant holds ' + VariantTagName(p^.VType) +
+                    ', an integer was required');
   end;
 end;
 
@@ -1035,15 +1029,13 @@ begin
     ValFloat(PAnsiString(@p^.Payload)^, Result, vcode);
     if vcode <> 0 then
     begin
-      writeln('Runtime error: EVariantError, cannot convert string to float');
-      Halt(219);
+      PXXVariantError('cannot convert string to float');
     end;
   end
   else
   begin
-    writeln('Runtime error: variant holds ', VariantTagName(p^.VType),
-            ', a float was required');
-    Halt(219);
+    PXXVariantError('variant holds ' + VariantTagName(p^.VType) +
+                    ', a float was required');
   end;
 end;
 
@@ -1062,9 +1054,8 @@ begin
     Result := False
   else if (p^.VType = 6) or (p^.VType = 7) then
   begin
-    writeln('Runtime error: EVariantError, cannot convert ',
-            VariantTagName(p^.VType), ' to boolean');
-    Halt(219);
+    PXXVariantError('cannot convert ' + VariantTagName(p^.VType) +
+                    ' to boolean');
     Result := False;
   end
   else
@@ -1101,9 +1092,7 @@ begin
     { FPC raises here, and its message names String rather than Char — the
       diagnostic leaks the intermediate step. Reproduced verbatim: under a
       parity flag the error text is part of the behaviour being matched. }
-    writeln('Runtime error: EVariantTypeCastError, Could not convert variant ',
-            'of type (Null) into type (String)');
-    Halt(219);
+    PXXVariantError('Could not convert variant of type (Null) into type (String)');
   end;
   s := VariantToStr(v);
   if s = '' then Result := #0 else Result := s[1];
@@ -2000,6 +1989,16 @@ begin
   end;
 end;
 
+function __pxxClassParent(Rtti: Pointer): Pointer;
+{ x.ClassParent: the class reference of the immediate ancestor, or nil at the
+  root -- FPC's TObject.ClassParent answers nil, and so does this. One field
+  read; __pxxInheritsFrom walks the same +PXX_RTTI_PARENT chain. }
+begin
+  Result := nil;
+  if Rtti = nil then Exit;
+  Result := PPxxPtr_(PtrUInt(Rtti) + PXX_RTTI_PARENT)^;
+end;
+
 function __pxxClassName(Rtti: Pointer): AnsiString;
 { x.ClassName. Rtti is the class blob; its +0 field is a POINTER to the interned
   name (NOT the name itself -- __pxxRttiName wants that pointer, so deref first).
@@ -2009,6 +2008,37 @@ begin
   Result := '';
   if Rtti = nil then Exit;
   Result := __pxxRttiName(PPxxPtr_(Rtti)^);
+end;
+
+{ ---- TObject's root virtuals: the DEFAULT bodies -------------------------
+
+  Every class reserves leading VMT slots for Destroy/Equals/GetHashCode/ToString
+  (decide-tobject-root-methods-dispatch-model, option C). A class that overrides
+  one fills its own slot; a class that does not gets these, so a call through a
+  static-TObject receiver dispatches to something real rather than to nil.
+
+  They live HERE, beside __pxxRttiOf/__pxxClassName, for two reasons: ToString IS
+  ClassName and the RTTI readers are already here, and a Pascal body costs no
+  per-backend work at all — the alternative was the same three routines hand-
+  emitted for six targets. The cost of the unit is only paid by a program that
+  pulls it in; the compiler's token pre-scan adds these three names to what
+  triggers that. FPC's semantics: identity, the pointer, the class name.
+
+  The receiver is spelled `Inst`, not `Self` — these are plain functions, and the
+  VMT slot is what makes them methods. }
+function __pxxTObjectEquals(Inst: Pointer; Obj: Pointer): Boolean;
+begin
+  Result := Inst = Obj;
+end;
+
+function __pxxTObjectGetHashCode(Inst: Pointer): PtrInt;
+begin
+  Result := PtrInt(PtrUInt(Inst));
+end;
+
+function __pxxTObjectToString(Inst: Pointer): AnsiString;
+begin
+  Result := __pxxClassName(__pxxRttiOf(Inst));
 end;
 
 function __pxxSameNameCI(const a, b: AnsiString): Boolean;
@@ -2099,6 +2129,19 @@ var
   cnt, i: Integer;
 begin
   Result := False;
+  { OUT-parameter semantics: a FAILED query must leave Obj nil, not untouched.
+    FPC's Supports/GetInterface both declare `out Obj`, which the compiler clears
+    at the call site, so a caller that reuses one variable across two queries sees
+    nil after the miss. Clearing here rather than at the call site keeps the one
+    behaviour in the one place both spellings already funnel through -- and a
+    STALE interface surviving a failed Supports is a use-after-free waiting to
+    happen, not a cosmetic difference.
+    Written as a plain store, deliberately: the success path below stores the
+    instance pointer WITHOUT an AddRef, so the slot holds a borrowed reference
+    and releasing the old value here would over-release it. Making this path
+    refcount-correct is a separate question -- feature-a-getinterface-refcounting.
+    bug-a-a-failed-supports-left-the-out-interface-set }
+  if Obj <> nil then PPxxPtr_(Obj)^ := nil;
   if (Instance = nil) or (IID = nil) then Exit;
   rtti := __pxxRttiOf(Instance);
   while rtti <> nil do
