@@ -5195,7 +5195,13 @@ test-core: $(COMPILER)
 	# raise. It now agrees with fpc 3.2.2 line for line, so the probe becomes
 	# the test.
 	./$(COMPILER) -Fulib/rtl test/fpcv.pas $(TESTTMP)/fpcv26
-	test "$$($(TESTTMP)/fpcv26)" = "$$(printf 'int of ''42''  = 42\nint of ''abc'' EXC: EVariantError\ndbl of ''2.5'' = 2.50\nbool of ''''    EXC: EVariantError\nbool of 0.0   = FALSE')"
+	# \047 is a literal single quote. Spelling it '' inside a single-quoted sh
+	# string does NOT produce one — sh closes and reopens the quote, so '' is the
+	# EMPTY string and '''' is nothing at all. This row therefore never matched
+	# from the day it was wired and Track T reported it red against that very
+	# commit (test-core#src:test/fpcv.pas@2). The program's output was right all
+	# along; the expectation could not be.
+	test "$$($(TESTTMP)/fpcv26)" = "$$(printf 'int of \04742\047  = 42\nint of \047abc\047 EXC: EVariantError\ndbl of \0472.5\047 = 2.50\nbool of \047\047    EXC: EVariantError\nbool of 0.0   = FALSE')"
 	./$(COMPILER) -Fulib/rtl test/test_rtl_fpc_compat_helpers.pas $(TESTTMP)/test_rtl_fpc_compat_helpers26
 	test "$$($(TESTTMP)/test_rtl_fpc_compat_helpers26 | tail -1)" = "total ok 23 / 23"
 	# WriteLn of a WideChar prints the CHARACTER, not its ordinal. WideChar used

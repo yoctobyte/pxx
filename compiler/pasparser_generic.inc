@@ -324,7 +324,23 @@ begin
              ((i = 0) or (Tokens[i-1].Kind <> tkEq));
     if specB or
        (delphiPattern and (Tokens[i].Kind = tkIdent) and (Tokens[i+1].Kind = tkLt) and
-        CaseEqual(GetTokenStr(i), tname)) then
+        CaseEqual(GetTokenStr(i), tname) and
+        { ...but NOT when the previous round already put `specialize` in front of
+          this very group. The paramform arm below REWRITES `TFoo<T>` into
+          `specialize TFoo<T>` in place; on the next round specB matches the new
+          keyword and correctly does nothing, but the loop's Inc(i) then lands on
+          the `TFoo` `<` immediately after it and pattern A matched all over
+          again, inserting a second `specialize`, then a third. Two tokens per
+          round, forever, until the runaway guard fired with "nested deeper than
+          16 levels" on a file nested one level deep.
+
+          Harmless while each template was swept EXACTLY ONCE, which is what it
+          was until this procedure was run to a fixed point for nested inline
+          specializations. A rewrite that a fixed-point loop calls repeatedly has
+          to be IDEMPOTENT, and this one silently was not.
+          bug-a-the-delphi-generic-rewrite-is-not-idempotent }
+        ((i = 0) or (Tokens[i-1].Kind <> tkIdent) or
+         (not CaseEqual(GetTokenStr(i-1), 'specialize')))) then
     begin
       { collect the <...> argument list }
       ok := True; na := 0;
