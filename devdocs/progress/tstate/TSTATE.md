@@ -8,7 +8,7 @@
 
 ## Open regressions
 - **test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy** — test/test_nilpy_callable_to_str_param_fails.npy test/test_nilpy_float_repeat_typeerror.npy (plexus): bad `e96a698f1f29`, last good `57b9b7148d32`, 1 commit(s) in range
-- **test-pascal-conformance#shard4/6** — tools/run_pascal_conformance.sh (plexus): bad `1b9b43e5b511`, last good `57b9b7148d32`, 132 commit(s) in range
+- **test-pascal-conformance#shard4/6** — tools/run_pascal_conformance.sh (plexus): bad `b645e1b2aff7`, last good `57b9b7148d32`, 66 commit(s) in range
 - **test-core#src:test/fpcv.pas@2** — test/fpcv.pas (plexus): bad `16a540b759c5`, last good `69e61a7bfda9`, 12 commit(s) in range
 - **test-core#src:test/test_generic_inherit_delphi.pas** — test/test_generic_inherit_delphi.pas (plexus): bad `98ed38202254`, last good `f74df41e851c`, 2 commit(s) in range
 - **demos#00** (plexus): bad `98ed38202254`, last good `23becd24b8e5`, 423 commit(s) in range
