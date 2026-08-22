@@ -6,7 +6,7 @@ blocked-by: []
 summary: "obj.Free through a base-class reference never runs the descendant's Destroy when the base declares no destructor — FPC runs it. Silent skipped cleanup / leak, not a diagnostic. The reserved root VMT slot 0 now makes the fix cheap."
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: 24585b403
 ---
 
 # `Free` through a base reference skips the descendant's `Destroy`
@@ -142,4 +142,4 @@ regression.
 `make compiler/pascal26` (self-host fixedpoint) + `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-22 — resolved, commit PENDING-COMMIT.
+- 2026-08-22 — resolved, commit 24585b403.
