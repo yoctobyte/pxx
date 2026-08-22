@@ -43,3 +43,6 @@ ear: PXXNilRefHook   SysRaiseAccessViolation  PXXVariantErrorHook >>>   SysRaise
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-22 — auto-closed by the plexus watcher: `demos#00` passes at fd93e4a71c37 (tier full); it was red at f3acfdabf53c. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
