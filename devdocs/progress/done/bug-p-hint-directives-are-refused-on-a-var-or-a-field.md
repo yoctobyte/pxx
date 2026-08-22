@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: f73eca492
 summary: "`var v: Integer deprecated;` answered `unknown type: deprecated` — the var section's type loop kept calling ParseTypeKind until a stop token, and a hint directive is a plain identifier, so it was read as a second type name. Record and class fields were refused too. `type`, `const` and routine headers already worked."
 ---
 
