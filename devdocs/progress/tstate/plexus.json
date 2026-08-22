@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T01:28:15Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "23becd24b8e5a952d29006a6efbab7e4a6068a0d",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T02:07:15Z",
    "fixed": [],
    "new_red": [
@@ -470,6 +462,14 @@
    ],
    "new_red": [],
    "sha": "fc7ede94565a3ea17a42d889caa4baa363388c14",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-22T18:58:19Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "fd93e4a71c37a7932b9ef73e4c9f8a7deceb3c34",
    "tier": "native",
    "verdict": "RED"
   }
@@ -1533,6 +1533,7 @@
   "test-core#src:test/test_class_property_b299.pas": "native",
   "test-core#src:test/test_class_str.pas": "native",
   "test-core#src:test/test_class_var_array.pas": "native",
+  "test-core#src:test/test_class_var_of_a_managed_type.pas": "native",
   "test-core#src:test/test_class_var_section_b244.pas": "native",
   "test-core#src:test/test_classname_b271.pas": "native",
   "test-core#src:test/test_classparent.pas": "native",
@@ -4379,6 +4380,7 @@
   "test-core#src:test/test_class_property_b299.pas": "pass",
   "test-core#src:test/test_class_str.pas": "pass",
   "test-core#src:test/test_class_var_array.pas": "pass",
+  "test-core#src:test/test_class_var_of_a_managed_type.pas": "pass",
   "test-core#src:test/test_class_var_section_b244.pas": "pass",
   "test-core#src:test/test_classname_b271.pas": "pass",
   "test-core#src:test/test_classparent.pas": "pass",
@@ -6350,11 +6352,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-22T17:56:48Z",
-  "sha": "fc7ede94565a3ea17a42d889caa4baa363388c14",
+  "date": "2026-08-22T18:58:19Z",
+  "sha": "fd93e4a71c37a7932b9ef73e4c9f8a7deceb3c34",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.4
+  "wall": 3600.5
  },
  "last_bench": {
   "conf_rows": 550,
