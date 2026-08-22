@@ -6315,7 +6315,7 @@
  ],
  "open_regressions": [
   {
-   "bad": "c410dfd3b43db4f669df51f7c8512ac2d93d2759",
+   "bad": "1d85d2430a54910fa971a30d10a29c3a5a6ce8f2",
    "good": "57b9b7148d3290ac089cd9360c6e4553a4b44bfb",
    "job": "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy",
    "name": "test-nilpy#559",
@@ -6325,11 +6325,7 @@
     "e96a698f1f293982d22980f2d2fb01b72556c3a1",
     "d9419ae86420334ef870bce46acd58f00d35d2f3",
     "be43d398142d6974de1873144e1fbc9592941d9a",
-    "1d85d2430a54910fa971a30d10a29c3a5a6ce8f2",
-    "7bb7bb97a385944178b111e323e42641416cce89",
-    "229c12e3f0a967d9142026c2f50d3e80506dca88",
-    "804829adb73b474e992f629374e06c9f09225105",
-    "c410dfd3b43db4f669df51f7c8512ac2d93d2759"
+    "1d85d2430a54910fa971a30d10a29c3a5a6ce8f2"
    ],
    "src": "test/test_nilpy_callable_to_str_param_fails.npy test/test_nilpy_float_repeat_typeerror.npy",
    "status": "fail"
