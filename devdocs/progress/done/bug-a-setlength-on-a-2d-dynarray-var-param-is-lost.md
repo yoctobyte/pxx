@@ -118,4 +118,4 @@ capture/display path rather than as an `skParam`, so neither this fix nor the
 earlier `IR_STORE_SYM` one applies. Taken next.
 
 ## Log
-- 2026-08-22 — resolved, commit PENDING-COMMIT.
+- 2026-08-22 — resolved, commit 546278c8b.
