@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T00:53:03Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "75f93112a3d4d649f98cc576d664e778a795baa0",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T01:06:34Z",
    "fixed": [],
    "new_red": [],
@@ -466,6 +458,14 @@
     "test-core#src:test/test_fpc_compat_batch.pas"
    ],
    "sha": "1021bbdece658fd8b34c9190ee8a8ed66c703671",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-22T15:51:19Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "89f35406be7fe2abfa0f91b59d22b1cffffa7a6a",
    "tier": "native",
    "verdict": "RED"
   }
@@ -1556,6 +1556,7 @@
   "test-core#src:test/test_const_before_ctor.pas": "native",
   "test-core#src:test/test_const_before_unit_init_b292.pas": "native",
   "test-core#src:test/test_const_bitwise_shift.pas": "native",
+  "test-core#src:test/test_const_boolean_expression.pas": "native",
   "test-core#src:test/test_const_expr_builtins.pas": "native",
   "test-core#src:test/test_const_open_array_managed.pas": "native",
   "test-core#src:test/test_const_precedence.pas": "native",
@@ -1739,6 +1740,7 @@
   "test-core#src:test/test_getmem_proc.pas": "native",
   "test-core#src:test/test_glibc_tls_coexist.pas": "native",
   "test-core#src:test/test_goto.pas": "native",
+  "test-core#src:test/test_goto_labels_numeric_and_scoped.pas": "native",
   "test-core#src:test/test_halt_exit_code.pas": "native",
   "test-core#src:test/test_heap.pas@1": "native",
   "test-core#src:test/test_helper_const_not_global_fail.pas": "native",
@@ -1746,6 +1748,7 @@
   "test-core#src:test/test_high_low_const_expr.pas": "native",
   "test-core#src:test/test_high_low_word_aliases.pas": "native",
   "test-core#src:test/test_hilo_swap.pas": "native",
+  "test-core#src:test/test_hint_directives_on_vars_and_fields.pas": "native",
   "test-core#src:test/test_hint_sizeof.pas": "native",
   "test-core#src:test/test_hw_random_intrinsics.pas": "native",
   "test-core#src:test/test_i386_int64_high_half.pas": "native",
@@ -4393,6 +4396,7 @@
   "test-core#src:test/test_const_before_ctor.pas": "pass",
   "test-core#src:test/test_const_before_unit_init_b292.pas": "pass",
   "test-core#src:test/test_const_bitwise_shift.pas": "pass",
+  "test-core#src:test/test_const_boolean_expression.pas": "pass",
   "test-core#src:test/test_const_expr_builtins.pas": "pass",
   "test-core#src:test/test_const_open_array_managed.pas": "pass",
   "test-core#src:test/test_const_precedence.pas": "pass",
@@ -4575,6 +4579,7 @@
   "test-core#src:test/test_getmem_proc.pas": "pass",
   "test-core#src:test/test_glibc_tls_coexist.pas": "pass",
   "test-core#src:test/test_goto.pas": "pass",
+  "test-core#src:test/test_goto_labels_numeric_and_scoped.pas": "pass",
   "test-core#src:test/test_halt_exit_code.pas": "pass",
   "test-core#src:test/test_heap.pas@1": "pass",
   "test-core#src:test/test_helper_const_not_global_fail.pas": "pass",
@@ -4582,6 +4587,7 @@
   "test-core#src:test/test_high_low_const_expr.pas": "pass",
   "test-core#src:test/test_high_low_word_aliases.pas": "pass",
   "test-core#src:test/test_hilo_swap.pas": "pass",
+  "test-core#src:test/test_hint_directives_on_vars_and_fields.pas": "pass",
   "test-core#src:test/test_hint_sizeof.pas": "pass",
   "test-core#src:test/test_hw_random_intrinsics.pas": "pass",
   "test-core#src:test/test_i386_int64_high_half.pas": "pass",
@@ -6331,11 +6337,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-22T14:49:34Z",
-  "sha": "1021bbdece658fd8b34c9190ee8a8ed66c703671",
+  "date": "2026-08-22T15:51:19Z",
+  "sha": "89f35406be7fe2abfa0f91b59d22b1cffffa7a6a",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.5
+  "wall": 3600.0
  },
  "last_bench": {
   "conf_rows": 550,
