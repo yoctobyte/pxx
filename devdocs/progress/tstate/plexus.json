@@ -6816,15 +6816,12 @@
   },
   {
    "bad": "98ed382022547bbe6624c779ee024a3ad1dea518",
-   "good": "187ddef2a4878b0bd59e550b03f4c30bfd28a240",
+   "good": "895d826dee09e65eec8224d01c70943eea0d0580",
    "job": "test-pascal-conformance#shard0/6",
    "name": "test-pascal-conformance#shard0/6",
    "opened": "2026-08-22T00:45:54Z",
    "pin_built": false,
    "range": [
-    "4e08eae85f3e4363c2aaad3339770ec79d4c3851",
-    "d54cebf0754a4850ccf9660ad431db8d3fb936ee",
-    "895d826dee09e65eec8224d01c70943eea0d0580",
     "8929883751c541d3708993078abc8a09410991f4",
     "f74df41e851cf669e0dfa56c30f9c768f900e244",
     "5179c4d4350bcb775841ce7b7283c1a367abe035",
