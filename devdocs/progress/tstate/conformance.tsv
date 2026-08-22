@@ -315,9 +315,9 @@ skip	tgeneric65.pp	tgeneric	gap	generic record with nested `object` type
 skip	tgeneric66.pp	tgeneric	gap	generic `object` type with nested record
 skip	tgeneric67.pp	tgeneric	gap	generic `object` type with nested class
 skip	tgeneric68.pp	tgeneric	gap	generic `object` type with nested `object`
-pass	tgeneric69.pp	tgeneric	-	
+fail	tgeneric69.pp	tgeneric	-	compile error
 skip	tgeneric6.pp	tgeneric	gap	objfpc generic syntax + nested record/pointer types inside a generic class
-pass	tgeneric70.pp	tgeneric	-	
+fail	tgeneric70.pp	tgeneric	-	compile error
 pass	tgeneric71.pp	tgeneric	-	
 pass	tgeneric72.pp	tgeneric	-	
 pass	tgeneric73.pp	tgeneric	-	
@@ -345,7 +345,7 @@ skip	tgeneric92.pp	tgeneric	gap	objfpc generic syntax + `with` over a generic ty
 skip	tgeneric93.pp	tgeneric	gap	{$if declared(TName<,>)} generic-arity form of declared()
 skip	tgeneric94.pp	tgeneric	gap	generic FUNCTION bodies with nested type sections (SizeOf/local types inside generic routines)
 skip	tgeneric95.pp	tgeneric	gap	specialize inside a generic routine signature (`expected name` at line 16)
-fail	tgeneric96.pp	tgeneric	-	compile error
+pass	tgeneric96.pp	tgeneric	-	
 skip	tgeneric97.pp	tgeneric	wontfix	expects FPC's internal specialized ClassName 'ttest<system.longint>'
 pass	tgeneric98.pp	tgeneric	-	
 skip	tgeneric99.pp	tgeneric	gap	unit-/class-qualified `specialize` syntax (ugeneric99.specialize TTest<...>)
