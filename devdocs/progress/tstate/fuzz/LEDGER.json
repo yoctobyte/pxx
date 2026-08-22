@@ -936,13 +936,15 @@
       ],
       "first_seed": 82750,
       "first_sha": "98ed38202254",
+      "fixed": "2026-08-22T03:06:26Z",
+      "fixed_sha": "98ed38202254",
       "hits": 1,
       "kind": "undefined-variable-pxxblockmove",
       "note": "pxx REJECTED a program FPC accepts -- frontend gap or regression (Track A/P)",
       "opened": "2026-08-22T02:22:12Z",
       "reopened_from_fixed": true,
       "sig": "pxx-reject_undefined-variable-pxxblockmove",
-      "status": "open",
+      "status": "fixed",
       "ticket": null
     },
     "pxx-vs-fpc_?": {
