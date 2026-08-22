@@ -3,7 +3,7 @@ slug: bug-a-for-in-over-a-set-variable-refuses-the-kinds-its-error-message-claim
 track: A
 prio: 50
 status: done
-commit: PENDING-COMMIT
+commit: a4b763803
 ---
 
 # `for x in <named set type>` is refused — by an error naming the kinds it refuses
