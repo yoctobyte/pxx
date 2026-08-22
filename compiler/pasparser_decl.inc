@@ -5935,3 +5935,25 @@ begin
   PendNestCount := 0;
   PendNestRtnCount := 0;
 end;
+
+{ `label a, b;` — a declaration section like var/const/type, and reachable from
+  two places (a program/unit's decl block and a routine's). It was written out
+  twice; the routine copy sat AFTER the var/const/type loop, so the canonical
+  ISO order (label first) parsed the labels and then met `var` where the caller
+  expected `begin`. One body, called from both.
+  bug-a-a-label-section-must-come-last-in-a-routine }
+procedure ParseLabelSection;
+begin
+  Next;                             { 'label' }
+  while CurTok.Kind = tkIdent do
+  begin
+    if GotoLabelCount >= MAX_GOTO_LABELS then Error('too many labels');
+    GotoLabelNOff[GotoLabelCount]    := Tokens[TokPos-1].SOffset;
+    GotoLabelNLen[GotoLabelCount]    := Tokens[TokPos-1].SLen;
+    GotoLabelCodePos[GotoLabelCount] := -1;
+    Inc(GotoLabelCount);
+    Next;
+    if not Eat(tkComma) then Break;
+  end;
+  Eat(tkSemicolon);
+end;

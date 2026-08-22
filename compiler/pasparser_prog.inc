@@ -1236,20 +1236,7 @@ begin
         else if CaseEqual(CurTok.SVal, 'resourcestring') then
           ParseConstSection(-1, 0)      { registers as plain string constants }
         else if CaseEqual(CurTok.SVal, 'label') then
-        begin
-          Next;
-          while CurTok.Kind = tkIdent do
-          begin
-            if GotoLabelCount >= MAX_GOTO_LABELS then Error('too many labels');
-            GotoLabelNOff[GotoLabelCount]    := Tokens[TokPos-1].SOffset;
-            GotoLabelNLen[GotoLabelCount]    := Tokens[TokPos-1].SLen;
-            GotoLabelCodePos[GotoLabelCount] := -1;
-            Inc(GotoLabelCount);
-            Next;
-            if not Eat(tkComma) then Break;
-          end;
-          Eat(tkSemicolon);
-        end
+          ParseLabelSection
         else
           doneDecls := True;
       else

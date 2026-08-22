@@ -55,7 +55,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (279)
+## backlog (280)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -64,6 +64,7 @@ _none_
 | bug-a-findtypealias-failed-to-find-puint8-on-stderr | A | 20 | bug | `FindTypeAlias failed to find puint8! AliasCount=36` is printed to stderr during a compile that then SUCCEEDS. Either the lookup failure is real and something silently fell back to a wrong type, or the message is a stale debug print that should not be in a release build. Both readings are defects; which one it is has not been established. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
+| bug-a-numeric-goto-labels-are-not-supported | A | 15 | bug | Numeric goto labels are not supported | — |
 | bug-a-real-is-single-on-hosted-riscv32 | A | 35 | bug | `Real` is Single (4 bytes) on hosted riscv32 Linux and Double (8) on every other target and on FPC. The type is keyed on the ARCH, not on the ESP profile, so a target with no ESP in it inherits an ESP decision — silently halving the precision of every `Real` in a ported program. | — |
 | bug-a-riscv32-sa-onstack-has-no-effect-under-qemu | A | 25 | bug | riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware. | — |
 | bug-a-rtti-kind-numbers-are-the-compilers-not-the-typinfo-enum-the-unit-documents | A | 40 | bug | typinfo.pas documents RetKind / TypeKind / ParamKinds as Ord(TTypeKind) and declares TTypeKind as FPC's enum (Int64 = 19), but the compiler fills those fields with its OWN internal TTypeKind (Int64 = 13). A user comparing a reported kind against the enum in the same unit gets a silently wrong answer; the unit's own TypeKindSize/TypeKindSigned already decode the compiler numbering, so the two halves of one file disagree. | decide-rtti-kind-numbering |
@@ -552,9 +553,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2245)
+## done (2246)
 
-2245 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2246 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -853,6 +854,7 @@ _none_
 - [p 20] [A] feature-cli-widgetset-flag
 - [p 20] [B] feature-networking
 - [p 20] [T] feature-t-nilpy-cpython-differential-fuzzer
+- [p 15] [A] bug-a-numeric-goto-labels-are-not-supported
 - [p 15] [N] bug-nilpy-delattr-globals-and-locals-are-absent
 - [p 15] [C] compat-c-printf-p-of-null-prints-0x0-not-nil
 - [p 15] [P] compat-p-system-integer-is-smallint-in-fpc

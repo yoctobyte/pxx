@@ -5234,6 +5234,14 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Fulib/rtl test/test_out_parameter_of_a_managed_type_is_cleared.pas $(TESTTMP)/test_out_param_cleared26
 	test "$$($(TESTTMP)/test_out_param_cleared26)" = "$$(printf 'str      []\ndyn      0\nintf     TRUE\nassigned [set]\nint      42\nvarint   42\nchar     [z]\nshortstr [y]\nmethod   []\nclassm   []\ntwoout   [][B][C]\nmixed    []\nfuncout  [] 1\nnested   []\nuntyped  5\nsurvive  [payload-] 7 bad=0')"
 
+	# A routine's `label` section in the canonical ISO position — first, ahead of
+	# const/type/var/nested routines. The label loop used to run only AFTER that
+	# decl loop, so `label` first ate the labels and then met `var` where the
+	# caller wanted `begin`. Rows: canonical order, label-last (the order that
+	# always worked), label before a nested routine, two labels in one section.
+	./$(COMPILER) test/test_label_section_precedes_the_other_declarations.pas $(TESTTMP)/test_label_section26
+	test "$$($(TESTTMP)/test_label_section26)" = "$$(printf '6\n200\n5\n10')"
+
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"

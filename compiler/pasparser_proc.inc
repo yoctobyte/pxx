@@ -1929,13 +1929,18 @@ begin
     copy. refactor-a-the-missing-layer-between-frontends-and-backends }
   EmitParamSpillsForTarget(procIdx, nparams);
 
-  { Optional var/const/type/label sections }
-  while CurTok.Kind in [tkVar, tkConst, tkType, tkProcedure, tkFunction] do
+  { Optional var/const/type/label sections, in any order — `label` included,
+    because ISO Pascal puts it FIRST and it used to be handled only by a
+    separate loop further down, i.e. only when it came last.
+    bug-a-a-label-section-must-come-last-in-a-routine }
+  while (CurTok.Kind in [tkVar, tkConst, tkType, tkProcedure, tkFunction]) or
+        ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'label')) do
     case CurTok.Kind of
       tkVar:   ParseVarSection;
       tkConst: ParseConstSection(-1, 0);
       tkType:  ParseTypeSection;
       tkProcedure, tkFunction: ParseNestedRoutine;
+      tkIdent: ParseLabelSection;
     end;
   EmitManagedLocalsZeroInit(savedSC);
   { Routine-local typed constants: now that storage is allocated and managed
@@ -1949,22 +1954,10 @@ begin
   for i := 0 to nparams - 1 do
     if pout[i] and (i < MAX_PROC_PARAMS) then
       ClearManagedOutParam(Procs[procIdx].Params[i].SymIdx);
-  { label declarations: label foo, bar; }
+  { A `label` section that came after everything else — the decl loop above
+    stops at the out-param clearing, so a trailing one still lands here. }
   while (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'label') do
-  begin
-    Next;
-    while CurTok.Kind = tkIdent do
-    begin
-      if GotoLabelCount >= MAX_GOTO_LABELS then Error('too many labels');
-      GotoLabelNOff[GotoLabelCount]    := Tokens[TokPos-1].SOffset;
-      GotoLabelNLen[GotoLabelCount]    := Tokens[TokPos-1].SLen;
-      GotoLabelCodePos[GotoLabelCount] := -1;
-      Inc(GotoLabelCount);
-      Next;
-      if not Eat(tkComma) then break;
-    end;
-    Eat(tkSemicolon);
-  end;
+    ParseLabelSection;
 
   { A proc holding managed locals that can be unwound PAST needs a landing pad
     of its own: neither its epilogue nor the eventual handler's frame runs, so
