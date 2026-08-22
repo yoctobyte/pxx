@@ -10,7 +10,7 @@ summary: "FIXED 2026-08-21. A failed Variant conversion (i := v with v='abc') pr
 
 - **Type:** bug (uncatchable failure on ordinary code) — Track A (`compiler/builtin`),
   with the raiser half in `lib/rtl` (Track B files; see the ownership note)
-- **Status:** **fixed 2026-08-21**
+- **Status:** done
 - **Opened / closed:** 2026-08-21, found by running `test/fpcv.pas` — a file
   sitting UNWIRED in the tree with a note calling it an FPC oracle probe —
   against FPC.
@@ -100,3 +100,6 @@ sysutils, three in variants, both in the units that own the class.
 GREEN, plus the six variant/promoint tests re-run by hand and
 `test_rtl_fpc_compat_helpers` still 23 / 23 (it catches `EVariantError` from
 `variants`, which is what proves the re-export works).
+
+## Log
+- 2026-08-21 — resolved, commit PENDING-COMMIT.

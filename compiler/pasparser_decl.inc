@@ -301,7 +301,7 @@ begin
         for the string aliases was badly wrong, not merely mis-sized. A user or RTL
         declaration still wins — FindTypeAlias is consulted before this. TDateTime and
         Currency deliberately match what lib/rtl/sysutils already declares them as. }
-      else if (not tnHasAlias) and (CaseEqual(lo, 'widechar')) then Result := tyUInt16    { 2 bytes, not 4 }
+      else if (not tnHasAlias) and (CaseEqual(lo, 'widechar')) then Result := tyWideChar  { 2 bytes, not 4 }
       { UCS4Char — FPC's own name for a CODE POINT (system unit: UCS4Char = type
         LongWord). Distinct from WideChar above it, which is a UTF-16 code UNIT
         and cannot hold a character past the BMP without a surrogate pair. Its

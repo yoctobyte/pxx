@@ -4697,7 +4697,18 @@ end;
   the 16-bit ordinal as a string pointer. }
 function NodeIsWideCharVal(n: Integer): Boolean;
 begin
-  Result := (n >= 0) and (ASTKind[n] = AN_PTR_CAST) and (Integer(ASTIVal[n]) = -3);
+  { Two ways to be a WideChar value, and both must answer here. The -3 marker on
+    an AN_PTR_CAST is the original one and still the only evidence a CAST leaves.
+    The TYPE KIND is the one that survives a variable: since tyWideChar exists
+    (bug-a-writeln-of-a-widechar-prints-its-ordinal) a `w: WideChar` read carries
+    its own kind instead of collapsing to tyUInt16, so the callers that used to
+    need a separate "...or the operand is tyUInt16" clause beside every call are
+    answered here instead. Those clauses stay where they are — they are a
+    fallback for shapes neither arm reaches, and retiring them is its own
+    migration. }
+  Result := (n >= 0) and
+            (((ASTKind[n] = AN_PTR_CAST) and (Integer(ASTIVal[n]) = -3)) or
+             (IntToTypeKind(ASTTk[n]) = tyWideChar));
 end;
 
 { Wrap a WideChar value node in __pxxWideCharToUTF8(node) so the UTF-16 code
@@ -5225,9 +5236,10 @@ begin
   else if CaseEqual(nm, 'nativeuint') or CaseEqual(nm, 'ptruint') then Result := tyNativeUInt
   else if CaseEqual(nm, 'boolean') then Result := tyBoolean
   else if CaseEqual(nm, 'char') or CaseEqual(nm, 'ansichar') then Result := tyChar
-  { WideChar is a 2-byte ordinal here (this RTL is byte/ASCII throughout; the type exists so
-    FPC sources that name it compile). `WideChar(x)` is fpjson's \u escape decoder. }
-  else if CaseEqual(nm, 'widechar') then Result := tyUInt16
+  { WideChar — a UTF-16 code UNIT, 2 bytes. Its own kind (storage is tyUInt16's)
+    so that WriteLn can tell it from a Word; see the note on tyWideChar in
+    defs.inc. `WideChar(x)` is fpjson's \u escape decoder. }
+  else if CaseEqual(nm, 'widechar') then Result := tyWideChar
   { UCS4Char is FPC's own name for a code point (system unit: UCS4Char = type
     LongWord) and, unlike WideChar, holds any character. Its own kind because it
     CONVERTS to a string as UTF-8 — see the note on tyUCS4Char in defs.inc. }

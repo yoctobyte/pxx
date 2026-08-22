@@ -1508,7 +1508,29 @@ type
       level marker (what WideChar uses) is not enough here: this type is
       STORABLE, and the marker is lost through a variable.
       feature-nilpy-text-string-kind }
-    tyUCS4Char     { 30: Unicode code point — 4 unsigned bytes, converts as UTF-8 }
+    tyUCS4Char,    { 30: Unicode code point — 4 unsigned bytes, converts as UTF-8 }
+    { A UTF-16 code UNIT — FPC's `WideChar`. Storage is tyUInt16's, and for
+      eighteen months that is all it was: `var w: WideChar` declared a plain
+      tyUInt16 and every string context recognised it by the shape of the
+      expression instead (an explicit `WideChar(x)` cast carried the -3 marker
+      on its AN_PTR_CAST node; a bare variable was caught by the broader "any
+      tyUInt16 flowing into a string context" fallback, which is safe there
+      because a bare Word in a string context is meaningless anyway).
+
+      That fallback cannot serve `WriteLn`, and this kind exists for that one
+      reason. `WriteLn(someWord)` must print the NUMBER and
+      `WriteLn(someWideChar)` must print the CHARACTER, so writeln is the site
+      where the two readings of tyUInt16 finally conflict — and it printed the
+      number for both, for ASCII too (`WriteLn(w)` with w='A' gave 65).
+
+      Same argument tyUCS4Char and tyBool8 already won: its own kind for
+      CONVERSION, not for layout. Everything that cares about SIZE or
+      ordinal-ness goes through TypeSize/TypeIsOrdinal and sees no difference;
+      only conversion sites ask for it by name. The tyUInt16 fallbacks stay
+      where they are — they are additive, they still catch shapes the kind does
+      not reach, and removing them is a separate migration.
+      bug-a-writeln-of-a-widechar-prints-its-ordinal }
+    tyWideChar     { 31: UTF-16 code unit — 2 unsigned bytes, converts as UTF-8 }
   );
 
   TSymKind  = (skLocal, skGlobal, skParam, skConst);

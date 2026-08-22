@@ -11796,6 +11796,20 @@ begin
            ((ASTKind[item] = AN_ARG) or (ASTKind[item] = AN_PAIR)) and
            (ASTCharArrayCap(ASTLeft[item]) >= 0) then
           ASTLeft[item] := WrapCharArrayToStringExpr(ASTLeft[item]);
+        { write(w) on a WideChar prints the CHARACTER, not the 16-bit ordinal.
+          Every other string context already converted (assign, concat, a string
+          parameter) by recognising "a tyUInt16 flowing somewhere a Word cannot
+          mean anything" — but writeln is precisely where a Word DOES mean
+          something, so the fallback could not be used here and `WriteLn(w)` with
+          w='A' printed 65. tyWideChar exists to make the two decidable; this is
+          the site it was added for. Same two-place shape as the char-array wrap
+          above: rewrite ASTLeft for the AN_ARG / AN_PAIR forms (rewriting `item`
+          would break the argument chain, which lives in ASTRight[item]), and the
+          bare form is caught in the dispatch below.
+          bug-a-writeln-of-a-widechar-prints-its-ordinal }
+        if ((ASTKind[item] = AN_ARG) or (ASTKind[item] = AN_PAIR)) and
+           NodeIsWideCharVal(ASTLeft[item]) then
+          ASTLeft[item] := WrapWideCharToUTF8(ASTLeft[item]);
         if (ASTKind[item] = AN_ARG) and (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyBoolean) then
         begin
           { write(Boolean[:w]) -> FPC-style TRUE/FALSE text, branched at runtime. }
@@ -11859,6 +11873,14 @@ begin
             break the argument chain (ASTRight[item] is the next item), so the
             wrap is applied to the lowered value here rather than to the slot. }
           value := IRLowerAST(WrapCharArrayToStringExpr(item));
+          outNode := IRAppend(IR_WRITE, value, -1, -1, writeFd, Ord(tyAnsiString));
+        end
+        else if NodeIsWideCharVal(item) then
+        begin
+          { the BARE WideChar — `WriteLn(w)` / `WriteLn(WideChar(66))`. Same
+            reason the wrap is applied to the expression rather than to the slot
+            as for the char array above. }
+          value := IRLowerAST(WrapWideCharToUTF8(item));
           outNode := IRAppend(IR_WRITE, value, -1, -1, writeFd, Ord(tyAnsiString));
         end
         else
