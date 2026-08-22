@@ -11,6 +11,6 @@
 - **test-pascal-conformance#shard4/6** — tools/run_pascal_conformance.sh (plexus): bad `74d84a6ba449`, last good `8ccc8f05c42a`, 1 commit(s) in range
 - **test-core#src:test/fpcv.pas@2** — test/fpcv.pas (plexus): bad `f3acfdabf53c`, last good `ba5791c02ce3`, 1 commit(s) in range
 - **test-core#src:test/test_generic_inherit_delphi.pas** — test/test_generic_inherit_delphi.pas (plexus): bad `5179c4d4350b`, last good `f74df41e851c`, 1 commit(s) in range
-- **demos#00** (plexus): bad `98ed38202254`, last good `23becd24b8e5`, 423 commit(s) in range
+- **demos#00** (plexus): bad `98ed38202254`, last good `67630272b0c1`, 212 commit(s) in range
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +2 (plexus): bad `98ed38202254`, last good `23becd24b8e5`, 423 commit(s) in range
 - **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (plexus): bad `98ed38202254`, last good `23becd24b8e5`, 423 commit(s) in range
