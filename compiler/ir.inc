@@ -3274,6 +3274,14 @@ begin
       begin
         if caElemTk = tyRecord then caElemSz := RecSize(caElemRec)
         else caElemSz := TypeSize(caElemTk);
+        { ...unless the source array's elements are dyn-array HANDLES
+          (`array[0..1] of TRow`): ElemType is the row's BASE type, so
+          TypeSize answered 4 for an Integer row and only half the array was
+          copied into the open-array temp — the callee saw a nil handle for
+          m[1] and Length(m[1]) was 0 where fpc said 1.
+          bug-p-open-array-of-a-named-dynamic-array-reads-garbage }
+        if (caArgSym >= 0) and (SymElemDynDepth[caArgSym] > 0) then
+          caElemSz := TARGET_PTR_SIZE;
         if caCount * caElemSz > MAX_OPEN_ARRAY_STACK_TEMP then
         begin
           { Large source array: a frame-local `[len:8][data]` buffer here would
@@ -3417,6 +3425,11 @@ begin
     begin
       if caElemTk = tyRecord then caElemSz := RecSize(caElemRec)
       else caElemSz := TypeSize(caElemTk);
+      { dyn-array HANDLE elements are pointer-sized whatever the row's base type
+        is — same correction as the const/value path above. }
+      if (ASTKind[argAST] = AN_IDENT) and (Integer(ASTIVal[argAST]) >= 0) and
+         (SymElemDynDepth[ASTIVal[argAST]] > 0) then
+        caElemSz := TARGET_PTR_SIZE;
       if caCount * caElemSz > MAX_OPEN_ARRAY_STACK_TEMP then
       begin
         { Large source array: same reasoning as the const/value path above —

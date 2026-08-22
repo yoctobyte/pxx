@@ -767,6 +767,9 @@ begin
       else
       begin
         VDArrLo := ArrTypeLo[ai]; VDArrHi := ArrTypeHi[ai];
+        { alias whose ELEMENT is a named dynamic array: pointer-sized handle
+          slots, the same shape the inline declaration records below. }
+        VDElemDynDepth := ArrTypeElemDynDepth[ai];
         if ArrTypeNDims[ai] >= 2 then
         begin
           VDIsArrND := True; VDNdCnt := ArrTypeNDims[ai];
@@ -3530,6 +3533,7 @@ var
   aLo, aHi: Integer; aElemTk: TTypeKind;
   tdCnt, tdLo, tdHi, tdi, tflatLen, fNDims: Integer;
   aElemStrCap: Integer;   { `array[..] of string[N]`: N, captured where it is parsed }
+  aElemDynDepth: Integer; { `array[..] of TRow`, TRow a named DYNAMIC array: TRow's dyn depth }
   tdDimLo, tdDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
   mPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
   mPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
@@ -5103,8 +5107,27 @@ begin
             merge covers arbitrary nesting depth. }
           fAi := -1;
           aElemStrCap := 0;
+          aElemDynDepth := 0;
           if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
-          if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
+          if (fAi >= 0) and ArrTypeIsDyn[fAi] then
+          begin
+            { A named DYNAMIC array as the element (`TFD = array[0..1] of TRow`,
+              `TRow = array of Integer`): each slot holds a pointer-sized
+              HANDLE. The identical INLINE declaration (`var f: array[0..1] of
+              TRow`) already recorded this in VDElemDynDepth, but the type table
+              had nowhere to keep it, so the alias reached ParseTypeKind, which
+              resolves TRow to its BASE scalar — `SetLength(f[0], 1)` was then
+              refused with `SetLength expects an array variable in IR codegen`
+              while the inline spelling of the same type compiled and ran.
+              bug-p-a-named-fixed-array-of-a-dynamic-array-type-loses-its-element-depth }
+            aElemTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+            aElemStrCap := ArrTypeElemStrCap[fAi];
+            LastTypeRecId := ArrTypeElemRec[fAi];
+            LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
+            aElemDynDepth := ArrTypeDynDepth[fAi];
+            Next;   { consume the alias name }
+          end
+          else if (fAi >= 0) and (not ArrTypeIsDyn[fAi]) then
           begin
             aElemStrCap := ArrTypeElemStrCap[fAi];
             if ArrTypeNDims[fAi] >= 2 then
@@ -5158,6 +5181,7 @@ begin
           ArrTypeIsDyn[ArrTypeCount] := False;
           ArrTypeElemRowLen[ArrTypeCount] := 0;
           ArrTypeElemRowLo[ArrTypeCount] := 0;
+          ArrTypeElemDynDepth[ArrTypeCount] := aElemDynDepth;
           if (aElemTk = tyFixedString) or (aElemTk = tyShortString) then
             ArrTypeElemStrCap[ArrTypeCount] := aElemStrCap
           else
@@ -5234,6 +5258,7 @@ begin
           ArrTypePtrElemRec[ArrTypeCount] := LastTypePointerElemRec;
           ArrTypeNDims[ArrTypeCount] := 0;
           ArrTypeIsDyn[ArrTypeCount] := True;
+          ArrTypeElemDynDepth[ArrTypeCount] := 0;
           ArrTypeDynDepth[ArrTypeCount] := tdCnt;
           ArrTypeUnitIdx[ArrTypeCount] := CurrentUnitIdx; Inc(ArrTypeCount);
         end;

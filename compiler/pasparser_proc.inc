@@ -742,6 +742,10 @@ begin
         begin
           paramFixedLen := ArrTypeHi[paramAi] - ArrTypeLo[paramAi] + 1;
           paramFixedLo := ArrTypeLo[paramAi];
+          { ...and, when that fixed type's ELEMENT is a named dynamic array
+            (`TFD = array[0..1] of TRow`), the pointer-sized handle slots — the
+            same field the var declaration threads into SymElemDynDepth. }
+          paramElemDynDepth := ArrTypeElemDynDepth[paramAi];
         end;
         Next;
       end

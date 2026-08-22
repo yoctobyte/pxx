@@ -4048,6 +4048,7 @@ var
   ArrTypeDynDepth: array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeElemRowLen: array[0..MAX_TYPEALIAS-1] of Integer; { dyn alias whose element is a named FIXED array (`TDA = array of T`): the row's flattened element count; 0 = scalar element }
   ArrTypeElemRowLo : array[0..MAX_TYPEALIAS-1] of Integer; { the row's low bound, paired with ArrTypeElemRowLen }
+  ArrTypeElemDynDepth: array[0..MAX_TYPEALIAS-1] of Integer; { FIXED alias whose element is a named DYNAMIC array (`TFD = array[0..1] of TRow`): the element's dyn depth; 0 = element not dynamic. Each slot is pointer-sized. Threaded to SymElemDynDepth via VDElemDynDepth when a var is declared with the alias. }
   ArrTypeElemStrCap: array[0..MAX_TYPEALIAS-1] of Integer; { frozen-string element (`array[..] of string[N]`): N. Nothing else carries it — a USE of the alias is far from where `string[N]` was parsed, so LastTypeStrCap is whatever the last unrelated declaration left behind. bug-a-nd-array-function-result-indexes-the-wrong-slot }
   ArrTypeCount  : Integer;
 
