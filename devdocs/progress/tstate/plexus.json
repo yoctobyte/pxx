@@ -6341,7 +6341,7 @@
    "status": "fail"
   },
   {
-   "bad": "16a540b759c53a2be03c3013751d90741ef38e40",
+   "bad": "f3acfdabf53c12070af980ad285bf7be708ea3b7",
    "good": "f9291800661b0ddcef2501439fa4823c460a71fb",
    "job": "test-core#src:test/fpcv.pas@2",
    "name": "test-core#299",
@@ -6350,10 +6350,7 @@
    "range": [
     "ad27e6915f88eaa2143949f42a61b33159a66189",
     "ba5791c02ce32a0962a551c9e8d0a5a848791fd6",
-    "f3acfdabf53c12070af980ad285bf7be708ea3b7",
-    "5d185043c8dc9459595478769fb443cff6eff7d3",
-    "90429d1b135d79689ad2e768892a5a604f7664e6",
-    "16a540b759c53a2be03c3013751d90741ef38e40"
+    "f3acfdabf53c12070af980ad285bf7be708ea3b7"
    ],
    "src": "test/fpcv.pas",
    "status": "fail"
