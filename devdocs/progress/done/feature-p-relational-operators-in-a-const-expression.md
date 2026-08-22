@@ -5,7 +5,7 @@ type: feature
 blocked-by: []
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: 0b9004cae
 summary: "`const F = 1 > 0` died on the `>` — ConstEval had no relational level, stopping at `+ - or xor`, while `const B = True and False` worked, so booleans were half supported. The idiom this blocked is the portability constant, `const Is64 = SizeOf(Pointer) = 8`. Also fixes `not True` folding bitwise to -2 and printing TRUE."
 ---
 
