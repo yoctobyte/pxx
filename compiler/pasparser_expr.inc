@@ -8998,12 +8998,29 @@ var r: Int64; idx: Integer; castBytes: Integer; castSigned: Boolean;
     ccBaseCi, ccReg: Integer;
 begin
   r := 0;
+  CEIsBool := False;   { see CEIsBool: cleared here, set by the boolean-producing
+                         arms below and by the relational level in ConstEval }
   { NB: the parens on the recursive ConstEvalFactor() are required — a bare own
     function name in an expression reads the (uninitialised) Result var instead
     of recursing, both under the FPC seed and self-hosted. }
-  if CurTok.Kind = tkMinus then begin Next; Result := -ConstEvalFactor(); Exit; end;
-  if CurTok.Kind = tkPlus  then begin Next; Result :=  ConstEvalFactor(); Exit; end;
-  if CurTok.Kind = tkNot   then begin Next; Result := not ConstEvalFactor(); Exit; end;
+  if CurTok.Kind = tkMinus then begin Next; Result := -ConstEvalFactor(); CEIsBool := False; Exit; end;
+  if CurTok.Kind = tkPlus  then begin Next; Result :=  ConstEvalFactor(); CEIsBool := False; Exit; end;
+  { `not` KEEPS the operand's boolean-ness: `not (a > b)` is a Boolean, `not 5`
+    is an integer -- and the OPERATOR follows the operand, logical for a Boolean
+    and bitwise otherwise. `not True` folded bitwise gives -2, which is a
+    non-zero Boolean and therefore printed TRUE. }
+  if CurTok.Kind = tkNot then
+  begin
+    Next;
+    r := ConstEvalFactor();
+    if CEIsBool then
+    begin
+      if r = 0 then Result := 1 else Result := 0;
+    end
+    else
+      Result := not r;
+    Exit;
+  end;
   if CurTok.Kind = tkNil   then begin Next; Result := 0; Exit; end;   { `= nil` default params (FPC RTL) }
   hasConstCast := False;
   if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
@@ -9021,10 +9038,11 @@ begin
     Next; Expect(tkLParen, '(');
     r := ConstEval(); Expect(tkRParen, ')');
     r := ConstApplyCast(r, castBytes, castSigned);
+    CEIsBool := False;   { an integer typecast, whatever the operand was }
   end
   else if CurTok.Kind = tkInteger then begin r := CurTok.IVal; Next; end
-  else if CurTok.Kind = tkTrue  then begin r := 1; Next; end
-  else if CurTok.Kind = tkFalse then begin r := 0; Next; end
+  else if CurTok.Kind = tkTrue  then begin r := 1; CEIsBool := True; Next; end
+  else if CurTok.Kind = tkFalse then begin r := 0; CEIsBool := True; Next; end
   else if (CurTok.Kind = tkString) and (Length(CurTok.SVal) = 1) then
     { single-char literal 'x' used as an ordinal constant (Char typed-const
       element, `Ord('A')`-free contexts) -> its character code. }
@@ -9144,7 +9162,12 @@ begin
       end;
     end;
     if (idx >= 0) and (Syms[idx].Kind = skConst) then
-      r := Syms[idx].ConstVal
+    begin
+      r := Syms[idx].ConstVal;
+      { a Boolean-typed named const stays Boolean through the fold, so
+        `const A = 1 > 0; B = A and True;` types B as Boolean too }
+      CEIsBool := Syms[idx].TypeKind = tyBoolean;
+    end
     else
       { compat-pascal-const-expr-ord-chr-succ: this used to dump raw lexer
         token state (line/kind/offset for a 10-token window) to stderr before
@@ -9165,17 +9188,22 @@ function ConstEvalTerm: Int64;
 { Multiplicative precedence level (binds tighter than +/-): * div mod and shl
   shr, left-associative. `shr` is lexed as an identifier (no tkShr token), like
   the runtime term parser. }
-var r, v: Int64; op: TTokenKind;
+var r, v: Int64; op: TTokenKind; lBool: Boolean;
 begin
   r := ConstEvalFactor;
+  lBool := CEIsBool;
   while (CurTok.Kind in [tkStar, tkDiv, tkMod, tkAnd, tkShl]) or
         ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'shr')) do
   begin
     if CurTok.Kind = tkIdent then
-    begin Next; v := ConstEvalFactor; r := r shr v; end
+    begin Next; v := ConstEvalFactor; r := r shr v; lBool := False; end
     else
     begin
       op := CurTok.Kind; Next; v := ConstEvalFactor;
+      { `and` over two Booleans is a Boolean; over anything else it is the
+        bitwise operator and the result is an integer. Same rule as fpc's, and
+        the reason `const F = (a > b) and (c < d)` types as Boolean here. }
+      if op = tkAnd then lBool := lBool and CEIsBool else lBool := False;
       case op of
         tkStar: r := r * v;
         tkDiv:  r := r div v;
@@ -9185,20 +9213,25 @@ begin
       end;
     end;
   end;
+  CEIsBool := lBool;
   Result := r;
 end;
 
-function ConstEval: Int64;
-{ Evaluate a compile-time constant expression (no code emitted). Additive
-  precedence level: + - or xor, left-associative; multiplicative ops bind
-  tighter (ConstEvalTerm). Fixes the old flat right-to-left fold that ignored
-  operator precedence (`2*3+1` gave 8, not 7). }
-var r, v: Int64; op: TTokenKind;
+function ConstEvalAdd: Int64;
+{ Additive precedence level of a const expression: + - or xor, left-associative;
+  multiplicative ops bind tighter (ConstEvalTerm). Fixes the old flat
+  right-to-left fold that ignored operator precedence (`2*3+1` gave 8, not 7).
+  ConstEval sits ABOVE this with the relational level, so this is no longer the
+  entry point -- call ConstEval. }
+var r, v: Int64; op: TTokenKind; lBool: Boolean;
 begin
   r := ConstEvalTerm;
+  lBool := CEIsBool;
   while CurTok.Kind in [tkPlus, tkMinus, tkOr, tkXor] do
   begin
     op := CurTok.Kind; Next; v := ConstEvalTerm;
+    { same rule as `and` in ConstEvalTerm: boolean only when both sides are }
+    if op in [tkOr, tkXor] then lBool := lBool and CEIsBool else lBool := False;
     case op of
       tkPlus:  r := r + v;
       tkMinus: r := r - v;
@@ -9206,6 +9239,40 @@ begin
       tkXor:   r := (r or v) and not (r and v);  { a xor b; the compiler must
                  stay buildable by an older seed that lacks the xor operator }
     end;
+  end;
+  CEIsBool := lBool;
+  Result := r;
+end;
+
+function ConstEval: Int64;
+{ Evaluate a compile-time constant expression (no code emitted).
+
+  RELATIONAL level, the loosest-binding one in Pascal, so `a + b = c` reads as
+  `(a + b) = c`. It had no level at all: `const F = 1 > 0` died on the `>` with
+  "Expected: begin", and `const F = (1 > 0) and (2 < 3)` on the `>` inside the
+  parens -- while `const F = True and False` worked, so booleans were half
+  supported. The idiom this blocks is the portability constant,
+  `const Is64 = SizeOf(Pointer) = 8`.
+
+  A relational result is a BOOLEAN, and this evaluator has only Int64, so the
+  fact is carried out of band in CEIsBool for the const declaration to read --
+  otherwise the const is declared tyInteger and `WriteLn(F)` prints 1 rather
+  than TRUE. }
+var r, v: Int64; op: TTokenKind;
+begin
+  r := ConstEvalAdd;
+  if CurTok.Kind in [tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe] then
+  begin
+    op := CurTok.Kind; Next; v := ConstEvalAdd;
+    case op of
+      tkEq:  if r =  v then r := 1 else r := 0;
+      tkNeq: if r <> v then r := 1 else r := 0;
+      tkLt:  if r <  v then r := 1 else r := 0;
+      tkLe:  if r <= v then r := 1 else r := 0;
+      tkGt:  if r >  v then r := 1 else r := 0;
+      tkGe:  if r >= v then r := 1 else r := 0;
+    end;
+    CEIsBool := True;
   end;
   Result := r;
 end;

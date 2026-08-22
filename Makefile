@@ -5409,6 +5409,8 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Fulib/rtl test/test_goto_labels_numeric_and_scoped.pas $(TESTTMP)/test_gotolabel26
 	test "$$($(TESTTMP)/test_gotolabel26 | tail -1)" = "main.done"
 	test "$$($(TESTTMP)/test_gotolabel26 | wc -l)" = "8"
+	./$(COMPILER) -Fulib/rtl test/test_const_boolean_expression.pas $(TESTTMP)/test_constbool26
+	test "$$($(TESTTMP)/test_constbool26 | tail -1)" = "ALL OK"
 
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26

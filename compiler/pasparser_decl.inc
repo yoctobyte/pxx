@@ -2241,7 +2241,18 @@ begin
         SetConstOff[SetConstCount]    := BakeSetConst;
         SetConstUnitIdx[SetConstCount] := CurrentUnitIdx; Inc(SetConstCount);
       end
-      else if (CurTok.Kind = tkString) or
+      else if ((CurTok.Kind = tkString) and
+               { …but a ONE-CHARACTER literal followed by a RELATIONAL operator
+                 is an OPERAND of a folded boolean expression, not the constant
+                 itself: `const F = 'a' < 'b'` is a Boolean const in fpc. Without
+                 this the char/string arm below consumed `'a'` and the
+                 declaration died on the `<`. ConstEvalFactor has its own
+                 single-char-literal arm, so the comparison folds there. Only
+                 length 1, because a longer literal has no ordinal value for
+                 this evaluator to compare and would trade one error for
+                 another. }
+               (not ((Tokens[TokPos-1].SLen = 1) and
+                     (Tokens[TokPos].Kind in [tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe])))) or
               ((CurTok.Kind = tkIdent) and (FindStrConst(CurTok.SVal) >= 0)) or
               ((CurTok.Kind = tkIdent) and (Tokens[TokPos].Kind = tkPlus) and
                (CharConstSymOf(CurTok.SVal) >= 0)) then
@@ -2373,6 +2384,16 @@ begin
       else
       begin
         v := ConstEval;
+        if CEIsBool then
+          { A folded BOOLEAN expression -- `const F = 1 > 0`,
+            `const G = (a > b) and (c < d)`, `const H = not F`. ConstEval
+            collapses every ordinal to an Int64, so without CEIsBool the const
+            is declared tyInteger and prints 1 instead of TRUE, boxes as
+            vtInteger in `array of const`, and does not match a Boolean
+            parameter. The bare True/False arm above already had this; a folded
+            EXPRESSION did not, which its own comment noted. }
+          AddConst(name, tyBoolean, v)
+        else
         { Widen to Int64 when the value does not fit a 32-bit Integer. The value
           itself always survived (ConstVal is an Int64); it was the declared TYPE
           that collapsed, so the 32-bit backends materialized only the low word
