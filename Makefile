@@ -5341,6 +5341,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_whole_record_hard_cast.pas $(TESTTMP)/test_whole_rec_cast26
 	test "$$($(TESTTMP)/test_whole_rec_cast26 | tr -s ' ')" = "$$(printf 'assign 8589934593\nfield 8589934593\nlvalue 7 0\nptr 7\np->i 67305985\ni->p 4 3 2 1\nb->q 578437695752307201\nbyref 16909060\ncall 1')"
 
+	# A failed `as` downcast raises a catchable EInvalidCast. It used to be an
+	# inline Halt(1) — no message, and the ONE member of the checked-operation
+	# family (PXXNilRef/PXXDivZero/PXXOverflow/PXXRangeChk/PXXVariantError) that
+	# a handler could not intercept. Covers the typed handler, a generic
+	# `on E: Exception`, a raise crossing a frame with a finally, `nil as T`
+	# passing through, and the unchanged success path.
+	./$(COMPILER) -Fulib/rtl test/test_failed_as_downcast_is_catchable.pas $(TESTTMP)/test_failed_as26
+	test "$$($(TESTTMP)/test_failed_as26 | tail -1)" = "total ok 4 / 4"
+
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"

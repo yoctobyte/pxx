@@ -123,6 +123,7 @@ type
   EConvertError     = class(Exception) end;      { StrToInt/StrToFloat on malformed input }
   EInOutError       = class(Exception) end;
   EAccessViolation  = class(Exception) end;
+  EInvalidCast      = class(Exception) end;   { a failed `as` downcast }
   EInvalidOp        = class(Exception) end;
   EIntError         = class(Exception) end;
   EDivByZero        = class(EIntError) end;
@@ -4769,6 +4770,16 @@ begin
   raise EVariantError.Create(msg);
 end;
 
+procedure SysRaiseInvalidCast;
+begin
+  { A failed `as` downcast upgraded from a silent Halt to a catchable
+    exception. It was the only member of the checked-operation family that
+    `try ... except` could not intercept, which is exactly backwards for the
+    one construct whose purpose is a downcast you are prepared to have fail.
+    bug-a-a-failed-as-downcast-dies-silently-and-uncatchably }
+  raise EInvalidCast.Create('Invalid type cast');
+end;
+
 procedure SysRaiseAccessViolation;
 begin
   { A nil receiver / nil procvar call, caught at the site by the compiler's
@@ -4787,6 +4798,7 @@ initialization
   PXXRangeErrorHook := @SysRaiseRangeError;
   PXXIoErrorHook := @SysRaiseIoError;
   PXXNilRefHook := @SysRaiseAccessViolation;
+  PXXInvalidCastHook := @SysRaiseInvalidCast;
   PXXVariantErrorHook := @SysRaiseVariantError;
   TimeSeparator := ':';
   DateSeparator := '-';
