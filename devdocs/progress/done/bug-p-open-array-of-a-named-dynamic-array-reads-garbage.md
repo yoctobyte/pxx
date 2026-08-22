@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: 2432769d0
 summary: "`procedure P(const m: array of TRow)` with `TRow = array of Integer` typed the parameter's element as TRow's BASE type, so the callee indexed dyn-array handles with a 4-byte Integer stride: `Length(m[0])` printed 124906597515344 where fpc printed 3, and a slightly larger shape segfaulted. Three arms — the parameter's element type, the `[a, b]` constructor temp, and the parser-side dyn-depth of `m[i][j]`."
 ---
 
