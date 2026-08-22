@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T01:06:34Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "374297d8c9c699accaee818a3e10ed23dd4db0f7",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T01:15:58Z",
    "fixed": [],
    "new_red": [],
@@ -466,6 +458,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "89f35406be7fe2abfa0f91b59d22b1cffffa7a6a",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-22T16:53:59Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "29a518312e66f2ffccec849963d08590399f8e07",
    "tier": "native",
    "verdict": "RED"
   }
@@ -1899,6 +1899,7 @@
   "test-core#src:test/test_multidim_const_array.pas": "native",
   "test-core#src:test/test_multithreading.pas@1": "native",
   "test-core#src:test/test_named_dynarray_field.pas": "native",
+  "test-core#src:test/test_named_fixed_array_of_a_dynamic_array.pas": "native",
   "test-core#src:test/test_named_operators.pas": "native",
   "test-core#src:test/test_narrowing_typecast_rvalue.pas": "native",
   "test-core#src:test/test_nativeint_cast_field.pas": "native",
@@ -2054,6 +2055,7 @@
   "test-core#src:test/test_open_array_field_args.pas": "native",
   "test-core#src:test/test_open_array_managed_length.pas": "native",
   "test-core#src:test/test_open_array_no_leak.pas": "native",
+  "test-core#src:test/test_open_array_of_a_named_dynamic_array.pas": "native",
   "test-core#src:test/test_open_array_of_variant.pas": "native",
   "test-core#src:test/test_operator_enumerator.pas": "native",
   "test-core#src:test/test_operator_implicit_shortstring_b356.pas": "native",
@@ -4738,6 +4740,7 @@
   "test-core#src:test/test_multidim_const_array.pas": "pass",
   "test-core#src:test/test_multithreading.pas@1": "pass",
   "test-core#src:test/test_named_dynarray_field.pas": "pass",
+  "test-core#src:test/test_named_fixed_array_of_a_dynamic_array.pas": "pass",
   "test-core#src:test/test_named_operators.pas": "pass",
   "test-core#src:test/test_narrowing_typecast_rvalue.pas": "pass",
   "test-core#src:test/test_nativeint_cast_field.pas": "pass",
@@ -4892,6 +4895,7 @@
   "test-core#src:test/test_open_array_field_args.pas": "pass",
   "test-core#src:test/test_open_array_managed_length.pas": "pass",
   "test-core#src:test/test_open_array_no_leak.pas": "pass",
+  "test-core#src:test/test_open_array_of_a_named_dynamic_array.pas": "pass",
   "test-core#src:test/test_open_array_of_variant.pas": "pass",
   "test-core#src:test/test_operator_enumerator.pas": "pass",
   "test-core#src:test/test_operator_implicit_shortstring_b356.pas": "pass",
@@ -6337,11 +6341,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-22T15:51:19Z",
-  "sha": "89f35406be7fe2abfa0f91b59d22b1cffffa7a6a",
+  "date": "2026-08-22T16:53:59Z",
+  "sha": "29a518312e66f2ffccec849963d08590399f8e07",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.0
+  "wall": 3600.4
  },
  "last_bench": {
   "conf_rows": 550,
