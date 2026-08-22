@@ -61,6 +61,43 @@ begin
       Result := tyRecord;
       Exit;
     end;
+    tkProcedure, tkFunction:
+    begin
+      { ANONYMOUS procedural type — `cb: procedure(l: LongInt)` written inline,
+        as a record field, a var, a parameter or an array element, with no named
+        alias. Ordinary Pascal, and FPC takes it; pxx rejected it outright
+        because the grammar lived only in ParseTypeSection's naming path.
+        Same shape as the anonymous inline record arm above: parse it here, mint
+        the unnamed backing (a body-less Procs[] signature, the AddUClass(0,0)
+        analogue), and hand back the same TTypeKind + LastType* the named alias
+        would have produced — so every consumer (AllocVar, the record-field
+        walker, the call sites gating on SymProcSig) sees no difference between
+        the inline form and the aliased one.
+        bug-a-an-anonymous-procedural-type-is-not-accepted }
+      aliasIdx := ParseProcTypeSignature;
+      if CurTok.Kind = tkOf then
+      begin
+        { `of object` — a method pointer: a 16-byte {Code,Data} value, so the
+          type kind is the shared method-pointer RECORD, exactly as
+          RegisterMethodPtrTypeAlias sets it for the named form. }
+        Next;
+        if CurTok.Kind = tkIdent then Next;   { consume `object` }
+        EatProcTypeCdecl(aliasIdx);
+        LastTypeRecId := EnsureMethodPtrRec;
+        LastTypeProcSig := aliasIdx;
+        Result := tyRecord;
+      end
+      else
+      begin
+        { a plain procedural value is a code address — the pointer alias shape
+          RegisterProcTypeAlias uses (tyPointer, depth 1, unknown pointee). }
+        EatProcTypeCdecl(aliasIdx);
+        LastTypePointerDepth := 1;
+        LastTypeProcSig := aliasIdx;
+        Result := tyPointer;
+      end;
+      Exit;
+    end;
     tkCaret:
     begin
       Next;
@@ -824,6 +861,17 @@ begin
         unknown-name default and quietly became Integers. That is how `absolute` came to
         be silently IGNORED — the overlay never happened and the variable got its own
         storage. Handled properly just below. }
+      if CurTok.Kind in [tkProcedure, tkFunction] then
+        { `var cb: procedure(l: LongInt);` — an ANONYMOUS procedural type. The
+          loop below treats these two tokens as the var section's terminator,
+          which is right at a DECLARATION position (a routine follows) and wrong
+          here: nothing but a type can follow the colon, so a routine
+          declaration is not one of the readings. Take the type and skip the
+          loop; ParseTypeKind's tkProcedure/tkFunction arm (and, for `of
+          object`, the method-pointer record it hands back) does the rest.
+          bug-a-an-anonymous-procedural-type-is-not-accepted }
+        VDTk := ParseTypeKind
+      else
       while not (CurTok.Kind in [tkSemicolon, tkEq, tkBegin, tkVar, tkConst, tkType,
                  tkProcedure, tkFunction, tkEnd, tkEOF]) and
             not ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'absolute')) do
@@ -3180,6 +3228,119 @@ begin
   Result := FindUClassInUnit(mem, u);
 end;
 
+function ParseProcTypeSignature: Integer;
+{ `procedure(...)` / `function(...): R` — the SIGNATURE only, from the keyword
+  up to (not including) any `of object`. Returns the body-less Procs[] index
+  that AliasProcSig / SymProcSig carry so an indirect call `v(args)` marshals
+  args and return value through the same machinery as a direct call.
+
+  Extracted from ParseTypeSection's named-alias arm, which was the only place
+  that could parse this. That is why `cb: procedure(l: LongInt)` written inline
+  — as a record field, a var, or a parameter — was a hard syntax error while the
+  identical shape behind a named alias worked: the grammar lived in the naming
+  path instead of in the type path.
+  bug-a-an-anonymous-procedural-type-is-not-accepted }
+var
+  mIsFunc, mDoneArgs, mIsByRef, mSawConst, mDoneParam, mIsArr: Boolean;
+  mNParams, mStartIdx, mpi, i: Integer;
+  mRetType, mTk: TTypeKind;
+  mPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
+  mPTypes: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
+  mPTypesRec: array[0..MAX_PROC_PARAMS-1] of Integer;
+  mPArr, mPByRef: array[0..MAX_PROC_PARAMS-1] of Boolean;
+begin
+      mIsFunc := (CurTok.Kind = tkFunction);
+      Next;
+      mNParams := 0;
+      mRetType := tyInteger;
+      if CurTok.Kind = tkLParen then
+      begin
+        Next;
+        mDoneArgs := False;
+        while (CurTok.Kind <> tkRParen) and not mDoneArgs do
+        begin
+          mIsByRef := False;
+          mSawConst := False;
+          if (CurTok.Kind = tkVar) or
+             ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
+          begin mIsByRef := True; Next; end
+          else if IsConstParamTok then
+          begin mSawConst := True; Next; end;
+          mStartIdx := mNParams;
+          mDoneParam := False;
+          while IsDeclNameTok and not mDoneParam do
+          begin
+            mPNames[mNParams] := CurTok.SVal; Inc(mNParams); Next;
+            if not Eat(tkComma) then mDoneParam := True;
+            if CurTok.Kind = tkColon then mDoneParam := True;
+          end;
+          Expect(tkColon, ':');
+          mIsArr := False;
+          if CurTok.Kind = tkArray then
+          begin
+            Next; Expect(tkOf, 'of'); mTk := ParseTypeKind; mIsArr := True;
+          end
+          else
+            mTk := ParseTypeKind;
+          { A `const` record/variant param is passed by reference — must match
+            ParseSubroutine's rule (pasparser_*.inc ~11403) so an INDIRECT call
+            through this proc-type marshals the arg the same way the callee
+            receives it (else the address/value mismatch segfaults — see
+            bug-proc-typed-call-const-record-arg). }
+          if mSawConst and ((mTk = tyRecord) or (mTk = tyVariant)) and not mIsArr then
+            mIsByRef := True;
+          for i := mStartIdx to mNParams-1 do
+          begin
+            mPTypes[i] := mTk;
+            mPTypesRec[i] := LastTypeRecId;
+            mPArr[i] := mIsArr;
+            mPByRef[i] := mIsByRef;
+          end;
+          if not Eat(tkSemicolon) then mDoneArgs := True;
+        end;
+        Expect(tkRParen, ')');
+      end;
+      if mIsFunc then
+      begin
+        Expect(tkColon, ':');
+        mRetType := ParseTypeKind;
+      end;
+      mpi := RegisterProc('$proctype', mIsFunc, mRetType, mNParams, mPNames, mPTypes);
+      Procs[mpi].BodyAddr := -1;
+      { Record the return pointer-element type on the signature (mRetType was the
+        last type parsed above, so LastTypePointerElem* still describe it). Without
+        this a `T = function(...): PAnsiChar` sig leaves ProcRetPtrElemTk at
+        tyUnknown, so IsNodePChar can't tell an indirect call through T returns
+        char* and `AnsiString(fp(...))` mis-lowers. Same dropped-field pattern as
+        the external-decl path. See bug-pascal-ansistring-cast-of-fnptr-call-result. }
+      if mIsFunc and (mRetType = tyPointer) then
+      begin
+        ProcRetPtrElemTk[mpi] := Ord(LastTypePointerElemTk);
+        ProcRetPtrElemRec[mpi] := LastTypePointerElemRec;
+      end;
+      for i := 0 to mNParams-1 do
+      begin
+        Procs[mpi].Params[i].IsArray := mPArr[i];
+        Procs[mpi].Params[i].IsRef := mPByRef[i];
+      end;
+  Result := mpi;
+end;
+
+procedure EatProcTypeCdecl(mpi: Integer);
+{ Optional `; cdecl` on a procedural type (`T = function(...): R; cdecl;`).
+  Marks the signature C-ABI so an indirect call through a value of this type
+  marshals System V — needed for dlsym'd C functions. Other directives
+  (stdcall etc.) are not modelled yet. Shared by the named and anonymous forms. }
+begin
+  if (CurTok.Kind = tkSemicolon) and (TokPos < TokCount) and
+     (Tokens[TokPos].Kind = tkIdent) and CaseEqual(GetTokenStr(TokPos), 'cdecl') then
+  begin
+    Next;   { consume ';' }
+    Next;   { consume 'cdecl' }
+    ProcCdecl[mpi] := True;
+  end;
+end;
+
 procedure ParseTypeSection;
 { Handles enum types, record/class type declarations }
 var
@@ -4958,80 +5119,7 @@ begin
           The signature is parsed into a body-less Procs[] entry; the alias keeps
           its index (AliasProcSig) so an indirect call `v(args)` through a var of
           this type marshals args/return via the same machinery as a direct call. }
-        mIsFunc := (CurTok.Kind = tkFunction);
-        Next;
-        mNParams := 0;
-        mRetType := tyInteger;
-        if CurTok.Kind = tkLParen then
-        begin
-          Next;
-          mDoneArgs := False;
-          while (CurTok.Kind <> tkRParen) and not mDoneArgs do
-          begin
-            mIsByRef := False;
-            mSawConst := False;
-            if (CurTok.Kind = tkVar) or
-               ((CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'out')) then
-            begin mIsByRef := True; Next; end
-            else if IsConstParamTok then
-            begin mSawConst := True; Next; end;
-            mStartIdx := mNParams;
-            mDoneParam := False;
-            while IsDeclNameTok and not mDoneParam do
-            begin
-              mPNames[mNParams] := CurTok.SVal; Inc(mNParams); Next;
-              if not Eat(tkComma) then mDoneParam := True;
-              if CurTok.Kind = tkColon then mDoneParam := True;
-            end;
-            Expect(tkColon, ':');
-            mIsArr := False;
-            if CurTok.Kind = tkArray then
-            begin
-              Next; Expect(tkOf, 'of'); mTk := ParseTypeKind; mIsArr := True;
-            end
-            else
-              mTk := ParseTypeKind;
-            { A `const` record/variant param is passed by reference — must match
-              ParseSubroutine's rule (pasparser_*.inc ~11403) so an INDIRECT call
-              through this proc-type marshals the arg the same way the callee
-              receives it (else the address/value mismatch segfaults — see
-              bug-proc-typed-call-const-record-arg). }
-            if mSawConst and ((mTk = tyRecord) or (mTk = tyVariant)) and not mIsArr then
-              mIsByRef := True;
-            for i := mStartIdx to mNParams-1 do
-            begin
-              mPTypes[i] := mTk;
-              mPTypesRec[i] := LastTypeRecId;
-              mPArr[i] := mIsArr;
-              mPByRef[i] := mIsByRef;
-            end;
-            if not Eat(tkSemicolon) then mDoneArgs := True;
-          end;
-          Expect(tkRParen, ')');
-        end;
-        if mIsFunc then
-        begin
-          Expect(tkColon, ':');
-          mRetType := ParseTypeKind;
-        end;
-        mpi := RegisterProc('$proctype', mIsFunc, mRetType, mNParams, mPNames, mPTypes);
-        Procs[mpi].BodyAddr := -1;
-        { Record the return pointer-element type on the signature (mRetType was the
-          last type parsed above, so LastTypePointerElem* still describe it). Without
-          this a `T = function(...): PAnsiChar` sig leaves ProcRetPtrElemTk at
-          tyUnknown, so IsNodePChar can't tell an indirect call through T returns
-          char* and `AnsiString(fp(...))` mis-lowers. Same dropped-field pattern as
-          the external-decl path. See bug-pascal-ansistring-cast-of-fnptr-call-result. }
-        if mIsFunc and (mRetType = tyPointer) then
-        begin
-          ProcRetPtrElemTk[mpi] := Ord(LastTypePointerElemTk);
-          ProcRetPtrElemRec[mpi] := LastTypePointerElemRec;
-        end;
-        for i := 0 to mNParams-1 do
-        begin
-          Procs[mpi].Params[i].IsArray := mPArr[i];
-          Procs[mpi].Params[i].IsRef := mPByRef[i];
-        end;
+        mpi := ParseProcTypeSignature;
         if CurTok.Kind = tkOf then
         begin
           { `of object` — a method pointer: a 16-byte {Code,Data} value. The
@@ -5042,18 +5130,7 @@ begin
         end
         else
           RegisterProcTypeAlias(tnOff, tnLen, mpi);
-        { Optional `; cdecl` calling-convention directive on the procedural type
-          (`T = function(...): R; cdecl;`). Marks the signature C-ABI so an
-          indirect call through a value of this type marshals System V (needed for
-          dlsym'd C functions). Other directives (stdcall etc.) are not modelled
-          yet — only cdecl, which on x86-64 is the System V path the externs use. }
-        if (CurTok.Kind = tkSemicolon) and (TokPos < TokCount) and
-           (Tokens[TokPos].Kind = tkIdent) and CaseEqual(GetTokenStr(TokPos), 'cdecl') then
-        begin
-          Next;   { consume ';' }
-          Next;   { consume 'cdecl' }
-          ProcCdecl[mpi] := True;
-        end;
+        EatProcTypeCdecl(mpi);
       end
       else if (CurTok.Kind = tkInteger) or (CurTok.Kind = tkMinus) or (CurTok.Kind = tkString) then
       begin

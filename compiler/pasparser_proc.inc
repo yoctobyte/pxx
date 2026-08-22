@@ -199,7 +199,17 @@ begin
     begin we must not mistake for our own. }
   while not (CurTok.Kind in [tkBegin, tkAsm, tkEOF]) do
   begin
-    if CurTok.Kind in [tkProcedure, tkFunction] then
+    { NestIsRoutineDecl, not a bare keyword test: a procedural TYPE
+      (`type TP = procedure(l: LongInt);`, `var cb: procedure;`) starts with the
+      same keyword and is NOT a nested routine. This walk used to take the
+      keyword alone, skip the "signature", eat the `;` and then hunt for that
+      phantom routine's `begin` — which found the ENCLOSING routine's, so the
+      real body was consumed as the phantom's and the parse ran off the end of
+      the program. Any routine-local procedural type did it; a local record or
+      pointer type was fine. NestIsRoutineDecl already carries exactly this
+      discrimination, and documents it; this was a second hand-written copy
+      that omitted it. bug-a-a-routine-local-procedural-type-eats-the-body }
+    if NestIsRoutineDecl(TokPos - 1) then
     begin
       Next;                       { proc/func keyword }
       { skip the signature up to the ';' at paren depth 0 }

@@ -5251,6 +5251,18 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_typed_procvar_const_is_callable.pas $(TESTTMP)/test_typed_procvar_const26
 	test "$$($(TESTTMP)/test_typed_procvar_const26)" = "$$(printf 'direct 49\nemit 4\nbare\nbare\nlocal -3\nviavar 25\nmixed 13\narg 36\nassigned TRUE')"
 
+	# ANONYMOUS procedural types — `cb: procedure(l: LongInt)` inline, no named
+	# alias — as record fields (incl. two per declaration and an `of object` one),
+	# globals, locals, array elements, and with cdecl. The grammar used to live
+	# only in ParseTypeSection's naming path. `after 11` and the sizes row check
+	# that fields following a procvar still lay out correctly.
+	# Second half: a routine-LOCAL procedural type, named or anonymous, used to
+	# make PreScanSkipRoutineBody hunt for a phantom nested routine's `begin`,
+	# find the enclosing routine's, and eat the real body. Outer/Inner proves the
+	# recursion into a genuine nested routine still finds its own.
+	./$(COMPILER) -Fulib/rtl test/test_anonymous_procedural_type.pas $(TESTTMP)/test_anon_proctype26
+	test "$$($(TESTTMP)/test_anon_proctype26)" = "$$(printf 's1 10\nassigned TRUE\nassigned FALSE\ncdecl 108\ns1 12\ns2 13\nfield 25\nmeth 14\nafter 11\ns1 16\nnested 15\n4 9 \napply 49\ns1 1\ns2 2\nhi\nlocalfn 16\ns1 6\nsizes 48 56')"
+
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"

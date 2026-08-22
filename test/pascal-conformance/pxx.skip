@@ -140,7 +140,7 @@ toperator1.pp	gap: operator overloading (+) on records declared in units; cross-
 toperator6.pp	gap: `operator :=` implicit-conversion overload + qword/int64 overload selection
 tover3.pp	wontfix: dialect-pass — overload ambiguity — PXX deterministically ranks (picks longint for cardinal arg) by design; FPC-parity ambiguity errors belong to --strict-overload
 tover4.pp	gap: 80-bit extended/cextended float type and overload resolution across single/double/extended
-tprocvar1.pp	gap: ANONYMOUS procedural types (`cb: procedure(l: longint)` inline, no named alias) — see bug-a-an-anonymous-procedural-type-is-not-accepted. Named-alias procvars, method pointers and typed-const procvars all work now; the old reason listed those three and was stale.
+tprocvar1.pp	gap: old-style `object` types with constructor/virtual methods (same gap as tobject2.pp / tsealed6.pp). Its procvar content passes now — the previous reason named three gaps (method pointers, @Class.Method, typed-const procvars) and a fourth found chasing it (anonymous procedural types); all are fixed, and unskipping shows `object constructor init` is what is left.
 tprocvar2.pp	gap: typed const procvar initialized with bare proc name (TP mode), procvar via move()
 tprocvar3.pp	gap: delphi-mode procvar of object, @-less proc assignment, codepointer method addresses
 tprop1.pp	gap: global `property` section in a program (FPC-mode global properties)

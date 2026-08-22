@@ -471,6 +471,11 @@ function ParseAsmStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;
 procedure CompileAST(node: Integer); forward;
 function ParseTypeKind: TTypeKind; forward;
+{ the procedural-type grammar, shared by the named alias (ParseTypeSection) and
+  the anonymous inline form (ParseTypeKind) — mutually recursive with the latter,
+  since a parameter's type is itself a type }
+function ParseProcTypeSignature: Integer; forward;
+procedure EatProcTypeCdecl(mpi: Integer); forward;
 procedure ParseRecordFields(ci: Integer; isPackedRecord: Boolean); forward;
 procedure ParseRecordMethodDecl(ci: Integer); forward;
 var RecordMethodClassPrefix: Boolean = False;  { `class function` in a record/helper body }
