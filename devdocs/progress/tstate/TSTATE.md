@@ -13,4 +13,4 @@
 - **test-core#src:test/test_generic_inherit_delphi.pas** — test/test_generic_inherit_delphi.pas (plexus): bad `5179c4d4350b`, last good `f74df41e851c`, 1 commit(s) in range
 - **demos#00** (plexus): bad `f3acfdabf53c`, last good `ba5791c02ce3`, 1 commit(s) in range
 - **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +2 (plexus): bad `98ed38202254`, last good `23becd24b8e5`, 423 commit(s) in range
-- **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (plexus): bad `98ed38202254`, last good `f3acfdabf53c`, 14 commit(s) in range
+- **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (plexus): bad `98ed38202254`, last good `187ddef2a487`, 7 commit(s) in range
