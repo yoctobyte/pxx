@@ -12294,7 +12294,7 @@ begin
         off := ASTSOffset[node];
         len := ASTSLen[node];
         lbId := -1;
-        for i := 0 to GotoLabelCount - 1 do
+        for i := GotoLabelBase to GotoLabelCount - 1 do
           if TokSlicesMatch(GotoLabelNOff[i], GotoLabelNLen[i], off, len) then
           begin
             if GotoLabelIRId[i] = -1 then
@@ -12319,7 +12319,7 @@ begin
         off := ASTSOffset[node];
         len := ASTSLen[node];
         lbId := -1;
-        for i := 0 to GotoLabelCount - 1 do
+        for i := GotoLabelBase to GotoLabelCount - 1 do
           if TokSlicesMatch(GotoLabelNOff[i], GotoLabelNLen[i], off, len) then
           begin
             if GotoLabelIRId[i] = -1 then

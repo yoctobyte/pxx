@@ -470,7 +470,7 @@ var
   retArrAi : Integer;           { its ArrType index, so the Result slot can be shaped like the type; -1 = not one }
   retPtrElemTk, retPtrElemRec : Integer;
   savedSC, savedFS, savedCurProc : Integer;
-  savedGLC, savedGFC, j, savedVisVarSeq: Integer;
+  savedGLC, savedGFC, savedGLB, j, savedVisVarSeq: Integer;
   cleanupJnePatch: Integer;
   patchPos : Integer;
   depth    : Integer;
@@ -1552,9 +1552,13 @@ begin
   savedGFC := GotoFixupCount;
   savedProcCleanupFrameActive := ProcExceptionCleanupFrameActive;
   ProcExceptionCleanupFrameActive := False;
-  GotoLabelCount := 0;
+  savedGLB := GotoLabelBase;
+  GotoLabelBase := GotoLabelCount;   { this routine's labels start here; the
+    enclosing scope's stay put. Resetting the COUNT to 0 restored the count on
+    exit but not the slot CONTENTS, so a routine's labels overwrote the
+    program's. }
   GotoFixupCount := 0;
-  for j := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[j] := -1;
+  for j := GotoLabelBase to MAX_GOTO_LABELS - 1 do GotoLabelIRId[j] := -1;
   FrameSize := 0;
   CurProc := procIdx;
   if declInline then ProcInline[procIdx] := True;
@@ -2087,7 +2091,7 @@ begin
     EmitProcCleanupLandingPadForTarget(cleanupJnePatch);
 
   { Verify all forward goto fixups were resolved }
-  for i := 0 to GotoLabelCount - 1 do
+  for i := GotoLabelBase to GotoLabelCount - 1 do
     if GotoLabelCodePos[i] = -1 then
     begin
       for j := 0 to GotoFixupCount - 1 do
@@ -2127,6 +2131,7 @@ begin
   FrameSize := savedFS;
   GotoLabelCount := savedGLC;
   GotoFixupCount := savedGFC;
+  GotoLabelBase := savedGLB;
   CurProc   := -1;
   CurBodyHdrTok := savedVisVarSeq;   { restore decl-order horizon (see all outside a body) }
   CurSelfClass := REC_NONE;
@@ -4193,7 +4198,7 @@ end;
   `finalization`. Leaves the parser positioned at that terminator. }
 procedure ParseInitializationSection(const uname: AnsiString; isFini: Boolean);
 var
-  procIdx, savedSC, savedFS, savedGLC, savedGFC, j, patchPos: Integer;
+  procIdx, savedSC, savedFS, savedGLC, savedGFC, savedGLB, j, patchPos: Integer;
   seqNode, lastSeq, stmtNode: Integer;
   dummyNames: array[0..0] of AnsiString;
   dummyTypes: array[0..0] of TTypeKind;
@@ -4209,8 +4214,10 @@ begin
   savedSC := SymCount; savedFS := FrameSize;
   LocalInitCount := 0;   { routine-local typed-const initializers, flushed in the prologue }
   savedGLC := GotoLabelCount; savedGFC := GotoFixupCount;
-  GotoLabelCount := 0; GotoFixupCount := 0;
-  for j := 0 to MAX_GOTO_LABELS - 1 do GotoLabelIRId[j] := -1;
+  savedGLB := GotoLabelBase;
+  GotoLabelBase := GotoLabelCount;   { see the other body parser above }
+  GotoFixupCount := 0;
+  for j := GotoLabelBase to MAX_GOTO_LABELS - 1 do GotoLabelIRId[j] := -1;
   FrameSize := 0;
   CurProc := procIdx;
   Procs[procIdx].ScopeBase := SymCount;
@@ -4259,6 +4266,7 @@ begin
 
   SymRollbackTo(savedSC); FrameSize := savedFS;
   GotoLabelCount := savedGLC; GotoFixupCount := savedGFC;
+  GotoLabelBase := savedGLB;
   CurProc := -1;
 
   if isFini then

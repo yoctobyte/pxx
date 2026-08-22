@@ -493,5 +493,38 @@ procedure ParseNestedRoutine; forward;
 procedure FlushPendingNestedProcs; forward;
 function ParseParallelFor: Integer; forward;
 
+procedure LabelSpanOfTok(idx: Integer; var noff, nlen: Integer);
+{ The source span that IDENTIFIES a goto label at token `idx`.
+
+  Labels are matched by SPAN (TokSlicesMatch over TokChars), which works for an
+  identifier label because the lexer copies every token's SVal into the char
+  pool. A NUMERIC label -- `label 1; ... 1: ... goto 1` -- has no SVal at all:
+  the lexer leaves SVal empty for tkInteger and puts the value in IVal, so its
+  span is zero-length and every numeric label would match every other one.
+
+  So synthesise the span from the VALUE. That has the side benefit of matching
+  fpc's rule, which compares numeric labels numerically: `007` and `7` are the
+  same label, and go through AIntToStr to the same digits here. }
+var s: AnsiString; i: Integer;
+begin
+  if Tokens[idx].Kind = tkInteger then
+  begin
+    s := AIntToStr(Tokens[idx].IVal);
+    if TokCharLen + Length(s) > STRING_CAP then Error('token char pool overflow');
+    noff := TokCharLen;
+    nlen := Length(s);
+    for i := 1 to Length(s) do
+    begin
+      TokChars[TokCharLen] := s[i];
+      Inc(TokCharLen);
+    end;
+  end
+  else
+  begin
+    noff := Tokens[idx].SOffset;
+    nlen := Tokens[idx].SLen;
+  end;
+end;
+
 { GetTokenStrFromRaw moved up to lexer.inc (before its lexer.inc use) for FPC
   declaration-order; see there. }

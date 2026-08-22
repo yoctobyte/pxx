@@ -6100,13 +6100,16 @@ end;
   expected `begin`. One body, called from both.
   bug-a-a-label-section-must-come-last-in-a-routine }
 procedure ParseLabelSection;
+{ `label a, b;` and `label 1, 2;` alike. NUMERIC labels are the traditional
+  Pascal spelling and were refused outright -- the loop below only accepted
+  tkIdent, so `label 1;` died with "Expected: begin". LabelSpanOfTok gives a
+  numeric token the same kind of span an identifier already has. }
 begin
   Next;                             { 'label' }
-  while CurTok.Kind = tkIdent do
+  while (CurTok.Kind = tkIdent) or (CurTok.Kind = tkInteger) do
   begin
     if GotoLabelCount >= MAX_GOTO_LABELS then Error('too many labels');
-    GotoLabelNOff[GotoLabelCount]    := Tokens[TokPos-1].SOffset;
-    GotoLabelNLen[GotoLabelCount]    := Tokens[TokPos-1].SLen;
+    LabelSpanOfTok(TokPos-1, GotoLabelNOff[GotoLabelCount], GotoLabelNLen[GotoLabelCount]);
     GotoLabelCodePos[GotoLabelCount] := -1;
     Inc(GotoLabelCount);
     Next;

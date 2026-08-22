@@ -1347,7 +1347,7 @@ begin
   Eat(tkDot);
 
   { Verify all forward goto fixups were resolved }
-  for i := 0 to GotoLabelCount - 1 do
+  for i := GotoLabelBase to GotoLabelCount - 1 do
     if GotoLabelCodePos[i] = -1 then
     begin
       for j := 0 to GotoFixupCount - 1 do

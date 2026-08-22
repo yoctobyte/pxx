@@ -3555,6 +3555,7 @@ var
   GotoLabelNOff   : array[0..MAX_GOTO_LABELS-1] of Integer; { name offset in TokChars }
   GotoLabelNLen   : array[0..MAX_GOTO_LABELS-1] of Integer; { name length }
   GotoLabelCodePos: array[0..MAX_GOTO_LABELS-1] of Integer; { code position; -1 = not yet placed }
+  GotoLabelBase : Integer;   { index where the CURRENT routine's labels start in the GotoLabel* tables. A routine used to reset GotoLabelCount to 0 and restore it on exit, which restored the COUNT but not the CONTENTS -- its labels were written over the enclosing program's slots, so `program p; label la; procedure Q; label lq; ...` lost `la` and the main body's `la:` died with "AN_LABEL: undeclared label". Every lookup scans [GotoLabelBase, GotoLabelCount) so a nested routine neither sees nor clobbers the enclosing scope's labels; a non-local goto stays impossible, which is the Pascal rule anyway. bug-p-a-routines-label-section-clobbers-the-enclosing-programs-labels }
   GotoLabelIRId   : array[0..MAX_GOTO_LABELS-1] of Integer; { IR label ID for IR path; -1 = unallocated }
 
   { Scratch stack for IRLowerAST's statement-sequence lowering, which used to

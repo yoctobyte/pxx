@@ -4361,6 +4361,23 @@ begin
     StmtNChecks := Integer(TokNChecks[TokPos - 1]);
   node := -1;
   case CurTok.Kind of
+    tkInteger:
+    begin
+      { A NUMERIC label at statement position -- `1: Writeln(...)`. The
+        IDENTIFIER form is handled inside the tkIdent case far below, which a
+        number never reaches, so `1:` was a syntax error even with the label
+        declared. Only a following ':' makes it a label; anything else keeps
+        the diagnostic a statement starting with a number deserves. }
+      if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkColon) then
+      begin
+        node := AllocNode(AN_LABEL);
+        LabelSpanOfTok(TokPos-1, ASTSOffset[node], ASTSLen[node]);
+        Next; Next;   { the number and the ':' }
+        Result := node;
+        Exit;
+      end;
+      Error('a statement cannot start with a number');
+    end;
     tkInteger_T, tkLongWord_T, tkChar_T, tkBoolean_T:
     begin
       { Cast-as-lvalue store: `Integer(expr^) := v` (fgl's
@@ -4717,8 +4734,7 @@ begin
       if Tokens[TokPos].Kind = tkColon then
       begin
         node := AllocNode(AN_LABEL);
-        ASTSOffset[node] := Tokens[TokPos-1].SOffset;
-        ASTSLen[node]    := Tokens[TokPos-1].SLen;
+        LabelSpanOfTok(TokPos-1, ASTSOffset[node], ASTSLen[node]);
         Next; Next; { consume ident and colon }
         Result := node;
         Exit;
@@ -5612,10 +5628,10 @@ begin
       else if CaseEqual(name, 'goto') then
       begin
         Next;
-        if CurTok.Kind <> tkIdent then Error('expected label name after goto');
+        if (CurTok.Kind <> tkIdent) and (CurTok.Kind <> tkInteger) then
+          Error('expected a label name or number after goto');
         node := AllocNode(AN_GOTO);
-        ASTSOffset[node] := Tokens[TokPos-1].SOffset;
-        ASTSLen[node]    := Tokens[TokPos-1].SLen;
+        LabelSpanOfTok(TokPos-1, ASTSOffset[node], ASTSLen[node]);
         Next;
       end
       else
