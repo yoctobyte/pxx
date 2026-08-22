@@ -55,12 +55,13 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (286)
+## backlog (287)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-variant-comparison-does-not-coerce-a-stringy-operand | A | 45 | bug | `a := 1; b := '1'; a = b` answers False and `1 < '2'` answers False; FPC coerces the stringy side and answers True for both. SILENT wrong boolean. PXXVarBinOpPas coerces for arithmetic (isCompare=0) and not for comparison, and x86-64 hand-emits its own copy of the whole rule in EmitVarBinOp — so the fix is two places, or one after deleting the duplication. | — |
 | bug-a-absolute-cannot-overlay-an-untyped-var-parameter | A | 30 | bug | `procedure Zap(var x); var b: array[0..255] of Byte absolute x;` is refused with 'absolute: target must not be a by-reference parameter'. That IS the idiom untyped parameters exist for — FPC compiles it — and the overlay machinery cannot express it because it works by copying the target's Offset, which for a by-ref param aliases the POINTER rather than the pointee. | — |
+| bug-a-low-high-of-a-char-indexed-array-answer-the-ordinal | P | 30 | bug | `Low(a)` / `High(a)` on `array['a'..'e'] of Integer` answer 97 and 101 where fpc answers 'a' and 'e', so `for c := Low(a) to High(a)` does not compile against a Char loop variable. The bound is folded as tyInteger because the array's INDEX type is not recorded anywhere. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
 | bug-a-null-does-not-propagate-through-variant-arithmetic | A | 45 | bug | `Null + 5` yields 5, not Null: VarIsNull(a + b) with a = Null answers False where FPC answers True. Null is read as payload 0 and behaves like the number zero through every arithmetic operator, so a missing value silently becomes a real one — the exact failure mode Null exists to prevent. | — |
@@ -559,9 +560,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2266)
+## done (2267)
 
-2266 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2267 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -781,6 +782,7 @@ _none_
 - [p 35] [P] refactor-p-three-hand-rolled-postfix-loops
 - [p 35] [D] task-d-document-the-strict-overload-width-flag
 - [p 30] [A] bug-a-absolute-cannot-overlay-an-untyped-var-parameter
+- [p 30] [P] bug-a-low-high-of-a-char-indexed-array-answer-the-ordinal
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
 - [p 30] [B] bug-b-the-fpc-vartype-constants-are-missing
 - [p 30] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder

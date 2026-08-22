@@ -5346,6 +5346,98 @@ end;
   Otherwise consume nothing and return False (the caller falls back to the
   High/Low-of-array-variable path). A name that resolves to a VARIABLE is left
   for that path. }
+function TryOrdinalVarBound(symIdx: Integer; wantHigh: Boolean;
+                            var v: Int64; var tkOut: TTypeKind): Boolean;
+{ Low(x)/High(x) where x is an ordinal VARIABLE -- `var b: Byte` gave 0 and -1,
+  and so did every other scalar: Byte, SmallInt, Char, Boolean, Integer, an
+  enum, and a named subrange. Only the array-variable arms and the type-name
+  fold ever answered.
+
+  0 and -1 is not a random wrong pair, it is `Length(x) - 1` reached through the
+  fallback at the bottom of both intrinsics: a non-array, non-string operand has
+  no [data-8] header, Length answers 0, and High answers -1. So the single most
+  idiomatic loop in Pascal, `for i := Low(x) to High(x)`, ran ZERO times over
+  any ordinal -- silently, since 0..-1 is a legal empty range -- and `High(b)`
+  used as a mask or a bound was -1. Found 2026-08-22 by an fpc differential
+  sweep over arrays; fpc answers the variable's TYPE bounds for all of these.
+
+  The bound's type comes back in tkOut so the literal prints like fpc's:
+  Low(Char) is #0 and not 0, Low(Boolean) is FALSE and not 0. A named subrange
+  keeps its base type (`TL = 'a'..'e'` is a Char), which is what SymSubLo/Hi are
+  already stamped alongside for {$R+}. }
+var eLo, eHi: Integer;
+begin
+  Result := False;
+  if (symIdx < 0) or (symIdx >= SymCount) then Exit;
+  if Syms[symIdx].IsArray then Exit;
+  tkOut := Syms[symIdx].TypeKind;
+  { A named SUBRANGE answers its OWN bounds, not the base type's -- the same
+    rule TryConstHighLowValue and TryFoldHighLowType apply to the type NAME.
+    Without it `var i: TI` where `TI = 3..7` answered Integer's bounds, which
+    is the bug bug-a-low-high-of-a-named-subrange-answer-the-base-type fixed
+    for the type name and never reached the variable. }
+  if SymIsSub[symIdx] then
+  begin
+    if wantHigh then v := SymSubHi[symIdx] else v := SymSubLo[symIdx];
+    Result := True;
+    Exit;
+  end;
+  if SymEnumId[symIdx] >= 0 then
+  begin
+    EnumTypeOrdRange(SymEnumId[symIdx], eLo, eHi);
+    if wantHigh then v := eHi else v := eLo;
+    Result := True;
+    Exit;
+  end;
+  Result := OrdinalTypeBound(tkOut, wantHigh, v);
+end;
+
+function TryArrayTypeBound(const nm: AnsiString; wantHigh: Boolean; var v: Int64): Boolean;
+{ Low(T)/High(T) where T is a named ARRAY type -- `TA = array[5..9] of Integer`
+  answered `undefined variable (TA)` while `Low(a)` over a VARIABLE of that type
+  worked, so the idiomatic `for i := Low(TA) to High(TA)` had to be spelled with
+  a dummy variable. Measured against fpc 3.2.2: Low(TA)=5, High(TA)=9; on an N-D
+  type the bounds are the FIRST dimension's (`array[0..2, 0..3]` gives 0 and 2);
+  on a dynamic type Low is 0 and High is REFUSED, since there is no length until
+  an instance exists.
+
+  Called from both TryConstHighLowValue (const contexts) and TryFoldHighLowType
+  (expressions) -- those two are one concept in two places, as their own
+  comments already say, so the array rule lands as ONE function rather than a
+  third copy. Does not consume the name; the callers do that.
+
+  The bound's TYPE is Integer here, matching what the variable path already
+  answers: `Low(c)` over `array['a'..'e']` prints 97, not 'a', in pxx today.
+  That is a real divergence from fpc, but it is the VARIABLE path's divergence
+  and predates this -- filed as bug-a-low-high-of-a-char-indexed-array-answer-
+  the-ordinal. Answering differently here would make the type name and the
+  variable disagree, which is worse than either answer. }
+var ai, base: Integer;
+begin
+  Result := False;
+  ai := FindArrayType(nm);
+  if ai < 0 then Exit;
+  if ArrTypeIsDyn[ai] or (ArrTypeDynDepth[ai] > 0) then
+  begin
+    { fpc: Low is 0, High is a compile error. Refusing High keeps a wrong
+      answer out of `for i := Low(T) to High(T)`, which would otherwise run
+      from 0 to whatever ArrTypeHi happened to hold for a dynamic alias. }
+    if wantHigh then Exit;
+    v := 0;
+    Result := True;
+    Exit;
+  end;
+  if ArrTypeNDims[ai] >= 1 then
+  begin
+    base := ai * MAX_ARR_DIMS;
+    if wantHigh then v := ArrTypeDimLo[base] + ArrTypeDimSpan[base] - 1
+    else v := ArrTypeDimLo[base];
+  end
+  else if wantHigh then v := ArrTypeHi[ai]
+  else v := ArrTypeLo[ai];
+  Result := True;
+end;
+
 function TryConstHighLowValue(wantHigh: Boolean; var v: Int64): Boolean;
 { Value twin of TryFoldHighLowType for the constant evaluator: CurTok sits on
   the (candidate) type name inside High(...)/Low(...); on success the bound is
@@ -5395,6 +5487,12 @@ begin
   begin
     EnumTypeOrdRange(etid, eLo, eHi);
     if wantHigh then v := eHi else v := eLo;
+    Next;
+    Result := True; Exit;
+  end;
+
+  if TryArrayTypeBound(nm, wantHigh, v) then
+  begin
     Next;
     Result := True; Exit;
   end;
@@ -5449,6 +5547,12 @@ begin
   begin
     EnumTypeOrdRange(etid, eLo, eHi);
     if wantHigh then bv := eHi else bv := eLo;
+    Next; outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv; ASTTk[outNode] := Ord(tyInteger);
+    Result := True; Exit;
+  end;
+
+  if TryArrayTypeBound(nm, wantHigh, bv) then
+  begin
     Next; outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv; ASTTk[outNode] := Ord(tyInteger);
     Result := True; Exit;
   end;

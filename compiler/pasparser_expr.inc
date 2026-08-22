@@ -279,6 +279,8 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     szScan, szBd, szExprNode: Integer;
     szIsExpr: Boolean;
     szExprTk: TTypeKind;
+    hlBoundV: Int64;
+    hlBoundTk: TTypeKind;
     mcCi: Integer; mcFin: Boolean;   { metaclass receiver at the end of a cast-deref chain }
  szElemTk: TTypeKind; szBTk: TTypeKind;
     seEtid, seOrd: Integer;
@@ -4731,6 +4733,17 @@ begin
             RecFieldArrLen(ResolveNodeRec(ASTLeft[valNode]), GetASTIdentName(valNode)) - 1;
           ASTTk[CurASTNode] := Ord(tyInteger);
         end
+        else if (idx >= 0) and (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx) and
+                TryOrdinalVarBound(idx, True, hlBoundV, hlBoundTk) then
+        begin
+          { High of an ordinal VARIABLE is its type's upper bound. Without this
+            arm it fell into the Length-1 fallback below and answered -1 for
+            every scalar -- see TryOrdinalVarBound. }
+          CurASTNode := AllocNode(AN_INT_LIT);
+          ASTIVal[CurASTNode] := hlBoundV; ASTTk[CurASTNode] := Ord(hlBoundTk);
+          LastExprTk := hlBoundTk;
+          Exit;
+        end
         else
         begin
           node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
@@ -4774,6 +4787,17 @@ begin
           { Low of a whole multi-dim static array = the FIRST dimension's lower
             bound (SymArrDimLo[sym*MAX+0]); was silently 0. }
           ASTIVal[CurASTNode] := SymArrDimLo[idx * MAX_ARR_DIMS]
+        else if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx) and
+                TryOrdinalVarBound(idx, False, hlBoundV, hlBoundTk) then
+        begin
+          { Low of an ordinal VARIABLE is its type's lower bound; the `else 0`
+            below answered 0 for Integer, SmallInt and every named subrange.
+            Paired with the High arm above -- see TryOrdinalVarBound. }
+          ASTIVal[CurASTNode] := hlBoundV;
+          ASTTk[CurASTNode] := Ord(hlBoundTk);
+          LastExprTk := hlBoundTk;
+          Exit;
+        end
         else
           ASTIVal[CurASTNode] := 0;
         ASTTk[CurASTNode] := Ord(tyInteger);
