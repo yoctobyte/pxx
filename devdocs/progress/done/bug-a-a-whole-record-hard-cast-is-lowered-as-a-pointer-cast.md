@@ -3,7 +3,7 @@ slug: bug-a-a-whole-record-hard-cast-is-lowered-as-a-pointer-cast
 track: A
 prio: 65
 status: done
-commit: PENDING-COMMIT
+commit: 5a48cce1e
 ---
 
 # `q := TQ(r)` segfaults; `q.x := TQ(r).x` does not

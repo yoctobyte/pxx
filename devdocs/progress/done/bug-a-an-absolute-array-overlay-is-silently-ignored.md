@@ -3,7 +3,7 @@ slug: bug-a-an-absolute-array-overlay-is-silently-ignored
 track: A
 prio: 60
 status: done
-commit: PENDING-COMMIT
+commit: 35ef86078
 ---
 
 # `array ... absolute x` is accepted, aliases nothing, and says nothing
