@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `9cebdbb1f02c` | 2026-08-22T13:47:33Z | RED (native) | 3600.1s | `98ed38202254` RED |
+| plexus | `1021bbdece65` | 2026-08-22T14:49:34Z | RED (native) | 3600.5s | `98ed38202254` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -14,3 +14,4 @@
 - **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (plexus): bad `5179c4d4350b`, last good `f74df41e851c`, 1 commit(s) in range
 - **test-core#src:test/test_classref.pas** — test/test_classref.pas (plexus): bad `392ea5d94545`, last good `766e6ea5b4d6`, 4 commit(s) in range
 - **test-core#src:test/test_rtti.pas** — test/test_rtti.pas (plexus): bad `392ea5d94545`, last good `766e6ea5b4d6`, 4 commit(s) in range
+- **test-core#src:test/test_fpc_compat_batch.pas** — test/test_fpc_compat_batch.pas (plexus): bad `1021bbdece65`, last good `9cebdbb1f02c`, 9 commit(s) in range

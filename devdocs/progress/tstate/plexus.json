@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T00:31:04Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "48d64f73bd0d935e6b6d26397edb3195b5e2555b",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T00:53:03Z",
    "fixed": [],
    "new_red": [],
@@ -466,6 +458,16 @@
    "sha": "9cebdbb1f02c6c62656d4f3ea610c86ab05d33f6",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-22T14:49:34Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_fpc_compat_batch.pas"
+   ],
+   "sha": "1021bbdece658fd8b34c9190ee8a8ed66c703671",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
@@ -473,6 +475,7 @@
   "demos#00": "OK    examples/sudoku/sudoku.pas | OK    examples/tk/uses_tkinter_and_configparser.pas | FAIL  examples/tui/menudemo.pas  --   near: PXXNilRefHook   SysRaiseAccessViolation  PXXVariantErrorHook >>>   SysRaiseVariantError | FAIL  examples/vm/vmdemo.pas  --   near: PXXNilRefHook   SysRaiseAccessViolation  PXXVariantErrorHook >>>   SysRaiseVariantError | === demos: 7/35 built into build/demos/ (esp3\u2026",
   "lib-test#src:tools/crtl_reachability.py": "in: stable_linux_amd64/default/../../lib/rtl/sysutils.pas | near: PXXNilRefHook   SysRaiseAccessViolation  PXXVariantErrorHook >>>   SysRaiseVariantError | lib-units: FAIL x509 | pascal26:4790: error: undefined variable (PXXVariantErrorHook) | in: stable_linux_amd64/default/../../lib/rtl/sysutils.pas | near: PXXNilRefHook   SysRaiseAccessViolation  PXXVariantErrorHook >>>   SysRaiseVariantError",
   "test-core#src:test/test_classref.pas": "ok: $TMP  [code=113781B  data=4272B  bss=42524B  procs=254] | Segmentation fault (core dumped)",
+  "test-core#src:test/test_fpc_compat_batch.pas": "pascal26:132: error: undefined variable (LongWord) | near:  SizeOf  System  LongWord >>>   SizeOf",
   "test-core#src:test/test_rtti.pas": "ok: $TMP  [code=119230B  data=6124B  bss=46756B  procs=255] | Segmentation fault (core dumped)",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter",
   "test-pascal-conformance#shard0/6": "SKIP tover1.pp \u2014 gap: overload resolution across shortstring/ansistring/widestring/pchar params | SKIP tprocvar3.pp \u2014 gap: delphi-mode procvar of object, @-less proc assignment, codepointer method addresses | SKIP tset2a.pp \u2014 gap: explicit enum ordinal values (dA:=8) + {$packset 1} packed-set semantics | SKIP tstring11.pp \u2014 gap: overload resolution RawByteString vs UnicodeString (char/array/pchar\u2026",
@@ -1413,6 +1416,7 @@
   "test-core#src:test/test_aintostr_negative.pas@2": "native",
   "test-core#src:test/test_algol_skeleton.alg": "native",
   "test-core#src:test/test_alloca.c": "native",
+  "test-core#src:test/test_anonymous_enum_and_subrange_types.pas": "native",
   "test-core#src:test/test_anonymous_procedural_type.pas": "native",
   "test-core#src:test/test_anonymous_record.pas": "native",
   "test-core#src:test/test_ansistring.pas": "native",
@@ -1498,6 +1502,7 @@
   "test-core#src:test/test_case_sensitive.pas": "native",
   "test-core#src:test/test_case_sensitive_unit.pas": "native",
   "test-core#src:test/test_case_unit_lookup.pas": "native",
+  "test-core#src:test/test_cast_as_lvalue_over_a_variable.pas": "native",
   "test-core#src:test/test_cast_char_bool.pas": "native",
   "test-core#src:test/test_cast_deref_chain_siblings.pas": "native",
   "test-core#src:test/test_cast_deref_pointer_field.pas": "native",
@@ -1827,6 +1832,7 @@
   "test-core#src:test/test_local_var_beats_string_const_b313.pas": "native",
   "test-core#src:test/test_lolcode_skeleton.lol": "native",
   "test-core#src:test/test_loop_control.pas": "native",
+  "test-core#src:test/test_low_high_of_ordinal_and_array_type.pas": "native",
   "test-core#src:test/test_managed_arg_temp.pas": "native",
   "test-core#src:test/test_managed_block_header.pas": "native",
   "test-core#src:test/test_managed_block_meta.pas": "native",
@@ -2214,6 +2220,7 @@
   "test-core#src:test/test_sizeof.pas": "native",
   "test-core#src:test/test_sizeof_array_field.pas": "native",
   "test-core#src:test/test_sizeof_array_typename.pas": "native",
+  "test-core#src:test/test_sizeof_of_an_expression.pas": "native",
   "test-core#src:test/test_soft_keyword_length.pas": "native",
   "test-core#src:test/test_source_type_beats_unit_function.pas": "native",
   "test-core#src:test/test_sqlite_crud.pas": "native",
@@ -4247,6 +4254,7 @@
   "test-core#src:test/test_aintostr_negative.pas@2": "pass",
   "test-core#src:test/test_algol_skeleton.alg": "pass",
   "test-core#src:test/test_alloca.c": "pass",
+  "test-core#src:test/test_anonymous_enum_and_subrange_types.pas": "pass",
   "test-core#src:test/test_anonymous_procedural_type.pas": "pass",
   "test-core#src:test/test_anonymous_record.pas": "pass",
   "test-core#src:test/test_ansistring.pas": "pass",
@@ -4331,6 +4339,7 @@
   "test-core#src:test/test_case_sensitive.pas": "pass",
   "test-core#src:test/test_case_sensitive_unit.pas": "pass",
   "test-core#src:test/test_case_unit_lookup.pas": "pass",
+  "test-core#src:test/test_cast_as_lvalue_over_a_variable.pas": "pass",
   "test-core#src:test/test_cast_char_bool.pas": "pass",
   "test-core#src:test/test_cast_deref_chain_siblings.pas": "pass",
   "test-core#src:test/test_cast_deref_pointer_field.pas": "pass",
@@ -4533,7 +4542,7 @@
   "test-core#src:test/test_forward_class_base.pas": "pass",
   "test-core#src:test/test_forward_ptr_record_field.pas": "pass",
   "test-core#src:test/test_forward_use.pas": "pass",
-  "test-core#src:test/test_fpc_compat_batch.pas": "pass",
+  "test-core#src:test/test_fpc_compat_batch.pas": "fail",
   "test-core#src:test/test_fpc_compat_batch2.pas": "pass",
   "test-core#src:test/test_fpc_float_errors.pas@1": "pass",
   "test-core#src:test/test_fpc_float_errors.pas@2": "pass",
@@ -4659,6 +4668,7 @@
   "test-core#src:test/test_local_var_beats_string_const_b313.pas": "pass",
   "test-core#src:test/test_lolcode_skeleton.lol": "pass",
   "test-core#src:test/test_loop_control.pas": "pass",
+  "test-core#src:test/test_low_high_of_ordinal_and_array_type.pas": "pass",
   "test-core#src:test/test_managed_arg_temp.pas": "pass",
   "test-core#src:test/test_managed_block_header.pas": "pass",
   "test-core#src:test/test_managed_block_meta.pas": "pass",
@@ -5045,6 +5055,7 @@
   "test-core#src:test/test_sizeof.pas": "pass",
   "test-core#src:test/test_sizeof_array_field.pas": "pass",
   "test-core#src:test/test_sizeof_array_typename.pas": "pass",
+  "test-core#src:test/test_sizeof_of_an_expression.pas": "pass",
   "test-core#src:test/test_soft_keyword_length.pas": "pass",
   "test-core#src:test/test_source_type_beats_unit_function.pas": "pass",
   "test-core#src:test/test_sqlite_crud.pas": "pass",
@@ -6320,11 +6331,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-22T13:47:33Z",
-  "sha": "9cebdbb1f02c6c62656d4f3ea610c86ab05d33f6",
+  "date": "2026-08-22T14:49:34Z",
+  "sha": "1021bbdece658fd8b34c9190ee8a8ed66c703671",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.1
+  "wall": 3600.5
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6871,6 +6882,27 @@
     "392ea5d94545cafd1bb085c21eb66b0d4a6f4592"
    ],
    "src": "test/test_rtti.pas",
+   "status": "fail"
+  },
+  {
+   "bad": "1021bbdece658fd8b34c9190ee8a8ed66c703671",
+   "good": "9cebdbb1f02c6c62656d4f3ea610c86ab05d33f6",
+   "job": "test-core#src:test/test_fpc_compat_batch.pas",
+   "name": "test-core#338",
+   "opened": "2026-08-22T14:49:34Z",
+   "pin_built": false,
+   "range": [
+    "0b77e2bea1817cd333c83da6df68d475aeea2c56",
+    "7081a25c2e92180fe79936aace1ffb1b3df0ae03",
+    "fa549a7751c9d6c98829538aaa36e61434024929",
+    "7b2736e82f44ec176395dc61e071e4026665ccdc",
+    "3d521d909c7e5c92df5bbe1b0c74f829d27db597",
+    "ffaba7b1ff0520485569fbda3cd8a3542624b60e",
+    "47fc2c383784250908b755e4345c69f30513c85b",
+    "1ac6458b328dd050d9153bf7f02147081d85fc7b",
+    "1021bbdece658fd8b34c9190ee8a8ed66c703671"
+   ],
+   "src": "test/test_fpc_compat_batch.pas",
    "status": "fail"
   }
  ],
