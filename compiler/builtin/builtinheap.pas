@@ -389,6 +389,20 @@ procedure PxxSciDigits17(value: Double; var mant17: Int64; var decExp: Integer);
   run-once guarded, so a Halt reached from inside a finalization does not
   re-enter it; it simply exits with the newer code, which is what FPC does. }
 procedure PXXExitProcess;
+{ TObject.Destroy's DEFAULT body: nothing to do. It exists so slot
+  ROOT_VMT_DESTROY is never nil, which is what lets `Free` dispatch Destroy
+  VIRTUALLY for every class instead of deciding at parse time from the
+  receiver's STATIC type — `b.Free` through a `TBase` reference skipped the
+  descendant's Destroy entirely when TBase declared none
+  (bug-p-free-through-base-reference-skips-destroy).
+
+  It lives in builtinHEAP rather than in `builtin` because tkClass already pulls
+  builtinheap into every class-bearing program, so this costs nothing; putting it
+  in `builtin` would have dragged that unit's ~43 KB into every program that
+  calls Free. The receiver is spelled `Inst`, not `Self` — it is a plain
+  procedure, and the VMT slot is what makes it a method (same convention as
+  __pxxTObjectEquals and friends). }
+procedure __pxxTObjectDestroy(Inst: Pointer);
 implementation
 
 
@@ -2937,6 +2951,14 @@ begin
     memberPtr := memberPtr + 16;
     i := i + 1;
   end;
+end;
+
+procedure __pxxTObjectDestroy(Inst: Pointer);
+{ See the interface comment: TObject.Destroy's default body is empty. The
+  managed-field sweep is NOT done here — PXXClassFinalize is injected by the
+  Free desugar after the whole Destroy chain has run, which is FPC's
+  FreeInstance timing. }
+begin
 end;
 
 procedure PXXClassFinalize(inst: Pointer);

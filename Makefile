@@ -5421,6 +5421,14 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_ptrdiff26 | tail -1)" = "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_a_record_field_named_like_a_class_operation.pas $(TESTTMP)/test_recfldop26
 	test "$$($(TESTTMP)/test_recfldop26 | tail -1)" = "ALL OK"
+	# Free through a BASE reference runs the descendant's Destroy (virtual, via
+	# root VMT slot 0). Byte-identical to fpc -Mobjfpc; --compact-classes has no
+	# root slots and keeps the parse-time behaviour by design, so it is asserted
+	# separately -- rows --1 and --2 lose their destructor output there.
+	./$(COMPILER) -Fulib/rtl test/test_pascal_free_through_base_destroy.pas $(TESTTMP)/test_freebase26
+	test "$$($(TESTTMP)/test_freebase26)" = "$$(printf 'der\nTDer.Destroy q\nTMid.Destroy\n--1\nTDer.Destroy r\nTMid.Destroy\n--2\nTDer.Destroy t\nTMid.Destroy\n--3\nTDer.Destroy u\nTMid.Destroy\n--4\n--5\nTMid.Destroy\n--6\n--7')"
+	./$(COMPILER) --compact-classes -Fulib/rtl test/test_pascal_free_through_base_destroy.pas $(TESTTMP)/test_freebase_compact26
+	test "$$($(TESTTMP)/test_freebase_compact26)" = "$$(printf 'der\n--1\n--2\nTDer.Destroy t\nTMid.Destroy\n--3\nTDer.Destroy u\nTMid.Destroy\n--4\n--5\nTMid.Destroy\n--6\n--7')"
 
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26

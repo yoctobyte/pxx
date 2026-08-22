@@ -446,6 +446,15 @@ begin
   if n <= 0 then Exit;
   ci := FindUClass('TObject');
   if ci < 0 then Exit;
+  { Destroy is registered SEPARATELY from the other three: its body lives in
+    builtinHEAP (pulled by tkClass, i.e. by every class program) while theirs
+    live in `builtin` (pulled only by an explicit .Equals/.ToString), so a
+    program can legitimately have one and not the other. Sharing the Equals
+    idempotency guard below would have made Destroy's row depend on whether the
+    program happened to mention ToString.
+    bug-p-free-through-base-reference-skips-destroy }
+  if (ROOT_VMT_DESTROY < n) and (FindUMeth(ci, 'Destroy') < 0) then
+    AddTObjectRootMethod(ci, ROOT_VMT_DESTROY, 'Destroy', '__pxxTObjectDestroy');
   if FindUMeth(ci, 'Equals') >= 0 then Exit;   { idempotent }
   if ROOT_VMT_EQUALS < n then
     AddTObjectRootMethod(ci, ROOT_VMT_EQUALS, 'Equals', '__pxxTObjectEquals');
@@ -491,10 +500,17 @@ begin
       FillRootVMTSlotDefault(ci, ROOT_VMT_GETHASHCODE, '__pxxTObjectGetHashCode');
     if ROOT_VMT_TOSTRING < n then
       FillRootVMTSlotDefault(ci, ROOT_VMT_TOSTRING, '__pxxTObjectToString');
+    { ROOT_VMT_DESTROY used to be left nil deliberately, on the reasoning that
+      Free dispatched Destroy only for a class that DECLARED one, so slot 0 was
+      unreachable. That reasoning was the bug: deciding from the receiver's
+      STATIC class meant `b.Free` through a `TBase` reference ran no destructor
+      at all when TBase declared none — the descendant's Destroy, and every
+      managed field it released, silently skipped. Filling the slot with the
+      empty default makes Free an ordinary virtual dispatch, which lands on the
+      override. bug-p-free-through-base-reference-skips-destroy }
+    if ROOT_VMT_DESTROY < n then
+      FillRootVMTSlotDefault(ci, ROOT_VMT_DESTROY, '__pxxTObjectDestroy');
   end;
-  { ROOT_VMT_DESTROY is deliberately left nil when nothing overrides it: Free
-    dispatches Destroy only for a class that declares one, so an unfilled slot 0
-    is unreachable rather than a trap waiting to fire. }
 end;
 
 procedure ParseProgram;
