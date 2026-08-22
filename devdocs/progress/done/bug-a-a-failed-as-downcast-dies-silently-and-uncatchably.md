@@ -3,7 +3,7 @@ slug: bug-a-a-failed-as-downcast-dies-silently-and-uncatchably
 track: A
 prio: 60
 status: done
-commit: PENDING-COMMIT
+commit: 0a40b8a14
 ---
 
 # A failed `as` downcast exits 1, prints nothing, and cannot be caught
