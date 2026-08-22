@@ -6315,7 +6315,7 @@
  ],
  "open_regressions": [
   {
-   "bad": "6e937a27b469c7a6cc6927623c68bdb690b31aa7",
+   "bad": "cf4e41600e6bd60f13fab79b2c2698d1721f0c26",
    "good": "57b9b7148d3290ac089cd9360c6e4553a4b44bfb",
    "job": "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy",
    "name": "test-nilpy#559",
@@ -6337,24 +6337,7 @@
     "706bab89ab0d131ea3dc0b10818f79e6f95cd89e",
     "3b0a886e96414feb5d3e29138c3f1c4f8f0ead7a",
     "858263130a64b2dfc2b1a09d3e751aba792a1cad",
-    "cf4e41600e6bd60f13fab79b2c2698d1721f0c26",
-    "a7bcd2fc183eefd37139bae75e0adf8db630057d",
-    "0ae5d7aa898251938effade7e335286fb47c10b8",
-    "f2a145943ff2f4eb323606710c6e5c111012b23e",
-    "8ccc8f05c42aab63acf5b9c58897a8150aa00542",
-    "74d84a6ba449a8d6d77e64731ee7661df23f4988",
-    "791c33fb646d62dbd9b200584f6436fee166057b",
-    "a9138c4834610955961df64c3226c29574d85476",
-    "2e88f316d5cf10bf07f3b1c5138407d02115d11c",
-    "e6582fd12880a6a41826e5d27cf91eb9129f1af5",
-    "99093225b7902948cc7fa7a6918bd31b0c5b81cf",
-    "22e4d086090841684c3f0f899c238eaa491be1c3",
-    "7c0e23d6550d8f027a717c1813ae45d8955f7849",
-    "eb7e7f253352dd282d78f065246a73a785fff179",
-    "db04962761cdd8acb21a409f711ec99fe903f4d7",
-    "4abad34325778ac4f08025e82d9e7b86be8bf22e",
-    "00d1105d59c4b790f59a21b5e198c4b7bbd2ec51",
-    "6e937a27b469c7a6cc6927623c68bdb690b31aa7"
+    "cf4e41600e6bd60f13fab79b2c2698d1721f0c26"
    ],
    "src": "test/test_nilpy_callable_to_str_param_fails.npy test/test_nilpy_float_repeat_typeerror.npy",
    "status": "fail"
