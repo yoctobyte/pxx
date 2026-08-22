@@ -5,7 +5,7 @@ type: feature
 blocked-by: []
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: 3d521d909
 summary: "`var c: (red, green, blue)` and `var n: 1..5` were `unknown type` — the enum member-list and the lo..hi grammars lived only in ParseTypeSection's NAMING path, so the same construct worked with a name in front of it and not without. ParseTypeKind already had anonymous arms for record, procedural, pointer, array and set; these were the two missing."
 ---
 
