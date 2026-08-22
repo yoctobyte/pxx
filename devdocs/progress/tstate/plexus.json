@@ -6315,15 +6315,14 @@
  ],
  "open_regressions": [
   {
-   "bad": "d9419ae86420334ef870bce46acd58f00d35d2f3",
+   "bad": "e96a698f1f293982d22980f2d2fb01b72556c3a1",
    "good": "57b9b7148d3290ac089cd9360c6e4553a4b44bfb",
    "job": "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy",
    "name": "test-nilpy#559",
    "opened": "2026-08-20T16:41:29Z",
    "pin_built": false,
    "range": [
-    "e96a698f1f293982d22980f2d2fb01b72556c3a1",
-    "d9419ae86420334ef870bce46acd58f00d35d2f3"
+    "e96a698f1f293982d22980f2d2fb01b72556c3a1"
    ],
    "src": "test/test_nilpy_callable_to_str_param_fails.npy test/test_nilpy_float_repeat_typeerror.npy",
    "status": "fail"
