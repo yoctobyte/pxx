@@ -47,6 +47,52 @@ begin
   LastTypeSetElemTk := Ord(elemTk);
 end;
 
+procedure ParseEnumMembers(etid: Integer);
+{ The member list of an enum type: CurTok is on '(' at entry, past ')' at exit.
+  Lifted out of ParseTypeSection so the ANONYMOUS form (`var c: (red, green)`,
+  legal wherever a type is expected) parses through the same code as the named
+  one -- an enum with explicit ordinals, holes and scoping is not a grammar to
+  keep two copies of.
+  EnumTypeScoped[etid] must already be set by the caller: it is read from the
+  token position of the '(' and an anonymous enum has no name to scope under. }
+var ordinal, hiVal, enumNOff, enumNLen: Integer;
+    enumNm: AnsiString;
+    done: Boolean;
+begin
+  Next; ordinal := 0;
+  done := False;
+  while (CurTok.Kind = tkIdent) and not done do
+  begin
+    { Optional explicit ordinal: `(a = 1, b = 5, c)` -- a value sets the
+      member's ordinal; the next valueless member continues from value+1
+      (FPC semantics). }
+    enumNOff := Tokens[TokPos-1].SOffset; enumNLen := Tokens[TokPos-1].SLen;
+    enumNm := CurTok.SVal;
+    Next;
+    if CurTok.Kind = tkEq then
+    begin
+      Next;                 { consume '=' }
+      hiVal := ordinal;     { the implicit next ordinal }
+      ordinal := ConstEval; { explicit ordinal value }
+      { A jump off the implicit 0..n-1 sequence makes the enum non-contiguous --
+        for-in over the TYPE is then invalid (FPC, tforin20) and
+        ordinal<->position no longer coincide. }
+      if ordinal <> hiVal then EnumTypeHasHoles[etid] := True;
+    end;
+    AddEnumVal(enumNOff, enumNLen, ordinal);
+    if not EnumTypeScoped[etid] then
+      { An unscoped member is reachable as a bare name, and it used to become a
+        plain Integer const -- so it arrived at an assignment carrying nothing but
+        its ordinal, and `aColor := banana` silently stored TFruit's 1 as green
+        (tenum4). Tag the const with its enum so the identity survives the lookup. }
+      SymEnumId[AddConst(enumNm, tyInteger, ordinal)] := etid;
+    Inc(ordinal);
+    if not Eat(tkComma) then done := True;
+  end;
+  Expect(tkRParen, ')');
+  EnumTypeValCount[etid] := EnumValCount - EnumTypeValBase[etid];
+end;
+
 function ParseTypeKind: TTypeKind;
 var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
     qtOuter, qtNested: Integer;   { `TOuter.TInner` — the nested-type lookup }
@@ -67,6 +113,40 @@ begin
   LastTypeDynElemRowLen := 0; LastTypeDynElemRowLo := 0;
   LastTypeIsSub := False; LastTypeSubLo := 0; LastTypeSubHi := 0;
   case CurTok.Kind of
+    tkLParen:
+    begin
+      { ANONYMOUS enum type -- `var c: (red, green, blue);`, a record field, an
+        array element. Ordinary Pascal (ISO and FPC both take it); pxx rejected
+        it with "unknown type" because the member-list grammar lived only in
+        ParseTypeSection's naming path. Same shape as the anonymous record and
+        anonymous procedural arms below: mint the unnamed backing and hand back
+        the SAME TTypeKind + LastType* the named form produces, so AllocVar,
+        the record-field walker and every consumer see no difference.
+        Scoping is off by definition -- {$SCOPEDENUMS} makes members reachable
+        only as `TName.member`, and there is no TName here. }
+      LastTypeEnumId := RegisterEnumType(0, 0);
+      EnumTypeScoped[LastTypeEnumId] := False;
+      ParseEnumMembers(LastTypeEnumId);
+      Result := tyInteger;   { enums are ordinal/integer-sized at codegen }
+      Exit;
+    end;
+    tkInteger, tkMinus, tkString:
+    begin
+      { ANONYMOUS ordinal subrange -- `var n: 1..5;`, `array[0..2] of 1..5`,
+        `record f: 'a'..'z'; end`. Modelled exactly like the NAMED form in
+        ParseTypeSection: an alias to the base ordinal (tyChar for a
+        char-literal bound, else tyInteger) with the bounds RETAINED, so {$R+}
+        checks stores against them and Low/High answer the subrange rather
+        than the base type. The named path's own comment claimed this was
+        "the same treatment as an inline `var x: lo..hi` subrange" -- it was
+        aspirational, there was no inline form. }
+      if CurTok.Kind = tkString then Result := tyChar else Result := tyInteger;
+      LastTypeSubLo := ConstEval;      { low bound }
+      Expect(tkDotDot, '..');
+      LastTypeSubHi := ConstEval;      { high bound }
+      LastTypeIsSub := True;
+      Exit;
+    end;
     tkRecord, tkPacked:
     begin
       { Anonymous inline record type literal — `var x: record ... end;`,
@@ -3484,38 +3564,7 @@ begin
         etid := RegisterEnumType(tnOff, tnLen);
         { {$SCOPEDENUMS ON} at this token: members only under TEnum.member }
         EnumTypeScoped[etid] := TokScopedEnums[TokPos-1];
-        Next; ordinal := 0;
-        done := False;
-        while (CurTok.Kind = tkIdent) and not done do
-        begin
-          { Optional explicit ordinal: `(a = 1, b = 5, c)` — a value sets the
-            member's ordinal; the next valueless member continues from value+1
-            (FPC semantics). }
-          enumNOff := Tokens[TokPos-1].SOffset; enumNLen := Tokens[TokPos-1].SLen;
-          enumNm := CurTok.SVal;
-          Next;
-          if CurTok.Kind = tkEq then
-          begin
-            Next;                 { consume '=' }
-            hiVal := ordinal;     { the implicit next ordinal }
-            ordinal := ConstEval; { explicit ordinal value }
-            { A jump off the implicit 0..n-1 sequence makes the enum
-              non-contiguous — for-in over the TYPE is then invalid (FPC,
-              tforin20) and ordinal<->position no longer coincide. }
-            if ordinal <> hiVal then EnumTypeHasHoles[etid] := True;
-          end;
-          AddEnumVal(enumNOff, enumNLen, ordinal);
-          if not EnumTypeScoped[etid] then
-            { An unscoped member is reachable as a bare name, and it used to become a
-              plain Integer const — so it arrived at an assignment carrying nothing but
-              its ordinal, and `aColor := banana` silently stored TFruit's 1 as green
-              (tenum4). Tag the const with its enum so the identity survives the lookup. }
-            SymEnumId[AddConst(enumNm, tyInteger, ordinal)] := etid;
-          Inc(ordinal);
-          if not Eat(tkComma) then done := True;
-        end;
-        Expect(tkRParen, ')');
-        EnumTypeValCount[etid] := EnumValCount - EnumTypeValBase[etid];
+        ParseEnumMembers(etid);
       end
       else if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'interface') then
       begin

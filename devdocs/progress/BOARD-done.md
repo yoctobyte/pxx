@@ -1848,6 +1848,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-optimization-levels | O | 65 | feature | Optimization levels (`-O0/-O1/-O2/-O3/-Os`) + pass framework | — |
 | feature-overflow-checks-cross-and-intrinsics | A | 35 | feature | {$Q+} follow-up: cross-backend checks (pair carry chains), Succ/Pred/Abs/Sqr, subword widths | — |
 | feature-own-net-http-lib | B | 50 | feature | Own networking library — native HTTP client (+ sockets, async) | — |
+| feature-p-anonymous-enum-and-subrange-types | P | 40 | feature | `var c: (red, green, blue)` and `var n: 1..5` were `unknown type` — the enum member-list and the lo..hi grammars lived only in ParseTypeSection's NAMING path, so the same construct worked with a name in front of it and not without. ParseTypeKind already had anonymous arms for record, procedural, pointer, array and set; these were the two missing. | — |
 | feature-p-nested-type-method-implementation | P | 60 | feature | A method of a NESTED type cannot be implemented: `TOuter.TInner.Method` | — |
 | feature-p-read-text-into-a-char-arm | P | 50 | feature | the RTL half (textfile.TextReadChar) has landed, so ParseTextReadRest can now route read(f, c) to it and drop the 'not supported yet' error | — |
 | feature-p-sizeof-of-an-expression | P | 30 | feature | `SizeOf` accepts only a type name or an lvalue (variable, field, `a[i]`) — `SizeOf(i + 1)`, `SizeOf(Abs(i))`, `SizeOf(p^)`, `SizeOf('abc')` are all compile errors. FPC takes any expression, and it is the only portable way to ask what type an expression actually has. | — |
