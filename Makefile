@@ -5303,6 +5303,20 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Fulib/rtl test/test_indexing_a_string_value.pas $(TESTTMP)/test_str_value_index26
 	test "$$($(TESTTMP)/test_str_value_index26)" = "$$(printf 'grp   b\ngrp2  c\nexpr  ef\ncall  A\nlit   ho\nhello\nlidx  l\nonce  y 1\nnamed ho\nfncall AB\ndirect ac\narr   4 6\nastr  zz z\nfld   yy b\nplit  e\nshort b')"
 
+	# `Continue` inside a for-in loop HUNG — an infinite loop, in every container
+	# kind. The desugar put the increment at the END of the body, and AN_WHILE's
+	# continue target is the CONDITION TEST, so Continue jumped over it and re-ran
+	# the same element forever. Break was fine, and so were plain for/while, whose
+	# increments the IR places at the continue label itself. The `all` row is the
+	# shape that spins if the advance is reachable only by falling off the body's
+	# end; `static` covers the non-zero index base; empty/one/estr pin that the
+	# rewritten bounds neither gain nor lose an iteration. Three separate desugars
+	# had the shape — arrays/strings, enum types, and sets — so set/sctor are here
+	# too; the set one was missed on the first pass and found by re-reading the
+	# sibling builder. TIMEOUT-GUARDED.
+	./$(COMPILER) test/test_continue_in_a_for_in_loop.pas $(TESTTMP)/test_forin_continue26
+	test "$$(timeout 30 $(TESTTMP)/test_forin_continue26)" = "$$(printf '024 dyn\n024 fixed\n10 14 16 static\nacde str\n02 enum\n02 set\n13 sctor\n012 break\nall 5\nempty 0\none 1 9\nestr 0')"
+
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"

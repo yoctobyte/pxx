@@ -777,7 +777,8 @@ end;
   the `in` membership operator over the element base-type range, so no knowledge
   of the 32-byte bitset layout is needed:
     X := lo;
-    while X <= hi do begin if X in S then BODY; X := X + 1; end;
+    X := lo - 1;
+    while X < hi do begin X := X + 1; if X in S then BODY; end;
   X (the loop var) doubles as the scan ordinal. Range from the set element type:
   `set of <enum>` → the enum's ordinal range; `set of Char` → 0..255. }
 { Shared membership-scan builder for `for x in <set>`. The set source is an
@@ -812,8 +813,14 @@ begin
     narrow loop var (a Char counter overflows 255 -> 0 and loops forever). }
   oSym := AllocVar('', tyInteger);
   vtk := Ord(Syms[varIdx].TypeKind);
-  initN := GenMakeAssign(GenMakeIdent(oSym, tyInteger), GenMakeIntLit(loV));
-  scanCond := GenMakeBinop(tkLe, GenMakeIdent(oSym, tyInteger), GenMakeIntLit(hiV), tyBoolean);
+  { …and it starts ONE BELOW the range, advancing at the TOP of the body, for
+    the same reason BuildForInArrayLoop does: AN_WHILE's continue target is the
+    condition test, so an increment at the bottom is unreachable from a
+    `Continue` and the loop spins forever. `for e in st do if e = gn then
+    Continue` HUNG, as did the set-constructor form.
+    bug-a-continue-in-a-for-in-loop-never-advances }
+  initN := GenMakeAssign(GenMakeIdent(oSym, tyInteger), GenMakeIntLit(loV - 1));
+  scanCond := GenMakeBinop(tkLt, GenMakeIdent(oSym, tyInteger), GenMakeIntLit(hiV), tyBoolean);
 
   { loop var := ordinal (Chr() for char elements, plain ordinal for enums) }
   if isChar = 1 then
@@ -839,7 +846,8 @@ begin
 
   incN := GenMakeAssign(GenMakeIdent(oSym, tyInteger),
     GenMakeBinop(tkPlus, GenMakeIdent(oSym, tyInteger), GenMakeIntLit(1), tyInteger));
-  innerSeq := GenMakeSeq(assignE, GenMakeSeq(ifN, GenMakeSeq(incN, -1)));
+  { advance FIRST — see initN above }
+  innerSeq := GenMakeSeq(incN, GenMakeSeq(assignE, GenMakeSeq(ifN, -1)));
   whileN := AllocNode(AN_WHILE);
   ASTLeft[whileN] := scanCond;
   ASTRight[whileN] := innerSeq;
@@ -918,7 +926,18 @@ begin
     loNode := GenMakeIntLit(staticLo)
   else if isArr then loNode := GenMakeIntLit(0)
   else begin Error('for-in: variable is not a string or array'); loNode := GenMakeIntLit(0); end;
-  initI := GenMakeAssign(GenMakeIdent(idxSym, tyInteger), loNode);
+  { __i starts ONE BEFORE the low bound and is advanced at the TOP of the body,
+    not the bottom. The bottom form is the obvious desugar and it makes
+    `Continue` an infinite loop: AN_WHILE's continue target is the condition
+    test, so a Continue jumps over the increment and re-runs the same element
+    forever. `for n in dy do if Odd(n) then Continue` HUNG.
+    The C frontend hit the identical problem with `for(init; cond; post)` and
+    solved it with a first-iteration flag; this needs no flag, because the
+    counter is ours and starting it one low costs nothing. The condition moves
+    from `__i <= hi` to `__i < hi` to match.
+    bug-a-continue-in-a-for-in-loop-never-advances }
+  initI := GenMakeAssign(GenMakeIdent(idxSym, tyInteger),
+             GenMakeBinop(tkMinus, loNode, GenMakeIntLit(1), tyInteger));
 
   if isStaticArr then
     hiNode := GenMakeIntLit(staticLo + staticLen - 1)
@@ -929,7 +948,7 @@ begin
       GenMakeLengthCallNode(GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen, ctemplate, contTk)),
       GenMakeIntLit(1), tyInteger);
 
-  condNode := GenMakeBinop(tkLe, GenMakeIdent(idxSym, tyInteger), hiNode, tyBoolean);
+  condNode := GenMakeBinop(tkLt, GenMakeIdent(idxSym, tyInteger), hiNode, tyBoolean);
 
   elemAccess := AllocNode(AN_INDEX);
   ASTLeft[elemAccess] := GenMakeContainerNode(ckind, csym, cselfSym, cfOff, cfLen, ctemplate, contTk);
@@ -950,7 +969,8 @@ begin
   incNode := GenMakeAssign(GenMakeIdent(idxSym, tyInteger),
     GenMakeBinop(tkPlus, GenMakeIdent(idxSym, tyInteger), GenMakeIntLit(1), tyInteger));
 
-  innerSeq := GenMakeSeq(assignX, GenMakeSeq(bodyNode, GenMakeSeq(incNode, -1)));
+  { advance FIRST, then read the element — see initI above }
+  innerSeq := GenMakeSeq(incNode, GenMakeSeq(assignX, GenMakeSeq(bodyNode, -1)));
   whileNode := AllocNode(AN_WHILE);
   ASTLeft[whileNode] := condNode;
   ASTRight[whileNode] := innerSeq;
@@ -1221,12 +1241,14 @@ begin
     isString, isStaticArr, isArr, staticLen, elemTk, bodyNode, 1, 0);
 end;
 
-{ for x in <EnumType> do BODY iterates ALL enum ordinals low..high. The loop
-  variable itself holds the ordinal (enum vars are integer-sized), so no separate
-  index is needed:  x := 0; while x <= count-1 do begin BODY; x := x + 1; end; }
+{ for x in <EnumType> do BODY iterates ALL enum ordinals low..high, as
+    __i := -1; while __i < count-1 do begin __i := __i + 1; x := __i; BODY; end
+  The advance is at the TOP and driven by a hidden counter — see the comment on
+  the body below, and BuildForInArrayLoop, which has the identical shape for the
+  identical reason (Continue). }
 function ParseForInEnumTypeAST(varIdx, etid: Integer): Integer;
 var
-  bodyNode, initN, condN, incN, whileN, innerSeq: Integer;
+  bodyNode, initN, condN, incN, whileN, innerSeq, idxSym, assignE: Integer;
   cnt, vtk: Integer;
 begin
   { Inline `for var x in TEnum`: enums are ordinal/integer-sized (no distinct
@@ -1243,13 +1265,26 @@ begin
 
   cnt := EnumTypeValCount[etid];
   vtk := Ord(Syms[varIdx].TypeKind);
-  initN := GenMakeAssign(GenMakeIdent(varIdx, IntToTypeKind(vtk)), GenMakeIntLit(0));
-  condN := GenMakeBinop(tkLe, GenMakeIdent(varIdx, IntToTypeKind(vtk)),
+  { Same shape as BuildForInArrayLoop, and for the same reason: advance at the
+    TOP so `Continue` — whose target is AN_WHILE's condition test — cannot skip
+    it and spin forever. `for e in TC do if e = gn then Continue` HUNG.
+    A HIDDEN Integer counter drives it rather than the loop variable itself, so
+    the user's enum variable never momentarily holds -1 (out of range for its
+    type, and a trap waiting for {$R+}); it is assigned from the counter at the
+    top of each iteration, exactly as the array loop assigns its element. That
+    also leaves the variable at the LAST enum value after a normal exit instead
+    of one past the end, which is the more defensible of the two.
+    bug-a-continue-in-a-for-in-loop-never-advances }
+  idxSym := AllocVar('', tyInteger);
+  initN := GenMakeAssign(GenMakeIdent(idxSym, tyInteger), GenMakeIntLit(-1));
+  condN := GenMakeBinop(tkLt, GenMakeIdent(idxSym, tyInteger),
                         GenMakeIntLit(cnt - 1), tyBoolean);
-  incN := GenMakeAssign(GenMakeIdent(varIdx, IntToTypeKind(vtk)),
-    GenMakeBinop(tkPlus, GenMakeIdent(varIdx, IntToTypeKind(vtk)),
+  incN := GenMakeAssign(GenMakeIdent(idxSym, tyInteger),
+    GenMakeBinop(tkPlus, GenMakeIdent(idxSym, tyInteger),
                  GenMakeIntLit(1), tyInteger));
-  innerSeq := GenMakeSeq(bodyNode, GenMakeSeq(incN, -1));
+  assignE := GenMakeAssign(GenMakeIdent(varIdx, IntToTypeKind(vtk)),
+                           GenMakeIdent(idxSym, tyInteger));
+  innerSeq := GenMakeSeq(incN, GenMakeSeq(assignE, GenMakeSeq(bodyNode, -1)));
   whileN := AllocNode(AN_WHILE);
   ASTLeft[whileN] := condN;
   ASTRight[whileN] := innerSeq;
