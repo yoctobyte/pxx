@@ -5417,6 +5417,8 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_oadynelem26 | tail -1)" = "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_named_fixed_array_of_a_dynamic_array.pas $(TESTTMP)/test_fixdynelem26
 	test "$$($(TESTTMP)/test_fixdynelem26 | tail -1)" = "ALL OK"
+	./$(COMPILER) -Fulib/rtl test/test_pointer_difference_is_a_number.pas $(TESTTMP)/test_ptrdiff26
+	test "$$($(TESTTMP)/test_ptrdiff26 | tail -1)" = "ALL OK"
 
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26

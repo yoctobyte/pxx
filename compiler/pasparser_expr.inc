@@ -8285,6 +8285,18 @@ begin
       else
         ASTTk[node] := Ord(tyString);
     end
+    else if (op = tkMinus) and
+            (ASTTk[left] = Ord(tyPointer)) and (ASTTk[right] = Ord(tyPointer)) then
+      { POINTER DIFFERENCE is a NUMBER, not a pointer. tyPointer is reported as
+        ordinal by TypeIsOrdinal, so `p - q` matched the pointer-arithmetic arm
+        below and the result node stayed tyPointer — which is only invisible
+        while the value is assigned to an integer. `Writeln(pc - pc0)` on a
+        ^Char / ^Byte then printed the DIFFERENCE AS A STRING and segfaulted
+        dereferencing address 3, while the identical expression assigned to a
+        PtrInt first printed 3. The lowering already scales by the element size;
+        only the node's type was wrong.
+        bug-p-pointer-difference-is-typed-as-a-pointer }
+      ASTTk[node] := Ord(tyNativeInt)
     else if ((op = tkPlus) or (op = tkMinus)) and
             (ASTTk[left] = Ord(tyPointer)) and
             TypeIsOrdinal(IntToTypeKind(ASTTk[right])) then

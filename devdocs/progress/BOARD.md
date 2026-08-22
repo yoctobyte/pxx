@@ -55,7 +55,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (291)
+## backlog (292)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -170,6 +170,7 @@ _none_
 | compat-pascal-uses-sysutils-withdraws-the-variadic-concat | P | 25 | compat | The variadic `Concat` intrinsic is shadowed by `sysutils`'s two-argument `Concat`, so `uses sysutils` breaks `Concat('a','b','c')` — which compiles fine without it. The shadow rule is `procIdx < 0`, i.e. ANY user Concat disables the intrinsic outright. Loud, not silent. | — |
 | decide-assertion-default-vs-fpc | U | 25 | decide | pxx evaluates Assert() by default; FPC ignores it unless -Sa. So Assert(False) raises EAssertionFailed here and is a no-op there — code that passes its own test suite under FPC can die under pxx, and vice versa. With -Sa the two agree exactly, so this is purely a question of which default we want. Options: keep ours, match FPC, or add {$ASSERTIONS}/-Sa and pick a default. | — |
 | decide-old-style-object-types | U | 30 | decide | Decide: do we implement Turbo Pascal `object` types? | — |
+| decide-pointer-difference-unit | U | 30 | decide | FPC's `p - q` answers BYTES when either operand is an untyped Pointer (which includes `@x` under the default {$TYPEDADDRESS OFF}) and ELEMENTS when both are the same typed pointer. pxx always answers elements. `p - @a[0]` therefore prints 8 in FPC and 2 in pxx — a silent difference in ported code. Match FPC, keep the uniform rule, or diagnose? | — |
 | decide-rtti-kind-numbering | U | 40 | decide | typinfo.pas declares TTypeKind in FPC's order (tkInt64=19) but the RTTI blob the compiler emits carries the COMPILER's TTypeKind (tyInt64=13), so `if mi^.RetKind = Ord(tkInt64)` is silently false. Three ways out; they differ in whether the RTTI blob's numbering — a compiler ABI — changes. Recommendation: option 2. Needs a human call because option 1 breaks already-compiled consumers and option 2 spends the FPC-compatibility argument the FPC-ordered enum was added for. | — |
 | docs-d-document-exec-eval-and-the-builtins-incompatibility | D | 40 | docs | docs/targets/nil-python.md tells the public `eval`/`exec` do not exist (\"No eval of runtime-constructed code\") — but the explicit-dict form has worked since 2026-07-31 via pyeval's tree-walker. Document what exec/eval DO support, the refused ambient form, and the decided __builtins__ incompatibility (decided 2026-08-19, permanent for now). | — |
 | docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out | D | 45 | docs | docs/language/name-resolution.md:47 and docs/targets/nil-python.md:260 quote the bare-import refusal message and state the rule with no carve-out. As of 2026-08-20 a unit declaring {$PYEXTENSION} and binding the cpyext runtime IS bare-importable, so both pages are now wrong in the direction that makes a working program look unsupported. | — |
@@ -564,9 +565,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2274)
+## done (2275)
 
-2274 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2275 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -805,6 +806,7 @@ _none_
 - [p 30] [P] compat-pascal-subrange-storage-size
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
 - [p 30] [U] decide-old-style-object-types
+- [p 30] [U] decide-pointer-difference-unit
 - [p 30] [D] docs-toolchain-cli-flags
 - [p 30] [A] feature-a-a-variant-has-no-null-tag
 - [p 30] [A] feature-a-dynamic-array-of-frozen-strings
