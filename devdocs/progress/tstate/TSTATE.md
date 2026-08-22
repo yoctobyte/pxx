@@ -3,12 +3,9 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `fd93e4a71c37` | 2026-08-22T18:58:19Z | RED (native) | 3600.5s | `98ed38202254` RED |
+| plexus | `fd93e4a71c37` | 2026-08-22T21:01:34Z | RED (full) | 3600.5s | `fd93e4a71c37` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
 - **test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy** — test/test_nilpy_callable_to_str_param_fails.npy test/test_nilpy_float_repeat_typeerror.npy (plexus): bad `e96a698f1f29`, last good `57b9b7148d32`, 1 commit(s) in range
-- **test-pascal-conformance#shard4/6** — tools/run_pascal_conformance.sh (plexus): bad `74d84a6ba449`, last good `8ccc8f05c42a`, 1 commit(s) in range
-- **demos#00** (plexus): bad `f3acfdabf53c`, last good `ba5791c02ce3`, 1 commit(s) in range
-- **lib-test#src:tools/crtl_reachability.py** — tools/crtl_reachability.py tools/gen_crtl_map.py +2 (plexus): bad `98ed38202254`, last good `23becd24b8e5`, 423 commit(s) in range
-- **test-pascal-conformance#shard0/6** — tools/run_pascal_conformance.sh (plexus): bad `5179c4d4350b`, last good `f74df41e851c`, 1 commit(s) in range
+- **lib-test#src:test/lib_mimic_xml_etree_elementtree.npy** — test/lib_mimic_xml_etree_elementtree.npy (plexus): bad `fd93e4a71c37`, last good `98ed38202254`, 137 commit(s) in range
