@@ -6354,15 +6354,14 @@
    "status": "fail"
   },
   {
-   "bad": "98ed382022547bbe6624c779ee024a3ad1dea518",
+   "bad": "5179c4d4350bcb775841ce7b7283c1a367abe035",
    "good": "f74df41e851cf669e0dfa56c30f9c768f900e244",
    "job": "test-core#src:test/test_generic_inherit_delphi.pas",
    "name": "test-core#298",
    "opened": "2026-08-21T22:41:51Z",
    "pin_built": false,
    "range": [
-    "5179c4d4350bcb775841ce7b7283c1a367abe035",
-    "98ed382022547bbe6624c779ee024a3ad1dea518"
+    "5179c4d4350bcb775841ce7b7283c1a367abe035"
    ],
    "src": "test/test_generic_inherit_delphi.pas",
    "status": "fail"
