@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: 3a107f008
 summary: "`Writeln(pc - pc0)` on two `^Char` (or `^Byte`) pointers SEGFAULTED — the parser typed the difference node tyPointer, because TypeIsOrdinal reports tyPointer as ordinal so `p - q` matched the pointer-ARITHMETIC arm. Writeln then printed the difference as a null-terminated string from address 3. Assigning it to an integer first printed 3 correctly, and the IR lowering had typed it tyNativeInt all along."
 ---
 
