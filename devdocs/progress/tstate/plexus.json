@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-20T22:50:33Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "6ab56d11a9aa8c20ac73975c902d35f34188e8af",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-20T23:09:01Z",
    "fixed": [],
    "new_red": [
@@ -466,14 +458,23 @@
    "sha": "0d0a12a09757193933b41cb921ad6de3efda3aaa",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-22T08:31:21Z",
+   "fixed": [
+    "test-core#src:test/fpcv.pas@2",
+    "test-core#src:test/test_generic_inherit_delphi.pas"
+   ],
+   "new_red": [],
+   "sha": "d7e5e44b0f6cb800a4bcbdbd3f1efb39309c9147",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "demos#00": "OK    examples/sudoku/sudoku.pas | OK    examples/tk/uses_tkinter_and_configparser.pas | FAIL  examples/tui/menudemo.pas  --   near: PXXNilRefHook   SysRaiseAccessViolation  PXXVariantErrorHook >>>   SysRaiseVariantError | FAIL  examples/vm/vmdemo.pas  --   near: PXXNilRefHook   SysRaiseAccessViolation  PXXVariantErrorHook >>>   SysRaiseVariantError | === demos: 7/35 built into build/demos/ (esp3\u2026",
   "lib-test#src:tools/crtl_reachability.py": "in: stable_linux_amd64/default/../../lib/rtl/sysutils.pas | near: PXXNilRefHook   SysRaiseAccessViolation  PXXVariantErrorHook >>>   SysRaiseVariantError | lib-units: FAIL x509 | pascal26:4790: error: undefined variable (PXXVariantErrorHook) | in: stable_linux_amd64/default/../../lib/rtl/sysutils.pas | near: PXXNilRefHook   SysRaiseAccessViolation  PXXVariantErrorHook >>>   SysRaiseVariantError",
-  "test-core#src:test/fpcv.pas@2": "ok: $TMP  [code=272900B  data=21384B  bss=75860B  procs=616]",
-  "test-core#src:test/test_generic_inherit_delphi.pas": "pascal26:10: error: generic specialization nested deeper than 16 levels (or a rewrite loop) | near: type TBox  T   >>> class V",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter",
   "test-pascal-conformance#shard0/6": "SKIP tover1.pp \u2014 gap: overload resolution across shortstring/ansistring/widestring/pchar params | SKIP tprocvar3.pp \u2014 gap: delphi-mode procvar of object, @-less proc assignment, codepointer method addresses | SKIP tset2a.pp \u2014 gap: explicit enum ordinal values (dA:=8) + {$packset 1} packed-set semantics | SKIP tstring11.pp \u2014 gap: overload resolution RawByteString vs UnicodeString (char/array/pchar\u2026",
   "test-pascal-conformance#shard4/6": "SKIP toperator9.pp \u2014 gap: operator overload for `in` on a record type not supported by the parser | SKIP tprocvar1.pp \u2014 gap: method pointers (`procedure(l:longint) of object`), @Class.Method, typed-const procvars | SKIP tsealed6.pp \u2014 gap: `object abstract` / `object sealed` modifiers in object declarations | SKIP tstring4.pp \u2014 wontfix: reads ansistring refcount/length header words \u2014 FPC internal \u2026"
@@ -1602,6 +1603,7 @@
   "test-core#src:test/test_dynarray.pas": "native",
   "test-core#src:test/test_dynarray_ansistring.pas@1": "native",
   "test-core#src:test/test_dynarray_ansistring.pas@2": "native",
+  "test-core#src:test/test_dynarray_assign_to_a_var_parameter.pas": "native",
   "test-core#src:test/test_dynarray_copy.pas": "native",
   "test-core#src:test/test_dynarray_copy_expr_source.pas@1": "native",
   "test-core#src:test/test_dynarray_copy_expr_source.pas@2": "native",
@@ -1803,6 +1805,7 @@
   "test-core#src:test/test_isas_open_world_b325.pas": "native",
   "test-core#src:test/test_keyword_array_case.pas": "native",
   "test-core#src:test/test_keyword_case.pas": "native",
+  "test-core#src:test/test_label_section_precedes_the_other_declarations.pas": "native",
   "test-core#src:test/test_lazy_var.pas": "native",
   "test-core#src:test/test_length_dynarray_call.pas": "native",
   "test-core#src:test/test_lfm.pas": "native",
@@ -2037,6 +2040,7 @@
   "test-core#src:test/test_operator_enumerator.pas": "native",
   "test-core#src:test/test_operator_implicit_shortstring_b356.pas": "native",
   "test-core#src:test/test_opt_store_reload.pas": "native",
+  "test-core#src:test/test_out_parameter_of_a_managed_type_is_cleared.pas": "native",
   "test-core#src:test/test_overflow_checks_qplus.pas": "native",
   "test-core#src:test/test_overflow_qplus_narrow.pas": "native",
   "test-core#src:test/test_overflow_succ_pred.pas": "native",
@@ -2270,6 +2274,7 @@
   "test-core#src:test/test_typed_const_record.pas": "native",
   "test-core#src:test/test_typed_metaclass_b278.pas": "native",
   "test-core#src:test/test_typed_pointer_inc_dec.pas": "native",
+  "test-core#src:test/test_typed_procvar_const_is_callable.pas": "native",
   "test-core#src:test/test_typed_string_const.pas": "native",
   "test-core#src:test/test_typeinfo_array_pointer.pas": "native",
   "test-core#src:test/test_typeinfo_enum_b288.pas": "native",
@@ -2346,6 +2351,7 @@
   "test-core#src:test/test_widechar_var_concat.pas": "native",
   "test-core#src:test/test_widechar_var_to_string.pas": "native",
   "test-core#src:test/test_widechar_var_to_string_arg.pas": "native",
+  "test-core#src:test/test_widechar_writeln_prints_the_character.pas": "native",
   "test-core#src:test/test_wildcard_lfm.pas": "native",
   "test-core#src:test/test_with.pas": "native",
   "test-core#src:test/test_with_class_create.pas": "native",
@@ -4199,7 +4205,7 @@
   "test-core#src:test/dotted/test_dotted_uses.pas": "pass",
   "test-core#src:test/fileio.pas@1": "pass",
   "test-core#src:test/fileio.pas@2": "pass",
-  "test-core#src:test/fpcv.pas@2": "fail",
+  "test-core#src:test/fpcv.pas@2": "pass",
   "test-core#src:test/gamelib/crtl_inet_smoke.c": "pass",
   "test-core#src:test/gamelib/crtl_mathf_smoke.c": "pass",
   "test-core#src:test/gamelib/crtl_net_headers_smoke.c": "pass",
@@ -4415,6 +4421,7 @@
   "test-core#src:test/test_dynarray.pas": "pass",
   "test-core#src:test/test_dynarray_ansistring.pas@1": "pass",
   "test-core#src:test/test_dynarray_ansistring.pas@2": "pass",
+  "test-core#src:test/test_dynarray_assign_to_a_var_parameter.pas": "pass",
   "test-core#src:test/test_dynarray_copy.pas": "pass",
   "test-core#src:test/test_dynarray_copy_expr_source.pas@1": "pass",
   "test-core#src:test/test_dynarray_copy_expr_source.pas@2": "pass",
@@ -4525,7 +4532,7 @@
   "test-core#src:test/test_generic_class_methods.pas": "pass",
   "test-core#src:test/test_generic_func.pas": "pass",
   "test-core#src:test/test_generic_inherit.pas": "pass",
-  "test-core#src:test/test_generic_inherit_delphi.pas": "fail",
+  "test-core#src:test/test_generic_inherit_delphi.pas": "pass",
   "test-core#src:test/test_generic_multiparam.pas": "pass",
   "test-core#src:test/test_generic_name_overload.pas": "pass",
   "test-core#src:test/test_generic_nested_diamond.pas": "pass",
@@ -4615,6 +4622,7 @@
   "test-core#src:test/test_isas_open_world_b325.pas": "pass",
   "test-core#src:test/test_keyword_array_case.pas": "pass",
   "test-core#src:test/test_keyword_case.pas": "pass",
+  "test-core#src:test/test_label_section_precedes_the_other_declarations.pas": "pass",
   "test-core#src:test/test_lazy_var.pas": "pass",
   "test-core#src:test/test_length_dynarray_call.pas": "pass",
   "test-core#src:test/test_lfm.pas": "pass",
@@ -4848,6 +4856,7 @@
   "test-core#src:test/test_operator_enumerator.pas": "pass",
   "test-core#src:test/test_operator_implicit_shortstring_b356.pas": "pass",
   "test-core#src:test/test_opt_store_reload.pas": "pass",
+  "test-core#src:test/test_out_parameter_of_a_managed_type_is_cleared.pas": "pass",
   "test-core#src:test/test_overflow_checks_qplus.pas": "pass",
   "test-core#src:test/test_overflow_qplus_narrow.pas": "pass",
   "test-core#src:test/test_overflow_succ_pred.pas": "pass",
@@ -5081,6 +5090,7 @@
   "test-core#src:test/test_typed_const_record.pas": "pass",
   "test-core#src:test/test_typed_metaclass_b278.pas": "pass",
   "test-core#src:test/test_typed_pointer_inc_dec.pas": "pass",
+  "test-core#src:test/test_typed_procvar_const_is_callable.pas": "pass",
   "test-core#src:test/test_typed_string_const.pas": "pass",
   "test-core#src:test/test_typeinfo_array_pointer.pas": "pass",
   "test-core#src:test/test_typeinfo_enum_b288.pas": "pass",
@@ -5157,6 +5167,7 @@
   "test-core#src:test/test_widechar_var_concat.pas": "pass",
   "test-core#src:test/test_widechar_var_to_string.pas": "pass",
   "test-core#src:test/test_widechar_var_to_string_arg.pas": "pass",
+  "test-core#src:test/test_widechar_writeln_prints_the_character.pas": "pass",
   "test-core#src:test/test_wildcard_lfm.pas": "pass",
   "test-core#src:test/test_with.pas": "pass",
   "test-core#src:test/test_with_class_create.pas": "pass",
@@ -6280,11 +6291,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-22T06:27:38Z",
-  "sha": "0d0a12a09757193933b41cb921ad6de3efda3aaa",
+  "date": "2026-08-22T08:31:21Z",
+  "sha": "d7e5e44b0f6cb800a4bcbdbd3f1efb39309c9147",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.1
+  "wall": 3600.4
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6338,32 +6349,6 @@
     "74d84a6ba449a8d6d77e64731ee7661df23f4988"
    ],
    "src": "tools/run_pascal_conformance.sh",
-   "status": "fail"
-  },
-  {
-   "bad": "f3acfdabf53c12070af980ad285bf7be708ea3b7",
-   "good": "ba5791c02ce32a0962a551c9e8d0a5a848791fd6",
-   "job": "test-core#src:test/fpcv.pas@2",
-   "name": "test-core#299",
-   "opened": "2026-08-21T20:38:47Z",
-   "pin_built": false,
-   "range": [
-    "f3acfdabf53c12070af980ad285bf7be708ea3b7"
-   ],
-   "src": "test/fpcv.pas",
-   "status": "fail"
-  },
-  {
-   "bad": "5179c4d4350bcb775841ce7b7283c1a367abe035",
-   "good": "f74df41e851cf669e0dfa56c30f9c768f900e244",
-   "job": "test-core#src:test/test_generic_inherit_delphi.pas",
-   "name": "test-core#298",
-   "opened": "2026-08-21T22:41:51Z",
-   "pin_built": false,
-   "range": [
-    "5179c4d4350bcb775841ce7b7283c1a367abe035"
-   ],
-   "src": "test/test_generic_inherit_delphi.pas",
    "status": "fail"
   },
   {
