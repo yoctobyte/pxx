@@ -3429,6 +3429,29 @@ begin
 end;
 
 var
+  { Installed by sysutils' initialization to convert a FAILED `as` DOWNCAST into
+    a raised, catchable EInvalidCast — same design as PXXDivZeroHook above.
+    Default nil = print-and-halt below.
+
+    The `as` trap used to be a bare Halt(1) emitted inline by the AN_AS_CAST
+    lowering: no message, no exit code anyone could read, and — unlike every
+    other checked operation in this family — nothing a `try ... except` could
+    intercept. A failed safe downcast is the one shape `as` exists FOR, so the
+    program that wrote the handler was the program that died silently.
+    bug-a-a-failed-as-downcast-dies-silently-and-uncatchably }
+  PXXInvalidCastHook: TPXXDivZeroProc;
+
+{ Failed `as` downcast: the instance is not of the requested class. FPC raises
+  EInvalidCast (Runtime error 219 without sysutils). Never returns unless a
+  hook raises past it. }
+procedure PXXInvalidCast;
+begin
+  if PXXInvalidCastHook <> nil then PXXInvalidCastHook();
+  writeln('Runtime error 219 (invalid typecast)');
+  Halt(219);
+end;
+
+var
   { Installed by sysutils' initialization to convert a {$Q+} arithmetic
     overflow into a raised, catchable EIntOverflow — same design as
     PXXDivZeroHook above. Default nil = FPC-without-sysutils behavior. }

@@ -7243,7 +7243,23 @@ begin
       IRAppend(IR_JUMP_IF_FALSE, elseLabel, right, -1, 0, 0);  { non-nil mismatch -> trap }
       IRAppend(IR_JUMP, endLabel, -1, -1, 0, 0);
       IRAppend(IR_LABEL, -1, -1, -1, elseLabel, 0);
-      IRAppend(IR_TERMINATE, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)), -1, -1, AN_HALT, 0);
+      { The mismatch exit. It was `Halt(1)` inline: silent, and the only member
+        of the checked-operation family that a `try ... except` could not
+        intercept — which is backwards, because a failed downcast is precisely
+        what `as` exists to let you handle. It now calls PXXInvalidCast, the
+        same shape PXXNilRef / PXXDivZero / PXXOverflow / PXXRangeChk use: print
+        + Halt(219) on its own, or a raise past it when sysutils has installed
+        the hook. A build without builtinheap keeps the old inline terminate —
+        the same lax fallthrough the range and nil checks take.
+        bug-a-a-failed-as-downcast-dies-silently-and-uncatchably }
+      varIdx := FindProc('PXXInvalidCast');
+      if varIdx >= 0 then
+      begin
+        left := IRAppendCall(varIdx, -1, -1, Ord(tyUnknown));
+        IRIVal[left] := 1;   { statement-level: side-effect call, result discarded }
+      end
+      else
+        IRAppend(IR_TERMINATE, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)), -1, -1, AN_HALT, 0);
       IRAppend(IR_LABEL, -1, -1, -1, endLabel, 0);
       Result := IRAppend(IR_LOAD_SYM, classIdx, -1, -1, 0, Ord(tyClass));
     end;
