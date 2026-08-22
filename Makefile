@@ -5370,6 +5370,17 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_dynarray_var_param_nested_index.pas $(TESTTMP)/test_dynvarparam26
 	test "$$($(TESTTMP)/test_dynvarparam26 | tail -1)" = "total ok 7 / 7"
 
+	# Forwarding a by-ref dynarray param onward as another by-ref argument. The
+	# arg path EXCLUDED a forwarded by-ref param on the reasoning that its slot
+	# already holds &caller_slot — true of the slot, false of what IRLowerAddress
+	# hands back (IR_LEA's dyn arm derefs TWICE on a read), so the callee read
+	# element 0 as a handle. A nested routine is a lambda-lifted call with its
+	# captures as by-ref params, which is why every nested write to a captured
+	# var-param dynarray had it too. Includes the AnsiString capture row, whose
+	# arm excludes the same case CORRECTLY (its IR_LEA arm derefs once).
+	./$(COMPILER) test/test_dynarray_var_param_forwarded.pas $(TESTTMP)/test_dynfwd26
+	test "$$($(TESTTMP)/test_dynfwd26 | tail -1)" = "total ok 7 / 7"
+
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"

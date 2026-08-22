@@ -1273,6 +1273,38 @@ begin
   end;
 end;
 
+function IRDynHandleSlotAddr(symIdx: Integer): Integer;
+{ The address of the slot that HOLDS a dynamic array's handle, for a plain
+  variable root — the one thing SetLength, IR_DYNUNIQUE and a by-ref argument
+  all need, and the one thing three different call sites each computed their
+  own way.
+
+  For a local, a global or a by-VALUE param that is the slot itself, so
+  IR_SLOTADDR (a plain lea on every backend, by its documented contract).
+
+  For a `var`/`out` parameter the slot holds the ADDRESS of the caller's handle,
+  so the answer is the slot's CONTENTS — one indirection in from where
+  IR_SLOTADDR points.
+
+  IR_LEA cannot answer this. Its dyn-array arm derefs TWICE on a read, because
+  in a value context reading a by-ref dyn param means the handle; that is right
+  there and wrong here, and both of this ticket's bugs are that one node used in
+  a place that wanted the slot:
+
+    d[0] := nil          on `var d: TD2` nulled the ROOT handle
+    SetLength(d[0], 3)   RESIZED the root, then walked rows that were not rows
+    Sink(d)              forwarding `var d` onward passed the DATA pointer, so
+                         the callee treated element 0 as a handle
+
+  bug-a-setlength-on-a-2d-dynarray-var-param-is-lost
+  bug-a-a-dynarray-var-param-written-from-a-nested-routine-is-discarded }
+begin
+  Result := IRAppend(IR_SLOTADDR, symIdx, -1, -1, 0, Ord(tyPointer));
+  if (symIdx >= 0) and (symIdx < SymCount) and
+     (Syms[symIdx].Kind = skParam) and Syms[symIdx].IsRef then
+    Result := IRAppend(IR_LOAD_MEM, Result, -1, -1, 0, Ord(tyPointer));
+end;
+
 function IRLowerAddress(node: Integer): Integer;
 var baseNode, baseAddr, indexNode, lo, elemSize: Integer;
     rcSym, rcPi, rcArg, rcArg2: Integer;
@@ -1484,32 +1516,7 @@ begin
         slot in the object; for a sub-array it is the element address in the
         parent's data (its own IR_DYNUNIQUE chain, so COW recurses upward). }
       if ASTKind[baseNode] = AN_IDENT then
-      begin
-        { IR_SLOTADDR is the address of the LOCAL slot, by contract and by every
-          backend's implementation. For a `var`/`out` parameter that slot does
-          not hold the handle — it holds the ADDRESS of the caller's handle — so
-          the address IR_DYNUNIQUE wants is the slot's CONTENTS, one indirection
-          in from where SLOTADDR points.
-
-          Without this, every nested index on a by-ref dynarray param aimed at
-          the parameter's own slot: `d[0] := nil` on `var d: array of array of
-          Integer` nulled the ROOT handle (caller saw Length 0, not 7), and
-          `SetLength(d[0], 3)` RESIZED THE ROOT (Length 3, then a segfault
-          walking rows that were never rows). SetLength on the root was correct
-          throughout, because it comes in through IR_LEA, whose write mode
-          already loads the slot — so the two halves of one statement disagreed
-          about what `d` meant.
-
-          IR_LEA cannot be used here: its READ mode derefs once more to the data
-          pointer, and IR_DYNUNIQUE needs the slot address in both modes (that
-          is why IR_SLOTADDR exists at all). LOAD_MEM of the slot address is the
-          same answer in both, on every target, with no backend change.
-          bug-a-setlength-on-a-2d-dynarray-var-param-is-lost }
-        slotAddrNode := IRAppend(IR_SLOTADDR, ASTIVal[baseNode], -1, -1, 0, Ord(tyPointer));
-        if (ASTIVal[baseNode] >= 0) and (ASTIVal[baseNode] < SymCount) and
-           (Syms[ASTIVal[baseNode]].Kind = skParam) and Syms[ASTIVal[baseNode]].IsRef then
-          slotAddrNode := IRAppend(IR_LOAD_MEM, slotAddrNode, -1, -1, 0, Ord(tyPointer));
-      end
+        slotAddrNode := IRDynHandleSlotAddr(ASTIVal[baseNode])
       else
         slotAddrNode := IRLowerAddress(baseNode);
       baseAddr := IRAppend(IR_DYNUNIQUE, slotAddrNode, baseDynDepth, dynBaseRec,
@@ -3648,16 +3655,25 @@ begin
       end;
       if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < MAX_PROC_PARAMS) and
          (ProcParamDynDepth[cpi * MAX_PROC_PARAMS + pathIdx] > 0) and
-         (ASTKind[argAST] = AN_IDENT) and
-         not ((Syms[ASTIVal[argAST]].Kind = skParam) and
-              Syms[ASTIVal[argAST]].IsRef) then
+         (ASTKind[argAST] = AN_IDENT) then
         { var/out named-dynamic-array param: pass the ADDRESS of the caller's
           handle slot (&caller_slot) so SetLength can publish a resized handle
           back. IR_LEA over a dyn-array ident would instead yield the handle
-          VALUE, so use IR_SLOTADDR explicitly (mirrors the by-ref AnsiString
-          arg below). A forwarded by-ref param already holds &caller_slot in its
-          slot, so it takes the IRLowerAddress path. }
-        value := IRAppend(IR_SLOTADDR, ASTIVal[argAST], -1, -1, 0, Ord(tyPointer))
+          VALUE, so the slot address is taken explicitly (mirrors the by-ref
+          AnsiString arg below).
+
+          This used to EXCLUDE a forwarded by-ref param, on the reasoning that
+          "a forwarded by-ref param already holds &caller_slot in its slot, so
+          it takes the IRLowerAddress path". The slot does hold that — but
+          IRLowerAddress does not hand it back: IR_LEA's dyn-array arm derefs
+          TWICE on a read, so `Sink(d)` inside `procedure Fwd(var d: TDA)`
+          passed the DATA pointer and the callee read element 0 as a handle.
+          The by-ref AnsiString arm below excludes the same case for the same
+          stated reason and is CORRECT there, because IR_LEA's string arm
+          derefs only once — which is exactly why one shared helper now answers
+          the question instead of each site reasoning about IR_LEA's modes.
+          bug-a-a-dynarray-var-param-written-from-a-nested-routine-is-discarded }
+        value := IRDynHandleSlotAddr(ASTIVal[argAST])
       else if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < MAX_PROC_PARAMS) and
          (ProcParamDynDepth[cpi * MAX_PROC_PARAMS + pathIdx] > 0) and
          (ASTKind[argAST] = AN_DEREF) then
