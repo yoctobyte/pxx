@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: 3dba78808
 summary: "`SetLength(TC.V, n)` on a dynamic-array `class var` compiled clean and SEGFAULTED on the next read — the qualified spelling makes SetLength's own operand lookup answer the CLASS, not the member, so idx was -1 and the target classification fell through every arm to the STRING one, writing a string header over the array handle. `New(TC.P)` is the same defect through its loud arm (\"New: undefined variable\" on a valid pointer class var)."
 ---
 
@@ -107,4 +107,4 @@ instance naming it (`o.Inl`). Output is line-for-line identical to
 `make compiler/pascal26` (fixedpoint, converged) + the repro + `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-22 — resolved, commit PENDING-COMMIT.
+- 2026-08-22 — resolved, commit 3dba78808.
