@@ -5276,6 +5276,17 @@ test-core: $(COMPILER)
 	./$(COMPILER) --strict-fpc test/test_strict_fpc_shr_keeps_the_sign.pas $(TESTTMP)/test_shr_sign_strict26
 	test "$$($(TESTTMP)/test_shr_sign_strict26)" = "$$(printf 'c0 -16\nv0 -16\nl0 -16\ns0 -16\nb0 -16\nq0 -16\np0 16 4\nd1 2147483640\nd4 268435455\nd31 -2147483648\nd33 2')"
 
+	# TObject.InstanceSize / TObject.ClassNameIs — System-level, no `uses`.
+	# InstanceSize was pure omission: rtti_emit has always written the size into
+	# the class blob at +16 and only the accessor was missing. The `poly` and
+	# `ref` rows are the ones that matter: a STATIC TObject receiver and a TClass
+	# variable must both report the RUNTIME class's size (24, not TObject's), which
+	# is what proves the blob is reached through the value rather than resolved at
+	# compile time. `nis3` pins that ClassNameIs does NOT walk the parent chain
+	# while InheritsFrom on the same line does.
+	./$(COMPILER) test/test_tobject_instancesize_and_classnameis.pas $(TESTTMP)/test_tobj_instsize26
+	test "$$($(TESTTMP)/test_tobj_instsize26)" = "$$(printf 'cls  16 24\ninst 16 24\npoly 24\nref  24\ngrow TRUE\nnis1 TRUE TRUE FALSE\nnis2 TRUE FALSE\nnis3 TRUE FALSE TRUE\nparen 16 TBase')"
+
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"

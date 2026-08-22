@@ -925,6 +925,19 @@ begin
     if pi < 0 then Exit;
     outTk := tyBoolean;
   end
+  else if CaseEqual(op, 'InstanceSize') then
+  begin
+    { the blob's +16 word, which rtti_emit has always written }
+    pi := FindProc('__pxxInstanceSize');
+    if pi < 0 then Exit;
+    outTk := tyInt64;
+  end
+  else if CaseEqual(op, 'ClassNameIs') then
+  begin
+    pi := FindProc('__pxxClassNameIs');
+    if pi < 0 then Exit;
+    outTk := tyBoolean;
+  end
   else
     Exit;
 
@@ -935,9 +948,10 @@ begin
   ASTLeft[argSeq] := blobNode;
   ASTLeft[callNode] := argSeq;
 
-  if CaseEqual(op, 'InheritsFrom') then
+  if CaseEqual(op, 'InheritsFrom') or CaseEqual(op, 'ClassNameIs') then
   begin
-    { the class to test against -- itself a class reference, i.e. a blob pointer }
+    { the one argument: a class reference (blob pointer) for InheritsFrom, a
+      string for ClassNameIs. Same shape, so the same arm builds it. }
     Expect(tkLParen, '(');
     ParseExpr;
     argSeq2 := AllocNode(AN_ARG);
@@ -955,13 +969,14 @@ begin
   Result := callNode;
 end;
 
-{ True for the four names GenMakeClassRefOp handles. }
+{ True for the names GenMakeClassRefOp handles. }
 function IsClassRefOpName(const nm: AnsiString): Boolean;
 var m: AnsiString;
 begin
   m := MapNilPyClassRefOpName(nm);
   IsClassRefOpName := CaseEqual(m, 'ClassName') or CaseEqual(m, 'ClassType') or
-                      CaseEqual(m, 'InheritsFrom') or CaseEqual(m, 'ClassParent');
+                      CaseEqual(m, 'InheritsFrom') or CaseEqual(m, 'ClassParent') or
+                      CaseEqual(m, 'InstanceSize') or CaseEqual(m, 'ClassNameIs');
 end;
 
 { The class RTTI blob of an INSTANCE expression. An IR node, not a builtin call:

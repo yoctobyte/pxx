@@ -938,6 +938,7 @@ begin
     if (Tokens[i].Kind = tkIdent) and
        (CaseEqual(GetTokenStr(i), 'classname') or CaseEqual(GetTokenStr(i), 'inheritsfrom') or
         CaseEqual(GetTokenStr(i), 'classparent') or
+        CaseEqual(GetTokenStr(i), 'instancesize') or CaseEqual(GetTokenStr(i), 'classnameis') or
         { `E is <class-reference VALUE>` lowers to __pxxInheritsFrom (see ParseExpr).
           Whether the right-hand side is a class NAME (compile-time, no helper) or a
           TClass value (runtime, helper) is not knowable from the tokens, so the

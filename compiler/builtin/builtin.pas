@@ -1928,6 +1928,7 @@ type
 
 const
   PXX_RTTI_PARENT    = 8;
+  PXX_RTTI_INSTSIZE  = 16;   { UClsSize_, written by rtti_emit's pass 2 }
   PXX_RTTI_METHCOUNT = 48;
   PXX_RTTI_METHS     = 56;
   PXX_RTTI_METHSIZE  = 48;   { {name,code,arity,retKind,paramKinds,flags} }
@@ -2010,6 +2011,18 @@ begin
   Result := __pxxRttiName(PPxxPtr_(Rtti)^);
 end;
 
+function __pxxInstanceSize(Rtti: Pointer): PtrInt;
+{ x.InstanceSize: the byte size of an instance of the class, which rtti_emit
+  already writes into the blob at +16 (UClsSize_). One field read, exactly like
+  __pxxClassParent -- the value was there all along and only the accessor was
+  missing. FPC answers for a class reference and for an instance alike; both
+  reach here with the same blob. }
+begin
+  Result := 0;
+  if Rtti = nil then Exit;
+  Result := PPxxInt_(PtrUInt(Rtti) + PXX_RTTI_INSTSIZE)^;
+end;
+
 { ---- TObject's root virtuals: the DEFAULT bodies -------------------------
 
   Every class reserves leading VMT slots for Destroy/Equals/GetHashCode/ToString
@@ -2049,6 +2062,16 @@ begin
   for i := 1 to Length(a) do
     if __pxxUpCase(a[i]) <> __pxxUpCase(b[i]) then Exit;
   Result := True;
+end;
+function __pxxClassNameIs(Rtti: Pointer; const Name: AnsiString): Boolean;
+{ x.ClassNameIs(s): FPC compares the class's own name to s CASE-INSENSITIVELY
+  and does NOT walk the parent chain -- it asks "is this exactly that class",
+  not "is it one of those". __pxxSameNameCI is the same comparison the name
+  lookups already use, so the two cannot disagree about what "same name" means. }
+begin
+  Result := False;
+  if Rtti = nil then Exit;
+  Result := __pxxSameNameCI(__pxxClassName(Rtti), Name);
 end;
 
 function __pxxMethodAddress(Instance: Pointer; const Name: AnsiString): Pointer;
