@@ -4198,34 +4198,7 @@ begin
   end
   else if (tk = tyAnsiString) and (CurTok.Kind = tkLBrack) then
   begin
-    { Index a STRING-returning call: `Uppercase(s)[2]` (ftpsend's permission
-      chars). AN_INDEX needs an addressable base, so materialise the result
-      into a hidden temp first and yield `(tmp := call, tmp[i])` via AN_COMMA
-      (evaluate-left-yield-right). PASCAL ONLY — the NilPy arm above handles
-      that dialect's 0-based/negative/slice semantics. }
-    Next;
-    prevTok := AllocVar('', tyAnsiString);   { hidden temp (sym idx) }
-    tmpN := AllocNode(AN_IDENT);
-    ASTIVal[tmpN] := prevTok;
-    ASTTk[tmpN] := Ord(tyAnsiString);
-    sub := AllocNode(AN_ASSIGN);
-    ASTLeft[sub] := tmpN;
-    ASTRight[sub] := node;
-    node := sub;                             { the side-effect leg }
-    tmpN := AllocNode(AN_IDENT);
-    ASTIVal[tmpN] := prevTok;
-    ASTTk[tmpN] := Ord(tyAnsiString);
-    sub := AllocNode(AN_INDEX);
-    ASTLeft[sub] := tmpN;
-    ParseExpr;
-    ASTRight[sub] := CurASTNode;
-    Expect(tkRBrack, ']');
-    ASTTk[sub] := Ord(tyChar);
-    prevTok := AllocNode(AN_COMMA);
-    ASTLeft[prevTok] := node;
-    ASTRight[prevTok] := sub;
-    ASTTk[prevTok] := Ord(tyChar);
-    node := prevTok;
+    node := GenMakeStringValueIndex(node);
     tk := tyChar;
   end
   else if ((tk = tyClass) or (tk = tyRecord)) and (CurTok.Kind in [tkDot, tkLBrack]) and
@@ -4393,6 +4366,47 @@ begin
   end;
   CurASTNode := node;
   LastExprTk := tk;
+end;
+
+{ Index a string VALUE — something with no addressable base: a call result
+  (`UpperCase(s)[2]`), a parenthesised expression (`(a + b)[3]`), a literal
+  (`'hello'[1]`). AN_INDEX needs an address, so materialise the value into a
+  hidden temp and yield `(tmp := value, tmp[i])` via AN_COMMA
+  (evaluate-left-yield-right), which also evaluates the value exactly once.
+
+  On entry CurTok is the `[`; on exit the `]` is consumed. Returns a node of
+  type tyChar.
+
+  Extracted so the call-result arm and the grouped-expression arm cannot drift:
+  the grouped arm used to build a RAW AN_INDEX over the string, which compiled
+  and then SEGFAULTED at run time (`(s)[3]`) because the base it indexed was the
+  string handle rather than a slot holding one.
+  bug-a-indexing-a-parenthesised-string-compiles-and-segfaults }
+function GenMakeStringValueIndex(valNode: Integer): Integer;
+var tmpSym, tmpN, asgn, idx, comma: Integer;
+begin
+  Next;                                      { consume '[' }
+  tmpSym := AllocVar('', tyAnsiString);      { hidden temp (sym idx) }
+  tmpN := AllocNode(AN_IDENT);
+  ASTIVal[tmpN] := tmpSym;
+  ASTTk[tmpN] := Ord(tyAnsiString);
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := tmpN;
+  ASTRight[asgn] := valNode;                 { the side-effect leg }
+  tmpN := AllocNode(AN_IDENT);
+  ASTIVal[tmpN] := tmpSym;
+  ASTTk[tmpN] := Ord(tyAnsiString);
+  idx := AllocNode(AN_INDEX);
+  ASTLeft[idx] := tmpN;
+  ParseExpr;
+  ASTRight[idx] := CurASTNode;
+  Expect(tkRBrack, ']');
+  ASTTk[idx] := Ord(tyChar);
+  comma := AllocNode(AN_COMMA);
+  ASTLeft[comma] := asgn;
+  ASTRight[comma] := idx;
+  ASTTk[comma] := Ord(tyChar);
+  Result := comma;
 end;
 
 function ParseProcVarCallAST(calleeSym, sigPi: Integer): Integer;

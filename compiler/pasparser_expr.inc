@@ -657,6 +657,26 @@ begin
         ASTSOffset[node] := Tokens[prevTok].SOffset; ASTSLen[node] := Tokens[prevTok].SLen;
         ASTTk[node] := Ord(tyString); CurASTNode := node;
         LastExprTk := tyString;
+        { Trailing index on the LITERAL itself — `'hello'[1]`, which FPC takes.
+          A NAMED string constant has had this since bug-const-string-index-
+          miscompiles; the bare literal is the same AN_STR_LIT node and lowers
+          the same way (IRLowerAddress reaches its IR_CONST_STR storage), so it
+          was missing the loop and nothing else. Kept as the identical shape,
+          NOT routed through GenMakeStringValueIndex: a literal's storage IS
+          addressable, so it needs no temp.
+          bug-a-indexing-a-parenthesised-string-compiles-and-segfaults }
+        while CurTok.Kind = tkLBrack do
+        begin
+          Next;
+          indexNode := AllocNode(AN_INDEX);
+          ASTLeft[indexNode] := node;
+          ParseExpr;
+          ASTRight[indexNode] := CurASTNode;
+          Expect(tkRBrack, ']');
+          ASTTk[indexNode] := Ord(tyChar);
+          node := indexNode; CurASTNode := node;
+          LastExprTk := tyChar;
+        end;
       end;
     end;
     tkLParen:
@@ -737,14 +757,29 @@ begin
         end
         else if CurTok.Kind = tkLBrack then
         begin
-          Next;
-          indexNode := AllocNode(AN_INDEX);
-          ASTLeft[indexNode] := node;
-          ParseExpr;
-          ASTRight[indexNode] := CurASTNode;
-          Expect(tkRBrack, ']');
-          ASTTk[indexNode] := ASTTk[node];
-          node := indexNode;
+          if IntToTypeKind(ASTTk[node]) = tyAnsiString then
+          begin
+            { A grouped STRING has no addressable base, so a raw AN_INDEX over
+              it indexes the string HANDLE rather than a slot holding one:
+              `(s)[3]` compiled clean and segfaulted at run time, and
+              `(s + 'x')[3]` reached IR_UNSUPPORTED. Materialise into a temp and
+              index that — the same move, and now literally the same code, as
+              the string-returning-call arm in pasparser_lval.inc.
+              bug-a-indexing-a-parenthesised-string-compiles-and-segfaults }
+            node := GenMakeStringValueIndex(node);
+            tk := tyChar;
+          end
+          else
+          begin
+            Next;
+            indexNode := AllocNode(AN_INDEX);
+            ASTLeft[indexNode] := node;
+            ParseExpr;
+            ASTRight[indexNode] := CurASTNode;
+            Expect(tkRBrack, ']');
+            ASTTk[indexNode] := ASTTk[node];
+            node := indexNode;
+          end;
         end
         else { tkDot — field or method of the grouped record/class value }
         begin

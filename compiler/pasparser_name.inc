@@ -471,6 +471,9 @@ function ParseAsmStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;
 procedure CompileAST(node: Integer); forward;
 function ParseTypeKind: TTypeKind; forward;
+{ materialise-and-index for a string VALUE with no addressable base — used from
+  two arms in pasparser_lval.inc, one of which sits above its definition }
+function GenMakeStringValueIndex(valNode: Integer): Integer; forward;
 { the procedural-type grammar, shared by the named alias (ParseTypeSection) and
   the anonymous inline form (ParseTypeKind) — mutually recursive with the latter,
   since a parameter's type is itself a type }

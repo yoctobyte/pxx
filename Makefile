@@ -5287,6 +5287,16 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_tobject_instancesize_and_classnameis.pas $(TESTTMP)/test_tobj_instsize26
 	test "$$($(TESTTMP)/test_tobj_instsize26)" = "$$(printf 'cls  16 24\ninst 16 24\npoly 24\nref  24\ngrow TRUE\nnis1 TRUE TRUE FALSE\nnis2 TRUE FALSE\nnis3 TRUE FALSE TRUE\nparen 16 TBase')"
 
+	# Indexing a string with no addressable base. `(s)[3]` COMPILED and then
+	# SEGFAULTED — the grouped-expression suffix loop built a raw AN_INDEX, so it
+	# indexed the string handle rather than a slot holding one. `(s + 'x')[3]` hit
+	# IR_UNSUPPORTED and a bare literal `'hello'[1]` was a syntax error, while a
+	# named constant and a string-returning call both worked. The `once` row is
+	# the one that justifies the temp: the value must be evaluated exactly once.
+	# The named/fncall/direct/arr rows are the shapes that already worked.
+	./$(COMPILER) -Fulib/rtl test/test_indexing_a_string_value.pas $(TESTTMP)/test_str_value_index26
+	test "$$($(TESTTMP)/test_str_value_index26)" = "$$(printf 'grp   b\ngrp2  c\nexpr  ef\ncall  A\nlit   ho\nhello\nlidx  l\nonce  y 1\nnamed ho\nfncall AB\ndirect ac\narr   4 6')"
+
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"
