@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: 47fc2c383
 summary: "`Integer(v) := x` over an ordinary lvalue was refused — only `Integer(p^) := x` parsed. That made writing through an UNTYPED `var x` parameter impossible, though reading one already worked, so a Move/FillChar-shaped routine could look at its argument and not store to it."
 ---
 
