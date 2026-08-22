@@ -29,3 +29,6 @@ gtk_init resolved and called successfully!
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-22 — auto-closed by the plexus watcher: `test-core#src:test/test_c_gtk_call.pas` passes at 98ed38202254 (tier full); it was red at 98ed38202254. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
