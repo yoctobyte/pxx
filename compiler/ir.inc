@@ -5582,6 +5582,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     rcSubLo, rcSubHi: Int64;
     vrCount, vrTmp, vrIdent, vrCountLit, vrArg1, vrArg2, vrSlCall: Integer;
     vrIdxLit, vrIndex, vrTag, elemAddr, vrSavedRecId, vrBoxSym: Integer;
+    vrElemDepth: Integer;
     vrElemTk, vrBoxTk: TTypeKind;
     setAllConst: Boolean; setSym: Integer;
     dcSrcSym, dcElemRec, dcElemSz, dcIdxAst, dcCntAst, dcSrcTmp, dcIdxTmp: Integer;
@@ -5669,13 +5670,27 @@ begin
       item := ASTLeft[node];
       while item <> -1 do begin Inc(vrCount); item := ASTRight[item]; end;
 
-      { fixed-array ROW element (`array of T`, T a named fixed array): the parse
-        stashed the row shape on the node (ASTSOffset = row length, ASTSLen =
-        row lo); hand it to AllocDynArray so the temp's stride and the element
-        row-copies below are row-sized. }
-      LastTypeDynElemRowLen := ASTSOffset[node];
-      LastTypeDynElemRowLo  := ASTSLen[node];
-      vrTmp := AllocDynArray('', vrElemTk, 1);
+      { The parse stashed the ELEMENT shape on the node (OpenArrayCtorRowLen's
+        encoding): ASTSOffset > 0 = a named FIXED array row of that length, with
+        ASTSLen its low bound — hand it to AllocDynArray so the temp's stride and
+        the element row-copies below are row-sized; ASTSOffset < 0 = a named
+        DYNAMIC array element of depth -ASTSOffset, so the temp is one level
+        deeper and each slot holds a dyn HANDLE (storing one into a base-scalar
+        slot was a silent garbage read then a segfault —
+        bug-p-open-array-of-a-named-dynamic-array-reads-garbage). }
+      if ASTSOffset[node] < 0 then
+      begin
+        vrElemDepth := -ASTSOffset[node];
+        LastTypeDynElemRowLen := 0;
+        LastTypeDynElemRowLo  := 0;
+      end
+      else
+      begin
+        vrElemDepth := 0;
+        LastTypeDynElemRowLen := ASTSOffset[node];
+        LastTypeDynElemRowLo  := ASTSLen[node];
+      end;
+      vrTmp := AllocDynArray('', vrElemTk, 1 + vrElemDepth);
       { Managed local synthesised after the prologue zero-init pass — flag it for
         the codegen prologue nil-init and zero the handle slot here so SetLength
         sees nil (mirrors AN_VARREC_ARRAY). }
@@ -5708,11 +5723,12 @@ begin
         ASTIVal[vrIdxLit] := i; ASTTk[vrIdxLit] := Ord(tyInteger);
         vrIndex := AllocNode(AN_INDEX);
         ASTLeft[vrIndex] := vrIdent; ASTRight[vrIndex] := vrIdxLit;
-        ASTTk[vrIndex] := Ord(vrElemTk);
+        if vrElemDepth > 0 then ASTTk[vrIndex] := Ord(tyPointer)
+        else ASTTk[vrIndex] := Ord(vrElemTk);
         elemAddr := AllocNode(AN_ASSIGN);
         ASTLeft[elemAddr] := vrIndex;
         ASTRight[elemAddr] := ASTLeft[item];
-        ASTTk[elemAddr] := Ord(vrElemTk);
+        ASTTk[elemAddr] := ASTTk[vrIndex];
         IRMarkStatementNode(IRLowerAST(elemAddr));
         Inc(i);
         item := ASTRight[item];

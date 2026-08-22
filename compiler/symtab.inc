@@ -7538,6 +7538,7 @@ begin
   SetLength(ProcParamDynDepth, n*MAX_PROC_PARAMS);  SetLength(ProcParamIsConst, n*MAX_PROC_PARAMS);  SetLength(ProcParamExplicitByRef, n*MAX_PROC_PARAMS);
   SetLength(ProcParamCapRef, n*MAX_PROC_PARAMS);  SetLength(ProcParamProcSig, n*MAX_PROC_PARAMS);  SetLength(ProcParamUntyped, n*MAX_PROC_PARAMS);
   SetLength(ProcParamHasDefault, n*MAX_PROC_PARAMS);  SetLength(ProcParamElemRowLen, n*MAX_PROC_PARAMS);  SetLength(ProcParamElemRowLo, n*MAX_PROC_PARAMS);
+  SetLength(ProcParamElemDynDepth, n*MAX_PROC_PARAMS);
   SetLength(ProcParamDefaultVal, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultIsStr, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultIsNone, n*MAX_PROC_PARAMS);
   SetLength(ProcParamDefaultIsFloat, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultIsBool, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultSym, n*MAX_PROC_PARAMS);
   SetLength(ProcParamDefaultGName, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultIsSet, n*MAX_PROC_PARAMS);  SetLength(ProcParamDefaultSOff, n*MAX_PROC_PARAMS);
@@ -7614,6 +7615,7 @@ begin
     ProcParamSetEnumId[ProcCount * MAX_PROC_PARAMS + i] := -1;
     ProcParamDynDepth[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamElemRowLen[ProcCount * MAX_PROC_PARAMS + i] := 0;
+    ProcParamElemDynDepth[ProcCount * MAX_PROC_PARAMS + i] := 0;
     ProcParamElemRowLo[ProcCount * MAX_PROC_PARAMS + i] := 0;
   end;
   for i := 0 to nParams-1 do
@@ -10421,7 +10423,19 @@ begin
   else if ASTKind[node] = AN_INDEX then
   begin
     depth := DynArrayNodeDepth(ASTLeft[node]);
-    if depth > 0 then Result := depth - 1;
+    if depth > 0 then Result := depth - 1
+    else if (ASTKind[ASTLeft[node]] = AN_IDENT) and (ASTIVal[ASTLeft[node]] >= 0) and
+            Syms[ASTIVal[ASTLeft[node]]].IsArray and
+            (Syms[ASTIVal[ASTLeft[node]]].ArrLen <> -1) and
+            (SymElemDynDepth[ASTIVal[ASTLeft[node]]] > 0) then
+      { Indexing an array whose ELEMENT is a dyn-array handle — a fixed
+        `array[..] of TRow`, or an open-array param `array of TRow`: a[i] is
+        still an array, of the element's own depth. IR's NodeDynDepth already
+        knew this; the parser-side twin did not, so `a[i][j]` was TYPED as
+        indexing the element BASE type — for a managed-string base that made
+        m[0][1] a CHAR read off an 8-byte stride (silent garbage;
+        bug-p-open-array-of-a-named-dynamic-array-reads-garbage). }
+      Result := SymElemDynDepth[ASTIVal[ASTLeft[node]]];
   end;
 end;
 

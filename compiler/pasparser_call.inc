@@ -1084,7 +1084,7 @@ begin
         exprNode := ParseVarRecLiteralAST
       else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(mpi, ai) then
         exprNode := ParseArrayCtorAST(Procs[mpi].Params[ai].TypeKind,
-          ProcParamElemRowLen[mpi * MAX_PROC_PARAMS + ai], ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + ai])
+          OpenArrayCtorRowLen(mpi, ai), ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + ai])
       else if Procs[mpi].Params[ai].IsRef or Procs[mpi].Params[ai].IsArray then
       begin
         if ByRefArgStartsExpression(ParamIsConstVariant(mpi, ai)) then

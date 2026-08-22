@@ -2320,6 +2320,7 @@ var
   ProcParamHasDefault : array of Boolean; { param has a default value (`b: Integer = 10`). Trailing params only. A call omitting trailing args supplies these; overload matching accepts nArgs in [required..ParamCount]. }
   ProcParamElemRowLen : array of Integer; { open-array param whose element is a named FIXED array (`a: array of T`): the row's flattened element count; 0 = scalar element. Drives the call-site `[..]` ctor stride and static-array copy-in count. }
   ProcParamElemRowLo  : array of Integer; { the row's low bound, paired with ProcParamElemRowLen }
+  ProcParamElemDynDepth : array of Integer; { open-array param whose element is a named DYNAMIC array (`a: array of TRow`): the element's dyn depth; 0 = element not dynamic. Mutually exclusive with ProcParamElemRowLen. Drives the call-site `[..]` ctor temp's nesting. }
   ProcParamDefaultVal : array of Int64;   { the constant-folded default ordinal value (when ProcParamHasDefault). }
   ProcParamDefaultIsStr : array of Boolean; { default is a STRING literal (`msg: string = ''`), not an ordinal; the text is (SOff,SLen) below. }
   ProcParamDefaultIsNone: array of Boolean;

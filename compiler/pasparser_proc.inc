@@ -455,11 +455,12 @@ var
   pFixedLen : array[0..MAX_PROC_PARAMS-1] of Integer;
   pElemRowLen : array[0..MAX_PROC_PARAMS-1] of Integer; { open-array param `array of T`, T a named FIXED array: elements per row (0 = scalar element) }
   pElemRowLo  : array[0..MAX_PROC_PARAMS-1] of Integer; { the row's low bound }
+  pElemDynDepth : array[0..MAX_PROC_PARAMS-1] of Integer; { open-array param `array of T`, T a named DYNAMIC array: the element's dyn depth (0 = element not dynamic) }
   pFixedLo : array[0..MAX_PROC_PARAMS-1] of Integer; { named fixed-array param's LOW BOUND — dropped before, so a[1] on a var 1..3 param indexed off by lo (silent neighbour write; found by the {$R+} arc) }  { named FIXED 1-D array param: its real element count (0 = unknown/open — keep AllocParam's placeholder) }
   pDimLo    : array[0..95] of Integer;
   pDimSpan  : array[0..95] of Integer;
   paramNDims, paramDynDepth, paramAi, pdi, paramFixedLen, paramFixedLo: Integer;
-  paramElemRowLen, paramElemRowLo: Integer;
+  paramElemRowLen, paramElemRowLo, paramElemDynDepth: Integer;
   psLo, psSpan: array[0..MAX_ARR_DIMS-1] of Integer;
   nparams  : Integer;
   procIdx, helperPi, i, sz, retRecId, savedLastTypeRecId: Integer;
@@ -511,6 +512,7 @@ begin
     pFixedLo[pzi] := 0;
     pElemRowLen[pzi] := 0;
     pElemRowLo[pzi] := 0;
+    pElemDynDepth[pzi] := 0;
   end;
   { require-forward: the header's SOffset (stable under pass-2 token edits,
     like CurBodyHdrTok) becomes the routine's visibility boundary when the
@@ -683,7 +685,7 @@ begin
           Error('untyped parameter requires var, const, or out');
         isUntyped := True; isByRef := True;
         tk := tyPointer; isArr := False; paramNDims := 0; paramDynDepth := 0;
-        paramElemRowLen := 0; paramElemRowLo := 0;
+        paramElemRowLen := 0; paramElemRowLo := 0; paramElemDynDepth := 0;
         LastTypeRecId := REC_NONE; LastTypePointerElemTk := tyUnknown;
         LastTypePointerElemRec := REC_NONE; LastTypeProcSig := -1;
       end
@@ -697,6 +699,7 @@ begin
       paramFixedLo := 0;
       paramElemRowLen := 0;
       paramElemRowLo := 0;
+      paramElemDynDepth := 0;
       tokKindOrd := Ord(CurTok.Kind);
       if DebugTrace then writeln('After colon, CurTok.Kind = ', tokKindOrd, ', CurTok.SVal = ', CurTok.SVal);
       paramAi := -1;
@@ -778,6 +781,25 @@ begin
             paramElemRowLo  := ArrTypeLo[paramAi];
             Next;             { consume the named array type }
           end
+          else if paramAi >= 0 then
+          begin
+            { open array whose element is a named DYNAMIC array
+              (`a: array of TRow` where `TRow = array of Integer`): each element
+              is a pointer-sized dyn-array HANDLE, not a base scalar.
+              ParseTypeKind collapses TRow to its element base type, so the
+              callee indexed the parameter with a 4-byte Integer stride and read
+              garbage for m[i] / Length(m[i]) — a silent wrong value that
+              segfaulted on a slightly bigger shape
+              (bug-p-open-array-of-a-named-dynamic-array-reads-garbage). Mark
+              the element dynamic instead; SymElemDynDepth then drives the
+              pointer-sized stride and tags m[i] as a handle. }
+            tk := IntToTypeKind(ArrTypeElemTk[paramAi]);
+            LastTypeRecId := ArrTypeElemRec[paramAi];
+            LastTypePointerElemRec := ArrTypePtrElemRec[paramAi];
+            paramElemDynDepth := ArrTypeDynDepth[paramAi];
+            if paramElemDynDepth <= 0 then paramElemDynDepth := 1;
+            Next;             { consume the named array type }
+          end
           else
             tk := ParseTypeKind;
         end;
@@ -829,6 +851,7 @@ begin
         pFixedLo[i] := paramFixedLo;
         pElemRowLen[i] := paramElemRowLen;
         pElemRowLo[i] := paramElemRowLo;
+        pElemDynDepth[i] := paramElemDynDepth;
         for pdi := 0 to paramNDims - 1 do
         begin
           pDimLo[i * MAX_ARR_DIMS + pdi]   := psLo[pdi];
@@ -1055,6 +1078,7 @@ begin
       pout[nparams] := False;
       pNDims[nparams] := 0; pDynDepth[nparams] := 0;
       pElemRowLen[nparams] := 0; pElemRowLo[nparams] := 0;
+      pElemDynDepth[nparams] := 0;
       Inc(nparams);
     end;
     lcb := LiftCapStart[liftIdx];
@@ -1075,6 +1099,7 @@ begin
       pDynDepth[nparams] := LiftCapDyn[lcb + i];
       pElemRowLen[nparams] := 0;
       pElemRowLo[nparams] := 0;
+      pElemDynDepth[nparams] := 0;
       Inc(nparams);
     end;
   end;
@@ -1183,6 +1208,7 @@ begin
       pDynDepth[i] := pDynDepth[i-1];
       pElemRowLen[i] := pElemRowLen[i-1];
       pElemRowLo[i] := pElemRowLo[i-1];
+      pElemDynDepth[i] := pElemDynDepth[i-1];
       { The default-value arrays shift with the params. Leaving them unshifted
         wrote each default onto the PREVIOUS param's slot, so a method impl that
         repeats its defaults silently gave `M(a: Integer = 1; b: Integer = 2)`
@@ -1259,6 +1285,7 @@ begin
     pDynDepth[0] := 0;
     pElemRowLen[0] := 0;
     pElemRowLo[0] := 0;
+    pElemDynDepth[0] := 0;
     pdefault[0] := False;
     pdefaultval[0] := 0;
     pdefaultisstr[0] := False;
@@ -1311,6 +1338,7 @@ begin
       pDynDepth[i] := pDynDepth[i-1];
       pElemRowLen[i] := pElemRowLen[i-1];
       pElemRowLo[i] := pElemRowLo[i-1];
+      pElemDynDepth[i] := pElemDynDepth[i-1];
       for pdi := 0 to MAX_ARR_DIMS - 1 do
       begin
         pDimLo[i * MAX_ARR_DIMS + pdi]   := pDimLo[(i-1) * MAX_ARR_DIMS + pdi];
@@ -1331,6 +1359,7 @@ begin
     pDynDepth[0] := 0;
     pElemRowLen[0] := 0;
     pElemRowLo[0] := 0;
+    pElemDynDepth[0] := 0;
     nparams := nparams + 1;
     retType := tyBoolean;
   end;
@@ -1694,10 +1723,15 @@ begin
       Param sym slots are reused across procs, so ALWAYS write (0 clears). }
     SymDynElemRowLen[idx] := pElemRowLen[i];
     SymDynElemRowLo[idx]  := pElemRowLo[i];
+    { open-array param whose ELEMENT is a named dynamic array: pointer-sized
+      slots holding dyn handles. AllocParam cleared it, and param slots are
+      reused across procs, so ALWAYS write (0 clears). }
+    SymElemDynDepth[idx] := pElemDynDepth[i];
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then
     begin
       ProcParamElemRowLen[procIdx * MAX_PROC_PARAMS + i] := pElemRowLen[i];
       ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + i] := pElemRowLo[i];
+      ProcParamElemDynDepth[procIdx * MAX_PROC_PARAMS + i] := pElemDynDepth[i];
       if ptypes[i] = tySet then
         ProcParamSetEnumId[procIdx * MAX_PROC_PARAMS + i] := ptypesSetEnum[i];
     end;

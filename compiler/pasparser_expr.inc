@@ -6569,7 +6569,7 @@ begin
             CurASTNode := ParseVarRecLiteralAST
           else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(procIdx, slotIdx) then
             CurASTNode := ParseArrayCtorAST(Procs[procIdx].Params[slotIdx].TypeKind,
-              ProcParamElemRowLen[procIdx * MAX_PROC_PARAMS + slotIdx], ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + slotIdx])
+              OpenArrayCtorRowLen(procIdx, slotIdx), ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + slotIdx])
           else if isNilPy and PyBareGenExprAhead then
             { a BARE generator expression as an argument — `sum(x*2 for x in xs)`.
               It must be diverted BEFORE the element expression is parsed, since

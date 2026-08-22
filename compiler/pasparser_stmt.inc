@@ -5775,7 +5775,7 @@ begin
               CurASTNode := ParseVarRecLiteralAST
             else if (CurTok.Kind = tkLBrack) and ParamIsOpenArrayScalar(procIdx, slotIdx) then
               CurASTNode := ParseArrayCtorAST(Procs[procIdx].Params[slotIdx].TypeKind,
-              ProcParamElemRowLen[procIdx * MAX_PROC_PARAMS + slotIdx], ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + slotIdx])
+              OpenArrayCtorRowLen(procIdx, slotIdx), ProcParamElemRowLo[procIdx * MAX_PROC_PARAMS + slotIdx])
             else
             begin
               node := TryDelphiBareProcArg;

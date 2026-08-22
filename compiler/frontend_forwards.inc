@@ -47,6 +47,7 @@ procedure EmitProgramRuntimeStubsForTarget; forward;        { THE finish-the-run
   pxx-built stage stays perfectly green -- a gap only the fpc-bootstrap job sees. }
 function ParamIsVarRecArray(procIdx, argNo: Integer): Boolean; forward;
 function ParamIsOpenArrayScalar(procIdx, argNo: Integer): Boolean; forward;
+function OpenArrayCtorRowLen(procIdx, argNo: Integer): Integer; forward;
 function ByRefArgStartsExpression(constVariantParam: Boolean): Boolean; forward;
 function ParamIsConstVariant(pi, slot: Integer): Boolean; forward;
 function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer; forward;

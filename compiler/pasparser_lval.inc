@@ -2384,7 +2384,7 @@ begin
                 { `[...]` open-array literal to an instance/record method
                   (r.SumAll([10,20])) — was parsed as a SET literal (b334) }
                 mexprNode := ParseArrayCtorAST(Procs[mpi].Params[mslot].TypeKind,
-                  ProcParamElemRowLen[mpi * MAX_PROC_PARAMS + mslot], ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + mslot])
+                  OpenArrayCtorRowLen(mpi, mslot), ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + mslot])
               else if Procs[mpi].Params[mslot].IsRef or Procs[mpi].Params[mslot].IsArray then
               begin
                 if ByRefArgStartsExpression(ParamIsConstVariant(mpi, mslot)) then
@@ -3003,14 +3003,33 @@ begin
             (Procs[procIdx].Params[argNo].TypeKind <> tyVariant);
 end;
 
+function OpenArrayCtorRowLen(procIdx, argNo: Integer): Integer;
+{ The `rowLen` to hand ParseArrayCtorAST for an open-array param, ENCODING both
+  element shapes the temp can need. They are mutually exclusive (a named array
+  type is fixed OR dynamic), so one integer carries both:
+    > 0  the element is a named FIXED array — this many elements per row
+    = 0  the element is a plain scalar/string
+    < 0  the element is a named DYNAMIC array — its dyn depth, negated
+  Without the third case the temp was built as `array of <base scalar>` and each
+  `[a, b]` element stored a dyn HANDLE into a 4-byte Integer slot: silent garbage
+  then a segfault (bug-p-open-array-of-a-named-dynamic-array-reads-garbage). }
+begin
+  Result := 0;
+  if (procIdx < 0) or (argNo < 0) or (argNo >= MAX_PROC_PARAMS) then Exit;
+  Result := ProcParamElemRowLen[procIdx * MAX_PROC_PARAMS + argNo];
+  if Result = 0 then
+    Result := -ProcParamElemDynDepth[procIdx * MAX_PROC_PARAMS + argNo];
+end;
+
 function ParseArrayCtorAST(elemTk: TTypeKind; rowLen, rowLo: Integer): Integer;
 { `[ e0, e1, ... ]` for an `array of T` (scalar/string) parameter. Builds an
   AN_ARRAY_CTOR whose Left is the element AN_ARG chain; ASTIVal/ASTTk carry the
   element type so overload matching binds it to the open-array param (whose
   TypeKind is the element type). Lowering builds a heap dyn-array temp.
-  rowLen/rowLo (ASTSOffset/ASTSLen): the param's fixed-array ROW element shape
-  (`array of T`, T a named fixed array) — 0 for a scalar element; drives the
-  temp's row stride and per-element row-copy in the lowering. }
+  rowLen/rowLo (ASTSOffset/ASTSLen): the param's ELEMENT shape, encoded by
+  OpenArrayCtorRowLen — > 0 a fixed-array row of that length (rowLo is its low
+  bound; drives the temp's row stride and per-element row-copy), 0 a scalar,
+  < 0 a dyn-array handle element of depth -rowLen. }
 var node, argNode, lastArg: Integer; done: Boolean;
 begin
   node := AllocNode(AN_ARRAY_CTOR);
@@ -3804,7 +3823,7 @@ begin
               { `[...]` open-array literal (r.SumAll([10,20]) on a record
                 method) — was parsed as a SET literal and crashed (b334) }
               aNode := ParseArrayCtorAST(Procs[mpi].Params[mai].TypeKind,
-                ProcParamElemRowLen[mpi * MAX_PROC_PARAMS + mai], ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + mai]);
+                OpenArrayCtorRowLen(mpi, mai), ProcParamElemRowLo[mpi * MAX_PROC_PARAMS + mai]);
             end
             else if Procs[mpi].Params[mai].IsRef or Procs[mpi].Params[mai].IsArray then
             begin
