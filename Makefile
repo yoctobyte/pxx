@@ -5404,6 +5404,8 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_lowhigh26 | tail -1)" = "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_anonymous_enum_and_subrange_types.pas $(TESTTMP)/test_anontype26
 	test "$$($(TESTTMP)/test_anontype26 | tail -1)" = "ALL OK"
+	./$(COMPILER) -Fulib/rtl test/test_cast_as_lvalue_over_a_variable.pas $(TESTTMP)/test_castlval26
+	test "$$($(TESTTMP)/test_castlval26 | tail -1)" = "ALL OK"
 
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26

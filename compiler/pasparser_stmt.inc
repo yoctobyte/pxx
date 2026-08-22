@@ -4281,6 +4281,31 @@ begin
   end;
 end;
 
+
+function IsUntypedVarParamSym(symIdx: Integer): Boolean;
+{ Is this symbol the current routine's UNTYPED by-ref parameter (`var x` with
+  no type)? There is no per-symbol flag -- untypedness lives in the parallel
+  ProcParamUntyped array, keyed by proc and slot, because Params[].SymIdx is
+  -1 after RegisterProc and a param symbol does not outlive the callee's
+  scope. Inside the body being parsed the name is unambiguous, so match on it.
+  Used by the cast-as-lvalue arm: an untyped param is declared tyPointer and
+  therefore has no declared width for the cast to disagree with, which is
+  exactly what makes `Integer(x) := 99` legal there and a size error anywhere
+  else. }
+var i: Integer;
+begin
+  Result := False;
+  if (CurProc < 0) or (symIdx < 0) or (symIdx >= SymCount) then Exit;
+  if Syms[symIdx].Kind <> skParam then Exit;
+  for i := 0 to Procs[CurProc].ParamCount - 1 do
+    if ProcParamUntyped[CurProc * MAX_PROC_PARAMS + i] and
+       CaseEqual(Procs[CurProc].Params[i].Name, Syms[symIdx].Name) then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 function ParseStatementAST: Integer;
 var
   smmiS, pvSig, pvTarget, smSelfNode, fanSym: Integer;
@@ -4354,7 +4379,39 @@ begin
       valNode := CurASTNode;
       Expect(tkRParen, ')');
       if ASTKind[valNode] <> AN_DEREF then
-        Error('cast-as-lvalue statement requires a pointer deref inside the cast');
+      begin
+        { `Integer(v) := x` over a plain LVALUE, not a pointer deref: ordinary
+          FPC, and the ONLY way to write through an untyped `var x` parameter
+          (`procedure SetI(var x); begin Integer(x) := 99; end`) -- the
+          Move/FillChar-shaped routine this dialect otherwise supports on the
+          READ side, since `Integer(x)` as an r-value already worked.
+
+          Normalised into the shape that already works rather than given a
+          second store path: `Integer(v) := x` becomes `PInteger(@v)^ := x`,
+          an AN_DEREF over AN_ADDR tagged with the cast's type. The deref arm
+          below then retags and stores at the CAST's width, which is the whole
+          point -- an untyped param is declared tyPointer, so storing through
+          it directly would write 8 bytes into a 4-byte Integer.
+          devdocs/dev/normalise-dont-special-case.md }
+        if not IsASTLValue(valNode) then
+          Error('cast-as-lvalue statement requires a variable or a pointer deref inside the cast');
+        { FPC's rule is same-SIZE reinterpretation: `Integer(b) := 5` on a Byte
+          is "Typecast has different size" there, and silently writing 4 bytes
+          into 1 here would corrupt the neighbour. An UNTYPED var parameter is
+          exempt -- it has no declared width to disagree with, which is what
+          makes it the interesting case. }
+        castPrevTok := -1;
+        if ASTKind[valNode] = AN_IDENT then castPrevTok := ASTIVal[valNode];
+        if not ((castPrevTok >= 0) and (castPrevTok < SymCount) and
+                IsUntypedVarParamSym(castPrevTok)) then
+          if TypeSize(castTk) <> TypeSize(IntToTypeKind(ASTTk[valNode])) then
+            Error('cast-as-lvalue: the cast type must be the same size as the variable');
+        node := AllocNode(AN_ADDR);
+        ASTLeft[node] := valNode;
+        ASTTk[node] := Ord(tyPointer);
+        valNode := AllocNode(AN_DEREF);
+        ASTLeft[valNode] := node;
+      end;
       ASTTk[valNode] := Ord(castTk);
       Expect(tkAssign, ':=');
       ParseExpr;
