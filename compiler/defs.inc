@@ -2982,6 +2982,12 @@ var
     boundary rather than releasing one mid-expression. IRReset clears it per
     body, so nothing can name a symbol from another stack frame. }
   PostCallIntfSym : array[0..255] of Integer;
+  { REC_NONE = a bare interface temp (released with PXXIntfRelease); a real
+    record id = a by-value RECORD temp with managed fields, finalized with the
+    zero-source IR_COPY_REC_MANAGED. Same queue, same boundary — the two differ
+    only in what "release this temp" means.
+    bug-a-by-value-record-arg-temp-outlives-the-call }
+  PostCallIntfRec : array[0..255] of Integer;
   PostCallIntfCount : Integer;
   SourceFileDir : AnsiString;
   { The DOTTED spelling of the NilPy module path the next ParseUsesUnit call is

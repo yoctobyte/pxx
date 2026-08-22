@@ -616,13 +616,41 @@ end;
   an IR_STORE_SYM: a raw pointer-width write, with no ARC store logic to
   release the slot a second time. }
 procedure IRFlushPostCallIntf(base: Integer);
-var sym, pi, a0, a1, c: Integer;
+var sym, pi, a0, a1, c, zeroSym, zeroAddr, recId: Integer;
 begin
   pi := FindProc('PXXIntfRelease');
   while PostCallIntfCount > base do
   begin
     PostCallIntfCount := PostCallIntfCount - 1;
     sym := PostCallIntfSym[PostCallIntfCount];
+    recId := PostCallIntfRec[PostCallIntfCount];
+    if recId <> REC_NONE then
+    begin
+      { A by-VALUE RECORD argument temp with managed fields. FPC finalizes a
+        value parameter in the CALLEE, so the copy's references die when the
+        call returns; here the temp was a caller local and lived to the
+        caller's epilogue — which in the MAIN body means program exit, so an
+        interface field's destructor ran after the last statement instead of
+        after the call (bug-a-by-value-record-arg-temp-outlives-the-call).
+
+        Finalized with the op that already exists on every backend rather than
+        a new one: IR_COPY_REC_MANAGED from a ZEROED source retains the source
+        (all nil — a no-op), releases the destination's fields, then copies the
+        zeros in. That is exactly a finalize, and it leaves the temp nil, so
+        the epilogue pass that still visits it releases nothing a second time —
+        the same "nil it and the old path becomes a no-op" safety the interface
+        arm below relies on. }
+      zeroSym := AllocVar('', tyRecord);
+      SymTR[zeroSym].RecId := recId;
+      SymIsHiddenArgTemp[zeroSym] := True;
+      zeroAddr := IRAppend(IR_LEA, zeroSym, -1, -1, 0, Ord(tyPointer));
+      IRAppend(IR_DEFAULT_MEM, zeroAddr, -1, REC_NONE, RecSize(recId), Ord(tyRecord));
+      IRAppend(IR_COPY_REC_MANAGED,
+        IRAppend(IR_LEA, sym, -1, -1, 0, Ord(tyPointer)),
+        IRAppend(IR_LEA, zeroSym, -1, -1, 0, Ord(tyPointer)),
+        recId, RecSize(recId), Ord(tyRecord));
+      continue;
+    end;
     if pi >= 0 then
     begin
       a0 := IRAppend(IR_ARG, IRAppend(IR_LEA, sym, -1, -1, 0, Ord(tyPointer)),
@@ -3627,10 +3655,23 @@ begin
       if PostCallIntfCount > High(PostCallIntfSym) then
         Error('too many pending by-value interface argument temps');
       PostCallIntfSym[PostCallIntfCount] := tmpSym;
+      PostCallIntfRec[PostCallIntfCount] := REC_NONE;
       Inc(PostCallIntfCount);
     end
     else if RecordHasManagedFields(argRecId) then
-      IRAppend(IR_COPY_REC_MANAGED, tmpAddr, srcAddr, argRecId, RecSize(argRecId), Ord(tyRecord))
+    begin
+      IRAppend(IR_COPY_REC_MANAGED, tmpAddr, srcAddr, argRecId, RecSize(argRecId), Ord(tyRecord));
+      { …and queue the end-of-statement finalize, for the same reason and on the
+        same queue as the bare-interface arm above: FPC finalizes a value
+        parameter in the callee, so this copy's references must die with the
+        call, not at the caller's scope exit.
+        bug-a-by-value-record-arg-temp-outlives-the-call }
+      if PostCallIntfCount > High(PostCallIntfSym) then
+        Error('too many pending by-value record argument temps');
+      PostCallIntfSym[PostCallIntfCount] := tmpSym;
+      PostCallIntfRec[PostCallIntfCount] := argRecId;
+      Inc(PostCallIntfCount);
+    end
     else
       IRAppend(IR_COPY_REC, tmpAddr, srcAddr, -1, RecSize(argRecId), Ord(tyRecord));
 

@@ -5381,6 +5381,16 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_dynarray_var_param_forwarded.pas $(TESTTMP)/test_dynfwd26
 	test "$$($(TESTTMP)/test_dynfwd26 | tail -1)" = "total ok 7 / 7"
 
+	# A by-VALUE record argument with managed fields: its hidden caller temp was
+	# released at the CALLER's epilogue, which in the main body is program exit,
+	# so an interface field's destructor ran after the last statement. FPC
+	# finalizes a value parameter in the callee. The COUNTS are the assertion:
+	# main/two/inproc/loop pin that the release happens once per call and not
+	# per iteration; `nested 0` pins an rvalue argument (Ident(g)) still holding
+	# its own reference the same way FPC does.
+	./$(COMPILER) -Fulib/rtl test/test_byvalue_record_arg_lifetime.pas $(TESTTMP)/test_byval_rec_life26
+	test "$$($(TESTTMP)/test_byval_rec_life26)" = "$$(printf 'B bs\nmain   1\nXY\ntwo    2\nP ps\ninproc 1\nL bs\nL bs\nL bs\nloop   1\nN bs\nnested 0')"
+
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"
