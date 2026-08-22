@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: fa549a775
 summary: "`Low(x)` / `High(x)` over ANY ordinal variable answered 0 and -1 — Byte, SmallInt, Char, Boolean, Integer, an enum, a named subrange, all of them. `for i := Low(x) to High(x)` therefore ran ZERO times, silently, because 0..-1 is a legal empty range. Also fixed: Low/High of a named ARRAY TYPE, which was `undefined variable`."
 ---
 
