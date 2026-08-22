@@ -5242,6 +5242,15 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_label_section_precedes_the_other_declarations.pas $(TESTTMP)/test_label_section26
 	test "$$($(TESTTMP)/test_label_section26)" = "$$(printf '6\n200\n5\n10')"
 
+	# A typed procvar CONST is callable — `const K: TFn = @Sq;` then `K(7)`. The
+	# const path allocated the symbol without copying LastTypeProcSig into
+	# SymProcSig (the var path does), and both call sites gate on that, so the
+	# call was a syntax error while `f := K` worked. Rows: direct call, proc-typed,
+	# parameterless with and without parens, routine-local (a different storage
+	# path), via-var, inside a larger expression, and passed as an argument.
+	./$(COMPILER) test/test_typed_procvar_const_is_callable.pas $(TESTTMP)/test_typed_procvar_const26
+	test "$$($(TESTTMP)/test_typed_procvar_const26)" = "$$(printf 'direct 49\nemit 4\nbare\nbare\nlocal -3\nviavar 25\nmixed 13\narg 36\nassigned TRUE')"
+
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"

@@ -84,3 +84,26 @@ runaway it caught was my own non-idempotent rewrite.
 
 `make compiler/pascal26` (byte-identical fixedpoint, 1 round) + `tools/gate.sh
 quick`, plus the four files and two conformance shards above.
+
+## Follow-up: both conformance shards verified clean at HEAD (2026-08-22)
+
+Track T still lists two open regressions against this area, and both are stale:
+
+- `test-pascal-conformance#shard0/6 bad=5179c4d4350b` — this bug's own sha.
+- `test-pascal-conformance#shard4/6 bad=74d84a6ba449` — `fix(P): bodyless
+  generic class, interface method directives, duplicate nested spec`, a
+  *different* commit. It was never separately diagnosed; the shape is the same
+  (the Delphi generic rewriter) and the fix here covers it.
+
+Re-run at HEAD (`f9f1a42bc`), against the real corpus
+`library_candidates/fpc-testsuite/tests/test` that the `full` tier shards:
+
+```
+shard 0/6: 57 pass, 0 fail, 30 skip, 5 auto-gated (of 92)
+shard 4/6: 58 pass, 0 fail, 28 skip, 5 auto-gated (of 91)
+```
+
+Both green. T's entries should clear on its next `full` tier — it is 7 testable
+commits behind and its newest full run is 6h old, so the open list is describing
+a tree from before the fix, not this one. No action; recorded here so the next
+reader does not re-diagnose a closed bug from a stale report.

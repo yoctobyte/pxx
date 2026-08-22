@@ -1876,6 +1876,13 @@ begin
             (SSLImplementation.Create) dispatch like a var of the type }
           Syms[cIdx].PtrElemTk := LastTypePointerElemTk;
           Syms[cIdx].PtrElemRec := LastTypePointerElemRec;
+          { ...INCLUDING the call signature, which is what makes a procedural
+            type callable: `const K: TFn = @Sq;` then `K(7)`. The var arm above
+            copies it, this one did not, so a procvar CONST could be declared
+            and assigned to a variable but never called — the statement and
+            expression call sites both gate on SymProcSig >= 0 and saw -1.
+            bug-a-a-typed-procvar-constant-cannot-be-called }
+          SymProcSig[cIdx] := LastTypeProcSig;
           SymSyncTypeRef(cIdx);
         end;
         Expect(tkEq, '=');
