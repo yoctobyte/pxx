@@ -3,7 +3,7 @@ slug: bug-a-a-source-type-alias-loses-to-a-used-units-function-in-a-cast
 track: A
 prio: 50
 status: done
-commit: PENDING-COMMIT
+commit: d699b2d23
 ---
 
 # `type PI = ^Integer` — and then `PI(p)^` is a call to math's `Pi`
