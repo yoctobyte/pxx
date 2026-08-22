@@ -1,9 +1,9 @@
 ---
 track: P
-prio: 35
+prio: 20
 type: feature
 blocked-by: []
-summary: "Six TObject members FPC has and pxx rejects at compile time: ClassParent, InstanceSize, ClassInfo, ToString, Equals, GetHashCode. Loud failures (not wrong values), found by the same probe as bug-p-a-class-does-not-inherit-from-tobject-at-run-time."
+summary: "Was six TObject members pxx rejected; five landed. Only ClassInfo is left, and it is a Track U question (decide-classinfo-returns-our-blob-or-nothing), not an implementation choice. UnitName -- not in the original six -- is the other gap, tracked in feature-pascal-builtin-tobject-class."
 status: backlog
 ---
 
@@ -44,3 +44,32 @@ and wrong for structural reflection. Decide that before implementing
 Land `ClassParent`, `ToString`, `Equals`, `GetHashCode` together (all trivial,
 all fully specified). Then `InstanceSize`. Leave `ClassInfo` for last, or file
 a Track U `decide-` if the reflection-layout question needs the owner.
+
+## 2026-08-22 — five of the six landed; only ClassInfo is left
+
+Re-measured against a self-hosted binary at `0332839bc`, on a
+`TD = class(TObject)` instance with one Integer field:
+
+| member | 2026-08-20 | today |
+| --- | --- | --- |
+| `ClassParent` | PXX-REJECT | works |
+| `InstanceSize` | PXX-REJECT | works (12) |
+| `ToString` | PXX-REJECT | works (`'TD'`), and a descendant's `override` dispatches |
+| `Equals` | PXX-REJECT | works, VIRTUAL through a static `TObject` receiver |
+| `GetHashCode` | PXX-REJECT | works, same |
+| `ClassInfo` | PXX-REJECT | PXX-REJECT |
+
+`Equals` / `GetHashCode` / `ToString` came with
+[[feature-a-tobject-root-method-vmt-slots]] (option C of
+[[decide-tobject-root-methods-dispatch-model]]) rather than with this ticket, and
+they are virtual, not intercepted — which is the property that made them worth
+the reserved slots.
+
+**`ClassInfo` is the whole remainder, and this ticket already named why it is not
+an implementation choice** ("Decide that before implementing"). Now filed as
+[[decide-classinfo-returns-our-blob-or-nothing]]. Dropped to `prio: 20`: what is
+left here is one member gated on a decision, not five members of work.
+
+`UnitName` — never in this ticket's six — is the other TObject member still
+rejected; it is tracked in [[feature-pascal-builtin-tobject-class]] because it
+needs a word added to the class RTTI blob rather than a new accessor.

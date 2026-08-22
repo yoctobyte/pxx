@@ -2,14 +2,16 @@
 track: P
 prio: 65
 owner: frank1-ACP
-blocked-by: feature-pascal-builtin-tobject-class
+blocked-by: []
+status: backlog
+type: feature
 ---
 
 # rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** blocked on [[feature-pascal-builtin-tobject-class]]
+- **Status:** unblocked 2026-08-22 — TObject's root methods dispatch virtually now
   runs, fpjson's suite is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
@@ -776,3 +778,36 @@ splitting the value with `Frexp`. Three separate gaps:
 [[feature-pascal-builtin-tobject-class]]. With that and `GetHashCode` stubbed the
 unit reaches 1865, which this batch clears; the next measurement follows the
 TObject decision.
+
+## 2026-08-22 — UNBLOCKED (TObject root methods), and Gap 2 re-measured
+
+**The blocker is gone.** [[feature-pascal-builtin-tobject-class]] is out of
+`blocked/`: the decision it waited on was answered on 2026-08-21 (option C,
+reserved leading VMT slots) and implemented, and `Equals` / `GetHashCode` /
+`ToString` now dispatch VIRTUALLY through a static `TObject` receiver — verified
+against `fpc -Mobjfpc -O1` with a descendant overriding all three and called
+through `function EqRoot(const L, R: TObject)`. That is the exact shape of
+`generics.defaults.pas:1569` (`TEquals.&class`) and `:1780`
+(`THashFactory.&Class`), so both walls are clear. Only `UnitName` and
+`ClassInfo` are still missing from TObject, and neither is on this rung's path.
+
+**Gap 2 (`class var` takes no array at all) is also gone, but it was two
+defects.** The *parse* half is already fixed: the branch (now
+`pasparser_decl.inc`, `class var` at ~4120 — the file numbers in the entry above
+predate the `parser.inc` slice) calls `ParseDeclTypeDesc` +
+`AllocFromDeclTypeDesc`, the same pair the `var` section uses, and its comment
+records the extraction the entry above asked for. The four-row table there is
+stale: inline-fixed, named-fixed and named-dynamic all declare correctly now.
+
+What was left is a different mechanism, and it was the dangerous kind — a
+dynamic-array class var reached through the QUALIFIED spelling (`TC.V`) compiled
+clean and **segfaulted**, because `SetLength` resolves its own operand and the
+qualified name answers the CLASS, not the member. Filed and fixed as
+[[bug-p-setlength-on-a-qualified-class-var-writes-a-string-header]] (`New` had
+the same defect through its loud arm), with
+`test/test_class_var_of_a_managed_type.pas` in `test-core`.
+
+**So the wall at line 635 needs re-measuring, not re-fixing.** Both the reasons
+it was parked have been removed since; the next session on this rung should
+re-stage rtl-generics and drive `uses generics.defaults` until the line number
+moves, rather than starting from this entry's conclusions.

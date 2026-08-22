@@ -5312,6 +5312,17 @@ begin
           idx := FindVarSym(CurTok.SVal);
         identTokIdx := TokPos - 1; Next;
         valNode := ParseLValueAST(idx, identTokIdx);
+        { The symbol the lvalue actually DENOTES, which is not always the one the
+          name lookup above found. A QUALIFIED class var (`TC.V`) arrives with
+          idx = -1 -- the lookup saw the CLASS name, not the member -- and the
+          classification below then fell through every arm to the STRING one, so
+          SetLength wrote a string header over a dynamic-array handle and the next
+          read segfaulted. The unqualified spelling was fixed by FindVarSym; this
+          is the same defect through the other door. ParseLValueAST has already
+          resolved the member, so read its answer off the node rather than
+          re-deriving it (devdocs/dev/normalise-dont-special-case.md). }
+        if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) then
+          idx := ASTIVal[valNode];
         Expect(tkComma, ',');
 
         { Collect the size dimension(s): `SetLength(a, d0)` or the multidim sugar
@@ -5378,6 +5389,11 @@ begin
         idx := FindSym(CurTok.SVal); identTokIdx := TokPos - 1; Next;
         valNode := ParseLValueAST(idx, identTokIdx);
         Expect(tkRParen, ')');
+        { Same normalisation as SetLength above: a qualified class var (`TC.P`)
+          resolves the CLASS name here, so idx is -1 and the element size below
+          would have nothing to read. The lvalue already knows. }
+        if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) then
+          idx := ASTIVal[valNode];
         if idx < 0 then Error('New: undefined variable');
         if Syms[idx].PtrElemTk = tyRecord then
           castPrevTok := RecSize(Syms[idx].PtrElemRec)

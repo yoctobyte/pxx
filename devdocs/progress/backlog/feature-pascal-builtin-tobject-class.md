@@ -1,12 +1,16 @@
 ---
+track: P
 prio: 42
-blocked-by: decide-tobject-root-methods-dispatch-model
+type: feature
+blocked-by: []
+status: backlog
 ---
 
 # Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods
 
 - **Type:** feature (Pascal frontend — builtin class) — **Track P/A**
-- **Status:** blocked on [[decide-tobject-root-methods-dispatch-model]]
+- **Status:** unblocked 2026-08-22 (the decide is answered and implemented);
+  only `UnitName` and `ClassInfo` remain — see the bottom of this file
 
 ## Symptom
 
@@ -94,3 +98,53 @@ implicit) and carries the recommendation.
 `make test` + self-host byte-identical; a compile-run test
 (`var o: TObject; o := TObject.Create; o.Free`); unskip tobject5 (partial —
 the RTTI-free assertions).
+
+## 2026-08-22 — UNBLOCKED, and nearly done. Two members left.
+
+The blocker [[decide-tobject-root-methods-dispatch-model]] was answered on
+2026-08-21 (option C, reserved leading VMT slots, N = 4, with `--compact-classes`)
+and its implementation ticket
+[[feature-a-tobject-root-method-vmt-slots]] is in `done/`. Slot 0 (`Destroy`) was
+the last unfilled one and landed in `24585b403`. So this ticket is no longer
+blocked on anything.
+
+Re-measured against a self-hosted binary at `0332839bc` — the six members the
+ticket and [[feature-p-tobject-api-classparent-instancesize-tostring]] list, on a
+`TD = class(TObject)` instance:
+
+| member | today |
+| --- | --- |
+| `ClassParent` | works (non-nil for a class with a parent) |
+| `InstanceSize` | works (12 for a one-Integer class) |
+| `ClassName` | works |
+| `ToString` | works — `'TD'`, and a descendant's `override` dispatches |
+| `Equals` | works — including a descendant's `override` through a **static `TObject`** receiver |
+| `GetHashCode` | works — same, virtual |
+| `ClassInfo` | PXX-REJECT |
+| `UnitName` | PXX-REJECT |
+
+The virtual-dispatch check is the one that mattered: a `TFoo` overriding all
+three, called through `function EqRoot(const L, R: TObject)`, agrees with
+`fpc -Mobjfpc -O1 {$H+}` line for line. That is exactly the shape
+`generics.defaults`' `TEquals.&class` / `THashFactory.&Class` use, so the corpus
+walls at `generics.defaults.pas:1569` and `:1780` are cleared —
+[[feature-pascal-corpus-generics]] is unblocked from here.
+
+**Remaining, and neither is on the corpus path:**
+
+- **`UnitName`.** Needs a unit-name word in the class RTTI blob. `RTTI_CLS_SIZE`
+  is 96 and all twelve slots are taken (name, parent, instSize, vmt, propCount,
+  props, methCount, meths, fieldCount, fields, ifaceCount, ifaces), so this is
+  +8 bytes per declared class. The value is already tracked —
+  `UClsUnitIdx[ci]` is the `Strs[]` index of the declaring unit, -1 for the main
+  program — and nothing outside `rtti_emit.inc` depends on the blob's total size
+  (`lib/rtl/rtti.pas` names field offsets, not a stride). The one wrinkle is that
+  FPC answers `'System'` for `TObject` itself, which the builtin registration
+  would have to say explicitly. Blocks the last assertion of `tobject5.pp`.
+- **`ClassInfo`.** Deliberately last: returning our blob is honest for identity
+  comparison and wrong for anything that walks FPC's `TTypeInfo` layout. That is a
+  Track U call, not an implementation choice — see
+  [[feature-p-tobject-api-classparent-instancesize-tostring]], which states the
+  same trade-off.
+
+Moved out of `blocked/`.

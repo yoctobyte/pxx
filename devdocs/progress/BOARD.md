@@ -41,7 +41,7 @@ _none_
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 
-## blocked (9)
+## blocked (7)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -49,13 +49,11 @@ _none_
 | bug-n-a-subpackage-directory-does-not-resolve-as-a-module | N | 55 | bug | `from .inner import X` (RELATIVE) where `inner` is a subpackage directory fails with `no unit named inner`, while the absolute `from pkg.inner import X` works — so directory-as-module resolution exists and the relative form just hands the resolver a bare name instead of the package-qualified one. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung. | bug-a-a-python-module-s-identity-is-its-name-not-its-file |
 | bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module | N | 85 | bug | RE-SCOPED: not about import aliases. A name that names a `def` is resolved to that def at EVERY call site and any later rebinding is ignored — `def a…; def b…; b = a; b(1,5)` answers 18 (the original b) where CPython answers 5, with no import anywhere. The alias spelling is one way to rebind. Blocked: the correct destination is the dynamic call path, which cannot yet carry defaults (see the decision ticket). | decide-how-a-compiled-def-carries-its-signature-when-boxed |
 | bug-nilpy-songformatter-no-longer-compiles-set-callback-and-get-arity | N | 60 | bug | songformatter (the real CPython app) no longer compiles: `set_` no such member on the scrollbar callback, and a get() arity error in settings.py — app unchanged since 2026-07-28 | feature-b-tkhtmlview-in-nilpy |
-| feature-pascal-builtin-tobject-class | A | 42→65 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | decide-tobject-root-methods-dispatch-model |
-| feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | feature-pascal-builtin-tobject-class |
 | feature-port-freebsd-native | A | 55 | feature | FreeBSD/amd64 native target — raw-syscall ELF, own syscall table, carry-flag error convention, ELF brand | feature-t-freebsd-image-and-runner |
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (289)
+## backlog (292)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -168,6 +166,7 @@ _none_
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-uses-sysutils-withdraws-the-variadic-concat | P | 25 | compat | The variadic `Concat` intrinsic is shadowed by `sysutils`'s two-argument `Concat`, so `uses sysutils` breaks `Concat('a','b','c')` — which compiles fine without it. The shadow rule is `procIdx < 0`, i.e. ANY user Concat disables the intrinsic outright. Loud, not silent. | — |
 | decide-assertion-default-vs-fpc | U | 25 | decide | pxx evaluates Assert() by default; FPC ignores it unless -Sa. So Assert(False) raises EAssertionFailed here and is a no-op there — code that passes its own test suite under FPC can die under pxx, and vice versa. With -Sa the two agree exactly, so this is purely a question of which default we want. Options: keep ours, match FPC, or add {$ASSERTIONS}/-Sa and pick a default. | — |
+| decide-classinfo-returns-our-blob-or-nothing | U | 35 | decide | `TObject.ClassInfo` is the last unimplemented member of the TObject API. Returning our own class blob is right for identity comparison and wrong for anything that walks FPC's TTypeInfo layout. Three options: emit it as our blob, refuse it, or route it through the typinfo facade. Needs the owner's call on how far reflection parity goes. | — |
 | decide-old-style-object-types | U | 30 | decide | Decide: do we implement Turbo Pascal `object` types? | — |
 | decide-pointer-difference-unit | U | 30 | decide | FPC's `p - q` answers BYTES when either operand is an untyped Pointer (which includes `@x` under the default {$TYPEDADDRESS OFF}) and ELEMENTS when both are the same typed pointer. pxx always answers elements. `p - @a[0]` therefore prints 8 in FPC and 2 in pxx — a silent difference in ported code. Match FPC, keep the uniform rule, or diagnose? | — |
 | decide-rtti-kind-numbering | U | 40 | decide | typinfo.pas declares TTypeKind in FPC's order (tkInt64=19) but the RTTI blob the compiler emits carries the COMPILER's TTypeKind (tyInt64=13), so `if mi^.RetKind = Ord(tkInt64)` is silently false. Three ways out; they differ in whether the RTTI blob's numbering — a compiler ABI — changes. Recommendation: option 2. Needs a human call because option 1 breaks already-compiled consumers and option 2 spends the FPC-compatibility argument the FPC-ordered enum was added for. | — |
@@ -280,11 +279,13 @@ _none_
 | feature-p-record-const-with-an-array-of-record-field | P | 35 | feature | A record typed constant whose FIELD is an array of records is refused (`not a constant`): `CR: TR = (a: ((x:1;y:2),(x:3;y:4)))`. The kind-7 array-valued-field path handles scalar elements only; FPC compiles it. | — |
 | feature-p-sizeof-of-a-literal | P | 20 | feature | `SizeOf(1)`, `SizeOf('abc')`, `SizeOf(3.5)`, `SizeOf(nil)` are compile errors — the remaining half of feature-p-sizeof-of-an-expression, split out because fpc types a literal by its VALUE (SizeOf(1)=1, SizeOf(256)=2) rather than by the expression's type, so it needs its own rule. | — |
 | feature-p-tmethod-record-for-method-pointers | P | 35 | feature | `TMethod` is undefined — `var m: TMethod` fails with `unknown type: TMethod`. It is the standard system record `record Code, Data: Pointer end` that names the two halves of a `procedure of object` value, and the documented way real code takes a method pointer apart or builds one. | — |
-| feature-p-tobject-api-classparent-instancesize-tostring | P | 35 | feature | Six TObject members FPC has and pxx rejects at compile time: ClassParent, InstanceSize, ClassInfo, ToString, Equals, GetHashCode. Loud failures (not wrong values), found by the same probe as bug-p-a-class-does-not-inherit-from-tobject-at-run-time. | — |
+| feature-p-tobject-api-classparent-instancesize-tostring | P | 20 | feature | Was six TObject members pxx rejected; five landed. Only ClassInfo is left, and it is a Track U question (decide-classinfo-returns-our-blob-or-nothing), not an implementation choice. UnitName -- not in the original six -- is the other gap, tracked in feature-pascal-builtin-tobject-class. | — |
 | feature-p-uses-a-unit-in-an-explicit-file | P | 30 | feature | `uses mymod in 'mymod.pas';` — the FPC/Delphi spelling for naming a unit's source file — does not parse. pxx has the quoted-path form (`uses './mymod.pas' as m;`, shipped 2026-06-30) but not the standard `in` one, so ordinary FPC project sources are refused at the uses clause. | — |
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-load-sampler-refine | B | 20 | feature | Parallel load sampler — refinements (ramp/EMA, BSD/cgroup) | feature-os-targets-bsd-mac |
+| feature-pascal-builtin-tobject-class | P | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | — |
 | feature-pascal-corpus-expansion | P | 15 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
+| feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 | feature-pascal-corpus-oop | P | 65 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-pascal-corpus-passrc | P | 45 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
 | feature-pascal-management-operators-copy-and-addref | P | 35 | feature | `class operator Copy` / `AddRef` are recognised but never dispatched | — |
@@ -562,9 +563,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2281)
+## done (2282)
 
-2281 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2282 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -621,6 +622,7 @@ _none_
 - [p 65] [B] bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
 - [p 65] [T] bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - [p 65] [C] feature-c-csmith-differential-fuzzing
+- [p 65] [P] feature-pascal-corpus-generics
 - [p 65] [P] feature-pascal-corpus-oop
 - [p 60] [N] bug-n-inferred-return-type-of-true-division-is-int
 - [p 60] [T] bug-t-the-push-rate-starves-breadth-coverage-entirely
@@ -698,6 +700,7 @@ _none_
 - [p 45] [C] refactor-c-string-literal-decay-belongs-at-the-producer
 - [p 45] [A] refactor-centralize-managed-string-pchar-conversion
 - [p 45] [P] refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too
+- [p 42] [P] feature-pascal-builtin-tobject-class
 - [p 40] [U] decide-rtti-kind-numbering (unblocks 1)
 - [p 40] [A] bug-a-nilpy-leading-double-star-in-a-call-is-not-detected
 - [p 40] [A] bug-a-the-builtin-type-name-table-exists-twice-and-the-two-disagree
@@ -754,6 +757,7 @@ _none_
 - [p 35] [P] bug-p-sizeof-rejects-a-pointer-deref-in-its-operand
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
+- [p 35] [U] decide-classinfo-returns-our-blob-or-nothing
 - [p 35] [A] feature-a-finalize-an-out-variant-and-managed-record
 - [p 35] [A] feature-a-getinterface-refcounting
 - [p 35] [A] feature-a-io-lock-owner-from-tls-not-gettid
@@ -775,7 +779,6 @@ _none_
 - [p 35] [P] feature-p-class-helper-for-a-class-type
 - [p 35] [P] feature-p-record-const-with-an-array-of-record-field
 - [p 35] [P] feature-p-tmethod-record-for-method-pointers
-- [p 35] [P] feature-p-tobject-api-classparent-instancesize-tostring
 - [p 35] [P] feature-pascal-management-operators-copy-and-addref
 - [p 35] [P] feature-pascal-typed-and-untyped-files
 - [p 35] [T] feature-t-pasmith-rung-selftest
@@ -870,6 +873,7 @@ _none_
 - [p 20] [A] feature-cli-widgetset-flag
 - [p 20] [B] feature-networking
 - [p 20] [P] feature-p-sizeof-of-a-literal
+- [p 20] [P] feature-p-tobject-api-classparent-instancesize-tostring
 - [p 20] [T] feature-t-nilpy-cpython-differential-fuzzer
 - [p 15] [A] bug-a-numeric-goto-labels-are-not-supported
 - [p 15] [N] bug-nilpy-delattr-globals-and-locals-are-absent
@@ -903,12 +907,10 @@ _none_
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **1** — decide-rtti-kind-numbering
-- **1** — decide-tobject-root-methods-dispatch-model
 - **1** — decide-xml-etree-thin-tree-model-or-a-real-xml-library
 - **1** — feature-nilpy-object-reclamation
 - **1** — feature-nilpy-parallel-for-in
 - **1** — feature-os-targets-bsd-mac
-- **1** — feature-pascal-builtin-tobject-class
 - **1** — feature-pcl-win32-widgetset
 - **1** — feature-port-freebsd-native
 - **1** — feature-t-freebsd-image-and-runner

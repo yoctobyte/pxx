@@ -5421,6 +5421,8 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_ptrdiff26 | tail -1)" = "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_a_record_field_named_like_a_class_operation.pas $(TESTTMP)/test_recfldop26
 	test "$$($(TESTTMP)/test_recfldop26 | tail -1)" = "ALL OK"
+	./$(COMPILER) -Fulib/rtl test/test_class_var_of_a_managed_type.pas $(TESTTMP)/test_clsvarmgd26
+	test "$$($(TESTTMP)/test_clsvarmgd26 | tail -1)" = "ALL OK"
 	# Free through a BASE reference runs the descendant's Destroy (virtual, via
 	# root VMT slot 0). Byte-identical to fpc -Mobjfpc; --compact-classes has no
 	# root slots and keeps the parse-time behaviour by design, so it is asserted
