@@ -55,13 +55,15 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (281)
+## backlog (284)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-a-variant-comparison-does-not-coerce-a-stringy-operand | A | 45 | bug | `a := 1; b := '1'; a = b` answers False and `1 < '2'` answers False; FPC coerces the stringy side and answers True for both. SILENT wrong boolean. PXXVarBinOpPas coerces for arithmetic (isCompare=0) and not for comparison, and x86-64 hand-emits its own copy of the whole rule in EmitVarBinOp — so the fix is two places, or one after deleting the duplication. | — |
 | bug-a-absolute-cannot-overlay-an-untyped-var-parameter | A | 30 | bug | `procedure Zap(var x); var b: array[0..255] of Byte absolute x;` is refused with 'absolute: target must not be a by-reference parameter'. That IS the idiom untyped parameters exist for — FPC compiles it — and the overlay machinery cannot express it because it works by copying the target's Offset, which for a by-ref param aliases the POINTER rather than the pointee. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
+| bug-a-null-does-not-propagate-through-variant-arithmetic | A | 45 | bug | `Null + 5` yields 5, not Null: VarIsNull(a + b) with a = Null answers False where FPC answers True. Null is read as payload 0 and behaves like the number zero through every arithmetic operator, so a missing value silently becomes a real one — the exact failure mode Null exists to prevent. | — |
 | bug-a-numeric-goto-labels-are-not-supported | A | 15 | bug | Numeric goto labels are not supported | — |
 | bug-a-real-is-single-on-hosted-riscv32 | A | 35 | bug | `Real` is Single (4 bytes) on hosted riscv32 Linux and Double (8) on every other target and on FPC. The type is keyed on the ARCH, not on the ESP profile, so a target with no ESP in it inherits an ESP decision — silently halving the precision of every `Real` in a ported program. | — |
 | bug-a-riscv32-sa-onstack-has-no-effect-under-qemu | A | 25 | bug | riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware. | — |
@@ -73,6 +75,7 @@ _none_
 | bug-b-inttostr-of-a-qword-prints-it-signed | B | 40 | bug | IntToStr(q) where q: QWord >= 2^63 prints a NEGATIVE number — IntToStr(High(QWord)) answers -1 — because sysutils declares only IntToStr(Int64) and the QWord argument is passed through it. WriteLn(q) is correct, so the same value prints two different ways in one program. UIntToStr does not exist at all. Overload resolution on QWord vs Int64 already works, so this is purely two RTL functions. | — |
 | bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line | B | 65 | bug | `read(f, n)` / `readln(f, n)` on a Text file reads the whole LINE and Vals it, so any line with two numbers, or one number plus trailing spaces, silently yields 0. `readln(t, n, m)` on '42 3' gives 0 0 where FPC gives 42 3. Works only when the line holds exactly one number and nothing else. | — |
 | bug-b-sysutils-string-gaps-found-by-differential | B | 35 | bug | Four sysutils gaps from one 22-program string differential against FPC 3.2.2: Concat takes exactly two AnsiStrings (FPC's is variadic and takes Chars), AnsiQuotedStr and SameStr do not exist, and the TryStr* family leaves its value untouched on failure where FPC zeroes it. Everything else in the family — Copy/Pos/Delete/Insert bounds, StringReplace, Format, Trim, comparison, PChar interop, ShortString — was byte-identical. | — |
+| bug-b-the-fpc-vartype-constants-are-missing | B | 30 | bug | `VarType(v) = varInteger` does not compile — varEmpty/varNull/varInteger/varDouble/varString/... are not declared anywhere, so the ONLY way to test a variant's type is against this RTL's private 0..6 tags, which are not FPC's numbers either (FPC: varString = 256, varInteger = 3). | — |
 | bug-b-varisstr-is-false-for-a-one-character-string | B | 40 | bug | VarIsStr answers FALSE for a ONE-CHARACTER string variant. It tests `VarType(V) = 6` (VT_STRING) and a single char is tagged VT_CHAR = 5, so `v := \'x\'; VarIsStr(v)` is False while `v := \'xy\'` and `v := \'\'` are both True. The same unit already has the right predicate three lines below — IsTextTag(t) = (t = VT_STRING) or (t = VT_CHAR) — and VarCompareValue uses it and gets the one-char case right. Two mechanisms for one concept, disagreeing. | — |
 | bug-b-vartostr-is-missing-from-variants | B | 35 | bug | variants.pas has no VarToStr, so `WriteLn(VarToStr(v))` — the ordinary way to print a Variant in FPC/Delphi code — fails with `undefined variable (VarToStr)`. The unit already has the whole implementation as a private helper (`AsText`), so this is an export, not a feature. Found while writing the differential for bug-a-an-out-parameter-of-a-managed-type-is-not-cleared, which could not be written against the FPC oracle until VarToStr was removed from it. | — |
 | bug-c-driver-misses-the-shared-runtime-finalisation-step | C | 40 | bug | The C driver calls EmitIoLockStubsForTarget directly instead of the shared EmitProgramRuntimeStubsForTarget, so a C program still ships with no signal runtime. Every other frontend was moved over on 2026-08-21; C was left alone because cparser.inc is Track C's file-lane. One line. | — |
@@ -554,9 +557,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2264)
+## done (2265)
 
-2264 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2265 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -646,6 +649,8 @@ _none_
 - [p 50] [A] feature-release-checksums-repro
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [A] bug-a-a-variant-comparison-does-not-coerce-a-stringy-operand
+- [p 45] [A] bug-a-null-does-not-propagate-through-variant-arithmetic
 - [p 45] [B] bug-b-format-percent-u-prints-a-signed-value
 - [p 45] [B] bug-b-inttostr-of-a-qword-above-2-63-renders-negative
 - [p 45] [N] bug-n-a-class-base-that-is-an-expression-does-not-compile
@@ -774,6 +779,7 @@ _none_
 - [p 35] [D] task-d-document-the-strict-overload-width-flag
 - [p 30] [A] bug-a-absolute-cannot-overlay-an-untyped-var-parameter
 - [p 30] [S] bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file
+- [p 30] [B] bug-b-the-fpc-vartype-constants-are-missing
 - [p 30] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder
 - [p 30] [N] bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind
 - [p 30] [N] bug-nilpy-an-extended-slice-cannot-be-assigned

@@ -5391,6 +5391,14 @@ test-core: $(COMPILER)
 	./$(COMPILER) -Fulib/rtl test/test_byvalue_record_arg_lifetime.pas $(TESTTMP)/test_byval_rec_life26
 	test "$$($(TESTTMP)/test_byval_rec_life26)" = "$$(printf 'B bs\nmain   1\nXY\ntwo    2\nP ps\ninproc 1\nL bs\nL bs\nL bs\nloop   1\nN bs\nnested 0')"
 
+	# A one-char string LITERAL boxes as VT_CHAR and a string VARIABLE as
+	# VT_STRING, so `v := '7'; i := v` gave 55 (the character code) where
+	# `s := '7'; v := s; i := v` gave 7. FPC has no char variant (VarType 256,
+	# varString) and answers 7 for both. Literal / variable / real Char, Int64
+	# and Double targets, the raise on a non-numeric character, and VarIsStr.
+	./$(COMPILER) -Fulib/rtl test/test_char_variant_converts_as_text.pas $(TESTTMP)/test_char_variant26
+	test "$$($(TESTTMP)/test_char_variant26 | tail -1)" = "total ok 10 / 10"
+
 	# Math.Float / Frexp / Ldexp, and SizeOf through ANY unit qualifier
 	./$(COMPILER) -Fulib/rtl test/test_rtl_math_float_frexp.pas $(TESTTMP)/test_rtl_math_float_frexp26
 	test "$$($(TESTTMP)/test_rtl_math_float_frexp26 | tail -1)" = "total ok 14 / 14"

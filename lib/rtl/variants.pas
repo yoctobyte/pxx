@@ -147,7 +147,13 @@ end;
 
 function VarIsStr(const V: Variant): Boolean;
 begin
-  Result := VarType(V) = 6;
+  { VT_CHAR counts, and this used to say only `= 6`. IsTextTag right below —
+    "a char and a string are one kind here" — already said so for comparison,
+    so the unit contained both answers and gave them to different callers.
+    FPC has no char variant at all (`v := c` with c: Char gives VarType 256,
+    varString), so True is also its answer.
+    bug-a-a-char-variant-converts-to-its-ordinal-not-its-text }
+  Result := (VarType(V) = VT_STRING) or (VarType(V) = VT_CHAR);
 end;
 
 { text tag: a char and a string are one kind here -- this RTL's Variant holds

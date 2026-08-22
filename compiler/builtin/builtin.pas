@@ -973,7 +973,7 @@ begin
     begin
       if p^.Payload <> 0 then Result := -1 else Result := 0;
     end
-  else if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 5) then
+  else if (p^.VType = 1) or (p^.VType = 2) then
     Result := p^.Payload
   else if p^.VType = 3 then
     Result := Trunc(PDouble(@p^.Payload)^)
@@ -987,13 +987,31 @@ begin
     PXXVariantError('promotable integer ' + PAnsiString(@p^.Payload)^ +
                     ' does not fit an Int64');
   end
-  else if p^.VType = 6 then
+  else if (p^.VType = 6) or (p^.VType = 5) then
   begin
     { VT_STRING. FPC PARSES it -- measured, not assumed: `i := v` with v='42'
       yields 42 and v='abc' raises EVariantError. NilPy does NOT come through
       here (it has pylib's pyvar_to_int, which raises a Python TypeError for
-      any string); this helper is the Pascal path and follows Pascal. }
-    Val(PAnsiString(@p^.Payload)^, Result, vcode);
+      any string); this helper is the Pascal path and follows Pascal.
+
+      VT_CHAR (5) parses TOO, and used to sit up in the integer branch above
+      answering its ORDINAL. That made one value convert two ways depending on
+      how it was written:
+
+        v := '7';          i := v;   { 55 -- the character code }
+        s := '7'; v := s;  i := v;   {  7 }
+
+      because a one-character string LITERAL is boxed as VT_CHAR and a string
+      VARIABLE as VT_STRING. FPC has no char variant at all — `v := c` with
+      c: Char gives VarType 256, varString — so it answers 7 for both, and
+      raises for v := 'a' exactly as the string branch does here.
+      Whatever the dialect decides about a char variant, the two spellings of
+      one value must agree; text is the reading that also matches FPC.
+      bug-a-a-char-variant-converts-to-its-ordinal-not-its-text }
+    if p^.VType = 5 then
+      Val(Chr(Byte(p^.Payload)), Result, vcode)
+    else
+      Val(PAnsiString(@p^.Payload)^, Result, vcode);
     if vcode <> 0 then
       PXXVariantError('cannot convert string to integer');
   end
@@ -1019,14 +1037,20 @@ begin
     begin
       if p^.Payload <> 0 then Result := -1.0 else Result := 0.0;
     end
-  else if (p^.VType = 1) or (p^.VType = 2) or (p^.VType = 5) then
+  else if (p^.VType = 1) or (p^.VType = 2) then
     Result := p^.Payload
   else if p^.VType = 0 then
     Result := 0.0
-  else if p^.VType = 6 then
+  else if (p^.VType = 6) or (p^.VType = 5) then
   begin
-    { FPC coerces a numeric string here too (v='2.5' -> 2.50, measured). }
-    ValFloat(PAnsiString(@p^.Payload)^, Result, vcode);
+    { FPC coerces a numeric string here too (v='2.5' -> 2.50, measured).
+      VT_CHAR joins it for the reason spelled out in VariantToInt64: the same
+      one-character value must not convert two ways depending on whether it was
+      written as a literal or through a variable. }
+    if p^.VType = 5 then
+      ValFloat(Chr(Byte(p^.Payload)), Result, vcode)
+    else
+      ValFloat(PAnsiString(@p^.Payload)^, Result, vcode);
     if vcode <> 0 then
     begin
       PXXVariantError('cannot convert string to float');
