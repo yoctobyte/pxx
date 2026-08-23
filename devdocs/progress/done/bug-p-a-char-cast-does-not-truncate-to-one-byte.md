@@ -127,4 +127,4 @@ load-bearing. `tools/gate.sh quick` GREEN.
 FPC + `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit 21b064636.
