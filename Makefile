@@ -5471,6 +5471,12 @@ test-core: $(COMPILER)
 	# the next read; and `p = 'alpha'` compared pointers, not contents.
 	./$(COMPILER) -Fulib/rtl test/test_pchar_from_a_string_literal.pas $(TESTTMP)/test_pcharlit26
 	test "$$($(TESTTMP)/test_pcharlit26 | tail -1)" = "ALL OK"
+	# A value typecast to a narrower ordinal truncates in EVERY spelling: Char
+	# and Boolean are lexer tokens and AnsiChar an identifier, and the two
+	# spellings built different nodes, so Char(258) answered 258 and
+	# AnsiChar(258) answered 2. Boolean narrows to its byte and then tests it.
+	./$(COMPILER) -Fulib/rtl test/test_ordinal_value_cast_narrows.pas $(TESTTMP)/test_castnarrow26
+	test "$$($(TESTTMP)/test_castnarrow26 | tail -1)" = "ALL OK"
 	# Free through a BASE reference runs the descendant's Destroy (virtual, via
 	# root VMT slot 0). Byte-identical to fpc -Mobjfpc; --compact-classes has no
 	# root slots and keeps the parse-time behaviour by design, so it is asserted

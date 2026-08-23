@@ -6921,7 +6921,22 @@ begin
           castIsSigned := (castTk = tyInteger) or (castTk = tyInt8) or
                           (castTk = tyInt16) or (castTk = tyInt32) or
                           (castTk = tyNativeInt);
-          if (narrowSize < 8) and (castTk <> tyBoolean) and (castTk <> tyChar) and
+          { ONE kind opts out of the mask, and only one: tyPointer, because a
+            pointer cast is a REINTERPRET and not a narrowing.
+
+            tyChar and tyBoolean used to sit beside it. Neither had a reason.
+            A Char is a one-byte ordinal exactly like the Byte this very line
+            masks, and `Ord(Char(258))` answered 258 where FPC answers 2. The
+            Boolean exclusion carried a justification -- "nonzero is true, not
+            the low bit, so masking would turn Boolean(256) False" -- and
+            measuring FPC says False is precisely what it answers:
+            Boolean(256) and Boolean(512) are FALSE there, Boolean(257) is
+            TRUE. FPC narrows to the type's width first and tests the byte.
+            The comment described a rule nobody had checked.
+            The neighbouring tyWideChar and tyUCS4Char were never excluded,
+            which is what made the pair read as an accident.
+            bug-p-a-char-cast-does-not-truncate-to-one-byte }
+          if (narrowSize < 8) and
              (castTk <> tyPointer) and TypeIsOrdinal(castTk) then
           begin
             right := IRAppend(IR_CONST_INT, -1, -1, -1,

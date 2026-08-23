@@ -1365,10 +1365,18 @@ begin
       end
       else
       begin
-        node := AllocNode(AN_CALL); ASTIVal[node] := -op;
+        { The SAME node the identifier-spelled casts build (AN_PTR_CAST with
+          ASTIVal = -1, the built-in ordinal pun), not an AN_CALL intrinsic.
+          `Char` and `Boolean` are lexer TOKENS while `AnsiChar` is an
+          identifier, so the two spellings took different paths and drifted:
+          after the narrowing mask learned about tyChar, `AnsiChar(258)`
+          answered 2 like FPC and `Char(258)` still answered 258. One concept,
+          one node — now both spellings narrow through the one arm in ir.inc.
+          bug-p-a-char-cast-does-not-truncate-to-one-byte }
+        node := AllocNode(AN_PTR_CAST);
+        ASTLeft[node] := CurASTNode;
+        ASTIVal[node] := -1;    { built-in cast }
         if op = Ord(tkChar_T) then ASTTk[node] := Ord(tyChar) else ASTTk[node] := Ord(tyBoolean);
-        argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;
-        ASTLeft[node] := argSeq;
         CurASTNode := node;
       end;
     end;
