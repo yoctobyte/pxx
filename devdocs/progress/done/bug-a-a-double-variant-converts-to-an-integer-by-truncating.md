@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: d014cc21a
 summary: "`i := v` and `Integer(v)` on a Variant holding 2.75 answer 2; FPC answers 3. The VT_DOUBLE arm of VariantToInt64 truncates where FPC's variant conversion table ROUNDS (banker's, half-to-even). Silent wrong integer, off by one, through every integer target (Integer/Int64/Byte/Word/SmallInt all narrow from this one helper). pxx's own Round() is already correct -- only the VARIANT conversion diverges."
 ---
 
@@ -79,4 +79,4 @@ Track A's, plus the seven rows above matching fpc 3.2.2 through each of
 Double is unchanged, and a `.npy` row proving `int(2.75)` still truncates.
 
 ## Log
-- 2026-08-23 — resolved, commit PENDING-COMMIT.
+- 2026-08-23 — resolved, commit d014cc21a.
