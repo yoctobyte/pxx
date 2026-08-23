@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: c2145352e
 summary: "`v div 0` on Variants had NO pre-divide zero check on any target: x86-64 reached a raw idiv and died on SIGFPE with a core dump (uncatchable, no message), while i386/arm32 answered -1 and aarch64 answered 0 -- silent garbage. The identical program on plain Integers raises EDivByZero correctly, so the check exists and the variant path simply never called it."
 ---
 
@@ -113,4 +113,4 @@ x86-64, i386, aarch64 (qemu), arm32 (qemu) and fpc 3.2.2.
 `make compiler/pascal26` converged + the four-target differential + `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-23 — resolved, commit PENDING-COMMIT.
+- 2026-08-23 — resolved, commit c2145352e.
