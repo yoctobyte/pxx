@@ -5432,6 +5432,10 @@ test-core: $(COMPILER)
 	# comparison). Same two implementations as the row above.
 	./$(COMPILER) -Fulib/rtl test/test_variant_null_propagates_through_arithmetic.pas $(TESTTMP)/test_varnullprop26
 	test "$$($(TESTTMP)/test_varnullprop26 | tail -1)" = "ALL OK"
+	# A Double Variant converts to an integer by ROUNDING half-to-even, and a
+	# plain Trunc() is deliberately unaffected.
+	./$(COMPILER) -Fulib/rtl test/test_variant_double_to_integer_rounds.pas $(TESTTMP)/test_vardblround26
+	test "$$($(TESTTMP)/test_vardblround26 | tail -1)" = "ALL OK"
 	# Free through a BASE reference runs the descendant's Destroy (virtual, via
 	# root VMT slot 0). Byte-identical to fpc -Mobjfpc; --compact-classes has no
 	# root slots and keeps the parse-time behaviour by design, so it is asserted

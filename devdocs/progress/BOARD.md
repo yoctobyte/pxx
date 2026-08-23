@@ -53,7 +53,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (291)
+## backlog (293)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -62,6 +62,7 @@ _none_
 | bug-a-low-high-of-a-char-indexed-array-answer-the-ordinal | P | 30 | bug | `Low(a)` / `High(a)` on `array['a'..'e'] of Integer` answer 97 and 101 where fpc answers 'a' and 'e', so `for c := Low(a) to High(a)` does not compile against a Char loop variable. The bound is folded as tyInteger because the array's INDEX type is not recorded anywhere. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
+| bug-a-not-on-an-integer-variant-answers-a-boolean | A | 45 | bug | `not v` on a Variant holding 12 answers False; FPC answers -13 (the bitwise complement). Silent wrong VALUE and wrong TYPE -- pxx applies logical not to every variant regardless of tag, where FPC picks bitwise-vs-logical from the operand. `v shr n` is the loud half of the same gap: `Variant arithmetic: unsupported operator`. | — |
 | bug-a-numeric-goto-labels-are-not-supported | A | 15 | bug | Numeric goto labels are not supported | — |
 | bug-a-real-is-single-on-hosted-riscv32 | A | 35 | bug | `Real` is Single (4 bytes) on hosted riscv32 Linux and Double (8) on every other target and on FPC. The type is keyed on the ARCH, not on the ESP profile, so a target with no ESP in it inherits an ESP decision — silently halving the precision of every `Real` in a ported program. | — |
 | bug-a-riscv32-codegen-has-no-variant-support | A | 30 | bug | `var v: Variant; v := 1;` does not compile for --target=riscv32: `unsupported node in IR codegen: var_store`. Every other target (x86-64, i386, aarch64, arm32) compiles and runs the same program. Loud, not silent -- and it means any ticket claiming riscv32 'routes through PXXVarBinOpPas' is describing a path nothing can reach. | — |
@@ -171,6 +172,7 @@ _none_
 | decide-old-style-object-types | U | 30 | decide | Decide: do we implement Turbo Pascal `object` types? | — |
 | decide-pointer-difference-unit | U | 30 | decide | FPC's `p - q` answers BYTES when either operand is an untyped Pointer (which includes `@x` under the default {$TYPEDADDRESS OFF}) and ELEMENTS when both are the same typed pointer. pxx always answers elements. `p - @a[0]` therefore prints 8 in FPC and 2 in pxx — a silent difference in ported code. Match FPC, keep the uniform rule, or diagnose? | — |
 | decide-rtti-kind-numbering | U | 40 | decide | typinfo.pas declares TTypeKind in FPC's order (tkInt64=19) but the RTTI blob the compiler emits carries the COMPILER's TTypeKind (tyInt64=13), so `if mi^.RetKind = Ord(tkInt64)` is silently false. Three ways out; they differ in whether the RTTI blob's numbering — a compiler ABI — changes. Recommendation: option 2. Needs a human call because option 1 breaks already-compiled consumers and option 2 spends the FPC-compatibility argument the FPC-ordered enum was added for. | — |
+| decide-vartype-returns-pxx-tags-not-fpc-codes | U | 30 | decide | `VarType(v)` returns pxx's internal tag (0..8), not FPC's varXxx code, and lib/rtl/variants.pas exports no varInteger/varDouble/varString constants at all -- so the FPC idiom `if VarType(v) = varInteger` does not compile. Fork: map VarType onto FPC's codes (compat, changes what existing pxx code comparing to VT_ constants sees) or export a pxx-flavoured constant set (no compat). Needs the owner's call on which surface is public. | — |
 | docs-d-document-exec-eval-and-the-builtins-incompatibility | D | 40 | docs | docs/targets/nil-python.md tells the public `eval`/`exec` do not exist (\"No eval of runtime-constructed code\") — but the explicit-dict form has worked since 2026-07-31 via pyeval's tree-walker. Document what exec/eval DO support, the refused ambient form, and the decided __builtins__ incompatibility (decided 2026-08-19, permanent for now). | — |
 | docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out | D | 45 | docs | docs/language/name-resolution.md:47 and docs/targets/nil-python.md:260 quote the bare-import refusal message and state the rule with no carve-out. As of 2026-08-20 a unit declaring {$PYEXTENSION} and binding the cpyext runtime IS bare-importable, so both pages are now wrong in the direction that makes a working program look unsupported. | — |
 | docs-d-nilchecks-directive-and-flag | D | 40 | docs | {$NILCHECKS ON\|OFF} and --no-nil-check shipped 2026-08-21 and are not in docs/reference/directives.md or modes.md. The row is unusual enough to be worth a sentence: the directive is tri-state, so ON and OFF do different things depending on which site class you are looking at. | — |
@@ -562,9 +564,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2287)
+## done (2288)
 
-2287 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2288 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -651,6 +653,7 @@ _none_
 - [p 50] [A] feature-release-checksums-repro
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [A] bug-a-not-on-an-integer-variant-answers-a-boolean
 - [p 45] [B] bug-b-format-percent-u-prints-a-signed-value
 - [p 45] [B] bug-b-inttostr-of-a-qword-above-2-63-renders-negative
 - [p 45] [N] bug-n-a-class-base-that-is-an-expression-does-not-compile
@@ -802,6 +805,7 @@ _none_
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
 - [p 30] [U] decide-old-style-object-types
 - [p 30] [U] decide-pointer-difference-unit
+- [p 30] [U] decide-vartype-returns-pxx-tags-not-fpc-codes
 - [p 30] [D] docs-toolchain-cli-flags
 - [p 30] [A] feature-a-a-variant-has-no-null-tag
 - [p 30] [A] feature-a-dynamic-array-of-frozen-strings

@@ -1029,7 +1029,17 @@ begin
   else if (p^.VType = 1) or (p^.VType = 2) then
     Result := p^.Payload
   else if p^.VType = 3 then
-    Result := Trunc(PDouble(@p^.Payload)^)
+    { ROUND, not Trunc: FPC's variant conversion table rounds half-to-even, so
+      `i := v` with v = 2.75 is 3 and with v = 3.5 is 4. Truncating answered 2
+      and 3 -- a silent integer off by one, through every integer target, since
+      Byte/Word/SmallInt/Integer/Int64 all narrow from this one helper.
+
+      Same VARIANT-conversion scope as the VT_BOOL rule above: a plain
+      `Trunc(2.75)` on a Double variable is still 2. And NilPy still truncates,
+      because Python's int(2.75) is 2 -- it does not reach here, pylib routes to
+      pyvar_to_int.
+      bug-a-a-double-variant-converts-to-an-integer-by-truncating }
+    Result := Round(PDouble(@p^.Payload)^)
   else if p^.VType = 0 then
     Result := 0
   else if p^.VType = 8193 then
