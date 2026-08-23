@@ -2136,6 +2136,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-asm-emit | P | 70 | regression | regression: test-core#src:test/test_asm_emit.pas red at 943c706936b3 (auto-filed by twatch) | — |
 | regression-test-core-test-asm-ifdef-multiarch | P | 70 | regression | regression: test-core#src:test/test_asm_ifdef_multiarch.pas red at 498c6dea3f48 (auto-filed by twatch) | — |
 | regression-test-core-test-asyncecho | T | 70 | regression | regression: test-core#src:test/test_asyncecho.pas red at 60502ed0c353 (auto-filed by twatch) | — |
+| regression-test-core-test-basic-comprehensive-2 | T | 70 | regression | regression: test-core#src:test/test_basic_comprehensive.bas red at 7d4a3dbb99ce (auto-filed by twatch) | — |
 | regression-test-core-test-basic-comprehensive | T | 70 | regression | regression: test-core#src:test/test_basic_comprehensive.bas red at 3f2828476c6c (auto-filed by twatch) | — |
 | regression-test-core-test-c-cross-ns-arity | T | 70 | regression | regression: test-core#src:test/test_c_cross_ns_arity.pas red at 60502ed0c353 (auto-filed by twatch) | — |
 | regression-test-core-test-c-gtk-call-2 | T | 70 | regression | regression: test-core#src:test/test_c_gtk_call.pas red at 98ed38202254 (auto-filed by twatch) | — |

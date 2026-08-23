@@ -683,6 +683,7 @@ procedure ParseBProgram;
 var
   stmtList: Integer;
   jmpPatch, i: Integer;
+  bNeedsHeap, bNeedsAnsi, bNeedsDiv: Boolean;
 begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
 
@@ -703,6 +704,32 @@ begin
     runtime at all — the same gap the I/O lock had, one stub later.
     bug-a-only-the-pascal-driver-emits-the-signal-runtime }
   EmitProgramRuntimeStubsForTarget;
+
+  { The emitted AnsiString runtime — the SAME omission as the two above, one
+    stub family later, and the fourth time this driver has been the one that
+    did not make a call every other driver makes.
+
+    A BASIC program pulls builtinheap the moment anything needs the heap, and
+    builtinheap is Pascal: its own bodies concatenate literals, so they compile
+    calls to AnsiStrFromLiteralAddr / AnsiStrConcatAddr. With no emission those
+    addresses stay 0, and the guard in IREmitCodeCall turns what would have been
+    a jump to the ELF entry point into `call to a runtime stub that was never
+    emitted`, reported against a line in a compiler builtin — a diagnostic that
+    names a file the BASIC program never mentions. It surfaced when a new
+    diagnostic string was added to PXXVarBinOp: the unit had simply never
+    needed a managed string on this path before.
+
+    Gated on the same DetectPascalRuntimeNeeds pre-scan and the same x86-64
+    condition the C driver uses (the shims ARE x86-64 machine code; the other
+    backends call the builtinheap helpers directly), and the forwards go first
+    so the emitter can reference bodies builtinheap has not parsed yet.
+    bug-a-only-the-pascal-driver-emits-the-signal-runtime is the same story. }
+  DetectPascalRuntimeNeeds(bNeedsHeap, bNeedsAnsi, bNeedsDiv);
+  if bNeedsAnsi and (TargetArch = TARGET_X86_64) then
+  begin
+    RegisterEmittedStringRuntimeForwards;
+    EmitAnsiStringRuntime;
+  end;
 
   { System intrinsics, exactly like the Pascal, C and NilPy drivers do — BASIC
     was the one frontend that never minted them. It got away with it while
