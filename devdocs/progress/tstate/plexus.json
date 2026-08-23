@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T03:18:31Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "a6036b45d770a88fdddfd067c4a134ce7cb43cb9",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T03:54:08Z",
    "fixed": [],
    "new_red": [],
@@ -476,12 +468,23 @@
    "sha": "df21e490d7989a812fc35b0f5f2dc5b5ea0e4bab",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-23T23:22:17Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_basic_comprehensive.bas"
+   ],
+   "sha": "7d4a3dbb99ce2bc83a5fbde50a6844292c5bd21a",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2358728B  data=61689B  bss=51420B  procs=1788] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
-  "test-core#src:test/test_variant_string_ops.pas": "ok: $TMP  [code=129332B  data=3248B  bss=42700B  procs=229]",
+  "test-core#src:test/test_basic_comprehensive.bas": "pascal26:3906: error: compiler error: call to a runtime stub that was never emitted (code offset 0 is the ELF entry point). A frontend driver is missing its stub-emission call for the current flags/target. | in: $TMP | near: Exit  end  end  >>> end  function",
+  "test-core#src:test/test_variant_string_ops.pas": "ok: $TMP  [code=133970B  data=3416B  bss=42700B  procs=232]",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter"
  },
  "job_tier": {
@@ -1612,6 +1615,7 @@
   "test-core#src:test/test_deref_managed_string_b302.pas": "native",
   "test-core#src:test/test_dialect_generics_prereqs_b329.pas": "native",
   "test-core#src:test/test_directive_if_numeric.pas": "native",
+  "test-core#src:test/test_div_by_zero_raises_on_every_target.pas": "native",
   "test-core#src:test/test_div_mod_mixed_signedness.pas": "native",
   "test-core#src:test/test_div_zero_re200.pas": "native",
   "test-core#src:test/test_dyn_comma.pas": "native",
@@ -2351,17 +2355,22 @@
   "test-core#src:test/test_varcast_and_dec.pas": "native",
   "test-core#src:test/test_variant.pas": "native",
   "test-core#src:test/test_variant_arg_prefers_variant_overload.pas": "native",
+  "test-core#src:test/test_variant_bitwise_and_not.pas": "native",
   "test-core#src:test/test_variant_byvalue_param.pas": "native",
   "test-core#src:test/test_variant_comparison_coerces_a_stringy_operand.pas": "native",
   "test-core#src:test/test_variant_conversion_failure_is_catchable.pas": "native",
   "test-core#src:test/test_variant_div.pas": "native",
+  "test-core#src:test/test_variant_div_by_zero_raises.pas": "native",
+  "test-core#src:test/test_variant_double_to_integer_rounds.pas": "native",
   "test-core#src:test/test_variant_fn_return_forward.pas": "native",
   "test-core#src:test/test_variant_literal_concat_arg.pas": "native",
+  "test-core#src:test/test_variant_null_propagates_through_arithmetic.pas": "native",
   "test-core#src:test/test_variant_ops.pas": "native",
   "test-core#src:test/test_variant_record_tag_padding.pas": "native",
   "test-core#src:test/test_variant_string.pas": "native",
   "test-core#src:test/test_variant_string_arithmetic.pas": "native",
   "test-core#src:test/test_variant_string_ops.pas": "native",
+  "test-core#src:test/test_variant_string_to_boolean.pas": "native",
   "test-core#src:test/test_variant_typecast.pas": "native",
   "test-core#src:test/test_variant_typecast_strict.pas": "native",
   "test-core#src:test/test_varrec_alloc_after.pas": "native",
@@ -4488,7 +4497,7 @@
   "test-core#src:test/test_auto_var.pas": "pass",
   "test-core#src:test/test_bare_procvar_call_b273.pas": "pass",
   "test-core#src:test/test_bare_property.pas": "pass",
-  "test-core#src:test/test_basic_comprehensive.bas": "pass",
+  "test-core#src:test/test_basic_comprehensive.bas": "fail",
   "test-core#src:test/test_basic_goto_gosub.bas": "pass",
   "test-core#src:test/test_big_static_array_open_param.pas": "pass",
   "test-core#src:test/test_bitwise_not_lvalue_b280.pas": "pass",
@@ -4644,6 +4653,7 @@
   "test-core#src:test/test_deref_managed_string_b302.pas": "pass",
   "test-core#src:test/test_dialect_generics_prereqs_b329.pas": "pass",
   "test-core#src:test/test_directive_if_numeric.pas": "pass",
+  "test-core#src:test/test_div_by_zero_raises_on_every_target.pas": "pass",
   "test-core#src:test/test_div_mod_mixed_signedness.pas": "pass",
   "test-core#src:test/test_div_zero_re200.pas": "pass",
   "test-core#src:test/test_dyn_comma.pas": "pass",
@@ -5381,17 +5391,22 @@
   "test-core#src:test/test_varcast_and_dec.pas": "pass",
   "test-core#src:test/test_variant.pas": "pass",
   "test-core#src:test/test_variant_arg_prefers_variant_overload.pas": "pass",
+  "test-core#src:test/test_variant_bitwise_and_not.pas": "pass",
   "test-core#src:test/test_variant_byvalue_param.pas": "pass",
   "test-core#src:test/test_variant_comparison_coerces_a_stringy_operand.pas": "pass",
   "test-core#src:test/test_variant_conversion_failure_is_catchable.pas": "pass",
   "test-core#src:test/test_variant_div.pas": "pass",
+  "test-core#src:test/test_variant_div_by_zero_raises.pas": "pass",
+  "test-core#src:test/test_variant_double_to_integer_rounds.pas": "pass",
   "test-core#src:test/test_variant_fn_return_forward.pas": "pass",
   "test-core#src:test/test_variant_literal_concat_arg.pas": "pass",
+  "test-core#src:test/test_variant_null_propagates_through_arithmetic.pas": "pass",
   "test-core#src:test/test_variant_ops.pas": "pass",
   "test-core#src:test/test_variant_record_tag_padding.pas": "pass",
   "test-core#src:test/test_variant_string.pas": "pass",
   "test-core#src:test/test_variant_string_arithmetic.pas": "pass",
   "test-core#src:test/test_variant_string_ops.pas": "fail",
+  "test-core#src:test/test_variant_string_to_boolean.pas": "pass",
   "test-core#src:test/test_variant_typecast.pas": "pass",
   "test-core#src:test/test_variant_typecast_strict.pas": "pass",
   "test-core#src:test/test_varrec_alloc_after.pas": "pass",
@@ -6540,8 +6555,8 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-23T22:20:43Z",
-  "sha": "df21e490d7989a812fc35b0f5f2dc5b5ea0e4bab",
+  "date": "2026-08-23T23:22:17Z",
+  "sha": "7d4a3dbb99ce2bc83a5fbde50a6844292c5bd21a",
   "tier": "native",
   "verdict": "RED",
   "wall": 3600.4
@@ -6759,6 +6774,32 @@
     "df21e490d7989a812fc35b0f5f2dc5b5ea0e4bab"
    ],
    "src": "test/test_variant_string_ops.pas",
+   "status": "fail"
+  },
+  {
+   "bad": "7d4a3dbb99ce2bc83a5fbde50a6844292c5bd21a",
+   "good": "df21e490d7989a812fc35b0f5f2dc5b5ea0e4bab",
+   "job": "test-core#src:test/test_basic_comprehensive.bas",
+   "name": "test-core#283",
+   "opened": "2026-08-23T23:22:17Z",
+   "pin_built": false,
+   "range": [
+    "9074403c08168194e9ab788c8919dea953854a58",
+    "e9388fe6f8569c728991c0c39d53e662388f7041",
+    "d014cc21a8da48605c72ae5e280216fedffd4ac1",
+    "1b3dcc656073d0f3c22ed630dd18dc65c0c1140e",
+    "1bfd5e9e964265297bfad460988f1a032c278efe",
+    "1f48588facfac395fda8b001661a815512a28784",
+    "c2145352e20cd39c6133e1774f29cb322c655ce8",
+    "d3d26ccbcb1b6c373f608e96f8a35eed3ad50a98",
+    "ef3f9168e78f4a95f2ad6a2c51c65e09dbec7f66",
+    "f3ef5d0d6e86984a1668fd9b90167239a21f32ed",
+    "6241076adb137f000011cd8b4d7031fa61c155dd",
+    "e87099722f03042e50741925964ca2d73720ea57",
+    "66cc20bb9b82736f98b337218e4f483e447a33b9",
+    "7d4a3dbb99ce2bc83a5fbde50a6844292c5bd21a"
+   ],
+   "src": "test/test_basic_comprehensive.bas",
    "status": "fail"
   }
  ],
