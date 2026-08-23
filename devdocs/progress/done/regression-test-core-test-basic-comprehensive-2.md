@@ -72,4 +72,4 @@ whatever the Pascal driver gained last. Filed as
 Gate: `make compiler/pascal26` fixedpoint converged; all three `.bas` tests in
 `test-core` pass (`test_basic_comprehensive` 21 lines, `test_basic_goto_gosub`
 and `test_basic_lexer` byte-exact); `tools/gate.sh quick` GREEN.
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit 046491cf5.
