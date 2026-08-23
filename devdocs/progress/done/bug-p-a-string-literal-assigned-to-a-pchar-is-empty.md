@@ -95,4 +95,4 @@ Self-host fixedpoint converged in one round; `tools/gate.sh quick` GREEN.
 49-row cross-product + the gcc C-mode re-check + `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit d86c82868.
