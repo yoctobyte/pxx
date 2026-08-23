@@ -938,13 +938,35 @@ var
 begin
   lp := left;
   rp := right;
+  lStr := (PVariantRecord(left)^.VType = 5) or (PVariantRecord(left)^.VType = 6);
+  rStr := (PVariantRecord(right)^.VType = 5) or (PVariantRecord(right)^.VType = 6);
   if isCompare = 0 then
   begin
-    lStr := (PVariantRecord(left)^.VType = 5) or (PVariantRecord(left)^.VType = 6);
-    rStr := (PVariantRecord(right)^.VType = 5) or (PVariantRecord(right)^.VType = 6);
     { tkPlus = 70. Both stringy and `+` is the one case that stays a concat;
       hand the raw dispatch the ORIGINAL operands so its string arm fires. }
     if not ((opTk = 70) and lStr and rStr) then
+    begin
+      lp := PXXVarNumCoerce(left, @la);
+      rp := PXXVarNumCoerce(right, @ra);
+    end;
+  end
+  else
+  begin
+    { COMPARISON, third half of the same rule -- and the one this wrapper used to
+      skip outright, which made `v(1) = v('1')` answer FALSE where FPC answers
+      TRUE. Silent wrong boolean: the comparison does not fail, it answers, and
+      it answers the safe-looking False, so a filter over variants that arrived
+      from text simply matches nothing.
+
+      Coerce when EXACTLY ONE side is stringy. Both stringy is a genuine string
+      comparison ('ab' < 'ac') and must keep the raw dispatch's string arm;
+      neither stringy is already numeric and PXXVarNumCoerce would be a no-op on
+      both. Exactly one is the mixed case FPC converts -- and when the text does
+      not parse, PXXVarNumCoerce raises, which is also FPC's answer for
+      `v('ab') = v(2)`. Refusing to compare incomparables is a real answer;
+      silently saying "not equal" was not.
+      bug-a-a-variant-comparison-does-not-coerce-a-stringy-operand }
+    if lStr <> rStr then
     begin
       lp := PXXVarNumCoerce(left, @la);
       rp := PXXVarNumCoerce(right, @ra);

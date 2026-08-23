@@ -3241,6 +3241,42 @@ begin
   EmitB($0F); EmitB($B6); EmitB($C0); { movzx eax, al }
 end;
 
+procedure EmitVarNumCoercePair(vcProc: Integer);
+{ rdi = left variant addr, rsi = right variant addr: run BOTH through
+  PXXVarNumCoerce and leave the (possibly coerced) addresses back in rdi/rsi.
+
+  The helper returns its argument untouched for every non-stringy tag, so it is
+  safe to call on both operands unconditionally -- the CALLER decides WHEN the
+  coercion applies, and the two callers disagree, which is why this is a shared
+  routine and not inline code at one of them:
+
+    * arithmetic calls it on the numeric path, after the string-vs-string
+      dispatch, so `'5' + '3'` still concatenates;
+    * comparison calls it BEFORE that dispatch and only when exactly one side is
+      stringy, because a stringy pair is a real string comparison.
+
+  One emission, two policies. Writing it twice is how EmitVarBinOp and
+  PXXVarBinOpPas drifted apart in the first place. }
+begin
+  if not VarCoerceScratchSet then
+  begin
+    BSSSize := AlignTo(BSSSize, 8);
+    VarCoerceScratchOff := BSSSize;
+    Inc(BSSSize, 48);          { [0]=coerced left, [16]=coerced right, [32]/[40]=saved addrs }
+    VarCoerceScratchSet := True;
+  end;
+  EmitAsmX64(['mov [@glob], rdi', VarCoerceScratchOff + 32]);
+  EmitAsmX64(['mov [@glob], rsi', VarCoerceScratchOff + 40]);
+  EmitAsmX64(['mov rsi, @glob', VarCoerceScratchOff]);       { dst = scratch A; rdi = left }
+  EmitCallProc(vcProc);
+  EmitAsmX64(['mov [@glob], rax', VarCoerceScratchOff + 32]);
+  EmitAsmX64(['mov rax, @glob', VarCoerceScratchOff + 40, 'mov rdi, [rax]']);
+  EmitAsmX64(['mov rsi, @glob', VarCoerceScratchOff + 16]);  { dst = scratch B }
+  EmitCallProc(vcProc);
+  EmitAsmX64(['mov rsi, rax']);
+  EmitAsmX64(['mov rax, @glob', VarCoerceScratchOff + 32, 'mov rdi, [rax]']);
+end;
+
 procedure EmitVarBinOp(opTk, resultOff: Integer; isCompare: Boolean);
 { rdi = left variant addr, rsi = right variant addr. Closed double-dispatch:
   both integer-class -> integer op (preserves int); any VT_DOUBLE -> double op.
@@ -3249,7 +3285,7 @@ var pDbl1, pDbl2, pDoneInt, pLi, pRi, pLd, pRd, pForceDbl: Integer;
     pIsStr1, pIsStr2, pIsStr3, pIsStr4, pNumericPath: Integer;
     pLeftStrOk, pNumericPath2, vcProc: Integer;
     pasPlus: Boolean;
-    pLhsOk, pRhsOk, pDiffTags1, pDiffTags2: Integer;
+    pLhsOk, pRhsOk, pDiffTags1, pDiffTags2, pSkipCoerce: Integer;
     pLhsStrCmp, pLhsCharCmp, pLhsDoneCmp, pLhsDone2Cmp, pLhsDone3Cmp, pLhsNilCmp: Integer;
     pRhsStrCmp, pRhsCharCmp, pRhsDoneCmp, pRhsDone2Cmp, pRhsDone3Cmp, pRhsNilCmp: Integer;
     pNoneA, pNoneB, pNoneDone, pNotNone: Integer;
@@ -3298,6 +3334,50 @@ begin
     EmitB($E9); pNoneDone := CodeLen; EmitI32(0);             { jmp L_all_done }
     { L_not_none: }
     Patch32(pNotNone, CodeLen - (pNotNone + 4));
+  end;
+
+  { COMPARISON coerces a stringy operand too, by the same rule as arithmetic --
+    and it has to happen HERE, before the string dispatch below, because that
+    dispatch takes its string arm as soon as EITHER side is stringy and then
+    answers "different tags -> not equal". `v(1) = v('1')` answered FALSE where
+    FPC answers TRUE: a silent wrong boolean, and the safe-looking one, so a
+    filter over variants that arrived from text matched nothing.
+
+    Only when EXACTLY ONE side is stringy -- a RUNTIME property of the tags, so
+    the decision is an emitted guard rather than a compile-time one. Both
+    stringy is a genuine string comparison ('ab' < 'ac') and must reach the
+    dispatch; neither stringy is already numeric. Exactly one is FPC's
+    convert-the-text case, and when the text does not parse PXXVarNumCoerce
+    raises -- also FPC's answer for `v('ab') = v(2)`. Refusing to compare
+    incomparables is a real answer; silently saying "not equal" was not.
+
+    PXXVarBinOpPas (the other five targets) carries the identical rule in Pascal.
+    The two implementations have drifted once already; keep them in step.
+    bug-a-a-variant-comparison-does-not-coerce-a-stringy-operand }
+  pSkipCoerce := -1;
+  if isCompare and (not PyProgramMode) then
+  begin
+    vcProc := FindProc('PXXVarNumCoerce');
+    if vcProc >= 0 then
+    begin
+      { al := lTag is stringy; cl := rTag is stringy; skip unless they differ.
+        `tag - VT_CHAR <= 1` unsigned covers VT_CHAR(5) and VT_STRING(6). }
+      EmitB($48); EmitB($8B); EmitB($07);                     { mov rax,[rdi] }
+      EmitB($48); EmitB($83); EmitB($E8); EmitB(VT_CHAR);     { sub rax, VT_CHAR }
+      EmitB($48); EmitB($83); EmitB($F8); EmitB($01);         { cmp rax, 1 }
+      EmitB($0F); EmitB($96); EmitB($C0);                     { setbe al }
+      EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);         { movzx rax, al }
+      EmitB($48); EmitB($8B); EmitB($0E);                     { mov rcx,[rsi] }
+      EmitB($48); EmitB($83); EmitB($E9); EmitB(VT_CHAR);     { sub rcx, VT_CHAR }
+      EmitB($48); EmitB($83); EmitB($F9); EmitB($01);         { cmp rcx, 1 }
+      EmitB($0F); EmitB($96); EmitB($C1);                     { setbe cl }
+      EmitB($48); EmitB($0F); EmitB($B6); EmitB($C9);         { movzx rcx, cl }
+      EmitB($48); EmitB($39); EmitB($C8);                     { cmp rax, rcx }
+      EmitB($0F); EmitB($84); pSkipCoerce := CodeLen; EmitI32(0);   { je L_no_coerce }
+      EmitVarNumCoercePair(vcProc);
+      { L_no_coerce: }
+      Patch32(pSkipCoerce, CodeLen - (pSkipCoerce + 4));
+    end;
   end;
 
   if isCompare or (opTk = Ord(tkPlus)) then
@@ -3536,44 +3616,22 @@ begin
     Patch32(pNumericPath2, CodeLen - (pNumericPath2 + 4));
   end;
 
-  { Pascal Variant arithmetic COERCES a stringy operand to a number before the
-    numeric dispatch below reads its payload. Without this the dispatch read the
-    payload raw: a VT_CHAR's ordinal (`v('5') - 3` = 50) and, far worse, a
-    VT_STRING's ANSISTRING HANDLE (`v('15') - 3` = a heap address, different
-    every run). FPC converts — 2 and 12 — or raises EVariantError when the text
-    is not numeric, and PXXVarNumCoerce implements exactly that, returning a
-    non-stringy operand untouched so both sides can be passed through it
-    unconditionally.
+  { A stringy operand is CONVERTED to a number before the numeric dispatch below
+    reads its payload -- see EmitVarNumCoercePair. Comparison has its own,
+    guarded, call to the same helper further up (it has to run before the
+    string-vs-string dispatch, which this one deliberately sits after so that
+    `'5' + '3'` still reaches the concat arm).
 
     NilPy is excluded at EMIT time (PyProgramMode): Python's rules for these
     pairs are different in every case ('5' * 3 is '555', '5' + 3 is a
     TypeError), and its own lowering handles them before this emitter sees
-    them. Skipped when the helper is absent — a program that pulls no builtin
+    them. Skipped when the helper is absent -- a program that pulls no builtin
     unit keeps the old behaviour rather than failing to compile.
     bug-p-variant-arithmetic-on-a-string-reads-the-payload-as-a-number }
   if (not isCompare) and (not PyProgramMode) then
   begin
     vcProc := FindProc('PXXVarNumCoerce');
-    if vcProc >= 0 then
-    begin
-      if not VarCoerceScratchSet then
-      begin
-        BSSSize := AlignTo(BSSSize, 8);
-        VarCoerceScratchOff := BSSSize;
-        Inc(BSSSize, 48);          { [0]=coerced left, [16]=coerced right, [32]/[40]=saved addrs }
-        VarCoerceScratchSet := True;
-      end;
-      EmitAsmX64(['mov [@glob], rdi', VarCoerceScratchOff + 32]);
-      EmitAsmX64(['mov [@glob], rsi', VarCoerceScratchOff + 40]);
-      EmitAsmX64(['mov rsi, @glob', VarCoerceScratchOff]);       { dst = scratch A; rdi = left }
-      EmitCallProc(vcProc);
-      EmitAsmX64(['mov [@glob], rax', VarCoerceScratchOff + 32]);
-      EmitAsmX64(['mov rax, @glob', VarCoerceScratchOff + 40, 'mov rdi, [rax]']);
-      EmitAsmX64(['mov rsi, @glob', VarCoerceScratchOff + 16]);  { dst = scratch B }
-      EmitCallProc(vcProc);
-      EmitAsmX64(['mov rsi, rax']);
-      EmitAsmX64(['mov rax, @glob', VarCoerceScratchOff + 32, 'mov rdi, [rax]']);
-    end;
+    if vcProc >= 0 then EmitVarNumCoercePair(vcProc);
   end;
 
   { '/' is real division: always Double, like Pascal — skip the integer path. }

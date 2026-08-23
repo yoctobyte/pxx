@@ -5423,6 +5423,11 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_recfldop26 | tail -1)" = "ALL OK"
 	./$(COMPILER) -Fulib/rtl test/test_class_var_of_a_managed_type.pas $(TESTTMP)/test_clsvarmgd26
 	test "$$($(TESTTMP)/test_clsvarmgd26 | tail -1)" = "ALL OK"
+	# A Variant comparison with exactly ONE stringy operand converts the text.
+	# Two implementations of one rule (EmitVarBinOp inline on x86-64,
+	# PXXVarBinOpPas for the other targets) -- this is what notices a drift.
+	./$(COMPILER) -Fulib/rtl test/test_variant_comparison_coerces_a_stringy_operand.pas $(TESTTMP)/test_varcmpcoerce26
+	test "$$($(TESTTMP)/test_varcmpcoerce26 | tail -1)" = "ALL OK"
 	# Free through a BASE reference runs the descendant's Destroy (virtual, via
 	# root VMT slot 0). Byte-identical to fpc -Mobjfpc; --compact-classes has no
 	# root slots and keeps the parse-time behaviour by design, so it is asserted
