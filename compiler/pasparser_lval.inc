@@ -5288,6 +5288,104 @@ begin
   else Result := tyUnknown;
 end;
 
+{ Every built-in SCALAR type name, in ONE place: the kind it denotes, or
+  tyUnknown for a name that is not one. The sibling of BuiltinPtrNameElemTk
+  above, and consulted under the same rule — only after FindTypeAlias misses,
+  so a source or RTL declaration of the name still wins.
+
+  It exists because the table used to exist TWICE and the two copies disagreed.
+  ParseTypeKind (pasparser_decl.inc) knew ~40 names; the built-in typecast in
+  pasparser_expr.inc knew ~12. A name added to the first did not become
+  CASTABLE, so `var b: ByteBool` compiled and `ByteBool(2)` was
+  "undefined variable (ByteBool)" — along with WordBool, LongBool, Comp,
+  ValReal, TDateTime, Currency, SizeUInt, UTF8String, RawByteString, OleVariant
+  and CodePointer, every one of them a legal cast in FPC. And where the two
+  overlapped they did not always answer the same thing: the cast chain called
+  `longint` tyInteger, `nativeint`/`ptrint` tyInt64 and `nativeuint`/`ptruint`
+  tyUInt64. The declaration's answers won the merge, because a cast that
+  produces a different kind from the DECLARATION of the same name means one of
+  them is wrong, and NativeInt is pointer-sized by definition — tyInt64 is
+  simply false on every 32-bit target.
+  bug-a-the-builtin-type-name-table-exists-twice-and-the-two-disagree
+
+  Only side-effect-free names live here. `shortstring` (sets LastTypeStrCap),
+  `pwidechar` / `pchar` / `object` (set LastTypePointerElemTk), `textfile`,
+  `file` and the promotable-int family keep their own arms at the declaration
+  site, because they do more than name a kind. }
+function BuiltinScalarTypeKind(const nm: AnsiString): TTypeKind;
+begin
+  { The keyword-token builtins BY NAME. The real lexer tokenizes these as
+    tkBoolean_T/tkInteger_T/..., so a DECLARATION reaches them here only from a
+    synthetic token stream that spells them as plain identifiers — the
+    parallel-for capture accessor (`capj: ^Boolean` built via NestStrOff) being
+    the one in-tree producer, and without the mapping a captured Boolean deref
+    re-typed as Integer (bug-parallel-for-captured-boolean-loses-type). A
+    TYPECAST reaches them by name every time. }
+  if CaseEqual(nm, 'boolean') then Result := tyBoolean
+  else if CaseEqual(nm, 'integer') then Result := tyInteger
+  else if CaseEqual(nm, 'char') or CaseEqual(nm, 'ansichar') then Result := tyChar
+  else if CaseEqual(nm, 'shortint') or CaseEqual(nm, 'int8') then Result := tyInt8
+  else if CaseEqual(nm, 'byte') or CaseEqual(nm, 'uint8') then Result := tyUInt8
+  else if CaseEqual(nm, 'smallint') or CaseEqual(nm, 'int16') then Result := tyInt16
+  else if CaseEqual(nm, 'word') or CaseEqual(nm, 'uint16') then Result := tyUInt16
+  else if CaseEqual(nm, 'longint') or CaseEqual(nm, 'int32') then Result := tyInt32
+  else if CaseEqual(nm, 'cardinal') or CaseEqual(nm, 'longword') or
+          CaseEqual(nm, 'uint32') or CaseEqual(nm, 'dword') then Result := tyUInt32
+  else if CaseEqual(nm, 'int64') then Result := tyInt64
+  else if CaseEqual(nm, 'qword') or CaseEqual(nm, 'uint64') then Result := tyUInt64
+  { pointer-sized by DEFINITION: the cast site used to answer tyInt64/tyUInt64,
+    which is wrong on i386, arm32, riscv32 and xtensa }
+  else if CaseEqual(nm, 'nativeint') or CaseEqual(nm, 'ptrint') or
+          CaseEqual(nm, 'sizeint') then Result := tyNativeInt
+  else if CaseEqual(nm, 'nativeuint') or CaseEqual(nm, 'ptruint') or
+          CaseEqual(nm, 'sizeuint') then Result := tyNativeUInt
+  else if CaseEqual(nm, 'pointer') or CaseEqual(nm, 'codepointer') then Result := tyPointer
+  { floats. `Real` is the target's native float depth: ESP and riscv32 have no
+    hardware double. `Extended` aliases Double on every target
+    (feature-extended-alias-or-reject) and `ValReal` is FPC's "widest real". }
+  else if CaseEqual(nm, 'real') then
+  begin
+    if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
+      Result := tySingle
+    else
+      Result := tyDouble;
+  end
+  else if CaseEqual(nm, 'single') then Result := tySingle
+  else if CaseEqual(nm, 'double') or CaseEqual(nm, 'extended') or
+          CaseEqual(nm, 'valreal') or CaseEqual(nm, 'tdatetime') or
+          CaseEqual(nm, 'currency') then Result := tyDouble
+  { FPC's sized booleans are C-ABI booleans — a fixed-width integer where
+    nonzero means true. They must keep their WIDTH (LongBool 4, WordBool 2,
+    ByteBool 1); mapping them onto tyBoolean would silently resize any struct
+    or call that crosses to C. }
+  else if CaseEqual(nm, 'longbool') then Result := tyInteger
+  else if CaseEqual(nm, 'wordbool') then Result := tyUInt16
+  else if CaseEqual(nm, 'bytebool') then Result := tyUInt8
+  { WideChar is a UTF-16 code UNIT; UCS4Char is a CODE POINT and converts to a
+    string as UTF-8. Distinct kinds on purpose — see defs.inc. }
+  else if CaseEqual(nm, 'widechar') then Result := tyWideChar
+  else if CaseEqual(nm, 'ucs4char') or CaseEqual(nm, 'unicodechar') then Result := tyUCS4Char
+  else if CaseEqual(nm, 'comp') then Result := tyInt64
+  else if CaseEqual(nm, 'variant') or CaseEqual(nm, 'olevariant') then Result := tyVariant
+  { unicodestring/widestring: pragmatic alias to the native string type (byte
+    semantics). FPC's UTF-16 payload model is a later slice. }
+  else if CaseEqual(nm, 'ansistring') or CaseEqual(nm, 'unicodestring') or
+          CaseEqual(nm, 'widestring') then
+  begin
+    if PasDefineExists('PXX_MANAGED_STRING') then
+      Result := tyAnsiString
+    else
+      Result := tyString;
+  end
+  { UTF8String / RawByteString are unconditionally the managed kind, which is
+    what the declaration site has always said. Kept distinct from the arm above
+    rather than folded into it: the two differ, and merging tables is exactly
+    how the divergence this function exists to end got started. }
+  else if CaseEqual(nm, 'utf8string') or CaseEqual(nm, 'rawbytestring') then
+    Result := tyAnsiString
+  else Result := tyUnknown;
+end;
+
 { The alias index for a built-in pointer name, REGISTERING it on first use. Registering lazily is
   what keeps a source declaration winning: FindTypeAlias is consulted first by every caller, so a
   real `PInteger` in the source or the RTL is found before we ever get here. Returns -1 for a name

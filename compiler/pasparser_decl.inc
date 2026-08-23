@@ -376,19 +376,6 @@ begin
           of silently minting an integer-sized slot
           (bug-pascal-missing-diagnostics-fail-tests / tdefault4). }
         Error('file types are not supported (use TextFile for text I/O)')
-      else if (not tnHasAlias) and (CaseEqual(lo, 'ansistring') or
-         CaseEqual(lo, 'unicodestring') or CaseEqual(lo, 'widestring')) then
-      begin
-        { unicodestring/widestring: pragmatic alias to the native string type
-          (byte semantics). FPC's UTF-16 payload model is a later slice; the
-          alias gives literals/writeln/compare/case-of/indexing string
-          behavior instead of a bare machine word
-          (bug-pascal-unicodestring-widestring-type-missing). }
-        if PasDefineExists('PXX_MANAGED_STRING') then
-          Result := tyAnsiString
-        else
-          Result := tyString;
-      end
       else if (not tnHasAlias) and (CaseEqual(lo, 'shortstring')) then
       begin
         { Interim: `shortstring` maps to a 255-cap tyFixedString (word-prefix
@@ -397,56 +384,16 @@ begin
         LastTypeStrCap := 255;
         Result := tyFixedString;
       end
-      else if (not tnHasAlias) and (CaseEqual(lo, 'real')) then
-      begin
-        if (TargetArch = TARGET_XTENSA) or (TargetArch = TARGET_RISCV32) then
-          Result := tySingle  { Real = native float depth; ESP has no HW double }
-        else
-          Result := tyDouble;
-      end
-      else if (not tnHasAlias) and (CaseEqual(lo, 'single')) then Result := tySingle
-      else if (not tnHasAlias) and (CaseEqual(lo, 'double')) then Result := tyDouble
-      else if (not tnHasAlias) and (CaseEqual(lo, 'extended')) then Result := tyDouble
-        { Extended aliases Double (feature-extended-alias-or-reject, option a):
-          arithmetic already ran in SSE2 double; the 10-byte x87 tyExtended
-          storage gave no extra precision, so `Extended` is now plain Double on
-          every target. The tyExtended enum + its x87 load/store paths remain but
-          are no longer produced by the front end. }
-      { The Int8/16/32 spellings were MISSING while UInt8/16/32 were present, so they
-        fell through to the unknown-name default and silently became a 4-byte Integer —
-        harmless for Int32 by luck, wrong for Int8/Int16 (4 bytes instead of 1/2, which
-        also mislays any record they sit in). The compiler's own source uses Int32. }
-      { `Char` is a lexer TOKEN, so its FPC synonym `AnsiChar` never resolved as an
-        identifier and fell through to the unknown-name default — a 4-byte Integer where a
-        1-byte char belongs, which also mislays any record or array it sits in. }
-      else if (not tnHasAlias) and (CaseEqual(lo, 'ansichar')) then Result := tyChar
-      { FPC's sized booleans, used by real bindings (Synapse). These are C-ABI booleans —
-        a fixed-width integer where nonzero means true — so they must keep their WIDTH:
-        LongBool is 4 bytes, WordBool 2, ByteBool 1. Mapping them onto tyBoolean would
-        silently change their size and corrupt any struct or call that crosses to C. }
-      else if (not tnHasAlias) and (CaseEqual(lo, 'longbool')) then Result := tyInteger
-      else if (not tnHasAlias) and (CaseEqual(lo, 'wordbool')) then Result := tyUInt16
-      else if (not tnHasAlias) and (CaseEqual(lo, 'bytebool')) then Result := tyUInt8
-      { More System names that were never recognised. Until the unknown-name fallback was
-        closed they were all silently 4-byte Integers, which for TDateTime (a Double!) and
-        for the string aliases was badly wrong, not merely mis-sized. A user or RTL
-        declaration still wins — FindTypeAlias is consulted before this. TDateTime and
-        Currency deliberately match what lib/rtl/sysutils already declares them as. }
-      else if (not tnHasAlias) and (CaseEqual(lo, 'widechar')) then Result := tyWideChar  { 2 bytes, not 4 }
-      { UCS4Char — FPC's own name for a CODE POINT (system unit: UCS4Char = type
-        LongWord). Distinct from WideChar above it, which is a UTF-16 code UNIT
-        and cannot hold a character past the BMP without a surrogate pair. Its
-        own kind because it converts to a string as UTF-8; see defs.inc. }
-      else if (not tnHasAlias) and (CaseEqual(lo, 'ucs4char') or CaseEqual(lo, 'unicodechar')) then Result := tyUCS4Char
-      else if (not tnHasAlias) and (CaseEqual(lo, 'comp')) then Result := tyInt64
-      { ValReal — FPC's "widest available real". pxx's widest is Double. }
-      else if (not tnHasAlias) and (CaseEqual(lo, 'valreal')) then Result := tyDouble
-      else if (not tnHasAlias) and (CaseEqual(lo, 'tdatetime')) then Result := tyDouble
-      else if (not tnHasAlias) and (CaseEqual(lo, 'currency')) then Result := tyDouble
-      else if (not tnHasAlias) and (CaseEqual(lo, 'sizeint')) then Result := tyNativeInt
-      else if (not tnHasAlias) and (CaseEqual(lo, 'sizeuint')) then Result := tyNativeUInt
-      else if (not tnHasAlias) and (CaseEqual(lo, 'utf8string') or CaseEqual(lo, 'rawbytestring')) then Result := tyAnsiString
-      else if (not tnHasAlias) and (CaseEqual(lo, 'olevariant')) then Result := tyVariant
+      { EVERY side-effect-free builtin scalar name, from the ONE table shared
+        with the built-in typecast in pasparser_expr.inc. It used to be ~40
+        arms here and a ~12-arm subset there, so a name added at this site did
+        not become CASTABLE and where the two overlapped they disagreed.
+        BuiltinScalarTypeKind (pasparser_lval.inc) carries the list and the
+        reasoning; the arms that survive below it are the ones that do more
+        than name a kind (LastTypeStrCap, LastTypePointerElemTk, an Error).
+        bug-a-the-builtin-type-name-table-exists-twice-and-the-two-disagree }
+      else if (not tnHasAlias) and (BuiltinScalarTypeKind(lo) <> tyUnknown) then
+        Result := BuiltinScalarTypeKind(lo)
       else if (not tnHasAlias) and (CaseEqual(lo, 'pwidechar')) then
       begin
         { tyWideChar, not tyUInt16 — the element of a PWideChar IS a WideChar,
@@ -477,31 +424,6 @@ begin
         LastTypePointerElemRec := REC_NONE;
         Result := tyPointer;
       end
-      { The keyword-token builtins by NAME: the real lexer always tokenizes
-        these as tkBoolean_T/tkInteger_T/…, so this arm is only reached by a
-        SYNTHETIC token stream that spells them as plain identifiers — the
-        parallel-for capture accessor (`capj: ^Boolean` built via NestStrOff)
-        being the one in-tree producer. Without the mapping the caret element
-        type silently defaulted, so a captured Boolean deref re-typed as
-        Integer and overload resolution rejected `Sink(i, lflag)`
-        (bug-parallel-for-captured-boolean-loses-type). }
-      else if (not tnHasAlias) and (CaseEqual(lo, 'boolean')) then Result := tyBoolean
-      else if (not tnHasAlias) and (CaseEqual(lo, 'integer')) then Result := tyInteger
-      else if (not tnHasAlias) and (CaseEqual(lo, 'char')) then Result := tyChar
-      else if (not tnHasAlias) and (CaseEqual(lo, 'single')) then Result := tySingle
-      else if (not tnHasAlias) and (CaseEqual(lo, 'double')) then Result := tyDouble
-      else if (not tnHasAlias) and (CaseEqual(lo, 'shortint') or CaseEqual(lo, 'int8')) then Result := tyInt8
-      else if (not tnHasAlias) and (CaseEqual(lo, 'byte') or CaseEqual(lo, 'uint8')) then Result := tyUInt8
-      else if (not tnHasAlias) and (CaseEqual(lo, 'smallint') or CaseEqual(lo, 'int16')) then Result := tyInt16
-      else if (not tnHasAlias) and (CaseEqual(lo, 'word') or CaseEqual(lo, 'uint16')) then Result := tyUInt16
-      else if (not tnHasAlias) and (CaseEqual(lo, 'longint') or CaseEqual(lo, 'int32')) then Result := tyInt32
-      else if (not tnHasAlias) and (CaseEqual(lo, 'cardinal') or CaseEqual(lo, 'longword') or CaseEqual(lo, 'uint32') or CaseEqual(lo, 'dword')) then Result := tyUInt32
-      else if (not tnHasAlias) and (CaseEqual(lo, 'int64')) then Result := tyInt64
-      else if (not tnHasAlias) and (CaseEqual(lo, 'qword') or CaseEqual(lo, 'uint64')) then Result := tyUInt64
-      else if (not tnHasAlias) and (CaseEqual(lo, 'nativeint') or CaseEqual(lo, 'ptrint')) then Result := tyNativeInt
-      else if (not tnHasAlias) and (CaseEqual(lo, 'nativeuint') or CaseEqual(lo, 'ptruint')) then Result := tyNativeUInt
-      else if (not tnHasAlias) and
-              (CaseEqual(lo, 'pointer') or CaseEqual(lo, 'codepointer')) then Result := tyPointer
       else if (not tnHasAlias) and (CaseEqual(lo, 'object')) then
       begin
         { `object`: a rooted object reference — holds ANY class instance
@@ -522,7 +444,6 @@ begin
         LastTypePointerElemTk := tyChar;
         Result := tyPointer;
       end
-      else if (not tnHasAlias) and (CaseEqual(lo, 'variant')) then Result := tyVariant
       { PROMOTABLE INT (feature-a-promotable-int). Opt-in and explicitly typed,
         so no existing Pascal program changes behaviour by naming nothing.
         `PromoInt` picks the target's default storage class; the numbered names

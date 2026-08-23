@@ -5775,32 +5775,25 @@ begin
             else LastExprTk := tyPointer;
             Exit;
           end;
-          if CaseEqual(name, 'pointer') then castTk := tyPointer
-          else if CaseEqual(name, 'int64') or CaseEqual(name, 'nativeint') or CaseEqual(name, 'ptrint') then castTk := tyInt64
-          else if CaseEqual(name, 'qword') or CaseEqual(name, 'uint64') or CaseEqual(name, 'nativeuint') or CaseEqual(name, 'ptruint') then castTk := tyUInt64
-          else if CaseEqual(name, 'integer') or CaseEqual(name, 'longint') then castTk := tyInteger
-          else if CaseEqual(name, 'cardinal') or CaseEqual(name, 'longword') or CaseEqual(name, 'uint32') or CaseEqual(name, 'dword') then castTk := tyUInt32
-          else if CaseEqual(name, 'smallint') then castTk := tyInt16
-          else if CaseEqual(name, 'word') or CaseEqual(name, 'uint16') then castTk := tyUInt16
-          else if CaseEqual(name, 'shortint') then castTk := tyInt8
-          else if CaseEqual(name, 'byte') or CaseEqual(name, 'uint8') then castTk := tyUInt8
-          else if CaseEqual(name, 'char') or CaseEqual(name, 'ansichar') then castTk := tyChar
-          else if CaseEqual(name, 'boolean') then castTk := tyBoolean
-          else if CaseEqual(name, 'ansistring') or
-                  CaseEqual(name, 'unicodestring') or CaseEqual(name, 'widestring') then
-          begin
-            if PasDefineExists('PXX_MANAGED_STRING') then
-              castTk := tyAnsiString
-            else
-              castTk := tyString;
-          end
-          else if CaseEqual(name, 'string') then castTk := tyString
-          else if FindEnumType(name) >= 0 then
-            { Ordinal->enum typecast, TEnum(intExpr). Enums are integer-sized
-              ordinals (cf. ParseTypeKind / the SizeOf branch above), so the
-              cast is a plain integer reinterpret; the enum->ordinal direction
-              already worked via the Integer(...) case above.
-              See bug-integer-to-enum-typecast-undefined-variable. }
+          { The ONE builtin-scalar table, shared with ParseTypeKind. This site
+            used to carry its own ~12-arm subset of it, so a dozen names that
+            DECLARED fine were "undefined variable" in a cast (ByteBool,
+            WordBool, LongBool, Comp, ValReal, TDateTime, Currency, SizeUInt,
+            UTF8String, RawByteString, OleVariant, CodePointer — all legal in
+            FPC), and where the two overlapped they disagreed: this chain said
+            `longint` was tyInteger and `nativeint`/`ptrint` tyInt64, which is
+            simply false on a 32-bit target.
+            bug-a-the-builtin-type-name-table-exists-twice-and-the-two-disagree }
+          castTk := BuiltinScalarTypeKind(name);
+          { `string` is a KEYWORD, not one of the identifier-spelled builtins,
+            so it stays here rather than joining the shared table. }
+          if (castTk = tyUnknown) and CaseEqual(name, 'string') then castTk := tyString;
+          { Ordinal->enum typecast, TEnum(intExpr). Enums are integer-sized
+            ordinals (cf. ParseTypeKind / the SizeOf branch above), so the cast
+            is a plain integer reinterpret; the enum->ordinal direction already
+            worked via the Integer(...) case above.
+            See bug-integer-to-enum-typecast-undefined-variable. }
+          if (castTk = tyUnknown) and (FindEnumType(name) >= 0) then
             castTk := tyInteger;
 
           if castTk <> tyUnknown then

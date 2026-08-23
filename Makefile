@@ -5460,6 +5460,12 @@ test-core: $(COMPILER)
 	# Variant printed True/False on x86-64 and 1/0 everywhere else.
 	./$(COMPILER) -Fulib/rtl test/test_variant_writes_every_tag.pas $(TESTTMP)/test_varwrite26
 	test "$$($(TESTTMP)/test_varwrite26 | tr '\n' '|')" = "True|False|42|-7|1.25|q|hey|"
+	# A builtin type NAME means the same thing in a cast as in a declaration.
+	# The name->kind table used to exist twice; a dozen names that declared fine
+	# were "undefined variable" in a cast, and where the two overlapped they
+	# disagreed (nativeint cast as tyInt64 = 8 bytes on a 32-bit target).
+	./$(COMPILER) -Fulib/rtl test/test_builtin_type_names_cast_and_declare.pas $(TESTTMP)/test_typenames26
+	test "$$($(TESTTMP)/test_typenames26 | tail -1)" = "ALL OK"
 	# Free through a BASE reference runs the descendant's Destroy (virtual, via
 	# root VMT slot 0). Byte-identical to fpc -Mobjfpc; --compact-classes has no
 	# root slots and keeps the parse-time behaviour by design, so it is asserted

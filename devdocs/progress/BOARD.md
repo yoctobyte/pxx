@@ -53,7 +53,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (297)
+## backlog (298)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -67,7 +67,6 @@ _none_
 | bug-a-riscv32-codegen-has-no-variant-support | A | 30 | bug | `var v: Variant; v := 1;` does not compile for --target=riscv32: `unsupported node in IR codegen: var_store`. Every other target (x86-64, i386, aarch64, arm32) compiles and runs the same program. Loud, not silent -- and it means any ticket claiming riscv32 'routes through PXXVarBinOpPas' is describing a path nothing can reach. | — |
 | bug-a-riscv32-sa-onstack-has-no-effect-under-qemu | A | 25 | bug | riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware. | — |
 | bug-a-rtti-kind-numbers-are-the-compilers-not-the-typinfo-enum-the-unit-documents | A | 40 | bug | typinfo.pas documents RetKind / TypeKind / ParamKinds as Ord(TTypeKind) and declares TTypeKind as FPC's enum (Int64 = 19), but the compiler fills those fields with its OWN internal TTypeKind (Int64 = 13). A user comparing a reported kind against the enum in the same unit gets a silently wrong answer; the unit's own TypeKindSize/TypeKindSigned already decode the compiler numbering, so the two halves of one file disagree. | decide-rtti-kind-numbering |
-| bug-a-the-builtin-type-name-table-exists-twice-and-the-two-disagree | A | 40 | bug | `ByteBool(x)` and a dozen other builtin type names are rejected as `undefined variable` in a CAST while working fine in a DECLARATION — the two sites carry separate name->kind tables, and where they overlap they disagree. | — |
 | bug-a-the-div-by-zero-check-is-still-missing-on-xtensa | A+S | 30 | bug | The last target without a pre-divide zero check. The other five landed 2026-08-23; xtensa was left out because it cannot be RUN on this box (bare profile emits an ESP image, not a Linux ELF), its branches carry only an 8-bit displacement, its windowed ABI rotates the register window on a call, and its divide is two shapes depending on XtensaSoftDivide. | — |
 | bug-a-varclear-is-undefined | A | 30 | bug | `VarClear(v)` is `error: undefined variable (VarClear)`, though FPC's Variants unit exports it and code that resets a Variant slot uses it. The runtime primitive already exists -- PXXVarClear is implemented and exported from builtinheap.pas -- so this is a missing declaration, not missing machinery. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
@@ -122,6 +121,7 @@ _none_
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
 | bug-p-a-builtin-pointer-cast-is-refused-as-an-assignment-target | P | 45 | bug | `PInteger(p)^ := 1;` as a STATEMENT is `undefined variable (PInteger)`, while the same cast as an EXPRESSION works. Only PByte/PWord/PInt32/PInt64/PDouble work as targets -- exactly the five that happen to be declared for real in compiler/builtin/*.pas -- so the statement path resolves the name through FindTypeAlias alone and never consults BuiltinPtrNameElemTk. ~20 names affected including PChar, PCardinal, PBoolean, PNativeInt. | — |
 | bug-p-a-call-result-is-refused-as-a-const-open-array-argument | P | 45 | bug | `Sum(Copy(a, 1, 3))` and `Sum(MakeArray)` -- a call result given to a `const array of T` open-array parameter -- do not compile. FPC accepts both. A naive relaxation was tried and REVERTED: it compiles `array of Double` and `array of string` into segfaults, so the by-ref check is a symptom and the real defect is that a dynamic-array-valued call is typed inconsistently. | — |
+| bug-p-a-char-cast-does-not-truncate-to-one-byte | P | 40 | bug | `Ord(Char(258))` answers 258 where FPC answers 2. Byte(x) and Word(x) truncate correctly, so the machinery is there -- tyChar is explicitly excluded from the narrowing mask in ir.inc, alongside tyBoolean, and only tyBoolean has a reason to be. Silent wrong value; AnsiChar is the same arm. | — |
 | bug-p-a-parameterless-function-is-undefined-as-a-method-call-argument | P | 35 | bug | A parameterless function used as an ARGUMENT to a method call fails to resolve — `error: undefined variable (zero)` — while the identical argument to a free function compiles. Any argument position. Found writing lib/rtl/mimic_urllib_request.pas, where `headers.get(name, pynone)` would not compile but `HeaderFirst(raw, name, pynone)` did. | — |
 | bug-p-a-record-typed-var-initialiser-is-refused | P | 40 | bug | `var R: TRec = (n: 7; ev: nil);` is refused with 'parenthesised initializer requires an array variable'. FPC accepts it — a var initialiser takes the same parenthesised record form a typed CONST does, and the const form already works here. One shape, two spellings, only one implemented. | — |
 | bug-p-a-typed-string-constant-cannot-be-assigned | P | 35 | bug | `const S: string = 'a'; ... S := 'b';` is `undefined variable (S)`, though the same assignment works for a typed Integer, Char or ARRAY constant. Typed consts are writable here (fpc's default in non-Delphi modes) for every type except string, which is registered as a read-only literal alias with no storage. | — |
@@ -338,6 +338,7 @@ _none_
 | refactor-a-backend-machine-code-lives-in-six-shared-files | A | 35 | refactor | A backend is not ir_codegen_<arch>.inc + asmtext_<arch>.inc. Six shared files emit or name per-arch machine code: symtab.inc (three full function epilogues), asmenc.inc (inline-asm text for all five targets), ir_codegen.inc (the shared -O pipeline calls two aarch64 passes by name), asmfront.inc, exception_emit.inc, and -- the one that crosses a lane -- cparser.inc, the C FRONTEND, which writes the C _start entry stub as raw rv32_/a64_/arm32_ emission. Measured by the omission defines, which turn every one of these into a compile error. | — |
 | refactor-a-search-path-helpers-live-in-the-c-preprocessor | A | 25 | refactor | AddPasUnitDir / AddPasIncDir / AddCIncludeDir are generic search-path functions that live in cpreproc.inc, so compiler.pas's own -Fu/-I handling depends on the C frontend. Six of the eleven errors from omitting the C frontend are this misplacement, not coupling: moving them drops omit-c from 11 sites to about 4. | — |
 | refactor-a-seven-frontends-borrow-rust-parser-helpers | A | 40 | refactor | Zig, ALGOL, Erlang, Fortran, LOLCODE and Whitespace all call five helpers whose bodies live in rparser.inc, so PXX_NO_RUST alone fails with 198 errors and Rust can only be omitted together with all six. Three different layers are marooned under one R prefix: AST constructors (share, wrong file), RWiden (numeric widening — SEMANTICS, should not be shared at all), and REmitParamRegSpill (raw x86-64 emission in a frontend). | — |
+| refactor-a-the-const-cast-width-table-is-the-third-copy | A | 30 | refactor | ConstIntCastWidth is a third copy of the builtin type-name table -- name to width+signedness, for const-expression casts -- and it carries the same longint/nativeint disagreements that bug-a-the-builtin-type-name-table-exists-twice just settled in the other two. Not a bug today: nothing observably differs. It is the count that is the problem. | — |
 | refactor-a-the-greenfield-frontends-share-each-others-parser-helpers | A | 30 | refactor | Omitting rparser.inc breaks zparser.inc in 123 places, plus gparser/eparser/fparser — the greenfield frontends call each other's support functions, which is exactly what the-substrate-is-ast-and-ir-not-the-parser.md says not to do. Costs nothing today; makes R and Z individually unomittable and couples two language specs. | — |
 | refactor-c-string-literal-decay-belongs-at-the-producer | C | 45 | refactor | The +8 that turns a C string literal's handle into a char* is duplicated at three consumers (assign, return, call argument), each keyed on `ASTKind[...] = AN_STR_LIT`. Any wrapper node defeats all three at once -- which is exactly how bug-c-a-pointer-cast-of-a-string-literal-points-at-the-length-prefix happened. Do the decay once, at the producer. | — |
 | refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag | C | 25 | refactor | cparser's partial-index builder marks 'this add is raw bytes, do not scale' by RETAGGING its base ASTTk to tyInt64 — a type tag used as a flag. tyInt64 is also the honest element tag of a `long long` array, and that collision cost a real bug. | — |
@@ -568,9 +569,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2293)
+## done (2294)
 
-2293 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2294 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -708,7 +709,6 @@ _none_
 - [p 42] [P] feature-pascal-builtin-tobject-class
 - [p 40] [U] decide-rtti-kind-numbering (unblocks 1)
 - [p 40] [A] bug-a-nilpy-leading-double-star-in-a-call-is-not-detected
-- [p 40] [A] bug-a-the-builtin-type-name-table-exists-twice-and-the-two-disagree
 - [p 40] [B] bug-b-inttostr-of-a-qword-prints-it-signed
 - [p 40] [B] bug-b-varisstr-is-false-for-a-one-character-string
 - [p 40] [C] bug-c-driver-misses-the-shared-runtime-finalisation-step
@@ -718,6 +718,7 @@ _none_
 - [p 40] [N] bug-n-tk-got-files-are-invisible-to-testmgr-privatization
 - [p 40] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
+- [p 40] [P] bug-p-a-char-cast-does-not-truncate-to-one-byte
 - [p 40] [P] bug-p-a-record-typed-var-initialiser-is-refused
 - [p 40] [T] bug-t-twatch-status-says-down-while-the-daemon-is-alive-and-testing
 - [p 40] [P] compat-pascal-a-string-n-field-makes-a-record-a-different-size-than-fpc
@@ -838,6 +839,7 @@ _none_
 - [p 30] [D] idea-public-status-page
 - [p 30] [A] perf-c-parse-codegen-large-file-superlinear
 - [p 30] [N] perf-nilpy-remaining-perbyte-string-builders
+- [p 30] [A] refactor-a-the-const-cast-width-table-is-the-third-copy
 - [p 30] [A] refactor-a-the-greenfield-frontends-share-each-others-parser-helpers
 - [p 30] [N] refactor-n-two-import-handlers-are-twins
 - [p 30] [D] task-d-document-warn-ignored-directives
