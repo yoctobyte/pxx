@@ -188,4 +188,4 @@ NilPy re-measured against CPython on the same operators (`not`, `~`, `&`, `|`,
 the NilPy/CPython re-measure + `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit 6241076ad.
