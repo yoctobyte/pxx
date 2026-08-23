@@ -208,6 +208,10 @@ function __pxxSqrDbl(d: Double): Double;
 function __pxxUpCase(c: Char): Char;
 function __pxxPos(const sub, s: AnsiString): Integer;
 
+{ Case-insensitive whole-string equality, on __pxxUpCase. Declared here because
+  VariantToBool needs it and is implemented far above the body. }
+function __pxxSameNameCI(const a, b: AnsiString): Boolean;
+
 { FPC System bit rotates (RolDWord/RorDWord/RolQWord/RorQWord), reached through
   a parser soft-alias like UpCase/Pos so no real proc of those names exists to
   shadow a user's own. n is masked to the width like FPC/x86 do. }
@@ -1129,6 +1133,10 @@ end;
 function VariantToBool(const v: Variant): Boolean;
 var
   p: PVariantRecord;
+  vbTxt: AnsiString;
+  vbInt: Int64;
+  vbDbl: Double;
+  vbCode: Integer;
 begin
   { PASCAL rules. This once carried Python's truthiness while NilPy was still
     routed through it; NilPy now has pylib's pyvar_to_bool. FPC RAISES for a
@@ -1139,7 +1147,55 @@ begin
     Result := PDouble(@p^.Payload)^ <> 0.0
   else if p^.VType = 0 then
     Result := False
-  else if (p^.VType = 6) or (p^.VType = 7) then
+  else if (p^.VType = 5) or (p^.VType = 6) then
+  begin
+    { STRINGY -> Boolean. This arm used to refuse every string outright, on the
+      strength of a measurement that only covered the EMPTY one: '' does raise
+      in FPC, and so does 'zz', but 'True' converts. A one-value measurement had
+      become a whole-tag rule, and it killed programs on the exact spelling a
+      Boolean arrives in from a config file or a query result.
+
+      FPC's rule, measured across 21 spellings: the two keywords
+      case-insensitively and WITHOUT trimming (' true' raises), else parse it as
+      a number and test against zero ('2.5' is True, '0.0' is False), else
+      raise. The number half is PXXVarNumCoerce's own Val -> ValFloat ladder, so
+      the two cannot disagree about what numeric text is.
+
+      VT_CHAR joins as its ONE-CHARACTER text: pxx has a char variant and FPC
+      does not (`v := c` gives FPC a varString), so there is no oracle, and
+      treating it as a 1-character string is both the coherent reading and what
+      PXXVarNumCoerce already does with the tag.
+
+      NilPy does not reach here -- pylib's pyvar_to_bool keeps Python's
+      truthiness, where '' is False and 'zz' is True.
+      bug-a-a-string-variant-never-converts-to-a-boolean }
+    if p^.VType = 5 then
+      vbTxt := Chr(Byte(p^.Payload))
+    else
+      vbTxt := PAnsiString(@p^.Payload)^;
+    if __pxxSameNameCI(vbTxt, 'true') then
+      Result := True
+    else if __pxxSameNameCI(vbTxt, 'false') then
+      Result := False
+    else
+    begin
+      Val(vbTxt, vbInt, vbCode);
+      if vbCode = 0 then
+        Result := vbInt <> 0
+      else
+      begin
+        ValFloat(vbTxt, vbDbl, vbCode);
+        if vbCode = 0 then
+          Result := vbDbl <> 0.0
+        else
+        begin
+          PXXVariantError('cannot convert a string to boolean');
+          Result := False;
+        end;
+      end;
+    end;
+  end
+  else if p^.VType = 7 then
   begin
     PXXVariantError('cannot convert ' + VariantTagName(p^.VType) +
                     ' to boolean');

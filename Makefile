@@ -5436,6 +5436,10 @@ test-core: $(COMPILER)
 	# plain Trunc() is deliberately unaffected.
 	./$(COMPILER) -Fulib/rtl test/test_variant_double_to_integer_rounds.pas $(TESTTMP)/test_vardblround26
 	test "$$($(TESTTMP)/test_vardblround26 | tail -1)" = "ALL OK"
+	# A stringy Variant converts to a Boolean by FPC's rule -- keywords, then
+	# numeric text, then raise. The raising rows are asserted as raises.
+	./$(COMPILER) -Fulib/rtl test/test_variant_string_to_boolean.pas $(TESTTMP)/test_varstrbool26
+	test "$$($(TESTTMP)/test_varstrbool26 | tail -1)" = "ALL OK"
 	# Free through a BASE reference runs the descendant's Destroy (virtual, via
 	# root VMT slot 0). Byte-identical to fpc -Mobjfpc; --compact-classes has no
 	# root slots and keeps the parse-time behaviour by design, so it is asserted
