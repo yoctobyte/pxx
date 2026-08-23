@@ -176,4 +176,4 @@ the 20-row value differential + pinned-vs-HEAD value check on x86-64/i386/arm32
 + `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit b1a007f27.
