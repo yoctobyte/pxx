@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 unfinished:21 blocked:7 backlog:296 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2292 rejected:40`
+`urgent:2 unfinished:21 blocked:7 backlog:297 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2293 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -50,11 +50,12 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 285, ranked
+## Ready — top 30 of 286, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [T]` bug-t-the-native-tier-times-out-and-publishes-a-contentless-red
 - `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree-2
+- `[p 70] [P]` regression-test-core-test-variant-string-ops
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-callable-to-str-param-fails
 - `[p 65] [B]` bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
 - `[p 65] [T]` bug-t-agents-kill-each-others-processes-with-pattern-pkill
@@ -81,6 +82,5 @@ _none — no lane is locked._
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
 - `[p 53] [S]` feature-esp-peripheral-callback-api
-- `[p 50] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 
-_255 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_256 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

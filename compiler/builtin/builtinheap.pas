@@ -4698,13 +4698,33 @@ begin
 end;
 
 procedure PXXWriteVariant(v: Pointer);
-{ Tag-dispatched write of a 16-byte variant slot; mirrors EmitWriteVariant
-  (x86-64): int/int64/bool as signed integer, double natural, char raw,
-  string payload bytes, empty/object nothing. }
+{ Tag-dispatched write of a 16-byte variant slot; the runtime twin of
+  x86-64's inline EmitWriteVariant: bool as True/False, int/int64 as a signed
+  integer, double natural, char raw, string payload bytes.
+
+  Two arms x86-64 has and this does not, deliberately: it spells an EMPTY slot
+  `None` and an OBJECT slot `<object>`, both Python renderings. FPC prints
+  nothing for a cleared Variant and RAISES for Null, so copying those spellings
+  here would propagate a contested rendering to three more targets — that
+  question is [[bug-a-a-null-variant-renders-as-none-in-pascal]] and settles in
+  one place for all targets once it is answered. Measured 2026-08-24 across
+  bool / int / negative int / double / char / string: after the bool arm below,
+  Boolean was the ONLY tag the two renderers disagreed about. }
 var tag, iv, len, i, s: Int64; ch: Char;
 begin
   tag := PWord(v)^;
-  if (tag = 1) or (tag = 2) or (tag = 4) then  { VT_INT / VT_INT64 / VT_BOOL }
+  if tag = 4 then                              { VT_BOOL }
+  begin
+    { Not as an integer. `writeln(v)` with v a Boolean Variant printed True and
+      False on x86-64 and 1 and 0 on i386, arm32 and aarch64 — same source,
+      same program, output that depends on the target, and the 1/0 form is not
+      what FPC prints either. The Python spelling is the same word, so one arm
+      serves both frontends.
+      bug-a-a-boolean-variant-writes-as-1-or-0-off-x86-64 }
+    iv := PWord(Int64(v) + 8)^;
+    if iv <> 0 then write('True') else write('False');
+  end
+  else if (tag = 1) or (tag = 2) then          { VT_INT / VT_INT64 }
   begin
     iv := PWord(Int64(v) + 8)^;
     write(iv);

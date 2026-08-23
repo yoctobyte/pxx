@@ -5455,6 +5455,11 @@ test-core: $(COMPILER)
 	# garbage off x86-64 because only the inline emitter implemented them.
 	./$(COMPILER) -Fulib/rtl test/test_variant_bitwise_and_not.pas $(TESTTMP)/test_varbitnot26
 	test "$$($(TESTTMP)/test_varbitnot26 | tail -1)" = "ALL OK"
+	# How writeln RENDERS each Variant tag. Asserts the whole output stream, not
+	# an ALL OK line, because the rendering is what is under test: a Boolean
+	# Variant printed True/False on x86-64 and 1/0 everywhere else.
+	./$(COMPILER) -Fulib/rtl test/test_variant_writes_every_tag.pas $(TESTTMP)/test_varwrite26
+	test "$$($(TESTTMP)/test_varwrite26 | tr '\n' '|')" = "True|False|42|-7|1.25|q|hey|"
 	# Free through a BASE reference runs the descendant's Destroy (virtual, via
 	# root VMT slot 0). Byte-identical to fpc -Mobjfpc; --compact-classes has no
 	# root slots and keeps the parse-time behaviour by design, so it is asserted
