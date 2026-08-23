@@ -121,4 +121,4 @@ Self-host fixedpoint converged in one round; `tools/gate.sh quick` GREEN.
 targets against FPC + the NilPy re-measure + `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit 3bf667e92.
