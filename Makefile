@@ -5428,6 +5428,10 @@ test-core: $(COMPILER)
 	# PXXVarBinOpPas for the other targets) -- this is what notices a drift.
 	./$(COMPILER) -Fulib/rtl test/test_variant_comparison_coerces_a_stringy_operand.pas $(TESTTMP)/test_varcmpcoerce26
 	test "$$($(TESTTMP)/test_varcmpcoerce26 | tail -1)" = "ALL OK"
+	# Null propagates through Variant ARITHMETIC (and deliberately not through
+	# comparison). Same two implementations as the row above.
+	./$(COMPILER) -Fulib/rtl test/test_variant_null_propagates_through_arithmetic.pas $(TESTTMP)/test_varnullprop26
+	test "$$($(TESTTMP)/test_varnullprop26 | tail -1)" = "ALL OK"
 	# Free through a BASE reference runs the descendant's Destroy (virtual, via
 	# root VMT slot 0). Byte-identical to fpc -Mobjfpc; --compact-classes has no
 	# root slots and keeps the parse-time behaviour by design, so it is asserted

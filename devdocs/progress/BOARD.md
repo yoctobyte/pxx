@@ -57,11 +57,11 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-a-null-variant-renders-as-none-in-pascal | A | 30 | bug | `string(v)` and `WriteLn(v)` on a Null/Unassigned Variant print `None` in a PASCAL program -- NilPy's spelling of VT_EMPTY leaking into Pascal output. FPC raises EVariantTypeCastError for the cast and prints nothing for the write. Pre-existing (identical under the pinned binary), loud in neither direction: a plausible-looking wrong string. | — |
 | bug-a-absolute-cannot-overlay-an-untyped-var-parameter | A | 30 | bug | `procedure Zap(var x); var b: array[0..255] of Byte absolute x;` is refused with 'absolute: target must not be a by-reference parameter'. That IS the idiom untyped parameters exist for — FPC compiles it — and the overlay machinery cannot express it because it works by copying the target's Offset, which for a by-ref param aliases the POINTER rather than the pointee. | — |
 | bug-a-low-high-of-a-char-indexed-array-answer-the-ordinal | P | 30 | bug | `Low(a)` / `High(a)` on `array['a'..'e'] of Integer` answer 97 and 101 where fpc answers 'a' and 'e', so `for c := Low(a) to High(a)` does not compile against a Char loop variable. The bound is folded as tyInteger because the array's INDEX type is not recorded anywhere. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
-| bug-a-null-does-not-propagate-through-variant-arithmetic | A | 45 | bug | `Null + 5` yields 5, not Null: VarIsNull(a + b) with a = Null answers False where FPC answers True. Null is read as payload 0 and behaves like the number zero through every arithmetic operator, so a missing value silently becomes a real one — the exact failure mode Null exists to prevent. | — |
 | bug-a-numeric-goto-labels-are-not-supported | A | 15 | bug | Numeric goto labels are not supported | — |
 | bug-a-real-is-single-on-hosted-riscv32 | A | 35 | bug | `Real` is Single (4 bytes) on hosted riscv32 Linux and Double (8) on every other target and on FPC. The type is keyed on the ARCH, not on the ESP profile, so a target with no ESP in it inherits an ESP decision — silently halving the precision of every `Real` in a ported program. | — |
 | bug-a-riscv32-codegen-has-no-variant-support | A | 30 | bug | `var v: Variant; v := 1;` does not compile for --target=riscv32: `unsupported node in IR codegen: var_store`. Every other target (x86-64, i386, aarch64, arm32) compiles and runs the same program. Loud, not silent -- and it means any ticket claiming riscv32 'routes through PXXVarBinOpPas' is describing a path nothing can reach. | — |
@@ -562,9 +562,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2286)
+## done (2287)
 
-2286 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2287 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -651,7 +651,6 @@ _none_
 - [p 50] [A] feature-release-checksums-repro
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [A] bug-a-null-does-not-propagate-through-variant-arithmetic
 - [p 45] [B] bug-b-format-percent-u-prints-a-signed-value
 - [p 45] [B] bug-b-inttostr-of-a-qword-above-2-63-renders-negative
 - [p 45] [N] bug-n-a-class-base-that-is-an-expression-does-not-compile
@@ -784,6 +783,7 @@ _none_
 - [p 35] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
 - [p 35] [P] refactor-p-three-hand-rolled-postfix-loops
 - [p 35] [D] task-d-document-the-strict-overload-width-flag
+- [p 30] [A] bug-a-a-null-variant-renders-as-none-in-pascal
 - [p 30] [A] bug-a-absolute-cannot-overlay-an-untyped-var-parameter
 - [p 30] [P] bug-a-low-high-of-a-char-indexed-array-answer-the-ordinal
 - [p 30] [A] bug-a-riscv32-codegen-has-no-variant-support

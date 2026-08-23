@@ -935,9 +935,40 @@ var
   la, ra: TVariantRecord;
   lp, rp: Pointer;
   lStr, rStr: Boolean;
+  dr: PVariantRecord;
 begin
   lp := left;
   rp := right;
+  { NULL PROPAGATION, ahead of everything else -- FPC's rule, inherited from OLE
+    and shared with SQL: an ARITHMETIC operator with a Null operand yields Null.
+    pxx read VT_EMPTY's payload as 0 and carried on, so `Null + 5` was 5 and
+    `Null * 5` was 0: a missing value silently became a real one, which is the
+    single failure mode Null exists to prevent. A Null column summed into a
+    total contributed 0 and the total looked plausible.
+
+    Ahead of the coercion below on purpose -- PXXVarNumCoerce would see a
+    non-stringy tag, return it untouched, and the numeric dispatch would then
+    read the 0 payload. Comparison is NOT affected and must not be: FPC answers
+    False for `Null = 5` and True for `Null <> 5`, which the raw dispatch
+    already does.
+
+    VT_EMPTY spells BOTH `Null` and `Unassigned` in this implementation, and
+    that is fine here rather than an approximation to apologise for: measured
+    against fpc 3.2.2, `Unassigned + 5` is not 5 either -- it is Unassigned. FPC
+    propagates both, each as itself, so one tag propagating gives the right
+    ANSWER for both. The residual difference is only which of
+    VarIsNull/VarIsEmpty says True afterwards, and that approximation is
+    pre-existing and already documented in lib/rtl/variants.pas' header.
+    bug-a-null-does-not-propagate-through-variant-arithmetic }
+  if (isCompare = 0) and
+     ((PVariantRecord(left)^.VType = 0) or (PVariantRecord(right)^.VType = 0)) then
+  begin
+    dr := PVariantRecord(dest);
+    dr^.VType := 0;                                   { VT_EMPTY }
+    dr^.Payload := 0;
+    Result := Int64(dest);
+    Exit;
+  end;
   lStr := (PVariantRecord(left)^.VType = 5) or (PVariantRecord(left)^.VType = 6);
   rStr := (PVariantRecord(right)^.VType = 5) or (PVariantRecord(right)^.VType = 6);
   if isCompare = 0 then

@@ -3289,6 +3289,7 @@ var pDbl1, pDbl2, pDoneInt, pLi, pRi, pLd, pRd, pForceDbl: Integer;
     pLhsStrCmp, pLhsCharCmp, pLhsDoneCmp, pLhsDone2Cmp, pLhsDone3Cmp, pLhsNilCmp: Integer;
     pRhsStrCmp, pRhsCharCmp, pRhsDoneCmp, pRhsDone2Cmp, pRhsDone3Cmp, pRhsNilCmp: Integer;
     pNoneA, pNoneB, pNoneDone, pNotNone: Integer;
+    pNullA, pNullB, pNullDone, pNotNull: Integer;
     pLhsStrConcat, pLhsCharConcat, pLhsDoneConcat, pLhsDone2Concat, pLhsDone3Concat, pLhsNilConcat: Integer;
     pRhsStrConcat, pRhsCharConcat, pRhsDoneConcat, pRhsDone2Concat, pRhsDone3Concat, pRhsNilConcat: Integer;
     pDoneStr1, pDoneStr2, pDoneStr3: Integer;
@@ -3303,6 +3304,7 @@ begin
   pasPlus := (not isCompare) and (opTk = Ord(tkPlus)) and (not PyProgramMode);
   pDoneStr1 := -1; pDoneStr2 := -1; pDoneStr3 := -1;
   pNoneDone := -1;
+  pNullDone := -1;
 
   { --- None (VT_EMPTY) equality, ahead of every other dispatch ---
     Python's None equals None and NOTHING else. Both the string and the numeric
@@ -3334,6 +3336,46 @@ begin
     EmitB($E9); pNoneDone := CodeLen; EmitI32(0);             { jmp L_all_done }
     { L_not_none: }
     Patch32(pNotNone, CodeLen - (pNotNone + 4));
+  end;
+
+  { --- NULL PROPAGATION, ahead of the string dispatch and the coercion ---
+    FPC's rule, inherited from OLE and shared with SQL: an ARITHMETIC operator
+    with a Null operand yields Null. pxx read VT_EMPTY's payload as 0 and
+    carried on, so `Null + 5` was 5 and `Null * 5` was 0 -- a missing value
+    silently became a real one, which is the single failure mode Null exists to
+    prevent, and every database-shaped program is exposed: a Null column summed
+    into a total contributed 0 and the total looked plausible.
+
+    Before the string dispatch because `Null + 'x'` is Null too, and before the
+    coercion because a Null is not stringy, so PXXVarNumCoerce would hand it
+    back untouched and the numeric dispatch would read the 0 payload.
+
+    Comparison is deliberately excluded and must stay so -- FPC answers False
+    for `Null = 5` and True for `Null <> 5`, which the None-equality arm above
+    already does.
+
+    VT_EMPTY spells both `Null` and `Unassigned` here, and one tag is enough:
+    measured against fpc 3.2.2, `Unassigned + 5` is not 5 either, it is
+    Unassigned. FPC propagates both, each as itself. NilPy is excluded at emit
+    time -- `None + 5` is a TypeError there, not a value.
+    bug-a-null-does-not-propagate-through-variant-arithmetic }
+  if (not isCompare) and (not PyProgramMode) then
+  begin
+    EmitB($48); EmitB($8B); EmitB($07);                       { mov rax,[rdi] }
+    EmitB($48); EmitB($85); EmitB($C0);                       { test rax,rax }
+    EmitB($0F); EmitB($84); pNullA := CodeLen; EmitI32(0);    { jz L_null }
+    EmitB($48); EmitB($8B); EmitB($06);                       { mov rax,[rsi] }
+    EmitB($48); EmitB($85); EmitB($C0);                       { test rax,rax }
+    EmitB($0F); EmitB($85); pNotNull := CodeLen; EmitI32(0);  { jnz L_not_null }
+    { L_null: result := Null }
+    Patch32(pNullA, CodeLen - (pNullA + 4));
+    EmitB($48); EmitB($8D); EmitB($04); EmitB($25); EmitGlobRef(resultOff);  { lea rax,[result] }
+    EmitVariantClear;
+    EmitB($48); EmitB($C7); EmitB($00); EmitI32(VT_EMPTY);    { mov qword[rax], VT_EMPTY }
+    EmitB($48); EmitB($C7); EmitB($40); EmitB($08); EmitI32(0); { mov qword[rax+8], 0 }
+    EmitB($E9); pNullDone := CodeLen; EmitI32(0);             { jmp L_all_done }
+    { L_not_null: }
+    Patch32(pNotNull, CodeLen - (pNotNull + 4));
   end;
 
   { COMPARISON coerces a stringy operand too, by the same rule as arithmetic --
@@ -3781,6 +3823,7 @@ begin
 
   { L_all_done — the None-equality arm above jumps straight here }
   if pNoneDone >= 0 then Patch32(pNoneDone, CodeLen - (pNoneDone + 4));
+  if pNullDone >= 0 then Patch32(pNullDone, CodeLen - (pNullDone + 4));
 end;
 
 procedure EmitWriteCStr;
