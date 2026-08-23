@@ -81,4 +81,4 @@ The stub's `track: P` guess was wrong — a Variant comparison rule is Track A
 (shared runtime + `EmitVarBinOp`), not the Pascal frontend. Harmless here
 because the same agent held both, but the guess is made from the test's file
 name and will keep landing Variant and RTL regressions in P.
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit f5dfab2b5.
