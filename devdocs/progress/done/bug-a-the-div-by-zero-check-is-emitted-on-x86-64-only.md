@@ -197,4 +197,4 @@ unchanged (`--esp-profile=bare --target=xtensa`).
 `--no-div-check` opt-out rows + `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit ef3f9168e.
