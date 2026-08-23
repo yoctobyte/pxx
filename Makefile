@@ -7979,7 +7979,7 @@ test-core: $(COMPILER)
 	./$(COMPILER) test/test_variant_string.pas $(TESTTMP)/test_variant_string26
 	test "$$($(TESTTMP)/test_variant_string26)" = "$$(printf 'hello\n42\nhello\nmanaged\nworld\nlocal\n7')"
 	./$(COMPILER) test/test_variant_string_ops.pas $(TESTTMP)/test_variant_string_ops26
-	test "$$($(TESTTMP)/test_variant_string_ops26)" = "$$(printf 'TRUE\nFALSE\nFALSE\nTRUE\nTRUE\nTRUE\nFALSE\nFALSE\nTRUE\nTRUE\nTRUE\nTRUE\nTRUE\nFALSE\nTRUE\nTRUE\nFALSE\nhello world\nab\nsweet potato\ngreen tomato\nFALSE\nTRUE\nFALSE\nFALSE')"
+	test "$$($(TESTTMP)/test_variant_string_ops26)" = "$$(printf 'TRUE\nFALSE\nFALSE\nTRUE\nTRUE\nTRUE\nFALSE\nFALSE\nTRUE\nTRUE\nTRUE\nTRUE\nTRUE\nFALSE\nTRUE\nTRUE\nFALSE\nhello world\nab\nsweet potato\ngreen tomato\nTRUE\nFALSE\nTRUE\nFALSE')"
 	./$(COMPILER) test/test_float_intrinsics.pas $(TESTTMP)/test_float_intrinsics26
 	test "$$($(TESTTMP)/test_float_intrinsics26)" = "$$(printf '3\n-3\n4\n2\n4\n0.7500\n3.0')"
 	./$(COMPILER) test/test_nil_python_core.npy $(TESTTMP)/test_nil_python_core26

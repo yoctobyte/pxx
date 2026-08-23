@@ -18,9 +18,11 @@ program test_variant_comparison_coerces_a_stringy_operand;
 
   Oracle: fpc 3.2.2 -Mobjfpc -O1 produces every value below. }
 {$mode objfpc}{$H+}
+uses sysutils;
 var
   a, b, c: Variant;
   fails: Integer;
+  raised, dummy: Boolean;
 
 procedure ChkB(const what: string; got, want: Boolean);
 begin
@@ -69,6 +71,29 @@ begin
   a := 2.5;  b := 2.5;   ChkB('dbl=dbl',      a = b,  True);
   a := 1;    b := 1.0;   ChkB('int=dbl',      a = b,  True);
   a := True; b := True;  ChkB('bool=bool',    a = b,  True);
+
+  { --- a stringy operand that is not a NUMBER raises, which is the other half
+        of the coercion rule and the half that has a cost. fpc 3.2.2 raises
+        EVariantError on `v('abc') = v(123)`; pxx used to answer
+        unequal-and-unordered instead, and test_variant_string_ops.pas asserted
+        that old answer until this rule landed. Asserted here because this file
+        already carries sysutils and a try/except; that one is deliberately
+        unit-free. --- }
+  raised := False;
+  a := 'abc'; b := 123;
+  try
+    dummy := (a = b);
+    if dummy then raised := False;
+  except
+    raised := True;
+  end;
+  ChkB('non-numeric string vs int raises', raised, True);
+
+  { ...and it is the CONVERSION that raises, not the mixed tags: the same pair
+    with numeric text compares fine. }
+  a := '123'; b := 123;  ChkB('numeric string vs int',  a = b,  True);
+  a := '99';  b := 123;  ChkB('numeric string < int',   a < b,  True);
+  a := '99';  b := 123;  ChkB('numeric string > int',   a > b,  False);
 
   { --- arithmetic, unchanged by the coercion move --- }
   a := '5';  b := '3';   c := a + b;  ChkS('cat',   c, '53');

@@ -57,11 +57,25 @@ begin
   v_res := 'green ' + v1;
   writeln(v_res);      { green tomato }
 
-  { --- 4. Tag Mismatches --- }
-  v1 := 'abc';
+  { --- 4. A STRINGY operand against a NUMBER coerces the text and compares
+        numerically, which is what FPC does.
+
+        This section used to assert the opposite -- 'abc' vs 123 answering
+        unequal-and-unordered (FALSE/TRUE/FALSE/FALSE) -- and that expectation
+        was pxx's old rule, not FPC's. fpc 3.2.2 RAISES EVariantError on
+        `v('abc') = v(123)`: it converts the stringy side, and 'abc' is not a
+        number. pxx now does the same, so the old rows could not stay.
+        bug-a-a-variant-comparison-does-not-coerce-a-stringy-operand
+
+        The rows here are the ones both implementations agree on and that still
+        exercise the mixed-tag path. The RAISING case is asserted in
+        test_variant_comparison_coerces_a_stringy_operand.pas, which has the
+        sysutils try/except this unit-free test deliberately does not. --- }
+  v1 := '123';
   v2 := 123;
-  writeln(v1 = v2);    { 0 }
-  writeln(v1 <> v2);   { 1 }
-  writeln(v1 < v2);    { 0 }
+  writeln(v1 = v2);    { 1 }
+  writeln(v1 <> v2);   { 0 }
+  v1 := '99';
+  writeln(v1 < v2);    { 1 }
   writeln(v1 > v2);    { 0 }
 end.
