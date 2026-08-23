@@ -8543,6 +8543,32 @@ begin
       so both now call the one helper. }
     NormalizeUnsignedLiteralOperand(left, right);
     NormalizeUnsignedLiteralOperand(right, left);
+    { A PChar compared against a string or a char compares CONTENTS, as in FPC.
+      pxx compared the two POINTERS, so `p = 'alpha'` answered whatever pointer
+      identity happened to say: True when p had been assigned that very literal
+      (same data-section handle), False for the same text built at runtime.
+      `PChar(s) = 'alpha'` with s built by concatenation was already answering
+      the wrong thing before any of this; the assign-a-literal case only looked
+      right by luck, and stopped looking right the moment
+      bug-p-a-string-literal-assigned-to-a-pchar-is-empty made the assignment
+      store char 0 instead of the handle.
+
+      Normalised HERE, on the operand, for the same reason the `+` wrap sits at
+      the additive level: every downstream comparison arm then sees two string
+      operands and needs to know nothing about PChar. Excluded in C mode, where
+      `p == "x"` genuinely IS a pointer comparison.
+      refactor-centralize-managed-string-pchar-conversion }
+    if not CProgramMode then
+    begin
+      if IsNodePChar(left) and
+         ((ASTTk[right] = Ord(tyAnsiString)) or (ASTTk[right] = Ord(tyString)) or
+          (ASTTk[right] = Ord(tyChar))) then
+        left := WrapPCharToString(left)
+      else if IsNodePChar(right) and
+         ((ASTTk[left] = Ord(tyAnsiString)) or (ASTTk[left] = Ord(tyString)) or
+          (ASTTk[left] = Ord(tyChar))) then
+        right := WrapPCharToString(right);
+    end;
     if PyExprMode and (op in [tkEq, tkNeq]) and
        PyNodeIsPyBytes(left) and PyNodeIsPyBytes(right) then
     begin

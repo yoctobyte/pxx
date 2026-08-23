@@ -5466,6 +5466,11 @@ test-core: $(COMPILER)
 	# disagreed (nativeint cast as tyInt64 = 8 bytes on a 32-bit target).
 	./$(COMPILER) -Fulib/rtl test/test_builtin_type_names_cast_and_declare.pas $(TESTTMP)/test_typenames26
 	test "$$($(TESTTMP)/test_typenames26 | tail -1)" = "ALL OK"
+	# `p := 'literal'` on a PChar stored the literal's HANDLE, so WriteLn(p)
+	# printed nothing; a one-char literal stored the ORDINAL and segfaulted on
+	# the next read; and `p = 'alpha'` compared pointers, not contents.
+	./$(COMPILER) -Fulib/rtl test/test_pchar_from_a_string_literal.pas $(TESTTMP)/test_pcharlit26
+	test "$$($(TESTTMP)/test_pcharlit26 | tail -1)" = "ALL OK"
 	# Free through a BASE reference runs the descendant's Destroy (virtual, via
 	# root VMT slot 0). Byte-identical to fpc -Mobjfpc; --compact-classes has no
 	# root slots and keeps the parse-time behaviour by design, so it is asserted

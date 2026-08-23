@@ -10,7 +10,7 @@ prio: 45
 - **Type:** refactor / data-completeness (Track A — `parser.inc` registration + node
   creation, `ir.inc` predicates). **Additive and fallback-preserving — NOT a big-bang
   rewrite.**
-- **Status:** backlog — slice 1 done (2026-08-21), slices 2-3 open
+- **Status:** working
 - **Opened:** 2026-07-17, from a user observation ("we keep special-casing AnsiString,
   keep finding issues"). **Re-scoped 2026-07-18** after the user correctly pointed out the
   sane, low-risk shape: *just store the pointer type; C already does it.*
@@ -297,3 +297,68 @@ WideChar a PChar's element type is variable (`PWideChar`, `PByte`, `PInteger`…
 and a kind per pointee does not scale. That asymmetry is worth stating in the
 ticket before anyone starts, since "do what WideChar did" is now the obvious and
 probably wrong instinct.
+
+## The acceptance line's differential, run again 2026-08-24 — and what it found
+
+The acceptance line asks that "a fuzz pass finds no new PChar/WideChar-conversion
+divergence". Ran the PChar half again as a cross product: **7 sources** (a PChar
+var, a static array element by constant and by variable index, a dynamic array
+element, a record field, a function result, pointer arithmetic) × **7 contexts**
+(`AnsiString()` cast, assign, `WriteLn`, `'x' +`, `Length`, `=`, `<>`), each its
+own program, each diffed against fpc 3.2.2.
+
+**Four diverged, and none of them was where this ticket was looking.** They are
+recorded and fixed under [[bug-p-a-string-literal-assigned-to-a-pchar-is-empty]]:
+`p := 'literal'` stored the literal's HANDLE (so `WriteLn(p)` printed nothing), a
+one-character literal stored the ORDINAL and segfaulted, and `p = 'alpha'`
+compared POINTERS. The cross product is now 49/49 identical to FPC.
+
+Two of those three fixes are this ticket's own pattern one construct over, which
+is why they are noted here and not only there:
+
+- the `+8` character-data skip existed at the call-ARGUMENT boundary and not at
+  the ASSIGNMENT boundary — **one marshalling rule applied at one of its two
+  boundaries**, the exact shape of slice 1's "the metadata was there and the
+  reader was missing";
+- the comparison wrap was added at the RELATIONAL level next to the one this
+  ticket already added at the ADDITIVE level, by normalising the OPERAND rather
+  than growing an arm in the comparison chain — the same move, same reason,
+  stated in the same words.
+
+### The `^PChar` residual, now diagnosed rather than just listed
+
+The note above says *"`pp[i]` where `pp: PPChar` … the new arm deliberately does
+not cover"*. Measured properly this time, and it is sharper than "not covered":
+
+| context, on `q^` / `q[0]` / `(q+1)^` where `q: ^PChar` | result |
+| --- | --- |
+| `AnsiString(q^)`, `s := q^`, `Length(AnsiString(q^))` | correct |
+| `WriteLn(q^)` | prints the POINTER as a decimal number |
+| `'x' + q^` | empty string |
+
+The three that "work" are **not** recognition. `AnsiString(<any pointer>)`
+treats its operand as a PChar unconditionally — measured: `AnsiString(pi)` with
+`pi: ^Integer` and `AnsiString(rawPointer)` both render the text. So the cast
+and assign contexts are right by a blanket rule, and `WriteLn` and `+` are the
+two contexts that correctly REFUSE to guess, because `WriteLn(somePointer)` must
+print a number.
+
+**Why `IsNodePChar` cannot answer it today, and why that is slice 2 exactly.**
+For `q: ^PChar`, `Syms[q].PtrElemTk` is `tyPointer` — the pointee is a pointer,
+and the char-ness one level further in is recorded nowhere. `NodePtrElem` has no
+`AN_DEREF` arm either, and adding one would only return `tyPointer` again. The
+metadata is genuinely absent, not merely unread: this is the first shape in this
+ticket's history where that is true, and it is precisely the case node-side
+storage at creation (slice 2 proper) exists to serve — at `q^`'s creation the
+alias `^PChar` is in hand and PChar's own element type is one lookup away.
+
+So the residual is not a missing arm to be added cheaply. Left open, with the
+diagnosis banked rather than a half-fix applied.
+
+### Slice 3's re-scope, still owed
+
+Unchanged from the 2026-08-22 note: WideChar got a real type kind and no longer
+wants node-side storage, and whether PChar wants a `tyPChar` kind is a genuinely
+different call because a PChar's pointee varies. The `^PChar` finding above is
+the first concrete argument for node-side storage over a kind, since a kind
+cannot express "pointer to (pointer to char)" without one kind per depth.

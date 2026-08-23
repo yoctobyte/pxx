@@ -9760,12 +9760,49 @@ begin
                                IRPromoAddrOf(ASTRight[node]), -1, -1, tyInt64)
         else
         value := IRLowerAST(ASTRight[node]);
-        { A C string literal stored to a pointer must land on char 0, not the
-          8-byte Pascal length prefix the literal's handle points at. Apply the
-          same +8 skip the call-argument path uses (see the tyString->tyPointer
-          marshalling in AN_CALL). C-mode only -> Pascal self-build unaffected. }
-        if CProgramMode and (ASTKind[ASTRight[node]] = AN_STR_LIT) and
-           (lhsTk = tyPointer) then
+        { A ONE-CHARACTER literal is an AN_INT_LIT tagged tyChar, not a string
+          node -- so `p := 'e'` stored the ORDINAL 101 into the pointer and the
+          next `WriteLn(p)` dereferenced address 101 and died. Not a wrong
+          value, a SEGFAULT, and it reproduces with the pinned binary. FPC
+          reads a one-char literal in a PChar context as the one-char string it
+          also is, and prints `e`.
+
+          Retagged to the string node it should have been, which is the same
+          two-line move the frozen-string ARGUMENT path already makes
+          (pasparser_expr.inc, `TypeIsFrozenString(param)` + tyChar operand);
+          the source span is already on the node, so the retag is all it takes.
+          Done here rather than at the parser so the whole "a literal assigned
+          to a PChar" rule -- this and the +8 below -- lives in one place.
+          bug-p-a-string-literal-assigned-to-a-pchar-is-empty }
+        if (ASTKind[ASTRight[node]] = AN_INT_LIT) and
+           (IntToTypeKind(ASTTk[ASTRight[node]]) = tyChar) and
+           (ASTSLen[ASTRight[node]] > 0) and
+           (lhsTk = tyPointer) and IsNodePChar(ASTLeft[node]) then
+        begin
+          ASTKind[ASTRight[node]] := AN_STR_LIT;
+          ASTTk[ASTRight[node]] := Ord(tyString);
+          value := IRLowerAST(ASTRight[node]);
+        end;
+        { A string literal stored to a char pointer must land on char 0, not on
+          the 8-byte Pascal length prefix the literal's handle points at. Same
+          +8 skip the call-ARGUMENT path already applies (the tyString->tyPointer
+          marshalling in AN_CALL), which is why `Show('lit')` printed the text
+          while `p := 'lit'` did not.
+
+          Pascal reaches this too, and used not to: `p := 'abcde'` with
+          `p: PChar` stored the handle, so `WriteLn(p)` printed nothing (char 0
+          is the length prefix's low byte, then a NUL) and
+          `Length(AnsiString(p))` answered 1. Silent, and the idiom is
+          everywhere in C bindings. FPC assigns the address of the literal's
+          character data. bug-p-a-string-literal-assigned-to-a-pchar-is-empty
+
+          C keeps the blanket rule for ANY pointer destination, which is right
+          there: a C string literal IS a char*. Pascal asks IsNodePChar about
+          the DESTINATION instead, because Pascal does not permit a string
+          literal in a `p: Pointer` at all and pxx should not invent a meaning
+          for it. }
+        if (ASTKind[ASTRight[node]] = AN_STR_LIT) and (lhsTk = tyPointer) and
+           (CProgramMode or IsNodePChar(ASTLeft[node])) then
           value := IRAppend(IR_BINOP, value,
                             IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
                             Ord(tkPlus), 0, Ord(tyPointer));
