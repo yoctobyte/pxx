@@ -224,4 +224,4 @@ claimed here covers four targets, not five.
 `make compiler/pascal26` converged + the differential above + `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-23 — resolved, commit PENDING-COMMIT.
+- 2026-08-23 — resolved, commit 46b7aa284.
