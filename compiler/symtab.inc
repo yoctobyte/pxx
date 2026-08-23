@@ -86,6 +86,7 @@ procedure EmitLoadConstXtensa(rd: Integer; v: Int32); forward;
 procedure EmitLoadGlobAddrXtensa(rd: Integer; bssOff: Integer); forward;
 procedure EmitLoadDataRefXtensa(rd: Integer; dataOff: Integer); forward;
 procedure EmitCallProc(procIdx: Integer); forward;
+function DivZeroCheckProc: Integer; forward;
 procedure EmitManagedLocalCleanup(retSymIdx: Integer); forward;
 { Scope-exit release of a proc's managed locals on ANY target. Body in
   ir_codegen.inc — see the note there for why the six arms had to be one
@@ -9869,6 +9870,27 @@ begin
   { snapshot the body this site is being aimed at — see CallFixTarget }
   CallFixTarget[CallFixCount] := Procs[procIdx].BodyAddr;
   Inc(CallFixCount);
+end;
+
+function DivZeroCheckProc: Integer;
+{ The ONE decision behind every backend's pre-divide zero check: -1 means emit
+  no check, anything else is the proc to call when the divisor is zero.
+
+  Kept here, beside EmitCallProc, because the check itself cannot be shared --
+  each backend has its own divide instruction, its own divisor register and its
+  own branch encoding -- but the POLICY must be. Five backends transcribing
+  `if NoDivCheck then ... FindProc('PXXDivZero') ...` is how the x86-64 version
+  ended up being the only one that had it at all
+  (bug-a-the-div-by-zero-check-is-emitted-on-x86-64-only).
+
+  x86-64 additionally falls back to an emitted unit-free stub (Div0StubAddr)
+  when builtinheap is absent; that stub is x86-64 machine code, so on the cross
+  targets a missing PXXDivZero means no check rather than a wrong call, which is
+  today's behaviour for a program that pulls no unit at all. }
+begin
+  Result := -1;
+  if NoDivCheck then Exit;
+  Result := FindProc('PXXDivZero');
 end;
 
 procedure EmitCallProc(procIdx: Integer);

@@ -432,6 +432,26 @@ begin
   Patch32(pSkip, skipBranchEnc or ((((CodeLen - pSkip) div 4) and $7FFFF) shl 5));
 end;
 
+procedure EmitDivZeroCheckA64;
+{ Pre-divide zero check, aarch64 leg: divisor in x1. `cbnz x1, .ok` over a call
+  to PXXDivZero, which never returns.
+
+  aarch64's sdiv/udiv do not trap -- the ARM spec says a zero divisor yields 0 --
+  so before this, `1 div 0` silently answered 0 while the same program on x86-64
+  raised. Shaped like EmitOvfCheckA64 above (patch the skip branch's imm19 after
+  the call is emitted); the policy is DivZeroCheckProc's, shared with every
+  other backend.
+  bug-a-the-div-by-zero-check-is-emitted-on-x86-64-only }
+var pSkip, dzProc: Integer;
+begin
+  dzProc := DivZeroCheckProc;
+  if dzProc < 0 then Exit;
+  pSkip := CodeLen;
+  EmitI32($B5000001);                       { cbnz x1, .ok  (imm19 patched below) }
+  EmitCallProc(dzProc);
+  Patch32(pSkip, $B5000001 or ((((CodeLen - pSkip) div 4) and $7FFFF) shl 5));
+end;
+
 procedure EmitCvtIntToF64A64(dReg, xReg: Integer; srcTk: TTypeKind);
 { int -> double: scvtf for signed sources, ucvtf for unsigned 64-bit ones —
   scvtf converted a qword >= 2^63 to a negative double
@@ -1763,6 +1783,7 @@ begin
         end
         else if op = Ord(tkDiv) then
         begin
+          EmitDivZeroCheckA64;
           { UDIV for an unsigned dividend, SDIV otherwise (matches the arm32 /
             riscv32 backends, which key off the dividend type). Emitting SDIV for
             an unsigned operand whose top bit is set (e.g. size_t ~0) treated it
@@ -1773,6 +1794,7 @@ begin
         end
         else if op = Ord(tkMod) then
         begin
+          EmitDivZeroCheckA64;
           if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then EmitI32($9AC10802) { udiv x2, x0, x1 }
           else EmitI32($9AC10C02);                          { sdiv x2, x0, x1 }
           EmitI32($9B018040);  { msub x0, x2, x1, x0 }

@@ -1098,9 +1098,11 @@ begin
   { Integer div-by-zero abort stub (Runtime error 200): referenced by div/mod
     sites that have no builtinheap PXXDivZero to call. Emitted only when the
     pre-scan saw a div/mod token (feature-opt-div0-stub-on-use) — division-free
-    programs carry neither the stub nor its message string. x86-64 only for now
-    (other backends keep their per-target hardware behavior until their sites
-    get the check — see bug-integer-div-zero-sigfpe-uncatchable). }
+    programs carry neither the stub nor its message string. The STUB stays
+    x86-64 only: it is emitted machine code, and the other backends now emit the
+    check too but call builtinheap's PXXDivZero directly, skipping the check
+    when that unit is absent rather than calling a stub they cannot emit
+    (bug-a-the-div-by-zero-check-is-emitted-on-x86-64-only). }
   { needsHeap keeps the stub: builtinheap's OWN div sites compile before its
     PXXDivZero is registered (FindProc misses mid-unit) and fall back to the
     stub. C mode likewise (C tokens carry no tkDiv; C '%'/'/' emit checks).

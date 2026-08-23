@@ -505,12 +505,42 @@ begin
   end;
 end;
 
+procedure EmitDivZeroCheckRV32(divisorInA1Only: Boolean);
+{ Pre-divide zero check, riscv32 leg. The 32-bit form tests a1 (the divisor);
+  the 64-bit form ORs a0:a1 into t6, which is the software long-division core's
+  entry convention (that core clobbers t0..t6, so t6 is free here). Branches
+  over a call to PXXDivZero, which never returns.
+
+  RISC-V defines division by zero as producing an all-ones quotient and the
+  dividend as the remainder -- no trap -- so before this `1 div 0` silently
+  answered -1 and `17 mod 0` answered 17. Shaped like EmitOvfCheckRISCV32 above.
+  bug-a-the-div-by-zero-check-is-emitted-on-x86-64-only }
+var pSkip, dzProc, testReg: Integer;
+begin
+  dzProc := DivZeroCheckProc;
+  if dzProc < 0 then Exit;
+  if divisorInA1Only then
+    testReg := reg_a1
+  else
+  begin
+    rv32_or(reg_t6, reg_a0, reg_a1);       { zero iff both halves are }
+    testReg := reg_t6;
+  end;
+  pSkip := CodeLen;
+  rv32_bne(testReg, reg_zero, 0);          { -> .ok (patched below) }
+  EmitCallProc(dzProc);
+  Patch32(pSkip, EncodeRISCVBNE(testReg, reg_zero, CodeLen - pSkip));
+end;
+
 procedure EmitUDivMod64RISCV32(wantMod: Boolean);
 { Unsigned 64-bit divide. Pre: dividend in t0:t1 (lo:hi), divisor in a0:a1.
   Restoring binary long division, 64 iterations MSB-first: the dividend doubles
   as the quotient register (t0:t1), the remainder builds in t2:t3. Post: result
   (quotient, or remainder when wantMod) in a0:a1. Clobbers t0..t6. }
 begin
+  { One guard covers BOTH 64-bit cores: the signed one negates the divisor and
+    then calls this, and a zero divisor is still zero after negation. }
+  EmitDivZeroCheckRV32(False);
   EmitAsmRv32([
     'addi t2, zero, 0',     { R.lo = 0 }
     'addi t3, zero, 0',     { R.hi = 0 }
@@ -2033,12 +2063,14 @@ begin
         end
         else if op = Ord(tkDiv) then
         begin
+          EmitDivZeroCheckRV32(True);
           { unsigned dividend (Cardinal/LongWord, C unsigned int) -> divu }
           if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then rv32_divu(reg_a0, reg_a0, reg_a1)
           else rv32_div(reg_a0, reg_a0, reg_a1);
         end
         else if op = Ord(tkMod) then
         begin
+          EmitDivZeroCheckRV32(True);
           if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then rv32_remu(reg_a0, reg_a0, reg_a1)
           else rv32_rem(reg_a0, reg_a0, reg_a1);
         end

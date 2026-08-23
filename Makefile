@@ -5444,6 +5444,11 @@ test-core: $(COMPILER)
 	# or inventing an answer (-1 / 0 on the other targets). Three idiv sites.
 	./$(COMPILER) -Fulib/rtl test/test_variant_div_by_zero_raises.pas $(TESTTMP)/test_vardivzero26
 	test "$$($(TESTTMP)/test_vardivzero26 | tail -1)" = "ALL OK"
+	# Integer div/mod by zero raises on EVERY backend, not just x86-64 -- both
+	# widths, both signednesses (64-bit is a software long division on the
+	# 32-bit targets and needed its own guard).
+	./$(COMPILER) -Fulib/rtl test/test_div_by_zero_raises_on_every_target.pas $(TESTTMP)/test_divzeroall26
+	test "$$($(TESTTMP)/test_divzeroall26 | tail -1)" = "ALL OK"
 	# Free through a BASE reference runs the descendant's Destroy (virtual, via
 	# root VMT slot 0). Byte-identical to fpc -Mobjfpc; --compact-classes has no
 	# root slots and keeps the parse-time behaviour by design, so it is asserted

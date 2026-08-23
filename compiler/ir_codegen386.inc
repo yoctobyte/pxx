@@ -865,6 +865,37 @@ begin
   EmitwriteUInt64_386;
 end;
 
+procedure EmitDivZeroCheck386(divisorInECX: Boolean);
+{ Pre-divide zero check. `divisorInECX` selects the 32-bit form (divisor in ecx)
+  from the 64-bit one (divisor in edx:eax, the software long-division core's
+  entry convention). Calls PXXDivZero, which never returns -- so the branch is
+  over the call and nothing after it needs a register preserved.
+
+  i386 had NO check at all: `1 div 0` answered -1, silently, where the same
+  program on x86-64 raised. The policy (opt-out, which proc) is
+  DivZeroCheckProc's, shared with every other backend; only these few
+  instructions are per-target.
+  bug-a-the-div-by-zero-check-is-emitted-on-x86-64-only }
+var dzProc, jOff: Integer;
+begin
+  dzProc := DivZeroCheckProc;
+  if dzProc < 0 then Exit;
+  if divisorInECX then
+  begin
+    EmitB($85); EmitB($C9);                        { test ecx, ecx }
+  end
+  else
+  begin
+    EmitB($53);                                    { push ebx }
+    EmitB($89); EmitB($C3);                        { mov ebx, eax }
+    EmitB($09); EmitB($D3);                        { or ebx, edx  (zero iff both halves are) }
+    EmitB($5B);                                    { pop ebx  (flags survive pop) }
+  end;
+  EmitB($75); jOff := CodeLen; EmitB(0);           { jnz .ok }
+  EmitCallProc(dzProc);                            { never returns }
+  Code[jOff] := Byte(CodeLen - (jOff + 1));        { .ok: }
+end;
+
 procedure EmitUDivMod64Core_386(wantMod: Boolean);
 { Unsigned 64-bit divide. Precondition: the dividend is on the stack
   ([esp]=lo, [esp+4]=hi) and the divisor is in edx:eax. Restoring binary long
@@ -873,6 +904,9 @@ procedure EmitUDivMod64Core_386(wantMod: Boolean);
   the 8-byte dividend has been popped. Clobbers ebx, ecx, esi, edi. }
 var loopOff, skip1, jaOff, skip2: Integer;
 begin
+  { One guard covers BOTH 64-bit cores: the signed one negates the divisor and
+    then calls this, and a zero divisor is still zero after negation. }
+  EmitDivZeroCheck386(False);
   EmitB($52);                                      { push edx (D.hi) }
   EmitB($50);                                      { push eax (D.lo) }
   { stack: [esp]=D.lo [esp+4]=D.hi [esp+8]=N.lo [esp+12]=N.hi }
@@ -2578,6 +2612,7 @@ begin
         end
         else if op = Ord(tkDiv) then
         begin
+          EmitDivZeroCheck386(True);
           { unsigned dividend (Cardinal/LongWord, C unsigned int): zero edx + div }
           if TypeDivideUnsigned(lhsTk, rhsTk) then
             begin EmitB($31); EmitB($D2); EmitB($F7); EmitB($F1); end { xor edx,edx; div ecx }
@@ -2586,6 +2621,7 @@ begin
         end
         else if op = Ord(tkMod) then
         begin
+          EmitDivZeroCheck386(True);
           if TypeDivideUnsigned(lhsTk, rhsTk) then
             begin EmitB($31); EmitB($D2); EmitB($F7); EmitB($F1); end { xor edx,edx; div ecx }
           else

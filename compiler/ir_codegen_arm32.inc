@@ -541,6 +541,30 @@ begin
   end;
 end;
 
+procedure EmitDivZeroCheckArm32(divisorInR1Only: Boolean);
+{ Pre-divide zero check, arm32 leg. The 32-bit form tests r1 (the divisor); the
+  64-bit form tests r0:r1 together, which is the software long-division core's
+  entry convention -- r2 is free there, the core loads it one instruction later.
+  Branches over a call to PXXDivZero, which never returns.
+
+  arm32's sdiv/udiv do not trap (the ARM spec yields 0), and the software
+  64-bit core just ran its loop, so before this `1 div 0` silently answered -1
+  or 0 depending on which path it took. Shaped like EmitOvfCheckArm32 above.
+  bug-a-the-div-by-zero-check-is-emitted-on-x86-64-only }
+var pSkip, dzProc: Integer;
+begin
+  dzProc := DivZeroCheckProc;
+  if dzProc < 0 then Exit;
+  if divisorInR1Only then
+    EmitI32($E3510000)                       { cmp r1, #0 }
+  else
+    EmitI32($E1902001);                      { orrs r2, r0, r1  (zero iff both halves are) }
+  pSkip := CodeLen;
+  EmitI32($1A000000);                        { bne .ok  (imm24 patched below) }
+  EmitCallProc(dzProc);
+  Patch32(pSkip, $1A000000 or ((((CodeLen - pSkip - 8) div 4)) and $00FFFFFF));
+end;
+
 procedure EmitUDivMod64Arm32(wantMod: Boolean);
 { Unsigned 64-bit divide. Pre: [sp]=N.lo, [sp+4]=N.hi (dividend); divisor in
   r0:r1. Restoring binary long division, 64 iterations MSB-first. Post: the
@@ -548,6 +572,9 @@ procedure EmitUDivMod64Arm32(wantMod: Boolean);
   Clobbers r2..r6, r9. }
 var loopOff, skip1, jaOff, skip2: Integer;
 begin
+  { One guard covers BOTH 64-bit cores: the signed one negates the divisor and
+    then calls this, and a zero divisor is still zero after negation. }
+  EmitDivZeroCheckArm32(False);
   EmitI32($E59D2000);  { ldr r2, [sp]    (NQ.lo) }
   EmitI32($E59D3004);  { ldr r3, [sp, #4] (NQ.hi) }
   EmitI32($E3A04000);  { mov r4, #0  (R.lo) }
@@ -2045,12 +2072,14 @@ begin
         end
         else if op = Ord(tkDiv) then
         begin
+          EmitDivZeroCheckArm32(True);
           { unsigned dividend (Cardinal/LongWord, C unsigned int) -> udiv (bit21) }
           if TypeDivideUnsigned(lhsTk, rhsTk) then EmitI32($E730F110)   { udiv r0, r0, r1 }
           else EmitI32($E710F110);                               { sdiv r0, r0, r1 }
         end
         else if op = Ord(tkMod) then
         begin
+          EmitDivZeroCheckArm32(True);
           if TypeDivideUnsigned(lhsTk, rhsTk) then EmitI32($E732F110)   { udiv r2, r0, r1 }
           else EmitI32($E712F110);                               { sdiv r2, r0, r1 }
           EmitI32($E0020192);  { mul r2, r2, r1 }
