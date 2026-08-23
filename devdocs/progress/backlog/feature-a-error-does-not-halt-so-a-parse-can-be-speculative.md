@@ -83,3 +83,64 @@ limit, not a wrong answer. Worth noting for ranking, though, that this ticket
 is a **blocker with priority propagating down to it** — its item 1 is why
 `feature-n-nilpy-ast-typing-module-scope` sits at prio 8 — so the N deferral
 does not lower it; items 2 and 3 are A/P-facing on their own.
+
+## Slice 1 landed 2026-08-24 (claude-A) — the error path can return, and item 2 is real for names
+
+**What landed.** `Error` was one procedure that formatted a diagnostic and then
+`Halt`ed. It is now three: `ErrorPrint` (the only place a diagnostic is worded,
+so the `in:` line and the `near:` window cannot drift between callers), `Error`
+= print + halt, and **`ErrorRecover`** = print, count into `ErrCount`, and
+**return**. The Pascal frontend's four "this name does not resolve" sites take
+the recovering path; the driver halts on `ErrCount > 0` immediately after
+`ParseProgram`, before RTTI, fixups or any output.
+
+The ticket's own measured symptom:
+
+```
+$ pascal26 e1.pas -o e1
+pascal26:3: error: undefined variable (undefined_one)
+pascal26:4: error: undefined variable (undefined_two)
+$ echo $?   ->  1     $ ls e1   ->  no such file
+```
+
+**Why name resolution and not syntax.** A name that does not resolve is a
+*semantic* failure over a *well-formed token stream* — the parser's position is
+still exactly right, so there is nothing to resync and no rollback to design.
+That is why this slice is safe and the syntax half is not: past a syntax error
+the parser's position is meaningless, and continuing produces cascades, which is
+the failure mode the ticket itself warns about ("a compiler that limps on
+producing cascading nonsense, which is worse than stopping"). A syntax error
+still halts, and a recovered diagnostic followed by a syntax one reports both
+and then stops — measured.
+
+**The caller owes the parse a stand-in.** `ErrorRecover` returning with the
+symbol index still `-1` just moves the crash, so the two halves are one pair of
+helpers in `pasparser_lval.inc`: `ReportUndefinedName` (the three-way
+diagnostic, which existed in four drifting copies) and `PoisonSym`, which mints
+an ordinary Integer variable under the failed name. It is REGISTERED under that
+name, so a typo repeated five times is reported once — one line per mistake, not
+per occurrence. Nothing poisoned can reach codegen: `ErrCount` is checked before
+any emission.
+
+Capped at `MAX_REPORTED_ERRORS = 20`, then `too many errors, stopping`. Past a
+handful, a cascading file produces noise rather than information.
+
+**Gate:** `make compiler/pascal26` fixedpoint converged in one round;
+`tools/gate.sh quick` GREEN; new `test-core` case
+`test_two_undefined_names_both_report_fail` asserts all three properties (both
+names reported, the repeat silent, no binary written).
+
+### What is left, and it is most of the ticket
+
+- **Item 1 (speculative parse) is NOT delivered.** `ErrorRecover` is the
+  *mechanism* a trial parse needs, but the hard half named in "Shape, not a
+  prescription" is untouched: what state a failed attempt must unwind. The
+  pieces exist — `SymRollbackTo` is already used by six parsers — but nothing
+  ties an error to a rollback point yet, and until it does NilPy's typing pass
+  still cannot trial-parse a name it has not seen.
+- **Item 2 is delivered for names only.** Syntax errors still halt at the first
+  one; that is a deliberate boundary, not an oversight.
+- **Extending recovery is per-site work with the pattern now established.**
+  `class method not found`, `New: undefined variable` and the rest are the same
+  shape: report, mint a stand-in, `Exit`. Each one is a judgement about what
+  stand-in keeps the parse sane, which is why they were not swept in bulk.

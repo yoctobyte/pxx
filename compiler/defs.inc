@@ -98,6 +98,10 @@ const
   CPREP_MACRO_HASH_SIZE = 16384;   { power of two; ~half-full at MAX macros }
   MAX_DECL_NAMES = 256;  { comma-separated names in one var declaration line }
   MAX_ARR_DIMS = 6;      { max dimensions of a fixed multidimensional array }
+  { how many RECOVERED diagnostics are printed before the compiler gives up. A
+    file whose first error cascades produces noise, not information, past a
+    handful. feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+  MAX_REPORTED_ERRORS = 20;
   MAX_PENDING_INITS = 16384;  { constant global-var initializer assignments }
   MAX_LOCAL_INITS   = 4096;   { routine-local typed-const initializer assignments }
   { PendingInitElem / LocalInitElem carry an initializer element's array INDEX,
@@ -2476,6 +2480,10 @@ var
   LastTypePointerBaseRec : Integer;
   LastTypeProcSig : Integer;  { set by ParseTypeKind when a name resolves to a procedural type: signature proc index, else -1 }
   ErrorIdent : AnsiString;
+  { Recovered (non-fatal) diagnostics reported so far. Nonzero after the parse
+    means the compile FAILED -- the driver halts before any output is written.
+    feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+  ErrCount : Integer;
   { Nested `def` (feature-nilpy-nested-defs). A def inside another def cannot be
     emitted where it is written — single-pass emission would drop its body into
     the middle of the enclosing routine's code — so the statement parser

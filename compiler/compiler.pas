@@ -1886,6 +1886,14 @@ begin
     Next;
     ParseProgram;
   end;
+
+  { Recovered diagnostics: the parse was allowed to continue past a name that
+    did not resolve, so the file's other independent mistakes are reported in
+    the same run. It still FAILED -- stop here, before RTTI, fixups or any
+    output, so nothing downstream ever meets a poisoned symbol.
+    feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+  if ErrCount > 0 then Halt(1);
+
   { NilPy included: isinstance() resolves class identity through the same
     RTTI backlink chain (__pxxInheritsFrom) the Pascal `is` operator uses. }
   if IsPascalFrontend or isNilPy then

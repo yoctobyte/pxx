@@ -6,7 +6,11 @@ procedure WriteTokenContext; forward;   { body sits after GetTokenStrFromRaw, wh
 
 procedure WriteDiagSourceFile; forward;   { body sits after PasSrcOfTok is reachable; see below }
 
-procedure Error(const msg: AnsiString);
+{ The one place a diagnostic is FORMATTED. Error and ErrorRecover differ only
+  in what they do afterwards -- halt, or count and return -- so the wording, the
+  `in:` line and the `near:` window are written once and cannot drift apart.
+  feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+procedure ErrorPrint(const msg: AnsiString);
 begin
   { ErrorIdent names the symbol the diagnostic is about; when there is none, the
     old unconditional parens printed a bare "()" that reads like an empty format
@@ -17,7 +21,38 @@ begin
     writeln('pascal26:', CurTok.Line, ': error: ', msg);
   WriteDiagSourceFile;
   WriteTokenContext;
+  { cleared, because a RECOVERED diagnostic is followed by more of them: a stale
+    ident would be re-printed beside the next message, naming the wrong symbol. }
+  ErrorIdent := '';
+end;
+
+procedure Error(const msg: AnsiString);
+begin
+  ErrorPrint(msg);
   Halt(1);
+end;
+
+{ A diagnostic the caller can CARRY ON past: it is reported and counted, and the
+  parse continues so the next independent mistake in the file is found too. The
+  caller owes the parse a well-formed stand-in for whatever failed (see
+  PoisonSym in pasparser_lval.inc) -- returning here with a -1 symbol index or
+  an unset Result node just moves the crash.
+
+  Only ever a SEMANTIC failure over a well-formed token stream (a name that does
+  not resolve). A syntax error still halts: past one, the parser's position is
+  no longer meaningful and every later message is noise.
+
+  ErrCount is checked once, after the parse, and no output is written when it is
+  nonzero -- so nothing downstream ever sees a poisoned symbol. }
+procedure ErrorRecover(const msg: AnsiString);
+begin
+  ErrorPrint(msg);
+  Inc(ErrCount);
+  if ErrCount >= MAX_REPORTED_ERRORS then
+  begin
+    writeln('pascal26: too many errors, stopping');
+    Halt(1);
+  end;
 end;
 
 
@@ -718,6 +753,7 @@ begin
   StmtCallDepth := 0;
   MaxStackFrameSize := MAX_STACK_FRAME_SIZE;
   LaxDeclOrder := False;
+  ErrCount := 0;
   ImplicitVars := False;   { default off; --auto-locals (parsed after this) or {$IMPLICITVARS ON} turns it on }
   name := 'PXX';
   PasDefine(name);

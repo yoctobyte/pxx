@@ -2270,6 +2270,20 @@ test-nilpy: $(COMPILER)
 	test "$$($(TESTTMP)/test_nilpy_comparison_chaining26)" = "$$(printf 'True\nFalse\nTrue\nTrue\nTrue\nFalse\nTrue\ncall\nTrue')"
 	./$(COMPILER) test/test_pascal_forward_class_ok.pas $(TESTTMP)/test_pascal_forward_class_ok26
 	test "$$($(TESTTMP)/test_pascal_forward_class_ok26)" = "7"
+	@# a name that does not resolve is REPORTED and the parse carries on, so a
+	@# file's independent mistakes come out in one run instead of one per compile
+	@# cycle. Three properties: both names reported, `alpha`'s second mention
+	@# silent (recovery registers the failed name), and no output written.
+	@# feature-a-error-does-not-halt-so-a-parse-can-be-speculative
+	@rm -f $(TESTTMP)/test_two_undefined26
+	@out=$$(./$(COMPILER) test/test_two_undefined_names_both_report_fail.pas $(TESTTMP)/test_two_undefined26 2>&1); \
+	 rc=$$?; \
+	 n=$$(printf '%s\n' "$$out" | grep -c 'error: undefined variable'); \
+	 test "$$rc" = "1" && test "$$n" = "2" \
+	   && printf '%s\n' "$$out" | grep -q '(alpha)' \
+	   && printf '%s\n' "$$out" | grep -q '(beta)' \
+	   && test ! -e $(TESTTMP)/test_two_undefined26 \
+	  || { echo "test_two_undefined_names_both_report_fail: FAIL - rc=$$rc, $$n undefined-variable lines (want rc=1 and 2 lines, both named, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	@# a SECOND class of the same name in one unit must be refused, naming it
 	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas $(TESTTMP)/test_pascal_dup_class26 2>&1 \
 	  | grep -q 'duplicate class name TFoo' \

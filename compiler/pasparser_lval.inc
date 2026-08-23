@@ -17,6 +17,42 @@
   What is shared between frontends is the AST and the IR, never the parser:
   devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md }
 
+{ ===== a name that did not resolve =====
+
+  Both halves of recovering from one, so the four sites that report it stay in
+  step. Splitting them was how the three-way diagnostic below drifted between
+  its copies in the first place (normalise-dont-special-case.md).
+
+  ReportUndefinedName prints, counts, and RETURNS; PoisonSym then hands the
+  parse an ordinary Integer variable under the failed name, so everything after
+  it -- the assignment being parsed, the expression it sits in, the rest of the
+  file -- carries on against a symbol that behaves. It is REGISTERED under that
+  name, so a typo repeated five times is reported once rather than five times.
+
+  Nothing is ever emitted from a poisoned parse: the driver halts on ErrCount
+  after ParseProgram, before any output.
+  feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+procedure ReportUndefinedName(const nm: AnsiString);
+begin
+  ErrorIdent := nm;
+  if HiddenByDeclOrder(nm) then
+    ErrorRecover('undefined variable — it is a global declared later, declare it before use')
+  else if HiddenByForwardOrder(nm) then
+    ErrorRecover('routine used before its declaration — define it above, or add a forward; declaration (--strict/require-forward)')
+  else
+    ErrorRecover('undefined variable');
+end;
+
+function PoisonSym(const nm: AnsiString): Integer;
+begin
+  { the same shape --auto-locals mints for an undeclared name, minus the warning
+    and minus any chance of reaching codegen. A plain scalar deliberately: the
+    point is a symbol no later check has to special-case. }
+  LastTypeIsSub := False;
+  LastTypeRecId := REC_NONE;
+  Result := AllocVar(nm, tyInteger);
+end;
+
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   augBin: TTokenKind; augRead, augNode: Integer;   { `d[k] += v` }
@@ -953,13 +989,14 @@ begin
         end
         else
         begin
-          ErrorIdent := fieldName;
-          if HiddenByDeclOrder(fieldName) then
-            Error('undefined variable — it is a global declared later, declare it before use')
-          else if HiddenByForwardOrder(fieldName) then
-            Error('routine used before its declaration — define it above, or add a forward; declaration (--strict/require-forward)')
-          else
-            Error('undefined variable');
+          ReportUndefinedName(fieldName);
+          node := AllocNode(AN_IDENT);
+          ASTIVal[node] := PoisonSym(fieldName);
+          ASTTk[node] := Ord(tyInteger);
+          tk := tyInteger;
+          recName := REC_NONE;
+          Result := node;
+          Exit;
         end;
       end;
     end;
@@ -3245,13 +3282,8 @@ begin
   idx := FindSym(name);
   if idx < 0 then
   begin
-    ErrorIdent := name;
-    if HiddenByDeclOrder(name) then
-      Error('undefined variable — it is a global declared later, declare it before use')
-    else if HiddenByForwardOrder(name) then
-      Error('routine used before its declaration — define it above, or add a forward; declaration (--strict/require-forward)')
-    else
-      Error('undefined variable');
+    ReportUndefinedName(name);
+    idx := PoisonSym(name);
   end;
   CompileLValueAddressInternal(idx, tk, recName);
 end;
@@ -3268,13 +3300,8 @@ begin
   idx := FindSym(name);
   if idx < 0 then
   begin
-    ErrorIdent := name;
-    if HiddenByDeclOrder(name) then
-      Error('undefined variable — it is a global declared later, declare it before use')
-    else if HiddenByForwardOrder(name) then
-      Error('routine used before its declaration — define it above, or add a forward; declaration (--strict/require-forward)')
-    else
-      Error('undefined variable');
+    ReportUndefinedName(name);
+    idx := PoisonSym(name);
   end;
 
   Next; { consume identifier }
