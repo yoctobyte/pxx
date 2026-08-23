@@ -5,7 +5,7 @@ type: bug
 blocked-by: []
 status: done
 owner: claude-A
-commit: PENDING-COMMIT
+commit: 1bfd5e9e9
 summary: "`b := v` with v = 'True' RAISES EVariantError; FPC answers True. VariantToBool refuses every string, on the strength of a measurement that only covered the empty one. FPC accepts case-insensitive 'true'/'false' and any numeric text, and raises only for text that is neither -- so pxx kills a program on a value FPC converts."
 ---
 
@@ -108,4 +108,4 @@ rather than being duplicated.
 `make compiler/pascal26` converged + the 21-row differential + `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-23 — resolved, commit PENDING-COMMIT.
+- 2026-08-23 — resolved, commit 1bfd5e9e9.
