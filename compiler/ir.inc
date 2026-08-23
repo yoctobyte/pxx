@@ -7676,8 +7676,30 @@ begin
     begin
       if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant then
       begin
-        { `not v` is Python TRUTHINESS over the payload. The raw 8-byte load
-          was the tag, which is non-zero for every typed value, so `not b` was
+        { PASCAL's `not` is BITWISE on an integer and LOGICAL on a Boolean, and
+          on a Variant only the runtime TAG knows which — so hand it to the
+          runtime, exactly as FPC does. An ordinary CALL, which is why this
+          costs no per-backend codegen at all: the inline EmitVarBinOp on
+          x86-64 is a speed path for NilPy's hot binary operators, and a unary
+          `not` is not one of those.
+          bug-a-not-on-an-integer-variant-answers-a-boolean }
+        if (not PyProgramMode) and (FindProc('PXXVarNot') >= 0) then
+        begin
+          varIdx := AllocVar('', tyVariant);
+          { hidden variant temp: the prologue nil-init pass has to reach it, or
+            PXXVarNot reads a garbage destination tag and releases a wild
+            AnsiString (same reason IRPromoBoxedVariantAddr flags its temp). }
+          SymIsHiddenArgTemp[varIdx] := True;
+          Result := IRPromoCall('PXXVarNot',
+                      IRAppend(IR_LEA, varIdx, -1, -1, 0, Ord(tyPointer)),
+                      IRVariantAddr(ASTLeft[node]), -1, tyPointer);
+          IRTk[Result] := Ord(tyVariant);
+          ASTTk[node] := Ord(tyVariant);
+          Exit;
+        end;
+        { NilPy: `not v` is Python TRUTHINESS over the payload, and its result
+          genuinely IS a Boolean (`not 12` is False). The raw 8-byte load was
+          the tag, which is non-zero for every typed value, so `not b` was
           False whatever b held. }
         left := IRLowerVariantAsScalar(ASTLeft[node], tyBoolean);
         ASTTk[node] := Ord(tyBoolean);
@@ -8504,6 +8526,18 @@ begin
                             IRLowerAST(ASTRight[node]), Ord(IntToTypeKind(ASTTk[ASTRight[node]])), 0, Ord(tyVariant));
         end;
         item := Integer(ASTIVal[node]);
+        { Pascal spells `shr` as an IDENTIFIER — there is no tkShr token for
+          it, and ParseTerm stores Ord(tkIdent) as the operator. Every other
+          consumer of that convention already knows it (PromoOpHelper has the
+          same arm; so does the shift arm of each backend), but the variant
+          path did not, so `v shr 1` arrived at EmitVarBinOp as tkIdent and was
+          refused outright: "Variant arithmetic: unsupported operator". Turn it
+          into the one operator here, once, instead of teaching the convention
+          to the promo table and six backends separately.
+          In a BINOP tkIdent is only ever `shr` — the parser admits the
+          identifier solely when its text is 'shr'.
+          bug-a-not-on-an-integer-variant-answers-a-boolean }
+        if item = Ord(tkIdent) then item := Ord(tkShr);
         { A variant may hold a PROMOTABLE INT whose value does not fit 64 bits.
           Its payload is then a managed string, and the ordinary variant binop
           reads a payload as an integer — `v + w` returned pointer arithmetic, a

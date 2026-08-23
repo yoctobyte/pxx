@@ -370,6 +370,7 @@ procedure PXXRecordFinalize(recAddr: Pointer; desc: Pointer);
 procedure PXXDynArrayRelease(arrData: Pointer; desc: Pointer);
 function PXXDynArrayUnique(arrSlot: Pointer; desc: Pointer): Pointer;
 function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
+function PXXVarNot(dest: Pointer; src: Pointer): Int64;
 function PXXVarStrAppend(dest: Pointer; right: Pointer): Int64;
 procedure PXXVarClear(v: Pointer);
 procedure PXXVarRetain(v: Pointer);
@@ -3616,6 +3617,35 @@ end;
 type
   PDouble = ^Double;
 
+{ The bitwise operator set, named once. tkAnd = 30, tkOr = 31, tkShl = 103,
+  tkXor = 117, tkShr = 119 — the TTokenKind ordinals from defs.inc, which the
+  runtime cannot see. }
+function VarOpIsBitwise(opTk: NativeInt): Boolean;
+begin
+  VarOpIsBitwise := (opTk = 30) or (opTk = 31) or (opTk = 103) or
+                    (opTk = 117) or (opTk = 119);
+end;
+
+{ Apply one of them to two already-integral operands. Kept apart from its two
+  call sites so the INTEGER arm and the FLOAT arm of PXXVarBinOp cannot drift
+  the way this function and x86-64's EmitVarBinOp did.
+  `shr` is ARITHMETIC (sign-extending), matching the `sar` x86-64 emits and
+  Python's `>>`. Pascal's own `shr` is logical, and FPC's Variant `shr` is
+  neither — it narrows to 32 bits first, so `v(-12) shr 1` is 2147483642
+  there. All three agree on non-negative operands, which is every row anyone
+  has actually written; the fork is parked as decide-variant-bitwise-width. }
+function VarBitwiseInt(lVal, rVal: Int64; opTk: NativeInt): Int64;
+var r: Int64;
+begin
+  if opTk = 30 then r := lVal and rVal
+  else if opTk = 31 then r := lVal or rVal
+  else if opTk = 117 then r := lVal xor rVal
+  else if opTk = 103 then r := lVal shl rVal
+  else if lVal < 0 then r := not ((not lVal) shr rVal)   { arithmetic shr }
+  else r := lVal shr rVal;
+  VarBitwiseInt := r;
+end;
+
 function PXXVarBinOp(dest: Pointer; left: Pointer; right: Pointer; opTk: NativeInt; isCompare: NativeInt): Int64;
 var
   lTag, rTag, lVal, rVal, resVal: Int64;
@@ -3779,17 +3809,31 @@ begin
       else if opTk = 69 then Result := Int64(lDbl >= rDbl);
       Exit;
     end
-    else if (opTk = 33) or (opTk = 34) then { tkDiv = 33, tkMod = 34 }
+    else if (opTk = 33) or (opTk = 34) or VarOpIsBitwise(opTk) then
     begin
-      lVal := Trunc(lDbl);
-      rVal := Trunc(rDbl);
-      { The same pre-divide check an ordinary integer divide gets. Without it a
-        variant `1 div 0` answered GARBAGE here (-1 on i386/arm32, 0 on aarch64
-        -- whatever the target's divide instruction does with a zero divisor)
-        while the identical program on plain Integers raised EDivByZero. FPC
-        raises for both. bug-a-a-variant-div-by-zero-sigfpes-or-answers-garbage }
-      if rVal = 0 then PXXDivZero;
-      if opTk = 33 then resVal := lVal div rVal else resVal := lVal mod rVal;
+      if VarOpIsBitwise(opTk) then
+      begin
+        { A BITWISE op with a float operand: FPC ROUNDS it to an integer first
+          — `v(1.5) and v(10)` is 2, not the 0 that truncating gives. Same
+          Round-not-Trunc rule VariantToInt64 already follows. div/mod below
+          keep Pascal's truncation, which is a different operator rather than
+          an inconsistency. }
+        lVal := Round(lDbl);
+        rVal := Round(rDbl);
+        resVal := VarBitwiseInt(lVal, rVal, opTk);
+      end
+      else
+      begin
+        lVal := Trunc(lDbl);
+        rVal := Trunc(rDbl);
+        { The same pre-divide check an ordinary integer divide gets. Without it a
+          variant `1 div 0` answered GARBAGE here (-1 on i386/arm32, 0 on aarch64
+          -- whatever the target's divide instruction does with a zero divisor)
+          while the identical program on plain Integers raised EDivByZero. FPC
+          raises for both. bug-a-a-variant-div-by-zero-sigfpes-or-answers-garbage }
+        if rVal = 0 then PXXDivZero;
+        if opTk = 33 then resVal := lVal div rVal else resVal := lVal mod rVal;
+      end;
       if PWord(dest)^ = 6 then
         PXXStrDecRef(Pointer(PWord(Int64(dest) + 8)^));
       PWord(dest)^ := 1;
@@ -3833,7 +3877,23 @@ begin
       else if opTk = 71 then resVal := lVal - rVal
       else if opTk = 72 then resVal := lVal * rVal
       else if opTk = 33 then resVal := lVal div rVal
-      else if opTk = 34 then resVal := lVal mod rVal;
+      else if opTk = 34 then resVal := lVal mod rVal
+      { The BITWISE ops. x86-64's inline EmitVarBinOp has had them for as long
+        as NilPy has needed machine-word masking; this function — the dispatch
+        every OTHER target uses — did not, so the if-chain ran off its end and
+        stored whatever resVal happened to hold. `v(12) and v(10)` answered
+        -524095488 on i386, 4358436 on aarch64 and 1082138624 on arm32, for the
+        source that gives 8 on x86-64 and under FPC. One concept, two
+        implementations, and only one of them was ever finished.
+        bug-a-not-on-an-integer-variant-answers-a-boolean }
+      else if VarOpIsBitwise(opTk) then resVal := VarBitwiseInt(lVal, rVal, opTk)
+      else
+      begin
+        { and no silent fall-through ever again: an operator this function does
+          not implement now SAYS so rather than returning the stack. }
+        PXXVariantError('unsupported operator on a Variant');
+        resVal := 0;
+      end;
 
       if PWord(dest)^ = 6 then
         PXXStrDecRef(Pointer(PWord(Int64(dest) + 8)^));
@@ -3843,6 +3903,58 @@ begin
       Exit;
     end;
   end;
+end;
+
+{ Pascal's UNARY `not` on a Variant. Bitwise on an integer, logical on a
+  Boolean — Pascal picks between the two from the operand's type, and on a
+  Variant only the runtime TAG knows it. FPC dispatches exactly this way:
+  `not v` is -13 for v=12 and False for v=True.
+
+  Before this, `not v` was lowered as Python TRUTHINESS for every tag, so
+  `not v` with v=12 answered False. Wrong twice over — the VALUE, and the
+  result's TYPE, so `mask := not flags` handed a Boolean to everything
+  downstream and nothing afterwards mentioned `not`. The Boolean rows agreeing
+  is what hid it. NilPy keeps the truthiness lowering (Python's `not 12` IS
+  False) and never calls this.
+  bug-a-not-on-an-integer-variant-answers-a-boolean }
+function PXXVarNot(dest: Pointer; src: Pointer): Int64;
+var tag, v: Int64;
+begin
+  tag := PWord(src)^;
+  { the destination may be a reused temp still holding a string handle }
+  if PWord(dest)^ = 6 then
+    PXXStrDecRef(Pointer(PWord(Int64(dest) + 8)^));
+  if tag = 4 then                       { VT_BOOL }
+  begin
+    v := PInt64(Int64(src) + 8)^;
+    PWord(dest)^ := 4;
+    PInt64(Int64(dest) + 8)^ := Int64(v = 0);
+  end
+  else if (tag = 1) or (tag = 2) then   { VT_INT, VT_INT64 }
+  begin
+    v := PInt64(Int64(src) + 8)^;
+    PWord(dest)^ := 1;
+    PInt64(Int64(dest) + 8)^ := not v;
+  end
+  else if tag = 3 then                  { VT_DOUBLE }
+  begin
+    { round, then complement: FPC's `not v(1.5)` is -3, not -2. Same
+      Round-not-Trunc rule as the bitwise binops above.
+      Through a LOCAL, not `not Round(...)` directly: pxx answers TRUE for that
+      (it applies the logical `not` to a builtin call's result, giving 2 xor 1
+      = 3 here) -- bug-p-not-of-a-builtin-round-or-trunc-call-is-logical. }
+    v := Round(PDouble(Int64(src) + 8)^);
+    PWord(dest)^ := 1;
+    PInt64(Int64(dest) + 8)^ := not v;
+  end
+  else if tag = 0 then                  { VT_EMPTY / Null propagates }
+  begin
+    PWord(dest)^ := 0;
+    PInt64(Int64(dest) + 8)^ := 0;
+  end
+  else
+    PXXVariantError('`not` needs an ordinal Variant');
+  Result := Int64(dest);
 end;
 
 { `v := v + x` on a VARIANT slot, appended in place. Returns 1 when it handled

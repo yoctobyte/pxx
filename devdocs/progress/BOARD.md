@@ -53,16 +53,16 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (294)
+## backlog (296)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-a-boolean-variant-writes-as-1-or-0-off-x86-64 | A | 40 | bug | `writeln(v)` with v a Boolean Variant prints True/False on x86-64 and 1/0 on i386, arm32 and aarch64. Same source, same program, different output per target -- and the 1/0 form is not what FPC prints either. Pre-existing (reproduces with the pinned binary), and the same two-implementations-of-one-concept shape as the variant operator table. | — |
 | bug-a-a-null-variant-renders-as-none-in-pascal | A | 30 | bug | `string(v)` and `WriteLn(v)` on a Null/Unassigned Variant print `None` in a PASCAL program -- NilPy's spelling of VT_EMPTY leaking into Pascal output. FPC raises EVariantTypeCastError for the cast and prints nothing for the write. Pre-existing (identical under the pinned binary), loud in neither direction: a plausible-looking wrong string. | — |
 | bug-a-absolute-cannot-overlay-an-untyped-var-parameter | A | 30 | bug | `procedure Zap(var x); var b: array[0..255] of Byte absolute x;` is refused with 'absolute: target must not be a by-reference parameter'. That IS the idiom untyped parameters exist for — FPC compiles it — and the overlay machinery cannot express it because it works by copying the target's Offset, which for a by-ref param aliases the POINTER rather than the pointee. | — |
 | bug-a-low-high-of-a-char-indexed-array-answer-the-ordinal | P | 30 | bug | `Low(a)` / `High(a)` on `array['a'..'e'] of Integer` answer 97 and 101 where fpc answers 'a' and 'e', so `for c := Low(a) to High(a)` does not compile against a Char loop variable. The bound is folded as tyInteger because the array's INDEX type is not recorded anywhere. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 40 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
-| bug-a-not-on-an-integer-variant-answers-a-boolean | A | 45 | bug | `not v` on a Variant holding 12 answers False; FPC answers -13 (the bitwise complement). Silent wrong VALUE and wrong TYPE -- pxx applies logical not to every variant regardless of tag, where FPC picks bitwise-vs-logical from the operand. `v shr n` is the loud half of the same gap: `Variant arithmetic: unsupported operator`. | — |
 | bug-a-numeric-goto-labels-are-not-supported | A | 15 | bug | Numeric goto labels are not supported | — |
 | bug-a-real-is-single-on-hosted-riscv32 | A | 35 | bug | `Real` is Single (4 bytes) on hosted riscv32 Linux and Double (8) on every other target and on FPC. The type is keyed on the ARCH, not on the ESP profile, so a target with no ESP in it inherits an ESP decision — silently halving the precision of every `Real` in a ported program. | — |
 | bug-a-riscv32-codegen-has-no-variant-support | A | 30 | bug | `var v: Variant; v := 1;` does not compile for --target=riscv32: `unsupported node in IR codegen: var_store`. Every other target (x86-64, i386, aarch64, arm32) compiles and runs the same program. Loud, not silent -- and it means any ticket claiming riscv32 'routes through PXXVarBinOpPas' is describing a path nothing can reach. | — |
@@ -125,6 +125,7 @@ _none_
 | bug-p-a-parameterless-function-is-undefined-as-a-method-call-argument | P | 35 | bug | A parameterless function used as an ARGUMENT to a method call fails to resolve — `error: undefined variable (zero)` — while the identical argument to a free function compiles. Any argument position. Found writing lib/rtl/mimic_urllib_request.pas, where `headers.get(name, pynone)` would not compile but `HeaderFirst(raw, name, pynone)` did. | — |
 | bug-p-a-record-typed-var-initialiser-is-refused | P | 40 | bug | `var R: TRec = (n: 7; ev: nil);` is refused with 'parenthesised initializer requires an array variable'. FPC accepts it — a var initialiser takes the same parenthesised record form a typed CONST does, and the const form already works here. One shape, two spellings, only one implemented. | — |
 | bug-p-a-typed-string-constant-cannot-be-assigned | P | 35 | bug | `const S: string = 'a'; ... S := 'b';` is `undefined variable (S)`, though the same assignment works for a typed Integer, Char or ARRAY constant. Typed consts are writable here (fpc's default in non-Delphi modes) for every type except string, which is registered as a read-only literal alias with no storage. | — |
+| bug-p-not-of-a-builtin-round-or-trunc-call-is-logical | P | 45 | bug | `not Round(1.5)` answers TRUE where FPC answers -3: pxx applies the LOGICAL not (xor 1) to a builtin ordinal function's result. `not Trunc(d)` the same. A user-written `function Two: Int64` is fine, so it is the builtin calls specifically. Silent wrong value AND wrong type. | — |
 | bug-p-sizeof-rejects-a-pointer-deref-in-its-operand | P | 35 | bug | `SizeOf(p^.A)` is a parse error (`Expected: ), but got: ^`). SizeOf's operand parser is a hand-rolled selector walk that handles `v`, `v.f.g` and `v[i]` but has no `^` case, so any pointer deref in the operand is rejected outright. | — |
 | bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence | T | 45 | bug | file_cascade_ticket's Root-cause-suspects line falls back to 'likely a broken build or harness event' whenever no CASCADE_ROOT_JOBS entry is in the red set. That is a conclusion drawn from the absence of one narrow signal, printed with no hedge, and it is now directly contradicted by the Range section shipped in 8ec77190c — which on the live incident named the actual cause. Same defect class the Range work fixed for the sha: an auto-filed ticket asserting something it has no evidence for. | — |
 | bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio | T | 45 | bug | Float-accuracy assertions in the gated suites make a one-ulp move a CI RED, and a red job is worked at the priority of BEING RED - which overrides the owner's standing rule that float accuracy is low prio. Parking the tickets in float/ does not close this door; only the tests can. | — |
@@ -173,6 +174,7 @@ _none_
 | decide-old-style-object-types | U | 30 | decide | Decide: do we implement Turbo Pascal `object` types? | — |
 | decide-pointer-difference-unit | U | 30 | decide | FPC's `p - q` answers BYTES when either operand is an untyped Pointer (which includes `@x` under the default {$TYPEDADDRESS OFF}) and ELEMENTS when both are the same typed pointer. pxx always answers elements. `p - @a[0]` therefore prints 8 in FPC and 2 in pxx — a silent difference in ported code. Match FPC, keep the uniform rule, or diagnose? | — |
 | decide-rtti-kind-numbering | U | 40 | decide | typinfo.pas declares TTypeKind in FPC's order (tkInt64=19) but the RTTI blob the compiler emits carries the COMPILER's TTypeKind (tyInt64=13), so `if mi^.RetKind = Ord(tkInt64)` is silently false. Three ways out; they differ in whether the RTTI blob's numbering — a compiler ABI — changes. Recommendation: option 2. Needs a human call because option 1 breaks already-compiled consumers and option 2 spends the FPC-compatibility argument the FPC-ordered enum was added for. | — |
+| decide-variant-bitwise-width | U | 30 | decide | FPC narrows a Variant to 32 bits before a bitwise op, so `v(-12) shr 1` is 2147483642 there; pxx works in 64 bits and its `shr` is arithmetic, giving -6. Three readings of one expression (FPC's, Pascal's logical shr, our sar) and they agree on every non-negative operand. Which one do we owe? | — |
 | decide-vartype-returns-pxx-tags-not-fpc-codes | U | 30 | decide | `VarType(v)` returns pxx's internal tag (0..8), not FPC's varXxx code, and lib/rtl/variants.pas exports no varInteger/varDouble/varString constants at all -- so the FPC idiom `if VarType(v) = varInteger` does not compile. Fork: map VarType onto FPC's codes (compat, changes what existing pxx code comparing to VT_ constants sees) or export a pxx-flavoured constant set (no compat). Needs the owner's call on which surface is public. | — |
 | docs-d-document-exec-eval-and-the-builtins-incompatibility | D | 40 | docs | docs/targets/nil-python.md tells the public `eval`/`exec` do not exist (\"No eval of runtime-constructed code\") — but the explicit-dict form has worked since 2026-07-31 via pyeval's tree-walker. Document what exec/eval DO support, the refused ambient form, and the decided __builtins__ incompatibility (decided 2026-08-19, permanent for now). | — |
 | docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out | D | 45 | docs | docs/language/name-resolution.md:47 and docs/targets/nil-python.md:260 quote the bare-import refusal message and state the rule with no carve-out. As of 2026-08-20 a unit declaring {$PYEXTENSION} and binding the cpyext runtime IS bare-importable, so both pages are now wrong in the direction that makes a working program look unsupported. | — |
@@ -565,9 +567,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2291)
+## done (2292)
 
-2291 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2292 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -654,7 +656,6 @@ _none_
 - [p 50] [A] feature-release-checksums-repro
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
-- [p 45] [A] bug-a-not-on-an-integer-variant-answers-a-boolean
 - [p 45] [B] bug-b-format-percent-u-prints-a-signed-value
 - [p 45] [B] bug-b-inttostr-of-a-qword-above-2-63-renders-negative
 - [p 45] [N] bug-n-a-class-base-that-is-an-expression-does-not-compile
@@ -667,6 +668,7 @@ _none_
 - [p 45] [N] bug-nilpy-a-keyword-call-through-a-statically-unknown-callee-does-not-compile
 - [p 45] [P] bug-p-a-builtin-pointer-cast-is-refused-as-an-assignment-target
 - [p 45] [P] bug-p-a-call-result-is-refused-as-a-const-open-array-argument
+- [p 45] [P] bug-p-not-of-a-builtin-round-or-trunc-call-is-logical
 - [p 45] [T] bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence
 - [p 45] [T] bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio
 - [p 45] [T] bug-t-a-pin-verifys-reds-carry-no-reasons
@@ -703,6 +705,7 @@ _none_
 - [p 45] [P] refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too
 - [p 42] [P] feature-pascal-builtin-tobject-class
 - [p 40] [U] decide-rtti-kind-numbering (unblocks 1)
+- [p 40] [A] bug-a-a-boolean-variant-writes-as-1-or-0-off-x86-64
 - [p 40] [A] bug-a-nilpy-leading-double-star-in-a-call-is-not-detected
 - [p 40] [A] bug-a-the-builtin-type-name-table-exists-twice-and-the-two-disagree
 - [p 40] [B] bug-b-inttostr-of-a-qword-prints-it-signed
@@ -807,6 +810,7 @@ _none_
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
 - [p 30] [U] decide-old-style-object-types
 - [p 30] [U] decide-pointer-difference-unit
+- [p 30] [U] decide-variant-bitwise-width
 - [p 30] [U] decide-vartype-returns-pxx-tags-not-fpc-codes
 - [p 30] [D] docs-toolchain-cli-flags
 - [p 30] [A] feature-a-a-variant-has-no-null-tag

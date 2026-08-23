@@ -5449,6 +5449,12 @@ test-core: $(COMPILER)
 	# 32-bit targets and needed its own guard).
 	./$(COMPILER) -Fulib/rtl test/test_div_by_zero_raises_on_every_target.pas $(TESTTMP)/test_divzeroall26
 	test "$$($(TESTTMP)/test_divzeroall26 | tail -1)" = "ALL OK"
+	# Bitwise ops and unary `not` on a Variant. `not v` used to answer Python
+	# truthiness for every tag (v=12 gave False), `v shr 1` was refused because
+	# Pascal spells shr as an identifier, and every bitwise op returned stack
+	# garbage off x86-64 because only the inline emitter implemented them.
+	./$(COMPILER) -Fulib/rtl test/test_variant_bitwise_and_not.pas $(TESTTMP)/test_varbitnot26
+	test "$$($(TESTTMP)/test_varbitnot26 | tail -1)" = "ALL OK"
 	# Free through a BASE reference runs the descendant's Destroy (virtual, via
 	# root VMT slot 0). Byte-identical to fpc -Mobjfpc; --compact-classes has no
 	# root slots and keeps the parse-time behaviour by design, so it is asserted

@@ -3780,10 +3780,26 @@ begin
     end
     else
     begin
-    { div/mod and the BITWISE ops are integer operators: truncate the double
-      operands to int64, apply, store VT_INT64. (Pascal div/mod semantics.) }
-    EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);                  { cvttsd2si rax, xmm0 }
-    EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C9);                  { cvttsd2si rcx, xmm1 }
+    { div/mod and the BITWISE ops are integer operators: make both double
+      operands integral, apply, store VT_INT64.
+      The two differ in HOW: div/mod TRUNCATE (Pascal's rule for those
+      operators), while a bitwise op ROUNDS, because FPC rounds a float variant
+      before a bitwise op — `v(1.5) and v(10)` is 2 there, and truncating
+      answered 0. cvtsd2si ($2D) rounds under the default MXCSR mode, which is
+      round-half-to-even, the same rule FPC's Round uses. The runtime twin
+      (VarBitwiseInt in builtinheap.pas, used by every other target) makes the
+      same split with Round vs Trunc.
+      bug-a-not-on-an-integer-variant-answers-a-boolean }
+    if (opTk = Ord(tkDiv)) or (opTk = Ord(tkMod)) then
+    begin
+      EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C0);                { cvttsd2si rax, xmm0 }
+      EmitB($F2); EmitB($48); EmitB($0F); EmitB($2C); EmitB($C9);                { cvttsd2si rcx, xmm1 }
+    end
+    else
+    begin
+      EmitB($F2); EmitB($48); EmitB($0F); EmitB($2D); EmitB($C0);                { cvtsd2si  rax, xmm0 }
+      EmitB($F2); EmitB($48); EmitB($0F); EmitB($2D); EmitB($C9);                { cvtsd2si  rcx, xmm1 }
+    end;
     if      opTk = Ord(tkAnd) then begin EmitB($48); EmitB($21); EmitB($C8); end { and rax,rcx }
     else if opTk = Ord(tkOr)  then begin EmitB($48); EmitB($09); EmitB($C8); end { or  rax,rcx }
     else if opTk = Ord(tkXor) then begin EmitB($48); EmitB($31); EmitB($C8); end { xor rax,rcx }
