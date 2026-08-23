@@ -3783,6 +3783,12 @@ begin
     begin
       lVal := Trunc(lDbl);
       rVal := Trunc(rDbl);
+      { The same pre-divide check an ordinary integer divide gets. Without it a
+        variant `1 div 0` answered GARBAGE here (-1 on i386/arm32, 0 on aarch64
+        -- whatever the target's divide instruction does with a zero divisor)
+        while the identical program on plain Integers raised EDivByZero. FPC
+        raises for both. bug-a-a-variant-div-by-zero-sigfpes-or-answers-garbage }
+      if rVal = 0 then PXXDivZero;
       if opTk = 33 then resVal := lVal div rVal else resVal := lVal mod rVal;
       if PWord(dest)^ = 6 then
         PXXStrDecRef(Pointer(PWord(Int64(dest) + 8)^));
@@ -3821,6 +3827,8 @@ begin
     end
     else
     begin
+      { Pre-divide check -- see the note in the double arm above. }
+      if ((opTk = 33) or (opTk = 34)) and (rVal = 0) then PXXDivZero;
       if opTk = 70 then resVal := lVal + rVal
       else if opTk = 71 then resVal := lVal - rVal
       else if opTk = 72 then resVal := lVal * rVal

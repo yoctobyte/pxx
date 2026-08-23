@@ -5440,6 +5440,10 @@ test-core: $(COMPILER)
 	# numeric text, then raise. The raising rows are asserted as raises.
 	./$(COMPILER) -Fulib/rtl test/test_variant_string_to_boolean.pas $(TESTTMP)/test_varstrbool26
 	test "$$($(TESTTMP)/test_varstrbool26 | tail -1)" = "ALL OK"
+	# div/mod by zero on Variants raises instead of trapping (x86-64 SIGFPE'd)
+	# or inventing an answer (-1 / 0 on the other targets). Three idiv sites.
+	./$(COMPILER) -Fulib/rtl test/test_variant_div_by_zero_raises.pas $(TESTTMP)/test_vardivzero26
+	test "$$($(TESTTMP)/test_vardivzero26 | tail -1)" = "ALL OK"
 	# Free through a BASE reference runs the descendant's Destroy (virtual, via
 	# root VMT slot 0). Byte-identical to fpc -Mobjfpc; --compact-classes has no
 	# root slots and keeps the parse-time behaviour by design, so it is asserted

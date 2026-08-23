@@ -3699,6 +3699,15 @@ begin
   end
   else
   begin
+    { div/mod need the SAME pre-divide zero check an ordinary integer divide
+      gets -- the divisor is already in rcx, which is exactly what
+      EmitDivZeroCheckX64 expects. Without it a variant `1 div 0` reached a raw
+      idiv and died on SIGFPE with a core dump: uncatchable, no message, while
+      the identical program on plain Integers raised EDivByZero and its `except`
+      ran. FPC raises for both.
+      bug-a-a-variant-div-by-zero-sigfpes-or-answers-garbage }
+    if (opTk = Ord(tkDiv)) or (opTk = Ord(tkMod)) then
+      EmitDivZeroCheckX64;
     if      opTk = Ord(tkPlus)  then begin EmitB($48); EmitB($01); EmitB($C8); end             { add  rax,rcx }
     else if opTk = Ord(tkMinus) then begin EmitB($48); EmitB($29); EmitB($C8); end             { sub  rax,rcx }
     else if opTk = Ord(tkStar)  then begin EmitB($48); EmitB($0F); EmitB($AF); EmitB($C1); end { imul rax,rcx }
@@ -3781,6 +3790,12 @@ begin
     else if opTk = Ord(tkShl) then begin EmitB($48); EmitB($D3); EmitB($E0); end { shl rax,cl }
     else if opTk = Ord(tkShr) then begin EmitB($48); EmitB($D3); EmitB($F8); end { sar rax,cl }
     else begin
+    { The double arm has its OWN idiv and needs the same guard as the integer
+      one -- `v(1.5) div v(0.0)` truncates to 1 div 0 and SIGFPE'd here after
+      the integer path was already fixed. Divisor is in rcx by then, which is
+      what EmitDivZeroCheckX64 expects.
+      bug-a-a-variant-div-by-zero-sigfpes-or-answers-garbage }
+    EmitDivZeroCheckX64;
     EmitB($48); EmitB($99); EmitB($48); EmitB($F7); EmitB($F9);                  { cqo; idiv rcx }
     if opTk = Ord(tkMod) then begin EmitB($48); EmitB($89); EmitB($D0); end;     { mov rax,rdx (remainder) }
     end;
