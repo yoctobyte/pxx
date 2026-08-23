@@ -7391,6 +7391,14 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_widechar_nocast26)" = "$$(printf '1 A\n2 xA\n2 Ax\n1 B\n2 yC\n1 A')"
 	./$(COMPILER) test/test_pchar_concat_and_array_element.pas $(TESTTMP)/test_pchar_concat26
 	test "$$($(TESTTMP)/test_pchar_concat26)" = "$$(printf 'xyabcde\nxabcde\nabcdetail\nQabcde\nabcdeQ\nzabcde\nbcde\ncde\nabcde\ncde\npabcde\n5\neq\nabcde\ncde\nbcde\nqe\nbcde')"
+	# a POINTER TO PChar (`^PChar`, and PPChar which is FPC's name for the same
+	# `char**`) in every context that has to recognise a C string, plus Length
+	# over a plain PChar. Half of these looked right before only because
+	# AnsiString(<any pointer>) converts unconditionally; WriteLn, concat,
+	# Length and comparison all answered with the pointer. Stream matched
+	# against fpc 3.2.2 on the same source.
+	./$(COMPILER) test/test_pchar_pointer_to_pchar.pas $(TESTTMP)/test_pchar_ppchar26
+	test "$$($(TESTTMP)/test_pchar_ppchar26)" = "$$(printf 'abcde\nxabcde\nabcdey\nabcde\nabcde\n5\nTRUE\nFALSE\nabcde\nyabcde\nabcde\nzabcde\nTRUE\n5\n5\n4')"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; test "$$?" = "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26

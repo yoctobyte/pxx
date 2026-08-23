@@ -2504,6 +2504,55 @@ begin
     end;
   end;
 
+  { 7. A DEREF, or an ELEMENT, of a POINTER TO PChar — `q^` / `q[i]` where
+       `q: ^PChar`. The metadata is present and was simply unread, like arm 6:
+       ParseTypeKind's caret arm records depth 2 with the ULTIMATE base
+       (tyChar), so "depth exactly 2 over a char base" is precisely "this deref
+       is a PChar". Depth 3+ derefs to another multi-level pointer and must not
+       match.
+
+       Half the contexts appeared to work before this arm, which is why the
+       shape read as covered: `AnsiString(<any pointer>)` treats its operand as
+       a PChar unconditionally, so the cast and assign spellings were right by a
+       blanket rule that never looked at the type. `WriteLn(q^)` printed the
+       pointer as a decimal number and `'x' + q^` did pointer arithmetic —
+       the two contexts that correctly refuse to guess, and therefore the two
+       that needed the shape to be recognised.
+       refactor-centralize-managed-string-pchar-conversion }
+  if ASTKind[node] = AN_DEREF then
+  begin
+    { the deref chain already STORES what it computed on the node itself:
+      ASTSOffset = pointer levels REMAINING, ASTSLen = the ultimate base kind.
+      One level remaining over a char base is exactly "this deref is a PChar".
+      This is the node-side read this ticket's slice 2 asks for, against storage
+      that turned out to already exist. }
+    if (ASTSOffset[node] = 1) and
+       ((ASTSLen[node] = Ord(tyChar)) or (ASTSLen[node] = Ord(tyUInt8)) or
+        (ASTSLen[node] = Ord(tyInt8))) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+
+  if (ASTKind[node] = AN_INDEX) and (ASTLeft[node] >= 0) and
+     (ASTKind[ASTLeft[node]] = AN_IDENT) then
+  begin
+    { `q[i]` over `q: ^PChar` — indexing a POINTER rather than an array, so arm
+      6 above (which requires IsArray) does not answer it. No node-side storage
+      here to read, so it goes to the symbol: depth 2 over a char base. }
+    symId := ASTIVal[ASTLeft[node]];
+    if (symId >= 0) and (symId < SymCount) and
+       (Syms[symId].TypeKind = tyPointer) and (SymPtrDepth[symId] = 2) and
+       ((SymPtrBaseTk[symId] = Ord(tyChar)) or
+        (SymPtrBaseTk[symId] = Ord(tyUInt8)) or
+        (SymPtrBaseTk[symId] = Ord(tyInt8))) then
+    begin
+      Result := True;
+      Exit;
+    end;
+  end;
+
   { 5. If it's a binop pointer expression }
   if ASTKind[node] = AN_BINOP then
   begin

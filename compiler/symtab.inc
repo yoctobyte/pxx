@@ -3707,6 +3707,19 @@ begin
     end;
   end;
   SymSyncTypeRef(SymCount);
+  { PXXDBG=a.symptr:<name> (or `*`) — what a declaration actually RECORDED about
+    a pointer variable: depth, immediate pointee, ultimate base. The predicates
+    that decide "is this a PChar" read exactly these fields, so a shape that
+    lowers wrong is either metadata that was never populated or a reader that
+    never looked — and this says which, without a print-bisect.
+    refactor-centralize-managed-string-pchar-conversion }
+  if PxxDbgWants('a.symptr', name) then
+    WriteLn('PXXDBG a.symptr ', name, ' kind=', Ord(tk),
+            ' depth=', SymPtrDepth[SymCount],
+            ' elemTk=', Ord(Syms[SymCount].PtrElemTk),
+            ' baseTk=', SymPtrBaseTk[SymCount],
+            ' isArray=', Syms[SymCount].IsArray,
+            ' arrElemPtrTk=', Ord(Syms[SymCount].PtrElemTk));
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 

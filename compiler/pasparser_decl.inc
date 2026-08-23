@@ -422,6 +422,18 @@ begin
       begin
         LastTypePointerElemTk := BuiltinPtrNameElemTk(lo);
         LastTypePointerElemRec := REC_NONE;
+        { DEPTH and ULTIMATE BASE too, not just the immediate pointee. A builtin
+          pointer NAME is a one-level typed pointer exactly like the `^Byte` a
+          user writes, and the caret arm above builds `^PByte` by adding one to
+          whatever its element reported — so leaving these unset here made
+          `^PChar` come out as depth 1 over a base of tyPointer, and every
+          predicate that asks "how many levels, over what" got a wrong answer for
+          a pointer to a builtin pointer alias. The dropped-field pattern this
+          ticket is about, one construct further in.
+          refactor-centralize-managed-string-pchar-conversion }
+        LastTypePointerDepth := 1;
+        LastTypePointerBaseTk := Ord(LastTypePointerElemTk);
+        LastTypePointerBaseRec := REC_NONE;
         Result := tyPointer;
       end
       else if (not tnHasAlias) and (CaseEqual(lo, 'object')) then
@@ -442,6 +454,25 @@ begin
       else if (not tnHasAlias) and (CaseEqual(lo, 'pchar') or CaseEqual(lo, 'pansichar')) then
       begin
         LastTypePointerElemTk := tyChar;
+        { see the depth/base note on the builtin-pointer-name arm above }
+        LastTypePointerDepth := 1;
+        LastTypePointerBaseTk := Ord(tyChar);
+        LastTypePointerBaseRec := REC_NONE;
+        Result := tyPointer;
+      end
+      { PPChar / PPAnsiChar — a pointer to PChar, which FPC's System declares and
+        which is how a C `char**` (argv, an environment block, a
+        NULL-terminated name table) is spelled in Pascal. It was simply not a
+        known type name here: `var p: PPChar` failed with "unknown type". Two
+        levels over a char base, so `p^` is a PChar and everything that
+        recognises one — WriteLn, concat, Length, comparison — answers for it.
+        refactor-centralize-managed-string-pchar-conversion }
+      else if (not tnHasAlias) and (CaseEqual(lo, 'ppchar') or CaseEqual(lo, 'ppansichar')) then
+      begin
+        LastTypePointerElemTk := tyPointer;
+        LastTypePointerDepth := 2;
+        LastTypePointerBaseTk := Ord(tyChar);
+        LastTypePointerBaseRec := REC_NONE;
         Result := tyPointer;
       end
       { PROMOTABLE INT (feature-a-promotable-int). Opt-in and explicitly typed,

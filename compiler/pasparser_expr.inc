@@ -4917,6 +4917,18 @@ begin
         end
         else
         begin
+          { Length(p) over a PChar is FPC's strlen, not the pointer. Normalise
+            the OPERAND — the same move the concat, relational and argument
+            boundaries already make for this shape — so the runtime Length path
+            below sees an ordinary string and needs to know nothing about
+            pointers. `Length(arr[0])` over an `array of PChar` happened to
+            answer correctly already; a plain `Length(p)` printed the ADDRESS,
+            which is the two-arms-of-one-concept split this ticket is about.
+            (The wrap materialises a temporary to measure it; a strlen intrinsic
+            would avoid that, at the cost of a second mechanism for one concept.)
+            refactor-centralize-managed-string-pchar-conversion }
+          if (not CProgramMode) and IsNodePChar(valNode) then
+            valNode := WrapPCharToString(valNode);
           node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
           argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
           ASTLeft[node] := argSeq;

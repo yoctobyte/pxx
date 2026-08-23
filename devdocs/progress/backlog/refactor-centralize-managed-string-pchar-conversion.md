@@ -362,3 +362,81 @@ wants node-side storage, and whether PChar wants a `tyPChar` kind is a genuinely
 different call because a PChar's pointee varies. The `^PChar` finding above is
 the first concrete argument for node-side storage over a kind, since a kind
 cannot express "pointer to (pointer to char)" without one kind per depth.
+
+## Slice 2's node-side read, 2026-08-24 — and the ^PChar residual was the metadata after all
+
+The `^PChar` residual above was recorded as *"the metadata is genuinely absent,
+not merely unread"* and left for node-side storage. Both halves of that sentence
+turned out to be wrong, and the way they were wrong is the point:
+
+**The node-side storage this ticket's slice 2 asks for ALREADY EXISTS.** The
+deref chain in `pasparser_lval.inc` computes, for every `x^`, the pointer levels
+REMAINING and the ULTIMATE base kind, and writes them onto the deref node
+(`ASTSOffset` = remaining depth, `ASTSLen` = base kind, `ASTIVal` = base rec).
+It has been doing that all along. `IsNodePChar` simply never read it — so the
+new arm is four lines: one level remaining over a char base IS a PChar.
+
+**And the metadata WAS absent, one construct earlier than the ticket looked.**
+`ParseTypeKind`'s builtin-pointer-name arms — the `BuiltinPtrNameElemTk` family
+and `pchar`/`pansichar` — set the immediate pointee and **left depth and base
+unset**, while the `^T` caret arm right above them builds a nested pointer by
+adding one to *whatever its element reported*. So `^PChar` came out as depth 1
+over a base of `tyPointer` instead of depth 2 over `tyChar`, and every predicate
+that asks "how many levels, over what" got a wrong answer. Measured, not
+reasoned: a new `PXXDBG=a.symptr:<name>` topic prints what a declaration
+actually recorded, which is how a plausible story about node-side storage got
+replaced by the field that was empty.
+
+That topic is worth keeping — it answers this ticket's recurring question ("was
+the metadata never populated, or never read?") in one run, and it is the exact
+lesson of `devdocs/dev/debugging-playbook.md`: the first arm added here was
+written against an ASSUMED symbol layout, compiled, and changed nothing.
+
+### What that fixed, measured as a cross product
+
+**72 programs** — 8 PChar sources (a var, `q^`, `q[0]`, an array element, a
+record field, a function result, pointer arithmetic, and an element of an array
+of `^PChar`) × 9 contexts (`WriteLn`, assign, concat on either side,
+`AnsiString()`, `Length`, `=`, `<>`, a `const AnsiString` argument), each its own
+program, each diffed against fpc 3.2.2. Before: 15 diverged. After: 7, all of
+them the one shape below.
+
+Three fixes, and each is this ticket's own pattern:
+
+1. **The dropped depth/base at the two builtin-pointer-alias arms** — the
+   registration half.
+2. **`IsNodePChar` reads the deref node's stored (remaining depth, base)** — the
+   reader half, against storage that already existed. `q[i]` over a `^PChar`
+   goes to the symbol instead, since the index path stores nothing.
+3. **`Length(p)` over a PChar answered with the ADDRESS** — while
+   `Length(arrayOfPChar[0])` on the line beside it answered 5. Fixed by
+   normalising the OPERAND at the Length site (wrap to string), the same move
+   already made at the concat, relational and argument boundaries, rather than
+   growing a pointer arm inside the Length lowering. Note the shape of the bug:
+   one concept, correct through one spelling and wrong through another.
+
+**And `PPChar` was not a known type name at all** — `var p: PPChar` failed with
+*"unknown type"*, on a compiler whose C interop is a headline feature and whose
+users write `char**` as PPChar (argv, an environment block, a NULL-terminated
+name table). Two levels over a char base, declared beside `pchar`, and the three
+fixes above then make every context answer for `p^` and `p[i]`.
+
+`test/test_pchar_pointer_to_pchar.pas`, 16 rows, byte-identical to fpc 3.2.2
+natively and under qemu on i386 / aarch64 / arm32 / riscv32. `pinned` does not
+compile it. Gate: `make compiler/pascal26` fixedpoint + `tools/gate.sh quick`.
+
+### The one shape still open: an element of an `array of ^PChar`
+
+`qa[0]^` where `qa: array[0..1] of ^PChar` is wrong in all 7 non-blanket
+contexts, and unlike the residual it replaces, this one really is missing
+metadata. An array symbol records its element's immediate pointee
+(`Syms[].PtrElemTk`) and **nothing about the element's own depth or base** —
+there is no `SymElemPtrDepth`. So the deref chain's AN_INDEX branch has nothing
+to propagate onto the deref node, and the node-side reader above correctly
+declines.
+
+Adding a pair of parallel arrays would work and is the wrong shape: the fix is
+an element TYPE REFERENCE rather than another two parallel fields, which is
+exactly what [[feature-a-typeref-migrate-consumers]] is for (`SymTR` already
+carries `PtrBaseTk` for the symbol itself). Left open and tied there rather than
+bolted on — the ticket has enough parallel-field pairs already.
