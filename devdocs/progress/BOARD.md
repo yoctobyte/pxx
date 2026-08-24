@@ -360,7 +360,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
-| bug-a-aarch64-o3-segfaults-the-compiler-on-an-empty-program | A | 60 | bug | `pascal26 --target=aarch64 -O3` SEGFAULTS the compiler on `program n; begin end.` — an empty program, no absolute, no loop, nothing. Deterministic, aarch64-only, -O3-only, present on `pinned`. The FPC-seeded build of the SAME source compiles it fine, so it is a miscompile (or a latent out-of-bounds) in the self-hosted binary, not a logic error visible to FPC. | — |
+| chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 35 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
 
 ## experimental (20)
 
@@ -575,9 +575,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2306)
+## done (2307)
 
-2306 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2307 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -635,7 +635,6 @@ _none_
 - [p 65] [C] feature-c-csmith-differential-fuzzing
 - [p 65] [P] feature-pascal-corpus-generics
 - [p 65] [P] feature-pascal-corpus-oop
-- [p 60] [A] bug-a-aarch64-o3-segfaults-the-compiler-on-an-empty-program
 - [p 60] [N] bug-n-inferred-return-type-of-true-division-is-int
 - [p 60] [P] bug-p-an-assignment-is-not-type-checked-at-all
 - [p 60] [T] bug-t-the-push-rate-starves-breadth-coverage-entirely
@@ -768,6 +767,7 @@ _none_
 - [p 35] [P] bug-p-a-typed-constant-of-pchar-type-is-a-parse-error
 - [p 35] [P] bug-p-a-typed-string-constant-cannot-be-assigned
 - [p 35] [P] bug-p-sizeof-rejects-a-pointer-deref-in-its-operand
+- [p 35] [A] chore-a-the-range-checked-fpc-seed-cannot-be-built
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
 - [p 35] [U] decide-classinfo-returns-our-blob-or-nothing

@@ -726,6 +726,12 @@ begin
         else
         begin
           if islot >= 6 then Continue;
+          { The table bound, stated rather than implied. islot < 6 already caps
+            the REGISTER pool (x19..x24), but the three RcResident* arrays are
+            indexed by RcResidentCount, and when they were sized 0..3 nothing
+            here said so -- slots 4 and 5 wrote past the end of all three, which
+            is bug-a-aarch64-o3-segfaults-the-compiler-on-an-empty-program. }
+          if RcResidentCount >= RC_RESIDENT_SLOTS then Continue;
           if Counts[k] <= 3 then Continue;      { int threshold: > 3 loop accesses }
           if not RegcallScalarType(Syms[si].TypeKind) then Continue;
           if ResidentRegOf(si) <> 0 then Continue;

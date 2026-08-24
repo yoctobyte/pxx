@@ -3721,6 +3721,33 @@ test-core: $(COMPILER)
 	      echo "test_absolute_alias_survives_residency$$o: MISMATCH"; \
 	      echo "--- expected"; echo "$$exp"; echo "--- got"; echo "$$got"; exit 1; fi; \
 	  done
+	# The -O3 loop-residency pass parks a body's hottest loop scalars in
+	# callee-saved registers. x86-64's pool is r12..r15 (four); aarch64's is
+	# x19..x24 (SIX) — and both passes index ONE set of parallel tables, sized by
+	# x86-64's pool. Residents five and six wrote past the end of three adjacent
+	# BSS arrays, which showed up as the COMPILER segfaulting: `--target=aarch64
+	# -O3` died on `program n; begin end.`, because builtinheap is compiled first
+	# and its own bodies have four-plus loop-hot scalars. So this row asserts both
+	# halves — the empty program compiles for every target at -O3, and six hot
+	# locals produce fpc's answers natively and under qemu.
+	# bug-a-aarch64-o3-segfaults-the-compiler-on-an-empty-program
+	@printf 'program empty_o3;\nbegin end.\n' > $(TESTTMP)/test_empty_o3.pas
+	@for arch in native i386 aarch64 arm32 riscv32; do \
+	  if [ "$$arch" = native ]; then tflag=""; else tflag="--target=$$arch"; fi; \
+	  ./$(COMPILER) $$tflag -O3 $(TESTTMP)/test_empty_o3.pas $(TESTTMP)/test_empty_o3_$$arch >/dev/null \
+	    || { echo "empty program at -O3 does not COMPILE for $$arch"; exit 1; }; \
+	done; echo "empty -O3 compiles: native i386 aarch64 arm32 riscv32"
+	./$(COMPILER) -O3 test/test_o3_residency_six_hot_locals.pas $(TESTTMP)/test_o3_resid26
+	test "$$($(TESTTMP)/test_o3_resid26)" = "$$(printf 'sum   106050\ntails 101 202 303 404 505 606')"
+	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then \
+	  for arch in i386 aarch64 arm32; do \
+	    ./$(COMPILER) --target=$$arch -O3 test/test_o3_residency_six_hot_locals.pas $(TESTTMP)/test_o3_resid_$$arch >/dev/null; \
+	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/test_o3_resid_$$arch)" = "$$(printf 'sum   106050\ntails 101 202 303 404 505 606')" \
+	      || { echo "cross -O3 residency FAIL on $$arch"; exit 1; }; \
+	  done; echo "cross -O3 residency ok: i386 aarch64 arm32"; \
+	else \
+	  echo "=== test-core: qemu-user not present, skipping cross -O3 residency ==="; \
+	fi
 	./$(COMPILER) test/test_writeln_nonfinite_float.pas $(TESTTMP)/test_writeln_nonfinite26
 	@out=$$(timeout 20 $(TESTTMP)/test_writeln_nonfinite26); rc=$$?; \
 	  if [ "$$rc" = "124" ]; then echo "test_writeln_nonfinite: TIMEOUT after 20s (not a wrong value)"; exit 1; fi; \

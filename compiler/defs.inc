@@ -749,6 +749,7 @@ const
   IR_IO_LOCK       = 66; { --threadsafe statement-atomic console I/O: acquire the reentrant owner-tid I/O spinlock (BSS_IO_OWNER/BSS_IO_DEPTH). Emitted by AN_WRITE/AN_WRITELN/AN_READ* lowering around the whole statement, x86-64 + ThreadSafeMode only. Reentrant so a write-arg calling a writing function cannot self-deadlock. }
   IR_IO_UNLOCK     = 67; { release the I/O statement lock (depth-counted; owner cleared at depth 0). }
   MAX_LOOPSYM_SCAN = 64; { -O3 loop-residency: cap on distinct syms tallied inside a body's loop ranges (UnifiedResidencyAssign); overflow just means later syms are not residency candidates. }
+  RC_RESIDENT_SLOTS = 6;  { GPR residency table size — the LARGEST pool any backend assigns from (aarch64 x19..x24; x86-64 uses 4 of them, r12..r15). See the RcResident* declarations: sizing it by x86-64's pool is what made aarch64 -O3 write past the end of three parallel arrays. }
   FR_RESIDENT_MAX  = 6;  { -O3 float loop residency: max tyDouble locals/params held in xmm8..xmm13 (xmm14/15 kept free as general scratch). Callee-saved in the pxx internal ABI, save-iff-used — allowed in bodies with calls (see FrResidentCount). }
   IR_CONST_DATA    = 68; { generic data-reference constant: IRIVal = Data[] offset OR a negative dataref sentinel (RECORD_RTTI/CLASSREF/SYM_RTTI bases, resolved by the pre-link fixup pass). Value = absolute data address in the accumulator. Lets IR-level CALLS pass descriptor addresses (e.g. a record layout descriptor to PXXDynArrayRetainImmediate) instead of needing a bespoke per-backend op. }
   IR_MULHI         = 69; { __pxxmulhi_u64(a, b): IRA = a, IRB = b. UNSIGNED widening 64x64->128 multiply, yielding the HIGH 64 bits in the accumulator (the low half is an ordinary tkStar multiply). x86-64 = `mul r64` (RDX:RAX), aarch64 = `umulh`. 64-BIT TARGETS ONLY -- IRLowerAST rejects it on the 32-bit targets, which have no such instruction, so the 32-bit backends never see this op and need no case. Callers get a portable path via lib/rtl's MulHiU64 wrapper ({$IFDEF CPU64} intrinsic {$ELSE} Pascal fallback). Exists so bignum/field arithmetic can use saturated 64-bit limbs instead of a reduced radix. }
@@ -1909,10 +1910,22 @@ var
     the caller's values are saved to a reserved frame slot at body entry and
     restored in the epilogue. These globals hold the CURRENT proc's residency
     (procs compile sequentially; nested procs flush after the enclosing one). }
-  RcResidentCount   : Integer;               { 0..4 syms resident in the current body (slots 0-1: r14/r15 params at -O2; slots 2-3: r12/r13 loop-hot locals at -O3) }
-  RcResidentSym     : array[0..3] of Integer; { Syms[] index of each resident sym }
-  RcResidentReg     : array[0..3] of Integer; { 12..15 }
-  RcResidentSaveOff : array[0..3] of Integer; { rbp offset of the caller-reg save slot }
+  { The three parallel residency tables are sized by the LARGEST pool any backend
+    assigns from, not by x86-64's. They were array[0..3] -- x86-64's r12..r15 --
+    while UnifiedResidencyAssignA64 hands out x19..x24, SIX registers, indexing
+    the same arrays: slots 4 and 5 were written past the end of all three, and
+    since they sit adjacent in BSS each overflow landed in the next table. That is
+    why `--target=aarch64 -O3` segfaulted the compiler on ANY program with four or
+    more loop-hot scalars in one body -- an empty program included, because
+    builtinheap's own routines qualify while it is being parsed
+    (bug-a-aarch64-o3-segfaults-the-compiler-on-an-empty-program). The FPC-seeded
+    build survived the same overflow on the same source: the fault was a BSS
+    layout accident, not a logic difference, which is exactly how an out-of-bounds
+    write hides. Both assign loops now also test the bound explicitly. }
+  RcResidentCount   : Integer;               { 0..RC_RESIDENT_SLOTS syms resident in the current body (x86-64: slots 0-1 r14/r15 params at -O2, 2-3 r12/r13 loop-hot locals at -O3; aarch64: x19..x24) }
+  RcResidentSym     : array[0..RC_RESIDENT_SLOTS - 1] of Integer; { Syms[] index of each resident sym }
+  RcResidentReg     : array[0..RC_RESIDENT_SLOTS - 1] of Integer; { x86-64 12..15; aarch64 19..24 }
+  RcResidentSaveOff : array[0..RC_RESIDENT_SLOTS - 1] of Integer; { rbp offset of the caller-reg save slot }
   { Set while CompilePendingLocalInits emits routine-local typed-const initializer
     assignments (each via its own CompileAST call, BEFORE the main body). Residency
     assignment must NOT run for those: it would re-emit the r14/r15 save+load once

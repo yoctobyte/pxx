@@ -9068,7 +9068,7 @@ begin
   nextReg := 14;
   for pi := 0 to Procs[CurProc].ParamCount - 1 do
   begin
-    if RcResidentCount >= 2 then Break;
+    if RcResidentCount >= 2 then Break;        { r14/r15: the -O2 param POOL, well inside RC_RESIDENT_SLOTS }
     sy := Procs[CurProc].Params[pi].SymIdx;
     if Procs[CurProc].Params[pi].IsRef then Continue;
     if Procs[CurProc].Params[pi].IsArray then Continue;
@@ -9214,7 +9214,7 @@ begin
           if Counts[k] <= 3 then Continue;      { int threshold: > 3 loop accesses }
           if not RegcallScalarType(Syms[si].TypeKind) then Continue;
           if ResidentRegOf(si) <> 0 then Continue;
-          if RcResidentCount >= 4 then Continue;
+          if RcResidentCount >= RC_RESIDENT_SLOTS then Continue;   { the TABLE bound }
         end;
         if SymSlotEscapes(si) then Continue;
         best := k; bestCnt := Counts[k];
