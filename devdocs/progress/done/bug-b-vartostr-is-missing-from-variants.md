@@ -91,4 +91,4 @@ yet because no program has asked for them -- the three that were, were.
 Null rows; `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit b4bfe770f.

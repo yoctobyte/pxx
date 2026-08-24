@@ -89,4 +89,4 @@ exactly; the same program cross-checked on i386 / aarch64 / arm32 under
 qemu-user.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit b4bfe770f.
