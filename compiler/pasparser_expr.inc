@@ -6645,6 +6645,20 @@ begin
             tyRecord param. Report it as tyRecord so overload matching binds it to
             the method-pointer param, mirroring the assignment path
             (bug-pascal-methodref-arg-to-named-of-object-param-no-match). }
+          { A dyn-array-returning CALL is a dyn-array VALUE, and a dyn-array
+            VARIABLE reports its ELEMENT kind here -- an array node carries the
+            element type, the array-ness lives on the symbol. The call node
+            carries tyPointer (the handle), so `SumI(dy)` and `SumI(MkI)` arrived
+            at overload resolution as DIFFERENT types for the same value, and
+            only parameters whose element type happens to accept a Pointer (the
+            ordinals) matched at all: `array of string`, `array of Boolean` and
+            `array of TRec` were "no overload matches: (Pointer)".
+            bug-p-a-call-result-is-refused-as-a-const-open-array-argument }
+          if ((ASTKind[exprNode] = AN_CALL) or (ASTKind[exprNode] = AN_VIRTUAL_CALL) or
+              (ASTKind[exprNode] = AN_INTF_CALL) or (ASTKind[exprNode] = AN_CALL_IND) or
+              (ASTKind[exprNode] = AN_DYN_COPY)) and
+             (NodeDynDepth(exprNode) >= 1) and (NodeDynBaseTk(exprNode) <> tyUnknown) then
+            argTypes[i] := NodeDynBaseTk(exprNode);
           if ASTKind[exprNode] = AN_METHODREF then argTypes[i] := tyRecord;
           currArg := ASTRight[currArg];
         end;

@@ -158,6 +158,24 @@ begin
         Result := SymDynDepth[ASTIVal[node]];
     AN_FIELD:
       Result := RecFieldDynDepth(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));
+    AN_CALL, AN_VIRTUAL_CALL, AN_INTF_CALL, AN_CALL_IND:
+      { A dyn-array-returning CALL is a dyn-array VALUE, and the proc table has
+        always said so (ProcRetIsDynArray + the element type). Only this reader
+        was missing, so `SumI(MkI)` and `Copy(MkI)` saw a bare tyPointer where
+        `SumI(dy)` and `Copy(dy)` saw an array -- five different outcomes for
+        one shape, from "works" through "no overload matches: (Pointer)" to a
+        segfault, depending on the element type.
+        bug-p-a-call-result-is-refused-as-a-const-open-array-argument }
+      if (Integer(ASTIVal[node]) >= 0) and (Integer(ASTIVal[node]) < ProcCount) and
+         ProcRetIsDynArray[ASTIVal[node]] then
+      begin
+        Result := ProcRetDynDepth[ASTIVal[node]];
+        if Result < 1 then Result := 1;
+      end;
+    AN_DYN_COPY:
+      { `Copy(a)` / `Copy(a, i, n)` of a dyn array yields an array of the SAME
+        shape -- its depth and element come straight from the source. }
+      Result := NodeDynDepth(ASTLeft[node]);
     AN_INDEX:
       begin
         bd := NodeDynDepth(ASTLeft[node]);
@@ -188,9 +206,16 @@ begin
       { fixed array of a dyn-array element: element base type lives in ElemType }
       Result := Syms[ASTIVal[node]].ElemType;
   end
+  else if (ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
+          (ASTKind[node] = AN_INTF_CALL) or (ASTKind[node] = AN_CALL_IND) then
+  begin
+    if (Integer(ASTIVal[node]) >= 0) and (Integer(ASTIVal[node]) < ProcCount) and
+       ProcRetIsDynArray[ASTIVal[node]] then
+      Result := ProcRetElemTk[ASTIVal[node]];
+  end
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldType(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
-  else if ASTKind[node] = AN_INDEX then
+  else if (ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DYN_COPY) then
     Result := NodeDynBaseTk(ASTLeft[node]);
 end;
 
@@ -201,9 +226,16 @@ begin
   if node < 0 then Exit;
   if ASTKind[node] = AN_IDENT then
     Result := Syms[ASTIVal[node]].ElemRecName
+  else if (ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
+          (ASTKind[node] = AN_INTF_CALL) or (ASTKind[node] = AN_CALL_IND) then
+  begin
+    if (Integer(ASTIVal[node]) >= 0) and (Integer(ASTIVal[node]) < ProcCount) and
+       ProcRetIsDynArray[ASTIVal[node]] then
+      Result := ProcRetElemRec[ASTIVal[node]];
+  end
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldRecId(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
-  else if ASTKind[node] = AN_INDEX then
+  else if (ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DYN_COPY) then
     Result := NodeDynBaseRec(ASTLeft[node]);
 end;
 

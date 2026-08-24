@@ -4,7 +4,8 @@ prio: 45
 type: bug
 blocked-by: []
 summary: "`Sum(Copy(a, 1, 3))` and `Sum(MakeArray)` -- a call result given to a `const array of T` open-array parameter -- do not compile. FPC accepts both. A naive relaxation was tried and REVERTED: it compiles `array of Double` and `array of string` into segfaults, so the by-ref check is a symptom and the real defect is that a dynamic-array-valued call is typed inconsistently."
-status: backlog
+status: done
+owner: claude-A
 ---
 
 # A call result is refused as a `const array of T` argument
@@ -86,3 +87,74 @@ an empty literal; `Low`/`High`/`Length` on each; `var` open arrays writing back
 to all three sources; `array of const` with integer/string/char/boolean
 elements; and `Format` with `%d %s %x %X %.4x`, width and left-justify flags,
 `%%`, and positional `%1:s`.
+
+## Log
+- 2026-08-25 — resolved, commit PENDING-COMMIT.
+
+---
+
+# Resolution (2026-08-25)
+
+Two defects, both on the ticket's own line — *give the expression one type, then
+route it through the same temp* — and neither was the by-ref check the ticket
+warned against relaxing.
+
+**1. The expression had no type that overload resolution could read.** Both
+`argTypes[i]` construction sites (`pasparser_expr.inc`, `pasparser_stmt.inc`)
+described a dyn-array-valued CALL or `Copy()` by its handle — `(Pointer)` — while
+the identical dyn-array VARIABLE was reported by its ELEMENT kind. So `CatS(MkS)`
+came back "no overload matches: (Pointer)" and `SumI(Copy(MkI,1,2))` was refused
+inside `Copy`'s own resolution. Both sites now normalise a dyn-array-valued node to
+its element kind, which needed `NodeDynDepth` / `NodeDynBaseTk` / `NodeDynBaseRec`
+in `ast_arena.inc` to grow arms for the four call kinds and for `AN_DYN_COPY`, and
+needed the call kinds to have somewhere to read from — hence `ProcRetDynDepth`,
+written at all three `ProcRetIsDynArray` sinks in `pasparser_proc.inc`.
+
+That is the fifth ticket in this family whose fix was **"the metadata was there
+and the reader was missing"** — `ProcRetIsDynArray` had been set for as long as
+dyn-array results existed; nothing on the argument path had ever asked.
+
+**2. The float rows did not merely refuse — they SEGFAULTED, and that was the
+real find.** `const a: array of Double` records the ELEMENT kind, `tyDouble`, in
+`Procs[].Params[].TypeKind`. The "integer argument to a float parameter" coercion
+in `ir.inc` tests exactly that field, and the argument it saw was the dyn-array
+HANDLE — `tyPointer`, an ordinal. So it allocated a Double temp, ran the handle
+through `cvtsi2sd`, and handed the callee a float where a pointer belonged:
+
+```
+0: call a=129 tk=17            <- MkD, result is a dyn-array HANDLE (tyPointer)
+1: store_sym a=93 b=0 tk=19    <- into a hidden temp typed tyDouble
+2: load_sym a=93 tk=19
+3: arg a=2 tk=17
+4: call a=128 b=3 tk=19        <- SumD receives garbage
+```
+
+`SumD(dd)` on a VARIABLE was fine, because only the call form reached that arm.
+The guard is one clause — `and (not Procs[cpi].Params[pathIdx].IsArray)` — an
+open-array parameter's TypeKind is the element's, so it must never drive a scalar
+coercion of the argument.
+
+# Measurement
+
+22 rows across two differentials, `fpc -Mobjfpc -O1` as oracle: every element
+kind (Integer, Int64, Double, Single, Char, AnsiString, Boolean, a record),
+every source shape (call result, `Copy(var)`, `Copy(call)`, static array,
+`[literal]`, mixed-numeric literal, empty result, two calls in one expression),
+both `const` and by-value open arrays. **22/22 match fpc** on x86-64, aarch64,
+arm32 and riscv32. Before: int worked, double segfaulted, str/bool/rec were
+"no overload matches: (Pointer)".
+
+Landed as `test/test_call_result_as_open_array_argument.pas` in `test-core`,
+`.expected` being fpc's own output.
+
+# Spun off
+
+**i386 was already broken here and stays broken:** `LenD(dd)` — a dyn array of
+Double, a plain VARIABLE, a body that only calls `Length` — segfaults on
+`--target=i386` on the PINNED compiler exactly as on HEAD, while arm32 and
+riscv32 (also 32-bit) are fine. Filed as
+`bug-a-an-open-array-of-double-segfaults-on-i386`. The new test is native-only
+for that reason; adding it to a cross list would land a known red.
+
+Gate: `make compiler/pascal26` fixedpoint converged in 1 round,
+`tools/gate.sh quick` GREEN.

@@ -1,0 +1,22 @@
+var int   : 6
+call int  : 6
+copy int  : 5
+call dbl  : 4.00
+copy dbl  : 4.00
+call str  : abcd
+copy str  : abcd
+call bool : 2
+copy bool : 2
+call rec  : 9
+copy rec  : 9
+copy call : 5
+char      : xyz
+int64     : 1000000000007
+len call  : 2
+len empty : 0
+nested    : 4.00
+static    : 6.00
+literal   : 4.00
+mixed lit : 3.50
+twice     : 8.00
+inner     : 8

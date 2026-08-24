@@ -2321,6 +2321,12 @@ var
   ProcRetRecId : array of Integer; { record id for tyRecord results }
   ProcAggregateDestSym : array of Integer; { hidden caller-result pointer local, or -1 }
   ProcRetIsDynArray : array of Boolean; { result is `array of T` (pointer-sized heap handle) }
+  { ...and how many `array of` levels that handle carries, so a dyn-array-valued
+    CALL can answer NodeDynDepth the way a dyn-array VARIABLE does. Without it
+    the call node was a bare tyPointer to every reader, and `Copy(MkI)` /
+    `SumI(MkI)` disagreed with `Copy(dy)` / `SumI(dy)` on the same value.
+    bug-p-a-call-result-is-refused-as-a-const-open-array-argument }
+  ProcRetDynDepth : array of Integer;
   ProcRetFixedArrBytes : array of Integer; { result is a FIXED array (`array[0..N] of T`): its byte size, returned via the hidden caller destination like a record. 0 = not one. See abi.inc / bug-a-set-and-array-function-results-come-back-empty }
   { ...and WHICH array type it is. ProcRetFixedArrBytes keeps only a byte
     count, which is enough to return the value and not enough to SHAPE a

@@ -7657,6 +7657,14 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_builtin_pointer_cast_as_target.pas $(TESTTMP)/test_bptrtgt26
 	test "$$($(TESTTMP)/test_bptrtgt26)" = "$$(cat test/test_builtin_pointer_cast_as_target.expected)"
+	# A dyn-array-valued EXPRESSION (function result, Copy(), both nested) as an
+	# `array of T` argument. Overload resolution used to describe it as its
+	# handle -- "no overload matches: (Pointer)" -- and the float rows went
+	# further: an open array's TypeKind is its ELEMENT kind, so the int->float
+	# argument coercion fired on the handle and SEGFAULTED.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_call_result_as_open_array_argument.pas $(TESTTMP)/test_calloa26
+	test "$$($(TESTTMP)/test_calloa26)" = "$$(cat test/test_call_result_as_open_array_argument.expected)"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; test "$$?" = "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26

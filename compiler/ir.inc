@@ -3967,8 +3967,16 @@ begin
         (feature-int-to-float-assign). }
       if (cpi >= 0) and (pathIdx >= 0) and (pathIdx < Procs[cpi].ParamCount) and
          TypeIsFloat(Procs[cpi].Params[pathIdx].TypeKind) and
+         (not Procs[cpi].Params[pathIdx].IsArray) and
          (not TypeIsFloat(argTk)) and TypeIsOrdinal(argTk) then
       begin
+        { NOT for an OPEN ARRAY parameter: `const a: array of Double` records
+          the ELEMENT kind in Params[].TypeKind, and the argument is a dyn-array
+          HANDLE (tyPointer, which is an ordinal here). Converting it ran the
+          handle through cvtsi2sd and the callee received a float where a
+          pointer belonged -- `SumD(MkD)` SEGFAULTED while `SumD(dd)` on a
+          variable was fine, because only the call form reached this arm.
+          bug-p-a-call-result-is-refused-as-a-const-open-array-argument }
         tmpSym := AllocVar('', Procs[cpi].Params[pathIdx].TypeKind);
         IRAppend(IR_STORE_SYM, tmpSym, value, -1, 0, Ord(Procs[cpi].Params[pathIdx].TypeKind));
         value := IRAppend(IR_LOAD_SYM, tmpSym, -1, -1, 0, Ord(Procs[cpi].Params[pathIdx].TypeKind));

@@ -7772,6 +7772,7 @@ begin
   SetLength(ProcGenParamCnt, n);  SetLength(ProcGenInstSize, n);  SetLength(ProcRetElemTk, n);
   SetLength(ProcRetElemRec, n);  SetLength(ProcRetPtrElemTk, n);  SetLength(ProcRetProcSig, n);
   SetLength(ProcRetPtrDepth, n); SetLength(ProcRetPtrBaseTk, n); SetLength(ProcRetPtrBaseRec, n);
+  SetLength(ProcRetDynDepth, n);
   SetLength(CProcHasLocalDef, n);  SetLength(ProcRetPtrElemRec, n);  SetLength(PyCapCount, n);
   SetLength(PyDefTokOf, n);  SetLength(ProcPyStarIdx, n);  SetLength(ProcPyKwIdx, n);
   SetLength(ProcSigOff, n);  SetLength(ProcSigDfltOff, n);  SetLength(ObjProcStrOff, n);
@@ -7821,6 +7822,7 @@ begin
   ProcRetRecId[ProcCount]     := REC_NONE;
   ProcAggregateDestSym[ProcCount] := -1;
   ProcRetIsDynArray[ProcCount] := False;
+  ProcRetDynDepth[ProcCount]   := 0;
   { -1, not 0: zero is a VALID ArrType index, so a proc that never sets this
     would claim to return the FIRST array type declared in the program. }
   ProcRetArrAi[ProcCount] := -1;

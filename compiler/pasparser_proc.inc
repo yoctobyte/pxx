@@ -518,6 +518,7 @@ var
   retArrAi : Integer;           { its ArrType index, so the Result slot can be shaped like the type; -1 = not one }
   retPtrElemTk, retPtrElemRec : Integer;
   retPtrDepth, retPtrBaseTk, retPtrBaseRec : Integer;
+  retDynDepth : Integer;   { `array of` levels of a dyn-array result }
   savedSC, savedFS, savedCurProc : Integer;
   savedGLC, savedGFC, savedGLB, j, savedVisVarSeq: Integer;
   cleanupJnePatch: Integer;
@@ -687,6 +688,7 @@ begin
     paths below fill some slots without going through the typed-param branch. }
   for i := 0 to MAX_PROC_PARAMS - 1 do ptypesSetEnum[i] := -1;
   retIsDynArr := False; retElemTk := tyUnknown; retElemRec := REC_NONE;
+  retDynDepth := 0;
   retFixedArrBytes := 0; retArrAi := -1;
   retPtrElemTk := Ord(tyUnknown); retPtrElemRec := REC_NONE;
   retPtrDepth := 0; retPtrBaseTk := Ord(tyUnknown); retPtrBaseRec := REC_NONE;
@@ -931,6 +933,7 @@ begin
       Expect(tkOf, 'of');
       retType := ParseTypeKind;
       retIsDynArr := True;
+      retDynDepth := 1;
       retElemTk := retType;
       retElemRec := LastTypeRecId;
     end
@@ -943,6 +946,8 @@ begin
       paramAi := FindArrayType(CurTok.SVal);
       retType := ParseTypeKind;            { consume the alias name }
       retIsDynArr := True;
+      retDynDepth := ArrTypeDynDepth[paramAi];
+      if retDynDepth < 1 then retDynDepth := 1;
       retElemTk := IntToTypeKind(ArrTypeElemTk[paramAi]);
       retElemRec := ArrTypeElemRec[paramAi];
       retPtrElemRec := ArrTypePtrElemRec[paramAi];
@@ -1206,6 +1211,7 @@ begin
       `AnsiString(f(...))` silently mis-lowers (reads a bogus managed-string
       header). See bug-pascal-ansistring-cast-of-cdecl-call-result. }
     ProcRetIsDynArray[procIdx] := retIsDynArr;
+    ProcRetDynDepth[procIdx] := retDynDepth;
   ProcRetFixedArrBytes[procIdx] := retFixedArrBytes;
   ProcRetArrAi[procIdx] := retArrAi;
     ProcRetElemTk[procIdx] := retElemTk;
@@ -1543,6 +1549,7 @@ begin
       if declFlexColumn then ProcFlexColumn[procIdx] := True;
       ProcRetRecId[procIdx] := retRecId;
       ProcRetIsDynArray[procIdx] := retIsDynArr;
+      ProcRetDynDepth[procIdx] := retDynDepth;
   ProcRetFixedArrBytes[procIdx] := retFixedArrBytes;
   ProcRetArrAi[procIdx] := retArrAi;
       ProcRetElemTk[procIdx] := retElemTk;
@@ -1575,6 +1582,7 @@ begin
   if declFlexColumn then ProcFlexColumn[procIdx] := True;
   ProcRetRecId[procIdx] := retRecId;
   ProcRetIsDynArray[procIdx] := retIsDynArr;
+  ProcRetDynDepth[procIdx] := retDynDepth;
   ProcRetFixedArrBytes[procIdx] := retFixedArrBytes;
   ProcRetArrAi[procIdx] := retArrAi;
   ProcRetElemTk[procIdx] := retElemTk;
