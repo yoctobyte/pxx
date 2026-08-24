@@ -220,4 +220,4 @@ tests + the 625-pair differential + the RTL/PCL and examples corpora +
 `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit 497fc8e78.
