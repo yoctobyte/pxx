@@ -133,4 +133,4 @@ test pins.
 `not Round(PDouble(..)^)`; the local it rounded through is gone.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit 44764c24e.
