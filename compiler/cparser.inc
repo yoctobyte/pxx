@@ -9527,12 +9527,25 @@ begin
     (latent; exposed by the feature-opt-div0-stub-on-use safety net). C
     '%'/'/' sites always need the check, so emit unconditionally. }
   if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
-  { --threadsafe statement-atomic I/O lock stubs. Shared dispatcher, and a
-    call every frontend driver needs: without it IOLockAddr stays 0 and any
-    AN_WRITE lowering under --threadsafe calls code offset 0 -- the ELF entry
-    point -- which jumps back to main and hangs until the stack is gone
-    (bug-a-threadsafe-segfaults-on-every-nilpy-program). }
-  EmitIoLockStubsForTarget;
+  { THE finish-the-runtime step: the signal runtime (plus its BSS block) AND the
+    --threadsafe statement-atomic I/O lock stubs, which is what
+    EmitProgramRuntimeStubsForTarget is for. This driver called
+    EmitIoLockStubsForTarget -- HALF of it -- so a C program shipped with no
+    signal runtime and, more quietly, without EnsureSignalBss having run at all.
+    That is exactly the divergence
+    bug-a-only-the-pascal-driver-emits-the-signal-runtime fixed everywhere else
+    on 2026-08-21; the C driver kept the old call and so kept the old hole,
+    which is the pattern this refactor exists to end. The one-place rule is
+    written on EmitProgramRuntimeStubsForTarget itself: "do not call
+    EmitSignalRuntimeForTarget/EmitIoLockStubsForTarget directly".
+
+    Unlike the nine skeleton drivers, C cannot take the whole
+    EmitProgramPrologue: its entry stub is five per-arch call-main /
+    run-finalizers / exit(eax) chains, not the shared save-rsp-and-jump-to-body
+    that EmitProgramEntryForTarget emits. Merging those two conventions is its
+    own change; this is the step of the checklist that was simply missing.
+    refactor-a-one-program-driver-prologue-for-every-frontend }
+  EmitProgramRuntimeStubsForTarget;
 
   { The emitted AnsiString runtime — the call this driver was MISSING. A Pascal
     unit `#include`d from C compiles its body through the same lowering as a

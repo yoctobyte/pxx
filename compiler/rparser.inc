@@ -2737,35 +2737,37 @@ begin
 end;
 
 procedure ParseRustProgram;
-var callPatch, mainIdx: Integer;
+var callPatch, mainIdx, jmpPatch: Integer;
 begin
   if TargetArch <> TARGET_X86_64 then
     Error('Rust frontend: only the x86-64 target is supported by the skeleton (feature-rust-frontend-skeleton)');
 
-  BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
-  { Entry stub: call main(), then exit_group(main's i32 return) — println!/
-    process::exit are out of scope (sub-ticket 12), so the trivial test
-    programs this skeleton targets report their result via exit code, same
-    convention as a hosted C `int main()`. }
-  EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+  { The shared checklist: BSS_INITIAL_RSP, the per-arch entry stub, the emitted
+    div0 stub, the signal runtime and the --threadsafe I/O lock stubs. This
+    driver used to open-code four of those and MISS RegisterBuiltinTGuid /
+    RegisterBuiltinTObject -- which is the drift the prologue exists to stop.
+
+    wantAnsiRuntime is False, and MEASURED so: passing True registers the
+    PXXStr* forwards and emits the bodies EmitAnsiStringRuntime owns, but the
+    rest of that family ships in builtinheap, which a .rs compile never parses.
+    Every Rust program then failed with `unresolved forward: PXXStrFromLit`.
+    Rust strings are `&str` slices here, not managed AnsiStrings, so the runtime
+    is dead weight for this frontend rather than a step it is missing.
+    refactor-a-one-program-driver-prologue-for-every-frontend }
+  EmitProgramPrologue(False, False, True, jmpPatch);
+
+  { Rust's "body" is three instructions, and this driver writes them itself
+    rather than getting them from a parse: call main(), then
+    exit_group(main's i32 return). println!/process::exit are out of scope
+    (sub-ticket 12), so the trivial test programs this skeleton targets report
+    their result via exit code, same convention as a hosted C `int main()`.
+    The prologue's jump lands HERE, which is why the patch is taken first --
+    the stubs it emitted sit between the ELF entry and this point. }
+  PatchProgramEntryJump(jmpPatch);
   EmitB($E8); callPatch := CodeLen; EmitI32(0);   { call main }
   EmitB($89); EmitB($C7);            { mov edi, eax }
   EmitB($B8); EmitI32(231);          { mov eax, 231 (exit_group) }
   EmitB($0F); EmitB($05);            { syscall }
-
-  { div-by-zero abort stub — same latent zero-Div0StubAddr hole as the other
-    non-Pascal drivers; see the C driver comment. }
-  if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
-  { --threadsafe statement-atomic I/O lock stubs. Shared dispatcher, and a
-    call every frontend driver needs: without it IOLockAddr stays 0 and any
-    AN_WRITE lowering under --threadsafe calls code offset 0 -- the ELF entry
-    point -- which jumps back to main and hangs until the stack is gone
-    (bug-a-threadsafe-segfaults-on-every-nilpy-program). }
-  { THE finish-the-runtime step (signal runtime + --threadsafe I/O lock stubs).
-    Was EmitIoLockStubsForTarget alone, so this frontend shipped with no signal
-    runtime at all — the same gap the I/O lock had, one stub later.
-    bug-a-only-the-pascal-driver-emits-the-signal-runtime }
-  EmitProgramRuntimeStubsForTarget;
 
   REnumVariantCount := 0;
   RTraitCount := 0; RImplCount := 0; RGenericFuncCount := 0;
@@ -2799,7 +2801,6 @@ begin
     else Error('Rust: expected fn, struct, enum, trait, impl or const at top level');
   end;
 
-  EmitFinalizerRunnerBody;   { resolve any Halt-site __pxx_run_finalizers forward calls }
-  ApplyCallFixups;
+  EmitProgramEpilogue;
   Patch32(callPatch, Procs[mainIdx].BodyAddr - (callPatch + 4));
 end;

@@ -1956,7 +1956,7 @@ begin
 end;
 
 procedure ParseZigProgram;
-var callPatch, mainIdx, structDepth: Integer;
+var callPatch, mainIdx, structDepth, jmpPatch: Integer;
     mainIsVoid: Boolean;
 begin
   if TargetArch <> TARGET_X86_64 then
@@ -1975,12 +1975,27 @@ begin
   mainIdx := FindProc('main');
   if mainIdx < 0 then Error('Zig: no fn main() found');
 
-  BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
-  { Entry stub: call main(), then exit_group — with main's return value as
-    the exit code when main returns an integer, or 0 for `fn main() void`
-    (whose Result slot is never written, so its eax is garbage). Same
-    convention as the Rust skeleton's stub. }
-  EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+  { The shared checklist: BSS_INITIAL_RSP, the per-arch entry stub, the div0
+    stub, the signal runtime and the --threadsafe I/O lock stubs. This driver
+    used to open-code four of those and MISS RegisterBuiltinTGuid /
+    RegisterBuiltinTObject -- the drift the prologue exists to stop.
+
+    It sits HERE, after the prescan, and not at the top of the routine, because
+    the prescan is what decides `mainIsVoid` and the prescan's own BSS
+    allocation (__zig_err) must keep its offset. wantAnsiRuntime is False for
+    the same measured reason as the Rust driver: half that family ships in
+    builtinheap, which a .zig compile never parses, so asking for it produces
+    `unresolved forward: PXXStrFromLit` rather than working strings.
+    refactor-a-one-program-driver-prologue-for-every-frontend }
+  EmitProgramPrologue(False, False, True, jmpPatch);
+
+  { Zig's "body" is four instructions, written by this driver rather than by a
+    parse: call main(), then exit_group — with main's return value as the exit
+    code when main returns an integer, or 0 for `fn main() void` (whose Result
+    slot is never written, so its eax is garbage). Same convention as the Rust
+    skeleton's stub. The prologue's jump lands here; the stubs it emitted sit
+    between the ELF entry and this point. }
+  PatchProgramEntryJump(jmpPatch);
   EmitB($E8); callPatch := CodeLen; EmitI32(0);   { call main }
   if mainIsVoid then
   begin
@@ -1992,22 +2007,6 @@ begin
   end;
   EmitB($B8); EmitI32(231);          { mov eax, 231 (exit_group) }
   EmitB($0F); EmitB($05);            { syscall }
-
-  { Integer div-by-zero abort stub — same latent hole as the C/NilPy drivers:
-    a div site with no PXXDivZero in scope fell back to a zero Div0StubAddr
-    (silent call into the entry stub). Emit unconditionally after the entry
-    stub; never reached by fall-through. }
-  if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
-  { --threadsafe statement-atomic I/O lock stubs. Shared dispatcher, and a
-    call every frontend driver needs: without it IOLockAddr stays 0 and any
-    AN_WRITE lowering under --threadsafe calls code offset 0 -- the ELF entry
-    point -- which jumps back to main and hangs until the stack is gone
-    (bug-a-threadsafe-segfaults-on-every-nilpy-program). }
-  { THE finish-the-runtime step (signal runtime + --threadsafe I/O lock stubs).
-    Was EmitIoLockStubsForTarget alone, so this frontend shipped with no signal
-    runtime at all — the same gap the I/O lock had, one stub later.
-    bug-a-only-the-pascal-driver-emits-the-signal-runtime }
-  EmitProgramRuntimeStubsForTarget;
 
   while CurTok.Kind <> tkEOF do
   begin
@@ -2059,7 +2058,6 @@ begin
     else Error('Zig: expected fn (or pub fn) at top level');
   end;
 
-  EmitFinalizerRunnerBody;   { resolve any Halt-site __pxx_run_finalizers forward calls }
-  ApplyCallFixups;
+  EmitProgramEpilogue;
   Patch32(callPatch, Procs[mainIdx].BodyAddr - (callPatch + 4));
 end;

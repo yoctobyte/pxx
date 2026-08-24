@@ -196,3 +196,89 @@ and prints exactly what the same program prints without the flag.
   one of them will change layout whichever canonical order is chosen — harmless
   (the stubs sit behind the entry jump and are reached only by call) but it must
   be a deliberate step, not a surprise.
+
+## Progress — 2026-08-24, second batch: R, Z, BASIC, and half of C
+
+`EmitProgramPrologue` / `EmitProgramEpilogue` now live in
+`compiler/frontend_prologue.inc`. Adoption stands at **nine of twelve drivers**.
+
+| driver | prologue | epilogue | note |
+| --- | --- | --- | --- |
+| `aparser` Ada | yes | yes | first batch |
+| `eparser` Erlang | yes | yes | first batch |
+| `fparser` Fortran | yes | yes | first batch |
+| `gparser` Algol | yes | yes | first batch |
+| `lparser` LOLCODE | yes | yes | first batch |
+| `wparser` Whitespace | yes | yes | first batch |
+| `rparser` Rust | **yes** | **yes** | gained TGuid/TObject |
+| `zparser` Zig | **yes** | **yes** | gained TGuid/TObject |
+| `bparser` BASIC | **yes** | partial | epilogue blocked, see below |
+| `cparser` C | no — entry seam | yes | **gained the signal runtime** |
+| `pasparser_prog` Pascal | no | yes | the original checklist |
+| `pyparser` NilPy | no | yes | |
+
+### Measured, per driver
+
+Every adoption was verified by compiling that frontend's own tests before and
+after and diffing **program output**, not just exit status:
+
+- Rust (`else_if`, `advanced`, `struct_array`, `chess_perft`) — output
+  identical, `+5` bytes each. The five bytes are the shared entry stub's
+  patchable `jmp`; `chess_perft` was additionally diffed against `pinned`'s
+  binary and matches.
+- Zig (`skeleton`, `structs`, `advanced`) — output identical, `+5` bytes each.
+- BASIC (`comprehensive`, `goto_gosub`, `lexer`) — output identical and
+  **byte-identical code size**. A pure de-duplication, which is the ideal
+  outcome and the reason this one is worth pointing at: the driver that had been
+  caught missing six steps now reaches all of them through one call.
+- C (`c_builtin_bits`, `c_inline_strlit_arg`, `c_lua_opcode_decode_b132`,
+  `c_environ_prefilled_b380`) — output identical, `+386` bytes each. Those 386
+  bytes are the signal runtime the C frontend never had.
+
+### The two things this batch found
+
+**1. R and Z must pass `wantAnsiRuntime = False`, and it is not a preference.**
+Passing `True` registers the `PXXStr*` forwards and emits the bodies
+`EmitAnsiStringRuntime` owns, but the rest of that family ships in
+`builtinheap`, which a `.rs` or `.zig` compile never parses. Every Rust program
+then failed to compile with `unresolved forward: PXXStrFromLit`. Rust `&str`
+and Zig slices are not managed AnsiStrings, so the runtime is dead weight for
+those frontends rather than a step they were missing. Found by compiling, not
+by reading.
+
+**2. The C driver called `EmitIoLockStubsForTarget` — HALF of the mandated
+step.** `EmitProgramRuntimeStubsForTarget` is signal runtime + I/O lock stubs,
+and its own comment says "every frontend driver reaches this through
+[it] — do not call it directly, and do not add a tenth private copy". The C
+driver kept the pre-2026-08-21 call and so kept the pre-2026-08-21 hole: a C
+program shipped with no signal runtime, and — quieter — without `EnsureSignalBss`
+ever running, which per that routine's own comment leaves
+`BSS_SIG_HOOKS/_CODE/_ADDR/_CTX` all at 0, *aliased onto the same eight bytes*.
+Fixed by calling the whole step. This is precisely the drift the ticket
+predicts: the C driver is missing whatever the Pascal driver gained most
+recently.
+
+### Why C, Pascal and NilPy do not take the full prologue yet
+
+**C is blocked on a real seam, not on effort.** Its entry stub is five per-arch
+`call main` / run-finalizers / `exit(eax)` chains (`cparser.inc` 9266–9520),
+while `EmitProgramEntryForTarget` emits save-rsp-and-jump-to-body. Rust and Zig
+adopted cleanly because their `call main; exit_group` sequence could simply
+become the *body* the prologue's jump lands on — a three- or four-instruction
+body the driver writes itself instead of getting from a parse. C's cannot: it
+interleaves the finalizer runner and spans five backends. Merging the two entry
+conventions is its own change, and should be its own commit.
+
+Pascal and NilPy already reach every step of the checklist (they are where the
+checklist came from), so adopting the prologue there is pure de-duplication with
+no behaviour to gain — worth doing, lowest value of the twelve, and it should go
+last precisely because the Pascal driver is the reference the others are
+compared against.
+
+### BASIC's epilogue is still blocked
+
+`ApplyCallFixups` in `bparser` remains blocked on
+[[bug-a-a-unit-free-basic-program-calls-a-helper-it-never-emits]] — it turns a
+unit-free `.bas` program with a string literal into a compile error, because the
+managed-string helper it calls only ships with `builtinheap`. So BASIC calls
+`EmitFinalizerRunnerBody` directly rather than `EmitProgramEpilogue`.

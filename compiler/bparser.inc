@@ -685,75 +685,21 @@ var
   jmpPatch, i: Integer;
   bNeedsHeap, bNeedsAnsi, bNeedsDiv: Boolean;
 begin
-  BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
-
-  { THE shared entry stub, not an open-coded x86-64 one. This driver spelled it
-    out inline -- `mov [BSS_INITIAL_RSP], rsp` plus a `jmp rel32` -- for every
-    target, so an aarch64 or arm32 .bas binary began with thirteen bytes of
-    x86-64 and died of SIGILL before its first line of output, on HEAD and on
-    every pin before it. It compiled CLEANLY, which is what kept it hidden: the
-    .bas jobs run in the native tier only, so no cross verdict had ever been
-    published for this frontend.
-
-    Of the nine drivers that open-coded this stub, the other eight refuse a
-    non-x86-64 target up front with a clear message ("only the x86-64 target is
-    supported by the skeleton"). BASIC alone had no guard, which is precisely
-    why it was the one that produced a broken binary instead of a diagnostic.
-    bug-a-a-basic-program-is-an-illegal-instruction-on-aarch64-and-arm32 }
-  EmitProgramEntryForTarget(False, jmpPatch);
-
-  { div-by-zero abort stub — same latent zero-Div0StubAddr hole as the other
-    non-Pascal drivers; see the C driver comment. Behind the entry jmp, reached
-    only by call. }
-  if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
-  { --threadsafe statement-atomic I/O lock stubs. Shared dispatcher, and a
-    call every frontend driver needs: without it IOLockAddr stays 0 and any
-    AN_WRITE lowering under --threadsafe calls code offset 0 -- the ELF entry
-    point -- which jumps back to main and hangs until the stack is gone
-    (bug-a-threadsafe-segfaults-on-every-nilpy-program). }
-  { THE finish-the-runtime step (signal runtime + --threadsafe I/O lock stubs).
-    Was EmitIoLockStubsForTarget alone, so this frontend shipped with no signal
-    runtime at all — the same gap the I/O lock had, one stub later.
-    bug-a-only-the-pascal-driver-emits-the-signal-runtime }
-  EmitProgramRuntimeStubsForTarget;
-
-  { The emitted AnsiString runtime — the SAME omission as the two above, one
-    stub family later, and the fourth time this driver has been the one that
-    did not make a call every other driver makes.
-
-    A BASIC program pulls builtinheap the moment anything needs the heap, and
-    builtinheap is Pascal: its own bodies concatenate literals, so they compile
-    calls to AnsiStrFromLiteralAddr / AnsiStrConcatAddr. With no emission those
-    addresses stay 0, and the guard in IREmitCodeCall turns what would have been
-    a jump to the ELF entry point into `call to a runtime stub that was never
-    emitted`, reported against a line in a compiler builtin — a diagnostic that
-    names a file the BASIC program never mentions. It surfaced when a new
-    diagnostic string was added to PXXVarBinOp: the unit had simply never
-    needed a managed string on this path before.
-
-    Gated on the same DetectPascalRuntimeNeeds pre-scan and the same x86-64
-    condition the C driver uses (the shims ARE x86-64 machine code; the other
-    backends call the builtinheap helpers directly), and the forwards go first
-    so the emitter can reference bodies builtinheap has not parsed yet.
-    bug-a-only-the-pascal-driver-emits-the-signal-runtime is the same story. }
+  { The whole starting checklist, in one call. This driver is the reason the
+    routine exists: it was caught missing SIX of these steps, one at a time,
+    each found by a user-visible failure rather than by a check -- the
+    --threadsafe I/O lock stubs (a call to code offset 0 that hung until the
+    stack was gone), the signal runtime (shipped with none), the System
+    intrinsics (`unknown type: TGuid` reported inside a compiler builtin,
+    against a program mentioning neither), the emitted AnsiString runtime, the
+    shared ENTRY stub (thirteen bytes of x86-64 at the entry point of an
+    aarch64 binary -- SIGILL, and it compiled cleanly, because the .bas jobs run
+    in the native tier only), and EmitFinalizerRunnerBody. Six separate rounds
+    of "this frontend is the one that did not make a call every other driver
+    makes"; there is now no call for it to miss.
+    refactor-a-one-program-driver-prologue-for-every-frontend }
   DetectPascalRuntimeNeeds(bNeedsHeap, bNeedsAnsi, bNeedsDiv);
-  if bNeedsAnsi and (TargetArch = TARGET_X86_64) then
-  begin
-    RegisterEmittedStringRuntimeForwards;
-    EmitAnsiStringRuntime;
-  end;
-
-  { System intrinsics, exactly like the Pascal, C and NilPy drivers do — BASIC
-    was the one frontend that never minted them. It got away with it while
-    nothing on this path pulled builtinheap, whose TInterfacedObject/IInterface
-    signatures NAME TGuid and TObject; the moment a `USES <c file>` started
-    pulling the C runtime bridge, builtinheap arrived and its own declarations
-    failed to resolve with `unknown type: TGuid` — an error in a compiler
-    builtin, reported against a BASIC program that mentions neither. Idempotent
-    (both Register* routines return early if the row exists).
-    bug-pascal-uses-non-transitivity-only-covers-routines-and-types }
-  RegisterBuiltinTGuid;
-  RegisterBuiltinTObject;
+  EmitProgramPrologue(False, bNeedsAnsi, True, jmpPatch);
 
   { GOTO/GOSUB: reset the shared label table (C resets it per function; the
     BASIC main program is one scope), prescan for jump targets, and allocate
