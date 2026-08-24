@@ -1,0 +1,8 @@
+global  : hello
+globalix: eo
+byvalue : hello
+byvar   : hello
+byconst : hello
+intptr  : 41
+paramidx: eo
+capture : hello

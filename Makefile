@@ -7621,6 +7621,15 @@ test-core: $(COMPILER)
 	# pair beside it. .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_pchar_array_of_pointer_to_pchar.pas $(TESTTMP)/test_pchar_arr_ppc26
 	test "$$($(TESTTMP)/test_pchar_arr_ppc26)" = "$$(cat test/test_pchar_array_of_pointer_to_pchar.expected)"
+	# ...and the same shape reached through a PARAMETER, a nested-routine CAPTURE
+	# and `p^[i]`. Pascal's parameter table carried the pointee alone (C's has
+	# carried depth+base all along), the capture table lost it one level further
+	# out, and `p^[i]` indexed the pointer VARIABLE by the pointer stride because
+	# IRLowerAddress's computed-pointer-value arm was gated on CProgramMode.
+	# Seven of these eight rows print an address on the pinned compiler.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_pointer_param_keeps_its_depth.pas $(TESTTMP)/test_ptrparam26
+	test "$$($(TESTTMP)/test_ptrparam26)" = "$$(cat test/test_pointer_param_keeps_its_depth.expected)"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; test "$$?" = "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26

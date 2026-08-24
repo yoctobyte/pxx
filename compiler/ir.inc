@@ -1585,11 +1585,21 @@ begin
       Result := IRAppend(IR_INDEX, baseAddr, indexNode, 0, elemSize, ASTTk[node]);
       Exit;
     end;
-    { Computed pointer-value indexing, e.g. C `(cond ? a : b)[i]`. The base
-      expression yields the pointer value; taking IRLowerAddress(base) would ask
-      for the address of a non-lvalue expression such as AN_TERNARY. }
-    if CProgramMode and
-       (ASTKind[baseNode] <> AN_IDENT) and
+    { Computed pointer-value indexing, e.g. C `(cond ? a : b)[i]` and Pascal
+      `p^[i]`. The base expression yields the pointer value; taking
+      IRLowerAddress(base) would ask for the address of a non-lvalue expression
+      such as AN_TERNARY -- and for `p^[i]` it asked for the address of the
+      pointer VARIABLE, then indexed it by the pointer stride, so `q^[1]` on a
+      `^PChar` read eight bytes past q instead of the second character.
+
+      This arm was gated on CProgramMode for no reason the guard itself needs:
+      it already proves the base is pointer-VALUED (IRNodePointerBase) and it
+      already declines every base kind that has its own arm above. The gate only
+      meant "C is where this was noticed". Ungated, Pascal's dereference,
+      function-result and computed bases route through the same one path
+      instead of falling to the array path that wants an lvalue address.
+      feature-a-typeref-migrate-consumers }
+    if (ASTKind[baseNode] <> AN_IDENT) and
        (ASTKind[baseNode] <> AN_FIELD) and
        (ASTKind[baseNode] <> AN_PTR_CAST) and
        (ASTKind[baseNode] <> AN_INDEX) and

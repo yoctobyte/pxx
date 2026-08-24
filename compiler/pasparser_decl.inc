@@ -5607,6 +5607,7 @@ var
   capNm: array[0..MAX_NEST_CAPS-1] of AnsiString;
   capTk: array[0..MAX_NEST_CAPS-1] of TTypeKind;
   capRec, capDyn, capPtrRec, capProcSig: array[0..MAX_NEST_CAPS-1] of Integer;
+  capPtrDepth, capPtrBaseTk, capPtrBaseRec: array[0..MAX_NEST_CAPS-1] of Integer;
   capPtrTk: array[0..MAX_NEST_CAPS-1] of TTypeKind;
   capArr: array[0..MAX_NEST_CAPS-1] of Boolean;
   capActOff: array[0..MAX_NEST_CAPS-1] of Integer;
@@ -5816,6 +5817,9 @@ begin
             end;
             capPtrTk[capCount] := Syms[sidx].PtrElemTk;
             capPtrRec[capCount] := Syms[sidx].PtrElemRec;
+            capPtrDepth[capCount] := SymPtrDepth[sidx];
+            capPtrBaseTk[capCount] := SymPtrBaseTk[sidx];
+            capPtrBaseRec[capCount] := SymPtrBaseRec[sidx];
             capProcSig[capCount] := SymProcSig[sidx];
             Inc(capCount);
           end;
@@ -5870,6 +5874,9 @@ begin
     LiftCapDyn[LiftCapTot]    := capDyn[k];
     LiftCapPtrTk[LiftCapTot]  := capPtrTk[k];
     LiftCapPtrRec[LiftCapTot] := capPtrRec[k];
+    LiftCapPtrDepth[LiftCapTot]   := capPtrDepth[k];
+    LiftCapPtrBaseTk[LiftCapTot]  := capPtrBaseTk[k];
+    LiftCapPtrBaseRec[LiftCapTot] := capPtrBaseRec[k];
     LiftCapProcSig[LiftCapTot]:= capProcSig[k];
     Inc(LiftCapTot);
   end;

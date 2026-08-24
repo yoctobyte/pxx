@@ -472,6 +472,15 @@ var
   ptypesSetEnum : array[0..MAX_PROC_PARAMS-1] of Integer;  { `set of TEnum` param: element enum index, -1 otherwise }
   ptypesPtrElemTk : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   ptypesPtrElemRec : array[0..MAX_PROC_PARAMS-1] of Integer;
+  { The rest of a pointer PARAMETER's identity. Without these three a `^PChar`
+    parameter arrived at the callee as depth 1 -- indistinguishable from a plain
+    PChar -- so `p^` inside the body yielded the raw address instead of the
+    string, while the identical GLOBAL printed fine. cparser's parameter table
+    has carried the triple (pdepths/pbasetk/pbaserec) all along; Pascal's had
+    the pointee alone. feature-a-typeref-migrate-consumers }
+  ptypesPtrDepth : array[0..MAX_PROC_PARAMS-1] of Integer;
+  ptypesPtrBaseTk : array[0..MAX_PROC_PARAMS-1] of Integer;
+  ptypesPtrBaseRec : array[0..MAX_PROC_PARAMS-1] of Integer;
   ptypesProcSig : array[0..MAX_PROC_PARAMS-1] of Integer;  { proc-typed param: signature index, -1 otherwise }
   parr      : array[0..MAX_PROC_PARAMS-1] of Boolean;
   pbyref    : array[0..MAX_PROC_PARAMS-1] of Boolean;
@@ -875,6 +884,9 @@ begin
         else ptypesSetEnum[i] := -1;
         ptypesPtrElemTk[i] := LastTypePointerElemTk;
         ptypesPtrElemRec[i] := LastTypePointerElemRec;
+        ptypesPtrDepth[i] := LastTypePointerDepth;
+        ptypesPtrBaseTk[i] := LastTypePointerBaseTk;
+        ptypesPtrBaseRec[i] := LastTypePointerBaseRec;
         ptypesProcSig[i] := LastTypeProcSig;
         parr[i] := isArr;
         pbyref[i] := isByRef;
@@ -1115,6 +1127,9 @@ begin
       ptypes[nparams] := tyClass;
       ptypesRec[nparams] := REC_UCLASS_BASE + LiftSelfCi[liftIdx];
       ptypesPtrElemTk[nparams] := tyUnknown; ptypesPtrElemRec[nparams] := REC_NONE;
+      ptypesPtrDepth[nparams] := 0;
+      ptypesPtrBaseTk[nparams] := Ord(tyUnknown);
+      ptypesPtrBaseRec[nparams] := REC_NONE;
       ptypesProcSig[nparams] := -1;
       parr[nparams] := False; pbyref[nparams] := False; pconst[nparams] := False;
       pout[nparams] := False;
@@ -1132,6 +1147,9 @@ begin
       ptypesRec[nparams] := LiftCapRec[lcb + i];
       ptypesPtrElemTk[nparams] := LiftCapPtrTk[lcb + i];
       ptypesPtrElemRec[nparams] := LiftCapPtrRec[lcb + i];
+      ptypesPtrDepth[nparams] := LiftCapPtrDepth[lcb + i];
+      ptypesPtrBaseTk[nparams] := LiftCapPtrBaseTk[lcb + i];
+      ptypesPtrBaseRec[nparams] := LiftCapPtrBaseRec[lcb + i];
       ptypesProcSig[nparams] := LiftCapProcSig[lcb + i];
       parr[nparams] := LiftCapArr[lcb + i];
       pbyref[nparams] := True;            { captured by reference }
@@ -1235,6 +1253,9 @@ begin
       ptypesSetEnum[i] := ptypesSetEnum[i-1];
       ptypesPtrElemTk[i] := ptypesPtrElemTk[i-1];
       ptypesPtrElemRec[i] := ptypesPtrElemRec[i-1];
+      ptypesPtrDepth[i] := ptypesPtrDepth[i-1];
+      ptypesPtrBaseTk[i] := ptypesPtrBaseTk[i-1];
+      ptypesPtrBaseRec[i] := ptypesPtrBaseRec[i-1];
       ptypesProcSig[i] := ptypesProcSig[i-1];
       parr[i]   := parr[i-1];
       pbyref[i] := pbyref[i-1];
@@ -1321,6 +1342,10 @@ begin
       ptypesPtrElemTk[0] := tyUnknown;
       ptypesPtrElemRec[0] := REC_NONE;
     end;
+    { Self is a class reference, not a typed pointer: no depth to speak of. }
+    ptypesPtrDepth[0] := 0;
+    ptypesPtrBaseTk[0] := Ord(tyUnknown);
+    ptypesPtrBaseRec[0] := REC_NONE;
     ptypesProcSig[0] := -1;
     parr[0]   := False;
     pNDims[0] := 0;
@@ -1365,6 +1390,9 @@ begin
       ptypesSetEnum[i] := ptypesSetEnum[i-1];
       ptypesPtrElemTk[i] := ptypesPtrElemTk[i-1];
       ptypesPtrElemRec[i] := ptypesPtrElemRec[i-1];
+      ptypesPtrDepth[i] := ptypesPtrDepth[i-1];
+      ptypesPtrBaseTk[i] := ptypesPtrBaseTk[i-1];
+      ptypesPtrBaseRec[i] := ptypesPtrBaseRec[i-1];
       ptypesProcSig[i] := ptypesProcSig[i-1];
       parr[i]   := parr[i-1];
       pbyref[i] := pbyref[i-1];
@@ -1394,6 +1422,9 @@ begin
     ptypesRec[0] := REC_NONE;
     ptypesPtrElemTk[0] := tyUnknown;
     ptypesPtrElemRec[0] := REC_NONE;
+    ptypesPtrDepth[0] := 0;
+    ptypesPtrBaseTk[0] := Ord(tyUnknown);
+    ptypesPtrBaseRec[0] := REC_NONE;
     ptypesProcSig[0] := -1;
     parr[0]   := False;
     pbyref[0] := False;
@@ -1867,14 +1898,9 @@ begin
     end;
     if ptypes[i] = tyPointer then
     begin
-      { The parameter-type table records only the immediate pointee --
-        ptypesPtrElemTk/Rec, with no ptypesPtrDepth -- so this is the derived
-        single-level answer, and it declines when the pointee is itself a
-        pointer. A `^PChar` PARAMETER therefore still loses its depth; giving
-        the table the full triple is the next conversion in
-        feature-a-typeref-migrate-consumers, and it needs three more entries in
-        an already-parallel table rather than a helper call here. }
-      SetSymPointerTo(idx, ptypesPtrElemTk[i], ptypesPtrElemRec[i]);
+      SetSymPointerType(idx, ptypesPtrElemTk[i], ptypesPtrElemRec[i],
+                        ptypesPtrDepth[i], ptypesPtrBaseTk[i],
+                        ptypesPtrBaseRec[i]);
       SymProcSig[idx] := ptypesProcSig[i];
     end
     else if (ptypes[i] = tyRecord) and (ptypesProcSig[i] >= 0) then

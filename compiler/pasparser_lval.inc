@@ -1445,6 +1445,36 @@ begin
         tk := IntToTypeKind(AliasElemTk[aliasIdx]);
         recName := AliasElemRec[aliasIdx];
       end
+      else if (tk = tyPointer) and (ASTKind[node] = AN_DEREF) then
+      begin
+        { `p^[i]` -- indexing the RESULT of a dereference. The caret branch above
+          already parked that result's remaining depth in ASTSOffset and its
+          ultimate base in ASTSLen/ASTIVal, so this arm reads the tag it wrote
+          rather than re-deriving anything: one level left means the element IS
+          the base type (`^PChar` -> `p^[i]` is a Char), two or more means the
+          element is still a pointer.
+
+          Without this arm `p^[i]` fell to the final else, which asks the BASE
+          SYMBOL for its ElemType -- a pointer variable has none -- so the
+          element came out tyUnknown and printed as an address. Both arms of the
+          double case were broken identically, global and parameter alike, which
+          is why the parameter-depth fix above did not move it. }
+        if ASTSOffset[node] >= 2 then
+        begin
+          tk := tyPointer;
+          recName := ASTIVal[node];
+        end
+        else if (ASTSOffset[node] = 1) and (ASTSLen[node] <> Ord(tyUnknown)) then
+        begin
+          tk := IntToTypeKind(ASTSLen[node]);
+          recName := ASTIVal[node];
+        end
+        else
+        begin
+          tk := tyUnknown;
+          recName := REC_NONE;
+        end;
+      end
       else if (tk = tyPointer) and (ASTKind[node] = AN_FIELD) then
       begin
         { pointer-typed field indexing FField[i]: element type/rec from the

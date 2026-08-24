@@ -1789,6 +1789,13 @@ var
   LiftCapDyn         : array[0..MAX_LIFT_CAPS-1] of Integer;
   LiftCapPtrTk       : array[0..MAX_LIFT_CAPS-1] of TTypeKind;
   LiftCapPtrRec      : array[0..MAX_LIFT_CAPS-1] of Integer;
+  { ...and the rest of the captured pointer's identity, so a nested routine that
+    captures a `^PChar` gets a `^PChar` parameter rather than a flattened PChar.
+    Prime TTypeRef territory: this table redeclares the same tuple for the third
+    time. feature-a-typeref-migrate-consumers }
+  LiftCapPtrDepth    : array[0..MAX_LIFT_CAPS-1] of Integer;
+  LiftCapPtrBaseTk   : array[0..MAX_LIFT_CAPS-1] of Integer;
+  LiftCapPtrBaseRec  : array[0..MAX_LIFT_CAPS-1] of Integer;
   LiftCapProcSig     : array[0..MAX_LIFT_CAPS-1] of Integer;
   LiftCapTot         : Integer;
   ParForSeq          : Integer;   { monotonic id for synthesized `parallel for` worker procs (__pf_<n>) }
