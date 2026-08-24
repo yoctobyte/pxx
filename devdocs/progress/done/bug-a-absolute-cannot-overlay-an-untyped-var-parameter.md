@@ -133,4 +133,4 @@ a local-over-global is refused — and the by-value arm is the one open item.
 quick` GREEN; new `test-core` case `test_absolute_over_a_var_parameter`.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit 147d230bf.
