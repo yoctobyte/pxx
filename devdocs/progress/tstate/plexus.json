@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T04:24:18Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "108efa13f958bb11997f248b4abf9ac3984d3ce2",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T04:52:00Z",
    "fixed": [],
    "new_red": [],
@@ -480,12 +472,21 @@
    "sha": "04eaec15ed31fe00e45c3307d568af3e7ff622e0",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-24T01:25:25Z",
+   "fixed": [
+    "test-core#src:test/test_basic_comprehensive.bas"
+   ],
+   "new_red": [],
+   "sha": "6e2e8c136234202907c5035b3940f3be061e6950",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2358728B  data=61689B  bss=51420B  procs=1788] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
-  "test-core#src:test/test_basic_comprehensive.bas": "pascal26:3906: error: compiler error: call to a runtime stub that was never emitted (code offset 0 is the ELF entry point). A frontend driver is missing its stub-emission call for the current flags/target. | in: $TMP | near: Exit  end  end  >>> end  function",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter"
  },
  "job_tier": {
@@ -2107,6 +2108,7 @@
   "test-core#src:test/test_pascal_system_qualified_intrinsic.pas": "native",
   "test-core#src:test/test_pchar_concat_and_array_element.pas": "native",
   "test-core#src:test/test_pchar_from_a_string_literal.pas": "native",
+  "test-core#src:test/test_pchar_pointer_to_pchar.pas": "native",
   "test-core#src:test/test_pchar_result_decl_only_method.pas": "native",
   "test-core#src:test/test_pchar_to_string.pas": "native",
   "test-core#src:test/test_platform_defines.pas@1": "native",
@@ -3481,6 +3483,7 @@
   "test-threads#src:test/test_mulhi.pas": "native",
   "test-threads#src:test/test_mutex.pas": "native",
   "test-threads#src:test/test_op_overload_mixed_operands.pas": "native",
+  "test-threads#src:test/test_op_overload_scalar_left.pas": "native",
   "test-threads#src:test/test_open_array_value_param_copies.pas": "native",
   "test-threads#src:test/test_palthread.pas": "native",
   "test-threads#src:test/test_parallel_for.pas": "native",
@@ -4502,7 +4505,7 @@
   "test-core#src:test/test_auto_var.pas": "pass",
   "test-core#src:test/test_bare_procvar_call_b273.pas": "pass",
   "test-core#src:test/test_bare_property.pas": "pass",
-  "test-core#src:test/test_basic_comprehensive.bas": "fail",
+  "test-core#src:test/test_basic_comprehensive.bas": "pass",
   "test-core#src:test/test_basic_goto_gosub.bas": "pass",
   "test-core#src:test/test_big_static_array_open_param.pas": "pass",
   "test-core#src:test/test_bitwise_not_lvalue_b280.pas": "pass",
@@ -5147,6 +5150,7 @@
   "test-core#src:test/test_pascal_system_qualified_intrinsic.pas": "pass",
   "test-core#src:test/test_pchar_concat_and_array_element.pas": "pass",
   "test-core#src:test/test_pchar_from_a_string_literal.pas": "pass",
+  "test-core#src:test/test_pchar_pointer_to_pchar.pas": "pass",
   "test-core#src:test/test_pchar_result_decl_only_method.pas": "pass",
   "test-core#src:test/test_pchar_to_string.pas": "pass",
   "test-core#src:test/test_platform_defines.pas@1": "pass",
@@ -6512,6 +6516,7 @@
   "test-threads#src:test/test_mulhi.pas": "pass",
   "test-threads#src:test/test_mutex.pas": "pass",
   "test-threads#src:test/test_op_overload_mixed_operands.pas": "pass",
+  "test-threads#src:test/test_op_overload_scalar_left.pas": "pass",
   "test-threads#src:test/test_open_array_value_param_copies.pas": "pass",
   "test-threads#src:test/test_palthread.pas": "pass",
   "test-threads#src:test/test_parallel_for.pas": "pass",
@@ -6564,11 +6569,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-24T00:23:52Z",
-  "sha": "04eaec15ed31fe00e45c3307d568af3e7ff622e0",
+  "date": "2026-08-24T01:25:25Z",
+  "sha": "6e2e8c136234202907c5035b3940f3be061e6950",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.0
+  "wall": 3600.4
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6758,32 +6763,6 @@
     "fd93e4a71c37a7932b9ef73e4c9f8a7deceb3c34"
    ],
    "src": "test/lib_mimic_xml_etree_elementtree.npy",
-   "status": "fail"
-  },
-  {
-   "bad": "7d4a3dbb99ce2bc83a5fbde50a6844292c5bd21a",
-   "good": "df21e490d7989a812fc35b0f5f2dc5b5ea0e4bab",
-   "job": "test-core#src:test/test_basic_comprehensive.bas",
-   "name": "test-core#283",
-   "opened": "2026-08-23T23:22:17Z",
-   "pin_built": false,
-   "range": [
-    "9074403c08168194e9ab788c8919dea953854a58",
-    "e9388fe6f8569c728991c0c39d53e662388f7041",
-    "d014cc21a8da48605c72ae5e280216fedffd4ac1",
-    "1b3dcc656073d0f3c22ed630dd18dc65c0c1140e",
-    "1bfd5e9e964265297bfad460988f1a032c278efe",
-    "1f48588facfac395fda8b001661a815512a28784",
-    "c2145352e20cd39c6133e1774f29cb322c655ce8",
-    "d3d26ccbcb1b6c373f608e96f8a35eed3ad50a98",
-    "ef3f9168e78f4a95f2ad6a2c51c65e09dbec7f66",
-    "f3ef5d0d6e86984a1668fd9b90167239a21f32ed",
-    "6241076adb137f000011cd8b4d7031fa61c155dd",
-    "e87099722f03042e50741925964ca2d73720ea57",
-    "66cc20bb9b82736f98b337218e4f483e447a33b9",
-    "7d4a3dbb99ce2bc83a5fbde50a6844292c5bd21a"
-   ],
-   "src": "test/test_basic_comprehensive.bas",
    "status": "fail"
   }
  ],
