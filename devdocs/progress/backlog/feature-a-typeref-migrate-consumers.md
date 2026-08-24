@@ -334,9 +334,41 @@ replaces five stores at nine sites.
   from PINNED differs from compiler/pascal26") that was pure contamination. The
   re-run on a quiet tree was GREEN with no change to the sources.
 
+### Lane 4 is DONE too, and it went the other way round
+
+Proc returns got the triple (`ProcRetPtrDepth` / `ProcRetPtrBaseTk` / `Rec`) at
+all nine declaration sites, and record/class FIELDS got theirs
+(`UFldPtrDepth` / `UFldPtrBaseTk` / `Rec`) right after, because the 72-program
+cross product found them one after the other. Both closed
+`bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape`;
+that ticket asked for `TTypeRef` FIRST and got parallel arrays instead. The
+reasoning is written out in the resolved ticket -- in short, the same five
+fields are populated at the same sites either way, folding arrays into a record
+is mechanical, and waiting cost silently wrong values in the field.
+
+**The reader is the expensive half, every single time.** Populating proc-return
+depth fixed nothing on its own: `c := GetQ^; WriteLn(c)` printed the string
+while `WriteLn(GetQ^)` printed the address, same binary, same declaration.
+`ApplyCallResultPtrSuffix` is a FOURTH copy of the pointer walk (with the main
+deref chain, `pasparser_expr`'s parenthesised tail, and the inherited-call tail)
+and it stamped none of the node tags the rest of the compiler reads. Four
+tickets running now have ended "the metadata was there / easy, the reader was
+missing" -- when a pointer shape is wrong, look at the reader before the table.
+
+**Cross-product acceptance line: 72/72 agree with fpc 3.2.2** (10 source shapes
+x 8 contexts). Before this session's fixes: 67/72, and before the array fix, 36
+divergences out of 88.
+
 ### Still open, in order
 
-1. ~~The other 20 post-creation sites.~~ **DONE** (see above).
-2. Then `TTypeRef` gains `PtrDepth` and `PtrBaseTk`/`Rec` are re-pointed at the
-   ultimate base, with `ir.inc:2506` guarding on `PtrDepth = 1`.
-3. Then lane 4 (`ProcRetTR`), which closes the filed `GetQ^` bug.
+1. ~~The other 20 post-creation sites.~~ **DONE**
+2. ~~Lane 4 (proc returns).~~ **DONE**, plus fields, which were not on the list.
+3. `TTypeRef` gains `PtrDepth` and `PtrBaseTk`/`Rec` are re-pointed at the
+   ultimate base, with `ir.inc:2506` guarding on `PtrDepth = 1`. **Blocked on a
+   Track U call now that seven tables spell the depth separately** --
+   [[decide-typeref-gains-a-pointer-depth-field]] lays out the fork. Do not
+   start the fold before it is answered.
+4. The remaining reader duplication: four copies of the pointer walk, none of
+   which can be deleted without the other three agreeing on the node tags. That
+   is a bigger, better-value refactor than the table fold and it is not filed
+   yet -- file it before starting, with the four sites named.
