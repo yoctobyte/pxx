@@ -679,6 +679,36 @@ begin
   Result := stmtList;
 end;
 
+function BSourceUsesAUnit: Boolean;
+{ Does this .bas source contain a USES statement?
+
+  It reads like a stylistic question and it is not: the emitted AnsiString
+  runtime is a set of SHIMS, and every shim's actual body is a builtinheap
+  procedure (`AnsiStrFromLiteralAddr` is nine pushes around
+  `EmitCallProc(FindProc('PXXStrFromLit'))`). BASIC pulls builtinheap through
+  exactly one door -- `USES <unit>` during the parse -- so "will builtinheap be
+  here" and "does this source say USES" are the SAME question, and it is the
+  only honest predicate for whether the shims can be emitted.
+
+  DetectPascalRuntimeNeeds cannot answer it. Its `needsAnsiRuntime` is
+  `PasDefineExists('PXX_MANAGED_STRING')` first thing, and PasApplyDefaults
+  defines PXX_MANAGED_STRING unconditionally -- so for EVERY program, in every
+  frontend, it returns True and then sets needsHeap from it. It is not a
+  discriminator; it is a constant. That is why a unit-free `10 PRINT "hello"`
+  got the shim, and the shim called a builtinheap body that was never going to
+  arrive.
+  bug-a-a-unit-free-basic-program-calls-a-helper-it-never-emits }
+var i: Integer;
+begin
+  BSourceUsesAUnit := False;
+  for i := 0 to TokCount - 1 do
+    if Tokens[i].Kind = tkUses then
+    begin
+      BSourceUsesAUnit := True;
+      Exit;
+    end;
+end;
+
 procedure ParseBProgram;
 var
   stmtList: Integer;
@@ -699,7 +729,13 @@ begin
     makes"; there is now no call for it to miss.
     refactor-a-one-program-driver-prologue-for-every-frontend }
   DetectPascalRuntimeNeeds(bNeedsHeap, bNeedsAnsi, bNeedsDiv);
-  EmitProgramPrologue(False, bNeedsAnsi, True, jmpPatch);
+  { ...with ONE argument this driver has to compute itself: whether the emitted
+    AnsiString shims can be emitted at all. See BSourceUsesAUnit above --
+    bNeedsAnsi is a constant True for every program ever compiled, so it is the
+    wrong input here. A unit-free program gets no shims, emits no call into
+    them, and is SMALLER for it (933B -> 559B for `10 PRINT "hello"`).
+    bug-a-a-unit-free-basic-program-calls-a-helper-it-never-emits }
+  EmitProgramPrologue(False, BSourceUsesAUnit, True, jmpPatch);
 
   { GOTO/GOSUB: reset the shared label table (C resets it per function; the
     BASIC main program is one scope), prescan for jump targets, and allocate
@@ -754,17 +790,19 @@ begin
     on one target is not automatically benign on another, and this one had been
     hidden because .bas never ran anywhere but x86-64.
 
-    The BODY only, deliberately NOT the ApplyCallFixups that follows it in the
-    Pascal, C, NilPy, Rust, Zig and Erlang drivers. Nothing resolves this
-    driver's forward calls today — DceRun, whose trailing ApplyCallFixups is
-    the only one this driver could reach, is off unless --dce AND x86-64 AND
-    the Pascal frontend — and adding the pass here turns a unit-free .bas
-    program with a string literal into a COMPILE ERROR, `unresolved forward:
-    PXXStrFromLit`: BASIC's managed-string codegen calls a helper that only
-    arrives with builtinheap, which a program without `uses` never pulls. That
-    is a real latent hole and it has its own ticket; making the placeholder
-    inert (see EmitCallProc in symtab.inc) is what this fix needs, and it makes
-    an unresolved call behave exactly as it always has on x86-64.
+    ...and the shared EPILOGUE, which is the BODY plus the ApplyCallFixups that
+    resolves this driver's forward calls. That second half was deliberately
+    withheld when this comment was first written, because adding it turned a
+    unit-free .bas program with a string literal into `unresolved forward:
+    PXXStrFromLit` -- the shim was emitted, its builtinheap body was not, and
+    the only thing hiding it was that NOTHING resolved this driver's forward
+    calls, so the placeholder survived the whole compile and (on x86-64) fell
+    through. A call that silently does not happen.
+
+    That hole is closed above: the shims are now emitted only when builtinheap
+    will actually be there, so there is no dangling forward left to resolve and
+    the pass can finally run.
+    bug-a-a-unit-free-basic-program-calls-a-helper-it-never-emits
     bug-a-a-basic-program-is-an-illegal-instruction-on-aarch64-and-arm32 }
-  EmitFinalizerRunnerBody;
+  EmitProgramEpilogue;
 end;

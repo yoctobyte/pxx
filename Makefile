@@ -5272,6 +5272,17 @@ test-core: $(COMPILER)
 	# an instruction SKIP on ARM, which ate the `mov r7, #248` at the head of
 	# END's exit sequence. Cross rows are what make either regression visible.
 	# bug-a-a-basic-program-is-an-illegal-instruction-on-aarch64-and-arm32
+	# A unit-free .bas program with a string literal. The property is that it
+	# COMPILES: the emitted AnsiString SHIMS used to be emitted for every .bas
+	# source (DetectPascalRuntimeNeeds' needsAnsiRuntime is
+	# PasDefineExists('PXX_MANAGED_STRING'), which PasApplyDefaults sets
+	# unconditionally -- a constant, not a discriminator), while every shim's
+	# BODY is a builtinheap procedure and BASIC pulls builtinheap only through
+	# USES. Adding the ApplyCallFixups every other driver has then turned this
+	# file into `unresolved forward: PXXStrFromLit`.
+	# bug-a-a-unit-free-basic-program-calls-a-helper-it-never-emits
+	./$(COMPILER) test/test_basic_unit_free_string_literal.bas $(TESTTMP)/test_basic_uf26
+	test "$$($(TESTTMP)/test_basic_uf26)" = "$$(printf 'unit-free\nline numbered too')"
 	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then \
 	  for arch in i386 aarch64 arm32; do \
 	    ./$(COMPILER) --target=$$arch test/test_basic_goto_gosub.bas $(TESTTMP)/test_basic_gg_$$arch >/dev/null; \
@@ -5283,6 +5294,9 @@ test-core: $(COMPILER)
 	    ./$(COMPILER) --target=$$arch test/test_basic_lexer.bas $(TESTTMP)/test_basic_lex_$$arch >/dev/null; \
 	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_lex_$$arch)" = "$$(printf 'Hello, Traditional BASIC!\nHello, Modern BASIC!')" \
 	      || { echo "cross .bas lexer FAIL on $$arch"; exit 1; }; \
+	    ./$(COMPILER) --target=$$arch test/test_basic_unit_free_string_literal.bas $(TESTTMP)/test_basic_uf_$$arch >/dev/null; \
+	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_uf_$$arch)" = "$$(printf 'unit-free\nline numbered too')" \
+	      || { echo "cross .bas unit-free FAIL on $$arch"; exit 1; }; \
 	    echo "cross .bas ok: $$arch"; \
 	  done; \
 	else \
