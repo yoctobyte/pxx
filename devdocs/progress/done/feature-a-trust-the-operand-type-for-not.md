@@ -140,4 +140,4 @@ A/B compile of `compiler.pas` and three bitwise tests; the 53-expression
 differential; the new test on five targets; `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit 7a2635cba.
