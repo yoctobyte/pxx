@@ -89,7 +89,7 @@ elements; and `Format` with `%d %s %x %X %.4x`, width and left-justify flags,
 `%%`, and positional `%1:s`.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit e8603f056.
 
 ---
 
