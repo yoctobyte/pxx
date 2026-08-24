@@ -180,4 +180,4 @@ than folded in:
 new test on all four; `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit a95d75f89.
