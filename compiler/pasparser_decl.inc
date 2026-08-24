@@ -993,8 +993,14 @@ begin
     end
     else if VDTk = tyPointer then
     begin
-      Syms[idx].PtrElemTk := LastTypePointerElemTk;
-      Syms[idx].PtrElemRec := LastTypePointerElemRec;
+      { The whole triple from LastTypePointer*, which the type parser sets
+        together -- the Alloc* chokepoints read all five from there, and this
+        arm read two of them, so a `^PChar` declared through this path came out
+        indistinguishable from a `PChar`.
+        feature-a-typeref-migrate-consumers }
+      SetSymPointerType(idx, LastTypePointerElemTk, LastTypePointerElemRec,
+                        LastTypePointerDepth, LastTypePointerBaseTk,
+                        LastTypePointerBaseRec);
       SymProcSig[idx] := LastTypeProcSig;
       SymSyncTypeRef(idx);
     end
@@ -2067,8 +2073,9 @@ begin
         begin
           { metaclass / pointer typed const: keep the pointee info so uses
             (SSLImplementation.Create) dispatch like a var of the type }
-          Syms[cIdx].PtrElemTk := LastTypePointerElemTk;
-          Syms[cIdx].PtrElemRec := LastTypePointerElemRec;
+          SetSymPointerType(cIdx, LastTypePointerElemTk, LastTypePointerElemRec,
+                            LastTypePointerDepth, LastTypePointerBaseTk,
+                            LastTypePointerBaseRec);
           { ...INCLUDING the call signature, which is what makes a procedural
             type callable: `const K: TFn = @Sq;` then `K(7)`. The var arm above
             copies it, this one did not, so a procvar CONST could be declared

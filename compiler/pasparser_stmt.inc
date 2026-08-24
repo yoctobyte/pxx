@@ -252,7 +252,9 @@ begin
   if newPi < 0 then
     Error('for-in generator: a variant argument needs pylib (pycell_new) in scope');
   ps := AllocVar('', tyPointer);
-  Syms[ps].PtrElemTk := tyVariant;
+  { a synthesized cell pointer: exactly one level over a Variant, by
+    construction. feature-a-typeref-migrate-consumers }
+  SetSymPointerTo(ps, tyVariant, REC_NONE);
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := newPi;
   ASTLeft[callNode] := -1;

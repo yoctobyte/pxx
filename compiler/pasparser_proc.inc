@@ -1867,8 +1867,14 @@ begin
     end;
     if ptypes[i] = tyPointer then
     begin
-      Syms[idx].PtrElemTk := ptypesPtrElemTk[i];
-      Syms[idx].PtrElemRec := ptypesPtrElemRec[i];
+      { The parameter-type table records only the immediate pointee --
+        ptypesPtrElemTk/Rec, with no ptypesPtrDepth -- so this is the derived
+        single-level answer, and it declines when the pointee is itself a
+        pointer. A `^PChar` PARAMETER therefore still loses its depth; giving
+        the table the full triple is the next conversion in
+        feature-a-typeref-migrate-consumers, and it needs three more entries in
+        an already-parallel table rather than a helper call here. }
+      SetSymPointerTo(idx, ptypesPtrElemTk[i], ptypesPtrElemRec[i]);
       SymProcSig[idx] := ptypesProcSig[i];
     end
     else if (ptypes[i] = tyRecord) and (ptypesProcSig[i] >= 0) then

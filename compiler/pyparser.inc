@@ -21395,7 +21395,9 @@ begin
   if newPi < 0 then
     Error('Nil Python: a generator variant argument needs pylib (pycell_new)');
   ps := AllocVar('', tyPointer);
-  Syms[ps].PtrElemTk := tyVariant;
+  { a synthesized pycell pointer: exactly one level over a Variant, by
+    construction. feature-a-typeref-migrate-consumers }
+  SetSymPointerTo(ps, tyVariant, REC_NONE);
   callNode := AllocNode(AN_CALL);
   ASTIVal[callNode] := newPi;
   ASTLeft[callNode] := -1;
@@ -22879,7 +22881,10 @@ begin
   newPi := FindProc('pycell_new');
   if newPi < 0 then Exit;
   ps := AllocVar('', tyPointer);
-  Syms[ps].PtrElemTk := Syms[si].TypeKind;
+  { the cell holds si's own type; SetSymPointerTo declines the depth when that
+    type is itself a pointer, which is what this site did before it had a name.
+    feature-a-typeref-migrate-consumers }
+  SetSymPointerTo(ps, Syms[si].TypeKind, REC_NONE);
   SymCellPtr[si] := ps;
 
   callNode := AllocNode(AN_CALL);

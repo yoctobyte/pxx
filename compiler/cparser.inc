@@ -4994,8 +4994,6 @@ begin
     idx := CAllocDeclVar(name, tyPointer);
     if paLen > 0 then
     begin
-      Syms[idx].PtrElemTk := IntToTypeKind(elemTkOrd);
-      Syms[idx].PtrElemRec := elemRec;
       SymPtrElemArrLen[idx] := paLen;
       { Multi-dim pointee `elem (*p)[A][B]..`: record the dim count + spans so
         `p[i][j][k]` flattens with the real inner strides (single-dim `[N]`
@@ -5004,20 +5002,15 @@ begin
       if CTypePtrElemNDims > 1 then
         for mdi := 0 to CTypePtrElemNDims - 1 do
           SymArrDimSpan[idx * MAX_ARR_DIMS + mdi] := CTypePtrElemDim[mdi];
-      SymPtrDepth[idx] := 1;
-      SymPtrBaseTk[idx] := ptrBaseTk;
-      SymPtrBaseRec[idx] := ptrBaseRec;
+      SetSymPointerType(idx, IntToTypeKind(elemTkOrd), elemRec,
+                        1, ptrBaseTk, ptrBaseRec);
     end
     else
     begin
-      Syms[idx].PtrElemTk := tyUnknown;
-      Syms[idx].PtrElemRec := REC_NONE;
-      SymPtrDepth[idx] := 1;
-      SymPtrBaseTk[idx] := Ord(tyUnknown);
-      SymPtrBaseRec[idx] := REC_NONE;
+      SetSymPointerType(idx, tyUnknown, REC_NONE,
+                        1, Ord(tyUnknown), REC_NONE);
       if procSig >= 0 then SymProcSig[idx] := procSig;
     end;
-    SymSyncTypeRef(idx);
     head := -1; tail := -1;
     if CurTok.Kind = tkAssign then
     begin
@@ -5101,13 +5094,9 @@ begin
       sibPaLen := CEvalConstExpr;    { N }
       Expect(tkRBrack, ']');
       idx := CAllocDeclVar(name, tyPointer);
-      Syms[idx].PtrElemTk := scalarTk;
-      Syms[idx].PtrElemRec := scalarRec;
       SymPtrElemArrLen[idx] := sibPaLen;
-      SymPtrDepth[idx] := 1;
-      SymPtrBaseTk[idx] := Ord(scalarTk);
-      SymPtrBaseRec[idx] := scalarRec;
-      SymSyncTypeRef(idx);
+      SetSymPointerType(idx, scalarTk, scalarRec,
+                        1, Ord(scalarTk), scalarRec);
       if CurTok.Kind = tkAssign then
       begin
         Next;
@@ -5532,12 +5521,8 @@ begin
         if vlaElemSz < 1 then vlaElemSz := 1;
         if declTk = tyRecord then LastTypeRecId := scalarRec;
         idx := CAllocDeclVar(name, tyPointer);
-        Syms[idx].PtrElemTk := declTk;
-        Syms[idx].PtrElemRec := scalarRec;
-        SymPtrDepth[idx] := declPtrDepth + 1;
-        SymPtrBaseTk[idx] := declBaseTk;
-        SymPtrBaseRec[idx] := declBaseRec;
-        SymSyncTypeRef(idx);
+        SetSymPointerType(idx, declTk, scalarRec,
+                          declPtrDepth + 1, declBaseTk, declBaseRec);
         { $vlasz$name := <dim> * sizeof(elem) }
         vlaSzSym := CAllocDeclVar('$vlasz$' + name, tyInt64);
         vlaSzLit := AllocNode(AN_INT_LIT); ASTIVal[vlaSzLit] := vlaElemSz;
@@ -5578,11 +5563,8 @@ begin
       end;
       if declTk = tyPointer then
       begin
-        Syms[idx].PtrElemTk := IntToTypeKind(declElemTk);
-        Syms[idx].PtrElemRec := declElemRec;
-        SymPtrDepth[idx] := declPtrDepth;
-        SymPtrBaseTk[idx] := declBaseTk;
-        SymPtrBaseRec[idx] := declBaseRec;
+        SetSymPointerType(idx, IntToTypeKind(declElemTk), declElemRec,
+                          declPtrDepth, declBaseTk, declBaseRec);
         { A LOCAL array of function pointers declared through a TYPEDEF --
           `binop tab[2] = {add, mul};` -- carries its element call signature in
           SymElemProcSig, the `tab[i](args)` channel, exactly as the file-scope
@@ -5683,11 +5665,8 @@ begin
       idx := CAllocDeclVar(name, declTk);
       if declTk = tyPointer then
       begin
-        Syms[idx].PtrElemTk := IntToTypeKind(declElemTk);
-        Syms[idx].PtrElemRec := declElemRec;
-        SymPtrDepth[idx] := declPtrDepth;
-        SymPtrBaseTk[idx] := declBaseTk;
-        SymPtrBaseRec[idx] := declBaseRec;
+        SetSymPointerType(idx, IntToTypeKind(declElemTk), declElemRec,
+                          declPtrDepth, declBaseTk, declBaseRec);
         if declProcSig >= 0 then SymProcSig[idx] := declProcSig;  { fn-pointer var: callable }
         { `ft *pf` — pointer to a fn-pointer: the pointee sig lets `(*pf)(args)`
           resolve (SymElemProcSig channel, shared with `pf[0](args)`). }
@@ -7744,10 +7723,8 @@ begin
       else
       begin
         if procIdx >= 0 then SymProcSig[idx] := procIdx;
-        Syms[idx].PtrElemTk := tyUnknown;
-        Syms[idx].PtrElemRec := REC_NONE;
-        SymPtrDepth[idx] := 1;
-        SymSyncTypeRef(idx);
+        SetSymPointerType(idx, tyUnknown, REC_NONE,
+                          1, Ord(tyUnknown), REC_NONE);
       end;
     end;
     for ei := 0 to nArrElems - 1 do
@@ -8026,11 +8003,8 @@ begin
     end;
     if (idx >= 0) and (baseTk = tyPointer) then
     begin
-      Syms[idx].PtrElemTk := IntToTypeKind(CTypeElemTk);
-      Syms[idx].PtrElemRec := CTypeElemRec;
-      SymPtrDepth[idx] := CTypePtrDepth;
-      SymPtrBaseTk[idx] := CTypePtrBaseTk;
-      SymPtrBaseRec[idx] := CTypePtrBaseRec;
+      SetSymPointerType(idx, IntToTypeKind(CTypeElemTk), CTypeElemRec,
+                        CTypePtrDepth, CTypePtrBaseTk, CTypePtrBaseRec);
       { `ft *gpf` global — pointee sig so `(*gpf)(args)` resolves. }
       if CTypePtrElemProcSig >= 0 then SymElemProcSig[idx] := CTypePtrElemProcSig;
       SymSyncTypeRef(idx);
@@ -10380,11 +10354,8 @@ begin
       arithmetic inside the body know the element stride/width. }
     if ptypes[i] = tyPointer then
     begin
-      Syms[idx].PtrElemTk := IntToTypeKind(pelemtk[i]);
-      Syms[idx].PtrElemRec := pelemrec[i];
-      SymPtrDepth[idx] := pdepths[i];
-      SymPtrBaseTk[idx] := pbasetk[i];
-      SymPtrBaseRec[idx] := pbaserec[i];
+      SetSymPointerType(idx, IntToTypeKind(pelemtk[i]), pelemrec[i],
+                        pdepths[i], pbasetk[i], pbaserec[i]);
       if pprocsig[i] >= 0 then SymProcSig[idx] := pprocsig[i];  { fn-pointer param: callable }
       if pptrelemsig[i] >= 0 then SymElemProcSig[idx] := pptrelemsig[i];  { `ft *pf` param: `(*pf)()` }
       { pointer-to-array param: apply the pointee array shape so `q[i][j]` flattens

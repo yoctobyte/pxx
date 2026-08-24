@@ -304,11 +304,39 @@ that drifted apart would still match a regenerated `.expected`. Verified to FAIL
 on the pre-change compiler, on all three affected rows. Cross-checked on
 i386 / aarch64 / arm32 / riscv32.
 
+### Step 1 is DONE — every post-creation site now goes through the helper
+
+`grep 'Syms\[.*\].PtrElemTk :='` outside `symtab.inc` returns **nothing**.
+The 15 remaining sites landed in two A/B-verified batches after the
+`ast_syminfer` one: `pasparser_decl` 2, `pasparser_proc` 1, `pasparser_stmt` 1,
+`pyparser` 2, then `cparser` 9. Reference binary compiled the same sources
+before and after each batch; `compiler.pas`, three PChar/`not`/depth Pascal
+tests, `test_basic_comprehensive.bas`, three NilPy tests and eight C tests
+(VLA, 2-D row length, decay stride, fn-pointer array, `**` return, called
+result, ptr-array field) were **binary identical** every time. The compiler's
+own code section shrank 1,306 bytes in the cparser batch alone — the helper
+replaces five stores at nine sites.
+
+**Two findings worth carrying forward:**
+
+- **C's parameter table has the full triple, Pascal's does not.** `cparser`
+  threads `pdepths[i]` / `pbasetk[i]` / `pbaserec[i]` alongside `pelemtk`, so a
+  C `char **argv` parameter keeps its depth. `pasparser_proc`'s parallel
+  `ptypesPtrElemTk` / `ptypesPtrElemRec` have **no depth sibling**, so that site
+  had to take the derived single-level answer (`SetSymPointerTo`) and a Pascal
+  `^PChar` PARAMETER still arrives at depth 1 instead of 2. That is the same
+  class of loss as the inference bug just fixed, in the one place a helper call
+  cannot paper over: the metadata genuinely is not recorded. Extending the
+  param table is a prerequisite for step 2's `PtrDepth = 1` guard being safe for
+  Pascal parameters — do it as the first half of step 2, not as an afterthought.
+- **Do not edit sources while a gate runs.** `gate.sh quick` rebuilds from the
+  working tree; a mid-run edit produced a *bogus* RED ("the fixedpoint reached
+  from PINNED differs from compiler/pascal26") that was pure contamination. The
+  re-run on a quiet tree was GREEN with no change to the sources.
+
 ### Still open, in order
 
-1. The other **20** post-creation sites (`cparser.inc` 9, `pasparser_decl` 2,
-   `pasparser_proc` 1, `pasparser_stmt` 1, `pyparser` 2, and the five remaining
-   `ast_syminfer` writes are done). Each under the A/B binary comparison.
+1. ~~The other 20 post-creation sites.~~ **DONE** (see above).
 2. Then `TTypeRef` gains `PtrDepth` and `PtrBaseTk`/`Rec` are re-pointed at the
    ultimate base, with `ir.inc:2506` guarding on `PtrDepth = 1`.
 3. Then lane 4 (`ProcRetTR`), which closes the filed `GetQ^` bug.
