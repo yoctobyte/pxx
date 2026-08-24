@@ -4323,6 +4323,7 @@ var
   miArg, miEmpty: Integer; miIsFin: Boolean;   { Initialize/Finalize }
   pfIsPF: Boolean; pfK, pfDepth: Integer;
   insSrcSym: Integer;   { Insert(srcArr, arr, i): the source array's symbol, else -1 }
+  savedErrCount: Integer;   { recovered-diagnostic watermark, for statement resync }
 begin
   { `parallel for` soft keyword: `parallel` lexes as a plain ident, so it is a
     parallel-for only when followed by `for`, or by a policy clause `(...)` whose
@@ -6323,7 +6324,24 @@ begin
                 end;
               end;
               Next;
+              savedErrCount := ErrCount;
               valNode := ParseLValueAST(idx, TokPos - 2);
+              if (ErrCount > savedErrCount) and
+                 (not (CurTok.Kind in [tkAssign, tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq])) then
+              begin
+                { RECOVERED: a name in this statement did not resolve, so what
+                  the stand-in left behind is not a statement — `NoSuchProc;`
+                  reached Expect(':=') and died on `unexpected token`, which
+                  buries the real diagnostic AND stops the file at the first
+                  mistake, the exact thing recovery exists to prevent. Resync to
+                  the statement terminator and carry on with the next one; the
+                  compile still fails on ErrCount, so nothing is emitted.
+                  feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+                while not (CurTok.Kind in [tkSemicolon, tkEnd, tkEOF, tkElse, tkUntil]) do Next;
+                Result := AllocNode(AN_BLOCK);
+                ASTLeft[Result] := -1;
+                Exit;
+              end;
               if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) or
                  (ASTKind[valNode] = AN_INTF_CALL) or (ASTKind[valNode] = AN_CALL_IND) or
                  { with-scoped `Free;` desugars to a nil-guarded IF — a

@@ -144,3 +144,62 @@ names reported, the repeat silent, no binary written).
   `class method not found`, `New: undefined variable` and the rest are the same
   shape: report, mint a stand-in, `Exit`. Each one is a judgement about what
   stand-in keeps the parse sane, which is why they were not swept in bulk.
+
+## Slice 2 landed 2026-08-24 (claude-A) — three more diagnostics, and the resync that made them worth having
+
+Slice 1 made `Error()` able to return and converted the four "undefined
+variable" sites. Three more name-resolution diagnostics now recover, chosen
+because together they cover the ordinary typo:
+
+- **unknown TYPE** (`var x: TUnknwn;`) — stands in `tyInteger`, which is exactly
+  what the catch-all used to produce SILENTLY before it was closed. The
+  difference, and the whole point, is that it is now reported and the compile
+  fails.
+- **unknown MEMBER** (`r.nofield`) — the caller falls into `RecFieldType`'s
+  not-found default, again the old silent behaviour, now reported.
+- **a call to a procedure that does not exist**, which needed something the
+  first three did not.
+
+### The resync, and why a stand-in was not enough
+
+`NoSuchProc;` is not an assignment, so a stand-in VARIABLE leaves the statement
+parser at `Expect(':=')` and it dies on `unexpected token` — which buries the
+real diagnostic under a meaningless one AND stops the file at the first mistake,
+the exact thing this ticket exists to prevent. So the statement dispatcher now
+takes a **watermark**: if `ErrCount` rose while parsing the statement's lvalue
+and what follows is not an assignment operator, it skips to the statement
+terminator and yields an empty block.
+
+That is classic panic-mode recovery, and it is safe HERE for the reason slice 1
+gave: the token stream is well-formed, so "skip to the next `;`" discards
+exactly one statement and lands somewhere real. It is not a general syntax-error
+recovery and must not be read as one.
+
+Measured against fpc 3.2.2 on a file with four different unresolved names —
+a type, a member, a procedure call, a function in an expression:
+
+```
+pascal26:17: error: unknown type: TUnknownType
+pascal26:21: error: "nofield": no such member on this record/class
+pascal26:22: error: undefined variable (NoSuchProc)
+pascal26:23: error: undefined variable (NoSuchFunc)
+```
+
+fpc reports the same four (plus a follow-on "Error in type definition" for the
+first). Three unresolved names inside expressions across three lines match FPC
+name for name and line for line.
+
+### Found while doing it: `ParseLValue` and `CompileLValueAddress` are DEAD
+
+`compiler/pasparser_lval.inc`'s `ParseLValue` has no callers anywhere in
+`compiler/**` — only its own forward declaration — and `CompileLValueAddress` is
+called only from inside it. Roughly 130 lines of statement-assignment parsing,
+including a direct-emit path (`EmitB($48)`) from the pre-AST era, that nothing
+reaches. Not deleted here, because "dead" is a claim that deserves its own
+change and gate rather than a footnote in someone else's; filed as
+[[chore-a-delete-the-dead-pascal-lvalue-statement-path]].
+
+### Still open
+
+Item 1 (speculative parse) is untouched: the mechanism exists, the state-unwind
+design does not. Syntax errors still halt at the first one — deliberately.

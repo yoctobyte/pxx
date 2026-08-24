@@ -1752,7 +1752,12 @@ procedure RequireRecMember(recId: Integer; const fieldName: AnsiString);
 begin
   if (recId >= REC_UCLASS_BASE) and
      (FindUField(recId - REC_UCLASS_BASE, fieldName) < 0) then
-    Error('"' + fieldName + '": no such member on this record/class');
+    { RECOVERABLE: the caller then falls into RecFieldType's not-found default
+      (tyInteger at offset 0) and carries on reading the file, which is exactly
+      what used to happen SILENTLY. Reporting it is what changed; nothing is
+      emitted, because the driver halts on ErrCount before any output.
+      feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+    ErrorRecover('"' + fieldName + '": no such member on this record/class');
 end;
 
 function ParamIsConstVariant(pi, slot: Integer): Boolean;

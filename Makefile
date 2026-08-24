@@ -2284,6 +2284,21 @@ test-nilpy: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q '(beta)' \
 	   && test ! -e $(TESTTMP)/test_two_undefined26 \
 	  || { echo "test_two_undefined_names_both_report_fail: FAIL - rc=$$rc, $$n undefined-variable lines (want rc=1 and 2 lines, both named, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@# ...and four DIFFERENT kinds of unresolved name in one file — an unknown
+	@# type, an unknown member, a call to a procedure that does not exist, and a
+	@# function that does not exist inside an expression. fpc 3.2.2 reports all
+	@# four; this reported the first and stopped.
+	@rm -f $(TESTTMP)/test_four_errors26
+	@out=$$(./$(COMPILER) test/test_four_independent_errors_report_fail.pas $(TESTTMP)/test_four_errors26 2>&1); \
+	 rc=$$?; \
+	 n=$$(printf '%s\n' "$$out" | grep -c '^pascal26:[0-9]*: error:'); \
+	 test "$$rc" = "1" && test "$$n" = "4" \
+	   && printf '%s\n' "$$out" | grep -q 'unknown type: TUnknownType' \
+	   && printf '%s\n' "$$out" | grep -q 'no such member' \
+	   && printf '%s\n' "$$out" | grep -q '(NoSuchProc)' \
+	   && printf '%s\n' "$$out" | grep -q '(NoSuchFunc)' \
+	   && test ! -e $(TESTTMP)/test_four_errors26 \
+	  || { echo "test_four_independent_errors_report_fail: FAIL - rc=$$rc, $$n error lines (want rc=1 and 4, all four named, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	@# a SECOND class of the same name in one unit must be refused, naming it
 	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas $(TESTTMP)/test_pascal_dup_class26 2>&1 \
 	  | grep -q 'duplicate class name TFoo' \

@@ -643,7 +643,16 @@ begin
                   the hole bug-tobject-param-truncated-32bit came through — that fix patched
                   the one symptom (TObject, just above), and the hole went on to produce
                   TClass, Int8/Int16 and `absolute`. Closed here. }
-                Error('unknown type: ' + lo);
+              begin
+                { RECOVERABLE: report it and stand in an Integer, so the rest of
+                  the file is still checked and its other mistakes come out in
+                  the same run. Exactly the tyInteger the catch-all used to
+                  produce silently — the difference, and the whole point, is
+                  that it is now reported and the compile fails.
+                  feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+                ErrorRecover('unknown type: ' + lo);
+                Result := tyInteger;
+              end;
             end;
           end;
         end;

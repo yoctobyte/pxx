@@ -43,6 +43,29 @@ begin
     ErrorRecover('undefined variable');
 end;
 
+{ Consume a balanced (...) group starting at the current token, so a recovered
+  statement does not leave its argument list behind for the statement parser to
+  choke on. `NoSuchProc(1, 2);` is a CALL to a name that does not exist, and a
+  stand-in VARIABLE cannot absorb the arguments — the second diagnostic was
+  `unexpected token`, which says nothing and buries the one that mattered.
+  feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+procedure SkipParenGroup;
+var depth: Integer;
+begin
+  if CurTok.Kind <> tkLParen then Exit;
+  depth := 0;
+  while CurTok.Kind <> tkEOF do
+  begin
+    if CurTok.Kind = tkLParen then Inc(depth)
+    else if CurTok.Kind = tkRParen then
+    begin
+      Dec(depth);
+      if depth = 0 then begin Next; Exit; end;
+    end;
+    Next;
+  end;
+end;
+
 function PoisonSym(const nm: AnsiString): Integer;
 begin
   { the same shape --auto-locals mints for an undeclared name, minus the warning
@@ -990,6 +1013,10 @@ begin
         else
         begin
           ReportUndefinedName(fieldName);
+          { a CALL to a name that does not exist — swallow the argument list, or
+            the stand-in below (a VARIABLE) leaves `(1, 2)` for the statement
+            parser and the real diagnostic is buried under `unexpected token`. }
+          if CurTok.Kind = tkLParen then SkipParenGroup;
           node := AllocNode(AN_IDENT);
           ASTIVal[node] := PoisonSym(fieldName);
           ASTTk[node] := Ord(tyInteger);
@@ -3301,6 +3328,15 @@ begin
   if idx < 0 then
   begin
     ReportUndefinedName(name);
+    { a CALL to a name that does not exist: consume the argument list and end
+      the statement here, rather than poisoning the name into a variable and
+      letting `(1, 2)` reach the statement parser as `unexpected token`. }
+    if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
+    begin
+      Next;
+      SkipParenGroup;
+      Exit;
+    end;
     idx := PoisonSym(name);
   end;
 
