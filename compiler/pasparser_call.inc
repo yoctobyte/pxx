@@ -17,18 +17,61 @@
   What is shared between frontends is the AST and the IR, never the parser:
   devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md }
 
+{ The (kind, record id) an operator OPERAND's declared type name denotes.
+
+  Both operands resolve through here, so the LEFT key and the SECOND key cannot
+  disagree about what `TVec` or `Double` means — which is the failure mode the
+  two-key table exists to remove, not one to reintroduce by resolving each side
+  its own way. feature-a-operator-table-keyed-on-both-operands }
+procedure OperandTypeKindRec(const nm: AnsiString; var tk, rec: Integer);
+var ci: Integer; stk: TTypeKind;
+begin
+  { Record the operand's real type kind so the registration tag matches how the
+    use site looks it up (a record operand carries ASTTk=tyRecord, a class
+    operand tyClass). Registering everything as tyClass made FindOpOverload miss
+    for record operands, so `a + b` on records silently fell through to a scalar
+    binop. }
+  rec := IsRecordType(nm);
+  if rec <> REC_NONE then
+  begin
+    tk := Ord(tyRecord);
+    Exit;
+  end;
+  ci := FindUClass(nm);
+  if ci >= 0 then
+  begin
+    rec := REC_UCLASS_BASE + ci;
+    tk := Ord(tyClass);
+    Exit;
+  end;
+  { SCALAR operand types (FPC allows operators on any type — tgenfunc8's
+    `operator := (aOther: LongInt): String`). Keyed on the type kind with recId
+    REC_NONE. }
+  rec := REC_NONE;
+  if CaseEqual(nm, 'string') or CaseEqual(nm, 'ansistring') then
+    stk := tyAnsiString
+  else
+    { the shared builtin-type-name table, not a private copy of the float names
+      — which is how `Extended` came to register as tyDouble here while
+      ParseTypeKind gave it tyExtended. }
+    stk := BuiltinTypeNameTk(nm);
+  if stk = tyUnknown then
+    Error('operator overloading: ' + nm + ' is not a supported operand type');
+  tk := Ord(stk);
+end;
+
 { Parses: operator < (a, b: TMyType): Boolean; begin...end;
   Called when CurTok = tkIdent('operator') at top level }
 procedure ParseOperatorDef;
 var
   opKind: TTokenKind;
   opKey, dupPi: Integer;
-  scalarTk, scalarTk2: TTypeKind;
+  scalarTk2: TTypeKind;
   synName: AnsiString;
-  typeName: AnsiString;
+  typeName, rightName: AnsiString;
   recId: Integer;
   opTypeKind: Integer;
-  ci: Integer;
+  rightTk, rightRec: Integer;
   depth, i, j: Integer;
   isFunc, foundClose: Boolean;
   nameOff, nameLen: Integer;
@@ -74,74 +117,53 @@ begin
     Error('expected operator symbol after operator keyword');
   { Stay on operator token — do NOT call Next. TokPos → '(' }
 
-  { Lookahead: find first ':' inside '()' to get operand type name }
+  { Lookahead: the operand type name after EACH ':' at paren depth 1 — the
+    first names the LEFT operand, the last the RIGHT one. `(a, b: T)` has one
+    colon and both operands are T; `(a: Double; b: TCx)` has two and they
+    differ, which is the whole point of the second key.
+
+    The name comes from the token's own SOURCE TEXT, for every kind. This used
+    to map four builtin type TOKENS back to names by hand (Integer/Boolean/
+    Char/String), so `operator + (a: Double; b: TCx)` died at `operator: cannot
+    determine operand type` — Double, Real, Single, Extended and LongWord are
+    type KEYWORDS in this lexer and none of them was in the list. The resolution
+    below already handles those names; only the token-to-name step was missing,
+    and a hand-maintained list of which tokens have names is a list that will be
+    short again the next time a type name becomes a keyword.
+    feature-a-operator-table-keyed-on-both-operands }
   typeName := '';
+  rightName := '';
   depth := 0;
   i := TokPos; { Tokens[TokPos] = '(' }
-  while (i < TokCount) and (typeName = '') do
+  while i < TokCount do
   begin
     if Tokens[i].Kind = tkLParen then Inc(depth)
-    else if Tokens[i].Kind = tkRParen then Dec(depth)
+    else if Tokens[i].Kind = tkRParen then
+    begin
+      Dec(depth);
+      if depth = 0 then i := TokCount;   { end of the parameter list }
+    end
     else if (Tokens[i].Kind = tkColon) and (depth = 1) then
     begin
       Inc(i);
-      if i < TokCount then
+      if (i < TokCount) and (Tokens[i].SLen > 0) then
       begin
-        if Tokens[i].Kind = tkIdent then
-          typeName := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen)
-        else if Tokens[i].Kind = tkInteger_T then typeName := 'Integer'
-        else if Tokens[i].Kind = tkBoolean_T then typeName := 'Boolean'
-        else if Tokens[i].Kind = tkChar_T then typeName := 'Char'
-        else if Tokens[i].Kind = tkString_T then typeName := 'String';
+        rightName := GetTokenStrFromRaw(Tokens[i].SOffset, Tokens[i].SLen);
+        if typeName = '' then typeName := rightName;
       end;
-      i := TokCount; { break }
     end;
     Inc(i);
   end;
   if typeName = '' then Error('operator: cannot determine operand type');
+  if rightName = '' then rightName := typeName;
 
-  { Resolve recId for the operand type. Record the operand's real type kind so
-    the registration tag matches how the use site looks it up (a record operand
-    carries ASTTk=tyRecord, a class operand tyClass). Registering everything as
-    tyClass made FindOpOverload miss for record operands, so `a + b` on records
-    silently fell through to a scalar binop. }
-  recId := IsRecordType(typeName);
+  OperandTypeKindRec(typeName, opTypeKind, recId);
+  { `String` registers under BOTH the managed and frozen kinds — a string
+    expression types as either depending on origin. }
   scalarTk2 := tyUnknown;
-  if recId = REC_NONE then
-  begin
-    ci := FindUClass(typeName);
-    if ci >= 0 then
-    begin
-      recId := REC_UCLASS_BASE + ci;
-      opTypeKind := Ord(tyClass);
-    end
-    else
-    begin
-      { SCALAR operand types (FPC allows operators on any type —
-        tgenfunc8's `operator := (aOther: LongInt): String`). Key the
-        registration on the type kind with recId REC_NONE. `String`
-        registers under BOTH the managed and frozen kinds — a string
-        expression types as either depending on origin. }
-      scalarTk := OrdinalNameToTk(typeName);
-      if scalarTk = tyUnknown then
-      begin
-        if CaseEqual(typeName, 'string') or CaseEqual(typeName, 'ansistring') then
-        begin
-          scalarTk := tyAnsiString;
-          scalarTk2 := tyString;
-        end
-        else if CaseEqual(typeName, 'single') then scalarTk := tySingle
-        else if CaseEqual(typeName, 'double') or CaseEqual(typeName, 'real') or
-                CaseEqual(typeName, 'extended') then scalarTk := tyDouble;
-      end;
-      if scalarTk = tyUnknown then
-        Error('operator overloading: ' + typeName + ' is not a supported operand type');
-      opTypeKind := Ord(scalarTk);
-      recId := REC_NONE;
-    end;
-  end
-  else
-    opTypeKind := Ord(tyRecord);
+  if (recId = REC_NONE) and
+     (CaseEqual(typeName, 'string') or CaseEqual(typeName, 'ansistring')) then
+    scalarTk2 := tyString;
 
   { Determine function vs procedure: find matching ')' then check for ':' }
   depth := 0;
@@ -224,6 +246,13 @@ begin
   { After ParseSubroutine, the proc is registered — look it up by synName }
   procIdx := FindProc(synName);
   if procIdx < 0 then Error('operator: internal error, proc not found after parse');
+  { The SECOND key, resolved now that the arity is known. A unary or conversion
+    operator has no right operand and stores none — it is looked up by the
+    single-key FindOpOverload, which does not read these columns. }
+  rightTk := Ord(tyUnknown);
+  rightRec := REC_NONE;
+  if Procs[procIdx].ParamCount = 2 then
+    OperandTypeKindRec(rightName, rightTk, rightRec);
   { Arity: conversion/unary named operators take exactly ONE parameter —
     FPC rejects `operator :=(S1, S2: String)` (tassignmentoperator1 %fail). }
   { Copy/AddRef are recognised so the spelling is not a syntax error, but they
@@ -268,8 +297,19 @@ begin
       Error('binary operator must take exactly two parameters');
     { FPC forbids overloading a BINARY symbol operator when the operation is
       predefined for the operand types — at least one operand must be a
-      record/class (toperator13..68 %fails: +,-,<,= on LongInt/AnsiString). }
-    if recId = REC_NONE then
+      record/class (toperator13..68 %fails: +,-,<,= on LongInt/AnsiString).
+
+      EITHER operand, which is what FPC means and what this checked wrongly:
+      it read the LEFT operand only, so `operator * (a: Integer; b: TCx)` — a
+      scalar on the left, the record on the right — was refused as if it were
+      Integer*Integer. Widening the check alone would have been WORSE than the
+      refusal: the table is keyed on the left operand, so the entry lands under
+      (tkStar, tyInteger, REC_NONE) and a plain `3 * 5` would find it. What
+      makes it safe is the use sites, which now consult the table only when one
+      of the operands actually IS an aggregate, and take no fallback when the
+      left one is not. See decide-operator-table-keyed-on-one-operand-or-two.
+      feature-a-operator-table-keyed-on-both-operands }
+    if (recId = REC_NONE) and (not TkIsRecordOrClass(rightTk)) then
       Error('impossible operator overload: this operation is predefined for built-in operand types');
   end;
   { FPC-parity rejections (bug-pascal-missing-diagnostics-fail-tests): }
@@ -291,9 +331,9 @@ begin
     if (dupPi >= 0) and (Procs[dupPi].RetType = Procs[procIdx].RetType) then
       Error('duplicate conversion operator: this source type already converts to this result type');
   end;
-  RegisterOpOverload(opKey, opTypeKind, recId, procIdx);
+  RegisterOpOverload(opKey, opTypeKind, recId, rightTk, rightRec, procIdx);
   if scalarTk2 <> tyUnknown then
-    RegisterOpOverload(opKey, Ord(scalarTk2), REC_NONE, procIdx);
+    RegisterOpOverload(opKey, Ord(scalarTk2), REC_NONE, rightTk, rightRec, procIdx);
 end;
 
 { Linear (row-major) index of an N-D fixed array element, built from AST nodes so

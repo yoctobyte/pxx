@@ -3445,6 +3445,14 @@ test-threads: $(COMPILER)
 	# signature skip was depth-blind and stopped at the ';' separating parameter
 	# groups; and once it parsed, the operator table turned out to be keyed on
 	# the LEFT operand alone, so TVec+TVec and TVec+Integer collided silently.
+	@# an operator whose LEFT operand is a built-in type (`1.5 + cx`, `3 * v`),
+	@# which FPC accepts and this refused at the declaration. The negatives
+	@# matter as much: the table is keyed on the left operand, so an
+	@# (Integer, TVec) operator registers under a plain Integer key and `3 * 5`
+	@# must still be arithmetic. Values measured against fpc 3.2.2.
+	@# feature-a-operator-table-keyed-on-both-operands
+	./$(COMPILER) test/test_op_overload_scalar_left.pas $(TESTTMP)/test_opscalarleft26
+	test "$$($(TESTTMP)/test_opscalarleft26)" = "ALL OK"
 	./$(COMPILER) test/test_op_overload_mixed_operands.pas $(TESTTMP)/test_opmix26
 	test "$$($(TESTTMP)/test_opmix26 | tail -1)" = "OP OVERLOAD MIXED OPERANDS OK"
 	test "$$($(TESTTMP)/test_opmix26 | head -3 | tail -1)" = "mul   (3,6)"

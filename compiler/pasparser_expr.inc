@@ -7830,7 +7830,14 @@ begin
       end;
     end;
     opci := -1;
-    if (IntToTypeKind(ASTTk[left]) = tyRecord) or (IntToTypeKind(ASTTk[left]) = tyClass) then
+    { EITHER operand: `1.5 + cx` is as much an overloaded operator as `cx + 1.5`,
+      and FPC accepts both. The lookup key stays the LEFT operand and the right
+      one is matched against the entry's second parameter, so a scalar-left
+      entry is only ever reachable from an expression that has an aggregate in
+      it — which is what keeps `3 * 5` plain arithmetic with an
+      `(Integer, TCx)` operator in scope.
+      feature-a-operator-table-keyed-on-both-operands }
+    if TkIsRecordOrClass(ASTTk[left]) or TkIsRecordOrClass(ASTTk[right]) then
       opci := FindOpOverload2(Ord(op), ASTTk[left], ResolveNodeRec(left),
                               ASTTk[right], ResolveNodeRec(right));
     if opci >= 0 then
@@ -8182,7 +8189,14 @@ begin
     if ((op = tkPlus) or (op = tkMinus)) and TokQChecks[TokPos - 1] then
       ASTQChk[node] := True;
     opci := -1;
-    if (IntToTypeKind(ASTTk[left]) = tyRecord) or (IntToTypeKind(ASTTk[left]) = tyClass) then
+    { EITHER operand: `1.5 + cx` is as much an overloaded operator as `cx + 1.5`,
+      and FPC accepts both. The lookup key stays the LEFT operand and the right
+      one is matched against the entry's second parameter, so a scalar-left
+      entry is only ever reachable from an expression that has an aggregate in
+      it — which is what keeps `3 * 5` plain arithmetic with an
+      `(Integer, TCx)` operator in scope.
+      feature-a-operator-table-keyed-on-both-operands }
+    if TkIsRecordOrClass(ASTTk[left]) or TkIsRecordOrClass(ASTTk[right]) then
       opci := FindOpOverload2(Ord(op), ASTTk[left], ResolveNodeRec(left),
                               ASTTk[right], ResolveNodeRec(right));
     if opci >= 0 then

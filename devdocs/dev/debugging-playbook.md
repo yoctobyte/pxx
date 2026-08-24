@@ -90,8 +90,20 @@ PXXDBG=n.locals    compiler/pascal26 prog.py out   # inferred local types
 PXXDBG=n.ctorargs  compiler/pascal26 prog.py out   # construction arg types
 PXXDBG=a.ir:myproc compiler/pascal26 prog.py out   # IR of ONE routine
 PXXDBG=a.ast:myproc compiler/pascal26 prog.py out  # its AST before lowering
+PXXDBG=a.symptr:p  compiler/pascal26 prog.pas out  # what a pointer DECL recorded
+PXXDBG=a.opovl     compiler/pascal26 prog.pas out  # operator lookups + candidates
 make pxx-debug && gdb --args compiler/pascal26-debug prog.py /tmp/out
 ```
+
+The last two answer a question this repo keeps asking in different words: *was
+the metadata never populated, or never read?* `a.symptr:<name>` (or `:*`) prints
+a pointer variable's recorded depth, pointee and ultimate base — the exact
+fields `IsNodePChar` and friends consult, so a shape that lowers wrong tells you
+in one run which half is missing. `a.opovl` prints every operator-table query,
+each candidate for that operator with its stored right-operand key, and the
+answer; "my operator did not fire" otherwise has four indistinguishable causes.
+Both were added while chasing a bug whose FIRST fix attempt was written against
+an assumed layout, compiled, and changed nothing.
 
 No rebuild, no source patch. **This exists because patching a probe in and
 self-compiling (~90s) is how a wrong premise got recorded in a ticket** — the

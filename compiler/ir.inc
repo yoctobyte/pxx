@@ -8519,7 +8519,8 @@ begin
           time. Reject it honestly — comparisons are left alone (method-pointer
           `=`/`<>` are legitimate record compares), and C is exempt (struct
           pointer/array arithmetic tags operands tyRecord legitimately). }
-        Error('no operator overload found for record operands (operator not declared, or its unit not compiled?)')
+        Error('no operator overload found for record operands (operator not declared, or its unit not compiled?)'
+              + ' — PXXDBG=a.opovl prints the lookup and every candidate')
       else if ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
               (NodeIsInterface(ASTLeft[node]) or NodeIsInterface(ASTRight[node])) then
       begin

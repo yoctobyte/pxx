@@ -1835,6 +1835,20 @@ var
   OvrlOpKind   : array[0..MAX_OP_OVERLOADS-1] of Integer;  { TTokenKind ordinal }
   OvrlTypeKind : array[0..MAX_OP_OVERLOADS-1] of Integer;  { TTypeKind ordinal }
   OvrlRecId    : array[0..MAX_OP_OVERLOADS-1] of Integer;
+  { THE SECOND KEY — the RIGHT operand's kind and record id, for a binary
+    operator (tyUnknown/REC_NONE for the unary and conversion ones). Taken from
+    the DECLARATION's type name, exactly like the left key.
+
+    It is stored rather than read back from the operator proc's second
+    PARAMETER because that parameter's symbol is already gone: the params are
+    rolled back when the operator body finishes, so `Params[1].SymIdx` is past
+    SymCount before the registration even runs (measured: SymIdx 93, SymCount
+    92). The lookup that tried to read it therefore never matched a record
+    right-operand at all, and every mixed-type program was resolved by the
+    first-registered fallback.
+    feature-a-operator-table-keyed-on-both-operands }
+  OvrlRightTk  : array[0..MAX_OP_OVERLOADS-1] of Integer;  { TTypeKind ordinal }
+  OvrlRightRec : array[0..MAX_OP_OVERLOADS-1] of Integer;
   OvrlProcIdx  : array[0..MAX_OP_OVERLOADS-1] of Integer;
   OvrlCount    : Integer;
   { FPC named-result operator form: `operator + (a, b: T) z: T;` — while the

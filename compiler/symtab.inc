@@ -5396,13 +5396,29 @@ end;
 
 { ===== Operator overload table ===== }
 
-procedure RegisterOpOverload(opKind, typeKind, recId, procIdx: Integer);
+{ Is this type kind an AGGREGATE operand — the thing an operator overload has to
+  involve for FPC to allow it at all? Spelled once because four sites ask it
+  (the declaration's legality check and the three binary use sites), and a
+  disagreement between them is exactly how a scalar-left operator would become
+  a miscompile of plain arithmetic.
+  feature-a-operator-table-keyed-on-both-operands }
+function TkIsRecordOrClass(tk: Integer): Boolean;
+begin
+  TkIsRecordOrClass := (IntToTypeKind(tk) = tyRecord) or (IntToTypeKind(tk) = tyClass);
+end;
+
+procedure RegisterOpOverload(opKind, typeKind, recId, rightTk, rightRec, procIdx: Integer);
 begin
   if OvrlCount >= MAX_OP_OVERLOADS then Error('too many operator overloads');
   OvrlOpKind[OvrlCount]   := opKind;
   OvrlTypeKind[OvrlCount] := typeKind;
   OvrlRecId[OvrlCount]    := recId;
+  OvrlRightTk[OvrlCount]  := rightTk;
+  OvrlRightRec[OvrlCount] := rightRec;
   OvrlProcIdx[OvrlCount]  := procIdx;
+  if PxxDbgEnabled('a.opovl') then
+    WriteLn('PXXDBG a.opovl register op=', opKind, ' left=(', typeKind, ',', recId,
+            ') right=(', rightTk, ',', rightRec, ') proc=', Procs[procIdx].Name);
   Inc(OvrlCount);
 end;
 
@@ -5422,25 +5438,39 @@ begin
   end;
 end;
 
-{ Binary-operator lookup that also considers the RIGHT operand.
+{ Binary-operator lookup on BOTH operands.
 
-  The table is keyed on the LEFT operand only, so two overloads of one operator
-  sharing a left type collide and the first registered always wins: with both
-  `TVec + TVec` and `TVec + Integer` declared, `a + 5` called the record/record
-  one and silently produced its answer. Unreachable until the mixed-type
-  SIGNATURE started parsing, which is why it had never been seen.
+  The table's key is the LEFT operand plus, since
+  feature-a-operator-table-keyed-on-both-operands, the RIGHT one. Two overloads
+  of an operator sharing a left type no longer collide: with both `TVec + TVec`
+  and `TVec + Integer` declared, `a + 5` picks the second.
 
-  Rather than widen the table, disambiguate here: the entry names a proc whose
-  Params already carry the real operand types. Prefer an entry whose SECOND
-  parameter matches the right operand exactly; fall back to the first entry with
-  the right (opKind, leftKind, leftRec), which is exactly the old behaviour and
-  keeps every single-overload program compiling as before.
-  bug-a-a-mixed-type-record-operator-signature-fails-to-parse }
+  That disambiguation was attempted once before by reading the operator proc's
+  second PARAMETER (bug-a-a-mixed-type-record-operator-signature-fails-to-parse).
+  It worked for a scalar right operand and could NEVER work for a record or
+  class one: the param's record id lives on the param's SYMBOL, and those
+  symbols are rolled back before the operator is even registered, so the
+  in-range check on `SymIdx` failed every time and the fallback answered. That
+  is why the second key is stored at declaration instead.
+
+  The fallback — first entry with the right (opKind, leftKind, leftRec) — stays
+  for an AGGREGATE left operand, where it is the old, proven behaviour and keeps
+  every single-overload program compiling as before. It is WITHDRAWN when the
+  left operand is a scalar: `operator + (a: Double; b: TCx)` registers under
+  (tkPlus, tyDouble, REC_NONE), so `1.5 + <some other record>` would otherwise
+  fall back into an operator written for a type it has nothing to do with. }
 function FindOpOverload2(opKind, typeKind, recId, rightTk, rightRec: Integer): Integer;
-var i, pi, firstHit: Integer;
+var i, pi, firstHit: Integer; exact: Boolean;
 begin
   Result := -1;
   firstHit := -1;
+  { PXXDBG=a.opovl — the query, every candidate for that operator, and the
+    answer. "Why did my operator not fire" otherwise has four indistinguishable
+    causes: left-kind miss, left-record miss, right-kind miss, right-record
+    miss. }
+  if PxxDbgEnabled('a.opovl') then
+    WriteLn('PXXDBG a.opovl query op=', opKind, ' left=(', typeKind, ',', recId,
+            ') right=(', rightTk, ',', rightRec, ')');
   i := 0;
   while i < OvrlCount do
   begin
@@ -5448,13 +5478,12 @@ begin
     begin
       pi := OvrlProcIdx[i];
       if firstHit < 0 then firstHit := pi;
-      { TParam carries no RecName — the record id lives on the param's SYMBOL. }
-      if (Procs[pi].ParamCount = 2) and
-         (Ord(Procs[pi].Params[1].TypeKind) = rightTk) and
-         (((rightTk <> Ord(tyRecord)) and (rightTk <> Ord(tyClass))) or
-          ((Procs[pi].Params[1].SymIdx >= 0) and
-           (Procs[pi].Params[1].SymIdx < SymCount) and
-           (Syms[Procs[pi].Params[1].SymIdx].RecName = rightRec))) then
+      exact := (Procs[pi].ParamCount = 2) and (OvrlRightTk[i] = rightTk) and
+               ((not TkIsRecordOrClass(rightTk)) or (OvrlRightRec[i] = rightRec));
+      if PxxDbgEnabled('a.opovl') then
+        WriteLn('PXXDBG a.opovl   cand#', i, ' right=(', OvrlRightTk[i], ',',
+                OvrlRightRec[i], ') proc=', Procs[pi].Name, ' exact=', exact);
+      if exact then
       begin
         Result := pi;
         Exit;
@@ -5462,7 +5491,9 @@ begin
     end;
     Inc(i);
   end;
-  Result := firstHit;
+  if TkIsRecordOrClass(typeKind) then Result := firstHit;
+  if PxxDbgEnabled('a.opovl') then
+    WriteLn('PXXDBG a.opovl   -> ', Result, ' (no exact match)');
 end;
 
 { ===== Procedure table ===== }
@@ -10425,7 +10456,16 @@ begin
     { An overloaded operator on record/class operands resolves to its result
       record (the call returns an aggregate). Without this, an inferred
       `var c := a + b` gets REC_NONE -> wrong RecSize -> truncated/garbage copy. }
-    fIdx := FindOpOverload(ASTIVal[node], ASTTk[ASTLeft[node]], ResolveNodeRec(ASTLeft[node]));
+    { Both operands, and only when one of them is an aggregate: a scalar-left
+      operator (`Integer + TCx`) is registered under a scalar left key, so the
+      single-key lookup that used to be here would have answered for `3 * 5`
+      and given the node a record identity it does not have.
+      feature-a-operator-table-keyed-on-both-operands }
+    fIdx := -1;
+    if TkIsRecordOrClass(ASTTk[ASTLeft[node]]) or
+       TkIsRecordOrClass(ASTTk[ASTRight[node]]) then
+      fIdx := FindOpOverload2(ASTIVal[node], ASTTk[ASTLeft[node]], ResolveNodeRec(ASTLeft[node]),
+                              ASTTk[ASTRight[node]], ResolveNodeRec(ASTRight[node]));
     if fIdx >= 0 then
       Result := ProcRetRecId[fIdx]
     else

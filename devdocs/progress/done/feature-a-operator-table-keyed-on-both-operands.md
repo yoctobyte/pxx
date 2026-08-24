@@ -4,13 +4,14 @@ type: feature
 prio: 40
 track: A
 blocked-by: []
+owner: claude-A
 ---
 
 # Key the operator-overload table on both operands
 
 - **Type:** feature (Pascal frontend + symtab) — Track A: `compiler/parser.inc`,
   `compiler/symtab.inc`, `compiler/ir.inc`.
-- **Status:** backlog. **This is the re-filing of an already-DECIDED question**,
+- **Status:** done
   not a new proposal.
 
 ## The decision is already made — do not re-open it
@@ -139,3 +140,87 @@ so the single-key table is still in place and the decision behind this ticket
 is still unimplemented. Kept as a feature: the refusal is at the declaration,
 loud, and the ticket's own warning — that relaxing only the guard would
 **miscompile plain `3 * 5`** — is the reason it must not be shortcut.
+
+## Implemented 2026-08-24 (claude-A) — and the second key was load-bearing for a reason nobody had measured
+
+All four rows of the table above now behave as FPC does, `3 * 5` is still 15
+with an `(Integer, TCx)` operator in scope, and a third bug fell out that this
+ticket did not know about.
+
+### What was actually missing
+
+1. **The token→name step**, exactly as diagnosed: the declaration lookahead
+   mapped four builtin type TOKENS back to names by hand, and `Double`, `Real`,
+   `Single`, `Extended` and `LongWord` are type keywords that were not in the
+   list. Now the name comes from the token's own SOURCE TEXT for every kind —
+   a hand-maintained list of which tokens have names is a list that goes short
+   again the next time a type name becomes a keyword.
+2. **The declaration guard read the LEFT operand only**, so a scalar-left
+   operator was refused as if it were `Integer * Integer`. It now asks whether
+   EITHER operand is an aggregate, which is what FPC means.
+3. **The use sites consulted the table only when the LEFT operand was an
+   aggregate.** Widened to either side. This is the half that makes (2) safe:
+   the table is keyed on the left operand, so an `(Integer, TVec)` entry lives
+   under a plain Integer key, and nothing may consult it for an expression with
+   no aggregate in it.
+4. **The fallback is withdrawn when the left operand is a scalar.**
+   `FindOpOverload2` falls back to the first entry with a matching
+   `(op, leftKind, leftRec)`. For an aggregate left key that is the old, proven
+   behaviour. For a scalar left key it would send `1.5 + <some other record>`
+   into an operator written for a type it has nothing to do with.
+
+### The third bug: the previous disambiguation could never have worked
+
+`FindOpOverload2` was added by
+[[bug-a-a-mixed-type-record-operator-signature-fails-to-parse]] to prefer an
+entry whose SECOND PARAMETER matches the right operand. It read that parameter's
+record id off the parameter's SYMBOL — and those symbols are rolled back when
+the operator body finishes, **before the registration runs**. Measured with a
+new `PXXDBG=a.opovl` topic: at registration, `Params[1].SymIdx` is 93 while
+`SymCount` is 92. The in-range guard therefore failed every single time, so for
+a RECORD or CLASS right operand the exact match never fired and the
+first-registered overload always answered.
+
+```pascal
+operator + (a: TVec; b: TVec): TVec;   { ... }
+operator + (a: TVec; b: TPt):  TVec;   { ... }
+v := MkVec(1,2) + MkPt(3,4);
+   fpc 3.2.2  ->  3001 4002
+   pinned     ->  4 6          { the WRONG overload, silently }
+   HEAD       ->  3001 4002
+```
+
+A silent wrong value on a program FPC compiles correctly, live on `pinned`
+today, and invisible because the only test with two same-left-type overloads had
+a SCALAR right operand — where the kind check alone is enough and the symbol is
+never consulted.
+
+**That is why the decision's "both keys" was right and reading the signature was
+not.** The second key is now STORED at registration (`OvrlRightTk` /
+`OvrlRightRec`), resolved from the declaration's second type NAME through the
+same helper the left key uses, so the two sides cannot disagree about what
+`TVec` means. No symbol is consulted at lookup time, because by then there is no
+symbol.
+
+### The open sub-question, answered by construction
+
+The decision left open what the unary and conversion operators (`:=`,
+`Explicit`, `Inc`, `Dec`, `Enumerator`) store in the second key: they store
+`(tyUnknown, REC_NONE)` and nothing reads it — those are looked up through the
+single-key `FindOpOverload`, which does not touch the new columns.
+
+### Gate
+
+`test/test_op_overload_scalar_left.pas` (wired into `test-core`) — the four-row
+table, the two-same-left-type disambiguation, and four NEGATIVE rows asserting
+that `3 * 5`, `n = 7`, `n = 8` and `1.5 + 2.5` stay plain arithmetic with all
+those operators in scope. `ALL OK` under fpc 3.2.2 and under pxx on x86-64,
+aarch64, arm32 and riscv32. (i386 cannot compile it: that backend refuses
+by-value RECORD parameters — `only ordinal/pointer parameters supported yet` —
+on `pinned` as much as on HEAD, and unrelated to operators.)
+`test_op_overload`, `test_op_overload_mixed_operands` and `lib_ucomplex` all
+unchanged. `make compiler/pascal26` fixedpoint converged; `tools/gate.sh quick`
+GREEN.
+
+## Log
+- 2026-08-24 — resolved, commit PENDING-COMMIT.
