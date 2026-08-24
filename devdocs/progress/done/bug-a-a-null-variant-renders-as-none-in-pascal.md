@@ -88,4 +88,4 @@ Track A's, plus a differential row per spelling (`string(Null)`,
 proving NilPy still prints `None`.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit d609ac66a.
