@@ -519,7 +519,7 @@ begin
 end;
 
 procedure ParseEProgram;
-var callPatch, mainIdx: Integer;
+var callPatch, mainIdx, jmpPatch: Integer;
 begin
   if TargetArch <> TARGET_X86_64 then
     Error('Erlang frontend: only the x86-64 target is supported by the skeleton (feature-erlang-frontend-scoping)');
@@ -529,26 +529,21 @@ begin
   if mainIdx < 0 then Error('Erlang: no main/0 found');
   if Procs[mainIdx].ParamCount <> 0 then Error('Erlang: main must have arity 0');
 
-  BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
-  EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+  { The shared program prologue: BSS_INITIAL_RSP, the per-target entry stub and
+    its patchable jump, the div-by-zero stub, the signal runtime, the
+    --threadsafe I/O lock stubs and the System intrinsics.
+
+    Erlang's body is not straight-line code at the entry point — it is a `call
+    main` followed by exit — so what the entry jump lands on is that three-line
+    trampoline rather than a statement list. Same two halves as every other
+    driver, just with a shorter thing on the far side of the jump.
+    refactor-a-one-program-driver-prologue-for-every-frontend }
+  EmitProgramPrologue(False, False, True, jmpPatch);
+  PatchProgramEntryJump(jmpPatch);
   EmitB($E8); callPatch := CodeLen; EmitI32(0);   { call main }
   EmitB($31); EmitB($FF);            { xor edi, edi — exit 0 }
   EmitB($B8); EmitI32(231);          { mov eax, 231 (exit_group) }
   EmitB($0F); EmitB($05);            { syscall }
-
-  { div-by-zero abort stub — same latent zero-Div0StubAddr hole as the other
-    non-Pascal drivers; see the C driver comment. }
-  if TargetArch = TARGET_X86_64 then EmitDiv0Stub;
-  { --threadsafe statement-atomic I/O lock stubs. Shared dispatcher, and a
-    call every frontend driver needs: without it IOLockAddr stays 0 and any
-    AN_WRITE lowering under --threadsafe calls code offset 0 -- the ELF entry
-    point -- which jumps back to main and hangs until the stack is gone
-    (bug-a-threadsafe-segfaults-on-every-nilpy-program). }
-  { THE finish-the-runtime step (signal runtime + --threadsafe I/O lock stubs).
-    Was EmitIoLockStubsForTarget alone, so this frontend shipped with no signal
-    runtime at all — the same gap the I/O lock had, one stub later.
-    bug-a-only-the-pascal-driver-emits-the-signal-runtime }
-  EmitProgramRuntimeStubsForTarget;
 
   while CurTok.Kind <> tkEOF do
   begin
@@ -564,7 +559,6 @@ begin
       Error('Erlang: expected a function definition or attribute at top level');
   end;
 
-  EmitFinalizerRunnerBody;   { resolve any Halt-site __pxx_run_finalizers forward calls }
-  ApplyCallFixups;
+  EmitProgramEpilogue;   { the __pxx_run_finalizers body, then the fixups that aim the Halt-site calls at it }
   Patch32(callPatch, Procs[mainIdx].BodyAddr - (callPatch + 4));
 end;

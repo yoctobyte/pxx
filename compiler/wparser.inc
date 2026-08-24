@@ -211,32 +211,20 @@ begin
 end;
 
 procedure ParseWsProgram;
-var wsStubJmp: Integer;
+var jmpPatch: Integer;
 begin
   if TargetArch <> TARGET_X86_64 then
     Error('Whitespace frontend: only the x86-64 target is supported by the skeleton (feature-esoteric-whitespace)');
 
-  BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
-  EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
-  { div-by-zero abort stub — same latent zero-Div0StubAddr hole as the other
-    non-Pascal drivers (Whitespace's `div` instruction emits the check); jump
-    over it, this driver has no entry jmp. See the C driver comment. }
-  if TargetArch = TARGET_X86_64 then
-  begin
-    EmitB($E9); wsStubJmp := CodeLen; EmitI32(0);   { jmp over the stub }
-    EmitDiv0Stub;
-    { --threadsafe statement-atomic I/O lock stubs. Shared dispatcher, and a
-      call every frontend driver needs: without it IOLockAddr stays 0 and any
-      AN_WRITE lowering under --threadsafe calls code offset 0 -- the ELF entry
-      point -- which jumps back to main and hangs until the stack is gone
-      (bug-a-threadsafe-segfaults-on-every-nilpy-program). }
-    { THE finish-the-runtime step (signal runtime + --threadsafe I/O lock stubs).
-      Was EmitIoLockStubsForTarget alone, so this frontend shipped with no signal
-      runtime at all — the same gap the I/O lock had, one stub later.
-      bug-a-only-the-pascal-driver-emits-the-signal-runtime }
-    EmitProgramRuntimeStubsForTarget;
-    Patch32(wsStubJmp, CodeLen - (wsStubJmp + 4));
-  end;
+  { The shared program prologue: BSS_INITIAL_RSP, the per-target entry stub and
+    its patchable jump, the div-by-zero stub, the signal runtime, the
+    --threadsafe I/O lock stubs and the System intrinsics. This driver used to
+    spell the sequence out, which is how the other skeletons came to be missing
+    different halves of it. No AnsiString runtime: this frontend emits no
+    managed-string operations of its own.
+    refactor-a-one-program-driver-prologue-for-every-frontend }
+  EmitProgramPrologue(False, False, True, jmpPatch);
+  PatchProgramEntryJump(jmpPatch);
 
   WsPos := 1;
   WsSp := 0;
@@ -252,14 +240,17 @@ begin
   CompileAST(CurASTNode);
   EmitExit(0);
 
-  { The closing step every driver owes: the __pxx_run_finalizers BODY. A Halt
-    site emits a call to that shell, whose body is registered lazily; without
-    this the proc stays at BodyAddr = -1 and the call keeps its PLACEHOLDER
-    branch (the DCE pass's ApplyCallFixups then has a body to aim it at). On x86-64 that placeholder is `call rel32=0`,
-    which targets the next instruction and falls through -- wrong but invisible,
-    which is why five drivers shipped without it. On ARM the same placeholder
+  { The shared program epilogue: the __pxx_run_finalizers BODY, then the fixups
+    that AIM the Halt-site calls at it. A Halt site emits a forward call to that
+    shell, whose body is registered lazily; without the body the proc stays at
+    BodyAddr = -1 and the call keeps its PLACEHOLDER, and without ApplyCallFixups
+    nothing resolves it even once the body exists — DceRun's trailing fixups are
+    the only ones this driver could inherit and they run under `--dce` AND
+    x86-64 AND IsPascalFrontend. On x86-64 the placeholder is `call rel32=0`,
+    which targets the next instruction and falls through — wrong but invisible,
+    which is why six drivers shipped without it. On ARM the same placeholder
     SKIPS an instruction (bl with a zero displacement lands at PC+8), which is
     what it did to the BASIC driver's END.
     refactor-a-one-program-driver-prologue-for-every-frontend }
-  EmitFinalizerRunnerBody;
+  EmitProgramEpilogue;
 end;

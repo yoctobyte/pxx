@@ -9,8 +9,8 @@ summary: "Five frontend drivers each open-code the same program prologue (entry 
 
 - **Type:** refactor (Track A — the drivers live in `pasparser_prog.inc`,
   `cparser.inc`, `pyparser.inc`, `bparser.inc` and the other skeleton frontends)
-- **Status:** backlog — opened 2026-08-24 from the fourth instance
-- **Owner:** —
+- **Status:** working
+- **Owner:** claude-A
 
 ## The pattern, measured rather than felt
 
@@ -118,3 +118,81 @@ frontends all have exactly one test each (`test_ada_skeleton.adb`,
 and they run in about a second, so per-driver verification is cheap. Do NOT
 sweep all nine in one commit: the BASIC fix above changed emitted bytes for one
 driver and needed four measurement rounds to get right.
+
+## Slice 1 landed 2026-08-24 (claude-A) — the shape exists, and the six skeletons use it
+
+`compiler/frontend_prologue.inc`: **`EmitProgramPrologue(withHeapArena,
+wantAnsiRuntime, wantDiv0Stub; var jmpPatch)`** and **`EmitProgramEpilogue`**.
+The prologue does, in order: System intrinsics (`RegisterBuiltinTGuid` /
+`RegisterBuiltinTObject`, symbol-table only, so they go first — a unit pulled
+during the parse must find them) → allocate `BSS_INITIAL_RSP` → the per-target
+entry stub and its patchable jump → the emitted AnsiString runtime with its
+forwards → the div-by-zero stub → `EmitProgramRuntimeStubsForTarget`. The
+epilogue is `EmitFinalizerRunnerBody` then `ApplyCallFixups`.
+
+**A twelfth copy the inventory above had missed:** `BSS_INITIAL_RSP := BSSSize;
+Inc(BSSSize, 8);` is open-coded in **every one of the twelve drivers**, one line
+above the entry stub that is its only writer. It moved into the prologue too.
+
+The two x86-64 guards sit INSIDE the routine rather than at each call site, so
+a driver cannot get them subtly different: both stubs are emitted machine code,
+and the other backends call the builtinheap helpers directly.
+
+### What the six skeleton drivers actually gained
+
+Converted: `aparser` (Ada), `eparser` (Erlang), `fparser` (Fortran), `gparser`
+(Algol), `lparser` (LOLCODE), `wparser` (Whitespace).
+
+The inventory said BASIC was the driver that kept being caught missing steps.
+Measured while converting, **Fortran, Algol and LOLCODE were worse**: they
+emitted the entry stub and *nothing else* — no div-by-zero stub, no signal
+runtime, no `--threadsafe` I/O lock stubs, no System intrinsics. Ada, Erlang and
+Whitespace had the runtime stubs but not the intrinsics.
+
+That is not theoretical. On `pinned`, today:
+
+```
+$ pinned --threadsafe test/test_fortran_skeleton.f90 out
+pascal26:33: error: compiler error: call to a runtime stub that was never
+emitted (code offset 0 is the ELF entry point). A frontend driver is missing
+its stub-emission call for the current flags/target.
+```
+
+Same for Algol and LOLCODE. It is a *refusal* rather than the hang the same gap
+caused in NilPy only because a guard was added after that incident. On HEAD all
+three compile and run, and the flag changes nothing they print.
+
+### And the epilogue closed a real hole
+
+None of the six called `ApplyCallFixups`, and the inventory established nothing
+else does it for them (`DceRun`'s trailing fixups need `--dce` AND x86-64 AND
+`IsPascalFrontend`). So a forward call in a skeleton frontend was resolved by
+nothing at all and kept its placeholder for the whole compile. `EmitProgramEpilogue`
+pairs the body with the fixups that aim calls at it, because the two halves are
+one step and separating them is what let five drivers ship half of it.
+
+### Verification
+
+Each of the seven skeleton tests (the six converted plus Zig, untouched) was run
+BEFORE and AFTER: identical output. Pascal, C, NilPy and BASIC spot-checked
+unchanged. `make compiler/pascal26` fixedpoint converged in one round;
+`tools/gate.sh quick` GREEN. New `test-core` row: `--threadsafe` on all six
+skeletons compiles, does not hang (20s timeout — the failure mode this closes),
+and prints exactly what the same program prints without the flag.
+
+### Still open — and one is blocked
+
+- **`bparser` (BASIC)** keeps its own prologue for now: it needs the
+  `DetectPascalRuntimeNeeds` pre-scan to decide `wantAnsiRuntime`, which is a
+  different call shape, and its `ApplyCallFixups` is **blocked** on
+  [[bug-a-a-unit-free-basic-program-calls-a-helper-it-never-emits]] — adding it
+  turns a unit-free `.bas` program with a string literal into a compile error.
+- **`rparser` (Rust) and `zparser` (Zig)** still open-code the entry stub.
+- **`cparser`, `pyparser` and the Pascal driver** are the three that already
+  perform the full checklist; converting them is pure de-duplication and is
+  where the byte-layout care goes, since the Pascal driver is what the self-host
+  gate measures. Their orders differ from each other today (Pascal emits the
+  AnsiString runtime before the div0 stub, NilPy after the runtime stubs), so
+  one of them will change layout whichever canonical order is chosen — harmless
+  (the stubs sit behind the entry jump and are reached only by call) but it must
+  be a deliberate step, not a surprise.

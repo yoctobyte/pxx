@@ -356,10 +356,11 @@ _none_
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (1)
+## backlog_new (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-a-riscv32-diagnostic-names-the-wrong-target | A | 20 | bug | `--target=riscv32` on a program with an external cdecl symbol fails with `target esp32: external (dynamic) symbols not yet supported`. The user typed riscv32, the message says esp32, and the two are different things — riscv32 is a hosted Linux target in its own right, not only the ESP32-C3 profile. One shared arm, one hard-coded name. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 35 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
 
 ## experimental (20)
@@ -878,6 +879,7 @@ _none_
 - [p 25] [A] refactor-a-search-path-helpers-live-in-the-c-preprocessor
 - [p 25] [C] refactor-c-the-partial-index-sentinel-should-not-be-a-type-tag
 - [p 25] [A] task-a-add-fu-to-the-compiler-usage-line
+- [p 20] [A] bug-a-a-riscv32-diagnostic-names-the-wrong-target
 - [p 20] [N] bug-nilpy-augmented-repeat-on-a-variant-target-still-rebinds
 - [p 20] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only
 - [p 20] [N] bug-nilpy-four-remaining-absent-builtins

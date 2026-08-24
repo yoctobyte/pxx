@@ -153,6 +153,10 @@ function IRNodeOwnsManagedStr(n: Integer): Boolean; forward;
 {$include ir_codegen_riscv32.inc}
 {$include ir_codegen_xtensa.inc}
 {$include ir_codegen.inc}
+{ The shared program-driver prologue/epilogue every frontend calls. After
+  ir_codegen.inc (the emitters), pasparser_prog.inc (the Register* helpers) and
+  symtab.inc (ApplyCallFixups); before every driver that calls it. }
+{$include frontend_prologue.inc}
 {$include asmdisasm_x64.inc}
 { Generated crtl function -> header map (tools/gen_crtl_map.py). Must precede
   cparser.inc, whose CCrtlHeaderForName reads it. Regenerate after adding a crtl

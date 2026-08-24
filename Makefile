@@ -5200,6 +5200,30 @@ test-core: $(COMPILER)
 	# out-char/out-number). Prints Hi\n40\n2\n36.
 	./$(COMPILER) test/test_ws_skeleton.ws $(TESTTMP)/test_ws_skeleton26
 	test "$$($(TESTTMP)/test_ws_skeleton26)" = "$$(printf 'Hi\n40\n2\n36')"
+	# The six skeleton drivers now reach their parse through one shared prologue
+	# (EmitProgramPrologue) and their exit through one shared epilogue, instead of
+	# open-coding the checklist. Fortran, Algol and LOLCODE emitted the entry stub
+	# ALONE — no signal runtime, no --threadsafe I/O lock stubs, no div-by-zero
+	# stub — so `--threadsafe` on any of them was refused outright by the
+	# offset-0 guard ("call to a runtime stub that was never emitted"), which is
+	# what pinned still does. The property is that the flag changes nothing a
+	# program prints, so each is compared against its own plain output.
+	# refactor-a-one-program-driver-prologue-for-every-frontend
+	@for t in "test/test_fortran_skeleton.f90 test_fortran" \
+	          "test/test_algol_skeleton.alg test_algol" \
+	          "test/test_lolcode_skeleton.lol test_lolcode" \
+	          "test/test_ada_skeleton.adb test_ada" \
+	          "test/test_erlang_skeleton.erl test_erlang" \
+	          "test/test_ws_skeleton.ws test_ws"; do \
+	  set -- $$t; src=$$1; nm=$$2; \
+	  ./$(COMPILER) $$src $(TESTTMP)/$${nm}_plain26 >/dev/null; \
+	  ./$(COMPILER) --threadsafe $$src $(TESTTMP)/$${nm}_ts26 >/dev/null \
+	    || { echo "$$nm: --threadsafe does not COMPILE"; exit 1; }; \
+	  plain="$$($(TESTTMP)/$${nm}_plain26)"; \
+	  ts="$$(timeout 20 $(TESTTMP)/$${nm}_ts26)"; rc=$$?; \
+	  if [ "$$rc" = "124" ]; then echo "$$nm: --threadsafe HANGS (the missing I/O lock stubs are back)"; exit 1; fi; \
+	  if [ "$$plain" != "$$ts" ]; then echo "$$nm: --threadsafe changes the output"; echo "$$plain"; echo "---"; echo "$$ts"; exit 1; fi; \
+	done; echo "skeleton --threadsafe ok: fortran algol lolcode ada erlang whitespace"
 	# Erlang frontend skeleton (esoteric probe on feature-erlang-frontend-scoping):
 	# multi-clause pattern dispatch (literals + variable binds + when guards),
 	# recursion, single-assignment, io:format ~p placeholders.

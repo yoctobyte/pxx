@@ -363,14 +363,22 @@ begin
 end;
 
 procedure ParseGProgram;
-var stmtList, stmt: Integer;
+var stmtList, stmt, jmpPatch: Integer;
     vtype: TTypeKind;
 begin
   if TargetArch <> TARGET_X86_64 then
     Error('Algol frontend: only the x86-64 target is supported by the skeleton (feature-esoteric-algol)');
 
-  BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
-  EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
+  { The shared program prologue: BSS_INITIAL_RSP, the per-target entry stub and
+    its patchable jump, the div-by-zero stub, the signal runtime, the
+    --threadsafe I/O lock stubs and the System intrinsics. This driver used to
+    emit the entry stub ALONE -- no div-by-zero stub, no signal runtime, no
+    --threadsafe I/O lock stubs, no System intrinsics -- which is the drift the
+    shared prologue exists to end: it was missing whatever the Pascal driver
+    gained after this file was written.
+    refactor-a-one-program-driver-prologue-for-every-frontend }
+  EmitProgramPrologue(False, False, True, jmpPatch);
+  PatchProgramEntryJump(jmpPatch);
 
   Expect(tkBegin, 'begin');
 
@@ -410,14 +418,17 @@ begin
   CompileAST(CurASTNode);
   EmitExit(0);
 
-  { The closing step every driver owes: the __pxx_run_finalizers BODY. A Halt
-    site emits a call to that shell, whose body is registered lazily; without
-    this the proc stays at BodyAddr = -1 and the call keeps its PLACEHOLDER
-    branch (the DCE pass's ApplyCallFixups then has a body to aim it at). On x86-64 that placeholder is `call rel32=0`,
-    which targets the next instruction and falls through -- wrong but invisible,
-    which is why five drivers shipped without it. On ARM the same placeholder
+  { The shared program epilogue: the __pxx_run_finalizers BODY, then the fixups
+    that AIM the Halt-site calls at it. A Halt site emits a forward call to that
+    shell, whose body is registered lazily; without the body the proc stays at
+    BodyAddr = -1 and the call keeps its PLACEHOLDER, and without ApplyCallFixups
+    nothing resolves it even once the body exists — DceRun's trailing fixups are
+    the only ones this driver could inherit and they run under `--dce` AND
+    x86-64 AND IsPascalFrontend. On x86-64 the placeholder is `call rel32=0`,
+    which targets the next instruction and falls through — wrong but invisible,
+    which is why six drivers shipped without it. On ARM the same placeholder
     SKIPS an instruction (bl with a zero displacement lands at PC+8), which is
     what it did to the BASIC driver's END.
     refactor-a-one-program-driver-prologue-for-every-frontend }
-  EmitFinalizerRunnerBody;
+  EmitProgramEpilogue;
 end;
