@@ -7665,6 +7665,13 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_call_result_as_open_array_argument.pas $(TESTTMP)/test_calloa26
 	test "$$($(TESTTMP)/test_calloa26)" = "$$(cat test/test_call_result_as_open_array_argument.expected)"
+	# An open-array parameter is ONE pointer-sized slot whatever its element
+	# type. Three i386 sites re-derived that instead of asking the ABI oracle
+	# and widened a 64-bit element to 8 bytes -- fault, or a clobbered
+	# neighbour. Mixed rows put the open array in the middle on purpose.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_open_array_param_slot_is_a_handle.pas $(TESTTMP)/test_oaslot26
+	test "$$($(TESTTMP)/test_oaslot26)" = "$$(cat test/test_open_array_param_slot_is_a_handle.expected)"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; test "$$?" = "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26
@@ -9102,6 +9109,13 @@ progress-check:
 test-i386: $(COMPILER)
 	./$(COMPILER) --target=i386 test/hello.pas $(TESTTMP)/test_i386_hello
 	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_hello)" = "Hello, World!"
+	# The open-array parameter slot is a HANDLE, not its element -- the bug was
+	# i386-only, so this is where it has to be caught
+	# (bug-a-an-open-array-of-double-segfaults-on-i386).
+	./$(COMPILER) --target=i386 test/test_open_array_param_slot_is_a_handle.pas $(TESTTMP)/test_i386_oaslot
+	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_oaslot)" = "$$(cat test/test_open_array_param_slot_is_a_handle.expected)"
+	./$(COMPILER) --target=i386 test/test_call_result_as_open_array_argument.pas $(TESTTMP)/test_i386_calloa
+	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_calloa)" = "$$(cat test/test_call_result_as_open_array_argument.expected)"
 	# a Variant holding a CLASS, and the unbox back to a scalar: both halves
 	# were x86-64-only gaps, so every target must print the same line
 	./$(COMPILER) --target=i386 test/test_variant_class_cross.pas $(TESTTMP)/test_i386_varcls

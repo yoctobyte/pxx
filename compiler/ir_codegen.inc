@@ -1040,22 +1040,20 @@ begin
       sz := 0;
       for j := i + 1 to nparams - 1 do
       begin
-        if Procs[procIdx].Params[j].IsArray then
-        begin
-          { Open-array param stack width must match how the caller pushes the
-            argument (the i386 caller dispatches on the param's element type, so
-            `Procs[procIdx].Params[j].TypeKind` here is the element type). A 64-bit element (Int64/UInt64/
-            Double) goes through the 8-byte push path; `array of const` (a single
-            dyn-array handle) and 32-bit-element open arrays are one 4-byte slot.
-            NOTE: regular open arrays don't yet carry a real high word, so
-            Length() over them is unreliable — tracked separately. }
-          if (Procs[procIdx].Params[j].TypeKind = tyInt64) or (Procs[procIdx].Params[j].TypeKind = tyUInt64) or (Procs[procIdx].Params[j].TypeKind = tyDouble) then
-            Inc(sz, 8)
-          else
-            Inc(sz, 4);
-        end
-        else if Procs[procIdx].Params[j].IsRef or (Procs[procIdx].Params[j].TypeKind = tyString) or
-           (Procs[procIdx].Params[j].TypeKind in [tyAnsiString, tyPointer, tyClass, tyVariant]) then
+        { An OPEN ARRAY is a HANDLE: one 4-byte slot, whatever its element type.
+          This walk used to widen it to 8 when the element was Int64/Double, to
+          match a caller that pushed 8 — and both halves were wrong. The
+          callee's own slot is pointer-sized (ParamSize and AllocParam both read
+          ABIParamSlotIsPointer, which answers isArray first), so the widened
+          walk shifted every EARLIER param's [ebp+disp] by four bytes and the
+          8-byte spill below wrote the second dword over its neighbour. That is
+          why `H1(b: Int64; const a: array of Double)` came back with b's high
+          dword set, and why `array of Double` faulted outright. Ask the oracle
+          here exactly as the caller now does in ir_codegen386.inc's IR_CALL.
+          bug-a-an-open-array-of-double-segfaults-on-i386 }
+        if ABIParamSlotIsPointer(Procs[procIdx].Params[j].TypeKind,
+                                 Procs[procIdx].Params[j].IsRef,
+                                 Procs[procIdx].Params[j].IsArray) then
           Inc(sz, 4)
         else if Procs[procIdx].Params[j].TypeKind = tyDouble then
           Inc(sz, 8)
@@ -1078,13 +1076,17 @@ begin
         end;
       end
       else if (Syms[idx].TypeKind = tyDouble) and
-              (Syms[idx].IsArray or not Syms[idx].IsRef) then
+              (not ABIParamSlotIsPointer(Syms[idx].TypeKind, Syms[idx].IsRef,
+                                         Syms[idx].IsArray)) then
       begin
         { By-VALUE double only. A `var/out d: Double` is a pointer in one
           4-byte slot (the sz walk above already counts it as one, via
           Procs[procIdx].Params[j].IsRef), so the 8-byte copy here wrote past the slot — with the
           param at [ebp-4] the second dword landed on [ebp+0], the SAVED EBP.
-          It falls through to the generic 4-byte handle copy below. }
+          It falls through to the generic 4-byte handle copy below.
+          `const a: array of Double` is the same trap wearing the element type:
+          its slot is a 4-byte HANDLE, so it is excluded here too, by the same
+          oracle the width walk above asks. }
         EmitB($8B); EmitB($85); EmitI32(8 + sz);     { mov eax, [ebp+disp] }
         EmitB($89); EmitB($85); EmitI32(Syms[idx].Offset);
         EmitB($8B); EmitB($85); EmitI32(12 + sz);    { mov eax, [ebp+disp+4] }

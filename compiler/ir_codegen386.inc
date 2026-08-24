@@ -3188,9 +3188,12 @@ begin
             if nArgs < Procs[procIdx].ParamCount then
             begin
               tk := Procs[procIdx].Params[nArgs].TypeKind;
-              { A by-ref float/64-bit param is a pointer: one 4-byte slot. }
-              if Procs[procIdx].Params[nArgs].IsRef and
-                 not Procs[procIdx].Params[nArgs].IsArray then
+              { A by-ref float/64-bit param is a pointer: one 4-byte slot — and
+                so is an OPEN ARRAY, whose TypeKind is its element's. The ABI
+                oracle answers both. }
+              if ABIParamSlotIsPointer(Procs[procIdx].Params[nArgs].TypeKind,
+                                       Procs[procIdx].Params[nArgs].IsRef,
+                                       Procs[procIdx].Params[nArgs].IsArray) then
                 tk := tyPointer;
               if (tk = tyDouble) or (tk = tyExtended) or Is64Bit386(tk) then
                 Inc(argBytes, 8)
@@ -3216,9 +3219,11 @@ begin
             tk := Procs[procIdx].Params[i].TypeKind;
             { `var d: Double` on a cdecl external is a `double*`: the address is
               already in eax and goes in one 4-byte slot, exactly as the
-              argBytes accounting above now counts it. }
-            if Procs[procIdx].Params[i].IsRef and
-               not Procs[procIdx].Params[i].IsArray then
+              argBytes accounting above now counts it. Same for an open array,
+              which is a handle — one oracle, both questions, both loops. }
+            if ABIParamSlotIsPointer(Procs[procIdx].Params[i].TypeKind,
+                                     Procs[procIdx].Params[i].IsRef,
+                                     Procs[procIdx].Params[i].IsArray) then
               tk := tyPointer;
             if (tk = tyDouble) or (tk = tyExtended) then
             begin
@@ -3331,7 +3336,9 @@ begin
           end;
           if (procIdx >= 0) and (nArgs < Procs[procIdx].ParamCount) and
              Is64Bit386(Procs[procIdx].Params[nArgs].TypeKind) and
-             (Procs[procIdx].Params[nArgs].IsArray or not Procs[procIdx].Params[nArgs].IsRef) then
+             (not ABIParamSlotIsPointer(Procs[procIdx].Params[nArgs].TypeKind,
+                                        Procs[procIdx].Params[nArgs].IsRef,
+                                        Procs[procIdx].Params[nArgs].IsArray)) then
           begin
             { 64-bit by-value param: widen the (possibly 32-bit) value to
               edx:eax, then push both dwords (lo at the lower address). }
@@ -3377,12 +3384,25 @@ begin
               the 4-byte `push eax` below is the whole marshalling. Without this
               guard the float path ran cvtsi2sd over the address and pushed it
               as an 8-byte double, so the callee dereferenced the low dword of
-              a converted pointer and faulted. Mirrors the `IsArray or not
-              IsRef` shape the 64-bit by-value branch above already uses — an
-              open array of Double keeps the 8-byte push both sides agree on. }
+              a converted pointer and faulted.
+
+              An OPEN ARRAY is excluded for the same reason one step further
+              out, and the earlier text here had it backwards: `const a: array
+              of Double` records the ELEMENT kind, tyDouble, in the parameter,
+              but the argument is a dyn-array HANDLE and the callee's slot is a
+              4-byte POINTER — ABIParamSlotIsPointer, which ParamSize and
+              AllocParam both read, says so. The two sides did NOT agree on an
+              8-byte push: the caller ran cvtsi2sd over the handle and pushed
+              the double bits, so the callee read garbage out of the low dword
+              and faulted before its first statement. Ask the ABI oracle rather
+              than re-deriving the rule, here and in the 64-bit branch above —
+              an open array of Int64 was pushing 8 bytes for the same reason and
+              only survived because its low dword happened to be the handle.
+              bug-a-an-open-array-of-double-segfaults-on-i386 }
             if TypeIsFloat(Procs[procIdx].Params[nArgs].TypeKind) and
-               (Procs[procIdx].Params[nArgs].IsArray or
-                not Procs[procIdx].Params[nArgs].IsRef) then
+               (not ABIParamSlotIsPointer(Procs[procIdx].Params[nArgs].TypeKind,
+                                          Procs[procIdx].Params[nArgs].IsRef,
+                                          Procs[procIdx].Params[nArgs].IsArray)) then
             begin
               if not TypeIsFloat(IntToTypeKind(IRTk[IRA[argNode]])) then
                 EmitIntToXmm386(0, IntToTypeKind(IRTk[IRA[argNode]])); { int -> xmm0 (64-bit/unsigned aware) }

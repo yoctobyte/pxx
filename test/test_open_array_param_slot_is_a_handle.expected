@@ -1,0 +1,14 @@
+len int   : 2
+len int64 : 2
+len single: 2
+len byte  : 2
+len rec   : 2
+len double: 3
+H1        : 10
+H2        : 2.5
+H3        : 5.5
+H4        : 3.75
+H5        : 6
+H6        : 3.5
+V1        : 6.750 d0=1.50
+V2        : 102.000 r=100.0
