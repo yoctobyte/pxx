@@ -147,4 +147,4 @@ through it instead of falling to the array path that wants an lvalue address.
 - `make compiler/pascal26` fixedpoint + `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit b67d2179b.
