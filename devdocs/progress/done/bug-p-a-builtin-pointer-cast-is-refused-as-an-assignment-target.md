@@ -3,8 +3,9 @@ track: P
 prio: 45
 type: bug
 blocked-by: []
-status: backlog
+status: done
 summary: "`PInteger(p)^ := 1;` as a STATEMENT is `undefined variable (PInteger)`, while the same cast as an EXPRESSION works. Only PByte/PWord/PInt32/PInt64/PDouble work as targets -- exactly the five that happen to be declared for real in compiler/builtin/*.pas -- so the statement path resolves the name through FindTypeAlias alone and never consults BuiltinPtrNameElemTk. ~20 names affected including PChar, PCardinal, PBoolean, PNativeInt."
+owner: claude-A
 ---
 
 # A builtin pointer-name cast is refused as an ASSIGNMENT TARGET
@@ -56,3 +57,47 @@ belongs after the alias lookup, mirroring the expression site exactly.
 
 `make compiler/pascal26` + a differential test over the whole name list as both
 an expression and a statement target + `tools/gate.sh quick`.
+
+---
+
+# Resolved 2026-08-24 — the one-line fallback, plus the name the table never had
+
+The statement lvalue path (`pasparser_stmt.inc`, the "C4" block) now falls
+through to `EnsureBuiltinPtrAlias` when `FindTypeAlias` misses, in that order —
+the same two lines the expression site has carried, and the order is the
+load-bearing part (registering the builtins up front shadows a source
+declaration and silently re-types this compiler's own `PWord = ^NativeInt`,
+which is `bug-pascal-builtin-pointer-type-cast`).
+
+**`PChar` needed one thing more, and it is the reason not to "just register the
+names".** PChar is deliberately absent from `BuiltinPtrNameElemTk`: the
+expression site lowers it as the **-2 adapter**, which skips a STRING operand's
+inline length prefix. A plain `^Char` alias would have made `PChar(s)^ := 'H'`
+write into the string HANDLE instead of its first character — a wrong value,
+silently, where today there is a clean compile error. The statement path
+therefore builds the same adapter, spelled the same way; `PChar(s)^ := 'H'`
+now edits the string and matches fpc.
+
+# Verified
+
+- A 27-name sweep (every name in `BuiltinPtrNameElemTk` plus PChar), each
+  written as `<N>(p)^ := v; WriteLn(<N>(p)^)` and diffed against fpc 3.2.2:
+  **26 agree**, the 27th being `PPointer`, where fpc refuses to `WriteLn` a
+  pointer at all and pxx prints 0. Before the fix, 20 of the 27 were a compile
+  error.
+- `test/test_builtin_pointer_cast_as_target.pas` — 11 rows including a user
+  alias with a record-field chain and both PChar shapes (into a heap string and
+  into raw memory). `.expected` IS fpc's output; the pinned compiler refuses the
+  file outright. Green on i386 / aarch64 / arm32 / riscv32.
+- `make compiler/pascal26` fixedpoint + `tools/gate.sh quick` GREEN.
+
+# Left open, deliberately
+
+The two lvalue paths are still two. This is the third bug of the shape "the
+expression path learned something and the statement path did not", and the real
+fix is for the statement path to delegate to the expression lvalue parser the
+way the cast-headed-CALL case already does. Filed as
+[[refactor-p-one-lvalue-path-for-statements-and-expressions]].
+
+## Log
+- 2026-08-24 — resolved, commit PENDING-COMMIT.

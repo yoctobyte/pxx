@@ -1,0 +1,11 @@
+string  : Hello
+pint    : 42
+pcard   : 7
+plongint: -11
+pbool   : TRUE
+pnative : -9
+psmall  : -3
+pqword  : 123456789
+psingle : 1.50
+rec     : 5z
+pchar p : Q

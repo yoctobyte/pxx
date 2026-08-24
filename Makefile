@@ -7651,6 +7651,12 @@ test-core: $(COMPILER)
 	# LOGICAL). .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_not_of_a_constant_widens.pas $(TESTTMP)/test_notconst26
 	test "$$($(TESTTMP)/test_notconst26)" = "$$(cat test/test_not_of_a_constant_widens.expected)"
+	# A builtin pointer-name cast as an assignment TARGET -- `PInteger(p)^ := 42`
+	# was "undefined variable (PInteger)" as a statement while the same cast as an
+	# EXPRESSION compiled. Refused outright on the pinned compiler (first line).
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_builtin_pointer_cast_as_target.pas $(TESTTMP)/test_bptrtgt26
+	test "$$($(TESTTMP)/test_bptrtgt26)" = "$$(cat test/test_builtin_pointer_cast_as_target.expected)"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; test "$$?" = "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26

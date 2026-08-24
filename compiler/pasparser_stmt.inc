@@ -4332,6 +4332,7 @@ var
   smci, smmii, smpii, smcallNode, smselfArg, smLastArg, smArgSeq, smMai, smSelfIdx: Integer;
   aliasIdx, fieldNode, indexNode, castPrevTok, qUnit: Integer;
   castFieldName: AnsiString; castTk: TTypeKind; castRec: Integer;
+  castElemTk: Integer; pcharCast: Boolean;   { PChar(p)^ := c as a statement target }
   decVal, decNode: Integer; strIsFloat: Boolean;
   valTmpSym, valTmpAssign, valTmpIdent: Integer;
   miArg, miEmpty: Integer; miIsFin: Boolean;   { Initialize/Finalize }
@@ -6181,7 +6182,31 @@ begin
           begin
             { C4: pointer-type-alias cast as lvalue statement — PFoo(expr)^.field := val }
             aliasIdx := FindTypeAlias(name);
-            if (aliasIdx >= 0) and (Tokens[TokPos].Kind = tkLParen) then
+            { ...and, only if that missed, a BUILT-IN pointer name -- the exact
+              fallback the EXPRESSION site has (pasparser_expr.inc, "C4"), in
+              the exact order, because the ordering is load-bearing: registering
+              the builtins up front shadows a source declaration and silently
+              re-types this compiler's own `PWord = ^NativeInt`
+              (bug-pascal-builtin-pointer-type-cast).
+
+              Without it `PInteger(p)^ := 42;` was "undefined variable
+              (PInteger)" while `WriteLn(PInteger(p)^)` on the line above
+              compiled, and the five names that did work as targets -- PByte,
+              PWord, PInt32, PInt64, PDouble -- were exactly the five declared
+              for real in the always-linked prelude, i.e. found by FindTypeAlias
+              like any source alias. One concept, two lookup paths, and the
+              second one never got the fallback.
+              bug-p-a-builtin-pointer-cast-is-refused-as-an-assignment-target }
+            if (aliasIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
+              aliasIdx := EnsureBuiltinPtrAlias(name);
+            { PChar is not in that table and never was: the expression site
+              builds it as the -2 ADAPTER, which skips a string operand's inline
+              length prefix, and a plain `^Char` alias would write into the
+              handle instead. So the statement target takes the same adapter,
+              spelled the same way. }
+            pcharCast := (aliasIdx < 0) and (Tokens[TokPos].Kind = tkLParen) and
+                         (CaseEqual(name, 'pchar') or CaseEqual(name, 'pansichar'));
+            if ((aliasIdx >= 0) or pcharCast) and (Tokens[TokPos].Kind = tkLParen) then
             begin
               Next; { consume alias name }
               Expect(tkLParen, '(');
@@ -6189,10 +6214,20 @@ begin
               Expect(tkRParen, ')');
               indexNode := AllocNode(AN_PTR_CAST);
               ASTLeft[indexNode] := CurASTNode;
-              ASTIVal[indexNode] := aliasIdx;
+              if pcharCast then
+              begin
+                ASTIVal[indexNode] := -2;   { the PChar adapter }
+                castElemTk := Ord(tyChar);
+                castRec := REC_NONE;
+              end
+              else
+              begin
+                ASTIVal[indexNode] := aliasIdx;
+                castElemTk := AliasElemTk[aliasIdx];
+                castRec := AliasElemRec[aliasIdx];
+              end;
               ASTTk[indexNode]   := Ord(tyPointer);
               castTk  := tyPointer;
-              castRec := AliasElemRec[aliasIdx];
               valNode := indexNode;
               { Handle ^  and .field suffix chain }
               while CurTok.Kind in [tkCaret, tkDot] do
@@ -6202,8 +6237,7 @@ begin
                   Next;
                   fieldNode := AllocNode(AN_DEREF);
                   ASTLeft[fieldNode] := valNode;
-                  castTk := IntToTypeKind(AliasElemTk[aliasIdx]);
-                  castRec := AliasElemRec[aliasIdx];
+                  castTk := IntToTypeKind(castElemTk);
                   ASTTk[fieldNode] := Ord(castTk);
                   valNode := fieldNode;
                 end

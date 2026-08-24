@@ -53,7 +53,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (294)
+## backlog (293)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -115,7 +115,6 @@ _none_
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 20 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 20 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 35 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
-| bug-p-a-builtin-pointer-cast-is-refused-as-an-assignment-target | P | 45 | bug | `PInteger(p)^ := 1;` as a STATEMENT is `undefined variable (PInteger)`, while the same cast as an EXPRESSION works. Only PByte/PWord/PInt32/PInt64/PDouble work as targets -- exactly the five that happen to be declared for real in compiler/builtin/*.pas -- so the statement path resolves the name through FindTypeAlias alone and never consults BuiltinPtrNameElemTk. ~20 names affected including PChar, PCardinal, PBoolean, PNativeInt. | — |
 | bug-p-a-call-result-is-refused-as-a-const-open-array-argument | P | 45 | bug | `Sum(Copy(a, 1, 3))` and `Sum(MakeArray)` -- a call result given to a `const array of T` open-array parameter -- do not compile. FPC accepts both. A naive relaxation was tried and REVERTED: it compiles `array of Double` and `array of string` into segfaults, so the by-ref check is a symptom and the real defect is that a dynamic-array-valued call is typed inconsistently. | — |
 | bug-p-a-parameterless-function-is-undefined-as-a-method-call-argument | P | 35 | bug | A parameterless function used as an ARGUMENT to a method call fails to resolve — `error: undefined variable (zero)` — while the identical argument to a free function compiles. Any argument position. Found writing lib/rtl/mimic_urllib_request.pas, where `headers.get(name, pynone)` would not compile but `HeaderFirst(raw, name, pynone)` did. | — |
 | bug-p-a-record-typed-var-initialiser-is-refused | P | 40 | bug | `var R: TRec = (n: 7; ev: nil);` is refused with 'parenthesised initializer requires an array variable'. FPC accepts it — a var initialiser takes the same parenthesised record form a typed CONST does, and the const form already works here. One shape, two spellings, only one implemented. | — |
@@ -352,7 +351,7 @@ _none_
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (6)
+## backlog_new (7)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -362,6 +361,7 @@ _none_
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 35 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
 | decide-how-much-string-machinery-the-basic-frontend-gets | U | 35 | decide | String concat and comparison between BASIC variables need PXXStrConcat/PXXStrEq, whose bodies ship only in builtinheap, which a unit-free .bas never pulls — so `PRINT s + t` is a compiler-internal error. Every OTHER frontend solves this by pulling builtinheap unconditionally (a Pascal hello-world is 63 KB). BASIC's unit-free path is 559 bytes. The fork is size vs capability, and it is a product call, not a code one. | — |
 | decide-typeref-gains-a-pointer-depth-field | U | 35 | decide | TTypeRef was landed to replace the 8-field tuple that ~90 sites redeclare, but as declared it carries PtrBaseTk/PtrBaseRec and DynDepth and no POINTER depth — so it cannot express `^PChar` any better than the pair it replaces. Every pointer table has since grown a depth field of its own (symbols, aliases, the type parser, C params, Pascal params, captures, proc returns). Either TTypeRef gains PtrDepth and the migration folds them all in, or depth is declared to live outside TTypeRef and the migration's value shrinks. Additive either way, but it changes a shared type mid-migration. | — |
+| refactor-p-one-lvalue-path-for-statements-and-expressions | P | 35 | refactor | An assignment TARGET is parsed by a second, smaller copy of the lvalue walk in pasparser_stmt.inc, which resolves every `.name` as a field and ends on Expect(':='). Every capability the expression path gains has to be re-added there by hand, and three bugs so far are exactly that omission: the builtin pointer-name fallback, the PChar adapter, and the deref-then-index shape. The statement path should delegate, as its own cast-headed-CALL arm already does. | — |
 
 ## experimental (20)
 
@@ -576,9 +576,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2316)
+## done (2317)
 
-2316 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2317 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -675,7 +675,6 @@ _none_
 - [p 45] [N] bug-n-isinstance-does-not-accept-a-qualified-class-name
 - [p 45] [N] bug-n-self-class-cannot-be-called-as-a-constructor
 - [p 45] [N] bug-nilpy-a-keyword-call-through-a-statically-unknown-callee-does-not-compile
-- [p 45] [P] bug-p-a-builtin-pointer-cast-is-refused-as-an-assignment-target
 - [p 45] [P] bug-p-a-call-result-is-refused-as-a-const-open-array-argument
 - [p 45] [T] bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence
 - [p 45] [T] bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio
@@ -797,6 +796,7 @@ _none_
 - [p 35] [T] feature-t-uforth-bench-on-the-watcher-idle-phase
 - [p 35] [A] refactor-a-backend-machine-code-lives-in-six-shared-files
 - [p 35] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
+- [p 35] [P] refactor-p-one-lvalue-path-for-statements-and-expressions
 - [p 35] [P] refactor-p-three-hand-rolled-postfix-loops
 - [p 35] [D] task-d-document-the-strict-overload-width-flag
 - [p 30] [P] bug-a-low-high-of-a-char-indexed-array-answer-the-ordinal
