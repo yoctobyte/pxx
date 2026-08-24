@@ -120,4 +120,4 @@ arm32. `pinned` prints `120` and `121` for the two string rows.
 GREEN.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit df8c7c9f3.
