@@ -3,7 +3,7 @@ track: A
 prio: 30
 type: feature
 blocked-by: []
-summary: "Initialize/Finalize work for records and AnsiStrings. A BARE dynamic-array or variant lvalue currently gets a clear compile error instead, because the dyn-array release helper needs a per-symbol element descriptor that has no IR-level dataref sentinel (SYM_RTTI_DATAREF_BASE is declared but has no fixup branch). A record CONTAINING either is fully handled, and `a := nil` is the one-line workaround, so the gap is narrow."
+summary: "The VARIANT half landed 2026-08-24 (PXXVarClear through the slot address, FPC-identical on four targets); what remains is the DYNAMIC ARRAY only. A bare dyn-array lvalue still gets a clear compile error, because the release helper needs a per-symbol element descriptor that has no IR-level dataref sentinel (SYM_RTTI_DATAREF_BASE is declared but has no fixup branch). A record CONTAINING one is fully handled, and `a := nil` is the one-line workaround, so the gap is narrow."
 status: backlog
 owner: ""
 ---
@@ -22,7 +22,7 @@ while landing it, 2026-08-21.
 | AnsiString | raw zero store | desugared to `x := ''` |
 | unmanaged | no-op | no-op |
 | **bare dynamic array** | **compile error** | **compile error** |
-| **bare variant** | **compile error** | **compile error** |
+| ~~bare variant~~ | zero 16 bytes | `PXXVarClear(@v)` — **done 2026-08-24** |
 
 An error, deliberately, not a no-op — a silent no-op on a managed type is the
 exact defect the parent ticket was filed for, so the gap says so out loud.

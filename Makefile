@@ -3669,9 +3669,12 @@ test-core: $(COMPILER)
 	# record Finalize (unmanaged members untouched, which is the line between
 	# Finalize and FillChar); and `plain 1 2 5` (no managed members, and a plain
 	# ordinal, are legal no-ops -- a generic container finalizing every element
-	# type has to compile for those too).
+	# type has to compile for those too). The `var ...` rows are the bare-Variant
+	# half of feature-a-finalize-for-bare-dynarray-and-variant: PXXVarClear through
+	# the slot address, idempotent by construction, releasing a REFERENCE (keep
+	# survives) rather than the object.
 	./$(COMPILER) test/test_initialize_finalize.pas $(TESTTMP)/test_initfin26
-	test "$$($(TESTTMP)/test_initfin26)" = "$$(printf 'len=0 []\nagain len=0\ns len=0 keep=[world]\nrec [from-heap] n=3 nums0=7 len=3\nafter fin: namelen=0 numslen=0 n=3\nafter fin2: namelen=0\nplain 1 2 5\ndone 0')"
+	test "$$($(TESTTMP)/test_initfin26)" = "$$(printf 'len=0 []\nagain len=0\ns len=0 keep=[world]\nrec [from-heap] n=3 nums0=7 len=3\nafter fin: namelen=0 numslen=0 n=3\nafter fin2: namelen=0\nplain 1 2 5\nvar []\nvar again []\nvar [] keep=[world]\nvar int []\nvar init []\ndone 0')"
 	# An empty Variant renders as Pascal's empty string, not NilPy's `None`
 	# (bug-a-a-null-variant-renders-as-none-in-pascal). Byte-identical to fpc
 	# 3.2.2; the non-empty rows catch a delegation that stopped delegating.
@@ -5274,7 +5277,7 @@ test-core: $(COMPILER)
 	# would be a divergence the other way. Last row is the ARC check — the clear
 	# releases the caller's reference, so a second owner must survive it.
 	./$(COMPILER) -Fulib/rtl test/test_out_parameter_of_a_managed_type_is_cleared.pas $(TESTTMP)/test_out_param_cleared26
-	test "$$($(TESTTMP)/test_out_param_cleared26)" = "$$(printf 'str      []\ndyn      0\nintf     TRUE\nassigned [set]\nint      42\nvarint   42\nchar     [z]\nshortstr [y]\nmethod   []\nclassm   []\ntwoout   [][B][C]\nmixed    []\nfuncout  [] 1\nnested   []\nuntyped  5\nsurvive  [payload-] 7 bad=0')"
+	test "$$($(TESTTMP)/test_out_param_cleared26)" = "$$(printf 'str      []\ndyn      0\nintf     TRUE\nvariant  []\nrec      [] 3\nassigned [set]\nvarassn  [set]\nrecassn  [set] 9\nint      42\nvarint   42\nchar     [z]\nshortstr [y]\nunmgdrec 1 2\nmethod   []\nclassm   []\ntwoout   [][B][C]\nmixed    []\nfuncout  [] 1\nnested   []\nuntyped  5\nsurvive  [payload-] 7 bad=0')"
 
 	# A routine's `label` section in the canonical ISO position — first, ahead of
 	# const/type/var/nested routines. The label loop used to run only AFTER that

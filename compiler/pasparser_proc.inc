@@ -175,6 +175,44 @@ begin
     ASTIVal[valNode] := 0;
     ASTTk[valNode] := Ord(tyPointer);
   end
+  else if (Syms[symIdx].TypeKind = tyVariant) and not Syms[symIdx].IsArray then
+  begin
+    { Variant and managed record have no empty-value LITERAL to assign, which
+      is why the assignment trick above stopped at three kinds. They go through
+      the finalize primitive instead — the same AN_MANAGED_INIT node
+      `Finalize(x)` builds, which by then knew both kinds. So this is still not
+      a new emitter: it is the intrinsic the user can already write by hand,
+      emitted at the head of the body.
+
+      `Finalize`, not `Initialize`: an out param's incoming bytes ARE the
+      caller's live references, and dropping them without releasing is the leak
+      the ticket names. PXXVarClear reads the tag, releases what that tag says
+      is a reference, and writes VT_EMPTY — idempotent, so a callee that also
+      calls Finalize(v) itself decrements nothing the second time.
+      feature-a-finalize-an-out-variant-and-managed-record }
+    valNode := AllocNode(AN_MANAGED_INIT);
+    ASTLeft[valNode] := identNode;
+    ASTIVal[valNode] := 1;                { 1 = Finalize }
+    CompileAST(valNode);
+    Result := True;
+    Exit;
+  end
+  else if (Syms[symIdx].TypeKind = tyRecord) and not Syms[symIdx].IsArray and
+          RecordHasManagedFields(SymTR[symIdx].RecId) then
+  begin
+    { Managed record: PXXRecordFinalize releases each managed field and nils
+      it, leaving the UNMANAGED members alone — which is FPC's `out` exactly.
+      A record with no managed fields is deliberately not cleared: FPC does not
+      finalize it either, so the caller's value survives, and zeroing it here
+      would be a divergence in the other direction (the same trap the ordinal
+      rows of the test guard against). }
+    valNode := AllocNode(AN_MANAGED_INIT);
+    ASTLeft[valNode] := identNode;
+    ASTIVal[valNode] := 1;                { 1 = Finalize }
+    CompileAST(valNode);
+    Result := True;
+    Exit;
+  end
   else
     Exit;   { not managed, or a kind with no empty literal — see the note above }
   CompileAST(GenMakeAssign(identNode, valNode));

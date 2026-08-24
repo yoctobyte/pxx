@@ -125,6 +125,7 @@ _none_
 | bug-p-a-record-typed-var-initialiser-is-refused | P | 40 | bug | `var R: TRec = (n: 7; ev: nil);` is refused with 'parenthesised initializer requires an array variable'. FPC accepts it — a var initialiser takes the same parenthesised record form a typed CONST does, and the const form already works here. One shape, two spellings, only one implemented. | — |
 | bug-p-a-typed-constant-of-pchar-type-is-a-parse-error | P | 35 | bug | `const KC: PChar = 'konst';` is `error: unexpected token` -- a TYPED constant whose type is a pointer does not parse. FPC takes it, and it is the ordinary way to name a C string constant. Untyped `const KC = 'konst';` works, and so does a `var` of the same type. | — |
 | bug-p-a-typed-string-constant-cannot-be-assigned | P | 35 | bug | `const S: string = 'a'; ... S := 'b';` is `undefined variable (S)`, though the same assignment works for a typed Integer, Char or ARRAY constant. Typed consts are writable here (fpc's default in non-Delphi modes) for every type except string, which is registered as a read-only literal alias with no storage. | — |
+| bug-p-length-of-a-string-literal-plus-anything-does-not-parse | P | 40 | bug | `Length('ab' + s)` is a PARSE ERROR (`Expected: ), but got: +`). Length's compile-time fold for a string literal fires on the first token being tkString and immediately demands `)`, so a literal that is merely the LEFT OPERAND of a concat is mistaken for the whole argument. `Length(s + 'ab')` works, and `Length(('ab') + s)` works — the same expression, three spellings, one of them refused. | — |
 | bug-p-not-of-a-builtin-round-or-trunc-call-is-logical | P | 45 | bug | `not Round(1.5)` answers TRUE where FPC answers -3: pxx applies the LOGICAL not (xor 1) to a builtin ordinal function's result. `not Trunc(d)` the same. A user-written `function Two: Int64` is fine, so it is the builtin calls specifically. Silent wrong value AND wrong type. | — |
 | bug-p-sizeof-rejects-a-pointer-deref-in-its-operand | P | 35 | bug | `SizeOf(p^.A)` is a parse error (`Expected: ), but got: ^`). SizeOf's operand parser is a hand-rolled selector walk that handles `v`, `v.f.g` and `v[i]` but has no `^` case, so any pointer deref in the operand is rejected outright. | — |
 | bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence | T | 45 | bug | file_cascade_ticket's Root-cause-suspects line falls back to 'likely a broken build or harness event' whenever no CASCADE_ROOT_JOBS entry is in the red set. That is a conclusion drawn from the absence of one narrow signal, printed with no hedge, and it is now directly contradicted by the Range section shipped in 8ec77190c — which on the live incident named the actual cause. Same defect class the Range work fixed for the sha: an auto-filed ticket asserting something it has no evidence for. | — |
@@ -188,8 +189,7 @@ _none_
 | feature-a-dynamic-array-of-frozen-strings | A | 30 | feature | In the FROZEN-string model (-uPXX_MANAGED_STRING, the self-host build), `array of string` is refused from SetLength up: the element is an inline fixed-capacity buffer and no path knows its stride. Delete/Insert refuse it downstream of that, which is why they carry a frozen-string exclusion. | — |
 | feature-a-emit-obj-record-class-abi-mode | A | 30 | feature | --emit-obj objects built with and without --compact-classes disagree on VMT slot numbers, and nothing diagnoses it. Record the class-ABI mode in the object and refuse a mismatched link, the way --threadsafe's hazard is meant to be handled. | — |
 | feature-a-error-does-not-halt-so-a-parse-can-be-speculative | A | 45 | feature | `Error()` calls `Halt` directly, so nothing in the compiler can trial-parse and back out. That blocks NilPy's type inference (which needs to read an as-yet-unseen name speculatively), and it is also why the compiler stops at the FIRST error. Make the error path recoverable; several unrelated wants fall out of the same change. | — |
-| feature-a-finalize-an-out-variant-and-managed-record | A | 35 | feature | Slice 2 of bug-a-an-out-parameter-of-a-managed-type-is-not-cleared, which cleared out AnsiString / dynarray / interface by synthesising an empty-value ASSIGNMENT at the body head. Variant and managed records have no empty-value literal to assign — `v := Unassigned` renders as None rather than FPC's empty, and a record has no empty literal at all — so these two need the finalize-through-pointer primitive that trick was written to avoid. | — |
-| feature-a-finalize-for-bare-dynarray-and-variant | A | 30 | feature | Initialize/Finalize work for records and AnsiStrings. A BARE dynamic-array or variant lvalue currently gets a clear compile error instead, because the dyn-array release helper needs a per-symbol element descriptor that has no IR-level dataref sentinel (SYM_RTTI_DATAREF_BASE is declared but has no fixup branch). A record CONTAINING either is fully handled, and `a := nil` is the one-line workaround, so the gap is narrow. | — |
+| feature-a-finalize-for-bare-dynarray-and-variant | A | 30 | feature | The VARIANT half landed 2026-08-24 (PXXVarClear through the slot address, FPC-identical on four targets); what remains is the DYNAMIC ARRAY only. A bare dyn-array lvalue still gets a clear compile error, because the release helper needs a per-symbol element descriptor that has no IR-level dataref sentinel (SYM_RTTI_DATAREF_BASE is declared but has no fixup branch). A record CONTAINING one is fully handled, and `a := nil` is the one-line workaround, so the gap is narrow. | — |
 | feature-a-getinterface-refcounting | A | 35 | feature | __pxxGetInterface stores the instance pointer into the caller's interface variable without an AddRef, so the slot holds a borrowed reference while the compiler treats the variable as managed and releases it at scope exit. Every Supports/GetInterface hit is therefore one release the object never got a retain for. Nothing observed to crash yet, which is why it is a ticket and not an urgent bug — but the asymmetry is real and worth settling deliberately. | — |
 | feature-a-io-lock-owner-from-tls-not-gettid | A | 35 | feature | The --threadsafe I/O lock issues a gettid SYSCALL on every I/O statement (measured: 43% overhead, one syscall per Writeln; caching it in TLS removed the whole penalty). The naive version is WRONG -- foreign threads (glibc pthread_create) inherit the creator's block and would answer 'lock already mine', silently losing mutual exclusion. Needs the stack-bounds validation design recorded in the ticket. | — |
 | feature-a-promoint-variant-esp-targets | S | 40 | feature | Promotable int in a Variant: riscv32 / xtensa | — |
@@ -570,9 +570,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2300)
+## done (2301)
 
-2300 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2301 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -719,6 +719,7 @@ _none_
 - [p 40] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 40] [P] bug-p-a-record-typed-var-initialiser-is-refused
+- [p 40] [P] bug-p-length-of-a-string-literal-plus-anything-does-not-parse
 - [p 40] [T] bug-t-twatch-status-says-down-while-the-daemon-is-alive-and-testing
 - [p 40] [P] compat-pascal-a-string-n-field-makes-a-record-a-different-size-than-fpc
 - [p 40] [P] compat-pascal-index-a-function-call-result
@@ -763,7 +764,6 @@ _none_
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
 - [p 35] [U] decide-classinfo-returns-our-blob-or-nothing
-- [p 35] [A] feature-a-finalize-an-out-variant-and-managed-record
 - [p 35] [A] feature-a-getinterface-refcounting
 - [p 35] [A] feature-a-io-lock-owner-from-tls-not-gettid
 - [p 35] [A] feature-a-unreferenced-class-rtti-keeps-every-method-alive

@@ -21,7 +21,16 @@ program test_initialize_finalize;
 
   n stays 3 after Finalize on purpose: unmanaged members are untouched, as in
   FPC. That is the line between Finalize and FillChar, and FillChar over managed
-  fields is the hazard this intrinsic exists to replace. }
+  fields is the hazard this intrinsic exists to replace.
+
+  A BARE Variant was a compile error until
+  feature-a-finalize-for-bare-dynarray-and-variant landed its separable half:
+  Finalize(v) is PXXVarClear through the slot address, which reads the tag,
+  releases what that tag says is a reference and writes VT_EMPTY — idempotent
+  by construction, so it gets the second property above for free rather than by
+  nil'ing afterwards. Initialize(v) is a 16-byte zero, because VT_EMPTY is 0 and
+  Initialize must NOT release (its incoming bytes are not references).
+  A bare dynamic array is still an error and still has the ticket. }
 
 type
   TRec = record
@@ -37,6 +46,7 @@ var
   p: PRec;
   r: TPlain;
   i: Integer;
+  v: Variant;
 
 begin
   s := 'hello';
@@ -73,6 +83,25 @@ begin
   i := 5;
   Finalize(i);
   Writeln('plain ', r.A, ' ', r.B, ' ', i);
+
+  { bare Variant. The string rows are the ones that matter — a variant holding
+    an AnsiString owns a reference, and this is where a wrong clear either leaks
+    it or takes `keep` with it. }
+  v := 'hello';
+  Finalize(v);
+  Writeln('var [', v, ']');
+  Finalize(v);                          { idempotent, as for the string above }
+  Writeln('var again [', v, ']');
+  keep := 'world';
+  v := keep;                            { refcount 2 }
+  Finalize(v);
+  Writeln('var [', v, '] keep=[', keep, ']');
+  v := 42;                              { an unmanaged tag: clears, releases nothing }
+  Finalize(v);
+  Writeln('var int [', v, ']');
+  v := 7;
+  Initialize(v);
+  Writeln('var init [', v, ']');
 
   Writeln('done 0');
 end.

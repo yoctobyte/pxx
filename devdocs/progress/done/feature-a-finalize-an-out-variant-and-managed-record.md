@@ -4,12 +4,13 @@ prio: 35
 type: feature
 blocked-by: []
 summary: "Slice 2 of bug-a-an-out-parameter-of-a-managed-type-is-not-cleared, which cleared out AnsiString / dynarray / interface by synthesising an empty-value ASSIGNMENT at the body head. Variant and managed records have no empty-value literal to assign — `v := Unassigned` renders as None rather than FPC's empty, and a record has no empty literal at all — so these two need the finalize-through-pointer primitive that trick was written to avoid."
+owner: claude-A
 ---
 
 # Finalize an `out` Variant and an `out` managed record
 
 - **Type:** feature (completes a partial fix) — Track A
-- **Status:** backlog
+- **Status:** done
 - **Opened:** 2026-08-22
 
 ## What already works, and why these two do not
@@ -60,3 +61,37 @@ Track A's, plus the two rows above matching fpc 3.2.2 added to
 `test/test_out_parameter_of_a_managed_type_is_cleared.pas`, and its ARC round
 trip extended to a Variant and a managed record (a second owner of the record's
 string field must survive the clear).
+
+## Landed 2026-08-24
+
+Both rows now match fpc 3.2.2 byte for byte, on x86-64, aarch64, arm32 and i386.
+
+The two tickets in the "worth doing as one primitive" note above turned out to
+be the same work, and the answer was that the primitive **already existed**:
+`AN_MANAGED_INIT`, the node `Finalize(x)` builds. It knew records from the day
+it landed, and it learned bare Variants in this same change
+([[feature-a-finalize-for-bare-dynarray-and-variant]]'s separable half). So
+`ClearManagedOutParam` did not need a new emitter after all — it builds that
+node over the parameter's ident and compiles it, which is literally "emit the
+intrinsic the user could have written by hand, at the head of the body".
+
+Finalize and not Initialize, for the reason the two differ by: an `out` param's
+incoming bytes ARE the caller's live references, so dropping them without
+releasing is a leak, which is the second half of what the ticket reported.
+
+Two negative rows guard the other direction, and both are in the gated test:
+`unmgdrec 1 2` (a record with NO managed fields is not cleared — FPC does not
+finalize it either, so the caller's value must survive) and `rec [] 3` (the
+managed field is released, the unmanaged `n` is untouched — the line between
+Finalize and FillChar).
+
+The side question — an empty Variant rendering as `None` — was fixed first, as
+[[bug-a-a-null-variant-renders-as-none-in-pascal]]; without it the `variant []`
+row could not have been written at all.
+
+Not done, and not this ticket: `VarClear` is still missing from the Pascal
+surface (`uses variants; VarClear(a)` is "undefined variable"), which is
+[[bug-b-vartostr-is-missing-from-variants]]' shape in Track B's lane.
+
+## Log
+- 2026-08-24 — resolved, commit PENDING-COMMIT.

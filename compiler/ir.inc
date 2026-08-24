@@ -7712,17 +7712,42 @@ begin
         Result := IRAppend(IR_STORE_MEM, IRLowerAddress(miArg),
                     IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
                     -1, 0, Ord(tyPointer))
-      else if (miTk = tyVariant) or
-              ((ASTKind[miArg] = AN_IDENT) and Syms[ASTIVal[miArg]].IsArray and
-               (Syms[ASTIVal[miArg]].ArrLen = -1)) then
+      else if miTk = tyVariant then
+      begin
+        { A bare VARIANT. Finalize is PXXVarClear through the slot address —
+          idempotent by construction (it reads the tag, releases what that tag
+          says is a reference, and writes VT_EMPTY), which is exactly the
+          "a second Finalize decrements nothing" property the record path gets
+          from nil'ing. Initialize is a 16-byte zero, because VT_EMPTY is 0 and
+          Initialize must NOT release: its incoming bytes are not references.
+
+          This is the half both open tickets named as separable and cheap —
+          the dynamic-array half still needs a per-symbol element descriptor
+          reachable from IR, which SYM_RTTI_DATAREF_BASE has no fixup branch
+          for. feature-a-finalize-for-bare-dynarray-and-variant }
+        if miIsFin then
+        begin
+          miPi := FindProc('PXXVarClear');
+          if miPi < 0 then
+            Error('compiler error: PXXVarClear not found in the builtin unit');
+          miArgN := IRAppend(IR_ARG, IRVariantAddr(miArg), -1, -1, 0, Ord(tyPointer));
+          Result := IRAppendCall(miPi, miArgN, -1, Ord(tyNativeInt));
+          IRIVal[Result] := 1;   { statement: emit for effect }
+        end
+        else
+          Result := IRAppend(IR_DEFAULT_MEM, IRVariantAddr(miArg), -1,
+                             REC_NONE, TypeSize(tyVariant), Ord(tyVariant));
+      end
+      else if (ASTKind[miArg] = AN_IDENT) and Syms[ASTIVal[miArg]].IsArray and
+              (Syms[ASTIVal[miArg]].ArrLen = -1) then
         { Deliberately an ERROR, not a no-op: a silent no-op on a managed type is
           the exact defect this ticket was filed for. A bare dynamic array has a
           one-line workaround (`a := nil`, which releases and nils exactly as
-          Finalize must), and a record CONTAINING either is fully handled --
+          Finalize must) and a record CONTAINING one is fully handled above --
           PXXRecordFinalize walks to PXXDynArrayRelease with the sub-descriptor
           -- so the gap is narrow and is not on the ticket's motivating path.
           feature-a-finalize-for-bare-dynarray-and-variant. }
-        Error('Initialize/Finalize on a bare dynamic array or variant is not implemented yet; assign nil instead, or wrap it in a record (feature-a-finalize-for-bare-dynarray-and-variant)')
+        Error('Initialize/Finalize on a bare dynamic array is not implemented yet; assign nil instead, or wrap it in a record (feature-a-finalize-for-bare-dynarray-and-variant)')
       else
         { Unmanaged type: legal and does nothing, as in FPC. }
         Result := IRAppend(IR_NOP, -1, -1, -1, 0, Ord(tyInteger));
