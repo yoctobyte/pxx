@@ -4,7 +4,7 @@ title: "BASIC: `PRINT s + t` in a unit-free program is `call to a runtime stub t
 track: A
 prio: 35
 type: bug
-blocked-by: []
+blocked-by: [decide-how-much-string-machinery-the-basic-frontend-gets]
 status: backlog_new
 owner: ""
 created: 2026-08-24
@@ -52,8 +52,13 @@ deferred:
    path at all. BASIC has no `A$` variables and its `DIM s = "..."` is a
    `tyString`, so the managed path may be entirely gratuitous here.
 
-Option 2 is the more attractive answer and the less certain one, which is
-exactly why it should not be guessed at.
+Option 2 was measured on 2026-08-24 and **does not exist**: a Pascal program
+doing `ShortString + ShortString` pulls builtinheap too and comes out at 63,760
+bytes. There is no frozen-string concat path that skips the unit, in any
+frontend. That turns this into a size-vs-capability call rather than a coding
+question, and it is now **blocked on
+[[decide-how-much-string-machinery-the-basic-frontend-gets]]**, which carries
+the three options, the measurements and a recommendation.
 
 ## Checked 2026-08-24: NOT the same defect as the one-char-string bug
 

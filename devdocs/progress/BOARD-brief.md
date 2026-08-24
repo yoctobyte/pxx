@@ -50,7 +50,7 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 290, ranked
+## Ready — top 30 of 289, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [T]` bug-t-the-native-tier-times-out-and-publishes-a-contentless-red
@@ -83,4 +83,4 @@ _none — no lane is locked._
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 50] [U]` decide-release-signing-key-custody (unblocks 1)
 
-_260 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_259 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
