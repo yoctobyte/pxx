@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T05:01:17Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "1fd75b93d1f3b463ed628180a300cf584c446aa5",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T05:33:50Z",
    "fixed": [],
    "new_red": [],
@@ -480,6 +472,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "09d33d2d7ee6ee34fda2bb1ae676d2696e89ca22",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-24T03:28:27Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "aa9f0989a4c0847941f212d664495f8be96f2032",
    "tier": "native",
    "verdict": "RED"
   }
@@ -1018,11 +1018,11 @@
   "test-cjson#src:test/cjson/runner.c": "full",
   "test-core#00": "native",
   "test-core#129": "full",
-  "test-core#156": "native",
   "test-core#157": "native",
   "test-core#158": "native",
   "test-core#159": "native",
   "test-core#160": "native",
+  "test-core#161": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
   "test-core#src:examples/tk/callbacks.npy": "native",
@@ -1417,6 +1417,7 @@
   "test-core#src:test/test_a_record_field_named_like_a_class_operation.pas": "native",
   "test-core#src:test/test_abs_sqr.pas": "native",
   "test-core#src:test/test_absolute_array_overlay.pas": "native",
+  "test-core#src:test/test_absolute_over_a_var_parameter.pas": "native",
   "test-core#src:test/test_absolute_overlay_b265.pas": "native",
   "test-core#src:test/test_abstract_out.pas": "native",
   "test-core#src:test/test_ada_skeleton.adb": "native",
@@ -4064,11 +4065,11 @@
   "test-c-conformance-riscv32#shard5/6": "pass",
   "test-cjson#src:test/cjson/runner.c": "pass",
   "test-core#00": "pass",
-  "test-core#156": "pass",
   "test-core#157": "pass",
   "test-core#158": "pass",
   "test-core#159": "pass",
   "test-core#160": "pass",
+  "test-core#161": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
@@ -4463,6 +4464,7 @@
   "test-core#src:test/test_a_record_field_named_like_a_class_operation.pas": "pass",
   "test-core#src:test/test_abs_sqr.pas": "pass",
   "test-core#src:test/test_absolute_array_overlay.pas": "pass",
+  "test-core#src:test/test_absolute_over_a_var_parameter.pas": "pass",
   "test-core#src:test/test_absolute_overlay_b265.pas": "pass",
   "test-core#src:test/test_abstract_out.pas": "pass",
   "test-core#src:test/test_ada_skeleton.adb": "pass",
@@ -6571,11 +6573,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-24T02:26:56Z",
-  "sha": "09d33d2d7ee6ee34fda2bb1ae676d2696e89ca22",
+  "date": "2026-08-24T03:28:27Z",
+  "sha": "aa9f0989a4c0847941f212d664495f8be96f2032",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.5
+  "wall": 3600.0
  },
  "last_bench": {
   "conf_rows": 550,
