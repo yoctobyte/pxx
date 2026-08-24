@@ -1443,3 +1443,4 @@
 {"date": "2026-08-24T04:28:41Z", "fixed": [], "full": true, "new_red": [], "sha": "aa9f0989a4c0847941f212d664495f8be96f2032", "still_red": ["lib-test#src:test/lib_mimic_xml_etree_elementtree.npy", "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy"], "tier": "full", "verdict": "RED", "wall": 3600.3}
 {"date": "2026-08-24T04:34:02Z", "fixed": [], "full": false, "new_red": [], "sha": "aa9f0989a4c0847941f212d664495f8be96f2032", "still_red": [], "tier": "slow", "verdict": "GREEN", "wall": 313.5}
 {"date": "2026-08-24T04:42:56Z", "fixed": [], "full": false, "new_red": [], "sha": "aa9f0989a4c0847941f212d664495f8be96f2032", "still_red": [], "tier": "opt", "verdict": "GREEN", "wall": 522.6}
+{"date": "2026-08-24T17:17:29Z", "fixed": [], "full": false, "new_red": [], "sha": "982f34a70f6df139f3f52bcde35850f0b7a1c03f", "still_red": [], "tier": "native", "verdict": "RED", "wall": 3600.5}
