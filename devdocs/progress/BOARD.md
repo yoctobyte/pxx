@@ -354,7 +354,7 @@ _none_
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (5)
+## backlog_new (6)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -363,6 +363,7 @@ _none_
 | bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 30 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
 | bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape | P | 30 | bug | A function returning `^PChar`, dereferenced, is wrong in the four contexts that refuse to guess: WriteLn prints the address in decimal, concat on either side yields the address, and `=`/`<>` compare pointers. The three contexts that look right are right only by the blanket `AnsiString(<any pointer>)` rule. Unlike the array shape beside it, this one genuinely IS missing metadata: a proc records ProcRetPtrElemTk/Rec — the immediate pointee — and nothing about the return pointer's DEPTH or ultimate BASE. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 35 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
+| decide-how-much-string-machinery-the-basic-frontend-gets | U | 35 | decide | String concat and comparison between BASIC variables need PXXStrConcat/PXXStrEq, whose bodies ship only in builtinheap, which a unit-free .bas never pulls — so `PRINT s + t` is a compiler-internal error. Every OTHER frontend solves this by pulling builtinheap unconditionally (a Pascal hello-world is 63 KB). BASIC's unit-free path is 559 bytes. The fork is size vs capability, and it is a product call, not a code one. | — |
 
 ## experimental (20)
 
@@ -772,6 +773,7 @@ _none_
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
 - [p 35] [U] decide-classinfo-returns-our-blob-or-nothing
+- [p 35] [U] decide-how-much-string-machinery-the-basic-frontend-gets
 - [p 35] [A] feature-a-getinterface-refcounting
 - [p 35] [A] feature-a-io-lock-owner-from-tls-not-gettid
 - [p 35] [A] feature-a-unreferenced-class-rtti-keeps-every-method-alive
