@@ -2845,6 +2845,108 @@ begin
   Result := (Ord(tk) = 18) or (Ord(tk) = 19) or (Ord(tk) = 20);  { tySingle or tyDouble or tyExtended }
 end;
 
+{ ===== Assignment compatibility ============================================
+
+  An assignment between incompatible types was not checked at ALL: seventeen of
+  the eighteen assignments fpc 3.2.2 rejects with `Incompatible types` compiled
+  clean, in every direction -- record to integer, class to integer, string to
+  boolean. Two of them are the argument for doing this at all, because they are
+  not laxness, they are a wrong answer:
+
+    s := 'hello';  i := s;   WriteLn(i);   { prints the string HANDLE }
+    i := 7;        s := i;   WriteLn(s);   { SEGFAULT: 7 dereferenced as a handle }
+
+  CLAUDE.md's rule is that the dialect stays lax by default and FPC-parity
+  strictness lives behind per-feature flags -- but that rule is about
+  RESTRICTIONS that were historic rather than necessary, and it carries its own
+  escape: a finding that means silent wrong behaviour is a normal bug. These
+  are silent wrong behaviour, so they are refused by default.
+
+  DELIBERATELY NARROW. This is not FPC's type system and must not grow into one
+  by accident: it fires only on pairs that cross a REPRESENTATION boundary the
+  lowering has no conversion for -- a managed handle, an aggregate, or a set on
+  one side and a plain arithmetic scalar on the other. Every merely-unidiomatic
+  pair FPC also rejects (`i := d`, `b := i`, `p := i`) is LEFT ALONE here: those
+  have a defined meaning in this dialect, and they belong behind the
+  --strict-assign flag this ticket proposes, not in the default.
+  bug-p-an-assignment-is-not-type-checked-at-all }
+
+function TypeIsManagedStr(tk: TTypeKind): Boolean;
+begin
+  TypeIsManagedStr := (tk = tyAnsiString);
+end;
+
+function TypeIsCharKind(tk: TTypeKind): Boolean;
+{ A single character that a string sink accepts: a UTF-8 code unit or a UTF-16
+  code unit. tyUCS4Char is deliberately NOT here -- FPC spells it
+  `UCS4Char = LongWord`, i.e. it is an INTEGER wearing a character's name, and
+  FPC rejects `AnsiString := UCS4Char` for exactly that reason. Measured
+  2026-08-24: fpc 3.2.2 refuses it, and pinned pxx accepted it and then
+  SEGFAULTED at run time (the AnsiString runtime was handed a raw code point as
+  a heap pointer). Admitting it here would have made the type checker bless a
+  crash, so the one-word omission is the fix for that crash too. }
+begin
+  TypeIsCharKind := (tk = tyChar) or (tk = tyWideChar);
+end;
+
+function TypeIsPlainScalar(tk: TTypeKind): Boolean;
+{ An arithmetic/ordinal value that lives in a register: no handle, no aggregate.
+  tyPointer is deliberately EXCLUDED even though TypeIsOrdinal admits it -- a
+  pointer legitimately receives a class, an interface and a procedure address,
+  and the whole point of this predicate is to be sure. }
+begin
+  TypeIsPlainScalar := ((TypeIsOrdinal(tk) and (tk <> tyPointer)) or TypeIsFloat(tk))
+                       and not TypeIsPromoInt(tk);
+end;
+
+function AssignKindsIncompatible(dstTk, srcTk: TTypeKind): Boolean;
+{ True when this pair can only produce a wrong value or a crash.
+
+  Symmetric where the wrongness is symmetric, and asymmetric where it is not:
+  `s := c` (a Char into a string) is legal and converts, while `c := s` takes
+  the low byte of a heap handle, so CHAR is a legal SOURCE for a string and
+  never a legal SINK for one. }
+begin
+  AssignKindsIncompatible := True;
+
+  { Unknown/inferred/variant on either side: not our business. A Variant assigns
+    to and from everything by design, tyAuto has not been resolved yet, and
+    tyUnknown means an earlier diagnostic already fired. }
+  if (dstTk = tyUnknown) or (srcTk = tyUnknown) then begin AssignKindsIncompatible := False; Exit; end;
+  if (dstTk = tyVariant) or (srcTk = tyVariant) then begin AssignKindsIncompatible := False; Exit; end;
+  if (dstTk = tyAuto) or (srcTk = tyAuto) then begin AssignKindsIncompatible := False; Exit; end;
+  if dstTk = srcTk then begin AssignKindsIncompatible := False; Exit; end;
+
+  { A managed string and a number/boolean. The handle is the wrong value in one
+    direction and an invalid pointer in the other. }
+  { A CHARACTER is the one legal scalar SOURCE for a string -- it converts, in
+    every character kind. Nothing else does: there is no implicit Bool->string
+    or number->string in this dialect any more than in FPC's, and a handle is
+    what the slot would otherwise receive. }
+  if TypeIsManagedStr(dstTk) and TypeIsPlainScalar(srcTk) and
+     not TypeIsCharKind(srcTk) then Exit;
+  if TypeIsManagedStr(srcTk) and TypeIsPlainScalar(dstTk) then Exit;
+  { ...and the frozen string kinds, same argument, same asymmetry. }
+  if TypeIsFrozenString(dstTk) and TypeIsPlainScalar(srcTk) and
+     not TypeIsCharKind(srcTk) then Exit;
+  if TypeIsFrozenString(srcTk) and TypeIsPlainScalar(dstTk) then Exit;
+
+  { A RECORD is a layout; nothing scalar or string-shaped stands in for it, in
+    either direction. (Two DIFFERENT record types are not distinguished here --
+    that is a RecId question, not a kind question, and it is not this check.) }
+  if (dstTk = tyRecord) <> (srcTk = tyRecord) then Exit;
+
+  { A SET is a 32-byte bitset. Same argument. }
+  if (dstTk = tySet) <> (srcTk = tySet) then Exit;
+
+  { A CLASS reference is pointer-shaped, so a Pointer on the other side is the
+    one legal partner -- everything else reads the instance address as data. }
+  if (dstTk = tyClass) and (srcTk <> tyPointer) then Exit;
+  if (srcTk = tyClass) and (dstTk <> tyPointer) then Exit;
+
+  AssignKindsIncompatible := False;
+end;
+
 function IRVariantUnboxKind(target: TTypeKind): Boolean;
 { Which scalar targets a tyVariant value may be unboxed into. Anything not
   listed keeps the pre-existing lowering (records, sets, classes, pointers —
@@ -6834,7 +6936,16 @@ begin
     tyAuto:        Result := 'auto';
     tyShortString: Result := 'ShortString';
     tyFixedString: Result := 'string[N]';
-    else           Result := 'type';
+    tyPromoInt32:  Result := 'PromoInt32';
+    tyPromoInt64:  Result := 'PromoInt64';
+    tyUCS4Char:    Result := 'UCS4Char';
+    tyWideChar:    Result := 'WideChar';
+    { No `else` that swallows a kind silently: every member of TTypeKind is
+      spelled above, so a kind APPENDED to the enum and forgotten here shows up
+      as the obviously-wrong '<unspelled type>' in a diagnostic instead of the
+      plausible-looking 'type'. `cannot assign type to AnsiString` was the real
+      message for a UCS4Char before this list was completed. }
+    else           Result := '<unspelled type>';
   end;
 end;
 

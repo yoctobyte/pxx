@@ -43,6 +43,54 @@ begin
   SymSlotEscapes := False;
 end;
 
+{ The type kind of one side of an assignment, and whether that kind is a
+  RELIABLE description of what is stored there.
+
+  It usually is not, which is the whole difficulty: an ARRAY's nodes carry the
+  ELEMENT kind (arrays are a symbol property, `IsArray`/`ArrLen`, not a type
+  kind), a procedural variable's ident carries its RESULT kind, and a cast, a
+  deref or a call result carries whatever the lowering decided. Any of those
+  read as a plain scalar would make the incompatibility check fire on correct
+  code, which is far worse than the laxness it replaces.
+
+  So this answers False for everything it is not certain about, and the check
+  above it is therefore narrow ON PURPOSE. Widening it is a measurement, not a
+  guess: the pairs it declines to judge are exactly the ones where the shapes
+  need working out first.
+  bug-p-an-assignment-is-not-type-checked-at-all }
+function AssignSideKind(node: Integer; var tk: TTypeKind): Boolean;
+var si: Integer;
+begin
+  AssignSideKind := False;
+  if node < 0 then Exit;
+  case ASTKind[node] of
+    AN_IDENT:
+      begin
+        si := Integer(ASTIVal[node]);
+        if (si < 0) or (si >= SymCount) then Exit;
+        if Syms[si].IsArray then Exit;          { the kind is the ELEMENT's }
+        if Syms[si].IsRef then Exit;            { by-ref/untyped: the slot holds an address }
+        if SymProcSig[si] >= 0 then Exit;       { procvar: the kind is the RESULT's }
+        if SymCellPtr[si] >= 0 then Exit;       { captured cell: one indirection away }
+        { An INTERFACE variable is spelled tyRecord -- it is a 16-byte fat
+          pointer {IMT, instance} -- so the record rule would refuse `p := ifc`,
+          which FPC accepts. Measured, not guessed: it was the single regression
+          in a 625-pair differential against fpc 3.2.2. The kind is not a
+          reliable description here, which is exactly what this function is for. }
+        if (Syms[si].RecName >= REC_UCLASS_BASE) and
+           (Syms[si].RecName - REC_UCLASS_BASE < MAX_UCLASS) and
+           UClsIsInterface[Syms[si].RecName - REC_UCLASS_BASE] then Exit;
+        tk := Syms[si].TypeKind;
+        AssignSideKind := True;
+      end;
+    AN_INT_LIT, AN_STR_LIT, AN_BOOL_LIT, AN_FLOAT_LIT:
+      begin
+        tk := IntToTypeKind(ASTTk[node]);
+        AssignSideKind := True;
+      end;
+  end;
+end;
+
 procedure IRReset;
 begin
   IRCount := 0;
@@ -5647,6 +5695,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     bLastNode: Integer;
     writeFd: Integer;
     chArrCap, chArrCap2: Integer;   { static `array of Char` <-> string conversion }
+    asgDstTk, asgSrcTk: TTypeKind;  { AN_ASSIGN incompatibility check }
     foldStr: AnsiString;
     down: Boolean;
     varIdx, varIdx2: Integer;
@@ -8985,6 +9034,33 @@ begin
               ' to a variable of enum type ' +
               GetTokenStrFromRaw(EnumTypeNOff[NodeEnumIdOf(ASTLeft[node])],
                                  EnumTypeNLen[NodeEnumIdOf(ASTLeft[node])]));
+
+      { ...and, one step below enum identity, the pairs that are not a type
+        SYSTEM question at all but a wrong ANSWER: a managed string handle
+        assigned to or from a number, an aggregate assigned to a scalar, a class
+        reference read as data. `i := s` printed the heap handle and `s := i`
+        segfaulted, both with no diagnostic at any stage
+        (bug-p-an-assignment-is-not-type-checked-at-all).
+
+        Here for the reason the two checks above give: every syntactic form of
+        assignment funnels through this node, so one rule covers `for` variables,
+        `+=`, out-param clears and field stores instead of the ~20 sites that
+        build an AN_ASSIGN.
+
+        Recovering rather than fatal, so a file reports every one of these it
+        contains; the driver halts on ErrCount before anything is emitted. Not
+        applied to the C or NilPy frontends -- both have their own conversion
+        rules (C converts freely between scalars by the standard; NilPy is
+        dynamically typed and routes through Variant). }
+      if (not CProgramMode) and (not PyProgramMode) then
+      begin
+        if AssignSideKind(ASTLeft[node], asgDstTk) and
+           AssignSideKind(ASTRight[node], asgSrcTk) and
+           AssignKindsIncompatible(asgDstTk, asgSrcTk) then
+          ErrorAtRecover(ASTLine[node],
+            'incompatible types: cannot assign ' + TypeKindSpelling(asgSrcTk) +
+            ' to ' + TypeKindSpelling(asgDstTk));
+      end;
 
       { @BodiedPascalProc into a `cdecl` proc-type var: the indirect cdecl call
         arm marshals TRUE SysV (floats in xmm0..7, int/sse classes counted

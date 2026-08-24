@@ -4758,6 +4758,18 @@ test-core: $(COMPILER)
 	grep -q "cannot compare an enum with a pointer" $(TESTTMP)/test_epc.log
 	! ./$(COMPILER) test/test_forin_enum_holes_fail.pas $(TESTTMP)/test_feh26 > $(TESTTMP)/test_feh.log 2>&1
 	grep -q "non-contiguous values" $(TESTTMP)/test_feh.log
+	# An assignment between incompatible types is refused -- and the check
+	# RECOVERS, so one compile must report all thirteen rows, not stop at the
+	# first. The count is the assertion: a check that halted early would still
+	# satisfy a plain grep. bug-p-an-assignment-is-not-type-checked-at-all
+	! ./$(COMPILER) test/test_assign_incompatible_types_fail.pas $(TESTTMP)/test_asgbad26 > $(TESTTMP)/test_asgbad.log 2>&1
+	test "$$(grep -c 'incompatible types' $(TESTTMP)/test_asgbad.log)" = "13"
+	grep -q "cannot assign Integer to AnsiString" $(TESTTMP)/test_asgbad.log
+	grep -q "cannot assign UCS4Char to AnsiString" $(TESTTMP)/test_asgbad.log
+	# ...and the other half: everything the check must NOT start refusing. It
+	# RUNS, because "accepted" and "correct" are different claims.
+	./$(COMPILER) test/test_assign_compatible_types.pas $(TESTTMP)/test_asgok26
+	test "$$($(TESTTMP)/test_asgok26)" = "compat 7 abc 7 0 2"
 	./$(COMPILER) test/test_delphi_generics.pas $(TESTTMP)/test_delphi_generics26
 	test "$$($(TESTTMP)/test_delphi_generics26)" = "$$(printf '42\nhi')"
 	./$(COMPILER) test/test_inline_array_field_const_bound.pas $(TESTTMP)/test_inline_array_field_const_bound26

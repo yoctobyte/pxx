@@ -56,6 +56,28 @@ begin
 end;
 
 
+{ ErrorAt's recovering twin -- the diagnostic is reported and counted and the
+  lowering CARRIES ON, so a file reports every instance it contains instead of
+  stopping at the first. Same contract as ErrorRecover (see above): only for a
+  SEMANTIC failure whose caller can leave something well-formed behind, and the
+  driver halts on ErrCount before any output is written, so nothing downstream
+  ever sees the node that was complained about.
+  feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+procedure ErrorAtRecover(line: Integer; const msg: AnsiString);
+begin
+  if ErrorIdent <> '' then
+    writeln('pascal26:', line, ': error: ', msg, ' (', ErrorIdent, ')')
+  else
+    writeln('pascal26:', line, ': error: ', msg);
+  ErrorIdent := '';
+  Inc(ErrCount);
+  if ErrCount >= MAX_REPORTED_ERRORS then
+  begin
+    writeln('pascal26: too many errors, stopping');
+    Halt(1);
+  end;
+end;
+
 { Fatal error for a site the CURRENT TOKEN is nowhere near — an IR-lowering check,
   which runs long after the parser reached EOF, so Error's CurTok.Line and its
   `near:` token window would both point at the end of the program and actively
