@@ -58,6 +58,20 @@ end;
   guess: the pairs it declines to judge are exactly the ones where the shapes
   need working out first.
   bug-p-an-assignment-is-not-type-checked-at-all }
+function AssignSideRecOf(node: Integer): Integer;
+{ The record/class id of an assignment side, or REC_NONE. Companion to
+  AssignSideKind, which answers the KIND: an operator overload is keyed on
+  both, and a record kind with the wrong id is a different type. }
+var si: Integer;
+begin
+  AssignSideRecOf := REC_NONE;
+  if node < 0 then Exit;
+  if ASTKind[node] <> AN_IDENT then Exit;
+  si := Integer(ASTIVal[node]);
+  if (si < 0) or (si >= SymCount) then Exit;
+  AssignSideRecOf := Syms[si].RecName;
+end;
+
 function AssignSideKind(node: Integer; var tk: TTypeKind): Boolean;
 var si: Integer;
 begin
@@ -90,6 +104,31 @@ begin
       end;
   end;
 end;
+
+function AssignHasConversionOperator(srcNode, dstNode: Integer): Boolean;
+{ Does a user-defined IMPLICIT conversion make this assignment legal?
+
+  `operator :=(a: TFoo): Integer` and Delphi's `class operator Implicit` both
+  register under Ord(tkAssign), keyed on the OPERAND's type -- so `i := a` and
+  `s := t` are conversions, not the record-into-scalar store the kind check
+  would otherwise refuse. Both sides are asked because the conversion can be
+  declared in either direction (`operator :=(i: Integer): TFoo` keys on
+  Integer), and a hit on either is enough to stand down: this check exists to
+  catch stores that can only produce a wrong value, and a declared conversion
+  is by definition not one.
+
+  Deliberately NOT extended to OPK_EXPLICIT: an explicit operator is what a
+  CAST invokes, and FPC refuses the bare assignment exactly as this does. }
+var tk: TTypeKind;
+begin
+  AssignHasConversionOperator := True;
+  if AssignSideKind(srcNode, tk) and
+     (FindOpOverload(Ord(tkAssign), Ord(tk), AssignSideRecOf(srcNode)) >= 0) then Exit;
+  if AssignSideKind(dstNode, tk) and
+     (FindOpOverload(Ord(tkAssign), Ord(tk), AssignSideRecOf(dstNode)) >= 0) then Exit;
+  AssignHasConversionOperator := False;
+end;
+
 
 procedure IRReset;
 begin
@@ -9066,7 +9105,8 @@ begin
       begin
         if AssignSideKind(ASTLeft[node], asgDstTk) and
            AssignSideKind(ASTRight[node], asgSrcTk) and
-           AssignKindsIncompatible(asgDstTk, asgSrcTk) then
+           AssignKindsIncompatible(asgDstTk, asgSrcTk) and
+           not AssignHasConversionOperator(ASTRight[node], ASTLeft[node]) then
           ErrorAtRecover(ASTLine[node],
             'incompatible types: cannot assign ' + TypeKindSpelling(asgSrcTk) +
             ' to ' + TypeKindSpelling(asgDstTk));

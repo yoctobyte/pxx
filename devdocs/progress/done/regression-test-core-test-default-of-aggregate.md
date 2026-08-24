@@ -1,6 +1,7 @@
 ---
 prio: 70
 track: P
+status: done
 ---
 
 > **Track guessed as P** from the test source. The ranker reads frontmatter, so an unset track parks a stub in Track T's queue regardless of what the body says -- correct the `track:` line if this is wrong.
@@ -33,3 +34,32 @@ pascal26:78: error: incompatible types: cannot assign Int64 to class
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+---
+
+# Triaged and fixed 2026-08-24 — false positives from the new assignment check
+
+All three reds are the same cause: `497fc8e78` started type-checking assignments
+(`bug-p-an-assignment-is-not-type-checked-at-all`), and the rule refused two
+shapes it should never have seen.
+
+- **A user-defined IMPLICIT conversion.** `operator :=(a: TFoo): Integer` and
+  Delphi's `class operator Implicit(...): TString80` both register under
+  `Ord(tkAssign)` keyed on the operand type, so `i := a` and `s := t` are
+  conversions, not the record-into-scalar store the kind check refuses. The
+  check now stands down when either side has such an overload
+  (`AssignHasConversionOperator`), and deliberately NOT for `OPK_EXPLICIT` —
+  an explicit operator is what a CAST invokes, and FPC refuses the bare
+  assignment exactly as this does.
+- **`Default(T)` lied about its type.** For every non-aggregate T the arm built
+  an `AN_INT_LIT 0` tagged `tyInt64`, so `s := Default(string)` reported
+  "cannot assign Int64 to AnsiString". The tag was wrong before the check
+  existed; the check just made it visible. Zero of a string is `''` and zero of
+  a class or pointer is `nil`, so the arm resolves the type (`ParseTypeKind`)
+  and builds the node the literal would: `c := Default(TCls)` is now exactly
+  the node `c := nil` builds. Aggregates keep their materialised zeroed static.
+
+The 625-pair fpc differential is unchanged by both escape hatches — still 416
+accepted, 202 tightenings, **0 regressions** — so the diagnostic did not lose
+any of its reach.
+- 2026-08-24 — resolved, commit PENDING-COMMIT.

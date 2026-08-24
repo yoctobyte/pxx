@@ -2165,6 +2165,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-classref | P | 70 | regression | regression: test-core#src:test/test_classref.pas red at 392ea5d94545 (auto-filed by twatch) | — |
 | regression-test-core-test-conformance-1 | P | 70 | regression | test_conformance_1's expected output still encodes the OLD Variant-typecast behaviour: it asserts `v int=1` where `v := 123`. 24204e10d made `Integer(v)` convert rather than reinterpret, so the compiler is now right and the expectation is wrong — and it holds every full tier RED. | — |
 | regression-test-core-test-ctor-result-member | P | 70 | regression | regression: test-core#src:test/test_ctor_result_member.pas red at a76303231306 (auto-filed by twatch) | — |
+| regression-test-core-test-default-of-aggregate | P | 70 | regression | regression: test-core#src:test/test_default_of_aggregate.pas red at 203438d2cf63 (auto-filed by twatch) | — |
 | regression-test-core-test-delphi-bare-alldefaulted-arg | P | 70 | regression | regression: test-core#src:test/test_delphi_bare_alldefaulted_arg.pas red at a2ae11a64191 (auto-filed by twatch) | — |
 | regression-test-core-test-dynarray-params | T | 70 | regression | regression: test-core#src:test/test_dynarray_params.pas red at 34670fe9b872 (auto-filed by twatch) | — |
 | regression-test-core-test-exception-unhandled | T | 70 | regression | regression: test-core#src:test/test_exception_unhandled.pas@1 red at 899e51cda3ba (auto-filed by twatch) | — |
@@ -2181,6 +2182,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-mode-delphi-callarg | P | 70 | regression | regression: test-core#src:test/test_mode_delphi_callarg.pas red at a2ae11a64191 (auto-filed by twatch) | — |
 | regression-test-core-test-mode-delphi-methptr | P | 70 | regression | regression: test-core#src:test/test_mode_delphi_methptr.pas red at a2ae11a64191 (auto-filed by twatch) | — |
 | regression-test-core-test-mode-delphi | P | 70 | regression | regression: test-core#src:test/test_mode_delphi.pas red at a2ae11a64191 (auto-filed by twatch) | — |
+| regression-test-core-test-named-operators | P | 70 | regression | regression: test-core#src:test/test_named_operators.pas red at 203438d2cf63 (auto-filed by twatch) | — |
 | regression-test-core-test-nested-class-type-b348 | P | 70 | regression | regression: test-core#src:test/test_nested_class_type_b348.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
 | regression-test-core-test-nested-cow | T | 70 | regression | regression: test-core#src:test/test_nested_cow.pas red at 899e51cda3ba (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-augmented-assign-class-dunder | T | 70 | regression | regression: test-core#src:test/test_nilpy_augmented_assign_class_dunder.npy red at e8450c58d67e (auto-filed by twatch) | — |
@@ -2198,6 +2200,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-nilpy-re | T | 70 | regression | regression: test-core#src:test/test_nilpy_re.npy red at b9e334fbd649 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-sorted-pairs | T | 70 | regression | regression: test-core#src:test/test_nilpy_sorted_pairs.npy red at bb845b13ceb3 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-star-methods-and-targets | T | 70 | regression | regression: test-core#src:test/test_nilpy_star_methods_and_targets.npy red at 89dae725b972 (auto-filed by twatch) | — |
+| regression-test-core-test-operator-implicit-shortstring-b356 | P | 70 | regression | regression: test-core#src:test/test_operator_implicit_shortstring_b356.pas red at 203438d2cf63 (auto-filed by twatch) | — |
 | regression-test-core-test-platform-defines | T | 70 | regression | regression: test-core#src:test/test_platform_defines.pas@2 red at 96147f570d29 (auto-filed by twatch) | — |
 | regression-test-core-test-procedure-as-value-ok | P | 70 | regression | regression: test-core#src:test/test_procedure_as_value_ok.pas red at a76303231306 (auto-filed by twatch) | — |
 | regression-test-core-test-procvar-value-context-2 | P | 70 | regression | regression: test-core#src:test/test_procvar_value_context.pas red at a2ae11a64191 (auto-filed by twatch) | — |

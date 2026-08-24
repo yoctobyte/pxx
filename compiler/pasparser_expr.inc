@@ -471,9 +471,38 @@ begin
         end
         else
         begin
+          { The zero of a STRING is '' and the zero of a class, interface or
+            pointer is nil -- neither is the integer 0 wearing an Int64 tag,
+            which is what this arm produced for every non-aggregate type. It
+            worked by accident (the store is the same bytes) and it lied to
+            everything that reads the tag: with assignments now type-checked,
+            `s := Default(string)` reported "cannot assign Int64 to AnsiString"
+            on code that is correct and that FPC accepts.
+
+            Resolving the type here rather than skipping over its tokens also
+            makes the node say what it is: `c := Default(TCls)` becomes exactly
+            the node `c := nil` builds. Aggregates keep the materialised static
+            above -- they are the case that cannot be a literal at all.
+            bug-a-an-assignment-is-not-type-checked-at-all (follow-up) }
+          dfTk := ParseTypeKind;
           node := AllocNode(AN_INT_LIT);
           ASTIVal[node] := 0;
-          ASTTk[node] := Ord(tyInt64);
+          if TypeIsManagedStr(dfTk) or TypeIsFrozenString(dfTk) then
+          begin
+            node := AllocNode(AN_STR_LIT);
+            ASTSOffset[node] := 0;
+            ASTSLen[node] := 0;
+            ASTTk[node] := Ord(dfTk);
+          end
+          else if (dfTk = tyClass) or (dfTk = tyPointer) then
+            ASTTk[node] := Ord(tyPointer)
+          else
+          begin
+            { every ordinal, char, bool, float and enum: the integer zero, as
+              before, and the tag it always had. }
+            ASTTk[node] := Ord(tyInt64);
+            dfTk := tyInt64;
+          end;
         end;
         i := 1;
         while (i > 0) and (CurTok.Kind <> tkEOF) do
