@@ -156,4 +156,4 @@ i386 / aarch64 / arm32 (guarded on qemu-user being present, the same shape
 identical.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit 1f32b8fde.
