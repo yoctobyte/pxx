@@ -193,4 +193,4 @@ because it is a tooling change with its own gate and this ticket had a cause:
 [[chore-a-the-range-checked-fpc-seed-cannot-be-built]].
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit a57efd6e2.
