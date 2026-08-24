@@ -5434,8 +5434,16 @@ begin
   end
   else if (target = tyString) or (target = tyAnsiString) then
   { str() under NilPy is routed to pylib pystr_of by the -201 lowering before
-    it reaches here; this is the Pascal path. }
-  begin vuName := 'VariantToStr'; vuRet := tyAnsiString; end
+    it reaches here; this is the Pascal path -- so it takes the Pascal
+    spelling of VT_EMPTY (nothing, as fpc prints for an Unassigned) rather
+    than pylib's None. Same seam trick as VariantToCharFPC above; the guard is
+    on PyProgramMode because the -201 lowering can still fall through to here
+    when pylib is not loaded. bug-a-a-null-variant-renders-as-none-in-pascal }
+  begin
+    if PyProgramMode then vuName := 'VariantToStr'
+    else vuName := 'VariantToStrPas';
+    vuRet := tyAnsiString;
+  end
   else
   begin vuName := 'VariantToInt64'; vuRet := tyInt64; end;
 
@@ -7710,7 +7718,7 @@ begin
         { Deliberately an ERROR, not a no-op: a silent no-op on a managed type is
           the exact defect this ticket was filed for. A bare dynamic array has a
           one-line workaround (`a := nil`, which releases and nils exactly as
-          Finalize must) and a record CONTAINING one is fully handled above --
+          Finalize must), and a record CONTAINING either is fully handled --
           PXXRecordFinalize walks to PXXDynArrayRelease with the sub-descriptor
           -- so the gap is narrow and is not on the ticket's motivating path.
           feature-a-finalize-for-bare-dynarray-and-variant. }
@@ -10455,7 +10463,10 @@ begin
             Result := IRAppendCall(procIdx, argNode, -1, Ord(Procs[procIdx].RetType));
             Exit;
           end;
-          procIdx := FindProc('VariantToStr');
+          { Pascal reaches here for str(v)/string(v): its VT_EMPTY is the
+            empty string, not None. See IRLowerVariantAsScalar's note. }
+          if PyProgramMode then procIdx := FindProc('VariantToStr')
+          else procIdx := FindProc('VariantToStrPas');
           if procIdx < 0 then Error('str: VariantToStr builtin not loaded');
           value := IRVariantAddr(argVal);
           argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyVariant));

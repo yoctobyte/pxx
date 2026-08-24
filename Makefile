@@ -3672,6 +3672,11 @@ test-core: $(COMPILER)
 	# type has to compile for those too).
 	./$(COMPILER) test/test_initialize_finalize.pas $(TESTTMP)/test_initfin26
 	test "$$($(TESTTMP)/test_initfin26)" = "$$(printf 'len=0 []\nagain len=0\ns len=0 keep=[world]\nrec [from-heap] n=3 nums0=7 len=3\nafter fin: namelen=0 numslen=0 n=3\nafter fin2: namelen=0\nplain 1 2 5\ndone 0')"
+	# An empty Variant renders as Pascal's empty string, not NilPy's `None`
+	# (bug-a-a-null-variant-renders-as-none-in-pascal). Byte-identical to fpc
+	# 3.2.2; the non-empty rows catch a delegation that stopped delegating.
+	./$(COMPILER) -Fulib/rtl test/test_variant_empty_renders_as_pascal_empty.pas $(TESTTMP)/test_variant_empty26
+	test "$$($(TESTTMP)/test_variant_empty26)" = "$$(printf 'write   []\ncast    []\nassign  [] 0\nconcat  [xy]\nint     [5] [5]\nnegint  [-7] [-7]\nstr     [ss] [ss]\nbool    [True] [True]\nboolf   [False] [False]\nchar    [c] [c]')"
 	./$(COMPILER) test/test_writeln_nonfinite_float.pas $(TESTTMP)/test_writeln_nonfinite26
 	@out=$$(timeout 20 $(TESTTMP)/test_writeln_nonfinite26); rc=$$?; \
 	  if [ "$$rc" = "124" ]; then echo "test_writeln_nonfinite: TIMEOUT after 20s (not a wrong value)"; exit 1; fi; \

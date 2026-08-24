@@ -90,6 +90,14 @@ procedure Val(const s: AnsiString; var v: Int64; var code: Integer);
 procedure ValQWord(const s: AnsiString; var v: QWord; var code: Integer);
 procedure ValFloat(const s: AnsiString; var v: Double; var code: Integer);
 function VariantToStr(const v: Variant): AnsiString;
+{ The PASCAL spelling of an empty variant, selected by name at the lowering
+  seam (IRLowerVariantAsScalar / the str() lowering) the way VariantToCharFPC
+  is -- so no frontend flag reaches the runtime. VT_EMPTY is the ONLY tag the
+  two spellings differ on: Python's word for it is None, Pascal's is nothing
+  at all (fpc 3.2.2 prints and casts an Unassigned as the empty string), and
+  VariantToStr must keep saying None because pylib routes f-strings, join and
+  startswith through it. bug-a-a-null-variant-renders-as-none-in-pascal }
+function VariantToStrPas(const v: Variant): AnsiString;
 function VariantTagName(t: Int64): AnsiString;
 { Variant -> SCALAR unboxing, the counterpart of IR_VAR_STORE/IR_VAR_BOX.
   Without these a variant reaching a scalar context (assignment, return,
@@ -841,6 +849,17 @@ begin
     Result := 'None'
   else
     Result := '';
+end;
+
+
+function VariantToStrPas(const v: Variant): AnsiString;
+{ See the interface note. Built ON TOP of VariantToStr so the two cannot drift
+  on any tag but the one they are meant to differ on. }
+var p: PVariantRecord;
+begin
+  p := @v;
+  if p^.VType = 0 then Result := ''
+  else Result := VariantToStr(v);
 end;
 
 

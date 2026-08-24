@@ -1,0 +1,61 @@
+---
+track: U
+prio: 25
+type: decide
+blocked-by: []
+status: backlog
+summary: "pxx spells FPC's Null and Unassigned with ONE tag (VT_EMPTY). fpc 3.2.2 prints/casts an Unassigned as the empty string but RAISES EVariantTypeCastError for a Null, in both `string(v)` and `WriteLn(v)`. Rendering now follows the Unassigned half, which is the only answer one tag can give. Adopting the raise means either a second tag or making Null and Unassigned both die -- a language call, not a bug fix."
+---
+
+# Should a Null Variant raise, the way FPC does?
+
+Split out of [[bug-a-a-null-variant-renders-as-none-in-pascal]] while fixing its
+first half, 2026-08-24. That half was uncontested and is done: an empty Variant
+in a **Pascal** program rendered as `None`, NilPy's word, and now renders as the
+empty string on every target.
+
+## What fpc 3.2.2 actually does — measured, not assumed
+
+| source | fpc 3.2.2 | pxx (after the fix) |
+| --- | --- | --- |
+| `a := Unassigned; WriteLn(a)` | `` (empty) | `` (empty) |
+| `a := Unassigned; WriteLn(string(a))` | `` (empty) | `` (empty) |
+| `a := Null; WriteLn(a)` | **raises** `EVariantTypeCastError: Could not convert variant of type (Null) into type (String)` | `` (empty) |
+| `a := Null; WriteLn(string(a))` | **raises**, same message | `` (empty) |
+
+So FPC's two empties are not one behaviour with two spellings — one prints and
+one dies. pxx has a single `VT_EMPTY` tag serving `Null`, `Unassigned` and
+NilPy's `None` (documented in `lib/rtl/variants.pas`' header and in
+`builtin.pas`' `PXXVarBinOpPas`, where the conflation gives the *right* answer:
+FPC propagates both through arithmetic, each as itself, so one propagating tag
+is correct there).
+
+## The fork
+
+1. **Leave it** — VT_EMPTY renders as empty, `Null` never raises. Cheapest, and
+   it never turns working code into dying code. The residual divergence is only
+   *which of VarIsNull/VarIsEmpty answers True*, which is pre-existing and
+   already documented.
+2. **Split the tag** — give `Null` its own tag so the raise can be per-spelling.
+   Real work: every tag test in `builtin.pas`, `pylib.pas`, the four backends'
+   variant dispatch and `rtti_emit.inc` learns a second empty, and the NilPy
+   side must map `None` to exactly one of them. The arithmetic conflation above
+   would have to be re-proved, not assumed.
+3. **Raise for VT_EMPTY behind `--strict-fpc`** — no new tag; the strict flag
+   picks a raising renderer at the lowering seam, exactly as `VariantToCharFPC`
+   is picked today. Wrong in one direction (an `Unassigned` would raise too,
+   where FPC prints), so it buys parity for the commoner spelling only.
+
+## Recommendation
+
+**Option 1, and close this.** CLAUDE.md's own rule — *"we seek LANGUAGE
+compliance, not error-handling compliance"* — puts a divergence whose subject is
+"which exception does it raise" at the bottom of the queue, and this one is
+worse than that: it changes what compiles-and-runs today into what dies today,
+for a value the dialect deliberately does not distinguish. Option 2 is the only
+one that could be fully right, and it is a language-wide tag commitment
+(cf. [[decide-variant-tag-space-is-a-language-wide-commitment]], rejected) for a
+payoff of one error message.
+
+Filed as a decision rather than acted on because "should this program now die?"
+is not a call to make from the code.

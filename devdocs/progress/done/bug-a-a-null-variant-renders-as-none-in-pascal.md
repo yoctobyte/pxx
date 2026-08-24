@@ -3,8 +3,9 @@ track: A
 prio: 30
 type: bug
 blocked-by: []
-status: backlog
+status: done
 summary: "`string(v)` and `WriteLn(v)` on a Null/Unassigned Variant print `None` in a PASCAL program -- NilPy's spelling of VT_EMPTY leaking into Pascal output. FPC raises EVariantTypeCastError for the cast and prints nothing for the write. Pre-existing (identical under the pinned binary), loud in neither direction: a plausible-looking wrong string."
+owner: claude-A
 ---
 
 # A Null Variant renders as `None` in a Pascal program
@@ -52,8 +53,39 @@ Two questions, and only the first is clearly settled:
 Rendering a Null as the empty string is safe on its own and does not need that
 question answered.
 
+## Resolution, 2026-08-24
+
+Question 1 fixed; question 2 filed as
+[[decide-should-a-null-variant-raise-like-fpc]] rather than guessed, because
+FPC turned out to raise for `WriteLn(a)` as well as for the cast, so "follow
+FPC" means making a running program die.
+
+Measured while fixing it, and worth recording: FPC's two empties do NOT behave
+alike. `Unassigned` prints and casts as the empty string; `Null` raises in both
+contexts. pxx spells both with one `VT_EMPTY` tag, so the empty string is the
+only answer one tag can give -- and it is the right one for the spelling the
+two implementations can agree on.
+
+The renderer split follows `VariantToCharFPC`'s precedent exactly: a
+`VariantToStrPas` that delegates to `VariantToStr` for every tag but the empty
+one, selected BY NAME at the lowering seam, so no frontend flag reaches the
+runtime. `VariantToStr` itself had to keep saying `None`, because pylib routes
+f-strings, `join`, `startswith` and `format` through it -- changing it in place
+would have broken `f"{None}"`.
+
+x86-64 needed a second, separate fix: `writeln(v)` there is an INLINE emitter
+(`EmitWriteVariant`), not a call, and it wrote `None` from its own data
+segment. Every other target already prints nothing, because `PXXWriteVariant`
+declined that arm on purpose. Verified after the fix on x86-64, aarch64, arm32
+and i386 -- all four byte-identical to fpc 3.2.2. riscv32 cannot compile a
+Variant program at all (`unsupported node in IR codegen: var_store`), which is
+pre-existing and unrelated.
+
 ## Gate
 
 Track A's, plus a differential row per spelling (`string(Null)`,
 `string(Unassigned)`, `WriteLn(Null)`) against fpc 3.2.2, and a `.npy` row
 proving NilPy still prints `None`.
+
+## Log
+- 2026-08-24 — resolved, commit PENDING-COMMIT.

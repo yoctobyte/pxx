@@ -3148,16 +3148,27 @@ begin
 
   { empty slot: Python spells it None — an unassigned variant used to print
     NOTHING, so `print(d.get(missing))` produced a blank line where CPython
-    prints None (feature-nilpy-none-variant). }
-  noneOff := DataLen;
-  Data[DataLen] := Ord('N'); Inc(DataLen);
-  Data[DataLen] := Ord('o'); Inc(DataLen);
-  Data[DataLen] := Ord('n'); Inc(DataLen);
-  Data[DataLen] := Ord('e'); Inc(DataLen);
+    prints None (feature-nilpy-none-variant).
+
+    PASCAL spells it nothing at all, so the write is skipped entirely there:
+    fpc 3.2.2 prints the empty string for `WriteLn(v)` with v Unassigned (and
+    raises for Null, which pxx does not distinguish -- one tag serves both).
+    Printing None in a .pas program was NilPy's word leaking into Pascal
+    output, and it was x86-64 ONLY: PXXWriteVariant, which every other target
+    calls, already declines this arm for exactly this reason.
+    bug-a-a-null-variant-renders-as-none-in-pascal }
   Patch32(pNone, CodeLen - (pNone + 4));
-  EmitB($48); EmitB($BE); EmitDataRef(noneOff);
-  EmitAsmX64(['mov rdx, %', 4]);
-  MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
+  if PyProgramMode then
+  begin
+    noneOff := DataLen;
+    Data[DataLen] := Ord('N'); Inc(DataLen);
+    Data[DataLen] := Ord('o'); Inc(DataLen);
+    Data[DataLen] := Ord('n'); Inc(DataLen);
+    Data[DataLen] := Ord('e'); Inc(DataLen);
+    EmitB($48); EmitB($BE); EmitDataRef(noneOff);
+    EmitAsmX64(['mov rdx, %', 4]);
+    MovRaxImm(SYS_WRITE); MovRdiImm(CurWriteFd); EmitSyscall;
+  end;
   EmitB($E9); pEnd6 := CodeLen; EmitI32(0);
 
   { object slot: CPython prints `<__main__.C object at 0x…>`, whose address

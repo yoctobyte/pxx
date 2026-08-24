@@ -58,7 +58,6 @@ _none_
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-basic-program-is-an-illegal-instruction-on-aarch64-and-arm32 | A | 30 | bug | Every .bas program compiled for aarch64 or arm32 dies with SIGILL at startup — on HEAD and on `pinned` alike. The BASIC jobs are native-only in the matrix, so nothing was watching. | — |
-| bug-a-a-null-variant-renders-as-none-in-pascal | A | 30 | bug | `string(v)` and `WriteLn(v)` on a Null/Unassigned Variant print `None` in a PASCAL program -- NilPy's spelling of VT_EMPTY leaking into Pascal output. FPC raises EVariantTypeCastError for the cast and prints nothing for the write. Pre-existing (identical under the pinned binary), loud in neither direction: a plausible-looking wrong string. | — |
 | bug-a-absolute-cannot-overlay-an-untyped-var-parameter | A | 30 | bug | `procedure Zap(var x); var b: array[0..255] of Byte absolute x;` is refused with 'absolute: target must not be a by-reference parameter'. That IS the idiom untyped parameters exist for — FPC compiles it — and the overlay machinery cannot express it because it works by copying the target's Offset, which for a by-ref param aliases the POINTER rather than the pointee. | — |
 | bug-a-low-high-of-a-char-indexed-array-answer-the-ordinal | P | 30 | bug | `Low(a)` / `High(a)` on `array['a'..'e'] of Integer` answer 97 and 101 where fpc answers 'a' and 'e', so `for c := Low(a) to High(a)` does not compile against a Char loop variable. The bound is folded as tyInteger because the array's INDEX type is not recorded anywhere. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 35 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
@@ -176,6 +175,7 @@ _none_
 | decide-old-style-object-types | U | 30 | decide | Decide: do we implement Turbo Pascal `object` types? | — |
 | decide-pointer-difference-unit | U | 30 | decide | FPC's `p - q` answers BYTES when either operand is an untyped Pointer (which includes `@x` under the default {$TYPEDADDRESS OFF}) and ELEMENTS when both are the same typed pointer. pxx always answers elements. `p - @a[0]` therefore prints 8 in FPC and 2 in pxx — a silent difference in ported code. Match FPC, keep the uniform rule, or diagnose? | — |
 | decide-rtti-kind-numbering | U | 40 | decide | typinfo.pas declares TTypeKind in FPC's order (tkInt64=19) but the RTTI blob the compiler emits carries the COMPILER's TTypeKind (tyInt64=13), so `if mi^.RetKind = Ord(tkInt64)` is silently false. Three ways out; they differ in whether the RTTI blob's numbering — a compiler ABI — changes. Recommendation: option 2. Needs a human call because option 1 breaks already-compiled consumers and option 2 spends the FPC-compatibility argument the FPC-ordered enum was added for. | — |
+| decide-should-a-null-variant-raise-like-fpc | U | 25 | decide | pxx spells FPC's Null and Unassigned with ONE tag (VT_EMPTY). fpc 3.2.2 prints/casts an Unassigned as the empty string but RAISES EVariantTypeCastError for a Null, in both `string(v)` and `WriteLn(v)`. Rendering now follows the Unassigned half, which is the only answer one tag can give. Adopting the raise means either a second tag or making Null and Unassigned both die -- a language call, not a bug fix. | — |
 | decide-variant-bitwise-width | U | 30 | decide | FPC narrows a Variant to 32 bits before a bitwise op, so `v(-12) shr 1` is 2147483642 there; pxx works in 64 bits and its `shr` is arithmetic, giving -6. Three readings of one expression (FPC's, Pascal's logical shr, our sar) and they agree on every non-negative operand. Which one do we owe? | — |
 | decide-vartype-returns-pxx-tags-not-fpc-codes | U | 30 | decide | `VarType(v)` returns pxx's internal tag (0..8), not FPC's varXxx code, and lib/rtl/variants.pas exports no varInteger/varDouble/varString constants at all -- so the FPC idiom `if VarType(v) = varInteger` does not compile. Fork: map VarType onto FPC's codes (compat, changes what existing pxx code comparing to VT_ constants sees) or export a pxx-flavoured constant set (no compat). Needs the owner's call on which surface is public. | — |
 | docs-d-document-exec-eval-and-the-builtins-incompatibility | D | 40 | docs | docs/targets/nil-python.md tells the public `eval`/`exec` do not exist (\"No eval of runtime-constructed code\") — but the explicit-dict form has worked since 2026-07-31 via pyeval's tree-walker. Document what exec/eval DO support, the refused ambient form, and the decided __builtins__ incompatibility (decided 2026-08-19, permanent for now). | — |
@@ -570,9 +570,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2299)
+## done (2300)
 
-2299 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2300 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -793,7 +793,6 @@ _none_
 - [p 35] [P] refactor-p-three-hand-rolled-postfix-loops
 - [p 35] [D] task-d-document-the-strict-overload-width-flag
 - [p 30] [A] bug-a-a-basic-program-is-an-illegal-instruction-on-aarch64-and-arm32
-- [p 30] [A] bug-a-a-null-variant-renders-as-none-in-pascal
 - [p 30] [A] bug-a-absolute-cannot-overlay-an-untyped-var-parameter
 - [p 30] [P] bug-a-low-high-of-a-char-indexed-array-answer-the-ordinal
 - [p 30] [A] bug-a-riscv32-codegen-has-no-variant-support
@@ -857,6 +856,7 @@ _none_
 - [p 25] [P] compat-pascal-string-n-is-not-a-shortstring
 - [p 25] [P] compat-pascal-uses-sysutils-withdraws-the-variadic-concat
 - [p 25] [U] decide-assertion-default-vs-fpc
+- [p 25] [U] decide-should-a-null-variant-raise-like-fpc
 - [p 25] [E] feature-demo-ide-jump-into-includes-and-units
 - [p 25] [A] feature-n-a-quoted-from-import-reaches-another-language
 - [p 25] [N] feature-nilpy-a-genexpr-is-lazy-not-materialised
