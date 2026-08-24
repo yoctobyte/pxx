@@ -1,0 +1,8 @@
+deref   : hello
+witharg : hello
+method  : hello
+index   : eo
+midx    : e
+viavar  : hello
+concat  : xhello
+compare : TRUE

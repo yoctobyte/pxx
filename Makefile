@@ -7630,6 +7630,14 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_pointer_param_keeps_its_depth.pas $(TESTTMP)/test_ptrparam26
 	test "$$($(TESTTMP)/test_ptrparam26)" = "$$(cat test/test_pointer_param_keeps_its_depth.expected)"
+	# ...and through a function RESULT, the last shape of that family: the proc
+	# table now records the returned pointer's depth and ultimate base beside its
+	# pointee, and the call-result suffix walk stamps the same node tags the main
+	# deref chain does, so IsNodePChar and IRPointerStride can read them. Seven
+	# of these eight rows print an address on the pinned compiler.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_pointer_function_result_keeps_its_depth.pas $(TESTTMP)/test_ptrfnres26
+	test "$$($(TESTTMP)/test_ptrfnres26)" = "$$(cat test/test_pointer_function_result_keeps_its_depth.expected)"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; test "$$?" = "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26

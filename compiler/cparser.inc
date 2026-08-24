@@ -9766,6 +9766,7 @@ var
   intIdx, sseIdx, stackOff, ngpNamed, nfpNamed: Integer;
   pwA, pnWordsA, whiA: Integer;   { arm32 word-based param spill }
   retPtrElemTk, retPtrElemRec, retRecId, retProcSig: Integer;
+  retPtrDepth, retPtrBaseTk, retPtrBaseRec: Integer;
   ptypes: array[0..31] of TTypeKind;
   pnames: array[0..31] of AnsiString;
   pdepths: array[0..31] of Integer;
@@ -9802,11 +9803,18 @@ begin
     on a typed-pointer result resolve the element. }
   retPtrElemTk := Ord(tyUnknown);
   retPtrElemRec := REC_NONE;
+  retPtrDepth := 0; retPtrBaseTk := Ord(tyUnknown); retPtrBaseRec := REC_NONE;
   if (retType = tyPointer) and
      ((CTypePtrDepth > 0) or (CTypeElemTk <> Ord(tyUnknown))) then
   begin
     retPtrElemTk := CTypeElemTk;
     retPtrElemRec := CTypeElemRec;
+    { ...and the depth + ultimate base, which the C type parser has always
+      computed here and this site dropped: `char **f()` then `*f()` needs to
+      know a level remains. feature-a-typeref-migrate-consumers }
+    retPtrDepth := CTypePtrDepth;
+    retPtrBaseTk := CTypePtrBaseTk;
+    retPtrBaseRec := CTypePtrBaseRec;
   end;
   { An aggregate return type (`struct S f(...)`) carries its record id in
     CTypeBaseRec; capture it before param parsing overwrites CTypeBaseRec, so the
@@ -10238,6 +10246,9 @@ begin
     ProcParamPtrDepth[procIdx * MAX_PROC_PARAMS + i] := pdepths[i];
   ProcRetPtrElemTk[procIdx] := retPtrElemTk;
   ProcRetPtrElemRec[procIdx] := retPtrElemRec;
+  ProcRetPtrDepth[procIdx] := retPtrDepth;
+  ProcRetPtrBaseTk[procIdx] := retPtrBaseTk;
+  ProcRetPtrBaseRec[procIdx] := retPtrBaseRec;
   if retProcSig >= 0 then ProcRetProcSig[procIdx] := retProcSig;
   if retType = tyRecord then ProcRetRecId[procIdx] := retRecId;
 

@@ -2749,6 +2749,7 @@ var
   isFunc, byref, sawConst, isCtor: Boolean;
   mname, recNm, fullNm: AnsiString;
   mnOff, mnLen, mpi, i, nP, startIdx, k: Integer;
+  retPtrDepth, retPtrBaseTk, retPtrBaseRec: Integer;   { ...and the depth + ultimate base beside it: feature-a-typeref-migrate-consumers }
   retPtrElemTk, retPtrElemRec: Integer;   { A pointer RETURN type's element kind, captured at the declaration exactly like
     mRetRecId above it. Without it a DECL-only PChar method — abstract, or an
     interface method, the two shapes whose call resolves to the DECL's procIdx and
@@ -2882,12 +2883,16 @@ begin
   LastTypeRecId := REC_NONE;
   retPtrElemTk := Ord(tyUnknown);
   retPtrElemRec := REC_NONE;
+  retPtrDepth := 0; retPtrBaseTk := Ord(tyUnknown); retPtrBaseRec := REC_NONE;
   if isFunc then
   begin
     Expect(tkColon, ':');
     retTk := ParseTypeKind;
     retPtrElemTk := Ord(LastTypePointerElemTk);
     retPtrElemRec := LastTypePointerElemRec;
+    retPtrDepth := LastTypePointerDepth;
+    retPtrBaseTk := LastTypePointerBaseTk;
+    retPtrBaseRec := LastTypePointerBaseRec;
   end;
   Eat(tkSemicolon);
 
@@ -2936,6 +2941,9 @@ begin
   begin
     ProcRetPtrElemTk[mpi] := retPtrElemTk;
     ProcRetPtrElemRec[mpi] := retPtrElemRec;
+    ProcRetPtrDepth[mpi] := retPtrDepth;
+    ProcRetPtrBaseTk[mpi] := retPtrBaseTk;
+    ProcRetPtrBaseRec[mpi] := retPtrBaseRec;
   end;
   for i := 0 to nP - 1 do
   begin
@@ -3492,6 +3500,9 @@ begin
       begin
         ProcRetPtrElemTk[mpi] := Ord(LastTypePointerElemTk);
         ProcRetPtrElemRec[mpi] := LastTypePointerElemRec;
+        ProcRetPtrDepth[mpi] := LastTypePointerDepth;
+        ProcRetPtrBaseTk[mpi] := LastTypePointerBaseTk;
+        ProcRetPtrBaseRec[mpi] := LastTypePointerBaseRec;
       end;
       for i := 0 to mNParams-1 do
       begin
@@ -3572,6 +3583,7 @@ var
   mPDefaultIsFloat: array[0..MAX_PROC_PARAMS-1] of Boolean; { ...and for FLOAT defaults (`d: Double = 2.5`): mPDefaultVal holds the IEEE bits }
   mDefaultIsSet: Boolean;
   mRetRecId: Integer;      { the DECL's return-type class/record id (ProcRetRecId) }
+  mRetPtrDepth, mRetPtrBaseTk, mRetPtrBaseRec: Integer;   { ...and the depth + ultimate base: feature-a-typeref-migrate-consumers }
   mRetPtrElemTk, mRetPtrElemRec: Integer;   { A pointer RETURN type's element kind, captured at the declaration exactly like
     mRetRecId above it. Without it a DECL-only PChar method — abstract, or an
     interface method, the two shapes whose call resolves to the DECL's procIdx and
@@ -3781,6 +3793,7 @@ begin
           mRetRecId := REC_NONE;
           mRetPtrElemTk := Ord(tyUnknown);
           mRetPtrElemRec := REC_NONE;
+          mRetPtrDepth := 0; mRetPtrBaseTk := Ord(tyUnknown); mRetPtrBaseRec := REC_NONE;
           if mIsFunc then
           begin
             Expect(tkColon, ':');
@@ -3788,6 +3801,9 @@ begin
             mRetRecId := LastTypeRecId;   { the return type's class/record id }
             mRetPtrElemTk := Ord(LastTypePointerElemTk);
             mRetPtrElemRec := LastTypePointerElemRec;
+            mRetPtrDepth := LastTypePointerDepth;
+            mRetPtrBaseTk := LastTypePointerBaseTk;
+            mRetPtrBaseRec := LastTypePointerBaseRec;
           end;
           Eat(tkSemicolon);
           while EatIntfMethodDirective do ;
@@ -3812,6 +3828,9 @@ begin
           begin
             ProcRetPtrElemTk[mpi] := mRetPtrElemTk;
             ProcRetPtrElemRec[mpi] := mRetPtrElemRec;
+            ProcRetPtrDepth[mpi] := mRetPtrDepth;
+            ProcRetPtrBaseTk[mpi] := mRetPtrBaseTk;
+            ProcRetPtrBaseRec[mpi] := mRetPtrBaseRec;
           end;
           for i := 0 to mNParams-1 do
           begin
@@ -4325,6 +4344,7 @@ begin
 
             mRetPtrElemTk := Ord(tyUnknown);
             mRetPtrElemRec := REC_NONE;
+            mRetPtrDepth := 0; mRetPtrBaseTk := Ord(tyUnknown); mRetPtrBaseRec := REC_NONE;
             if mIsFunc then
             begin
               Expect(tkColon, ':');
@@ -4332,6 +4352,9 @@ begin
               mRetRecId := LastTypeRecId;   { see the twin site above }
               mRetPtrElemTk := Ord(LastTypePointerElemTk);
               mRetPtrElemRec := LastTypePointerElemRec;
+              mRetPtrDepth := LastTypePointerDepth;
+              mRetPtrBaseTk := LastTypePointerBaseTk;
+              mRetPtrBaseRec := LastTypePointerBaseRec;
             end
             else
               mRetRecId := REC_NONE;
@@ -4400,6 +4423,9 @@ begin
               begin
                 ProcRetPtrElemTk[mpi] := mRetPtrElemTk;
                 ProcRetPtrElemRec[mpi] := mRetPtrElemRec;
+                ProcRetPtrDepth[mpi] := mRetPtrDepth;
+                ProcRetPtrBaseTk[mpi] := mRetPtrBaseTk;
+                ProcRetPtrBaseRec[mpi] := mRetPtrBaseRec;
               end;
               for i := 0 to mNParams-1 do
               begin

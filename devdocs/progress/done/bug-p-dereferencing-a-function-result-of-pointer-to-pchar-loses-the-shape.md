@@ -5,7 +5,7 @@ track: P
 prio: 30
 type: bug
 blocked-by: []
-status: backlog_new
+status: done
 owner: ""
 created: 2026-08-24
 summary: "A function returning `^PChar`, dereferenced, is wrong in the four contexts that refuse to guess: WriteLn prints the address in decimal, concat on either side yields the address, and `=`/`<>` compare pointers. The three contexts that look right are right only by the blanket `AnsiString(<any pointer>)` rule. Unlike the array shape beside it, this one genuinely IS missing metadata: a proc records ProcRetPtrElemTk/Rec — the immediate pointee — and nothing about the return pointer's DEPTH or ultimate BASE."
@@ -90,3 +90,61 @@ The 88-program generator is
 dyn element, pointer arithmetic} x contexts {WriteLn, assign, concat L/R,
 `AnsiString()`, `Length`, `=`, `<>`}. Re-run it against fpc after any change
 here; it is the ticket's acceptance line made executable.
+
+---
+
+# Resolved 2026-08-24 — and the design objection above is answered, not ignored
+
+Fixed by giving the proc table the same triple every other pointer-carrying
+table now has (`ProcRetPtrDepth`, `ProcRetPtrBaseTk`, `ProcRetPtrBaseRec`),
+populated at all nine declaration sites (Pascal routines, record methods, class
+methods on both the decl and impl side, proc-type signatures, and C functions,
+whose type parser had computed the depth all along and dropped it), and by
+teaching the two readers that needed it.
+
+**This ticket said "do NOT add two more parallel arrays" and that objection is
+right about the destination — so read why the arrays landed anyway.** The
+sprawl argument is an argument about the SHAPE of the eventual carrier, and it
+does not distinguish between the five fields living in five arrays and the same
+five fields living in one `TTypeRef`: either way they are populated at the same
+nine sites and read at the same places. Lane 4 folds them in, and folding three
+arrays into a record is mechanical. What waiting cost was different in kind: a
+program that dereferenced a `^PChar` result printed an ADDRESS, silently, in
+every context that refuses to guess. A wrong value in the field outranks the
+tidiness of the table it came from, and the blocking question the ticket names
+-- whether `TTypeRef` gains a `PtrDepth` -- is now filed on its own as
+[[decide-typeref-gains-a-pointer-depth-field]] rather than being decided
+sideways by a bug fix.
+
+**The finding that mattered was not the metadata.** Populating the triple fixed
+nothing on its own: `c := GetQ^; WriteLn(c)` printed the string while
+`WriteLn(GetQ^)` printed the address, on the same binary, from the same
+declaration. `ApplyCallResultPtrSuffix` in `pasparser_lval.inc` is a **fourth
+copy** of the pointer walk (the others: the main deref chain, the parenthesised
+tail in `pasparser_expr.inc`, the inherited-call tail) and it stamped none of
+the node tags the rest of the compiler reads -- `ASTSOffset` = levels remaining,
+`ASTSLen` = ultimate base -- so `IsNodePChar`'s arm 7 and `IRPointerStride`
+were blind to a deref they were perfectly able to classify. The reader half
+again, for the third ticket running.
+
+`p^[i]` needed one more thing: `IRLowerAddress`'s computed-pointer-value arm was
+gated on `CProgramMode`, a gate that recorded where the case was first noticed
+rather than any property of the code -- the arm already proves its base is
+pointer-valued. Ungated, Pascal's dereference and function-result bases route
+through it instead of falling to the array path that wants an lvalue address.
+
+# Verified
+
+- `test/test_pointer_function_result_keeps_its_depth.pas` -- 8 rows (deref,
+  with-args, class method, `^[i]` both ways, via a variable, concat, compare).
+  `.expected` IS fpc 3.2.2's output; **7 of the 8 print an address on the pinned
+  compiler**; green on i386 / aarch64 / arm32 / riscv32 under qemu.
+- The C twin measured against gcc on the same shape (`char **getq()`, `*getq()`
+  and `(*getq())[1]`): both print `hello` / `e`.
+- A/B binary comparison against the pre-change compiler: `compiler.pas`, two C
+  tests, three Pascal tests, a NilPy and a BASIC test all **byte-identical**, so
+  nothing outside the fixed shapes moved.
+- `make compiler/pascal26` fixedpoint + `tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-24 — resolved, commit PENDING-COMMIT.

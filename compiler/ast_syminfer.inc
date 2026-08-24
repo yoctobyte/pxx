@@ -96,13 +96,15 @@ begin
     begin
       procIdx := ASTIVal[node];
       if (procIdx >= 0) and (procIdx < ProcCount) then
-        { Same shortfall as the field case, and it is the one filed as
-          bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape:
-          a proc records ProcRetPtrElemTk/Rec -- the immediate pointee -- and no
-          depth, so `^PChar` and `PChar` are indistinguishable as return types
-          and this correctly declines rather than guessing. }
-        SetSymPointerTo(symIdx, IntToTypeKind(ProcRetPtrElemTk[procIdx]),
-                        ProcRetPtrElemRec[procIdx]);
+        { The proc table now records the whole triple (ProcRetPtrDepth /
+          ProcRetPtrBaseTk / ProcRetPtrBaseRec) captured at the declaration, so
+          a `function GetQ: ^PChar` result keeps its second level here instead
+          of arriving indistinguishable from a plain PChar.
+          bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape }
+        SetSymPointerType(symIdx, IntToTypeKind(ProcRetPtrElemTk[procIdx]),
+                          ProcRetPtrElemRec[procIdx],
+                          ProcRetPtrDepth[procIdx], ProcRetPtrBaseTk[procIdx],
+                          ProcRetPtrBaseRec[procIdx]);
     end
     { If it's a typecast }
     else if ASTKind[node] = AN_PTR_CAST then

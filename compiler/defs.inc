@@ -2344,6 +2344,13 @@ var
   ProcRetElemTk : array of TTypeKind;    { element type of a dyn-array result }
   ProcRetElemRec : array of Integer;     { element record id of a dyn-array result }
   ProcRetPtrElemTk : array of Integer;   { pointed-at TTypeKind ord when the result is a typed pointer (tyUnknown otherwise) }
+  { ...and the rest of the returned pointer's identity, so `GetQ^` on a
+    `function GetQ: ^PChar` knows a level remains. The pointee alone cannot say
+    it: PChar and ^PChar have the SAME immediate pointee once you only look one
+    step. feature-a-typeref-migrate-consumers }
+  ProcRetPtrDepth : array of Integer;
+  ProcRetPtrBaseTk : array of Integer;
+  ProcRetPtrBaseRec : array of Integer;
   ProcRetProcSig   : array of Integer;   { call signature when the result is itself a function pointer (`fty go(void)`), so `go()(args)` is an indirect call; -1 otherwise }
   CProcHasLocalDef : array of Boolean;   { a local (in-TU) function body for this proc was seen in pass 1; a later redundant prototype (guardless header re-included by several .c) must NOT re-mark it external — keeps the pass-2 forward call internal, not a dynamic import }
   ProcRetPtrElemRec : array of Integer;  { pointed-at record id when the result is a typed pointer-to-struct }

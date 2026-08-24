@@ -1149,6 +1149,35 @@ begin
             recName := REC_NONE;
           end;
         end
+        else if (ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
+                (ASTKind[node] = AN_INTF_CALL) or (ASTKind[node] = AN_CALL_IND) then
+        begin
+          { `GetQ^` -- dereferencing a function RESULT. The callee's declaration
+            records the returned pointer's whole triple (ProcRetPtrElemTk/Rec
+            plus ProcRetPtrDepth / ProcRetPtrBaseTk / ProcRetPtrBaseRec), so
+            this reads it exactly as the AN_IDENT arm reads a variable's.
+
+            There was no arm here at all: a dereferenced call fell to the final
+            else and came out tyInteger, so `WriteLn(GetQ^)` printed the address
+            as a number. All three call shapes carry the Procs[] index in IVal.
+            bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape }
+          if (ASTIVal[node] >= 0) and (ASTIVal[node] < ProcCount) then
+          begin
+            tk := IntToTypeKind(ProcRetPtrElemTk[ASTIVal[node]]);
+            recName := ProcRetPtrElemRec[ASTIVal[node]];
+            if ProcRetPtrDepth[ASTIVal[node]] > 0 then
+            begin
+              remDepth := ProcRetPtrDepth[ASTIVal[node]] - 1;
+              ptrBaseTk := ProcRetPtrBaseTk[ASTIVal[node]];
+              ptrBaseRec := ProcRetPtrBaseRec[ASTIVal[node]];
+            end;
+          end
+          else
+          begin
+            tk := tyUnknown;
+            recName := REC_NONE;
+          end;
+        end
         else
         begin
           tk := tyInteger;
@@ -4226,11 +4255,20 @@ procedure ApplyCallResultPtrSuffix(node, procIdx: Integer);
 var tk: TTypeKind; elemTk, elemRec, recId, sub, prevTok, tmpN: Integer; fieldName: AnsiString;
     mcCi, mmi, mpi, mcallNode: Integer; mcFin: Boolean;
     arrAi, tmpSym, ndD, nIdx: Integer; isND: Boolean;
+    remDepth, ptrBaseTk, ptrBaseRec: Integer;
 begin
   tk := Procs[procIdx].RetType;
   recId := REC_NONE;
   elemTk := ProcRetPtrElemTk[procIdx];
   elemRec := ProcRetPtrElemRec[procIdx];
+  { The returned pointer's remaining levels and ultimate base, so a `^PChar`
+    RESULT walks like a `^PChar` variable. Zero means "the declaration recorded
+    no depth" -- the C fn-pointer signature path still does not -- and every arm
+    below then keeps its old immediate-pointee behaviour.
+    bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape }
+  remDepth := ProcRetPtrDepth[procIdx];
+  ptrBaseTk := ProcRetPtrBaseTk[procIdx];
+  ptrBaseRec := ProcRetPtrBaseRec[procIdx];
 
   { A METACLASS-returning function is a RECEIVER, not a pointer whose fields you
     walk: `Give.Kind`, `Give.ClassName`, `Give.Create`. The pointer walk below
@@ -4269,7 +4307,28 @@ begin
         sub := AllocNode(AN_DEREF);
         ASTLeft[sub] := node;
         tk := IntToTypeKind(elemTk); recId := elemRec;
-        ASTTk[sub] := Ord(tk);
+        if remDepth > 0 then
+        begin
+          Dec(remDepth);
+          { the same tags the main deref chain writes on its own AN_DEREF nodes:
+            levels REMAINING in ASTSOffset, the ultimate base in ASTSLen/ASTIVal.
+            IsNodePChar's arm 7 and IRPointerStride both read them, and this
+            fourth copy of the pointer walk stamped neither -- which is why
+            `WriteLn(GetQ^)` printed the address while `c := GetQ^; WriteLn(c)`
+            printed the string. }
+          ASTSOffset[sub] := remDepth;
+          ASTSLen[sub] := ptrBaseTk;
+          if ptrBaseRec > 0 then ASTIVal[sub] := ptrBaseRec;
+          if remDepth >= 1 then
+          begin
+            tk := tyPointer; recId := ptrBaseRec;
+          end
+          else if ptrBaseTk <> Ord(tyUnknown) then
+          begin
+            tk := IntToTypeKind(ptrBaseTk); recId := ptrBaseRec;
+          end;
+        end;
+        ASTTk[sub] := StrValTk(tk);
         node := sub;
       end
       else if CurTok.Kind = tkLBrack then
@@ -4281,7 +4340,21 @@ begin
         ASTRight[sub] := CurASTNode;
         Expect(tkRBrack, ']');
         tk := IntToTypeKind(elemTk); recId := elemRec;
-        ASTTk[sub] := Ord(tk);
+        { `f()[i]` spends a level exactly as `f()^` does -- indexing a `^PChar`
+          result yields a PChar, not another `^PChar`. }
+        if remDepth > 0 then
+        begin
+          Dec(remDepth);
+          if remDepth >= 1 then
+          begin
+            tk := tyPointer; recId := ptrBaseRec;
+          end
+          else if ptrBaseTk <> Ord(tyUnknown) then
+          begin
+            tk := IntToTypeKind(ptrBaseTk); recId := ptrBaseRec;
+          end;
+        end;
+        ASTTk[sub] := StrValTk(tk);
         node := sub;
       end
       else { tkDot — field of the pointed-at record }

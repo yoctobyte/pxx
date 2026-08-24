@@ -517,6 +517,7 @@ var
   retFixedArrBytes : Integer;   { a FIXED-array result's byte size; 0 = not one }
   retArrAi : Integer;           { its ArrType index, so the Result slot can be shaped like the type; -1 = not one }
   retPtrElemTk, retPtrElemRec : Integer;
+  retPtrDepth, retPtrBaseTk, retPtrBaseRec : Integer;
   savedSC, savedFS, savedCurProc : Integer;
   savedGLC, savedGFC, savedGLB, j, savedVisVarSeq: Integer;
   cleanupJnePatch: Integer;
@@ -688,6 +689,7 @@ begin
   retIsDynArr := False; retElemTk := tyUnknown; retElemRec := REC_NONE;
   retFixedArrBytes := 0; retArrAi := -1;
   retPtrElemTk := Ord(tyUnknown); retPtrElemRec := REC_NONE;
+  retPtrDepth := 0; retPtrBaseTk := Ord(tyUnknown); retPtrBaseRec := REC_NONE;
 
   if CurTok.Kind = tkLParen then
   begin
@@ -995,6 +997,9 @@ begin
       if retType = tyPointer then
       begin
         retPtrElemTk := Ord(LastTypePointerElemTk);
+        retPtrDepth := LastTypePointerDepth;
+        retPtrBaseTk := LastTypePointerBaseTk;
+        retPtrBaseRec := LastTypePointerBaseRec;
         retPtrElemRec := LastTypePointerElemRec;
       end;
     end;
@@ -1207,6 +1212,9 @@ begin
     ProcRetElemRec[procIdx] := retElemRec;
     ProcRetPtrElemTk[procIdx] := retPtrElemTk;
     ProcRetPtrElemRec[procIdx] := retPtrElemRec;
+    ProcRetPtrDepth[procIdx] := retPtrDepth;
+    ProcRetPtrBaseTk[procIdx] := retPtrBaseTk;
+    ProcRetPtrBaseRec[procIdx] := retPtrBaseRec;
     for i := 0 to nparams-1 do
     begin
       Procs[procIdx].Params[i].IsArray := parr[i];
@@ -1541,6 +1549,9 @@ begin
       ProcRetElemRec[procIdx] := retElemRec;
       ProcRetPtrElemTk[procIdx] := retPtrElemTk;
       ProcRetPtrElemRec[procIdx] := retPtrElemRec;
+      ProcRetPtrDepth[procIdx] := retPtrDepth;
+      ProcRetPtrBaseTk[procIdx] := retPtrBaseTk;
+      ProcRetPtrBaseRec[procIdx] := retPtrBaseRec;
       if retIsDynArr then Procs[procIdx].RetType := tyPointer; { 8-byte heap handle ABI }
     end;
     if preScanBody then PreScanSkipRoutineBody;
@@ -1570,6 +1581,9 @@ begin
   ProcRetElemRec[procIdx] := retElemRec;
   ProcRetPtrElemTk[procIdx] := retPtrElemTk;
   ProcRetPtrElemRec[procIdx] := retPtrElemRec;
+  ProcRetPtrDepth[procIdx] := retPtrDepth;
+  ProcRetPtrBaseTk[procIdx] := retPtrBaseTk;
+  ProcRetPtrBaseRec[procIdx] := retPtrBaseRec;
   ProcIsAsync[procIdx] := isAsync;
   ProcIsGenerator[procIdx] := isGenerator;
   ProcIsStackless[procIdx] := isStackless;
