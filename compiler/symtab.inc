@@ -10027,13 +10027,40 @@ begin
       end;
       Exit;
     end;
+  { --- the forward-reference PLACEHOLDER, and why it is a NOP ---------------
+    A call to a body that has not been emitted yet writes a stand-in of the
+    right SIZE here and records a fixup; ApplyCallFixups overwrites the whole
+    instruction later. The stand-in only has to survive until then -- except
+    when the fixup never comes, which happens for real: DceRun (whose trailing
+    ApplyCallFixups is the only one several drivers ever reach) is off unless
+    --dce AND x86-64 AND the Pascal frontend, and a driver may simply not call
+    it (bparser did not, for years).
+
+    x86-64's stand-in is `call rel32=0`, which targets the very next
+    instruction and therefore falls THROUGH -- wrong, but inert. Every other
+    target's was a branch with a zero displacement, and a zero displacement is
+    not inert anywhere else:
+
+      arm32    `bl` reads PC as 8 ahead, so imm=0 lands one instruction PAST
+               the next one -- it SKIPS an instruction. It ate the
+               `mov r7, #248` at the head of a Halt's exit sequence, and the
+               svc that followed ran with r7 still holding 4 (write): the
+               program did not exit, it fell into the code below.
+      aarch64  imm=0 is a branch to ITSELF -- an infinite loop, measured.
+      riscv32  auipc t0,0 + jalr ra,t0,0 targets the auipc -- also a self-loop.
+      xtensa   call0/call8 with a zero relative offset -- likewise.
+
+    So the stand-in is a NOP on every target that has one. Same size, patched
+    over identically when the fixup does arrive, and when it does not the call
+    is silently skipped exactly as x86-64 has always silently skipped it.
+    bug-a-a-basic-program-is-an-illegal-instruction-on-aarch64-and-arm32 }
   if TargetArch = TARGET_ARM32 then
   begin
     RecordInternalCall(procIdx);
     if Procs[procIdx].BodyAddr >= 0 then
       EmitI32($EB000000 or ((((Procs[procIdx].BodyAddr - CodeLen) div 4) - 2) and $00ffffff))
     else
-      EmitI32($EB000000);
+      EmitI32($E1A00000);   { mov r0, r0 -- the universal ARM nop (no ARMv6K dep) }
     Exit;
   end;
   if TargetArch = TARGET_AARCH64 then
@@ -10042,7 +10069,7 @@ begin
     if Procs[procIdx].BodyAddr >= 0 then
       EmitI32($94000000 or (((Procs[procIdx].BodyAddr - CodeLen) div 4) and $03ffffff))
     else
-      EmitI32($94000000);
+      EmitI32($D503201F);   { nop }
     Exit;
   end;
   if TargetArch = TARGET_XTENSA then
@@ -10056,12 +10083,7 @@ begin
         xtensa_call0(Procs[procIdx].BodyAddr - CodeLen);
     end
     else
-    begin
-      if XtensaABI = XTENSA_ABI_WINDOWED then
-        xtensa_call8(0)
-      else
-        xtensa_call0(0);
-    end;
+      xtensa_nop;           { 3 bytes, same as CALLn -- see the note above }
     Exit;
   end;
   if TargetArch = TARGET_RISCV32 then
@@ -10078,8 +10100,8 @@ begin
     end
     else
     begin
-      rv32_auipc(reg_t0, 0);
-      rv32_jalr(reg_ra, reg_t0, 0);
+      { two NOPs, so the pair keeps its size for the two-word patch above }
+      EmitI32($00000013); EmitI32($00000013);   { addi x0, x0, 0 }
     end;
     Exit;
   end;

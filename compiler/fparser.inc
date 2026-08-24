@@ -377,4 +377,15 @@ begin
 
   CompileAST(CurASTNode);
   EmitExit(0);
+
+  { The closing step every driver owes: the __pxx_run_finalizers BODY. A Halt
+    site emits a call to that shell, whose body is registered lazily; without
+    this the proc stays at BodyAddr = -1 and the call keeps its PLACEHOLDER
+    branch (the DCE pass's ApplyCallFixups then has a body to aim it at). On x86-64 that placeholder is `call rel32=0`,
+    which targets the next instruction and falls through -- wrong but invisible,
+    which is why five drivers shipped without it. On ARM the same placeholder
+    SKIPS an instruction (bl with a zero displacement lands at PC+8), which is
+    what it did to the BASIC driver's END.
+    refactor-a-one-program-driver-prologue-for-every-frontend }
+  EmitFinalizerRunnerBody;
 end;

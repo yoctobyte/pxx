@@ -5172,6 +5172,34 @@ test-core: $(COMPILER)
 	# cross-language imports; used to print 1 line of ~21 and exit 0 (silently wrong)
 	./$(COMPILER) test/test_basic_comprehensive.bas $(TESTTMP)/test_basic_comprehensive26
 	test "$$($(TESTTMP)/test_basic_comprehensive26 | wc -l)" = "21"
+	# ...and the same three .bas files CROSS. Every one of them was an illegal
+	# instruction on aarch64 and arm32 -- the driver open-coded an x86-64 entry
+	# stub for every target, so the ELF entry point of a .bas binary held x86-64
+	# bytes. It compiled cleanly and died before its first line of output, on
+	# HEAD and on every pin before it, because the .bas jobs run in the NATIVE
+	# tier only and no cross verdict had ever been published for this frontend.
+	# The second half was subtler: a Halt site (END, and the GOSUB guard's error
+	# tail) called __pxx_run_finalizers, whose body this driver never emitted, so
+	# the call kept its placeholder branch -- benign on x86-64 (falls through),
+	# an instruction SKIP on ARM, which ate the `mov r7, #248` at the head of
+	# END's exit sequence. Cross rows are what make either regression visible.
+	# bug-a-a-basic-program-is-an-illegal-instruction-on-aarch64-and-arm32
+	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then \
+	  for arch in i386 aarch64 arm32; do \
+	    ./$(COMPILER) --target=$$arch test/test_basic_goto_gosub.bas $(TESTTMP)/test_basic_gg_$$arch >/dev/null; \
+	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_gg_$$arch)" = "$$(printf 'A\nB\nlooped 3\nsub1\nsub2\nsub1 back\nafter gosub\nsub2\ndone')" \
+	      || { echo "cross .bas goto_gosub FAIL on $$arch"; exit 1; }; \
+	    ./$(COMPILER) --target=$$arch test/test_basic_comprehensive.bas $(TESTTMP)/test_basic_cmp_$$arch >/dev/null; \
+	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_cmp_$$arch | wc -l)" = "21" \
+	      || { echo "cross .bas comprehensive FAIL on $$arch"; exit 1; }; \
+	    ./$(COMPILER) --target=$$arch test/test_basic_lexer.bas $(TESTTMP)/test_basic_lex_$$arch >/dev/null; \
+	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_lex_$$arch)" = "$$(printf 'Hello, Traditional BASIC!\nHello, Modern BASIC!')" \
+	      || { echo "cross .bas lexer FAIL on $$arch"; exit 1; }; \
+	    echo "cross .bas ok: $$arch"; \
+	  done; \
+	else \
+	  echo "=== test-core: qemu-user not present, skipping cross .bas ==="; \
+	fi
 	# TObject virtual Destroy/Create override: FPC's universal `destructor Destroy; override;` compiles on a root class + dispatches; inherited Destroy/Create = root no-op
 	./$(COMPILER) test/test_tobject_destroy_override.pas $(TESTTMP)/test_tobject_destroy_override26
 	test "$$($(TESTTMP)/test_tobject_destroy_override26)" = "$$(printf 'F\nc\nD\nA\nOK')"

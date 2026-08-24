@@ -687,8 +687,20 @@ var
 begin
   BSS_INITIAL_RSP := BSSSize; Inc(BSSSize, 8);
 
-  EmitB($48); EmitB($89); EmitB($24); EmitB($25); EmitGlobRef(BSS_INITIAL_RSP);
-  EmitB($E9); jmpPatch := CodeLen; EmitI32(0);
+  { THE shared entry stub, not an open-coded x86-64 one. This driver spelled it
+    out inline -- `mov [BSS_INITIAL_RSP], rsp` plus a `jmp rel32` -- for every
+    target, so an aarch64 or arm32 .bas binary began with thirteen bytes of
+    x86-64 and died of SIGILL before its first line of output, on HEAD and on
+    every pin before it. It compiled CLEANLY, which is what kept it hidden: the
+    .bas jobs run in the native tier only, so no cross verdict had ever been
+    published for this frontend.
+
+    Of the nine drivers that open-coded this stub, the other eight refuse a
+    non-x86-64 target up front with a clear message ("only the x86-64 target is
+    supported by the skeleton"). BASIC alone had no guard, which is precisely
+    why it was the one that produced a broken binary instead of a diagnostic.
+    bug-a-a-basic-program-is-an-illegal-instruction-on-aarch64-and-arm32 }
+  EmitProgramEntryForTarget(False, jmpPatch);
 
   { div-by-zero abort stub — same latent zero-Div0StubAddr hole as the other
     non-Pascal drivers; see the C driver comment. Behind the entry jmp, reached
@@ -754,7 +766,7 @@ begin
 
   stmtList := ParseBBlock(tkEOF, tkEOF);
 
-  Patch32(jmpPatch, CodeLen - (jmpPatch + 4));
+  PatchProgramEntryJump(jmpPatch);
 
   { A `USES unit` met during the parse compiles that unit through the Pascal
     parser, which resets GotoLabelCount per scope — wiping the L*/G* labels
@@ -773,4 +785,40 @@ begin
 
   CompileAST(CurASTNode);
   EmitExit(0);
+
+  { The finalizer-runner BODY -- the closing step every other driver makes and
+    this one did not, which is the FIFTH missing step found in this driver
+    (refactor-a-one-program-driver-prologue-for-every-frontend).
+
+    A `Halt` site -- BASIC's `END`, and the runtime-error tail of the GOSUB
+    guards -- emits a call to the `__pxx_run_finalizers` shell, whose body is
+    registered lazily and emitted here. Without this call the proc stayed at
+    BodyAddr = -1 and every Halt site kept its PLACEHOLDER branch.
+
+    On x86-64 that placeholder is `call rel32=0`, which targets the very next
+    instruction and therefore falls through: wrong, but invisible. On ARM the
+    same placeholder is `bl` with a zero displacement, and ARM's PC reads 8
+    ahead, so it lands one instruction PAST the next one -- it SKIPS an
+    instruction. The skipped instruction was `mov r7, #248` at the head of
+    END's exit sequence, so the svc that followed ran with r7 still holding 4
+    (write) and the program did not exit at all: it fell into the subroutine
+    below and died with "RETURN without GOSUB".
+
+    That is the general shape worth remembering: a placeholder that is benign
+    on one target is not automatically benign on another, and this one had been
+    hidden because .bas never ran anywhere but x86-64.
+
+    The BODY only, deliberately NOT the ApplyCallFixups that follows it in the
+    Pascal, C, NilPy, Rust, Zig and Erlang drivers. Nothing resolves this
+    driver's forward calls today — DceRun, whose trailing ApplyCallFixups is
+    the only one this driver could reach, is off unless --dce AND x86-64 AND
+    the Pascal frontend — and adding the pass here turns a unit-free .bas
+    program with a string literal into a COMPILE ERROR, `unresolved forward:
+    PXXStrFromLit`: BASIC's managed-string codegen calls a helper that only
+    arrives with builtinheap, which a program without `uses` never pulls. That
+    is a real latent hole and it has its own ticket; making the placeholder
+    inert (see EmitCallProc in symtab.inc) is what this fix needs, and it makes
+    an unresolved call behave exactly as it always has on x86-64.
+    bug-a-a-basic-program-is-an-illegal-instruction-on-aarch64-and-arm32 }
+  EmitFinalizerRunnerBody;
 end;
