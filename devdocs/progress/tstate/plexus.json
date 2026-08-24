@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T04:52:00Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "2797638e595e1c78de43713c3fc0915e36ccad56",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T05:01:17Z",
    "fixed": [],
    "new_red": [],
@@ -480,6 +472,14 @@
    ],
    "new_red": [],
    "sha": "6e2e8c136234202907c5035b3940f3be061e6950",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-24T02:26:56Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "09d33d2d7ee6ee34fda2bb1ae676d2696e89ca22",
    "tier": "native",
    "verdict": "RED"
   }
@@ -1018,11 +1018,11 @@
   "test-cjson#src:test/cjson/runner.c": "full",
   "test-core#00": "native",
   "test-core#129": "full",
-  "test-core#155": "native",
   "test-core#156": "native",
   "test-core#157": "native",
   "test-core#158": "native",
   "test-core#159": "native",
+  "test-core#160": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
   "test-core#src:examples/tk/callbacks.npy": "native",
@@ -1461,7 +1461,7 @@
   "test-core#src:test/test_bare_procvar_call_b273.pas": "native",
   "test-core#src:test/test_bare_property.pas": "native",
   "test-core#src:test/test_basic_comprehensive.bas": "native",
-  "test-core#src:test/test_basic_goto_gosub.bas": "native",
+  "test-core#src:test/test_basic_goto_gosub.bas@1": "native",
   "test-core#src:test/test_big_static_array_open_param.pas": "native",
   "test-core#src:test/test_bitwise_not_lvalue_b280.pas": "native",
   "test-core#src:test/test_block_mem_intrinsic.pas": "native",
@@ -2368,6 +2368,7 @@
   "test-core#src:test/test_variant_div.pas": "native",
   "test-core#src:test/test_variant_div_by_zero_raises.pas": "native",
   "test-core#src:test/test_variant_double_to_integer_rounds.pas": "native",
+  "test-core#src:test/test_variant_empty_renders_as_pascal_empty.pas": "native",
   "test-core#src:test/test_variant_fn_return_forward.pas": "native",
   "test-core#src:test/test_variant_literal_concat_arg.pas": "native",
   "test-core#src:test/test_variant_null_propagates_through_arithmetic.pas": "native",
@@ -4063,11 +4064,11 @@
   "test-c-conformance-riscv32#shard5/6": "pass",
   "test-cjson#src:test/cjson/runner.c": "pass",
   "test-core#00": "pass",
-  "test-core#155": "pass",
   "test-core#156": "pass",
   "test-core#157": "pass",
   "test-core#158": "pass",
   "test-core#159": "pass",
+  "test-core#160": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
@@ -4506,7 +4507,7 @@
   "test-core#src:test/test_bare_procvar_call_b273.pas": "pass",
   "test-core#src:test/test_bare_property.pas": "pass",
   "test-core#src:test/test_basic_comprehensive.bas": "pass",
-  "test-core#src:test/test_basic_goto_gosub.bas": "pass",
+  "test-core#src:test/test_basic_goto_gosub.bas@1": "pass",
   "test-core#src:test/test_big_static_array_open_param.pas": "pass",
   "test-core#src:test/test_bitwise_not_lvalue_b280.pas": "pass",
   "test-core#src:test/test_block_mem_intrinsic.pas": "pass",
@@ -5410,6 +5411,7 @@
   "test-core#src:test/test_variant_div.pas": "pass",
   "test-core#src:test/test_variant_div_by_zero_raises.pas": "pass",
   "test-core#src:test/test_variant_double_to_integer_rounds.pas": "pass",
+  "test-core#src:test/test_variant_empty_renders_as_pascal_empty.pas": "pass",
   "test-core#src:test/test_variant_fn_return_forward.pas": "pass",
   "test-core#src:test/test_variant_literal_concat_arg.pas": "pass",
   "test-core#src:test/test_variant_null_propagates_through_arithmetic.pas": "pass",
@@ -6569,11 +6571,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-24T01:25:25Z",
-  "sha": "6e2e8c136234202907c5035b3940f3be061e6950",
+  "date": "2026-08-24T02:26:56Z",
+  "sha": "09d33d2d7ee6ee34fda2bb1ae676d2696e89ca22",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.4
+  "wall": 3600.5
  },
  "last_bench": {
   "conf_rows": 550,
