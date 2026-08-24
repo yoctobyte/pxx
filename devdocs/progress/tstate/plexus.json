@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T03:54:08Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "742c4651ed67334967b7229840c0705847f0ce4b",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T04:24:18Z",
    "fixed": [],
    "new_red": [],
@@ -478,13 +470,22 @@
    "sha": "7d4a3dbb99ce2bc83a5fbde50a6844292c5bd21a",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-24T00:23:52Z",
+   "fixed": [
+    "test-core#src:test/test_variant_string_ops.pas"
+   ],
+   "new_red": [],
+   "sha": "04eaec15ed31fe00e45c3307d568af3e7ff622e0",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2358728B  data=61689B  bss=51420B  procs=1788] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
   "test-core#src:test/test_basic_comprehensive.bas": "pascal26:3906: error: compiler error: call to a runtime stub that was never emitted (code offset 0 is the ELF entry point). A frontend driver is missing its stub-emission call for the current flags/target. | in: $TMP | near: Exit  end  end  >>> end  function",
-  "test-core#src:test/test_variant_string_ops.pas": "ok: $TMP  [code=133970B  data=3416B  bss=42700B  procs=232]",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter"
  },
  "job_tier": {
@@ -1469,6 +1470,7 @@
   "test-core#src:test/test_builtin_pointer_types_b303.pas": "native",
   "test-core#src:test/test_builtin_tguid.pas": "native",
   "test-core#src:test/test_builtin_tobject.pas": "native",
+  "test-core#src:test/test_builtin_type_names_cast_and_declare.pas": "native",
   "test-core#src:test/test_byref_arg_lvalue_rule.pas": "native",
   "test-core#src:test/test_byval_record_temp.pas": "native",
   "test-core#src:test/test_byvalue_record_arg_lifetime.pas": "native",
@@ -2069,6 +2071,7 @@
   "test-core#src:test/test_operator_enumerator.pas": "native",
   "test-core#src:test/test_operator_implicit_shortstring_b356.pas": "native",
   "test-core#src:test/test_opt_store_reload.pas": "native",
+  "test-core#src:test/test_ordinal_value_cast_narrows.pas": "native",
   "test-core#src:test/test_out_parameter_of_a_managed_type_is_cleared.pas": "native",
   "test-core#src:test/test_overflow_checks_qplus.pas": "native",
   "test-core#src:test/test_overflow_qplus_narrow.pas": "native",
@@ -2103,6 +2106,7 @@
   "test-core#src:test/test_pascal_macro_comment_nesting.pas": "native",
   "test-core#src:test/test_pascal_system_qualified_intrinsic.pas": "native",
   "test-core#src:test/test_pchar_concat_and_array_element.pas": "native",
+  "test-core#src:test/test_pchar_from_a_string_literal.pas": "native",
   "test-core#src:test/test_pchar_result_decl_only_method.pas": "native",
   "test-core#src:test/test_pchar_to_string.pas": "native",
   "test-core#src:test/test_platform_defines.pas@1": "native",
@@ -2373,6 +2377,7 @@
   "test-core#src:test/test_variant_string_to_boolean.pas": "native",
   "test-core#src:test/test_variant_typecast.pas": "native",
   "test-core#src:test/test_variant_typecast_strict.pas": "native",
+  "test-core#src:test/test_variant_writes_every_tag.pas": "native",
   "test-core#src:test/test_varrec_alloc_after.pas": "native",
   "test-core#src:test/test_varrec_branch.pas": "native",
   "test-core#src:test/test_varrec_pchar_object_b320.pas": "native",
@@ -4508,6 +4513,7 @@
   "test-core#src:test/test_builtin_pointer_types_b303.pas": "pass",
   "test-core#src:test/test_builtin_tguid.pas": "pass",
   "test-core#src:test/test_builtin_tobject.pas": "pass",
+  "test-core#src:test/test_builtin_type_names_cast_and_declare.pas": "pass",
   "test-core#src:test/test_byref_arg_lvalue_rule.pas": "pass",
   "test-core#src:test/test_byval_record_temp.pas": "pass",
   "test-core#src:test/test_byvalue_record_arg_lifetime.pas": "pass",
@@ -5105,6 +5111,7 @@
   "test-core#src:test/test_operator_enumerator.pas": "pass",
   "test-core#src:test/test_operator_implicit_shortstring_b356.pas": "pass",
   "test-core#src:test/test_opt_store_reload.pas": "pass",
+  "test-core#src:test/test_ordinal_value_cast_narrows.pas": "pass",
   "test-core#src:test/test_out_parameter_of_a_managed_type_is_cleared.pas": "pass",
   "test-core#src:test/test_overflow_checks_qplus.pas": "pass",
   "test-core#src:test/test_overflow_qplus_narrow.pas": "pass",
@@ -5139,6 +5146,7 @@
   "test-core#src:test/test_pascal_macro_comment_nesting.pas": "pass",
   "test-core#src:test/test_pascal_system_qualified_intrinsic.pas": "pass",
   "test-core#src:test/test_pchar_concat_and_array_element.pas": "pass",
+  "test-core#src:test/test_pchar_from_a_string_literal.pas": "pass",
   "test-core#src:test/test_pchar_result_decl_only_method.pas": "pass",
   "test-core#src:test/test_pchar_to_string.pas": "pass",
   "test-core#src:test/test_platform_defines.pas@1": "pass",
@@ -5405,10 +5413,11 @@
   "test-core#src:test/test_variant_record_tag_padding.pas": "pass",
   "test-core#src:test/test_variant_string.pas": "pass",
   "test-core#src:test/test_variant_string_arithmetic.pas": "pass",
-  "test-core#src:test/test_variant_string_ops.pas": "fail",
+  "test-core#src:test/test_variant_string_ops.pas": "pass",
   "test-core#src:test/test_variant_string_to_boolean.pas": "pass",
   "test-core#src:test/test_variant_typecast.pas": "pass",
   "test-core#src:test/test_variant_typecast_strict.pas": "pass",
+  "test-core#src:test/test_variant_writes_every_tag.pas": "pass",
   "test-core#src:test/test_varrec_alloc_after.pas": "pass",
   "test-core#src:test/test_varrec_branch.pas": "pass",
   "test-core#src:test/test_varrec_pchar_object_b320.pas": "pass",
@@ -6555,11 +6564,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-23T23:22:17Z",
-  "sha": "7d4a3dbb99ce2bc83a5fbde50a6844292c5bd21a",
+  "date": "2026-08-24T00:23:52Z",
+  "sha": "04eaec15ed31fe00e45c3307d568af3e7ff622e0",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.4
+  "wall": 3600.0
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6749,31 +6758,6 @@
     "fd93e4a71c37a7932b9ef73e4c9f8a7deceb3c34"
    ],
    "src": "test/lib_mimic_xml_etree_elementtree.npy",
-   "status": "fail"
-  },
-  {
-   "bad": "df21e490d7989a812fc35b0f5f2dc5b5ea0e4bab",
-   "good": "fd93e4a71c37a7932b9ef73e4c9f8a7deceb3c34",
-   "job": "test-core#src:test/test_variant_string_ops.pas",
-   "name": "test-core#1239",
-   "opened": "2026-08-23T22:20:43Z",
-   "pin_built": false,
-   "range": [
-    "1286e95dd8ce0c6c36dfa08f7a3145c706d27eb2",
-    "4f1a10f84ecdc2ef48975ab00ef157beb9bfb17a",
-    "5ba6a625e0ba6fb2477da5bcc5eb4981b6775a95",
-    "0d856c603501b100050363af3d92e79783a9fb5c",
-    "a5c9747ee27e254451cf5b5f086538f44e23363b",
-    "05a967b893d4661373be6194d85a554520ff8598",
-    "e7b17f88a33658407a657bc56dfce80ab808b8bc",
-    "258e2d71e79808fa8a349658eadb3f602fab0ab6",
-    "72f38ec2a72aa8f16ee96c6f80c3ea2a50967918",
-    "953b01b0daf92f0e66d0c15fcba5c8bee3045537",
-    "9e22891b89f0aadc5d0a35545aa80427de612f03",
-    "46b7aa284e0dd57921e7883b94d13147254ea0b5",
-    "df21e490d7989a812fc35b0f5f2dc5b5ea0e4bab"
-   ],
-   "src": "test/test_variant_string_ops.pas",
    "status": "fail"
   },
   {
