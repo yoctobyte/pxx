@@ -100,4 +100,4 @@ way the cast-headed-CALL case already does. Filed as
 [[refactor-p-one-lvalue-path-for-statements-and-expressions]].
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit 1138e1626.
