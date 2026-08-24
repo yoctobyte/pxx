@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T07:22:26Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "4f526e338205c2e2a24c32af5cce1170327261d3",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T10:18:59Z",
    "fixed": [
     "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas",
@@ -486,14 +478,23 @@
    "sha": "fcdc530172cd71faa125cd1c56094b1fed2ef780",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-24T22:28:16Z",
+   "fixed": [
+    "test-core#src:test/test_default_of_aggregate.pas",
+    "test-core#src:test/test_named_operators.pas",
+    "test-core#src:test/test_operator_implicit_shortstring_b356.pas"
+   ],
+   "new_red": [],
+   "sha": "330466ca7f651c0f777b19859eaf0ae49a6d1cbd",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2358728B  data=61689B  bss=51420B  procs=1788] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
-  "test-core#src:test/test_default_of_aggregate.pas": "pascal26:76: error: incompatible types: cannot assign Int64 to AnsiString | pascal26:78: error: incompatible types: cannot assign Int64 to class",
-  "test-core#src:test/test_named_operators.pas": "pascal26:42: error: incompatible types: cannot assign record to Integer",
-  "test-core#src:test/test_operator_implicit_shortstring_b356.pas": "pascal26:27: error: incompatible types: cannot assign record to string[N] | pascal26:30: error: incompatible types: cannot assign record to string[N]",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter"
  },
  "job_tier": {
@@ -1787,6 +1788,7 @@
   "test-core#src:test/test_indexed_proc_call.pas": "native",
   "test-core#src:test/test_indexed_property.pas": "native",
   "test-core#src:test/test_indexing_a_string_value.pas": "native",
+  "test-core#src:test/test_inferred_pointer_keeps_its_depth.pas": "native",
   "test-core#src:test/test_inheritance_dispatch.pas": "native",
   "test-core#src:test/test_inherited.pas": "native",
   "test-core#src:test/test_initialize_finalize.pas": "native",
@@ -2133,6 +2135,9 @@
   "test-core#src:test/test_pointer_arith_deref_keeps_pointee.pas": "native",
   "test-core#src:test/test_pointer_deref_depth.pas": "native",
   "test-core#src:test/test_pointer_difference_is_a_number.pas": "native",
+  "test-core#src:test/test_pointer_field_keeps_its_depth.pas": "native",
+  "test-core#src:test/test_pointer_function_result_keeps_its_depth.pas": "native",
+  "test-core#src:test/test_pointer_param_keeps_its_depth.pas": "native",
   "test-core#src:test/test_pointers.pas": "native",
   "test-core#src:test/test_proc_const_record.pas": "native",
   "test-core#src:test/test_procaddr.pas": "native",
@@ -4680,7 +4685,7 @@
   "test-core#src:test/test_decl_order_ret_recid_b291.pas": "pass",
   "test-core#src:test/test_declared_directive.pas": "pass",
   "test-core#src:test/test_default_keyword.pas": "pass",
-  "test-core#src:test/test_default_of_aggregate.pas": "fail",
+  "test-core#src:test/test_default_of_aggregate.pas": "pass",
   "test-core#src:test/test_default_params_methods.pas": "pass",
   "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas": "pass",
   "test-core#src:test/test_delphi_generics.pas": "pass",
@@ -4841,6 +4846,7 @@
   "test-core#src:test/test_indexed_proc_call.pas": "pass",
   "test-core#src:test/test_indexed_property.pas": "pass",
   "test-core#src:test/test_indexing_a_string_value.pas": "pass",
+  "test-core#src:test/test_inferred_pointer_keeps_its_depth.pas": "pass",
   "test-core#src:test/test_inheritance_dispatch.pas": "pass",
   "test-core#src:test/test_inherited.pas": "pass",
   "test-core#src:test/test_initialize_finalize.pas": "pass",
@@ -4980,7 +4986,7 @@
   "test-core#src:test/test_multithreading.pas@1": "pass",
   "test-core#src:test/test_named_dynarray_field.pas": "pass",
   "test-core#src:test/test_named_fixed_array_of_a_dynamic_array.pas": "pass",
-  "test-core#src:test/test_named_operators.pas": "fail",
+  "test-core#src:test/test_named_operators.pas": "pass",
   "test-core#src:test/test_narrowing_typecast_rvalue.pas": "pass",
   "test-core#src:test/test_nativeint_cast_field.pas": "pass",
   "test-core#src:test/test_nested_alias.pas": "pass",
@@ -5139,7 +5145,7 @@
   "test-core#src:test/test_open_array_of_a_named_dynamic_array.pas": "pass",
   "test-core#src:test/test_open_array_of_variant.pas": "pass",
   "test-core#src:test/test_operator_enumerator.pas": "pass",
-  "test-core#src:test/test_operator_implicit_shortstring_b356.pas": "fail",
+  "test-core#src:test/test_operator_implicit_shortstring_b356.pas": "pass",
   "test-core#src:test/test_opt_store_reload.pas": "pass",
   "test-core#src:test/test_ordinal_value_cast_narrows.pas": "pass",
   "test-core#src:test/test_out_parameter_of_a_managed_type_is_cleared.pas": "pass",
@@ -5186,6 +5192,9 @@
   "test-core#src:test/test_pointer_arith_deref_keeps_pointee.pas": "pass",
   "test-core#src:test/test_pointer_deref_depth.pas": "pass",
   "test-core#src:test/test_pointer_difference_is_a_number.pas": "pass",
+  "test-core#src:test/test_pointer_field_keeps_its_depth.pas": "pass",
+  "test-core#src:test/test_pointer_function_result_keeps_its_depth.pas": "pass",
+  "test-core#src:test/test_pointer_param_keeps_its_depth.pas": "pass",
   "test-core#src:test/test_pointers.pas": "pass",
   "test-core#src:test/test_proc_const_record.pas": "pass",
   "test-core#src:test/test_procaddr.pas": "pass",
@@ -6598,11 +6607,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-24T20:24:17Z",
-  "sha": "fcdc530172cd71faa125cd1c56094b1fed2ef780",
+  "date": "2026-08-24T22:28:16Z",
+  "sha": "330466ca7f651c0f777b19859eaf0ae49a6d1cbd",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.3
+  "wall": 3600.0
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6792,63 +6801,6 @@
     "fd93e4a71c37a7932b9ef73e4c9f8a7deceb3c34"
    ],
    "src": "test/lib_mimic_xml_etree_elementtree.npy",
-   "status": "fail"
-  },
-  {
-   "bad": "203438d2cf6306c543194034cc6980662e5c23bf",
-   "good": "6d2af7ca7c2378a2e33e0500c1ff732e33bbd00e",
-   "job": "test-core#src:test/test_default_of_aggregate.pas",
-   "name": "test-core#200",
-   "opened": "2026-08-24T19:22:32Z",
-   "pin_built": false,
-   "range": [
-    "497fc8e78c873d62f85a2591474a83d14163be83",
-    "0a0527bde97a618b057ca63f9714f70212ff937f",
-    "2cba0af200ebd259251886605ed66f054dafdc73",
-    "6f52d4628d39034c9e9d4cc20e2b92da6dbd4f3b",
-    "0808f1fdf64dd489e626ed33ebe898ba0ddd5844",
-    "7f2eec33aede70a582598c45acec5fa2af2c8492",
-    "203438d2cf6306c543194034cc6980662e5c23bf"
-   ],
-   "src": "test/test_default_of_aggregate.pas test/test_generic_cycle_fail.pas",
-   "status": "fail"
-  },
-  {
-   "bad": "203438d2cf6306c543194034cc6980662e5c23bf",
-   "good": "6d2af7ca7c2378a2e33e0500c1ff732e33bbd00e",
-   "job": "test-core#src:test/test_named_operators.pas",
-   "name": "test-core#134",
-   "opened": "2026-08-24T19:22:32Z",
-   "pin_built": false,
-   "range": [
-    "497fc8e78c873d62f85a2591474a83d14163be83",
-    "0a0527bde97a618b057ca63f9714f70212ff937f",
-    "2cba0af200ebd259251886605ed66f054dafdc73",
-    "6f52d4628d39034c9e9d4cc20e2b92da6dbd4f3b",
-    "0808f1fdf64dd489e626ed33ebe898ba0ddd5844",
-    "7f2eec33aede70a582598c45acec5fa2af2c8492",
-    "203438d2cf6306c543194034cc6980662e5c23bf"
-   ],
-   "src": "test/test_named_operators.pas",
-   "status": "fail"
-  },
-  {
-   "bad": "203438d2cf6306c543194034cc6980662e5c23bf",
-   "good": "6d2af7ca7c2378a2e33e0500c1ff732e33bbd00e",
-   "job": "test-core#src:test/test_operator_implicit_shortstring_b356.pas",
-   "name": "test-core#800",
-   "opened": "2026-08-24T19:22:32Z",
-   "pin_built": false,
-   "range": [
-    "497fc8e78c873d62f85a2591474a83d14163be83",
-    "0a0527bde97a618b057ca63f9714f70212ff937f",
-    "2cba0af200ebd259251886605ed66f054dafdc73",
-    "6f52d4628d39034c9e9d4cc20e2b92da6dbd4f3b",
-    "0808f1fdf64dd489e626ed33ebe898ba0ddd5844",
-    "7f2eec33aede70a582598c45acec5fa2af2c8492",
-    "203438d2cf6306c543194034cc6980662e5c23bf"
-   ],
-   "src": "test/test_operator_implicit_shortstring_b356.pas",
    "status": "fail"
   }
  ],
