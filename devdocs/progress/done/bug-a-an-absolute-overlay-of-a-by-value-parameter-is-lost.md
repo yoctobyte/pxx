@@ -197,4 +197,4 @@ quick` GREEN; two `test-core` cases (the extended `absolute` test and the new
 three-`-O` residency test).
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit c0c650774.
