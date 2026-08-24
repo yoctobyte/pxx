@@ -2299,6 +2299,22 @@ test-nilpy: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q '(NoSuchFunc)' \
 	   && test ! -e $(TESTTMP)/test_four_errors26 \
 	  || { echo "test_four_independent_errors_report_fail: FAIL - rc=$$rc, $$n error lines (want rc=1 and 4, all four named, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@# ...and four BAD CALLS in one file — two in statement position, two inside
+	@# an expression (one of them merely an operand). fpc 3.2.2 reports all four,
+	@# on the same four lines; this reported the first and stopped. The correct
+	@# call at the end must stay silent: recovery that flags good code is worse
+	@# than halting.
+	@rm -f $(TESTTMP)/test_bad_calls26
+	@out=$$(./$(COMPILER) test/test_bad_calls_all_report_fail.pas $(TESTTMP)/test_bad_calls26 2>&1); \
+	 rc=$$?; \
+	 n=$$(printf '%s\n' "$$out" | grep -c 'error: no overload of'); \
+	 test "$$rc" = "1" && test "$$n" = "4" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:30: error: no overload of Two' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:31: error: no overload of Two' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:32: error: no overload of F' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:33: error: no overload of F' \
+	   && test ! -e $(TESTTMP)/test_bad_calls26 \
+	  || { echo "test_bad_calls_all_report_fail: FAIL - rc=$$rc, $$n overload lines (want rc=1 and 4, on lines 30-33, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	@# a SECOND class of the same name in one unit must be refused, naming it
 	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas $(TESTTMP)/test_pascal_dup_class26 2>&1 \
 	  | grep -q 'duplicate class name TFoo' \

@@ -5852,7 +5852,21 @@ begin
           if procIdx < 0 then
             procIdx := TryFillTrailingDefaults(name, qUnit, nArgs, argsHead, lastArg);
           if procIdx < 0 then
-            Error('no overload of ' + name + ' matches these arguments' + OverloadReport);
+          begin
+            { RECOVERABLE. A call whose arguments do not match any overload is a
+              semantic failure over a WELL-FORMED token stream -- the arguments
+              and the closing paren are already consumed, so the parser is
+              sitting exactly where it would be after a good call and there is
+              nothing to resync. Yielding an empty statement discards this one
+              call and nothing else, so the next mistake in the file gets
+              reported too. FPC reports every bad call in a file; pxx stopped at
+              the first, which is item 2 of
+              feature-a-error-does-not-halt-so-a-parse-can-be-speculative. }
+            ErrorRecover('no overload of ' + name + ' matches these arguments' + OverloadReport);
+            Result := AllocNode(AN_BLOCK);
+            ASTLeft[Result] := -1;
+            Exit;
+          end;
 
           currArg := argsHead;
           for i := 0 to nArgs - 1 do

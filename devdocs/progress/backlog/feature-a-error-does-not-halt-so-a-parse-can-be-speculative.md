@@ -3,6 +3,8 @@ track: A
 prio: 45
 type: feature
 summary: "`Error()` calls `Halt` directly, so nothing in the compiler can trial-parse and back out. That blocks NilPy's type inference (which needs to read an as-yet-unseen name speculatively), and it is also why the compiler stops at the FIRST error. Make the error path recoverable; several unrelated wants fall out of the same change."
+status: backlog
+owner: ""
 ---
 
 # `Error()` halts, so no parse can be speculative
@@ -203,3 +205,63 @@ change and gate rather than a footnote in someone else's; filed as
 
 Item 1 (speculative parse) is untouched: the mechanism exists, the state-unwind
 design does not. Syntax errors still halt at the first one — deliberately.
+
+## Slice 3 landed 2026-08-24 (claude-A) — bad CALLS, and the value-shaped half of recovery
+
+Slices 1 and 2 covered names that do not resolve. The next thing an ordinary
+file gets wrong is calls, and it was still halt-at-the-first: measured against
+fpc 3.2.2 on a file with four bad calls, fpc reported all four and pxx reported
+one.
+
+Both `no overload of X matches these arguments` sites now recover. The reason it
+is safe is the one slice 1 gave and it is stronger here: when the mismatch is
+detected the arguments **and the closing paren are already consumed**, so the
+parser is sitting exactly where a *good* call would have left it. There is
+nothing to resync and no rollback to design — the slice-2 statement watermark is
+not even needed.
+
+The two sites need different stand-ins, and that distinction is the new thing:
+
+- **statement position** (`pasparser_stmt.inc`) — yield an empty `AN_BLOCK`.
+  One call is discarded and nothing else.
+- **expression position** (`pasparser_expr.inc`) — an empty statement is not
+  available; the caller is mid-expression and needs a **value**. Same poison
+  rule as `PoisonSym`: an ordinary Integer `0`, which every enclosing operator
+  accepts, so `i := F(1) + F(2, 3)` reports the bad operand and does NOT produce
+  a second diagnostic about the `+` that never got one.
+
+Measured after, on the gated test:
+
+```
+pascal26:30: error: no overload of Two matches these arguments
+pascal26:31: error: no overload of Two matches these arguments
+pascal26:32: error: no overload of F matches these arguments
+pascal26:33: error: no overload of F matches these arguments
+```
+
+fpc reports the same four lines. The correct `Two(1, 2)` at the end stays
+silent — recovery that flags good code would be worse than halting — and no
+binary is written.
+
+**Gate:** `make compiler/pascal26` fixedpoint converged in one round;
+`tools/gate.sh quick` GREEN; new `test-core` case
+`test_bad_calls_all_report_fail`, and both earlier error tests re-measured
+unchanged.
+
+### Found while measuring, and much worse than what was being measured
+
+The same sweep asked what ELSE a file gets wrong, and turned up that **pxx does
+not type-check assignments at all**: 17 of 18 assignments fpc rejects with
+`Incompatible types` are accepted silently, including `i := s` (prints the
+string's heap address) and `s := i` (segfaults). Filed as
+[[bug-p-an-assignment-is-not-type-checked-at-all]] at prio 60 — Track P's, and
+not folded in here: this ticket is about the error *path*, that one is about a
+check that was never written.
+
+### Still open
+
+Item 1 (speculative parse) is untouched, and remains the reason this ticket
+stays open: `ErrorRecover` is the mechanism a trial parse needs, but nothing
+ties an error to a rollback point, so the state-unwind question in "Shape, not a
+prescription" is still unanswered. Syntax errors still halt at the first one,
+deliberately.

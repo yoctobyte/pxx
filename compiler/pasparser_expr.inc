@@ -6718,7 +6718,23 @@ begin
           end;
           procIdx := TryFillTrailingDefaults(name, qUnit, nArgs, argsHead, lastArg);
           if procIdx < 0 then
-            Error('no overload of ' + name + ' matches these arguments' + OverloadReport);
+          begin
+            { RECOVERABLE, and the value half of the statement site's recovery
+              (see pasparser_stmt.inc). The caller is mid-EXPRESSION, so an
+              empty statement is not available as a stand-in -- it needs a
+              VALUE, and the same poison rule applies as for an undefined name:
+              an ordinary Integer 0, which every enclosing operator accepts, so
+              one bad call does not cascade into a second diagnostic about the
+              expression around it. Nothing poisoned can reach codegen; the
+              driver halts on ErrCount > 0 before any emission.
+              feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+            ErrorRecover('no overload of ' + name + ' matches these arguments' + OverloadReport);
+            CurASTNode := AllocNode(AN_INT_LIT);
+            ASTIVal[CurASTNode] := 0;
+            ASTTk[CurASTNode] := Ord(tyInteger);
+            LastExprTk := tyInteger;
+            Exit;
+          end;
         end;
 
 

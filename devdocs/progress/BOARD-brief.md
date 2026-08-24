@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 unfinished:21 blocked:7 backlog:300 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2301 rejected:40`
+`urgent:2 unfinished:21 blocked:7 backlog:301 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2301 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -50,7 +50,7 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 288, ranked
+## Ready — top 30 of 289, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [T]` bug-t-the-native-tier-times-out-and-publishes-a-contentless-red
@@ -62,6 +62,7 @@ _none — no lane is locked._
 - `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 65] [P]` feature-pascal-corpus-oop
 - `[p 60] [N]` bug-n-inferred-return-type-of-true-division-is-int
+- `[p 60] [P]` bug-p-an-assignment-is-not-type-checked-at-all
 - `[p 60] [T]` bug-t-the-push-rate-starves-breadth-coverage-entirely
 - `[p 60] [T]` feature-t-gate-quick-should-smoke-the-pinned-compiler
 - `[p 58] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
@@ -81,6 +82,5 @@ _none — no lane is locked._
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
 - `[p 53] [S]` feature-esp-peripheral-callback-api
-- `[p 50] [U]` decide-release-signing-key-custody (unblocks 1)
 
-_258 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_259 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
