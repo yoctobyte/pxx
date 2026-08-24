@@ -55,7 +55,7 @@ begin
 end;
 
 procedure InferSymTypeFromNode(symIdx: Integer; node: Integer);
-var tk: TTypeKind; procIdx, recId, varIdx: Integer;
+var tk, addrTk: TTypeKind; procIdx, recId, varIdx, addrRec: Integer;
 begin
   tk := IntToTypeKind(ASTTk[node]);
   Syms[symIdx].TypeKind := tk;
@@ -71,56 +71,71 @@ begin
     begin
       varIdx := ASTIVal[node];
       if (varIdx >= 0) and (varIdx < SymCount) then
-      begin
-        Syms[symIdx].PtrElemTk := Syms[varIdx].PtrElemTk;
-        Syms[symIdx].PtrElemRec := Syms[varIdx].PtrElemRec;
-      end;
+        { The whole pointer identity, not two fifths of it: a symbol copied from
+          another symbol has an exact source for depth and base as well, so
+          `q := p` with `p: ^PChar` now yields depth 2 over tyChar instead of a
+          bare tyPointer pointee over depth 0. }
+        SetSymPointerType(symIdx, Syms[varIdx].PtrElemTk, Syms[varIdx].PtrElemRec,
+                          SymPtrDepth[varIdx], SymPtrBaseTk[varIdx],
+                          SymPtrBaseRec[varIdx]);
     end
     { If it's a field }
     else if ASTKind[node] = AN_FIELD then
     begin
       recId := ResolveNodeRec(ASTLeft[node]);
       if recId <> REC_NONE then
-      begin
-        Syms[symIdx].PtrElemTk := RecFieldPtrElemTk(recId, GetASTIdentName(node));
-        Syms[symIdx].PtrElemRec := RecFieldPtrElemRec(recId, GetASTIdentName(node));
-      end;
+        { A record FIELD's pointer type is recorded as UFldPtrElemTk/Rec and
+          nothing else -- there is no UFldPtrDepth -- so the single-level
+          derivation is all that is available here, and it declines when the
+          pointee is itself a pointer rather than claiming depth 1. }
+        SetSymPointerTo(symIdx, RecFieldPtrElemTk(recId, GetASTIdentName(node)),
+                        RecFieldPtrElemRec(recId, GetASTIdentName(node)));
     end
     { If it's a function call }
     else if ASTKind[node] = AN_CALL then
     begin
       procIdx := ASTIVal[node];
       if (procIdx >= 0) and (procIdx < ProcCount) then
-      begin
-        Syms[symIdx].PtrElemTk := IntToTypeKind(ProcRetPtrElemTk[procIdx]);
-        Syms[symIdx].PtrElemRec := ProcRetPtrElemRec[procIdx];
-      end;
+        { Same shortfall as the field case, and it is the one filed as
+          bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape:
+          a proc records ProcRetPtrElemTk/Rec -- the immediate pointee -- and no
+          depth, so `^PChar` and `PChar` are indistinguishable as return types
+          and this correctly declines rather than guessing. }
+        SetSymPointerTo(symIdx, IntToTypeKind(ProcRetPtrElemTk[procIdx]),
+                        ProcRetPtrElemRec[procIdx]);
     end
     { If it's a typecast }
     else if ASTKind[node] = AN_PTR_CAST then
     begin
       if ASTIVal[node] = -2 then
-      begin
-        Syms[symIdx].PtrElemTk := tyChar;
-        Syms[symIdx].PtrElemRec := REC_NONE;
-      end
+        { PChar(x): exactly one level over a char base, by definition. }
+        SetSymPointerType(symIdx, tyChar, REC_NONE, 1, Ord(tyChar), REC_NONE)
       else if ASTIVal[node] >= 0 then
-      begin
-        Syms[symIdx].PtrElemTk := IntToTypeKind(AliasElemTk[ASTIVal[node]]);
-        Syms[symIdx].PtrElemRec := AliasElemRec[ASTIVal[node]];
-      end;
+        { A pointer ALIAS does record depth and base (AliasPtrDepth /
+          AliasPtrBaseTk / AliasPtrBaseRec), so this branch has the exact
+          answer and must not fall back to the derivation. }
+        SetSymPointerType(symIdx, IntToTypeKind(AliasElemTk[ASTIVal[node]]),
+                          AliasElemRec[ASTIVal[node]],
+                          AliasPtrDepth[ASTIVal[node]],
+                          AliasPtrBaseTk[ASTIVal[node]],
+                          AliasPtrBaseRec[ASTIVal[node]]);
     end
     { If it's an address-of operator }
     else if ASTKind[node] = AN_ADDR then
     begin
-      Syms[symIdx].PtrElemTk := IntToTypeKind(ASTTk[ASTLeft[node]]);
-      if (Syms[symIdx].PtrElemTk = tyRecord) or (Syms[symIdx].PtrElemTk = tyClass) then
-        Syms[symIdx].PtrElemRec := ResolveNodeRec(ASTLeft[node]);
+      addrTk := IntToTypeKind(ASTTk[ASTLeft[node]]);
+      addrRec := REC_NONE;
+      if (addrTk = tyRecord) or (addrTk = tyClass) then
+        addrRec := ResolveNodeRec(ASTLeft[node]);
+      { `@x` is one level over x's own type -- unless x is itself a pointer, and
+        then SetSymPointerTo declines rather than claiming `@p` is a `^T`. }
+      SetSymPointerTo(symIdx, addrTk, addrRec);
     end;
   end;
-  { feature-a-typeref-migrate-consumers: every branch above mutates one of
-    TypeKind/RecName/PtrElemTk/PtrElemRec on symIdx; resync SymTR once at the
-    single exit point that follows all of them. }
+  { feature-a-typeref-migrate-consumers: the pointer branches now go through
+    SetSymPointerType/SetSymPointerTo, which resync themselves; this covers the
+    TypeKind/RecName writes above them. Harmless to call twice -- it is a
+    straight field copy. }
   SymSyncTypeRef(symIdx);
 end;
 

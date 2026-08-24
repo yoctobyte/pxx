@@ -3704,6 +3704,57 @@ begin
   SymCapacity := n;
 end;
 
+procedure SetSymPointerType(idx: Integer; elemTk: TTypeKind; elemRec, depth, baseTk, baseRec: Integer);
+{ THE one place a symbol's pointer identity is written after its Alloc*.
+
+  A typed pointer is FIVE fields, not two: the immediate pointee
+  (PtrElemTk/PtrElemRec), the number of levels (SymPtrDepth) and the ULTIMATE
+  base (SymPtrBaseTk/SymPtrBaseRec). They are not redundant -- `PChar` and
+  `^PChar` have the SAME depth-1-vs-2 distinction as their only difference at
+  the base, and every predicate that asks "one level remaining over a char base"
+  needs both halves.
+
+  The Alloc* chokepoints write all five together. Twenty-one sites outside
+  symtab.inc write PtrElemTk after creation, and measured 2026-08-24 only nine
+  of them (all in cparser.inc) touch depth at all -- so twelve symbols carried
+  an immediate pointee over depth 0 and base tyUnknown, which reads as "not a
+  typed pointer" to the predicates that consult the triple. That is the
+  "one of six parallel arrays not written" class this file's SymTR comment names,
+  and it is why feature-a-typeref-migrate-consumers cannot re-point
+  TTypeRef.PtrBaseTk at the real base yet.
+
+  Pass depth = 0 when the caller genuinely does not know (a pointee that is
+  itself a pointer, from a source that records no depth); the fields then read
+  exactly as they did before this helper existed, and the caller is at least
+  visibly declining rather than silently forgetting.
+
+  Calls SymSyncTypeRef, so SymTR cannot go stale behind it.
+  feature-a-typeref-migrate-consumers }
+begin
+  Syms[idx].PtrElemTk  := elemTk;
+  Syms[idx].PtrElemRec := elemRec;
+  SymPtrDepth[idx]     := depth;
+  SymPtrBaseTk[idx]    := baseTk;
+  SymPtrBaseRec[idx]   := baseRec;
+  SymSyncTypeRef(idx);
+end;
+
+procedure SetSymPointerTo(idx: Integer; elemTk: TTypeKind; elemRec: Integer);
+{ The single-level case, for a caller whose source records only the pointee.
+
+  `^T` where T is not itself a pointer IS depth 1 over base T -- the two are the
+  same fact, so deriving them costs nothing and is not a guess. When T *is* a
+  pointer the depth is genuinely unknown (>= 2, base unrecorded) and this
+  declines, leaving depth 0 rather than inventing a 1 that would make `^PChar`
+  claim to be a PChar.
+  feature-a-typeref-migrate-consumers }
+begin
+  if (elemTk = tyUnknown) or (elemTk = tyPointer) then
+    SetSymPointerType(idx, elemTk, elemRec, 0, Ord(tyUnknown), REC_NONE)
+  else
+    SetSymPointerType(idx, elemTk, elemRec, 1, Ord(elemTk), elemRec);
+end;
+
 procedure DbgReportSymPtr(si: Integer; const name: AnsiString);
 { PXXDBG=a.symptr:<name> (or `*`) — what a declaration actually RECORDED about a
   pointer-shaped variable: depth, immediate pointee, ultimate base. The

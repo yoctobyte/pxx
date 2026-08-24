@@ -4779,6 +4779,21 @@ test-core: $(COMPILER)
 	# output on this source. feature-a-trust-the-operand-type-for-not
 	./$(COMPILER) test/test_not_operand_type_matrix.pas $(TESTTMP)/test_not_matrix26
 	test "$$($(TESTTMP)/test_not_matrix26)" = "$$(cat test/test_not_operand_type_matrix.expected)"
+	# An INFERRED variable keeps the WHOLE pointer identity of what it was inferred
+	# from -- pointee, depth AND ultimate base -- not two fifths of it. `var q :=
+	# pp` over a `pp: ^PChar` used to lose the char-ness one level in, so `q^`
+	# printed the address while `pp^` on the line above printed the string. Every
+	# row prints the inferred value beside its EXPLICITLY TYPED twin; the two
+	# halves of each line must be equal, and the explicit half is separately
+	# pinned against fpc by test_pchar_pointer_to_pchar.
+	# feature-a-typeref-migrate-consumers
+	./$(COMPILER) test/test_inferred_pointer_keeps_its_depth.pas $(TESTTMP)/test_infptr26
+	test "$$($(TESTTMP)/test_infptr26)" = "$$(cat test/test_inferred_pointer_keeps_its_depth.expected)"
+	# ...and the property behind it, asserted structurally rather than only as a
+	# recorded string: no line may have two different halves. A pair that drifted
+	# APART would still match .expected if someone regenerated the file, so the
+	# invariant is checked on its own.
+	$(TESTTMP)/test_infptr26 | awk -F' \\| ' '$$1 != $$2 { print "inferred/explicit mismatch: " $$0; bad=1 } END { exit bad }'
 	./$(COMPILER) test/test_delphi_generics.pas $(TESTTMP)/test_delphi_generics26
 	test "$$($(TESTTMP)/test_delphi_generics26)" = "$$(printf '42\nhi')"
 	./$(COMPILER) test/test_inline_array_field_const_bound.pas $(TESTTMP)/test_inline_array_field_const_bound26

@@ -224,3 +224,91 @@ all of them the `GetQ^` shape) as the acceptance check.
 
 **Also: this ticket is in `backlog/`, which the 2026-08-19 triage asked for.
 That move happened. No action needed.**
+
+## 2026-08-24, step 1's first instalment — `SetSymPointerType`, and the inference site
+
+The step-1 plan recorded above (*"make the pointer triple written together at
+all 21 post-creation sites — a `SetSymPointerType` helper, so there is one place
+to forget instead of five fields"*) now has its helper and its first converted
+call site.
+
+### The helpers
+
+- **`SetSymPointerType(idx, elemTk, elemRec, depth, baseTk, baseRec)`** —
+  THE one place a symbol's pointer identity is written after its `Alloc*`. All
+  five fields, then `SymSyncTypeRef`, so `SymTR` cannot go stale behind it.
+- **`SetSymPointerTo(idx, elemTk, elemRec)`** — the single-level case, for a
+  caller whose source records only the pointee. `^T` where T is not itself a
+  pointer **is** depth 1 over base T; the two are the same fact, so deriving
+  them is not a guess. When T *is* a pointer the depth is genuinely unknown and
+  this declines, leaving depth 0 rather than inventing a 1 that would make
+  `^PChar` claim to be a `PChar`.
+
+The `depth = 0` escape is deliberate and is the honest half of the design: a
+caller that does not know is at least **visibly declining** instead of silently
+forgetting, which is the whole failure mode.
+
+### Converted: `InferSymTypeFromNode` (`ast_syminfer.inc`)
+
+Six branches, and they split exactly along whether the source records depth:
+
+| inferred from | source | result |
+| --- | --- | --- |
+| another SYMBOL | `SymPtrDepth`/`SymPtrBaseTk`/`Rec` | **exact** |
+| a pointer ALIAS | `AliasPtrDepth`/`AliasPtrBaseTk`/`Rec` | **exact** |
+| `PChar(x)` | definition | **exact** (1 over tyChar) |
+| `@x` | x's own type | derived, declines if x is a pointer |
+| a record FIELD | `UFldPtrElemTk`/`Rec` only — no `UFldPtrDepth` | derived |
+| a function RESULT | `ProcRetPtrElemTk`/`Rec` only — no depth | derived |
+
+The last two are the shortfalls this ticket exists to remove; the function-result
+one is filed as
+[[bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape]].
+
+### What it fixed, and how it was proven not to break anything else
+
+`var q := pp` where `pp: ^PChar` lost the char-ness one level in, because only
+the pointee was copied:
+
+```
+before:  132814934638624      'x' + q^ -> 132814934638744     q^ = 'alpha' -> FALSE
+after:   alpha                              xalpha                              TRUE
+```
+
+Proven neutral by an **A/B binary comparison**, which is the technique this
+ticket's 2026-08-01 revert lacked: the compiler built *before* the change and
+the compiler built *after* it were each used to compile the same sources, and
+the resulting binaries diffed.
+
+```
+compiler.pas                         BINARY IDENTICAL
+test_pchar_pointer_to_pchar.pas      BINARY IDENTICAL
+test_pchar_array_of_pointer_to_pchar BINARY IDENTICAL
+test_not_operand_type_matrix.pas     BINARY IDENTICAL
+test_basic_comprehensive.bas         BINARY IDENTICAL
+c_builtin_bits.c                     BINARY IDENTICAL
+```
+
+That is stronger than "the tests pass" — it is "no emitted byte moved, in any
+frontend" — and it is the standard the remaining conversions should be held to.
+
+### Test
+
+`test/test_inferred_pointer_keeps_its_depth.pas`. FPC cannot compile it (inline
+`var` in a statement block is a pxx/Delphi form, not objfpc), so the oracle is
+the **explicitly typed twin printed beside each inferred row**: every line must
+have two equal halves, and the explicit half is separately pinned against fpc
+3.2.2 by `test_pchar_pointer_to_pchar.pas`. `test-core` asserts both the
+recorded output *and* the halves-are-equal invariant on its own, because a pair
+that drifted apart would still match a regenerated `.expected`. Verified to FAIL
+on the pre-change compiler, on all three affected rows. Cross-checked on
+i386 / aarch64 / arm32 / riscv32.
+
+### Still open, in order
+
+1. The other **20** post-creation sites (`cparser.inc` 9, `pasparser_decl` 2,
+   `pasparser_proc` 1, `pasparser_stmt` 1, `pyparser` 2, and the five remaining
+   `ast_syminfer` writes are done). Each under the A/B binary comparison.
+2. Then `TTypeRef` gains `PtrDepth` and `PtrBaseTk`/`Rec` are re-pointed at the
+   ultimate base, with `ir.inc:2506` guarding on `PtrDepth = 1`.
+3. Then lane 4 (`ProcRetTR`), which closes the filed `GetQ^` bug.
