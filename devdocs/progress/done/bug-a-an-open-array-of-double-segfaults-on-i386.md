@@ -68,7 +68,7 @@ list until this is fixed — adding it would land a known red.
    be quicker than either.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit fa9861f13.
 
 ---
 
