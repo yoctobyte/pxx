@@ -12457,6 +12457,13 @@ endif
 	test "$$($(TESTTMP)/lib_dns_cache_facade)" = "$$(printf 'r1=0\nip1=ok\nr2=0\ncached=ok\nflushed-neg=ok\nc1=0\nc1-ip=ok\nc2=0\nc2-cached=ok')"
 	$(PXX_STABLE) -Fulib/rtl/platform/posix test/lib_dns_aaaa.pas $(TESTTMP)/lib_dns_aaaa
 	test "$$($(TESTTMP)/lib_dns_aaaa)" = "$$(printf 'rcode=0\ncount=1\nip6=ok\nrcode6c=0\ncount6c=1\nchased6=ok')"
+	# the `variants` unit's FPC surface. VarClear/VarToStr/VarToStrDef/VarIsClear
+	# were all missing, each found by a differential that could not be written
+	# without it (bug-a-varclear-is-undefined,
+	# bug-b-vartostr-is-missing-from-variants). Byte-identical to fpc 3.2.2; the
+	# survive row proves VarClear releases a REFERENCE, not the object.
+	$(PXX_STABLE) -Fulib/rtl test/lib_variants_surface.pas $(TESTTMP)/lib_variants_surface
+	test "$$($(TESTTMP)/lib_variants_surface)" = "$$(printf 'clear    [] empty=TRUE\nint      [42]\nbool     [True]\nstr      [text]\nnull     []\ndef-set  [7]\ndef-null [D]\nisclear0 FALSE\nisclear1 TRUE\nsurvive  [payload-] bad=0')"
 	$(PXX_STABLE) test/lib_dns_buildguard.pas $(TESTTMP)/lib_dns_buildguard
 	test "$$($(TESTTMP)/lib_dns_buildguard)" = "$$(printf 'toolong=ok\nno-overflow=ok\nbiglabel=ok\nemptylabel=ok\ntinybuf=ok\nfits=ok')"
 	$(PXX_STABLE) test/lib_dns_parsefuzz.pas $(TESTTMP)/lib_dns_parsefuzz

@@ -107,6 +107,33 @@ function VarIsStr(const V: Variant): Boolean;
       part of the contract -- see EVariantError. }
 function VarCompareValue(const A, B: Variant): TVariantRelationship;
 
+{ Reset V to the no-value state, releasing whatever it held.
+
+  FPC's `Variants.VarClear`. The primitive has always existed on the compiler
+  side -- PXXVarClear, which every overwritten Variant slot already goes
+  through -- but there was no user-callable name in front of it, so the natural
+  way to empty a Variant was `error: undefined variable (VarClear)`.
+  bug-a-varclear-is-undefined }
+procedure VarClear(var V: Variant);
+
+{ True when V holds no value -- FPC's VarIsClear, which is varEmpty OR varNull.
+  pxx spells both with one tag, so this is the same question as VarIsEmpty and
+  VarIsNull; see the unit header for why that approximation is stated rather
+  than hidden. }
+function VarIsClear(const V: Variant): Boolean;
+
+{ V rendered as text, with FPC's one documented special case: a Null/empty V
+  yields the EMPTY STRING rather than raising, which is the entire reason
+  callers reach for VarToStr instead of the plain `s := v` cast (fpc 3.2.2
+  raises EVariantTypeCastError for that cast on a Null).
+  bug-b-vartostr-is-missing-from-variants }
+function VarToStr(const V: Variant): AnsiString;
+
+{ VarToStr, except that a Null/empty V yields ADefault. Measured against fpc
+  3.2.2: `VarToStrDef(Null, 'D')` is 'D', and a value variant ignores the
+  default entirely. }
+function VarToStrDef(const V: Variant; const ADefault: AnsiString): AnsiString;
+
 implementation
 
 const
@@ -136,6 +163,26 @@ end;
 function VarIsNull(const V: Variant): Boolean;
 begin
   Result := VarType(V) = 0;
+end;
+
+procedure VarClear(var V: Variant);
+begin
+  { An ASSIGNMENT, not a hand-built release: assigning a Variant already
+    releases the destination's old payload before storing (IR_VAR_STORE owns
+    the ARC-correct 16-byte copy), and `Unassigned` is a VT_EMPTY slot that
+    nothing ever writes to. So this is Finalize's definition down to both
+    load-bearing properties -- it drops a REFERENCE rather than the object, and
+    a second VarClear releases an empty and decrements nothing.
+
+    `Finalize(V)` would say the same thing and is now legal on a bare Variant,
+    but only on a compiler newer than the current pin, and this unit builds
+    with $(PXX_STABLE). The assignment needs nothing new. }
+  V := Unassigned;
+end;
+
+function VarIsClear(const V: Variant): Boolean;
+begin
+  Result := VarType(V) = VT_EMPTY;
 end;
 
 function VarIsNumeric(const V: Variant): Boolean;
@@ -198,6 +245,21 @@ begin
   end
   else
     Result := V;
+end;
+
+function VarToStr(const V: Variant): AnsiString;
+begin
+  { The empty arm is the whole point of the routine -- see the interface note.
+    Everything else is the rendering AsText already did for the comparator,
+    which is why this is an export rather than an implementation. }
+  if VarType(V) = VT_EMPTY then Result := ''
+  else Result := AsText(V, VarType(V));
+end;
+
+function VarToStrDef(const V: Variant; const ADefault: AnsiString): AnsiString;
+begin
+  if VarType(V) = VT_EMPTY then Result := ADefault
+  else Result := AsText(V, VarType(V));
 end;
 
 { V as a number: i when isFloat is False, d when it is True. False means V is
