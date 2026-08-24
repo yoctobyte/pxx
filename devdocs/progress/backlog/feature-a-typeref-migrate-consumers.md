@@ -122,3 +122,105 @@ flagged CRITICAL precisely because a half-applied compiler change can break the
 self-host gate. Nothing is half-applied here — the parent landed cleanly and
 this is untouched follow-up work. It belongs in `backlog/`. Not moved by this
 read-only triage pass; flagged for whoever holds the A slot.
+
+## 2026-08-24 — the 2026-08-19 triage is out of date, and lane 4 has a measured prerequisite
+
+**Correction first.** The triage above says *"`TTypeRef` appears 4 times in
+`compiler/defs.inc` … and **zero** times in `compiler/symtab.inc` and
+`compiler/ir.inc`. So lane 1 has not started."* Measured today:
+
+```
+compiler/symtab.inc : 59 mentions      compiler/ir.inc : 19
+SymSyncTypeRef call sites : 105  (pyparser 54, pasparser_stmt 17, cparser 8,
+                                  ir 8, symtab 7, pasparser_decl 5, ...)
+SymTR read sites already migrated : ir.inc, ir_codegen386.inc, ir_codegen_xtensa.inc
+```
+
+Lane 1 is substantially landed — write-side sync **and** a first set of reads.
+The triage counted a stale checkout or grepped the type name rather than the
+array name; either way, do not plan off it.
+
+### Lane 4 (proc return types) is now WANTED by a filed bug
+
+[[bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape]]:
+`GetQ^` where `GetQ: ^PChar` is wrong in the four contexts that refuse to guess,
+because a proc records `ProcRetPtrElemTk`/`Rec` — the immediate pointee — and
+nothing about the return pointer's DEPTH or ultimate BASE, so `PChar` and
+`^PChar` are indistinguishable as return types. The lane is small: **10 write
+sites, 7 read sites.**
+
+### Two things block it, both measured today, both in this ticket's own subject
+
+**1. `TTypeRef` cannot express a pointer's depth.** As declared
+(`defs.inc:1559`) it has `PtrBaseTk`/`PtrBaseRec` and `DynDepth` — *dynamic
+array* nesting — and no pointer-level count. Symbols carry theirs OUTSIDE
+`SymTR`, in `SymPtrDepth`. So a `TTypeRef` today is strictly less expressive
+than the parallel arrays it is meant to replace, for exactly the case that
+motivates the migration.
+
+**2. And the field is fed the wrong half.** `SymSyncTypeRef` does
+
+```pascal
+  SymTR[idx].PtrBaseTk  := Ord(Syms[idx].PtrElemTk);   { the IMMEDIATE pointee }
+```
+
+into a field whose name and comment say *base*. Measured with
+`PXXDBG=a.symptr`:
+
+| declaration | depth | `PtrElemTk` (immediate) | `SymPtrBaseTk` (ultimate) |
+| --- | --- | --- | --- |
+| `pc: PChar` | 1 | tyChar | tyChar |
+| `ppc: ^PChar` | 2 | **tyPointer** | **tyChar** |
+| `pr: ^TRec` | 1 | tyRecord | tyRecord (rec 29) |
+| `raw: Pointer` | 0 | tyUnknown | tyUnknown |
+
+They coincide at depth ≤ 1, which is why the single existing reader
+(`ir.inc:2506`, the char-pointer check) is correct today and why nothing has
+caught it.
+
+### The obvious fix is NOT safe yet — this is the part worth recording
+
+The clean shape is: `TTypeRef` gains `PtrDepth`, and `PtrBaseTk`/`PtrBaseRec`
+are fed from `SymPtrBaseTk`/`SymPtrBaseRec` so they mean what they are named
+(the immediate pointee stays derivable: depth > 1 ⇒ tyPointer, else the base —
+which is exactly how the deref chain in `pasparser_lval.inc` already reasons).
+The one existing reader then guards on `PtrDepth = 1`, which is a correctness
+improvement in its own right.
+
+**It cannot land until the old arrays are themselves in lockstep, and they are
+not:**
+
+```
+Syms[..].PtrElemTk := ...  outside symtab.inc : 21 sites
+  ast_syminfer 6 · cparser 9 · pasparser_decl 2 · pasparser_proc 1
+  · pasparser_stmt 1 · pyparser 2
+SymPtrDepth[..] := ...     outside symtab.inc :  9 sites  (all cparser)
+```
+
+So **twelve post-creation sites set the immediate pointee and never touch depth
+or base.** Feeding `PtrBaseTk` from `SymPtrBaseTk` today would make it read
+`tyUnknown` at every symbol those twelve touch, and the char-pointer check would
+silently stop firing. That is the same shape as the two backend migrations
+reverted on 2026-08-01 (`9b73ff4d6`, `e484fde67`) — a parallel-array sync miss
+that a happy-path corpus does not exercise — and the same lesson: *sync the
+write side first, then migrate reads.*
+
+### Concrete next step for whoever takes this
+
+1. Make the pointer triple (`PtrElemTk`/`PtrElemRec`, `SymPtrDepth`,
+   `SymPtrBaseTk`/`SymPtrBaseRec`) written together at all 21 post-creation
+   sites — a `SetSymPointerType(idx, elemTk, elemRec, depth, baseTk, baseRec)`
+   helper, so there is one place to forget instead of five fields. That is
+   independently valuable and is the actual root cause behind the filed bug.
+2. Then add `PtrDepth` to `TTypeRef` and re-point `PtrBaseTk`/`Rec` at the
+   ultimate base, updating `ir.inc:2506` to guard on depth.
+3. Then lane 4 proper: `ProcRetTR`, populated at the 10 sites, read by a new
+   `AN_CALL` arm in the deref chain — which is what closes the filed bug.
+
+Each step under `make compiler/pascal26` + `tools/gate.sh quick`, and re-run the
+88-pair PChar differential recorded in
+[[refactor-centralize-managed-string-pchar-conversion]] (currently 5 diverging,
+all of them the `GetQ^` shape) as the acceptance check.
+
+**Also: this ticket is in `backlog/`, which the 2026-08-19 triage asked for.
+That move happened. No action needed.**
