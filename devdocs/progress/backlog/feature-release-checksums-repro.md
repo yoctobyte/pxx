@@ -1,5 +1,10 @@
 ---
 prio: 50
+track: A
+type: feature
+status: backlog
+owner: ""
+blocked-by: [decide-release-signing-key-custody]
 ---
 
 # Verifiable releases: checksums + signatures + the reproducible-build claim
@@ -46,6 +51,17 @@ reproduces the artifact byte-for-byte on a clean machine; the download page show
 steps.
 
 ## Log
+- 2026-08-24 — blocked on [[decide-release-signing-key-custody]]. Step 2 needs a
+  private key an agent must not generate or hold, so this ticket sat at the head
+  of Track A's ready queue where nobody could finish it. Steps 1 and 3 turn out
+  to be mostly DONE already and were not noticed: `tools/release.sh` writes a
+  `MANIFEST.sha256` over every prebuilt binary, attaches it to the Release as its
+  own asset, and ships a `selfcheck.sh` that rebuilds each binary on the
+  downloader's host and diffs it against that manifest — the reproducible-build
+  claim is machinery, not copy. What is genuinely missing without a key: a
+  `SHA256SUMS` over the published TARBALL (today you must extract before you can
+  verify anything) and the verify-it-yourself prose. Both are listed in the
+  decide ticket as the first things to do once it is answered.
 - 2026-07-12 — opened, out of the website/impersonation discussion. The insight worth keeping:
   the anti-impersonation argument points toward the download pipeline being **public and
   verifiable**, not private.

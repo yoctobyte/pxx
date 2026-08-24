@@ -53,7 +53,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (299)
+## backlog (300)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -175,6 +175,7 @@ _none_
 | decide-classinfo-returns-our-blob-or-nothing | U | 35 | decide | `TObject.ClassInfo` is the last unimplemented member of the TObject API. Returning our own class blob is right for identity comparison and wrong for anything that walks FPC's TTypeInfo layout. Three options: emit it as our blob, refuse it, or route it through the typinfo facade. Needs the owner's call on how far reflection parity goes. | — |
 | decide-old-style-object-types | U | 30 | decide | Decide: do we implement Turbo Pascal `object` types? | — |
 | decide-pointer-difference-unit | U | 30 | decide | FPC's `p - q` answers BYTES when either operand is an untyped Pointer (which includes `@x` under the default {$TYPEDADDRESS OFF}) and ELEMENTS when both are the same typed pointer. pxx always answers elements. `p - @a[0]` therefore prints 8 in FPC and 2 in pxx — a silent difference in ported code. Match FPC, keep the uniform rule, or diagnose? | — |
+| decide-release-signing-key-custody | U | 50 | decide | feature-release-checksums-repro sits at the head of Track A's queue and cannot be finished by an agent: signing a release needs a PRIVATE KEY the user generates and holds, and a public key committed to the repo. Which tool (minisign vs GPG vs sigstore), who holds the secret, and where the public half is published are all human calls. The checksum and reproducible-build halves are agent-work and are listed below as what to do once this is answered. | — |
 | decide-rtti-kind-numbering | U | 40 | decide | typinfo.pas declares TTypeKind in FPC's order (tkInt64=19) but the RTTI blob the compiler emits carries the COMPILER's TTypeKind (tyInt64=13), so `if mi^.RetKind = Ord(tkInt64)` is silently false. Three ways out; they differ in whether the RTTI blob's numbering — a compiler ABI — changes. Recommendation: option 2. Needs a human call because option 1 breaks already-compiled consumers and option 2 spends the FPC-compatibility argument the FPC-ordered enum was added for. | — |
 | decide-should-a-null-variant-raise-like-fpc | U | 25 | decide | pxx spells FPC's Null and Unassigned with ONE tag (VT_EMPTY). fpc 3.2.2 prints/casts an Unassigned as the empty string but RAISES EVariantTypeCastError for a Null, in both `string(v)` and `WriteLn(v)`. Rendering now follows the Unassigned half, which is the only answer one tag can give. Adopting the raise means either a second tag or making Null and Unassigned both die -- a language call, not a bug fix. | — |
 | decide-variant-bitwise-width | U | 30 | decide | FPC narrows a Variant to 32 bits before a bitwise op, so `v(-12) shr 1` is 2147483642 there; pxx works in 64 bits and its `shr` is arithmetic, giving -6. Three readings of one expression (FPC's, Pascal's logical shr, our sar) and they agree on every non-negative operand. Which one do we owe? | — |
@@ -305,7 +306,7 @@ _none_
 | feature-port-openbsd-libc | A | 50 | feature | OpenBSD/amd64 target — route RTL through libc.so; pinsyscalls satisfied by construction | feature-port-rtl-over-libc |
 | feature-port-windows-pe | M | 25→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
 | feature-promo-launch-plan | W | 25 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | — |
-| feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
+| feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | decide-release-signing-key-custody |
 | feature-t-fail-when-a-test-file-is-wired-into-no-build-rule | T | 45 | feature | A file in test/ is not a test until a build rule runs it. Two confirmed cases of a test that existed, passed, and was referenced by nothing — one ungated for two weeks. Proposed: a check (progress.sh check or testmgr) that fails when a test/*.expected or test/*.npy has no rule referencing it, converting the class from 'someone notices' to 'CI notices'. | — |
 | feature-t-fpc-probe-needs-a-trunk-oracle | T | 25 | feature | Every FPC-parity finding we produce is measured against installed FPC 3.2.2, so it inherits 3.2.2's bugs — and that has now twice produced a false 'pxx diverges from FPC' where pxx actually agreed with FPC trunk and only 3.2.2 was wrong. Give the probes a three-way verdict: pxx vs FPC-stable vs FPC-trunk. | — |
 | feature-t-freebsd-image-and-runner | T | 55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | — |
@@ -650,13 +651,13 @@ _none_
 - [p 55] [O] feature-opt-heap-per-thread-cache
 - [p 55] [T] feature-t-tier-job-self-compile-differential-across-o-levels
 - [p 53] [S] feature-esp-peripheral-callback-api
+- [p 50] [U] decide-release-signing-key-custody (unblocks 1)
 - [p 50] [N] bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - [p 50] [N] bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - [p 50] [T] bug-t-track-ts-own-pushes-destroy-track-ts-own-breadth-coverage
 - [p 50] [P] chore-p-read-text-char-test-hardcodes-tmp-paths
 - [p 50] [E] feature-demo-songformatter-pxx-target
 - [p 50] [A] feature-nilpy-collections-and-string-methods
-- [p 50] [A] feature-release-checksums-repro
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [B] bug-b-format-percent-u-prints-a-signed-value
@@ -920,6 +921,7 @@ _none_
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
+- **1** — decide-release-signing-key-custody
 - **1** — decide-rtti-kind-numbering
 - **1** — decide-xml-etree-thin-tree-model-or-a-real-xml-library
 - **1** — feature-nilpy-object-reclamation
