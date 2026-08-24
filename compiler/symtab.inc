@@ -3704,6 +3704,35 @@ begin
   SymCapacity := n;
 end;
 
+procedure DbgReportSymPtr(si: Integer; const name: AnsiString);
+{ PXXDBG=a.symptr:<name> (or `*`) — what a declaration actually RECORDED about a
+  pointer-shaped variable: depth, immediate pointee, ultimate base. The
+  predicates that decide "is this a PChar" read exactly these fields, so a shape
+  that lowers wrong is either metadata that was never populated or a reader that
+  never looked, and this says which without a print-bisect.
+
+  Called from EVERY Alloc* path, not just the scalar one. It was scalar-only,
+  which made it blind to the exact shape it was written to diagnose: for
+  `array[0..1] of ^PChar` the interesting fields are recorded by AllocArray, so
+  `PXXDBG=a.symptr:*` printed every symbol in the program EXCEPT the one being
+  investigated. A probe with a hole in it is worse than no probe, because the
+  silence reads as an answer.
+
+  Note what the array case does with these fields: an array symbol is not itself
+  a pointer, so AllocArray parks the ELEMENT's depth/base in the symbol's own
+  SymPtrDepth/SymPtrBaseTk slots. isArray is what tells the two apart.
+  refactor-centralize-managed-string-pchar-conversion }
+begin
+  if not PxxDbgWants('a.symptr', name) then Exit;
+  WriteLn('PXXDBG a.symptr ', name, ' kind=', Ord(Syms[si].TypeKind),
+          ' isArray=', Syms[si].IsArray,
+          ' elemType=', Ord(Syms[si].ElemType),
+          ' depth=', SymPtrDepth[si],
+          ' ptrElemTk=', Ord(Syms[si].PtrElemTk),
+          ' baseTk=', SymPtrBaseTk[si],
+          ' baseRec=', SymPtrBaseRec[si]);
+end;
+
 function AllocVar(const name: AnsiString; tk: TTypeKind): Integer;
 var sz, align: Integer;
 begin
@@ -3809,20 +3838,8 @@ begin
     end;
   end;
   SymSyncTypeRef(SymCount);
-  { PXXDBG=a.symptr:<name> (or `*`) — what a declaration actually RECORDED about
-    a pointer variable: depth, immediate pointee, ultimate base. The predicates
-    that decide "is this a PChar" read exactly these fields, so a shape that
-    lowers wrong is either metadata that was never populated or a reader that
-    never looked — and this says which, without a print-bisect.
-    refactor-centralize-managed-string-pchar-conversion }
-  if PxxDbgWants('a.symptr', name) then
-    WriteLn('PXXDBG a.symptr ', name, ' kind=', Ord(tk),
-            ' depth=', SymPtrDepth[SymCount],
-            ' elemTk=', Ord(Syms[SymCount].PtrElemTk),
-            ' baseTk=', SymPtrBaseTk[SymCount],
-            ' isArray=', Syms[SymCount].IsArray,
-            ' arrElemPtrTk=', Ord(Syms[SymCount].PtrElemTk));
   SymAbsAliased[SymCount] := False;   { recycled slot: an earlier scope's `absolute` must not leak in }
+  DbgReportSymPtr(SymCount, name);
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
@@ -3937,6 +3954,7 @@ begin
   Syms[SymCount].Offset := -FrameSize;
   SymSyncTypeRef(SymCount);
   SymAbsAliased[SymCount] := False;   { recycled slot: an earlier scope's `absolute` must not leak in }
+  DbgReportSymPtr(SymCount, name);
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
@@ -4162,6 +4180,7 @@ begin
   LastTypeElemDynDepth := 0;   { consumed }
   SymSyncTypeRef(SymCount);
   SymAbsAliased[SymCount] := False;   { recycled slot: an earlier scope's `absolute` must not leak in }
+  DbgReportSymPtr(SymCount, name);
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
@@ -4254,6 +4273,7 @@ begin
   end;
   SymSyncTypeRef(SymCount);
   SymAbsAliased[SymCount] := False;   { recycled slot: an earlier scope's `absolute` must not leak in }
+  DbgReportSymPtr(SymCount, name);
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
@@ -4294,6 +4314,7 @@ begin
   SymUnitIdx[SymCount] := CurrentUnitIdx;
   SymSyncTypeRef(SymCount);
   SymAbsAliased[SymCount] := False;   { recycled slot: an earlier scope's `absolute` must not leak in }
+  DbgReportSymPtr(SymCount, name);
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 

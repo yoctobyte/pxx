@@ -7562,6 +7562,15 @@ test-core: $(COMPILER)
 	# against fpc 3.2.2 on the same source.
 	./$(COMPILER) test/test_pchar_pointer_to_pchar.pas $(TESTTMP)/test_pchar_ppchar26
 	test "$$($(TESTTMP)/test_pchar_ppchar26)" = "$$(printf 'abcde\nxabcde\nabcdey\nabcde\nabcde\n5\nTRUE\nFALSE\nabcde\nyabcde\nabcde\nzabcde\nTRUE\n5\n5\n4')"
+	# ...and an ELEMENT of an `array of ^PChar`, dereferenced, over both a static
+	# and a dynamic array. The last open shape of that ticket, and it was
+	# recorded there as genuinely missing metadata needing a new SymElemPtrDepth
+	# -- it is not. An array symbol is not itself a pointer, so AllocArray parks
+	# the ELEMENT's depth and base in the symbol's own SymPtrDepth/SymPtrBaseTk;
+	# the deref chain's AN_INDEX arm read the immediate pointee and never the
+	# pair beside it. .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_pchar_array_of_pointer_to_pchar.pas $(TESTTMP)/test_pchar_arr_ppc26
+	test "$$($(TESTTMP)/test_pchar_arr_ppc26)" = "$$(cat test/test_pchar_array_of_pointer_to_pchar.expected)"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; test "$$?" = "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26

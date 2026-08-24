@@ -440,3 +440,98 @@ an element TYPE REFERENCE rather than another two parallel fields, which is
 exactly what [[feature-a-typeref-migrate-consumers]] is for (`SymTR` already
 carries `PtrBaseTk` for the symbol itself). Left open and tied there rather than
 bolted on — the ticket has enough parallel-field pairs already.
+
+## The last open shape closed, 2026-08-24 — and the diagnosis above it was wrong
+
+The section before this one closes with:
+
+> `qa[0]^` where `qa: array[0..1] of ^PChar` ... **unlike the residual it
+> replaces, this one really is missing metadata.** An array symbol records its
+> element's immediate pointee (`Syms[].PtrElemTk`) and **nothing about the
+> element's own depth or base** — there is no `SymElemPtrDepth`.
+
+That is wrong, and it is wrong in the same direction the ticket has now been
+wrong twice: **the metadata was there and the reader was missing.**
+
+`AllocArray` (`compiler/symtab.inc`) already does, for `elemType = tyPointer`:
+
+```pascal
+  SymPtrDepth[SymCount]   := LastTypePointerDepth;
+  SymPtrBaseTk[SymCount]  := LastTypePointerBaseTk;
+  SymPtrBaseRec[SymCount] := LastTypePointerBaseRec;
+```
+
+An array symbol is not itself a pointer, so those three slots are free and
+`AllocArray` parks the **element's** depth and ultimate base in them. Measured,
+not read:
+
+```
+PXXDBG a.symptr qq kind=17 isArray=TRUE elemType=17 depth=2 ptrElemTk=17 baseTk=3 baseRec=0
+```
+
+`depth=2` over `baseTk=3` (tyChar) is precisely "pointer to pointer to char".
+`SymElemPtrDepth` was never needed.
+
+### The probe had a hole exactly where the question was
+
+Getting that one line took extending `PXXDBG=a.symptr` first: it was called
+from `AllocVar` only, so for an ARRAY of pointers — the one shape it was written
+to diagnose — `a.symptr:*` printed every symbol in the program **except** the
+one under investigation, and the silence read as an answer. It is now one
+`DbgReportSymPtr` called from all five `Alloc*` tails, and it reports `isArray`
+and `elemType` so the array case's field-reuse is visible rather than
+confusing.
+
+That is `devdocs/dev/debugging-playbook.md` twice over in one ticket: the
+previous instalment recorded *"the first arm added here was written against an
+ASSUMED symbol layout, compiled, and changed nothing"*, and this one would have
+repeated it — a new `SymElemPtrDepth` array, populated, read, and identical
+output, because the value was already sitting in the field beside it.
+
+### The fix
+
+Four lines in the deref chain's `AN_INDEX` arm (`pasparser_lval.inc`), mirroring
+the `AN_IDENT` arm four lines above it, which already read exactly this triple.
+The `AN_INDEX` arm read the immediate pointee and stopped.
+
+### Measured, as a cross product
+
+**88 programs** — 11 PChar sources (a var, `q^`, `q[0]`, `qa[0]^`, `qa[1]^`,
+`qd[0]^` over a *dynamic* array of `^PChar`, `GetQ^`, a record field, a static
+array element, a dynamic array element, pointer arithmetic) x 8 contexts
+(`WriteLn`, assign, concat on either side, `AnsiString()`, `Length`, `=`, `<>`),
+each its own program, each diffed against fpc 3.2.2.
+
+```
+pinned  : 36 diverged
+HEAD    :  5 diverged
+```
+
+**All five remaining are one new shape**, not a residue of this one: a FUNCTION
+returning `^PChar`. Filed as
+[[bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape]] —
+and that one genuinely IS missing metadata, verified by grep this time rather
+than assumed: `ProcRetPtrElemTk`/`Rec` are the immediate pointee and there is no
+`ProcRetPtrDepth`, so `PChar` and `^PChar` are indistinguishable as return
+types. Deliberately **not** fixed here by adding two more parallel arrays — this
+ticket's own text rules that out — and routed to
+[[feature-a-typeref-migrate-consumers]] lane 4, which is 10 write sites and 7
+read sites.
+
+That routing surfaced a **blocker inside the TypeRef design** worth stating
+here, because it blocks the lane and not the bug: `TTypeRef` has
+`PtrBaseTk`/`PtrBaseRec` and `DynDepth` (dynamic-array nesting) but **no pointer
+depth field**, so as declared it cannot express "pointer to (pointer to char)"
+any better than the pair it replaces. Adding `PtrDepth` is additive and looks
+clearly right, but it changes a shared type mid-migration.
+
+### Test
+
+`test/test_pchar_array_of_pointer_to_pchar.pas` + `.expected` (which IS fpc
+3.2.2's output on that source), 12 rows over both a static and a dynamic array
+of `^PChar` — two different allocators reaching the same arm. Byte-identical to
+FPC natively and under qemu on **i386 / aarch64 / arm32 / riscv32**. `pinned`
+gets four rows wrong. Wired into `test-core`.
+
+**Gate:** `make compiler/pascal26` fixedpoint converged in one round; the 88-pair
+differential; the four cross targets; `tools/gate.sh quick` GREEN.

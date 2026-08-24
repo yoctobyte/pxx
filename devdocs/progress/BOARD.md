@@ -355,12 +355,13 @@ _none_
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (3)
+## backlog_new (4)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-riscv32-diagnostic-names-the-wrong-target | A | 20 | bug | `--target=riscv32` on a program with an external cdecl symbol fails with `target esp32: external (dynamic) symbols not yet supported`. The user typed riscv32, the message says esp32, and the two are different things — riscv32 is a hosted Linux target in its own right, not only the ESP32-C3 profile. One shared arm, one hard-coded name. | — |
 | bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 30 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
+| bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape | P | 30 | bug | A function returning `^PChar`, dereferenced, is wrong in the four contexts that refuse to guess: WriteLn prints the address in decimal, concat on either side yields the address, and `=`/`<>` compare pointers. The three contexts that look right are right only by the blanket `AnsiString(<any pointer>)` rule. Unlike the array shape beside it, this one genuinely IS missing metadata: a proc records ProcRetPtrElemTk/Rec — the immediate pointee — and nothing about the return pointer's DEPTH or ultimate BASE. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 35 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
 
 ## experimental (20)
@@ -809,6 +810,7 @@ _none_
 - [p 30] [N] bug-nilpy-an-extended-slice-cannot-be-assigned
 - [p 30] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
 - [p 30] [P] bug-p-a-variant-refuses-wide-chars-and-interfaces
+- [p 30] [P] bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape
 - [p 30] [T] bug-t-fpc-seed-canary-red-cited-lines-that-cannot-contain-the-identifier
 - [p 30] [A] chore-a-re-include-bench-timing-in-tools-devtest
 - [p 30] [T] chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile

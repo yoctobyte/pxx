@@ -1089,6 +1089,30 @@ begin
           begin
             tk := Syms[ASTIVal[baseNode]].PtrElemTk;
             recName := Syms[ASTIVal[baseNode]].PtrElemRec;
+            { ...and the element's DEPTH and ultimate BASE, exactly as the
+              AN_IDENT arm above reads them. This arm read only the immediate
+              pointee, so `qa[0]^` over `array[0..1] of ^PChar` came out as a
+              bare pointer with no depth and no base -- and every predicate that
+              asks "one level remaining over a char base?" answered no.
+              WriteLn(qa[0]^) printed the address, `'x' + qa[0]^` was empty and
+              `qa[0]^ = 'alpha'` compared pointers, while the three contexts that
+              work by the blanket AnsiString(<any pointer>) rule looked fine --
+              the mix that reads as "half a shape is supported".
+
+              This was recorded in the ticket as genuinely ABSENT metadata
+              needing a new SymElemPtrDepth. It is not absent. An array symbol
+              is not itself a pointer, so AllocArray parks the ELEMENT's depth
+              and base in the symbol's own SymPtrDepth/SymPtrBaseTk slots --
+              measured with PXXDBG=a.symptr, which needed extending to the array
+              alloc paths before it could answer (it was scalar-only, i.e. blind
+              to the one shape it was written to diagnose). Reader half, again.
+              refactor-centralize-managed-string-pchar-conversion }
+            if SymPtrDepth[ASTIVal[baseNode]] > 0 then
+            begin
+              remDepth := SymPtrDepth[ASTIVal[baseNode]] - 1;
+              ptrBaseTk := SymPtrBaseTk[ASTIVal[baseNode]];
+              ptrBaseRec := SymPtrBaseRec[ASTIVal[baseNode]];
+            end;
           end
           else
           begin
