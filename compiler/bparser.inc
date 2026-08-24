@@ -266,6 +266,38 @@ begin
   Result := node;
 end;
 
+function BVarTypeForInit(rhsNode: Integer): TTypeKind;
+{ The type a BASIC variable takes from its initialiser.
+
+  BASIC has no character type, no `A$` sigil and no type declarations -- a
+  variable is whatever its first assignment says it is, and there are exactly
+  two spellings it can hold: a number or a string. So a ONE-CHARACTER literal is
+  a string here, and this is where that had to be said.
+
+  It was not, and both copies of this rule read `ASTTk = tyString` alone. The
+  RHS comes from the shared Pascal expression parser, which tags `'x'` as
+  tyChar and `'xy'` as tyString -- so `DIM m = "x" : PRINT m` fell through to
+  tyInteger and printed **120**, while `DIM m = "hello"` printed hello and
+  `PRINT "x"` written directly printed x. A silent wrong answer in a two-line
+  program, reachable only through a variable, and only for a literal of length
+  one. bug-a-basic-prints-a-string-variable-as-its-character-code
+
+  Note this is NOT a case of teaching BASIC about tyChar: it is normalising the
+  ONE shape BASIC actually has (devdocs/dev/normalise-dont-special-case.md).
+  A frozen tyString variable is what every downstream BASIC path already
+  handles; a tyChar variable is a third shape nothing here supports. The two
+  call sites -- `DIM`/`VAR` and the LET-less `I = <expr>` form -- had drifted
+  into two copies of the rule, which is how one of them would have been fixed
+  and the other left. }
+begin
+  if (ASTTk[rhsNode] = Ord(tyString)) or
+     (ASTTk[rhsNode] = Ord(tyAnsiString)) or
+     (ASTTk[rhsNode] = Ord(tyChar)) then
+    BVarTypeForInit := tyString
+  else
+    BVarTypeForInit := tyInteger;
+end;
+
 function ParseBStatement: Integer;
 var
   stmtNode: Integer;
@@ -306,9 +338,7 @@ begin
     symIdx := FindSym(vname);
     if symIdx < 0 then
     begin
-      vtype := tyInteger;
-      if ASTTk[rhsNode] = Ord(tyString) then
-        vtype := tyString;
+      vtype := BVarTypeForInit(rhsNode);
       symIdx := AllocVar(vname, vtype);
     end;
     
@@ -570,9 +600,7 @@ begin
             Next;
             ParseExpr;
             rhsNode := CurASTNode;
-            vtype := tyInteger;
-            if ASTTk[rhsNode] = Ord(tyString) then
-              vtype := tyString;
+            vtype := BVarTypeForInit(rhsNode);
             symIdx := AllocVar(vname, vtype);
             
             lhsNode := AllocNode(AN_IDENT);

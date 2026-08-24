@@ -50,14 +50,37 @@ deferred:
    on "does this source concatenate" keeps the small programs small.
 2. **Give BASIC frozen-string concatenation** that does not reach the managed
    path at all. BASIC has no `A$` variables and its `DIM s = "..."` is a
-   `tyString`, so the managed path may be entirely gratuitous here — but see
-   [[bug-a-basic-prints-a-string-variable-as-its-character-code]], which
-   suggests the string-variable path is not carrying its type correctly in the
-   first place. **Settle that one first**; it may turn out this is the same
-   defect wearing a second hat.
+   `tyString`, so the managed path may be entirely gratuitous here.
 
 Option 2 is the more attractive answer and the less certain one, which is
 exactly why it should not be guessed at.
+
+## Checked 2026-08-24: NOT the same defect as the one-char-string bug
+
+This ticket used to say *"see
+[[bug-a-basic-prints-a-string-variable-as-its-character-code]] ... settle that
+one first; it may turn out this is the same defect wearing a second hat."*
+It was settled, and it is **not**. With one-character initialisers now correctly
+typed as strings, `PRINT s + t` still fails identically for `"abc" + "def"` and
+for `"a" + "b"`. Independent bug, unchanged scope.
+
+## ...and it has a THIRD sibling: string COMPARISON, on cross targets only
+
+Found the same day, by the same fix. `IF a = "x"` in a unit-free `.bas` program
+used to pass by accident — the variable was a tyInteger holding 120, so it was
+an integer compare. Now that it is a real string compare it needs `PXXStrEq`,
+and on aarch64 and arm32 that is
+
+```
+pascal26:22: error: compiler error: PXXStrEq not found
+```
+
+x86-64 and i386 compile it — they have an inline path — which is why this is
+recorded here rather than filed separately: it is the same root (a
+managed-string helper whose body ships only with builtinheap) reached through a
+third operator, and it should be fixed by the same decision. Whichever option
+above is chosen must cover `+`, `=` and `<>`, and the cross rows are what prove
+it — the native tier alone would call two of the three fixed.
 
 # Gate when it is done
 

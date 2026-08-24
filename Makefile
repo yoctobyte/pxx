@@ -5283,6 +5283,15 @@ test-core: $(COMPILER)
 	# bug-a-a-unit-free-basic-program-calls-a-helper-it-never-emits
 	./$(COMPILER) test/test_basic_unit_free_string_literal.bas $(TESTTMP)/test_basic_uf26
 	test "$$($(TESTTMP)/test_basic_uf26)" = "$$(printf 'unit-free\nline numbered too')"
+	# A BASIC variable initialised from a ONE-CHARACTER string literal. It printed
+	# 120 -- Ord('x') -- while a multi-char literal printed fine and the literal
+	# written directly into PRINT printed fine: the shared Pascal expression
+	# parser tags 'x' as tyChar and 'xy' as tyString, and both copies of BASIC's
+	# variable-typing rule tested for tyString alone. Both spellings (DIM and the
+	# LET-less `c = <expr>`) are covered, because the rule was in two copies.
+	# bug-a-basic-prints-a-string-variable-as-its-character-code
+	./$(COMPILER) test/test_basic_one_char_string_var.bas $(TESTTMP)/test_basic_ocs26
+	test "$$($(TESTTMP)/test_basic_ocs26)" = "$$(printf 'x\nhello\ny\n5')"
 	@if command -v qemu-aarch64 >/dev/null 2>&1 && command -v qemu-arm >/dev/null 2>&1; then \
 	  for arch in i386 aarch64 arm32; do \
 	    ./$(COMPILER) --target=$$arch test/test_basic_goto_gosub.bas $(TESTTMP)/test_basic_gg_$$arch >/dev/null; \
@@ -5297,6 +5306,9 @@ test-core: $(COMPILER)
 	    ./$(COMPILER) --target=$$arch test/test_basic_unit_free_string_literal.bas $(TESTTMP)/test_basic_uf_$$arch >/dev/null; \
 	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_uf_$$arch)" = "$$(printf 'unit-free\nline numbered too')" \
 	      || { echo "cross .bas unit-free FAIL on $$arch"; exit 1; }; \
+	    ./$(COMPILER) --target=$$arch test/test_basic_one_char_string_var.bas $(TESTTMP)/test_basic_ocs_$$arch >/dev/null; \
+	    test "$$(tools/run_target.sh $$arch $(TESTTMP)/test_basic_ocs_$$arch)" = "$$(printf 'x\nhello\ny\n5')" \
+	      || { echo "cross .bas one-char string var FAIL on $$arch"; exit 1; }; \
 	    echo "cross .bas ok: $$arch"; \
 	  done; \
 	else \
