@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T07:12:45Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "2edda4e9a2f8fac68cf79097e7ae82eaf82a02c8",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T07:22:26Z",
    "fixed": [],
    "new_red": [],
@@ -484,6 +476,14 @@
     "test-core#src:test/test_operator_implicit_shortstring_b356.pas"
    ],
    "sha": "203438d2cf6306c543194034cc6980662e5c23bf",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-24T20:24:17Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "fcdc530172cd71faa125cd1c56094b1fed2ef780",
    "tier": "native",
    "verdict": "RED"
   }
@@ -1472,8 +1472,10 @@
   "test-core#src:test/test_auto_var.pas": "native",
   "test-core#src:test/test_bare_procvar_call_b273.pas": "native",
   "test-core#src:test/test_bare_property.pas": "native",
-  "test-core#src:test/test_basic_comprehensive.bas": "native",
+  "test-core#src:test/test_basic_comprehensive.bas@1": "native",
   "test-core#src:test/test_basic_goto_gosub.bas@1": "native",
+  "test-core#src:test/test_basic_one_char_string_var.bas": "native",
+  "test-core#src:test/test_basic_unit_free_string_literal.bas@1": "native",
   "test-core#src:test/test_big_static_array_open_param.pas": "native",
   "test-core#src:test/test_bitwise_not_lvalue_b280.pas": "native",
   "test-core#src:test/test_block_mem_intrinsic.pas": "native",
@@ -2062,6 +2064,7 @@
   "test-core#src:test/test_not.pas": "native",
   "test-core#src:test/test_not_int64_expr.pas": "native",
   "test-core#src:test/test_not_of_negated_operand.pas": "native",
+  "test-core#src:test/test_not_operand_type_matrix.pas": "native",
   "test-core#src:test/test_not_ord_bitwise.pas": "native",
   "test-core#src:test/test_o3_residency_six_hot_locals.pas": "native",
   "test-core#src:test/test_object_ref_array_identity.pas": "native",
@@ -4525,8 +4528,10 @@
   "test-core#src:test/test_auto_var.pas": "pass",
   "test-core#src:test/test_bare_procvar_call_b273.pas": "pass",
   "test-core#src:test/test_bare_property.pas": "pass",
-  "test-core#src:test/test_basic_comprehensive.bas": "pass",
+  "test-core#src:test/test_basic_comprehensive.bas@1": "pass",
   "test-core#src:test/test_basic_goto_gosub.bas@1": "pass",
+  "test-core#src:test/test_basic_one_char_string_var.bas": "pass",
+  "test-core#src:test/test_basic_unit_free_string_literal.bas@1": "pass",
   "test-core#src:test/test_big_static_array_open_param.pas": "pass",
   "test-core#src:test/test_bitwise_not_lvalue_b280.pas": "pass",
   "test-core#src:test/test_block_mem_intrinsic.pas": "pass",
@@ -5112,6 +5117,7 @@
   "test-core#src:test/test_not.pas": "pass",
   "test-core#src:test/test_not_int64_expr.pas": "pass",
   "test-core#src:test/test_not_of_negated_operand.pas": "pass",
+  "test-core#src:test/test_not_operand_type_matrix.pas": "pass",
   "test-core#src:test/test_not_ord_bitwise.pas": "pass",
   "test-core#src:test/test_o3_residency_six_hot_locals.pas": "pass",
   "test-core#src:test/test_object_ref_array_identity.pas": "pass",
@@ -6592,11 +6598,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-24T19:22:32Z",
-  "sha": "203438d2cf6306c543194034cc6980662e5c23bf",
+  "date": "2026-08-24T20:24:17Z",
+  "sha": "fcdc530172cd71faa125cd1c56094b1fed2ef780",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.1
+  "wall": 3600.3
  },
  "last_bench": {
   "conf_rows": 550,
