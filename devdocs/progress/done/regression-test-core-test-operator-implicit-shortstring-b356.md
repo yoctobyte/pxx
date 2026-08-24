@@ -60,4 +60,4 @@ shapes it should never have seen.
 The 625-pair fpc differential is unchanged by both escape hatches — still 416
 accepted, 202 tightenings, **0 regressions** — so the diagnostic did not lose
 any of its reach.
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit 1174c2f54.
