@@ -4770,6 +4770,15 @@ test-core: $(COMPILER)
 	# RUNS, because "accepted" and "correct" are different claims.
 	./$(COMPILER) test/test_assign_compatible_types.pas $(TESTTMP)/test_asgok26
 	test "$$($(TESTTMP)/test_asgok26)" = "compat 7 abc 7 0 2"
+	# `not` over every operand shape the deleted node-kind whitelist ever named,
+	# plus the ones it deliberately distrusted. The list grew one entry per bug
+	# report -- array element, field, deref, Ord(x), value-cast, nested not,
+	# and/or/xor at explicit width, arithmetic binop, unary minus -- and each
+	# arrived AFTER someone shipped wrong bits. The operand's type decides now;
+	# this row is what stops the list growing back. .expected IS fpc 3.2.2's own
+	# output on this source. feature-a-trust-the-operand-type-for-not
+	./$(COMPILER) test/test_not_operand_type_matrix.pas $(TESTTMP)/test_not_matrix26
+	test "$$($(TESTTMP)/test_not_matrix26)" = "$$(cat test/test_not_operand_type_matrix.expected)"
 	./$(COMPILER) test/test_delphi_generics.pas $(TESTTMP)/test_delphi_generics26
 	test "$$($(TESTTMP)/test_delphi_generics26)" = "$$(printf '42\nhi')"
 	./$(COMPILER) test/test_inline_array_field_const_bound.pas $(TESTTMP)/test_inline_array_field_const_bound26

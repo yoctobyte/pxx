@@ -274,7 +274,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     castTk2: TTypeKind;   { postfix tail on a record-factory result }
     helperPi, sci: Integer;
     isLiftedCall: Boolean;
-    bitNot, opIsArith: Boolean; notOp: Integer; notOrdTk: TTypeKind;
+    bitNot: Boolean; notOrdTk: TTypeKind;
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec, szQUnit: Integer;
     szScan, szBd, szExprNode: Integer;
     szIsExpr: Boolean;
@@ -1105,100 +1105,47 @@ begin
     begin
       Next; ParseFactor;
       left := CurASTNode;
-      { `not` is bitwise complement for integer operands (matches FPC), logical
-        for Boolean and everything else. The earlier all-logical rule existed
-        because a prior attempt keyed bitwise-vs-logical off the GLOBAL
-        LastExprTk tracker, which is clobbered between factors — so a boolean
-        `while not done` was mistyped as bitwise and hung self-compile.
+      { `not` is bitwise complement for an INTEGER operand (matches FPC) and
+        logical for everything else, decided from the operand's own ASTTk and
+        nothing else.
 
-        Drive it off the operand node's OWN type, but ONLY trust that type for
-        operand node kinds whose type is authoritative: an integer LITERAL or an
-        IDENTIFIER (its symbol's declared type). Computed expressions — AN_BINOP
-        (comparisons / boolean ops) and AN_CALL (boolean-returning functions) —
-        are NOT trusted here: PXX tags some of them tyInteger/tyInt64 even when
-        they are logically Boolean (e.g. `not (a = b)`, `not Eat(...)` appear in
-        compiler.pas with ASTTk = tyInteger), and promoting those to bitwise
-        diverges from FPC and breaks self-host / cross-bootstrap. So those keep
-        the long-standing logical behaviour. The IR_NOT codegen already emits
-        `not rax` for ordinal-non-boolean types. }
+        It used to be decided from ASTTk *and* a WHITELIST of operand node kinds
+        "whose type is authoritative", because the frontend once tagged some
+        logically-Boolean expressions tyInteger and trusting those flipped them
+        to `not rax` instead of `xor rax,1`. That list was a museum -- array
+        element, field, deref, Ord(x), value-cast, nested not, and/or/xor at
+        explicit width, arithmetic binop, unary minus -- and every entry arrived
+        AFTER someone shipped wrong bits, which is what
+        feature-a-trust-the-operand-type-for-not was filed to end: a whitelist of
+        the shapes someone happened to hit is not a rule, and the next shape is
+        already wrong with nobody knowing which.
+
+        The premise had EXPIRED. The mistagging it worked around was fixed by
+        other work: `not (a = b)`, `not Eat(...)`, `not (p and q)` and
+        `not (p or q)` all carry ASTTk = tyBoolean today (measured with
+        PXXDBG=a.ast). So the whitelist was fully subsumed by the type tag, and
+        deleting it changes no emitted code:
+
+          - the self-host fixedpoint converges in one round;
+          - the compiler WITH the list and the compiler WITHOUT it emit a
+            BYTE-IDENTICAL compiler.pas -- the largest and most `not`-dense
+            program in the repo -- and byte-identical binaries for the bitwise
+            tests and cbitnot_b11.c;
+          - a 53-expression `not` differential against fpc 3.2.2 (every operand
+            shape the list ever named, plus comparisons, boolean ops, qword
+            and/or/xor, Ord, casts, calls, derefs, array elements) gives exactly
+            the same results before and after.
+
+        Note the direction, which is why this is safe by construction: the old
+        condition was `integer-typed AND whitelisted`, so removing the second
+        half can only turn LOGICAL into BITWISE, never the reverse. The only way
+        it could break is an integer-TAGGED operand that is logically Boolean --
+        precisely what compiler.pas being byte-identical rules out.
+
+        Do not re-add a node-kind arm here. If a shape is wrong, the tag is
+        wrong; fix the tag. }
       node := AllocNode(AN_NOT); ASTLeft[node] := left;
-      { Bitwise only when the operand's integer type is AUTHORITATIVE. Beyond the
-        literal/identifier base case, three more operand shapes carry a trustworthy
-        integer type and so were wrongly forced boolean (the result became `xor
-        rax,1` — e.g. `not Int64(0)` printed TRUE):
-          - a built-in ordinal value-cast `Int64(e)`/`Cardinal(e)` (AN_PTR_CAST,
-            ASTIVal=-1) and the `Integer(e)`/`LongWord(e)` token-casts (AN_CALL
-            with the cast's negative op id);
-          - a pure ARITHMETIC/shift AN_BINOP (`x-1`, `x shr 1`): its operator is
-            unambiguously numeric, so unlike a comparison/`and`/`or`/`xor` binop
-            (which PXX sometimes mistags integer though it is logically boolean)
-            it can never be boolean. `shr` is lexed as an identifier, so its
-            operator id is Ord(tkIdent) — the only ident-operator binop.
-        and/or/xor stay logical (ambiguous), matching the prior behaviour, so the
-        compiler's own `not (a or b)` / `not (r and v)` keep self-host identical. }
-      notOp := Integer(ASTIVal[left]);
-      opIsArith := (notOp = Ord(tkPlus)) or (notOp = Ord(tkMinus)) or
-                   (notOp = Ord(tkStar)) or (notOp = Ord(tkDiv)) or
-                   (notOp = Ord(tkMod)) or (notOp = Ord(tkShl)) or
-                   (notOp = Ord(tkIdent)) or
-                   { and/or/xor are distrusted in general because a LOGICAL
-                     and/or is sometimes mistagged tyInteger (self-host relies
-                     on those staying logical — trusting all integer-tagged
-                     and/or breaks the fixedpoint). But an EXPLICIT sized type
-                     tag (tyInt8..tyNativeUInt, 7..16) never comes from that
-                     mistag — it means both operands really are that integer
-                     type — so `not (q3 or q4)` on qwords is bitwise
-                     (tint642's testnotqword printed a boolean flip). Plain
-                     tyInteger(1)-tagged and/or/xor stays logical. }
-                   (((notOp = Ord(tkAnd)) or (notOp = Ord(tkOr)) or
-                     (notOp = Ord(tkXor))) and
-                    (ASTTk[left] >= 7) and (ASTTk[left] <= 16));
-      bitNot :=
-        ((ASTTk[left] = 1) or ((ASTTk[left] >= 7) and (ASTTk[left] <= 16))) and
-        ((ASTKind[left] = AN_INT_LIT) or (ASTKind[left] = AN_IDENT) or
-         { An ARRAY ELEMENT, a record/class FIELD and a DEREF carry the declared type of
-           the element / field / pointee, which is exactly as authoritative as a variable's
-           — and they were missing from this list, so `not arr[i]` and `not rec.f` were
-           lowered as a BOOLEAN not. `not rb[0]` printed TRUE, and `mask[i] and not
-           rhs[i]` silently produced garbage: bit manipulation on array elements (masks,
-           hashing, crypto) was quietly wrong while the same code on a plain variable was
-           right. The tyBoolean guard above still keeps a genuine Boolean element logical. }
-         (ASTKind[left] = AN_INDEX) or (ASTKind[left] = AN_FIELD) or
-         (ASTKind[left] = AN_DEREF) or
-         { A unary MINUS, for exactly the reason the arithmetic-AN_BINOP arm at
-           the bottom gives: negation is unambiguously numeric, so it can never
-           be one of the logically-boolean expressions PXX mistags as integer.
-           Without it `not -1` and `not (-n)` became `xor rax,1` and printed
-           TRUE -- an integer expression answering a BOOLEAN, which is as loud a
-           wrong value as this list produces, and it survived because every
-           earlier entry was added for the shape that reported it.
-           bug-a-not-of-a-negated-operand-is-a-boolean-not }
-         (ASTKind[left] = AN_NEG) or
-         { a nested BITWISE not: its integer tag (checked above) is ours to
-           trust — `not(not(q))` flipped the outer one to boolean (tint642
-           error 2701). An inner LOGICAL not is tyBoolean and never gets here. }
-         (ASTKind[left] = AN_NOT) or
-         ((ASTKind[left] = AN_PTR_CAST) and
-          ((Integer(ASTIVal[left]) = -1) or (Integer(ASTIVal[left]) = -3))) or
-         ((ASTKind[left] = AN_CALL) and
-          ((Integer(ASTIVal[left]) = -Ord(tkInteger_T)) or
-           (Integer(ASTIVal[left]) = -Ord(tkLongWord_T)) or
-           { Ord(x) is an integer by definition — it was missing here, so
-             `not ord(e)` lowered as a BOOLEAN not (xor 1): silently wrong
-             integers in any hash/mask over an ordinal
-             (bug-pascal-not-of-ord-uses-boolean-negation). }
-           (Integer(ASTIVal[left]) = -Ord(tkOrd)))) or
-         { A user function call whose DECLARED return type is a non-boolean
-           ordinal is authoritative (unlike the node's ASTTk, which PXX sometimes
-           mistags). This trusts `not f()` for an Int64/Integer-returning f
-           (e.g. C const-eval `~CEvalConstPrimary()`) as bitwise, while a
-           Boolean-returning f (RetType = tyBoolean, e.g. `not Eat(..)`) still
-           falls through to logical. }
-         ((ASTKind[left] = AN_CALL) and (Integer(ASTIVal[left]) >= 0) and
-          (Integer(ASTIVal[left]) < ProcCount) and
-          TypeIsOrdinal(Procs[Integer(ASTIVal[left])].RetType) and
-          (Procs[Integer(ASTIVal[left])].RetType <> tyBoolean)) or
-         ((ASTKind[left] = AN_BINOP) and opIsArith));
+      bitNot := (ASTTk[left] = 1) or ((ASTTk[left] >= 7) and (ASTTk[left] <= 16));
       if bitNot then
       begin
         ASTTk[node] := ASTTk[left];
