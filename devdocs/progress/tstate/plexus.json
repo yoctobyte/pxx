@@ -1,32 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T10:18:59Z",
-   "fixed": [
-    "test-core#src:test/test_delphi_bare_alldefaulted_arg.pas",
-    "test-core#src:test/test_mode_delphi.pas",
-    "test-core#src:test/test_mode_delphi_callarg.pas",
-    "test-core#src:test/test_mode_delphi_methptr.pas",
-    "test-core#src:test/test_procvar_value_context.pas"
-   ],
-   "new_red": [
-    "test-asm#src:compiler/compiler.pas",
-    "test-core#src:test/test_rust_advanced.rs",
-    "test-core#src:test/test_rust_assoc_fns.rs",
-    "test-core#src:test/test_rust_chess_engine.rs",
-    "test-core#src:test/test_rust_chess_perft.rs",
-    "test-core#src:test/test_rust_chess_perft_full.rs",
-    "test-core#src:test/test_rust_chess_search.rs",
-    "test-core#src:test/test_rust_else_if.rs@1",
-    "test-core#src:test/test_rust_else_if.rs@2",
-    "test-core#src:test/test_rust_struct_array.rs",
-    "test-core#src:test/test_rust_tuple_struct.rs"
-   ],
-   "sha": "8654c4d55b61605fc5dea51a38887e713d5b9fc0",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T10:28:12Z",
    "fixed": [],
    "new_red": [],
@@ -488,6 +462,14 @@
    ],
    "new_red": [],
    "sha": "330466ca7f651c0f777b19859eaf0ae49a6d1cbd",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-24T23:29:53Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "c1925bbe38a6947b16d701bfa000f7c57d18e6a4",
    "tier": "native",
    "verdict": "RED"
   }
@@ -1483,6 +1465,7 @@
   "test-core#src:test/test_bool_const_varrec_b326.pas": "native",
   "test-core#src:test/test_builtin_name_demote.pas": "native",
   "test-core#src:test/test_builtin_name_params.pas": "native",
+  "test-core#src:test/test_builtin_pointer_cast_as_target.pas": "native",
   "test-core#src:test/test_builtin_pointer_types_b303.pas": "native",
   "test-core#src:test/test_builtin_tguid.pas": "native",
   "test-core#src:test/test_builtin_tobject.pas": "native",
@@ -1516,6 +1499,7 @@
   "test-core#src:test/test_c_unit_globals.pas": "native",
   "test-core#src:test/test_c_unit_pulled_via_pascal_unit.pas": "native",
   "test-core#src:test/test_call_arg_marshalling_32bit.pas": "native",
+  "test-core#src:test/test_call_result_as_open_array_argument.pas": "native",
   "test-core#src:test/test_call_result_member.pas": "native",
   "test-core#src:test/test_case_else_multistmt.pas": "native",
   "test-core#src:test/test_case_insensitive.pas": "native",
@@ -2065,6 +2049,7 @@
   "test-core#src:test/test_nilpy_widen_fix.npy": "native",
   "test-core#src:test/test_not.pas": "native",
   "test-core#src:test/test_not_int64_expr.pas": "native",
+  "test-core#src:test/test_not_of_a_constant_widens.pas": "native",
   "test-core#src:test/test_not_of_negated_operand.pas": "native",
   "test-core#src:test/test_not_operand_type_matrix.pas": "native",
   "test-core#src:test/test_not_ord_bitwise.pas": "native",
@@ -2087,6 +2072,7 @@
   "test-core#src:test/test_open_array_no_leak.pas": "native",
   "test-core#src:test/test_open_array_of_a_named_dynamic_array.pas": "native",
   "test-core#src:test/test_open_array_of_variant.pas": "native",
+  "test-core#src:test/test_open_array_param_slot_is_a_handle.pas": "native",
   "test-core#src:test/test_operator_enumerator.pas": "native",
   "test-core#src:test/test_operator_implicit_shortstring_b356.pas": "native",
   "test-core#src:test/test_opt_store_reload.pas": "native",
@@ -4543,6 +4529,7 @@
   "test-core#src:test/test_bool_const_varrec_b326.pas": "pass",
   "test-core#src:test/test_builtin_name_demote.pas": "pass",
   "test-core#src:test/test_builtin_name_params.pas": "pass",
+  "test-core#src:test/test_builtin_pointer_cast_as_target.pas": "pass",
   "test-core#src:test/test_builtin_pointer_types_b303.pas": "pass",
   "test-core#src:test/test_builtin_tguid.pas": "pass",
   "test-core#src:test/test_builtin_tobject.pas": "pass",
@@ -4575,6 +4562,7 @@
   "test-core#src:test/test_c_unit_globals.pas": "pass",
   "test-core#src:test/test_c_unit_pulled_via_pascal_unit.pas": "pass",
   "test-core#src:test/test_call_arg_marshalling_32bit.pas": "pass",
+  "test-core#src:test/test_call_result_as_open_array_argument.pas": "pass",
   "test-core#src:test/test_call_result_member.pas": "pass",
   "test-core#src:test/test_case_else_multistmt.pas": "pass",
   "test-core#src:test/test_case_insensitive.pas": "pass",
@@ -5122,6 +5110,7 @@
   "test-core#src:test/test_nilpy_widen_fix.npy": "pass",
   "test-core#src:test/test_not.pas": "pass",
   "test-core#src:test/test_not_int64_expr.pas": "pass",
+  "test-core#src:test/test_not_of_a_constant_widens.pas": "pass",
   "test-core#src:test/test_not_of_negated_operand.pas": "pass",
   "test-core#src:test/test_not_operand_type_matrix.pas": "pass",
   "test-core#src:test/test_not_ord_bitwise.pas": "pass",
@@ -5144,6 +5133,7 @@
   "test-core#src:test/test_open_array_no_leak.pas": "pass",
   "test-core#src:test/test_open_array_of_a_named_dynamic_array.pas": "pass",
   "test-core#src:test/test_open_array_of_variant.pas": "pass",
+  "test-core#src:test/test_open_array_param_slot_is_a_handle.pas": "pass",
   "test-core#src:test/test_operator_enumerator.pas": "pass",
   "test-core#src:test/test_operator_implicit_shortstring_b356.pas": "pass",
   "test-core#src:test/test_opt_store_reload.pas": "pass",
@@ -6607,11 +6597,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-24T22:28:16Z",
-  "sha": "330466ca7f651c0f777b19859eaf0ae49a6d1cbd",
+  "date": "2026-08-24T23:29:53Z",
+  "sha": "c1925bbe38a6947b16d701bfa000f7c57d18e6a4",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.0
+  "wall": 3600.1
  },
  "last_bench": {
   "conf_rows": 550,
