@@ -1075,6 +1075,18 @@ begin
           begin
             tk := IntToTypeKind(UFldPtrElemTk[fIdx]);
             recName := UFldPtrElemRec[fIdx];
+            { ...and the depth + ultimate base, exactly as the AN_IDENT arm
+              reads them off a variable. `r.F^` over a `^PChar` FIELD came out a
+              bare pointer with no levels left, so WriteLn printed the address
+              and `=` compared pointers -- the same five-context signature the
+              array-element and function-result shapes had.
+              bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape }
+            if UFldPtrDepth[fIdx] > 0 then
+            begin
+              remDepth := UFldPtrDepth[fIdx] - 1;
+              ptrBaseTk := UFldPtrBaseTk[fIdx];
+              ptrBaseRec := UFldPtrBaseRec[fIdx];
+            end;
           end
           else
           begin

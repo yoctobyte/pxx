@@ -1,0 +1,9 @@
+recfield: alpha
+clsfield: alpha
+recindex: la
+clsindex: l
+concatL : xalpha
+concatR : alphay
+equal   : TRUE
+notequal: FALSE
+length  : 5

@@ -7638,6 +7638,12 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_pointer_function_result_keeps_its_depth.pas $(TESTTMP)/test_ptrfnres26
 	test "$$($(TESTTMP)/test_ptrfnres26)" = "$$(cat test/test_pointer_function_result_keeps_its_depth.expected)"
+	# ...and through a record or class FIELD, which closes the family: a 72-program
+	# cross product (10 pointer-to-PChar source shapes x 8 contexts, each its own
+	# program, each diffed against fpc 3.2.2) agrees on all 72 with this in.
+	# .expected IS fpc's own output; seven of these nine rows are wrong on pinned.
+	./$(COMPILER) test/test_pointer_field_keeps_its_depth.pas $(TESTTMP)/test_ptrfld26
+	test "$$($(TESTTMP)/test_ptrfld26)" = "$$(cat test/test_pointer_field_keeps_its_depth.expected)"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; test "$$?" = "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26

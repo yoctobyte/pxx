@@ -1352,6 +1352,7 @@ begin
   SetLength(UFldNOff, n);       SetLength(UFldNLen, n);         SetLength(UFldOff_, n);
   SetLength(UFldTk, n);         SetLength(UFldRec_, n);         SetLength(UFldAnonRec, n);
   SetLength(UFldPtrElemTk, n);  SetLength(UFldPtrElemRec, n);   SetLength(UFldPtrAlias, n);
+  SetLength(UFldPtrDepth, n);   SetLength(UFldPtrBaseTk, n);    SetLength(UFldPtrBaseRec, n);
   SetLength(UFldProcSig, n);    SetLength(UFldElemProcSig, n);  SetLength(UFldIsArray, n);
   SetLength(UFldArrLen, n);     SetLength(UFldDynDepth, n);     SetLength(UFldPub, n);
   SetLength(UFldVis, n);        SetLength(UFldStrCap, n);       SetLength(UFldIsSub, n);
@@ -1400,6 +1401,9 @@ begin
       UFldAnonRec[dst+k] := UFldAnonRec[src];
       UFldPtrElemTk[dst+k] := UFldPtrElemTk[src];
       UFldPtrElemRec[dst+k] := UFldPtrElemRec[src];
+      UFldPtrDepth[dst+k] := UFldPtrDepth[src];
+      UFldPtrBaseTk[dst+k] := UFldPtrBaseTk[src];
+      UFldPtrBaseRec[dst+k] := UFldPtrBaseRec[src];
       UFldPtrAlias[dst+k] := UFldPtrAlias[src];
       UFldSetEnumId[dst+k] := UFldSetEnumId[src];
       UFldSetElemTk[dst+k] := UFldSetElemTk[src];
@@ -1439,12 +1443,18 @@ begin
     UFldPtrElemTk[fi] := Ord(LastTypePointerElemTk);
     UFldPtrElemRec[fi] := LastTypePointerElemRec;
     UFldPtrAlias[fi] := LastTypePointerAlias;
+    UFldPtrDepth[fi] := LastTypePointerDepth;
+    UFldPtrBaseTk[fi] := LastTypePointerBaseTk;
+    UFldPtrBaseRec[fi] := LastTypePointerBaseRec;
   end
   else
   begin
     UFldPtrElemTk[fi] := Ord(tyUnknown);
     UFldPtrElemRec[fi] := REC_NONE;
     UFldPtrAlias[fi] := -1;
+    UFldPtrDepth[fi] := 0;
+    UFldPtrBaseTk[fi] := Ord(tyUnknown);
+    UFldPtrBaseRec[fi] := REC_NONE;
   end;
   if tk = Ord(tySet) then
   begin
@@ -10815,6 +10825,11 @@ begin
     begin
       UFldPtrElemTk[i] := AliasElemTk[a];
       UFldPtrElemRec[i] := AliasElemRec[a];
+      { the alias knows its own depth and base; a forward `PNode = ^TNode` field
+        that had to wait for this pass gets the whole triple, not two fifths. }
+      UFldPtrDepth[i] := AliasPtrDepth[a];
+      UFldPtrBaseTk[i] := AliasPtrBaseTk[a];
+      UFldPtrBaseRec[i] := AliasPtrBaseRec[a];
     end;
   end;
 end;

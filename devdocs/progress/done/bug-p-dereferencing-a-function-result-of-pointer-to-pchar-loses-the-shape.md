@@ -148,3 +148,22 @@ through it instead of falling to the array path that wants an lvalue address.
 
 ## Log
 - 2026-08-24 — resolved, commit b67d2179b.
+
+# Follow-up the same day: the 72-program cross product found the LAST shape
+
+Re-running the ticket's own acceptance line -- 10 pointer-to-PChar source shapes
+x 8 contexts, one program each, every one diffed against fpc 3.2.2 -- came back
+67/72 after the fix above, with all five remaining divergences on ONE shape: a
+`^PChar` record or class FIELD, dereferenced. Same table pattern
+(`UFldPtrElemTk`/`Rec` recorded the immediate pointee and nothing beside it),
+same five-context signature (WriteLn, concat L and R, `=`, `<>` wrong; cast,
+assign and Length right by the blanket AnsiString rule).
+
+Fields now carry `UFldPtrDepth` / `UFldPtrBaseTk` / `UFldPtrBaseRec` -- filled
+at declaration, carried through class inheritance, and re-read from the alias by
+`ResolvePendingPointerAliases` so a forward `PNode = ^TNode` field gets the whole
+triple rather than two fifths of it -- and the deref chain's AN_FIELD arm reads
+them exactly as the AN_IDENT arm reads a variable's.
+
+**72/72 agree with fpc.** `test/test_pointer_field_keeps_its_depth.pas` pins nine
+rows of it (seven wrong on pinned), green on all four cross targets.

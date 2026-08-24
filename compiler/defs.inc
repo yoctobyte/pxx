@@ -3927,6 +3927,13 @@ var
   UFldAnonRec : array of Integer; { C anonymous-member promotion: for a field flattened in from an anonymous struct/union member (C11 6.7.2.1), the source sub-record id (REC_UCLASS_BASE+subci) shared by all fields of that one anon member; REC_NONE otherwise. Lets the aggregate-init walker re-group a promoted anon member for a nested inner brace initializer. }
   UFldPtrElemTk : array of Integer;
   UFldPtrElemRec : array of Integer;
+  { ...and the rest of a pointer FIELD's identity. The pointee alone cannot tell
+    a `PChar` field from a `^PChar` field -- both point at something whose
+    immediate kind is the same one step down -- so `r.F^` printed the address.
+    Fourth table to grow this triple; see decide-typeref-gains-a-pointer-depth-field. }
+  UFldPtrDepth : array of Integer;
+  UFldPtrBaseTk : array of Integer;
+  UFldPtrBaseRec : array of Integer;
   UFldPtrAlias : array of Integer; { pointer field declared via a named pointer alias: that alias index, else -1. A field of type `PNode` inside `TNode` captures PtrElemRec BEFORE ResolvePendingPointerAliases fixes the forward `PNode = ^TNode` up, so it would keep REC_NONE forever and every `p^.next^.f` resolved at offset 0. Keeping the alias lets the same pass re-read it. }
   UFldProcSig : array of Integer; { procedural-type field: signature proc index (Procs[] entry) for an indirect call `rec.field(args)`; -1 = not proc-typed }
   UFldElemProcSig : array of Integer; { POINTER-to-fn-ptr field (`ft *pf`): sig of the pointee fn-pointer, so `(*s.pf)(args)` finds the callee sig UFldProcSig drops; -1 = field not ptr-to-fn-ptr }
