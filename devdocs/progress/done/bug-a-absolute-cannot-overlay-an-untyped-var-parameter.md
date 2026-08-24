@@ -3,9 +3,10 @@ slug: bug-a-absolute-cannot-overlay-an-untyped-var-parameter
 track: A
 prio: 30
 type: bug
-status: backlog
+status: done
 blocked-by: []
 summary: "`procedure Zap(var x); var b: array[0..255] of Byte absolute x;` is refused with 'absolute: target must not be a by-reference parameter'. That IS the idiom untyped parameters exist for — FPC compiles it — and the overlay machinery cannot express it because it works by copying the target's Offset, which for a by-ref param aliases the POINTER rather than the pointee."
+owner: claude-A
 ---
 
 # `absolute` over an untyped `var` parameter is refused
@@ -77,3 +78,59 @@ Found by the parameter-passing differential family.
 Track A's, plus the routine above zeroing a caller's Integer and a caller's
 record, and a row proving a `const` untyped parameter (`const x`) reads
 correctly through the same overlay.
+
+## Fixed 2026-08-24 (claude-A) — the representation already existed
+
+The refusal's reasoning was right and its conclusion did not follow. It said the
+overlay *"works by copying the target's Offset, which for a by-ref param aliases
+the POINTER rather than the pointee"* and concluded that a new representation
+was needed — a `SymAbsoluteViaPtr` flag, a deref in `IRLowerAddress`, and a
+per-path audit of `SizeOf` / `@` / passing the overlay onward, which is what
+made this look like a real ticket rather than a patch.
+
+None of that was needed. **`IsRef` IS that representation**, and every read,
+write, `@` and `SizeOf` path already honours it. Storage is an offset *plus an
+addressing mode*; the overlay was copying only the first half. So:
+
+```pascal
+Syms[idx].Offset := Syms[absTarget].Offset;
+if Syms[absTarget].IsRef then
+begin
+  Syms[idx].Kind  := Syms[absTarget].Kind;
+  Syms[idx].IsRef := True;
+end;
+```
+
+Nothing new is lowered, and the ticket's step 3 — "SizeOf, @, and passing the
+overlay onward must all go through the same path" — is satisfied by
+construction rather than by an audit, because they were never given a second
+path to go through. Both are in the gated test: `@b[0]` inside the callee
+equals `@i` in the caller, and `SizeOf(b)` reports the OVERLAY's type.
+
+Eleven rows, byte-identical to fpc 3.2.2 natively and under qemu on i386,
+aarch64, arm32 and riscv32; `pinned` does not compile the program at all. The
+shapes: untyped `var`, untyped `const`, a typed `var Integer` target, an array
+overlay, a scalar overlay, a record overlay, `@`, and `SizeOf`.
+
+### Found by varying the shape: the silent sibling
+
+`absolute` over a by-VALUE parameter is wrong too, and unlike this one it is
+**not refused** — it compiles and the write lands somewhere else, on `pinned`
+as well as HEAD. Same root: an offset copied without its space, the parameter
+area aliased onto a local slot at the same number. Giving it the same
+Kind/IsRef treatment **segfaults**, measured, so it is not the same fix wearing
+a different hat. Diagnosed and filed rather than half-applied:
+[[bug-a-an-absolute-overlay-of-a-by-value-parameter-is-lost]], and deliberately
+NOT asserted in the new test, so today's wrong answer is not frozen.
+
+That leaves `absolute` with every arm either correct or refused by name: local
+and global overlays work, a by-ref parameter works, a dynamic array is refused,
+a local-over-global is refused — and the by-value arm is the one open item.
+
+### Gate
+
+`make compiler/pascal26` fixedpoint converged in one round; `tools/gate.sh
+quick` GREEN; new `test-core` case `test_absolute_over_a_var_parameter`.
+
+## Log
+- 2026-08-24 — resolved, commit PENDING-COMMIT.

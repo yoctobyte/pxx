@@ -3696,6 +3696,12 @@ test-core: $(COMPILER)
 	# 3.2.2; the non-empty rows catch a delegation that stopped delegating.
 	./$(COMPILER) -Fulib/rtl test/test_variant_empty_renders_as_pascal_empty.pas $(TESTTMP)/test_variant_empty26
 	test "$$($(TESTTMP)/test_variant_empty26)" = "$$(printf 'write   []\ncast    []\nassign  [] 0\nconcat  [xy]\nint     [5] [5]\nnegint  [-7] [-7]\nstr     [ss] [ss]\nbool    [True] [True]\nboolf   [False] [False]\nchar    [c] [c]')"
+	# `absolute` over an UNTYPED var parameter — the idiom untyped params exist
+	# for, refused until the overlay learned to copy the target's ADDRESSING MODE
+	# and not just its offset. Byte-identical to fpc 3.2.2; `pinned` does not
+	# compile it. bug-a-absolute-cannot-overlay-an-untyped-var-parameter
+	./$(COMPILER) test/test_absolute_over_a_var_parameter.pas $(TESTTMP)/test_abs_varparam26
+	test "$$($(TESTTMP)/test_abs_varparam26)" = "$$(printf 'before   16909060\nzapped   0\nfilled   16843009\nsum      4\nrec      0 0 0\nrecsum   6\ntypedvar 9\nscalar   48879\naddr     TRUE\nrecover  11 22 33\nsizeof   8')"
 	./$(COMPILER) test/test_writeln_nonfinite_float.pas $(TESTTMP)/test_writeln_nonfinite26
 	@out=$$(timeout 20 $(TESTTMP)/test_writeln_nonfinite26); rc=$$?; \
 	  if [ "$$rc" = "124" ]; then echo "test_writeln_nonfinite: TIMEOUT after 20s (not a wrong value)"; exit 1; fi; \

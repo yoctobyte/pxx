@@ -1088,10 +1088,22 @@ begin
       if absTarget < 0 then Error('absolute: unknown variable ' + CurTok.SVal);
       if Syms[absTarget].Kind = skConst then
         Error('absolute: target must be a variable, not a constant');
-      if Syms[absTarget].IsRef then
-        { a by-ref param's slot holds an ADDRESS, so overlaying it would alias the
-          pointer word, not the pointee — reject rather than half-support }
-        Error('absolute: target must not be a by-reference parameter');
+      { A by-ref target used to be refused here, on the reasoning that its slot
+        holds an ADDRESS so copying the Offset would alias the pointer word
+        rather than the pointee. The reasoning is right; the conclusion was
+        wrong, because the compiler already HAS the representation for "the
+        storage is at this slot's contents" -- it is what IsRef means, and every
+        read, write, @ and SizeOf path already honours it.
+
+        So the overlay copies the target's ADDRESSING MODE, not just its offset
+        (see the alloc loop below): Kind and IsRef come from the target and the
+        declared type stays the declaration's. Nothing new is lowered.
+
+        This matters because an untyped `var x` has NO other spelling: you get a
+        name with no type, and `absolute` is one of the two ways to give it one
+        (the other being a hard cast). Turbo Pascal, Delphi and FPC code all use
+        it, so bit-level work over an untyped buffer hit this at its first
+        routine. bug-a-absolute-cannot-overlay-an-untyped-var-parameter }
       { A local overlaying a global (or the reverse) would alias a FRAME offset onto a
         DATA offset — two different address spaces. Reject rather than half-support. }
       if (CurProc >= 0) and (Syms[absTarget].Kind = skGlobal) then
@@ -1118,7 +1130,34 @@ begin
 	        handle, so overlaying it would reinterpret the target's bytes as a pointer
 	        and free them.
 	        bug-a-an-absolute-array-overlay-is-silently-ignored }
-	      if (absTarget >= 0) and (not isDyn) then Syms[idx].Offset := Syms[absTarget].Offset;
+	      if (absTarget >= 0) and (not isDyn) then
+	      begin
+	        { Storage is OFFSET **plus ADDRESSING MODE**, and taking only the
+	          first is what made the by-ref case unrepresentable. A by-ref
+	          parameter's slot holds an ADDRESS, so an overlay that copied the
+	          offset alone read the pointer word as the user's data -- eight bytes
+	          of address -- which is exactly why that case was refused outright.
+
+	          Copying Kind and IsRef makes the alias faithful for every access path
+	          at once -- read, write, @, SizeOf -- instead of needing a new flag
+	          consulted per lowering, because "where does this symbol's storage
+	          live" is what those two fields already answer.
+
+	          By-REF targets ONLY. A by-VALUE parameter target is also wrong today
+	          (its slot lives in the parameter space, so copying the offset aliases
+	          a LOCAL slot at the same number and the write goes elsewhere), but
+	          giving it the same treatment SEGFAULTS -- measured -- so skParam
+	          addressing is evidently not simply "the same space" for a non-ref
+	          param. Diagnosed and filed rather than half-applied:
+	          bug-a-an-absolute-overlay-of-a-by-value-parameter-is-lost.
+	          bug-a-absolute-cannot-overlay-an-untyped-var-parameter }
+	        Syms[idx].Offset := Syms[absTarget].Offset;
+	        if Syms[absTarget].IsRef then
+	        begin
+	          Syms[idx].Kind  := Syms[absTarget].Kind;
+	          Syms[idx].IsRef := True;
+	        end;
+	      end;
 	    end;
 	    if Eat(tkEq) then
 	    begin
