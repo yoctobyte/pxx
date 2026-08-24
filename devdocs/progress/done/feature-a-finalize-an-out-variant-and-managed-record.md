@@ -94,4 +94,4 @@ surface (`uses variants; VarClear(a)` is "undefined variable"), which is
 [[bug-b-vartostr-is-missing-from-variants]]' shape in Track B's lane.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit 7fcf3108b.
