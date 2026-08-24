@@ -3593,7 +3593,7 @@ begin
   SetLength(SymSubHi, n);          SetLength(SymPtrDepth, n);       SetLength(SymPtrBaseTk, n);
   SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymArrNDims, n);
   SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymBlockId, n);
-  SetLength(SymStaticLocal, n);
+  SetLength(SymStaticLocal, n);   SetLength(SymAbsAliased, n);
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
   SetLength(SymCLongRank, n);      SetLength(SymTR, n);
   SetLength(SymCellPtr, n);
@@ -3720,6 +3720,7 @@ begin
             ' baseTk=', SymPtrBaseTk[SymCount],
             ' isArray=', Syms[SymCount].IsArray,
             ' arrElemPtrTk=', Ord(Syms[SymCount].PtrElemTk));
+  SymAbsAliased[SymCount] := False;   { recycled slot: an earlier scope's `absolute` must not leak in }
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
@@ -3833,6 +3834,7 @@ begin
   FrameSize := AlignTo(FrameSize + sz, align);
   Syms[SymCount].Offset := -FrameSize;
   SymSyncTypeRef(SymCount);
+  SymAbsAliased[SymCount] := False;   { recycled slot: an earlier scope's `absolute` must not leak in }
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
@@ -4057,6 +4059,7 @@ begin
   end;
   LastTypeElemDynDepth := 0;   { consumed }
   SymSyncTypeRef(SymCount);
+  SymAbsAliased[SymCount] := False;   { recycled slot: an earlier scope's `absolute` must not leak in }
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
@@ -4148,6 +4151,7 @@ begin
     Syms[SymCount].Offset := -FrameSize;
   end;
   SymSyncTypeRef(SymCount);
+  SymAbsAliased[SymCount] := False;   { recycled slot: an earlier scope's `absolute` must not leak in }
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 
@@ -4187,6 +4191,7 @@ begin
   SymCaseSensitive[SymCount] := DeclCaseSensitive;
   SymUnitIdx[SymCount] := CurrentUnitIdx;
   SymSyncTypeRef(SymCount);
+  SymAbsAliased[SymCount] := False;   { recycled slot: an earlier scope's `absolute` must not leak in }
   Result := SymCount; SymHashInsert(Result); Inc(SymCount); StampDeclSeq(Result);
 end;
 

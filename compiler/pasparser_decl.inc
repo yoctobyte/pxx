@@ -1143,15 +1143,28 @@ begin
 	          consulted per lowering, because "where does this symbol's storage
 	          live" is what those two fields already answer.
 
-	          By-REF targets ONLY. A by-VALUE parameter target is also wrong today
-	          (its slot lives in the parameter space, so copying the offset aliases
-	          a LOCAL slot at the same number and the write goes elsewhere), but
-	          giving it the same treatment SEGFAULTS -- measured -- so skParam
-	          addressing is evidently not simply "the same space" for a non-ref
-	          param. Diagnosed and filed rather than half-applied:
-	          bug-a-an-absolute-overlay-of-a-by-value-parameter-is-lost.
-	          bug-a-absolute-cannot-overlay-an-untyped-var-parameter }
+	          By-REF targets ONLY, and that is the whole of it: a by-VALUE
+	          parameter and a local share ONE space -- both are `-FrameSize`
+	          rbp-relative, allocated by the same counter -- so the plain Offset
+	          copy already aliases a by-value param faithfully. (An earlier note
+	          here guessed at a separate "parameter space" to explain the by-value
+	          case reading wrong. It measured -O2, where the real cause was
+	          register residency, and copying skParam onto the overlay segfaults
+	          because the two Kinds differ in PROLOGUE SPILL, not in address
+	          space.) bug-a-absolute-cannot-overlay-an-untyped-var-parameter }
 	        Syms[idx].Offset := Syms[absTarget].Offset;
+	        { Two symbol indices, ONE slot -- and this is the only alias in the
+	          language that takes no ADDRESS, so the IR_LEA/IR_SLOTADDR scan that
+	          every register-residency and inlining guard runs cannot see it. Six
+	          copies of that scan each answered "not aliased" and the -O2 param
+	          residency then cached `v` in r14 while a write through the overlay
+	          went to the frame slot: `procedure P(v: Integer); var w: Byte
+	          absolute v; begin w := 5 ... end` was correct at -O0/-O1 and silently
+	          wrong at -O2. Recorded on BOTH sides, because either index is equally
+	          a residency candidate, and read by SymSlotEscapes.
+	          bug-a-an-absolute-overlay-of-a-by-value-parameter-is-lost }
+	        SymAbsAliased[idx]       := True;
+	        SymAbsAliased[absTarget] := True;
 	        if Syms[absTarget].IsRef then
 	        begin
 	          Syms[idx].Kind  := Syms[absTarget].Kind;

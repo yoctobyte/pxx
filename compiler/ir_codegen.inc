@@ -4029,10 +4029,7 @@ begin
       ArgSymAddrClean := not PaScanTaken[k];
       Exit;
     end;
-  taken := False;
-  for k := 0 to IRCount - 1 do
-    if ((IRKind[k] = IR_LEA) or (IRKind[k] = IR_SLOTADDR)) and (IRA[k] = si) then
-    begin taken := True; Break; end;
+  taken := SymSlotEscapes(si);
   if PaScanCount < 64 then
   begin
     PaScanSym[PaScanCount] := si;
@@ -9021,14 +9018,7 @@ begin
     if Procs[CurProc].Params[pi].IsRef then Continue;
     if Procs[CurProc].Params[pi].IsArray then Continue;
     if not RegcallScalarType(Procs[CurProc].Params[pi].TypeKind) then Continue;
-    addrTaken := False;
-    for k := 0 to IRCount - 1 do
-      if ((IRKind[k] = IR_LEA) or (IRKind[k] = IR_SLOTADDR)) and (IRA[k] = sy) then
-      begin
-        addrTaken := True;
-        Break;
-      end;
-    if addrTaken then
+    if SymSlotEscapes(sy) then
       Inc(RegcallAddrTaken)
     else
     begin
@@ -9083,10 +9073,7 @@ begin
     if Procs[CurProc].Params[pi].IsRef then Continue;
     if Procs[CurProc].Params[pi].IsArray then Continue;
     if not RegcallScalarType(Procs[CurProc].Params[pi].TypeKind) then Continue;
-    addrTaken := False;
-    for k := 0 to IRCount - 1 do
-      if ((IRKind[k] = IR_LEA) or (IRKind[k] = IR_SLOTADDR)) and (IRA[k] = sy) then
-      begin addrTaken := True; Break; end;
+    addrTaken := SymSlotEscapes(sy);
     if addrTaken then Continue;
     { Reserve a frame slot for the caller's r14/r15 and save it. }
     FrameSize := AlignTo(FrameSize + 8, 8);
@@ -9229,11 +9216,7 @@ begin
           if ResidentRegOf(si) <> 0 then Continue;
           if RcResidentCount >= 4 then Continue;
         end;
-        seen := False;   { addr-taken flag }
-        for j := 0 to IRCount - 1 do
-          if ((IRKind[j] = IR_LEA) or (IRKind[j] = IR_SLOTADDR)) and (IRA[j] = si) then
-          begin seen := True; Break; end;
-        if seen then Continue;
+        if SymSlotEscapes(si) then Continue;
         best := k; bestCnt := Counts[k];
       end;
     if best < 0 then Break;
@@ -9365,12 +9348,7 @@ begin
   for pi := 0 to Procs[CurProc].ParamCount - 1 do
   begin
     sy := Procs[CurProc].Params[pi].SymIdx;
-    for k := 0 to IRCount - 1 do
-      if ((IRKind[k] = IR_LEA) or (IRKind[k] = IR_SLOTADDR)) and (IRA[k] = sy) then
-      begin
-        ProcBodyAddrTakenParam[CurProc] := True;
-        Break;
-      end;
+    if SymSlotEscapes(sy) then ProcBodyAddrTakenParam[CurProc] := True;
   end;
 end;
 

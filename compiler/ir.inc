@@ -12,6 +12,37 @@ begin
   else if shift = 7 then Shl8_ := 128;
 end;
 
+{ "Can this symbol's storage be reached other than through THIS symbol index?"
+  -- the one question six residency and inlining guards were each asking with
+  their own copy of the same IR_LEA/IR_SLOTADDR scan (the -O2 param residency,
+  the -O3 unified residency and its aarch64 twin, the argument-deferral cache,
+  the per-proc addr-taken-param summary and the --measure-regcall probe).
+
+  Two ways for the answer to be yes, and only the first was ever asked:
+
+    * the body takes the symbol's ADDRESS (IR_LEA / IR_SLOTADDR), so a pointer
+      to the slot exists and any call reached through it can write the slot;
+    * an `absolute` overlay names the same slot under a SECOND symbol index.
+      That is the one alias in the language that takes no address at all, so
+      all six copies answered "clean" for it and -O2 cached a by-value param in
+      r14 while a write through its overlay went to the frame slot -- correct at
+      -O0/-O1, silently wrong from -O2 up
+      (bug-a-an-absolute-overlay-of-a-by-value-parameter-is-lost).
+
+  Six copies is what made a one-line miss a five-site miss, which is the whole
+  argument for asking it once (devdocs/dev/normalise-dont-special-case.md).
+  Conservative by construction: si < 0 answers "escapes". }
+function SymSlotEscapes(si: Integer): Boolean;
+var k: Integer;
+begin
+  SymSlotEscapes := True;
+  if si < 0 then Exit;
+  if SymAbsAliased[si] then Exit;
+  for k := 0 to IRCount - 1 do
+    if ((IRKind[k] = IR_LEA) or (IRKind[k] = IR_SLOTADDR)) and (IRA[k] = si) then Exit;
+  SymSlotEscapes := False;
+end;
+
 procedure IRReset;
 begin
   IRCount := 0;

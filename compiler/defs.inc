@@ -2231,6 +2231,7 @@ var
   SymArrDimSpan: array of Integer;
   SymRTTIOff  : array of Integer; { Data[] offset of layout RTTI descriptor, -1 if none }
   SymStaticLocal     : array of Boolean; { routine-LOCAL typed const: BSS storage (FPC's local typed consts are static and persist across calls) while staying block-scoped for lookup; exempt from the decl-order gate, which only makes sense for file-scope globals }
+  SymAbsAliased      : array of Boolean; { this symbol's STORAGE is named by a second symbol index -- set on BOTH sides of an `absolute` overlay. The only alias in the language that takes no address, so the IR_LEA/IR_SLOTADDR scan every residency/inlining guard runs cannot see it; SymSlotEscapes is the one predicate that asks both halves (bug-a-an-absolute-overlay-of-a-by-value-parameter-is-lost). Slots are RECYCLED by SymRollbackTo, so every Alloc* clears it. }
   SymIsHiddenArgTemp : array of Boolean; { compiler-synthesised owning managed local created during IR lowering (materialised managed-string call argument, or an `array of const` TVarRec dyn-array temp); allocated after the parser's prologue zero-init pass, so codegen nil-inits it before the body }
   SymBlockId : array of Integer;
   SymDeclTok : array of Integer; { token index where a global var was declared (decl-order gating); 0 = unstamped/always-visible }

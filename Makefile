@@ -3701,7 +3701,26 @@ test-core: $(COMPILER)
 	# and not just its offset. Byte-identical to fpc 3.2.2; `pinned` does not
 	# compile it. bug-a-absolute-cannot-overlay-an-untyped-var-parameter
 	./$(COMPILER) test/test_absolute_over_a_var_parameter.pas $(TESTTMP)/test_abs_varparam26
-	test "$$($(TESTTMP)/test_abs_varparam26)" = "$$(printf 'before   16909060\nzapped   0\nfilled   16843009\nsum      4\nrec      0 0 0\nrecsum   6\ntypedvar 9\nscalar   48879\naddr     TRUE\nrecover  11 22 33\nsizeof   8')"
+	test "$$($(TESTTMP)/test_abs_varparam26)" = "$$(printf 'before   16909060\nzapped   0\nfilled   16843009\nsum      4\nrec      0 0 0\nrecsum   6\ntypedvar 9\nscalar   48879\naddr     TRUE\nrecover  11 22 33\nsizeof   8\nbyval    16909061\nbyvalsc  16909061')"
+	# An `absolute` overlay is the one alias in the language that takes no
+	# ADDRESS, so the IR_LEA/IR_SLOTADDR scan six residency and inlining guards
+	# each ran could not see it: -O2 cached a by-value param in r14 while a write
+	# through its overlay went to the frame slot, and the inliner gave the two
+	# aliased symbols two separate slots in the caller. The property asserted here
+	# is therefore that the answer does NOT depend on the optimisation level, so
+	# the same source is compiled at -O0 (no residency at all), the default, and
+	# -O3 (loop residency, which claims locals too) and all three must agree with
+	# fpc 3.2.2. bug-a-an-absolute-overlay-of-a-by-value-parameter-is-lost
+	./$(COMPILER) -O0 test/test_absolute_alias_survives_residency.pas $(TESTTMP)/test_abs_resid26_O0
+	./$(COMPILER) test/test_absolute_alias_survives_residency.pas $(TESTTMP)/test_abs_resid26
+	./$(COMPILER) -O3 test/test_absolute_alias_survives_residency.pas $(TESTTMP)/test_abs_resid26_O3
+	@exp="$$(printf 'scalar   16909061\narray    16909061\ncond-yes 16909061\ncond-no  16909060\nlocalhot 676362420\novlhot   260\nacrcall  33818121')"; \
+	  for o in _O0 "" _O3; do \
+	    got="$$($(TESTTMP)/test_abs_resid26$$o)"; \
+	    if [ "$$got" != "$$exp" ]; then \
+	      echo "test_absolute_alias_survives_residency$$o: MISMATCH"; \
+	      echo "--- expected"; echo "$$exp"; echo "--- got"; echo "$$got"; exit 1; fi; \
+	  done
 	./$(COMPILER) test/test_writeln_nonfinite_float.pas $(TESTTMP)/test_writeln_nonfinite26
 	@out=$$(timeout 20 $(TESTTMP)/test_writeln_nonfinite26); rc=$$?; \
 	  if [ "$$rc" = "124" ]; then echo "test_writeln_nonfinite: TIMEOUT after 20s (not a wrong value)"; exit 1; fi; \

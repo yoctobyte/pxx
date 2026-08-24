@@ -18,7 +18,8 @@ This replaces the older split `devdocs/bugs/` and `devdocs/features/` folders.
 
 | Folder | Meaning |
 | --- | --- |
-| `backlog/` | Captured. New tickets land here (or `urgent/`). Rank is derived. |
+| `backlog_new/` | **Where every NEW ticket goes, from 2026-08-24 on.** Ranked exactly like `backlog/`. |
+| `backlog/` | Captured before 2026-08-24. Rank is derived. Still worked, no longer filed into. |
 | `urgent/` | Human override — do regardless; always sorts to the top. Keep to ~3. |
 | `working/` | Claimed and in progress. Set `Owner` so agents don't collide. |
 | `unfinished/` | Work halted with the ticket incomplete (parked). Track A/C here is CRITICAL — `check` flags it. |
@@ -28,9 +29,29 @@ This replaces the older split `devdocs/bugs/` and `devdocs/features/` folders.
 | `done/` | Completed/fixed. Note the commit and the regression test. |
 | `rejected/` | Declined / wontfix (for now). Say why. |
 
-Normal flow: `backlog/` (or `urgent/`) → `working/` → `done/`. A ticket may move
-to `unfinished/`, `blocked/`, `rainy-day/`, or `rejected/` from anywhere.
+Normal flow: `backlog_new/` (or `urgent/`) → `working/` → `done/`. A ticket may
+move to `unfinished/`, `blocked/`, `rainy-day/`, or `rejected/` from anywhere.
 Re-organize the folder set later if it stops fitting.
+
+### Why `backlog_new/` exists (user, 2026-08-24)
+
+> *"any new bug tickets, important or not, go into `backlog_new`. Instead of
+> sorting out, we are going to filter on date — reasoning being, our tickets go
+> from gross compiler issues to nitpicking details, and we have a hard time
+> sorting them out since they are all called 'bug'. So from here on, any new
+> tickets filed are fair game, just they go into `backlog_new`."*
+
+**Filing is free; the sort is by DATE.** `backlog/` grew to where the cost of a
+ticket was the cost of *placing* it — is this urgent, is it really a bug, what
+prio — and that friction was paid on every finding, including the cheap ones
+that are expensive to rediscover. The new folder removes it: **file it, don't
+triage it.** "What has come in recently" is then answerable by listing one
+folder, which is exactly what `backlog/` could no longer answer.
+
+It is **ranked** (`ready`/`next` scan it alongside `backlog/` and `urgent/`), so
+new findings still reach the queue — the split is a filing convenience, not a
+parking lot. Contrast `float/` and `experimental/`, which are loaded but
+deliberately unranked. `urgent/` is unchanged and still means act-first.
 
 ## Filename convention
 

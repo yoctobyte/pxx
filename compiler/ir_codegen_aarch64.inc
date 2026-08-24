@@ -730,11 +730,7 @@ begin
           if not RegcallScalarType(Syms[si].TypeKind) then Continue;
           if ResidentRegOf(si) <> 0 then Continue;
         end;
-        seen := False;   { addr-taken flag }
-        for j := 0 to IRCount - 1 do
-          if ((IRKind[j] = IR_LEA) or (IRKind[j] = IR_SLOTADDR)) and (IRA[j] = si) then
-          begin seen := True; Break; end;
-        if seen then Continue;
+        if SymSlotEscapes(si) then Continue;
         best := k; bestCnt := Counts[k];
       end;
     if best < 0 then Break;

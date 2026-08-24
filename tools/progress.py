@@ -30,6 +30,14 @@ STATUSES = [
     "unfinished",
     "blocked",
     "backlog",
+    # Everything filed from 2026-08-24 onward (user: "any new tickets filed are
+    # fair game, just they go into backlog_new"). RANKED exactly like backlog/ —
+    # the split is a FILING convenience, not a parking lot: sorting is by DATE
+    # (list the folder) instead of by a judgement call at filing time, because
+    # backlog/ had grown to where "gross compiler issue" and "cosmetic nitpick"
+    # were indistinguishable and both were called `bug-`. Contrast float/ and
+    # experimental/, which are loaded but deliberately NOT ranked.
+    "backlog_new",
     "experimental",
     "rainy-day",
     # Track F parks here. Listed so the folder is LOADED (board, check, blocker
@@ -617,7 +625,7 @@ class Board:
         eff = self.effective_prio()
         lev = self.leverage_counts()
         out = []
-        for st in ("backlog", "urgent"):
+        for st in ("backlog", "backlog_new", "urgent"):
             for t in self.by_status[st]:
                 if self.track_matches(t.track, track_filter) and all(b in done for b in t.blockers):
                     out.append(t)
@@ -676,7 +684,7 @@ class Board:
         head = "WRITE" if write else "DRY-RUN (pass --write to apply)"
         lines = [f"== AUTORATE ({head}; * = human-set, skipped) =="]
         n_write = 0
-        for st in ("urgent", "working", "unfinished", "backlog"):
+        for st in ("urgent", "working", "unfinished", "backlog", "backlog_new"):
             for t in self.by_status[st]:
                 if not self.track_matches(t.track, track_filter):
                     continue
@@ -1185,7 +1193,7 @@ pre code{background:none;padding:0}
         # match "## Also decided-needed", which means the opposite.
         decision_re = re.compile(
             r"^##\s+(USER\s+)?(DECISION|DECIDED|RESOLVED)\b", re.I | re.M)
-        for st in ("backlog", "urgent"):
+        for st in ("backlog", "backlog_new", "urgent"):
             for t in self.by_status[st]:
                 if not (t.slug.startswith("decide-") and decision_re.search(t.text)):
                     continue

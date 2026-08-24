@@ -452,6 +452,21 @@ begin
     if Procs[procIdx].Params[i].IsRef or Procs[procIdx].Params[i].IsArray then Exit;
     if not InlineScalarTk(Procs[procIdx].Params[i].TypeKind) then Exit;
   end;
+  { An `absolute` overlay anywhere in this routine's scope makes the body
+    un-retainable, because retention REPLACES storage: params and locals become
+    placeholders that the expansion re-materialises in the CALLER's frame, one
+    fresh slot per symbol. Two symbols that shared one slot in the callee get two
+    slots in the caller, and the alias -- the whole point of the declaration --
+    is gone. Measured: `function F(v: Integer): Integer; var w: Byte absolute v;
+    begin w := 5; F := v; end` inlined into two different globals, the write to
+    `w` landing four bytes past the value that was then read back.
+
+    Refused wholesale rather than per-shape: the overlay is invisible in the AST
+    (it is a fact about the symbol table, not about any node), so every shape
+    validator would have to learn the same check.
+    bug-a-an-absolute-overlay-of-a-by-value-parameter-is-lost }
+  for i := Procs[procIdx].ScopeBase to SymCount - 1 do
+    if SymAbsAliased[i] then Exit;
   { Body shape: ParseBlockAST returns an AN_SEQ chain. Shapes 1 & 2a are a single
     statement (Right=-1); shape 3 (slice 2b, -O3) is a straight-line multi-
     statement chain. The Ret* context defaults to neutral so shapes 1/2a never

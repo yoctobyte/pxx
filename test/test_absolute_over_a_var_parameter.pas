@@ -19,11 +19,13 @@ program test_absolute_over_a_var_parameter;
   `const x` earns its row separately from `var x`: a const untyped parameter is
   by-ref too, and a read-only overlay must resolve through the same slot.
 
-  NOT here, deliberately: an overlay over a by-VALUE parameter. That is wrong
-  today as well (silently — it compiles and the write lands elsewhere), it is
-  wrong on `pinned` too, and it is
-  bug-a-an-absolute-overlay-of-a-by-value-parameter-is-lost. Asserting today's
-  wrong answer here would freeze it. }
+  The by-VALUE parameter rows were omitted when this test was written, because
+  the write through the overlay was landing somewhere else and freezing a wrong
+  answer would have been worse than the gap. They are here now: the cause was
+  never the addressing (a by-value param and a local share ONE space), it was
+  register residency reading a cached copy of a slot the overlay had written
+  behind its back. bug-a-an-absolute-overlay-of-a-by-value-parameter-is-lost,
+  and test_absolute_alias_survives_residency gates that half across -O levels. }
 {$mode objfpc}{$H+}
 type TRec = record a, b, c: Integer; end;
 
@@ -64,12 +66,23 @@ function AddrOf(var x): PtrUInt;
 var b: array[0..3] of Byte absolute x;
 begin AddrOf := PtrUInt(@b[0]); end;
 
+{ a by-VALUE parameter: same frame space as a local, so the plain offset copy
+  aliases it — and the write must be visible to a later READ of the parameter,
+  which is what register residency used to break from -O2 up }
+procedure ByValueArr(v: Integer; var outv: Integer);
+var b: array[0..3] of Byte absolute v;
+begin b[0] := 5; outv := v; end;
+
+procedure ByValueScalar(v: Integer; var outv: Integer);
+var w: Byte absolute v;
+begin w := 5; outv := v; end;
+
 { SizeOf reports the OVERLAY's type, not the target's }
 function SizeOfOverlay(var x): Integer;
 var b: array[0..7] of Byte absolute x;
 begin SizeOfOverlay := SizeOf(b); end;
 
-var i: Integer; r: TRec; p: PtrUInt;
+var i, j: Integer; r: TRec; p: PtrUInt;
 begin
   i := $01020304;            WriteLn('before   ', i);
   Zap(i, SizeOf(i));         WriteLn('zapped   ', i);
@@ -84,4 +97,6 @@ begin
   i := 0;         p := AddrOf(i);WriteLn('addr     ', p = PtrUInt(@i));
   RecOver(r);                    WriteLn('recover  ', r.a, ' ', r.b, ' ', r.c);
                                  WriteLn('sizeof   ', SizeOfOverlay(i));
+  i := $01020304; ByValueArr(i, j);    WriteLn('byval    ', j);
+  i := $01020304; ByValueScalar(i, j); WriteLn('byvalsc  ', j);
 end.
