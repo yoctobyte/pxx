@@ -265,3 +265,58 @@ stays open: `ErrorRecover` is the mechanism a trial parse needs, but nothing
 ties an error to a rollback point, so the state-unwind question in "Shape, not a
 prescription" is still unanswered. Syntax errors still halt at the first one,
 deliberately.
+
+## Slice 4 landed 2026-08-24 (claude-A) — the four error routines stop being four copies
+
+Not new recovery: the *shape* of what slices 1-3 grew. Adding the fourth entry
+point (`ErrorAtRecover`, for the assignment type check) made the pattern
+obvious, and it was worth deleting rather than auditing.
+
+`ErrorPrint`'s own comment claimed to be *"the one place a diagnostic is
+formatted"* — while `ErrorAt` and then `ErrorAtRecover` each carried their own
+copy of the ident-parens logic, and the `MAX_REPORTED_ERRORS` cap was written
+out twice. Three copies of one five-line rule, and the third arrived the moment
+a fourth entry point was needed. That is
+`devdocs/dev/normalise-dont-special-case.md` exactly: the copy is what stays
+broken.
+
+The four names are not the problem — they encode **two independent axes**, which
+is why there are four and not one:
+
+|  | halt | count and return |
+| --- | --- | --- |
+| **line = current token** (parser is there; `in:`/`near:` are meaningful) | `Error` | `ErrorRecover` |
+| **line = an AST node** (lowering runs past EOF; a `near:` window would point at the end of the program and mislead) | `ErrorAt` | `ErrorAtRecover` |
+
+So the four stay, and now sit on **two** shared helpers instead of four copies:
+
+- `ErrorPrintAt(line, msg, withContext)` — THE one place a diagnostic is worded.
+  `withContext` is False for a post-parse check, which is the whole reason the
+  bottom row exists.
+- `CountRecoveredError` — the tail every recovering diagnostic shares, cap
+  included.
+
+`ErrorPrint(msg)` is now one line (`ErrorPrintAt(CurTok.Line, msg, True)`), kept
+as its own name because that is what the ~600 `Error()` sites read as.
+
+**Measured.** Self-host fixedpoint converged in one round and the compiler got
+**1,565 bytes smaller** (9,037,665 → 9,036,100). All four paths verified to
+print exactly what they printed before:
+
+- `ErrorRecover` — `test_two_undefined_names_both_report_fail`: both names, both
+  with their `near:` windows.
+- `ErrorAtRecover` — the assignment test: 13 diagnostics, no window, correct lines.
+- `Error` — a syntax error: message plus `near:` window, halts.
+- `ErrorAt` — the enum-identity check: message, no window, halts.
+- The shared cap: a file with 25 undefined names reports exactly 20 and then
+  `too many errors, stopping`.
+
+**Gate:** `make compiler/pascal26` fixedpoint converged in one round;
+`tools/gate.sh quick` GREEN.
+
+### Still open, unchanged
+
+Item 1 (speculative parse). `ErrorRecover` is the mechanism; nothing ties an
+error to a rollback point, so the state-unwind question in "Shape, not a
+prescription" is still unanswered. Syntax errors still halt at the first one,
+deliberately.

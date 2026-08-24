@@ -6,24 +6,71 @@ procedure WriteTokenContext; forward;   { body sits after GetTokenStrFromRaw, wh
 
 procedure WriteDiagSourceFile; forward;   { body sits after PasSrcOfTok is reachable; see below }
 
-{ The one place a diagnostic is FORMATTED. Error and ErrorRecover differ only
-  in what they do afterwards -- halt, or count and return -- so the wording, the
-  `in:` line and the `near:` window are written once and cannot drift apart.
+{ ===== The error routines: TWO axes, TWO helpers, four entry points =====
+
+  The axes are independent, which is why there are four names and not one:
+
+    WHERE THE LINE COMES FROM   the current token (the parser is there) vs an
+                                AST node's recorded line (an IR-lowering check
+                                runs long after the parser reached EOF, so
+                                CurTok.Line and the `near:` window would both
+                                point at the end of the program and actively
+                                mislead)
+    WHAT HAPPENS AFTERWARDS     halt, or count and return
+
+  Everything else -- the wording, the optional `(ident)` suffix, clearing
+  ErrorIdent, the `in:` line, the `near:` window, the MAX_REPORTED_ERRORS cap --
+  is shared, and is shared HERE rather than copied into each of the four.
+
+  It was copied into each of the four. ErrorPrint's comment claimed to be "the
+  one place a diagnostic is formatted" while ErrorAt and then ErrorAtRecover
+  each carried their own copy of the ident-parens logic, and the cap was written
+  out twice. Three copies of one five-line rule is the shape
+  devdocs/dev/normalise-dont-special-case.md names, and the third copy arrived
+  the moment a fourth entry point was needed -- which is the argument for
+  deleting the pattern rather than auditing it.
   feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
-procedure ErrorPrint(const msg: AnsiString);
+
+procedure ErrorPrintAt(line: Integer; const msg: AnsiString; withContext: Boolean);
+{ THE one place a diagnostic is worded. `withContext` is False for a check that
+  runs after the parse: the `in:` path and the `near:` window are both read off
+  the LEXER's current position, which by then is EOF. }
 begin
   { ErrorIdent names the symbol the diagnostic is about; when there is none, the
     old unconditional parens printed a bare "()" that reads like an empty format
     slot (bug-overload-mismatch-dumps-internals-to-stdout). }
   if ErrorIdent <> '' then
-    writeln('pascal26:', CurTok.Line, ': error: ', msg, ' (', ErrorIdent, ')')
+    writeln('pascal26:', line, ': error: ', msg, ' (', ErrorIdent, ')')
   else
-    writeln('pascal26:', CurTok.Line, ': error: ', msg);
-  WriteDiagSourceFile;
-  WriteTokenContext;
+    writeln('pascal26:', line, ': error: ', msg);
+  if withContext then
+  begin
+    WriteDiagSourceFile;
+    WriteTokenContext;
+  end;
   { cleared, because a RECOVERED diagnostic is followed by more of them: a stale
     ident would be re-printed beside the next message, naming the wrong symbol. }
   ErrorIdent := '';
+end;
+
+procedure ErrorPrint(const msg: AnsiString);
+{ The parser-position form of the above, kept as its own name because that is
+  what the ~600 Error() sites read as. }
+begin
+  ErrorPrintAt(CurTok.Line, msg, True);
+end;
+
+procedure CountRecoveredError;
+{ The tail every recovering diagnostic shares: count it, and stop once the file
+  is producing noise rather than information. Past a handful of errors a
+  cascading file is not telling the user anything more. }
+begin
+  Inc(ErrCount);
+  if ErrCount >= MAX_REPORTED_ERRORS then
+  begin
+    writeln('pascal26: too many errors, stopping');
+    Halt(1);
+  end;
 end;
 
 procedure Error(const msg: AnsiString);
@@ -32,6 +79,7 @@ begin
   Halt(1);
 end;
 
+procedure ErrorRecover(const msg: AnsiString);
 { A diagnostic the caller can CARRY ON past: it is reported and counted, and the
   parse continues so the next independent mistake in the file is found too. The
   caller owes the parse a well-formed stand-in for whatever failed (see
@@ -44,51 +92,27 @@ end;
 
   ErrCount is checked once, after the parse, and no output is written when it is
   nonzero -- so nothing downstream ever sees a poisoned symbol. }
-procedure ErrorRecover(const msg: AnsiString);
 begin
   ErrorPrint(msg);
-  Inc(ErrCount);
-  if ErrCount >= MAX_REPORTED_ERRORS then
-  begin
-    writeln('pascal26: too many errors, stopping');
-    Halt(1);
-  end;
+  CountRecoveredError;
 end;
 
-
-{ ErrorAt's recovering twin -- the diagnostic is reported and counted and the
-  lowering CARRIES ON, so a file reports every instance it contains instead of
-  stopping at the first. Same contract as ErrorRecover (see above): only for a
-  SEMANTIC failure whose caller can leave something well-formed behind, and the
-  driver halts on ErrCount before any output is written, so nothing downstream
-  ever sees the node that was complained about.
-  feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
-procedure ErrorAtRecover(line: Integer; const msg: AnsiString);
-begin
-  if ErrorIdent <> '' then
-    writeln('pascal26:', line, ': error: ', msg, ' (', ErrorIdent, ')')
-  else
-    writeln('pascal26:', line, ': error: ', msg);
-  ErrorIdent := '';
-  Inc(ErrCount);
-  if ErrCount >= MAX_REPORTED_ERRORS then
-  begin
-    writeln('pascal26: too many errors, stopping');
-    Halt(1);
-  end;
-end;
-
-{ Fatal error for a site the CURRENT TOKEN is nowhere near — an IR-lowering check,
-  which runs long after the parser reached EOF, so Error's CurTok.Line and its
-  `near:` token window would both point at the end of the program and actively
-  mislead. Takes the line from the AST node instead, and prints no window. }
 procedure ErrorAt(line: Integer; const msg: AnsiString);
+{ Fatal error for a site the CURRENT TOKEN is nowhere near -- an IR-lowering
+  check. See the `withContext` note on ErrorPrintAt. }
 begin
-  if ErrorIdent <> '' then
-    writeln('pascal26:', line, ': error: ', msg, ' (', ErrorIdent, ')')
-  else
-    writeln('pascal26:', line, ': error: ', msg);
+  ErrorPrintAt(line, msg, False);
   Halt(1);
+end;
+
+procedure ErrorAtRecover(line: Integer; const msg: AnsiString);
+{ ErrorAt's recovering twin, and ErrorRecover's out-of-position twin: same
+  contract as ErrorRecover -- a SEMANTIC failure whose caller leaves something
+  well-formed behind -- reported against an AST node's line because the lowering
+  is past the parser's position. }
+begin
+  ErrorPrintAt(line, msg, False);
+  CountRecoveredError;
 end;
 
 { `  in: <path>` under a diagnostic whose token did NOT come from the main
