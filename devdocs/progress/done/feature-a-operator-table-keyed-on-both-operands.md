@@ -223,4 +223,4 @@ unchanged. `make compiler/pascal26` fixedpoint converged; `tools/gate.sh quick`
 GREEN.
 
 ## Log
-- 2026-08-24 — resolved, commit PENDING-COMMIT.
+- 2026-08-24 — resolved, commit 1aee37628.
