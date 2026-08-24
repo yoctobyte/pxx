@@ -3,9 +3,12 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `6d2af7ca7c23` | 2026-08-24T18:19:05Z | RED (native) | 3600.2s | `aa9f0989a4c0` RED |
+| plexus | `203438d2cf63` | 2026-08-24T19:22:32Z | RED (native) | 3600.1s | `aa9f0989a4c0` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
 - **test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy** — test/test_nilpy_callable_to_str_param_fails.npy test/test_nilpy_float_repeat_typeerror.npy (plexus): bad `e96a698f1f29`, last good `57b9b7148d32`, 1 commit(s) in range
 - **lib-test#src:test/lib_mimic_xml_etree_elementtree.npy** — test/lib_mimic_xml_etree_elementtree.npy (plexus): bad `fd93e4a71c37`, last good `98ed38202254`, 137 commit(s) in range
+- **test-core#src:test/test_default_of_aggregate.pas** — test/test_default_of_aggregate.pas test/test_generic_cycle_fail.pas (plexus): bad `203438d2cf63`, last good `6d2af7ca7c23`, 7 commit(s) in range
+- **test-core#src:test/test_named_operators.pas** — test/test_named_operators.pas (plexus): bad `203438d2cf63`, last good `6d2af7ca7c23`, 7 commit(s) in range
+- **test-core#src:test/test_operator_implicit_shortstring_b356.pas** — test/test_operator_implicit_shortstring_b356.pas (plexus): bad `203438d2cf63`, last good `6d2af7ca7c23`, 7 commit(s) in range
