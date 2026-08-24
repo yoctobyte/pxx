@@ -7644,6 +7644,13 @@ test-core: $(COMPILER)
 	# .expected IS fpc's own output; seven of these nine rows are wrong on pinned.
 	./$(COMPILER) test/test_pointer_field_keeps_its_depth.pas $(TESTTMP)/test_ptrfld26
 	test "$$($(TESTTMP)/test_ptrfld26)" = "$$(cat test/test_pointer_field_keeps_its_depth.expected)"
+	# `not` over a CONSTANT ordinal widens to signed 64-bit; `not` over a VARIABLE
+	# complements at the variable's own width. Both halves in one file because
+	# they disagree on purpose. Eight rows are wrong on the pinned compiler
+	# (positive where fpc gives negative, plus the builtin calls that were
+	# LOGICAL). .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_not_of_a_constant_widens.pas $(TESTTMP)/test_notconst26
+	test "$$($(TESTTMP)/test_notconst26)" = "$$(cat test/test_not_of_a_constant_widens.expected)"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; test "$$?" = "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26

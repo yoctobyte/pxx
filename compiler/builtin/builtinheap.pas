@@ -3939,13 +3939,12 @@ begin
   else if tag = 3 then                  { VT_DOUBLE }
   begin
     { round, then complement: FPC's `not v(1.5)` is -3, not -2. Same
-      Round-not-Trunc rule as the bitwise binops above.
-      Through a LOCAL, not `not Round(...)` directly: pxx answers TRUE for that
-      (it applies the logical `not` to a builtin call's result, giving 2 xor 1
-      = 3 here) -- bug-p-not-of-a-builtin-round-or-trunc-call-is-logical. }
-    v := Round(PDouble(Int64(src) + 8)^);
+      Round-not-Trunc rule as the bitwise binops above. Written directly now
+      that `not Round(..)` is bitwise -- the local this used to round through
+      was a workaround for
+      bug-p-not-of-a-builtin-round-or-trunc-call-is-logical, since fixed. }
     PWord(dest)^ := 1;
-    PInt64(Int64(dest) + 8)^ := not v;
+    PInt64(Int64(dest) + 8)^ := not Round(PDouble(Int64(src) + 8)^);
   end
   else if tag = 0 then                  { VT_EMPTY / Null propagates }
   begin

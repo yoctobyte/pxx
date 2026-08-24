@@ -1,0 +1,23 @@
+var byte    : 254
+var shortint: -2
+var word    : 65534
+var smallint: -2
+var cardinal: 4294967294
+var integer : -2
+var int64   : -2
+ord var char: 190
+const 255   : -256
+const 0     : -1
+named const : -201
+const expr  : -202
+ord lit char: -66
+high byte   : -256
+low byte    : -1
+high word   : -65536
+high card   : -4294967296
+sizeof int  : -5
+round       : -3
+trunc       : -2
+length      : -4
+abs         : -4
+pos         : -3

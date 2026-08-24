@@ -52,6 +52,18 @@ begin
         Result := ASTConstIntValue(ASTLeft[node], a, depth + 1);
         if Result then v := -a;
       end;
+    AN_CALL:
+      begin
+        { `Ord(<constant>)` IS a constant expression, and FPC types the whole
+          expression by its folded value: `not Ord('A')` is -66 while
+          `not Ord(chVar)` complements at the char's own byte width (190). The
+          builtin marker is the NEGATED token kind in IVal. }
+        if Integer(ASTIVal[node]) <> -Ord(tkOrd) then Exit;
+        if ASTLeft[node] < 0 then Exit;
+        if ASTKind[ASTLeft[node]] <> AN_ARG then Exit;
+        Result := ASTConstIntValue(ASTLeft[ASTLeft[node]], a, depth + 1);
+        if Result then v := a;
+      end;
     AN_BINOP:
       begin
         if not ASTConstIntValue(ASTLeft[node], a, depth + 1) then Exit;

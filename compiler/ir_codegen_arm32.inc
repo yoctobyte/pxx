@@ -3862,24 +3862,33 @@ begin
 
     IR_NOT:
       begin
-        IREmitNodeArm32(IRA[node]);
         if Is64BitArm32(IntToTypeKind(IRTk[node])) then
         begin
           { 64-bit value in the r0:r1 pair: complement BOTH words. `mvn r0,r0`
             alone left the high word (r1) intact, so `not x` for an Int64 read as
             a 32-bit-wide complement (e.g. -6 printed as 4294967290). Mirrors the
-            i386 eax:edx pair. }
+            i386 eax:edx pair.
+
+            Through EmitNode64Arm32, not IREmitNodeArm32, exactly as IR_NEG's
+            64-bit arm does: the OPERAND may be narrower than the result, and
+            plain emission then leaves r1 holding whatever was there before.
+            `not High(Cardinal)` -- a 32-bit-tagged constant under a 64-bit NOT
+            -- printed -578716232904081408 instead of -4294967296, on arm32
+            alone (x86-64, i386, aarch64 and riscv32 all widen implicitly).
+            The narrower operand became reachable when constant `not` started
+            being typed by its folded value; the gap was always here. }
+          EmitNode64Arm32(IRA[node]);  { value -> r0:r1, widened if narrower }
           EmitI32($E1E00000); { mvn r0, r0 }
           EmitI32($E1E01001); { mvn r1, r1 }
         end
-        else if TypeIsOrdinal(IntToTypeKind(IRTk[node])) and
-           (IntToTypeKind(IRTk[node]) <> tyBoolean) then
-        begin
-          EmitI32($E1E00000); { mvn r0, r0 }
-        end
         else
         begin
-          EmitI32($E2200001); { eor r0, r0, #1 }
+          IREmitNodeArm32(IRA[node]);
+          if TypeIsOrdinal(IntToTypeKind(IRTk[node])) and
+             (IntToTypeKind(IRTk[node]) <> tyBoolean) then
+            EmitI32($E1E00000)   { mvn r0, r0 }
+          else
+            EmitI32($E2200001);  { eor r0, r0, #1 }
         end;
       end;
 

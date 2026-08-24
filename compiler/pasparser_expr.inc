@@ -274,7 +274,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     castTk2: TTypeKind;   { postfix tail on a record-factory result }
     helperPi, sci: Integer;
     isLiftedCall: Boolean;
-    bitNot: Boolean; notOrdTk: TTypeKind;
+    bitNot: Boolean; notOrdTk: TTypeKind; notConstV: Int64;
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec, szQUnit: Integer;
     szScan, szBd, szExprNode: Integer;
     szIsExpr: Boolean;
@@ -1188,6 +1188,34 @@ begin
             ASTTk[node] := Ord(tyUInt8)
           else if (Ord(notOrdTk) >= 7) and (Ord(notOrdTk) <= 16) then
             ASTTk[node] := Ord(notOrdTk);
+        end;
+        { ...unless the operand is a CONSTANT, and then the width question does
+          not arise: FPC evaluates a constant expression in a signed 64-bit
+          type, so `not High(Byte)` is -256, `not Low(Byte)` is -1 and
+          `not Ord('A')` is -66 -- while the same `not` over a byte-typed
+          VARIABLE complements at the variable's own width (254), which is why
+          this must not fire on a variable.
+
+          ParseFactor's tkMinus arm has typed a negated constant this way since
+          ASTConstIntValue was written for it; `not` is the same rule and was
+          never given it, so a constant operand complemented inside its small
+          type and produced a POSITIVE number where fpc gives a negative one.
+          bug-p-not-of-a-builtin-round-or-trunc-call-is-logical }
+        if ASTConstIntValue(left, notConstV, 0) then
+        begin
+          { the SMALLEST signed type the complement fits in, which is what FPC
+            gives a constant expression -- not a blanket Int64. The difference
+            is not cosmetic: forcing 64 bits made `not 255` an IR_NOT with a
+            64-bit result over a 32-bit immediate, and arm32 leaves the high
+            half of such a NOT undefined (measured: -579161170041110784 for
+            `not 255`, correct on x86-64/i386/aarch64/riscv32). That backend
+            gap is filed separately; typing the constant the way fpc does is
+            right on its own terms and stops feeding it. }
+          notConstV := not notConstV;
+          if (notConstV >= -2147483648) and (notConstV <= 2147483647) then
+            ASTTk[node] := Ord(tyInteger)
+          else
+            ASTTk[node] := Ord(tyInt64);
         end;
         LastExprTk := IntToTypeKind(ASTTk[node]);
       end
