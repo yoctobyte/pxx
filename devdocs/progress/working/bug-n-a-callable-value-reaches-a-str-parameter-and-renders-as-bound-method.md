@@ -99,3 +99,82 @@ will leave the mimic job red.
 *Filed by frank2-C during cascade triage; not claimed. Track N ground — the
 standing mandate defers N features and bugs, but a REGRESSION is worked at the
 priority of being red regardless of subject.*
+
+---
+
+## Worked by frank1-N (2026-08-25) — both halves plus the leak underneath
+
+Landed on `dev`, gate quick GREEN at `d37573c69` (self-host fixedpoint + testmgr
+quick, on a box with Track T running).
+
+### 1. The refusal — `bf5a9ba61`
+
+The bisect to `9bbbbef6c` is correct, and the mechanism is a NAME WHITELIST that
+went blind. `PyNodeIsCallableValue` recognises a callable by the name of the
+pylib call that constructed it, spelled out one at a time:
+
+    (nm = 'pybound_new') or (nm = 'pybound_new_star') or ...
+
+`9bbbbef6c` added `pybound_new_sig` and switched BOTH producers
+(`PyMakeFuncValueFor`, `PyMakeBoundMethod`) onto it, so from that commit on
+every bound method the frontend builds arrives under a name the predicate had
+never heard of. Nothing about the VALUE changed — only the label.
+
+Matched by prefix now: any `pybound_new<suffix>` is a `{code, recv}`
+constructor. The `pyclosure_*` / `pyboundfn_*` arms deliberately stay explicit —
+those families also hold predicates and dispatchers (`pyclosure_is`,
+`pyboundfn_call_ptr`) that do NOT produce a callable, so a prefix over-claims
+there.
+
+### 2. The leak — `293d70509`. NOT what the ticket note assumed.
+
+`str(f)` on a plain def printed a decimal, but **not** because the value was
+VT_INT64 and **not** because tag 12 was constructed nowhere. Measured with
+`pyvartag`:
+
+    print(pyvartag(g))    # 12   <- argument position
+    a = g; print(pyvartag(a))  # 8    <- after an assignment
+
+Tag 12 exists, the backends stamp it (`IRSrcIsCallable`), and all three
+rendering entry points already route it through `PyCallableStr`. The value
+simply never got boxed on one of the two roads: `ParseFactorCore`'s
+bare-callable arm handed back an `AN_PROCADDR` typed **tyPointer**, and a
+tyPointer argument never reaches a `const v: Variant` parameter — overload
+matching binds it to `pystr_of(Int64)`, which formats the code address as a
+number. The callable machinery was never consulted.
+
+That arm was a COPY of `PyMakeFuncValueFor`'s body (safe-overload pick,
+return-side wrapper, nested-def closure) and had drifted twice: the wrapper was
+still capped at `ParamCount = 1` while the assignment path had been widened to
+any arity, and the plain case never reached the `pybound_new` pair at all. It is
+now one line of delegation — the second implementation is deleted, not patched
+(`devdocs/dev/normalise-dont-special-case.md`).
+
+`test_nilpy_function_value_repr` grows the case its own header explicitly
+excluded ("NOT covered: a plain compiled def used as a value ... it still prints
+a number"); the whole file now matches CPython byte for byte.
+
+### 3. The compensating arm — `d37573c69`, removed, measured first
+
+`PyVarEqCallable`'s int arm ("an int opposite a real callable is a code
+address") is gone. Instrumented to report every time it answered **True**, it
+answered True **zero** times across the uforth smoke, four ANS word sets
+(exceptiontest / coreexttest / stringtest / localstest, all byte-identical to
+the CPython oracle), `lib_mimic_xml_etree_elementtree`, and eleven
+callable-value tests — and zero with the leak still OPEN too, built at
+`293d70509^`. So it was dead code before the fix as well as after, which is why
+this is a removal rather than a bet on the fix upstream of it. It also carried a
+divergence: CPython says a function is never equal to a number.
+
+### Repros
+
+    ./compiler/pascal26 test/test_nilpy_callable_to_str_param_fails.npy /tmp/x
+    # -> error: Nil Python: f expects text for parameter "s" ...   (exit 1)  GREEN
+
+    ./compiler/pascal26 -Fulib/rtl test/lib_mimic_xml_etree_elementtree.npy /tmp/m && /tmp/m | tail -1
+    # -> MIMIC-XML-ETREE OK                                                  GREEN
+
+### Pin
+
+`d37573c69` touches `compiler/builtin/pylib.pas`, so Track B's `lib-test` does
+not see the equality change until someone pins. Flagged to `frank1-72`.
