@@ -40,4 +40,4 @@ the specific entries to `ALLOWED` in the guard **with a reason**.
 still pass in the quick tier.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 5ca5c222d.
