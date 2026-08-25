@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 25
+prio: 30
 type: feature
 blocked-by: []
 summary: "A genexpr's elements are built EAGERLY and then walked by a cursor, so single consumption is right but an INFINITE genexpr still cannot be expressed and side effects all happen at construction. True laziness means a TPyIter whose mapping is the element expression."

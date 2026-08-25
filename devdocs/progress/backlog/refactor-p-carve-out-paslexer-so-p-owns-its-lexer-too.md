@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 45
+prio: 55
 type: refactor
 blocked-by: []
 summary: "The parser carve-out is done, but Pascal still shares lexer.inc with Track A — so the A/P no-concurrent-edit rule still binds, now over 2,566 lines instead of 37,249. Carve the Pascal-specific lexing into paslexer.inc the way C, NilPy, Rust and Zig already have their own, and the A/P slot stops existing."

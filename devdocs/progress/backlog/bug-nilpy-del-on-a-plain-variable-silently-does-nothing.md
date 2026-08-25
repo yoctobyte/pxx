@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 30
+prio: 35
 type: bug
 summary: "NilPy: `del x` on a plain variable is accepted and does nothing — the name stays bound, so reading it afterwards returns the old value where CPython raises NameError. `del lst[i]` and `del d[k]` are correct."
 ---

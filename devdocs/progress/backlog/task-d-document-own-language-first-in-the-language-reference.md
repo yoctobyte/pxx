@@ -1,6 +1,6 @@
 ---
 track: D
-prio: 40
+prio: 15
 type: task
 blocked-by: [feature-a-own-language-first-symbol-resolution]
 summary: "The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing."

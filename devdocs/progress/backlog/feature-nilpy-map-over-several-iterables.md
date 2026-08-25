@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 35
+prio: 40
 type: feature
 blocked-by: []
 summary: "`map(f, xs, ys)` — CPython's N-iterable map — is a PARSE error (\"Expected: )\"). The map arm reads exactly two arguments, and the whole callback path below it (PyCallKey1, pymap_iter_i, pyiter_map_i) is one-argument by construction."

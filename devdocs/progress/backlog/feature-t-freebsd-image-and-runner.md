@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 55
+prio: 20
 type: feature
 blocked-by: []
 summary: "Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T."

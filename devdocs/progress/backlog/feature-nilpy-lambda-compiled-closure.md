@@ -2,7 +2,7 @@
 summary: "nilpy: lambdas are interpreted by pyeval — compile them like nested defs (perf + one semantics)"
 type: feature
 track: N
-prio: 45
+prio: 55
 ---
 
 # A lambda's body runs in pyeval, interpreted from its source text

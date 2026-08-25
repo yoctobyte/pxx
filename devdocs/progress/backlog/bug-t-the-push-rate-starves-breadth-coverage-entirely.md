@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 60
+prio: 55
 type: bug
 blocked-by: []
 summary: "SHAPE 2 SHIPPED AND DID NOTHING (see the 2026-08-19 correction: 9 saved, 0 carried, 100% loss — fixed under bug-t-a-saved-partial-is-evicted-by-the-next-run-of-different-work); this closes on carried_runs leaving zero, not on more code. Zero full-tier runs on HEAD in the 5h13m between 9bfb7fcfac03 (10:31:57Z) and ~15:45Z, while cross-target coverage read as fine because every native verdict was green. RE-MEASURED: the watcher is idle 54% of that window (~2.8h, 8x what a full tier needs) — breadth is not starved by pushes, it is queued behind pin verify, which needs a contiguous 21 minutes, gets idle slices with a median of 299s, and discards 100% on every abort. Breadth ran within minutes of pin verify finally retiring. Fix is resumability plus bounding consecutive idle, NOT reserving a slot."

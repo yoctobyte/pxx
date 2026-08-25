@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 35
+prio: 55
 type: bug
 blocked-by: []
 summary: "`const S: string = 'a'; ... S := 'b';` is `undefined variable (S)`, though the same assignment works for a typed Integer, Char or ARRAY constant. Typed consts are writable here (fpc's default in non-Delphi modes) for every type except string, which is registered as a read-only literal alias with no storage."

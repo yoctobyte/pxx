@@ -1,6 +1,6 @@
 ---
 track: B
-prio: 45
+prio: 55
 type: bug
 blocked-by: []
 summary: "`Format('%u', [q])` on a QWord prints -1: sysutils' formatter aliases 'u' to 'd' and runs both through the signed IntToStr. FPC prints 18446744073709551615. The same line makes `%u` of Integer(-1) print -1 where FPC prints 4294967295. Filed from Track A+C+P — B owns lib/rtl."

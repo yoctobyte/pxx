@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 20
+prio: 5
 type: compat
 blocked-by: []
 summary: "pxx compiles `var p: Pointer;` and `procedure P(...)` in the SAME scope and resolves both correctly — bare p is the variable, P(x) the routine. FPC rejects it ('overloaded identifier \"p\" isn't a function'), since Pascal is case-insensitive and those are one identifier. Assumed to be dialect laxness rather than a defect, on the precedent set for overload widening; --strict-fpc should reject it. Not filed as a bug: nothing resolves wrongly."

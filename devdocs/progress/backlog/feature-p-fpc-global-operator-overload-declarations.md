@@ -1,7 +1,7 @@
 ---
 slug: feature-p-fpc-global-operator-overload-declarations
 track: P
-prio: 40
+prio: 72
 type: feature
 blocked-by: []
 summary: "`operator := (const u:qword):Tconstexprint;` — FPC's UNIT-SCOPE operator overload declaration — is not parsed. It is the first wall behind the FPC-compiler define profile: constexp.pas:58, and constexp is what cutils and cstreams pull in first."

@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 25
+prio: 15
 type: feature
 blocked-by: []
 summary: "blocktest-elfhash SKIPs in the uforth bench: blocktest.fth needs uforth's block-word preamble (FIRST-TEST-BLOCK / LIMIT-TEST-BLOCK / [?IF]) that tester.fr alone does not supply. It is the tracked ~100x-slow outlier, so while it skips the harness has no visibility on the worst case."

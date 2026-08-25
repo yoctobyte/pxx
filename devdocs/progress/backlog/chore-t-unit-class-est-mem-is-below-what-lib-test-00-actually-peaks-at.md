@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 30
+prio: 25
 type: chore
 blocked-by: []
 summary: "testmgr's own advisory, printed at the end of every full tier: `lib-test#00 peaked at 596 MB against a 550 MB estimate` for class `unit`. The scheduler admitted it on a promise the box did not have to keep. Raise the CLASSES row to max*1.5, or give the outlier its own class."

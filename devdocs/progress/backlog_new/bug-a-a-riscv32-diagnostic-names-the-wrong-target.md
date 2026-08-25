@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 20
+prio: 25
 type: bug
 blocked-by: []
 status: backlog

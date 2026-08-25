@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 25
+prio: 18
 type: refactor
 blocked-by: []
 summary: "AddPasUnitDir / AddPasIncDir / AddCIncludeDir are generic search-path functions that live in cpreproc.inc, so compiler.pas's own -Fu/-I handling depends on the C frontend. Six of the eleven errors from omitting the C frontend are this misplacement, not coupling: moving them drops omit-c from 11 sites to about 4."

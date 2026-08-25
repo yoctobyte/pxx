@@ -1,5 +1,5 @@
 ---
-prio: 65
+prio: 40
 ---
 
 # C differential fuzzing (csmith vs gcc) — campaign, PAUSED with the harness live

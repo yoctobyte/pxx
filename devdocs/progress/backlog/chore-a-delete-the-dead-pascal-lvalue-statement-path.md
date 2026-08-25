@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 25
+prio: 30
 type: chore
 summary: "`ParseLValue` and `CompileLValueAddress` in pasparser_lval.inc have no callers anywhere in compiler/** — ~130 lines of pre-AST statement-assignment parsing, including direct machine-code emission, that nothing reaches."
 ---

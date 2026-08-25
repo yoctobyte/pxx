@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 20
+prio: 12
 type: feature
 summary: "`DialectIsPxx` now exists and only `--strict-overload` consults it. The other six strict flags apply everywhere, including to our own {$MODE PXX} RTL. Audit each one: does it WANT the ownership carve-out, or is it right to judge every file?"
 status: backlog

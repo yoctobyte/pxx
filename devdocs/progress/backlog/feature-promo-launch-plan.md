@@ -1,5 +1,5 @@
 ---
-prio: 25
+prio: 15
 ---
 
 # Promo & launch plan — visibility now, 0.1 beta next, the loud moment last

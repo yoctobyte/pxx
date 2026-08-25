@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 25
+prio: 15
 type: bug
 blocked-by: []
 summary: "tools/twatch_web.py lists riscv64 in CROSS_TARGETS, but no compiler backend can produce a riscv64 binary and the test manager never mentions the target. The dashboard therefore carries a column that is structurally empty, and an empty column reads as 'no news' rather than 'impossible'."

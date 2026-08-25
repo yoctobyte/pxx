@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 30
+prio: 40
 type: feature
 blocked-by: []
 summary: "--emit-obj objects built with and without --compact-classes disagree on VMT slot numbers, and nothing diagnoses it. Record the class-ABI mode in the object and refuse a mismatched link, the way --threadsafe's hazard is meant to be handled."

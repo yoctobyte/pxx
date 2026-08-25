@@ -1,7 +1,7 @@
 ---
 slug: feature-demo-ide-jump-into-includes-and-units
 track: B
-prio: 25
+prio: 35
 type: feature
 blocked-by: []
 summary: "garin's diagnostic parser keys off `a number between the first two colons` and carries no file, on the stated assumption that the compiler names one main unit. Since 2026-08-21 that is no longer true: a diagnostic in an include or a `uses`d unit is followed by an `in: <path>` line, which the IDE currently drops, so jump-to-error lands on the wrong file."

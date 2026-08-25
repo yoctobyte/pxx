@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 45
+prio: 78
 type: bug
 blocked-by: []
 summary: "`class X(mod.X)` — a class whose qualified base shares its name — is refused with `class X cannot inherit from itself` when written in the MAIN PROGRAM. The identical code in a pulled `.py` module compiles and dispatches correctly, and renaming either class makes the program case work too, so the variable is the name collision on the program path. This is how all ~100 of CPython's `encodings/*.py` and html5lib's filters are written."

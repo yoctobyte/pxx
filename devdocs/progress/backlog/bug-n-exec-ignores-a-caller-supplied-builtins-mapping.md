@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 35
+prio: 20
 type: bug
 blocked-by: []
 summary: "`exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key."

@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 15
+prio: 5
 type: idea
 blocked-by: []
 ---

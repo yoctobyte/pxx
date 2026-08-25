@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 25
+prio: 65
 type: bug
 blocked-by: []
 summary: "`_κ = 5` is legal Python 3 and the NilPy lexer rejects it with `unexpected character`. Non-ASCII in a STRING literal already works, so this is the identifier path only. Two tinycss2 files (color4.py, color5.py) use Greek letters as names for colour-space constants."

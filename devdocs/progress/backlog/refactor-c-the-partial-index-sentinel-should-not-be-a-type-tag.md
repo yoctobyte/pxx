@@ -1,6 +1,6 @@
 ---
 track: C
-prio: 25
+prio: 40
 type: refactor
 blocked-by: []
 summary: "cparser's partial-index builder marks 'this add is raw bytes, do not scale' by RETAGGING its base ASTTk to tyInt64 — a type tag used as a flag. tyInt64 is also the honest element tag of a `long long` array, and that collision cost a real bug."

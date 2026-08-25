@@ -1,6 +1,6 @@
 ---
 track: B
-prio: 65
+prio: 88
 type: bug
 blocked-by: []
 summary: "`read(f, n)` / `readln(f, n)` on a Text file reads the whole LINE and Vals it, so any line with two numbers, or one number plus trailing spaces, silently yields 0. `readln(t, n, m)` on '42 3' gives 0 0 where FPC gives 42 3. Works only when the line holds exactly one number and nothing else."

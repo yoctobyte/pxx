@@ -2,7 +2,7 @@
 slug: bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one
 title: "`Length(p^)` over a pointer to a named DYNAMIC array answers 1, and `High(p^)` answers 0"
 track: P
-prio: 30
+prio: 50
 type: bug
 blocked-by: []
 status: backlog_new

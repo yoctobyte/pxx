@@ -1,5 +1,5 @@
 ---
-prio: 25  # auto
+prio: 60
 ---
 
 # Real-world C programs as compiler stress tests (brainstorm)

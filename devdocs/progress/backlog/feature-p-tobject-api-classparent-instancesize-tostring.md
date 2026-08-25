@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 20
+prio: 15
 type: feature
 blocked-by: []
 summary: "Was six TObject members pxx rejected; five landed. Only ClassInfo is left, and it is a Track U question (decide-classinfo-returns-our-blob-or-nothing), not an implementation choice. UnitName -- not in the original six -- is the other gap, tracked in feature-pascal-builtin-tobject-class."

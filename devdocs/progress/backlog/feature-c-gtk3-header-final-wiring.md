@@ -1,5 +1,5 @@
 ---
-prio: 45  # auto
+prio: 55
 ---
 
 # GTK3 header import final wiring

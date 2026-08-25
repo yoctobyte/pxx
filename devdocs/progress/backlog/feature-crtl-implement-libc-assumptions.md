@@ -1,6 +1,6 @@
 ---
 track: B
-prio: 10  # standing collector: rank the batch you file, not this
+prio: 45
 ---
 
 # crtl: implement the libc assumptions real-world C leans on

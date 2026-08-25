@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 45
+prio: 65
 type: bug
 blocked-by: []
 summary: "A Track A change that adds a builtin and uses it from lib/rtl breaks every $(PXX_STABLE) build the moment it lands, because stable_linux_amd64/default/builtin/ is a FROZEN copy — and gate.sh quick is green through it, because the quick gate never builds anything with the pinned binary. It happened on 2026-08-21 and Track B/D/E were dead on master until the next pin. A ~1s canary closes it."

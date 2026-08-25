@@ -2,7 +2,7 @@
 summary: "nilpy runtime: pycallback_call2/3 and a multi-parameter bound-fn call, so a callable can receive more than one own argument"
 type: feature
 track: N
-prio: 35
+prio: 45
 ---
 
 # A NilPy callable can only be handed ZERO or ONE argument from library code

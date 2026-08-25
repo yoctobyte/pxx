@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 40
+prio: 50
 type: bug
 blocked-by: []
 summary: "str(e) on an exception class declared in a Pascal unit dispatches __str__ by the STATIC type of the except clause, not the runtime type: `except URLError as e` gives '<urlopen error boom>' and `except Exception as e` gives 'boom' for the same object. CPython gives the same string either way. Pure-NilPy classes are NOT affected."

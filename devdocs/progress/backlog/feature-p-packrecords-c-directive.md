@@ -1,7 +1,7 @@
 ---
 slug: feature-p-packrecords-c-directive
 track: P
-prio: 30
+prio: 58
 type: feature
 blocked-by: []
 summary: "`{$packrecords c}` is refused with 'invalid packrecords value: c'. It means 'lay records out the way this platform's C compiler does', which is what every FPC header binding to a C library uses — and it is what blocks the arm profile of --mimic-fpc-compiler, since fpcdefs.inc's arm branch sets it."

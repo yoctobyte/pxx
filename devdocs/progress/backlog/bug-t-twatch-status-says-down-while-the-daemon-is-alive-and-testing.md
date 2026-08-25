@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 40
+prio: 55
 type: bug
 blocked-by: []
 summary: "tools/twatch.py --status exits 1 (DOWN, 'run your own full gate') on the same box and at the same moment that tools/trackt.py health reports OK with a live daemon in phase=testing. The DOWN verdict is a pure staleness heuristic — newest commit untested for > 45 min — so a productive night of pushes, or a loaded box, manufactures it. CLAUDE.md makes either command's DOWN the trigger for a 10-minute full gate, so a false DOWN costs every dev agent ten minutes per fix."

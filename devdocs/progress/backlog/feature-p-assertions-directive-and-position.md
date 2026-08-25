@@ -2,7 +2,7 @@
 summary: "RE-TYPED 2026-08-19 feature -> bug for half 1: `{$ASSERTIONS OFF}` is ACCEPTED AND IGNORED — measured on v363, an Assert whose condition has a side effect still runs it (n=1 where FPC gives n=0), so the two dialects take different paths with no diagnostic. Implement FPC assertion parity: {$ASSERTIONS ON/OFF} and -Sa gating (Assert compiled OUT when off, so its side effects do not run), plus the '(file, line N)' suffix FPC appends to the message"
 type: bug
 track: P
-prio: 40
+prio: 55
 ---
 
 # `{$ASSERTIONS}` gating and the `(file, line N)` message suffix

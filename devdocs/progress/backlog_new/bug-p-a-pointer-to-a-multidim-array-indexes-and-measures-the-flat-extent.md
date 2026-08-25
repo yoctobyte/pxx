@@ -2,7 +2,7 @@
 slug: bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent
 title: "`qg^[i, j]` over a pointer to a 2-D array indexes with the wrong dims, and `Length(qg^)` answers the flattened count"
 track: P
-prio: 35
+prio: 60
 type: bug
 blocked-by: []
 status: backlog_new

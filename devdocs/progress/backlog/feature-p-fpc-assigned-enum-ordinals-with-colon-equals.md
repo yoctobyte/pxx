@@ -1,7 +1,7 @@
 ---
 slug: feature-p-fpc-assigned-enum-ordinals-with-colon-equals
 track: P
-prio: 40
+prio: 72
 type: feature
 blocked-by: []
 summary: "An enum with explicit ordinals written FPC-style — `(ms_on := 1, ms_off := 2)` — is refused. objfpc mode spells assigned enum values with `:=` where Delphi mode uses `=`; pxx accepts only the Delphi spelling. Second wall behind the FPC-compiler define profile: globtype.pas:800, which cclasses pulls in."

@@ -1,5 +1,5 @@
 ---
-prio: 40
+prio: 35
 ---
 
 # Decide the Pascal-import namespace for C packages (`uses zlib` collision)

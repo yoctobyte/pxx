@@ -2,7 +2,7 @@
 slug: bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence
 track: T
 type: bug
-prio: 45
+prio: 40
 status: backlog
 blocked-by: []
 summary: "file_cascade_ticket's Root-cause-suspects line falls back to 'likely a broken build or harness event' whenever no CASCADE_ROOT_JOBS entry is in the red set. That is a conclusion drawn from the absence of one narrow signal, printed with no hedge, and it is now directly contradicted by the Range section shipped in 8ec77190c — which on the live incident named the actual cause. Same defect class the Range work fixed for the sha: an auto-filed ticket asserting something it has no evidence for."

@@ -1,5 +1,5 @@
 ---
-prio: 45  # auto
+prio: 20
 ---
 
 # Cross-frontend interop contract — umbrella

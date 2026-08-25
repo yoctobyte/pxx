@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 35
+prio: 20
 type: bug
 blocked-by: []
 summary: "`str.__name__` / `int.__name__` raise AttributeError: 'type' object has no attribute '__name__'. A USER class answers correctly, so only the builtin-type value (VT_BTYPE) is missing the attribute. Clean Python-shaped error, not a crash."

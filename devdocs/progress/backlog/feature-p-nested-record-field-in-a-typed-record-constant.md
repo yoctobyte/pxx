@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 40
+prio: 48
 type: feature
 blocked-by: []
 summary: "`const CN: TNest = (p: (x: 1; y: 2); tag: 'k');` is rejected with `error: not a constant` when a field is itself a RECORD. Array-valued fields and array-of-record constants both work; only a record-typed field is missing. Loud (a compile error, never a wrong value)."

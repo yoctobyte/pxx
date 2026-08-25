@@ -2,7 +2,7 @@
 slug: bug-a-a-dynarray-delete-temp-holds-the-new-buffer-until-scope-exit
 title: "After Delete/Insert/Copy, the fresh-buffer temp keeps a reference until SCOPE EXIT, so `a := nil` destroys nothing"
 track: A
-prio: 35
+prio: 40
 type: bug
 blocked-by: []
 status: backlog_new

@@ -2,7 +2,7 @@
 slug: bug-p-high-and-low-refuse-every-non-identifier-operand
 title: "`High('abc')`, `High('ab' + s)` and `High(('ab'))` are all parse errors"
 track: P
-prio: 35
+prio: 30
 type: bug
 blocked-by: []
 status: backlog_new

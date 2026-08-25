@@ -1,6 +1,6 @@
 ---
 track: O
-prio: 45
+prio: 65
 type: feature
 summary: "The runtime's bulk-copy primitives move ONE BYTE per iteration. Copy() on a 64-element array is ~23x slower than FPC's (2.54s vs 0.11s over 3M copies). A word-at-a-time loop -- ~10 lines, portable, no backend work -- was prototyped and measured at 3.3x of that back."
 ---

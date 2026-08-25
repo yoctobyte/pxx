@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 35
+prio: 60
 type: bug
 summary: "`stdcall`/`safecall`/`pascal`/`mwpascal` are accepted on a class METHOD declaration but are a parse ERROR on a plain routine, an `external`, or a procedural type — so FPC sources that spell a convention on a routine do not compile, and which spelling works depends on where it is written."
 ---

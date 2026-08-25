@@ -1,6 +1,6 @@
 ---
 track: B
-prio: 35
+prio: 65
 type: feature
 blocked-by: []
 summary: "`SeekEof`, `SeekEoln`, `Rename` and `SetTextBuf` are absent from the Text surface — every one is `undefined variable` at compile time. `SeekEof`/`SeekEoln` are the whitespace-tolerant loop conditions ordinary token-reading code uses; `Rename` has its PAL entry point already (`PalRename`) and needs only the Text-handle wrapper."

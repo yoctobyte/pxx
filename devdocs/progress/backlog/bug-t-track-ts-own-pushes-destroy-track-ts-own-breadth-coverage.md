@@ -2,7 +2,7 @@
 slug: bug-t-track-ts-own-pushes-destroy-track-ts-own-breadth-coverage
 track: T
 type: bug
-prio: 50
+prio: 45
 status: backlog
 blocked-by: []
 summary: "NOTEST_PREFIXES is ('devdocs/', 'docs/'), so tools/** is testable — correct, since a testmgr change can change results. The consequence is that Track T is the only lane whose ordinary work systematically destroys its own coverage: any T tooling push aborts an in-flight idle-phase full tier and discards 100% of it. Measured 2026-08-19: one twatch push killed the first breadth run in 5h13m at ~207/2765 jobs. Batching by hand is a habit, not a property."

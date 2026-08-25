@@ -53,35 +53,35 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 ## Ready — top 30 of 312, ranked
 
-- `[p 70] [T]` bug-t-the-native-tier-times-out-and-publishes-a-contentless-red
+- `[p 85] [T]` bug-t-the-native-tier-times-out-and-publishes-a-contentless-red
+- `[p 88] [B]` bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
 - `[p 88] [N]` bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
-- `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree-2
-- `[p 70] [N]` regression-test-nilpy-test-nilpy-callable-to-str-param-fails
-- `[p 65] [B]` gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo (unblocks 1)
-- `[p 65] [B]` bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
-- `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
-- `[p 65] [T]` bug-t-agents-kill-each-others-processes-with-pattern-pkill
-- `[p 65] [C]` feature-c-csmith-differential-fuzzing
-- `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
-- `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
-- `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
-- `[p 65] [P]` feature-pascal-corpus-oop
-- `[p 62] [N]` bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name
-- `[p 62] [B]` feature-b-the-module-shim-batch-blocking-the-python-corpus
-- `[p 60] [N]` bug-n-every-nilpy-compile-pays-a-fixed-nine-second-cost
-- `[p 60] [N]` bug-n-inferred-return-type-of-true-division-is-int
-- `[p 60] [T]` bug-t-the-push-rate-starves-breadth-coverage-entirely
-- `[p 60] [T]` feature-t-gate-quick-should-smoke-the-pinned-compiler
-- `[p 58] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
-- `[p 58] [O]` feature-opt-o3-register-pressure
-- `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
-- `[p 55] [A]` feature-nilpy-object-reclamation (unblocks 1)
-- `[p 55] [T]` feature-t-freebsd-image-and-runner (unblocks 1)
-- `[p 55] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
-- `[p 55] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
-- `[p 55] [N]` bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence
-- `[p 55] [N]` bug-n-hasattr-through-an-untyped-parameter-is-always-false
-- `[p 55] [N]` bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
-- `[p 55] [N]` bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
+- `[p 88] [N]` bug-n-inferred-return-type-of-true-division-is-int
+- `[p 82] [N]` bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
+- `[p 80] [N]` bug-n-a-class-base-that-is-an-expression-does-not-compile
+- `[p 80] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
+- `[p 80] [N]` bug-n-hasattr-through-an-untyped-parameter-is-always-false
+- `[p 78] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
+- `[p 78] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
+- `[p 78] [N]` bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program
+- `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
+- `[p 75] [B]` feature-b-rtl-gap-inventory-22-sysutils-strutils-symbols
+- `[p 75] [P]` feature-pascal-corpus-expansion
+- `[p 75] [P]` feature-pascal-corpus-oop
+- `[p 72] [N]` bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
+- `[p 72] [N]` feature-nilpy-stdlib-coverage-gaps-measured
+- `[p 72] [P]` feature-p-fpc-assigned-enum-ordinals-with-colon-equals
+- `[p 72] [P]` feature-p-fpc-global-operator-overload-declarations
+- `[p 72] [B]` feature-typinfo-facade-unit
+- `[p 70] [N]` bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through
+- `[p 70] [N]` bug-n-an-augmented-subscript-on-a-dunder-class-is-refused
+- `[p 70] [N]` bug-nilpy-a-lambda-returned-directly-is-not-callable
+- `[p 70] [N]` bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
+- `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
+- `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
+- `[p 70] [P]` feature-p-delphi-string-helpers
+- `[p 70] [P]` feature-pascal-typed-and-untyped-files
+- `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
+- `[p 68] [E]` feature-demo-songformatter-pxx-target
 
 _282 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 35
+prio: 25
 type: feature
 blocked-by: []
 summary: "tools/uforth_bench.py is standalone + a make target, so uforth rows only exist when a human types it. Hang it off the watcher's idle bench phase so rows land per-sha automatically — which is also the only way to get the quiet-box baseline the harness has never had, and the instrument for the open slow-creep question."

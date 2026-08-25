@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 30
+prio: 48
 type: bug
 blocked-by: []
 summary: "`Low(a)` / `High(a)` on `array['a'..'e'] of Integer` answer 97 and 101 where fpc answers 'a' and 'e', so `for c := Low(a) to High(a)` does not compile against a Char loop variable. The bound is folded as tyInteger because the array's INDEX type is not recorded anywhere."

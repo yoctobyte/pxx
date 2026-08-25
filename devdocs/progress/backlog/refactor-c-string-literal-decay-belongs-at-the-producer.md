@@ -1,6 +1,6 @@
 ---
 track: C
-prio: 45
+prio: 50
 type: refactor
 blocked-by: []
 summary: "The +8 that turns a C string literal's handle into a char* is duplicated at three consumers (assign, return, call argument), each keyed on `ASTKind[...] = AN_STR_LIT`. Any wrapper node defeats all three at once -- which is exactly how bug-c-a-pointer-cast-of-a-string-literal-points-at-the-length-prefix happened. Do the decay once, at the producer."

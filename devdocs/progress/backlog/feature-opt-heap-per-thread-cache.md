@@ -1,5 +1,5 @@
 ---
-prio: 55  # auto — allocation under threads is currently a NEGATIVE speedup; blocks every allocating parallel workload
+prio: 48
 track: A
 ---
 

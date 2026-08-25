@@ -1,6 +1,6 @@
 ---
 track: B
-prio: 35
+prio: 40
 type: feature
 blocked-by: []
 summary: "The compiler now exports __pxxCpuHasHwRandom / __pxxHwRandom64 (x86-64 RDRAND behind a CPUID probe), which is what lib/rtl/random.pas's tier-1 stub has been waiting for. The library still runs one tier below its design; wiring it is a Track B change of a few lines."

@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 25
+prio: 50
 type: feature
 blocked-by: []
 summary: "Every FPC-parity finding we produce is measured against installed FPC 3.2.2, so it inherits 3.2.2's bugs — and that has now twice produced a false 'pxx diverges from FPC' where pxx actually agreed with FPC trunk and only 3.2.2 was wrong. Give the probes a three-way verdict: pxx vs FPC-stable vs FPC-trunk."

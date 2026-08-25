@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 55
+prio: 78
 type: bug
 blocked-by: []
 summary: "A base class whose __iter__ only raises poisons every subclass override: `for k in self` inside a base method calls the BASE __iter__, and the subclass's real __iter__ is never reached — `iter() returned non-iterator of type 'Sub'`. This is the whole ABC mixin pattern."

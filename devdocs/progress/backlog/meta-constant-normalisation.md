@@ -1,5 +1,5 @@
 ---
-prio: 45
+prio: 20
 track: A
 type: meta
 summary: "Standing index: stop writing compiler code that branches on constant-vs-variable. Each constant expression becomes its own uniquely-named read-only variable, so downstream has ONE shape to handle. Goal is less double work on future fixes, not speed."

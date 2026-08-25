@@ -1,7 +1,7 @@
 ---
 summary: "NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle"
 type: feature
-prio: 20
+prio: 45
 ---
 
 # NilPy differential fuzzer (vs CPython)

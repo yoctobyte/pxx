@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 20
+prio: 8
 type: compat
 blocked-by: []
 summary: "`--strict-fpc` reproduces FPC's shift widths but not its `Abs`/`Sqr` widths, so `Abs(Low(Integer))` and `Sqr(65536)` keep the native-width answer under the flag. Completes the strict-mode escape hatch the shift decision promised."

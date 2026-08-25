@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 25
+prio: 65
 type: feature
 blocked-by: []
 summary: "TypeInfo(T) now answers kind + name for every category that has a consumer, but every non-class/record blob writes a nil DataPtr — no TTypeData. The data is all already in the compiler (subrange bounds, set element enum, array element type and dims); this is emission, not discovery. Plus the three categories with no consumer yet: interfaces (14), metaclasses (28), Currency (4, which needs a type-system change first)."

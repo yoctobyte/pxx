@@ -1,6 +1,6 @@
 ---
 track: C
-prio: 15
+prio: 22
 type: compat
 blocked-by: []
 summary: "`printf(\"%p\", NULL)` prints `0x0`; glibc prints `(nil)`. Only the null case differs — a non-null pointer prints identically. It matters because it makes a gcc-oracle differential run report a divergence that is not a miscompile."

@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 65
+prio: 55
 type: bug
 blocked-by: []
 summary: "Two csmith batches were killed mid-run from outside their own session. Pattern-pkill (pkill -f <name>) cannot distinguish two agents running the same tool, and this repo ALREADY hit and solved this class once in tools/gui_shot.sh — the rule was written into that one script and never generalised, while devdocs/dev/debugging-playbook.md still actively teaches `pkill -9 -f <path>`."

@@ -1774,7 +1774,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-lib-bignum-operators | B | 42 | feature | bignum operator layer: TBigInt + - * div mod comparisons — Track B | — |
 | feature-lib-markdown | B | 45 | feature | A Markdown library — and the `markdown` Python shim over it | — |
 | feature-lib-mimic-string | B | 40 | feature | Write lib/pcl/mimic_string.pas — ascii_lowercase, ascii_uppercase, digits, punctuation, whitespace, capwords. The resolver now prefers a mimic_ shim over a same-named C header, so this is the half that makes `import string` in a .npy stop finding /usr/include/string.h. | — |
-| feature-lib-pxxpdf-reportlab-compat | B | 50 | feature | pxxpdf — pxx pdfgen-backed, reportlab-compatible PDF library (nilpy) | decide-pxxpdf-ticket-obsolete |
+| feature-lib-pxxpdf-reportlab-compat | B | 50→68 | feature | pxxpdf — pxx pdfgen-backed, reportlab-compatible PDF library (nilpy) | decide-pxxpdf-ticket-obsolete |
 | feature-lib-pyexec | B | 45 | feature | lib pyexec: a real exec() for Python-subset source (library, two engines) | feature-rtti-field-reflection |
 | feature-lib-regex-engine | B | 50 | feature | regex engine library — backtracking matcher, the substrate for nilpy's re module | — |
 | feature-lib-reportlab-fidelity-vs-oracle | B | 45 | feature | The reportlab mimic produces a VALID PDF, never one shown to agree with real reportlab. Differential-test lib/pcl/mimic_reportlab_* against CPython+reportlab on the same script | — |
@@ -1876,7 +1876,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-py-module-loader | N | 55 | feature | NilPy: `import <sibling>.py` — compile a real Python module as a unit | — |
 | feature-nilpy-qualified-class-construction | N | 55 | feature | nilpy: unit-qualified class construction (`tk.Frame(...)`) | — |
 | feature-nilpy-range-as-a-value | N | 55 | feature | range was NOT A VALUE — `r = range(3)` was `undefined variable (range)`, and `list(range(3))` worked only through a hard-coded whitelist of callees that promise to merely iterate their argument. TPyRange makes it CPython's lazy SEQUENCE: re-iterable, indexable, len-able, sliceable, constant-time membership, three Int64s and no storage. | — |
-| feature-nilpy-re-module | N | 50 | feature | nilpy: re module (match/search/sub/findall/fullmatch/compile) over the regex engine | feature-lib-regex-engine |
+| feature-nilpy-re-module | N | 50→68 | feature | nilpy: re module (match/search/sub/findall/fullmatch/compile) over the regex engine | feature-lib-regex-engine |
 | feature-nilpy-runtime-method-dispatch-on-variant | N | 50 | feature | NilPy: dispatch a method call on a VARIANT receiver at RUNTIME | — |
 | feature-nilpy-set-methods-issubset-union-etc | N | 35 | feature | set methods missing: issubset/issuperset/union/intersection/difference/discard | — |
 | feature-nilpy-set-needs-runtime-tag-for-display-and-equality | N | 40 | feature | A `set` needs its own runtime tag — two divergences from `list` share this root cause | — |
@@ -1891,7 +1891,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-nilpy-tk-binding | B | 45 | feature | Thin Tcl/Tk embed for pxx (lib/pcl/tk.pas) + a tkinter-shaped NilPy surface — v1 landed | — |
 | feature-nilpy-tk-callbacks | B | 65 | feature | nilpy/PCL: tkinter callbacks — a bound method as command=/bind(), via Tcl_CreateCommand | — |
 | feature-nilpy-tkinter-facade-widening | B | 60 | feature | tkinter façade: the surface a real GUI app needs (callables, ttk, Menu, Text, tuple coords) | — |
-| feature-nilpy-tkinter-facade | N | 50 | feature | nilpy: tkinter-shaped façade over lib/pcl/tk.pas — widget objects, kwargs, command callbacks | — |
+| feature-nilpy-tkinter-facade | N | 50→68 | feature | nilpy: tkinter-shaped façade over lib/pcl/tk.pas — widget objects, kwargs, command callbacks | — |
 | feature-nilpy-tuple-return | N | 50 | feature | nilpy: return a tuple — `return 1, 2` (and unpack at the call site) | — |
 | feature-nilpy-tuple-unpack | N | 55 | feature | NilPy: sequence unpacking (`a, b = ...`, `for k, v in ...`) | — |
 | feature-nilpy-wire-pyeval-exec | A | 55 | feature | Wire pyeval into NilPy exec() — auto-use triggers an unrelated str-index segfault | — |
@@ -2057,7 +2057,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-typed-const-arrays | A | 50 | feature | Typed constant arrays (initialized const arrays) | — |
 | feature-typed-const-record | A | 50 | feature | feature: typed constant record initializer (`const r: TRec = (...)`) | — |
 | feature-typed-instruction-encoders | A | 50 | feature | Typed instruction encoders for codegen | — |
-| feature-typeinfo-all-types | A | 50 | feature | `TypeInfo(T)` for every type, not just enums | — |
+| feature-typeinfo-all-types | A | 50→72 | feature | `TypeInfo(T)` for every type, not just enums | — |
 | feature-types-unit | B | 50 | feature | `types` unit (System.Types core) — geometry records + TDuplicates | — |
 | feature-unified-heap-allocator | A | 50 | feature | Unified syscall-free heap allocator | — |
 | feature-untyped-parameters | B | 50 | feature | Untyped `var` / `const` / `out` parameters | — |

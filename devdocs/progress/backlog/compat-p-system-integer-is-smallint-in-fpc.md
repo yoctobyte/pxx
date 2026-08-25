@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 15
+prio: 10
 ---
 
 # `System.Integer` is SmallInt in FPC, LongInt in pxx

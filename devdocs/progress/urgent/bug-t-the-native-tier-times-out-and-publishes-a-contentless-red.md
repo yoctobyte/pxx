@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 70
+prio: 85
 type: bug
 blocked-by: []
 summary: "Every native run on plexus since 14:28 today has ended at wall 3600.x — the one-hour cap — and publishes verdict RED. The last three carry new_red: [] AND still_red: [], i.e. a RED with nothing attributed: the run is killed before it can name anything. So Track T has had no usable verdict for six hours while looking, to --status and to every agent, exactly like a persistent regression. A timeout must not publish as RED."

@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 35
+prio: 30
 type: feature
 blocked-by: []
 summary: "A fuzz rung that has only ever been SILENT is indistinguishable from one that does not work. Proposes a --selftest that proves each rung's fold actually observes its construct, by MUTATING the generated program rather than by rebuilding an old compiler — cheaper, needs no checkout, and applies to rungs that were never written against a specific fix."

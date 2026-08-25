@@ -3,7 +3,7 @@ slug: bug-t-a-pin-verifys-reds-carry-no-reasons
 title: A pin verify's reds carry no reasons, so the jobs most needing triage are the ones with nothing recorded
 track: T
 kind: bug
-prio: 45
+prio: 40
 status: backlog
 ---
 

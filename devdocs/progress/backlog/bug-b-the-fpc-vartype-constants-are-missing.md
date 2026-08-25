@@ -1,7 +1,7 @@
 ---
 slug: bug-b-the-fpc-vartype-constants-are-missing
 track: B
-prio: 30
+prio: 55
 type: bug
 status: backlog
 blocked-by: []

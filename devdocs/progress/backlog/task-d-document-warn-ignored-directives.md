@@ -2,7 +2,7 @@
 summary: "New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert"
 type: task
 track: D
-prio: 30
+prio: 20
 ---
 
 # Document `--warn-ignored-directives`

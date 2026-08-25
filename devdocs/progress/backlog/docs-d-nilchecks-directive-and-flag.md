@@ -1,6 +1,6 @@
 ---
 track: D
-prio: 40
+prio: 30
 type: docs
 blocked-by: []
 summary: "{$NILCHECKS ON|OFF} and --no-nil-check shipped 2026-08-21 and are not in docs/reference/directives.md or modes.md. The row is unusual enough to be worth a sentence: the directive is tri-state, so ON and OFF do different things depending on which site class you are looking at."

@@ -1,7 +1,7 @@
 ---
 slug: feature-c-diagnostics-name-the-module-they-are-in
 track: C
-prio: 30
+prio: 40
 type: feature
 blocked-by: []
 summary: "A Pascal diagnostic now prints `in: <path>` when the error is in an include or a `uses`d unit. The C frontend has the same information already — CModRange* is populated in every build, not just under -g — and prints nothing, so an error in a crtl module or an included header still reports a bare line number."

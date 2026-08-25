@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 30
+prio: 48
 type: feature
 blocked-by: []
 summary: "`High(QWord)`, `Low(UInt64)`, `High(NativeUInt)` and `High(PtrUInt)` are rejected at compile time — the const evaluator carries Int64, which cannot hold 2^64-1. Every other integer type name folds. Idiomatic FPC code that spells a machine-word bound this way does not compile."

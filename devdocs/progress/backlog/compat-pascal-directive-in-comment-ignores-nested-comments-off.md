@@ -2,7 +2,7 @@
 summary: "With nested comments OFF (delphi mode), a {$...} sequence inside a brace comment does not end the comment in pxx, but does in FPC. Lax direction — pxx accepts sources FPC rejects"
 type: compat
 track: P
-prio: 25
+prio: 5
 ---
 
 # `{$...}` inside a brace comment survives `{$NESTEDCOMMENTS OFF}` in pxx

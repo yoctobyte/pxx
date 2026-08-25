@@ -1,6 +1,6 @@
 ---
 track: C
-prio: 40
+prio: 60
 type: bug
 blocked-by: []
 summary: "The C driver calls EmitIoLockStubsForTarget directly instead of the shared EmitProgramRuntimeStubsForTarget, so a C program still ships with no signal runtime. Every other frontend was moved over on 2026-08-21; C was left alone because cparser.inc is Track C's file-lane. One line."

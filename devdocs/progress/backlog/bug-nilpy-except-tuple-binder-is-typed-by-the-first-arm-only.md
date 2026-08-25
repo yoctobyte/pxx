@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 20
+prio: 55
 type: bug
 blocked-by: []
 summary: "`except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field."

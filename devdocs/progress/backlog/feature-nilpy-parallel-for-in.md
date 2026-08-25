@@ -2,7 +2,7 @@
 track: N
 summary: "NilPy parallel for-in — lower a marked for-loop to the shared PXXParallelFor runtime"
 type: feature
-prio: 5
+prio: 10
 blocked-by: []   # was decide-nilpy-parallel-capture-semantics — DECIDED 2026-08-11
 ---
 

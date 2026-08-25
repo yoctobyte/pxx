@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 35
+prio: 55
 type: bug
 summary: "`SizeOf(p^.A)` is a parse error (`Expected: ), but got: ^`). SizeOf's operand parser is a hand-rolled selector walk that handles `v`, `v.f.g` and `v[i]` but has no `^` case, so any pointer deref in the operand is rejected outright."
 ---

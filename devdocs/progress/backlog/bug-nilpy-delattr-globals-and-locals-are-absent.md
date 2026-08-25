@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 15
+prio: 12
 type: bug
 blocked-by: []
 summary: "`delattr`, `globals()` and `locals()` are `undefined variable`. delattr is a real gap with no runtime entry behind it; globals/locals want a run-time name table this dialect deliberately does not build, so they may be a documented divergence rather than a bug."

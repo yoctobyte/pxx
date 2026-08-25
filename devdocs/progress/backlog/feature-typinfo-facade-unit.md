@@ -1,5 +1,5 @@
 ---
-prio: 50
+prio: 72
 blocked-by: [feature-typeinfo-all-types]
 ---
 

@@ -1,5 +1,5 @@
 ---
-prio: 35
+prio: 50
 ---
 
 # Nested routines: capture of fixed-size array locals not supported

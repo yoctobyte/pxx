@@ -1,5 +1,5 @@
 ---
-prio: 65
+prio: 75
 ---
 
 # Pascal OOP corpus — real libraries that hammer classes/interfaces/generics

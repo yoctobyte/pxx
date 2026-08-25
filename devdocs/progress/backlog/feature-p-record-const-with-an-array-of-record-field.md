@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 35
+prio: 45
 type: feature
 blocked-by: []
 summary: "A record typed constant whose FIELD is an array of records is refused (`not a constant`): `CR: TR = (a: ((x:1;y:2),(x:3;y:4)))`. The kind-7 array-valued-field path handles scalar elements only; FPC compiles it."

@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 25
+prio: 30
 type: feature
 blocked-by: []
 summary: "The whole `math` surface swept name by name against CPython: 39 of 51 agree, 12 are absent and fail LOUDLY at compile. Four of them (isqrt, isfinite, ldexp, frexp) are EXACT operations with no rounding question and can land today; the other eight inherit the standing 'do not map a 1-ulp-off RTL routine' policy."

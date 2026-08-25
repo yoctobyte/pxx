@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 35
+prio: 45
 type: feature
 blocked-by: []
 summary: "The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers."

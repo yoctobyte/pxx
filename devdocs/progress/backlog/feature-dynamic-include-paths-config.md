@@ -1,5 +1,5 @@
 ---
-prio: 45  # auto
+prio: 55
 ---
 
 # Dynamic Include Paths, Configuration Files, and System Scanner

@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 30
+prio: 45
 type: bug
 blocked-by: []
 summary: "NilPy's TypeInfo path carries the same two defects Track A just fixed on the Pascal side: it reads GetTokenStr(TokPos) — one token PAST the type name, because Next already advanced — and it resolves the type from the TOKEN KIND rather than the spelling, so TypeInfo(byte) answers Integer (byte and integer share tkInteger_T)."

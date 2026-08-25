@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 55
+prio: 70
 type: bug
 blocked-by: []
 summary: "`return lambda x: ...` yields a value that is NOT callable — `TypeError: object is not callable (no __call__)` where CPython calls it. Binding the same lambda to a local first (`g = lambda ...; return g`) works, so the lift is fine and it is the RETURN of the lambda expression that loses the callable tag."

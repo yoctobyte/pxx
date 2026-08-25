@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 40
+prio: 30
 type: feature
 blocked-by: []
 status: backlog

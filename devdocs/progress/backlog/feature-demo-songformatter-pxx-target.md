@@ -2,7 +2,7 @@
 summary: "songformatter as a pxx compile target (nilpy) — GUI editor + live preview"
 type: feature
 track: E
-prio: 50
+prio: 68
 blocked-by: [feature-lib-pxxpdf-reportlab-compat, feature-nilpy-re-module, feature-nilpy-tkinter-facade]
 ---
 

@@ -2,7 +2,7 @@
 slug: bug-p-a-variant-refuses-wide-chars-and-interfaces
 title: A Variant refuses WideChar, UCS4Char and an interface ("Variant := this type not yet supported")
 track: P
-prio: 30
+prio: 40
 type: bug
 blocked-by: []
 status: backlog_new

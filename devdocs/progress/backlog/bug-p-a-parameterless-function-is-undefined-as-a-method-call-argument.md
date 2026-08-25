@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 35
+prio: 62
 type: bug
 blocked-by: []
 summary: "A parameterless function used as an ARGUMENT to a method call fails to resolve — `error: undefined variable (zero)` — while the identical argument to a free function compiles. Any argument position. Found writing lib/rtl/mimic_urllib_request.pas, where `headers.get(name, pynone)` would not compile but `HeaderFirst(raw, name, pynone)` did."

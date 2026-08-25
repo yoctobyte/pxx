@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 30
+prio: 45
 type: feature
 blocked-by: []
 summary: "TPyList/TPyDict corrupt under concurrent mutation — append is a read-modify-write over a buffer PyListGrow may realloc, so two threads can use-after-free. Free-threaded CPython guarantees this cannot happen; adopt that contract under --threadsafe with one-way biased sharing."

@@ -1,5 +1,5 @@
 ---
-prio: 30  # auto
+prio: 35
 track: D
 ---
 
