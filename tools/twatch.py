@@ -2479,8 +2479,25 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # degraded marker, so the host stops reporting DOWN on its own the moment
     # it recovers (a reseed usually does it) with no manual clearing.
     st.pop("infra", None)
+    # The latched summary carries the three fields that decide what it MEANS.
+    #
+    # It used to hold date/sha/tier/verdict/wall only, and `last_full` is a copy
+    # of it — so the one document every consumer reads first dropped exactly the
+    # evidence that separates a completed run from a teardown, and left it in
+    # `runs-<host>.ndjson` one file over. A coordinator's health check duly
+    # reported CANNOT DISTINGUISH about a run that had finished comfortably
+    # (2492s against a 7200s deadline, unreached 0) — not caution, blindness,
+    # and every consumer would have had to learn the same cross-file join to
+    # avoid it.
+    #
+    # A summary that omits the field determining its meaning is the same defect
+    # as a report that omits what it never reached: the reader is left to infer
+    # from a number what a field could have told them.
     st["last"] = {"sha": sha, "date": utcnow(), "verdict": report["verdict"],
-                  "wall": report["wall"], "tier": report["tier"]}
+                  "wall": report["wall"], "tier": report["tier"],
+                  "timed_out": bool(report.get("timed_out")),
+                  "deadline": report.get("deadline"),
+                  "unreached": report.get("unreached")}
     if full and not incomplete:
         # Evict by COVERAGE, not wholesale.
         #

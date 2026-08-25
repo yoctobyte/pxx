@@ -163,6 +163,29 @@ def t_unreached_jobs_keep_their_red():
     return "unreached red survives and is named"
 
 
+def t_the_latched_summary_carries_what_decides_its_meaning():
+    """st["last"] (and last_full, which is a copy) must carry timed_out,
+    deadline and unreached.
+
+    They used to live only in runs-<host>.ndjson, so the document every consumer
+    reads FIRST dropped the evidence separating a completed run from a teardown
+    — and a health check reported "cannot distinguish" about a run that had
+    finished comfortably. This asserts the shape of the summary rather than a
+    behaviour, because the defect was an omission, and an omission is invisible
+    to every test that only checks what IS there.
+    """
+    import inspect
+    src = inspect.getsource(tw.test_sha)
+    marker = 'st["last"] = {'
+    i = src.index(marker)
+    summary = src[i:i + 400]
+    for field in ("timed_out", "deadline", "unreached"):
+        assert field in summary, \
+            "the latched summary drops %r — a consumer must not have to join " \
+            "against the ndjson to learn what this run was" % field
+    return "timed_out + deadline + unreached are latched"
+
+
 def main():
     rc = 0
     for fn in (t_a_timeout_is_not_a_red,
@@ -171,7 +194,8 @@ def main():
                t_an_old_report_without_the_field_is_not_incomplete,
                t_the_report_names_what_it_never_reached,
                t_a_complete_run_gets_no_banner,
-               t_unreached_jobs_keep_their_red):
+               t_unreached_jobs_keep_their_red,
+               t_the_latched_summary_carries_what_decides_its_meaning):
         try:
             print("  ok   %s — %s" % (fn.__name__, fn()))
         except Exception as e:              # noqa: BLE001 - report, keep going
