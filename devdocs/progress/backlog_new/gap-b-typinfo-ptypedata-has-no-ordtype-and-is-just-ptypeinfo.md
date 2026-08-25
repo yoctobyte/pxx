@@ -2,9 +2,9 @@
 slug: gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo
 title: "`lib/rtl/typinfo.pas` aliases PTypeData to PTypeInfo, so `ATypeData.OrdType` has no field to find"
 track: B
-prio: 40
+prio: 78
 type: gap
-blocked-by: []
+blocked-by: [feature-typeinfo-ttypedata-payloads]
 status: backlog_new
 owner: ""
 created: 2026-08-25
