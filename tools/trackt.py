@@ -467,7 +467,20 @@ def daemon_script(clone, local_code=False):
     return os.path.join(HERE, "twatch.py")
 
 
-def ensure_clone_on_branch(clone, branch="master"):
+def conf_branch(clone):
+    """The branch this clone's twatch.conf says to watch (default master).
+
+    One source of truth with the daemon: twatch resolves the same key, and the
+    unit stays bare, so `trackt config branch dev` retargets everything and
+    there is no CLI/conf pair that can disagree.
+    """
+    try:
+        return twatch.load_conf(clone).get("branch") or "master"
+    except Exception:                       # noqa: BLE001 - never block a start
+        return "master"
+
+
+def ensure_clone_on_branch(clone, branch=None):
     """Put the clone back on its branch before the daemon is launched from it.
 
     `daemon_script` deliberately runs the CLONE's copy of twatch.py, so that
@@ -486,12 +499,35 @@ def ensure_clone_on_branch(clone, branch="master"):
 
     Returns False when the clone cannot be made current — the caller should
     refuse rather than start something arbitrary.
+
+    branch=None means "whatever twatch.conf says", so a retarget to `dev` moves
+    the restart path with it. Getting this wrong is quiet: the daemon would
+    watch dev while its own checkout sat on master, i.e. it would run one
+    branch's watcher code against another branch's commits.
     """
+    branch = branch or conf_branch(clone)
     git = ["git", "-C", clone]
     try:
         detached = subprocess.run(git + ["symbolic-ref", "-q", "HEAD"],
                                   capture_output=True, text=True,
                                   timeout=30).returncode != 0
+        current = subprocess.run(git + ["symbolic-ref", "--short", "-q", "HEAD"],
+                                 capture_output=True, text=True,
+                                 timeout=30).stdout.strip()
+        if not detached and current and current != branch:
+            print("trackt: clone is on %s but twatch.conf watches %s — "
+                  "switching, so the daemon and its checkout agree"
+                  % (current, branch))
+            r = subprocess.run(git + ["checkout", branch], capture_output=True,
+                               text=True, timeout=60)
+            if r.returncode:                # no local branch yet: track origin's
+                r = subprocess.run(git + ["checkout", "-b", branch,
+                                          "origin/" + branch],
+                                   capture_output=True, text=True, timeout=60)
+            if r.returncode:
+                print("trackt: cannot check out %s in %s:\n%s"
+                      % (branch, clone, (r.stderr or "").strip()))
+                return False
         if detached:
             print("trackt: clone is detached (mid-test, or a crash left it "
                   "there) — returning it to %s so the daemon runs CURRENT "

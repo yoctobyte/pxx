@@ -26,6 +26,9 @@ import twatch
 class FakeClone:
     def __init__(self, path):
         self.path = path
+        # the watched branch: verdict-deriving helpers ask the CLONE,
+        # never a process default, so a double needs one too
+        self.branch = "master"
 
 
 PIN_A = "aaaaaaaaaaaa1111111111111111111111111111"

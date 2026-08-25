@@ -58,6 +58,9 @@ def iso_ago(secs):
 class FakeClone:
     def __init__(self, path):
         self.path = path
+        # the watched branch: verdict-deriving helpers ask the CLONE,
+        # never a process default, so a double needs one too
+        self.branch = "master"
 
 
 REPORT = {"tier": "native", "wall": 1.0, "scale": 1.0, "verdict": "GREEN",
