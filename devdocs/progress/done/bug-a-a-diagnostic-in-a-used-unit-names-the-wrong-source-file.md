@@ -115,4 +115,4 @@ was not touched here on the way past. Someone should settle it:
 `bug-a-the-specialization-splice-does-not-adjust-the-body-pass-spans`.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 7e69d825b.
