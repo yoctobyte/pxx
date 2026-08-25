@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T11:33:37Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:test/test_c_gtk_call.pas",
-    "test-core#src:test/test_c_gtk_window.pas"
-   ],
-   "sha": "ef7f17d45caae7d515cccd2dfee82fc68148e36b",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T11:50:55Z",
    "fixed": [],
    "new_red": [],
@@ -482,11 +471,24 @@
    "sha": "d34ea0c3e6f09c6856fcce23cb4ca070989d15ce",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-25T11:28:53Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_nilpy_json_module.npy",
+    "test-core#src:test/test_nilpy_json_reparse_heap.npy"
+   ],
+   "sha": "a28bc3993a0e0caa0370b71abb1759287d3e9909",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2358728B  data=61689B  bss=51420B  procs=1788] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
+  "test-core#src:test/test_nilpy_json_module.npy": "ok: $TMP  [code=2404378B  data=77852B  bss=76212B  procs=2020] | Segmentation fault",
+  "test-core#src:test/test_nilpy_json_reparse_heap.npy": "ok: $TMP  [code=2388648B  data=75864B  bss=75420B  procs=2002] | Segmentation fault",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter"
  },
  "job_tier": {
@@ -2140,6 +2142,7 @@
   "test-core#src:test/test_pointer_field_keeps_its_depth.pas": "native",
   "test-core#src:test/test_pointer_function_result_keeps_its_depth.pas": "native",
   "test-core#src:test/test_pointer_param_keeps_its_depth.pas": "native",
+  "test-core#src:test/test_pointer_to_a_named_fixed_array.pas": "native",
   "test-core#src:test/test_pointers.pas": "native",
   "test-core#src:test/test_proc_const_record.pas": "native",
   "test-core#src:test/test_procaddr.pas": "native",
@@ -2334,6 +2337,7 @@
   "test-core#src:test/test_tobject_instancesize_and_classnameis.pas": "native",
   "test-core#src:test/test_tobject_methodaddress_b256.pas": "native",
   "test-core#src:test/test_tobject_param_b243.pas": "native",
+  "test-core#src:test/test_tobject_root_methods_inside_a_unit.pas": "native",
   "test-core#src:test/test_type_helper_const_array.pas": "native",
   "test-core#src:test/test_type_helper_for_spelling.pas": "native",
   "test-core#src:test/test_type_helper_typename_receiver.pas": "native",
@@ -2412,6 +2416,7 @@
   "test-core#src:test/test_varrec_string.pas": "native",
   "test-core#src:test/test_virtual_call_string_args.pas": "native",
   "test-core#src:test/test_virtual_class_method_b290.pas": "native",
+  "test-core#src:test/test_virtual_class_method_called_as_a_statement.pas": "native",
   "test-core#src:test/test_virtual_int64_param_and_result.pas": "native",
   "test-core#src:test/test_virtual_keyword_result.pas": "native",
   "test-core#src:test/test_virtual_managed_arg.pas": "native",
@@ -5078,8 +5083,8 @@
   "test-core#src:test/test_nilpy_infer_return.npy": "pass",
   "test-core#src:test/test_nilpy_is_identity_vs_class_test.npy": "pass",
   "test-core#src:test/test_nilpy_iter_next_cursor.npy": "pass",
-  "test-core#src:test/test_nilpy_json_module.npy": "pass",
-  "test-core#src:test/test_nilpy_json_reparse_heap.npy": "pass",
+  "test-core#src:test/test_nilpy_json_module.npy": "fail",
+  "test-core#src:test/test_nilpy_json_reparse_heap.npy": "fail",
   "test-core#src:test/test_nilpy_kwarg_through_lifted_value.npy": "pass",
   "test-core#src:test/test_nilpy_lambda_capture.npy": "pass",
   "test-core#src:test/test_nilpy_lambda_container_result.npy": "pass",
@@ -5209,6 +5214,7 @@
   "test-core#src:test/test_pointer_field_keeps_its_depth.pas": "pass",
   "test-core#src:test/test_pointer_function_result_keeps_its_depth.pas": "pass",
   "test-core#src:test/test_pointer_param_keeps_its_depth.pas": "pass",
+  "test-core#src:test/test_pointer_to_a_named_fixed_array.pas": "pass",
   "test-core#src:test/test_pointers.pas": "pass",
   "test-core#src:test/test_proc_const_record.pas": "pass",
   "test-core#src:test/test_procaddr.pas": "pass",
@@ -5403,6 +5409,7 @@
   "test-core#src:test/test_tobject_instancesize_and_classnameis.pas": "pass",
   "test-core#src:test/test_tobject_methodaddress_b256.pas": "pass",
   "test-core#src:test/test_tobject_param_b243.pas": "pass",
+  "test-core#src:test/test_tobject_root_methods_inside_a_unit.pas": "pass",
   "test-core#src:test/test_type_helper_const_array.pas": "pass",
   "test-core#src:test/test_type_helper_for_spelling.pas": "pass",
   "test-core#src:test/test_type_helper_typename_receiver.pas": "pass",
@@ -5481,6 +5488,7 @@
   "test-core#src:test/test_varrec_string.pas": "pass",
   "test-core#src:test/test_virtual_call_string_args.pas": "pass",
   "test-core#src:test/test_virtual_class_method_b290.pas": "pass",
+  "test-core#src:test/test_virtual_class_method_called_as_a_statement.pas": "pass",
   "test-core#src:test/test_virtual_int64_param_and_result.pas": "pass",
   "test-core#src:test/test_virtual_keyword_result.pas": "pass",
   "test-core#src:test/test_virtual_managed_arg.pas": "pass",
@@ -6623,11 +6631,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-25T09:25:35Z",
-  "sha": "d34ea0c3e6f09c6856fcce23cb4ca070989d15ce",
+  "date": "2026-08-25T11:28:53Z",
+  "sha": "a28bc3993a0e0caa0370b71abb1759287d3e9909",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.2
+  "wall": 3600.4
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6817,6 +6825,48 @@
     "fd93e4a71c37a7932b9ef73e4c9f8a7deceb3c34"
    ],
    "src": "test/lib_mimic_xml_etree_elementtree.npy",
+   "status": "fail"
+  },
+  {
+   "bad": "a28bc3993a0e0caa0370b71abb1759287d3e9909",
+   "good": "d34ea0c3e6f09c6856fcce23cb4ca070989d15ce",
+   "job": "test-core#src:test/test_nilpy_json_module.npy",
+   "name": "test-core#1375",
+   "opened": "2026-08-25T11:28:53Z",
+   "pin_built": false,
+   "range": [
+    "6262fd99e85b8e868f23595d2accdcd67db665ca",
+    "6f6b4c552445b5c297e542863d1fba5be81cf9ca",
+    "99939b3a169851aea6d9f37d00dc4db863f30fb7",
+    "44ef758184c5faf96a5da3a6f79cda9aa771f9ba",
+    "8c0658cc0c71f9236275d646660959645465e4ca",
+    "e1633488e4799851f8c5e9d44cba6c8f7abfc9ba",
+    "f064c591b599ad5d52896f6c400b076d03e552fc",
+    "bd50e76edf0e69e45d1b6ab3d68238596b9e6cbb",
+    "a28bc3993a0e0caa0370b71abb1759287d3e9909"
+   ],
+   "src": "test/test_nilpy_json_module.npy",
+   "status": "fail"
+  },
+  {
+   "bad": "a28bc3993a0e0caa0370b71abb1759287d3e9909",
+   "good": "d34ea0c3e6f09c6856fcce23cb4ca070989d15ce",
+   "job": "test-core#src:test/test_nilpy_json_reparse_heap.npy",
+   "name": "test-core#1379",
+   "opened": "2026-08-25T11:28:53Z",
+   "pin_built": false,
+   "range": [
+    "6262fd99e85b8e868f23595d2accdcd67db665ca",
+    "6f6b4c552445b5c297e542863d1fba5be81cf9ca",
+    "99939b3a169851aea6d9f37d00dc4db863f30fb7",
+    "44ef758184c5faf96a5da3a6f79cda9aa771f9ba",
+    "8c0658cc0c71f9236275d646660959645465e4ca",
+    "e1633488e4799851f8c5e9d44cba6c8f7abfc9ba",
+    "f064c591b599ad5d52896f6c400b076d03e552fc",
+    "bd50e76edf0e69e45d1b6ab3d68238596b9e6cbb",
+    "a28bc3993a0e0caa0370b71abb1759287d3e9909"
+   ],
+   "src": "test/test_nilpy_json_reparse_heap.npy",
    "status": "fail"
   }
  ],
