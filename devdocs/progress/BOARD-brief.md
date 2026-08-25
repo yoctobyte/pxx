@@ -5,15 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:1 unfinished:23 blocked:7 backlog:279 backlog_new:22 experimental:20 rainy-day:44 float:20 done-followup:3 decided:114 done:2355 rejected:40`
+`working:1 unfinished:23 blocked:7 backlog:279 backlog_new:23 experimental:20 rainy-day:44 float:20 done-followup:3 decided:114 done:2356 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N] — owner: frank1-72
-
-## urgent (1) — jump the queue
-
-- `bug-t-the-native-tier-times-out-and-publishes-a-contentless-red` [T]
 
 ## unfinished (23) — parked mid-flight; re-claim, do not duplicate
 
@@ -53,7 +49,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
 ## Ready — top 30 of 312, ranked
 
-- `[p 85] [T]` bug-t-the-native-tier-times-out-and-publishes-a-contentless-red
 - `[p 88] [B]` bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
 - `[p 88] [N]` bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
 - `[p 88] [N]` bug-n-inferred-return-type-of-true-division-is-int
@@ -83,5 +78,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
+- `[p 68] [N]` feature-nilpy-user-defined-decorators
 
 _282 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

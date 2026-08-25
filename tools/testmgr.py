@@ -437,6 +437,26 @@ MAX_JOB_DEADLINE_FRAC = 0.5
 # this number, so it follows automatically.
 DEFAULT_DEADLINE = 3600.0
 
+# Exit code for "the clock ran out", distinct from 1 (something failed) and 130
+# (SIGINT). 124 is what timeout(1) uses, so it reads correctly to a human and to
+# any shell wrapper that already knows the convention.
+TIMEOUT_RC = 124
+
+
+def verdict_for(rc, invalid=False):
+    """The run's verdict label from its exit code.
+
+    TIMEOUT is NOT a flavour of RED and must never collapse into one. A red is a
+    claim about the SOURCES; a timeout is a statement about this run's clock,
+    and the jobs it never reached are unknown rather than broken. Collapsing the
+    two published `verdict: RED` with an empty finding list for three days in
+    August 2026, which reads to every consumer — --status, the fleet, the
+    revert rule — as a persistent regression nobody can locate.
+    """
+    if invalid:
+        return "INVALID"
+    return {0: "GREEN", TIMEOUT_RC: "TIMEOUT", 130: "INTERRUPTED"}.get(rc, "RED")
+
 
 def scaled_deadline(explicit, nproc, budget):
     """The run's global wall-clock budget, given the cores it may actually use.
@@ -2333,6 +2353,12 @@ class Manager:
                else max(2, int(round(self.core_budget * 2))))
         self.hard_cap = 1 if args.serial else (args.jobs or cap)
         self.selfhost_red = False
+        # Set when the global deadline tears the run down. It is the difference
+        # between "these sources are broken" and "we ran out of clock", and
+        # nothing downstream could tell them apart before: a teardown published
+        # verdict RED with an empty finding list, which reads as a persistent
+        # regression to --status, to the fleet, and to the revert rule.
+        self.timed_out = False
         self.prev_cpu = cpu_times()
         self.idle_frac = 1.0
         self.interrupted = False
@@ -2970,12 +2996,18 @@ class Manager:
                 self.queue = []
                 return 130
             if time.monotonic() > self.deadline:
-                print("testmgr: GLOBAL DEADLINE exceeded — tearing down", flush=True)
+                undecided = len(self.queue) + len(self.running)
+                print("testmgr: GLOBAL DEADLINE (%.0fs) exceeded — tearing "
+                      "down with %d job(s) undecided. This run has NO verdict: "
+                      "what it measured stands, what it never reached is "
+                      "unknown, and neither is a failure of the sources."
+                      % (self.args.deadline, undecided), flush=True)
+                self.timed_out = True
                 self.teardown()
                 for j in self.queue:
                     j.status = "skipped"
                 self.queue = []
-                return 1
+                return TIMEOUT_RC
             for job in self.reap():
                 self._last_progress = time.monotonic()   # a finished job IS progress
                 dur = job.t1 - job.t0
@@ -4669,9 +4701,7 @@ def main():
                                 if snap_path else ""), flush=True)
     if rc == 0 and carried_red(carried):
         rc = 1
-    verdict = ("INVALID" if invalid else
-               "GREEN" if rc == 0 else
-               "INTERRUPTED" if rc == 130 else "RED")
+    verdict = verdict_for(rc, invalid)
     if invalid:
         print("testmgr: INVALID — the compiler changed mid-run (%s -> %s). "
               "This run's PASS/FAIL cannot be attributed to one binary."
@@ -4686,6 +4716,21 @@ def main():
                "compiler_sha256": snap_sha or repo_sha0,
                "compiler_changed_mid_run": repo_moved,
                "slow": slow,
+               # ALWAYS present, both of them, so a consumer can test the field
+               # instead of pattern-matching `wall` against a deadline it has to
+               # guess. The guess was wrong the moment --deadline started
+               # scaling with the core budget: a completed run at 6 of 12 cores
+               # lands near 4000s, which any `wall >= 3595` heuristic reads as a
+               # teardown. `timed_out` is the honest signal; `deadline` lets a
+               # reader see how close a completed run came.
+               "timed_out": bool(getattr(mgr, "timed_out", False)),
+               "deadline": round(float(args.deadline), 1),
+               # Jobs this run never decided — never launched, or killed
+               # mid-flight by the teardown. They are omitted from "jobs" (see
+               # below), so without this count their absence is invisible and a
+               # partial run looks complete.
+               "unreached": sum(1 for j in jobs
+                                if j.status in ("skipped", "interrupted")),
                "flaky": [j.name for j in jobs if j.flaky],
                # "sel": the STABLE way to name this job again later (twatch
                # bisects and files tickets on it).  j.name is a positional

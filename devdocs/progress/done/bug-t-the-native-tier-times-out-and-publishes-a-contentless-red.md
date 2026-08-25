@@ -9,7 +9,7 @@ summary: "Every native run on plexus since 14:28 today has ended at wall 3600.x 
 # The native tier times out and publishes a RED with nothing in it
 
 - **Type:** bug (Track T tooling — the report format and the tier budget).
-- **Status:** urgent
+- **Status:** done
 - **Opened:** 2026-08-21 21:5x, noticed by a Track A session checking whether
   its own pushes had been swept.
 
@@ -125,3 +125,61 @@ Both are report-format work and both survive this fix — the next hang, in any
 job, publishes the same uninterpretable red. What has changed is the urgency:
 the tier fits its budget again, so this is no longer six hours of blind fleet.
 Whether it stays in `urgent/` is the coordinator's call, not mine.
+
+## Items 1 and 2 fixed, 2026-08-25 (Track T)
+
+Both report-format defects are closed. Item 3 (the budget) was closed
+separately and differently than this ticket expected — see below.
+
+**1. A timeout is its own verdict.** `testmgr.verdict_for()` maps the deadline
+teardown's exit code (`TIMEOUT_RC = 124`, what `timeout(1)` uses, so it collides
+with neither 1 nor 130) to `verdict: TIMEOUT`. The report JSON always carries
+`timed_out`, `deadline` and `unreached`, so a consumer tests a field instead of
+pattern-matching `wall` against a deadline it has to guess — which stopped being
+guessable the moment the deadline began scaling with the core budget. The
+markdown opens with a banner saying the run has NO verdict, how many jobs it
+never reached, and that unreached is not fixed. `--status` renders it as
+"TIMEOUT — no verdict, torn down at the deadline".
+
+**2. An incomplete run may not evict anything.** The real mechanism was one
+level below `still_red`: on a `full` run the job map is REPLACED, so jobs the
+run "could have produced and didn't" are dropped. That rule's premise is that
+the run was capable of running them — a teardown falsifies it, and every job the
+clock cut off had its red silently deleted. An absent job then counts as having
+passed (`prev_jobs.get(n, "pass")`), so it reads as fixed until it returns as a
+NEW-RED. Incomplete runs now merge instead of replacing, skip the orphan prune,
+file no tickets, open no ledger entries, and do not record `last_full` — so a
+torn-down run can never again be mistaken for breadth coverage. The report gains
+a **NOT REACHED — red at last look, unknown now** section listing them by name.
+
+Guard: `tools/twatch_timeout_verdict_devtest.py`, 7 cases, including the two
+that keep the fix honest — a legacy report with no `timed_out` field must read
+as complete (every consumer uses the predicate to withhold an inference, so a
+wrong True would freeze the map forever), and a complete run must get no banner,
+because a disclaimer that appears on ordinary reds trains the reader to skip it.
+
+**On item 3, the budget: the diagnosis in this ticket was incomplete.** The 8x
+growth was a GTK at-spi bridge hang, host-coupled to this box becoming a
+workstation on 08-20 — fixed in `2a129cfb9` (`NO_AT_BRIDGE=1` / `GTK_A11Y=none`
+in the job environment, plus the metric-healing and per-job-ceiling guards that
+stop a kill time from being learned as a duration). The ticket's instinct to
+measure first — "a genuine hang in one job looks exactly like this from the
+outside" — was right, and it was a hang.
+
+A second, unrelated budget defect surfaced while fixing this one: the 3600s
+deadline is a WALL-CLOCK number and did not move when the watcher was throttled
+to 6 of 12 cores. The matrix is ~24000 cpu-seconds, so it cannot fit an hour at
+any packing — the ceiling was unsatisfiable by construction and every breadth
+run would have been torn down at the same minute. `scaled_deadline()`
+(`b61125007`) stretches the default by the throttle factor; an explicit
+`--deadline` is untouched, and the per-job ceiling is a fraction of the result
+so it follows automatically.
+
+Follow-up NOT done, deliberately, and worth its own ticket if it bites: a sha
+whose only run TIMED OUT still counts as "tested" for staleness purposes. That
+is the wrong direction (it claims coverage the run did not produce), but it is a
+separate mechanism from the report format and expanding scope at the end of a
+session is how the next incomplete fix gets written.
+
+## Log
+- 2026-08-25 — resolved, commit PENDING-COMMIT.

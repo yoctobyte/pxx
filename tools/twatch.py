@@ -1494,7 +1494,7 @@ def update_job_reasons(st, report, jobs):
 
 
 def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
-                    st=None):
+                    st=None, not_reached=()):
     ts = utcnow().replace(":", "").replace("-", "")
     rel = os.path.join(TSTATE_REL, "reports",
                        "%s-%s-%s.md" % (ts, sha[:7], host))
@@ -1515,6 +1515,14 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
              # does not name the binary (task-t-seed-from-stable-defeats-rebuild).
              "compiler_sha256: %s" % (report.get("compiler_sha256") or "unknown"),
              "---", ""]
+    if report.get("timed_out") or report.get("verdict") == "TIMEOUT":
+        lines += ["> **THIS RUN HAS NO VERDICT.** It hit its %s-second deadline "
+                  "at %ss with %s job(s) never reached, and was torn down. What "
+                  "it measured stands; what it did not reach is UNKNOWN, not "
+                  "fixed. Do not read this as a regression, do not revert on "
+                  "it, and do not count it as coverage of this tree."
+                  % (report.get("deadline", "?"), report.get("wall"),
+                     report.get("unreached", "?")), ""]
     # How stale BREADTH was when this verdict was published. A native report is
     # the document a reader reaches for days later, and "GREEN" on it says
     # nothing about the cross targets — which run in `full` and nowhere else.
@@ -1564,7 +1572,12 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
         why = (reasonmap.get(n) or "").strip()
         return "%s\n  - `%s`" % (out, why[:160]) if why else out
     for title, names in (("NEW-RED", new_red), ("FIXED", fixed),
-                         ("STILL-RED", still_red)):
+                         ("STILL-RED", still_red),
+                         # Last, and named as a question rather than a verdict:
+                         # these jobs were red at the last look and this run
+                         # never got to them. Unknown is not fixed.
+                         ("NOT REACHED — red at last look, unknown now",
+                          list(not_reached))):
         if names:
             lines.append("## %s" % title)
             lines += ["- %s" % listed(n) for n in names]
@@ -2016,6 +2029,20 @@ def pin_shadow(clone, host, st, sha, report, authoritative, now=None):
               flush=True)
 
 
+def run_is_incomplete(report):
+    """Did this run stop before deciding everything it set out to decide?
+
+    Two spellings of the same fact, because the field is newer than the verdict:
+    `timed_out` is what testmgr writes now, `verdict == "TIMEOUT"` is what a
+    report says on its face. A report from before either existed answers False,
+    which is the old behaviour and the only safe default — every consumer of
+    this predicate uses it to WITHHOLD an inference, so a wrong False costs what
+    we already had, while a wrong True would silently stop the map from ever
+    being pruned.
+    """
+    return bool(report.get("timed_out")) or report.get("verdict") == "TIMEOUT"
+
+
 def no_measurement(report):
     """Did this run produce no measurement at all? Returns a reason, or "".
 
@@ -2129,6 +2156,34 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
               flush=True)
         return False
 
+    # TIMEOUT: the run ran out of clock. Unlike INFRA and INVALID this is NOT a
+    # reason to throw the run away — the jobs it decided were decided against
+    # this sha with this compiler, and a red it actually found is a real red.
+    # What it is not is COMPLETE, and every inference below that assumes
+    # completeness has to be switched off:
+    #
+    #   * it may not evict or prune the job map. The eviction rule's premise is
+    #     "this run was capable of running that job and did not produce it, so
+    #     the job is gone" — a teardown falsifies the premise, and the effect
+    #     was that every job the clock cut off had its red ERASED. It then came
+    #     back as NEW-RED later, or, worse, silently read as fixed because
+    #     `prev_jobs.get(n, "pass")` counts an absent job as having passed.
+    #   * it may not record breadth coverage. `aa9f0989a4c0` sat for a day and a
+    #     half as "the newest full tier" while being a teardown at wall 3600.3s,
+    #     and a coordinator nearly gated a merge on it.
+    #   * it files no tickets and opens no ledger entries, for the same reason a
+    #     baseline run does not: the diff is against an incomplete picture.
+    #
+    # It still publishes: the verdict, the job statuses it measured, and — the
+    # part that was missing — what it never reached.
+    incomplete = run_is_incomplete(report)
+    if incomplete:
+        print("twatch: %s TIMED OUT at %ss (deadline %ss) with %s job(s) "
+              "unreached — publishing what it measured, NOT a verdict on this "
+              "tree, and not touching the jobs it never got to"
+              % (sha[:12], report.get("wall"), report.get("deadline", "?"),
+                 report.get("unreached", "?")), flush=True)
+
     parent = (st["last"] or {}).get("sha")
     # Captured BEFORE the diff, because the diff is what consumes it. NEW-RED
     # means "red now, green in this host's recorded map", and on a host's first
@@ -2140,6 +2195,9 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     now, new_red, fixed, still_red = diff_jobs(st["jobs"], report)
     no_ticket = ticket_suppression(had_baseline, len(new_red),
                                    len(report["jobs"]))
+    if incomplete and not no_ticket:
+        no_ticket = ("the run timed out — its diff is against an incomplete "
+                     "picture, so a red here is recorded but not filed")
 
     # open-regression bookkeeping.  Two invariants keep this ledger a list of
     # REAL, actionable regressions instead of a dump of every red job:
@@ -2236,11 +2294,21 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                          "pin_built": pinmap.get(name, False)})
     st["open_regressions"] = regs
 
+    # Jobs that were red before and that this run never produced a status for.
+    # On a COMPLETE run this set is empty or means "the job is gone" (handled by
+    # the prune below). On an incomplete one it is the honest answer to "what
+    # about the rest?" — and its absence is what let a torn-down run render an
+    # empty STILL-RED section that reads as "everything recovered".
+    not_reached = sorted(n for n, v in st["jobs"].items()
+                         if n not in now and v not in PASSLIKE) \
+        if incomplete else []
+
     changed = bool(new_red or fixed)
     rel = None
-    if changed or report["verdict"] == "RED":
+    if changed or report["verdict"] in ("RED", "TIMEOUT"):
         rel = write_report_md(clone, host, sha, parent, report,
-                              new_red, fixed, still_red, st)
+                              new_red, fixed, still_red, st,
+                              not_reached=not_reached)
 
     # A run that measured something proves the box works again — drop any
     # degraded marker, so the host stops reporting DOWN on its own the moment
@@ -2248,7 +2316,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     st.pop("infra", None)
     st["last"] = {"sha": sha, "date": utcnow(), "verdict": report["verdict"],
                   "wall": report["wall"], "tier": report["tier"]}
-    if full:
+    if full and not incomplete:
         # Evict by COVERAGE, not wholesale.
         #
         # The intent of replacing here is to drop jobs that no longer exist in
@@ -2310,6 +2378,12 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
         f.write(json.dumps({"sha": sha, "date": st["last"]["date"],
                             "tier": report["tier"], "full": full,
                             "verdict": report["verdict"],
+                            # so the archive can tell a run that FAILED from one
+                            # that merely stopped. Every row before 2026-08-25
+                            # lacks it; absent means "not known", not "false".
+                            "timed_out": bool(report.get("timed_out")),
+                            "unreached": report.get("unreached"),
+                            "deadline": report.get("deadline"),
                             "wall": report["wall"], "new_red": new_red,
                             "fixed": fixed,
                             # still_red too, not just the transitions. Without
@@ -4812,12 +4886,18 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
             live += 1
             if inf:
                 degraded += 1
+        # TIMEOUT renders as what it is. The ticket asks for "no verdict"
+        # rather than a failure, and the parenthetical is what stops a reader
+        # (or a sibling agent skimming) from filing it as a regression.
+        lastv = last.get("verdict", "never")
+        if lastv == "TIMEOUT":
+            lastv = "TIMEOUT — no verdict, torn down at the deadline"
         print("tstate: host %-12s last %s %s (%s, %s)%s%s" %
               (st["host"], (last.get("sha") or "")[:12],
-               last.get("verdict", "never"), last.get("tier", "?"),
+               lastv, last.get("tier", "?"),
                last.get("date", ""),
                "; full through %s %s" % (lf["sha"][:12], lf["verdict"])
-               if lf.get("sha") else "",
+               if lf.get("sha") else "",   # only COMPLETE runs land in last_full
                "  [QUIET %s — not publishing]" % fmt_age(quiet) if quiet
                # Before a host has one recorded job map, its NEW-RED is a diff
                # against nothing. Say so where the host is read, so a fresh
