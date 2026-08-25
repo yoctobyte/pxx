@@ -141,11 +141,19 @@ CONF_DEFAULTS = {"tier": "full", "mid_tier": "full",
                  # retargets it; the unit stays bare, so there is exactly one
                  # place to look and no CLI/conf pair to disagree.
                  "branch": "master",
-                 # seconds into a BREADTH run after which a push no longer
-                 # aborts it (see make_preempted). 0 = always preempt, the
-                 # pre-2026-08-25 behaviour, which measured out as zero full
-                 # tiers on a working day.
-                 "full_commit_secs": 300,
+                 # Seconds into an IDLE-LADDER breadth run after which a push
+                 # no longer aborts it (see make_preempted). A reserved run
+                 # ignores this and commits at once.
+                 #
+                 # It was 300 for about an hour, tuned against an estimated
+                 # ~26-minute gap between testable pushes. The estimate was
+                 # wrong: measured on dev the same evening, the median gap
+                 # between commits is 85s and 26 of 29 are under 300s, so a
+                 # 300s window aborts essentially every run it governs — the
+                 # behaviour it was written to replace, one threshold later.
+                 # 60s keeps the cheap-to-discard property for a burst landing
+                 # in the first seconds without pretending pushes are rare.
+                 "full_commit_secs": 60,
                  "max_cores": 0,       # cores testmgr may keep busy (--max-cores)
                  "max_mem_mb": 0,      # cap the cgroup MemoryMax (env override)
                  "web": True, "web_port": 8377}   # everything ON by default;
@@ -5477,11 +5485,16 @@ def main():
                           % (head[:12], why), flush=True)
                     st["last_breadth_try"] = {"sha": head, "date": utcnow()}
                     save_state(clone, host, st)
+                    # commit_after=0, NOT the configured window: a RESERVED
+                    # breadth run is taken precisely because pushes never stop,
+                    # so letting one abort it rebuilds the starvation the
+                    # reservation exists to end. Measured: with a median gap of
+                    # 85s between commits, the first reserved run was aborted at
+                    # 68s of 3057 jobs. The window is for the idle ladder, where
+                    # a push is genuine news because the repo had gone quiet.
                     r = test_sha(clone, host, st, head, args.tier, full=True,
-                                 abort_check=make_preempted(
-                                     clone, head,
-                                     commit_after=(CONF.get("full_commit_secs")
-                                                   or None)))
+                                 abort_check=make_preempted(clone, head,
+                                                            commit_after=0))
                     did_work = r != "busy"
                 elif not STOP:
                     # act fast: a new push gets the fast native verdict first;

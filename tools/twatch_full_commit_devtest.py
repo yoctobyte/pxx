@@ -135,6 +135,33 @@ def t_the_native_path_is_untouched():
     return "native still preempts at every moment"
 
 
+def t_zero_commits_at_the_first_poll():
+    """A RESERVED breadth run passes 0 and must commit immediately.
+
+    0 is not "no commitment" — that is None. The distinction is load-bearing
+    because the natural spelling at the call site, `CONF.get(...) or None`,
+    silently turns a configured 0 into None and hands back the old
+    always-preempt behaviour. The reservation call therefore passes the literal
+    0, and this case is what stops someone tidying it back into the idiom.
+    """
+    c = FakeClone(head=NEWER)
+    clock(0.0)
+    p = tw.make_preempted(c, TESTED, commit_after=0)
+    clock(30.0)                                  # the first poll, ~30s in
+    assert not p(), "a reserved run was aborted by a push it must ignore"
+    assert c.fetches == 0, "it asked the network about a decision it cannot act on"
+    return "committed at the first poll"
+
+
+def t_none_still_means_never_commit():
+    c = FakeClone(head=NEWER)
+    clock(0.0)
+    p = tw.make_preempted(c, TESTED, commit_after=None)
+    clock(99999.0)
+    assert p(), "None must mean fully preemptive — it is what native passes"
+    return "None is not zero"
+
+
 def t_a_tstate_only_publish_never_preempts():
     """Our own fast-phase publish must not abort the work it queued."""
     c = FakeClone(head=NEWER, testable=False)
@@ -152,6 +179,8 @@ def main():
                t_commitment_is_sticky_and_stops_fetching,
                t_stop_still_aborts_a_committed_run,
                t_the_native_path_is_untouched,
+               t_zero_commits_at_the_first_poll,
+               t_none_still_means_never_commit,
                t_a_tstate_only_publish_never_preempts):
         try:
             print("  ok   %s — %s" % (fn.__name__, fn()))
