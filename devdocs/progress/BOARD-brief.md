@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 unfinished:22 blocked:7 backlog:288 backlog_new:17 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2345 rejected:40`
+`urgent:2 unfinished:23 blocked:7 backlog:288 backlog_new:17 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2345 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -16,7 +16,7 @@ _none — no lane is locked._
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
 - `bug-t-the-native-tier-times-out-and-publishes-a-contentless-red` [T]
 
-## unfinished (22) — parked mid-flight; re-claim, do not duplicate
+## unfinished (23) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -40,6 +40,7 @@ _none — no lane is locked._
 - `feature-real-dynlib-loader` [B] — blocked-by: bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert
 - `feature-signal-siginfo-ucontext` [A]
 - `feature-threadsafe-heap-optimize` [A]
+- `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
 ## blocked (7) — has an unmet blocker; do not claim
 

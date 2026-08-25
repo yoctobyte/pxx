@@ -15,7 +15,7 @@ lives in git, not in a timestamp._
 
 _none_
 
-## unfinished (22)
+## unfinished (23)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -41,6 +41,7 @@ _none_
 | feature-real-dynlib-loader | B | 45 | feature | Real dlopen loader: DONE on x86-64 (PAL primitives, opt-in -dPXX_DYNLIB_LIBC, truthful PalHasDynlib, OpenSSL 3 loaded and answering). Two items open: (b) an arm32/aarch64 RUN, blocked on this host having no cross ld-linux/libc, and (d) Synapse SSL end-to-end, now past the connect wall and stopped in SSLDoConnect. | bug-a-synapse-tls-handshake-jumps-into-the-stack-inside-x509-verify-cert |
 | feature-signal-siginfo-ucontext | A | 55 | feature | Signal handlers, phase 2: SA_SIGINFO + ucontext, threadsafe masks, sigaltstack, FPC-compat surface | — |
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
+| refactor-a-two-dyn-array-depth-functions-that-drift | A | 30 | refactor | Two functions answer 'how many `array of` levels does this expression have': NodeDynDepth (ast_arena.inc) and DynArrayNodeDepth (symtab.inc). They have diverged at least twice and each divergence produced a silent wrong VALUE, not an error. Merge them. | — |
 
 ## blocked (7)
 
@@ -365,7 +366,7 @@ _none_
 | decide-typeref-gains-a-pointer-depth-field | U | 35 | decide | TTypeRef was landed to replace the 8-field tuple that ~90 sites redeclare, but as declared it carries PtrBaseTk/PtrBaseRec and DynDepth and no POINTER depth — so it cannot express `^PChar` any better than the pair it replaces. Every pointer table has since grown a depth field of its own (symbols, aliases, the type parser, C params, Pascal params, captures, proc returns). Either TTypeRef gains PtrDepth and the migration folds them all in, or depth is declared to live outside TTypeRef and the migration's value shrinks. Additive either way, but it changes a shared type mid-migration. | — |
 | feature-p-legacy-value-object-types | P | 35 | feature | Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone. | — |
 | gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo | B | 40→65 | gap | PTypeData is declared as `= PTypeInfo` with a `same header for now` note, and TTypeInfo carries no OrdType / MinValue / MaxValue / FloatType. Any RTTI-driven code that switches on a type's ordinal width — Generics.Defaults' comparer selection, and the whole TypInfo idiom generally — cannot compile. | — |
-| refactor-a-two-dyn-array-depth-functions-that-drift | A | 30 | refactor | Two functions answer 'how many `array of` levels does this expression have': NodeDynDepth (ast_arena.inc) and DynArrayNodeDepth (symtab.inc). They have diverged at least twice and each divergence produced a silent wrong VALUE, not an error. Merge them. | — |
+| refactor-a-two-predicates-answer-what-a-caret-yields | A | 35 | refactor | Two functions type a dereference. NodePtrElem knows more SPELLINGS (index-into-base, pointer FIELD, inline PTR_CAST, pointer arithmetic); ResolveDerefShape knows more ABOUT each (remaining depth, ultimate base). Swapping a call site from one to the other trades one kind of knowledge for the other, silently — which is exactly what shipped a regression on 2026-08-25. | — |
 | refactor-p-one-lvalue-path-for-statements-and-expressions | P | 35 | refactor | An assignment TARGET is parsed by a second, smaller copy of the lvalue walk in pasparser_stmt.inc, which resolves every `.name` as a field and ends on Expect(':='). Every capability the expression path gains has to be re-added there by hand, and three bugs so far are exactly that omission: the builtin pointer-name fallback, the PChar adapter, and the deref-then-index shape. The statement path should delegate, as its own cast-headed-CALL arm already does. | — |
 | refactor-p-the-field-declaration-parser-exists-twice | P | 30 | refactor | `ParseRecordFields` (pasparser_decl.inc ~3199) and the class-body field arm inside `ParseTypeSection` (~4824) parse the same grammar — comma-separated names, inline fixed/dynamic array, named array alias, scalar — with the same locals under different names and the same AddUField tail. Every field-level feature has to be written twice, and the second copy is the one that stays broken. | — |
 
@@ -802,6 +803,7 @@ _none_
 - [p 35] [T] feature-t-pasmith-rung-selftest
 - [p 35] [T] feature-t-uforth-bench-on-the-watcher-idle-phase
 - [p 35] [A] refactor-a-backend-machine-code-lives-in-six-shared-files
+- [p 35] [A] refactor-a-two-predicates-answer-what-a-caret-yields
 - [p 35] [N] refactor-nilpy-three-places-decide-a-locals-class-identity
 - [p 35] [P] refactor-p-one-lvalue-path-for-statements-and-expressions
 - [p 35] [P] refactor-p-three-hand-rolled-postfix-loops
@@ -853,7 +855,6 @@ _none_
 - [p 30] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 30] [A] refactor-a-the-const-cast-width-table-is-the-third-copy
 - [p 30] [A] refactor-a-the-greenfield-frontends-share-each-others-parser-helpers
-- [p 30] [A] refactor-a-two-dyn-array-depth-functions-that-drift
 - [p 30] [N] refactor-n-two-import-handlers-are-twins
 - [p 30] [P] refactor-p-the-field-declaration-parser-exists-twice
 - [p 30] [D] task-d-document-warn-ignored-directives
