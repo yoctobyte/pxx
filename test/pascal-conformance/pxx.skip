@@ -154,7 +154,6 @@ tstring5.pp	gap: RTL `ExitCode` variable missing (needed by testsuite erroru uni
 tcase2.pp	gap: subrange-of-enum type (workdays = mon..fri) and case over it
 tclass13c.pp	gap: accepts-invalid — TRootClass.Integer nested-type member; needs per-class nested-type registry — PARKED (user call 2026-07-11, near-zero value; note in bug-pascal-missing-diagnostics-fail-tests)
 terecs_u1.pp	gap: advanced records in units — nested type/const/var/class var sections, static class methods
-tgeneric77.pp	gap: generic record templates (`generic TPointEx<T> = record`), non-class generics
 tgenfunc15.pp	gap: generic array type templates + generic method overloads with array-of-T params
 toperator2.pp	gap: unit-level `operator +` overload on records (global operator overloading)
 toperator3.pp	gap: unit-level `operator +` overload on records, mutually-used units

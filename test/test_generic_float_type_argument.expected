@@ -1,0 +1,9 @@
+double  3.7500 2.2500
+single  0.6250 0.5000
+real    3.2500 2.5000
+extended12.7500 8.5000
+integer 12 9
+longword 4000000007 4000000000
+mix-is  7 0.2500 pair
+mix-dw  0.7500 12 pair
+sizes   8 4 4

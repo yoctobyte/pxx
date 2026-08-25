@@ -7702,6 +7702,16 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_record_nested_type_section.pas $(TESTTMP)/test_rnts26
 	test "$$($(TESTTMP)/test_rnts26)" = "$$(cat test/test_record_nested_type_section.expected)"
+	# A FLOAT may be a generic type argument. Three copies of the "which tokens
+	# may stand as a concrete type argument" list named exactly
+	# Integer/Boolean/Char/String, so `specialize TBox<Double>` was "expected
+	# concrete type name" while `<Integer>` and even `<string>` worked.
+	# Both spellings, because the delphi rewriter carried its own copy.
+	# .expected IS fpc 3.2.2's own output on these sources.
+	./$(COMPILER) test/test_generic_float_type_argument.pas $(TESTTMP)/test_gfta26
+	test "$$($(TESTTMP)/test_gfta26)" = "$$(cat test/test_generic_float_type_argument.expected)"
+	./$(COMPILER) test/test_generic_float_type_argument_delphi.pas $(TESTTMP)/test_gftad26
+	test "$$($(TESTTMP)/test_gftad26)" = "$$(cat test/test_generic_float_type_argument_delphi.expected)"
 	# Eight constructs FPC rejects used to compile clean -- five of them doing
 	# something silently wrong (a segfault, an out-of-bounds read, a scalar
 	# overwritten with a heap pointer, a destroyed string, a plausible wrong

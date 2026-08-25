@@ -93,7 +93,7 @@ begin
   while scanning do
   begin
     if j >= count then Exit;
-    if not (TemplateTokens[ts + j].Kind in [tkIdent, tkInteger_T, tkBoolean_T, tkChar_T, tkString_T]) then Exit;
+    if not IsConcreteTypeArgKind(TemplateTokens[ts + j].Kind) then Exit;
     Inc(j);
     if (j < count) and (TemplateTokens[ts + j].Kind = tkComma) then Inc(j)
     else scanning := False;
@@ -348,7 +348,7 @@ begin
       while ok do
       begin
         if (j < TokCount) and (na < MAX_TEMPLATE_PARAMS) and
-           (Tokens[j].Kind in [tkIdent, tkInteger_T, tkBoolean_T, tkChar_T, tkString_T]) then
+           IsConcreteTypeArgKind(Tokens[j].Kind) then
         begin
           argTok[na] := Tokens[j]; Inc(na); Inc(j);
           if (j < TokCount) and (Tokens[j].Kind = tkComma) then Inc(j)
@@ -800,10 +800,16 @@ begin
   nc := 0;
   NSpecCount := 0;
   repeat
-    if (CurTok.Kind <> tkIdent) and (CurTok.Kind <> tkInteger_T) and (CurTok.Kind <> tkBoolean_T) and (CurTok.Kind <> tkChar_T) and (CurTok.Kind <> tkString_T) then
+    if not IsConcreteTypeArgKind(CurTok.Kind) then
       Error('expected concrete type name');
     if nc >= MAX_TEMPLATE_PARAMS then Error('too many specialization arguments (MAX_TEMPLATE_PARAMS)');
-    cNames[nc] := CurTok.SVal;
+    { GetTokenStr, not SVal: a builtin type spelled as a KEYWORD token carries an
+      EMPTY SVal (see IsMethodNameTok's note), so every keyword-spelled argument
+      recorded the same empty name — which is what the duplicate-specialization
+      check below compares, so `TA = specialize TBox<Integer>` and a later
+      `TA = specialize TBox<Double>` read as the same declaration. }
+    if CurTok.SVal <> '' then cNames[nc] := CurTok.SVal
+    else cNames[nc] := GetTokenStr(TokPos - 1);
     cKinds[nc] := CurTok.Kind;
     { keep the raw token too — a deferral re-emits this declaration verbatim }
     NSpecArg[(MAX_NESTED_SPECS - 1) * MAX_TEMPLATE_PARAMS + nc] := Tokens[TokPos - 1];

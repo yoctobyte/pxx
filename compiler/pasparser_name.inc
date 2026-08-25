@@ -48,6 +48,25 @@ begin
                      tkLongWord_T, tkSingle_T, tkDouble_T, tkExtended_T]);
 end;
 
+{ A token that may stand as a CONCRETE type argument of a specialization —
+  `specialize TBox<Double>`, `TBox<LongWord>`. An identifier, or one of the
+  builtin type names the lexer gives its own token kind to.
+
+  ONE predicate, because there were three copies of the list (the template-body
+  group scanner, the delphi-mode rewriter, and ParseSpecialization's own check)
+  and all three named exactly Integer/Boolean/Char/String — so every FLOAT was
+  refused as a type argument: `specialize TBox<Double>` was "expected concrete
+  type name", while `TBox<Integer>` and even `TBox<string>` worked. The same
+  token-kinds-vs-names split IsMethodNameTok's comment describes, one construct
+  on: the list was written once and never grew with the lexer.
+  NOTE the same empty-SVal rule applies — read these with GetTokenStr, not SVal. }
+function IsConcreteTypeArgKind(k: TTokenKind): Boolean;
+begin
+  IsConcreteTypeArgKind := k in [tkIdent, tkInteger_T, tkBoolean_T, tkChar_T,
+                                 tkString_T, tkReal_T, tkLongWord_T,
+                                 tkSingle_T, tkDouble_T, tkExtended_T];
+end;
+
 { Index-addressed IsMethodNameTok, for LOOKAHEAD past the current token — same
   token set, deliberately sharing the predicate above so the two cannot drift.
   A caller that accepts this must read the name with GetTokenStr(idx): the
