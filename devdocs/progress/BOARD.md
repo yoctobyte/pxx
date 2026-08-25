@@ -55,7 +55,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (285)
+## backlog (287)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -137,10 +137,12 @@ _none_
 | chore-a-re-include-bench-timing-in-tools-devtest | A | 30 | chore | One line: `tools-devtest` skips `bench_timing_devtest.py` with an explicit `case ... continue`, added by a1fd5715e because the guard was load-sensitive. It has been fixed (c194b01e9) and is green under load average 14. Deleting the skip re-arms the only guard for bug-t-bench-sub-second-timings-quantized-to-50ms, which has not run in the fleet since the family was wired up. | — |
 | chore-a-retire-the-dead-pyexec-stub-and-its-stale-comments | A | 20 | chore | compiler/builtin/pylib.pas still carries a no-op `pyexec` stub, plus comments in pylib.pas and pyeval.pas saying things SEGFAULT 'because pyexec is a stub'. Engine 1 landed 2026-07-31 and `exec` lowers to pyeval's EvalPyStmts — nothing calls the stub. The stale prose is the cost: it reads as an unimplemented feature and made a reader doubt a done, gated one. | — |
 | chore-a-sweep-the-unwired-tests-into-the-suite | A | 20 | chore | PAUSED 2026-08-21 after batch 4 with 15 of the original 98 files left, and all 15 are in lanes the user has DEFERRED (13 Track N pyeval/pyexec, 2 Track F softfloat) — resume when either is un-deferred; nothing is half-applied. DECIDED 2026-08-19: SWEEP the ~61 unwired test files into the suite — one job, not 61 tickets. Track A, not T, precisely because A can FIX a red in place; T would have had to file one per red. These are repro tests from fix commits that were never wired, so the bug already has a ticket in done/ — reference it, do not re-file. Never record current output as the expectation. | — |
+| chore-makefile-ws-skeleton-loop-hides-tmp-paths | A | 40 | chore | The whitespace/fortran/algol skeleton loop in Makefile:5313 reaches /tmp through a shell variable, so split_jobs cannot merge the recipe and testmgr cannot privatize the path. tools/testmgr_tmp_var_devtest.py is RED on dev because of it, which stops `make tools-devtest` before the ~20 guards that sort after it. | — |
 | chore-progress-flag-prose-only-track-decl | A | 25 | chore | `progress.sh check` should flag a ticket that declares its track only in prose | — |
 | chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile | T | 30 | chore | The second, weaker half of the split_jobs lint: flag any job that RUNS a /tmp binary no line in that job produces. Prototyped and deliberately NOT shipped — it yields 5-7 candidates depending on how recipe lines are segmented, and every one needs individual adjudication. Shipping it half-tuned would produce exactly the noisy guard that gets muted. | — |
 | chore-t-split-lib-test-into-jobs-that-name-what-failed | T | 55 | chore | One lib-test job bundles several sources, so its tstate key names only the FIRST of them: `lib-test#src:test/crtl_exp2.c` is really `crtl_exp2.c examples/tk/hello.npy +5`, and a timeout in the tk step reads as a C-math regression. Split it so a job names what failed. Do it while lib-test is green — the baseline is recorded here. | — |
 | chore-t-test-binaries-hardcode-unsweepable-tmp-paths | T | 45 | chore | 60 /tmp paths are hardcoded in 37 COMPILED TEST SOURCES and written by the test binary at runtime, so no Makefile sweep can reach them and testmgr does not privatize them either. Two concurrent runs still share those files EVEN UNDER testmgr. Split out of chore-makefile-testtmp-parameterize, which closed the recipe half. | — |
+| chore-t-test-runs-inherit-the-desktop-session | T | 55 | chore | Every systemd-run --user job on plexus inherits a full desktop session — DBUS_SESSION_BUS_ADDRESS, DISPLAY=:0, WAYLAND_DISPLAY, XAUTHORITY — because systemctl --user show-environment carries them and the watcher's own /proc/<pid>/environ has them all. a11y was the symptom that hung a job for three days; anything that opportunistically talks to a display or session bus can hang the same way. Strip the environment for test runs instead of blocklisting symptoms one variable at a time. | — |
 | chore-t-unit-class-est-mem-is-below-what-lib-test-00-actually-peaks-at | T | 30 | chore | testmgr's own advisory, printed at the end of every full tier: `lib-test#00 peaked at 596 MB against a 550 MB estimate` for class `unit`. The scheduler admitted it on a promise the box did not have to keep. Raise the CLASSES row to max*1.5, or give the outlier its own class. | — |
 | chore-web-secrets-sops-age | W | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
 | compat-c-printf-p-of-null-prints-0x0-not-nil | C | 15 | compat | `printf(\"%p\", NULL)` prints `0x0`; glibc prints `(nil)`. Only the null case differs — a non-null pointer prints identically. It matters because it makes a gcc-oracle differential run report a divergence that is not a miscompile. | — |
@@ -656,6 +658,7 @@ _none_
 - [p 55] [N] bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
 - [p 55] [N] bug-nilpy-a-lambda-returned-directly-is-not-callable
 - [p 55] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
+- [p 55] [T] chore-t-test-runs-inherit-the-desktop-session
 - [p 55] [N] feature-a-declaration-phase
 - [p 55] [B] feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - [p 55] [E] feature-demo-portable-userland
@@ -726,6 +729,7 @@ _none_
 - [p 40] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 40] [T] bug-t-twatch-status-says-down-while-the-daemon-is-alive-and-testing
+- [p 40] [A] chore-makefile-ws-skeleton-loop-hides-tmp-paths
 - [p 40] [P] compat-pascal-a-string-n-field-makes-a-record-a-different-size-than-fpc
 - [p 40] [U] decide-pchar-node-side-storage-or-a-pchar-type-kind
 - [p 40] [D] docs-d-document-exec-eval-and-the-builtins-incompatibility
