@@ -45,20 +45,54 @@ fail() { say FAIL "$1" "$2"; rc=1; }
 check_trackt() {
     git -C "$REPO" fetch --no-write-fetch-head -q origin 2>/dev/null
 
-    json=
+    json= ; runs=
     for ref in origin/dev origin/master; do
         json=$(git -C "$REPO" show "$ref:devdocs/progress/tstate/plexus.json" \
-               2>/dev/null) && [ -n "$json" ] && break
+               2>/dev/null) && [ -n "$json" ] && {
+            # The per-run LOG, not just the latched summary. plexus.json
+            # last_full carries only date/sha/tier/verdict/wall -- it DROPS
+            # timed_out, deadline and unreached, which are exactly the fields
+            # the breadth arm needs in order to stop guessing. They live only
+            # here, so without this the arm can never see them and says
+            # "cannot distinguish" about a run that plainly finished.
+            runs=$(git -C "$REPO" show \
+                   "$ref:devdocs/progress/tstate/runs-plexus.ndjson" 2>/dev/null)
+            break
+        }
     done
     if [ -z "$json" ]; then
         fail trackt "no tstate/plexus.json on origin/dev or origin/master"
         return
     fi
 
-    printf '%s' "$json" | python3 -c '
+    printf '%s\n---RUNS---\n%s' "$json" "$runs" | python3 -c '
 import json, sys, time, calendar
-d = json.load(sys.stdin)
-last = d.get("last") or {}
+raw = sys.stdin.read()
+_p, _, _r = raw.partition("\n---RUNS---\n")
+RUNS = []
+for _line in _r.splitlines():
+    _line = _line.strip()
+    if _line:
+        try: RUNS.append(json.loads(_line))
+        except Exception: pass
+
+def enrich(rec):
+    """Fill a latched summary from its own run-log row, which carries every
+    field. plexus.json keeps only date/sha/tier/verdict/wall, so timed_out,
+    deadline and unreached are invisible to any consumer reading it alone."""
+    if not rec or rec.get("timed_out") is not None:
+        return rec
+    want_full = bool(rec.get("full")) or rec.get("tier") == "full"
+    for r in reversed(RUNS):
+        if r.get("sha") == rec.get("sha") and bool(r.get("full")) == want_full:
+            merged = dict(rec)
+            for k in ("timed_out", "deadline", "unreached"):
+                if r.get(k) is not None:
+                    merged[k] = r[k]
+            return merged
+    return rec
+d = json.loads(_p)
+last = enrich(d.get("last") or {})
 wall = last.get("wall")
 date = last.get("date", "")
 sha  = (last.get("sha") or "")[:12]
@@ -126,7 +160,7 @@ else:
 # on had wall 3600.3s against a 3600s deadline, i.e. NO VERDICT, published as a
 # red. Its still_red list is empty for the same reason, so jobs it never reached
 # read as FIXED.
-full = d.get("last_full") or {}
+full = enrich(d.get("last_full") or {})
 fw, fsha = full.get("wall"), (full.get("sha") or "")[:12]
 try:
     fage = (time.time() - calendar.timegm(time.strptime(
@@ -168,9 +202,33 @@ else:
     done
 
     # `while` above runs in a subshell, so its rc never reaches us. Re-derive.
-    printf '%s' "$json" | python3 -c '
+    printf '%s\n---RUNS---\n%s' "$json" "$runs" | python3 -c '
 import json,sys
-l=(json.load(sys.stdin).get("last") or {})
+raw = sys.stdin.read()
+_p, _, _r = raw.partition("\n---RUNS---\n")
+RUNS = []
+for _line in _r.splitlines():
+    _line = _line.strip()
+    if _line:
+        try: RUNS.append(json.loads(_line))
+        except Exception: pass
+
+def enrich(rec):
+    """Fill a latched summary from its own run-log row, which carries every
+    field. plexus.json keeps only date/sha/tier/verdict/wall, so timed_out,
+    deadline and unreached are invisible to any consumer reading it alone."""
+    if not rec or rec.get("timed_out") is not None:
+        return rec
+    want_full = bool(rec.get("full")) or rec.get("tier") == "full"
+    for r in reversed(RUNS):
+        if r.get("sha") == rec.get("sha") and bool(r.get("full")) == want_full:
+            merged = dict(rec)
+            for k in ("timed_out", "deadline", "unreached"):
+                if r.get(k) is not None:
+                    merged[k] = r[k]
+            return merged
+    return rec
+l=enrich(json.loads(_p).get("last") or {})
 if l.get("timed_out") is not None: sys.exit(1 if l["timed_out"] else 0)
 if l.get("verdict")=="TIMEOUT": sys.exit(1)
 w,dl=l.get("wall"),l.get("deadline")
