@@ -253,6 +253,49 @@ begin
   ASTTk[Result] := Ord(tyPointer);
 end;
 
+{ `a + b` / `Concat(a, b, ...)` over dynamic arrays. ONE construction, used by
+  BOTH spellings — the ticket asked for that explicitly and
+  normalise-dont-special-case says why: the second entry point is the one that
+  stays broken.
+
+  Concat IS the array-SPLICE Insert with the insertion point pinned past the
+  end. PXXDynInsArrFill clamps its index to [0..len], so a MaxInt index means
+  "append", and AN_DYN_INSERT's whole fresh-buffer + managed-element-retain
+  machinery serves unchanged — no second lowering, no second ARC story.
+
+  The index is a CONSTANT and not a `Length(a)` node on purpose: a Length node
+  would re-evaluate the left operand, so `Concat(F(), G())` would call F twice.
+  MakeWholeDynCopy above pins its count the same way, for the same reason. }
+function MakeDynConcat(left, right: Integer): Integer;
+var argA, argB, idxN: Integer;
+begin
+  if (NodeDynDepth(left) < 1) or (NodeDynDepth(right) < 1) then
+    Error('array concatenation: both operands must be dynamic arrays');
+  if NodeDynDepth(left) <> NodeDynDepth(right) then
+    Error('array concatenation: the operands'' nesting differs');
+  if (NodeDynBaseTk(left) <> NodeDynBaseTk(right)) or
+     ((NodeDynBaseTk(left) = tyRecord) and
+      (NodeDynBaseRec(left) <> NodeDynBaseRec(right))) then
+    Error('array concatenation: the operands'' element types differ');
+  { Frozen-string elements are refused by dynamic-array Insert for the same
+    reason (the element width is the declared capacity, not TypeSize), and a
+    silent wrong stride is exactly what this ticket's diagnostic replaced. }
+  if NodeDynBaseTk(left) = tyString then
+    Error('array concatenation: frozen-string element type not yet supported');
+  if FindProc('PXXDynInsArrFill') < 0 then
+    Error('array concatenation: helper unavailable (needs the builtin unit; not on ESP)');
+  idxN := AllocNode(AN_INT_LIT);
+  ASTIVal[idxN] := 2147483647; ASTTk[idxN] := Ord(tyInteger);
+  Result := AllocNode(AN_DYN_INSERT);
+  ASTIVal[Result] := 1;                     { the array-splice form }
+  ASTLeft[Result] := left;
+  argA := AllocNode(AN_ARG); ASTLeft[argA] := right;    { spliced-in array }
+  argB := AllocNode(AN_ARG); ASTLeft[argB] := idxN;     { index = append }
+  ASTRight[argA] := argB;
+  ASTRight[Result] := argA;
+  ASTTk[Result] := Ord(tyPointer);
+end;
+
 procedure ParseFactorCore;
 var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG node }
     lenSavedHoist, lenTrialHoist: Integer;   { the len() intercept's parked hoist queue }
@@ -5481,7 +5524,13 @@ begin
 
       { Concat(s1, s2, ..., sn): the System string-concatenation intrinsic, just
         chained `+`. Folded here so it needs no `uses` and reuses the working
-        string-concat codegen. A user `Concat` (procIdx>=0) shadows it. }
+        string-concat codegen. A user `Concat` (procIdx>=0) shadows it.
+
+        FPC's Concat is ALSO the dynamic-array concatenation, so the first
+        operand's shape picks which one this is — one intrinsic, two element
+        types, decided by the same left-fold. Everything below the fold is
+        shared; only the node the fold builds differs
+        (feature-p-dynamic-array-concatenation). }
       if CaseEqual(name, 'Concat') and (procIdx < 0) and (Tokens[TokPos].Kind = tkLParen) then
       begin
         Next; Expect(tkLParen, '(');
@@ -5489,15 +5538,24 @@ begin
         while Eat(tkComma) do
         begin
           ParseExpr;
-          left := AllocNode(AN_BINOP);
-          ASTIVal[left] := Ord(tkPlus);
-          ASTLeft[left] := node; ASTRight[left] := CurASTNode;
-          ASTTk[left] := Ord(tyAnsiString);
-          node := left;
+          if NodeDynDepth(node) > 0 then
+            node := MakeDynConcat(node, CurASTNode)
+          else
+          begin
+            left := AllocNode(AN_BINOP);
+            ASTIVal[left] := Ord(tkPlus);
+            ASTLeft[left] := node; ASTRight[left] := CurASTNode;
+            ASTTk[left] := Ord(tyAnsiString);
+            node := left;
+          end;
         end;
         Expect(tkRParen, ')');
         CurASTNode := node;
-        LastExprTk := tyAnsiString;
+        { A one-argument `Concat(a)` over an array is the identity and never
+          reaches MakeDynConcat, so ask the NODE what it is rather than
+          remembering which branch ran. }
+        if NodeDynDepth(node) > 0 then LastExprTk := tyPointer
+        else LastExprTk := tyAnsiString;
         Exit;
       end;
 
@@ -8586,6 +8644,19 @@ begin
       ASTTk[node] := Ord(Procs[opci].RetType)
     else if (ASTTk[left] = Ord(tyVariant)) or (ASTTk[right] = Ord(tyVariant)) then
       ASTTk[node] := Ord(tyVariant)
+    else if (op = tkPlus) and not PyExprMode and not CProgramMode and
+            (NodeDynDepth(left) > 0) and (NodeDynDepth(right) > 0) then
+    begin
+      { `a + b` over two dynamic arrays — FPC's {$modeswitch arrayoperators} /
+        Delphi-mode concatenation. SAME node the Concat intrinsic builds, so
+        there is one lowering to keep correct rather than two
+        (feature-p-dynamic-array-concatenation). A dyn array on only ONE side
+        stays the loud refusal in ir.inc: it used to add the two handles and
+        hand back a wild pointer. }
+      node := MakeDynConcat(left, right);
+      CurASTNode := node;
+      continue;
+    end
     else if PyExprMode and (op = tkPlus) and PyNodeIsPyBytes(left) and PyNodeIsPyBytes(right) then
     begin
       { b1 + b2 — bytes concatenation (uforth WRITE-LINE) }

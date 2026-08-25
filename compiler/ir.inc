@@ -8698,9 +8698,14 @@ begin
         { An arithmetic operator with a dynamic-array operand otherwise fell through
           to the integer/pointer IR_BINOP, which added the two array handles and
           produced a wild pointer -> runtime SIGSEGV (bug-dynarray-concat-silent-
-          miscompile). Reject it honestly. `a + b` array concat is a future feature
-          (feature-dynarray-insert-delete / feature-copy-intrinsic). }
-        Error('arithmetic operator not supported for dynamic arrays (`a + b` array concatenation is not implemented)')
+          miscompile). Reject it honestly.
+          `a + b` over TWO dynamic arrays is now concatenation and never reaches
+          here -- the parser turns it into the array-splice AN_DYN_INSERT
+          (feature-p-dynamic-array-concatenation). What is left is the genuinely
+          meaningless rest: `-`, `*`, `div`, and a `+` with an array on only ONE
+          side. Kept as the safety net for any path that builds such a node
+          without going through ParseSimpleExpr. }
+        Error('arithmetic operator not supported for dynamic arrays (only `a + b` over two dynamic arrays is defined, as concatenation)')
       else if (not CProgramMode) and
               ((IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord) or
                (IntToTypeKind(ASTTk[ASTRight[node]]) = tyRecord)) and

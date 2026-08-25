@@ -172,9 +172,12 @@ begin
         Result := ProcRetDynDepth[ASTIVal[node]];
         if Result < 1 then Result := 1;
       end;
-    AN_DYN_COPY:
+    AN_DYN_COPY, AN_DYN_INSERT:
       { `Copy(a)` / `Copy(a, i, n)` of a dyn array yields an array of the SAME
-        shape -- its depth and element come straight from the source. }
+        shape -- its depth and element come straight from the source. So does
+        the array-splice AN_DYN_INSERT, which is what `a + b` and
+        `Concat(a, b)` build: same element, same nesting, more elements
+        (feature-p-dynamic-array-concatenation). }
       Result := NodeDynDepth(ASTLeft[node]);
     AN_COMMA:
       { `(side-effect, value)` yields the RIGHT operand's value, so its shape is
@@ -225,7 +228,8 @@ begin
   end
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldType(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
-  else if (ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DYN_COPY) then
+  else if (ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DYN_COPY) or
+          (ASTKind[node] = AN_DYN_INSERT) then
     Result := NodeDynBaseTk(ASTLeft[node])
   else if ASTKind[node] = AN_COMMA then
     { the comma's value is its RIGHT operand — see NodeDynDepth's arm }
@@ -248,7 +252,8 @@ begin
   end
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldRecId(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
-  else if (ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DYN_COPY) then
+  else if (ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DYN_COPY) or
+          (ASTKind[node] = AN_DYN_INSERT) then
     Result := NodeDynBaseRec(ASTLeft[node])
   else if ASTKind[node] = AN_COMMA then
     { the comma's value is its RIGHT operand — see NodeDynDepth's arm }

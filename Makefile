@@ -7786,6 +7786,15 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_index_a_dynamic_array_call_result.pas $(TESTTMP)/test_idxdyncall26
 	test "$$($(TESTTMP)/test_idxdyncall26)" = "$$(cat test/test_index_a_dynamic_array_call_result.expected)"
+	# Dynamic-array concatenation, BOTH spellings -- `Concat(a, b, ...)` and
+	# `a + b` under {$modeswitch arrayoperators}. They build the same
+	# array-splice node with the insertion index pinned past the end, so this
+	# asserts one lowering through two entry points: empty operands, aliasing
+	# (`a := a + b`, `u := u + u`), managed and nested element types, a call
+	# result as an operand, and a concat nested inside another.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_dynamic_array_concatenation.pas $(TESTTMP)/test_dynconcat26
+	test "$$($(TESTTMP)/test_dynconcat26)" = "$$(cat test/test_dynamic_array_concatenation.expected)"
 	# `function F: array of array of T` -- Result got a HARDCODED dyn depth of 1
 	# while the proc row already carried the real one, so an outer element was
 	# read as a 4-byte Integer instead of an 8-byte handle: inside the callee

@@ -10902,6 +10902,12 @@ begin
         bug-p-open-array-of-a-named-dynamic-array-reads-garbage). }
       Result := SymElemDynDepth[ASTIVal[ASTLeft[node]]];
   end
+  else if (ASTKind[node] = AN_DYN_COPY) or (ASTKind[node] = AN_DYN_INSERT) then
+    { `Copy(a)` yields an array of the source's shape -- and so does the
+      array-splice AN_DYN_INSERT that `a + b` / `Concat(a, b)` build
+      (feature-p-dynamic-array-concatenation). Both arms exist in the
+      ast_arena.inc twin; see the note below. }
+    Result := DynArrayNodeDepth(ASTLeft[node])
   else if ASTKind[node] = AN_COMMA then
     { `(side-effect, value)` yields the RIGHT operand — the same rule
       ResolveNodeRec's comma arm states, and the same arm NodeDynDepth has in
