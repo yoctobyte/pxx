@@ -2,8 +2,8 @@
 track: P
 prio: 65
 owner: claude-A
-blocked-by: []
-status: backlog
+blocked-by: [gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo]
+status: unfinished
 type: feature
 ---
 
@@ -11,7 +11,7 @@ type: feature
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** working
+- **Status:** unfinished — parked 2026-08-25, blocked on the Track B typinfo/PTypeData gap (see the last recon entry)
   runs, fpjson's suite is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
