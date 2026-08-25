@@ -177,6 +177,19 @@ begin
   end;
 end;
 
+function NestedOwnerCi(const nm: AnsiString): Integer;
+{ The UClass row a `TOuter.TInner` qualifier names as its OUTER scope — a class
+  OR a record. A record body now claims its nested types the same way a class
+  body does (ParseRecordFields), so every `TOuter.` walk must accept one: the
+  expression path gated on IsClassType and therefore refused
+  `TRec.TNestedClass.Create` while the identical shape under a class worked.
+  Class-first, so today's behaviour is unchanged wherever a class of the name
+  exists (see FindUClassNonRecord's note on same-named rows). }
+begin
+  Result := FindUClassNonRecord(nm);
+  if Result < 0 then Result := FindUClass(nm);
+end;
+
 { Register `nm` as a type declared inside class `ownerCi`'s body. Idempotent per
   (owner, name): a re-parse of the same body must not grow the table. }
 procedure AddNestedType(ownerCi: Integer; const nm: AnsiString; ci: Integer);

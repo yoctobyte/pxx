@@ -7693,6 +7693,15 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_pchar_paren_deref_and_copy.pas $(TESTTMP)/test_pdc26
 	test "$$($(TESTTMP)/test_pdc26)" = "$$(cat test/test_pchar_paren_deref_and_copy.expected)"
+	# A record was the only structured type that could not open a nested `type`
+	# section -- the class body had the arm and the record body did not, so
+	# `TRec = record type TSub = ... end` was a syntax error and the record body
+	# never claimed its nested types (so `function TOuter.TSub.M` could not find
+	# the scope either). Two records declaring the same nested name are two
+	# distinct types; SizeOf(TB.TSub) used to answer TA's width.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_record_nested_type_section.pas $(TESTTMP)/test_rnts26
+	test "$$($(TESTTMP)/test_rnts26)" = "$$(cat test/test_record_nested_type_section.expected)"
 	# Eight constructs FPC rejects used to compile clean -- five of them doing
 	# something silently wrong (a segfault, an out-of-bounds read, a scalar
 	# overwritten with a heap pointer, a destroyed string, a plausible wrong

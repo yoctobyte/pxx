@@ -277,6 +277,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     isLiftedCall: Boolean;
     bitNot: Boolean; notOrdTk: TTypeKind; notConstV: Int64;
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec, szQUnit: Integer;
+    szNestCi, szScanCi: Integer;   { SizeOf(TOuter.TInner) — the SCOPED nested row }
     szScan, szBd, szExprNode: Integer;
     szIsExpr: Boolean;
     szExprTk: TTypeKind;
@@ -3277,13 +3278,37 @@ begin
           died on the '.' while `var r: TOuter.TInner` already worked — a half-working
           feature is worse than an absent one. Same rule as ParseTypeKind: pxx registers
           nested types globally, so the qualifier only disambiguates the parse. }
+        szNestCi := -1;
         if (CurTok.Kind = tkIdent) and (FindUClass(name) >= 0) and
            (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) and
            (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkIdent) then
         begin
-          Next;               { past the class name — CurTok is now '.' }
-          Next;               { past '.'            — CurTok is now the nested type name }
-          name := CurTok.SVal;
+          { Walk the NESTED-TYPE registry, keeping the row the qualifier names,
+            rather than dropping the qualifier and re-looking the bare name up
+            flat. Two records may each declare a `TSub`; the flat lookup answers
+            with whichever registered first, so `SizeOf(TB.TSub)` reported TA's
+            width — silently, and only in SizeOf: `var y: TB.TSub` already
+            resolved through the registry and was right. The scope-blind half of
+            bug-a-duplicate-class-name-check-is-scope-blind, one construct on.
+            The bare-name strip stays as the fallback for the (common) case where
+            the nested type kept its unqualified registration. }
+          szScanCi := NestedOwnerCi(name);
+          while (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+                (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkIdent) and
+                (FindNestedType(szScanCi, GetTokenStr(TokPos + 1)) >= 0) do
+          begin
+            szScanCi := FindNestedType(szScanCi, GetTokenStr(TokPos + 1));
+            szNestCi := szScanCi;
+            Next;             { past the owner name — CurTok is now '.' }
+            Next;             { past '.'            — CurTok is now the nested name }
+            name := CurTok.SVal;
+          end;
+          if szNestCi < 0 then
+          begin
+            Next;               { past the class name — CurTok is now '.' }
+            Next;               { past '.'            — CurTok is now the nested type name }
+            name := CurTok.SVal;
+          end;
         end;
         { A builtin type spelled as a KEYWORD token (Double, Char, String, ...)
           carries no SVal, so give `name` the token's own text -- then ONE
@@ -3303,14 +3328,19 @@ begin
             see ParseTypeKind's identical guard) — only accept the record
             match if no user alias claims the same name, otherwise fall
             through to the alias branch below. }
-          idx := IsRecordType(name);
-          if idx = REC_NONE then
+          if szNestCi >= 0 then
+            idx := REC_UCLASS_BASE + szNestCi
+          else
           begin
-            ci := FindUClass(name);
-            if ci >= 0 then
-              idx := REC_UCLASS_BASE + ci;
+            idx := IsRecordType(name);
+            if idx = REC_NONE then
+            begin
+              ci := FindUClass(name);
+              if ci >= 0 then
+                idx := REC_UCLASS_BASE + ci;
+            end;
           end;
-          if (idx <> REC_NONE) and (FindTypeAlias(name) < 0) then
+          if (idx <> REC_NONE) and ((szNestCi >= 0) or (FindTypeAlias(name) < 0)) then
             prevTok := RecSize(idx)
           else
           begin
@@ -6057,10 +6087,10 @@ begin
         lookup, which would otherwise bind whichever class of that bare name
         registered first. bug-a-duplicate-class-name-check-is-scope-blind }
       nestCtorCi := -1;
-      if (idx < 0) and (procIdx < 0) and IsClassType(name) and
+      if (idx < 0) and (procIdx < 0) and (NestedOwnerCi(name) >= 0) and
          (CurTok.Kind = tkIdent) and (TokPos + 1 < TokCount) and
          (Tokens[TokPos].Kind = tkDot) and (Tokens[TokPos+1].Kind = tkIdent) and
-         (FindNestedType(FindUClass(name), GetTokenStr(TokPos+1)) >= 0) then
+         (FindNestedType(NestedOwnerCi(name), GetTokenStr(TokPos+1)) >= 0) then
       begin
         { Walk the whole `. nested . nested ...` run, then require `Create` after
           it. This was a FIXED three-token lookahead, so exactly one level of
@@ -6069,7 +6099,7 @@ begin
           non-constructor spellings untouched: nothing is eaten unless the run
           really does end in Create.
           bug-p-a-nested-class-method-implementation-takes-only-one-qualifier }
-        nestScanCi := FindUClass(name);
+        nestScanCi := NestedOwnerCi(name);
         nestScanPos := TokPos;          { at the '.' after the outermost name }
         nestDepth := 0;
         while (nestScanPos + 1 < TokCount) and (Tokens[nestScanPos].Kind = tkDot) and

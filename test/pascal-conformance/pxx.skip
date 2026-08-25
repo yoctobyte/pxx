@@ -72,7 +72,6 @@ tgeneric107.pp	gap: inline specialize expression (specialize G<T>.Create as expr
 tgeneric15.pp	gap: class inheriting from `specialize TStack<Integer>` as parent type
 tgeneric16.pp	gap: generic class inheriting from specialize of another generic
 tgeneric23.pp	wontfix: requires FPC `fgl` unit as shipped (TFPGList)
-tgeneric27.pp	gap: enum-tagged variant part with INLINE enum type in a template's record element (`case enum:(one,two) of`)
 tgeneric59.pp	gap: same generic name with different arity (TTest<T> vs TTest<T,S>) in delphi mode
 tgeneric79.pp	gap: inline `class(specialize IGenericIntf<T>)` parent-list specialize (interface templates capture now)
 tgeneric26.pp	gap: accepts-invalid — type parameter in a variant part must be rejected (substitution model has no pre-specialization check)
@@ -182,15 +181,10 @@ tgenconstraint1.pp	gap: Delphi generic constraint syntax (class/record/construct
 tgeneric103.pp	gap: standalone `generic procedure Test<T>` + specialize; also unit-only compilation
 tgeneric105.pp	gap: %FAIL diagnostic — impl type params must match interface decl (TTest<S> vs <T>)
 tgeneric106.pp	gap: generic class with `class var` procvar field of type G<T>, method-of-object
-tgeneric29.pp	gap: generic interface IGenericInterface<T>, generic record, generic array
 tgeneric30.pp	wontfix: dialect-pass — mode-delphi generic method impl without <T> — PXX's Delphi-generics rewriter deliberately accepts the bare name (3d71edcf); not a bug
 tgeneric48.pp	gap: mixed generic overloads by arity (class/record/interface/procvar/array)
 tgeneric50.pp	gap: hint directives (deprecated/platform/experimental) on generics and specializations
-tgeneric60.pp	gap: nested non-generic record inside generic class, incl. out-of-line static method
-tgeneric61.pp	gap: nested class inside generic class + out-of-line TTest<T>.TTestSub.Test impl
 tgeneric62.pp	gap: nested `object` type inside generic class
-tgeneric63.pp	gap: generic record with nested record type
-tgeneric64.pp	gap: generic record with nested class type
 tgeneric65.pp	gap: generic record with nested `object` type
 tgeneric66.pp	gap: generic `object` type with nested record
 tgeneric67.pp	gap: generic `object` type with nested class

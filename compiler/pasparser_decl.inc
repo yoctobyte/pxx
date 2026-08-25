@@ -2976,6 +2976,7 @@ var
   hiVal, loVal, i, nFldNames, fni, fNDims: Integer;
   tdLo, tdHi, tdi, classAlign: Integer;
   opDepth: Integer;   { paren nesting while skipping a `class operator` signature }
+  savedPCB: Integer;  { ParsingClassBodyCi around this body -- see below }
   isArr, fIsDyn: Boolean;
   fTk: TTypeKind;
   fldNOffs: array[0..15] of Integer;   { comma-separated field-name spans }
@@ -2984,6 +2985,12 @@ var
 begin
   curFieldOff := 0;
   classAlign := 1;
+  { Types declared from here to the matching `end` belong to THIS record, exactly
+    as the class body claims its own (ParseTypeSection's class arm). Without it a
+    nested type parsed but was registered flat, invisible to FindNestedType — so
+    the out-of-line `function TOuter.TSub.M` header could not walk into it. }
+  savedPCB := ParsingClassBodyCi;
+  ParsingClassBodyCi := ci;
   while (CurTok.Kind <> tkEnd) and (CurTok.Kind <> tkEOF) do
   begin
     { `class var` inside a RECORD: no shared-storage model for record class
@@ -3032,6 +3039,7 @@ begin
     begin
       if (CurTok.Kind = tkProperty) or (CurTok.Kind = tkProcedure) or
          (CurTok.Kind = tkFunction) or (CurTok.Kind = tkConst) or
+         (CurTok.Kind = tkType) or
          (CurTok.Kind = tkClass) or
          ((CurTok.Kind = tkIdent) and
           (CaseEqual(CurTok.SVal, 'constructor') or CaseEqual(CurTok.SVal, 'strict') or
@@ -3043,6 +3051,39 @@ begin
         else
           Error('a record type declared inside a routine can only have fields (no methods, properties, consts or visibility sections)');
       end;
+    end;
+
+    { Nested `type` section inside a RECORD body — the exact arm a CLASS body has
+      had all along (see ParseTypeSection's caller in the class member loop).
+      A record was the only structured type that did not take one, so
+
+        TTest = record
+        type
+          TSub = record ... end;
+        var
+          X: Integer;
+        end;
+
+      failed with `Expected: :` — the `type` keyword fell through to the field
+      parser, which demanded a ':' after the name it thought it had read. Two
+      mechanisms for one concept, and the second one was simply missing; the
+      classic double-case of normalise-dont-special-case.
+
+      Same semantics as the class arm, deliberately: parsed as GLOBAL type
+      aliases, because pxx does not scope member types (`TRec.TSub` resolves via
+      the flat name, which is what makes the qualified spelling work at all).
+      TypeSectionDepth is what tells ParseTypeSection it is nested and must stop
+      at the first ident not followed by '=' — i.e. at the next member word.
+
+      Unblocks the generic-record family too: tgeneric63/64/65 are `generic
+      TTest<T> = record type TTestSub = ... end` and failed here, not in the
+      generics machinery. }
+    if CurTok.Kind = tkType then
+    begin
+      Inc(TypeSectionDepth);
+      ParseTypeSection;
+      Dec(TypeSectionDepth);
+      continue;
     end;
 
     { ADVANCED RECORDS: visibility sections and methods. Access is still not ENFORCED
@@ -3353,6 +3394,7 @@ begin
     else
       Next;
   end;
+  ParsingClassBodyCi := savedPCB;
   UClsSize_[ci] := AlignTo(curFieldOff, classAlign);
   UClsAlign[ci] := classAlign;
   Expect(tkEnd, 'end');
