@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T14:28:49Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "de2de369ea6ae73475c996635d07f6c9902f294c",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T15:30:22Z",
    "fixed": [],
    "new_red": [
@@ -486,13 +478,22 @@
    "sha": "5f39ba51fbe1837f2d29beb324d9447957c515f4",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-25T15:36:42Z",
+   "fixed": [
+    "test-core#src:test/test_nilpy_json_module.npy",
+    "test-core#src:test/test_nilpy_json_reparse_heap.npy"
+   ],
+   "new_red": [],
+   "sha": "d20300d288eb206e9e1aa157e9e052d546369817",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2358728B  data=61689B  bss=51420B  procs=1788] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
-  "test-core#src:test/test_nilpy_json_module.npy": "ok: $TMP  [code=2404378B  data=77852B  bss=76212B  procs=2020] | Segmentation fault",
-  "test-core#src:test/test_nilpy_json_reparse_heap.npy": "ok: $TMP  [code=2388648B  data=75864B  bss=75420B  procs=2002] | Segmentation fault",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter"
  },
  "job_tier": {
@@ -1776,6 +1777,7 @@
   "test-core#src:test/test_heap.pas@1": "native",
   "test-core#src:test/test_helper_const_not_global_fail.pas": "native",
   "test-core#src:test/test_hex_char_code.pas": "native",
+  "test-core#src:test/test_high_and_low_of_a_string.pas": "native",
   "test-core#src:test/test_high_low_const_expr.pas": "native",
   "test-core#src:test/test_high_low_word_aliases.pas": "native",
   "test-core#src:test/test_hilo_swap.pas": "native",
@@ -1859,6 +1861,7 @@
   "test-core#src:test/test_label_section_precedes_the_other_declarations.pas": "native",
   "test-core#src:test/test_lazy_var.pas": "native",
   "test-core#src:test/test_length_dynarray_call.pas": "native",
+  "test-core#src:test/test_length_of_a_string_literal_expression.pas": "native",
   "test-core#src:test/test_lfm.pas": "native",
   "test-core#src:test/test_lineending_b260.pas": "native",
   "test-core#src:test/test_local_const_classref_array_b317.pas": "native",
@@ -4853,6 +4856,7 @@
   "test-core#src:test/test_heap.pas@1": "pass",
   "test-core#src:test/test_helper_const_not_global_fail.pas": "pass",
   "test-core#src:test/test_hex_char_code.pas": "pass",
+  "test-core#src:test/test_high_and_low_of_a_string.pas": "pass",
   "test-core#src:test/test_high_low_const_expr.pas": "pass",
   "test-core#src:test/test_high_low_word_aliases.pas": "pass",
   "test-core#src:test/test_hilo_swap.pas": "pass",
@@ -4936,6 +4940,7 @@
   "test-core#src:test/test_label_section_precedes_the_other_declarations.pas": "pass",
   "test-core#src:test/test_lazy_var.pas": "pass",
   "test-core#src:test/test_length_dynarray_call.pas": "pass",
+  "test-core#src:test/test_length_of_a_string_literal_expression.pas": "pass",
   "test-core#src:test/test_lfm.pas": "pass",
   "test-core#src:test/test_lineending_b260.pas": "pass",
   "test-core#src:test/test_local_const_classref_array_b317.pas": "pass",
@@ -5094,8 +5099,8 @@
   "test-core#src:test/test_nilpy_infer_return.npy": "pass",
   "test-core#src:test/test_nilpy_is_identity_vs_class_test.npy": "pass",
   "test-core#src:test/test_nilpy_iter_next_cursor.npy": "pass",
-  "test-core#src:test/test_nilpy_json_module.npy": "fail",
-  "test-core#src:test/test_nilpy_json_reparse_heap.npy": "fail",
+  "test-core#src:test/test_nilpy_json_module.npy": "pass",
+  "test-core#src:test/test_nilpy_json_reparse_heap.npy": "pass",
   "test-core#src:test/test_nilpy_kwarg_through_lifted_value.npy": "pass",
   "test-core#src:test/test_nilpy_lambda_capture.npy": "pass",
   "test-core#src:test/test_nilpy_lambda_container_result.npy": "pass",
@@ -6643,11 +6648,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-25T14:35:09Z",
-  "sha": "5f39ba51fbe1837f2d29beb324d9447957c515f4",
+  "date": "2026-08-25T15:36:42Z",
+  "sha": "d20300d288eb206e9e1aa157e9e052d546369817",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.3
+  "wall": 3600.2
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6837,48 +6842,6 @@
     "fd93e4a71c37a7932b9ef73e4c9f8a7deceb3c34"
    ],
    "src": "test/lib_mimic_xml_etree_elementtree.npy",
-   "status": "fail"
-  },
-  {
-   "bad": "a28bc3993a0e0caa0370b71abb1759287d3e9909",
-   "good": "d34ea0c3e6f09c6856fcce23cb4ca070989d15ce",
-   "job": "test-core#src:test/test_nilpy_json_module.npy",
-   "name": "test-core#1375",
-   "opened": "2026-08-25T11:28:53Z",
-   "pin_built": false,
-   "range": [
-    "6262fd99e85b8e868f23595d2accdcd67db665ca",
-    "6f6b4c552445b5c297e542863d1fba5be81cf9ca",
-    "99939b3a169851aea6d9f37d00dc4db863f30fb7",
-    "44ef758184c5faf96a5da3a6f79cda9aa771f9ba",
-    "8c0658cc0c71f9236275d646660959645465e4ca",
-    "e1633488e4799851f8c5e9d44cba6c8f7abfc9ba",
-    "f064c591b599ad5d52896f6c400b076d03e552fc",
-    "bd50e76edf0e69e45d1b6ab3d68238596b9e6cbb",
-    "a28bc3993a0e0caa0370b71abb1759287d3e9909"
-   ],
-   "src": "test/test_nilpy_json_module.npy",
-   "status": "fail"
-  },
-  {
-   "bad": "a28bc3993a0e0caa0370b71abb1759287d3e9909",
-   "good": "d34ea0c3e6f09c6856fcce23cb4ca070989d15ce",
-   "job": "test-core#src:test/test_nilpy_json_reparse_heap.npy",
-   "name": "test-core#1379",
-   "opened": "2026-08-25T11:28:53Z",
-   "pin_built": false,
-   "range": [
-    "6262fd99e85b8e868f23595d2accdcd67db665ca",
-    "6f6b4c552445b5c297e542863d1fba5be81cf9ca",
-    "99939b3a169851aea6d9f37d00dc4db863f30fb7",
-    "44ef758184c5faf96a5da3a6f79cda9aa771f9ba",
-    "8c0658cc0c71f9236275d646660959645465e4ca",
-    "e1633488e4799851f8c5e9d44cba6c8f7abfc9ba",
-    "f064c591b599ad5d52896f6c400b076d03e552fc",
-    "bd50e76edf0e69e45d1b6ab3d68238596b9e6cbb",
-    "a28bc3993a0e0caa0370b71abb1759287d3e9909"
-   ],
-   "src": "test/test_nilpy_json_reparse_heap.npy",
    "status": "fail"
   }
  ],
