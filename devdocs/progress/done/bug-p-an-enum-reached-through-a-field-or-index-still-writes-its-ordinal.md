@@ -155,4 +155,4 @@ array-returning call) is refused by
 asserted through a variable.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 6262fd99e.
