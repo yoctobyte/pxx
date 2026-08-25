@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:23 blocked:7 backlog:279 backlog_new:23 experimental:20 rainy-day:44 float:20 done-followup:3 decided:114 done:2356 rejected:40`
+`working:1 unfinished:23 blocked:7 backlog:281 backlog_new:23 experimental:20 rainy-day:44 float:20 done-followup:3 decided:114 done:2356 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -47,7 +47,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 312, ranked
+## Ready — top 30 of 313, ranked
 
 - `[p 88] [B]` bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
 - `[p 88] [N]` bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
@@ -56,6 +56,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 80] [N]` bug-n-a-class-base-that-is-an-expression-does-not-compile
 - `[p 80] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - `[p 80] [N]` bug-n-hasattr-through-an-untyped-parameter-is-always-false
+- `[p 78] [A]` feature-typeinfo-ttypedata-payloads (unblocks 1)
 - `[p 78] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - `[p 78] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
 - `[p 78] [N]` bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program
@@ -78,6 +79,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
-- `[p 68] [N]` feature-nilpy-user-defined-decorators
 
-_282 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_283 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

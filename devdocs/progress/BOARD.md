@@ -54,7 +54,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (279)
+## backlog (281)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -123,7 +123,9 @@ _none_
 | bug-p-sizeof-rejects-a-pointer-deref-in-its-operand | P | 55 | bug | `SizeOf(p^.A)` is a parse error (`Expected: ), but got: ^`). SizeOf's operand parser is a hand-rolled selector walk that handles `v`, `v.f.g` and `v[i]` but has no `^` case, so any pointer deref in the operand is rejected outright. | — |
 | bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence | T | 40 | bug | file_cascade_ticket's Root-cause-suspects line falls back to 'likely a broken build or harness event' whenever no CASCADE_ROOT_JOBS entry is in the red set. That is a conclusion drawn from the absence of one narrow signal, printed with no hedge, and it is now directly contradicted by the Range section shipped in 8ec77190c — which on the live incident named the actual cause. Same defect class the Range work fixed for the sha: an auto-filed ticket asserting something it has no evidence for. | — |
 | bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio | T | 50 | bug | Float-accuracy assertions in the gated suites make a one-ulp move a CI RED, and a red job is worked at the priority of BEING RED - which overrides the owner's standing rule that float accuracy is low prio. Parking the tickets in float/ does not close this door; only the tests can. | — |
+| bug-t-a-pin-that-moves-mid-run-is-not-detected | T | 55 | bug | testmgr snapshots the HEAD-built compiler and reports `compiler_changed_mid_run`, but the PIN — which lib-test and demos actually build with — is read ONCE at startup and never re-checked. A `make pin` during a run silently splits those jobs across two stables while the report claims a single `pin=N`. The asymmetry is the tell: one binary is guarded, the other is announced. | — |
 | bug-t-a-pin-verifys-reds-carry-no-reasons | T | 40 | bug | A pin verify's reds carry no reasons | — |
+| bug-t-a-timed-out-sha-still-counts-as-tested | T | 55 | bug | A sha whose only run TIMED OUT is recorded in st[\"last\"] and therefore counts as tested for staleness: --status stops asking for it and the fleet reads it as covered. The run published no verdict by design (bug-t-the-native-tier-times-out-and-publishes-a-contentless-red, fixed 2026-08-25) — but the staleness question is a separate mechanism that still answers yes. | — |
 | bug-t-agents-kill-each-others-processes-with-pattern-pkill | T | 55 | bug | Two csmith batches were killed mid-run from outside their own session. Pattern-pkill (pkill -f <name>) cannot distinguish two agents running the same tool, and this repo ALREADY hit and solved this class once in tools/gui_shot.sh — the rule was written into that one script and never generalised, while devdocs/dev/debugging-playbook.md still actively teaches `pkill -9 -f <path>`. | — |
 | bug-t-fpc-seed-canary-red-cited-lines-that-cannot-contain-the-identifier | T | 30 | bug | One gate.sh quick run reported the FPC seed canary RED with 'symtab.inc(5934,30) Identifier not found ByRefArgNeedsLvalue' — but line 5934 of that file contains an unrelated loop, and the real call sites are at 6185/6186, AFTER the definition at 6099. Not reproducible: fpc compiled the identical tree rc=0 twice by hand and the next gate.sh run was GREEN. Evidence points at the canary reading a stale/other tree state, the same class the fixedpoint step already defends against; a false RED costs an agent a full investigation. | — |
 | bug-t-gate-quick-cannot-see-a-broken-pinned-rtl | T | 65 | bug | A Track A change that adds a builtin and uses it from lib/rtl breaks every $(PXX_STABLE) build the moment it lands, because stable_linux_amd64/default/builtin/ is a FROZEN copy — and gate.sh quick is green through it, because the quick gate never builds anything with the pinned binary. It happened on 2026-08-21 and Track B/D/E were dead on master until the next pin. A ~1s canary closes it. | — |
@@ -302,7 +304,7 @@ _none_
 | feature-tls-provider-abstraction | B | 53 | feature | TLS provider abstraction — pluggable backends (OpenSSL + handrolled) | feature-tls13-from-scratch |
 | feature-toolchain-cli-ux | A | 30 | feature | Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck) | — |
 | feature-twatch-full-tier-coverage-age | T | 35 | feature | No signal distinguishes "full tier is lagging" from "full tier never completes" | — |
-| feature-typeinfo-ttypedata-payloads | A | 65 | feature | TypeInfo(T) now answers kind + name for every category that has a consumer, but every non-class/record blob writes a nil DataPtr — no TTypeData. The data is all already in the compiler (subrange bounds, set element enum, array element type and dims); this is emission, not discovery. Plus the three categories with no consumer yet: interfaces (14), metaclasses (28), Currency (4, which needs a type-system change first). | — |
+| feature-typeinfo-ttypedata-payloads | A | 65→78 | feature | TypeInfo(T) now answers kind + name for every category that has a consumer, but every non-class/record blob writes a nil DataPtr — no TTypeData. The data is all already in the compiler (subrange bounds, set element enum, array element type and dims); this is emission, not discovery. Plus the three categories with no consumer yet: interfaces (14), metaclasses (28), Currency (4, which needs a type-system change first). | — |
 | feature-typinfo-facade-unit | B | 72 | feature | `typinfo` facade unit: FPC's RTTI API shapes over OUR blobs | feature-typeinfo-all-types |
 | feature-unicodestring-model | A | 62 | feature | A real UnicodeString / WideChar model (UTF-16), or an honest refusal | — |
 | feature-web-track-w-bootstrap | W | 40→45 | feature | Track W (website) — bootstrap the lane: two repos, one board | — |
@@ -361,7 +363,7 @@ _none_
 | feature-b-vartype-speaks-fpc-varxxx-codes | B | 45 | feature | Re-filed from decide-vartype-returns-pxx-tags-not-fpc-codes, decided 2026-08-25 (option A). VarType currently returns pxx's internal tag (VT_INT=1, VT_DOUBLE=3, ...) and the unit exports no varXxx constants at all, so the FPC idiom `if VarType(v) = varInteger` does not compile. Measured: zero in-tree consumers compare VarType against a VT_ constant outside variants.pas itself, so the ticket's own gating condition for option A is met. | — |
 | feature-p-assertions-switch-and-strict-default | P | 30 | feature | Re-filed from decide-assertion-default-vs-fpc, decided 2026-08-25 (option 3, default ON). pxx evaluates Assert() always; FPC ignores it unless -Sa. The dialect contract requires every divergence to be switchable and disabled under the strict family, so the switch is mandated rather than merely preferred. Once it exists the default stops being a one-way door. | — |
 | feature-p-legacy-value-object-types | P | 15 | feature | Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone. | — |
-| gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo | B | 40→65 | gap | PTypeData is declared as `= PTypeInfo` with a `same header for now` note, and TTypeInfo carries no OrdType / MinValue / MaxValue / FloatType. Any RTTI-driven code that switches on a type's ordinal width — Generics.Defaults' comparer selection, and the whole TypInfo idiom generally — cannot compile. | — |
+| gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo | B | 78 | gap | PTypeData is declared as `= PTypeInfo` with a `same header for now` note, and TTypeInfo carries no OrdType / MinValue / MaxValue / FloatType. Any RTTI-driven code that switches on a type's ordinal width — Generics.Defaults' comparer selection, and the whole TypInfo idiom generally — cannot compile. | feature-typeinfo-ttypedata-payloads |
 | refactor-a-two-predicates-answer-what-a-caret-yields | A | 55 | refactor | Two functions type a dereference. NodePtrElem knows more SPELLINGS (index-into-base, pointer FIELD, inline PTR_CAST, pointer arithmetic); ResolveDerefShape knows more ABOUT each (remaining depth, ultimate base). Swapping a call site from one to the other trades one kind of knowledge for the other, silently — which is exactly what shipped a regression on 2026-08-25. | — |
 | refactor-p-one-lvalue-path-for-statements-and-expressions | P | 55 | refactor | An assignment TARGET is parsed by a second, smaller copy of the lvalue walk in pasparser_stmt.inc, which resolves every `.name` as a field and ends on Expect(':='). Every capability the expression path gains has to be re-added there by hand, and three bugs so far are exactly that omission: the builtin pointer-name fallback, the PChar adapter, and the deref-then-index shape. The statement path should delegate, as its own cast-headed-CALL arm already does. | — |
 | refactor-p-the-field-declaration-parser-exists-twice | P | 45 | refactor | `ParseRecordFields` (pasparser_decl.inc ~3199) and the class-body field arm inside `ParseTypeSection` (~4824) parse the same grammar — comma-separated names, inline fixed/dynamic array, named array alias, scalar — with the same locals under different names and the same AddUField tail. Every field-level feature has to be written twice, and the second copy is the one that stays broken. | — |
@@ -650,6 +652,7 @@ _none_
 - [p 80] [N] bug-n-a-class-base-that-is-an-expression-does-not-compile
 - [p 80] [N] bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - [p 80] [N] bug-n-hasattr-through-an-untyped-parameter-is-always-false
+- [p 78] [A] feature-typeinfo-ttypedata-payloads (unblocks 1)
 - [p 78] [N] bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - [p 78] [N] bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
 - [p 78] [N] bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program
@@ -673,7 +676,6 @@ _none_
 - [p 68] [N] bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - [p 68] [E] feature-demo-songformatter-pxx-target
 - [p 68] [N] feature-nilpy-user-defined-decorators
-- [p 65] [B] gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo (unblocks 1)
 - [p 65] [N] bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - [p 65] [N] bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members
 - [p 65] [N] bug-n-a-unicode-identifier-is-rejected-by-the-lexer
@@ -688,7 +690,6 @@ _none_
 - [p 65] [O] feature-opt-bulk-copy-is-byte-at-a-time
 - [p 65] [P] feature-pascal-corpus-fpc-testsuite [parked — re-claim, do not duplicate]
 - [p 65] [T] feature-t-gate-quick-should-smoke-the-pinned-compiler
-- [p 65] [A] feature-typeinfo-ttypedata-payloads
 - [p 62] [N] bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name
 - [p 62] [N] bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name [parked — re-claim, do not duplicate]
 - [p 62] [N] bug-n-self-class-cannot-be-called-as-a-constructor
@@ -729,6 +730,8 @@ _none_
 - [p 55] [P] bug-p-a-typed-constant-of-pchar-type-is-a-parse-error
 - [p 55] [P] bug-p-a-typed-string-constant-cannot-be-assigned
 - [p 55] [P] bug-p-sizeof-rejects-a-pointer-deref-in-its-operand
+- [p 55] [T] bug-t-a-pin-that-moves-mid-run-is-not-detected
+- [p 55] [T] bug-t-a-timed-out-sha-still-counts-as-tested
 - [p 55] [T] bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - [p 55] [T] bug-t-run-pascal-conformance-silently-fails-every-test-on-a-relative-compiler-path
 - [p 55] [T] bug-t-the-push-rate-starves-breadth-coverage-entirely
@@ -977,4 +980,5 @@ _none_
 - **1** — feature-port-freebsd-native
 - **1** — feature-t-freebsd-image-and-runner
 - **1** — feature-tls13-from-scratch
+- **1** — feature-typeinfo-ttypedata-payloads
 - **1** — gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo
