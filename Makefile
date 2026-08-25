@@ -7775,6 +7775,17 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_new_as_a_function_over_a_pointer_type.pas $(TESTTMP)/test_newfn26
 	test "$$($(TESTTMP)/test_newfn26)" = "$$(cat test/test_new_as_a_function_over_a_pointer_type.expected)"
+	# `f(...)[i]` where f returns a DYNAMIC array. The fixed-array half landed
+	# long ago; the dynamic half was refused because two attempts to make
+	# IRLowerAddress answer an address for the CALL node both failed -- the wrong
+	# end: a dyn-array LOCAL is already a slot holding a handle, so the temp is
+	# materialised in the PARSER and no IR change is needed. Every receiver
+	# spelling is asserted: they reached three different raw AN_INDEX sites and
+	# two had quietly stopped refusing (`b.Arr[1]` printed 0x06000000,
+	# `TBag.Create.Arr[0]` printed 0x600000005).
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_index_a_dynamic_array_call_result.pas $(TESTTMP)/test_idxdyncall26
+	test "$$($(TESTTMP)/test_idxdyncall26)" = "$$(cat test/test_index_a_dynamic_array_call_result.expected)"
 	# The `in: <path>` line under a diagnostic must name the unit the error is
 	# actually IN. The token->file map is keyed on absolute token indices, and the
 	# generic-specialization splice inserts tens of thousands of tokens into the

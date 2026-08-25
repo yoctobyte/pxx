@@ -3,6 +3,8 @@ track: P
 prio: 50
 type: chore
 summary: "test/test_read_text_char.pas (00d1105d5) hardcodes /tmp/test_read_text_char_{a,b}.txt, written by the test binary at runtime where no Makefile sweep or testmgr privatization reaches them. The ratchet guard tools/testmgr_hardcoded_tmp_devtest.py is RED on master because of it, so `make tools-devtest` fails at that step for every lane."
+status: done
+owner: claude-A
 ---
 
 # `test_read_text_char.pas` hardcodes two /tmp paths — the ratchet is red
@@ -56,3 +58,22 @@ growing it is how the ratchet stops ratcheting.
 
 `make tools-devtest` green (Track T's guard passes), plus the test itself still
 passes in the quick tier.
+
+# Already fixed — verified 2026-08-25
+
+Landed in `b7d26e906` ("test(P): test_read_text_char writes into $TESTTMP, not a
+shared /tmp name"), which took option 1 exactly as this ticket recommended: the
+test reads `TESTTMP` from the environment and defaults to `/tmp`, so the two
+paths stopped being literals and nothing had to be added to the guard's
+allow-list.
+
+Re-verified today rather than assumed — `python3
+tools/testmgr_hardcoded_tmp_devtest.py` prints
+`ok   no unlisted hardcoded /tmp path (61 known, 1 allowed file(s), 2 allowed
+path(s))` and exits 0.
+
+The umbrella [[chore-t-test-binaries-hardcode-unsweepable-tmp-paths]] (the 60
+baselined paths) is unaffected and stays open.
+
+## Log
+- 2026-08-25 — resolved, commit PENDING-COMMIT.

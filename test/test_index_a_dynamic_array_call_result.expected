@@ -1,0 +1,10 @@
+plain  : 10 20 30
+method : 6
+margs  : 3 9
+virtual: 70
+inline : 5
+strelem: beta
+recelem: 3 4
+loop   : 100
+length : 3
+copy   : 20 30

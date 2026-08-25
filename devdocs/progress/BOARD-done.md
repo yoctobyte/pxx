@@ -1474,6 +1474,7 @@ should not read it to find out what to do. Grep it freely._
 | chore-makefile-selfhost-iterate-to-convergence | A | 45 | chore | `make compiler/pascal26` demands one-pass convergence; a stale seed then fails a gate that would pass | — |
 | chore-makefile-testtmp-parameterize | A | 55 | chore | Route the Makefile's 6755 fixed /tmp paths through $(TESTTMP) so two concurrent raw `make test*` runs on one box stop clobbering each other. Mechanically verified by Track T: the sweep is byte-identical in `make -n` across all 90 targets, and `make test-smoke TESTTMP=<scratch>` passes end to end. Script + proof below — this is a 20-minute job, not a careful pass. | — |
 | chore-nilpy-pylib-forward-uses-are-a-build-tripwire | N | 40 | chore | `pylib.pas` calls eight helpers before defining them, with no forward declaration | — |
+| chore-p-read-text-char-test-hardcodes-tmp-paths | P | 50 | chore | test/test_read_text_char.pas (00d1105d5) hardcodes /tmp/test_read_text_char_{a,b}.txt, written by the test binary at runtime where no Makefile sweep or testmgr privatization reaches them. The ratchet guard tools/testmgr_hardcoded_tmp_devtest.py is RED on master because of it, so `make tools-devtest` fails at that step for every lane. | — |
 | chore-qemu-test-env | A | 50 | chore | QEMU cross-target test environment | — |
 | chore-repin-c-stdio-pal-bridge | A+C | 50 | chore | Re-pin stable for C stdio/socket PAL bridge | — |
 | chore-repin-new-intrinsics | A | 50 | chore | chore: re-pin stable to expose the new System intrinsics to Track B | — |

@@ -3,7 +3,7 @@ summary: "Indexing a call result: the FIXED-array, array-of-record and Copy-intr
 type: compat
 track: P
 prio: 40
-owner: 
+owner: claude-A
 ---
 
 # `f(...)[i]` — indexing a call result
@@ -26,7 +26,7 @@ owner:
 > from the prose immediately below.
 
 - **Type:** compat (Pascal frontend parity) — Track P
-- **Status:** backlog (an earlier session left this line saying "working"; the folder is the lock and it was never held)
+- **Status:** working
 - **Opened:** 2026-08-05
 - **Found by:** `tools/fpc_diff_probe.sh`, dynamic-array case batch
   (`dynarray-copy-and-alias`, now tagged `[known]`).

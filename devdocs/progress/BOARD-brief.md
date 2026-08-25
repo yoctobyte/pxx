@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 unfinished:22 blocked:7 backlog:290 backlog_new:17 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2337 rejected:40`
+`urgent:2 working:1 unfinished:22 blocked:7 backlog:290 backlog_new:18 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2338 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `compat-pascal-index-a-function-call-result` [P] — owner: claude-A
 
 ## urgent (2) — jump the queue
 
@@ -51,11 +51,13 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 294, ranked
+## Ready — top 30 of 295, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [T]` bug-t-the-native-tier-times-out-and-publishes-a-contentless-red
 - `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree-2
+- `[p 70] [N]` regression-test-core-test-nilpy-json-module
+- `[p 70] [N]` regression-test-core-test-nilpy-json-reparse-heap
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-callable-to-str-param-fails
 - `[p 65] [B]` gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo (unblocks 1)
 - `[p 65] [B]` bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
@@ -81,7 +83,5 @@ _none — no lane is locked._
 - `[p 55] [E]` feature-demo-portable-userland
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
-- `[p 53] [S]` feature-esp-peripheral-callback-api
-- `[p 50] [U]` decide-release-signing-key-custody (unblocks 1)
 
-_264 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_265 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

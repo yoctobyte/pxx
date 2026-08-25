@@ -78,6 +78,7 @@ end;
 
 procedure ResolveDerefShape(node: Integer; var tk: TTypeKind; var recName: Integer;
                             var remDepth, ptrBaseTk, ptrBaseRec: Integer); forward;
+procedure ApplyCallResultPtrSuffix(node, procIdx: Integer); forward;   { the ONE materialisation point for a suffix on a call RESULT — the index arm below hands array-returning calls to it }
 
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
@@ -1231,6 +1232,36 @@ begin
             continue;   { allow further postfix on the getter result }
           end;
         end;
+      end;
+      { An ARRAY-returning CALL indexed directly — `b.Arr[1]`, `b.ArrP(3)[0]`,
+        `TBag.Create.Arr[0]`. A call's value is not an addressable base, so the
+        raw AN_INDEX this arm would otherwise build indexes the HANDLE as though
+        it were the slot holding it: `b.Arr[1]` printed 100663296 (0x06000000)
+        and `TBag.Create.Arr[0]` printed 25769803781 (0x600000005 — elements 0
+        and 1 read as one word), silently. The pinned compiler still REFUSED
+        these with IR_UNSUPPORTED, so master had quietly traded a loud error for
+        a wrong value at some point between.
+
+        ApplyCallResultPtrSuffix is the one place that knows how to materialise
+        a call result into a temp shaped like what it returns, and it already
+        served the unqualified spelling `MakeArr[1]`. Handing the qualified ones
+        to it is the "one materialisation point" this ticket asked for; it is
+        also why the two spellings could drift apart in the first place.
+
+        AN_CALL_IND is excluded on purpose — its IVal is a signature, not a
+        Procs[] index, so there is no return shape to read.
+        compat-pascal-index-a-function-call-result }
+      if ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
+          (ASTKind[node] = AN_CLASS_VIRTUAL_CALL) or (ASTKind[node] = AN_INTF_CALL)) and
+         (Integer(ASTIVal[node]) >= 0) and (Integer(ASTIVal[node]) < ProcCount) and
+         (ProcRetIsDynArray[ASTIVal[node]] or (ProcRetFixedArrBytes[ASTIVal[node]] > 0)) then
+      begin
+        ApplyCallResultPtrSuffix(node, Integer(ASTIVal[node]));
+        node := CurASTNode;
+        tk := LastExprTk;
+        recName := ResolveNodeRec(node);
+        if (tk <> tyClass) and (tk <> tyRecord) then recName := REC_NONE;
+        continue;
       end;
       Next;
       alreadyResolved := False;
@@ -4086,6 +4117,27 @@ begin
         Continue;
       end;
 
+      { …and an ARRAY-returning CALL at the end of a chain — `TBag.Create.Arr[0]`,
+        `obj.Child.Items[i]`. Third copy of the same omission the default-property
+        note above describes: a raw AN_INDEX over a call indexes the returned
+        HANDLE as though it were the slot holding it, so this printed
+        25769803781 (0x600000005 — elements 0 and 1 read as one 8-byte word)
+        where the pinned compiler still said IR_UNSUPPORTED. One materialisation
+        point serves all three spellings.
+        compat-pascal-index-a-function-call-result }
+      if ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
+          (ASTKind[node] = AN_CLASS_VIRTUAL_CALL) or (ASTKind[node] = AN_INTF_CALL)) and
+         (Integer(ASTIVal[node]) >= 0) and (Integer(ASTIVal[node]) < ProcCount) and
+         (ProcRetIsDynArray[ASTIVal[node]] or (ProcRetFixedArrBytes[ASTIVal[node]] > 0)) then
+      begin
+        ApplyCallResultPtrSuffix(node, Integer(ASTIVal[node]));
+        node := CurASTNode;
+        tk := LastExprTk;
+        recId := ResolveNodeRec(node);
+        if (tk <> tyClass) and (tk <> tyRecord) then recId := REC_NONE;
+        Continue;
+      end;
+
       Next;
       sub := AllocNode(AN_INDEX);
       ASTLeft[sub] := node;
@@ -4431,7 +4483,101 @@ begin
       is also why `b.Arr[1]` is refused by the PINNED compiler despite the
       ticket recording it as working.
       Banked in compat-pascal-index-a-function-call-result with the measurement. }
-    if ProcRetIsDynArray[procIdx] or (ProcRetArrAi[procIdx] < 0) then
+    if ProcRetIsDynArray[procIdx] then
+    begin
+      { …and the DYNAMIC result, which the note above banked as open. It is the
+        same move, and the two failed attempts recorded there both went at it
+        from the WRONG END: they tried to make IRLowerAddress answer an address
+        for the call node itself, which is a handle and not a slot. Nothing has
+        to. A dyn-array LOCAL is a slot holding a handle, `tmp := call` is an
+        ordinary dyn-array assignment (the compiler has always done that — `c :=
+        Copy(MakeArr, 1, 2)` works), and `tmp[i]` is an ordinary dyn-array
+        index. So the temp is built HERE, exactly as the fixed arm above builds
+        its shaped temp, and both ends are already implemented.
+
+        The lifetime is the ordinary one and was measured before this landed:
+        an AllocDynArray local in the enclosing scope gets the ordinary
+        scope-exit release, and 200k iterations of `acc := acc + Make[1]` hold
+        RSS flat.
+        compat-pascal-index-a-function-call-result }
+      tk := ProcRetElemTk[procIdx];
+      LastTypeRecId := ProcRetElemRec[procIdx];
+      ndD := ProcRetDynDepth[procIdx];
+      if ndD < 1 then ndD := 1;
+      tmpSym := AllocDynArray('', tk, ndD);
+      Syms[tmpSym].ElemRecName := ProcRetElemRec[procIdx];
+      SymSyncTypeRef(tmpSym);
+      { the side-effect leg: tmp := call }
+      tmpN := AllocNode(AN_IDENT);
+      ASTIVal[tmpN] := tmpSym;
+      ASTTk[tmpN] := Ord(tk);
+      sub := AllocNode(AN_ASSIGN);
+      ASTLeft[sub] := tmpN;
+      ASTRight[sub] := node;
+      node := sub;
+      { the value leg: tmp[i] — and then any further suffix, since a dyn array
+        of arrays indexes again and a record element selects fields }
+      tmpN := AllocNode(AN_IDENT);
+      ASTIVal[tmpN] := tmpSym;
+      ASTTk[tmpN] := Ord(tk);
+      sub := AllocNode(AN_INDEX);
+      ASTLeft[sub] := tmpN;
+      Next;                                   { the '[' }
+      ParseExpr;
+      ASTRight[sub] := CurASTNode;
+      Expect(tkRBrack, ']');
+      ASTTk[sub] := StrValTk(tk);
+      { `MakeMat[1][0]` — an `array of array of T` result. A dyn array of dyn
+        arrays is indexed one bracket per LEVEL (there is no `[i,j]` spelling for
+        it, unlike the fixed arm's N-D temp), so keep taking brackets while
+        levels remain. Without this the second `[` was left for the enclosing
+        suffix loop, which built a raw AN_INDEX over the AN_COMMA below — a
+        value with no address — and the program SEGFAULTED where it had been
+        refused.
+
+        The condition asks NodeDynDepth of the node built so far rather than
+        counting down a depth taken from the proc row: the two can disagree
+        (a result declared through a named `array of T` alias), and the node is
+        the one that has to be right. }
+      while (CurTok.Kind = tkLBrack) and (NodeDynDepth(sub) > 0) do
+      begin
+        tmpN := sub;
+        sub := AllocNode(AN_INDEX);
+        ASTLeft[sub] := tmpN;
+        Next;                                 { the next '[' }
+        ParseExpr;
+        ASTRight[sub] := CurASTNode;
+        Expect(tkRBrack, ']');
+        ASTTk[sub] := StrValTk(tk);
+      end;
+      { A `[` still pending over a value that is no longer an array means the
+        temp ran out of levels before the source did — `MakeMat[1][0]` where
+        the proc row records depth 1 for an `array of array of T` result. The
+        enclosing suffix loop would build a raw AN_INDEX over the AN_COMMA
+        below, which has no address, and the program SEGFAULTS. Refuse instead:
+        a loud error is what this construct had before, and trading it for a
+        crash is the trade this ticket exists to refuse.
+        bug-p-a-nested-dynamic-array-result-records-only-one-level }
+      if (CurTok.Kind = tkLBrack) and (tk <> tyRecord) and (tk <> tyClass) then
+        Error('cannot index that deep into an array-returning function result — '
+              + 'assign it to a variable first');
+      if ((tk = tyRecord) or (tk = tyClass)) and (CurTok.Kind in [tkDot, tkLBrack]) then
+      begin
+        nIdx := ProcRetElemRec[procIdx];
+        if nIdx = REC_NONE then nIdx := ProcRetRecId[procIdx];
+        sub := ParseClassRecordSelectors(sub, nIdx, tk);
+      end;
+      prevTok := AllocNode(AN_COMMA);
+      ASTLeft[prevTok] := node;
+      ASTRight[prevTok] := sub;
+      ASTTk[prevTok] := StrValTk(tk);
+      node := prevTok;
+      tk := IntToTypeKind(StrValTk(tk));
+      CurASTNode := node;
+      LastExprTk := tk;
+      Exit;
+    end;
+    if ProcRetArrAi[procIdx] < 0 then
       Error('cannot index the result of an array-returning function directly — '
             + 'assign it to a variable first');
     arrAi := ProcRetArrAi[procIdx];
