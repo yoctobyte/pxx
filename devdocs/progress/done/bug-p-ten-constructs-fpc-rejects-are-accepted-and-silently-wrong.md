@@ -5,7 +5,7 @@ track: P
 prio: 55
 type: bug
 blocked-by: []
-status: working
+status: done
 owner: claude-A
 created: 2026-08-25
 summary: "A 28-construct sweep of things fpc 3.2.2 rejects: pxx accepts 10 of them with NO diagnostic and exit 0. Laxness by itself is dialect policy, but five of these are not lax, they are WRONG -- `i[2]` on an Integer reads out of bounds (-2099249120), `for s := 1 to 3` makes the rest of the program not run, `New(i)` overwrites an Integer with a heap pointer, `Inc(s)` empties an AnsiString, `Length(i)` answers 1. That is the compat-tag escape rule: silent wrong behaviour is a bug, not a parity nitpick."
@@ -152,3 +152,68 @@ the ticket's own ranking put them at 3-5.
 
 Gate: `make compiler/pascal26` fixedpoint converged in one round;
 `tools/gate.sh quick` GREEN.
+
+## The other three closed the same night, and the table's two remaining rows are correct
+
+The section above closed the five corrupting rows and left five "inert" ones.
+Three of those are now refused, and the other two turned out to be **correctly
+implemented laxness** — one of them mis-measured in this ticket's own filing.
+
+| construct | what it did | guard |
+| --- | --- | --- |
+| `b := r < 1` | compared the record's first qword against 1 and answered off garbage | ORDERING operators (`< > <= >=`) refuse a record operand with no overload |
+| `with i do` | accepted, scoped nothing, ran the body against the enclosing scope | `with` refuses an ordinal or float operand |
+| `F1(1) := 3` | emitted the CALL and **silently dropped the store** | a call node returned with an assignment operator still pending is refused |
+
+**Only ORDERING, not equality** — and that asymmetry is deliberate and already
+written down. The arithmetic arm one branch above says comparisons are left
+alone because *"method-pointer `=`/`<>` are legitimate record compares"*. That
+is true of equality and not of ordering, so this is the half that arm left out,
+not a widening of it.
+
+**`F1(1) := 3` was the interesting one.** Nothing rejected it because nothing
+SAW it: the plain-call branch built the call and returned, leaving `:= 3` for
+the NEXT statement, where the catch-all `else` skipped to the `;`. So the call
+ran and the store vanished — inert in the ticket's sense, and the worst of the
+three, because the code reads as if it assigns. The check is placed at
+`ParseStatementAST`'s single exit rather than in the branch that happened to
+build this one: `F1(1) := 3` comes out of the plain-call branch, `o.M := 3` out
+of the lvalue branch, and one test on the node actually being returned covers
+both without a third copy when a third spelling appears.
+
+It also uses `ErrorAt(ASTLine[node], …)` where the ordering check is concerned:
+lowering runs long past EOF, so plain `Error` reported the program's LAST line
+(`end.`) and pointed its `near:` window there. The sibling arithmetic arm still
+does that; left as found rather than changed under this ticket's gate.
+
+### `if i then` and `while i do` are laxness, and the filing was wrong about one
+
+The table in this ticket said `while i do ;` produced "no output — same
+disappearing tail as the `for`". Re-measured: it does not. `while i do` with a
+non-zero `i` and an empty body is an **infinite loop**, which is what "no
+output" was; the sweep runner's `timeout` exit was read as the program's. With a
+body that clears the counter it behaves exactly as `i <> 0`:
+
+```
+before / after n=4 / if-false
+```
+
+So both ordinal-condition rows are the C rule, correctly implemented, and stay.
+They want at most a `--strict-*` mention, which is a different ticket.
+
+### Measured
+
+The positive test grew `with` over a record and a class, and ordering over
+Integer, Char, AnsiString and an enum. **Byte-identical to fpc 3.2.2 natively
+and under qemu on i386, aarch64, arm32 and riscv32**, and the compiler's own
+37k lines pass all eight guards (fixedpoint converged in one round each time).
+`test_scalar_misuse_is_refused_fail` now asserts eight diagnostics in one
+compile, exit 1, no binary.
+
+**8 of 10 refused, 2 correct as they stand — the ticket is closed.**
+
+Gate: `make compiler/pascal26` fixedpoint converged in one round;
+`tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-25 — resolved, commit PENDING-COMMIT.

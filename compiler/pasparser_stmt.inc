@@ -3309,6 +3309,24 @@ begin
   ParseExpr;
   varNode := CurASTNode;
 
+  { `with` needs something that HAS members. `with i do ;` over an Integer was
+    accepted and did nothing -- the operand goes on WithStack and every bare
+    name in the body simply fails to find a field on it, so the construct is
+    inert rather than wrong. FPC says "Illegal expression".
+
+    Inert is still worth a diagnostic: a `with` that silently scopes nothing is
+    a whole block of code reading the wrong variables, and nothing points at
+    it. Refused only for an ordinal or float operand, the shapes that can never
+    have members -- a record, class, interface, object, pointer-to-record or
+    variant all stay.
+    bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong }
+  if (not CProgramMode) and
+     (TypeIsOrdinal(IntToTypeKind(ASTTk[varNode])) or
+      TypeIsFloat(IntToTypeKind(ASTTk[varNode]))) and
+     (ResolveNodeRec(varNode) < REC_UCLASS_BASE) then
+    ErrorRecover('with needs a record, class or interface — '
+                 + TypeKindSpelling(IntToTypeKind(ASTTk[varNode])) + ' has no members');
+
   { A side-effecting with-operand (`with TFTPSend.Create do` — ftpsend's
     helpers) must evaluate ONCE: every member access shares the operand node,
     and a shared CALL node re-compiles (re-creating the object) per access.
@@ -6656,6 +6674,30 @@ begin
       else
         while not (CurTok.Kind in [tkSemicolon,tkEnd,tkElse,tkUntil,tkEOF]) do Next;
     end;
+  end;
+  { A CALL is not an assignment TARGET. `F1(1) := 3;` built the call, returned,
+    and left `:= 3` for the NEXT statement — where the catch-all `else` just
+    above skips to the `;`. So the call RAN and the store VANISHED, silently,
+    exit 0. FPC says "Illegal expression". A silently discarded store is the
+    worst of the inert cases, because the code reads as if it assigns.
+
+    Placed here, at the single exit, rather than in the branch that happened to
+    build this one: `F1(1) := 3` comes out of the plain-call branch, `o.M := 3`
+    out of the lvalue branch, and a third spelling would come out of a third
+    place. One check on the node actually being returned covers all of them.
+    A property or default-property setter never reaches this with an assignment
+    still pending — ParseLValueAST consumes its own `:=` and value and returns
+    the setter call already complete.
+    bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong }
+  if (node >= 0) and
+     (CurTok.Kind in [tkAssign, tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq]) and
+     ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
+      (ASTKind[node] = AN_INTF_CALL) or (ASTKind[node] = AN_CALL_IND)) then
+  begin
+    ErrorRecover('cannot assign to the result of a function call');
+    while not (CurTok.Kind in [tkSemicolon, tkEnd, tkElse, tkUntil, tkEOF]) do Next;
+    node := AllocNode(AN_BLOCK);
+    ASTLeft[node] := -1;
   end;
   Result := node;
 end;

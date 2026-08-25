@@ -10,7 +10,12 @@ type
   TR = record arr: array[0..3] of Integer; end;
   PRec = ^TRec;
   TRec = record a: Integer; end;
+  TCls = class
+    n: Integer;
+    procedure Show;
+  end;
 
+procedure TCls.Show; begin WriteLn(n); end;
 procedure ShowOpenArray(const a: array of Integer); begin WriteLn('oa    : ', Length(a)); end;
 
 var
@@ -20,6 +25,7 @@ var
   jag: array of array of Integer; m: array[0..2, 0..4] of Integer;
   p: PChar; pi: ^Integer; pr: PRec; r: TR;
   sl: array of AnsiString; str: AnsiString;
+  wr: TRec; wo: TCls;
 begin
   { counted for over every ordinal kind, and for-in }
   Write('for   : ');
@@ -53,6 +59,17 @@ begin
   { New/Dispose over a typed pointer and a record pointer }
   New(pr); pr^.a := 7; Write('new   : ', pr^.a); Dispose(pr);
   New(pi); pi^ := 9; WriteLn(' ', pi^); Dispose(pi);
+
+  { `with` over a record and a class, and ordering over the kinds that DO order.
+    Record equality is not exercised here -- FPC does not overload `=` on a bare
+    record either -- but it is precisely why only the ORDERING operators are
+    refused for a record operand: a method-pointer compare is a legitimate
+    record `=` in this dialect and must keep working. }
+  wr.a := 41;
+  with wr do WriteLn('with  : ', a);
+  wo := TCls.Create; wo.n := 7;
+  with wo do WriteLn('withc : ', n);
+  WriteLn('order : ', 1 < 2, ' ', 'a' < 'b', ' ', s < 'z', ' ', eA < eB);
 
   { Inc/Dec over ordinals and a pointer. NOT a float: `Inc(d)` is accepted here
     (deliberate laxness -- it computes d + 1 and damages nothing) but FPC

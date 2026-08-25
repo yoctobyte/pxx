@@ -7693,26 +7693,30 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_pchar_paren_deref_and_copy.pas $(TESTTMP)/test_pdc26
 	test "$$($(TESTTMP)/test_pdc26)" = "$$(cat test/test_pchar_paren_deref_and_copy.expected)"
-	# Five constructs FPC rejects used to compile clean and do something
-	# silently wrong (a segfault, an out-of-bounds read, a scalar overwritten
-	# with a heap pointer, a destroyed string, a plausible wrong number). This
-	# is the POSITIVE half: every legal spelling of the same five, so the new
-	# guards cannot be one shape too wide.
+	# Eight constructs FPC rejects used to compile clean -- five of them doing
+	# something silently wrong (a segfault, an out-of-bounds read, a scalar
+	# overwritten with a heap pointer, a destroyed string, a plausible wrong
+	# number) and three inert (an ordering off garbage, a `with` that scopes
+	# nothing, a store that vanishes). This is the POSITIVE half: every legal
+	# spelling of the same eight, so the new guards cannot be one shape too wide.
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_indexing_length_for_new_inc_positive.pas $(TESTTMP)/test_ilfni26
 	test "$$($(TESTTMP)/test_ilfni26)" = "$$(cat test/test_indexing_length_for_new_inc_positive.expected)"
-	@# ...and the refusals themselves: all five reported in ONE compile
+	@# ...and the refusals themselves: all eight reported in ONE compile
 	@# (they recover), exit 1, and no binary written.
 	@out=$$(./$(COMPILER) test/test_scalar_misuse_is_refused_fail.pas $(TESTTMP)/test_scalarmisuse26 2>&1); \
 	 rc=$$?; \
 	 test "$$rc" = "1" \
-	   && printf '%s\n' "$$out" | grep -q '^pascal26:31: error: illegal counter variable' \
-	   && printf '%s\n' "$$out" | grep -q '^pascal26:32: error: this value cannot be indexed' \
-	   && printf '%s\n' "$$out" | grep -q '^pascal26:33: error: New needs a pointer variable' \
-	   && printf '%s\n' "$$out" | grep -q '^pascal26:34: error: Inc/Dec needs an ordinal or a pointer' \
-	   && printf '%s\n' "$$out" | grep -q '^pascal26:35: error: Length needs a string, an array or a PChar' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:44: error: illegal counter variable' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:45: error: this value cannot be indexed' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:46: error: New needs a pointer variable' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:47: error: Inc/Dec needs an ordinal or a pointer' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:48: error: Length needs a string, an array or a PChar' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:49: error: no operator overload found for ordering a record operand' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:50: error: with needs a record, class or interface' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:51: error: cannot assign to the result of a function call' \
 	   && test ! -e $(TESTTMP)/test_scalarmisuse26 \
-	  || { echo "test_scalar_misuse_is_refused_fail: FAIL - rc=$$rc (want rc=1, five diagnostics on lines 31-35, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	  || { echo "test_scalar_misuse_is_refused_fail: FAIL - rc=$$rc (want rc=1, eight diagnostics on lines 44-51, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; test "$$?" = "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26

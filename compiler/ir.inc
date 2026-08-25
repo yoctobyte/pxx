@@ -8691,6 +8691,32 @@ begin
           pointer/array arithmetic tags operands tyRecord legitimately). }
         Error('no operator overload found for record operands (operator not declared, or its unit not compiled?)'
               + ' — PXXDBG=a.opovl prints the lookup and every candidate')
+      else if (not CProgramMode) and
+              ((IntToTypeKind(ASTTk[ASTLeft[node]]) = tyRecord) or
+               (IntToTypeKind(ASTTk[ASTRight[node]]) = tyRecord)) and
+              ((Integer(ASTIVal[node]) = Ord(tkLt)) or (Integer(ASTIVal[node]) = Ord(tkGt)) or
+               (Integer(ASTIVal[node]) = Ord(tkLe)) or (Integer(ASTIVal[node]) = Ord(tkGe))) then
+        { ORDERING a record with no registered overload. `b := r < 1` fell
+          through to the scalar IR_BINOP, compared the record's first qword
+          against 1 and answered off garbage -- silently, exit 0. FPC says
+          "Illegal qualifier".
+
+          Only the ORDERING operators, deliberately: `=`/`<>` stay exempt for
+          the reason the arithmetic arm above already gives -- a method-pointer
+          compare is a legitimate record `=` -- and widening this to equality
+          would break that. The arm above is the same sentence for `+ - * / div
+          mod`; this is the half it left out.
+          bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong }
+        { ErrorAt, not Error: lowering runs long past EOF, so `Error`'s line
+          would be the program's last (`end.`) and its `near:` window would
+          point there too — misleading in exactly the way slice 4 of
+          feature-a-error-does-not-halt describes. The node knows its own line.
+          The sibling arithmetic arm above still uses plain `Error` and reports
+          the wrong line for the same reason; left as found rather than changed
+          under a different ticket's gate. }
+        ErrorAt(ASTLine[node], 'no operator overload found for ordering a record operand '
+              + '(< > <= >= need an explicit `class operator`)'
+              + ' — PXXDBG=a.opovl prints the lookup and every candidate')
       else if ((Integer(ASTIVal[node]) = Ord(tkEq)) or (Integer(ASTIVal[node]) = Ord(tkNeq))) and
               (NodeIsInterface(ASTLeft[node]) or NodeIsInterface(ASTRight[node])) then
       begin
