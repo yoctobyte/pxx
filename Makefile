@@ -7485,6 +7485,15 @@ test-core: $(COMPILER)
 	# file yields #26 — all 25 assertions are FPC 3.2.2's own output.
 	./$(COMPILER) test/test_read_text_char.pas $(TESTTMP)/test_read_text_char26
 	test "$$($(TESTTMP)/test_read_text_char26 | tail -1)" = "total ok 25 / 25"
+	# ...and the other two arms, which used to take a whole LINE: a numeric
+	# destination now takes one whitespace-delimited token and a string one stops
+	# BEFORE the terminator, so `readln(t, n, m)` on '42 3' is 42 3 and not 0 0.
+	# Every case asserts the CURSOR too, by draining the rest of the file a
+	# character at a time — a value-only assertion cannot see the half of this
+	# bug where the value is right and the cursor is a line too far. All 55
+	# expectations are FPC 3.2.2's own output for this same program.
+	./$(COMPILER) test/test_read_text_value_cursor.pas $(TESTTMP)/test_read_text_value_cursor26
+	test "$$($(TESTTMP)/test_read_text_value_cursor26 | tail -1)" = "total ok 55 / 55"
 	# `class operator Initialize/Finalize` -- FPC's MANAGEMENT operators, invoked
 	# at a variable's LIFETIME events. Desugared into Initialize + try..finally
 	# Finalize around the declaring routine's body (and the main body, for

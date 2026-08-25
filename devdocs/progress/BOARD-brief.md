@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:23 blocked:8 backlog:288 backlog_new:23 experimental:20 rainy-day:44 float:20 done-followup:3 decided:114 done:2358 rejected:40`
+`working:1 unfinished:23 blocked:8 backlog:288 backlog_new:22 experimental:20 rainy-day:44 float:20 done-followup:3 decided:114 done:2359 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -48,9 +48,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 322, ranked
+## Ready — top 30 of 321, ranked
 
-- `[p 88] [P]` bug-p-read-text-lowers-every-destination-to-a-whole-line-read (unblocks 1)
 - `[p 88] [N]` bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
 - `[p 88] [N]` bug-n-inferred-return-type-of-true-division-is-int
 - `[p 82] [A]` bug-a-the-fpjson-suite-overflows-the-fixed-4096-entry-data-ptr-fixup-table
@@ -80,5 +79,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` feature-p-delphi-string-helpers
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [T]` task-t-enrol-the-fgl-corpus-rung
+- `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 
-_292 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_291 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

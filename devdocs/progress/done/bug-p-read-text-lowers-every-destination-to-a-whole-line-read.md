@@ -3,8 +3,8 @@ track: P
 prio: 65
 type: bug
 blocked-by: []
-status: backlog
-owner: ""
+status: done
+owner: frank1-P-read
 summary: "`ParseTextReadRest` lowers BOTH the numeric and the string destination of `read[ln](f, ...)` to `TextReadLn`, which eats a whole line and its terminator. So `readln(t, n, m)` on '42 3' gives 0 0, `read(f, s)` is indistinguishable from `readln(f, s)`, and `read(f,s); readln(f)` skips every other line. The RTL half landed (TextReadNumTok / TextReadStrTo, cursor-preserving, FPC-measured); this is the frontend half, and the whole lowering is already proven against FPC."
 ---
 
@@ -132,3 +132,79 @@ Track P: `make compiler/pascal26` (the self-host fixedpoint) + the repro above.
 char-arm regressions and must stay green — the char arm itself does not change.
 Worth adding a `test/` case for the numeric table read once the lowering lands,
 since `test/lib_textreadnumtok.pas` covers only the primitives.
+
+## 2026-08-25 — landed (Track P, `frank1-P-read`)
+
+The edit is exactly what the B write-up predicted, in `ParseTextReadRest`
+(`compiler/pasparser_stmt.inc`): the numeric arm's hidden-tmp read is
+`TextReadNumTok` instead of `TextReadLn`, the string arm is `TextReadStrTo`,
+and `procRead` (`TextReadLn`) is now used for one thing only — `readln`'s
+end-of-line skip.
+
+**`trLastWasChar` is gone, not adjusted.** The variable, its three assignments
+and the `isLn and (trLastWasChar or (headSeq = -1))` guard were all deleted; the
+skip is a bare `if isLn then`. Nothing was added to replace it, so the change is
+a net removal of a case — the collapse the ticket predicted actually happened,
+and the three arms now have the same shape. `readln(f)` with no destinations
+still works: it is the skip on its own, which is what `headSeq = -1` used to
+special-case.
+
+### Verified against FPC 3.2.2, cursor included
+
+The oracle is the B worker's method, re-run here rather than trusted: read a
+value, then drain the rest of the file one character at a time with control
+bytes rendered `<LF>` / `<CR>` / `<SP>`, so the cursor is *visible*. 31 probe
+programs compiled by both `fpc -Mobjfpc` and the built compiler, stdout diffed:
+
+* **new compiler: 0 divergences over 31 probes.**
+* **pinned (pre-fix) compiler: 14 divergences over the same first 24** — so the
+  probe has teeth; it is not agreeing because it is blind.
+
+Both `Eoln`-after-a-numeric-read rows are in there (`'42 3'` → FALSE, `'42'#10'x'`
+→ TRUE) and both were wrong before. So were the eight `rest=[...]` cursor rows.
+Also probed, because `lib/rtl/configparser.pas` and `lib/rtl/pathlib.pas` drive
+`while not Eof(f) do readln(f, s)`: an Eof loop over a file with and without a
+trailing newline, an empty file, CRLF input, readln past EOF, and a
+whitespace-only line — all identical to FPC, which is the equivalence
+`TextReadStrTo` + skip must have with the old single `TextReadLn` for `readln`.
+
+The B worker's two corrections both held: `'42,3'` scans to whitespace (FPC's
+runtime error 106, our silent 0 — the stated error-path divergence), and
+`'42  '` leaves **two** blanks, asserted as such.
+
+### Regression test
+
+`test/test_read_text_value_cursor.pas`, wired into `make test`'s core sweep next
+to the existing char test. 55 assertions over 22 shapes, **every one asserting
+value AND cursor**, and every expectation is FPC's own output for that same
+program — the file compiles under `fpc -Mobjfpc` unchanged and prints
+`total ok 55 / 55` there too. Against the pre-fix pinned compiler it prints
+`total ok 25 / 55` (30 failures), which is the measure of what the fix bought.
+
+`test/test_read_text_char.pas` stays green at 25/25 — the char arm did not
+change, it only stopped being the special case.
+
+### Gate
+
+`make compiler/pascal26` converged (self-host fixedpoint, byte-identical);
+`tools/gate.sh quick` GREEN (self-host 172s + `testmgr --tier quick` + FPC seed
+canary). No pin needed for this — nothing here changes the stable binary's
+contract; a pin would only be to hand Track B a compiler that already emits the
+new lowering.
+
+### Unblocks
+
+`bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line` (Track B, prio 88)
+is now resolvable — its entire symptom table is covered by the probe run above.
+Left for its own lane to close.
+
+### Filed en route
+
+None in the compiler. One RTL gap noticed while writing the test and *not*
+chased: `lib/rtl/sysutils.pas` exports `FloatToStrF(value: Double; precision:
+Integer)`, not FPC's `FloatToStrF(value, format, precision, digits)`, so the
+FPC-shaped call is a compile error. Track B/F territory, unrelated to this
+ticket, and the test uses `Round(d * 100)` instead.
+
+## Log
+- 2026-08-25 — resolved, commit PENDING-COMMIT.

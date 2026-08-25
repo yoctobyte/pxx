@@ -348,7 +348,7 @@ _none_
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enrol-the-fgl-corpus-rung | T | 70 | task | Enrol the new `test-fgl` corpus target in a testmgr tier and add `fpc-rtl` to twatch's CORPUS_EXPECTED. The rung is wired and green (3 pass / 4 skip) but nothing in the matrix runs it, and the watcher will not warn when the tree is unfetched. | — |
 
-## backlog_new (23)
+## backlog_new (22)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -363,7 +363,6 @@ _none_
 | bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 40 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
 | bug-p-high-and-low-refuse-every-non-identifier-operand | P | 30 | bug | Both arms open with `if CurTok.Kind <> tkIdent then Error('High: expected array variable or ordinal type')`, so a string literal, a concat, or a parenthesised expression cannot be an operand at all. fpc takes all three — and gives each a DIFFERENT base, which is why widening the guard needs its own measured table rather than a one-line edit. | — |
 | bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one | P | 50 | bug | `PDyn = ^TDyn` with `TDyn = array of LongWord`: after `SetLength(d, 5)`, `Length(pdy^)` answers 1 and `High(pdy^)` answers 0 where FPC answers 5 and 4 — while `pdy^[1]` reads the right element. The pointee is a HANDLE, so the [data-8] header is one indirection further than the runtime path looks. | — |
-| bug-p-read-text-lowers-every-destination-to-a-whole-line-read | P | 65→88 | bug | `ParseTextReadRest` lowers BOTH the numeric and the string destination of `read[ln](f, ...)` to `TextReadLn`, which eats a whole line and its terminator. So `readln(t, n, m)` on '42 3' gives 0 0, `read(f, s)` is indistinguishable from `readln(f, s)`, and `read(f,s); readln(f)` skips every other line. The RTL half landed (TextReadNumTok / TextReadStrTo, cursor-preserving, FPC-measured); this is the frontend half, and the whole lowering is already proven against FPC. | — |
 | bug-t-run-pascal-conformance-silently-fails-every-test-on-a-relative-compiler-path | T | 55 | bug | `tools/run_pascal_conformance.sh ./compiler/pascal26 ...` fails 51 of 107 tgeneric tests; the same run with `/home/neo/frank1/compiler/pascal26` passes 61 and fails 0. The runner `cd`s into the suite dir before invoking the compiler, so a relative `$CC` no longer resolves — and the failure surfaces as `compile error`, i.e. as a COMPILER bug, for every test at once. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 55 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
 | chore-doc-pascal-dialect-divergences-pointer-difference | D | 25 | chore | Re-filed from decide-pointer-difference-unit and decide-should-a-null-variant-raise-like-fpc, both decided 2026-08-25. Two divergences from FPC are now CHOSEN rather than merely inherited, and a chosen divergence that is not written down is indistinguishable from a bug to the next reader. Both entries land in devdocs/dev/pascal-dialect-divergences.md. | — |
@@ -602,9 +601,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2358)
+## done (2359)
 
-2358 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2359 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -653,7 +652,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 88] [P] bug-p-read-text-lowers-every-destination-to-a-whole-line-read (unblocks 1)
 - [p 88] [N] bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults [parked — re-claim, do not duplicate]
 - [p 88] [N] bug-n-inferred-return-type-of-true-division-is-int
 - [p 82] [A] bug-a-the-fpjson-suite-overflows-the-fixed-4096-entry-data-ptr-fixup-table
@@ -982,7 +980,6 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
-- **1** — bug-p-read-text-lowers-every-destination-to-a-whole-line-read
 - **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets
 - **1** — decide-nilpy-dict-mutation-during-iteration

@@ -2932,40 +2932,54 @@ begin
 end;
 
 { Rewrite `read[ln](f, dest0, dest1, ...)` over a Text handle into textfile RTL
-  calls (one per destination). A STRING or NUMERIC destination takes a whole
-  line (v1 is line-oriented there: read and readln map to the same line read); a
-  CHAR destination takes exactly one character, which is what FPC does for every
-  type and is the only shape where the read/readln difference is observable
-  here — hence `isLn`. }
+  calls (one per destination). Every arm is CURSOR-PRESERVING — it stops where
+  FPC stops and leaves the delimiter parked: a NUMERIC destination takes one
+  whitespace-delimited token (TextReadNumTok), a STRING destination reads up to
+  but not over the line terminator (TextReadStrTo), a CHAR destination takes
+  exactly one character (TextReadChar). `readln` is then simply "and then step
+  over the rest of the line", one unconditional TextReadLn after the
+  destinations, whatever they were — the per-arm special case that used to
+  decide whether to emit it is deleted, not adjusted, which is the tell that
+  this was one defect and not three (normalise-dont-special-case.md).
+  Measured against FPC 3.2.2, VALUE and CURSOR alike:
+  test/test_read_text_value_cursor.pas. }
 function ParseTextReadRest(isLn: Boolean; fileSym: Integer): Integer;
-var procRead, procVal, procReadChar, callNode, destNode, headSeq, tailSeq, newSeq: Integer;
+var procRead, procVal, procReadChar, procNumTok, procStrTo: Integer;
+    callNode, destNode, headSeq, tailSeq, newSeq: Integer;
     trTmpSym, trCodeSym, trValTmp, trIdent, trAsn: Integer;
     trTk: TTypeKind;
-    trLastWasChar: Boolean;
 begin
   Next;  { consume the Text file identifier }
   procRead := FindProc('TextReadLn');
   if procRead < 0 then Error('read(Text): textfile RTL not loaded');
-  headSeq := -1; tailSeq := -1; trLastWasChar := False;
+  procNumTok := FindProc('TextReadNumTok');
+  if procNumTok < 0 then Error('read(Text): TextReadNumTok not in the textfile RTL');
+  procStrTo := FindProc('TextReadStrTo');
+  if procStrTo < 0 then Error('read(Text): TextReadStrTo not in the textfile RTL');
+  headSeq := -1; tailSeq := -1;
   while Eat(tkComma) do
   begin
     ParseExpr; destNode := CurASTNode;
     trTk := IntToTypeKind(ASTTk[destNode]);
     if TypeIsFloat(trTk) or (TypeIsOrdinal(trTk) and (trTk <> tyChar)) then
     begin
-      { readln(f, number): TextReadLn only reads STRINGS — the dest slot used
-        to be handed over AS an AnsiString handle, silently corrupting it
-        (tint642's testioqword). Read the line into a hidden string, then
+      { read(f, number): the RTL reads STRINGS — the dest slot used to be
+        handed over AS an AnsiString handle, silently corrupting it (tint642's
+        testioqword). So take one whitespace-delimited TOKEN into a hidden
+        string (TextReadNumTok skips leading whitespace including line breaks
+        and pushes the delimiter back, exactly as FPC scans a number), then
         Val it into the destination with the same dispatch as a Val statement
         (ValQWord for a QWord dest; Int64 temp for a narrow ordinal so the
-        8-byte var write cannot overrun). }
+        8-byte var write cannot overrun). A whole-LINE read here was the bug:
+        Val wants the string to be the number and nothing else, so '42 3' and
+        '42  ' both failed and left the destination at 0. }
       if TypeIsFloat(trTk) then procVal := FindProc('ValFloat')
       else if trTk = tyUInt64 then procVal := FindProc('ValQWord')
       else procVal := FindProc('Val');
       if procVal < 0 then Error('read(Text): Val builtin not loaded');
       trTmpSym := AllocVar('', tyAnsiString);
       trCodeSym := AllocVar('', tyInteger);
-      callNode := GenMakeCall6(procRead, tyUnknown, GenMakeIdent(fileSym, tyRecord),
+      callNode := GenMakeCall6(procNumTok, tyUnknown, GenMakeIdent(fileSym, tyRecord),
                                GenMakeIdent(trTmpSym, tyAnsiString), -1, -1, -1, -1);
       newSeq := GenMakeSeq(callNode, -1);
       if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
@@ -2994,18 +3008,17 @@ begin
         newSeq := GenMakeSeq(trAsn, -1);
         ASTRight[tailSeq] := newSeq; tailSeq := newSeq;
       end;
-      trLastWasChar := False;
     end
     else if trTk = tyChar then
     begin
       { ONE character, through the RTL's TextReadChar — not a line-read plus
         [1], which is right for the first read and wrong for every one after
-        it. It shares the cursor with TextReadLn (both drain f.Peek first), so
-        `read(f, c)` then `readln(f, s)` gives the REST of the line in s, and a
-        line terminator is an ordinary character the way FPC hands it over.
-        Until the RTL half landed this arm raised an error rather than fall
-        into the string branch below, whose `var AnsiString` slot would have
-        written a string handle into ONE BYTE. }
+        it. It shares the cursor with every other reader (all drain f.Peek
+        first), so `read(f, c)` then `readln(f, s)` gives the REST of the line
+        in s, and a line terminator is an ordinary character the way FPC hands
+        it over. Until the RTL half landed this arm raised an error rather than
+        fall into the string branch below, whose `var AnsiString` slot would
+        have written a string handle into ONE BYTE. }
       procReadChar := FindProc('TextReadChar');
       if procReadChar < 0 then
         Error('read(Text): TextReadChar not in the textfile RTL');
@@ -3014,27 +3027,29 @@ begin
       newSeq := GenMakeSeq(callNode, -1);
       if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
       tailSeq := newSeq;
-      trLastWasChar := True;
     end
     else
     begin
-      callNode := GenMakeCall6(procRead, tyUnknown, GenMakeIdent(fileSym, tyRecord),
+      { A string destination reads up to but NOT over the terminator, so a
+        second `read(f, s)` yields '' until a `readln` steps over it — TextReadLn
+        here made `read` and `readln` lower identically, and the classic
+        `read(f, s); readln(f)` idiom then skipped every other line. }
+      callNode := GenMakeCall6(procStrTo, tyUnknown, GenMakeIdent(fileSym, tyRecord),
                                destNode, -1, -1, -1, -1);
       newSeq := GenMakeSeq(callNode, -1);
       if headSeq = -1 then headSeq := newSeq else ASTRight[tailSeq] := newSeq;
       tailSeq := newSeq;
-      trLastWasChar := False;
     end;
   end;
   Expect(tkRParen, ')');
-  { `readln` means "and then through the end of the line". The string and
-    numeric arms already consume the terminator (TextReadLn eats it), so the
-    skip is emitted ONLY when the LAST destination was the char arm — or when
-    there were no destinations at all, `readln(f)`, which was a no-op. Measured
-    against FPC 3.2.2 on 'ab'#10'cd'#10: two `readln(f, c)` give 'a' then 'c',
-    not 'a' then 'b'; a bare `readln(f)` then `readln(f, s)` gives 'cd'.
-    A blanket skip would eat a whole extra line after `readln(f, s)`. }
-  if isLn and (trLastWasChar or (headSeq = -1)) then
+  { `readln` means "and then through the end of the line", and now that EVERY
+    arm leaves the cursor where FPC leaves it, that is one unconditional skip —
+    no per-arm special case, `readln(f)` with no destinations is just the skip
+    on its own. Measured against FPC 3.2.2 on 'ab'#10'cd'#10: two
+    `readln(f, c)` give 'a' then 'c', not 'a' then 'b'; a bare `readln(f)` then
+    `readln(f, s)` gives 'cd'; and on CRLF input TextReadStrTo stops at the CR
+    while this skip steps over CR+LF. }
+  if isLn then
   begin
     trTmpSym := AllocVar('', tyAnsiString);
     callNode := GenMakeCall6(procRead, tyUnknown, GenMakeIdent(fileSym, tyRecord),
