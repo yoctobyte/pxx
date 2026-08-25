@@ -176,6 +176,16 @@ begin
       { `Copy(a)` / `Copy(a, i, n)` of a dyn array yields an array of the SAME
         shape -- its depth and element come straight from the source. }
       Result := NodeDynDepth(ASTLeft[node]);
+    AN_COMMA:
+      { `(side-effect, value)` yields the RIGHT operand's value, so its shape is
+        the right operand's -- the same rule ResolveNodeRec's comma arm states.
+        This is the node the call-result materialisation builds, so without this
+        arm every dyn-array CALL result stopped being a dyn array the moment it
+        was lifted: `Length(MakeMat[1])` answered 0x600000007, the row's first
+        two elements read as one 8-byte word, where the identical expression
+        through a VARIABLE answered 2.
+        bug-p-a-nested-dynamic-array-result-crashes-however-it-is-reached }
+      Result := NodeDynDepth(ASTRight[node]);
     AN_INDEX:
       begin
         bd := NodeDynDepth(ASTLeft[node]);
@@ -216,7 +226,10 @@ begin
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldType(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
   else if (ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DYN_COPY) then
-    Result := NodeDynBaseTk(ASTLeft[node]);
+    Result := NodeDynBaseTk(ASTLeft[node])
+  else if ASTKind[node] = AN_COMMA then
+    { the comma's value is its RIGHT operand — see NodeDynDepth's arm }
+    Result := NodeDynBaseTk(ASTRight[node]);
 end;
 
 function NodeDynBaseRec(node: Integer): Integer;
@@ -236,7 +249,10 @@ begin
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldRecId(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
   else if (ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DYN_COPY) then
-    Result := NodeDynBaseRec(ASTLeft[node]);
+    Result := NodeDynBaseRec(ASTLeft[node])
+  else if ASTKind[node] = AN_COMMA then
+    { the comma's value is its RIGHT operand — see NodeDynDepth's arm }
+    Result := NodeDynBaseRec(ASTRight[node]);
 end;
 
 function NodeDynBaseSym(node: Integer): Integer;
@@ -250,7 +266,9 @@ begin
       Result := ASTIVal[node];
   end
   else if ASTKind[node] = AN_INDEX then
-    Result := NodeDynBaseSym(ASTLeft[node]);
+    Result := NodeDynBaseSym(ASTLeft[node])
+  else if ASTKind[node] = AN_COMMA then
+    Result := NodeDynBaseSym(ASTRight[node]);
 end;
 
 { May a dynamic-array TARGET be read and then written back through the same

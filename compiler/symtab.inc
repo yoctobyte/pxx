@@ -10901,7 +10901,15 @@ begin
         m[0][1] a CHAR read off an 8-byte stride (silent garbage;
         bug-p-open-array-of-a-named-dynamic-array-reads-garbage). }
       Result := SymElemDynDepth[ASTIVal[ASTLeft[node]]];
-  end;
+  end
+  else if ASTKind[node] = AN_COMMA then
+    { `(side-effect, value)` yields the RIGHT operand — the same rule
+      ResolveNodeRec's comma arm states, and the same arm NodeDynDepth has in
+      ast_arena.inc. These two functions ARE twins and drift is the recurring
+      failure here (see the AN_INDEX arm's own note above); when you add a shape
+      to one, add it to the other in the same edit.
+      bug-p-a-nested-dynamic-array-result-crashes-however-it-is-reached }
+    Result := DynArrayNodeDepth(ASTRight[node]);
 end;
 
 function IsNodeArray(node: Integer): Boolean;

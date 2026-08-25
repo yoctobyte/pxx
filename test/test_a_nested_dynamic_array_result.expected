@@ -1,0 +1,11 @@
+callee : 2 3 5
+var    : 2 3 5
+call   : 2 3
+callel : 5
+setlen : 2 2 7
+cube   : 2 1 2 4
+strs   : 2 2 beta
+high   : 1 2
+forinrow : 12
+forinmat : 15
+forinvar : 15

@@ -7786,6 +7786,17 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_index_a_dynamic_array_call_result.pas $(TESTTMP)/test_idxdyncall26
 	test "$$($(TESTTMP)/test_idxdyncall26)" = "$$(cat test/test_index_a_dynamic_array_call_result.expected)"
+	# `function F: array of array of T` -- Result got a HARDCODED dyn depth of 1
+	# while the proc row already carried the real one, so an outer element was
+	# read as a 4-byte Integer instead of an 8-byte handle: inside the callee
+	# `Length(Result[1])` answered 855638216 and `Result[1] := row` stored a
+	# truncated handle the caller then indexed into a SEGFAULT. A nested LOCAL
+	# worked and `Result := loc` transferred fine -- only Result's own shape was
+	# wrong. Asserts every level: callee-side read, SetLength through Result,
+	# depth 3, a managed base element, direct call-result index, High, for-in.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_a_nested_dynamic_array_result.pas $(TESTTMP)/test_nestdynres26
+	test "$$($(TESTTMP)/test_nestdynres26)" = "$$(cat test/test_a_nested_dynamic_array_result.expected)"
 	# The `in: <path>` line under a diagnostic must name the unit the error is
 	# actually IN. The token->file map is keyed on absolute token indices, and the
 	# generic-specialization splice inserts tens of thousands of tokens into the

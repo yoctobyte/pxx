@@ -1194,13 +1194,6 @@ begin
   fnDyn := NodeDynDepth(contNode);
   if (ASTKind[contNode] <> AN_IDENT) and (fnDyn > 0) then
   begin
-    { An `array of array of T` VALUE is refused rather than materialised: the
-      nested-result copy itself is broken today (`m := MakeMat; m[0]` faults —
-      bug-p-a-nested-dynamic-array-result-crashes-however-it-is-reached), and
-      this arm would turn that existing loud refusal into a SEGFAULT. Drop this
-      guard when that ticket lands; the desugar below already handles depth 2. }
-    if fnDyn > 1 then
-      Error('for-in over a nested dynamic-array VALUE (array of array of T) is not supported yet — assign it to a variable first (bug-p-a-nested-dynamic-array-result-crashes-however-it-is-reached)');
     LastTypeRecId := NodeDynBaseRec(contNode);
     fnSym := AllocDynArray('', NodeDynBaseTk(contNode), fnDyn);
     Syms[fnSym].ElemRecName := NodeDynBaseRec(contNode);
@@ -2414,7 +2407,20 @@ begin
       otherwise match FindSym and then choke on the trailing `.`. }
     if (TokPos < TokCount) and (Tokens[TokPos].Kind in [tkDot, tkLBrack]) then
     begin
-      srcIdx := FindSym(CurTok.SVal); srcTokIdx := TokPos - 1; Next;
+      srcIdx := FindSym(CurTok.SVal);
+      { …unless the name is a PROC rather than a variable: `for i in MakeMat[1]`.
+        ParseLValueAST is handed idx = -1 and answers 'undefined variable', which
+        is a lookup failure and not a statement about the container. ParseExpr
+        resolves the call and applies the `[` through the same suffix path the
+        expression form uses. Mirrors the High/Low arms in pasparser_expr.inc.
+        compat-pascal-index-a-function-call-result }
+      if (srcIdx < 0) and (FindProc(CurTok.SVal) >= 0) then
+      begin
+        ParseExpr;
+        Result := ParseForInNodeAST(varIdx, CurASTNode);
+        Exit;
+      end;
+      srcTokIdx := TokPos - 1; Next;
       Result := ParseForInNodeAST(varIdx, ParseLValueAST(srcIdx, srcTokIdx));
       Exit;
     end;

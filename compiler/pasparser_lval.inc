@@ -4557,7 +4557,7 @@ begin
         below, which has no address, and the program SEGFAULTS. Refuse instead:
         a loud error is what this construct had before, and trading it for a
         crash is the trade this ticket exists to refuse.
-        bug-p-a-nested-dynamic-array-result-records-only-one-level }
+        bug-p-a-nested-dynamic-array-result-crashes-however-it-is-reached }
       if (CurTok.Kind = tkLBrack) and (tk <> tyRecord) and (tk <> tyClass) then
         Error('cannot index that deep into an array-returning function result — '
               + 'assign it to a variable first');

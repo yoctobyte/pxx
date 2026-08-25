@@ -5933,7 +5933,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     dcElemTk: TTypeKind;
     pendBase: Integer;
     mcCrefSym, mcInstSym, mcSize, mcVmt, mcAddr, mcSelfArg: Integer;
-    dynLenTmp, dynLenPi: Integer;
+    dynLenTmp: Integer;
     caseIsStr: Boolean;
 begin
   if node = -1 then
@@ -10986,16 +10986,23 @@ begin
                      IRLowerAST(ASTLeft[ASTLeft[item]]), -1, -1, 0, Ord(tyAnsiString));
         end
         else if (cpi < 0) and (-cpi = Ord(tkLength)) and (pathIdx = 0) and
-           (ASTKind[ASTLeft[item]] = AN_CALL) and (ASTIVal[ASTLeft[item]] >= 0) and
-           ProcRetIsDynArray[ASTIVal[ASTLeft[item]]] then
+           (not IsASTLValue(ASTLeft[item])) and (NodeDynDepth(ASTLeft[item]) > 0) then
         begin
-          dynLenPi := ASTIVal[ASTLeft[item]];
+          { Keyed on the VALUE's shape, not on one spelling of it. This arm used
+            to test `AN_CALL with ProcRetIsDynArray` and hardcode depth 1, so
+            `Length(MakeMat[1])` — the row of an `array of array of T` result,
+            which the parser has already lifted into an AN_COMMA — missed it and
+            took the value path, which derefs the handle and returns the row's
+            first two elements as one 8-byte word (0x600000007 where FPC says 2).
+            Every non-lvalue dyn-array value has the same problem and now the
+            same answer.
+            bug-p-a-nested-dynamic-array-result-crashes-however-it-is-reached }
           dynLenTmp := AllocVar('', tyPointer);
           Syms[dynLenTmp].IsArray := True;
           Syms[dynLenTmp].ArrLen := -1;
-          SymDynDepth[dynLenTmp] := 1;
-          Syms[dynLenTmp].ElemType := ProcRetElemTk[dynLenPi];
-          Syms[dynLenTmp].ElemRecName := ProcRetElemRec[dynLenPi];
+          SymDynDepth[dynLenTmp] := NodeDynDepth(ASTLeft[item]);
+          Syms[dynLenTmp].ElemType := NodeDynBaseTk(ASTLeft[item]);
+          Syms[dynLenTmp].ElemRecName := NodeDynBaseRec(ASTLeft[item]);
           SymSyncTypeRef(dynLenTmp);
           callVal := IRLowerAST(ASTLeft[item]);
           IRAppend(IR_STORE_SYM, dynLenTmp, callVal, -1, 0, Ord(tyPointer));

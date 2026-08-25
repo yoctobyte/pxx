@@ -1994,7 +1994,18 @@ begin
       { Result is a dynamic array: a pointer-sized local heap handle. Indexing,
         Length, and SetLength operate on it like any dyn-array local. }
       LastTypeRecId := retElemRec;
-      idx := AllocDynArray('Result', retElemTk, 1);
+      { …at the declared NESTING, not a hardcoded 1. `function F: TMat` where
+        `TMat = array of array of Integer` gave Result depth 1, so an outer
+        element was read as a 4-byte Integer instead of an 8-byte handle:
+        inside the function `Length(Result[1])` answered garbage and
+        `Result[1] := row` wrote a truncated handle, which the caller then
+        indexed into a SEGFAULT. Everything else about the value was fine — a
+        nested dyn-array LOCAL works, and the caller received the right value in
+        `Result := loc` — so the defect was exactly this symbol's shape.
+        bug-p-a-nested-dynamic-array-result-crashes-however-it-is-reached }
+      idx := ProcRetDynDepth[procIdx];
+      if idx < 1 then idx := 1;
+      idx := AllocDynArray('Result', retElemTk, idx);
       Procs[procIdx].RetSymIdx := idx;
     end
     else if retType = tyString then
