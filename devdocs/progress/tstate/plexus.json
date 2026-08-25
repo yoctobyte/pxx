@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T11:19:49Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "0531b3b6735a464ce4fac8674212ceea50e4fae4",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T11:33:37Z",
    "fixed": [],
    "new_red": [
@@ -480,6 +472,14 @@
    ],
    "new_red": [],
    "sha": "d2fb8211acb9366e5a26518b16c279da2c2fa83a",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-25T09:25:35Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "d34ea0c3e6f09c6856fcce23cb4ca070989d15ce",
    "tier": "native",
    "verdict": "RED"
   }
@@ -1642,6 +1642,7 @@
   "test-core#src:test/test_dynarray_copy_managed_elems.pas@2": "native",
   "test-core#src:test/test_dynarray_copy_nested.pas": "native",
   "test-core#src:test/test_dynarray_copy_uses_sysutils.pas": "native",
+  "test-core#src:test/test_dynarray_delete_insert_copy_of_interfaces.pas": "native",
   "test-core#src:test/test_dynarray_field.pas": "native",
   "test-core#src:test/test_dynarray_global_after_method.pas": "native",
   "test-core#src:test/test_dynarray_insert_delete.pas": "native",
@@ -1953,6 +1954,7 @@
   "test-core#src:test/test_nil_check_procvar.pas": "native",
   "test-core#src:test/test_nil_check_receiver.pas": "native",
   "test-core#src:test/test_nil_python_core.npy": "native",
+  "test-core#src:test/test_nil_to_a_whole_dynamic_array.pas": "native",
   "test-core#src:test/test_nilpy_accumulate_float_from_container.npy": "native",
   "test-core#src:test/test_nilpy_ambiguous_variant_field.npy": "native",
   "test-core#src:test/test_nilpy_array_of_const_unit.npy": "native",
@@ -4711,6 +4713,7 @@
   "test-core#src:test/test_dynarray_copy_managed_elems.pas@2": "pass",
   "test-core#src:test/test_dynarray_copy_nested.pas": "pass",
   "test-core#src:test/test_dynarray_copy_uses_sysutils.pas": "pass",
+  "test-core#src:test/test_dynarray_delete_insert_copy_of_interfaces.pas": "pass",
   "test-core#src:test/test_dynarray_field.pas": "pass",
   "test-core#src:test/test_dynarray_global_after_method.pas": "pass",
   "test-core#src:test/test_dynarray_insert_delete.pas": "pass",
@@ -5020,6 +5023,7 @@
   "test-core#src:test/test_nil_check_procvar.pas": "pass",
   "test-core#src:test/test_nil_check_receiver.pas": "pass",
   "test-core#src:test/test_nil_python_core.npy": "pass",
+  "test-core#src:test/test_nil_to_a_whole_dynamic_array.pas": "pass",
   "test-core#src:test/test_nilpy_accumulate_float_from_container.npy": "pass",
   "test-core#src:test/test_nilpy_ambiguous_variant_field.npy": "pass",
   "test-core#src:test/test_nilpy_array_of_const_unit.npy": "pass",
@@ -6619,11 +6623,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-25T08:23:40Z",
-  "sha": "d2fb8211acb9366e5a26518b16c279da2c2fa83a",
+  "date": "2026-08-25T09:25:35Z",
+  "sha": "d34ea0c3e6f09c6856fcce23cb4ca070989d15ce",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.3
+  "wall": 3600.2
  },
  "last_bench": {
   "conf_rows": 550,
