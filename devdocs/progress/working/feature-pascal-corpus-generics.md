@@ -848,3 +848,36 @@ has no `AN_PTR_CAST` arm. Measured, tabled against fpc, and filed as
 lowering still emits one indirection where two are needed. Type resolution and
 address computation have to move together here; that ticket is this rung's next
 real blocker, and it is a bigger job than the three above.
+
+### …and it was not. Same day: two small fixes, wall 1865 → 2074
+
+The paragraph above is a good record of a wrong conclusion, so it stays. The
+segfault was not evidence that "the lowering emits one indirection where two are
+needed"; it was evidence that **the reader was the wrong end of the problem.**
+The pointer-alias TYPECAST in `ParseFactorCore` runs its own suffix walk over
+`^`, built on `NodePtrElem` (immediate pointee only), so the deref nodes never
+carried depth or base — patching `ResolveNodeRec` to invent a record the address
+computation did not share is what produced the crash. Pointing that walk at the
+shared `ResolveDerefShape` fixed types AND addresses together, with no lowering
+change at all:
+
+| | ticket |
+| --- | --- |
+| `PPRec(pp)^^.f` at offset 0, silently | [[bug-p-a-pointer-to-a-pointer-through-a-typecast-loses-its-depth]] |
+| forward `PPFwd = ^PFwd` refuses the second `^` | [[bug-p-a-forward-declared-pointer-to-a-pointer-loses-a-level]] |
+| `Result := New(PSpoof…)` — New's expression form | [[bug-p-new-as-a-function-over-a-pointer-type-is-undefined]] |
+
+### The current wall — RTTI, and it is Track B
+
+`generics.defaults.pas:2082` reads `ATypeData.OrdType` off a `PTypeData`.
+`lib/rtl/typinfo.pas` declares `PTypeData = PTypeInfo`, and that header carries
+no `OrdType` / `MinValue` / `FloatType` — so this is a LIBRARY gap, not a
+frontend one: [[gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo]].
+Generics.Defaults only reads `OrdType` and `FloatType`, so the first rung is
+small.
+
+While chasing this, note that the `in: <path>` line under a diagnostic named a
+707-line file for an error on line 2074 —
+[[bug-a-a-diagnostic-in-a-used-unit-names-the-wrong-source-file]]. Anyone driving
+a corpus unit reads that line to find the wall; trust the `near:` window over it
+until that is fixed.

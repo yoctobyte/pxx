@@ -7758,6 +7758,23 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) -Futest/tobject_units test/test_tobject_root_methods_inside_a_unit.pas $(TESTTMP)/test_torootu26
 	test "$$($(TESTTMP)/test_torootu26)" = "$$(cat test/test_tobject_root_methods_inside_a_unit.expected)"
+	# A DOUBLE pointer, three spellings and both declaration orders. The CAST
+	# spelling ran its own suffix walk on NodePtrElem (immediate pointee only),
+	# so `PPOut(pp)^^.inner.y` lost the record and answered the field at OFFSET 0
+	# -- silently, while `pp^^.inner.y` was right. And a FORWARD `PPFwd = ^PFwd`
+	# kept depth 1, so the second `^` was refused outright: the same program
+	# compiled or not depending on the order of two type declarations.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_pointer_to_a_pointer_through_a_cast_and_a_forward.pas $(TESTTMP)/test_pptr26
+	test "$$($(TESTTMP)/test_pptr26)" = "$$(cat test/test_pointer_to_a_pointer_through_a_cast_and_a_forward.expected)"
+	# `New` has two spellings in FPC -- the statement `New(p)` and the expression
+	# `p := New(PRec)` -- and pxx had only the first, because the intrinsic lived
+	# solely in the statement parser. The expression form was `undefined variable
+	# (New)`; rtl-generics writes exactly that form. Both spellings over both a
+	# record and a scalar pointee, so the two arms cannot drift on the size rule.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_new_as_a_function_over_a_pointer_type.pas $(TESTTMP)/test_newfn26
+	test "$$($(TESTTMP)/test_newfn26)" = "$$(cat test/test_new_as_a_function_over_a_pointer_type.expected)"
 	# `a := nil` on a WHOLE dynamic array empties it, whatever the element type.
 	# An array symbol's TypeKind IS its element kind, so a record-shaped element
 	# routed the store into the record `:= nil` arms: they zeroed RecSize bytes

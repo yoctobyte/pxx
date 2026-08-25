@@ -10943,8 +10943,31 @@ begin
       begin
         targetAlias := FindTypeAlias(targetName);
         if (targetAlias >= 0) and (AliasTk[targetAlias] = Ord(tyPointer)) and
-           (AliasPtrDepth[targetAlias] > 0) and (AliasElemTk[i] = Ord(tyPointer)) then
+           (AliasPtrDepth[targetAlias] > 0) then
         begin
+          { The pointee is itself a POINTER alias — `PPNode = ^PNode`, and in a
+            forward section (`PPVmt = ^PVmt;` written ABOVE `PVmt = ^TVmt;`,
+            which is how rtl-generics spells it) PVmt did not exist when this
+            row was built. ParseTypeKind's forward escape hatch answers
+            tyInteger for a name it cannot see yet, so the row kept elem
+            tyInteger and DEPTH 1 — and depth 1 means "one `^` and you are at
+            the base", so the SECOND `^` was refused outright with
+            `dereferenced value is not a pointer`, while the identical
+            declarations in the other ORDER compiled and ran. A declaration
+            order changing whether a program parses is the tell.
+
+            This arm used to require the element to ALREADY be tyPointer, which
+            a forward reference can never satisfy — so it only ever repaired
+            the base of a row that was already right, and never the row that
+            needed it. It now takes the whole triple from the target: element
+            kind, depth (one more level than the pointee's), and the ultimate
+            base. AliasElemRec stays REC_NONE on purpose — the IMMEDIATE
+            pointee is a pointer, which has no record of its own; the record
+            that matters lives in AliasPtrBaseRec, where every reader of a
+            multi-level pointer looks for it.
+            bug-p-a-forward-declared-pointer-to-a-pointer-loses-a-level }
+          AliasElemTk[i] := Ord(tyPointer);
+          AliasPtrDepth[i] := AliasPtrDepth[targetAlias] + 1;
           AliasPtrBaseTk[i] := AliasPtrBaseTk[targetAlias];
           AliasPtrBaseRec[i] := AliasPtrBaseRec[targetAlias];
         end

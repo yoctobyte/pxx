@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 working:1 unfinished:21 blocked:7 backlog:290 backlog_new:16 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2332 rejected:40`
+`urgent:2 working:1 unfinished:21 blocked:7 backlog:290 backlog_new:17 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2336 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -50,7 +50,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 293, ranked
+## Ready — top 30 of 294, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [T]` bug-t-the-native-tier-times-out-and-publishes-a-contentless-red
@@ -83,4 +83,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 50] [U]` decide-release-signing-key-custody (unblocks 1)
 - `[p 50] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 
-_263 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_264 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

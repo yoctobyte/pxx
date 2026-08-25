@@ -5,7 +5,7 @@ track: P
 prio: 40
 type: bug
 blocked-by: []
-status: backlog_new
+status: done
 owner: ""
 created: 2026-08-25
 summary: "With `PPVmt = ^PVmt; PVmt = ^TVmt`, `pp^^.__ClassRef` is refused with `dereferenced value is not a pointer`, and Delphi mode's auto-deref spelling `PPVmt(pp)^.__ClassRef` resolves REC_NONE, so the member becomes a plain AN_FIELD of whatever name follows. Both work in fpc 3.2.2. This is the wall rtl-generics' Generics.Defaults stops at."
@@ -73,3 +73,38 @@ spliced into ~30 call sites.
 `make compiler/pascal26` + the four-row repro above diffed against `fpc -Mdelphi
 -O1` + `tools/gate.sh quick`. The repro must RUN, not merely compile — that is
 the trap this ticket exists to record.
+
+# Resolution 2026-08-25 — fixed, and this ticket's diagnosis was half wrong
+
+Both rows are fixed and the repro above now matches fpc on all four. They were
+**two independent defects**, filed and written up separately:
+
+- [[bug-p-a-forward-declared-pointer-to-a-pointer-loses-a-level]] — the `pp^^`
+  half. The guess above ("suspect the same forward-declaration path") was right
+  in direction and wrong in mechanism: nothing to do with `AliasPtrBaseRec`. The
+  forward fixup pass had an arm for a pointer-to-pointer pointee whose guard
+  required the element to ALREADY be `tyPointer` — unsatisfiable for a forward
+  reference, so the arm could never fire on the case it existed for.
+- [[bug-p-a-pointer-to-a-pointer-through-a-typecast-loses-its-depth]] — the
+  `PPVmt(x)^` half. **The diagnosis above is wrong.** It blamed a missing
+  `AN_PTR_CAST` arm in `ResolveNodeRec`'s `AN_DEREF` branch. That branch is
+  fine; it already has that arm. The real cause is that the pointer-alias cast
+  in `ParseFactorCore` runs its OWN suffix walk over `^`, built on
+  `NodePtrElem`, which knows only the immediate pointee — so the deref nodes
+  never got the depth and base that `ResolveNodeRec` reads. Fixing the reader
+  was the wrong end, which is exactly why the attempt "compiled and then
+  segfaulted": it invented a record identity the address computation did not
+  share. Pointing that walk at the shared `ResolveDerefShape` fixed both the
+  types and the addresses at once, with no lowering change at all.
+
+The general lesson is the one `devdocs/dev/root-cause-over-microfix.md` states
+and this ticket is a clean instance of: **a ticket names a plausible cause, and
+9 times out of 10 the real one is deeper.** Here the plausible cause was one
+reader missing an arm; the real one was a fourth private copy of the walk that
+feeds every reader.
+
+Regression test `test/test_pointer_to_a_pointer_through_a_cast_and_a_forward.pas`
+covers all three spellings in both declaration orders.
+
+## Log
+- 2026-08-25 — resolved, commit PENDING-COMMIT.

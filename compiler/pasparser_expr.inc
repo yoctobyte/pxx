@@ -3941,6 +3941,55 @@ begin
         Exit;
       end;
 
+      { `p := New(PRec)` — New's FUNCTION form, which takes the pointer TYPE and
+        hands the block back instead of storing it through a variable. FPC has
+        had both spellings forever and rtl-generics uses this one
+        (`Result := New(PSpoofInterfacedTypeSizeObject)` in Generics.Defaults);
+        pxx had only the statement form, in the statement parser, so the
+        expression spelling came out as `undefined variable (New)`.
+
+        Same lowering as that arm — GetMem(SizeOf(pointee)) — with the size read
+        off the ALIAS row rather than off a variable's symbol, which is the only
+        difference between the two spellings. Note this is deliberately NOT a
+        second New: the intrinsic that allocates is one concept and its two
+        surface forms must agree, so if the size rule ever changes it changes in
+        both arms or neither (devdocs/dev/normalise-dont-special-case.md).
+
+        Guarded so it can only fire on the real intrinsic: a user `New` proc or
+        variable wins, a `(` must follow, and the argument must be an IDENT that
+        names a POINTER type alias — `New(p)` over a variable is the statement
+        form and never reaches here.
+        bug-p-new-as-a-function-over-a-pointer-type-is-undefined }
+      if CaseEqual(name, 'New') and
+         ((qUnit = -2) or ((FindProc(name) < 0) and (FindSym(name) < 0))) and
+         (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkLParen) and
+         (Tokens[TokPos + 1].Kind = tkIdent) and
+         (FindTypeAlias(GetTokenStr(TokPos + 1)) >= 0) and
+         (AliasTk[FindTypeAlias(GetTokenStr(TokPos + 1))] = Ord(tyPointer)) then
+      begin
+        Next; Expect(tkLParen, '(');
+        aliasIdx := FindTypeAlias(CurTok.SVal);
+        Next;                                  { the pointer type name }
+        Expect(tkRParen, ')');
+        if IntToTypeKind(AliasElemTk[aliasIdx]) = tyRecord then
+          i := RecSize(AliasElemRec[aliasIdx])
+        else
+          i := TypeSize(IntToTypeKind(AliasElemTk[aliasIdx]));
+        exprNode := AllocNode(AN_INT_LIT);
+        ASTIVal[exprNode] := i;
+        ASTTk[exprNode] := Ord(tyInteger);
+        argSeq := AllocNode(AN_ARG);
+        ASTLeft[argSeq] := exprNode;
+        node := AllocNode(AN_CALL);
+        ASTIVal[node] := -Ord(tkGetMem);
+        ASTLeft[node] := argSeq;
+        ASTTk[node] := Ord(tyPointer);
+        LastExprTk := tyPointer;
+        LastTypeRecId := AliasElemRec[aliasIdx];
+        CurASTNode := node;
+        Exit;
+      end;
+
       if CaseEqual(name, 'TypeInfo') and
          ((qUnit = -2) or ((FindProc(name) < 0) and (FindSym(name) < 0))) and
          (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
@@ -5782,17 +5831,36 @@ begin
                 and a `^Int64` field through the same cast "worked" because the
                 wrong tag happened to match. Silent, and one of the two
                 spellings of one expression.
-                bug-p-a-second-deref-on-a-typecast-pointer-field-is-dropped }
-              elemTk := tyUnknown; elemRec := REC_NONE;
-              if NodePtrElem(node, elemTk, elemRec, 0) then
+                bug-p-a-second-deref-on-a-typecast-pointer-field-is-dropped
+
+                …and NodePtrElem answers only the IMMEDIATE pointee, so this
+                loop — a third copy of the deref suffix walk — knew nothing of
+                DEPTH. `PPRec(pp)^^.f` therefore lost the record after the
+                second `^`: the deref nodes carried no remaining-depth, no
+                ultimate base kind and no base record, ResolveNodeRec answered
+                REC_NONE, and every field resolved at OFFSET 0 while the same
+                chain without the cast (`pp^^.f`) was right, because THAT one
+                goes through ParseLValueAST, which has always called
+                ResolveDerefShape. Silent wrong values, one of two spellings —
+                the exact shape the note above describes, one level deeper.
+
+                So this walk now asks the SHARED resolver and stamps the same
+                three fields ParseLValueAST's copy does, instead of carrying a
+                fourth private notion of what a `^` yields
+                (devdocs/dev/normalise-dont-special-case.md).
+                bug-p-a-pointer-to-a-pointer-through-a-typecast-loses-its-depth }
+              derefRem := 0; derefBaseTk := Ord(tyUnknown); derefBaseRec := REC_NONE;
+              ResolveDerefShape(node, tk, recName, derefRem, derefBaseTk, derefBaseRec);
+              ASTSOffset[indexNode] := derefRem;
+              ASTSLen[indexNode]    := derefBaseTk;
+              if derefBaseRec > 0 then ASTIVal[indexNode] := derefBaseRec;
+              if (tk = tyInteger) and (recName = REC_NONE) and (derefRem = 0) and
+                 (derefBaseRec <= 0) then
               begin
-                tk      := elemTk;
-                recName := elemRec;
-              end
-              else
-              begin
-                { No pointee on the node — the adapter casts (-1/-2) land here,
-                  and for them the alias IS the right answer. }
+                { No shape on the node at all — the ADAPTER casts (ival -1/-2)
+                  land here, since they carry no alias row for the resolver to
+                  read, and for them the alias in hand IS the right answer, as
+                  it always was. }
                 tk      := IntToTypeKind(AliasElemTk[aliasIdx]);
                 recName := AliasElemRec[aliasIdx];
               end;
