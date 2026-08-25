@@ -414,6 +414,7 @@ end;
 
 procedure EmitPySignatures;
 var pi, k, nUser, reqN, dfltOff, firstUser, slot, pend, namesOff: Integer;
+    lastDecl: Integer;   { one past the last DECLARED (non-collector) parameter }
 begin
   { ProcCapacity, not MAX_PROCS: these tables are allocated to fit (see
     EnsureProcCapacity) and a loop to the old fixed bound now writes off the end
@@ -467,10 +468,39 @@ begin
         firstUser := 1;
         Break;
       end;
-    nUser := Procs[pi].ParamCount - firstUser;
+    { A TRAILING `*args` COLLECTOR is not a parameter the caller fills. It can
+      never carry a default and is never required -- the callee packs it itself
+      -- but it was counted here like any other declared parameter, which
+      inflated BOTH counts by one. `def f(a, lo=7, *rest)` therefore recorded
+      reqN=2/TotN=3 instead of reqN=1/TotN=2, and every consumer that trusts
+      those numbers was wrong about the same def: the dispatcher either refused
+      a legal `f(1)` as "missing 1 required positional argument(s)" or, on the
+      star path that skipped this record entirely, ran with `lo` unset and
+      returned a plausible wrong number.
+      bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
+
+      Stripped only when the star is the LAST parameter and the callee does NOT
+      also collect `**kwargs`. Two reasons, and neither is timidity:
+
+      * Indices stay put. Dflts and Names are indexed by (k - firstUser), so
+        dropping a parameter that is not last would leave a live index >= the
+        shrunken count and write past the array. Scanning from the END can only
+        ever remove a suffix, so every surviving index is unchanged by
+        construction.
+      * A `**kwargs` collector must keep counting. The runtime bridge has no way
+        to synthesize the empty dict the body expects in that slot (see
+        PyBoundCallV2 in pylib.pas), so leaving the collector in reqN is what
+        makes the bridge REFUSE such a call with a TypeError instead of
+        dispatching at an arity the body does not have -- which is a segfault.
+        Deliberate, and the missing capability is filed as
+        feature-n-a-kwargs-collecting-callee-through-a-callable-value. }
+    lastDecl := Procs[pi].ParamCount;
+    if (ProcPyKwIdx[pi] < 0) and (lastDecl - 1 = ProcPyStarIdx[pi]) and
+       (lastDecl - 1 >= firstUser) then Dec(lastDecl);
+    nUser := lastDecl - firstUser;
     if nUser < 0 then nUser := 0;
     reqN := 0;
-    for k := firstUser to Procs[pi].ParamCount - 1 do
+    for k := firstUser to lastDecl - 1 do
       if not ProcParamHasDefault[pi * MAX_PROC_PARAMS + k] then Inc(reqN);
 
     ProcSigOff[pi] := DataLen;
@@ -496,7 +526,7 @@ begin
         PYSIG_DFLT_UNSET. }
       for k := 0 to nUser - 1 do
         PatchDataU64(dfltOff + k * 16, PYSIG_DFLT_UNSET);
-      for k := firstUser to Procs[pi].ParamCount - 1 do
+      for k := firstUser to lastDecl - 1 do
       begin
         if not ProcParamHasDefault[pi * MAX_PROC_PARAMS + k] then Continue;
         slot := dfltOff + (k - firstUser) * 16;
@@ -555,7 +585,7 @@ begin
       namesOff := DataLen;
       DataPutZeros(nUser * 8);
       AddDataPtrFix(ProcSigOff[pi] + PYSIG_OFF_NAMES, namesOff);
-      for k := firstUser to Procs[pi].ParamCount - 1 do
+      for k := firstUser to lastDecl - 1 do
       begin
         AddDataPtrFix(namesOff + (k - firstUser) * 8, DataLen);
         DataPutZ(Procs[pi].Params[k].Name);

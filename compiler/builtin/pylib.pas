@@ -13678,6 +13678,13 @@ type
     it did before signatures existed.
       ReqN  parameters with NO default, Self excluded
       TotN  declared parameters,        Self excluded
+            Both EXCLUDE a trailing `*args` collector -- it is never required
+            and never defaulted, so counting it made `def f(a, lo=7, *rest)`
+            report two required parameters and rejected a legal `f(1)`. A
+            `**kwargs` collector is still counted, deliberately: this bridge
+            cannot synthesize the empty dict such a body expects, and a slot
+            ReqN still guards is a TypeError where an uncounted one would be a
+            dispatch at the wrong arity. See EmitPySignatures in rtti_emit.inc.
       Star  the *args position PLUS ONE, 0 = none
       Dflts TotN variants, 16 bytes each, one per declared parameter; a slot
             whose VType is PYSIG_DFLT_UNSET (-1, an illegal tag) was never
@@ -14133,17 +14140,6 @@ begin
   for i := 0 to 3 do bound[i] := i < nPos;
   nkw := 0;
   if kwNames <> nil then nkw := kwNames.count;
-  { a COLLECTING callee packs its own surplus and has no omitted parameters to
-    fill -- that path predates this one and stays exactly as it was }
-  if b^.StarIdx >= 0 then
-  begin
-    if nkw > 0 then
-      raise TypeError.Create('a keyword argument through a callable value is '
-              + 'not supported yet for a callee that collects *args');
-    Result := PyBoundCallStar(code, recv, isFn, b^.StarIdx, nPos,
-                              av[0], av[1], av[2], av[3]);
-    Exit;
-  end;
   want := nPos;
   sg := b^.Sig;
   if sg = nil then
@@ -14213,6 +14209,32 @@ begin
         av[i] := PVariant(NativeInt(dp) + i * 16)^;
       end;
     end;
+  end;
+  { A COLLECTING callee dispatches differently -- its surplus arguments become
+    one TPyList where the caller wrote loose ones -- but it does NOT have a
+    different SIGNATURE story, and treating it as though it did is what this
+    early-out used to do. It sat ABOVE the block that has just run and said "a
+    collecting callee packs its own surplus and has no omitted parameters to
+    fill", which is simply untrue of `def f(a, lo=7, *rest)`: `lo` is omitted
+    and defaulted, and skipping the fill left it holding whatever the stack
+    had. One default silently became a wrong number, two dereferenced garbage,
+    and with a `**kwargs` on the end as well the process died at rc=139.
+
+    So the split now happens HERE, at dispatch, and only here: keyword
+    matching, the arity check and the default fill above are the ONE path every
+    callable value takes. Star-ness is a calling convention, not a second
+    notion of what a signature means.
+    bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
+
+    nPos, not `want`, bounds the packing: `want` counts the slots the BODY
+    takes (fixed parameters, defaults included), while only the arguments the
+    CALLER actually wrote past the star position belong in the tuple. Filling a
+    default never adds to the surplus. }
+  if b^.StarIdx >= 0 then
+  begin
+    Result := PyBoundCallStar(code, recv, isFn, b^.StarIdx, nPos,
+                              av[0], av[1], av[2], av[3]);
+    Exit;
   end;
   if recv = nil then
   begin

@@ -897,6 +897,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_locbind26 | diff -u test/test_nilpy_local_binding_beats_a_def.expected -
 	./$(COMPILER) test/test_nilpy_callable_value_defaults.npy $(TESTTMP)/test_nilpy_cvdflt26
 	$(TESTTMP)/test_nilpy_cvdflt26 | diff -u test/test_nilpy_callable_value_defaults.expected -
+	./$(COMPILER) test/test_nilpy_callable_value_defaults_with_star_args.npy $(TESTTMP)/test_nilpy_cvdfltstar26
+	$(TESTTMP)/test_nilpy_cvdfltstar26 | diff -u test/test_nilpy_callable_value_defaults_with_star_args.expected -
 	./$(COMPILER) test/test_nilpy_str_line_continuation.npy $(TESTTMP)/test_nilpy_linecont26
 	$(TESTTMP)/test_nilpy_linecont26 | diff -u test/test_nilpy_str_line_continuation.expected -
 	./$(COMPILER) test/test_nilpy_user_class_keys_items_values.npy $(TESTTMP)/test_nilpy_ukiv26

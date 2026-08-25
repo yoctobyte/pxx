@@ -29,7 +29,12 @@ k = K()
 h = k.m
 print(h(10), h(10, 1), k.m(10))
 
-# a COLLECTING callee has no omitted parameters to fill: unchanged
+# a COLLECTING callee with NO defaults -- the one shape for which "nothing to
+# fill" is actually true. It was written here as though it held for every
+# collecting callee, and the dispatcher carried the same sentence as the reason
+# it skipped the signature record entirely; put a defaulted parameter before
+# the star and the claim collapses. The general case lives in
+# test_nilpy_callable_value_defaults_with_star_args.
 def star(a, *rest):
     return (a, rest)
 

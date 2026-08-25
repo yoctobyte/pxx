@@ -14,14 +14,13 @@ _none_
 | --- | --- | --- | --- | --- | --- |
 | bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method | N | 70 | bug | A callable value is silently accepted where `str` is declared, and no longer compares equal to itself — bisected to `9bbbbef6c` | — |
 
-## unfinished (23)
+## unfinished (22)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-nilpy-on-cross-targets-four-remaining-walls | A | 40 | bug | After the string-tagged-binop gate was lifted, NilPy still does not RUN on any cross target: arm32 builds and SIGILLs, i386 refuses on `symbol kind not supported yet (load)`, aarch64 on `aggregate result with more than 8 params`, riscv32 on bare-metal mmap. Four separate walls, one campaign — ~53 .npy tests are cross-blind until they fall. | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
 | bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name | N | 62 | bug | `X.attr` where X came from an import that did not resolve is compiled as the BARE NAME `attr`, so `ModuleType.__name__` fails with `undefined variable (__name__)` — a message naming the attribute and never the unresolved import that caused it. Now the first wall on 4 html5lib files. | — |
-| bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults | N | 88 | bug | A call through a module-level function ALIAS that omits a defaulted parameter segfaults at runtime, with no diagnostic at compile time. `f = g` then `f(a, b)` where g is `def g(a, b, lo=0, hi=-1)` crashes; the same call with all four arguments supplied is fine, and calling `g` directly with the defaults omitted is fine. Six-line repro, no imports involved. | — |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
 | bug-p-cannot-call-directly-through-a-procedural-type-cast | P | 35 | bug | `TFn(p)(args)` — calling straight through a procedural-type cast — is `unexpected token`, where FPC compiles and runs it. Assigning the cast to a variable first and calling that works, so the capability is present and only this spelling is refused. Hit twice while writing repros for the rtl-generics constant-initializer walls. | — |
@@ -347,7 +346,7 @@ _none_
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enrol-the-fgl-corpus-rung | T | 70 | task | Enrol the new `test-fgl` corpus target in a testmgr tier and add `fpc-rtl` to twatch's CORPUS_EXPECTED. The rung is wired and green (3 pass / 4 skip) but nothing in the matrix runs it, and the watcher will not warn when the tree is unfetched. | — |
 
-## backlog_new (22)
+## backlog_new (24)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -358,6 +357,7 @@ _none_
 | bug-a-error-recovery-silences-every-lowering-only-diagnostic | A | 45 | bug | Once ANY diagnostic is recovered, every lowering-only check stops firing | — |
 | bug-a-the-specialization-splice-does-not-adjust-the-body-pass-spans | A | 35 | bug | InsertTokens/RemoveTokens keep the body pass's DeclItem spans and body-begin marker in step with a token-stream edit. The specialization splice hand-rolls its own insert and calls neither — it now adjusts the token->file map (that fix landed) but still not the Pass2 spans. Either Pass2Active is always false there, in which case say so in a comment, or the spans drift. | — |
 | bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical | A | 50 | bug | Re-filed from decide-variant-bitwise-width, decided 2026-08-25 (option 2). pxx's static Pascal `shr` is a 64-bit LOGICAL shift on both Integer and Int64; its Variant `shr` is a 64-bit ARITHMETIC shift. Two different operators under one spelling inside one language. Fix: Pascal's Variant path emits a logical shift; NilPy keeps the arithmetic one (Python's >> sign-extends), split at the PyProgramMode seam that already exists. | — |
+| bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable | N | 70 | bug | `import m` then `m.f(1)` compiles and runs, but `h = m.f` — the same member in VALUE position — is a COMPILE ERROR, `undefined variable (f)`, naming the attribute as if it were a bare name. Every value position fails the same way (assignment, dict value, `map(m.f, ...)`), so a module's functions cannot be used as callbacks at all. The import resolves; only the value position is broken. | — |
 | bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent | P | 60 | bug | `PG = ^TG` with `TG = array[0..1, 0..2] of LongWord`: `qg^[i, j]` prints `0 1 2 1 2 10` where FPC prints `0 1 2 10 11 12` — the comma subscript is not flattened against the pointee's dims — and `Length(qg^)` answers 6 (the flat extent) where FPC answers 2 (the first dimension). Predates and is not caused by the single-dim fix; the metadata it needs is now present. | — |
 | bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 40 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
 | bug-p-high-and-low-refuse-every-non-identifier-operand | P | 30 | bug | Both arms open with `if CurTok.Kind <> tkIdent then Error('High: expected array variable or ordinal type')`, so a string literal, a concat, or a parenthesised expression cannot be an operand at all. fpc takes all three — and gives each a DIFFERENT base, which is why widening the guard needs its own measured table rather than a one-line edit. | — |
@@ -368,6 +368,7 @@ _none_
 | compat-pascal-strict-fpc-pointer-difference-bytes | P | 15 | compat | Re-filed from decide-pointer-difference-unit, decided 2026-08-25 (option 2 + parity behind the flag). The default dialect keeps the uniform element rule; FPC's byte answer for a difference involving an untyped Pointer is a BEHAVIOUR (deterministic, dependable) not a bug, so the dialect contract puts it in the strict family. Ranked 15 deliberately: no corpus target has asked for it. | — |
 | feature-a-classinfo-returns-the-typinfo-header | A | 45 | feature | Re-filed from decide-classinfo-returns-our-blob-or-nothing / decide-tobject-classinfo-blob-or-refusal, both decided 2026-08-25. x.ClassInfo returns exactly what TypeInfo(TThatClass) returns -- the 24-byte {Kind; NamePtr; DataPtr} header whose DataPtr points at the class blob -- so o.ClassInfo = TypeInfo(TFoo) holds and a layout walker reads a real kind byte. One header word per declared class. | — |
 | feature-b-vartype-speaks-fpc-varxxx-codes | B | 45 | feature | Re-filed from decide-vartype-returns-pxx-tags-not-fpc-codes, decided 2026-08-25 (option A). VarType currently returns pxx's internal tag (VT_INT=1, VT_DOUBLE=3, ...) and the unit exports no varXxx constants at all, so the FPC idiom `if VarType(v) = varInteger` does not compile. Measured: zero in-tree consumers compare VarType against a VT_ constant outside variants.pas itself, so the ticket's own gating condition for option A is met. | — |
+| feature-n-a-kwargs-collecting-callee-through-a-callable-value | N | 55 | feature | A callee that collects `**kwargs` cannot be called through a callable value at all — every shape raises TypeError, including `def f(a, **kw)` called as `zz(1)` with no defaults anywhere. The dynamic bridge has no way to synthesize the empty dict the body expects in the collector slot, so the collector is deliberately left counted in ReqN to make the call REFUSE loudly rather than dispatch at an arity the body does not have. Split out of the *args fix; that half is done and CPython-exact. | — |
 | feature-p-assertions-switch-and-strict-default | P | 30 | feature | Re-filed from decide-assertion-default-vs-fpc, decided 2026-08-25 (option 3, default ON). pxx evaluates Assert() always; FPC ignores it unless -Sa. The dialect contract requires every divergence to be switchable and disabled under the strict family, so the switch is mandated rather than merely preferred. Once it exists the default stops being a one-way door. | — |
 | feature-p-legacy-value-object-types | P | 15 | feature | Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone. | — |
 | refactor-a-two-predicates-answer-what-a-caret-yields | A | 55 | refactor | Two functions type a dereference. NodePtrElem knows more SPELLINGS (index-into-base, pointer FIELD, inline PTR_CAST, pointer arithmetic); ResolveDerefShape knows more ABOUT each (remaining depth, ultimate base). Swapping a call site from one to the other trades one kind of knowledge for the other, silently — which is exactly what shipped a regression on 2026-08-25. | — |
@@ -600,9 +601,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2360)
+## done (2361)
 
-2360 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2361 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -651,7 +652,6 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 88] [N] bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults [parked — re-claim, do not duplicate]
 - [p 88] [N] bug-n-inferred-return-type-of-true-division-is-int
 - [p 82] [A] bug-a-the-fpjson-suite-overflows-the-fixed-4096-entry-data-ptr-fixup-table
 - [p 82] [N] bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
@@ -672,6 +672,7 @@ _none_
 - [p 72] [P] feature-p-fpc-global-operator-overload-declarations
 - [p 72] [B] feature-typinfo-facade-unit
 - [p 70] [N] bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through
+- [p 70] [N] bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable
 - [p 70] [N] bug-n-an-augmented-subscript-on-a-dunder-class-is-refused
 - [p 70] [N] bug-nilpy-a-lambda-returned-directly-is-not-callable
 - [p 70] [N] bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
@@ -751,6 +752,7 @@ _none_
 - [p 55] [A] feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets [parked — re-claim, do not duplicate]
 - [p 55] [C] feature-c-gtk3-header-final-wiring
 - [p 55] [A] feature-dynamic-include-paths-config
+- [p 55] [N] feature-n-a-kwargs-collecting-callee-through-a-callable-value
 - [p 55] [N] feature-nilpy-lambda-compiled-closure
 - [p 55] [N] feature-nilpy-no-type-inference-switch
 - [p 55] [N] feature-nilpy-str-format-named-keyword-fields

@@ -5,18 +5,17 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:23 blocked:7 backlog:288 backlog_new:22 experimental:20 rainy-day:44 float:20 done-followup:3 decided:114 done:2360 rejected:40`
+`working:1 unfinished:22 blocked:7 backlog:288 backlog_new:24 experimental:20 rainy-day:44 float:20 done-followup:3 decided:114 done:2361 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N] — owner: frank1-72
 
-## unfinished (23) — parked mid-flight; re-claim, do not duplicate
+## unfinished (22) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name` [N]
-- `bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
 - `bug-p-cannot-call-directly-through-a-procedural-type-cast` [P]
@@ -47,9 +46,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 321, ranked
+## Ready — top 30 of 322, ranked
 
-- `[p 88] [N]` bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
 - `[p 88] [N]` bug-n-inferred-return-type-of-true-division-is-int
 - `[p 82] [A]` bug-a-the-fpjson-suite-overflows-the-fixed-4096-entry-data-ptr-fixup-table
 - `[p 82] [N]` bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
@@ -70,6 +68,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 72] [P]` feature-p-fpc-global-operator-overload-declarations
 - `[p 72] [B]` feature-typinfo-facade-unit
 - `[p 70] [N]` bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through
+- `[p 70] [N]` bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable
 - `[p 70] [N]` bug-n-an-augmented-subscript-on-a-dunder-class-is-refused
 - `[p 70] [N]` bug-nilpy-a-lambda-returned-directly-is-not-callable
 - `[p 70] [N]` bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
@@ -80,4 +79,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [T]` task-t-enrol-the-fgl-corpus-rung
 - `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 
-_291 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_292 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

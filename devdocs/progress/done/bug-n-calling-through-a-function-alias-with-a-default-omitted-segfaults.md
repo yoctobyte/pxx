@@ -4,8 +4,8 @@ prio: 88
 type: bug
 blocked-by: []
 summary: "A call through a module-level function ALIAS that omits a defaulted parameter segfaults at runtime, with no diagnostic at compile time. `f = g` then `f(a, b)` where g is `def g(a, b, lo=0, hi=-1)` crashes; the same call with all four arguments supplied is fine, and calling `g` directly with the defaults omitted is fine. Six-line repro, no imports involved."
-status: unfinished
-owner: unassigned
+status: done
+owner: frank1-N-alias
 ---
 
 # Calling through a function alias with a default omitted segfaults
@@ -271,3 +271,140 @@ representation exists and works. The open question is ownership, not design.
 The title still says "calling through a function alias" and is wrong twice over:
 not aliases, not imports. Left for whoever takes the decision, per the convention
 already applied to [[feature-nilpy-yield-outside-a-for-loop]].
+
+---
+
+## FIXED 2026-08-25 (frank1-N-alias) — and the banked diagnosis was right about the design, wrong about what was left
+
+Measured at HEAD, self-host fixedpoint, differentially against CPython.
+
+### First: everything this ticket originally reported is already GREEN
+
+The Track A build that came out of the decision —
+[[feature-n-a-callable-value-carries-its-signature-type]], the `VT_CALLABLE_TAG`
+payload becoming a static signature record — retired the whole population the
+ticket and its three re-scopes recorded. Re-measured, every row now matches
+CPython exactly:
+
+| shape | before | now |
+| --- | --- | --- |
+| `ali = real; ali([1,2,2,3], 2)` (the filed six-line repro) | SIGSEGV | `4` |
+| `zz = loc; zz(1)` (one file, no import, no alias) | empty/garbage | `7` |
+| `handlers = [loc]; handlers[0](1)` | SIGSEGV | `7` |
+| `d = {"x": loc}; d["x"](1)` | SIGSEGV | `7` |
+| `def call(fn): return fn(1)` | SIGSEGV | `7` |
+| `cb = k.m` (bound method) | SIGSEGV | `7` |
+| keyword through a value, shared mutable default, non-constant default | — | all CPython-exact |
+
+So this could have been closed as done-by-a-sibling. **Varying the shape further
+is what stopped that**, and it found a live arm of the same defect that no
+re-scope had reached.
+
+### The arm that was still broken: a callee that COLLECTS
+
+The signature record is consulted for a plain `def`. It is **not** consulted for
+a callee with `*args`, because the dynamic bridge had a second dispatch path that
+ran *before* the signature preamble and returned:
+
+```pascal
+{ a COLLECTING callee packs its own surplus and has no omitted parameters to
+  fill -- that path predates this one and stays exactly as it was }
+if b^.StarIdx >= 0 then
+begin
+  ...
+  Result := PyBoundCallStar(...);
+  Exit;
+end;
+```
+
+**That comment is false**, and the falseness is the bug: `def f(a, lo=7, *rest)`
+has both a collector *and* an omitted default. Measured before the fix:
+
+| shape | pxx | CPython |
+| --- | --- | --- |
+| `def va(a, lo=7, *rest)` … `zz(1)` | `1` | `8` |
+| `def st2(a, lo=7, hi=8, *rest)` … `ww(1)` | `1` | `16` |
+| `def st2(...)` … `ww(1, 2)` | `3` | `11` |
+| `def both(a, lo=7, *rest, **kw)` … `zz(1)` | **rc=139, SIGSEGV** | `8` |
+| `def st(a, *rest)` (no defaults) … `zz(1)` | `1` | `1` (already fine) |
+
+**Silent wrong values again, and a live segfault** — the exact failure shape this
+ticket exists for, in the one population every earlier pass had waved through.
+It survived because the shape that got probed (`def star(a, *rest)`, no defaults)
+is precisely the shape for which the false comment happens to be true. That test
+is in the tree, `test_nilpy_callable_value_defaults.npy`, carrying the same
+sentence as its comment — the claim and its only witness reinforcing each other.
+
+### Root cause, measured with `PXXDBG=n.sig` rather than reasoned
+
+Two defects, one concept:
+
+**1. `EmitPySignatures` counted the collector as an ordinary parameter.**
+`PXXDBG=n.sig` on `def va(a, lo=7, *rest)` printed `nUser=3 reqN=2` where the
+truth is `TotN=2 ReqN=1` — `rest` has no default, so the "params with no default"
+loop counted it as *required*. Every consumer that trusts those numbers was
+therefore wrong about the same def.
+
+**2. The bridge had two paths and only one consulted the signature.** Exactly
+the double case in `devdocs/dev/normalise-dont-special-case.md`: the second path
+is the one that stays broken. It skipped default-filling, arity checking *and*
+keyword matching (the last was an explicit `not supported yet` raise).
+
+### The fix — delete the second path, do not extend it
+
+- `compiler/rtti_emit.inc`: strip a **trailing `*args`** collector from `ReqN`
+  and `TotN`. Scanned from the END on purpose — `Dflts` and `Names` are indexed
+  by `(k - firstUser)`, so removing only a suffix leaves every surviving index
+  correct *by construction* rather than by care.
+- `compiler/builtin/pylib.pas`: the star early-out is **gone**. Keyword matching,
+  the arity check and the default fill are now the ONE path every callable value
+  takes; star-ness is a calling convention that affects only the final dispatch.
+  Packing is bounded by `nPos`, not `want`, so a filled default never leaks into
+  the tuple.
+
+Result: every star shape above now matches CPython, **and keyword arguments
+through a star callee work** (`ww(1, hi=3)`), which the old path refused outright.
+
+### What was deliberately NOT fixed, and why it is not a consolation microfix
+
+A `**kwargs` collector is still counted in `ReqN`. That is load-bearing: the
+bridge cannot synthesize the empty `TPyDict` the body expects in that slot, so
+uncounting it without supplying the dict would convert today's loud `TypeError`
+into a dispatch at an arity the body does not have — **a segfault**. The refusal
+is the safe state and both ends say so in comments.
+
+Net effect on the `**kwargs` population: unchanged where it was already loud,
+and the `def both(a, lo=7, *rest, **kw)` case went from **SIGSEGV to TypeError**.
+Filed as [[feature-n-a-kwargs-collecting-callee-through-a-callable-value]] with
+the two-part build it needs. It is a genuinely missing capability, not this bug —
+it fails with **no defaults anywhere** (`def f(a, **kw)` called as `zz(1)`).
+
+### Regression test
+
+`test/test_nilpy_callable_value_defaults_with_star_args.npy` + `.expected`, wired
+into the Makefile beside its sibling. Every line prints the **direct call's value
+beside the value reached through the callable value** — the ticket's own
+instruction, because a test that only checks "does not crash" passes on the
+one-default shape while it is still silently wrong. Its `.expected` was generated
+from **CPython** and pxx's output diffs clean against it.
+
+The false comment in `test_nilpy_callable_value_defaults.npy` is corrected in
+place, and now points at the general case rather than restating the claim that
+licensed the bug.
+
+### Found on the way, filed, not fixed here
+
+[[bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable]] — `m.f(1)`
+compiles and runs, `h = m.f` is a compile error `undefined variable (f)`. Shares
+its message with the unresolved-import ticket but has the opposite cause (the
+import resolves fine). Compile-time, so it never reaches this bug's territory.
+
+### Retitling
+
+Left as filed, per the convention this ticket already invoked twice. For the
+record the title is now wrong three ways: not aliases, not imports, and — for the
+part that was actually still broken — not defaults alone but defaults **plus a
+collector**.
+
+## Log
+- 2026-08-25 — resolved, commit PENDING-COMMIT.
