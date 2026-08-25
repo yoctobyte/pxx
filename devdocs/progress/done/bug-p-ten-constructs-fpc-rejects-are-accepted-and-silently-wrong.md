@@ -216,4 +216,4 @@ Gate: `make compiler/pascal26` fixedpoint converged in one round;
 `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 6cb98e361.
