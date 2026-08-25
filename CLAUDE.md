@@ -596,20 +596,77 @@ Workers need nothing extra — their lane rules are the track sections above. Th
 roster is only for whoever is coordinating, plus the live "who holds what" table.
 
 ## Workflow norms (all tracks)
-- **All tracks work directly on `master`** (no worktrees/clones). Commit in small
-  units. (Historic: C used a `feat/cfront` worktree until it merged at v80; that
-  worktree is retired. Exception: Track T's watcher daemon runs in its own
-  dedicated clone — it's infra, not a dev agent.)
+- **All tracks work on `dev`** (one branch, no worktrees/clones). Commit in small
+  units. (Historic: every track worked directly on `master` until 2026-08-25;
+  C used a `feat/cfront` worktree until it merged at v80. Both are retired.
+  Exception: Track T's watcher daemon runs in its own dedicated clone — it's
+  infra, not a dev agent.) **Every "Works on `master`" line in the track
+  sections above now means `dev`** — they were written before the split and are
+  not individually corrected.
+
+### BRANCHES — `dev` is where work happens, `master` is a snapshot
+
+**Decided by the user, 2026-08-25.** The old rule was "land only green, on
+master". It bought stability by making every fix wait to be provably green, and
+the wait — not the tests — was the cost. The new rule moves the proof off the
+critical path:
+
+- **`dev` is the working branch. Fix, commit, push. Do not wait for tests.**
+  Read, analyse, fix, commit, push, next. A red `dev` is expected and cheap.
+- **`master` is a stable snapshot**, advanced once or twice a day, only from a
+  `dev` state Track T has reported green.
+- **You may land non-green on `dev`** — this is the whole point, and it is the
+  one freedom the old loop did not give you. Commit mid-refactor, bank a partial
+  fix, and *deliberately craft regressions* to see what catches them. What you
+  must not do is push something you know is broken and say nothing: note it in
+  the commit message so the sync-back can route around it.
+- **Pins happen on `dev` only.** `stable_linux_amd64/**` is 27MB of committed
+  binary that changes ~3.4×/day, and binaries do not merge. One writer, one
+  branch. Track B/D/E build on `dev`'s `pinned` like everyone else.
+
+**Sync-back to `master` is the COORDINATOR's job, and it is a MERGE:**
+
+```
+git checkout master && git merge --no-ff dev && git push origin master
+```
+
+**Never rebase and never squash `dev` into `master`.** Both tstate verdicts and
+the board's `resolve` citations are keyed by **sha**. A rebase at sync time
+invalidates every Track T verdict earned on the branch and mints a fresh batch
+of dead-commit citations — the board already carries 349 of those. The merge
+commit is the price of keeping a day of test results meaningful, and it is
+cheap.
+
+If Track T reports `dev` red at sync time, **sync to the newest sha T called
+green** rather than blocking the whole day's work — `--first-parent` walk, merge
+that sha, leave the rest on `dev`. All-or-nothing is what turns one regression
+into a lost day.
+
+`tools/sync.sh` is branch-aware: it syncs whatever branch you are ON against
+`origin/<that branch>`. It is for landing your own commits on `dev`. It is
+**not** how master moves — the merge above is.
+
 ### THE PER-FIX LOOP — this file is the authority on it
 
-**Per fix, in full:**
+**Per fix, on `dev`, in full:**
 
 ```
 make compiler/pascal26     # ~12s — and it IS the byte-identical self-host fixedpoint
 <run your repro / the one assertion you added>
-tools/gate.sh quick        # ~30s — self-host fixedpoint + testmgr --tier quick
-git commit && git push
+git commit && git push     # tools/sync.sh does the pull --rebase + push for you
 ```
+
+**`make compiler/pascal26` stays mandatory, and it is not a test** — it is the
+build. It is also, for free, the byte-identical self-host fixedpoint, so it is
+the one thing that cannot be skipped in the name of speed: a compiler that
+cannot reproduce itself is the single failure that would poison every lane at
+once, and this catches it in ~12s before the commit exists.
+
+**`tools/gate.sh quick` (~30s) is now OPTIONAL on `dev`** — run it when you
+touched something you are nervous about, skip it when you are not. It is
+**REQUIRED before a sync-back to `master`**, which is the coordinator's call,
+not yours. This is the change of 2026-08-25: the proof moved off the critical
+path, it did not disappear.
 
 **That is the entire gate. Nothing is missing from it.** Breadth — the full
 suites, cross targets, the corpus, regressions elsewhere — is **Track T's job**,
