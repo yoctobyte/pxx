@@ -6844,7 +6844,7 @@
    "status": "fail"
   },
   {
-   "bad": "d37573c69d04700732760f3ccb5dfab10eb2a113",
+   "bad": "224b06285ca3f94acc2586e7c5bd9fc6fd3ea947",
    "good": "d2cb6721e17541fbb91eafc87992df0eca17c055",
    "job": "test-aarch64#src:test/test_forin_member_access.pas",
    "name": "test-aarch64#87",
@@ -6852,10 +6852,7 @@
    "pin_built": false,
    "range": [
     "ab584382edcd4ecc1084e12b44b394fe0d744de9",
-    "224b06285ca3f94acc2586e7c5bd9fc6fd3ea947",
-    "47968652bad8c70c887c5a6457de09abe017706a",
-    "2f3139aa137e7b9df981cd003edd6de171ffb611",
-    "d37573c69d04700732760f3ccb5dfab10eb2a113"
+    "224b06285ca3f94acc2586e7c5bd9fc6fd3ea947"
    ],
    "src": "test/test_forin_member_access.pas tools/run_target.sh",
    "status": "fail"
