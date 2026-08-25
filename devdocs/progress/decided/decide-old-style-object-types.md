@@ -2,7 +2,7 @@
 slug: decide-old-style-object-types
 track: U
 prio: 30
-status: backlog
+status: decided
 ---
 
 # Decide: do we implement Turbo Pascal `object` types?
@@ -89,3 +89,60 @@ It is a Track A feature (layout / VMT / constructor protocol / SizeOf), sized in
 the several-days range, and would want its own ticket chain rather than one
 item. `tobject2.pp`, `tsealed6.pp` and `tprocvar1.pp` are the acceptance set,
 plus `object abstract` / `object sealed` modifiers for `tsealed6`.
+
+---
+
+# DECIDED 2026-08-25 — **option A: we do not implement `object` types. Not now.**
+
+Decided by an agent under the no-human-available rule
+(`devdocs/progress/decided/README-agent-decisions.md`). **Derived.**
+
+Turbo Pascal `object` stays unsupported. The three FPC conformance tests
+(`tobject2.pp`, `tsealed6.pp`, `tprocvar1.pp`) stay skipped with an honest
+reason naming this decision.
+
+## The principle
+
+`frontend-compat-philosophy.md`, on what a corpus is for:
+
+> *"**A corpus is a measuring instrument, not a dependency.** ... **Do not
+> justify core work with a corpus.** Before proposing a compiler change, ask
+> what actually DEPENDS on the thing that motivated it."*
+
+Asked. The answer is: three conformance tests, and nothing else. Measured
+2026-08-25 — no `= object` declaration exists anywhere in `lib/`, `compiler/` or
+`examples/`. No real-world target on the list (self-host, the FPC RTL subset,
+Synapse, fgl, zlib, sqlite, QuickJS) requires it, and the owner's standing
+framing is *a pragmatic compiler, not a conformance trophy*.
+
+The ticket's own recommendation says the same thing in the same words —
+*"'three FPC tests' is not a reason to add a second object model to the
+language — that is conforming to FPC's history rather than to Pascal"* — and it
+is right. Adding a second object model with different storage, different
+lifetime, different assignment semantics and different inheritance would also
+run straight into `root-cause-over-microfix.md`'s *"count the mechanisms serving
+one concept ... two is a smell"* for a payoff of zero real programs.
+
+## The revisit trigger, stated so it is unambiguous
+
+**Option B, in full, the moment actual source someone wants to build needs it.**
+Not "an FPC test needs it" — a program. The acceptance set is then the three
+tests plus `object abstract` / `object sealed`, it is a Track A feature (layout /
+VMT / constructor protocol / `SizeOf`), and it wants its own ticket chain rather
+than one item.
+
+## Option C stays refused
+
+The ticket calls it *"the bad middle"* and that reading holds: accepting the
+keyword while silently refusing `virtual` trades today's clean error for a worse
+one deeper in. Nothing about the passage of time improves it.
+
+## Re-filed as work
+
+None — this is a decision to not build something. The only follow-on is
+bookkeeping: the three `pxx.skip` entries should name this decided ticket as
+their reason, so the next conformance sweep does not re-open the question.
+Folded into the skip file's normal maintenance rather than given a ticket.
+
+## Log
+- 2026-08-25 — decided, commit PENDING-COMMIT.

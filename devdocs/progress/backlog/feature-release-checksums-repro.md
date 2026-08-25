@@ -4,7 +4,7 @@ track: A
 type: feature
 status: backlog
 owner: ""
-blocked-by: [decide-release-signing-key-custody]
+blocked-by: []
 ---
 
 # Verifiable releases: checksums + signatures + the reproducible-build claim
@@ -65,3 +65,33 @@ steps.
 - 2026-07-12 — opened, out of the website/impersonation discussion. The insight worth keeping:
   the anti-impersonation argument points toward the download pipeline being **public and
   verifiable**, not private.
+
+---
+
+# UNBLOCKED 2026-08-25 — steps 1-3 are agent work; only the signature waits
+
+[[decide-release-signing-key-custody]] was answered in part on 2026-08-25 (see
+`devdocs/progress/decided/README-agent-decisions.md`). The `blocked-by` edge is
+removed because it was gating the whole ticket on the one step that needs a
+human.
+
+**Do, in this order:**
+
+1. **`SHA256SUMS` for the published tarball.** Today `MANIFEST.sha256` covers
+   the prebuilt binaries, so a downloader can only verify *after* extracting.
+   No key involved.
+2. **The reproducible-build doc**, wired to the existing `selfcheck.sh` — which
+   already rebuilds each binary on the downloader's host and diffs against the
+   manifest. The claim is machinery, not copy; say so.
+3. **Download-page copy** (Track W/D). **Claims discipline applies**: this is
+   reproducibility of *our own* build. Write "rebuilds byte-for-byte from source
+   on your host and matches the published manifest" — never anything that could
+   be read as a gcc comparison. See CLAIMS in CLAUDE.md.
+4. **The minisign signature step — BLOCKED ON THE OWNER.** The tool is
+   preselected (minisign); what is missing is who holds the private key and
+   where it lives. **Do not generate a key to unblock this**, and do not
+   substitute another tool to route around it.
+
+Steps 1-3 carry most of the anti-impersonation value the ticket argues for: a
+clone site cannot make its binary match a hash published in a repo it does not
+control, and cannot make it rebuild byte-for-byte at all.

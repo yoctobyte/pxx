@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: P
+status: working
+owner: trackP-worker
 ---
 
 > **Track guessed as P** from the test source. The ranker reads frontmatter, so an unset track parks a stub in Track T's queue regardless of what the body says -- correct the `track:` line if this is wrong.
@@ -50,3 +52,58 @@ pascal26:51: error: cannot assign to the result of a function call
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+---
+
+## Triage — root cause
+
+Not a Pascal bug at all in origin: **519fa45a0** (`feat(A): a file reports its LAST
+mistake too — error recovery, slice 5`) added `if ErrCount > 0 then Exit;` at the
+top of `CompileAST` (`compiler/ir_codegen.inc`). That is correct on its own terms
+— a poisoned symbol must not reach codegen — but it means **IR lowering stops at
+the first RECOVERED diagnostic**, and one of the eight refusals this test asserts
+lived *only* in lowering:
+
+    ir.inc:8746   ErrorAt(ASTLine[node], 'no operator overload found for ordering
+                                          a record operand ...')
+
+So `b := r < 1` on line 49 went silent the moment lines 44-48 had already been
+reported. Measured, not reasoned: the diagnostic fires in isolation, and
+disappears behind *any single* preceding recovered error — one preceding error is
+enough, whichever of the five it is.
+
+Nothing produced a binary here (`ErrCount` still halts the driver); the Makefile
+recipe fails on the missing line, and the `ok:` in the log tail is the *positive*
+test's binary, not this one's.
+
+## Fix
+
+The check is a **Pascal dialect rule** (`not CProgramMode`-guarded — the smell) that
+was squatting in the shared IR, where it is both in the wrong layer and now
+unreachable after any earlier diagnostic. Moved to the Pascal relational level in
+`compiler/pasparser_expr.inc` (`ParseExpr`, beside the enum-vs-pointer and
+enum-vs-enum FPC-parity diagnostics it belongs with), using the same
+`FindOpOverload2` lookup and the same message text, and reporting through
+`ErrorRecover` so the file's later mistakes (`with i do`, `F1(1) := 3`) are still
+found.
+
+The `ir.inc` arm is left in place as the backstop for nodes nobody parsed — the
+same rationale its dynamic-array sibling states two arms above. It is not
+touched (Track A file, Track A worker live).
+
+Result: all eight diagnostics on lines 44-51, rc=1, no binary; the positive half
+(`test_indexing_length_for_new_inc_positive`) still matches fpc's output exactly.
+
+## Sibling left open — for Track A
+
+The same hole applies to *every* diagnostic that exists only in IR lowering. Two
+known ones sit in the same `ir.inc` binop chain and are silenced identically by a
+preceding recovered error:
+
+- `no operator overload found for record operands` (arithmetic on a record) — `ir.inc:8721`
+- `arithmetic operator not supported for dynamic arrays` — the arm above it
+
+Neither is asserted after another diagnostic today, so neither is red — but both
+are now unreachable in exactly the situation a multi-error file creates. That is a
+Track A question about where recovery draws the line (keep lowering for CHECKS and
+skip only emission?), not a Pascal-frontend one.

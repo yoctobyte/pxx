@@ -10,11 +10,12 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-t-the-native-tier-times-out-and-publishes-a-contentless-red | T | 70 | bug | Every native run on plexus since 14:28 today has ended at wall 3600.x — the one-hour cap — and publishes verdict RED. The last three carry new_red: [] AND still_red: [], i.e. a RED with nothing attributed: the run is killed before it can name anything. So Track T has had no usable verdict for six hours while looking, to --status and to every agent, exactly like a persistent regression. A timeout must not publish as RED. | — |
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method | N | 70 | bug | A callable value is silently accepted where `str` is declared, and no longer compares equal to itself — bisected to `9bbbbef6c` | — |
+| regression-test-core-test-indexing-length-for-new-inc-positive | P | 70 | regression | regression: test-core#src:test/test_indexing_length_for_new_inc_positive.pas red at c59796cd1e1d (auto-filed by twatch) | — |
 
 ## unfinished (23)
 
@@ -56,7 +57,7 @@ lives in git, not in a timestamp._
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (287)
+## backlog (278)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -164,15 +165,7 @@ lives in git, not in a timestamp._
 | compat-pascal-subrange-storage-size | P | 30 | compat | Every subrange type gets the 4-byte default instead of the smallest type that holds it: SizeOf(10..20) is 4 where FPC says 1, so a `packed record` of subranges is 12 bytes where FPC lays out 3. Values are all correct — this is a layout divergence, not a wrong-value bug, and it breaks binary interop and costs 4x memory. | — |
 | compat-pascal-supports-three-arg-out-form | P | 30 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
 | compat-pascal-uses-sysutils-withdraws-the-variadic-concat | P | 25 | compat | The variadic `Concat` intrinsic is shadowed by `sysutils`'s two-argument `Concat`, so `uses sysutils` breaks `Concat('a','b','c')` — which compiles fine without it. The shadow rule is `procIdx < 0`, i.e. ANY user Concat disables the intrinsic outright. Loud, not silent. | — |
-| decide-assertion-default-vs-fpc | U | 25 | decide | pxx evaluates Assert() by default; FPC ignores it unless -Sa. So Assert(False) raises EAssertionFailed here and is a no-op there — code that passes its own test suite under FPC can die under pxx, and vice versa. With -Sa the two agree exactly, so this is purely a question of which default we want. Options: keep ours, match FPC, or add {$ASSERTIONS}/-Sa and pick a default. | — |
-| decide-classinfo-returns-our-blob-or-nothing | U | 35 | decide | `TObject.ClassInfo` is the last unimplemented member of the TObject API. Returning our own class blob is right for identity comparison and wrong for anything that walks FPC's TTypeInfo layout. Three options: emit it as our blob, refuse it, or route it through the typinfo facade. Needs the owner's call on how far reflection parity goes. | — |
-| decide-old-style-object-types | U | 30 | decide | Decide: do we implement Turbo Pascal `object` types? | — |
-| decide-pointer-difference-unit | U | 30 | decide | FPC's `p - q` answers BYTES when either operand is an untyped Pointer (which includes `@x` under the default {$TYPEDADDRESS OFF}) and ELEMENTS when both are the same typed pointer. pxx always answers elements. `p - @a[0]` therefore prints 8 in FPC and 2 in pxx — a silent difference in ported code. Match FPC, keep the uniform rule, or diagnose? | — |
-| decide-release-signing-key-custody | U | 50 | decide | feature-release-checksums-repro sits at the head of Track A's queue and cannot be finished by an agent: signing a release needs a PRIVATE KEY the user generates and holds, and a public key committed to the repo. Which tool (minisign vs GPG vs sigstore), who holds the secret, and where the public half is published are all human calls. The checksum and reproducible-build halves are agent-work and are listed below as what to do once this is answered. | — |
-| decide-rtti-kind-numbering | U | 40 | decide | typinfo.pas declares TTypeKind in FPC's order (tkInt64=19) but the RTTI blob the compiler emits carries the COMPILER's TTypeKind (tyInt64=13), so `if mi^.RetKind = Ord(tkInt64)` is silently false. Three ways out; they differ in whether the RTTI blob's numbering — a compiler ABI — changes. Recommendation: option 2. Needs a human call because option 1 breaks already-compiled consumers and option 2 spends the FPC-compatibility argument the FPC-ordered enum was added for. | — |
-| decide-should-a-null-variant-raise-like-fpc | U | 25 | decide | pxx spells FPC's Null and Unassigned with ONE tag (VT_EMPTY). fpc 3.2.2 prints/casts an Unassigned as the empty string but RAISES EVariantTypeCastError for a Null, in both `string(v)` and `WriteLn(v)`. Rendering now follows the Unassigned half, which is the only answer one tag can give. Adopting the raise means either a second tag or making Null and Unassigned both die -- a language call, not a bug fix. | — |
-| decide-variant-bitwise-width | U | 30 | decide | FPC narrows a Variant to 32 bits before a bitwise op, so `v(-12) shr 1` is 2147483642 there; pxx works in 64 bits and its `shr` is arithmetic, giving -6. Three readings of one expression (FPC's, Pascal's logical shr, our sar) and they agree on every non-negative operand. Which one do we owe? | — |
-| decide-vartype-returns-pxx-tags-not-fpc-codes | U | 30 | decide | `VarType(v)` returns pxx's internal tag (0..8), not FPC's varXxx code, and lib/rtl/variants.pas exports no varInteger/varDouble/varString constants at all -- so the FPC idiom `if VarType(v) = varInteger` does not compile. Fork: map VarType onto FPC's codes (compat, changes what existing pxx code comparing to VT_ constants sees) or export a pxx-flavoured constant set (no compat). Needs the owner's call on which surface is public. | — |
+| decide-release-signing-key-custody | U | 25 | decide | feature-release-checksums-repro sits at the head of Track A's queue and cannot be finished by an agent: signing a release needs a PRIVATE KEY the user generates and holds, and a public key committed to the repo. Which tool (minisign vs GPG vs sigstore), who holds the secret, and where the public half is published are all human calls. The checksum and reproducible-build halves are agent-work and are listed below as what to do once this is answered. | — |
 | docs-d-document-exec-eval-and-the-builtins-incompatibility | D | 40 | docs | docs/targets/nil-python.md tells the public `eval`/`exec` do not exist (\"No eval of runtime-constructed code\") — but the explicit-dict form has worked since 2026-07-31 via pyeval's tree-walker. Document what exec/eval DO support, the refused ambient form, and the decided __builtins__ incompatibility (decided 2026-08-19, permanent for now). | — |
 | docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out | D | 45 | docs | docs/language/name-resolution.md:47 and docs/targets/nil-python.md:260 quote the bare-import refusal message and state the rule with no carve-out. As of 2026-08-20 a unit declaring {$PYEXTENSION} and binding the cpyext runtime IS bare-importable, so both pages are now wrong in the direction that makes a working program look unsupported. | — |
 | docs-d-nilchecks-directive-and-flag | D | 40 | docs | {$NILCHECKS ON\|OFF} and --no-nil-check shipped 2026-08-21 and are not in docs/reference/directives.md or modes.md. The row is unusual enough to be worth a sentence: the directive is tri-state, so ON and OFF do different things depending on which site class you are looking at. | — |
@@ -296,7 +289,7 @@ lives in git, not in a timestamp._
 | feature-port-openbsd-libc | A | 50 | feature | OpenBSD/amd64 target — route RTL through libc.so; pinsyscalls satisfied by construction | feature-port-rtl-over-libc |
 | feature-port-windows-pe | M | 25→55 | feature | Windows/x64 target — PE/COFF writer, MS x64 ABI, IAT imports; testable via Wine | feature-port-rtl-over-libc |
 | feature-promo-launch-plan | W | 25 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | — |
-| feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | decide-release-signing-key-custody |
+| feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-t-fail-when-a-test-file-is-wired-into-no-build-rule | T | 45 | feature | A file in test/ is not a test until a build rule runs it. Two confirmed cases of a test that existed, passed, and was referenced by nothing — one ungated for two weeks. Proposed: a check (progress.sh check or testmgr) that fails when a test/*.expected or test/*.npy has no rule referencing it, converting the class from 'someone notices' to 'CI notices'. | — |
 | feature-t-fpc-probe-needs-a-trunk-oracle | T | 25 | feature | Every FPC-parity finding we produce is measured against installed FPC 3.2.2, so it inherits 3.2.2's bugs — and that has now twice produced a false 'pxx diverges from FPC' where pxx actually agreed with FPC trunk and only 3.2.2 was wrong. Give the probes a three-way verdict: pxx vs FPC-stable vs FPC-trunk. | — |
 | feature-t-freebsd-image-and-runner | T | 55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | — |
@@ -340,7 +333,6 @@ lives in git, not in a timestamp._
 | refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too | P | 45 | refactor | The parser carve-out is done, but Pascal still shares lexer.inc with Track A — so the A/P no-concurrent-edit rule still binds, now over 2,566 lines instead of 37,249. Carve the Pascal-specific lexing into paslexer.inc the way C, NilPy, Rust and Zig already have their own, and the A/P slot stops existing. | — |
 | refactor-p-three-hand-rolled-postfix-loops | P | 35 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | regression-lib-test-lib-mimic-xml-etree-elementtree-2 | N | 70 | regression | regression: lib-test#src:test/lib_mimic_xml_etree_elementtree.npy red at fd93e4a71c37 (auto-filed by twatch) | — |
-| regression-test-core-test-indexing-length-for-new-inc-positive | P | 70 | regression | regression: test-core#src:test/test_indexing_length_for_new_inc_positive.pas red at c59796cd1e1d (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-callable-to-str-param-fails | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy red at 1b9b43e5b511 (auto-filed by twatch) | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 25 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 40 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
@@ -348,25 +340,28 @@ lives in git, not in a timestamp._
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (19)
+## backlog_new (22)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-dynarray-delete-temp-holds-the-new-buffer-until-scope-exit | A | 35 | bug | `Delete(a, 2, 2)` then `a := nil` should destroy the three survivors at the nil. pxx destroys them at procedure exit instead, because AN_DYN_DELETE's hidden fresh-buffer temp still holds a reference and is only released by the scope-exit walk. Correct refcounts, wrong destruction TIME — visible to any destructor with a side effect, and what fpc-testsuite tarray11 checks. | — |
+| bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce | A | 30 | bug | Raised out of decide-how-much-string-machinery-the-basic-frontend-gets, decided 2026-08-25. That decision accepted ~100 KB BASIC binaries on the grounds that binary size is a GENERAL problem with a general answer (reachability-gated emission), not a per-frontend one. But feature-emission-size-dce is marked done while a Pascal hello-world is still 63,760 bytes -- so either the pass is not reaching this, or the done ticket's scope was narrower than its title. | — |
 | bug-a-a-riscv32-diagnostic-names-the-wrong-target | A | 20 | bug | `--target=riscv32` on a program with an external cdecl symbol fails with `target esp32: external (dynamic) symbols not yet supported`. The user typed riscv32, the message says esp32, and the two are different things — riscv32 is a hosted Linux target in its own right, not only the ESP32-C3 profile. One shared arm, one hard-coded name. | — |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
 | bug-a-the-specialization-splice-does-not-adjust-the-body-pass-spans | A | 35 | bug | InsertTokens/RemoveTokens keep the body pass's DeclItem spans and body-begin marker in step with a token-stream edit. The specialization splice hand-rolls its own insert and calls neither — it now adjusts the token->file map (that fix landed) but still not the Pass2 spans. Either Pass2Active is always false there, in which case say so in a comment, or the spans drift. | — |
+| bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical | A | 50 | bug | Re-filed from decide-variant-bitwise-width, decided 2026-08-25 (option 2). pxx's static Pascal `shr` is a 64-bit LOGICAL shift on both Integer and Int64; its Variant `shr` is a 64-bit ARITHMETIC shift. Two different operators under one spelling inside one language. Fix: Pascal's Variant path emits a logical shift; NilPy keeps the arithmetic one (Python's >> sign-extends), split at the PyProgramMode seam that already exists. | — |
 | bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent | P | 35 | bug | `PG = ^TG` with `TG = array[0..1, 0..2] of LongWord`: `qg^[i, j]` prints `0 1 2 1 2 10` where FPC prints `0 1 2 10 11 12` — the comma subscript is not flattened against the pointee's dims — and `Length(qg^)` answers 6 (the flat extent) where FPC answers 2 (the first dimension). Predates and is not caused by the single-dim fix; the metadata it needs is now present. | — |
 | bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 30 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
 | bug-p-high-and-low-refuse-every-non-identifier-operand | P | 35 | bug | Both arms open with `if CurTok.Kind <> tkIdent then Error('High: expected array variable or ordinal type')`, so a string literal, a concat, or a parenthesised expression cannot be an operand at all. fpc takes all three — and gives each a DIFFERENT base, which is why widening the guard needs its own measured table rather than a one-line edit. | — |
 | bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one | P | 30 | bug | `PDyn = ^TDyn` with `TDyn = array of LongWord`: after `SetLength(d, 5)`, `Length(pdy^)` answers 1 and `High(pdy^)` answers 0 where FPC answers 5 and 4 — while `pdy^[1]` reads the right element. The pointee is a HANDLE, so the [data-8] header is one indirection further than the runtime path looks. | — |
 | bug-t-run-pascal-conformance-silently-fails-every-test-on-a-relative-compiler-path | T | 25 | bug | `tools/run_pascal_conformance.sh ./compiler/pascal26 ...` fails 51 of 107 tgeneric tests; the same run with `/home/neo/frank1/compiler/pascal26` passes 61 and fails 0. The runner `cd`s into the suite dir before invoking the compiler, so a relative `$CC` no longer resolves — and the failure surfaces as `compile error`, i.e. as a COMPILER bug, for every test at once. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 35 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
-| decide-how-much-string-machinery-the-basic-frontend-gets | U | 35 | decide | String concat and comparison between BASIC variables need PXXStrConcat/PXXStrEq, whose bodies ship only in builtinheap, which a unit-free .bas never pulls — so `PRINT s + t` is a compiler-internal error. Every OTHER frontend solves this by pulling builtinheap unconditionally (a Pascal hello-world is 63 KB). BASIC's unit-free path is 559 bytes. The fork is size vs capability, and it is a product call, not a code one. | — |
-| decide-pchar-node-side-storage-or-a-pchar-type-kind | U | 40 | decide | The last thing owed by refactor-centralize-managed-string-pchar-conversion is slice 3, and its premise expired twice. WideChar got a real type kind (tyWideChar) and no longer wants node-side storage; PChar cannot copy that, because a PChar's pointee VARIES and a kind per pointee does not scale. Meanwhile the deref walk is now ONE function and 198/198 cross-product rows match fpc, so the third option — do nothing structural and keep extending the one walk — is live. This is a design call, not work. | — |
-| decide-tobject-classinfo-blob-or-refusal | U | 42 | decide | TObject.ClassInfo is the last member of feature-pascal-builtin-tobject-class still PXX-REJECT, and it is a judgment call, not an implementation choice: our RTTI blob is honest for identity comparison and wrong for anything that walks FPC's TTypeInfo layout. Answer or refuse — the third option is to answer and be silently wrong for the second caller. | — |
-| decide-typeref-gains-a-pointer-depth-field | U | 35 | decide | TTypeRef was landed to replace the 8-field tuple that ~90 sites redeclare, but as declared it carries PtrBaseTk/PtrBaseRec and DynDepth and no POINTER depth — so it cannot express `^PChar` any better than the pair it replaces. Every pointer table has since grown a depth field of its own (symbols, aliases, the type parser, C params, Pascal params, captures, proc returns). Either TTypeRef gains PtrDepth and the migration folds them all in, or depth is declared to live outside TTypeRef and the migration's value shrinks. Additive either way, but it changes a shared type mid-migration. | — |
-| feature-p-legacy-value-object-types | P | 35 | feature | Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone. | — |
+| chore-doc-pascal-dialect-divergences-pointer-difference | D | 25 | chore | Re-filed from decide-pointer-difference-unit and decide-should-a-null-variant-raise-like-fpc, both decided 2026-08-25. Two divergences from FPC are now CHOSEN rather than merely inherited, and a chosen divergence that is not written down is indistinguishable from a bug to the next reader. Both entries land in devdocs/dev/pascal-dialect-divergences.md. | — |
+| compat-pascal-strict-fpc-pointer-difference-bytes | P | 15 | compat | Re-filed from decide-pointer-difference-unit, decided 2026-08-25 (option 2 + parity behind the flag). The default dialect keeps the uniform element rule; FPC's byte answer for a difference involving an untyped Pointer is a BEHAVIOUR (deterministic, dependable) not a bug, so the dialect contract puts it in the strict family. Ranked 15 deliberately: no corpus target has asked for it. | — |
+| feature-a-classinfo-returns-the-typinfo-header | A | 45 | feature | Re-filed from decide-classinfo-returns-our-blob-or-nothing / decide-tobject-classinfo-blob-or-refusal, both decided 2026-08-25. x.ClassInfo returns exactly what TypeInfo(TThatClass) returns -- the 24-byte {Kind; NamePtr; DataPtr} header whose DataPtr points at the class blob -- so o.ClassInfo = TypeInfo(TFoo) holds and a layout walker reads a real kind byte. One header word per declared class. | — |
+| feature-b-vartype-speaks-fpc-varxxx-codes | B | 45 | feature | Re-filed from decide-vartype-returns-pxx-tags-not-fpc-codes, decided 2026-08-25 (option A). VarType currently returns pxx's internal tag (VT_INT=1, VT_DOUBLE=3, ...) and the unit exports no varXxx constants at all, so the FPC idiom `if VarType(v) = varInteger` does not compile. Measured: zero in-tree consumers compare VarType against a VT_ constant outside variants.pas itself, so the ticket's own gating condition for option A is met. | — |
+| feature-p-assertions-switch-and-strict-default | P | 30 | feature | Re-filed from decide-assertion-default-vs-fpc, decided 2026-08-25 (option 3, default ON). pxx evaluates Assert() always; FPC ignores it unless -Sa. The dialect contract requires every divergence to be switchable and disabled under the strict family, so the switch is mandated rather than merely preferred. Once it exists the default stops being a one-way door. | — |
+| feature-p-legacy-value-object-types | P | 15 | feature | Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone. | — |
 | gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo | B | 40→65 | gap | PTypeData is declared as `= PTypeInfo` with a `same header for now` note, and TTypeInfo carries no OrdType / MinValue / MaxValue / FloatType. Any RTTI-driven code that switches on a type's ordinal width — Generics.Defaults' comparer selection, and the whole TypInfo idiom generally — cannot compile. | — |
 | refactor-a-two-predicates-answer-what-a-caret-yields | A | 35 | refactor | Two functions type a dereference. NodePtrElem knows more SPELLINGS (index-into-base, pointer FIELD, inline PTR_CAST, pointer arithmetic); ResolveDerefShape knows more ABOUT each (remaining depth, ultimate base). Swapping a call site from one to the other trades one kind of knowledge for the other, silently — which is exactly what shipped a regression on 2026-08-25. | — |
 | refactor-p-one-lvalue-path-for-statements-and-expressions | P | 35 | refactor | An assignment TARGET is parsed by a second, smaller copy of the lvalue walk in pasparser_stmt.inc, which resolves every `.name` as a field and ends on Expect(':='). Every capability the expression path gains has to be re-added there by hand, and three bugs so far are exactly that omission: the builtin pointer-name fallback, the PChar adapter, and the deref-then-index shape. The statement path should delegate, as its own cast-headed-CALL arm already does. | — |
@@ -479,16 +474,19 @@ lives in git, not in a timestamp._
 | feature-async-language-surface | A | 50 | feature | Async language surface + stackless coroutine backend | feature-cross-target-feature-parity |
 | feature-string-model-tyfixedstring | B | 50 | feature | String model overhaul: tyFixedString + managed `string` + Str/Val | — |
 
-## decided (101)
+## decided (114)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| README-agent-decisions | A | 50 | README | Agent-made Track U decisions — the authority, and how to read them | — |
 | decide-1-0-scope-promise | A | 55 | decide | DECIDE: version scheme — pin count / N, not semver | — |
 | decide-3rd-party-vendor-vs-fetch | U | 45 | decide | Policy: how to carry dependency-grade third-party source — vendor in-tree vs fetch-gitignored vs system-dynamic | — |
 | decide-a-cross-unit-define-name-and-semantics | U | 40 | decide | A define that crosses unit boundaries is order-dependent BY CONSTRUCTION — `{$DEFINEGLOBAL}` reads as 'global' while the mechanism is claim-and-skip. Four questions (name, undefinability, scope, visibility to earlier units) must be settled before anyone builds it, and nothing currently pulls on the feature: its motivating case was closed as synthetic. | — |
+| decide-assertion-default-vs-fpc | U | 25 | decide | pxx evaluates Assert() by default; FPC ignores it unless -Sa. So Assert(False) raises EAssertionFailed here and is a no-op there — code that passes its own test suite under FPC can die under pxx, and vice versa. With -Sa the two agree exactly, so this is purely a question of which default we want. Options: keep ours, match FPC, or add {$ASSERTIONS}/-Sa and pick a default. | — |
 | decide-assertions-directive-and-message-format | U | 40 | decide | FPC compiles Assert OUT unless -Sa/{$ASSERTIONS ON} and appends '(file, line N)' to the message; pxx always evaluates and omits the position. Adopt both, neither, or one? | — |
 | decide-builtin-and-library-code-sharing | U | 30 | decide | A builtin unit and lib/rtl cannot share code today: moving the shared part down breaks library READABILITY (you must be able to step into sysutils and read it straight through), and letting a builtin use the library collides in NilPy's flat unit scope. The float core is being copied because of it. Review when the next clash lands — not a blocker for anything now. | — |
 | decide-class-namespace-scoping | U | 65 | decide | Decide: how should two libraries be allowed to export the same class name? | — |
+| decide-classinfo-returns-our-blob-or-nothing | U | 35 | decide | `TObject.ClassInfo` is the last unimplemented member of the TObject API. Returning our own class blob is right for identity comparison and wrong for anything that walks FPC's TTypeInfo layout. Three options: emit it as our blob, refuse it, or route it through the typinfo facade. Needs the owner's call on how far reflection parity goes. | — |
 | decide-constructor-exception-cleanup-semantics | A | 60 | decide | DECIDE: constructor-exception-cleanup semantics (auto-Destroy on failed Create?) | — |
 | decide-cross-language-qualifier-syntax | U | 50 | decide | DECIDED 2026-08-16: none of the three proposed syntaxes. The escape is `uses './mymath.c' as cmath;` + `cmath.cube(...)`, which feature-uses-alias-as shipped 2026-06-30 and which reaches foreign symbols because the alias maps to the REAL unit's Strs[] index. Verified on pinned. Bare `uses './x.c'` stays unbound deliberately. The originating bug is a docs fix, not a compiler one. | — |
 | decide-crtl-libm-glibc-bit-parity | A | 50 | decide |  | — |
@@ -503,6 +501,7 @@ lives in git, not in a timestamp._
 | decide-gate-line-convention | U | 60 | decide | Should ticket Gate: lines prescribe the long local suite, or the 40s native confirm plus Track T offload? Today they say the former while CLAUDE.md says the latter. | — |
 | decide-gpc-as-corpus-target | U | 45 | decide | Track U: reject the GPC corpus wish, or keep it? Two sweeps have called it a rejection candidate. | — |
 | decide-how-a-compiled-def-carries-its-signature-when-boxed | U | 88 | decide | A compiled NilPy `def` boxed into a variant is a bare CODE ADDRESS (VT_CALLABLE_TAG), carrying no arity and no defaults — so every call through a procedural value skips default-filling AND arity checking, and the ordinary callback shapes SIGSEGV. A lambda is correct because it takes the owned-callable path, which already carries ReqN..TotN. Fixing it means changing what a def-as-value OWNS, which the current representation deliberately avoids. That ownership call is the decision. | — |
+| decide-how-much-string-machinery-the-basic-frontend-gets | U | 35 | decide | String concat and comparison between BASIC variables need PXXStrConcat/PXXStrEq, whose bodies ship only in builtinheap, which a unit-free .bas never pulls — so `PRINT s + t` is a compiler-internal error. Every OTHER frontend solves this by pulling builtinheap unconditionally (a Pascal hello-world is 63 KB). BASIC's unit-free path is 559 bytes. The fork is size vs capability, and it is a product call, not a code one. | — |
 | decide-how-python-shaped-shims-should-be-shipped | U | 70 | decide | A shim whose content is Python-level aliases (six: `text_type = str`) cannot be written in the mimic_<name>.pas slot, and the working alternative — a NilPy .py in a library root — silently defeats --no-shims. Three options, recommendation is to let the shim lookup also probe mimic_<name>.py. | — |
 | decide-int-div-zero-behavior-unification | A | 43 | decide | DECIDE: unify integer div/mod-by-zero behavior across targets | — |
 | decide-interface-members-in-aggregates-lock-strategy | U | 60 | decide | SIX open Track A tickets (two of them use-after-frees) are all the same missing capability: a COM interface held inside an aggregate is invisible to every container-level retain/release walk. The one fix is blocked on a heap-lock question that was attempted once and reverted. Which strategy — reentrant lock, unlocked interface pass, or a copy-site-only stopgap — and who validates it against the threading stress tests? | — |
@@ -542,13 +541,16 @@ lives in git, not in a timestamp._
 | decide-nilpy-str-is-bytes-or-codepoints | U | 55 | decide | NilPy strings are BYTES where CPython's are code points: len('héllo')==6, s[1] is half a character, and s[::-1] silently produces invalid UTF-8. Decide the target — full code-point str, UTF-8-aware indexing over the byte buffer, or a documented ASCII-only limit | — |
 | decide-nilpy-transitive-nested-def-capture | U | 40 | decide | decide: NilPy transitive capture for sibling nested-def calls | — |
 | decide-nilpy-where-the-exact-decimal-float-core-lives | U | 60 | decide | NilPy's float repr needs exact decimal digits + a correctly-rounded strtod. Both exist, in lib/rtl/sysutils.pas — which a BUILTIN unit may not use (builtins sit below the Track B libraries, and pylib dragging sysutils in would link it into every NilPy program). Move the core down into a builtin unit, duplicate it, or relax the layering? Blocks bug-nilpy-float-repr-is-not-pythons-shortest-roundtrip. | — |
+| decide-old-style-object-types | U | 30 | decide | Decide: do we implement Turbo Pascal `object` types? | — |
 | decide-one-answer-to-have-i-already-compiled-this-unit | U | 40 | decide | Three tickets in three lanes are all 'a compilation unit got processed twice', served by three unrelated mechanisms: unit-NAME keying (Pascal/NilPy), an @cpath: key space (path-form C units), and preprocessor include-guard visibility (C headers). Two is a smell, three is a design flaw. Question for the user: does 'have I already compiled this translation unit?' deserve ONE answer, or are three correct-in-their-own-lane answers the right shape? | — |
 | decide-operator-table-keyed-on-one-operand-or-two | U | 40 | decide | Decide: should the operator-overload table be keyed on BOTH operand types? | — |
 | decide-own-language-first-name-resolution | U | 5 | decide | the user's 'own language first' rule (own-language declarations beat cross-language matches, outranking import order) is stated but not specified — settle the exact rule before anyone implements it | — |
 | decide-own-language-first-vs-explicit-import-in-a-case-insensitive-language | U | 60 | decide | Own-language-first was decided with explicit import as its safety valve — 'nothing becomes unreachable, it just has to be asked for by name'. Measured: in Pascal there IS no distinct name to ask with, because Pascal is case-insensitive, so `uses './math.c'` does not ADD `exp` alongside `Exp`, it REPLACES it. The rule cannot be both a hard precedence and overridable by explicit import. Pick which gives. | — |
 | decide-parenless-all-defaulted-routine-in-argument-position | U | 40 | decide | Bare `F` in ARGUMENT position where F is a routine with all-defaulted parameters: call it, or take it as a procedural reference? Statement and expression positions now call it; argument position is genuinely ambiguous and was deliberately left unfixed. | — |
 | decide-pascal-uses-campaign-scope | U | 55 | decide | Decide: how should the `uses`-is-transitive fix be scoped and sequenced? | — |
+| decide-pchar-node-side-storage-or-a-pchar-type-kind | U | 40 | decide | The last thing owed by refactor-centralize-managed-string-pchar-conversion is slice 3, and its premise expired twice. WideChar got a real type kind (tyWideChar) and no longer wants node-side storage; PChar cannot copy that, because a PChar's pointee VARIES and a kind per pointee does not scale. Meanwhile the deref walk is now ONE function and 198/198 cross-product rows match fpc, so the third option — do nothing structural and keep extending the one walk — is live. This is a design call, not work. | — |
 | decide-pcl-may-use-pylib | U | 55 | decide | decide: may a PCL library unit use pylib (Python runtime types) to accept Python-shaped arguments? | — |
+| decide-pointer-difference-unit | U | 30 | decide | FPC's `p - q` answers BYTES when either operand is an untyped Pointer (which includes `@x` under the default {$TYPEDADDRESS OFF}) and ELEMENTS when both are the same typed pointer. pxx always answers elements. `p - @a[0]` therefore prints 8 in FPC and 2 in pxx — a silent difference in ported code. Match FPC, keep the uniform rule, or diagnose? | — |
 | decide-progress-should-decide-slugs-auto-tag-track-u | U | 30 | decide | Should `decide-*` slugs auto-tag Track U in the ranker? | — |
 | decide-promoint-rvalue-representation | U | 85 | decide | Promotable int: what IS an rvalue once heap bignums exist? | — |
 | decide-pxxpdf-ticket-obsolete | U | 50 | decide | Close `feature-lib-pxxpdf-reportlab-compat` as obsolete, or keep it? | — |
@@ -559,11 +561,13 @@ lives in git, not in a timestamp._
 | decide-reprice-nilpy-ast-typing-module-scope | U | 55 | decide | feature-n-nilpy-ast-typing-module-scope sits at prio 55 — top of the ranked Track N queue after the META — but its own 2026-08-09 note concludes it is now an OPTIMISATION, not a correctness item, and asks to be re-priced. prio is the user's field, so: re-price, or leave it steering the queue? | — |
 | decide-riscv64-vs-the-bug-queue-for-autonomous-nights | U | 50 | decide | feature-a-riscv64-as-a-hosted-first-class-target is the top-ranked Track A ticket at prio 50, and its own log says it was ranked 'as a strategic target rather than an urgent one'. It is a multi-session job. An unattended overnight Track A session keeps reaching it, skipping it, and taking a p40 bug instead — which may be right, but it is a decision being made silently every night. Make it once, out loud. | — |
 | decide-rtl-math-correctly-rounded-vs-fast-tier | U | 35 | decide | lib/rtl/math.pas's transcendentals are correctly rounded and ~1000x slower than libm — MEASURED: Ln+Exp 16,480 ms per 1M pairs against glibc's 13 ms, and the new dd Sin/Cos 29,383 ms against a plain-double 673 ms. That is the SHIPPED standard today, not a proposal. Question: is one correctly-rounded tier the intended answer for a language whose demos draw graphics, or does the RTL want a fast tier alongside it? Three options, recommendation inside. | — |
+| decide-rtti-kind-numbering | U | 40 | decide | typinfo.pas declares TTypeKind in FPC's order (tkInt64=19) but the RTTI blob the compiler emits carries the COMPILER's TTypeKind (tyInt64=13), so `if mi^.RetKind = Ord(tkInt64)` is silently false. Three ways out; they differ in whether the RTTI blob's numbering — a compiler ABI — changes. Recommendation: option 2. Needs a human call because option 1 breaks already-compiled consumers and option 2 spends the FPC-compatibility argument the FPC-ordered enum was added for. | — |
 | decide-rtti-none-semantics | A | 40 | decide | decide: `--rtti=none` semantics — what happens to the FUNCTIONAL parts of the RTTI blob? | — |
 | decide-runtime-primitive-layering | U | 70 | decide | Where does a runtime primitive live? — DECIDED: a PAL per language | — |
 | decide-scope-hiding-vs-flat-overload-set | U | 60 | decide | One rule explains four separate symptoms: a declaration should HIDE a same-named one from an outer/earlier scope unless marked `overload`. pxx behaves as if everything were `overload` — one flat set, first-in-chain wins. Decide whether to adopt hiding, and which marker carries it: any {$mode}, --strict-overload/{$MIMIC FPC}, or the default | — |
 | decide-set-vs-array-of-const-at-the-same-overload-slot | U | 30 | decide | DECIDED 2026-08-16 (user): leave it — don't overload on a set and an array of const at one slot, give the function a decisive name; a cast-style `(set)[...]` was considered and rejected as non-standard Pascal. Docs footnote only. The separate bug-p-set-literal-elements-are-not-type-checked STAYS OPEN and is the real defect. Background: RE-SCOPED 2026-08-16 after re-measurement: the original table was wrong (pxx is NOT order-independent — it flips on all four bracket shapes, FPC only on the genuinely ambiguous one). Most of the difference is bug-p-set-literal-elements-are-not-type-checked, filed separately; fix that and content disambiguates as it does in FPC. What is left to decide is the true tie only: `[dTue]`, `[dMon, dWed]`, `[]`. | — |
 | decide-shift-operator-promotion-width | U | 45 | decide | Decide: what width do `shl` / `shr` happen at for a 32-bit operand? | — |
+| decide-should-a-null-variant-raise-like-fpc | U | 25 | decide | pxx spells FPC's Null and Unassigned with ONE tag (VT_EMPTY). fpc 3.2.2 prints/casts an Unassigned as the empty string but RAISES EVariantTypeCastError for a Null, in both `string(v)` and `WriteLn(v)`. Rendering now follows the Unassigned half, which is the only answer one tag can give. Adopting the raise means either a second tag or making Null and Unassigned both die -- a language call, not a bug fix. | — |
 | decide-should-from-accept-a-quoted-foreign-file | U | 45 | decide | A bare NilPy import resolves to Python only, and the escape is `import 'x.pas' as x`. There is no matching escape for `from x import Name` -- `from 'x.pas' import Name` is refused with \"expected a module name after from\". Decide whether the quoted form should be accepted after `from`, or whether the alias form is deliberately the only door. A test already lost an assertion to this. | — |
 | decide-should-the-gate-prove-self-compile-at-more-than-one-o-level | U | 55 | decide | A -O0-only self-compile failure passed the per-fix gate, the self-host fixedpoint, and every Track T tier — the class is structurally invisible. Widening the gate would catch it and would also lengthen the loop CLAUDE.md is emphatic about NOT widening. Genuine fork; coordinator must not settle gating policy. | — |
 | decide-sole-a-guard-for-unattended-sessions | U | 55 | decide | How should an UNATTENDED session satisfy the sole-A guard? | — |
@@ -571,13 +575,17 @@ lives in git, not in a timestamp._
 | decide-t-notification-transport-poll-not-webhooks | U | 60 | decide | How Track T's findings reach an agent or a human: polling, never webhooks. 60s is the baseline; adaptive backoff is allowed but the daemon must not grow a time-based one. | — |
 | decide-t-queue-scope-2026-08-03 | T | 60 | decide | User calls on four standing assumptions in the Track T queue: borg's watcher, the arm oracles, who may pin, and when the NilPy fuzzer earns its keep | — |
 | decide-threadsafe-gate-is-reach-based-not-use-based | U | 45 | decide | Putting TThread in Classes where FPC code looks for it is not a size trade-off — MEASURED, it makes every `uses classes` program require --threadsafe, because the gate fires on REACHING __pxxclone's unit rather than on calling it. Same wall the palfutex split just removed one level down, but splitting cannot fix this one | — |
+| decide-tobject-classinfo-blob-or-refusal | U | 42 | decide | TObject.ClassInfo is the last member of feature-pascal-builtin-tobject-class still PXX-REJECT, and it is a judgment call, not an implementation choice: our RTTI blob is honest for identity comparison and wrong for anything that walks FPC's TTypeInfo layout. Answer or refuse — the third option is to answer and be silently wrong for the second caller. | — |
 | decide-tobject-root-methods-dispatch-model | U | 65 | decide | Decide: how `TObject.Equals` / `GetHashCode` dispatch — intercept, real parent, or reserved slots | — |
 | decide-track-t-autopin-criteria | U | 55 | decide | What criteria justify Track T auto-pinning a stable binary? | — |
 | decide-two-track-model-dev-and-regression-testing | T | 60 | decide | DECIDED: two operational tracks — development, and regression testing | — |
 | decide-typeinfo-scalar-name-spelling | U | 20 | decide | TypeInfo(Integer)^.Name: pxx says `Integer`, FPC says `LongInt`. pxx's tyInteger and tyInt32 are separate type kinds where FPC's Integer IS LongInt, so TypeInfoOrdName picks one canonical spelling per pxx kind and Integer keeps its own. Cosmetic today (nothing branches on the string), but it is a visible FPC-parity gap in a compat-sensitive API, and changing it later breaks whatever started reading it. | — |
+| decide-typeref-gains-a-pointer-depth-field | U | 35 | decide | TTypeRef was landed to replace the 8-field tuple that ~90 sites redeclare, but as declared it carries PtrBaseTk/PtrBaseRec and DynDepth and no POINTER depth — so it cannot express `^PChar` any better than the pair it replaces. Every pointer table has since grown a depth field of its own (symbols, aliases, the type parser, C params, Pascal params, captures, proc returns). Either TTypeRef gains PtrDepth and the migration folds them all in, or depth is declared to live outside TTypeRef and the migration's value shrinks. Additive either way, but it changes a shared type mid-migration. | — |
 | decide-uforth-exec-leak-strategy | U | 55 | decide | decide: how to stop the pyeval exec'd-word per-call leak (uforth doloop 553 MB) | — |
 | decide-unary-minus-widening-in-the-default-dialect | U | 45 | decide | FPC widens unary minus to 64-bit for EVERY integer type; pxx truncates an UNSIGNED operand to 32 bits first, so `-b shr 1` answers 2147483644 where FPC says 9223372036854775804 — in the DEFAULT dialect, not behind a flag. Adopt FPC's rule as the default, or keep ours and document the divergence? | — |
+| decide-variant-bitwise-width | U | 30 | decide | FPC narrows a Variant to 32 bits before a bitwise op, so `v(-12) shr 1` is 2147483642 there; pxx works in 64 bits and its `shr` is arithmetic, giving -6. Three readings of one expression (FPC's, Pascal's logical shr, our sar) and they agree on every non-negative operand. Which one do we owe? | — |
 | decide-variant-tag-mismatch-policy | U | 60 | decide | Decide: what a Variant unbox does when the tag does not match the target | — |
+| decide-vartype-returns-pxx-tags-not-fpc-codes | U | 30 | decide | `VarType(v)` returns pxx's internal tag (0..8), not FPC's varXxx code, and lib/rtl/variants.pas exports no varInteger/varDouble/varString constants at all -- so the FPC idiom `if VarType(v) = varInteger` does not compile. Fork: map VarType onto FPC's codes (compat, changes what existing pxx code comparing to VT_ constants sees) or export a pxx-flavoured constant set (no compat). Needs the owner's call on which surface is public. | — |
 | decide-watcher-lifecycle-manual-only | T | 50 | decide | DECIDE: the watcher daemon is started and stopped BY HAND — no supervision | — |
 | decide-week-theme-2026-08-17 | U | 70 | decide | What should the next week of work aim at? Measured: the bug backlog already peaked (61 on 08-03 -> 32 now) and 65% of open tickets are features, so this is no longer a burn-down question. Three candidate themes with the numbers behind each. | — |
 | decide-what-an-unwired-test-may-assert | U | 55 | decide | May we record our own output as the expectation? | — |
@@ -638,7 +646,6 @@ lives in git, not in a timestamp._
 
 - [urgent p 70] [T] bug-t-the-native-tier-times-out-and-publishes-a-contentless-red
 - [p 70] [N] regression-lib-test-lib-mimic-xml-etree-elementtree-2
-- [p 70] [P] regression-test-core-test-indexing-length-for-new-inc-positive
 - [p 70] [N] regression-test-nilpy-test-nilpy-callable-to-str-param-fails
 - [p 65] [B] gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo (unblocks 1)
 - [p 65] [B] bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
@@ -666,12 +673,13 @@ lives in git, not in a timestamp._
 - [p 55] [O] feature-opt-heap-per-thread-cache
 - [p 55] [T] feature-t-tier-job-self-compile-differential-across-o-levels
 - [p 53] [S] feature-esp-peripheral-callback-api
-- [p 50] [U] decide-release-signing-key-custody (unblocks 1)
+- [p 50] [A] bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical
 - [p 50] [N] bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - [p 50] [N] bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - [p 50] [T] bug-t-track-ts-own-pushes-destroy-track-ts-own-breadth-coverage
 - [p 50] [E] feature-demo-songformatter-pxx-target
 - [p 50] [A] feature-nilpy-collections-and-string-methods
+- [p 50] [A] feature-release-checksums-repro
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [B] bug-b-format-percent-u-prints-a-signed-value
@@ -692,8 +700,10 @@ lives in git, not in a timestamp._
 - [p 45] [T] bug-t-two-devtests-measure-the-box-and-flake-the-fleet-job
 - [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
 - [p 45] [D] docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out
+- [p 45] [A] feature-a-classinfo-returns-the-typinfo-header
 - [p 45] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 45] [B] feature-b-rtl-gap-inventory-22-sysutils-strutils-symbols
+- [p 45] [B] feature-b-vartype-speaks-fpc-varxxx-codes
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [A] feature-cross-frontend-interop-contract
 - [p 45] [A] feature-dynamic-include-paths-config
@@ -717,9 +727,9 @@ lives in git, not in a timestamp._
 - [p 45] [A] meta-constant-normalisation
 - [p 45] [C] refactor-c-string-literal-decay-belongs-at-the-producer
 - [p 45] [P] refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too
-- [p 42] [U] decide-tobject-classinfo-blob-or-refusal (unblocks 1)
-- [p 40] [U] decide-rtti-kind-numbering (unblocks 1)
+- [p 42] [P] feature-pascal-builtin-tobject-class
 - [p 40] [A] bug-a-nilpy-leading-double-star-in-a-call-is-not-detected
+- [p 40] [A] bug-a-rtti-kind-numbers-are-the-compilers-not-the-typinfo-enum-the-unit-documents
 - [p 40] [B] bug-b-inttostr-of-a-qword-prints-it-signed
 - [p 40] [B] bug-b-varisstr-is-false-for-a-one-character-string
 - [p 40] [C] bug-c-driver-misses-the-shared-runtime-finalisation-step
@@ -731,7 +741,6 @@ lives in git, not in a timestamp._
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 40] [T] bug-t-twatch-status-says-down-while-the-daemon-is-alive-and-testing
 - [p 40] [P] compat-pascal-a-string-n-field-makes-a-record-a-different-size-than-fpc
-- [p 40] [U] decide-pchar-node-side-storage-or-a-pchar-type-kind
 - [p 40] [D] docs-d-document-exec-eval-and-the-builtins-incompatibility
 - [p 40] [D] docs-d-nilchecks-directive-and-flag
 - [p 40] [S] feature-a-promoint-variant-esp-targets
@@ -757,8 +766,8 @@ lives in git, not in a timestamp._
 - [p 40] [A] refactor-a-one-program-driver-prologue-for-every-frontend
 - [p 40] [A] refactor-a-seven-frontends-borrow-rust-parser-helpers
 - [p 40] [D] task-d-document-own-language-first-in-the-language-reference
-- [p 35] [U] decide-how-much-string-machinery-the-basic-frontend-gets (unblocks 1)
 - [p 35] [A] bug-a-a-dynarray-delete-temp-holds-the-new-buffer-until-scope-exit
+- [p 35] [A] bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error
 - [p 35] [A] bug-a-nilpy-double-star-in-a-mixed-argument-list
 - [p 35] [A] bug-a-real-is-single-on-hosted-riscv32
 - [p 35] [A] bug-a-the-specialization-splice-does-not-adjust-the-body-pass-spans
@@ -776,8 +785,6 @@ lives in git, not in a timestamp._
 - [p 35] [A] chore-a-the-range-checked-fpc-seed-cannot-be-built
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
 - [p 35] [P] compat-pascal-inline-generic-specialization
-- [p 35] [U] decide-classinfo-returns-our-blob-or-nothing
-- [p 35] [U] decide-typeref-gains-a-pointer-depth-field
 - [p 35] [A] feature-a-getinterface-refcounting
 - [p 35] [A] feature-a-io-lock-owner-from-tls-not-gettid
 - [p 35] [A] feature-a-unreferenced-class-rtti-keeps-every-method-alive
@@ -796,7 +803,6 @@ lives in git, not in a timestamp._
 - [p 35] [N] feature-nilpy-staticmethod-and-classmethod
 - [p 35] [O] feature-opt-inline-float-and-record-returning-leaves
 - [p 35] [P] feature-p-class-helper-for-a-class-type
-- [p 35] [P] feature-p-legacy-value-object-types
 - [p 35] [P] feature-p-record-const-with-an-array-of-record-field
 - [p 35] [P] feature-p-tmethod-record-for-method-pointers
 - [p 35] [P] feature-pascal-management-operators-copy-and-addref
@@ -809,6 +815,7 @@ lives in git, not in a timestamp._
 - [p 35] [P] refactor-p-one-lvalue-path-for-statements-and-expressions
 - [p 35] [P] refactor-p-three-hand-rolled-postfix-loops
 - [p 35] [D] task-d-document-the-strict-overload-width-flag
+- [p 30] [A] bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce
 - [p 30] [P] bug-a-low-high-of-a-char-indexed-array-answer-the-ordinal
 - [p 30] [A] bug-a-riscv32-codegen-has-no-variant-support
 - [p 30] [A+S] bug-a-the-div-by-zero-check-is-still-missing-on-xtensa
@@ -827,10 +834,6 @@ lives in git, not in a timestamp._
 - [p 30] [B] compat-pascal-ioresult-returns-a-negative-errno
 - [p 30] [P] compat-pascal-subrange-storage-size
 - [p 30] [P] compat-pascal-supports-three-arg-out-form
-- [p 30] [U] decide-old-style-object-types
-- [p 30] [U] decide-pointer-difference-unit
-- [p 30] [U] decide-variant-bitwise-width
-- [p 30] [U] decide-vartype-returns-pxx-tags-not-fpc-codes
 - [p 30] [D] docs-toolchain-cli-flags
 - [p 30] [A] feature-a-a-variant-has-no-null-tag
 - [p 30] [A] feature-a-dynamic-array-of-frozen-strings
@@ -847,6 +850,7 @@ lives in git, not in a timestamp._
 - [p 30] [N] feature-nilpy-user-defined-decorators
 - [p 30] [N] feature-nilpy-walrus-operator
 - [p 30] [O] feature-opt-arch-level-and-dispatch
+- [p 30] [P] feature-p-assertions-switch-and-strict-default
 - [p 30] [P] feature-p-const-evaluator-carries-unsigned-64-bit
 - [p 30] [P] feature-p-packrecords-c-directive
 - [p 30] [P] feature-p-uses-a-unit-in-an-explicit-file
@@ -866,14 +870,14 @@ lives in git, not in a timestamp._
 - [p 25] [T] bug-t-run-pascal-conformance-silently-fails-every-test-on-a-relative-compiler-path
 - [p 25] [T] bug-t-twatch-web-lists-a-target-that-cannot-be-built
 - [p 25] [A] chore-a-delete-the-dead-pascal-lvalue-statement-path
+- [p 25] [D] chore-doc-pascal-dialect-divergences-pointer-difference
 - [p 25] [A] chore-progress-flag-prose-only-track-decl
 - [p 25] [P] compat-pascal-class-helpers
 - [p 25] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off
 - [p 25] [P] compat-pascal-set-storage-size-is-always-32-bytes
 - [p 25] [P] compat-pascal-string-n-is-not-a-shortstring
 - [p 25] [P] compat-pascal-uses-sysutils-withdraws-the-variadic-concat
-- [p 25] [U] decide-assertion-default-vs-fpc
-- [p 25] [U] decide-should-a-null-variant-raise-like-fpc
+- [p 25] [U] decide-release-signing-key-custody
 - [p 25] [E] feature-demo-ide-jump-into-includes-and-units
 - [p 25] [A] feature-n-a-quoted-from-import-reaches-another-language
 - [p 25] [N] feature-nilpy-a-genexpr-is-lazy-not-materialised
@@ -913,10 +917,12 @@ lives in git, not in a timestamp._
 - [p 15] [P] compat-p-system-integer-is-smallint-in-fpc
 - [p 15] [A] compat-pascal-binop-operand-eval-order
 - [p 15] [A] compat-pascal-overload-prefers-signed-for-an-unsigned-argument
+- [p 15] [P] compat-pascal-strict-fpc-pointer-difference-bytes
 - [p 15] [A] feature-a-shrink-managed-header-on-32-bit
 - [p 15] [B] feature-b-a-real-minidom-is-an-implementation-not-a-shim
 - [p 15] [B] feature-lib-mimic-string-template
 - [p 15] [N] feature-nilpy-nested-def-as-value
+- [p 15] [P] feature-p-legacy-value-object-types
 - [p 15] [P] feature-pascal-corpus-expansion
 - [p 15] [A] idea-a-auto-enable-threadsafe-by-restarting-the-compile
 - [p 12] [P] task-pascal-conformance-long-tail
@@ -939,7 +945,6 @@ lives in git, not in a timestamp._
 - **1** — decide-nilpy-dict-mutation-during-iteration
 - **1** — decide-nilpy-none-str-sentinel-vs-textstr-kind
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
-- **1** — decide-release-signing-key-custody
 - **1** — decide-rtti-kind-numbering
 - **1** — decide-tobject-classinfo-blob-or-refusal
 - **1** — decide-xml-etree-thin-tree-model-or-a-real-xml-library
