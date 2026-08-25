@@ -123,5 +123,46 @@ reason this note exists at all, and it is **not** about speed or memory:
 Each constant expression gets its own uniquely-named variable, bound once and
 only read. The gain is that a future fix is single work instead of double.
 
+## Three of these landed in one evening (2026-08-25)
+
+Not a coincidence worth writing down for its own sake — worth writing down
+because all three had the **same tell**, and it is not the one you would
+predict. In each case the second path was guarded by something that was TRUE
+for the shape anyone had tested, and only for that shape.
+
+1. **The callable bridge (Track N).** A second dispatch path ran before the
+   signature preamble, skipping default-filling, arity checking and keyword
+   matching. Its comment justified this: a collecting callee "has no omitted
+   parameters to fill" — false the moment a defaulted parameter precedes the
+   star. It survived because the only shape ever probed was `def star(a, *rest)`
+   with no defaults, which is exactly the shape for which the false comment is
+   true. **And the test in the tree carried that same sentence as its comment**,
+   so the claim and its witness reinforced each other. Symptom when finally
+   varied: silent wrong values, plus a SIGSEGV.
+
+2. **`last_covering_sha()` (Track T).** The function already reasoned correctly
+   about blame ranges and its docstring already stated the rule — but it was
+   gated on the range being EMPTY, which was the symptom someone noticed first
+   rather than the general case. Result: four regressions blamed on a
+   23-commit window when the honest range was 179, and the 23 were precisely
+   the commits that could not have caused them.
+
+3. **The relocation tables (Track A).** Nine hand-written guard/store/store/Inc
+   quartets did the same append. **Two of the nine had no cap check at all** —
+   NilPy's VMT emitter wrote past the end of a fixed array into neighbouring
+   BSS, silently. Note what this defeats: the campaign's mandated `MAX_*` grep
+   could not find those sites, **because they never mentioned the constant.**
+   A guard written nine times is a guard written eight times.
+
+The generalisation, and the reason this section is here rather than in three
+tickets: **a duplicated path is dangerous in proportion to how plausible its
+justification is.** An obviously-wrong second path gets deleted early. One
+carrying a reasonable-sounding comment survives for months, and the comment
+then teaches the next reader — and the next test — to stop looking.
+
+So when you find a second path, do not only check whether it is correct today.
+Check what makes it *look* correct, and whether the tests were written from the
+same sentence.
+
 See also: `differential-probes.md` (the oracles that make a silent sibling
 visible at all) and `debugging-playbook.md` (measure, do not reason).
