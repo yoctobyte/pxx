@@ -98,12 +98,14 @@ var lo: AnsiString; elemTk: TTypeKind; aliasIdx, ci, tkQUnit: Integer;
     qtOuter, qtNested: Integer;   { `TOuter.TInner` — the nested-type lookup }
     tnHasAlias: Boolean;   { a source/RTL alias of this name beats every builtin name }
     childDepth, childBaseTk, childBaseRec: Integer;
+    ptrArrAi: Integer;   { `^TFixed`: the pointee's ArrType index, else -1 }
     wasPacked: Boolean;
 begin
   LastTypeRecId := REC_NONE;
   LastTypePointerElemTk := tyUnknown;
   LastTypePointerElemRec := REC_NONE;
   LastTypePointerAlias := -1;
+  LastTypePointerElemArrAi := -1;
   LastTypePointerDepth := 0;
   LastTypePointerBaseTk := Ord(tyUnknown);
   LastTypePointerBaseRec := REC_NONE;
@@ -212,9 +214,30 @@ begin
     tkCaret:
     begin
       Next;
-      Inc(PtrElemDepth);          { a forward element name is legal here — see PtrElemDepth }
-      elemTk := ParseTypeKind();
-      Dec(PtrElemDepth);
+      { `^TFixed` where TFixed is a named FIXED-ARRAY type. An array alias is not
+        in the scalar alias table, so ParseTypeKind falls through its
+        unknown-name default and answers tyInteger — the pointee then had a
+        4-byte stride whatever its real element was, so `p^[i]` over
+        `array[0..3] of Int64` read halves of the wrong elements and over an
+        array of records read the wrong field, silently. Take the element shape
+        from the ArrType entry, as the function-result and record-field paths
+        already do, and keep the alias so the extent is still knowable.
+        (A FORWARD `PA = ^TA` ahead of TA's own declaration is not covered — the
+        entry does not exist yet — and falls back to the old default.) }
+      ptrArrAi := -1;
+      if CurTok.Kind = tkIdent then ptrArrAi := FindArrayType(CurTok.SVal);
+      if (ptrArrAi >= 0) and (not ArrTypeIsDyn[ptrArrAi]) then
+      begin
+        elemTk := IntToTypeKind(ArrTypeElemTk[ptrArrAi]);
+        LastTypeRecId := ArrTypeElemRec[ptrArrAi];
+        Next;   { consume the alias name ParseTypeKind would have eaten }
+      end
+      else
+      begin
+        Inc(PtrElemDepth);          { a forward element name is legal here — see PtrElemDepth }
+        elemTk := ParseTypeKind();
+        Dec(PtrElemDepth);
+      end;
       childDepth := LastTypePointerDepth;
       childBaseTk := LastTypePointerBaseTk;
       childBaseRec := LastTypePointerBaseRec;
@@ -232,6 +255,7 @@ begin
         LastTypePointerBaseTk := Ord(elemTk);
         LastTypePointerBaseRec := LastTypeRecId;
       end;
+      LastTypePointerElemArrAi := ptrArrAi;
       Result := tyPointer;
       Exit;
     end;
@@ -560,6 +584,7 @@ begin
                   ResolvePendingPointerAliases fills it in. Record which alias this was
                   so a field declared here can be re-read then. }
                 LastTypePointerAlias := aliasIdx;
+                LastTypePointerElemArrAi := AliasPtrElemArrAi[aliasIdx];
                 LastTypePointerDepth := AliasPtrDepth[aliasIdx];
                 LastTypePointerBaseTk := AliasPtrBaseTk[aliasIdx];
                 LastTypePointerBaseRec := AliasPtrBaseRec[aliasIdx];
@@ -3632,6 +3657,7 @@ var
   aElemStrCap: Integer;   { `array[..] of string[N]`: N, captured where it is parsed }
   aElemEnumId: Integer;   { `array[..] of TEnum`: the enum type index, captured where it is parsed }
   fEnumId2: Integer;      { CLASS-body field: enum type of the field (its ELEMENT for an array field), else -1 }
+  aPtrArrAi: Integer;     { `PFixed = ^TFixed`: the pointee's ArrType index, else -1 }
   aElemDynDepth: Integer; { `array[..] of TRow`, TRow a named DYNAMIC array: TRow's dyn depth }
   tdDimLo, tdDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
   mPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
@@ -5165,10 +5191,26 @@ begin
         Next;
         targetNOff := Tokens[TokPos-1].SOffset;
         targetNLen := Tokens[TokPos-1].SLen;
-        Inc(PtrElemDepth);        { `PFoo = ^TFoo` may forward-reference TFoo }
-        fTk := ParseTypeKind;
-        Dec(PtrElemDepth);
+        { `PFixed = ^TFixed`, TFixed a named FIXED-ARRAY type — the alias form of
+          the same shape ParseTypeKind's `^` arm handles. Without it the alias
+          recorded a tyInteger pointee and every variable of it inherited a
+          4-byte stride. }
+        aPtrArrAi := -1;
+        if CurTok.Kind = tkIdent then aPtrArrAi := FindArrayType(CurTok.SVal);
+        if (aPtrArrAi >= 0) and (not ArrTypeIsDyn[aPtrArrAi]) then
+        begin
+          fTk := IntToTypeKind(ArrTypeElemTk[aPtrArrAi]);
+          LastTypeRecId := ArrTypeElemRec[aPtrArrAi];
+          Next;   { consume the alias name }
+        end
+        else
+        begin
+          Inc(PtrElemDepth);        { `PFoo = ^TFoo` may forward-reference TFoo }
+          fTk := ParseTypeKind;
+          Dec(PtrElemDepth);
+        end;
         RegisterPtrAlias(tnOff, tnLen, Ord(fTk), LastTypeRecId, targetNOff, targetNLen);
+        AliasPtrElemArrAi[AliasCount-1] := aPtrArrAi;
         if fTk = tyPointer then
         begin
           AliasPtrDepth[AliasCount-1] := LastTypePointerDepth + 1;

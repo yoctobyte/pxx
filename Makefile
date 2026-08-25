@@ -7731,6 +7731,16 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_enum_name_through_field_index_and_call.pas $(TESTTMP)/test_enumid26
 	test "$$($(TESTTMP)/test_enumid26)" = "$$(cat test/test_enum_name_through_field_index_and_call.expected)"
+	# `PFixed = ^TFixed` over a named FIXED-array type. An array alias is not in
+	# the scalar alias table, so the pointee was recorded as tyInteger: p^[i]
+	# over an Int64 array read halves of the wrong elements, p^[i].b resolved
+	# every field at offset 0, Length/High answered 0/-1 and SizeOf answered the
+	# ELEMENT size -- all silently, while p^[0] of a LongWord array happened to
+	# be right because that element is 4 bytes. The non-zero-low-bound row is
+	# load-bearing (the subscript is normalised where the bound is known).
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_pointer_to_a_named_fixed_array.pas $(TESTTMP)/test_pfixarr26
+	test "$$($(TESTTMP)/test_pfixarr26)" = "$$(cat test/test_pointer_to_a_named_fixed_array.expected)"
 	# `a := nil` on a WHOLE dynamic array empties it, whatever the element type.
 	# An array symbol's TypeKind IS its element kind, so a record-shaped element
 	# routed the store into the record `:= nil` arms: they zeroed RecSize bytes

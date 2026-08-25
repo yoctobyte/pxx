@@ -205,6 +205,7 @@ procedure RegisterPtrAlias(noff, nlen, elemTk, elemRec, targetNOff, targetNLen: 
 begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
   AliasNOff[AliasCount] := noff;
+  AliasPtrElemArrAi[AliasCount] := -1;   { pointee-is-a-named-array: filled in by the ^T parse when it is one }
   AliasNLen[AliasCount] := nlen;
   AliasTk[AliasCount] := Ord(tyPointer);
   AliasElemTk[AliasCount] := elemTk;
@@ -227,6 +228,7 @@ procedure RegisterGeneralAlias(noff, nlen, tk, rec: Integer);
 begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
   AliasNOff[AliasCount] := noff;
+  AliasPtrElemArrAi[AliasCount] := -1;   { pointee-is-a-named-array: filled in by the ^T parse when it is one }
   AliasNLen[AliasCount] := nlen;
   AliasTk[AliasCount] := tk;
   AliasElemTk[AliasCount] := tk;
@@ -259,6 +261,7 @@ procedure RegisterMethodPtrTypeAlias(noff, nlen, sigPi, methodRec: Integer);
 begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
   AliasNOff[AliasCount] := noff;
+  AliasPtrElemArrAi[AliasCount] := -1;   { pointee-is-a-named-array: filled in by the ^T parse when it is one }
   AliasNLen[AliasCount] := nlen;
   AliasTk[AliasCount] := Ord(tyRecord);
   AliasElemTk[AliasCount] := Ord(tyRecord);
@@ -281,6 +284,7 @@ procedure RegisterProcTypeAlias(noff, nlen, sigPi: Integer);
 begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
   AliasNOff[AliasCount] := noff;
+  AliasPtrElemArrAi[AliasCount] := -1;   { pointee-is-a-named-array: filled in by the ^T parse when it is one }
   AliasNLen[AliasCount] := nlen;
   AliasTk[AliasCount] := Ord(tyPointer);
   AliasElemTk[AliasCount] := Ord(tyUnknown);
@@ -349,6 +353,7 @@ procedure RegisterSetAlias(noff, nlen, elemEnumId, elemTk: Integer);
 begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
   AliasNOff[AliasCount] := noff;
+  AliasPtrElemArrAi[AliasCount] := -1;   { pointee-is-a-named-array: filled in by the ^T parse when it is one }
   AliasNLen[AliasCount] := nlen;
   AliasTk[AliasCount] := Ord(tySet);
   AliasElemTk[AliasCount] := elemEnumId;
@@ -382,6 +387,7 @@ procedure RegisterClassRefAlias(noff, nlen, classRec: Integer);
 begin
   if AliasCount >= MAX_TYPEALIAS then Error('too many type aliases');
   AliasNOff[AliasCount] := noff;
+  AliasPtrElemArrAi[AliasCount] := -1;   { pointee-is-a-named-array: filled in by the ^T parse when it is one }
   AliasNLen[AliasCount] := nlen;
   AliasTk[AliasCount] := Ord(tyPointer);
   AliasElemTk[AliasCount] := Ord(tyClass);
@@ -3799,11 +3805,13 @@ begin
           ' depth=', SymPtrDepth[si],
           ' ptrElemTk=', Ord(Syms[si].PtrElemTk),
           ' baseTk=', SymPtrBaseTk[si],
-          ' baseRec=', SymPtrBaseRec[si]);
+          ' baseRec=', SymPtrBaseRec[si],
+          ' ptrElemArrLen=', SymPtrElemArrLen[si],
+          ' ptrElemNDims=', SymPtrElemNDims[si]);
 end;
 
 function AllocVar(const name: AnsiString; tk: TTypeKind): Integer;
-var sz, align: Integer;
+var sz, align: Integer; ptrArrDimI: Integer;
 begin
   EnsureSymCapacity(SymCount + 1);
   Syms[SymCount].Name     := name;
@@ -3860,6 +3868,27 @@ begin
     SymPtrDepth[SymCount] := LastTypePointerDepth;
     SymPtrBaseTk[SymCount] := LastTypePointerBaseTk;
     SymPtrBaseRec[SymCount] := LastTypePointerBaseRec;
+    { `PFixed = ^TFixed` — the pointee IS a fixed array, the same fact C's
+      `elem (*p)[N]` records in this slot. One concept, one slot: the extent
+      (and, for an N-D pointee, the per-dim shape in the pointer symbol's
+      otherwise-unused SymArrDim* rows) is what lets Length/High/SizeOf of `p^`
+      fold, and what tells the index path the subscript changes the address
+      rather than the type. }
+    if LastTypePointerElemArrAi >= 0 then
+    begin
+      SymPtrElemArrLen[SymCount] := ArrTypeHi[LastTypePointerElemArrAi] -
+                                    ArrTypeLo[LastTypePointerElemArrAi] + 1;
+      SymPtrElemNDims[SymCount] := ArrTypeNDims[LastTypePointerElemArrAi];
+      SymArrDimLo[SymCount * MAX_ARR_DIMS] := ArrTypeLo[LastTypePointerElemArrAi];
+      if ArrTypeNDims[LastTypePointerElemArrAi] >= 2 then
+        for ptrArrDimI := 0 to ArrTypeNDims[LastTypePointerElemArrAi] - 1 do
+        begin
+          SymArrDimLo[SymCount * MAX_ARR_DIMS + ptrArrDimI] :=
+            ArrTypeDimLo[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
+          SymArrDimSpan[SymCount * MAX_ARR_DIMS + ptrArrDimI] :=
+            ArrTypeDimSpan[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
+        end;
+    end;
   end;
 
   if tk = tyAuto then
@@ -3930,7 +3959,7 @@ begin
 end;
 
 function AllocParam(const name: AnsiString; tk: TTypeKind; isRef, isArray: Boolean): Integer;
-var sz, align: Integer;
+var sz, align: Integer; ptrArrDimI: Integer;
 begin
   EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
@@ -3993,6 +4022,27 @@ begin
     SymPtrDepth[SymCount] := LastTypePointerDepth;
     SymPtrBaseTk[SymCount] := LastTypePointerBaseTk;
     SymPtrBaseRec[SymCount] := LastTypePointerBaseRec;
+    { `PFixed = ^TFixed` — the pointee IS a fixed array, the same fact C's
+      `elem (*p)[N]` records in this slot. One concept, one slot: the extent
+      (and, for an N-D pointee, the per-dim shape in the pointer symbol's
+      otherwise-unused SymArrDim* rows) is what lets Length/High/SizeOf of `p^`
+      fold, and what tells the index path the subscript changes the address
+      rather than the type. }
+    if LastTypePointerElemArrAi >= 0 then
+    begin
+      SymPtrElemArrLen[SymCount] := ArrTypeHi[LastTypePointerElemArrAi] -
+                                    ArrTypeLo[LastTypePointerElemArrAi] + 1;
+      SymPtrElemNDims[SymCount] := ArrTypeNDims[LastTypePointerElemArrAi];
+      SymArrDimLo[SymCount * MAX_ARR_DIMS] := ArrTypeLo[LastTypePointerElemArrAi];
+      if ArrTypeNDims[LastTypePointerElemArrAi] >= 2 then
+        for ptrArrDimI := 0 to ArrTypeNDims[LastTypePointerElemArrAi] - 1 do
+        begin
+          SymArrDimLo[SymCount * MAX_ARR_DIMS + ptrArrDimI] :=
+            ArrTypeDimLo[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
+          SymArrDimSpan[SymCount * MAX_ARR_DIMS + ptrArrDimI] :=
+            ArrTypeDimSpan[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
+        end;
+    end;
   end;
 
   if (tk = tyRecord) and not isRef and not isArray and (RecSize(LastTypeRecId) <= 8) then
@@ -4144,7 +4194,7 @@ begin
 end;
 
 function AllocArray(const name: AnsiString; elemType: TTypeKind; lo, hi: Integer): Integer;
-var elemSize, totalSize, align: Integer;
+var elemSize, totalSize, align: Integer; ptrArrDimI: Integer;
 begin
   EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
@@ -4234,6 +4284,27 @@ begin
     SymPtrDepth[SymCount] := LastTypePointerDepth;
     SymPtrBaseTk[SymCount] := LastTypePointerBaseTk;
     SymPtrBaseRec[SymCount] := LastTypePointerBaseRec;
+    { `PFixed = ^TFixed` — the pointee IS a fixed array, the same fact C's
+      `elem (*p)[N]` records in this slot. One concept, one slot: the extent
+      (and, for an N-D pointee, the per-dim shape in the pointer symbol's
+      otherwise-unused SymArrDim* rows) is what lets Length/High/SizeOf of `p^`
+      fold, and what tells the index path the subscript changes the address
+      rather than the type. }
+    if LastTypePointerElemArrAi >= 0 then
+    begin
+      SymPtrElemArrLen[SymCount] := ArrTypeHi[LastTypePointerElemArrAi] -
+                                    ArrTypeLo[LastTypePointerElemArrAi] + 1;
+      SymPtrElemNDims[SymCount] := ArrTypeNDims[LastTypePointerElemArrAi];
+      SymArrDimLo[SymCount * MAX_ARR_DIMS] := ArrTypeLo[LastTypePointerElemArrAi];
+      if ArrTypeNDims[LastTypePointerElemArrAi] >= 2 then
+        for ptrArrDimI := 0 to ArrTypeNDims[LastTypePointerElemArrAi] - 1 do
+        begin
+          SymArrDimLo[SymCount * MAX_ARR_DIMS + ptrArrDimI] :=
+            ArrTypeDimLo[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
+          SymArrDimSpan[SymCount * MAX_ARR_DIMS + ptrArrDimI] :=
+            ArrTypeDimSpan[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
+        end;
+    end;
   end;
 
   if (CurProc < 0) or AllocStaticLocal then
@@ -4261,6 +4332,7 @@ function AllocDynArray(const name: AnsiString; elemType: TTypeKind; depth: Integ
   ArrLen = -1 marks the symbol as dynamic (static arrays always have ArrLen >= 1).
   depth is the nesting count: 1 for `array of T`, 2 for `array of array of T`...
   elemType is the BASE element type at the deepest level. }
+var ptrArrDimI: Integer;
 begin
   EnsureSymCapacity(SymCount + 1);
   SymDeclTypeNOff[SymCount] := 0; SymDeclTypeNLen[SymCount] := 0;
@@ -4330,6 +4402,27 @@ begin
     SymPtrDepth[SymCount] := LastTypePointerDepth;
     SymPtrBaseTk[SymCount] := LastTypePointerBaseTk;
     SymPtrBaseRec[SymCount] := LastTypePointerBaseRec;
+    { `PFixed = ^TFixed` — the pointee IS a fixed array, the same fact C's
+      `elem (*p)[N]` records in this slot. One concept, one slot: the extent
+      (and, for an N-D pointee, the per-dim shape in the pointer symbol's
+      otherwise-unused SymArrDim* rows) is what lets Length/High/SizeOf of `p^`
+      fold, and what tells the index path the subscript changes the address
+      rather than the type. }
+    if LastTypePointerElemArrAi >= 0 then
+    begin
+      SymPtrElemArrLen[SymCount] := ArrTypeHi[LastTypePointerElemArrAi] -
+                                    ArrTypeLo[LastTypePointerElemArrAi] + 1;
+      SymPtrElemNDims[SymCount] := ArrTypeNDims[LastTypePointerElemArrAi];
+      SymArrDimLo[SymCount * MAX_ARR_DIMS] := ArrTypeLo[LastTypePointerElemArrAi];
+      if ArrTypeNDims[LastTypePointerElemArrAi] >= 2 then
+        for ptrArrDimI := 0 to ArrTypeNDims[LastTypePointerElemArrAi] - 1 do
+        begin
+          SymArrDimLo[SymCount * MAX_ARR_DIMS + ptrArrDimI] :=
+            ArrTypeDimLo[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
+          SymArrDimSpan[SymCount * MAX_ARR_DIMS + ptrArrDimI] :=
+            ArrTypeDimSpan[LastTypePointerElemArrAi * MAX_ARR_DIMS + ptrArrDimI];
+        end;
+    end;
   end;
   if CurProc < 0 then
   begin
@@ -10406,6 +10499,33 @@ end;
 
 function ResolveNodeRec(node: Integer): Integer; forward;   { NodeMetaclassCi's FIELD arm needs it; real body just below }
 
+{ `p^` where p is a pointer to a named FIXED array — `PFixed = ^TFixed`. The
+  pointee's extent survives on the pointer SYMBOL (SymPtrElemArrLen, and its low
+  bound in the pointer row's otherwise-unused SymArrDimLo slot); a deref NODE
+  carries none of it. One predicate so Length/High/Low/SizeOf all ask the same
+  question — they each used to fall through to a path that reads a [data-8]
+  header off a value that has none, and answered 0 / -1 / the ELEMENT size while
+  `p^[i]` indexed correctly.
+  bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero }
+function DerefPtrArrayInfo(node: Integer; var elemCount, lowBound: Integer): Boolean;
+var dpaSi: Integer;
+begin
+  Result := False;
+  elemCount := 0;
+  lowBound := 0;
+  if node < 0 then Exit;
+  if ASTKind[node] <> AN_DEREF then Exit;
+  if ASTLeft[node] < 0 then Exit;
+  if ASTKind[ASTLeft[node]] <> AN_IDENT then Exit;
+  dpaSi := ASTIVal[ASTLeft[node]];
+  if (dpaSi < 0) or (dpaSi >= SymCount) then Exit;
+  if SymPtrElemArrLen[dpaSi] <= 0 then Exit;
+  elemCount := SymPtrElemArrLen[dpaSi];
+  lowBound := SymArrDimLo[dpaSi * MAX_ARR_DIMS];
+  Result := True;
+end;
+
+
 function NodeMetaclassCi(node: Integer): Integer;
 { The class index a node's METACLASS VALUE refers to, or -1 when the node is not
   one. A metaclass value is a `class of T` — a tyPointer whose pointee is a class
@@ -10580,6 +10700,15 @@ begin
         Result := ResolveNodeRec(ASTLeft[node]);
     end
     else if ASTKind[ASTLeft[node]] = AN_INDEX then
+      Result := ResolveNodeRec(ASTLeft[node])
+    else if ASTKind[ASTLeft[node]] = AN_DEREF then
+      { `p^[i].field` — p points at a named ARRAY of records. The deref already
+        yields the ELEMENT's record (a pointer-to-array's PtrElemRec IS the
+        element's), so the subscript changes the address and not the record.
+        Exactly the omission the AN_CALL arm below documents, one base kind
+        over: no arm here meant REC_NONE, so the field lookup found nothing and
+        `.field` was applied at OFFSET 0 — `p^[1].b` answered `p^[1].a`.
+        bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero }
       Result := ResolveNodeRec(ASTLeft[node])
     else if (ASTKind[ASTLeft[node]] = AN_CALL) or
             (ASTKind[ASTLeft[node]] = AN_VIRTUAL_CALL) or

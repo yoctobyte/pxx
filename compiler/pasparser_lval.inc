@@ -108,6 +108,7 @@ var
   fldSigPi, callIndNode, argsHead2, lastArg2, argSeq2, baseRecFld: Integer;
   isMethodPtr: Boolean;
   autoDeref, peRec: Integer;
+  dpaCount, dpaLo, dpaLoNode, dpaSubNode: Integer;   { `p^[i]` over a pointer to a named FIXED array }
   ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { qualified TClass.Const }
   keyNode: Integer;   { __getitem__/__setitem__ subscript key }
   pyInitCall: Boolean;   { NilPy `Base.__init__(self, ...)` — run the ctor BODY on self, never construct }
@@ -1388,6 +1389,36 @@ begin
         begin
           tk := tyUnknown;
           recName := REC_NONE;
+        end;
+      end
+      else if DerefPtrArrayInfo(node, dpaCount, dpaLo) then
+      begin
+        { `p^[i]` where p points at a named FIXED ARRAY. The `^` arm already
+          resolved tk/recName through PtrElemTk/PtrElemRec, which for this shape
+          ARE the element's, so the subscript changes the ADDRESS and not the
+          type — there is nothing to re-derive here.
+
+          Falling through to the tail below instead asked the ROOT symbol for an
+          ElemType, and a pointer variable has none: `p^[i]` came back with
+          REC_NONE, so `p^[i].b` resolved every field at offset 0 and printed
+          the FIRST field's value whatever you asked for. Silent, exit 0.
+          bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero }
+        { ...and the pointee's own LOW BOUND, which nothing downstream knows
+          about: `p^[i]` over `array[1..4]` indexed from the array's base and
+          ran one element past its end. Normalise the subscript here, the one
+          place that knows the bound, rather than teaching the lowering about a
+          second kind of base. }
+        if (dpaLo <> 0) and (ASTRight[indexNode] >= 0) then
+        begin
+          dpaLoNode := AllocNode(AN_INT_LIT);
+          ASTIVal[dpaLoNode] := dpaLo;
+          ASTTk[dpaLoNode] := Ord(tyInteger);
+          dpaSubNode := AllocNode(AN_BINOP);
+          ASTIVal[dpaSubNode] := Ord(tkMinus);
+          ASTLeft[dpaSubNode] := ASTRight[indexNode];
+          ASTRight[dpaSubNode] := dpaLoNode;
+          ASTTk[dpaSubNode] := Ord(tyInteger);
+          ASTRight[indexNode] := dpaSubNode;
         end;
       end
       else

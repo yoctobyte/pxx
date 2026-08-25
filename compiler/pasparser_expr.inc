@@ -284,6 +284,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     szExprTk: TTypeKind;
     hlBoundV: Int64;
     hlBoundTk: TTypeKind;
+    dpaCount, dpaLo: Integer;   { `p^` over a pointer-to-fixed-array: its extent and low bound }
     mcCi: Integer; mcFin: Boolean;   { metaclass receiver at the end of a cast-deref chain }
  szElemTk: TTypeKind; szBTk: TTypeKind;
     seEtid, seOrd: Integer;
@@ -3244,6 +3245,25 @@ begin
           ParseExpr;
           szExprNode := CurASTNode;
           szExprTk := IntToTypeKind(ASTTk[szExprNode]);
+          { `SizeOf(p^)` where p points at a named FIXED array is the whole
+            AGGREGATE's width. The node carries its ELEMENT kind (an array node
+            always does), so this answered the element size — 4 for an
+            `array[0..3] of LongWord` where FPC says 16, and that number reaches
+            GetMem and Move. }
+          if DerefPtrArrayInfo(szExprNode, dpaCount, dpaLo) then
+          begin
+            Expect(tkRParen, ')');
+            node := AllocNode(AN_INT_LIT);
+            { a RECORD element is sized by its record id, not by TypeSize(tyRecord) }
+            if szExprTk = tyRecord then
+              ASTIVal[node] := dpaCount * RecSize(ResolveNodeRec(szExprNode))
+            else
+              ASTIVal[node] := dpaCount * TypeSize(szExprTk);
+            ASTTk[node] := Ord(tyInteger);
+            CurASTNode := node;
+            LastExprTk := tyInteger;
+            Exit;
+          end;
           { A record-typed expression needs a record id to be sized and the AST
             does not carry one on a general node, so refuse rather than answer
             TypeSize(tyRecord). Same for an operand whose type we failed to
@@ -4793,6 +4813,14 @@ begin
             RecFieldArrLen(ResolveNodeRec(ASTLeft[valNode]), GetASTIdentName(valNode)) - 1;
           ASTTk[CurASTNode] := Ord(tyInteger);
         end
+        else if DerefPtrArrayInfo(valNode, dpaCount, dpaLo) then
+        begin
+          { `High(p^)` over a pointer to a named FIXED array — same fold as the
+            whole-static-array arm, off the pointer symbol's pointee metadata. }
+          CurASTNode := AllocNode(AN_INT_LIT);
+          ASTIVal[CurASTNode] := dpaLo + dpaCount - 1;
+          ASTTk[CurASTNode] := Ord(tyInteger);
+        end
         else if (idx >= 0) and (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx) and
                 TryOrdinalVarBound(idx, True, hlBoundV, hlBoundTk) then
         begin
@@ -4847,6 +4875,9 @@ begin
           { Low of a whole multi-dim static array = the FIRST dimension's lower
             bound (SymArrDimLo[sym*MAX+0]); was silently 0. }
           ASTIVal[CurASTNode] := SymArrDimLo[idx * MAX_ARR_DIMS]
+        else if DerefPtrArrayInfo(valNode, dpaCount, dpaLo) then
+          { `Low(p^)`: the pointee's declared lower bound. }
+          ASTIVal[CurASTNode] := dpaLo
         else if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx) and
                 TryOrdinalVarBound(idx, False, hlBoundV, hlBoundTk) then
         begin
@@ -4942,6 +4973,18 @@ begin
             (SymArrDimSpan[sym*MAX+0]). }
           node := AllocNode(AN_INT_LIT);
           ASTIVal[node] := SymArrDimSpan[ASTIVal[valNode] * MAX_ARR_DIMS]; ASTTk[node] := Ord(tyInteger);
+          CurASTNode := node;
+        end
+        else if DerefPtrArrayInfo(valNode, dpaCount, dpaLo) then
+        begin
+          { `Length(p^)` where p points at a named FIXED array. The pointee has
+            no [data-8] header, so the runtime path read one off a value that has
+            none and answered 0 while `p^[i]` indexed correctly — the metadata
+            was there, Length just never asked. Fold to the extent, the same move
+            the whole-static-array and static-array-FIELD arms make. }
+          node := AllocNode(AN_INT_LIT);
+          ASTIVal[node] := dpaCount;
+          ASTTk[node] := Ord(tyInteger);
           CurASTNode := node;
         end
         else if (lenFieldIdx >= 0) and UFldIsArray[lenFieldIdx] and

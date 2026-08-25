@@ -2240,7 +2240,7 @@ var
   SymCellPtr : array of Integer;
   SymPtrBaseTk : array of Integer; { typed pointer ultimate base TTypeKind ordinal, tyUnknown if unset. }
   SymPtrBaseRec : array of Integer; { typed pointer ultimate base record id, REC_NONE if unset. }
-  SymPtrElemArrLen : array of Integer; { C pointer-to-array `elem (*p)[N]`: the pointee is a fixed array of N; row length N (elem stride = PtrElemTk size). 0 = pointee is not an array. Drives `p[i][j]` flatten (i*N+j). For a multi-dim pointee (`elem (*p)[A][B]`) this holds the FLATTENED product A*B (p+1 stride) and SymPtrElemNDims/SymArrDimSpan carry the per-dim shape for multi-subscript indexing. }
+  SymPtrElemArrLen : array of Integer; { pointer-to-array — C's `elem (*p)[N]` and Pascal's `PFixed = ^TFixed`, one slot for one concept: the pointee is a fixed array of N; row length N (elem stride = PtrElemTk size). 0 = pointee is not an array. Drives `p[i][j]` flatten (i*N+j). For a multi-dim pointee (`elem (*p)[A][B]`) this holds the FLATTENED product A*B (p+1 stride) and SymPtrElemNDims/SymArrDimSpan carry the per-dim shape for multi-subscript indexing. }
   SymPtrElemNDims  : array of Integer; { C pointer-to-multidim-array `elem (*p)[A][B]..`: number of pointee array dims (0 or 1 = single-dim / scalar-pointee, uses SymPtrElemArrLen only). >1 -> the dim spans live in SymArrDimSpan[idx*MAX_ARR_DIMS + d] (a pointer symbol has SymArrNDims=0, so those slots are otherwise unused). Drives the >2-subscript `p[i][j][k]` flatten. }
   { 2-D fixed array flattened to 1-D storage: m[i,j] / m[i][j] index as
     (i-lo1)*span2 + (j-lo2). Default False/0 (single-dimension array). }
@@ -2525,6 +2525,7 @@ var
   LastTypePointerElemTk : TTypeKind;
   LastTypePointerElemRec : Integer;
   LastTypePointerAlias : Integer;  { set by ParseTypeKind when a pointer type resolves through a NAMED alias: that alias index, else -1 (see UFldPtrAlias) }
+  LastTypePointerElemArrAi : Integer;  { set by ParseTypeKind when a pointer's POINTEE is a named FIXED-array type: that ArrType index, else -1. Carries the pointee's extent so Length/High/SizeOf of `p^` can fold it. }
   LastTypePointerDepth : Integer;
   LastTypePointerBaseTk : Integer;
   LastTypePointerBaseRec : Integer;
@@ -4073,6 +4074,7 @@ var
   AliasElemTk  : array[0..MAX_TYPEALIAS-1] of Integer;  { pointer element TTypeKind ordinal }
   AliasSetElemTk : array[0..MAX_TYPEALIAS-1] of Integer;  { set alias: element TTypeKind ordinal (AliasElemTk holds the enum id there) }
   AliasElemRec : array[0..MAX_TYPEALIAS-1] of Integer;  { pointer element record/class id }
+  AliasPtrElemArrAi : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias whose POINTEE is a named FIXED-array type (`PFixed = ^TFixed`): that ArrType index, else -1. An array alias is not in the scalar alias table, so ParseTypeKind answers its unknown-name default for the pointee; without this the pointer kept a 4-byte stride whatever the real element was. }
   AliasPtrDepth : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias depth, 0 for non-pointer/unknown }
   AliasPtrBaseTk : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias ultimate base TTypeKind ordinal }
   AliasPtrBaseRec : array[0..MAX_TYPEALIAS-1] of Integer; { pointer alias ultimate base record/class id }

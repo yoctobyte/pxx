@@ -349,16 +349,17 @@ _none_
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (14)
+## backlog_new (15)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-dynarray-delete-temp-holds-the-new-buffer-until-scope-exit | A | 35 | bug | `Delete(a, 2, 2)` then `a := nil` should destroy the three survivors at the nil. pxx destroys them at procedure exit instead, because AN_DYN_DELETE's hidden fresh-buffer temp still holds a reference and is only released by the scope-exit walk. Correct refcounts, wrong destruction TIME — visible to any destructor with a side effect, and what fpc-testsuite tarray11 checks. | — |
 | bug-a-a-riscv32-diagnostic-names-the-wrong-target | A | 20 | bug | `--target=riscv32` on a program with an external cdecl symbol fails with `target esp32: external (dynamic) symbols not yet supported`. The user typed riscv32, the message says esp32, and the two are different things — riscv32 is a hosted Linux target in its own right, not only the ESP32-C3 profile. One shared arm, one hard-coded name. | — |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
+| bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent | P | 35 | bug | `PG = ^TG` with `TG = array[0..1, 0..2] of LongWord`: `qg^[i, j]` prints `0 1 2 1 2 10` where FPC prints `0 1 2 10 11 12` — the comma subscript is not flattened against the pointee's dims — and `Length(qg^)` answers 6 (the flat extent) where FPC answers 2 (the first dimension). Predates and is not caused by the single-dim fix; the metadata it needs is now present. | — |
 | bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 30 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
 | bug-p-an-array-returning-call-cannot-be-indexed-directly | P | 30 | bug | `MakeDyn(3)[2]` fails with `cannot index the result of an array-returning function directly — assign it to a variable first`. fpc 3.2.2 compiles and runs it. `Length(MakeDyn(3))` on the same call already works, so the call result IS materialised somewhere the intrinsic can reach; only the subscript path declines it. | — |
-| bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero | P | 40 | bug | `PFixed = ^TFixed` with `TFixed = array[0..3] of LongWord`: `Length(pfx^)` returns 0, fpc 3.2.2 returns 4. Indexing the same deref (`pfx^[2]`) is correct, so the pointer's element metadata IS reachable — Length just does not consult it and falls through to the runtime [data-8] header read on a value that has none. A wrong VALUE, silently, exit 0. | — |
+| bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one | P | 30 | bug | `PDyn = ^TDyn` with `TDyn = array of LongWord`: after `SetLength(d, 5)`, `Length(pdy^)` answers 1 and `High(pdy^)` answers 0 where FPC answers 5 and 4 — while `pdy^[1]` reads the right element. The pointee is a HANDLE, so the [data-8] header is one indirection further than the runtime path looks. | — |
 | bug-t-run-pascal-conformance-silently-fails-every-test-on-a-relative-compiler-path | T | 25 | bug | `tools/run_pascal_conformance.sh ./compiler/pascal26 ...` fails 51 of 107 tgeneric tests; the same run with `/home/neo/frank1/compiler/pascal26` passes 61 and fails 0. The runner `cd`s into the suite dir before invoking the compiler, so a relative `$CC` no longer resolves — and the failure surfaces as `compile error`, i.e. as a COMPILER bug, for every test at once. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 35 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
 | decide-how-much-string-machinery-the-basic-frontend-gets | U | 35 | decide | String concat and comparison between BASIC variables need PXXStrConcat/PXXStrEq, whose bodies ship only in builtinheap, which a unit-free .bas never pulls — so `PRINT s + t` is a compiler-internal error. Every OTHER frontend solves this by pulling builtinheap unconditionally (a Pascal hello-world is 63 KB). BASIC's unit-free path is 559 bytes. The fork is size vs capability, and it is a product call, not a code one. | — |
@@ -581,9 +582,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2328)
+## done (2329)
 
-2328 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2329 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -726,7 +727,6 @@ _none_
 - [p 40] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 40] [P] bug-p-a-record-typed-var-initialiser-is-refused
-- [p 40] [P] bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero
 - [p 40] [P] bug-p-length-of-a-string-literal-plus-anything-does-not-parse
 - [p 40] [T] bug-t-twatch-status-says-down-while-the-daemon-is-alive-and-testing
 - [p 40] [P] compat-pascal-a-string-n-field-makes-a-record-a-different-size-than-fpc
@@ -768,6 +768,7 @@ _none_
 - [p 35] [N] bug-n-name-on-a-builtin-type-is-unimplemented
 - [p 35] [N] bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
 - [p 35] [P] bug-p-a-parameterless-function-is-undefined-as-a-method-call-argument
+- [p 35] [P] bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent
 - [p 35] [P] bug-p-a-typed-constant-of-pchar-type-is-a-parse-error
 - [p 35] [P] bug-p-a-typed-string-constant-cannot-be-assigned
 - [p 35] [P] bug-p-sizeof-rejects-a-pointer-deref-in-its-operand
@@ -817,6 +818,7 @@ _none_
 - [p 30] [N] bug-nilpy-del-on-a-plain-variable-silently-does-nothing
 - [p 30] [P] bug-p-a-variant-refuses-wide-chars-and-interfaces
 - [p 30] [P] bug-p-an-array-returning-call-cannot-be-indexed-directly
+- [p 30] [P] bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one
 - [p 30] [T] bug-t-fpc-seed-canary-red-cited-lines-that-cannot-contain-the-identifier
 - [p 30] [A] chore-a-re-include-bench-timing-in-tools-devtest
 - [p 30] [T] chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile
