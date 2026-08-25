@@ -1236,6 +1236,32 @@ def covered_tiers(tier):
     return {tier}                     # opt (and any future disjoint tier)
 
 
+def job_bounding_tier(st, name, report_tier):
+    """The tier whose last run bounds this job's blame range.
+
+    `job_tier` holds the tier that last spoke for each job, and at diff time it
+    has not been updated for the current run — so it names where the job's
+    PREVIOUS status came from, which is exactly what bounds the range. Falls
+    back to this run's tier for a job with no recorded history.
+    """
+    return (st.get("job_tier") or {}).get(name) or report_tier
+
+
+def parent_ran_job(st, name, report_tier):
+    """Did the run recorded in st["last"] actually CONTAIN this job?
+
+    If it did, `commits_between(parent, sha)` is the right range. If it did not
+    — a full-tier-only job whose parent run was `native` — that range is too
+    NARROW, and a too-narrow range is the dangerous direction: a bisect over
+    commits that do not contain the culprit does not fail, it narrows
+    confidently onto an innocent one.
+    """
+    parent_tier = (st.get("last") or {}).get("tier") or ""
+    if not parent_tier:
+        return False
+    return job_bounding_tier(st, name, report_tier) in covered_tiers(parent_tier)
+
+
 def last_covering_sha(st, tier, exclude_sha):
     """Newest earlier run that certainly CONTAINED this tier's jobs, or None.
 
@@ -2352,6 +2378,40 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # So when it is empty, ask the narrower question the ledger actually needs:
     # since this JOB last ran under a tier that contained it.
     good = parent
+
+    # PER-JOB RANGE, always — not only when the parent range is empty.
+    #
+    # `commits_between(parent, sha)` answers "since this host last tested
+    # ANYTHING", and that is the right range only if the parent run actually
+    # CONTAINED the job that just went red. Measured 2026-08-25 on the first
+    # completed breadth run on dev: four NEW-REDs on full-tier-only jobs
+    # (test-aarch64, test-uforth, two conformance shards) were filed against a
+    # 23-commit range, because the parent was a NATIVE run — while those jobs
+    # had not run for 1d15h and ~120 commits. A bisect over 23 commits that do
+    # not contain the culprit does not fail; it narrows confidently onto an
+    # innocent one.
+    #
+    # last_covering_sha() already reasons correctly about this and its docstring
+    # already states the rule — "a too-wide range costs bisect steps; a
+    # too-narrow one can exclude the culprit, which is the failure that
+    # matters". It was simply gated on the empty-range case, which is the
+    # SYMPTOM that was noticed first (same sha re-tested at a widening tier)
+    # rather than the general one.
+    #
+    # `job_tier` holds the tier that last spoke for each job and has not been
+    # updated for this run yet, so it names the tier the job's PREVIOUS status
+    # came from — which is exactly the tier whose last run bounds the range.
+    def range_for(name):
+        prev_tier = job_bounding_tier(st, name, report["tier"])
+        if parent_ran_job(st, name, report["tier"]):
+            return rng, good        # the parent's run DID contain it
+        y = last_covering_sha(st, prev_tier, sha)
+        if y and y != sha:
+            wider = clone.commits_between(y, sha)
+            if wider and len(wider) > len(rng):
+                return wider, y
+        return rng, good
+
     if new_red and not rng:
         y = last_covering_sha(st, report["tier"], sha)
         if y and y != sha:
@@ -2385,9 +2445,16 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
             # "job" is the stable selector; "name" is the positional name it
             # had at this sha — kept ONLY as the bisect fallback for older
             # commits, never as identity (see job_key).
+            jrng, jgood = range_for(name)
+            if len(jrng) != len(rng):
+                print("twatch: %s last ran under `%s`, not at the parent — "
+                      "range widened from %d to %d commit(s) since %s, or a "
+                      "bisect would narrow onto a commit that cannot be causal"
+                      % (name, (st.get("job_tier") or {}).get(name, "?"),
+                         len(rng), len(jrng), (jgood or "?")[:12]), flush=True)
             regs.append({"job": name, "name": namemap.get(name, ""),
                          "src": srcmap.get(name, ""), "bad": sha,
-                         "good": good, "range": rng, "opened": utcnow(),
+                         "good": jgood, "range": jrng, "opened": utcnow(),
                          "status": statmap.get(name, "fail"),
                          "pin_built": pinmap.get(name, False)})
     st["open_regressions"] = regs
