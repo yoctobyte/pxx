@@ -103,4 +103,4 @@ Gate: `make compiler/pascal26` converged in 1 round, `tools/gate.sh quick`
 GREEN, fpc-testsuite unmoved.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit a0ccba78f.
