@@ -2,7 +2,8 @@
 slug: bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 track: N
 prio: 70
-status: urgent
+status: working
+owner: frank1-72
 ---
 
 # A callable value is silently accepted where `str` is declared, and no longer compares equal to itself — bisected to `9bbbbef6c`

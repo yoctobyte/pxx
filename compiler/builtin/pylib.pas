@@ -950,6 +950,26 @@ function pyseq_kind_v(const v: Variant): Integer;
 function pylist_repr(l: TPyList): AnsiString;
 function pybytes_repr(b: TPyBytes): AnsiString;
 function pydict_repr(d: TPyDict): AnsiString;
+{ ONE place that knows how each callable tag stores what it calls.
+
+  A callable value wears four shapes here -- VT_BOUNDMETHOD (8, a {code,recv}
+  pair BLOCK), VT_PYCLOSURE (9), VT_BOUNDFN (10) and VT_CALLABLE (12), the last
+  three carrying a bare code address in the payload -- and a bare `def` name in
+  value position still escapes UNBOXED as VT_INT64, which is the leak tag 12 was
+  introduced to stop and has not yet closed.
+
+  Four shapes for one concept is why `a = f; a == f` answered False while
+  `d["k"] = f; d["k"] == f` answered True: the first compares the ADDRESS OF THE
+  PAIR BLOCK against a code address, and a fresh block is allocated per boxing,
+  so a function was not equal to itself. Comparing the pair this returns instead
+  of the payload bits makes every shape agree.
+
+  bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method }
+function PyCallableParts(const v: Variant; var code, recv: Pointer): Boolean;
+function PyCallablePartsP(p: PPyVarRec; var code, recv: Pointer): Boolean;
+function PyVarEqCallable(p, q: PPyVarRec; var res: Boolean): Boolean;
+function PyVarIsCallableRec(p: PPyVarRec): Boolean;
+
 function PyCallableStr(const v: Variant): AnsiString;
 function PyClassRefStr(const v: Variant): AnsiString;
 { `==`/`!=` TRY for two variant slots by address, in PXXPromoVarCmpTry's
@@ -5668,6 +5688,44 @@ function PyUserObjArith(pobj, qobj: TObject; const pv, qv: Variant;
                         const dunder, rdunder: AnsiString;
                         var res: Variant): Boolean; forward;
 
+function PyVarIsCallableRec(p: PPyVarRec): Boolean;
+begin
+  PyVarIsCallableRec := (p^.VType = 8) or (p^.VType = 9) or
+                        (p^.VType = 10) or (p^.VType = 12);
+end;
+
+{ Claims a comparison in which a CALLABLE is involved, answering into `res`.
+  Returns False when neither side is one, so every other pair falls through
+  untouched.
+
+  The int arm exists because a bare `def` name in value position still escapes
+  UNBOXED as VT_INT64 -- the leak tag 12 was added to close and has not. An int
+  is read as a code address ONLY opposite a real callable, never int-vs-int, so
+  `d["k"] == f` keeps working while the leak lasts without making a function
+  equal to a number in general. Close the leak and this arm can go. }
+function PyVarEqCallable(p, q: PPyVarRec; var res: Boolean): Boolean;
+var cp, rp, cq, rq: Pointer; isp, isq: Boolean;
+begin
+  cp := nil; rp := nil; cq := nil; rq := nil;
+  isp := PyCallablePartsP(p, cp, rp);
+  isq := PyCallablePartsP(q, cq, rq);
+  PyVarEqCallable := isp or isq;
+  if not (isp or isq) then Exit;
+  if isp and isq then
+  begin
+    res := (cp = cq) and (rp = rq);
+    Exit;
+  end;
+  if isp then
+  begin
+    res := (rp = nil) and ((q^.VType = 1) or (q^.VType = 2)) and
+           (Int64(NativeInt(cp)) = q^.Payload);
+    Exit;
+  end;
+  res := (rq = nil) and ((p^.VType = 1) or (p^.VType = 2)) and
+         (Int64(NativeInt(cq)) = p^.Payload);
+end;
+
 function PyVarEq(p, q: PPyVarRec): Boolean;
 var
   k: Integer;
@@ -5677,6 +5735,14 @@ var
   userEq: Boolean;
 begin
   Result := False;
+  { CALLABLES compare by WHAT THEY CALL. Four shapes carry one concept here (see
+    PyCallablePartsP), so comparing payload bits made a {code,recv} pair block
+    unequal to the very def it wraps -- and, because a fresh block is allocated
+    per boxing, unequal to itself. This is the dict/list/`in` path as well as
+    `==`, so the sentinel `Comment("x").tag == Comment` and `tag in table` both
+    depend on it.
+    bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method }
+  if PyVarEqCallable(p, q, Result) then Exit;
   { The int-family tags (VT_INT/VT_INT64/VT_BOOL) are ONE Python number and
     must compare CROSS-TAG: a masked cell comes back VT_INT64 while a
     define-time key is VT_INT, and the old tag-sensitive compare made
@@ -5842,7 +5908,14 @@ end;
 function pyvar_eqv(a, b: Pointer; neq: Int64): Int64;
 var eq: Boolean;
 begin
-  if (PPyVarRec(a)^.VType <> 7) and (PPyVarRec(b)^.VType <> 7) then
+  { A CALLABLE pair is ours too. Declining it left the compiler's own bitwise
+    variant compare to decide, which reads a pair-block ADDRESS against a code
+    address -- so `a = f; a == f` was False. Claim it here, or fixing PyVarEq
+    alone changes `in` and dict lookup while leaving `==` wrong: the two paths
+    are reached separately (normalise-dont-special-case). }
+  if (PPyVarRec(a)^.VType <> 7) and (PPyVarRec(b)^.VType <> 7) and
+     not PyVarIsCallableRec(PPyVarRec(a)) and
+     not PyVarIsCallableRec(PPyVarRec(b)) then
   begin
     Result := 0;                      { not ours — the caller's own compare stands }
     Exit;
@@ -9234,13 +9307,51 @@ begin
 end;
 
 function pyeq_v(const a: Variant; const b: Variant): Boolean;
-var pa, pb: PPyVarRec;
+var pa, pb: PPyVarRec; ca, ra, cb, rb: Pointer; isca, iscb: Boolean;
 begin
   pa := PPyVarRec(@a); pb := PPyVarRec(@b);
   { None equals only None }
   if (pa^.VType = 0) or (pb^.VType = 0) then
   begin
     Result := (pa^.VType = 0) and (pb^.VType = 0);
+    Exit;
+  end;
+  { CALLABLES compare by WHAT THEY CALL, before the ordering path can read
+    their payloads as numbers. pycmp_v has no callable arm, so a {code,recv}
+    pair block was compared to a code address as two integers and a function
+    was not equal to itself -- which is what made html5lib's `node.tag ==
+    ElementTreeCommentType` sentinel test fail and walk a comment as an
+    element. Equality is the ONLY comparison Python defines on callables, so it
+    belongs here and not in pycmp_v: `f < g` stays the TypeError it already is.
+    bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method }
+  ca := nil; ra := nil; cb := nil; rb := nil;
+  isca := PyCallableParts(a, ca, ra);
+  iscb := PyCallableParts(b, cb, rb);
+  if isca or iscb then
+  begin
+    { A bare `def` name in value position still escapes UNBOXED as VT_INT64, so
+      one side is routinely a raw code address with no tag to identify it. Treat
+      an int as a code address ONLY opposite a real callable -- never int-vs-int
+      -- so `d["k"] == f` keeps working while the leak lasts. Closing the leak
+      (box every callable, tag 12) removes this arm; it is not a licence to
+      compare a function to a number. }
+    if isca and not iscb then
+    begin
+      if pyvar_is_inttag(b) then
+        Result := (ra = nil) and (Int64(NativeInt(ca)) = pb^.Payload)
+      else
+        Result := False;
+      Exit;
+    end;
+    if iscb and not isca then
+    begin
+      if pyvar_is_inttag(a) then
+        Result := (rb = nil) and (Int64(NativeInt(cb)) = pa^.Payload)
+      else
+        Result := False;
+      Exit;
+    end;
+    Result := (ca = cb) and (ra = rb);
     Exit;
   end;
   Result := pycmp_v(a, b) = 0;
@@ -17468,11 +17579,58 @@ begin
                         (pyvartag(v) = 10) or (pyvartag(v) = 12);
 end;
 
+function PyCallableParts(const v: Variant; var code, recv: Pointer): Boolean;
+begin
+  PyCallableParts := PyCallablePartsP(PPyVarRec(@v), code, recv);
+end;
+
+function PyCallablePartsP(p: PPyVarRec; var code, recv: Pointer): Boolean;
+var b: PPyBoundRec;
+begin
+  code := nil;
+  recv := nil;
+  case p^.VType of
+    8: begin
+         b := PPyBoundRec(NativeInt(p^.Payload));
+         code := b^.Code;
+         { A plain def merely TRAVELS in a pair block: IsFunc set, receiver nil.
+           What makes something a bound method is being bound to something, so
+           the receiver is the answer and the tag is not. Reading the tag alone
+           is what made the same def boxed twice into two different values. }
+         recv := b^.Recv;
+         PyCallablePartsP := True;
+       end;
+    9, 10, 12:
+       begin
+         code := Pointer(NativeInt(p^.Payload));
+         PyCallablePartsP := True;
+       end;
+  else
+    PyCallablePartsP := False;
+  end;
+end;
+
 function PyCallableStr(const v: Variant): AnsiString;
 const HEXD = '0123456789abcdef';
 var a: Int64; i: Integer; hx: AnsiString; lead: Boolean;
+    isBound: Boolean; code, recv: Pointer;
 begin
-  a := PPyVarRec(@v)^.Payload;
+  { The TAG alone does not say bound-vs-plain: a plain def boxed into a pair
+    block wears tag 8 with IsFunc set and a nil receiver, and printed as
+    `<bound method ...>`. That is the text html5lib's tree walk got where it
+    expected a comment sentinel. Ask what it is bound TO, not which box it
+    arrived in -- and hex the CODE, so the same def renders the same address
+    however many times it has been boxed. }
+  if PyCallableParts(v, code, recv) then
+  begin
+    isBound := recv <> nil;
+    a := Int64(NativeInt(code));
+  end
+  else
+  begin
+    isBound := pyvartag(v) = 8;
+    a := PPyVarRec(@v)^.Payload;
+  end;
   hx := '';
   lead := True;
   i := (SizeOf(Pointer) * 8) - 4;
@@ -17483,7 +17641,7 @@ begin
     i := i - 4;
   end;
   if hx = '' then hx := '0';
-  if pyvartag(v) = 8 then
+  if isBound then
     Result := '<bound method at 0x' + hx + '>'
   else
     Result := '<function at 0x' + hx + '>';
