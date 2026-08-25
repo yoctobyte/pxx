@@ -65,6 +65,35 @@ sha  = (last.get("sha") or "")[:12]
 tier = last.get("tier", "?")
 verdict = last.get("verdict", "?")
 
+# Is this run a TEARDOWN rather than a verdict? Returns True / False / None,
+# and None genuinely means "cannot tell" -- it is never quietly folded into
+# False, because "we do not know" and "it finished" are the two readings this
+# whole file exists to keep apart.
+#
+# "wall >= 3595" was a proxy for this and is now wrong in the direction that
+# HIDES the failure: deadlines are SCALED per run since b61125007, so 3600
+# stopped being the universal ceiling. A run given a scaled-DOWN budget and
+# torn down at, say, 1800s reads as a clean completion under a fixed 3595 test.
+# So ask the run what ITS OWN deadline was.
+def torn_down(rec):
+    if rec.get("timed_out") is not None:
+        return rec["timed_out"] is True
+    if rec.get("verdict") == "TIMEOUT":       # exit 124, the timeout(1) convention
+        return True
+    w, dl = rec.get("wall"), rec.get("deadline")
+    if w is not None and dl:
+        return w >= dl - 5
+    return None                                # legacy row, pre-2026-08-25
+
+# How big is the hole? For a torn-down run the still_red list is not merely
+# stale, it is WRONG: jobs the clock never reached were pruned from the job map,
+# and an absent job reads as having passed the next time round. "unreached" is
+# the count of those, so print it -- that number is the size of what nobody knows.
+def hole(rec):
+    n = rec.get("unreached")
+    return " -- %d job(s) never reached" % n if n else ""
+
+
 try:
     age = (time.time() - calendar.timegm(time.strptime(date, "%Y-%m-%dT%H:%M:%SZ"))) / 60.0
 except Exception:
@@ -72,12 +101,12 @@ except Exception:
 
 # Prefer the honest field the moment Track T publishes it; the wall test below
 # is a proxy for exactly this and should be deleted when the field is reliable.
-if last.get("timed_out") is True:
-    print("FAIL|%s %s TIMED OUT -- no verdict" % (tier, sha))
+if torn_down(last) is True:
+    print("FAIL|%s %s TIMED OUT -- no verdict%s" % (tier, sha, hole(last)))
 # Wall proxy, native only. Unlike the full tier this does NOT overlap: a
 # completed native lands ~500s against a 3600s+ deadline, so a wall at the
 # ceiling really is a teardown. Do not copy this test to the breadth arm.
-elif wall is not None and wall >= 3595:
+elif torn_down(last) is None and wall is not None and wall >= 3595:
     print("FAIL|torn down at the %.0fs deadline (%s %s, %s) -- CONTENTLESS, "
           "T is blind" % (wall, tier, sha, verdict))
 elif age is None:
@@ -106,10 +135,10 @@ except Exception:
     fage = None
 if not full:
     print("WARN|breadth: no full tier on record at all")
-elif full.get("timed_out") is True:
+elif torn_down(full) is True:
     print("FAIL|breadth: full %s TIMED OUT (%.0fs) -- no verdict, and its "
-          "still_red is unreliable" % (fsha, fw or -1))
-elif full.get("timed_out") is False:
+          "still_red is unreliable%s" % (fsha, fw or -1, hole(full)))
+elif torn_down(full) is False:
     if fage is not None and fage > 24:
         print("WARN|breadth: newest completed full %s is %.0fh old -- native "
               "is x86-64 only, this is not current matrix coverage"
@@ -142,8 +171,10 @@ else:
     printf '%s' "$json" | python3 -c '
 import json,sys
 l=(json.load(sys.stdin).get("last") or {})
-w=l.get("wall")
-sys.exit(1 if (w is not None and w>=3595) else 0)' 2>/dev/null || rc=1
+if l.get("timed_out") is not None: sys.exit(1 if l["timed_out"] else 0)
+if l.get("verdict")=="TIMEOUT": sys.exit(1)
+w,dl=l.get("wall"),l.get("deadline")
+sys.exit(1 if (w is not None and w >= ((dl-5) if dl else 3595)) else 0)' 2>/dev/null || rc=1
 }
 
 # The daemon being ALIVE is a separate, weaker fact. Report it as its own line
