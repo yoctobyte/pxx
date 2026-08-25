@@ -69,4 +69,4 @@ Closed as a duplicate rather than worked: it was filed independently on
 2026-08-25 by a probe sweep, on the same day the fix landed.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 1facc0a40.
