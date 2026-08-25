@@ -9148,6 +9148,38 @@ begin
             GetTokenStrFromRaw(EnumTypeNOff[NodeEnumIdOf(left)], EnumTypeNLen[NodeEnumIdOf(left)]) +
             ' with enum type ' +
             GetTokenStrFromRaw(EnumTypeNOff[NodeEnumIdOf(right)], EnumTypeNLen[NodeEnumIdOf(right)]));
+    { ORDERING a record operand with no registered `class operator`. `b := r < 1`
+      compared the record's first qword against 1 and answered off garbage; FPC
+      says "Illegal qualifier".
+
+      The identical refusal exists in ir.inc's binop lowering and stays there as
+      the backstop for nodes nobody parsed — but a diagnostic that lives ONLY in
+      lowering is one that vanishes the moment anything EARLIER in the file was
+      reported: error recovery stops lowering at the first recovered diagnostic
+      (`if ErrCount > 0 then Exit` in CompileAST), so this one went silent behind
+      its six siblings and a file with seven errors still wrote a binary. A
+      dialect rule belongs in the dialect's parser, beside the enum-comparison
+      diagnostics just above — which is also why the check is a PARSE-time
+      FindOpOverload2 lookup rather than a flag lowering has to carry.
+
+      Only the ORDERING operators, exactly as the lowering arm has it: `=`/`<>`
+      stay exempt because a method-pointer compare is a legitimate record `=`,
+      and C is exempt because struct pointer/array arithmetic tags operands
+      tyRecord legitimately.
+      regression-test-core-test-indexing-length-for-new-inc-positive }
+    if (not CProgramMode) and
+       ((op = tkLt) or (op = tkGt) or (op = tkLe) or (op = tkGe)) and
+       ((IntToTypeKind(ASTTk[left]) = tyRecord) or
+        (IntToTypeKind(ASTTk[right]) = tyRecord)) and
+       (FindOpOverload2(Ord(op), ASTTk[left], ResolveNodeRec(left),
+                        ASTTk[right], ResolveNodeRec(right)) < 0) then
+      { RECOVERS: the node it leaves behind is an ordinary boolean AN_BINOP, so
+        the parse carries on and the file's LATER mistakes are reported too --
+        which is the whole point of moving the check here. A plain Error() would
+        halt at 49 and lose the `with` and the function-result assignment. }
+      ErrorRecover('no operator overload found for ordering a record operand '
+            + '(< > <= >= need an explicit `class operator`)'
+            + ' — PXXDBG=a.opovl prints the lookup and every candidate');
     { FPC range-based constants: a NON-NEGATIVE literal compared against an
       UNSIGNED operand compares UNSIGNED — retag the literal so codegen's
       TypeCompareUnsigned sees two unsigned operands. Without this
