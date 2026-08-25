@@ -1,6 +1,6 @@
 ---
-track: N
-prio: 60
+track: A
+prio: 80
 type: bug
 blocked-by: []
 summary: "Measured 2026-08-25 (pin v374, this box): compiling `print(\"hi\")` costs 8.92s; compiling `begin end.` costs 0.25s. The ~8.7s is a FIXED per-invocation constant — it does not scale with program size — and it is pure user CPU, not I/O. It is ~29% of the entire test matrix's CPU (805 .npy jobs x 8.7s ~ 7000 of 24219 cpu-s) and it is 9 seconds on every NilPy user's hello-world."
@@ -282,3 +282,46 @@ printf 'program u; uses pylib, pyeval, promocore, pypal; begin end.\n' > /tmp/us
 ./compiler/pascal26 --dce --dce-report /tmp/empty.npy /tmp/o               # "dce: off: only the Pascal frontend..."
 make pxx-debug && gdb -batch -ex 'break ParseUsesUnitAmbient' ... --args ./compiler/pascal26-debug /tmp/empty.npy /tmp/o
 ```
+
+## Re-filed N -> A, and raised 60 -> 80 (coordinator, 2026-08-25)
+
+The profile came back and it moved the ticket to a different lane, so the
+frontmatter had to move with it. Recording why, because the title still says
+"NilPy" and the next reader will reasonably expect a Track N file.
+
+**The lane.** It is not NilPy-frontend cost. The decisive measurement is a pure
+PASCAL program -- `uses pylib, pyeval, promocore, pypal; begin end.` -- which
+reproduces the whole constant at 9.18s against an empty `.npy` at 8.80s, ten
+procs apart, with the NilPy frontend never entered at all. A ZERO-BYTE `.npy`
+costs the full 8.8s. What is actually happening is that every `.npy` compile
+unconditionally compiles the NilPy runtime from Pascal source -- `pylib.pas`
+(18,768 lines) and `pyeval.pas` (5,692 lines), ~2.1 MB of machine code -- before
+the user program is looked at. That is shared unit compilation, and all three
+candidate fixes land in Track A files. The ticket pre-authorised this re-file if
+the profile landed here; it did.
+
+**The prio.** 80, second only to the segfaults. This is the largest single lever
+on the owner complaint that started the whole measurement ("we see testing
+overhead taking 95% of our development time") and, unlike every tiering or
+role-split proposal, **it costs no coverage at all -- it is the same tests,
+faster**. 805 `.npy` jobs x 8.7s is ~7000 of the matrix 24219 cpu-seconds, i.e.
+~29% of the entire matrix, and the same 9 seconds lands on every NilPy user
+hello-world. Real-world target, not an edge case. It was ranked 60 only because
+nobody had measured it yet.
+
+**Read the negative results before starting.** They are in the ticket above and
+they exist to stop a re-hunt: the optimiser is flat across -O0/-O2/-O3, ELF
+writing is 0.03s, there is no O(n^2) hotspot (throughput matches the compiler
+own self-compile at ~4 s/MB across a 150x range), and there is no hot function
+to fix. In particular **DCE is not the lever** -- it refuses on NilPy outright,
+and where it does run it cuts 34% of code for ZERO wall-clock saving, because
+`dce.inc` is a post-pass and the compiler emits each routine as it parses it.
+Wiring DCE into NilPy is a worthwhile separate BINARY-SIZE ticket (2.2MB ->
+~1.4MB hello-world) and must not be sold as the fix for these nine seconds.
+
+Diagnosis measured against `compiler/pascal26` self-hosted at `6ac58fa4c`,
+bootstrap fixedpoint `cmp` passed. Method note for whoever takes it: `perf` is
+blocked on this box (`perf_event_paranoid = 4`), but `gdb` works and
+`make pxx-debug` yields DWARF with Pascal function names, so deterministic
+breakpoint timing is a usable profiler here. Async `interrupt` sampling in gdb
+batch mode is not.
