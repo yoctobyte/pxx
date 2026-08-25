@@ -4,7 +4,7 @@ prio: 45
 type: feature
 blocked-by: []
 status: done
-commit: PENDING-COMMIT
+commit: 77c6dd854
 summary: "Type-helper method dispatch keyed on the receiver SYMBOL, so only a plain declared variable worked. A literal, a call result, a grouped expression and a chained helper result were refused (two of them silently wrong until the same day). Self is by-reference, so a computed receiver needs an addressable home: bind it to a hidden local once."
 owner: claude-A
 ---
