@@ -2219,6 +2219,8 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-nilpy-forward-module-global | T | 70 | regression | regression: test-core#src:test/test_nilpy_forward_module_global.npy red at dbf783346025 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-from-import-as-rename | N | 70 | regression | regression: test-core#src:test/test_nilpy_from_import_as_rename.npy red at 9bbbbef6c055 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-html-tempfile | T | 70 | regression | regression: test-core#src:test/test_nilpy_html_tempfile.npy red at 106a63cabbca (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-json-module | N | 70 | regression | regression: test-core#src:test/test_nilpy_json_module.npy red at a28bc3993a0e (auto-filed by twatch) | — |
+| regression-test-core-test-nilpy-json-reparse-heap | N | 70 | regression | regression: test-core#src:test/test_nilpy_json_reparse_heap.npy red at a28bc3993a0e (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-min-max-variadic | T | 70 | regression | regression: test-core#src:test/test_nilpy_min_max_variadic.npy red at 9305672dbcd5 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-module-first-import | T | 70 | regression | regression: test-core#src:test/test_nilpy_module_first_import.npy red at b9e334fbd649 (auto-filed by twatch) | — |
 | regression-test-core-test-nilpy-qualifier-vs-cproc | T | 70 | regression | regression: test-core#src:test/test_nilpy_qualifier_vs_cproc.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |

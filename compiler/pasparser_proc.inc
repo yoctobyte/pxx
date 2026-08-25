@@ -4292,7 +4292,17 @@ begin
       if (Tokens[i].Kind = tkIdent) and (i > startPos) and (Tokens[i - 1].Kind = tkDot) and
          (RootVMTSlotCount > 0) and
          (CaseEqual(GetTokenStr(i), 'equals') or CaseEqual(GetTokenStr(i), 'gethashcode')
-          or CaseEqual(GetTokenStr(i), 'tostring')) then
+          or CaseEqual(GetTokenStr(i), 'tostring')) and
+         { ...but a QUALIFIED IMPLEMENTATION HEADER is dot-preceded too, and it is
+           a definition, not a call: `function TJSONValue.ToString(...)` in
+           lib/rtl/json.pas fired this and pulled `builtin` + the root-method rows
+           into every NilPy program that imports json — which then SEGFAULTED on a
+           second parse (test_nilpy_json_reparse_heap) and dropped a line from
+           test_nilpy_json_module. Walk back past `<TypeName> .` and refuse the
+           four routine keywords, `class`/`static` prefix included.
+           regression-test-core-test-nilpy-json-module }
+         (not ((i >= startPos + 3) and (Tokens[i - 2].Kind = tkIdent) and
+               ((Tokens[i - 3].Kind = tkFunction) or (Tokens[i - 3].Kind = tkProcedure)))) then
         unitNeedsRootMeth := True;
       Inc(i);
     end;

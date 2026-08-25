@@ -54,7 +54,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (290)
+## backlog (288)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -340,8 +340,6 @@ _none_
 | refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too | P | 45 | refactor | The parser carve-out is done, but Pascal still shares lexer.inc with Track A — so the A/P no-concurrent-edit rule still binds, now over 2,566 lines instead of 37,249. Carve the Pascal-specific lexing into paslexer.inc the way C, NilPy, Rust and Zig already have their own, and the A/P slot stops existing. | — |
 | refactor-p-three-hand-rolled-postfix-loops | P | 35 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | regression-lib-test-lib-mimic-xml-etree-elementtree-2 | N | 70 | regression | regression: lib-test#src:test/lib_mimic_xml_etree_elementtree.npy red at fd93e4a71c37 (auto-filed by twatch) | — |
-| regression-test-core-test-nilpy-json-module | N | 70 | regression | regression: test-core#src:test/test_nilpy_json_module.npy red at a28bc3993a0e (auto-filed by twatch) | — |
-| regression-test-core-test-nilpy-json-reparse-heap | N | 70 | regression | regression: test-core#src:test/test_nilpy_json_reparse_heap.npy red at a28bc3993a0e (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-callable-to-str-param-fails | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy red at 1b9b43e5b511 (auto-filed by twatch) | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 25 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 40 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
@@ -349,13 +347,14 @@ _none_
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (17)
+## backlog_new (18)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-dynarray-delete-temp-holds-the-new-buffer-until-scope-exit | A | 35 | bug | `Delete(a, 2, 2)` then `a := nil` should destroy the three survivors at the nil. pxx destroys them at procedure exit instead, because AN_DYN_DELETE's hidden fresh-buffer temp still holds a reference and is only released by the scope-exit walk. Correct refcounts, wrong destruction TIME — visible to any destructor with a side effect, and what fpc-testsuite tarray11 checks. | — |
 | bug-a-a-riscv32-diagnostic-names-the-wrong-target | A | 20 | bug | `--target=riscv32` on a program with an external cdecl symbol fails with `target esp32: external (dynamic) symbols not yet supported`. The user typed riscv32, the message says esp32, and the two are different things — riscv32 is a hosted Linux target in its own right, not only the ESP32-C3 profile. One shared arm, one hard-coded name. | — |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
+| bug-a-minting-tobject-root-methods-from-a-unit-corrupts-the-heap | A | 45 | bug | When the per-unit pre-scan fired ParseUsesUnitAmbient('builtin') + EnsureTObjectRootMethods while parsing lib/rtl/json.pas, every NilPy program importing json broke: test_nilpy_json_reparse_heap SEGFAULTED and test_nilpy_json_module silently dropped an output line. The trigger was a false positive and has been fixed; that MINTING those rows from a unit can corrupt a program at all has not been. | — |
 | bug-a-the-specialization-splice-does-not-adjust-the-body-pass-spans | A | 35 | bug | InsertTokens/RemoveTokens keep the body pass's DeclItem spans and body-begin marker in step with a token-stream edit. The specialization splice hand-rolls its own insert and calls neither — it now adjusts the token->file map (that fix landed) but still not the Pass2 spans. Either Pass2Active is always false there, in which case say so in a comment, or the spans drift. | — |
 | bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent | P | 35 | bug | `PG = ^TG` with `TG = array[0..1, 0..2] of LongWord`: `qg^[i, j]` prints `0 1 2 1 2 10` where FPC prints `0 1 2 10 11 12` — the comma subscript is not flattened against the pointee's dims — and `Length(qg^)` answers 6 (the flat extent) where FPC answers 2 (the first dimension). Predates and is not caused by the single-dim fix; the metadata it needs is now present. | — |
 | bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 30 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
@@ -584,9 +583,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2342)
+## done (2344)
 
-2342 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2344 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -638,8 +637,6 @@ _none_
 - [urgent p 70] [N] bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - [urgent p 70] [T] bug-t-the-native-tier-times-out-and-publishes-a-contentless-red
 - [p 70] [N] regression-lib-test-lib-mimic-xml-etree-elementtree-2
-- [p 70] [N] regression-test-core-test-nilpy-json-module
-- [p 70] [N] regression-test-core-test-nilpy-json-reparse-heap
 - [p 70] [N] regression-test-nilpy-test-nilpy-callable-to-str-param-fails
 - [p 65] [B] gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo (unblocks 1)
 - [p 65] [B] bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
@@ -674,6 +671,7 @@ _none_
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [B] feature-typinfo-facade-unit
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
+- [p 45] [A] bug-a-minting-tobject-root-methods-from-a-unit-corrupts-the-heap
 - [p 45] [B] bug-b-format-percent-u-prints-a-signed-value
 - [p 45] [B] bug-b-inttostr-of-a-qword-above-2-63-renders-negative
 - [p 45] [N] bug-n-a-class-base-that-is-an-expression-does-not-compile
