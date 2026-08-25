@@ -18,6 +18,27 @@ type
 procedure TCls.Show; begin WriteLn(n); end;
 procedure ShowOpenArray(const a: array of Integer); begin WriteLn('oa    : ', Length(a)); end;
 
+{ The four shapes the FIRST version of the index/Length guards refused. Each is
+  a postfix CHAIN whose ROOT symbol is not the thing being subscripted, or a
+  dynamic array reached other than through a plain variable — and a dynamic
+  array is a tyPointer, which TypeIsOrdinal answers True for. Kept here rather
+  than in a ticket because that is the only reason they cannot come back.
+  regression-test-core-test-{length-dynarray-call,nested-dynarray-field,ptr-deref-vararg} }
+type
+  TDyn = array of Integer;
+  TGridR = record w: Integer; mm: array of array of Integer; end;
+  TFixed = array[0..3] of LongWord;
+  PFixed = ^TFixed;
+
+function MakeDyn(k: Integer): TDyn;
+var z: Integer;
+begin
+  SetLength(Result, k);
+  for z := 0 to k - 1 do Result[z] := z;
+end;
+
+procedure BumpWord(var x: LongWord); begin x := x + 1; end;
+
 var
   i, j: Integer; c: Char; b: Boolean; e: TE; q: Int64; w: Word; sub: 1..9;
   s: AnsiString; fs: string[10]; ca: array[0..7] of Char;
@@ -26,6 +47,7 @@ var
   p: PChar; pi: ^Integer; pr: PRec; r: TR;
   sl: array of AnsiString; str: AnsiString;
   wr: TRec; wo: TCls;
+  gr: TGridR; fx: TFixed; pfx: PFixed;
 begin
   { counted for over every ordinal kind, and for-in }
   Write('for   : ');
@@ -76,6 +98,28 @@ begin
     rejects it with "Ordinal expression expected", so it cannot appear in a test
     whose .expected is FPC's own output. It is asserted nowhere and refused
     nowhere, which is exactly its status. }
+  { Chains whose root symbol is not what is subscripted, and a dynamic array
+    that never appears as a plain variable. }
+  gr.w := 3;
+  SetLength(gr.mm, 2);
+  SetLength(gr.mm[0], 2); SetLength(gr.mm[1], 2);
+  gr.mm[0][1] := 4; gr.mm[1][0] := 6;
+  WriteLn('chain : ', gr.mm[0][1], ' ', gr.mm[1][0], ' ', Length(gr.mm),
+          ' ', Length(gr.mm[0]));
+
+  fx[2] := 40; pfx := @fx;
+  BumpWord(pfx^[2]);
+  { `Length(pfx^)` — Length of a deref'd pointer-to-fixed-array — is NOT asserted
+    here: it answers 0 where FPC answers 4, a separate pre-existing wrong VALUE
+    (bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero). It must not
+    be REFUSED either, which is what this line's neighbours check. }
+  WriteLn('deref : ', fx[2], ' ', pfx^[2]);
+
+  { `MakeDyn(3)[2]` — indexing an array-returning call directly — is a separate,
+    PRE-EXISTING gap ("cannot index the result of an array-returning function
+    directly"); FPC accepts it. Not asserted here. }
+  WriteLn('lencall: ', Length(MakeDyn(3)), ' ', Length(MakeDyn(0)));
+
   i := 1; Inc(i); Inc(i, 5); Dec(i);
   c := 'a'; Inc(c);
   q := 10; Inc(q, 3);

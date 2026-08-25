@@ -261,6 +261,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
     derefRem, derefBaseTk, derefBaseRec: Integer;   { `(x)^` pointer shape, from ResolveDerefShape }
+    lenSi: Integer;   { Length(v) — the SYMBOL, when the operand is a bare identifier }
     nestCtorCi: Integer;   { `TOuter.TInner.Create` — the nested class, resolved by scope }
     nestScanCi, nestScanPos, nestDepth, nestI: Integer;   { …walking N levels of it }
     mthName: AnsiString;   { @TClass.Method — name read via GetTokenStr (may be a type keyword) }
@@ -4974,18 +4975,36 @@ begin
           { Length wants a STRING, an ARRAY or a PChar. `Length(i)` over an
             Integer reached this runtime path, which reads a [data-8] length
             header off the value, and answered 1 -- a plausible number, no
-            diagnostic, exit 0. FPC says "Illegal qualifier". Refused for a
-            plain ordinal or float operand only: every array, string, field and
-            PChar shape has been claimed by an arm above or by the wrap on the
-            line before, and the arrayness of an `array of Char` lives on the
-            SYMBOL, so ASTCharArrayCap is asked rather than the node's kind.
-            bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong }
-          if (not CProgramMode) and
-             (TypeIsOrdinal(IntToTypeKind(ASTTk[valNode])) or
-              TypeIsFloat(IntToTypeKind(ASTTk[valNode]))) and
+            diagnostic, exit 0. FPC says "Illegal qualifier".
+
+            NARROW ON PURPOSE — a BARE IDENTIFIER naming a non-array ordinal or
+            float symbol, and nothing else. The first version tested the node's
+            TYPE KIND instead, and a node's kind is the wrong question here for
+            the same reason it is wrong for an open-array parameter: an
+            array-shaped node carries its ELEMENT kind, so every one of these
+            legal spellings was refused —
+
+              Length(MakeDyn(3))    a function returning a dynamic array (tyPointer,
+                                    and TypeIsOrdinal answers True for a pointer)
+              Length(gr.mm[0])      an inner dynarray reached through a record field
+              Length(pfx^)          a deref of a pointer-to-fixed-array
+
+            — each reported as "not Integer" or "not Pointer", the diagnostic
+            naming its own bug. Every one of those is a CHAIN; the shape the
+            check was measured against is not. Asking the SYMBOL, once, at the
+            only node where a symbol is unambiguously the whole operand, is the
+            question that has a right answer.
+            bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong,
+            regression-test-core-test-length-dynarray-call }
+          lenSi := -1;
+          if (ASTKind[valNode] = AN_IDENT) then lenSi := ASTIVal[valNode];
+          if (not CProgramMode) and (lenSi >= 0) and (lenSi < SymCount) and
+             (not Syms[lenSi].IsArray) and
+             (TypeIsOrdinal(Syms[lenSi].TypeKind) or TypeIsFloat(Syms[lenSi].TypeKind)) and
+             (Syms[lenSi].TypeKind <> tyPointer) and
              (not IsNodeArray(valNode)) and (ASTCharArrayCap(valNode) < 0) then
             ErrorRecover('Length needs a string, an array or a PChar, not '
-                         + TypeKindSpelling(IntToTypeKind(ASTTk[valNode])));
+                         + TypeKindSpelling(Syms[lenSi].TypeKind));
           node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
           argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
           ASTLeft[node] := argSeq;

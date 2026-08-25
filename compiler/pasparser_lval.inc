@@ -1400,12 +1400,33 @@ begin
           qualifier".
 
           Guarded narrowly on purpose: only an ordinal or float BASE, and only
-          when the base symbol is not an array. Everything indexable has already
-          been claimed by an arm above (array, string, pointer, pointer field,
-          deref, N-D, comma sugar, default property), so what is left here with
-          a scalar base is the mistake and nothing else.
-          bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong }
+          when the base symbol is not an array.
+
+          TWO exclusions, and the paragraph above was wrong without them — this
+          arm is reachable for plenty of legal shapes, because it is the tail of
+          a postfix CHAIN and not just a bare `v[i]`:
+
+            - tk = tyPointer. TypeIsOrdinal answers TRUE for a pointer
+              (symtab.inc lists 17 on purpose — a pointer has a simple ordinal
+              value), and a dynamic array IS a tyPointer here.
+            - the chain has already consumed something. `pa^[2]` (deref then
+              index) and `g.m[i][j]` (field, index, index) arrive with `idx`
+              still naming the ROOT symbol — `pa`, `g` — while `tk` has walked
+              down to the element type, which is ordinary Integer/LongWord. So
+              the base symbol's name in the message was not even the thing being
+              indexed. `ASTKind[node] = AN_IDENT` is the test that this is the
+              FIRST subscript applied directly to the variable, which is the
+              only shape the diagnostic was ever measured against.
+
+          Missing both cost four reds at once — test_nested_dynarray_field,
+          test_ptr_deref_vararg, test_parallel_for_capture_aggr, and (through
+          the sibling guard on Length) test_length_dynarray_call. The lesson is
+          the one root-cause-over-microfix states: "everything indexable has
+          already been claimed by an arm above" was reasoning, not measurement.
+          bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong,
+          regression-test-core-test-nested-dynarray-field }
         if (idx >= 0) and (idx < SymCount) and (not Syms[idx].IsArray) and
+           (tk <> tyPointer) and (ASTKind[node] = AN_IDENT) and
            (TypeIsOrdinal(tk) or TypeIsFloat(tk)) then
         begin
           ErrorIdent := Syms[idx].Name;
