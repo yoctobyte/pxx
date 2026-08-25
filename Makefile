@@ -12653,6 +12653,24 @@ lib-test: pxx-stable-check
 	# (bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line).
 	$(PXX_STABLE) -Fulib/rtl test/lib_textreadnumtok.pas $(TESTTMP)/lib_textreadnumtok
 	test "$$($(TESTTMP)/lib_textreadnumtok | tail -n 1)" = "TEXTNUMTOK OK"
+	# The PChar family (StrPCopy/StrNew/StrAlloc/StrECopy/StrMove/StrUpper...).
+	# Half of it existed and half did not, which is the worst shape: code
+	# compiles up to its second call. Expectations measured against FPC by
+	# running the SAME program under both — StrNew('') is nil, StrECopy returns
+	# the end cursor, StrBufSize(StrNew('abc')) is 4.
+	$(PXX_STABLE) -Fulib/rtl test/lib_strings_pchar.pas $(TESTTMP)/lib_strings_pchar
+	test "$$($(TESTTMP)/lib_strings_pchar | tail -n 1)" = "STRINGSPCHAR OK"
+	# StrUtils' three disagreeing split models (ExtractWord vs ExtractDelimited
+	# vs ExtractSubstr) plus SplitString, pinned on 'a,b,,c' — the row with an
+	# empty field, where they differ. Measured against FPC.
+	$(PXX_STABLE) -Fulib/rtl test/lib_strutils_words.pas $(TESTTMP)/lib_strutils_words
+	test "$$($(TESTTMP)/lib_strutils_words | tail -n 1)" = "STRUTILSWORDS OK"
+	# SysUtils directory manipulation, DateToStr/TimeToStr/DateTimeToStr,
+	# GetTickCount64 and TextToFloat. CreateDir on an existing directory is
+	# FALSE and DateTimeToStr drops the time half at midnight — both measured,
+	# both the kind of thing a plausible implementation gets backwards.
+	$(PXX_STABLE) -Fulib/rtl test/lib_sysutils_dirs_dates.pas $(TESTTMP)/lib_sysutils_dirs_dates
+	test "$$($(TESTTMP)/lib_sysutils_dirs_dates | tail -n 1)" = "SYSUTILSDIRSDATES OK"
 	# The FPC threading surface where FPC code looks for it: WaitFor as a
 	# FUNCTION returning ReturnValue, the BeginThread family, and an empty
 	# cthreads shim. Expectations are FPC's own output for the same program.

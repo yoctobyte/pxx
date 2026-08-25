@@ -46,6 +46,26 @@ type
   end;
   TFileInfoArray = array of TFileInfo;
 
+  { FPC's SysUtils string-vector and parameterless-procedure names. Both stop a
+    program at its `var` line rather than at a call, so their absence reads as
+    much worse than "one missing routine": nothing in the unit compiles.
+
+    TStringArray is the result type of SplitString and of the TStringHelper
+    Split family; declaring it here (not in `types`) is where FPC puts it. It is
+    deliberately a distinct name from TStringDynArray, which FPC also has — the
+    two are assignment-compatible, so code written against either works. }
+  TStringArray = array of AnsiString;
+  TStringDynArray = array of AnsiString;
+
+  { `type TProc0 = procedure;` is a one-line workaround, but every FPC example
+    that takes a callback writes TProcedure, so the workaround is one the caller
+    has to know to apply. }
+  TProcedure = procedure;
+
+  { FPC's float layout selector — the first argument of the FOUR-argument
+    FloatToStrF, which is the only spelling real FPC code uses. }
+  TFloatFormat = (ffGeneral, ffExponent, ffFixed, ffNumber, ffCurrency);
+
   TReplaceFlag  = (rfReplaceAll, rfIgnoreCase);
   TReplaceFlags = set of TReplaceFlag;
 
@@ -306,6 +326,13 @@ var
     is 'd/m/y' with DateSeparator '-', which looks inconsistent and is not:
     '/' inside a format string MEANS "the date separator". }
   ShortDateFormat: AnsiString;
+  { The time and long-date layouts DateToStr / TimeToStr / DateTimeToStr expand
+    to. FPC's C-locale defaults, measured on fpc 3.2.2 under LANG=C:
+    LongTimeFormat 'hh:nn:ss', ShortTimeFormat 'hh:nn',
+    LongDateFormat 'dd" "mmmm" "yyyy'. Writable like FPC's. }
+  LongTimeFormat: AnsiString;
+  ShortTimeFormat: AnsiString;
+  LongDateFormat: AnsiString;
   { A one- or two-digit year is placed in the 100 years ENDING at
     CurrentYear - TwoDigitYearCenturyWindow + 100, i.e. the window slides with
     the clock. FPC's default is 50. }
@@ -355,7 +382,38 @@ function FloatToStr(value: Single): AnsiString; overload;
   is the caller that needs it; FloatToStr is this with FPC's fifteen. }
 function FloatToStrSig(value: Double; sigDigits: Integer): AnsiString;
 function FloatToExpStr(value: Double): AnsiString;
-function FloatToStrF(value: Double; precision: Integer): AnsiString;
+function FloatToStrF(value: Double; precision: Integer): AnsiString; overload;
+
+{ FPC's FOUR-argument FloatToStrF — the only spelling real code uses, and it
+  was a COMPILE ERROR here until now, because the two-argument form above is a
+  pxx invention that happens to share the name. Both are kept: the short one has
+  callers in examples/, and changing a signature out from under them is not a
+  fix. This is an overload, not a replacement.
+
+  The two Integer arguments mean DIFFERENT things per format, which is the
+  trap — `Precision, Digits` reads like "before, after the point" and is not:
+
+  | format      | Precision           | Digits                          |
+  | ffFixed     | ignored             | digits AFTER the point          |
+  | ffNumber    | ignored             | digits after the point, grouped |
+  | ffCurrency  | ignored             | digits after the point          |
+  | ffExponent  | SIGNIFICANT digits  | MINIMUM width of the exponent   |
+  | ffGeneral   | SIGNIFICANT digits  | (unused in practice)            |
+
+  Measured against fpc 3.2.2 under LC_ALL=C:
+
+    FloatToStrF(1234.5678, ffFixed,    15, 2)  =  1234.57
+    FloatToStrF(1234.5678, ffFixed,     2, 2)  =  1234.57      <- Precision ignored
+    FloatToStrF(1234.5678, ffGeneral,   4, 0)  =  1235
+    FloatToStrF(1234.5678, ffExponent,  5, 2)  =  1.2346E+03
+    FloatToStrF(1234.5678, ffExponent, 15, 0)  =  1.23456780000000E+3
+    FloatToStrF(1234567.891, ffNumber, 15, 2)  =  1,234,567.89
+    FloatToStrF(-1234.5,   ffCurrency, 15, 2)  =  -1,234.50$
+
+  Note ffExponent's exponent field has no fixed width: Digits 2 gives E+03 and
+  Digits 0 gives E+3. Format's '%e' is the same routine pinned at three. }
+function FloatToStrF(value: Double; format: TFloatFormat;
+                     Precision, Digits: Integer): AnsiString; overload;
 
 { EXACT float -> string. Unlike FloatToStrSig, which normalises the mantissa by
   scaling in doubles and therefore cannot honestly offer more than 15
@@ -374,6 +432,12 @@ function FloatToStrShortest(value: Double): AnsiString;
   EConvertError, as FPC does and as the integer arms of this family already did. }
 function StrToFloatDef(const s: AnsiString; def: Double): Double;
 function StrToFloat(const s: AnsiString): Double;
+
+{ FPC's non-raising PChar-taking parser — StrToFloat is defined in terms of it.
+  True on success with Value set; False leaves Value alone. Measured against
+  FPC 3.2.2: surrounding whitespace is TRIMMED ('  2.5  ' parses), but trailing
+  junk is fatal ('1.5x' is False, not 1.5), and the empty buffer is False. }
+function TextToFloat(Buffer: PChar; var Value: Extended): Boolean;
 
 { Currency <-> string. CurrToStr has existed in the implementation since the
   Currency type was added but was never declared here, so no caller outside
@@ -409,6 +473,35 @@ function DynArraySize(P: Pointer): Int64;
 
 function StrLCopy(Dest, Source: PChar; MaxLen: Cardinal): PChar;
 function StrLComp(Str1, Str2: PChar; MaxLen: Cardinal): Integer;
+
+{ The rest of the PChar family, exactly as FPC's SysUtils re-exports it (see
+  rtl/objpas/sysutils/syspchh.inc). Real FPC code writes `uses SysUtils` and
+  calls StrPCopy/StrNew/StrScan without ever naming the `strings` unit — half
+  the family was reachable here and half was not, which is the worst shape: the
+  code compiles up to its second call and then stops.
+
+  These are thin forwards to `strings`, NOT a second implementation — the
+  contracts (and their traps: StrNew('') = nil, StrECopy returning the
+  end-cursor rather than Dest, StrBufSize's hidden 4-byte prefix) are documented
+  once, in lib/rtl/strings.pas, and measured against FPC there. }
+function StrCopy(Dest, Source: PChar): PChar;
+function StrCat(Dest, Source: PChar): PChar;
+function StrComp(Str1, Str2: PChar): Integer;
+function StrIComp(Str1, Str2: PChar): Integer;
+function StrEnd(P: PChar): PChar;
+function StrScan(P: PChar; C: Char): PChar;
+function StrRScan(P: PChar; C: Char): PChar;
+function StrPos(Str1, Str2: PChar): PChar;
+function StrECopy(Dest, Source: PChar): PChar;
+function StrMove(Dest, Source: PChar; L: Integer): PChar;
+function StrUpper(P: PChar): PChar;
+function StrLower(P: PChar): PChar;
+function StrPCopy(Dest: PChar; const Source: AnsiString): PChar;
+function StrPLCopy(Dest: PChar; const Source: AnsiString; MaxLen: Integer): PChar;
+function StrAlloc(Size: Integer): PChar;
+function StrBufSize(Str: PChar): Integer;
+function StrNew(P: PChar): PChar;
+procedure StrDispose(Str: PChar);
 
 { Suspend the current thread for at least Milliseconds (FPC SysUtils.Sleep).
   Backed by the nanosleep syscall. }
@@ -459,6 +552,18 @@ function UnicodeCompareStr(const s1, s2: AnsiString): Integer;
 function UnicodeCompareText(const s1, s2: AnsiString): Integer;
 function SameText(const s1, s2: AnsiString): Boolean;
 function AnsiSameText(const s1, s2: AnsiString): Boolean;
+
+{ The case-SENSITIVE twins of SameText / AnsiSameText. FPC has both pairs and
+  real code reaches for SameStr precisely when it does NOT want folding, so
+  routing it to SameText would be a silent wrong answer, not a shortcut.
+  Measured: AnsiSameStr('a','A') is False, AnsiSameStr('','') is True. }
+function SameStr(const s1, s2: AnsiString): Boolean;
+function AnsiSameStr(const s1, s2: AnsiString): Boolean;
+
+{ FPC's AnsiPos. Byte-identical to Pos on this RTL (one string model, no locale
+  layer) and declared because FPC code names it. The empty needle answers 0 —
+  same as Pos, and the same trap StrUtils' AnsiContainsStr inherits. }
+function AnsiPos(const substr, s: AnsiString): Integer;
 
 { Strip leading / trailing chars <= ' '. }
 function TrimLeft(const s: AnsiString): AnsiString;
@@ -589,6 +694,42 @@ function Time: TDateTime;
 
 function DateTimeToTimeStamp(DateTime: TDateTime): TTimeStamp;
 
+{ ---- the render direction of the date surface (FPC SysUtils) ----
+  FPC defines these as FormatDateTime with the shorthand format letters, and
+  each letter expands to a FORMAT SETTING, not to a fixed layout:
+
+    DateToStr     = 'ddddd' = ShortDateFormat
+    TimeToStr     = 'tt'    = LongTimeFormat
+    DateTimeToStr = 'c'     = ShortDateFormat, then — only when the time is
+                              NON-ZERO — ' ' + LongTimeFormat
+    DateTimeToStr(d, True) = 'f' = both halves, unconditionally
+
+  So DateToStr on the C-locale defaults is '7-3-20', not an ISO date: '/' in a
+  format string means DateSeparator (which defaults to '-'), and a lone 'y' is
+  a TWO-digit year. Measured against FPC 3.2.2, not assumed.
+
+  The zero-time rule is the one that surprises: DateTimeToStr of a pure date
+  silently drops the time half, so a log line that usually reads
+  '7-3-20 13:05:09' becomes '7-3-20' at exactly midnight. FPC tests only
+  hour/minute/second — a non-zero MILLISECOND does not bring the time back. }
+function DateToStr(Date: TDateTime): string;
+function TimeToStr(Time: TDateTime): string;
+function DateTimeToStr(DateTime: TDateTime): string;
+function DateTimeToStr(DateTime: TDateTime; ForceTimeIfZero: Boolean): string;
+
+{ Milliseconds since an unspecified origin, from the MONOTONIC clock — it does
+  not jump when the wall clock is set, which is the whole reason timeout loops
+  use it. FPC's GetTickCount is the deprecated 32-bit truncation of the same
+  counter, and wraps every ~49 days; it is here because old code names it. }
+function GetTickCount64: Int64;
+function GetTickCount: LongWord;
+
+{ Last-modification time of an OPEN handle, as Unix epoch SECONDS, or -1 when
+  the handle is not stat-able. Unix FPC returns st_mtime raw here — it is NOT
+  a TDateTime and NOT the DOS-packed value the name suggests on other targets;
+  FileDateToDateTime is the converter. }
+function FileGetDate(Handle: Integer): Integer;
+
 { The process environment, FPC's spelling. Read from /proc/self/environ, whose
   records are NUL-separated `NAME=VALUE` pairs — Linux-only, and deliberately so
   for now: the environment block sits on the initial stack, but reaching it
@@ -621,6 +762,32 @@ function FileExists(const FileName: string): Boolean;
 function DirectoryExists(const Dir: string): Boolean;
 function DeleteFile(const FileName: string): Boolean;
 
+{ ---- directory manipulation (FPC SysUtils) ----
+  Boolean-returning, never raising — a failure is False, exactly as FPC's unix
+  implementation returns `syscall = 0`. Measured against FPC 3.2.2:
+
+  - CreateDir on an EXISTING directory is False (EEXIST is still a failure), so
+    `if not CreateDir(d) then` is not the same question as "does d exist".
+    ForceDirectories is the idempotent one — it is True when the path already
+    exists, and it creates missing parents.
+  - RemoveDir only removes an EMPTY directory (rmdir, not rm -r).
+  - GetCurrentDir has no trailing slash ('/tmp', not '/tmp/'); ExpandFileName
+    of the EMPTY string, by contrast, is cwd WITH one ('/tmp/'). Both measured.
+  - RenameFile is rename(2): it fails across filesystems rather than copying. }
+function CreateDir(const NewDir: string): Boolean;
+function RemoveDir(const Dir: string): Boolean;
+function ForceDirectories(const Dir: string): Boolean;
+function GetCurrentDir: string;
+function SetCurrentDir(const NewDir: string): Boolean;
+function RenameFile(const OldName, NewName: string): Boolean;
+
+{ Absolute, '.'/'..'-collapsed form of FileName, relative to the CURRENT
+  directory. Purely lexical after the cwd prefix — it does not stat anything and
+  does not resolve symlinks, which is what FPC does too (measured:
+  ExpandFileName('/a/./b/../c') = '/a/c' for paths that do not exist). A
+  trailing slash on the input is PRESERVED. }
+function ExpandFileName(const FileName: string): string;
+
 { Temp-file naming (FPC SysUtils; Synapse's GetTempFile). No TMPDIR probe --
   this RTL has no env access yet; '/tmp/' is the POSIX default. The name is
   unique against FileExists at pick time (same guarantee FPC gives). }
@@ -643,7 +810,7 @@ procedure SetString(var S: AnsiString; Buf: PChar; Len: Integer);
 
 implementation
 
-uses platform, platform_types, wideint;
+uses platform, platform_types, wideint, strings;
 
 procedure FreeAndNil(var Obj);
 var
@@ -1044,6 +1211,101 @@ begin
     end;
     Inc(i);
   end;
+end;
+
+{ ---- the PChar family, forwarded to `strings` ----
+  Qualified calls on purpose: an unqualified StrCopy here would resolve to this
+  very function and recurse. The contracts live in lib/rtl/strings.pas, measured
+  against FPC there; nothing is re-derived in this file. }
+
+function StrCopy(Dest, Source: PChar): PChar;
+begin
+  Result := strings.StrCopy(Dest, Source);
+end;
+
+function StrCat(Dest, Source: PChar): PChar;
+begin
+  Result := strings.StrCat(Dest, Source);
+end;
+
+function StrComp(Str1, Str2: PChar): Integer;
+begin
+  Result := strings.StrComp(Str1, Str2);
+end;
+
+function StrIComp(Str1, Str2: PChar): Integer;
+begin
+  Result := strings.StrIComp(Str1, Str2);
+end;
+
+function StrEnd(P: PChar): PChar;
+begin
+  Result := strings.StrEnd(P);
+end;
+
+function StrScan(P: PChar; C: Char): PChar;
+begin
+  Result := strings.StrScan(P, C);
+end;
+
+function StrRScan(P: PChar; C: Char): PChar;
+begin
+  Result := strings.StrRScan(P, C);
+end;
+
+function StrPos(Str1, Str2: PChar): PChar;
+begin
+  Result := strings.StrPos(Str1, Str2);
+end;
+
+function StrECopy(Dest, Source: PChar): PChar;
+begin
+  Result := strings.StrECopy(Dest, Source);
+end;
+
+function StrMove(Dest, Source: PChar; L: Integer): PChar;
+begin
+  Result := strings.StrMove(Dest, Source, L);
+end;
+
+function StrUpper(P: PChar): PChar;
+begin
+  Result := strings.StrUpper(P);
+end;
+
+function StrLower(P: PChar): PChar;
+begin
+  Result := strings.StrLower(P);
+end;
+
+function StrPCopy(Dest: PChar; const Source: AnsiString): PChar;
+begin
+  Result := strings.StrPCopy(Dest, Source);
+end;
+
+function StrPLCopy(Dest: PChar; const Source: AnsiString; MaxLen: Integer): PChar;
+begin
+  Result := strings.StrPLCopy(Dest, Source, MaxLen);
+end;
+
+function StrAlloc(Size: Integer): PChar;
+begin
+  Result := strings.StrAlloc(Size);
+end;
+
+function StrBufSize(Str: PChar): Integer;
+begin
+  Result := strings.StrBufSize(Str);
+end;
+
+function StrNew(P: PChar): PChar;
+begin
+  Result := strings.StrNew(P);
+end;
+
+procedure StrDispose(Str: PChar);
+begin
+  strings.StrDispose(Str);
 end;
 
 function SysNanosleepNo: Integer;
@@ -3030,6 +3292,21 @@ begin
   Result := SameText(s1, s2);
 end;
 
+function SameStr(const s1, s2: AnsiString): Boolean;
+begin
+  Result := CompareStr(s1, s2) = 0;
+end;
+
+function AnsiSameStr(const s1, s2: AnsiString): Boolean;
+begin
+  Result := SameStr(s1, s2);
+end;
+
+function AnsiPos(const substr, s: AnsiString): Integer;
+begin
+  Result := Pos(substr, s);
+end;
+
 function TrimLeft(const s: AnsiString): AnsiString;
 var i, n: Integer;
 begin
@@ -3383,18 +3660,22 @@ end;
   `1E20` and FloatToExpStr's `1E+20`: a mantissa, then `E`, then a sign that is
   always present, then at least three exponent digits —
   `3.3333333333333331E-001`. Measured against an FPC build, not assumed. }
-function FmtExponent(v: Double; sig: Integer): AnsiString;
+function FmtExponentEx(v: Double; sig, expDigits: Integer): AnsiString;
 var neg: Boolean; e10: Integer; ds, mant, es: AnsiString;
 begin
   { `sig` is significant digits (FPC's rule, min 2); 17 is the most a Double
-    can carry, and the default. }
+    can carry, and the default. `expDigits` is the MINIMUM width of the
+    exponent field: 3 for Format's '%e' (FPC prints E+000), but FloatToStrF's
+    ffExponent takes it from its Digits argument, which is why this is a
+    parameter rather than the constant it used to be. }
+  if expDigits < 1 then expDigits := 1;
   if sig < 2 then sig := 2;
   if sig > 17 then sig := 17;
-  if v <> v then begin FmtExponent := 'NaN'; Exit; end;
+  if v <> v then begin FmtExponentEx := 'NaN'; Exit; end;
   { Infinity BEFORE anything else: the old normalise loop divided by ten until
     the value dropped below ten, and Inf/10.0 is Inf, so it never terminated. }
-  if v > 1.7976931348623157e308 then begin FmtExponent := 'Inf'; Exit; end;
-  if v < -1.7976931348623157e308 then begin FmtExponent := '-Inf'; Exit; end;
+  if v > 1.7976931348623157e308 then begin FmtExponentEx := 'Inf'; Exit; end;
+  if v < -1.7976931348623157e308 then begin FmtExponentEx := '-Inf'; Exit; end;
   neg := v < 0.0;
   if neg then v := -v;
   if v = 0.0 then
@@ -3420,9 +3701,16 @@ begin
   if sig > 1 then mant := mant + '.' + Copy(ds, 2, sig - 1);
   if neg then mant := '-' + mant;
   es := IntToStr(Abs(e10));
-  while Length(es) < 3 do es := '0' + es;
+  while Length(es) < expDigits do es := '0' + es;
   if e10 < 0 then es := '-' + es else es := '+' + es;
-  FmtExponent := mant + 'E' + es;
+  FmtExponentEx := mant + 'E' + es;
+end;
+
+function FmtExponent(v: Double; sig: Integer): AnsiString;
+begin
+  { Format's '%e' width — FPC prints 3.14159E+000. One implementation, one
+    place the rounding lives. }
+  FmtExponent := FmtExponentEx(v, sig, 3);
 end;
 
 { Width padding is ALWAYS spaces. Zero-padding is what the precision does, and
@@ -3520,6 +3808,25 @@ begin
     else
       Result := body + CurrencyString;          { 1, and the default }
     end;
+end;
+
+function FloatToStrF(value: Double; format: TFloatFormat;
+                     Precision, Digits: Integer): AnsiString;
+begin
+  { FPC defines its own Format's float conversions IN TERMS of FloatToStrF, so
+    routing this onto the same five helpers Format already uses is the shared
+    path, not a parallel one: '%f' is ffFixed, '%g' ffGeneral, '%e' ffExponent,
+    '%n' ffNumber, '%m' ffCurrency, and the rounding lives in one place. }
+  case format of
+    ffFixed:    Result := FmtFixed(value, Digits);
+    ffNumber:   Result := FmtGroup(FmtFixed(value, Digits));
+    ffCurrency: Result := FmtCurrency(value, Digits);
+    { the ONE format that reads Digits as an exponent width rather than as a
+      decimal count — see the interface table }
+    ffExponent: Result := FmtExponentEx(value, Precision, Digits);
+  else
+    Result := FmtGeneral(value, Precision);   { ffGeneral }
+  end;
 end;
 
 function Format(const fmt: AnsiString; const args: array of const): AnsiString;
@@ -4014,6 +4321,66 @@ begin
   Result.Date := Trunc(DateTime) + DateDelta;
 end;
 
+function DateToStr(Date: TDateTime): string;
+begin
+  { FPC: FormatDateTime('ddddd', Date), and 'ddddd' IS ShortDateFormat. Passing
+    the setting straight through is the same operation with one indirection
+    fewer — and it keeps working whatever the caller has set the format to. }
+  Result := FormatDateTime(ShortDateFormat, Date);
+end;
+
+function TimeToStr(Time: TDateTime): string;
+begin
+  Result := FormatDateTime(LongTimeFormat, Time);
+end;
+
+function DateTimeToStr(DateTime: TDateTime; ForceTimeIfZero: Boolean): string;
+var
+  h, mi, s, ms: Word;
+begin
+  Result := FormatDateTime(ShortDateFormat, DateTime);
+  DecodeTime(DateTime, h, mi, s, ms);
+  { FPC's 'c' omits the time half at exact midnight. Note the test is on
+    h/mi/s only — MSec is deliberately NOT consulted, matching FPC. }
+  if ForceTimeIfZero or (h <> 0) or (mi <> 0) or (s <> 0) then
+    Result := Result + ' ' + FormatDateTime(LongTimeFormat, DateTime);
+end;
+
+function DateTimeToStr(DateTime: TDateTime): string;
+begin
+  Result := DateTimeToStr(DateTime, False);
+end;
+
+function GetTickCount64: Int64;
+begin
+  Result := PalMonotonicMillis;
+end;
+
+function GetTickCount: LongWord;
+begin
+  { deprecated in FPC, and this is why: the 32-bit truncation wraps. Kept
+    bit-for-bit the same truncation so code that already copes with the wrap
+    sees what it expects. }
+  Result := LongWord(GetTickCount64 and $FFFFFFFF);
+end;
+
+function FileGetDate(Handle: Integer): Integer;
+var info: TPalFileStat;
+begin
+  if PalFstat(Handle, info) <> 0 then
+    Result := -1
+  else
+    Result := Integer(info.MTimeSec);
+end;
+
+function TextToFloat(Buffer: PChar; var Value: Extended): Boolean;
+begin
+  { TryStrToFloat already carries the measured contract (trim, reject trailing
+    junk, reject empty) — this is the PChar spelling of the same question, not
+    a second parser. }
+  Result := TryStrToFloat(StrPas(Buffer), Value);
+end;
+
 { ---- environment ---------------------------------------------------------- }
 
 var
@@ -4212,6 +4579,144 @@ end;
 function DeleteFile(const FileName: string): Boolean;
 begin
   Result := PalDelete(PChar(FileName)) = 0;
+end;
+
+function CreateDir(const NewDir: string): Boolean;
+begin
+  { 0o777 — the kernel applies the process umask, same as FPC's fpMkdir. }
+  Result := PalMkdir(PChar(NewDir), 511) = 0;
+end;
+
+function RemoveDir(const Dir: string): Boolean;
+begin
+  Result := PalRmdir(PChar(Dir)) = 0;
+end;
+
+function SetCurrentDir(const NewDir: string): Boolean;
+begin
+  Result := PalChdir(PChar(NewDir)) = 0;
+end;
+
+function GetCurrentDir: string;
+var
+  buf: array[0..4095] of Char;
+  n: Integer;
+begin
+  { PalGetcwd is the raw syscall: the byte count INCLUDING the NUL on success,
+    -errno on failure. Anything <= 0 means we have no path — return '' rather
+    than a buffer of uninitialised stack. }
+  n := PalGetcwd(@buf[0], SizeOf(buf));
+  if n <= 0 then
+    Result := ''
+  else
+    Result := StrPas(@buf[0]);
+end;
+
+function RenameFile(const OldName, NewName: string): Boolean;
+begin
+  Result := PalRename(PChar(OldName), PChar(NewName)) = 0;
+end;
+
+function ForceDirectories(const Dir: string): Boolean;
+var
+  i, n: Integer;
+  part: string;
+begin
+  { True when the whole path already exists — this is the idempotent member of
+    the family, unlike CreateDir, which reports EEXIST as failure. }
+  Result := False;
+  if Dir = '' then Exit;
+  n := Length(Dir);
+  { walk the separators left to right, creating each missing prefix. A prefix
+    that exists is not an error; only a prefix we can neither find nor create
+    fails the whole call. }
+  i := 1;
+  while i <= n do
+  begin
+    if (Dir[i] = '/') and (i > 1) then
+    begin
+      part := Copy(Dir, 1, i - 1);
+      if not DirectoryExists(part) then
+        if not CreateDir(part) then
+        begin
+          { lost a race, or a real failure — only the second is fatal }
+          if not DirectoryExists(part) then Exit;
+        end;
+    end;
+    Inc(i);
+  end;
+  if Dir[n] <> '/' then
+  begin
+    if not DirectoryExists(Dir) then
+      if not CreateDir(Dir) then
+      begin
+        Result := DirectoryExists(Dir);
+        Exit;
+      end;
+  end;
+  Result := DirectoryExists(Dir);
+end;
+
+function ExpandFileName(const FileName: string): string;
+var
+  s, seg, acc: string;
+  i, n, segStart: Integer;
+  trailing, uncRoot: Boolean;
+begin
+  s := FileName;
+  if (s = '') or (s[1] <> '/') then
+  begin
+    { relative — anchor on the cwd. GetCurrentDir has no trailing slash, so one
+      is added here; the empty input therefore expands to cwd + '/', which is
+      what FPC gives (measured: ExpandFileName('') in /tmp is '/tmp/'). }
+    acc := GetCurrentDir;
+    if (acc = '') or (acc[Length(acc)] <> '/') then acc := acc + '/';
+    s := acc + s;
+  end;
+
+  { A trailing separator on the INPUT survives expansion — FPC keeps it
+    ('/a/b/' stays '/a/b/'), and callers that append a file name depend on it. }
+  n := Length(s);
+  trailing := (n > 0) and (s[n] = '/');
+
+  { A path beginning with EXACTLY two slashes keeps them. POSIX reserves '//'
+    for an implementation-defined meaning and forbids collapsing it, and FPC
+    preserves it (measured: ExpandFileName('//a//b') = '//a/b', where every
+    other run of slashes collapses). Three or more collapse to one. }
+  uncRoot := (n >= 2) and (s[1] = '/') and (s[2] = '/') and
+             ((n = 2) or (s[3] <> '/'));
+
+  { Purely lexical collapse of '.', '..' and repeated separators. No stat, no
+    symlink resolution — matching FPC, which expands paths that do not exist. }
+  Result := '';
+  i := 1;
+  while i <= n do
+  begin
+    while (i <= n) and (s[i] = '/') do Inc(i);
+    segStart := i;
+    while (i <= n) and (s[i] <> '/') do Inc(i);
+    if i > segStart then
+    begin
+      seg := Copy(s, segStart, i - segStart);
+      if seg = '.' then
+        { drop }
+      else if seg = '..' then
+      begin
+        { pop one component; '..' at the root stays at the root, as in POSIX }
+        if Result <> '' then
+          Result := Copy(Result, 1, LastDelimiter('/', Result) - 1);
+      end
+      else
+        Result := Result + '/' + seg;
+    end;
+  end;
+  if Result = '' then
+    Result := '/'
+  else
+  begin
+    if uncRoot then Result := '/' + Result;
+    if trailing then Result := Result + '/';
+  end;
 end;
 
 function GetTempDir: string;
@@ -4803,6 +5308,9 @@ initialization
   TimeSeparator := ':';
   DateSeparator := '-';
   ShortDateFormat := 'd/m/y';
+  LongTimeFormat := 'hh:nn:ss';
+  ShortTimeFormat := 'hh:nn';
+  LongDateFormat := 'dd" "mmmm" "yyyy';
   TwoDigitYearCenturyWindow := 50;
   DecimalSeparator := '.';
   ThousandSeparator := ',';

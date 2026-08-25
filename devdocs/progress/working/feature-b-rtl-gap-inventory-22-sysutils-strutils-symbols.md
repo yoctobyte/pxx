@@ -4,8 +4,8 @@ prio: 75
 type: feature
 blocked-by: []
 summary: "Measured inventory: 22 sysutils/strutils/dateutils routines plus 3 type/alias names that FPC accepts and pxx rejects with `undefined variable`. Everything pxx DOES implement in this surface was verified byte-identical to FPC, so the gap is coverage, not correctness — a directory-walking or PChar-using program simply does not compile."
-status: backlog
-owner: unassigned
+status: working
+owner: frank1-B-rtl
 ---
 
 # 22 sysutils/strutils symbols FPC has and pxx does not
