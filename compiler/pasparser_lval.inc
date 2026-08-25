@@ -1392,6 +1392,26 @@ begin
       end
       else
       begin
+        { A SCALAR cannot be indexed. `i[2]` over an Integer reached this
+          fallback, took Syms[i].ElemType -- which for a scalar is its own type,
+          not an element type -- and emitted an element load off the variable's
+          own address. It compiled clean and read OUT OF BOUNDS: -2099249120 in
+          the measured case, a segfault with a larger index. FPC says "Illegal
+          qualifier".
+
+          Guarded narrowly on purpose: only an ordinal or float BASE, and only
+          when the base symbol is not an array. Everything indexable has already
+          been claimed by an arm above (array, string, pointer, pointer field,
+          deref, N-D, comma sugar, default property), so what is left here with
+          a scalar base is the mistake and nothing else.
+          bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong }
+        if (idx >= 0) and (idx < SymCount) and (not Syms[idx].IsArray) and
+           (TypeIsOrdinal(tk) or TypeIsFloat(tk)) then
+        begin
+          ErrorIdent := Syms[idx].Name;
+          ErrorRecover('this value cannot be indexed — only arrays, strings and '
+                       + 'pointers can');
+        end;
         if idx >= 0 then
         begin
           tk := Syms[idx].ElemType;

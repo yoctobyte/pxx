@@ -4941,6 +4941,21 @@ begin
             refactor-centralize-managed-string-pchar-conversion }
           if (not CProgramMode) and IsNodePChar(valNode) then
             valNode := WrapPCharToString(valNode);
+          { Length wants a STRING, an ARRAY or a PChar. `Length(i)` over an
+            Integer reached this runtime path, which reads a [data-8] length
+            header off the value, and answered 1 -- a plausible number, no
+            diagnostic, exit 0. FPC says "Illegal qualifier". Refused for a
+            plain ordinal or float operand only: every array, string, field and
+            PChar shape has been claimed by an arm above or by the wrap on the
+            line before, and the arrayness of an `array of Char` lives on the
+            SYMBOL, so ASTCharArrayCap is asked rather than the node's kind.
+            bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong }
+          if (not CProgramMode) and
+             (TypeIsOrdinal(IntToTypeKind(ASTTk[valNode])) or
+              TypeIsFloat(IntToTypeKind(ASTTk[valNode]))) and
+             (not IsNodeArray(valNode)) and (ASTCharArrayCap(valNode) < 0) then
+            ErrorRecover('Length needs a string, an array or a PChar, not '
+                         + TypeKindSpelling(IntToTypeKind(ASTTk[valNode])));
           node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
           argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
           ASTLeft[node] := argSeq;

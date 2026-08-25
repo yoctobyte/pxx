@@ -2458,6 +2458,25 @@ begin
 
     Error('for-in: not a generator, enum type, or iterable variable');
   end;
+  { A COUNTED for needs an ORDINAL counter -- FPC's "Illegal counter variable".
+    `for s := 1 to 3 do ...` over an AnsiString compiled clean and SEGFAULTED:
+    the loop machinery increments the counter's slot, which for a managed string
+    is the handle, so the body ran against a walked pointer and everything after
+    the loop was lost with it. Silently, exit 0 in the small case and a fault in
+    the larger one -- the expensive shape, not a crash with a location.
+
+    The for-IN form above is exempt and must stay so: its counter is bound to an
+    element and is legitimately a string, a record or a class. tyAuto is the
+    inline `for var i` before its backfill.
+    bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong }
+  if (varIdx >= 0) and (varIdx < SymCount) and
+     (Syms[varIdx].TypeKind <> tyAuto) and
+     (not TypeIsOrdinal(Syms[varIdx].TypeKind)) then
+  begin
+    ErrorIdent := Syms[varIdx].Name;
+    ErrorRecover('illegal counter variable: a counted for needs an ordinal '
+                 + '(integer, char, boolean, enum or subrange)');
+  end;
   Expect(tkAssign, ':=');
   ParseExpr; initNode := CurASTNode;
   down := CurTok.Kind = tkDownto;
@@ -5057,6 +5076,22 @@ begin
         end
         else
         begin
+        { Inc/Dec want an ORDINAL or a POINTER. `Inc(s)` on an AnsiString
+          desugared to `s := s + 1` and the string CONCAT path took it: the
+          measured effect is that `'x'` becomes `''` -- the variable is
+          destroyed, silently, exit 0. A record, class, set or variant target is
+          the same shape. FPC says "Incompatible type".
+
+          Floats are deliberately left alone: `Inc(d)` is laxness of the ordinary
+          kind (it computes d + 1 and nothing is damaged), and this dialect keeps
+          that sort of thing. What is refused here is the set that CORRUPTS.
+          bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong }
+        castTk := IntToTypeKind(ASTTk[valNode]);
+        if TypeIsFrozenString(castTk) or (castTk = tyAnsiString) or
+           (castTk = tyString) or (castTk = tyRecord) or (castTk = tyClass) or
+           (castTk = tySet) or (castTk = tyVariant) then
+          ErrorRecover('Inc/Dec needs an ordinal or a pointer, not '
+                       + TypeKindSpelling(castTk));
         opNode := AllocNode(AN_BINOP);
         if i = Ord(tkInc) then ASTIVal[opNode] := Ord(tkPlus) else ASTIVal[opNode] := Ord(tkMinus);
         ASTLeft[opNode] := valNode;
@@ -5411,6 +5446,18 @@ begin
         if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] >= 0) then
           idx := ASTIVal[valNode];
         if idx < 0 then Error('New: undefined variable');
+        { New wants a POINTER. `New(i)` on an Integer took TypeSize(PtrElemTk)
+          -- tyUnknown, so a nonsense size -- allocated it, and stored the block
+          address INTO the Integer: `i` came back 264241264, silently, exit 0.
+          FPC says "Illegal qualifier". Same guard shape as the SetLength and
+          Inc sites: refuse the target that gets CORRUPTED.
+          bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong }
+        if IntToTypeKind(ASTTk[valNode]) <> tyPointer then
+        begin
+          ErrorIdent := Syms[idx].Name;
+          ErrorRecover('New needs a pointer variable, not '
+                       + TypeKindSpelling(IntToTypeKind(ASTTk[valNode])));
+        end;
         if Syms[idx].PtrElemTk = tyRecord then
           castPrevTok := RecSize(Syms[idx].PtrElemRec)
         else
