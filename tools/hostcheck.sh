@@ -135,32 +135,54 @@ check_dns_applied() {
 # is the one that hides: on 2026-08-25 every unqualified lookup on this box took
 # exactly 10.02s while succeeding, so nothing failed and everything crawled.
 #
-# Cause, worth stating because the fix looks wrong until you see it: a DNS
-# search domain of `local` collides with mDNS. `.local` is reserved for
+# Cause, worth stating precisely because the obvious version of it is wrong:
+# a DNS search domain of `local` collides with mDNS. `.local` is reserved for
 # multicast DNS, and nsswitch here is `files mdns4_minimal [NOTFOUND=return]
-# dns` -- so `github.com` is tried as `github.com.local` FIRST, waits out the
-# full mDNS timeout, and only then falls through to real DNS. Comparing the
-# unqualified lookup against the same name with a trailing dot (which skips the
-# search list entirely) isolates it in one measurement.
+# dns`.
+#
+# It is NOT that every name is tried as `<name>.local` first. With ndots:1
+# glibc tries a dotted name ABSOLUTE first, and consults the search list only
+# when the bare name returns no answer FOR THAT ADDRESS FAMILY. So the stall
+# lands exclusively on **IPv4-only hosts**: they have no AAAA, the AAAA half
+# falls through to `<name>.local`, mDNS has no concept of a negative answer,
+# and it can only end in a full timeout. `getent hosts` asks AF_UNSPEC, waits
+# for the slow half, and the name looks uniformly broken. Dual-stack hosts
+# never stall at all -- which is why this presents as intermittent and random
+# rather than as an outage.
+#
+# CANARY MUST BE IPv4-ONLY. github.com is the headline case (and is why git
+# over https and apt ate the tax while browsing mostly did not). If it ever
+# gains an AAAA record this check would read green while the box stalls, so
+# the canary is asserted rather than assumed.
+#
+# Comparing the unqualified lookup against the same name with a trailing dot
+# isolates it in one measurement: the dot skips the search list and holds
+# everything else constant.
+CANARY=${CANARY:-github.com}
+
 check_dns_resolve() {
+    # If the canary is dual-stack it cannot detect the search-list stall.
+    if timeout 5 resolvectl query -t AAAA "$CANARY" 2>/dev/null | grep -q ':'; then
+        warn resolve "canary $CANARY now has an AAAA record -- it can no longer detect a search-list stall; pick an IPv4-only name"
+    fi
     t0=$(date +%s%N)
-    timeout 20 getent hosts github.com >/dev/null 2>&1; got=$?
+    timeout 20 getent hosts "$CANARY" >/dev/null 2>&1; got=$?
     t1=$(date +%s%N)
     unq=$(( (t1 - t0) / 1000000 ))
 
     t0=$(date +%s%N)
-    timeout 20 getent hosts github.com. >/dev/null 2>&1
+    timeout 20 getent hosts "$CANARY." >/dev/null 2>&1
     t1=$(date +%s%N)
     fqdn=$(( (t1 - t0) / 1000000 ))
 
     if [ "$got" -ne 0 ]; then
-        fail resolve "github.com did NOT resolve within 20s"
+        fail resolve "$CANARY did NOT resolve within 20s"
     elif [ "$unq" -gt 2000 ] && [ "$fqdn" -lt 500 ]; then
         fail resolve "unqualified ${unq}ms vs FQDN ${fqdn}ms -- the search list is stalling; drop \`local\` from ipv4.dns-search (it is mDNS-reserved) and use via.local"
     elif [ "$unq" -gt 2000 ]; then
         fail resolve "resolution is slow: ${unq}ms unqualified, ${fqdn}ms FQDN"
     else
-        ok resolve "github.com ${unq}ms (FQDN ${fqdn}ms)"
+        ok resolve "$CANARY ${unq}ms (FQDN ${fqdn}ms)"
     fi
 }
 
