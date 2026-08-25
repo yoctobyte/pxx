@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T15:30:22Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:test/cstatic_same_module_dup.c"
-   ],
-   "sha": "99dcac2a2ade0352ceb8fe8fc8aadbc2071ca422",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T16:31:55Z",
    "fixed": [
     "test-asm#src:compiler/compiler.pas",
@@ -489,11 +479,24 @@
    "sha": "d20300d288eb206e9e1aa157e9e052d546369817",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-25T16:38:22Z",
+   "fixed": [],
+   "new_red": [
+    "test-core#src:test/test_arr_of_ptr_elemrec_b354.pas",
+    "test-core#src:test/test_setlength_grow_capacity.pas"
+   ],
+   "sha": "10dada0b7689fee546516eec7ea90d1da4256053",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2358728B  data=61689B  bss=51420B  procs=1788] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
+  "test-core#src:test/test_arr_of_ptr_elemrec_b354.pas": "pascal26:51: error: \"A\": this value has no members (only records, classes, interfaces and variants do) | near: lst  i    >>> A | pascal26:51: error: \"B\": this value has no members (only records, classes, interfaces and variants do) | near: lst  i    >>> B | pascal26:51: error: \"C\": this value has no members (only records, classes, interfaces and variants do) | near: lst  i    >>> C",
+  "test-core#src:test/test_setlength_grow_capacity.pas": "ok: $TMP  [code=65250B  data=2016B  bss=42480B  procs=128]",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter"
  },
  "job_tier": {
@@ -1425,6 +1428,7 @@
   "test-core#src:test/strings.pas@1": "native",
   "test-core#src:test/test_a_nested_dynamic_array_result.pas": "native",
   "test-core#src:test/test_a_record_field_named_like_a_class_operation.pas": "native",
+  "test-core#src:test/test_a_record_typed_var_initialiser.pas": "native",
   "test-core#src:test/test_abs_sqr.pas": "native",
   "test-core#src:test/test_absolute_alias_survives_residency.pas": "native",
   "test-core#src:test/test_absolute_array_overlay.pas": "native",
@@ -1639,6 +1643,7 @@
   "test-core#src:test/test_div_mod_mixed_signedness.pas": "native",
   "test-core#src:test/test_div_zero_re200.pas": "native",
   "test-core#src:test/test_dyn_comma.pas": "native",
+  "test-core#src:test/test_dynamic_array_concatenation.pas": "native",
   "test-core#src:test/test_dynarray.pas": "native",
   "test-core#src:test/test_dynarray_ansistring.pas@1": "native",
   "test-core#src:test/test_dynarray_ansistring.pas@2": "native",
@@ -4506,6 +4511,7 @@
   "test-core#src:test/strings.pas@1": "pass",
   "test-core#src:test/test_a_nested_dynamic_array_result.pas": "pass",
   "test-core#src:test/test_a_record_field_named_like_a_class_operation.pas": "pass",
+  "test-core#src:test/test_a_record_typed_var_initialiser.pas": "pass",
   "test-core#src:test/test_abs_sqr.pas": "pass",
   "test-core#src:test/test_absolute_alias_survives_residency.pas": "pass",
   "test-core#src:test/test_absolute_array_overlay.pas": "pass",
@@ -4525,7 +4531,7 @@
   "test-core#src:test/test_ansistring_cast_extern_pchar.pas": "pass",
   "test-core#src:test/test_ansistring_cast_fnptr.pas": "pass",
   "test-core#src:test/test_ansistring_record_char_read.pas": "pass",
-  "test-core#src:test/test_arr_of_ptr_elemrec_b354.pas": "pass",
+  "test-core#src:test/test_arr_of_ptr_elemrec_b354.pas": "fail",
   "test-core#src:test/test_array_index_type_b284.pas": "pass",
   "test-core#src:test/test_array_of_const.pas": "pass",
   "test-core#src:test/test_array_of_const_cross_unit_overload.pas": "pass",
@@ -4719,6 +4725,7 @@
   "test-core#src:test/test_div_mod_mixed_signedness.pas": "pass",
   "test-core#src:test/test_div_zero_re200.pas": "pass",
   "test-core#src:test/test_dyn_comma.pas": "pass",
+  "test-core#src:test/test_dynamic_array_concatenation.pas": "pass",
   "test-core#src:test/test_dynarray.pas": "pass",
   "test-core#src:test/test_dynarray_ansistring.pas@1": "pass",
   "test-core#src:test/test_dynarray_ansistring.pas@2": "pass",
@@ -5334,7 +5341,7 @@
   "test-core#src:test/test_set_subrange.pas": "pass",
   "test-core#src:test/test_set_symmetric_difference.pas": "pass",
   "test-core#src:test/test_setlength_dynarray_result.pas": "pass",
-  "test-core#src:test/test_setlength_grow_capacity.pas": "pass",
+  "test-core#src:test/test_setlength_grow_capacity.pas": "fail",
   "test-core#src:test/test_setlength_managed_field.pas": "pass",
   "test-core#src:test/test_sets.pas": "pass",
   "test-core#src:test/test_shadow_first_uses_hidden.pas": "pass",
@@ -6648,11 +6655,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-25T15:36:42Z",
-  "sha": "d20300d288eb206e9e1aa157e9e052d546369817",
+  "date": "2026-08-25T16:38:22Z",
+  "sha": "10dada0b7689fee546516eec7ea90d1da4256053",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.2
+  "wall": 3600.0
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6842,6 +6849,44 @@
     "fd93e4a71c37a7932b9ef73e4c9f8a7deceb3c34"
    ],
    "src": "test/lib_mimic_xml_etree_elementtree.npy",
+   "status": "fail"
+  },
+  {
+   "bad": "10dada0b7689fee546516eec7ea90d1da4256053",
+   "good": "d20300d288eb206e9e1aa157e9e052d546369817",
+   "job": "test-core#src:test/test_arr_of_ptr_elemrec_b354.pas",
+   "name": "test-core#89",
+   "opened": "2026-08-25T16:38:22Z",
+   "pin_built": false,
+   "range": [
+    "a0ccba78f7ddfb64a3abc70300673a461400b65c",
+    "0d8fe0d03541372e4fd9fafb28f6d1cb5dc62ff8",
+    "f2bad72e923042f234d09920e9997b502f103ffa",
+    "3a1227d5df188f2c781dd5fe3db4d0e3d9965a8e",
+    "582cdc934c71b939d9dfa520933c8884f3fe40eb",
+    "383cada586f0206bf0d8fb6670626af405cc4e1a",
+    "10dada0b7689fee546516eec7ea90d1da4256053"
+   ],
+   "src": "test/test_arr_of_ptr_elemrec_b354.pas",
+   "status": "fail"
+  },
+  {
+   "bad": "10dada0b7689fee546516eec7ea90d1da4256053",
+   "good": "d20300d288eb206e9e1aa157e9e052d546369817",
+   "job": "test-core#src:test/test_setlength_grow_capacity.pas",
+   "name": "test-core#375",
+   "opened": "2026-08-25T16:38:22Z",
+   "pin_built": false,
+   "range": [
+    "a0ccba78f7ddfb64a3abc70300673a461400b65c",
+    "0d8fe0d03541372e4fd9fafb28f6d1cb5dc62ff8",
+    "f2bad72e923042f234d09920e9997b502f103ffa",
+    "3a1227d5df188f2c781dd5fe3db4d0e3d9965a8e",
+    "582cdc934c71b939d9dfa520933c8884f3fe40eb",
+    "383cada586f0206bf0d8fb6670626af405cc4e1a",
+    "10dada0b7689fee546516eec7ea90d1da4256053"
+   ],
+   "src": "test/test_setlength_grow_capacity.pas test/test_dynarray_concat_rejected.pas",
    "status": "fail"
   }
  ],
