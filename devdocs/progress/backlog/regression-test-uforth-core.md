@@ -44,3 +44,26 @@ test-uforth: FAIL — 1 of 1 corpora differ from CPython
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## CORRECTION — the range above is WRONG, and too narrow (Track T, 2026-08-25)
+
+**Do not bisect the 23-commit range this ticket was filed with.** The job named
+here does not run in the `native` tier, and the parent it was diffed against
+(`d2cb6721e175`) was a native run. It last actually executed in the full tier at
+`aa9f0989a4c0` on 2026-08-24 — so the honest range is **179 commits**
+(`aa9f0989a4c0..44193e547f6d`), not 23, and the last-good sha is
+`aa9f0989a4c0`, not `d2cb6721e175`.
+
+This matters more than the arithmetic suggests. A bisect over a range that does
+not contain the culprit does not fail and does not report "not found" — it
+narrows, confidently, onto an innocent commit, and a core-job red is a revert
+candidate by this repo's own rule. The 23-commit window is precisely the set of
+commits that CANNOT have caused this, since the job was already in this state
+before the window opened.
+
+Cause: `twatch` computed the blame range from "since this host last tested
+anything" rather than "since this job last ran". Fixed in `c68e6492e` —
+the range is now decided per job from `job_tier` and widened only when the
+parent's run provably did not contain it. Tickets filed from later runs carry
+the corrected range; this one is annotated rather than rewritten, because the
+filed text is the record of what the watcher actually claimed.
