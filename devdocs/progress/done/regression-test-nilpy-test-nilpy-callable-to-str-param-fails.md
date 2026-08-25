@@ -29,3 +29,6 @@ test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming t
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-25 — auto-closed by the plexus watcher: `test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy` passes at 44193e547f6d (tier full); it was red at e96a698f1f29. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
