@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T10:28:12Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "134827d9db5738b3754d896aa584656b68bbd6a9",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T10:37:29Z",
    "fixed": [],
    "new_red": [],
@@ -470,6 +462,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "c1925bbe38a6947b16d701bfa000f7c57d18e6a4",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-25T05:08:26Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "0626344011cf1f411c662114e23ff983c619731e",
    "tier": "native",
    "verdict": "RED"
   }
@@ -2113,6 +2113,7 @@
   "test-core#src:test/test_pchar_array_of_pointer_to_pchar.pas": "native",
   "test-core#src:test/test_pchar_concat_and_array_element.pas": "native",
   "test-core#src:test/test_pchar_from_a_string_literal.pas": "native",
+  "test-core#src:test/test_pchar_paren_deref_and_copy.pas": "native",
   "test-core#src:test/test_pchar_pointer_to_pchar.pas": "native",
   "test-core#src:test/test_pchar_result_decl_only_method.pas": "native",
   "test-core#src:test/test_pchar_to_string.pas": "native",
@@ -5174,6 +5175,7 @@
   "test-core#src:test/test_pchar_array_of_pointer_to_pchar.pas": "pass",
   "test-core#src:test/test_pchar_concat_and_array_element.pas": "pass",
   "test-core#src:test/test_pchar_from_a_string_literal.pas": "pass",
+  "test-core#src:test/test_pchar_paren_deref_and_copy.pas": "pass",
   "test-core#src:test/test_pchar_pointer_to_pchar.pas": "pass",
   "test-core#src:test/test_pchar_result_decl_only_method.pas": "pass",
   "test-core#src:test/test_pchar_to_string.pas": "pass",
@@ -6597,11 +6599,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-24T23:29:53Z",
-  "sha": "c1925bbe38a6947b16d701bfa000f7c57d18e6a4",
+  "date": "2026-08-25T05:08:26Z",
+  "sha": "0626344011cf1f411c662114e23ff983c619731e",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.1
+  "wall": 3600.3
  },
  "last_bench": {
   "conf_rows": 550,
