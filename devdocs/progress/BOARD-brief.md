@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:1 working:2 unfinished:23 blocked:7 backlog:278 backlog_new:22 experimental:20 rainy-day:44 float:20 done-followup:3 decided:114 done:2354 rejected:40`
+`urgent:1 working:2 unfinished:23 blocked:7 backlog:279 backlog_new:22 experimental:20 rainy-day:44 float:20 done-followup:3 decided:114 done:2354 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -52,7 +52,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 289, ranked
+## Ready — top 30 of 290, ranked
 
 - `[p 70] [T]` bug-t-the-native-tier-times-out-and-publishes-a-contentless-red
 - `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree-2
@@ -62,6 +62,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 65] [T]` bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
 - `[p 65] [P]` feature-pascal-corpus-oop
+- `[p 60] [N]` bug-n-every-nilpy-compile-pays-a-fixed-nine-second-cost
 - `[p 60] [N]` bug-n-inferred-return-type-of-true-division-is-int
 - `[p 60] [T]` bug-t-the-push-rate-starves-breadth-coverage-entirely
 - `[p 60] [T]` feature-t-gate-quick-should-smoke-the-pinned-compiler
@@ -83,6 +84,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
 - `[p 53] [S]` feature-esp-peripheral-callback-api
-- `[p 50] [A]` bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical
 
-_259 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_260 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
