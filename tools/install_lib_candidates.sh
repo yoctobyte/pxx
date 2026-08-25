@@ -9,7 +9,7 @@
 # and gets a PROVENANCE.md recording it.
 #
 # Usage:
-#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|stb|cglm|enet|zengl|quickjs|duktape|fcl-json|webencodings|tinycss2|html5lib|nilpy-stack|reportlab] ...
+#   tools/install_lib_candidates.sh [all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|fpc-rtl|zlib|tcc|cjson|stb|cglm|enet|zengl|quickjs|duktape|fcl-json|webencodings|tinycss2|html5lib|nilpy-stack|reportlab] ...
 #   FORCE=1 tools/install_lib_candidates.sh lua      # re-fetch even if present
 #
 # Default target is `all`.
@@ -319,6 +319,30 @@ EOF
   say "fpc-testsuite -> $DEST/fpc-testsuite"
 }
 
+fetch_fpc_rtl() {
+  # FPC's own RTL sources (rtl/objpas) at the SAME pinned commit as the
+  # testsuite fetch. This is what makes the fgl rung real: `fgl.pp` is FPC's
+  # generic-container unit and the flagship --mimic-fpc compile target, and
+  # until now the only way to reach it was a hardcoded /usr/share/fpcsrc path
+  # that is absent on most boxes -- so the check printed "SKIP (no fpcsrc)" and
+  # passed. Fetching it here makes the rung actually run.
+  if present fpc-rtl; then say "fpc-rtl present (FORCE=1 to re-fetch) -- skip"; return 0; fi
+  fetch_commit "$FPC_URL" fpc-rtl "$FPC_COMMIT" rtl/objpas rtl/inc LICENSE
+  cat > "$DEST/fpc-rtl/PROVENANCE.md" <<EOF
+# FPC RTL sources (fgl / Object Pascal corpus rung)
+Upstream: ${FPC_URL}
+Commit: ${FPC_COMMIT} (release_3_2_2 tag)
+Paths: rtl/objpas/ (fgl.pp, classes, sysutils, ...), rtl/inc/, LICENSE
+Installed by tools/install_lib_candidates.sh. Vendor source -- gitignored, never committed.
+License: the FPC RTL is LGPL with the static-linking exception (see LICENSE and
+the unit headers); used here only as a COMPILE TARGET for the Pascal corpus
+ladder, never shipped.
+Used by: \`make test-fgl\` -- pxx --mimic-fpc compiles REAL fgl.pp and runs
+test/test_fgl_use.pas against it.
+EOF
+  say "fpc-rtl -> $DEST/fpc-rtl"
+}
+
 fetch_fcl_json() {
   # fcl-json + fcl-fpcunit sources from the SAME pinned FPC commit as the
   # testsuite fetch — the fpjson/fpcunit 203-case suite target (make test-fpjson;
@@ -601,7 +625,7 @@ EOF
 }
 
   case "$t" in
-    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs; fetch_js_sha256; fetch_duktape; fetch_fcl_json; fetch_csmith; fetch_webencodings; fetch_tinycss2; fetch_html5lib; fetch_reportlab ;;
+    all)           fetch_lua; fetch_tiny_regex; fetch_freebsd_regex; fetch_sqlite; fetch_c_testsuite; fetch_fpc_testsuite; fetch_fpc_rtl; fetch_zlib; fetch_tcc; fetch_cjson; fetch_stb; fetch_cglm; fetch_enet; fetch_vice; fetch_zengl; fetch_quickjs; fetch_js_sha256; fetch_duktape; fetch_fcl_json; fetch_csmith; fetch_webencodings; fetch_tinycss2; fetch_html5lib; fetch_reportlab ;;
     lua)           fetch_lua ;;
     cjson)         fetch_cjson ;;
     stb)           fetch_stb ;;
@@ -612,6 +636,7 @@ EOF
     sqlite)        fetch_sqlite ;;
     c-testsuite)   fetch_c_testsuite ;;
     fpc-testsuite) fetch_fpc_testsuite ;;
+    fpc-rtl)       fetch_fpc_rtl ;;
     zlib)          fetch_zlib ;;
     tcc)           fetch_tcc ;;
     chess|vice)    fetch_vice ;;
@@ -627,7 +652,7 @@ EOF
     tinycss2)      fetch_tinycss2 ;;
     html5lib)      fetch_html5lib ;;
     nilpy-stack)   fetch_webencodings; fetch_tinycss2; fetch_html5lib; fetch_reportlab ;;
-    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|zlib|tcc|cjson|chess|csmith|webencodings|tinycss2|html5lib|nilpy-stack|reportlab)" ;;
+    *) die "unknown candidate '$t' (want: all|lua|tiny-regex-c|freebsd-regex|sqlite|c-testsuite|fpc-testsuite|fpc-rtl|zlib|tcc|cjson|chess|csmith|webencodings|tinycss2|html5lib|nilpy-stack|reportlab)" ;;
   esac
 done
 say "done. library_candidates/ stays gitignored — nothing entered the repo."

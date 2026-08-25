@@ -73,7 +73,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 .PHONY: test-esp-idf
 .PHONY: fuzz-csmith
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-fgl test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos tools-devtest c-interop-devtest tls-openssl-devtest tls13-handshake-devtest truststore-devtest tls-native-seam-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -5808,11 +5808,18 @@ test-core: $(COMPILER)
 	# FPC-compat batch 2: method overloads, method pointers, setter-prop writes, nested class types, CreateFmt, mem builtins
 	./$(COMPILER) -Fulib/rtl test/test_fpc_compat_batch2.pas $(TESTTMP)/test_fpc_compat_batch226
 	test "$$($(TESTTMP)/test_fpc_compat_batch226 | tail -1)" = "total ok 13 / 13"
-	# flagship FPC-compat: compile+run REAL FPC 3.2.2 fgl.pp (skipped when fpcsrc absent)
-	@if [ -d /usr/share/fpcsrc/3.2.2/rtl/objpas ]; then \
-	  ./$(COMPILER) --mimic-fpc -Fu/usr/share/fpcsrc/3.2.2/rtl/objpas test/test_fgl_use.pas $(TESTTMP)/test_fgl_use26 >/dev/null && \
+	# flagship FPC-compat: compile+run REAL FPC 3.2.2 fgl.pp. Prefers the fetched
+	# corpus tree (tools/install_lib_candidates.sh fpc-rtl) and only then a system
+	# fpcsrc -- it used to check ONLY /usr/share/fpcsrc, which is absent on most
+	# boxes, so this printed "SKIP (no fpcsrc)" and passed forever. The full rung,
+	# with its skip list and the other fgl containers, is `make test-fgl`.
+	@fglsrc=""; \
+	if [ -f library_candidates/fpc-rtl/rtl/objpas/fgl.pp ]; then fglsrc=library_candidates/fpc-rtl/rtl/objpas; \
+	elif [ -f /usr/share/fpcsrc/3.2.2/rtl/objpas/fgl.pp ]; then fglsrc=/usr/share/fpcsrc/3.2.2/rtl/objpas; fi; \
+	if [ -n "$$fglsrc" ]; then \
+	  ./$(COMPILER) --mimic-fpc -Fu$$fglsrc test/test_fgl_use.pas $(TESTTMP)/test_fgl_use26 >/dev/null && \
 	  test "$$($(TESTTMP)/test_fgl_use26 | tail -1)" = "map count=3 m[5]=50 m[2]=20" && echo "fgl(real FPC source): OK"; \
-	else echo "fgl(real FPC source): SKIP (no fpcsrc)"; fi
+	else echo "fgl(real FPC source): SKIP (no FPC RTL source -- tools/install_lib_candidates.sh fpc-rtl)"; fi
 	# implicit (sloppy) locals: --auto-locals infers int/string/for-counter/for-in from first assignment; default OFF still errors
 	./$(COMPILER) --auto-locals test/test_auto_locals.pas $(TESTTMP)/test_auto_locals26
 	test "$$($(TESTTMP)/test_auto_locals26 2>/dev/null)" = "total ok 4 / 4"
@@ -11386,6 +11393,22 @@ test-quickjs: $(COMPILER)
 # test/fpjson/tjrun.pp (walks the registry itself — the ITestListener interface
 # dispatch has a separate open bug). Asserts 203 run / 0 failures / 0 errors.
 # Skips if the gitignored tree is absent (tools/install_lib_candidates.sh fcl-json).
+# fgl corpus rung (Pascal real-world ladder rung 2, feature-pascal-corpus-fgl).
+# Compiles REAL FPC 3.2.2 fgl.pp -- the reference RTL's generic-container unit --
+# with pxx --mimic-fpc and runs test/fgl/*.pas against it, asserting each
+# driver's stdout byte-matches its .expected. Those .expected files were produced
+# by building the SAME drivers against the SAME fgl.pp with FPC 3.2.2 itself, so
+# this asserts BEHAVIOURAL parity with the reference compiler on real library
+# code -- it says nothing about the machine code we emit.
+# Known-fails are EXPLICIT in test/fgl/pxx.skip, one ticket-referenced line each;
+# anything else failing = regression, exit 1. The suite dir is spelled out so
+# testmgr's CORPUS_RE sees library_candidates/fpc-rtl and the job self-skips
+# LOUDLY on a box that has not fetched it (this rung spent its whole life as a
+# silent `SKIP (no fpcsrc)` inside test-core -- that is the bug being fixed).
+FPC_RTL_OBJPAS ?= library_candidates/fpc-rtl/rtl/objpas
+test-fgl: $(COMPILER)
+	tools/run_fgl_corpus.sh ./$(COMPILER) $(FPC_RTL_OBJPAS)
+
 FCLJSON_SRC ?= library_candidates/fcl-json/packages
 test-fpjson:
 	@test -x $(PXX_STABLE) || { echo "test-fpjson: no stable compiler at $(PXX_STABLE)"; exit 1; }

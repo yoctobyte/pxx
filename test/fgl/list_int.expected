@@ -1,0 +1,6 @@
+count=3
+indexof=1
+after-ins 30 99 10 20
+after-del count=3 head=99
+sorted: 10 20 30 99
+forin: 10 20 30 99
