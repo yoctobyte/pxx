@@ -4727,6 +4727,60 @@ begin
   else WriteArgWidth := -1;
 end;
 
+{ Append the last three arguments of a dyn-array element WALK —
+  (depth, baseKind, baseRecDesc) — onto an IR_ARG chain, and return the new
+  tail. The five-argument shape PXXDynArrayRetainImmediate and its release twin
+  take.
+
+  ONE copy, because there were three: the AN_DYN_COPY, AN_DYN_DELETE and
+  AN_DYN_INSERT arms each spelled out the same gate and the same three-way
+  dispatch, and all three named exactly AnsiString and managed-record. So the
+  COM-INTERFACE element type was retained by none of them, and
+  `Delete(arr, 2, 2)` over five interface elements destroyed all five: the fresh
+  buffer never took a reference, the old buffer's element-aware release (which
+  DOES know kind 4) dropped every element, and the three survivors were left
+  dangling. Use-after-free from ordinary code — fpc-testsuite tarray11.
+
+  ManagedElemKind is asked rather than re-deriving the policy, and its own
+  comment is the reason: it exists because that answer had been written out NINE
+  times and every copy was missing kind 4. These three were a tenth, eleventh and
+  twelfth door onto the same absent case. ManagedElemKind, not
+  ManagedElemKindLocked — this is the RETAIN half, AddRef frees nothing, and no
+  heap lock is held (see PXXDynArrayRetainImmediate's kind-4 note).
+
+  depth > 1 passes a NEUTRAL kind: the RTL's nested path IncRefs every handle and
+  reads neither of the last two, while the record arm would index the RTTI table
+  with a REC_NONE element id and compute a garbage offset.
+  bug-a-delete-on-a-dynamic-array-of-interfaces-dangles-every-survivor }
+function AppendDynWalkTail(last, depth, elemTk, elemRec: Integer): Integer;
+var argNode, kind: Integer;
+begin
+  argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, depth, Ord(tyInteger)),
+               -1, -1, 0, Ord(tyInteger));
+  IRB[last] := argNode; last := argNode;                       { depth }
+  if depth > 1 then kind := 0 else kind := ManagedElemKind(elemTk, elemRec);
+  argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, kind, Ord(tyInteger)),
+               -1, -1, 0, Ord(tyInteger));
+  IRB[last] := argNode; last := argNode;                       { baseKind }
+  if kind = 3 then
+    argNode := IRAppend(IR_ARG,
+                 IRAppend(IR_CONST_DATA, -1, -1, -1,
+                   -(RECORD_RTTI_DATAREF_BASE + (elemRec - REC_UCLASS_BASE)), Ord(tyPointer)),
+                 -1, -1, 0, Ord(tyPointer))
+  else if kind = 4 then
+    { kind 4 carries the interface ID as an IMMEDIATE in the desc slot, not an
+      address — PXXIntfAddRef takes it as its ifaceId. Same encoding
+      AppendKindAndDesc uses for the static-array walks. }
+    argNode := IRAppend(IR_ARG,
+                 IRAppend(IR_CONST_INT, -1, -1, -1, elemRec - REC_UCLASS_BASE, Ord(tyPointer)),
+                 -1, -1, 0, Ord(tyPointer))
+  else
+    argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
+                 -1, -1, 0, Ord(tyPointer));
+  IRB[last] := argNode;                                        { baseRecDesc }
+  AppendDynWalkTail := argNode;
+end;
+
 { Dispatch scan: walk the ENTIRE switch body (any depth — case/default labels are
   labels on arbitrarily nested statements, C 6.8.1) assigning each C marker an
   IR_LABEL and, for a case, emitting `if (sel == val) goto label`. Recurses into
@@ -6468,8 +6522,10 @@ begin
         elements are the SAME sub-arrays, so `h[0][0] := 99` is visible through
         `g[0][0]`. Retaining them is what makes that sharing safe instead of a
         double free. }
-      if (dcDepth > 1) or (dcElemTk = tyAnsiString) or
-         ((dcElemTk = tyRecord) and RecordHasManagedFields(dcElemRec)) then
+      { ONE question, asked of ManagedElemKind — the gate used to name AnsiString
+        and managed-record explicitly and so skipped the retain entirely for a
+        COM-interface element. See AppendDynWalkTail. }
+      if (dcDepth > 1) or (ManagedElemKind(Ord(dcElemTk), dcElemRec) <> 0) then
       begin
         procIdx := FindProc('PXXDynArrayRetainImmediate');
         if procIdx < 0 then Error('compiler error: PXXDynArrayRetainImmediate not found');
@@ -6481,43 +6537,7 @@ begin
         last := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcCntTmp, -1, -1, 0, Ord(tyInteger)),
                   -1, -1, 0, Ord(tyInteger));
         IRB[first] := last;
-        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, dcDepth, Ord(tyInteger)),
-                     -1, -1, 0, Ord(tyInteger));
-        IRB[last] := argNode; last := argNode;                 { depth }
-        if dcDepth > 1 then
-        begin
-          { Nested: the RTL takes its depth > 1 path and never reads these two,
-            so pass a NEUTRAL baseKind rather than falling into the record arm
-            below — that one indexes the RTTI table with dcElemRec, which for
-            `array of array of Integer` is REC_NONE and would compute a garbage
-            data offset. The call needs five arguments either way. }
-          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyInteger)),
-                       -1, -1, 0, Ord(tyInteger));
-          IRB[last] := argNode; last := argNode;               { baseKind = 0 (unused) }
-          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
-                       -1, -1, 0, Ord(tyPointer));
-          IRB[last] := argNode;                                { baseRecDesc = nil }
-        end
-        else if dcElemTk = tyAnsiString then
-        begin
-          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
-                       -1, -1, 0, Ord(tyInteger));
-          IRB[last] := argNode; last := argNode;               { baseKind = 1 (string) }
-          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
-                       -1, -1, 0, Ord(tyPointer));
-          IRB[last] := argNode;                                { baseRecDesc = nil }
-        end
-        else
-        begin
-          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 3, Ord(tyInteger)),
-                       -1, -1, 0, Ord(tyInteger));
-          IRB[last] := argNode; last := argNode;               { baseKind = 3 (record) }
-          argNode := IRAppend(IR_ARG,
-                       IRAppend(IR_CONST_DATA, -1, -1, -1,
-                         -(RECORD_RTTI_DATAREF_BASE + (dcElemRec - REC_UCLASS_BASE)), Ord(tyPointer)),
-                       -1, -1, 0, Ord(tyPointer));
-          IRB[last] := argNode;                                { baseRecDesc = layout blob }
-        end;
+        last := AppendDynWalkTail(last, dcDepth, Ord(dcElemTk), dcElemRec);
         dcSetlenVal := IRAppendCall(procIdx, first, -1, Ord(tyNativeInt));
         IRIVal[dcSetlenVal] := 1;   { statement-level: side-effect call }
       end;
@@ -6653,8 +6673,10 @@ begin
         array's handle). Kept elements gain the ref the new buffer owns; the
         deleted range gains none, so the old-buffer release frees exactly those. Mirrors PXXDynSetLen's
         RetainImmediate-after-copy pattern. }
-      if (dcDepth > 1) or (dcElemTk = tyAnsiString) or
-         ((dcElemTk = tyRecord) and RecordHasManagedFields(dcElemRec)) then
+      { ONE question, asked of ManagedElemKind — the gate used to name AnsiString
+        and managed-record explicitly and so skipped the retain entirely for a
+        COM-interface element. See AppendDynWalkTail. }
+      if (dcDepth > 1) or (ManagedElemKind(Ord(dcElemTk), dcElemRec) <> 0) then
       begin
         procIdx := FindProc('PXXDynArrayRetainImmediate');
         if procIdx < 0 then Error('compiler error: PXXDynArrayRetainImmediate not found');
@@ -6663,46 +6685,7 @@ begin
         last := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcNewLenTmp, -1, -1, 0, Ord(tyInteger)),
                   -1, -1, 0, Ord(tyInteger));
         IRB[first] := last;
-        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, dcDepth, Ord(tyInteger)),
-                     -1, -1, 0, Ord(tyInteger));
-        IRB[last] := argNode; last := argNode;                 { depth }
-        if dcDepth > 1 then
-        begin
-          { Nested: the RTL's depth > 1 path IncRefs every handle and never
-            reads these two, so pass a NEUTRAL baseKind rather than falling
-            into the record arm, which would index the RTTI table with a
-            REC_NONE element id and compute a garbage offset. The call needs
-            five arguments either way. }
-          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyInteger)),
-                       -1, -1, 0, Ord(tyInteger));
-          IRB[last] := argNode; last := argNode;               { baseKind = 0 (unused) }
-          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
-                       -1, -1, 0, Ord(tyPointer));
-          IRB[last] := argNode;                                { baseRecDesc = nil }
-        end
-        else if dcElemTk = tyAnsiString then
-        begin
-          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
-                       -1, -1, 0, Ord(tyInteger));
-          IRB[last] := argNode; last := argNode;               { baseKind = 1 (string) }
-          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
-                       -1, -1, 0, Ord(tyPointer));
-          IRB[last] := argNode;                                { baseRecDesc = nil }
-        end
-        else
-        begin
-          { Managed-field record elements: field-walk retain via the record's
-            layout descriptor (IR_CONST_DATA yields the blob's data address —
-            the sentinel resolves to UClsRTTIOff at link fixup). }
-          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 3, Ord(tyInteger)),
-                       -1, -1, 0, Ord(tyInteger));
-          IRB[last] := argNode; last := argNode;               { baseKind = 3 (record) }
-          argNode := IRAppend(IR_ARG,
-                       IRAppend(IR_CONST_DATA, -1, -1, -1,
-                         -(RECORD_RTTI_DATAREF_BASE + (dcElemRec - REC_UCLASS_BASE)), Ord(tyPointer)),
-                       -1, -1, 0, Ord(tyPointer));
-          IRB[last] := argNode;                                { baseRecDesc = layout blob }
-        end;
+        last := AppendDynWalkTail(last, dcDepth, Ord(dcElemTk), dcElemRec);
         dcSetlenVal := IRAppendCall(procIdx, first, -1, Ord(tyNativeInt));
         IRIVal[dcSetlenVal] := 1;   { statement-level: side-effect call }
       end;
@@ -6881,8 +6864,10 @@ begin
         array's handle). Kept elements gain the ref the new buffer owns; the
         still-nil gap is a no-op for the retain walk (the ARC-aware gap store below adds the inserted value's ref itself). Mirrors PXXDynSetLen's
         RetainImmediate-after-copy pattern. }
-      if (dcDepth > 1) or (dcElemTk = tyAnsiString) or
-         ((dcElemTk = tyRecord) and RecordHasManagedFields(dcElemRec)) then
+      { ONE question, asked of ManagedElemKind — the gate used to name AnsiString
+        and managed-record explicitly and so skipped the retain entirely for a
+        COM-interface element. See AppendDynWalkTail. }
+      if (dcDepth > 1) or (ManagedElemKind(Ord(dcElemTk), dcElemRec) <> 0) then
       begin
         procIdx := FindProc('PXXDynArrayRetainImmediate');
         if procIdx < 0 then Error('compiler error: PXXDynArrayRetainImmediate not found');
@@ -6891,47 +6876,7 @@ begin
         last := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcNewLenTmp, -1, -1, 0, Ord(tyInteger)),
                   -1, -1, 0, Ord(tyInteger));
         IRB[first] := last;
-        argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, dcDepth, Ord(tyInteger)),
-                     -1, -1, 0, Ord(tyInteger));
-        IRB[last] := argNode; last := argNode;                 { depth }
-        if dcDepth > 1 then
-        begin
-          { Nested: the RTL's depth > 1 path IncRefs every handle and never
-            reads these two, so pass a NEUTRAL baseKind rather than falling
-            into the record arm, which would index the RTTI table with a
-            REC_NONE element id and compute a garbage offset. The call needs
-            five arguments either way. }
-          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyInteger)),
-                       -1, -1, 0, Ord(tyInteger));
-          IRB[last] := argNode; last := argNode;               { baseKind = 0 (unused) }
-          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
-                       -1, -1, 0, Ord(tyPointer));
-          IRB[last] := argNode;                                { baseRecDesc = nil }
-        end
-        else if dcElemTk = tyAnsiString then
-        begin
-          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 1, Ord(tyInteger)),
-                       -1, -1, 0, Ord(tyInteger));
-          IRB[last] := argNode; last := argNode;               { baseKind = 1 (string) }
-          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 0, Ord(tyPointer)),
-                       -1, -1, 0, Ord(tyPointer));
-          IRB[last] := argNode;                                { baseRecDesc = nil }
-        end
-        else
-        begin
-          { Managed-field record elements — see AN_DYN_DELETE. The still-zero
-            gap record is nil-field for the walk (retains nothing there); the
-            IR_COPY_REC_MANAGED gap store below adds the inserted value's own
-            field refs. }
-          argNode := IRAppend(IR_ARG, IRAppend(IR_CONST_INT, -1, -1, -1, 3, Ord(tyInteger)),
-                       -1, -1, 0, Ord(tyInteger));
-          IRB[last] := argNode; last := argNode;               { baseKind = 3 (record) }
-          argNode := IRAppend(IR_ARG,
-                       IRAppend(IR_CONST_DATA, -1, -1, -1,
-                         -(RECORD_RTTI_DATAREF_BASE + (dcElemRec - REC_UCLASS_BASE)), Ord(tyPointer)),
-                       -1, -1, 0, Ord(tyPointer));
-          IRB[last] := argNode;                                { baseRecDesc = layout blob }
-        end;
+        last := AppendDynWalkTail(last, dcDepth, Ord(dcElemTk), dcElemRec);
         dcSetlenVal := IRAppendCall(procIdx, first, -1, Ord(tyNativeInt));
         IRIVal[dcSetlenVal] := 1;   { statement-level: side-effect call }
       end;

@@ -1,0 +1,27 @@
+delete:
+  destroy 2
+  destroy 3
+  kept: 0 1 4
+  destroy 0
+  destroy 1
+  destroy 4
+delete-head:
+  destroy 10
+  destroy 11
+  kept: 12 13
+  destroy 12
+  destroy 13
+copy:
+  src : 20 21 22 23
+  cpy : 21 22
+  destroy 20
+  destroy 23
+  cpy : 21 22
+  destroy 21
+  destroy 22
+shrink:
+  destroy 31
+  destroy 32
+  kept: 30
+  destroy 30
+end

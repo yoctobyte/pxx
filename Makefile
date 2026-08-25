@@ -7730,6 +7730,15 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_nil_to_a_whole_dynamic_array.pas $(TESTTMP)/test_nilda26
 	test "$$($(TESTTMP)/test_nilda26)" = "$$(cat test/test_nil_to_a_whole_dynamic_array.expected)"
+	# Delete/Copy/SetLength over an `array of IFoo` must RETAIN the elements that
+	# land in the fresh buffer. Three lowerings each carried their own copy of
+	# "which element types need a retain walk" and all three named exactly
+	# AnsiString and managed-record, so Delete(a,2,2) over five interfaces
+	# destroyed all five and the three survivors dangled. The destructor logs,
+	# so .expected asserts which objects die and when.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_dynarray_delete_insert_copy_of_interfaces.pas $(TESTTMP)/test_ddici26
+	test "$$($(TESTTMP)/test_ddici26)" = "$$(cat test/test_dynarray_delete_insert_copy_of_interfaces.expected)"
 	# Eight constructs FPC rejects used to compile clean -- five of them doing
 	# something silently wrong (a segfault, an out-of-bounds read, a scalar
 	# overwritten with a heap pointer, a destroyed string, a plausible wrong

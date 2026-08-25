@@ -5,7 +5,7 @@ track: A
 prio: 55
 type: bug
 blocked-by: []
-status: backlog_new
+status: done
 owner: ""
 created: 2026-08-25
 summary: "Deleting 2 of 5 interface elements destroys all five objects immediately: the fresh buffer does not retain the survivors, the old buffer's element-aware release drops all of them, and the three kept slots are left pointing at freed memory. Use-after-free reachable from ordinary code. AnsiString and managed-record element types are handled; the COM-interface element type is not."
@@ -74,3 +74,47 @@ balance, and `Copy(arr, i, n)` is the third. If Delete has the hole, measure all
 three against the same destructor-logging oracle. Static `array[0..N] of IFoo`
 whole-array assignment uses the header-free mirror
 (`PXXStaticArrayRelease`/RetainImmediate pair) and is a fourth.
+
+## Log
+- 2026-08-25 — resolved, commit PENDING-COMMIT.
+
+# Resolution, 2026-08-25
+
+`compiler/ir.inc`: the three dyn-array walk dispatch tails (Delete ~6540,
+Insert ~6688, Copy ~6879) were three hand-rolled copies of the same
+(depth, baseKind, baseRecDesc) argument triple, and all three knew only about
+AnsiString and record-with-managed-fields. A COM interface element fell through
+to "nothing to release", so every survivor of a `Delete` kept the refcount the
+old buffer had handed it, and the freed buffer's slots were never released.
+
+Replaced by one helper:
+
+```pascal
+function AppendDynWalkTail(last, depth, elemTk, elemRec: Integer): Integer;
+```
+
+keyed on `ManagedElemKind(elemTk, elemRec)` — 1 AnsiString, 3 record, 4 COM
+interface — which is the single answer the codebase already had for
+"what does one element of this container need". All three gates widened from the
+hand-written two-kind test to `(dcDepth > 1) or (ManagedElemKind(...) <> 0)`.
+
+This is the exact failure `ManagedElemKind`'s own comment predicts: its header
+records that the policy had been spelled out nine times and that **every** copy
+had missed kind 4. It is now spelled out once.
+
+Measured: the reduced repro printed `freed: 0 1 2 3 4` before (every element
+destroyed by the Delete, survivors included — dangling) and prints `freed: 2 3`
+after, matching fpc 3.2.2. `test/test_dynarray_delete_insert_copy_of_interfaces.pas`
+covers Delete / Delete-at-head / Copy / SetLength-shrink and diffs MATCH against
+fpc; it is wired into `test-core`.
+
+One divergence remains and is filed separately, not asserted here:
+`bug-a-a-dynarray-delete-temp-holds-the-new-buffer-until-scope-exit` — the
+survivors are destroyed at scope exit rather than at the following `a := nil`,
+because the hidden fresh-buffer temp holds a reference. Refcounts are correct;
+the destruction TIME is one scope late. fpc-testsuite `tarray11` moved
+SIGSEGV -> Halt(30) -> Halt(32) across the two fixes, and that last check is
+this remaining ticket.
+
+Gate: `make compiler/pascal26` fixedpoint converged in one round;
+`tools/gate.sh quick` GREEN (self-host 111s, testmgr quick, FPC seed canary).

@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 unfinished:21 blocked:7 backlog:291 backlog_new:14 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2326 rejected:40`
+`urgent:2 unfinished:21 blocked:7 backlog:291 backlog_new:14 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2327 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -67,7 +67,6 @@ _none — no lane is locked._
 - `[p 58] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - `[p 58] [O]` feature-opt-o3-register-pressure
 - `[p 55] [T]` feature-t-freebsd-image-and-runner (unblocks 1)
-- `[p 55] [A]` bug-a-delete-on-a-dynamic-array-of-interfaces-dangles-every-survivor
 - `[p 55] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - `[p 55] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
 - `[p 55] [N]` bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence
@@ -82,5 +81,6 @@ _none — no lane is locked._
 - `[p 55] [O]` feature-opt-heap-per-thread-cache
 - `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
 - `[p 53] [S]` feature-esp-peripheral-callback-api
+- `[p 50] [U]` decide-release-signing-key-custody (unblocks 1)
 
 _262 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
