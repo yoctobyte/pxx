@@ -69,4 +69,4 @@ left unmeasured there rather than guessed.
 Gate: `make compiler/pascal26` converged in 1 round, both `.npy` tests match
 CPython, `test_tobject_root_methods_inside_a_unit` unchanged, `tools/gate.sh
 quick` GREEN.
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 247c5095d.
