@@ -185,6 +185,21 @@ with the pin and behaves when built at HEAD. Some fix in the 37 commits between
 the pin and this branch already covers it; noted here because it means the pin
 is not optional for any consumer of this API.
 
+### One thing this adds pressure to — [[bug-a-the-fpjson-suite-overflows-the-fixed-4096-entry-data-ptr-fixup-table]]
+
+Every payload costs data->data relocations that were not there before: one for
+the header's `DataPtr`, plus one for `ElemRef` and one for `DimsPtr` where the
+kind has them. So a `TypeInfo()`d type now costs **1-3 `AddDataPtrFix` entries
+instead of 0**, bounded above by `MAX_TYPEINFO_REQ` (512) types.
+
+`MAX_DATAPTRFIX` is a fixed 4096 and is **already known to overflow** on the
+fpjson rung at prio 82. This change does not cause that overflow and cannot make
+an already-failing compile fail differently — but it does move every program
+some tens of entries closer to the ceiling, so it is called out here rather than
+left for whoever bisects the next one. The right fix is that ticket's (a fixed
+table is the defect; growing the constant only moves it), and this is one more
+reason the table should become dynamic rather than larger.
+
 ### Not touched, filed instead
 
 `PxxTkToFPCKind` reports `tkInteger` (1) for `tyNativeInt` / `tyNativeUInt`;
