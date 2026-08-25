@@ -83,6 +83,36 @@ elif age > 90:
 else:
     print("OK|%s %s %s, wall %.0fs, %.0f min ago"
           % (verdict, tier, sha, wall if wall is not None else -1, age))
+
+# The BREADTH record, reported separately and never folded into the line above.
+# A native verdict is x86-64 only; reading it as matrix coverage is the mistake
+# this line exists to prevent. And a full tier is torn down at the deadline the
+# same way a native one is -- the 1d14h-old "full RED" that gating was leaning
+# on had wall 3600.3s against a 3600s deadline, i.e. NO VERDICT, published as a
+# red. Its still_red list is empty for the same reason, so jobs it never reached
+# read as FIXED.
+full = d.get("last_full") or {}
+fw, fsha = full.get("wall"), (full.get("sha") or "")[:12]
+try:
+    fage = (time.time() - calendar.timegm(time.strptime(
+        full.get("date", ""), "%Y-%m-%dT%H:%M:%SZ"))) / 3600.0
+except Exception:
+    fage = None
+if not full:
+    print("WARN|breadth: no full tier on record at all")
+elif fw is not None and fw >= 3595:
+    # Deliberately a wide net. Deadlines are now scaled by the core throttle,
+    # so the ceiling is not always 3600 -- but a completed run landing within a
+    # few seconds ABOVE a tuned deadline is vanishingly unlikely, and a false
+    # "suspicious" costs a glance while a false "verdict" costs a bad merge.
+    print("FAIL|breadth: full %s wall %.0fs is AT the deadline -- torn down, "
+          "NO VERDICT (its still_red is empty for the same reason)" % (fsha, fw))
+elif fage is not None and fage > 24:
+    print("WARN|breadth: newest full tier %s is %.0fh old -- native is x86-64 "
+          "only, this is not matrix coverage" % (fsha, fage))
+else:
+    print("OK|breadth: full %s %s, wall %.0fs, %.0fh old"
+          % (fsha, full.get("verdict", "?"), fw if fw is not None else -1, fage or 0))
 ' 2>/dev/null | while IFS='|' read -r lvl msg; do
         case "$lvl" in
             OK)   ok   trackt "$msg" ;;
