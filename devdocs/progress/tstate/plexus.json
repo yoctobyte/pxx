@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T11:10:53Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "e13c0c4d43661b50ba3652c5c8adefede45b0f92",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T11:19:49Z",
    "fixed": [],
    "new_red": [],
@@ -477,16 +469,25 @@
    "sha": "a1ee5e00df8876cc9f9aaaebd4f9f57c96b4dd1b",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-25T08:23:40Z",
+   "fixed": [
+    "test-core#src:test/test_length_dynarray_call.pas",
+    "test-core#src:test/test_nested_dynarray_field.pas",
+    "test-core#src:test/test_ptr_deref_vararg.pas",
+    "test-threads#src:test/test_parallel_for_capture_aggr.pas"
+   ],
+   "new_red": [],
+   "sha": "d2fb8211acb9366e5a26518b16c279da2c2fa83a",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2358728B  data=61689B  bss=51420B  procs=1788] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
-  "test-core#src:test/test_length_dynarray_call.pas": "pascal26:31: error: Length needs a string, an array or a PChar, not Pointer | near: writeln  Length  MakeEmpty  >>>   writeln | pascal26:32: error: Length needs a string, an array or a PChar, not Pointer | near:  MakeStrs     >>>   writeln | pascal26:33: error: Length needs a string, an array or a PChar, not Pointer | near:  MakeStrs     >>>   end",
-  "test-core#src:test/test_nested_dynarray_field.pas": "pascal26:32: error: this value cannot be indexed \u2014 only arrays, strings and pointers can (g) | near:       >>>   m12= | pascal26:32: error: this value cannot be indexed \u2014 only arrays, strings and pointers can (g) | near:       >>>   m22= | pascal26:32: error: this value cannot be indexed \u2014 only arrays, strings and pointers can (g) | near:       >>>   sum=",
-  "test-core#src:test/test_ptr_deref_vararg.pas": "pascal26:37: error: this value cannot be indexed \u2014 only arrays, strings and pointers can (pa) | near:  pa     >>>   writeln",
-  "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter",
-  "test-threads#src:test/test_parallel_for_capture_aggr.pas": "pascal26:24: error: this value cannot be indexed \u2014 only arrays, strings and pointers can (d) | in: $TMP | near:  d   i  >>>  g | pascal26:24: error: this value cannot be indexed \u2014 only arrays, strings and pointers can (g) | in: $TMP | near:  g   i  >>>"
+  "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter"
  },
  "job_tier": {
   "demos#00": "full",
@@ -1747,6 +1748,8 @@
   "test-core#src:test/test_generic_bodyless.pas": "native",
   "test-core#src:test/test_generic_class_in_program.pas": "native",
   "test-core#src:test/test_generic_class_methods.pas": "native",
+  "test-core#src:test/test_generic_float_type_argument.pas": "native",
+  "test-core#src:test/test_generic_float_type_argument_delphi.pas": "native",
   "test-core#src:test/test_generic_func.pas": "native",
   "test-core#src:test/test_generic_inherit.pas": "native",
   "test-core#src:test/test_generic_inherit_delphi.pas": "native",
@@ -2432,6 +2435,7 @@
   "test-core#src:test/test_writeln_float_width.pas": "native",
   "test-core#src:test/test_writeln_mix.pas": "native",
   "test-core#src:test/test_writeln_nonfinite_float.pas": "native",
+  "test-core#src:test/test_writeln_of_an_enum_prints_its_name.pas": "native",
   "test-core#src:test/test_writeln_shortstring_param.pas": "native",
   "test-core#src:test/test_writeln_text_char.pas": "native",
   "test-core#src:test/test_ws_skeleton.ws": "native",
@@ -4812,6 +4816,8 @@
   "test-core#src:test/test_generic_bodyless.pas": "pass",
   "test-core#src:test/test_generic_class_in_program.pas": "pass",
   "test-core#src:test/test_generic_class_methods.pas": "pass",
+  "test-core#src:test/test_generic_float_type_argument.pas": "pass",
+  "test-core#src:test/test_generic_float_type_argument_delphi.pas": "pass",
   "test-core#src:test/test_generic_func.pas": "pass",
   "test-core#src:test/test_generic_inherit.pas": "pass",
   "test-core#src:test/test_generic_inherit_delphi.pas": "pass",
@@ -4911,7 +4917,7 @@
   "test-core#src:test/test_keyword_case.pas": "pass",
   "test-core#src:test/test_label_section_precedes_the_other_declarations.pas": "pass",
   "test-core#src:test/test_lazy_var.pas": "pass",
-  "test-core#src:test/test_length_dynarray_call.pas": "fail",
+  "test-core#src:test/test_length_dynarray_call.pas": "pass",
   "test-core#src:test/test_lfm.pas": "pass",
   "test-core#src:test/test_lineending_b260.pas": "pass",
   "test-core#src:test/test_local_const_classref_array_b317.pas": "pass",
@@ -4996,7 +5002,7 @@
   "test-core#src:test/test_nested_comments.pas": "pass",
   "test-core#src:test/test_nested_dynarray.pas": "pass",
   "test-core#src:test/test_nested_dynarray_alias.pas": "pass",
-  "test-core#src:test/test_nested_dynarray_field.pas": "fail",
+  "test-core#src:test/test_nested_dynarray_field.pas": "pass",
   "test-core#src:test/test_nested_dynarray_managed.pas@1": "pass",
   "test-core#src:test/test_nested_dynarray_managed.pas@2": "pass",
   "test-core#src:test/test_nested_include.pas": "pass",
@@ -5222,7 +5228,7 @@
   "test-core#src:test/test_ptr_cast.pas": "pass",
   "test-core#src:test/test_ptr_deref_field.pas": "pass",
   "test-core#src:test/test_ptr_deref_string_index.pas": "pass",
-  "test-core#src:test/test_ptr_deref_vararg.pas": "fail",
+  "test-core#src:test/test_ptr_deref_vararg.pas": "pass",
   "test-core#src:test/test_ptr_field_index.pas": "pass",
   "test-core#src:test/test_ptr_untyped_deref.pas": "pass",
   "test-core#src:test/test_puint8_no_compiler_spew.pas": "pass",
@@ -5496,6 +5502,7 @@
   "test-core#src:test/test_writeln_float_width.pas": "pass",
   "test-core#src:test/test_writeln_mix.pas": "pass",
   "test-core#src:test/test_writeln_nonfinite_float.pas": "pass",
+  "test-core#src:test/test_writeln_of_an_enum_prints_its_name.pas": "pass",
   "test-core#src:test/test_writeln_shortstring_param.pas": "pass",
   "test-core#src:test/test_writeln_text_char.pas": "pass",
   "test-core#src:test/test_ws_skeleton.ws": "pass",
@@ -6564,7 +6571,7 @@
   "test-threads#src:test/test_palthread.pas": "pass",
   "test-threads#src:test/test_parallel_for.pas": "pass",
   "test-threads#src:test/test_parallel_for_capture.pas": "pass",
-  "test-threads#src:test/test_parallel_for_capture_aggr.pas": "fail",
+  "test-threads#src:test/test_parallel_for_capture_aggr.pas": "pass",
   "test-threads#src:test/test_parallel_for_capture_callee.pas": "pass",
   "test-threads#src:test/test_parallel_for_capture_scalar_types.pas": "pass",
   "test-threads#src:test/test_parallel_for_capture_string.pas": "pass",
@@ -6612,11 +6619,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-25T07:21:28Z",
-  "sha": "a1ee5e00df8876cc9f9aaaebd4f9f57c96b4dd1b",
+  "date": "2026-08-25T08:23:40Z",
+  "sha": "d2fb8211acb9366e5a26518b16c279da2c2fa83a",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.2
+  "wall": 3600.3
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6806,78 +6813,6 @@
     "fd93e4a71c37a7932b9ef73e4c9f8a7deceb3c34"
    ],
    "src": "test/lib_mimic_xml_etree_elementtree.npy",
-   "status": "fail"
-  },
-  {
-   "bad": "b936d125601ea26a9e570d65be152ff3a35d04a0",
-   "good": "0626344011cf1f411c662114e23ff983c619731e",
-   "job": "test-core#src:test/test_length_dynarray_call.pas",
-   "name": "test-core#1243",
-   "opened": "2026-08-25T06:10:51Z",
-   "pin_built": false,
-   "range": [
-    "339b2a0eafdfae668c0bb557ce3235e2ab0d7d2c",
-    "8cd88b73d57cc17785a663ed280f713d50a612d8",
-    "e6a34a872fee529aa45eb02721b0e0cc9cf64e11",
-    "41b790d5ef4445ca7c3602ad6e0ce0beb9a4f9be",
-    "6cb98e361e0d6db2f9d46c55b419f0fa5d37bc6c",
-    "b936d125601ea26a9e570d65be152ff3a35d04a0"
-   ],
-   "src": "test/test_length_dynarray_call.pas",
-   "status": "fail"
-  },
-  {
-   "bad": "b936d125601ea26a9e570d65be152ff3a35d04a0",
-   "good": "0626344011cf1f411c662114e23ff983c619731e",
-   "job": "test-core#src:test/test_nested_dynarray_field.pas",
-   "name": "test-core#1232",
-   "opened": "2026-08-25T06:10:51Z",
-   "pin_built": false,
-   "range": [
-    "339b2a0eafdfae668c0bb557ce3235e2ab0d7d2c",
-    "8cd88b73d57cc17785a663ed280f713d50a612d8",
-    "e6a34a872fee529aa45eb02721b0e0cc9cf64e11",
-    "41b790d5ef4445ca7c3602ad6e0ce0beb9a4f9be",
-    "6cb98e361e0d6db2f9d46c55b419f0fa5d37bc6c",
-    "b936d125601ea26a9e570d65be152ff3a35d04a0"
-   ],
-   "src": "test/test_nested_dynarray_field.pas",
-   "status": "fail"
-  },
-  {
-   "bad": "b936d125601ea26a9e570d65be152ff3a35d04a0",
-   "good": "0626344011cf1f411c662114e23ff983c619731e",
-   "job": "test-core#src:test/test_ptr_deref_vararg.pas",
-   "name": "test-core#1113",
-   "opened": "2026-08-25T06:10:51Z",
-   "pin_built": false,
-   "range": [
-    "339b2a0eafdfae668c0bb557ce3235e2ab0d7d2c",
-    "8cd88b73d57cc17785a663ed280f713d50a612d8",
-    "e6a34a872fee529aa45eb02721b0e0cc9cf64e11",
-    "41b790d5ef4445ca7c3602ad6e0ce0beb9a4f9be",
-    "6cb98e361e0d6db2f9d46c55b419f0fa5d37bc6c",
-    "b936d125601ea26a9e570d65be152ff3a35d04a0"
-   ],
-   "src": "test/test_ptr_deref_vararg.pas",
-   "status": "fail"
-  },
-  {
-   "bad": "b936d125601ea26a9e570d65be152ff3a35d04a0",
-   "good": "0626344011cf1f411c662114e23ff983c619731e",
-   "job": "test-threads#src:test/test_parallel_for_capture_aggr.pas",
-   "name": "test-threads#22",
-   "opened": "2026-08-25T06:10:51Z",
-   "pin_built": false,
-   "range": [
-    "339b2a0eafdfae668c0bb557ce3235e2ab0d7d2c",
-    "8cd88b73d57cc17785a663ed280f713d50a612d8",
-    "e6a34a872fee529aa45eb02721b0e0cc9cf64e11",
-    "41b790d5ef4445ca7c3602ad6e0ce0beb9a4f9be",
-    "6cb98e361e0d6db2f9d46c55b419f0fa5d37bc6c",
-    "b936d125601ea26a9e570d65be152ff3a35d04a0"
-   ],
-   "src": "test/test_parallel_for_capture_aggr.pas",
    "status": "fail"
   }
  ],
