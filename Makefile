@@ -7672,6 +7672,13 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_open_array_param_slot_is_a_handle.pas $(TESTTMP)/test_oaslot26
 	test "$$($(TESTTMP)/test_oaslot26)" = "$$(cat test/test_open_array_param_slot_is_a_handle.expected)"
+	# `(qa[0])^` -- a PARENTHESISED index-then-deref -- lost the pointer shape
+	# the identical `qa[0]^` keeps (a second, smaller copy of the deref walk
+	# that stamped nothing), and `Copy(p, 2, 3)` over a PChar was refused for
+	# EVERY PChar spelling at once.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_pchar_paren_deref_and_copy.pas $(TESTTMP)/test_pdc26
+	test "$$($(TESTTMP)/test_pdc26)" = "$$(cat test/test_pchar_paren_deref_and_copy.expected)"
 	./$(COMPILER) -Ilib/crtl/include -Ilib/crtl/src test/cmath_sign_bits.c $(TESTTMP)/cmath_sign_bits26
 	$(TESTTMP)/cmath_sign_bits26; test "$$?" = "42"
 	./$(COMPILER) test/test_ptr_untyped_deref.pas $(TESTTMP)/test_ptr_untyped_deref26

@@ -1,0 +1,22 @@
+paren wr  : alpha
+paren asg : alpha
+paren catL: xalpha
+paren catR: alphay
+paren cast: alpha
+paren len : 5
+paren eq  : TRUE
+paren ne  : FALSE
+paren dyn : alpha
+paren deep: alpha
+paren arit: l
+copy var  : lph
+copy dref : lph
+copy idx  : lph
+copy paren: lph
+copy triple: lph
+copy fld  : lph
+copy call : lph
+copy const: lph
+copy out  : lph
+copy arith: lp
+pha

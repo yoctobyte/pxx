@@ -260,6 +260,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     intBaseArg, atRecv, atFld, atDflt, atProp: Integer; atIsGet, atExists: Boolean; atName: AnsiString; name, grpAcc: AnsiString; recName: Integer; idx, procIdx, i, node, left, prevTok, valNode: Integer; tk: TTypeKind; op, argSeq, argSeq2, argSeq3, lastArg, argIdx, exprNode, szArg: Integer;
     smmiS, smSelfNode, mselfArg, mcCtorCi, parenRec, ctorCi, ctorArgN: Integer;
     supPi: Integer;   { __pxxGetInterface, for the three-argument Supports }
+    derefRem, derefBaseTk, derefBaseRec: Integer;   { `(x)^` pointer shape, from ResolveDerefShape }
     nestCtorCi: Integer;   { `TOuter.TInner.Create` — the nested class, resolved by scope }
     nestScanCi, nestScanPos, nestDepth, nestI: Integer;   { …walking N levels of it }
     mthName: AnsiString;   { @TClass.Method — name read via GetTokenStr (may be a type keyword) }
@@ -774,18 +775,25 @@ begin
           Next;
           indexNode := AllocNode(AN_DEREF);
           ASTLeft[indexNode] := node;
-          { Resolve the pointee type from the inner node, mirroring the direct
-            `ident^` path. NodePtrElem sees through pointer ARITHMETIC as well:
-            this used to handle only a bare ident or `arr[i]` and default a binop
-            to Integer, which is right for a ^Integer and a wrong SPAN for every
-            other pointer — `(pc + 2)^` read four bytes.
-            bug-p-a-pchar-plus-offset-loses-its-type-when-dereferenced }
+          { Resolve the pointee from the inner node — and now through the SAME
+            walk the direct `ident^` path uses, rather than a second, smaller
+            one that knew only NodePtrElem.
+
+            The old copy answered the immediate pointee and stamped NOTHING, so
+            the deref node carried no remaining-depth and no ultimate base:
+            `(qa[0])^` over an `array of ^PChar` printed the address, `'x' + it`
+            was empty and `Length` answered the pointer, while the identical
+            `qa[0]^` one character to the left was correct in all seven
+            contexts. ResolveDerefShape keeps the NodePtrElem fallback for
+            pointer ARITHMETIC — `(pc + 2)^` still reads one char, not four
+            bytes (bug-p-a-pchar-plus-offset-loses-its-type-when-dereferenced) —
+            so this is strictly the old behaviour plus the shapes the copy
+            lacked. refactor-centralize-managed-string-pchar-conversion }
           tk := tyInteger; recName := REC_NONE;
-          if not NodePtrElem(node, tk, recName, 0) then
-          begin
-            { still no pointee to be had — Integer, as before }
-            tk := tyInteger; recName := REC_NONE;
-          end;
+          ResolveDerefShape(node, tk, recName, derefRem, derefBaseTk, derefBaseRec);
+          ASTSOffset[indexNode] := derefRem;
+          ASTSLen[indexNode] := derefBaseTk;
+          if derefBaseRec > 0 then ASTIVal[indexNode] := derefBaseRec;
           ASTTk[indexNode] := StrValTk(tk);
           node := indexNode;
         end
@@ -5278,6 +5286,19 @@ begin
           Pascal). }
         if IntToTypeKind(ASTTk[exprNode]) = tyChar then
           exprNode := WrapCharToStringExpr(exprNode);
+        { A PChar first argument: FPC converts it to a string, as in every other
+          string context. Normalise the OPERAND here — beside the Char promotion
+          above, and the same move already made at the Length, concat,
+          relational and argument boundaries — so the string-Copy path below
+          sees an ordinary string and needs to know nothing about pointers.
+          Without it `Copy(p, 2, 3)` fell through to the dynamic-array error, a
+          loud rejection of code FPC accepts, and it did so for EVERY PChar
+          spelling at once — a var, `q^`, `q[0]`, an array element, a record
+          field, a call result, a `const PChar` parameter, an `out` parameter.
+          That spread is the tell: unrecognised at this BOUNDARY, not one broken
+          shape. refactor-centralize-managed-string-pchar-conversion }
+        if (not CProgramMode) and IsNodePChar(exprNode) then
+          exprNode := WrapPCharToString(exprNode);
         { String first argument: bare `Copy(s, index[, count])` lowers to the
           __pxxStrCopy substring helper (builtin unit, pulled by the pre-scan), so
           string Copy needs no `uses sysutils`. 2-arg form -> count = rest (huge,

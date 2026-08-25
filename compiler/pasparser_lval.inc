@@ -76,6 +76,9 @@ begin
   Result := AllocVar(nm, tyInteger);
 end;
 
+procedure ResolveDerefShape(node: Integer; var tk: TTypeKind; var recName: Integer;
+                            var remDepth, ptrBaseTk, ptrBaseRec: Integer); forward;
+
 function ParseLValueAST(idx: Integer; identTokIdx: Integer): Integer;
 var
   augBin: TTokenKind; augRead, augNode: Integer;   { `d[k] += v` }
@@ -1049,157 +1052,7 @@ begin
       ASTLeft[indexNode] := node;
       if tk = tyPointer then
       begin
-        remDepth := 0;
-        ptrBaseTk := Ord(tyUnknown);
-        ptrBaseRec := REC_NONE;
-        if ASTKind[node] = AN_IDENT then
-        begin
-          tk := Syms[ASTIVal[node]].PtrElemTk;
-          recName := Syms[ASTIVal[node]].PtrElemRec;
-          if SymPtrDepth[ASTIVal[node]] > 0 then
-          begin
-            remDepth := SymPtrDepth[ASTIVal[node]] - 1;
-            ptrBaseTk := SymPtrBaseTk[ASTIVal[node]];
-            ptrBaseRec := SymPtrBaseRec[ASTIVal[node]];
-          end;
-        end
-        else if ASTKind[node] = AN_FIELD then
-        begin
-          baseNode := ASTLeft[node];
-          baseRec := ResolveNodeRec(baseNode);
-          fieldName := GetASTIdentName(node);
-          fIdx := -1;
-          if baseRec >= REC_UCLASS_BASE then
-            fIdx := FindUField(baseRec - REC_UCLASS_BASE, fieldName);
-          if fIdx >= 0 then
-          begin
-            tk := IntToTypeKind(UFldPtrElemTk[fIdx]);
-            recName := UFldPtrElemRec[fIdx];
-            { ...and the depth + ultimate base, exactly as the AN_IDENT arm
-              reads them off a variable. `r.F^` over a `^PChar` FIELD came out a
-              bare pointer with no levels left, so WriteLn printed the address
-              and `=` compared pointers -- the same five-context signature the
-              array-element and function-result shapes had.
-              bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape }
-            if UFldPtrDepth[fIdx] > 0 then
-            begin
-              remDepth := UFldPtrDepth[fIdx] - 1;
-              ptrBaseTk := UFldPtrBaseTk[fIdx];
-              ptrBaseRec := UFldPtrBaseRec[fIdx];
-            end;
-          end
-          else
-          begin
-            tk := tyUnknown;
-            recName := REC_NONE;
-          end;
-        end
-        else if ASTKind[node] = AN_INDEX then
-        begin
-          baseNode := ASTLeft[node];
-          if ASTKind[baseNode] = AN_IDENT then
-          begin
-            tk := Syms[ASTIVal[baseNode]].PtrElemTk;
-            recName := Syms[ASTIVal[baseNode]].PtrElemRec;
-            { ...and the element's DEPTH and ultimate BASE, exactly as the
-              AN_IDENT arm above reads them. This arm read only the immediate
-              pointee, so `qa[0]^` over `array[0..1] of ^PChar` came out as a
-              bare pointer with no depth and no base -- and every predicate that
-              asks "one level remaining over a char base?" answered no.
-              WriteLn(qa[0]^) printed the address, `'x' + qa[0]^` was empty and
-              `qa[0]^ = 'alpha'` compared pointers, while the three contexts that
-              work by the blanket AnsiString(<any pointer>) rule looked fine --
-              the mix that reads as "half a shape is supported".
-
-              This was recorded in the ticket as genuinely ABSENT metadata
-              needing a new SymElemPtrDepth. It is not absent. An array symbol
-              is not itself a pointer, so AllocArray parks the ELEMENT's depth
-              and base in the symbol's own SymPtrDepth/SymPtrBaseTk slots --
-              measured with PXXDBG=a.symptr, which needed extending to the array
-              alloc paths before it could answer (it was scalar-only, i.e. blind
-              to the one shape it was written to diagnose). Reader half, again.
-              refactor-centralize-managed-string-pchar-conversion }
-            if SymPtrDepth[ASTIVal[baseNode]] > 0 then
-            begin
-              remDepth := SymPtrDepth[ASTIVal[baseNode]] - 1;
-              ptrBaseTk := SymPtrBaseTk[ASTIVal[baseNode]];
-              ptrBaseRec := SymPtrBaseRec[ASTIVal[baseNode]];
-            end;
-          end
-          else
-          begin
-            tk := tyUnknown;
-            recName := REC_NONE;
-          end;
-        end
-        else if ASTKind[node] = AN_DEREF then
-        begin
-          if ASTSOffset[node] > 0 then
-          begin
-            remDepth := ASTSOffset[node] - 1;
-            ptrBaseTk := ASTSLen[node];
-            ptrBaseRec := ASTIVal[node];
-            if remDepth >= 1 then
-            begin
-              tk := tyPointer;
-              recName := ptrBaseRec;
-            end
-            else if ptrBaseTk <> Ord(tyUnknown) then
-            begin
-              tk := IntToTypeKind(ptrBaseTk);
-              recName := ptrBaseRec;
-            end
-            else
-            begin
-              tk := tyUnknown;
-              recName := REC_NONE;
-            end;
-          end
-          else
-          begin
-            tk := tyInteger;
-            recName := REC_NONE;
-          end;
-        end
-        else if (ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
-                (ASTKind[node] = AN_INTF_CALL) or (ASTKind[node] = AN_CALL_IND) then
-        begin
-          { `GetQ^` -- dereferencing a function RESULT. The callee's declaration
-            records the returned pointer's whole triple (ProcRetPtrElemTk/Rec
-            plus ProcRetPtrDepth / ProcRetPtrBaseTk / ProcRetPtrBaseRec), so
-            this reads it exactly as the AN_IDENT arm reads a variable's.
-
-            There was no arm here at all: a dereferenced call fell to the final
-            else and came out tyInteger, so `WriteLn(GetQ^)` printed the address
-            as a number. All three call shapes carry the Procs[] index in IVal.
-            bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape }
-          if (ASTIVal[node] >= 0) and (ASTIVal[node] < ProcCount) then
-          begin
-            tk := IntToTypeKind(ProcRetPtrElemTk[ASTIVal[node]]);
-            recName := ProcRetPtrElemRec[ASTIVal[node]];
-            if ProcRetPtrDepth[ASTIVal[node]] > 0 then
-            begin
-              remDepth := ProcRetPtrDepth[ASTIVal[node]] - 1;
-              ptrBaseTk := ProcRetPtrBaseTk[ASTIVal[node]];
-              ptrBaseRec := ProcRetPtrBaseRec[ASTIVal[node]];
-            end;
-          end
-          else
-          begin
-            tk := tyUnknown;
-            recName := REC_NONE;
-          end;
-        end
-        else
-        begin
-          tk := tyInteger;
-          recName := REC_NONE;
-        end;
-        if remDepth >= 1 then
-        begin
-          tk := tyPointer;
-          recName := ptrBaseRec;
-        end;
+        ResolveDerefShape(node, tk, recName, remDepth, ptrBaseTk, ptrBaseRec);
         ASTSOffset[indexNode] := remDepth;
         ASTSLen[indexNode] := ptrBaseTk;
         if ptrBaseRec > 0 then ASTIVal[indexNode] := ptrBaseRec;
@@ -4863,6 +4716,211 @@ begin
     if not Result then
       Result := NodePtrElem(ASTRight[node], elemTk, elemRec, depth + 1);
   end;
+end;
+
+{ ONE pointer-shape walk for a dereference, `x^`.
+
+  It answers the five-field question every PChar/pointer predicate downstream
+  asks -- the immediate pointee (tk, recName), the pointer levels REMAINING
+  after this `^`, and the ULTIMATE base (kind, rec) -- for a variable, a field,
+  an array element, a nested deref, a call result, a typed cast, and pointer
+  arithmetic.
+
+  It exists because there were FOUR copies of this walk: the lvalue suffix
+  chain, the parenthesised postfix tail in pasparser_expr.inc, the inherited-call
+  tail, and ApplyCallResultPtrSuffix -- and the copies disagreed. The
+  parenthesised one resolved the immediate pointee via NodePtrElem and stamped
+  NOTHING, so `(qa[0])^` over an `array of ^PChar` lost the shape that the
+  identical `qa[0]^` one character to the left keeps: WriteLn printed the
+  address, `'x' + it` was empty, `Length` answered the pointer. One concept,
+  correct through one spelling and wrong through another -- the exact failure
+  devdocs/dev/normalise-dont-special-case.md is about, and the reason this is
+  extracted rather than copied a fifth time.
+  refactor-centralize-managed-string-pchar-conversion }
+procedure ResolveDerefShape(node: Integer; var tk: TTypeKind; var recName: Integer;
+                            var remDepth, ptrBaseTk, ptrBaseRec: Integer);
+var baseNode, baseRec, fIdx: Integer;
+    fieldName: AnsiString;
+begin
+  remDepth := 0;
+  ptrBaseTk := Ord(tyUnknown);
+  ptrBaseRec := REC_NONE;
+      if ASTKind[node] = AN_IDENT then
+      begin
+        tk := Syms[ASTIVal[node]].PtrElemTk;
+        recName := Syms[ASTIVal[node]].PtrElemRec;
+        if SymPtrDepth[ASTIVal[node]] > 0 then
+        begin
+          remDepth := SymPtrDepth[ASTIVal[node]] - 1;
+          ptrBaseTk := SymPtrBaseTk[ASTIVal[node]];
+          ptrBaseRec := SymPtrBaseRec[ASTIVal[node]];
+        end;
+      end
+      else if ASTKind[node] = AN_FIELD then
+      begin
+        baseNode := ASTLeft[node];
+        baseRec := ResolveNodeRec(baseNode);
+        fieldName := GetASTIdentName(node);
+        fIdx := -1;
+        if baseRec >= REC_UCLASS_BASE then
+          fIdx := FindUField(baseRec - REC_UCLASS_BASE, fieldName);
+        if fIdx >= 0 then
+        begin
+          tk := IntToTypeKind(UFldPtrElemTk[fIdx]);
+          recName := UFldPtrElemRec[fIdx];
+          { ...and the depth + ultimate base, exactly as the AN_IDENT arm
+            reads them off a variable. `r.F^` over a `^PChar` FIELD came out a
+            bare pointer with no levels left, so WriteLn printed the address
+            and `=` compared pointers -- the same five-context signature the
+            array-element and function-result shapes had.
+            bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape }
+          if UFldPtrDepth[fIdx] > 0 then
+          begin
+            remDepth := UFldPtrDepth[fIdx] - 1;
+            ptrBaseTk := UFldPtrBaseTk[fIdx];
+            ptrBaseRec := UFldPtrBaseRec[fIdx];
+          end;
+        end
+        else
+        begin
+          tk := tyUnknown;
+          recName := REC_NONE;
+        end;
+      end
+      else if ASTKind[node] = AN_INDEX then
+      begin
+        baseNode := ASTLeft[node];
+        if ASTKind[baseNode] = AN_IDENT then
+        begin
+          tk := Syms[ASTIVal[baseNode]].PtrElemTk;
+          recName := Syms[ASTIVal[baseNode]].PtrElemRec;
+          { ...and the element's DEPTH and ultimate BASE, exactly as the
+            AN_IDENT arm above reads them. This arm read only the immediate
+            pointee, so `qa[0]^` over `array[0..1] of ^PChar` came out as a
+            bare pointer with no depth and no base -- and every predicate that
+            asks "one level remaining over a char base?" answered no.
+            WriteLn(qa[0]^) printed the address, `'x' + qa[0]^` was empty and
+            `qa[0]^ = 'alpha'` compared pointers, while the three contexts that
+            work by the blanket AnsiString(<any pointer>) rule looked fine --
+            the mix that reads as "half a shape is supported".
+
+            This was recorded in the ticket as genuinely ABSENT metadata
+            needing a new SymElemPtrDepth. It is not absent. An array symbol
+            is not itself a pointer, so AllocArray parks the ELEMENT's depth
+            and base in the symbol's own SymPtrDepth/SymPtrBaseTk slots --
+            measured with PXXDBG=a.symptr, which needed extending to the array
+            alloc paths before it could answer (it was scalar-only, i.e. blind
+            to the one shape it was written to diagnose). Reader half, again.
+            refactor-centralize-managed-string-pchar-conversion }
+          if SymPtrDepth[ASTIVal[baseNode]] > 0 then
+          begin
+            remDepth := SymPtrDepth[ASTIVal[baseNode]] - 1;
+            ptrBaseTk := SymPtrBaseTk[ASTIVal[baseNode]];
+            ptrBaseRec := SymPtrBaseRec[ASTIVal[baseNode]];
+          end;
+        end
+        else
+        begin
+          tk := tyUnknown;
+          recName := REC_NONE;
+        end;
+      end
+      else if ASTKind[node] = AN_DEREF then
+      begin
+        if ASTSOffset[node] > 0 then
+        begin
+          remDepth := ASTSOffset[node] - 1;
+          ptrBaseTk := ASTSLen[node];
+          ptrBaseRec := ASTIVal[node];
+          if remDepth >= 1 then
+          begin
+            tk := tyPointer;
+            recName := ptrBaseRec;
+          end
+          else if ptrBaseTk <> Ord(tyUnknown) then
+          begin
+            tk := IntToTypeKind(ptrBaseTk);
+            recName := ptrBaseRec;
+          end
+          else
+          begin
+            tk := tyUnknown;
+            recName := REC_NONE;
+          end;
+        end
+        else
+        begin
+          tk := tyInteger;
+          recName := REC_NONE;
+        end;
+      end
+      else if (ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
+              (ASTKind[node] = AN_INTF_CALL) or (ASTKind[node] = AN_CALL_IND) then
+      begin
+        { `GetQ^` -- dereferencing a function RESULT. The callee's declaration
+          records the returned pointer's whole triple (ProcRetPtrElemTk/Rec
+          plus ProcRetPtrDepth / ProcRetPtrBaseTk / ProcRetPtrBaseRec), so
+          this reads it exactly as the AN_IDENT arm reads a variable's.
+
+          There was no arm here at all: a dereferenced call fell to the final
+          else and came out tyInteger, so `WriteLn(GetQ^)` printed the address
+          as a number. All three call shapes carry the Procs[] index in IVal.
+          bug-p-dereferencing-a-function-result-of-pointer-to-pchar-loses-the-shape }
+        if (ASTIVal[node] >= 0) and (ASTIVal[node] < ProcCount) then
+        begin
+          tk := IntToTypeKind(ProcRetPtrElemTk[ASTIVal[node]]);
+          recName := ProcRetPtrElemRec[ASTIVal[node]];
+          if ProcRetPtrDepth[ASTIVal[node]] > 0 then
+          begin
+            remDepth := ProcRetPtrDepth[ASTIVal[node]] - 1;
+            ptrBaseTk := ProcRetPtrBaseTk[ASTIVal[node]];
+            ptrBaseRec := ProcRetPtrBaseRec[ASTIVal[node]];
+          end;
+        end
+        else
+        begin
+          tk := tyUnknown;
+          recName := REC_NONE;
+        end;
+      end
+      else if (ASTKind[node] = AN_PTR_CAST) and (ASTIVal[node] >= 0) and
+              (ASTIVal[node] < AliasCount) then
+      begin
+        { An inline typed pointer cast, `PPC(raw)^`. The alias row carries the
+          same triple a variable's declaration does, and this walk had no arm
+          for it at all -- it fell to the final else and came out tyInteger.
+          NodePtrElem below reads the alias's immediate pointee, so the CAST
+          spelling half-worked while the depth and base were dropped. }
+        tk := IntToTypeKind(AliasElemTk[ASTIVal[node]]);
+        recName := AliasElemRec[ASTIVal[node]];
+        if AliasPtrDepth[ASTIVal[node]] > 0 then
+        begin
+          remDepth := AliasPtrDepth[ASTIVal[node]] - 1;
+          ptrBaseTk := AliasPtrBaseTk[ASTIVal[node]];
+          ptrBaseRec := AliasPtrBaseRec[ASTIVal[node]];
+        end;
+      end
+      else
+      begin
+        { Anything else -- above all pointer ARITHMETIC, `(p + k)^`, which only
+          the parenthesised tail can reach. NodePtrElem sees through the binop
+          to whichever operand carries a pointee; it knows nothing of depth, so
+          a `^PChar` reached this way still resolves one level only. That is the
+          pre-existing behaviour of both callers, preserved rather than widened
+          here. }
+        tk := tyInteger;
+        recName := REC_NONE;
+        if not NodePtrElem(node, tk, recName, 0) then
+        begin
+          tk := tyInteger;
+          recName := REC_NONE;
+        end;
+      end;
+      if remDepth >= 1 then
+      begin
+        tk := tyPointer;
+        recName := ptrBaseRec;
+      end;
 end;
 
 { ===== A static `array of Char` IS a string =====

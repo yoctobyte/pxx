@@ -3,6 +3,7 @@ summary: "Populate pointer-element-type metadata consistently (additive, fallbac
 type: refactor
 prio: 45
 
+owner: claude-A
 ---
 
 # Populate pointer-element metadata consistently — the low-risk fix for the conversion class
@@ -10,7 +11,7 @@ prio: 45
 - **Type:** refactor / data-completeness (Track A — `parser.inc` registration + node
   creation, `ir.inc` predicates). **Additive and fallback-preserving — NOT a big-bang
   rewrite.**
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-07-17, from a user observation ("we keep special-casing AnsiString,
   keep finding issues"). **Re-scoped 2026-07-18** after the user correctly pointed out the
   sane, low-risk shape: *just store the pointer type; C already does it.*
@@ -535,3 +536,101 @@ gets four rows wrong. Wired into `test-core`.
 
 **Gate:** `make compiler/pascal26` fixedpoint converged in one round; the 88-pair
 differential; the four cross targets; `tools/gate.sh quick` GREEN.
+
+## Resolved 2026-08-25 — the acceptance line re-run, the four walks made one
+
+The acceptance line asks that "a fuzz pass finds no new PChar/WideChar-conversion
+divergence". Ran it as two cross products, each program its own file, each diffed
+against fpc 3.2.2:
+
+| set | shape | before | after |
+| --- | --- | --- | --- |
+| the standing 88 | 11 sources x 8 contexts | pinned 45 diverged, HEAD 0 | **0** |
+| 110 new | 10 NEW sources x 11 contexts (adding `Copy`, `Pos`, a `const AnsiString` argument) | 17 diverged | **0** |
+
+The 88 were already clean at HEAD — the function-returning-`^PChar` shape that
+closed the previous instalment as *"5 remaining, all one new shape"* is fixed, so
+that residual is gone. The 110 found two new things, and both are this ticket's
+pattern rather than new ones.
+
+### 1. `(qa[0])^` — the fourth copy of the deref walk, and now there is one
+
+The previous instalment named the problem without fixing it: *"four copies of
+the pointer walk exist."* The parenthesised postfix tail in `pasparser_expr.inc`
+was the small copy — it resolved the immediate pointee through `NodePtrElem` and
+stamped **nothing**, no remaining depth, no ultimate base. So `(qa[0])^` over an
+`array[0..1] of ^PChar` was wrong in every non-blanket context (WriteLn printed
+the address, concat produced '', `Length` answered the pointer, `=` compared
+pointers) while the identical **`qa[0]^`, one character to the left**, was
+correct in all of them. One concept, correct through one spelling and wrong
+through another — the fifth time that exact sentence has been written into this
+ticket.
+
+Extracted the 5-arm chain out of `ParseLValueAST` into **`ResolveDerefShape`**
+and pointed both callers at it, rather than copying it a fifth time
+(`devdocs/dev/normalise-dont-special-case.md`). Two things fell out for free:
+
+- the parenthesised spelling gained the call-result, nested-deref and
+  field arms it never had;
+- the shared walk gained an **`AN_PTR_CAST`** arm — `PPC(raw)^` had no arm in
+  EITHER copy and fell to the final else as `tyInteger`, while `NodePtrElem`
+  read the alias's immediate pointee only. `AliasPtrDepth/BaseTk/BaseRec` were
+  already populated; nothing read them. The metadata was there and the reader
+  was missing, for the sixth time.
+
+The `NodePtrElem` fallback is kept as the final else, so `(pc + 2)^` still reads
+one char and not four bytes
+([[bug-p-a-pchar-plus-offset-loses-its-type-when-dereferenced]]).
+
+### 2. `Copy(p, 2, 3)` over a PChar was refused outright
+
+*"Copy: dynamic-array Copy needs a dynamic-array first argument"* — on code fpc
+accepts, and for **every PChar spelling at once**: a var, `q^`, `q[0]`,
+`(qa[0])^`, `t^^`, an array element, a record field, a function result, a
+`const PChar` parameter, an `out` parameter. That spread is the tell, and it is
+the same one the array-element instalment recorded: one broken context is a
+context bug, ten broken sources at one call site is an unrecognised **boundary**.
+
+Fixed by normalising the OPERAND at the Copy site — literally beside the `Char`
+-> string promotion already sitting there, and the same move already made at the
+Length, concat, relational and argument boundaries. The string-Copy path below
+needs to know nothing about pointers.
+
+### A/B: no emitted byte moved
+
+The extraction is a refactor on the path every Pascal dereference takes, so it
+was checked as an A/B rather than by tests alone. Built the compiler from the
+pre-change sources, then compiled the SAME sources with both binaries:
+
+```
+compiler/compiler.pas (37k lines, every construct)   BYTE-IDENTICAL
+test_pchar_pointer_to_pchar, _concat_and_array_element,
+_result_decl_only_method, test_ptr_untyped_deref,
+test_pointer_{param,function_result,field}_keeps_its_depth,
+test_builtin_pointer_cast_as_target                  BYTE-IDENTICAL (8/8)
+```
+
+### Test
+
+`test/test_pchar_paren_deref_and_copy.pas`, 22 rows, `.expected` being fpc
+3.2.2's own output — identical natively and under qemu on **i386, aarch64, arm32
+and riscv32**. `pinned` does not compile it. Wired into `test-core`.
+
+Gate: `make compiler/pascal26` fixedpoint converged in 1 round,
+`tools/gate.sh quick` GREEN.
+
+### Why this closes the ticket
+
+Acceptance, line by line: every proc-registration path sets the return-pointer
+fields (slice 1, 2026-08-21); `IsNodePChar` prefers stored metadata with the
+shape-walk as fallback (slice 2, and the storage turned out to already exist);
+the known instances stay fixed; and the fuzz-equivalent finds no new divergence —
+**198/198**.
+
+What is NOT done is slice 3, and it is not work: its premise expired twice (see
+the 2026-08-22 note) and what remains is a design call — a `tyPChar` kind, node-
+side storage, or neither now that the walk is one function. Filed as
+[[decide-pchar-node-side-storage-or-a-pchar-type-kind]] (Track U) with a
+recommendation, so the next reader of "slice 3, still owed" does not build a
+`tyPChar` on the strength of "do what WideChar did".
+- 2026-08-25 — resolved, commit PENDING-COMMIT.
