@@ -48,4 +48,4 @@ drift on the size rule; `.expected` from fpc 3.2.2.
 in `TComparerService.CreateInterface`, Generics.Defaults line 2074.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 15ec54d7a.

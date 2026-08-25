@@ -107,4 +107,4 @@ Regression test `test/test_pointer_to_a_pointer_through_a_cast_and_a_forward.pas
 covers all three spellings in both declaration orders.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 15ec54d7a.

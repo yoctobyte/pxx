@@ -69,4 +69,4 @@ order-dependent state.
 forward order.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 15ec54d7a.
