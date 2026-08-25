@@ -76,4 +76,4 @@ The umbrella [[chore-t-test-binaries-hardcode-unsweepable-tmp-paths]] (the 60
 baselined paths) is unaffected and stays open.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit dd35abca2.
