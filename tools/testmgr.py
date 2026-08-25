@@ -419,6 +419,39 @@ OUTGROWN_MARGIN = 2.0
 # in it.
 MAX_JOB_DEADLINE_FRAC = 0.5
 
+# The global deadline is a WALL-CLOCK budget, so it has to move when we
+# deliberately take cores away.
+#
+# Measured 2026-08-25: the newest full tier on this host reports wall=3600.3s
+# against the 3600s default -- i.e. it did not finish, it was torn down, and the
+# RED it published is the contentless kind. That was on the WHOLE box. This box
+# then became a workstation and the watcher was capped at 6 of 12 cores, which
+# roughly doubles the wall of the same work: the matrix is ~24000 cpu-seconds,
+# so even packed perfectly it needs ~67 minutes at 6 cores and cannot fit an
+# hour at any packing.
+#
+# A deadline the run provably cannot meet does not protect anything -- it just
+# converts every breadth run into a teardown at the same minute. So the default
+# scales with the throttle: half the cores, twice the wall. An explicit
+# --deadline is never touched, and the per-job ceiling above is a FRACTION of
+# this number, so it follows automatically.
+DEFAULT_DEADLINE = 3600.0
+
+
+def scaled_deadline(explicit, nproc, budget):
+    """The run's global wall-clock budget, given the cores it may actually use.
+
+    An explicit --deadline is returned untouched: the caller said a number and
+    means it. Otherwise the default is stretched by exactly the factor the
+    throttle shrinks throughput by -- 6 of 12 cores doubles it. Never shrinks
+    below the default, because an unthrottled run is the case it was tuned for.
+    """
+    if explicit is not None:
+        return float(explicit)
+    ncpu = float(nproc or 1)
+    have = float(budget) if budget else ncpu
+    return DEFAULT_DEADLINE * max(1.0, ncpu / max(0.1, have))
+
 
 def metrics_key(job):
     """Identity of a job's learned metrics ACROSS commits.
@@ -2185,6 +2218,18 @@ class Manager:
         self._peer_polled = -PEER_POLL_PERIOD
         self.peer_last_seen = -1.0
         self.peer_repos = set()
+        self.core_budget = core_budget(getattr(args, "max_cores", 0),
+                                       self.nproc)
+        if args.deadline is None:
+            # throttled runs get proportionally longer to do the same work
+            args.deadline = scaled_deadline(None, self.nproc, self.core_budget)
+            if args.deadline > DEFAULT_DEADLINE:
+                print("testmgr: deadline %.0fs (default %.0fs x %.1f — this run "
+                      "has %.0f of %d cores, so the same work takes longer in "
+                      "wall-clock)"
+                      % (args.deadline, DEFAULT_DEADLINE,
+                         args.deadline / DEFAULT_DEADLINE,
+                         self.core_budget, self.nproc), flush=True)
         self.metrics = self.heal_latched_metrics(load_metrics(), args.deadline)
         outgrown = []
         unschedulable = []
@@ -2277,8 +2322,9 @@ class Manager:
             -(j.exp_dur if j.exp_dur else CLASSES[j.cls]["timeout"])))
         # cores/mem-aware admission does the real throttling; the cap is just
         # a runaway guard, and >nproc lets io/qemu-idle jobs keep cores busy
-        self.core_budget = core_budget(getattr(args, "max_cores", 0),
-                                       self.nproc)
+        # (self.core_budget is set at the top of __init__ — the deadline is
+        # derived from it and is needed before this point).
+        #
         # The 2x oversubscription is a RATIO, not the number 24: it exists so
         # io- and qemu-idle jobs (cores < 1) can pack denser than the core
         # budget suggests. Tie it to the budget, or `--max-cores 6` would leave
@@ -4230,8 +4276,9 @@ def main():
     ap.add_argument("--serial", action="store_true", help="PAR=1: one job at a time")
     ap.add_argument("--fail-fast", action="store_true",
                     help="first red kills the run (inner-loop mode)")
-    ap.add_argument("--deadline", type=float, default=3600,
-                    help="global wall-clock budget, seconds (default 3600)")
+    ap.add_argument("--deadline", type=float, default=None,
+                    help="global wall-clock budget, seconds (default 3600, "
+                         "scaled up when --max-cores throttles the run)")
     ap.add_argument("--list", action="store_true", help="print job table and exit")
     ap.add_argument("--job", metavar="GLOB",
                     help="run only jobs whose name matches (fnmatch), or "

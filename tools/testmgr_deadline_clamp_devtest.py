@@ -143,13 +143,60 @@ def t_learn_timeout_refuses_the_ceiling():
     return "ceiling refused, ordinary timeout still learned"
 
 
+def t_the_deadline_scales_with_the_core_budget():
+    """A wall-clock budget has to move when we take cores away.
+
+    Measured 2026-08-25: the newest full tier reported wall=3600.3s against the
+    3600s default — a teardown at the deadline, not a run. That was on the whole
+    box; the watcher is now capped at 6 of 12 cores, and the matrix is ~24000
+    cpu-seconds, so it cannot fit an hour at ANY packing. A deadline the run
+    provably cannot meet protects nothing and converts every breadth run into a
+    contentless red at the same minute.
+    """
+    full = tm.scaled_deadline(None, 12, 13)     # unthrottled: budget > nproc
+    assert abs(full - tm.DEFAULT_DEADLINE) < 1.0, \
+        "an unthrottled run must keep the tuned default, got %.0f" % full
+    half = tm.scaled_deadline(None, 12, 6)
+    assert abs(half - 2 * tm.DEFAULT_DEADLINE) < 1.0, \
+        "half the cores must double the budget, got %.0f" % half
+    quarter = tm.scaled_deadline(None, 12, 3)
+    assert abs(quarter - 4 * tm.DEFAULT_DEADLINE) < 1.0, \
+        "a quarter of the cores must quadruple it, got %.0f" % quarter
+    return "6/12 cores -> %.0fs" % half
+
+
+def t_an_explicit_deadline_is_never_rewritten():
+    """--deadline means the number the caller said, throttled or not."""
+    for budget in (12, 6, 1):
+        got = tm.scaled_deadline(1800.0, 12, budget)
+        assert abs(got - 1800.0) < 0.001, \
+            "explicit 1800s became %.0f at budget=%s" % (got, budget)
+    return "explicit wins at every budget"
+
+
+def t_the_per_job_ceiling_follows_the_scaled_deadline():
+    """The clamp is a FRACTION, so it must move with the deadline, not lag it.
+
+    If it did not, the throttle would raise the global budget while leaving
+    every individual job pinned to half of the OLD one — which is the same
+    starvation this whole file is about, one level down.
+    """
+    half = tm.scaled_deadline(None, 12, 6)
+    assert half * tm.MAX_JOB_DEADLINE_FRAC > tm.DEFAULT_DEADLINE * \
+        tm.MAX_JOB_DEADLINE_FRAC, "the per-job ceiling did not follow"
+    return "ceiling %.0fs at 6/12 cores" % (half * tm.MAX_JOB_DEADLINE_FRAC)
+
+
 def main():
     rc = 0
     for fn in (t_job_env_kills_the_a11y_bridge,
                t_latched_metric_is_dropped_on_load,
                t_healthy_metrics_are_untouched,
                t_outgrown_budget_is_clamped_to_the_deadline,
-               t_learn_timeout_refuses_the_ceiling):
+               t_learn_timeout_refuses_the_ceiling,
+               t_the_deadline_scales_with_the_core_budget,
+               t_an_explicit_deadline_is_never_rewritten,
+               t_the_per_job_ceiling_follows_the_scaled_deadline):
         try:
             print("  ok   %s — %s" % (fn.__name__, fn()))
         except Exception as e:              # noqa: BLE001 - report, keep going
