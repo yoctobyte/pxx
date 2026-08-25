@@ -2,7 +2,7 @@
 track: P
 prio: 42
 type: feature
-blocked-by: []
+blocked-by: [decide-tobject-classinfo-blob-or-refusal]
 status: backlog
 ---
 
@@ -148,3 +148,38 @@ walls at `generics.defaults.pas:1569` and `:1780` are cleared —
   same trade-off.
 
 Moved out of `blocked/`.
+
+## 2026-08-25 — `UnitName` LANDED. Only `ClassInfo` left, and it is a decide.
+
+`UnitName` is done, exactly as the note above scoped it: `RTTI_CLS_SIZE` grew
+96 → 104 with the declaring unit's interned name at +96, written in
+`rtti_emit.inc` from `UClsUnitIdx[ci]`, read by `__pxxUnitName` and reached
+through the `IsClassRefOpName` / `GenMakeClassRefOp` pair that already serves
+`ClassName` / `InstanceSize`.
+
+Two details worth keeping:
+
+- **`UClsUnitIdx = -1` is the main program, and FPC answers the PROGRAM'S OWN
+  NAME there** — measured: a class in `program unmain` answers `unmain`, not
+  `''` and not `'System'`. `DbgProgName` is where the parsed `program X;` name
+  already lives; this is its second consumer.
+- **TObject's `'System'` is stamped in `rtti_emit`, not by faking a
+  `UClsUnitIdx`.** That field is the *visibility scope* (`sameUnit := accUnit =
+  UClsUnitIdx[declCi]`), so a fake unit index would quietly change who may
+  touch a private member.
+
+Growing the header was safe by construction and now demonstrably so: nothing
+strides over these blobs (rtti_emit records each one's offset) and every reader
+— `builtin.pas`' `PXX_RTTI_*`, `lib/rtl/rtti.pas`' `RTTI_OFS_*` — names a
+FIELD offset, never the total. 141 lib units compile unchanged; the self-host
+fixedpoint converged.
+
+`tobject5.pp` is **unskipped and passing**: the conformance suite went 344 →
+**345 pass**, 171 → 170 skip, one pre-existing failure unmoved.
+
+Regression test: `test/test_tobject_unitname.pas` + its helper unit, wired into
+`test-core`, `.expected` taken from fpc 3.2.2.
+
+**Remaining: `ClassInfo` only**, and it is now filed as the Track U call it
+always was — [[decide-tobject-classinfo-blob-or-refusal]]. Do not implement it
+by picking a side here.

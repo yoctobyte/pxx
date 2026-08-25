@@ -253,7 +253,12 @@ const
   RTTI_KIND_METHOD = 5;   { reserved; event/method-pointer props }
 
   { RTTI blob byte layouts (all fields 8 bytes) }
-  RTTI_CLS_SIZE    = 96;  { name,parent,instSize,vmt,propCount,props,methCount,meths,fieldCount,fields,ifaceCount,ifaces }
+  RTTI_CLS_SIZE    = 104; { name,parent,instSize,vmt,propCount,props,methCount,meths,fieldCount,fields,ifaceCount,ifaces,unitName
+                            +8 for the DECLARING UNIT's name at +96 (TObject.UnitName,
+                            feature-pascal-builtin-tobject-class). Safe to grow: nothing
+                            strides over these headers -- rtti_emit records each one's
+                            offset and every reader (builtin.pas' PXX_RTTI_*, lib/rtl/rtti.pas'
+                            RTTI_OFS_*) names a FIELD offset, never the total. }
   RTTI_IFACE_SIZE  = 32;  { {GUID:16, IMT pointer:8, interface id:8} — the per-class
                             interface table. Every implemented interface gets an entry
                             (GUID-less CORBA ones too, GUID = zeros): GetInterface

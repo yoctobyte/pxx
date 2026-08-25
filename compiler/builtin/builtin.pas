@@ -2096,6 +2096,7 @@ const
   PXX_RTTI_METHSIZE  = 48;   { {name,code,arity,retKind,paramKinds,flags} }
   PXX_RTTI_METH_FLAGS = 40;
   PXX_RTTI_METH_PUBLISHED = 1;
+  PXX_RTTI_UNITNAME  = 96;   { the DECLARING unit's interned name — TObject.UnitName }
 
 function __pxxRttiOf(Instance: Pointer): Pointer;
 { The class RTTI blob of an instance: [[instance+0] - 8]. nil when the class
@@ -2171,6 +2172,18 @@ begin
   Result := '';
   if Rtti = nil then Exit;
   Result := __pxxRttiName(PPxxPtr_(Rtti)^);
+end;
+
+function __pxxUnitName(Rtti: Pointer): AnsiString;
+{ x.UnitName: the name of the unit that DECLARES the class -- FPC answers 'un'
+  for a class in `unit un`, the program's own name for one declared in the main
+  program, and 'System' for TObject itself. rtti_emit writes the pointer at
+  +96; this is the same one-field read as __pxxClassParent, through the same
+  interned-name deref __pxxClassName uses. }
+begin
+  Result := '';
+  if Rtti = nil then Exit;
+  Result := __pxxRttiName(PPxxPtr_(PtrUInt(Rtti) + PXX_RTTI_UNITNAME)^);
 end;
 
 function __pxxInstanceSize(Rtti: Pointer): PtrInt;

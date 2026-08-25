@@ -605,6 +605,7 @@ begin
     begin
       if UClsRTTIOff[ci] < 0 then continue;
       hdr := UClsRTTIOff[ci];
+      tobjCi := FindUClass('TObject');   { the implicit root -- parent link and UnitName both ask }
 
       { name }
       nm := TokSliceStr(UClsNOff[ci], UClsNLen[ci]);
@@ -627,9 +628,29 @@ begin
         AddDataPtrFix(hdr + 8, UClsRTTIOff[UClsParent[ci]])
       else if (UClsParent[ci] < 0) and (not UClsIsInterface[ci]) then
       begin
-        tobjCi := FindUClass('TObject');
         if (tobjCi >= 0) and (tobjCi <> ci) and (UClsRTTIOff[tobjCi] >= 0) then
           AddDataPtrFix(hdr + 8, UClsRTTIOff[tobjCi]);
+      end;
+
+      { declaring unit's name -- TObject.UnitName. UClsUnitIdx is the Strs[]
+        index of the unit that declared the class, and -1 means the MAIN
+        PROGRAM, for which FPC answers the program's own name (measured: a
+        class declared in `program unmain` answers 'unmain'). DbgProgName is
+        where the parsed `program X;` name already lives; this is its second
+        consumer, and it is the program name whatever it is called.
+        FPC measured: `unit un` -> 'un'; a class in `program unmain` -> 'unmain';
+        TObject -> 'System'. }
+      if UClsUnitIdx[ci] >= 0 then nm := Strs[UClsUnitIdx[ci]].Text
+      else nm := DbgProgName;
+      { TObject is minted by RegisterBuiltinTObject with no declaring unit, and
+        FPC answers 'System' for it -- said here rather than by faking a
+        UClsUnitIdx, because that field is the VISIBILITY scope and a fake unit
+        index would quietly change who may touch a private member. }
+      if (tobjCi >= 0) and (ci = tobjCi) then nm := 'System';
+      if nm <> '' then
+      begin
+        strIdx := InternStr(nm);
+        AddDataPtrFix(hdr + 96, Strs[strIdx].Offset);
       end;
 
       { instance size }

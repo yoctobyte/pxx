@@ -4352,6 +4352,14 @@ test-core: $(COMPILER)
 	# builtin TObject class: var o: TObject; o := TObject.Create
 	./$(COMPILER) --mimic-fpc test/test_builtin_tobject.pas $(TESTTMP)/test_tobj26
 	test "$$($(TESTTMP)/test_tobj26)" = "$$(printf 'FALSE\n42\nFALSE')"
+	# ...and TObject.UnitName, the last member of that ticket that was PXX-REJECT:
+	# the DECLARING unit's name, out of a new word in the class RTTI blob (+96).
+	# Three sources of the string -- a unit, the PROGRAM (which is what FPC
+	# answers for a class declared there), and 'System' for TObject itself --
+	# asserted on an instance, on a class reference, and through a descendant
+	# that declares nothing. .expected IS fpc 3.2.2's own output.
+	./$(COMPILER) test/test_tobject_unitname.pas $(TESTTMP)/test_tobjun26
+	test "$$($(TESTTMP)/test_tobjun26)" = "$$(cat test/test_tobject_unitname.expected)"
 	./$(COMPILER) test/test_bare_property.pas $(TESTTMP)/test_bare_property26
 	test "$$($(TESTTMP)/test_bare_property26)" = "$$(printf 'num=21\nnum2=25\ndbl=50\nflagzero=TRUE\nflagset=TRUE')"
 	./$(COMPILER) test/test_ansistring.pas $(TESTTMP)/test_ansistring26

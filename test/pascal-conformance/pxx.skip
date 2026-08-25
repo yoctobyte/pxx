@@ -85,7 +85,6 @@ tgenfunc1.pp	gap: generic (standalone) functions + inline specialize call expres
 tgenfunc23.pp	gap: generic procedure overload on T vs array of T + inline specialize call
 tgenfunc8.pp	gap: generic FUNCTION with <T> in result/args (scalar operators land; parse dies at the generic func decl)
 tobject1.pp	gap: object constructor `fail`, erroru/ExitCode RTL support
-tobject5.pp	gap: TObject.Equals/GetHashCode/UnitName/ToString RTL methods
 toperator78.pp	gap: global operator overloads on primitive/set types (**, ><, div, mod, and)
 toperator89.pp	gap: overloading implicit assignment operator `:=` (global operator)
 toperator9.pp	gap: operator overload for `in` on a record type not supported by the parser

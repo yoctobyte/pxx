@@ -969,6 +969,16 @@ begin
     if pi < 0 then Exit;
     outTk := tyBoolean;
   end
+  else if CaseEqual(op, 'UnitName') then
+  begin
+    { the blob's +96 word, which rtti_emit writes from UClsUnitIdx (and stamps
+      'System' for TObject, matching FPC). Same one-field shape as ClassName
+      and InstanceSize -- the value is emitted, this is only the accessor.
+      feature-pascal-builtin-tobject-class }
+    pi := FindProc('__pxxUnitName');
+    if pi < 0 then Exit;
+    outTk := tyAnsiString;
+  end
   else if CaseEqual(op, 'InstanceSize') then
   begin
     { the blob's +16 word, which rtti_emit has always written }
@@ -1020,7 +1030,8 @@ begin
   m := MapNilPyClassRefOpName(nm);
   IsClassRefOpName := CaseEqual(m, 'ClassName') or CaseEqual(m, 'ClassType') or
                       CaseEqual(m, 'InheritsFrom') or CaseEqual(m, 'ClassParent') or
-                      CaseEqual(m, 'InstanceSize') or CaseEqual(m, 'ClassNameIs');
+                      CaseEqual(m, 'InstanceSize') or CaseEqual(m, 'ClassNameIs') or
+                      CaseEqual(m, 'UnitName');
 end;
 
 { The class RTTI blob of an INSTANCE expression. An IR node, not a builtin call:

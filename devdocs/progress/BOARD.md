@@ -280,7 +280,7 @@ _none_
 | feature-p-uses-a-unit-in-an-explicit-file | P | 30 | feature | `uses mymod in 'mymod.pas';` — the FPC/Delphi spelling for naming a unit's source file — does not parse. pxx has the quoted-path form (`uses './mymod.pas' as m;`, shipped 2026-06-30) but not the standard `in` one, so ordinary FPC project sources are refused at the uses clause. | — |
 | feature-pal-esp-posix-fd-semantics | S | 30 | feature | ESP PAL: exact POSIX fd semantics over ESP-IDF VFS | — |
 | feature-parallel-load-sampler-refine | B | 20 | feature | Parallel load sampler — refinements (ramp/EMA, BSD/cgroup) | feature-os-targets-bsd-mac |
-| feature-pascal-builtin-tobject-class | P | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | — |
+| feature-pascal-builtin-tobject-class | P | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | decide-tobject-classinfo-blob-or-refusal |
 | feature-pascal-corpus-expansion | P | 15 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
 | feature-pascal-corpus-oop | P | 65 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-pascal-corpus-passrc | P | 45 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
@@ -345,7 +345,7 @@ _none_
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (18)
+## backlog_new (19)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -361,6 +361,7 @@ _none_
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 35 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
 | decide-how-much-string-machinery-the-basic-frontend-gets | U | 35 | decide | String concat and comparison between BASIC variables need PXXStrConcat/PXXStrEq, whose bodies ship only in builtinheap, which a unit-free .bas never pulls — so `PRINT s + t` is a compiler-internal error. Every OTHER frontend solves this by pulling builtinheap unconditionally (a Pascal hello-world is 63 KB). BASIC's unit-free path is 559 bytes. The fork is size vs capability, and it is a product call, not a code one. | — |
 | decide-pchar-node-side-storage-or-a-pchar-type-kind | U | 40 | decide | The last thing owed by refactor-centralize-managed-string-pchar-conversion is slice 3, and its premise expired twice. WideChar got a real type kind (tyWideChar) and no longer wants node-side storage; PChar cannot copy that, because a PChar's pointee VARIES and a kind per pointee does not scale. Meanwhile the deref walk is now ONE function and 198/198 cross-product rows match fpc, so the third option — do nothing structural and keep extending the one walk — is live. This is a design call, not work. | — |
+| decide-tobject-classinfo-blob-or-refusal | U | 42 | decide | TObject.ClassInfo is the last member of feature-pascal-builtin-tobject-class still PXX-REJECT, and it is a judgment call, not an implementation choice: our RTTI blob is honest for identity comparison and wrong for anything that walks FPC's TTypeInfo layout. Answer or refuse — the third option is to answer and be silently wrong for the second caller. | — |
 | decide-typeref-gains-a-pointer-depth-field | U | 35 | decide | TTypeRef was landed to replace the 8-field tuple that ~90 sites redeclare, but as declared it carries PtrBaseTk/PtrBaseRec and DynDepth and no POINTER depth — so it cannot express `^PChar` any better than the pair it replaces. Every pointer table has since grown a depth field of its own (symbols, aliases, the type parser, C params, Pascal params, captures, proc returns). Either TTypeRef gains PtrDepth and the migration folds them all in, or depth is declared to live outside TTypeRef and the migration's value shrinks. Additive either way, but it changes a shared type mid-migration. | — |
 | feature-p-legacy-value-object-types | P | 35 | feature | Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone. | — |
 | gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo | B | 40→65 | gap | PTypeData is declared as `= PTypeInfo` with a `same header for now` note, and TTypeInfo carries no OrdType / MinValue / MaxValue / FloatType. Any RTTI-driven code that switches on a type's ordinal width — Generics.Defaults' comparer selection, and the whole TypInfo idiom generally — cannot compile. | — |
@@ -712,7 +713,7 @@ _none_
 - [p 45] [A] meta-constant-normalisation
 - [p 45] [C] refactor-c-string-literal-decay-belongs-at-the-producer
 - [p 45] [P] refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too
-- [p 42] [P] feature-pascal-builtin-tobject-class
+- [p 42] [U] decide-tobject-classinfo-blob-or-refusal (unblocks 1)
 - [p 40] [U] decide-rtti-kind-numbering (unblocks 1)
 - [p 40] [A] bug-a-nilpy-leading-double-star-in-a-call-is-not-detected
 - [p 40] [B] bug-b-inttostr-of-a-qword-prints-it-signed
@@ -936,6 +937,7 @@ _none_
 - **1** — decide-nilpy-runtime-dunder-dispatch-strategy
 - **1** — decide-release-signing-key-custody
 - **1** — decide-rtti-kind-numbering
+- **1** — decide-tobject-classinfo-blob-or-refusal
 - **1** — decide-xml-etree-thin-tree-model-or-a-real-xml-library
 - **1** — feature-nilpy-object-reclamation
 - **1** — feature-nilpy-parallel-for-in
