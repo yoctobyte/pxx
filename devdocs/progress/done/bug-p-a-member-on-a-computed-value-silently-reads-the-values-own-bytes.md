@@ -4,7 +4,7 @@ prio: 55
 type: bug
 blocked-by: []
 status: done
-commit: PENDING-COMMIT
+commit: 582cdc934
 summary: "`.member` on a COMPUTED value — a call result, or the result of a type-helper method — built a field read at offset 0 and printed the receiver's own bytes as an Int32. `(F).Twice` printed 113 (ord 'q'); `s.Twice.Twice` and `s.Twice.IsEmpty` both printed 24929 (the two bytes of 'aa'), the trailing member silently dropped. The sibling refusal for a NAMED receiver was narrowed to a declared variable on purpose, and 'not a name' was read as 'leave it alone'."
 owner: claude-A
 ---
