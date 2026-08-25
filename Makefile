@@ -2315,6 +2315,25 @@ test-nilpy: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q '^pascal26:33: error: no overload of F' \
 	   && test ! -e $(TESTTMP)/test_bad_calls26 \
 	  || { echo "test_bad_calls_all_report_fail: FAIL - rc=$$rc, $$n overload lines (want rc=1 and 4, on lines 30-33, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@# ...and the three reasons a file still stopped before its LAST mistake:
+	@# `class method not found` and `SizeOf: unknown type` still halted; bodies
+	@# are lowered AS THEY ARE PARSED, so a poisoned stand-in hit the FATAL
+	@# "SetLength expects a string variable in IR codegen" at the routine's end
+	@# line and took every later routine with it; and the stand-in's own Integer
+	@# produced a misleading second line on `Length(NoSuchStr)`.
+	@# Five names, three routines, one compile. fpc 3.2.2 reports the same five
+	@# LINES on this exact source (38, 39, 40, 45, 51).
+	@out=$$(./$(COMPILER) test/test_errors_across_routines_all_report_fail.pas $(TESTTMP)/test_errxr26 2>&1); \
+	 rc=$$?; \
+	 n=$$(printf '%s\n' "$$out" | grep -c '^pascal26:[0-9]*: error:'); \
+	 test "$$rc" = "1" && test "$$n" = "5" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:38: error: undefined variable (NoSuchOne)' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:39: error: undefined variable (NoSuchArr)' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:40: error: undefined variable (NoSuchStr)' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:45: error: class method not found (NoSuchClassMethod)' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:51: error: SizeOf: unknown type or variable' \
+	   && test ! -e $(TESTTMP)/test_errxr26 \
+	  || { echo "test_errors_across_routines_all_report_fail: FAIL - rc=$$rc, $$n error lines (want rc=1 and exactly 5, on lines 38/39/40/45/51, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	@# Three diagnostics that were WRONG, not merely early: a parenless call to
 	@# a routine that needs arguments said "undefined variable" over a name in
 	@# scope; too many arguments to a METHOD died on Expect(')') as a SYNTAX

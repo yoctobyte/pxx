@@ -3,8 +3,8 @@ track: A
 prio: 45
 type: feature
 summary: "`Error()` calls `Halt` directly, so nothing in the compiler can trial-parse and back out. That blocks NilPy's type inference (which needs to read an as-yet-unseen name speculatively), and it is also why the compiler stops at the FIRST error. Make the error path recoverable; several unrelated wants fall out of the same change."
-status: backlog
-owner: ""
+status: working
+owner: claude-A
 ---
 
 # `Error()` halts, so no parse can be speculative
@@ -396,3 +396,79 @@ error to a rollback point, so the state-unwind question in "Shape, not a
 prescription" is still unanswered — and its only known consumer (NilPy typing)
 is deferred, so the ranking argument for doing it now is weak. Syntax errors
 still halt at the first one, deliberately.
+
+## Slice 5 landed 2026-08-25 (claude-A) — the file reports its LAST mistake too
+
+Slices 1-4 made recovery possible and converted the name and call sites. This
+slice asked the ticket's item-2 question again, with a bigger file, and found
+**three** independent reasons a compile still stopped early. Measured against
+fpc 3.2.2 on a 15-error file: fpc reported all fifteen, pxx reported **nine**.
+
+### 1. Two more diagnostics that still halted
+
+- **`class method not found`** (`TC.NoSuchMember`) — the metaclass twin of
+  `r.nofield`, which slice 2 already recovered. Same well-formed token stream,
+  same nothing-to-resync, and it was the halt that killed the file at error 9.
+- **`SizeOf: unknown type or variable`** — its stand-in (a size of 0) was
+  *already written on the next line*; only the halt had to go. That shape kept
+  recurring in this sweep: a diagnostic whose caller already knows what to carry
+  on with.
+
+The "report → swallow the argument list → hand back an Integer 0" longhand had
+reached its third copy, so it is now `PoisonValueNode`.
+
+### 2. Bodies are lowered AS THEY ARE PARSED, so poison reached codegen
+
+The claim in slice 1 — *"Nothing poisoned can reach codegen: `ErrCount` is
+checked before any emission"* — was **wrong**, and the check's placement is why.
+It sits after `ParseProgram`, but a routine body is lowered at its own `end`,
+inside the parse. So `SetLength(NoSuchArr, 3)` reported the undefined name and
+then died on the FATAL `SetLength expects a string variable in IR codegen`,
+attributed to the routine's `end` line, taking every later routine's diagnostics
+with it. Five undefined names across three routines produced three lines and a
+nonsense fourth.
+
+`CompileAST` now returns immediately when `ErrCount > 0`. That is the whole fix
+and it is safe by construction in both directions: the compile has already
+failed, so there is nothing the emission could still be for; and when `ErrCount`
+is 0 the guard is not reached at all, so **the self-host fixedpoint cannot
+move**.
+
+### 3. The stand-in produced misleading follow-ons
+
+`PoisonSym` mints an Integer, and an Integer is a fact about the RECOVERY, not
+about the program — so any later check that reads its type describes something
+the user never wrote. `Length(NoSuchStr)` printed the undefined name AND
+`Length needs a string, an array or a PChar, not Integer`; `New(NoSuchPtr)`
+added `New needs a pointer variable, not Integer`. fpc prints one line for the
+first and says `<erroneous type>` for the second — the same admission, more
+honestly worded.
+
+`ASTIsPoisoned(node)` answers whether a value came from a name that did not
+resolve, recursing through the operators an enclosing expression can wrap it in
+(so `Length(NoSuchVar + 'x')` is quiet for the same reason). The two checks
+above consult it. Backed by a LIST of at most `MAX_REPORTED_ERRORS` symbol
+indices rather than a per-symbol flag: recovery is capped at twenty, so a linear
+scan beats a parallel array over every symbol plus its three init sites.
+
+### Measured
+
+| file | fpc real errors | pxx before | pxx after |
+| --- | ---: | ---: | ---: |
+| 15 unresolved names/members/calls | 14 lines | 9 | **14** |
+| 19 names across statements, calls, casts, control flow | 19 lines | 20 incl. 1 bogus, **cap hit** | **19** |
+| 5 names across two routines + main body | 5 lines | 3 + 1 nonsense | **5** |
+
+Line for line with fpc in all three, and no binary is written.
+
+**Gate:** `make compiler/pascal26` fixedpoint converged in one round;
+`tools/gate.sh quick` GREEN; 141 lib units compile; fpc-testsuite unmoved. New
+`test-core` case `test_errors_across_routines_all_report_fail`, whose five
+expected lines are the five fpc reports on the same source.
+
+### Still open, unchanged
+
+Item 1 (speculative parse). `ErrorRecover` is the mechanism; nothing ties an
+error to a rollback point. Its only known consumer (NilPy typing) is deferred,
+so the ranking argument for doing it now is still weak. Syntax errors still halt
+at the first one, deliberately.

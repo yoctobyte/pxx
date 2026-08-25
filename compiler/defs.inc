@@ -2540,6 +2540,17 @@ var
     means the compile FAILED -- the driver halts before any output is written.
     feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
   ErrCount : Integer;
+  { The symbols PoisonSym minted as stand-ins for names that did not resolve.
+    A LIST and not a per-symbol flag on purpose: recovery is capped at
+    MAX_REPORTED_ERRORS, so there are at most twenty of these in any compile and
+    a linear scan is cheaper than a parallel array over every symbol plus its
+    three initialisation sites. Consulted by ASTIsPoisoned, so a check does not
+    complain about a TYPE THE COMPILER INVENTED -- `Length(NoSuchVar)` reported
+    the undefined name and then `Length needs a string, not Integer`, which
+    names the stand-in rather than anything the user wrote.
+    feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+  PoisonSyms : array[0..MAX_REPORTED_ERRORS - 1] of Integer;
+  PoisonSymCount : Integer;
   { Nested `def` (feature-nilpy-nested-defs). A def inside another def cannot be
     emitted where it is written — single-pass emission would drop its body into
     the middle of the enclosing routine's code — so the statement parser

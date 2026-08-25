@@ -9418,6 +9418,20 @@ end;
 procedure CompileAST(node: Integer);
 var iZeroTmp: Integer;
 begin
+  { Once a diagnostic has been RECOVERED, stop lowering. The claim that "nothing
+    poisoned can reach codegen" rested on the driver's ErrCount halt, and that
+    halt is after ParseProgram -- but bodies are lowered AS THEY ARE PARSED, so
+    a poisoned symbol reached IR lowering long before it. `SetLength(NoVar, 3)`
+    died on the FATAL `SetLength expects a string variable in IR codegen`,
+    reported at the routine's `end` line, and took the rest of the file's
+    diagnostics with it: fpc listed six names, pxx listed three and that.
+
+    Skipping is safe and is the whole fix, because the compile has already
+    failed -- the driver halts on ErrCount before any output, so there is
+    nothing this emission could still be for. And when ErrCount is 0 this is not
+    reached at all, so the self-host fixedpoint is untouched by construction.
+    feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+  if ErrCount > 0 then Exit;
   if (CurProc >= 0) and PxxDbgWants('a.ast', Procs[CurProc].Name) then
   begin
     WriteLn('PXXDBG a.ast ', Procs[CurProc].Name);

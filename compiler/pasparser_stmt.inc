@@ -5539,7 +5539,14 @@ begin
           FPC says "Illegal qualifier". Same guard shape as the SetLength and
           Inc sites: refuse the target that gets CORRUPTED.
           bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong }
-        if IntToTypeKind(ASTTk[valNode]) <> tyPointer then
+        { …but not for a name that did not resolve: the Integer this would
+          name is PoisonSym's stand-in, so the message describes the recovery
+          and not the program. fpc says `<erroneous type>` for the same shape,
+          which is the same admission; staying silent is cheaper and the
+          undefined-name diagnostic one line up already said it.
+          feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+        if (IntToTypeKind(ASTTk[valNode]) <> tyPointer) and
+           (not ASTIsPoisoned(valNode)) then
         begin
           ErrorIdent := Syms[idx].Name;
           ErrorRecover('New needs a pointer variable, not '

@@ -74,6 +74,65 @@ begin
   LastTypeIsSub := False;
   LastTypeRecId := REC_NONE;
   Result := AllocVar(nm, tyInteger);
+  if PoisonSymCount < MAX_REPORTED_ERRORS then
+  begin
+    PoisonSyms[PoisonSymCount] := Result;
+    Inc(PoisonSymCount);
+  end;
+end;
+
+function SymIsPoisoned(idx: Integer): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  if idx < 0 then Exit;
+  for i := 0 to PoisonSymCount - 1 do
+    if PoisonSyms[i] = idx then begin Result := True; Exit; end;
+end;
+
+{ Does this expression's value come from a name that did not resolve?
+
+  The stand-in PoisonSym mints is an Integer, and an Integer is a fact about the
+  RECOVERY, not about the program -- so any later check that reads its type is
+  describing something the user never wrote. `Length(NoSuchVar)` said
+  "undefined variable (NoSuchVar)" and then "Length needs a string, an array or
+  a PChar, not Integer": one real diagnostic and one about the compiler's own
+  invention, on the same line, where fpc reports exactly one.
+
+  Recurses through the operators an enclosing expression can wrap it in, so
+  `Length(NoSuchVar + 'x')` is quiet for the same reason.
+  feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+function ASTIsPoisoned(node: Integer): Boolean;
+begin
+  Result := False;
+  if node < 0 then Exit;
+  if PoisonSymCount = 0 then Exit;
+  case ASTKind[node] of
+    AN_IDENT: Result := SymIsPoisoned(ASTIVal[node]);
+    AN_NEG, AN_NOT, AN_DEREF, AN_ADDR, AN_PTR_CAST:
+      Result := ASTIsPoisoned(ASTLeft[node]);
+    AN_BINOP, AN_INDEX, AN_FIELD:
+      Result := ASTIsPoisoned(ASTLeft[node]) or ASTIsPoisoned(ASTRight[node]);
+  end;
+end;
+
+{ …and the VALUE-shaped half, which the caller in expression position needs and
+  which was being written out longhand at each site. Swallow an argument list if
+  one follows (a stand-in VARIABLE cannot absorb `(1, 2)`, and the leftover
+  parens bury the real diagnostic under `unexpected token`), then hand back an
+  ordinary Integer node: every enclosing operator accepts one, so
+  `i := TC.NoSuchMethod + 1` reports the member and does NOT produce a second
+  complaint about the `+` that never got an operand.
+  feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+function PoisonValueNode(const nm: AnsiString; var tk: TTypeKind;
+                         var recName: Integer): Integer;
+begin
+  if CurTok.Kind = tkLParen then SkipParenGroup;
+  Result := AllocNode(AN_IDENT);
+  ASTIVal[Result] := PoisonSym(nm);
+  ASTTk[Result] := Ord(tyInteger);
+  tk := tyInteger;
+  recName := REC_NONE;
 end;
 
 procedure ResolveDerefShape(node: Integer; var tk: TTypeKind; var recName: Integer;
@@ -958,7 +1017,16 @@ begin
               end;
             end;
 
-            Error('class method not found: ' + fieldName);
+            { RECOVERS: a member that does not exist on a class NAMED as a
+              type is the metaclass twin of `r.nofield`, and the parser is in
+              exactly the same place — a well-formed token stream, the member
+              consumed, nothing to resync. It was the halt that stopped a file
+              at its fifth mistake while fpc reported all fifteen.
+              feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+            ErrorIdent := fieldName;
+            ErrorRecover('class method not found');
+            Result := PoisonValueNode(fieldName, tk, recName);
+            Exit;
           end;
           EnforceMethVis(mmi, fieldName);
           mpi := UMthProc_[mmi];
@@ -1018,16 +1086,7 @@ begin
         else
         begin
           ReportUndefinedName(fieldName);
-          { a CALL to a name that does not exist — swallow the argument list, or
-            the stand-in below (a VARIABLE) leaves `(1, 2)` for the statement
-            parser and the real diagnostic is buried under `unexpected token`. }
-          if CurTok.Kind = tkLParen then SkipParenGroup;
-          node := AllocNode(AN_IDENT);
-          ASTIVal[node] := PoisonSym(fieldName);
-          ASTTk[node] := Ord(tyInteger);
-          tk := tyInteger;
-          recName := REC_NONE;
-          Result := node;
+          Result := PoisonValueNode(fieldName, tk, recName);
           Exit;
         end;
       end;

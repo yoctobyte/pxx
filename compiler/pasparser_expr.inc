@@ -3639,7 +3639,12 @@ begin
                 end
                 else
                 begin
-                  Error('SizeOf: unknown type or variable');
+                  { RECOVERS. The stand-in was already here (a size of 0) —
+                    only the halt had to go, and this is the shape the rest of
+                    the sweep keeps finding: a diagnostic whose caller already
+                    knows what to carry on with.
+                    feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+                  ErrorRecover('SizeOf: unknown type or variable');
                   prevTok := 0;
                 end;
               end;
@@ -5301,7 +5306,13 @@ begin
             regression-test-core-test-length-dynarray-call }
           lenSi := -1;
           if (ASTKind[valNode] = AN_IDENT) then lenSi := ASTIVal[valNode];
+          { …and NOT for a name that did not resolve. The Integer that check
+            would name is PoisonSym's stand-in, so the message describes the
+            recovery rather than the program: `Length(NoSuchVar)` printed the
+            undefined name AND "not Integer", where fpc prints one line.
+            feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
           if (not CProgramMode) and (lenSi >= 0) and (lenSi < SymCount) and
+             (not ASTIsPoisoned(valNode)) and
              (not Syms[lenSi].IsArray) and
              (TypeIsOrdinal(Syms[lenSi].TypeKind) or TypeIsFloat(Syms[lenSi].TypeKind)) and
              (Syms[lenSi].TypeKind <> tyPointer) and
