@@ -107,4 +107,4 @@ Landed with [[feature-typeinfo-ttypedata-payloads]]; the categories that still
 have no consumer moved to [[feature-typeinfo-last-categories]].
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 1a7b554fa.

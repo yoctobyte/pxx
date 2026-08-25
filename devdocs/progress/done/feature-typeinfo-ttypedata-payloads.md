@@ -217,4 +217,4 @@ kind-mapping defect, not a payload one — it goes to
 `tools/gate.sh quick`.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 1a7b554fa.
