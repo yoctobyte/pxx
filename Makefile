@@ -11384,15 +11384,6 @@ test-quickjs: $(COMPILER)
 	  echo "test-quickjs: FAIL — js-sha256 output mismatch"; head -12 "$$wd/diff2.txt"; exit 1; \
 	fi
 
-# fcl-json's own 203-case suite (fpjson + fpcunit, FPC release_3_2_2 sources)
-# under a pxx-built runner — the strongest OOP/RTL exerciser in the Pascal
-# corpus (feature-fpjson-fpcunit-suite-target). Track B shape: builds with
-# $(PXX_STABLE), never rebuilds the compiler. Stages upstream sources flat into
-# a temp dir (unit resolution wants one dir; -Fu order alone is insufficient)
-# with our test/fpjson/testutils.pas SHADOWING upstream testutils.pp, then runs
-# test/fpjson/tjrun.pp (walks the registry itself — the ITestListener interface
-# dispatch has a separate open bug). Asserts 203 run / 0 failures / 0 errors.
-# Skips if the gitignored tree is absent (tools/install_lib_candidates.sh fcl-json).
 # fgl corpus rung (Pascal real-world ladder rung 2, feature-pascal-corpus-fgl).
 # Compiles REAL FPC 3.2.2 fgl.pp -- the reference RTL's generic-container unit --
 # with pxx --mimic-fpc and runs test/fgl/*.pas against it, asserting each
@@ -11409,6 +11400,15 @@ FPC_RTL_OBJPAS ?= library_candidates/fpc-rtl/rtl/objpas
 test-fgl: $(COMPILER)
 	tools/run_fgl_corpus.sh ./$(COMPILER) $(FPC_RTL_OBJPAS)
 
+# fcl-json's own 203-case suite (fpjson + fpcunit, FPC release_3_2_2 sources)
+# under a pxx-built runner — the strongest OOP/RTL exerciser in the Pascal
+# corpus (feature-fpjson-fpcunit-suite-target). Track B shape: builds with
+# $(PXX_STABLE), never rebuilds the compiler. Stages upstream sources flat into
+# a temp dir (unit resolution wants one dir; -Fu order alone is insufficient)
+# with our test/fpjson/testutils.pas SHADOWING upstream testutils.pp, then runs
+# test/fpjson/tjrun.pp (walks the registry itself — the ITestListener interface
+# dispatch has a separate open bug). Asserts 203 run / 0 failures / 0 errors.
+# Skips if the gitignored tree is absent (tools/install_lib_candidates.sh fcl-json).
 FCLJSON_SRC ?= library_candidates/fcl-json/packages
 test-fpjson:
 	@test -x $(PXX_STABLE) || { echo "test-fpjson: no stable compiler at $(PXX_STABLE)"; exit 1; }

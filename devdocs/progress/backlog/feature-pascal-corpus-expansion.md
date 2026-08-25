@@ -80,8 +80,8 @@ matters, because it changes what is worth doing next. What is actually wired:
 | 1. FPC test-suite conformance | `tools/run_pascal_conformance.sh` + `test/pascal-conformance/pxx.skip` (206 entries), 6-way sharded, testmgr `full` tier, twatch dashboard (`conformance.tsv`) | **wired, green** (323 pass / 0 fail at last recorded sweep) |
 | 2. **fgl — real FPC generic containers** | `tools/run_fgl_corpus.sh` + `test/fgl/` + `make test-fgl` | **wired 2026-08-25** — 3 pass / 4 known-fail. [[feature-pascal-corpus-fgl]] |
 | 3. fpcunit | folded into the fpjson runner | done |
-| 4. fpjson (fcl-json's own 203-case suite) | `make test-fpjson` | **wired, green (203/203)** — but in **no testmgr tier** |
-| 5. Synapse | `make lib-test` (Track B), 3 drivers incl. TLS | **wired, green** |
+| 4. fpjson (fcl-json's own 203-case suite) | `make test-fpjson` | **wired, RED** — recorded 203/203, re-measured 2026-08-25 at dev HEAD `20c989a5e`: does not compile, `data ptr fixup overflow`. [[bug-a-the-fpjson-suite-overflows-the-fixed-4096-entry-data-ptr-fixup-table]]. In **no testmgr tier**, which is why nobody noticed. |
+| 5. Synapse | `make lib-test` (Track B), 3 drivers incl. TLS | **wired, green** — re-measured 2026-08-25 at dev HEAD, all three pass |
 | 6. rtl-generics (Generics.Collections) | — | blocked: [[feature-pascal-corpus-generics]] |
 | 7. fcl-passrc (60k LOC) | — | endgame: [[feature-pascal-corpus-passrc]] |
 | 8. FPC's own `pp.pas` | — | rainy-day lighthouse |
@@ -96,8 +96,14 @@ were:
    sources are now fetched from the same pinned commit the testsuite already
    used (`tools/install_lib_candidates.sh fpc-rtl`), and the rung is a real
    target with a skip list.
-2. **Enrolment gaps.** `test-fgl` and `test-fpjson` are in no testmgr tier —
-   [[task-t-enrol-the-fgl-corpus-rung]].
+2. **Enrolment gaps, and the rot they hide.** `test-fgl` and `test-fpjson` are
+   in no testmgr tier. Re-running fpjson by hand for the first time since it
+   landed found it **red** — `data ptr fixup overflow`, a fixed 4096-entry table
+   in the ELF writer that a real class-dense program has outgrown
+   ([[bug-a-the-fpjson-suite-overflows-the-fixed-4096-entry-data-ptr-fixup-table]]).
+   The corpus is pinned, so the change is on our side. The rung that was not
+   enrolled is the rung that rotted — [[task-t-enrol-the-fgl-corpus-rung]] is
+   the fix and should be read as urgent, not tidy-up.
 3. **No single place said what the ladder was**, which is how a re-triage
    concluded it did not exist. This table is that place.
 
@@ -120,8 +126,10 @@ typo'd section header discards declarations with no diagnostic) and
 
 That is a good yield for one rung, and it argues for the ladder rather than
 against it. **Recommended next rungs, by real-language-surface per unit of
-work:** (a) burn the three fgl walls — cheapest, and each turns on more than
-its own driver; (b) enrol what exists; (c) then rung 6 (rtl-generics), which is
+work:** (a) the fpjson `data ptr fixup overflow` — a real program the compiler
+cannot build at all, which outranks everything else here; (b) enrol what exists,
+so the next one does not rot unseen; (c) burn the three fgl walls — cheap, and
+each turns on more than its own driver; (d) then rung 6 (rtl-generics), which is
 already scoped and only blocked on one Track B typinfo gap.
 
 ### Two facts about unit resolution, measured, worth not re-deriving

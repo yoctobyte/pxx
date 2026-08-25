@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 50
+prio: 60
 type: task
 blocked-by: []
 summary: "Enrol the new `test-fgl` corpus target in a testmgr tier and add `fpc-rtl` to twatch's CORPUS_EXPECTED. The rung is wired and green (3 pass / 4 skip) but nothing in the matrix runs it, and the watcher will not warn when the tree is unfetched."
@@ -48,11 +48,19 @@ every box here, so it printed `SKIP (no fpcsrc)` and passed for its whole life
 while asserting nothing. Wiring the rung without enrolling it would leave it in
 the same state one level up — green because nobody runs it.
 
-## Also worth considering (T's call, not a request)
+## 4. `test-fpjson` too — and this one is not hypothetical
 
 `make test-fpjson` (fcl-json's own 203-case fpcunit suite under a pxx-built
-runner) is likewise **in no tier**. It is the other real Pascal library rung and
-has the same self-skip shape.
+runner) is likewise **in no tier**, same self-skip shape. It was landed green at
+203/203 and then never run again. Re-running it by hand on 2026-08-25 at dev
+HEAD `20c989a5e` — the first time since it landed — found it **red**: the
+program no longer compiles at all
+([[bug-a-the-fpjson-suite-overflows-the-fixed-4096-entry-data-ptr-fixup-table]]).
+The corpus is pinned, so the regression is ours.
+
+That is the concrete cost of the enrolment gap, measured rather than argued:
+**the rung that was not enrolled is the rung that rotted**, and it rotted
+silently for however long. Worth bumping this ticket's priority accordingly.
 
 ## Links
 Rung: [[feature-pascal-corpus-fgl]] · umbrella
