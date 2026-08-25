@@ -1126,6 +1126,12 @@ WorkingDirectory={clone}
 # is twatch's own problem to report, not a reason to refuse to start.
 ExecStartPre=-/bin/sh -c 'test -s {clone}/tools/twatch.py || git -C {clone} checkout -- tools/twatch.py'
 
+# WHICH BRANCH does this watch? Not from here: it is `branch` in
+# {clone}/twatch.conf, set with `trackt config branch <name>` (default master).
+# Deliberately NOT an ExecStart flag — a unit saying one branch and a conf
+# saying another is a pair that can disagree, and the CLI would win silently.
+# This line is a comment so that a human opening the file gets an answer, and
+# systemd gets nothing to parse.
 ExecStart={python} {clone}/tools/twatch.py --clone {clone}
 
 # on-failure, NOT always: a crash or OOM kill restarts, but a deliberate
