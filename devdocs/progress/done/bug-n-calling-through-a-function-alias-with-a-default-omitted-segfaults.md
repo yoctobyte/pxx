@@ -407,4 +407,4 @@ part that was actually still broken — not defaults alone but defaults **plus a
 collector**.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 224203767.
