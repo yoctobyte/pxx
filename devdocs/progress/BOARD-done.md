@@ -2176,6 +2176,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-field-class-identity | N | 70 | regression | regression: test-core#src:examples/tk/field_class_identity.npy red at 9bbbbef6c055 (auto-filed by twatch) | — |
 | regression-test-core-fpcv | P | 70 | regression | regression: test-core#src:test/fpcv.pas@2 red at 16a540b759c5 (auto-filed by twatch) | — |
 | regression-test-core-test-algol-skeleton | T | 70 | regression | regression: test-core#src:test/test_algol_skeleton.alg red at ad8e212cf739 (auto-filed by twatch) | — |
+| regression-test-core-test-arr-of-ptr-elemrec-b354 | P | 70 | regression | regression: test-core#src:test/test_arr_of_ptr_elemrec_b354.pas red at 10dada0b7689 (auto-filed by twatch) | — |
 | regression-test-core-test-asm-emit | P | 70 | regression | regression: test-core#src:test/test_asm_emit.pas red at 943c706936b3 (auto-filed by twatch) | — |
 | regression-test-core-test-asm-ifdef-multiarch | P | 70 | regression | regression: test-core#src:test/test_asm_ifdef_multiarch.pas red at 498c6dea3f48 (auto-filed by twatch) | — |
 | regression-test-core-test-asyncecho | T | 70 | regression | regression: test-core#src:test/test_asyncecho.pas red at 60502ed0c353 (auto-filed by twatch) | — |
@@ -2245,6 +2246,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-rtti | P | 70 | regression | regression: test-core#src:test/test_rtti.pas red at 392ea5d94545 (auto-filed by twatch) | — |
 | regression-test-core-test-set-literal-element-types | P | 70 | regression | regression: test-core#src:test/test_set_literal_element_types.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
 | regression-test-core-test-set-runtime | P | 70 | regression | regression: test-core#src:test/test_set_runtime.pas red at ce57db4cdda5 (auto-filed by twatch) | — |
+| regression-test-core-test-setlength-grow-capacity | P | 70 | regression | regression: test-core#src:test/test_setlength_grow_capacity.pas red at 10dada0b7689 (auto-filed by twatch) | — |
 | regression-test-core-test-sqlite-crud-lazy | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud_lazy.pas red at f913bd22ae30 (auto-filed by twatch) | — |
 | regression-test-core-test-sqlite-crud | T | 70 | regression | regression: test-core#src:test/test_sqlite_crud.pas red at ff90643ef2a3 (auto-filed by twatch) | — |
 | regression-test-core-test-stackless-gen | P | 70 | regression | regression: test-core#src:test/test_stackless_gen.pas red at dfac1da00b04 (auto-filed by twatch) | — |

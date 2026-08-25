@@ -9,7 +9,7 @@ summary: "Five frontend drivers each open-code the same program prologue (entry 
 
 - **Type:** refactor (Track A — the drivers live in `pasparser_prog.inc`,
   `cparser.inc`, `pyparser.inc`, `bparser.inc` and the other skeleton frontends)
-- **Status:** working
+- **Status:** backlog
 - **Owner:** claude-A
 
 ## The pattern, measured rather than felt

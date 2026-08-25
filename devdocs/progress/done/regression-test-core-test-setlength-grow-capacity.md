@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: P
+status: done
+owner: claude-A
 ---
 
 > **Track guessed as P** from the test source. The ranker reads frontmatter, so an unset track parks a stub in Track T's queue regardless of what the body says -- correct the `track:` line if this is wrong.
@@ -25,5 +27,27 @@ ok: /tmp/testmgr-scratch-1853321/test_setlength_grow_capacity26  [code=65250B  d
 
 ```
 
-*Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
-takes it from the repro line.*
+## Diagnosis (Track A/P, 2026-08-25)
+
+Not `test_setlength_grow_capacity` — that one is green (see the log tail: it
+compiled `ok`). The job bundles a second source, and the red is
+**`test/test_dynarray_concat_rejected.pas`** (Makefile 5830-5831).
+
+It is a NEGATIVE test asserting `c := a + b` over two dynamic arrays is refused.
+`f2bad72e9` (feature-p-dynamic-array-concatenation) deliberately made that
+spelling COMPILE, as concatenation. The test was obsoleted by the feature and
+should have been retargeted in that commit — the same move already made for
+`test_chained_helper_member_fail.pas`.
+
+## Fix
+
+Retargeted the test to the arm that is still loud, keeping the original intent
+(a meaningless arithmetic operator on a dynamic array must ERROR, never
+miscompile into a pointer-add that segfaults). It now uses `c := a + n` — a `+`
+with an array on only ONE side, which is the tightest condition on that
+`ir.inc` arm and the exact boundary the concat feature moved. `-`, `*` and `div`
+land on the same arm.
+
+The positive side is covered by `test/test_dynamic_array_concatenation.pas`.
+`tools/gate.sh quick` GREEN.
+- 2026-08-25 — resolved, commit PENDING-COMMIT.

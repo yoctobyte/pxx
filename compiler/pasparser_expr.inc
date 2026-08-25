@@ -1140,6 +1140,7 @@ begin
                 not-found default (tyInteger at offset 0) is the same trap in
                 all four copies, so it is asked the same question in all four.
                 bug-p-a-member-on-a-computed-value-silently-reads-the-values-own-bytes }
+              RequireValueHasMembers(baseRec, fieldName);
               RequireRecMember(baseRec, fieldName);
               fieldNode := AllocNode(AN_FIELD);
               ASTLeft[fieldNode] := node;

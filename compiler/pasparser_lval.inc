@@ -4201,6 +4201,7 @@ begin
         end;
         Next;                        { not a helper: re-consume the member name }
       end;
+      RequireValueHasMembers(recId, fieldName);
       RequireRecMember(recId, fieldName);
       sub := AllocNode(AN_FIELD);
       ASTLeft[sub] := node;

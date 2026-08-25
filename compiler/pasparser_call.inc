@@ -1798,6 +1798,32 @@ begin
     PureDesignator(node);
 end;
 
+procedure RequireValueHasMembers(recId: Integer; const fieldName: AnsiString);
+{ The hole one step to the LEFT of RequireRecMember: recId = REC_NONE, i.e. the
+  receiver is not a record or class AT ALL. RecFieldType's not-found default
+  fires the same way, so the fallthrough read the VALUE'S OWN BYTES at offset 0
+  and typed them tyInteger. With a `type helper for string` in scope,
+  `s.Twice.Twice` printed 24929 — the two bytes of 'aa' as an Int32 — and
+  `s.Twice.IsEmpty` printed 24929 as well, the trailing member silently dropped,
+  because a helper method's return type resets recId to REC_NONE and the
+  selector loop then kept going. `(F).Twice` printed 113, ord('q').
+  bug-p-a-member-on-a-computed-value-silently-reads-the-values-own-bytes
+
+  SEPARATE from RequireRecMember, and called from only the two COMPUTED-receiver
+  sites, deliberately. Folding it into RequireRecMember put it on all four
+  member-dispatch copies, and two of those are DEREF sites where REC_NONE is
+  normal and harmless: `arr[i]^.Field` over an array-of-pointer-to-record leaves
+  the parser's running recId at REC_NONE while the field still resolves
+  correctly downstream, so the shared arm refused valid code
+  (test_arr_of_ptr_elemrec_b354, regression at 10dada0b7689). REC_NONE means
+  "no record id HERE"; only on a computed value does it also mean "and there
+  never will be one". }
+begin
+  if recId = REC_NONE then
+    ErrorRecover('"' + fieldName + '": this value has no members (only records, '
+                 + 'classes, interfaces and variants do)');
+end;
+
 procedure RequireRecMember(recId: Integer; const fieldName: AnsiString);
 { Guard on the AN_FIELD fallthrough paths: a member name that resolved to
   NOTHING on a user record/class (no field, no method/property/class var —
@@ -1806,25 +1832,6 @@ procedure RequireRecMember(recId: Integer; const fieldName: AnsiString);
   and read garbage (bug-pascal-undefined-field-on-empty-record-compiles).
   Builtin records keep the lax path — their field names are compiler-authored. }
 begin
-  { …and the same hole one step to the left: recId = REC_NONE, i.e. the
-    receiver is not a record or class AT ALL. RecFieldType's not-found default
-    fires the same way, so the fallthrough read the VALUE'S OWN BYTES at offset
-    0 and typed them tyInteger. With a `type helper for string` in scope,
-    `s.Twice.Twice` printed 24929 — the two bytes of 'aa' as an Int32 — and
-    `s.Twice.IsEmpty` printed 24929 as well, the trailing member silently
-    dropped, because a helper method's return type resets recId to REC_NONE and
-    the selector loop then kept going. `(F).Twice` printed 113, ord('q').
-
-    This is the sibling of the AN_IDENT-receiver refusal in pasparser_lval.inc
-    (bug-p-a-member-on-a-scalar-silently-reads-the-values-own-bytes), which was
-    narrowed to a declared VARIABLE and so never covered a computed receiver.
-    Here the guard costs nothing extra: every caller already asks this function
-    whether the member exists, so asking it about REC_NONE too is one arm, not a
-    fourth copy of member dispatch.
-    bug-p-a-member-on-a-computed-value-silently-reads-the-values-own-bytes }
-  if recId = REC_NONE then
-    ErrorRecover('"' + fieldName + '": this value has no members (only records, '
-                 + 'classes, interfaces and variants do)');
   if (recId >= REC_UCLASS_BASE) and
      (FindUField(recId - REC_UCLASS_BASE, fieldName) < 0) then
     { RECOVERABLE: the caller then falls into RecFieldType's not-found default
