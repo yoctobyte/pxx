@@ -7,6 +7,6 @@ with  : 41
 withc : 7
 order : TRUE TRUE TRUE TRUE
 chain : 4 6 2 2
-deref : 41 41
+deref : 41 41 4
 lencall: 3 0
 inc   : 6 b 13 1 l

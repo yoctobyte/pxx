@@ -109,11 +109,13 @@ begin
 
   fx[2] := 40; pfx := @fx;
   BumpWord(pfx^[2]);
-  { `Length(pfx^)` — Length of a deref'd pointer-to-fixed-array — is NOT asserted
-    here: it answers 0 where FPC answers 4, a separate pre-existing wrong VALUE
-    (bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero). It must not
-    be REFUSED either, which is what this line's neighbours check. }
-  WriteLn('deref : ', fx[2], ' ', pfx^[2]);
+  { `Length(pfx^)` answered 0 where FPC answers 4 when this file was written, so
+    it was left off the row; it is asserted now
+    (bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero). The deeper
+    half of that bug was the STRIDE, which this row cannot see — fx is an array
+    of LongWord, and 4 bytes is what the wrong answer happened to be too;
+    test_pointer_to_a_named_fixed_array.pas is where the element widths vary. }
+  WriteLn('deref : ', fx[2], ' ', pfx^[2], ' ', Length(pfx^));
 
   { `MakeDyn(3)[2]` — indexing an array-returning call directly — is a separate,
     PRE-EXISTING gap ("cannot index the result of an array-returning function
