@@ -5134,6 +5134,27 @@ begin
           recName := REC_NONE;
         end;
       end;
+      { A node whose KIND an arm above recognised but whose pointee it could not
+        answer: an AN_INDEX whose base is not a plain variable — which is what
+        `PRec(raw)^.arr[1]^` is, an element of a pointer-ARRAY FIELD — or an
+        AN_FIELD whose record did not resolve. Those arms answered tyUnknown,
+        and the alias-cast suffix walk in pasparser_expr.inc, having nothing
+        else, then typed the `^` from the OUTER cast's alias: row b of
+        test_cast_deref_chain_siblings printed a raw pointer instead of 'world'.
+
+        NodePtrElem is the predicate that knows every spelling (it recurses an
+        INDEX into its base and has its own FIELD and PTR_CAST arms), and the
+        final else already asks it — it just was not asked when an arm had
+        already claimed the node. It carries no DEPTH, so remDepth stays 0 and
+        exactly one level resolves, which is what these chains did before this
+        procedure took the walk over.
+        regression-test-core-test-cast-deref-chain-siblings }
+      if tk = tyUnknown then
+        if not NodePtrElem(node, tk, recName, 0) then
+        begin
+          tk := tyUnknown;
+          recName := REC_NONE;
+        end;
       if remDepth >= 1 then
       begin
         tk := tyPointer;

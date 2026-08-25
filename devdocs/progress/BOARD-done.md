@@ -2184,6 +2184,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-c-struct-fields | T | 70 | regression | regression: test-core#src:test/test_c_struct_fields.pas red at 42786f141ea7 (auto-filed by twatch) | — |
 | regression-test-core-test-c-unit-globals | T | 70 | regression | regression: test-core#src:test/test_c_unit_globals.pas red at 60502ed0c353 (auto-filed by twatch) | — |
 | regression-test-core-test-call-result-member | P | 70 | regression | regression: test-core#src:test/test_call_result_member.pas red at a76303231306 (auto-filed by twatch) | — |
+| regression-test-core-test-cast-deref-chain-siblings | P | 70 | regression | regression: test-core#src:test/test_cast_deref_chain_siblings.pas red at 0bc0cfac61a8 (auto-filed by twatch) | — |
 | regression-test-core-test-classref | P | 70 | regression | regression: test-core#src:test/test_classref.pas red at 392ea5d94545 (auto-filed by twatch) | — |
 | regression-test-core-test-conformance-1 | P | 70 | regression | test_conformance_1's expected output still encodes the OLD Variant-typecast behaviour: it asserts `v int=1` where `v := 123`. 24204e10d made `Integer(v)` convert rather than reinterpret, so the compiler is now right and the expectation is wrong — and it holds every full tier RED. | — |
 | regression-test-core-test-ctor-result-member | P | 70 | regression | regression: test-core#src:test/test_ctor_result_member.pas red at a76303231306 (auto-filed by twatch) | — |
