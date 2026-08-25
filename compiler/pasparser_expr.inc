@@ -284,6 +284,8 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     szExprTk: TTypeKind;
     hlBoundV: Int64;
     hlBoundTk: TTypeKind;
+    hlValTk: TTypeKind; hlCap: Integer;          { High/Low over a STRING operand }
+    hlIsFrozen, hlIsAnsi, hlIsArrOp: Boolean;
     dpaCount, dpaLo: Integer;   { `p^` over a pointer-to-fixed-array: its extent and low bound }
     mcCi: Integer; mcFin: Boolean;   { metaclass receiver at the end of a cast-deref chain }
  szElemTk: TTypeKind; szBTk: TTypeKind;
@@ -4842,6 +4844,36 @@ begin
           valNode := ParseLValueAST(idx, TokPos - 2);
         end;
         Expect(tkRParen, ')');
+        { …and what KIND of value the operand turned out to be, which is what
+          decides a STRING's bounds. Computed once, read by the frozen and the
+          managed arm below.
+
+          An ARRAY operand is excluded outright — every array arm above has
+          already claimed those, and a dyn array of AnsiString has ELEMENT type
+          tyAnsiString on its symbol, so without `IsNodeArray` a `array of
+          string` FIELD would have been read as a string and answered Length
+          instead of Length-1.
+
+          The FROZEN arm additionally insists on a plain variable, because that
+          is the only operand whose declared CAPACITY is on hand: a
+          `string[6]`-returning FUNCTION has no ProcRet capacity row, and
+          answering the 255 default there would turn today's too-small bound
+          into a too-large one — a loop reading off the end rather than stopping
+          early, which is the worse of the two wrongs. It keeps the Length-1
+          tail and is recorded as a gap on the ticket. }
+        hlIsArrOp := IsNodeArray(valNode) or
+                     ((idx >= 0) and (idx < SymCount) and Syms[idx].IsArray);
+        if (idx >= 0) and (idx < SymCount) and (ASTKind[valNode] = AN_IDENT) and
+           (ASTIVal[valNode] = idx) then
+          hlValTk := Syms[idx].TypeKind
+        else
+          hlValTk := IntToTypeKind(ASTTk[valNode]);
+        hlIsFrozen := (not hlIsArrOp) and TypeIsFrozenString(hlValTk) and
+                      (idx >= 0) and (idx < SymCount) and
+                      (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx);
+        hlIsAnsi := (not hlIsArrOp) and (hlValTk = tyAnsiString);
+        hlCap := DEFAULT_STR_CAP;
+        if hlIsFrozen and (SymStrCap[idx] > 0) then hlCap := SymStrCap[idx];
         { High of a whole 1-D static array folds to its upper index bound (see
           the Length fold below for why the runtime path can't serve a static
           array). The lower bound is in Syms[].ConstVal (0 for a 0-based
@@ -4901,6 +4933,32 @@ begin
           LastExprTk := hlBoundTk;
           Exit;
         end
+        else if hlIsFrozen then
+        begin
+          { A FROZEN string's bounds are its declared CAPACITY, not its current
+            length — fpc answers 10 for `sh: string[10]` and 255 for a
+            ShortString, and 0-based, because index 0 is the length byte. The
+            Length-1 tail below answered 1 for a two-character string[10] and 2
+            for a three-character ShortString. SymStrCap 0 means the kind
+            default. bug-p-high-and-low-of-a-string-are-off-by-one }
+          CurASTNode := AllocNode(AN_INT_LIT);
+          ASTIVal[CurASTNode] := hlCap;
+          ASTTk[CurASTNode] := Ord(tyInteger);
+        end
+        else if hlIsAnsi then
+        begin
+          { A MANAGED string is 1-BASED. `s[1]` is its first character in pxx
+            exactly as in fpc, so its last valid index IS Length(s) — not
+            Length(s)-1, which is the tail below and is the answer for a
+            0-based dynamic array. So `for i := Low(s) to High(s) do Write(s[i])`
+            read s[0] and dropped the last character: a silent wrong value in
+            the canonical spelling, in a shape that compiled.
+            bug-p-high-and-low-of-a-string-are-off-by-one }
+          node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
+          argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := valNode;
+          ASTLeft[node] := argSeq;
+          CurASTNode := node;
+        end
         else
         begin
           node := AllocNode(AN_CALL); ASTIVal[node] := -Ord(tkLength); ASTTk[node] := Ord(tyInteger);
@@ -4948,6 +5006,36 @@ begin
           valNode := ParseLValueAST(idx, TokPos - 2);   { consume the array variable }
         end;
         Expect(tkRParen, ')');
+        { …and what KIND of value the operand turned out to be, which is what
+          decides a STRING's bounds. Computed once, read by the frozen and the
+          managed arm below.
+
+          An ARRAY operand is excluded outright — every array arm above has
+          already claimed those, and a dyn array of AnsiString has ELEMENT type
+          tyAnsiString on its symbol, so without `IsNodeArray` a `array of
+          string` FIELD would have been read as a string and answered Length
+          instead of Length-1.
+
+          The FROZEN arm additionally insists on a plain variable, because that
+          is the only operand whose declared CAPACITY is on hand: a
+          `string[6]`-returning FUNCTION has no ProcRet capacity row, and
+          answering the 255 default there would turn today's too-small bound
+          into a too-large one — a loop reading off the end rather than stopping
+          early, which is the worse of the two wrongs. It keeps the Length-1
+          tail and is recorded as a gap on the ticket. }
+        hlIsArrOp := IsNodeArray(valNode) or
+                     ((idx >= 0) and (idx < SymCount) and Syms[idx].IsArray);
+        if (idx >= 0) and (idx < SymCount) and (ASTKind[valNode] = AN_IDENT) and
+           (ASTIVal[valNode] = idx) then
+          hlValTk := Syms[idx].TypeKind
+        else
+          hlValTk := IntToTypeKind(ASTTk[valNode]);
+        hlIsFrozen := (not hlIsArrOp) and TypeIsFrozenString(hlValTk) and
+                      (idx >= 0) and (idx < SymCount) and
+                      (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx);
+        hlIsAnsi := (not hlIsArrOp) and (hlValTk = tyAnsiString);
+        hlCap := DEFAULT_STR_CAP;
+        if hlIsFrozen and (SymStrCap[idx] > 0) then hlCap := SymStrCap[idx];
         CurASTNode := AllocNode(AN_INT_LIT);
         if (idx >= 0) and Syms[idx].IsArray and (Syms[idx].Kind <> skParam) and
            (SymArrNDims[idx] <= 1) then
@@ -4971,7 +5059,17 @@ begin
           LastExprTk := hlBoundTk;
           Exit;
         end
+        else if hlIsAnsi then
+          { A MANAGED string is 1-BASED, so its first valid index is 1 and not
+            the 0 this tail gives every dynamic array. Paired with the High arm
+            above — the two together are what make
+            `for i := Low(s) to High(s)` walk the whole string.
+            bug-p-high-and-low-of-a-string-are-off-by-one }
+          ASTIVal[CurASTNode] := 1
         else
+          { …a FROZEN string lands here and 0 is right for it: index 0 is the
+            length byte, which is exactly why fpc reports 0 for `string[N]` and
+            for a ShortString while reporting 1 for a managed one. }
           ASTIVal[CurASTNode] := 0;
         ASTTk[CurASTNode] := Ord(tyInteger);
         LastExprTk := tyInteger;

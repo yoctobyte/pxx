@@ -1,0 +1,14 @@
+ansi    : 1 3
+walk    : qxy
+empty   : 1 0
+emptywalk: none
+short10 : 0 10
+shortstr: 0 255
+alias   : 0 6
+arrchar : 0 4
+dynint  : 0 2
+dynstr  : 0 3
+recfield: 1 2
+objfield: 1 5
+call    : 1 4
+param   : 5 0

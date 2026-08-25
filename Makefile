@@ -7806,6 +7806,17 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_length_of_a_string_literal_expression.pas $(TESTTMP)/test_lenlitexpr26
 	test "$$($(TESTTMP)/test_lenlitexpr26)" = "$$(cat test/test_length_of_a_string_literal_expression.expected)"
+	# High/Low over a string had the array tail's bounds: `Low(s)`/`High(s)` for a
+	# 3-char AnsiString answered 0 and 2 where fpc says 1 and 3 -- while `s[1]` is
+	# its first character in BOTH, so `for i := Low(s) to High(s) do Write(s[i])`
+	# read s[0] and dropped the last character. Three bases are asserted, because
+	# fpc gives three: managed = 1..Length, frozen = 0..declared CAPACITY (not
+	# length), array = its own bounds. The array rows include `array of AnsiString`,
+	# whose symbol carries tyAnsiString as its ELEMENT type and reads as a string
+	# without the array guard.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_high_and_low_of_a_string.pas $(TESTTMP)/test_hilostr26
+	test "$$($(TESTTMP)/test_hilostr26)" = "$$(cat test/test_high_and_low_of_a_string.expected)"
 	# The `in: <path>` line under a diagnostic must name the unit the error is
 	# actually IN. The token->file map is keyed on absolute token indices, and the
 	# generic-specialization splice inserts tens of thousands of tokens into the
