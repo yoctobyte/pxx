@@ -1,0 +1,8 @@
+varrec  : 7 seven
+vararr  : 1 a 2 b
+varords : 1 2 3 4 5 6
+zeroed  : 0 []
+constrec: 70 const
+constarr: 10 ca 20 cb
+local   : 9 8 2
+written : 99 written 42

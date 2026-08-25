@@ -1050,6 +1050,129 @@ begin
   Result := idx;
 end;
 
+{ `(f1: v1; f2: v2; ...)` — FPC's named-field record initialiser, for a typed
+  CONST and for an initialised VAR alike. Each scalar field is recorded as a
+  `sym.field := value` init (the field-name span drives an AN_FIELD target in
+  the init emitter); an array-valued field becomes one `sym.field[k] := v` per
+  element (Kind 7).
+
+  Extracted from ParseConstSection, which was the only caller, because the VAR
+  path did not have it: `var R: TRec = (n: 7)` answered *"parenthesised
+  initializer requires an array variable"* — the var path had learned
+  parenthesised initialisers for ARRAYS only and the record arm was never wired
+  up beside it, while the identical const declaration worked. One concept, two
+  spellings, one implemented (devdocs/dev/normalise-dont-special-case.md). Both
+  call this now, so a fix to the field rules cannot land on one and miss the
+  other.
+  bug-p-a-record-typed-var-initialiser-is-refused }
+procedure ParseRecordInitializerInto(symIdx, recId, elemIdx: Integer; isLocal: Boolean);
+var
+  fName: AnsiString;
+  fNameOff, fNameLen, rElem: Integer;
+  fTk: TTypeKind;
+  fvKind, fvAux: Integer;
+  fvVal: Int64;
+begin
+        { Record typed constant: `const r: TRec = (f1: v1; f2: v2; ...)` (FPC
+          named-field form). Each scalar field initializer is recorded as a
+          `r.field := value` init (field span drives an AN_FIELD target in the
+          init emitter). Nested record/array fields are not handled yet. }
+        Expect(tkLParen, '(');
+        while CurTok.Kind <> tkRParen do
+        begin
+          if CurTok.Kind <> tkIdent then Error('expected field name in record constant');
+          fName := CurTok.SVal;
+          fNameOff := Tokens[TokPos-1].SOffset;
+          fNameLen := Tokens[TokPos-1].SLen;
+          Next;
+          Expect(tkColon, ':');
+          fTk := RecFieldType(recId, fName);
+          if fTk = tyUnknown then Error('unknown field in record constant: ' + fName);
+          if RecFieldIsArray(recId, fName) and (CurTok.Kind = tkLParen) then
+          begin
+            { Array-valued field: `D4: ($C0, 0, ..., $46)` (TGuid). Each
+              element is a `sym.field[k] := v` init (Kind 7 — the emitter
+              builds FIELD then INDEX). Global-only for now. }
+            if isLocal then Error('array-valued field in a LOCAL record constant is not supported');
+            { Kind 7 spends PendingInitElem on PI_ELEM_NONE and ValAux on the
+              FIELD array's index, so there is nowhere left to carry an OUTER
+              element index. Refuse loudly rather than silently write element 0. }
+            if elemIdx <> PI_ELEM_NONE then
+              Error('array-valued field inside an ARRAY-of-record initializer is not supported');
+            Next;   { consume '(' }
+            rElem := 0;
+            while CurTok.Kind <> tkRParen do
+            begin
+              EnsurePendingInitCapacity(PendingInitCount);
+              PendingInitSym[PendingInitCount]  := symIdx;
+              PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
+              PendingInitFOff[PendingInitCount] := fNameOff;
+              PendingInitFLen[PendingInitCount] := fNameLen;
+              PendingInitKind[PendingInitCount] := 7;
+              PendingInitValAux[PendingInitCount] := rElem;
+              PendingInitVal[PendingInitCount]  := ParseInitValTk(fTk);
+              PendingInitTk[PendingInitCount]   := Ord(fTk);
+              Inc(PendingInitCount);
+              Inc(rElem);
+              if not Eat(tkComma) then Break;
+            end;
+            Expect(tkRParen, ')');
+          end
+          else if isLocal then
+          begin
+            if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
+            LocalInitSym[LocalInitCount]  := symIdx;
+            LocalInitElem[LocalInitCount] := elemIdx;
+            LocalInitFOff[LocalInitCount] := fNameOff;
+            LocalInitFLen[LocalInitCount] := fNameLen;
+            if TryParseInitValForm(fTk, fvKind, fvVal, fvAux) then
+            begin
+              { A LOCAL record const has no ValAux slot, and FLen is already
+                spoken for by the field NAME span the FIELD target reads. A
+                string value would have to overwrite it, so refuse rather than
+                corrupt the target -- the same call, and the same wording, the
+                array-of-record path above already makes. `@proc` / `@var`
+                carry everything in Val and are fine. }
+              if fvKind = 1 then
+                Error('record constant with string fields must be global');
+              LocalInitKind[LocalInitCount] := fvKind;
+              LocalInitVal[LocalInitCount]  := fvVal;
+            end
+            else
+            begin
+              LocalInitKind[LocalInitCount] := 0;
+              LocalInitVal[LocalInitCount]  := ParseInitValTk(fTk);
+            end;
+            LocalInitTk[LocalInitCount]   := Ord(fTk);
+            Inc(LocalInitCount);
+          end
+          else
+          begin
+            EnsurePendingInitCapacity(PendingInitCount);
+            PendingInitSym[PendingInitCount]  := symIdx;
+            PendingInitElem[PendingInitCount] := elemIdx;
+            PendingInitFOff[PendingInitCount] := fNameOff;
+            PendingInitFLen[PendingInitCount] := fNameLen;
+            if TryParseInitValForm(fTk, fvKind, fvVal, fvAux) then
+            begin
+              PendingInitKind[PendingInitCount]   := fvKind;
+              PendingInitVal[PendingInitCount]    := fvVal;
+              PendingInitValAux[PendingInitCount] := fvAux;
+            end
+            else
+            begin
+              PendingInitKind[PendingInitCount] := 0;
+              PendingInitVal[PendingInitCount]  := ParseInitValTk(fTk);
+            end;
+            PendingInitTk[PendingInitCount]   := Ord(fTk);
+            Inc(PendingInitCount);
+          end;
+          { FPC separates fields with `;`; tolerate a trailing `,` too. }
+          if not Eat(tkSemicolon) then Eat(tkComma);
+        end;
+        Expect(tkRParen, ')');
+end;
+
 procedure ParseVarSection;
 var names: array[0..MAX_DECL_NAMES-1] of AnsiString; n, i, idx: Integer; tk: TTypeKind;
     isArr, isDyn: Boolean; arrLo, arrHi: Integer; elemTk: TTypeKind;
@@ -1229,6 +1352,15 @@ begin
 	          typed-const machinery (flushed into the prologue): scalar
 	          ordinal/float consts and string literals. Aggregates keep the
 	          error. (rtl-generics' Adler32 declares two of these.) }
+	        if (not isArr) and (not isDyn) and (tk = tyRecord) and (CurTok.Kind = tkLParen) then
+	        begin
+	          { …and the LOCAL record form, `var L: TRec = (n: 9)`, through the
+	            same routine — the local typed-CONST spelling already used it. }
+	          ParseRecordInitializerInto(idx, Syms[idx].RecName, PI_ELEM_NONE, True);
+	          SkipHintDirectives;
+	          Eat(tkSemicolon);
+	          Continue;
+	        end;
 	        if isArr or isDyn then
 	          Error('local var-section ARRAY initializer not supported; assign in statements');
 	        if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
@@ -1255,6 +1387,20 @@ begin
 	      if isDyn then Error('dynamic array initializer not supported');
 	      if CurTok.Kind = tkLParen then
 	      begin
+	        { …or a RECORD var: `var R: TRec = (n: 7; s: 'seven')`. FPC treats a
+	          var initialiser as a writable typed const, and the const spelling
+	          has worked here for as long as records have — this path had learned
+	          parenthesised initialisers for ARRAYS only, so the record form was
+	          answered with *"requires an array variable"*, a diagnostic that
+	          names the gap it is. Same routine both sides now.
+	          bug-p-a-record-typed-var-initialiser-is-refused }
+	        if (not isArr) and (tk = tyRecord) then
+	        begin
+	          ParseRecordInitializerInto(idx, Syms[idx].RecName, PI_ELEM_NONE, False);
+	          SkipHintDirectives;
+	          Eat(tkSemicolon);
+	          Continue;
+	        end;
 	        if not isArr then Error('parenthesised initializer requires an array variable');
 	        Next;
 	        initElem := 0;
@@ -1268,7 +1414,23 @@ begin
 	        initDepth := 1;
 	        while initDepth > 0 do
 	        begin
-	          if CurTok.Kind = tkLParen then begin Next; Inc(initDepth); end
+	          { An array-of-RECORD element with NAMED fields —
+	            `var A: TArr = ((n: 1; s: 'a'), (n: 2; s: 'b'))`. Must be tested
+	            BEFORE the paren-depth arm below, which would otherwise read the
+	            element's `(` as another dimension and then hit `n` where it
+	            wanted a constant ("not a constant"). Same routine the const
+	            spelling uses; the element index is a parameter.
+	            bug-p-a-record-typed-var-initialiser-is-refused }
+	          if (initDepth = 1) and (elemTk = tyRecord) and (CurTok.Kind = tkLParen) and
+	             (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkIdent) and
+	             (Tokens[TokPos + 1].Kind = tkColon) then
+	          begin
+	            if initElem > (arrHi - arrLo) then Error('too many array initializer elements');
+	            ParseRecordInitializerInto(idx, Syms[idx].ElemRecName, arrLo + initElem, False);
+	            Eat(tkComma);
+	            Inc(initElem);
+	          end
+	          else if CurTok.Kind = tkLParen then begin Next; Inc(initDepth); end
 	          else if CurTok.Kind = tkRParen then begin Next; Dec(initDepth); end
 	          else if CurTok.Kind = tkComma then Next
 	          else
@@ -1827,74 +1989,18 @@ begin
           begin
             { Array-of-RECORD element with NAMED-field initializers —
               `(name: 'AND'; c: CSTII_and)` (Pascal Script's keyword table).
-              Each field becomes a `sym[elem].field := value` init; the
-              emitter already combines Elem + FOff. }
+              Each field becomes a `sym[elem].field := value` init; the emitter
+              already combines Elem + FOff.
+
+              This used to be a THIRD hand-written copy of the record-field
+              loop, beside the scalar const arm and (missing entirely) the var
+              arm — three mechanisms for one concept, which
+              devdocs/dev/root-cause-over-microfix.md calls a design flaw rather
+              than a smell. They are one routine now, and the element index is
+              just a parameter.
+              bug-p-a-record-typed-var-initialiser-is-refused }
             if cElem >= cFlatLen then Error('too many array constant elements');
-            Next;   { consume '(' }
-            while CurTok.Kind <> tkRParen do
-            begin
-              if CurTok.Kind <> tkIdent then Error('expected field name in record constant');
-              fNameOff := Tokens[TokPos-1].SOffset;
-              fNameLen := Tokens[TokPos-1].SLen;
-              fName := CurTok.SVal;
-              Next;
-              Expect(tkColon, ':');
-              fTk := RecFieldType(Syms[cIdx].ElemRecName, fName);
-              if fTk = tyUnknown then Error('unknown field in record constant: ' + fName);
-              if isLocalConst then
-              begin
-                { local emitter has no field+string combo; strings global-only }
-                if TypeIsFrozenString(fTk) or (fTk = tyAnsiString) then
-                  Error('array-of-record constant with string fields must be global');
-                if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
-                LocalInitSym[LocalInitCount]  := cIdx;
-                LocalInitElem[LocalInitCount] := cLo + cElem;
-                LocalInitFOff[LocalInitCount] := fNameOff;
-                LocalInitFLen[LocalInitCount] := fNameLen;
-                LocalInitKind[LocalInitCount] := 0;
-                LocalInitVal[LocalInitCount]  := ParseInitValTk(fTk);
-                LocalInitTk[LocalInitCount] := Ord(fTk);
-                Inc(LocalInitCount);
-              end
-              else
-              begin
-                EnsurePendingInitCapacity(PendingInitCount);
-                PendingInitSym[PendingInitCount]  := cIdx;
-                PendingInitElem[PendingInitCount] := cLo + cElem;
-                PendingInitFOff[PendingInitCount] := fNameOff;
-                PendingInitFLen[PendingInitCount] := fNameLen;
-                if TypeIsFrozenString(fTk) or (fTk = tyAnsiString) then
-                begin
-                  if CurTok.Kind <> tkString then Error('record constant: expected a string literal');
-                  PendingInitKind[PendingInitCount]   := 1;
-                  PendingInitVal[PendingInitCount]    := Tokens[TokPos-1].SOffset;
-                  PendingInitValAux[PendingInitCount] := Tokens[TokPos-1].SLen;
-                  Next;
-                end
-                { The scalar record-constant path's @proc / @var / @TClass.Method
-                  forms, for an ARRAY-of-record element. This is that path's
-                  sibling and the two must know the same value forms:
-                  rtl-generics' ComparerInstances is `array[TTypeKind] of
-                  TInstance` with `@TComparerService.SelectBinaryComparer` in a
-                  field. (The string case is handled just above, so the arm is
-                  only reached for non-string fields.) }
-                else if TryParseInitValForm(fTk, fvKind, fvVal, fvAux) then
-                begin
-                  PendingInitKind[PendingInitCount]   := fvKind;
-                  PendingInitVal[PendingInitCount]    := fvVal;
-                  PendingInitValAux[PendingInitCount] := fvAux;
-                end
-                else
-                begin
-                  PendingInitKind[PendingInitCount] := 0;
-                  PendingInitVal[PendingInitCount]  := ParseInitValTk(fTk);
-                end;
-                PendingInitTk[PendingInitCount] := Ord(fTk);
-                Inc(PendingInitCount);
-              end;
-              if not Eat(tkSemicolon) then Eat(tkComma);
-            end;
-            Expect(tkRParen, ')');
+            ParseRecordInitializerInto(cIdx, Syms[cIdx].ElemRecName, cLo + cElem, isLocalConst);
             Eat(tkComma);
             Inc(cElem);
           end
@@ -2160,102 +2266,7 @@ begin
           end;
         end
         else if cTk = tyRecord then
-        begin
-          { Record typed constant: `const r: TRec = (f1: v1; f2: v2; ...)` (FPC
-            named-field form). Each scalar field initializer is recorded as a
-            `r.field := value` init (field span drives an AN_FIELD target in the
-            init emitter). Nested record/array fields are not handled yet. }
-          cRec := Syms[cIdx].RecName;
-          Expect(tkLParen, '(');
-          while CurTok.Kind <> tkRParen do
-          begin
-            if CurTok.Kind <> tkIdent then Error('expected field name in record constant');
-            fName := CurTok.SVal;
-            fNameOff := Tokens[TokPos-1].SOffset;
-            fNameLen := Tokens[TokPos-1].SLen;
-            Next;
-            Expect(tkColon, ':');
-            fTk := RecFieldType(cRec, fName);
-            if fTk = tyUnknown then Error('unknown field in record constant: ' + fName);
-            if RecFieldIsArray(cRec, fName) and (CurTok.Kind = tkLParen) then
-            begin
-              { Array-valued field: `D4: ($C0, 0, ..., $46)` (TGuid). Each
-                element is a `sym.field[k] := v` init (Kind 7 — the emitter
-                builds FIELD then INDEX). Global-only for now. }
-              if isLocalConst then Error('array-valued field in a LOCAL record constant is not supported');
-              Next;   { consume '(' }
-              cElem := 0;
-              while CurTok.Kind <> tkRParen do
-              begin
-                EnsurePendingInitCapacity(PendingInitCount);
-                PendingInitSym[PendingInitCount]  := cIdx;
-                PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
-                PendingInitFOff[PendingInitCount] := fNameOff;
-                PendingInitFLen[PendingInitCount] := fNameLen;
-                PendingInitKind[PendingInitCount] := 7;
-                PendingInitValAux[PendingInitCount] := cElem;
-                PendingInitVal[PendingInitCount]  := ParseInitValTk(fTk);
-                PendingInitTk[PendingInitCount]   := Ord(fTk);
-                Inc(PendingInitCount);
-                Inc(cElem);
-                if not Eat(tkComma) then Break;
-              end;
-              Expect(tkRParen, ')');
-            end
-            else if isLocalConst then
-            begin
-              if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
-              LocalInitSym[LocalInitCount]  := cIdx;
-              LocalInitElem[LocalInitCount] := PI_ELEM_NONE;
-              LocalInitFOff[LocalInitCount] := fNameOff;
-              LocalInitFLen[LocalInitCount] := fNameLen;
-              if TryParseInitValForm(fTk, fvKind, fvVal, fvAux) then
-              begin
-                { A LOCAL record const has no ValAux slot, and FLen is already
-                  spoken for by the field NAME span the FIELD target reads. A
-                  string value would have to overwrite it, so refuse rather than
-                  corrupt the target -- the same call, and the same wording, the
-                  array-of-record path above already makes. `@proc` / `@var`
-                  carry everything in Val and are fine. }
-                if fvKind = 1 then
-                  Error('record constant with string fields must be global');
-                LocalInitKind[LocalInitCount] := fvKind;
-                LocalInitVal[LocalInitCount]  := fvVal;
-              end
-              else
-              begin
-                LocalInitKind[LocalInitCount] := 0;
-                LocalInitVal[LocalInitCount]  := ParseInitValTk(fTk);
-              end;
-              LocalInitTk[LocalInitCount]   := Ord(fTk);
-              Inc(LocalInitCount);
-            end
-            else
-            begin
-              EnsurePendingInitCapacity(PendingInitCount);
-              PendingInitSym[PendingInitCount]  := cIdx;
-              PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
-              PendingInitFOff[PendingInitCount] := fNameOff;
-              PendingInitFLen[PendingInitCount] := fNameLen;
-              if TryParseInitValForm(fTk, fvKind, fvVal, fvAux) then
-              begin
-                PendingInitKind[PendingInitCount]   := fvKind;
-                PendingInitVal[PendingInitCount]    := fvVal;
-                PendingInitValAux[PendingInitCount] := fvAux;
-              end
-              else
-              begin
-                PendingInitKind[PendingInitCount] := 0;
-                PendingInitVal[PendingInitCount]  := ParseInitValTk(fTk);
-              end;
-              PendingInitTk[PendingInitCount]   := Ord(fTk);
-              Inc(PendingInitCount);
-            end;
-            { FPC separates fields with `;`; tolerate a trailing `,` too. }
-            if not Eat(tkSemicolon) then Eat(tkComma);
-          end;
-          Expect(tkRParen, ')');
-        end
+          ParseRecordInitializerInto(cIdx, Syms[cIdx].RecName, PI_ELEM_NONE, isLocalConst)
         else if isLocalConst then
         begin
           if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');

@@ -7817,6 +7817,17 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_high_and_low_of_a_string.pas $(TESTTMP)/test_hilostr26
 	test "$$($(TESTTMP)/test_hilostr26)" = "$$(cat test/test_high_and_low_of_a_string.expected)"
+	# `var R: TRec = (n: 7)` was refused with "parenthesised initializer requires
+	# an array variable" while the identical CONST declaration worked: the var
+	# path had learned parenthesised initialisers for arrays only. Fixing it
+	# collapsed the record-field loop from THREE hand-written copies (scalar
+	# const, array-of-record const, absent var) onto one routine with the element
+	# index as a parameter -- so the const rows here are as much at risk as the
+	# var rows, and both are asserted. The `written` row is what makes an
+	# initialised var different from a const.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_a_record_typed_var_initialiser.pas $(TESTTMP)/test_recvarinit26
+	test "$$($(TESTTMP)/test_recvarinit26)" = "$$(cat test/test_a_record_typed_var_initialiser.expected)"
 	# The `in: <path>` line under a diagnostic must name the unit the error is
 	# actually IN. The token->file map is keyed on absolute token indices, and the
 	# generic-specialization splice inserts tens of thousands of tokens into the
