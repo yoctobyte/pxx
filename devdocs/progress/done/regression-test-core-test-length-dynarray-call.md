@@ -43,7 +43,7 @@ pascal26:33: error: Length needs a string, an array or a PChar, not Pointer
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit ff6b904ce.
 
 ## Resolution (2026-08-25)
 

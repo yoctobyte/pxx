@@ -57,7 +57,7 @@ unit; measure it first, because if it also fails the unit-ness is a red herring
 and the bug is purely "generic record template with static class methods".
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit ff6b904ce.
 
 ## Resolution (2026-08-25) — the theory in this ticket was WRONG
 
