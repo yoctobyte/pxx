@@ -17,10 +17,14 @@
 # facts that CPython and pxx do agree on, which is what makes it a real
 # oracle-diffed test rather than a screenshot of our own output.
 #
-# NOT covered: a plain compiled def used as a value (`print(some_def)`). That
-# one carries no tag at all — its value IS a bare code address, indistinguishable
-# from an integer — so it still prints a number. Fixing it needs the frontend to
-# tag plain defs, which is a separate change.
+# ALSO covered, since bug-n-a-callable-value-reaches-a-str-parameter-and-
+# renders-as-bound-method: a plain compiled def used as a value
+# (`print(some_def)`). It used to print a DECIMAL — the value-position arm in
+# the frontend handed back a bare code address typed tyPointer, which never
+# reaches a Variant parameter (overload matching binds it to the Int64 one), so
+# `print(g)` rendered 6410667 while `a = g; print(a)` — the identical value one
+# assignment later — rendered `<function at 0x...>`. That arm now builds the
+# same {code, recv} pair the assignment path always did.
 
 
 def mk(n):
@@ -53,3 +57,16 @@ print(str(f) != str(f2))
 
 # and the values still WORK — the fix is to the string form only
 print(f(1), f2(1), g(1))
+
+
+# a PLAIN def as a value — the case the note above used to exclude. Both roads
+# to it, the bare name and the name after an assignment, must render alike.
+def plain(x):
+    return x * 2
+
+
+sp = str(plain)
+print(sp.startswith("<function"), "at 0x" in sp, sp.endswith(">"))
+a = plain
+print(str(a).startswith("<function"), repr(plain) == str(plain))
+print(plain(3), a(3))
