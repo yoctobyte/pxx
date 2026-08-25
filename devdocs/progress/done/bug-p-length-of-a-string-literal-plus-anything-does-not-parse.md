@@ -113,4 +113,4 @@ a string EXPRESSION as a 1-based string (`High('ab' + s)` = 3), so the existing
 Gate: `make compiler/pascal26` converged in 1 round, `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 6cf3327e7.
