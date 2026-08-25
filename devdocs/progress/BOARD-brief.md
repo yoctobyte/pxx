@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 working:1 unfinished:21 blocked:7 backlog:290 backlog_new:9 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2320 rejected:40`
+`urgent:2 unfinished:21 blocked:7 backlog:291 backlog_new:9 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2320 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-a-error-does-not-halt-so-a-parse-can-be-speculative` [A] — owner: claude-A
+_none — no lane is locked._
 
 ## urgent (2) — jump the queue
 
@@ -50,7 +50,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 286, ranked
+## Ready — top 30 of 287, ranked
 
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [T]` bug-t-the-native-tier-times-out-and-publishes-a-contentless-red
@@ -83,4 +83,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 
-_256 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_257 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
