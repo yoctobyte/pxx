@@ -22,7 +22,7 @@ This replaces the older split `devdocs/bugs/` and `devdocs/features/` folders.
 | `backlog/` | Captured before 2026-08-24. Rank is derived. Still worked, no longer filed into. |
 | `urgent/` | Human override — do regardless; always sorts to the top. Keep to ~3. |
 | `working/` | Claimed and in progress. Set `Owner` so agents don't collide. |
-| `unfinished/` | Work halted with the ticket incomplete (parked). Track A/C here is CRITICAL — `check` flags it. |
+| `unfinished/` | Work halted with the ticket incomplete (parked mid-flight — **re-claim, do not duplicate**). **Ranked** like `backlog/`: parked is not abandoned. Track A/C here is CRITICAL — `check` flags it. |
 | `blocked/` | Needs a user decision, external input, or can't-reproduce. Say why. |
 | `rainy-day/` | Someday/maybe — real but not now, kept out of the ready queue. |
 | `done-followup/` | Done, but spawned a follow-up worth tracking. |
@@ -48,7 +48,8 @@ that are expensive to rediscover. The new folder removes it: **file it, don't
 triage it.** "What has come in recently" is then answerable by listing one
 folder, which is exactly what `backlog/` could no longer answer.
 
-It is **ranked** (`ready`/`next` scan it alongside `backlog/` and `urgent/`), so
+It is **ranked** (`ready`/`next` scan it alongside `backlog/`, `urgent/` and
+`unfinished/`), so
 new findings still reach the queue — the split is a filing convenience, not a
 parking lot. Contrast `float/` and `experimental/`, which are loaded but
 deliberately unranked. `urgent/` is unchanged and still means act-first.
@@ -131,8 +132,10 @@ From the rating + the edges, a stable queue falls out:
   (transitively). So a low-rated bug that blocks a 90-rated feature ranks ~90 —
   it's in the way, so it rises automatically. **Rate the goal; the chain
   follows.** The board shows `own→effective` when they differ.
-- **Ready** = a backlog/urgent ticket whose `blocked-by` slugs are all in
-  `done/` (or none). Only ready tickets are pullable. The ready list is **sorted
+- **Ready** = a ticket in `urgent/`, `backlog/`, `backlog_new/` or
+  `unfinished/` whose `blocked-by` slugs are all in `done/`/`decided/` (or
+  none). `working/` is excluded on purpose — it is a live lock, not a queue —
+  and so are `blocked/`, `rainy-day/`, `float/` and `experimental/`. Only ready tickets are pullable. The ready list is **sorted
   by effective priority** — highest first.
 - **Leverage** = how many tickets name this one in `blocked-by` (a tiebreaker
   after priority).

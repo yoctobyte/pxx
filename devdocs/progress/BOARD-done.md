@@ -2206,6 +2206,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-fpc-compat-batch | P | 70 | regression | regression: test-core#src:test/test_fpc_compat_batch.pas red at 1021bbdece65 (auto-filed by twatch) | — |
 | regression-test-core-test-fpc-compat-batch2 | T | 70 | regression | regression: test-core#src:test/test_fpc_compat_batch2.pas red at f6bcbe6c1237 (auto-filed by twatch) | — |
 | regression-test-core-test-generic-inherit-delphi | P | 70 | regression | regression: test-core#src:test/test_generic_inherit_delphi.pas red at 98ed38202254 (auto-filed by twatch) | — |
+| regression-test-core-test-indexing-length-for-new-inc-positive | P | 70 | regression | regression: test-core#src:test/test_indexing_length_for_new_inc_positive.pas red at c59796cd1e1d (auto-filed by twatch) | — |
 | regression-test-core-test-integer-longint-overload | P | 70 | regression | regression: test-core#src:test/test_integer_longint_overload.pas red at 943c706936b3 (auto-filed by twatch) | — |
 | regression-test-core-test-interface-mainbody-ascast-temp | T | 70 | regression | regression: test-core#src:test/test_interface_mainbody_ascast_temp.pas red at daf8d692af04 (auto-filed by twatch) | — |
 | regression-test-core-test-isas-open-world-b325 | P | 70 | regression | regression: test-core#src:test/test_isas_open_world_b325.pas red at a76303231306 (auto-filed by twatch) | — |

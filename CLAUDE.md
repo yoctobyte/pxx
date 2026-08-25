@@ -204,7 +204,8 @@ frontend)"). **At session start, infer your track from the request:**
   THAT lane's gate, so `track: B+F`, `track: P+F`, `track: A+F` are the normal
   spellings, and the ranker resolves both letters (`normalize_track` accepts F, so a
   `B+F` ticket is a B ticket that is also F). **But `ready --track F` correctly prints
-  nothing** — `ready`/`next` scan only `urgent`/`working`/`unfinished`/`backlog`, and F
+  nothing** — `ready`/`next` scan only `urgent`/`backlog`/`backlog_new`/`unfinished`
+  (`working/` is a live lock and is deliberately NOT ranked), and F
   tickets live in `float/`. **Parking and rankability are the same switch: you get the
   invisibility or the filter, not both.** To see the F set, list `devdocs/progress/float/`.
   **What is F — float MATH and float FORMATTING alike** (owner, same day: *"this
@@ -224,7 +225,7 @@ frontend)"). **At session start, infer your track from the request:**
   MECHANISM and whose float content is incidental. Mis-tagging in the F direction is how a
   real bug disappears, so when it is a close call it is NOT F.
   **Parking:** F tickets live in `devdocs/progress/float/`, which `ready`/`next`
-  never scan (they read only `urgent`/`working`/`unfinished`/`backlog`). Nothing
+  never scan (they read only `urgent`/`backlog`/`backlog_new`/`unfinished`). Nothing
   there is ranked or dispatched; it is picked up on explicit request, or for fun.
   Charter and the escape rule: `devdocs/progress/float/README.md`.
 - **Track Z — Zig frontend (zfront).** The Zig-language frontend, greenfield:

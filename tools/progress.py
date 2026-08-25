@@ -42,7 +42,8 @@ STATUSES = [
     "rainy-day",
     # Track F parks here. Listed so the folder is LOADED (board, check, blocker
     # resolution see it) — NOT so it is ranked: ready/next read only
-    # urgent/working/unfinished/backlog, which is the whole point of the lane.
+    # RANKED_STATUSES (urgent/backlog/backlog_new/unfinished), which is the
+    # whole point of the lane.
     "float",
     "done-followup",
     "decided",
@@ -620,12 +621,29 @@ class Board:
 
         return {s: eff(s, frozenset()) for s in self.by_slug}
 
+    # Folders the ranked queue pulls from. Everything else in STATUSES is
+    # LOADED (board, check, blocker resolution, prio propagation all see it) but
+    # never RANKED, and each exclusion is deliberate:
+    #   working/       — a LIVE LOCK. An agent is on it right now; ranking it
+    #                    would dispatch a second agent onto held files.
+    #   blocked/       — has an unmet blocker by definition.
+    #   float/         — Track F is low-prio by owner decree and parks there.
+    #   experimental/  — X-tagged (R/Z); picked up on request or for fun.
+    #   rainy-day/     — ideas, not queued work.
+    #   done-followup/, decided/, done/, rejected/ — terminal.
+    # unfinished/ IS ranked (added 2026-08-25). Its definition is "parked
+    # mid-flight; re-claim, do not duplicate" — that is work in progress, not
+    # work abandoned, and BOARD-brief.md already tells agents to re-claim it.
+    # Leaving it out hid 23 tickets from every dispatch, including the repo's
+    # highest prio (88, an N segfault) and the html5lib ladder at 65.
+    RANKED_STATUSES = ("backlog", "backlog_new", "unfinished", "urgent")
+
     def ready_tickets(self, track_filter: str = "") -> list[Ticket]:
         done = self.resolved_slugs        # done/ OR decided/ satisfies a blocker
         eff = self.effective_prio()
         lev = self.leverage_counts()
         out = []
-        for st in ("backlog", "backlog_new", "urgent"):
+        for st in self.RANKED_STATUSES:
             for t in self.by_status[st]:
                 if self.track_matches(t.track, track_filter) and all(b in done for b in t.blockers):
                     out.append(t)
@@ -645,6 +663,9 @@ class Board:
             tag = "urgent " if t.status == "urgent" else ""
             unb = lev.get(t.slug, 0)
             extra = f" (unblocks {unb})" if unb else ""
+            # unfinished/ ranks, but say so: it is re-claim work, not new work.
+            if t.status == "unfinished":
+                extra += " [parked — re-claim, do not duplicate]"
             lines.append(f"  [{tag}p{eff[t.slug]:>3}] [{t.track}] {t.slug}{extra}")
         return "\n".join(lines) + "\n"
 
@@ -654,7 +675,7 @@ class Board:
         rt = self.ready_tickets(track_filter)
         if not rt:
             scope = f" for Track {track_filter}" if track_filter else ""
-            return f"no ready ticket{scope} (all blocked or none in backlog/urgent)\n"
+            return f"no ready ticket{scope} (all blocked or none in urgent/backlog/unfinished)\n"
         eff = self.effective_prio()
         lev = self.leverage_counts()
         t = rt[0]
@@ -666,6 +687,8 @@ class Board:
             why += f"; unblocks {unb} ticket(s)"
         if t.status == "urgent":
             why = "URGENT; " + why
+        if t.status == "unfinished":
+            why += "; PARKED mid-flight in unfinished/ — re-claim it, do not restart from scratch"
         lines = [
             f"== NEXT{(' (Track ' + track_filter + ')') if track_filter else ''} ==",
             f"  {t.slug}   [{t.track}]",

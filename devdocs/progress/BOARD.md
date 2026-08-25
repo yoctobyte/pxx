@@ -10,12 +10,11 @@ lives in git, not in a timestamp._
 | --- | --- | --- | --- | --- | --- |
 | bug-t-the-native-tier-times-out-and-publishes-a-contentless-red | T | 70 | bug | Every native run on plexus since 14:28 today has ended at wall 3600.x — the one-hour cap — and publishes verdict RED. The last three carry new_red: [] AND still_red: [], i.e. a RED with nothing attributed: the run is killed before it can name anything. So Track T has had no usable verdict for six hours while looking, to --status and to every agent, exactly like a persistent regression. A timeout must not publish as RED. | — |
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method | N | 70 | bug | A callable value is silently accepted where `str` is declared, and no longer compares equal to itself — bisected to `9bbbbef6c` | — |
-| regression-test-core-test-indexing-length-for-new-inc-positive | P | 70 | regression | regression: test-core#src:test/test_indexing_length_for_new_inc_positive.pas red at c59796cd1e1d (auto-filed by twatch) | — |
 
 ## unfinished (23)
 
@@ -594,9 +593,9 @@ lives in git, not in a timestamp._
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2354)
+## done (2355)
 
-2354 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2355 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -646,19 +645,28 @@ lives in git, not in a timestamp._
 ## Ready (no unmet blocker)
 
 - [urgent p 70] [T] bug-t-the-native-tier-times-out-and-publishes-a-contentless-red
+- [p 88] [N] bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults [parked — re-claim, do not duplicate]
 - [p 70] [N] regression-lib-test-lib-mimic-xml-etree-elementtree-2
 - [p 70] [N] regression-test-nilpy-test-nilpy-callable-to-str-param-fails
 - [p 65] [B] gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo (unblocks 1)
 - [p 65] [B] bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
+- [p 65] [O] bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython [parked — re-claim, do not duplicate]
 - [p 65] [T] bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - [p 65] [C] feature-c-csmith-differential-fuzzing
+- [p 65] [N] feature-nilpy-cpyext-c-api-from-source [parked — re-claim, do not duplicate]
+- [p 65] [N] feature-nilpy-thirdparty-libraries-as-targets [parked — re-claim, do not duplicate]
+- [p 65] [P] feature-pascal-corpus-fpc-testsuite [parked — re-claim, do not duplicate]
 - [p 65] [P] feature-pascal-corpus-oop
+- [p 62] [N] bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name [parked — re-claim, do not duplicate]
+- [p 62] [B] feature-b-the-module-shim-batch-blocking-the-python-corpus [parked — re-claim, do not duplicate]
 - [p 60] [N] bug-n-every-nilpy-compile-pays-a-fixed-nine-second-cost
 - [p 60] [N] bug-n-inferred-return-type-of-true-division-is-int
 - [p 60] [T] bug-t-the-push-rate-starves-breadth-coverage-entirely
 - [p 60] [T] feature-t-gate-quick-should-smoke-the-pinned-compiler
 - [p 58] [N] bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - [p 58] [O] feature-opt-o3-register-pressure
+- [p 55] [A] feature-port-rtl-over-libc (unblocks 3) [parked — re-claim, do not duplicate]
+- [p 55] [A] feature-nilpy-object-reclamation (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 55] [T] feature-t-freebsd-image-and-runner (unblocks 1)
 - [p 55] [N] bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - [p 55] [N] bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
@@ -669,16 +677,22 @@ lives in git, not in a timestamp._
 - [p 55] [N] bug-nilpy-a-lambda-returned-directly-is-not-callable
 - [p 55] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 55] [T] chore-t-test-runs-inherit-the-desktop-session
+- [p 55] [A] feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets [parked — re-claim, do not duplicate]
 - [p 55] [N] feature-a-declaration-phase
 - [p 55] [B] feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
 - [p 55] [E] feature-demo-portable-userland
 - [p 55] [O] feature-opt-heap-per-thread-cache
+- [p 55] [A] feature-pascal-type-helpers [parked — re-claim, do not duplicate]
+- [p 55] [A] feature-signal-siginfo-ucontext [parked — re-claim, do not duplicate]
 - [p 55] [T] feature-t-tier-job-self-compile-differential-across-o-levels
 - [p 53] [S] feature-esp-peripheral-callback-api
+- [p 53] [A] feature-threadsafe-heap-optimize [parked — re-claim, do not duplicate]
 - [p 50] [A] bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical
 - [p 50] [N] bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - [p 50] [N] bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - [p 50] [T] bug-t-track-ts-own-pushes-destroy-track-ts-own-breadth-coverage
+- [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
+- [p 50] [C] feature-c-import-a-pascal-unit-under-a-mangled-name [parked — re-claim, do not duplicate]
 - [p 50] [E] feature-demo-songformatter-pxx-target
 - [p 50] [A] feature-nilpy-collections-and-string-methods
 - [p 50] [A] feature-release-checksums-repro
@@ -708,6 +722,7 @@ lives in git, not in a timestamp._
 - [p 45] [B] feature-b-vartype-speaks-fpc-varxxx-codes
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [A] feature-cross-frontend-interop-contract
+- [p 45] [A] feature-dynamic-compiler-tables [parked — re-claim, do not duplicate]
 - [p 45] [A] feature-dynamic-include-paths-config
 - [p 45] [P] feature-embed-dwscript-rtti
 - [p 45] [P] feature-embed-pascal-script
@@ -723,6 +738,7 @@ lives in git, not in a timestamp._
 - [p 45] [O] feature-opt-dynarray-grows-in-place
 - [p 45] [P] feature-p-delphi-string-helpers
 - [p 45] [P] feature-pascal-corpus-passrc
+- [p 45] [B] feature-real-dynlib-loader [parked — re-claim, do not duplicate]
 - [p 45] [T] feature-t-fail-when-a-test-file-is-wired-into-no-build-rule
 - [p 45] [A] feature-toolchain-cli-ux
 - [p 45] [A] feature-writeln-as-library
@@ -731,6 +747,7 @@ lives in git, not in a timestamp._
 - [p 45] [P] refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too
 - [p 42] [P] feature-pascal-builtin-tobject-class
 - [p 40] [A] bug-a-nilpy-leading-double-star-in-a-call-is-not-detected
+- [p 40] [A] bug-a-nilpy-on-cross-targets-four-remaining-walls [parked — re-claim, do not duplicate]
 - [p 40] [A] bug-a-rtti-kind-numbers-are-the-compilers-not-the-typinfo-enum-the-unit-documents
 - [p 40] [B] bug-b-inttostr-of-a-qword-prints-it-signed
 - [p 40] [B] bug-b-varisstr-is-false-for-a-one-character-string
@@ -741,6 +758,7 @@ lives in git, not in a timestamp._
 - [p 40] [N] bug-n-tk-got-files-are-invisible-to-testmgr-privatization
 - [p 40] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
+- [p 40] [N] bug-nilpy-shared-nonlocal-frame-cell-is-never-freed [parked — re-claim, do not duplicate]
 - [p 40] [T] bug-t-twatch-status-says-down-while-the-daemon-is-alive-and-testing
 - [p 40] [P] compat-pascal-a-string-n-field-makes-a-record-a-different-size-than-fpc
 - [p 40] [D] docs-d-document-exec-eval-and-the-builtins-incompatibility
@@ -782,6 +800,7 @@ lives in git, not in a timestamp._
 - [p 35] [P] bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent
 - [p 35] [P] bug-p-a-typed-constant-of-pchar-type-is-a-parse-error
 - [p 35] [P] bug-p-a-typed-string-constant-cannot-be-assigned
+- [p 35] [P] bug-p-cannot-call-directly-through-a-procedural-type-cast [parked — re-claim, do not duplicate]
 - [p 35] [P] bug-p-high-and-low-refuse-every-non-identifier-operand
 - [p 35] [P] bug-p-sizeof-rejects-a-pointer-deref-in-its-operand
 - [p 35] [A] chore-a-the-range-checked-fpc-seed-cannot-be-built
@@ -817,6 +836,7 @@ lives in git, not in a timestamp._
 - [p 35] [P] refactor-p-one-lvalue-path-for-statements-and-expressions
 - [p 35] [P] refactor-p-three-hand-rolled-postfix-loops
 - [p 35] [D] task-d-document-the-strict-overload-width-flag
+- [p 30] [N] bug-b-reportlab-mimic-multi-font-heap-corruption (unblocks 1) [parked — re-claim, do not duplicate]
 - [p 30] [A] bug-a-a-pascal-hello-world-is-63kb-after-emission-size-dce
 - [p 30] [P] bug-a-low-high-of-a-char-indexed-array-answer-the-ordinal
 - [p 30] [A] bug-a-riscv32-codegen-has-no-variant-support
@@ -862,6 +882,7 @@ lives in git, not in a timestamp._
 - [p 30] [N] perf-nilpy-remaining-perbyte-string-builders
 - [p 30] [A] refactor-a-the-const-cast-width-table-is-the-third-copy
 - [p 30] [A] refactor-a-the-greenfield-frontends-share-each-others-parser-helpers
+- [p 30] [A] refactor-a-two-dyn-array-depth-functions-that-drift [parked — re-claim, do not duplicate]
 - [p 30] [N] refactor-n-two-import-handlers-are-twins
 - [p 30] [P] refactor-p-the-field-declaration-parser-exists-twice
 - [p 30] [D] task-d-document-warn-ignored-directives
