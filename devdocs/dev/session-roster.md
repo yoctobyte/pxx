@@ -4,7 +4,7 @@
 someone called you a coordinator, this file is the job; nothing important lives
 in anyone's context. CLAUDE.md wins over this file on gating and lane rules.
 
-Updated 2026-08-17.
+Updated 2026-08-25.
 
 ---
 
@@ -66,19 +66,90 @@ Standing gate for everyone: `make compiler/pascal26` + the repro +
 
 ---
 
-## Roles
+## Roles — LIVE, 2026-08-25
 
-| session | role | lane | context |
+Sessions address each other by these names. **`ListAgents` lists them and
+`SendMessage` reaches them** — run `ListAgents` BEFORE spawning any subagent
+that would touch a clone other than your own, because the sibling clones on
+this box usually have a live session sitting in them. On 2026-08-25 a
+coordinator subagent was spawned into `/home/neo/pxx` while its owner was
+working there; the lane letters cannot see a subagent you created.
+
+| session | role | lane | checkout |
 | --- | --- | --- | --- |
-| frankonpiler | **coordinator** | none — assigns, does not code | persistent |
-| frank2 | worker | **N** (Nil-Python) | fresh per ticket / small batch |
-| frank3 | worker | **B** (libraries/demos) | fresh per ticket / small batch |
-| plexus-T | watcher + Track T agent | T (own clone, own box) | its own |
+| frank1-72 | **coordinator** | none — assigns, does not code | `/home/neo/frank1` |
+| pxx-aa | watcher + Track T agent (face 2) | **T** | `/home/neo/pxx` |
+| — | the watcher DAEMON (face 1) | T, writes only `tstate/` | `/home/neo/trackt-watch` |
+| neo-4a | host/sysadmin, no lane | none | none (cwd `/home/neo`) |
+| cA | **out-of-band** — driven directly by the human, not a pxx dev session | none | none |
+| frank2-99 | idle, stale clone, unresponsive to roster pings | unknown | `/home/neo/frank2` |
 
-Each session is its OWN CHECKOUT — `/home/rene/frankonpiler`, `/home/rene/frank2`,
-`/home/rene/frank3`, plus `franktrackD` for the watcher. So two agents never share
-a working tree; they meet only at push/merge, which is ordinary git. Lane rules
-still apply — they prevent conflicting EDITS to the same file, not tree damage.
+**The borg-era layout is gone.** This file used to describe four checkouts under
+`/home/rene` on a second box. borg's PSU died 2026-08-20; the box is intact and
+awaiting a part (its disk read back 716,378 files / 254 GB with zero errors, the
+rescue is parked on `/data`), so those checkouts are **parked, not lost** — but
+do not plan around a second dev machine, and note the human had already intended
+to scale down to one workstation to save power. One box is the direction, not
+the emergency.
+
+**Everything now shares plexus**, and that is the source of this project's two
+most expensive recent failures — see *Host coupling* below.
+
+## Branches — read CLAUDE.md, not this file
+
+Since 2026-08-25 work happens on **`dev`**; `master` is a stable snapshot the
+coordinator advances once or twice a day with `git merge --no-ff dev`, only from
+a `dev` state Track T called green. Never rebase, never squash — tstate verdicts
+and the board's `resolve` citations are keyed by sha. **Advancing master is a
+coordinator duty, and it has the same shape as a pin: it is the lock.**
+CLAUDE.md's "BRANCHES" section is the authority; this line exists only so a
+coordinator reading the roster first does not land work on master out of habit.
+
+## Host coupling — the failure mode that cost the most in August 2026
+
+Two incidents, one cause, and neither was a code defect. **plexus became a
+workstation on 2026-08-20** when borg died and gdm autologin brought up a
+desktop. Nothing in the repo changed; the box changed under the tests.
+
+1. **Track T went blind for three days and reported red the whole time.** The
+   wayland session started 06:04:48 and the at-spi accessibility bridge 3
+   seconds later; from 08-21 `test/test_c_gtk_call.pas` hung in it. Every native
+   run finished 1547/1550 jobs in ~26 min and then sat on that one until the
+   3600s global deadline killed it — 34 consecutive runs, 08-22 through 08-25,
+   each publishing a *contentless red*. Two Track T defects turned one hang into
+   a three-day outage: a deadline teardown was recorded as a MEASUREMENT
+   (latching that job's EWMA at 2902s → 3522s against ~7s siblings), and the
+   "outgrew its class" path then derived a 7045s budget against a 3600s
+   deadline — unsatisfiable, and honoured anyway.
+2. **DNS resolved through a router forwarder dropping ~40% of queries in
+   bursts**, for hours, while the NM profile claimed otherwise. The profile had
+   been corrected at 08:39 and 09:35 and the live device was never reapplied —
+   the first `device-reapply` of the day was at 11:56. Failure class:
+   **"not yet applied", NOT "will not persist"**. A reboot would have FIXED it.
+   After any `nmcli connection modify`, run `nmcli device reapply` or verify with
+   `nmcli -g IP4.DNS dev show`; profile and applied config diverge silently.
+
+**The generalisation, which is bigger than either:** `systemctl --user
+show-environment` on this box carries `DBUS_SESSION_BUS_ADDRESS`, `DISPLAY=:0`,
+`WAYLAND_DISPLAY` and `XAUTHORITY`, so **every `systemd-run --user` job inherits
+a full graphical session** — and that is the recommended way to run long jobs
+here, because un-tmux'd SSH kills a bare `&`. a11y is merely the symptom that
+hung first. Blocklisting variables one at a time (`NO_AT_BRIDGE=1`,
+`GTK_A11Y=none`) unblocks today; stripping the environment for test runs is the
+durable fix and is filed as its own Track T ticket.
+
+**What a coordinator should take from this:** when a tool reports something
+surprising, check whether the BOX changed before believing the report. Both
+incidents produced confident wrong signals rather than errors, and both were
+diagnosed only when someone compared a claim against the system's own record —
+`journalctl`, file mtimes, `/proc/<pid>/environ`. A verdict is not a
+measurement; **liveness is not the same as producing verdicts** (the coordinator
+reported Track T "up" on 2026-08-25 having checked only that the daemon was
+alive, and was corrected by Track T face 2).
+
+Each session is its OWN CHECKOUT, so two agents never share a working tree; they
+meet only at push/merge, which is ordinary git. Lane rules still apply — they
+prevent conflicting EDITS to the same file, not tree damage.
 
 ## The coordinator's actual job
 
