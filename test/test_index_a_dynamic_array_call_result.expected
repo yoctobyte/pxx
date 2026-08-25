@@ -8,3 +8,10 @@ recelem: 3 4
 loop   : 100
 length : 3
 copy   : 20 30
+high   : 2 0
+forin  : 60
+once   : 7 calls=1
+fistr  : alpha fistr  : beta 
+firec  : 46
+fiempty: 99
+fimeth : 18

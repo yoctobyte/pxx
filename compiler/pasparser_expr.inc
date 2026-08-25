@@ -4818,9 +4818,29 @@ begin
           Exit;
         end;
         if CurTok.Kind <> tkIdent then Error('High: expected array variable or ordinal type');
-        idx := FindSym(CurTok.SVal); Next;
-        { See Length below: ParseLValueAST handles implicit-Self + undefined. }
-        valNode := ParseLValueAST(idx, TokPos - 2);
+        idx := FindSym(CurTok.SVal);
+        if (idx < 0) and (FindProc(CurTok.SVal) >= 0) then
+        begin
+          { `High(MakeArr)` — the operand is a CALL, not a variable. This arm
+            insisted on an lvalue and handed FindSym's -1 straight to
+            ParseLValueAST, so a perfectly ordinary array-returning function
+            came back as `undefined variable (MakeArr)`. Length two arms below
+            has always used ParseExpr for exactly this reason and works on the
+            same operand — one intrinsic accepting what its sibling rejects,
+            over the same expression.
+            Every fold below is guarded on `idx >= 0`, so a call falls through
+            to the runtime Length-1 tail, which is the right answer for a dyn
+            array and is what Length itself already lowers to.
+            compat-pascal-index-a-function-call-result }
+          ParseExpr;
+          valNode := CurASTNode;
+        end
+        else
+        begin
+          Next;
+          { See Length below: ParseLValueAST handles implicit-Self + undefined. }
+          valNode := ParseLValueAST(idx, TokPos - 2);
+        end;
         Expect(tkRParen, ')');
         { High of a whole 1-D static array folds to its upper index bound (see
           the Length fold below for why the runtime path can't serve a static
@@ -4912,8 +4932,21 @@ begin
           Exit;
         end;
         if CurTok.Kind <> tkIdent then Error('Low: expected array variable or ordinal type');
-        idx := FindSym(CurTok.SVal); Next;
-        valNode := ParseLValueAST(idx, TokPos - 2);   { consume the array variable }
+        idx := FindSym(CurTok.SVal);
+        if (idx < 0) and (FindProc(CurTok.SVal) >= 0) then
+        begin
+          { `Low(MakeArr)` — a CALL operand, exactly as in the High arm above,
+            and fixed the same way rather than left as the one of the pair that
+            still says "undefined variable". Falls through to the `else 0` tail,
+            which is the lower bound of every dynamic array. }
+          ParseExpr;
+          valNode := CurASTNode;
+        end
+        else
+        begin
+          Next;
+          valNode := ParseLValueAST(idx, TokPos - 2);   { consume the array variable }
+        end;
         Expect(tkRParen, ')');
         CurASTNode := AllocNode(AN_INT_LIT);
         if (idx >= 0) and Syms[idx].IsArray and (Syms[idx].Kind <> skParam) and

@@ -26,7 +26,7 @@ owner: claude-A
 > from the prose immediately below.
 
 - **Type:** compat (Pascal frontend parity) — Track P
-- **Status:** working
+- **Status:** done
 - **Opened:** 2026-08-05
 - **Found by:** `tools/fpc_diff_probe.sh`, dynamic-array case batch
   (`dynarray-copy-and-alias`, now tagged `[known]`).
@@ -302,3 +302,55 @@ inside `IRLowerAddress` leaks one array per call.
 
 No new information, one new confirmation: the loud refusal is still loud, and
 nothing has drifted into silently answering.
+
+
+## RESOLVED 2026-08-25 — a dyn-array call result is now a first-class dyn-array VALUE, in one place
+
+All seven rows of the 2026-08-20 table match FPC 3.2.2. The last two —
+`High(f)` and `for x in f` — landed here; the index/`Copy`/open-array rows landed
+in `dd35abca2`.
+
+**The shape of the fix is the point.** Nothing in the IR changed, in either
+round. A dyn-array local is a slot holding a handle, so `tmp := call` is an
+ordinary dyn-array assignment and everything downstream — index, `High`,
+`for .. in`, the release at scope exit — is the ordinary VARIABLE case. The
+whole gap was that a call node has no SYMBOL, and every consumer keyed on one
+(`Syms[].ElemType`, `.ArrLen`, `.ElemRecName`). So each consumer got one line
+that materialises, and none of them got a second implementation:
+
+| spelling | consumer | what it now does |
+| --- | --- | --- |
+| `f[i]`, `o.M[i]`, `TC.Create.M[i]` | `ApplyCallResultPtrSuffix` | temp + `AN_INDEX` |
+| `High(f)` / `Low(f)` | `pasparser_expr.inc` High/Low arms | parse the operand with `ParseExpr`, fall through to the runtime `Length(x)-1` tail |
+| `for x in f` | `ParseForInNodeAST` | temp + `ParseForInVarAST` |
+
+`High`/`Low` needed no temp at all — the arms only ever accepted an operand that
+`FindSym` resolved, and every constant-fold in them is already guarded on
+`idx >= 0`, so routing a proc name through `ParseExpr` drops it onto the runtime
+tail that `Length` has always used. The bug there was the LOOKUP, not the fold.
+
+`for .. in` is the one that could have grown a second implementation and did
+not: the bare spelling (`for x in MakeArr`) and the qualified one
+(`for x in o.GetArr`) enter through different dispatchers, and both are routed
+into the single arm in `ParseForInNodeAST` — the same normalise-don't-special-case
+call the enumerator arm above it already makes.
+
+**One deliberate refusal kept.** An `array of array of T` VALUE is rejected with
+a named diagnostic rather than materialised. Not because the desugar cannot do
+it — it can — but because the nested-result COPY is broken underneath
+(`m := MakeMat; WriteLn(Length(m[0]))` faults today,
+`bug-p-a-nested-dynamic-array-result-crashes-however-it-is-reached`), and
+materialising here would have turned an existing loud refusal into a SEGFAULT.
+Delete the guard when that ticket lands.
+
+Verified against fpc 3.2.2 on: once-only evaluation of the container
+(`calls=1`, which a getter with side effects requires), managed elements,
+record elements, an empty result, `Continue` in the body, `for var x in f`,
+and a method result. `test/test_index_a_dynamic_array_call_result.pas` asserts
+all of it; `.expected` is fpc's own output.
+
+Gate: `make compiler/pascal26` converged in 1 round, `tools/gate.sh quick`
+GREEN, fpc-testsuite conformance unmoved.
+
+## Log
+- 2026-08-25 — resolved, commit PENDING-COMMIT.

@@ -46,8 +46,14 @@ begin SetLength(Result, 3); Result[0] := 50; Result[1] := 60; Result[2] := 70; e
 function TBag.ArrP(k: Integer): TIntArr;
 begin SetLength(Result, 3); Result[0] := k; Result[1] := k * 2; Result[2] := k * 3; end;
 
+var calls: Integer = 0;
+
 function MakeArr: TIntArr;
 begin SetLength(Result, 3); Result[0] := 10; Result[1] := 20; Result[2] := 30; end;
+function Counted: TIntArr;
+begin Inc(calls); SetLength(Result, 3); Result[0] := 1; Result[1] := 2; Result[2] := 4; end;
+function MakeEmpty: TIntArr;
+begin SetLength(Result, 0); end;
 function MakeStr: TStrArr;
 begin SetLength(Result, 2); Result[0] := 'alpha'; Result[1] := 'beta'; end;
 function MakePt: TPtArr;
@@ -56,6 +62,7 @@ begin SetLength(Result, 2);
 
 var
   b: TBag; v: TBag; i, acc: Integer; cp: TIntArr;
+  sv: string; pt: TPt;
 begin
   b := TBag.Create;
   v := TSub.Create;
@@ -87,6 +94,35 @@ begin
     being asserted as working. }
   cp := Copy(MakeArr, 1, 2);
   WriteLn('copy   : ', cp[0], ' ', cp[1]);
+
+  { A call result is not only INDEXABLE, it is a dyn-array VALUE — the same
+    materialised temp answers `High` and `for .. in`, which were the two rows of
+    this ticket's own table still refused after the index arm landed. }
+  WriteLn('high   : ', High(MakeArr), ' ', Low(MakeArr));
+  acc := 0;
+  for i in MakeArr do acc := acc + i;
+  WriteLn('forin  : ', acc);
+  { the container is evaluated ONCE, which a getter with side effects requires;
+    calls is 1 here and not 3 }
+  calls := 0;
+  acc := 0;
+  for i in Counted do acc := acc + i;
+  WriteLn('once   : ', acc, ' calls=', calls);
+  { a MANAGED element, and a RECORD element, over the same path }
+  for sv in MakeStr do Write('fistr  : ', sv, ' ');
+  WriteLn;
+  acc := 0;
+  for pt in MakePt do acc := acc + pt.X * 10 + pt.Y;
+  WriteLn('firec  : ', acc);
+  { an empty result runs the body zero times rather than once or forever }
+  acc := 99;
+  for i in MakeEmpty do acc := 0;
+  WriteLn('fiempty: ', acc);
+  { a METHOD result — the qualified spelling, which reaches the same arm from
+    ParseForInNodeAST directly rather than through the bare-name dispatch }
+  acc := 0;
+  for i in b.Arr do acc := acc + i;
+  WriteLn('fimeth : ', acc);
 
   b.Free; v.Free;
 end.

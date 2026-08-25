@@ -1142,6 +1142,7 @@ end;
 function ParseForInNodeAST(varIdx, contNode: Integer): Integer;
 var
   fnRec, fnSym, fnAssign, fnLoop, fnSeq: Integer;   { class container w/ GetEnumerator }
+  fnDyn: Integer;   { dyn-array VALUE container (a call result) — levels }
   bodyNode, elemTk, staticLen, recId, fldIdx: Integer;
   setEnumId, setElemTk: Integer;
   contTk: TTypeKind;
@@ -1167,6 +1168,45 @@ begin
     SymSyncTypeRef(fnSym);
     fnAssign := GenMakeAssign(GenMakeIdent(fnSym, tyClass), contNode);
     fnLoop := ParseForInEnumeratorAST(varIdx, fnSym, fnRec - REC_UCLASS_BASE);
+    Result := AllocNode(AN_SEQ);
+    ASTLeft[Result] := fnAssign;
+    fnSeq := AllocNode(AN_SEQ);
+    ASTLeft[fnSeq] := fnLoop;
+    ASTRight[fnSeq] := -1;
+    ASTRight[Result] := fnSeq;
+    Exit;
+  end;
+
+  { A dynamic-array VALUE that is not a bare variable: a function result
+    (`for x in MakeArr do`), a method result, a property getter. Every array
+    path below keys on a SYMBOL -- Syms[].ElemType, .ArrLen, .ElemRecName --
+    which such a node has not got, so it reached 'unsupported iterable
+    expression' here, or 'not a generator, enum type, or iterable variable' from
+    the bare-name dispatch. The container was never the problem; having no
+    symbol was.
+
+    Same move as the enumerator arm above, and the same one the INDEX spelling
+    already makes in ApplyCallResultPtrSuffix: materialise the value into a
+    hidden dyn-array local and drive the existing, well-tested bare-VARIABLE
+    loop with THAT. Evaluated exactly once, which a function with side effects
+    requires -- and once is also what FPC does.
+    compat-pascal-index-a-function-call-result }
+  fnDyn := NodeDynDepth(contNode);
+  if (ASTKind[contNode] <> AN_IDENT) and (fnDyn > 0) then
+  begin
+    { An `array of array of T` VALUE is refused rather than materialised: the
+      nested-result copy itself is broken today (`m := MakeMat; m[0]` faults —
+      bug-p-a-nested-dynamic-array-result-crashes-however-it-is-reached), and
+      this arm would turn that existing loud refusal into a SEGFAULT. Drop this
+      guard when that ticket lands; the desugar below already handles depth 2. }
+    if fnDyn > 1 then
+      Error('for-in over a nested dynamic-array VALUE (array of array of T) is not supported yet — assign it to a variable first (bug-p-a-nested-dynamic-array-result-crashes-however-it-is-reached)');
+    LastTypeRecId := NodeDynBaseRec(contNode);
+    fnSym := AllocDynArray('', NodeDynBaseTk(contNode), fnDyn);
+    Syms[fnSym].ElemRecName := NodeDynBaseRec(contNode);
+    SymSyncTypeRef(fnSym);
+    fnAssign := GenMakeAssign(GenMakeIdent(fnSym, NodeDynBaseTk(contNode)), contNode);
+    fnLoop := ParseForInVarAST(varIdx, fnSym);
     Result := AllocNode(AN_SEQ);
     ASTLeft[Result] := fnAssign;
     fnSeq := AllocNode(AN_SEQ);
@@ -2453,6 +2493,15 @@ begin
       ASTLeft[forcNode] := forcLoop;
       ASTRight[forcNode] := -1;
       ASTRight[Result] := forcNode;
+      Exit;
+    end;
+
+    { ...or a dyn-array VALUE (`for x in MakeArr do`). ONE implementation, in
+      ParseForInNodeAST, so the bare spelling and the qualified one
+      (`for x in o.GetArr do`, which lands there directly) cannot drift apart. }
+    if NodeDynDepth(forcNode) > 0 then
+    begin
+      Result := ParseForInNodeAST(varIdx, forcNode);
       Exit;
     end;
 
