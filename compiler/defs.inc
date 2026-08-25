@@ -1195,6 +1195,41 @@ const
     array type always DEFINES something, so it always keeps its own name. }
   TYPEINFO_REQ_CAT_ARRAY  = 5;
   MAX_TYPEINFO_REQ = 512;
+  { The TTypeData payload a TypeInfo header's DataPtr points at: TEN uniform
+    8-byte slots, the same discipline TTypeInfoHdr itself uses
+    (feature-typeinfo-ttypedata-payloads). FPC's TTypeData is a VARIANT record
+    keyed on TTypeKind; ours is one fixed shape, because real code reaches RTTI
+    through the typinfo UNIT's declarations, which WE supply -- so no
+    BYTE-LAYOUT parity with FPC is owed, and only the VALUES are diffed against
+    it. A kind with nothing to say for a slot leaves it zero, which is what lets
+    one shape serve every category instead of a second code path per kind.
+      +0  OrdType   Ord(TOrdType) for an ordinal; the ELEMENT's TOrdType for
+                    tkSet; 0 when the kind has none
+      +8  FloatType Ord(TFloatType) for tkFloat; 0 otherwise. Its OWN slot
+                    rather than an overlay on OrdType, because the consumer
+                    spells it `td^.FloatType` and a fixed-shape record has no
+                    variant part to spell it through -- 8 bytes buys the reader
+                    the name it already uses.
+      +16 MinValue  ordinal low bound; 0 for a string[N]
+      +24 MaxValue  ordinal high bound; N for a string[N]. otUQWord's 2^64-1
+                    does not fit a signed slot, so it is the BIT PATTERN (-1)
+                    and the reader casts -- which is exactly what FPC's own
+                    32-bit MaxValue does to LongWord (measured: it prints -1).
+      +32 ElemKind  Ord(TTypeKind) of the element/component type, 0 = none
+      +40 ElemRef   -> the element type's OWN RTTI blob (PEnumRTTI for an enum
+                    element, PClassRTTI for a class one), nil when it has none.
+                    The TPropInfo.TypeRef idiom, deliberately NOT a nested
+                    PTypeInfo: a nested header would mean emitting type info for
+                    types the program never named in a TypeInfo() call.
+      +48 ElemSize  bytes per element (arrays, sets); 0 for a scalar
+      +56 ElemCount total element count of a static array
+      +64 DimCount  static array: dimension count; dynamic array: nesting depth
+      +72 DimsPtr   -> DimCount {Lo:Int64; Hi:Int64} pairs; nil for a dyn array
+    Classes and records do NOT get one: their DataPtr already points at the
+    TClassRTTI / record layout descriptor typinfo.pas has always read there, and
+    re-pointing it would break every existing reader. }
+  TYPEDATA_SIZE = 80;
+  TYPEDATA_DIM_SIZE = 16;   { one {Lo,Hi} pair in the DimsPtr table }
 
   SYS_READ  = 0;
   SYS_WRITE = 1;

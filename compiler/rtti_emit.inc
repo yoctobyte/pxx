@@ -863,6 +863,171 @@ begin
   end;
 end;
 
+{ ===== TTypeData ==========================================================
+
+  The payload DataPtr points at. Layout and the reasoning behind ONE fixed
+  shape (rather than FPC's variant record) are documented at TYPEDATA_SIZE in
+  defs.inc; typinfo.pas declares the reader side.
+
+  TOrdType is FPC's ordinal-width code, same declared order as rtl/inc/rttih.inc:
+  otSByte otUByte otSWord otUWord otSLong otULong otSQWord otUQWord. Every row
+  below was diffed against an FPC 3.2.2 oracle, not recalled.
+
+  ONE deliberate divergence, and it is the honest answer rather than the parity
+  one: we report the width PXX ACTUALLY STORES THE VALUE IN. For all thirteen
+  builtin ordinals that is also FPC's answer (measured). It differs for a
+  SUBRANGE, because pxx does not narrow a subrange's storage the way FPC does --
+  `TSub = 1..10` is 4 bytes here and 1 byte there, so we say otSLong where FPC
+  says otSByte, while MinValue/MaxValue still carry the declared bounds and match
+  FPC exactly. The consumer this ticket exists for (Generics.Defaults picking a
+  comparer by ordinal width) uses OrdType to decide HOW MANY BYTES TO COMPARE, so
+  handing it FPC's narrower answer would make it read one byte of a four-byte
+  value. Parity would be a bug here, not a feature. }
+function OrdTypeCode(size: Integer; signed: Boolean): Integer;
+begin
+  if size <= 1 then Result := 0
+  else if size <= 2 then Result := 2
+  else if size <= 4 then Result := 4
+  else Result := 6;
+  if not signed then Result := Result + 1;
+end;
+
+{ The ordinal/float TTypeData fields for a plain scalar tk. False = this tk has
+  no payload at all (strings, variants, pointers, records...), and its DataPtr
+  stays nil. A float returns True with fltTy = Ord(TFloatType), ordTy 0 and a
+  zero range. }
+function ScalarTypeData(tk: Integer; var ordTy, fltTy, loV, hiV: Int64): Boolean;
+var sz: Integer; signed: Boolean;
+begin
+  ordTy := 0; fltTy := 0; loV := 0; hiV := 0; Result := False;
+  case tk of
+    Ord(tySingle):   begin fltTy := 0; Result := True; Exit; end;  { ftSingle }
+    Ord(tyDouble):   begin fltTy := 1; Result := True; Exit; end;  { ftDouble }
+    Ord(tyExtended): begin fltTy := 2; Result := True; Exit; end;  { ftExtended }
+    { Boolean is not "an unsigned byte 0..255": FPC reports 0..1 and so do we. }
+    Ord(tyBoolean), Ord(tyBool8):
+      begin ordTy := 1; loV := 0; hiV := 1; Result := True; Exit; end;
+    Ord(tyInteger), Ord(tyInt8), Ord(tyUInt8), Ord(tyInt16), Ord(tyUInt16),
+    Ord(tyInt32), Ord(tyUInt32), Ord(tyInt64), Ord(tyUInt64),
+    Ord(tyNativeInt), Ord(tyNativeUInt), Ord(tyChar), Ord(tyWideChar),
+    Ord(tyUCS4Char), Ord(tyPromoInt32), Ord(tyPromoInt64):
+      Result := True;
+    else Exit;
+  end;
+  { A promotable int is a {tag,payload} struct, so TypeSize would report the
+    struct; report the PAYLOAD's width, which is what the value ranges over. }
+  if tk = Ord(tyPromoInt32) then sz := 4
+  else if tk = Ord(tyPromoInt64) then sz := 8
+  else sz := TypeSize(IntToTypeKind(tk));
+  signed := TypeSigned(IntToTypeKind(tk)) or (tk = Ord(tyPromoInt32)) or
+            (tk = Ord(tyPromoInt64));
+  ordTy := OrdTypeCode(sz, signed);
+  if signed then
+  begin
+    case sz of
+      1: begin loV := -128; hiV := 127; end;
+      2: begin loV := -32768; hiV := 32767; end;
+      4: begin loV := -2147483648; hiV := 2147483647; end;
+      else begin loV := -9223372036854775807 - 1; hiV := 9223372036854775807; end;
+    end;
+  end
+  else
+  begin
+    loV := 0;
+    case sz of
+      1: hiV := 255;
+      2: hiV := 65535;
+      4: hiV := 4294967295;
+      else hiV := -1;   { 2^64-1 as a bit pattern -- see TYPEDATA_SIZE }
+    end;
+  end;
+end;
+
+{ Emit one TTypeData blob and point hdrOff's DataPtr at it. It takes every slot
+  rather than growing a per-kind overload precisely because the shape is uniform:
+  a category with nothing to say for a slot passes 0 / -1 and the slot stays
+  zero. elemRefOff < 0 = the element type has no RTTI blob, so ElemRef stays nil.
+  Returns the blob's Data[] offset so the caller can append a dims table. }
+function EmitTypeData(hdrOff: Integer; ordTy, fltTy, minV, maxV, elemKind,
+                      elemSize, elemCount, dimCount: Int64;
+                      elemRefOff: Integer): Integer;
+var td: Integer;
+begin
+  td := DataLen;
+  DataPutZeros(TYPEDATA_SIZE);
+  PatchDataU64(td + 0,  ordTy);
+  PatchDataU64(td + 8,  fltTy);
+  PatchDataU64(td + 16, minV);
+  PatchDataU64(td + 24, maxV);
+  PatchDataU64(td + 32, elemKind);
+  if elemRefOff >= 0 then AddDataPtrFix(td + 40, elemRefOff);
+  PatchDataU64(td + 48, elemSize);
+  PatchDataU64(td + 56, elemCount);
+  PatchDataU64(td + 64, dimCount);
+  AddDataPtrFix(hdrOff + 16, td);
+  Result := td;
+end;
+
+{ How many dimensions a named fixed-array type has. ArrTypeNDims is 0, not 1,
+  for a ONE-dimensional array: the ArrTypeDimLo/Span table is only filled from
+  two dimensions up (pasparser_decl.inc), and a 1-D array's single pair of
+  bounds lives in ArrTypeLo/ArrTypeHi instead. Reading NDims raw is how a 1-D
+  array would report DimCount=0 and a nil-looking bounds table. }
+function ArrTypeDimCount(ai: Integer): Integer;
+begin
+  Result := ArrTypeNDims[ai];
+  if Result < 2 then Result := 1
+  else if Result > MAX_ARR_DIMS then Result := MAX_ARR_DIMS;
+end;
+
+{ The static-array bounds table DimsPtr points at: DimCount {Lo,Hi} Int64 pairs,
+  appended straight after the TTypeData so one contiguous run covers the type.
+  ArrTypeDimSpan holds the element COUNT of a dimension, so its high bound is
+  lo + span - 1. Both array shapes are normalised into the SAME table here (see
+  ArrTypeDimCount) so the reader never has to know which one it has. }
+procedure EmitTypeDataDims(tdOff, ai: Integer);
+var d, dims, nd, lo, span: Integer;
+begin
+  nd := ArrTypeDimCount(ai);
+  dims := DataLen;
+  DataPutZeros(nd * TYPEDATA_DIM_SIZE);
+  if ArrTypeNDims[ai] < 2 then
+  begin
+    PatchDataU64(dims + 0, ArrTypeLo[ai]);
+    PatchDataU64(dims + 8, ArrTypeHi[ai]);
+  end
+  else
+    for d := 0 to nd - 1 do
+    begin
+      lo   := ArrTypeDimLo[ai * MAX_ARR_DIMS + d];
+      span := ArrTypeDimSpan[ai * MAX_ARR_DIMS + d];
+      PatchDataU64(dims + d * TYPEDATA_DIM_SIZE + 0, lo);
+      PatchDataU64(dims + d * TYPEDATA_DIM_SIZE + 8, lo + span - 1);
+    end;
+  AddDataPtrFix(tdOff + 72, dims);
+end;
+
+{ Ord(TTypeKind) for an element/component type, given the pxx tk and the enum
+  type id an enum element carries. An enum is tyInteger + an enum id in pxx, so
+  PxxTkToFPCKind alone would report tkInteger for it -- the one place the two
+  inputs are not interchangeable. }
+function ElemFPCKind(elemTk, elemEnumId: Integer): Integer;
+begin
+  if elemEnumId >= 0 then Result := 3   { tkEnumeration }
+  else Result := PxxTkToFPCKind(elemTk);
+end;
+
+{ The element type's own RTTI blob offset, or -1 when it has none: an enum's
+  PEnumRTTI, a class/record's TClassRTTI. Same idiom as TPropInfo.TypeRef. }
+function ElemRTTIOff(elemEnumId, elemRec: Integer): Integer;
+begin
+  Result := -1;
+  if (elemEnumId >= 0) and (elemEnumId < EnumTypeCount) then
+    Result := EnumTypeRTTIOff[elemEnumId]
+  else if elemRec >= REC_UCLASS_BASE then
+    Result := UClsRTTIOff[elemRec - REC_UCLASS_BASE];
+end;
+
 { Build the uniform "PTypeInfo" header -- {Kind:Int64; NamePtr:PString;
   DataPtr:Pointer}, 24 bytes on every target -- for every widened TypeInfo(T)
   request collected during parsing (RegisterTypeInfoReq). Runs right after
@@ -872,6 +1037,8 @@ end;
   pasparser_*.inc comment at the TypeInfo() call site. }
 procedure EmitTypeInfoHeaders;
 var i, hdr, strIdx, ci, kind: Integer; nm: AnsiString;
+    tdOff, elemTk, elemEnum, elemRec, elemSz: Integer;
+    ordTy, fltTy, loV, hiV: Int64;
 begin
   for i := 0 to TypeInfoReqCount - 1 do
   begin
@@ -887,8 +1054,13 @@ begin
         strIdx := InternStr(nm);
         AddDataPtrFix(hdr + 8, Strs[strIdx].Offset);
       end;
-      { DataPtr (hdr+16) stays nil: no extra TTypeData descriptor for scalars yet
-        (min/max/ordtype) -- add if/when a corpus target actually needs it. }
+      { DataPtr -> a TTypeData for every kind that has something to put in one:
+        the ordinals (OrdType + the type's full value range) and the floats
+        (FloatType). Strings, Variant and Pointer keep a nil DataPtr, because a
+        uniform payload of all-zeros says nothing a reader could use, and
+        "nil = no descriptor" is the cheaper contract. }
+      if ScalarTypeData(TypeInfoReqKey[i], ordTy, fltTy, loV, hiV) then
+        tdOff := EmitTypeData(hdr, ordTy, fltTy, loV, hiV, 0, 0, 0, 0, -1);
     end
     else if TypeInfoReqCat[i] = TYPEINFO_REQ_CAT_CLASS then
     begin
@@ -932,9 +1104,55 @@ begin
         strIdx := InternStr(nm);
         AddDataPtrFix(hdr + 8, Strs[strIdx].Offset);
       end;
-      { DataPtr stays nil, as for the scalars: no TTypeData descriptor yet.
-        The subrange's bounds live in AliasSubLo/Hi and the set's element enum
-        in AliasElemTk, so they are recoverable when a consumer needs them. }
+      { DataPtr -> TTypeData, one arm per thing an alias can DEFINE:
+          * string[N]  -> the length range 0..N (FPC's MaxLength)
+          * subrange   -> its DECLARED bounds, with the OrdType of the width pxx
+                          actually stores it in (see OrdTypeCode's note on why
+                          that is deliberately not FPC's narrower answer)
+          * set        -> the ELEMENT's kind, ord width, value range and RTTI
+                          blob. FPC's tkSet TTypeData is (OrdType, CompType) and
+                          this is the same two facts plus the range they imply.
+          * plain rename -> the base type's own scalar payload, which is what
+                          FPC does too: TypeInfo(TMyInt = Integer) reports
+                          LongInt's full range, measured.
+        A procedural type / method pointer gets none: its signature is a Procs[]
+        row, and inventing a shape for it before a consumer exists is exactly
+        what this ticket was held back to avoid. It needs no guard of its own --
+        its AliasTk is tyPointer or tyRecord, and ScalarTypeData answers False
+        for both. }
+      if AliasStrCap[ci] > 0 then
+        tdOff := EmitTypeData(hdr, 0, 0, 0, AliasStrCap[ci], 0, 0, 0, 0, -1)
+      else if AliasIsSub[ci] then
+      begin
+        if ScalarTypeData(AliasTk[ci], ordTy, fltTy, loV, hiV) then
+          tdOff := EmitTypeData(hdr, ordTy, fltTy, AliasSubLo[ci],
+                                AliasSubHi[ci], 0, 0, 0, 0, -1);
+      end
+      else if AliasTk[ci] = Ord(tySet) then
+      begin
+        elemTk   := AliasSetElemTk[ci];
+        elemEnum := AliasElemTk[ci];   { for a SET alias this slot is the element ENUM id, or -1 }
+        if (elemEnum >= 0) and (elemEnum < EnumTypeCount) then
+        begin
+          { pxx stores an enum in a 4-byte UNSIGNED slot -> otULong, which is
+            also what FPC 3.2.2 answers for `set of TEnum` (measured: ord=5). }
+          ordTy  := OrdTypeCode(4, False);
+          loV    := 0;
+          hiV    := EnumTypeValCount[elemEnum] - 1;
+          elemSz := 4;
+        end
+        else
+        begin
+          if not ScalarTypeData(elemTk, ordTy, fltTy, loV, hiV) then
+          begin ordTy := 0; loV := 0; hiV := 0; end;
+          elemSz := TypeSize(IntToTypeKind(elemTk));
+        end;
+        tdOff := EmitTypeData(hdr, ordTy, 0, loV, hiV,
+                              ElemFPCKind(elemTk, elemEnum), elemSz, 0, 0,
+                              ElemRTTIOff(elemEnum, REC_NONE));
+      end
+      else if ScalarTypeData(AliasTk[ci], ordTy, fltTy, loV, hiV) then
+        tdOff := EmitTypeData(hdr, ordTy, fltTy, loV, hiV, 0, 0, 0, 0, -1);
     end
     else if TypeInfoReqCat[i] = TYPEINFO_REQ_CAT_ARRAY then
     begin
@@ -951,8 +1169,30 @@ begin
         strIdx := InternStr(nm);
         AddDataPtrFix(hdr + 8, Strs[strIdx].Offset);
       end;
-      { DataPtr stays nil: no TTypeData yet. Element type and bounds are in
-        ArrTypeElemTk / ArrTypeDimLo / ArrTypeDimSpan when one is needed. }
+      { DataPtr -> TTypeData: the element's kind, size and RTTI blob for both
+        shapes, plus — for a STATIC array — the total element count and the
+        per-dimension bounds table. A dynamic array reports its nesting depth in
+        DimCount (`array of array of T` is 2) and a nil DimsPtr, because its
+        bounds are a runtime property of the value, not of the type. }
+      elemTk   := ArrTypeElemTk[ci];
+      elemEnum := ArrTypeElemEnumId[ci];
+      elemRec  := ArrTypeElemRec[ci];
+      if (elemRec >= REC_UCLASS_BASE) and (elemTk = Ord(tyRecord)) then
+        elemSz := RecSize(elemRec)
+      else
+        elemSz := TypeSize(IntToTypeKind(elemTk));
+      if ArrTypeIsDyn[ci] then
+        tdOff := EmitTypeData(hdr, 0, 0, 0, 0, ElemFPCKind(elemTk, elemEnum),
+                              elemSz, 0, ArrTypeDynDepth[ci],
+                              ElemRTTIOff(elemEnum, elemRec))
+      else
+      begin
+        tdOff := EmitTypeData(hdr, 0, 0, 0, 0, ElemFPCKind(elemTk, elemEnum),
+                              elemSz, ArrTypeHi[ci] - ArrTypeLo[ci] + 1,
+                              ArrTypeDimCount(ci),
+                              ElemRTTIOff(elemEnum, elemRec));
+        EmitTypeDataDims(tdOff, ci);
+      end;
     end
     else if TypeInfoReqCat[i] = TYPEINFO_REQ_CAT_RECORD then
     begin

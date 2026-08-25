@@ -4277,6 +4277,16 @@ test-core: $(COMPILER)
 	# multi-dimension array is still ONE tkArray, not a nested one.
 	./$(COMPILER) -Fulib/rtl test/test_typeinfo_array_pointer.pas $(TESTTMP)/test_typeinfo_arrptr26
 	test "$$($(TESTTMP)/test_typeinfo_arrptr26)" = "$$(printf 'TArr 12\nTDyn 21\nTArr2 12\nPointer 29\nVariant 11')"
+	# …and the TTypeData payloads those headers' DataPtr now carries — OrdType,
+	# MinValue/MaxValue, a set's element enum, an array's element type and its
+	# per-dimension bounds. Diffed against an FPC 3.2.2 oracle; the LAYOUT is
+	# ours (nothing outside lib/rtl/typinfo.pas reads these bytes, so no
+	# byte-parity is owed) but every VALUE below is FPC's, with exactly two
+	# documented exceptions: a SUBRANGE's ord is OUR storage width (4, where FPC
+	# narrows to 1 — its bounds still match), and LongWord's max is honest at
+	# 4294967295 where FPC's 32-bit MaxValue slot truncates it to -1.
+	./$(COMPILER) -Fulib/rtl test/test_typeinfo_typedata.pas $(TESTTMP)/test_typeinfo_typedata26
+	test "$$($(TESTTMP)/test_typeinfo_typedata26)" = "$$(printf 'ShortInt kind=1 name=ShortInt ord=0 min=-128 max=127\nByte kind=1 name=Byte ord=1 min=0 max=255\nSmallInt kind=1 name=SmallInt ord=2 min=-32768 max=32767\nWord kind=1 name=Word ord=3 min=0 max=65535\nInteger kind=1 name=Integer ord=4 min=-2147483648 max=2147483647\nLongWord kind=1 name=LongWord ord=5 min=0 max=4294967295\nInt64 kind=19 name=Int64 ord=6 min=-9223372036854775808 max=9223372036854775807\nBoolean kind=18 name=Boolean ord=1 min=0 max=1\nChar kind=2 name=Char ord=1 min=0 max=255\nSingle kind=4 name=Single float=0\nDouble kind=4 name=Double float=1\nTSub kind=1 name=TSub ord=4 min=1 max=10\nTSubB kind=1 name=TSubB ord=4 min=-5 max=5\nTMyInt kind=1 name=Integer ord=4 min=-2147483648 max=2147483647\nTStr20 kind=7 name=TStr20 ord=0 min=0 max=20\nTS kind=5 name=TS ord=5 elemkind=3 elemsize=4 min=0 max=2 comp=TEn compcount=3\nTArr kind=12 name=TArr elemkind=1 elemsize=4 elemcount=4 dims=1 [0..3]\nTArr2 kind=12 name=TArr2 elemkind=1 elemsize=1 elemcount=6 dims=2 [1..2] [1..3]\nTDyn kind=21 name=TDyn elemkind=1 elemsize=4 elemcount=0 dims=1\nPointer kind=29 name=Pointer <no typedata>\nVariant kind=11 name=Variant <no typedata>')"
 	# TypeInfo(T) where T is a GENERIC PARAMETER — the case the ticket was opened
 	# for. Needs no separate path (pxx substitutes the parameter's token
 	# textually before the parser sees the body), and this proves it instead of

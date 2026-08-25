@@ -131,9 +131,11 @@ type
     generics substitute the type parameter's token textually before this ever
     runs, so `TypeInfo(T)` inside a specialized body is just `TypeInfo(Integer)`
     etc by the time the parser sees it — no separate generic-param path needed.
-    DataPtr is category-specific: nil for a plain scalar/string; the existing
-    TClassRTTI blob for a class (Kind=tkClass); the existing record LAYOUT
-    descriptor for a record with managed fields, else nil (Kind=tkRecord).
+    DataPtr is category-specific: a TTypeData (below) for the ordinals, floats,
+    subranges, sets, string[N] and arrays; the existing TClassRTTI blob for a
+    class (Kind=tkClass); the existing record LAYOUT descriptor for a record
+    with managed fields, else nil (Kind=tkRecord); nil for a plain string,
+    Variant, Pointer or procedural type, which have nothing to put in one.
     Enum TypeInfo() does NOT go through this header -- it still yields a bare
     PEnumRTTI, unchanged, so GetEnumName/GetEnumNameCount below keep working
     exactly as they did before this widening (fpjson's RTTI streaming gate). }
@@ -145,7 +147,79 @@ type
     {$ifdef CPU32} _pad_data: LongInt; {$endif}
   end;
   PTypeInfo = ^TTypeInfoHdr;
-  PTypeData = PTypeInfo;   { same header for now — DataPtr carries anything extra }
+
+  { FPC's TOrdType and TFloatType, same declared order (rtl/inc/rttih.inc), so
+    `case GetTypeData(ti)^.OrdType of otSByte: ...` — the idiom Generics.Defaults
+    selects a comparer with — compiles and means the same thing unmodified. }
+  TOrdType   = (otSByte, otUByte, otSWord, otUWord,
+                otSLong, otULong, otSQWord, otUQWord);
+  TFloatType = (ftSingle, ftDouble, ftExtended, ftComp, ftCurr);
+
+  { What DataPtr points at for every kind that has more to say than a name
+    (compiler/rtti_emit.inc EmitTypeData; layout documented at TYPEDATA_SIZE in
+    compiler/defs.inc). FPC's TTypeData is a VARIANT record keyed on TTypeKind;
+    this one is a single fixed shape, and that is a deliberate choice we are free
+    to make because real code reaches RTTI through THIS unit's declarations,
+    which we supply — no byte-layout parity with FPC is owed. Only the VALUES
+    are FPC's, and every one of them was diffed against an FPC 3.2.2 oracle.
+
+    A kind with nothing to say for a field leaves it zero. Read the fields your
+    Kind defines and ignore the rest — that is the whole contract, and it is why
+    there is no variant part to get wrong.
+
+    ONE deliberate value divergence, and it is the honest answer rather than the
+    parity one: OrdType reports the width PXX ACTUALLY STORES THE VALUE IN. For
+    all thirteen builtin ordinals that is also FPC's answer. It differs for a
+    SUBRANGE, because pxx does not narrow a subrange's storage the way FPC does
+    — `TSub = 1..10` is 4 bytes here and 1 byte there, so OrdType is otSLong
+    where FPC says otSByte, while MinValue/MaxValue still carry the declared
+    bounds 1..10 and match FPC exactly. A comparer picked from OrdType reads
+    that many bytes, so FPC's narrower answer would make it read one byte of a
+    four-byte value: parity would be the bug here. }
+  TTypeData = record
+    { tkInteger/tkInt64/tkQWord/tkChar/tkWChar/tkBool: the value's width.
+      tkSet: the ELEMENT's width. Everything else: otSByte (0), meaning
+      "not applicable" — check Kind before you believe this field. }
+    OrdType:   TOrdType;
+    _pad_ord:  LongInt;   { the blob's slots are a uniform 8 bytes on every target }
+    { tkFloat: which float. ftSingle (0) otherwise, so check Kind first. It gets
+      its OWN slot rather than sharing OrdType's, because a fixed-shape record
+      has no variant part through which one slot could carry both names, and
+      `td^.FloatType` is how the calling code already spells it. }
+    FloatType: TFloatType;
+    _pad_flt:  LongInt;
+    { The ordinal range. tkSet: the ELEMENT's range. tkSString: 0..N, i.e.
+      MaxValue is FPC's MaxLength. A QWord's 2^64-1 does not fit a signed slot,
+      so for otUQWord these are BIT PATTERNS — read QWord(td^.MaxValue). FPC has
+      the same problem one size down and answers -1 for LongWord's MaxValue;
+      ours is honest at 32 bits and only casts at 64. }
+    MinValue:  Int64;
+    MaxValue:  Int64;
+    { The element/component type of a set or an array: Ord(TTypeKind), 0 = none. }
+    ElemKind:  Int64;
+    { The element type's OWN RTTI blob — PEnumRTTI for an enum element,
+      PClassRTTI for a class one — or nil. Same idiom as TPropInfo.TypeRef, and
+      deliberately not a nested PTypeInfo: a nested header would mean the
+      compiler emitting type info for types the program never named. }
+    ElemRef:   Pointer;
+    {$ifdef CPU32} _pad_elemref: LongInt; {$endif}
+    ElemSize:  Int64;     { bytes per element (arrays, sets); 0 for a scalar }
+    ElemCount: Int64;     { tkArray: total element count, all dimensions flattened }
+    DimCount:  Int64;     { tkArray: dimension count. tkDynArray: nesting depth }
+    { tkArray: -> DimCount TTypeDataDim records, one per dimension. nil for a
+      dynamic array, whose bounds belong to the value and not to the type. }
+    DimsPtr:   Pointer;
+    {$ifdef CPU32} _pad_dims: LongInt; {$endif}
+  end;
+  PTypeData = ^TTypeData;
+
+  TTypeDataDim = record
+    Lo: Int64;
+    Hi: Int64;
+  end;
+  PTypeDataDim = ^TTypeDataDim;
+  TTypeDataDims = array[0..5] of TTypeDataDim;   { MAX_ARR_DIMS }
+  PTypeDataDims = ^TTypeDataDims;
 
   TPropInfo = record
     NamePtr: PString;
@@ -220,6 +294,13 @@ procedure SetSetProp(instance: Pointer; p: PPropInfo; ordinal: Integer);
   GetEnumName), spelled with FPC's PTypeInfo parameter so those sources compile unchanged. }
 function GetEnumName(TypeInfo: PEnumRTTI; Value: Integer): string;
 function GetEnumNameCount(TypeInfo: PEnumRTTI): Integer;
+
+{ The TTypeData behind a PTypeInfo, spelled the way FPC code spells it —
+  `GetTypeData(TypeInfo(T))^.OrdType`. In FPC this has to skip a variable-length
+  inline name (`pointer(ti)+2+Length(ti^.Name)`); our header stores the payload
+  behind a pointer instead, so it is one load. nil when the kind has no
+  descriptor — check it, because a plain string or a Variant genuinely has none. }
+function GetTypeData(TypeInfo: PTypeInfo): PTypeData;
 
 implementation
 
@@ -522,6 +603,14 @@ begin
     PMethod(addr)^.Code := v.Code;
     PMethod(addr)^.Data := v.Data;
   end;
+end;
+
+function GetTypeData(TypeInfo: PTypeInfo): PTypeData;
+begin
+  if TypeInfo = nil then
+    GetTypeData := nil
+  else
+    GetTypeData := PTypeData(TypeInfo^.DataPtr);
 end;
 
 { Map an enum member name to its ordinal via the enum RTTI. -1 if not found. }

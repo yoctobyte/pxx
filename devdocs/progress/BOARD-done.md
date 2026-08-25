@@ -2059,6 +2059,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-typed-const-record | A | 50 | feature | feature: typed constant record initializer (`const r: TRec = (...)`) | — |
 | feature-typed-instruction-encoders | A | 50 | feature | Typed instruction encoders for codegen | — |
 | feature-typeinfo-all-types | A | 50→72 | feature | `TypeInfo(T)` for every type, not just enums | — |
+| feature-typeinfo-ttypedata-payloads | A | 65 | feature | TypeInfo(T) now answers kind + name for every category that has a consumer, but every non-class/record blob writes a nil DataPtr — no TTypeData. The data is all already in the compiler (subrange bounds, set element enum, array element type and dims); this is emission, not discovery. Plus the three categories with no consumer yet: interfaces (14), metaclasses (28), Currency (4, which needs a type-system change first). | — |
 | feature-types-unit | B | 50 | feature | `types` unit (System.Types core) — geometry records + TDuplicates | — |
 | feature-unified-heap-allocator | A | 50 | feature | Unified syscall-free heap allocator | — |
 | feature-untyped-parameters | B | 50 | feature | Untyped `var` / `const` / `out` parameters | — |
@@ -2074,6 +2075,7 @@ should not read it to find out what to do. Grep it freely._
 | feature-zero-init-contract | A | 65 | feature | Zero-init contract — one library-owned managed-slot zeroing guarantee | — |
 | fix-sat-dpll-needs-parens-after-paramless-flip | B | 50 | fix | sat DPLL: bare paramless recursion needs `DPLL()` after the paramless flip | — |
 | flaky-corpus-runner-shared-tmp-path | C | 55 | flaky | flaky: cJSON / lua corpus runners race on a shared /tmp input path under parallel testing | — |
+| gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo | B | 78 | gap | PTypeData is declared as `= PTypeInfo` with a `same header for now` note, and TTypeInfo carries no OrdType / MinValue / MaxValue / FloatType. Any RTTI-driven code that switches on a type's ordinal width — Generics.Defaults' comparer selection, and the whole TypInfo idiom generally — cannot compile. | feature-typeinfo-ttypedata-payloads |
 | idea-progress-board-md | B | 50 | idea | On-demand `BOARD.md` kanban grid | — |
 | lib-intToStr-missing | B | 50 | lib | `IntToStr` not available | — |
 | lib-string-copy-trim-missing | B | 50 | lib | String `Copy` / `Trim` not available | — |

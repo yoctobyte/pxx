@@ -5,7 +5,7 @@ track: B
 prio: 78
 type: gap
 blocked-by: [feature-typeinfo-ttypedata-payloads]
-status: backlog_new
+status: done
 owner: ""
 created: 2026-08-25
 summary: "PTypeData is declared as `= PTypeInfo` with a `same header for now` note, and TTypeInfo carries no OrdType / MinValue / MaxValue / FloatType. Any RTTI-driven code that switches on a type's ordinal width — Generics.Defaults' comparer selection, and the whole TypInfo idiom generally — cannot compile."
@@ -64,3 +64,47 @@ than modelling the whole variant record and is the right first rung.
 [[feature-pascal-corpus-generics]] — the wall after
 [[bug-p-new-as-a-function-over-a-pointer-type-is-undefined]] cleared, at
 `generics.defaults.pas:2082`.
+
+---
+
+## Done — 2026-08-25, by Track A
+
+Nothing is left for Track B here. This gap arriving is what unparked
+[[feature-typeinfo-ttypedata-payloads]] (which had been held at prio 25 with an
+explicit "do it when a consumer needs it, so the layout is designed against a
+real reader"), and the reader it was then designed against is the
+`SelectIntegerComparer` snippet at the top of this ticket.
+
+`lib/rtl/typinfo.pas` now declares `TOrdType`, `TFloatType`, a real
+`TTypeData` record with `PTypeData = ^TTypeData`, and `GetTypeData` spelled the
+way FPC code spells it. The compiler emits the payload
+(`compiler/rtti_emit.inc` `EmitTypeData`), so the fields carry values rather
+than existing as declarations: every one was diffed against an FPC 3.2.2 oracle.
+
+Verified with the exact shape this ticket reported — `ATypeData.OrdType`
+auto-deref in a `case` over `otSByte..otUQWord`, reached through
+`GetTypeData(TypeInfo(T))` — for all eight ordinal widths and a subrange, plus
+the `ATypeData.FloatType` arm over `ftSingle`/`ftDouble`.
+
+Two things the scope note above asked about, answered explicitly:
+
+- **`FloatType` is a real field, not a cast.** It has its own slot; the first
+  cut had it sharing `OrdType`'s and that was changed precisely because this
+  ticket names it as something calling code spells by name.
+- **The class fields (`ClassType`, `ParentInfo`, `PropCount`, `UnitName`) are
+  deliberately NOT on `TTypeData`.** A class's `DataPtr` already points at the
+  `TClassRTTI` blob `typinfo.pas` has always read, which carries `ParentRTTI`,
+  `PropCount` and the rest; re-pointing it would break every existing reader for
+  no gain. If a vendor source insists on the `GetTypeData(ti)^.ClassType`
+  spelling, that is a separate, additive item — file it when one does.
+
+**A pin is required** before anything outside this branch sees the payloads: the
+pinned binary emits a nil `DataPtr`, and (measured, same source) it also answers
+`d = nil` FALSE for a `PTypeData` assigned from one — so a correct nil check
+segfaults when built against the pin and behaves when built at HEAD.
+
+Landed with [[feature-typeinfo-ttypedata-payloads]]; the categories that still
+have no consumer moved to [[feature-typeinfo-last-categories]].
+
+## Log
+- 2026-08-25 — resolved, commit PENDING-COMMIT.
