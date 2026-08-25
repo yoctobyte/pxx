@@ -48,4 +48,4 @@ hit the arm consumes both tokens and yields the address form (`kind := 4`).
 then 1865, so it was blocking two further findings behind it.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit bd50e76ed.

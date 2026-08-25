@@ -57,4 +57,4 @@ Driving `uses generics.defaults` for [[feature-pascal-corpus-generics]] — the 
 at line 1569, after the class-const `@` fix moved it up from 411.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit bd50e76ed.

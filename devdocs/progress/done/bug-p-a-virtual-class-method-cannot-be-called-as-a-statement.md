@@ -54,4 +54,4 @@ Regression test `test/test_virtual_class_method_called_as_a_statement.pas`,
 [[feature-pascal-corpus-generics]], wall at `generics.defaults.pas:1865`.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit bd50e76ed.
