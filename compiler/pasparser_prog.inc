@@ -439,7 +439,22 @@ begin
   end;
 end;
 
-procedure EnsureTObjectRootMethods;
+{ …minus Destroy. The per-unit pre-scan in pasparser_proc.inc calls this one:
+  its trigger is a dot-preceded Equals/GetHashCode/ToString, Destroy has nothing
+  to do with that, and minting a Destroy ROW mid-parse of a unit — before that
+  unit's own classes are declared, where the program-level caller runs at the
+  END of pass 1 with every class already in — is measured to corrupt the
+  program. With `lib/rtl/json.pas` triggering the scan,
+  test_nilpy_json_reparse_heap SEGFAULTED and test_nilpy_json_module dropped an
+  output line; disabling ONLY the Destroy registration made both pass with the
+  trigger still firing, which is what identifies this half rather than the
+  `builtin` pull (that half was eliminated the same way, separately).
+
+  WHY an early Destroy row corrupts is still not understood, and that is the
+  open half of bug-a-minting-tobject-root-methods-from-a-unit-corrupts-the-heap.
+  This split removes the only way to reach it — the program path mints Destroy
+  after all classes are parsed — rather than explaining it. }
+procedure EnsureTObjectRootMethodsEx(withDestroy: Boolean);
 var ci, n: Integer;
 begin
   n := RootVMTSlotCount;
@@ -453,7 +468,7 @@ begin
     idempotency guard below would have made Destroy's row depend on whether the
     program happened to mention ToString.
     bug-p-free-through-base-reference-skips-destroy }
-  if (ROOT_VMT_DESTROY < n) and (FindUMeth(ci, 'Destroy') < 0) then
+  if withDestroy and (ROOT_VMT_DESTROY < n) and (FindUMeth(ci, 'Destroy') < 0) then
     AddTObjectRootMethod(ci, ROOT_VMT_DESTROY, 'Destroy', '__pxxTObjectDestroy');
   if FindUMeth(ci, 'Equals') >= 0 then Exit;   { idempotent }
   if ROOT_VMT_EQUALS < n then
@@ -462,6 +477,11 @@ begin
     AddTObjectRootMethod(ci, ROOT_VMT_GETHASHCODE, 'GetHashCode', '__pxxTObjectGetHashCode');
   if ROOT_VMT_TOSTRING < n then
     AddTObjectRootMethod(ci, ROOT_VMT_TOSTRING, 'ToString', '__pxxTObjectToString');
+end;
+
+procedure EnsureTObjectRootMethods;
+begin
+  EnsureTObjectRootMethodsEx(True);
 end;
 
 { Fill every class's UNRESOLVED reserved root slots with the default bodies.

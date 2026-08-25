@@ -4313,7 +4313,7 @@ begin
     if unitNeedsRootMeth and (not NoDefaultRtl) and (not TargetIsEspClass) then
     begin
       ParseUsesUnitAmbient('builtin');
-      EnsureTObjectRootMethods;
+      EnsureTObjectRootMethodsEx(False);   { NOT Destroy — see the note on that routine }
     end;
 
     { Load the implicit textfile surface (builtin first, for its numeric write

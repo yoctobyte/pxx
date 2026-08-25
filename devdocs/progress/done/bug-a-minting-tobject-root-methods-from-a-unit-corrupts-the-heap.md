@@ -5,8 +5,8 @@ track: A
 prio: 45
 type: bug
 blocked-by: []
-status: backlog_new
-owner: ""
+status: done
+owner: claude-A
 created: 2026-08-25
 summary: "When the per-unit pre-scan fired ParseUsesUnitAmbient('builtin') + EnsureTObjectRootMethods while parsing lib/rtl/json.pas, every NilPy program importing json broke: test_nilpy_json_reparse_heap SEGFAULTED and test_nilpy_json_module silently dropped an output line. The trigger was a false positive and has been fixed; that MINTING those rows from a unit can corrupt a program at all has not been."
 ---
@@ -76,3 +76,57 @@ definition-reads-as-a-use false positive (a program that defines a class with a
 `ToString` method drags in the root-method surface). It does not crash there, so
 it is a size/waste issue rather than a correctness one — but it is the same
 missing check, and worth fixing in the same edit as this.
+
+
+## MEASURED and NARROWED 2026-08-25 — it is the `Destroy` row, not the `builtin` pull
+
+Both halves were split and run separately, with the false trigger deliberately
+re-enabled so `lib/rtl/json.pas` fired the scan:
+
+| unit pre-scan does | `test_nilpy_json_module` | `test_nilpy_json_reparse_heap` |
+| --- | --- | --- |
+| `ParseUsesUnitAmbient('builtin')` + `EnsureTObjectRootMethods` | drops a line | **SIGSEGV** |
+| `ParseUsesUnitAmbient('builtin')` only | pass | pass |
+| both, with ONLY the `Destroy` registration disabled | pass | pass |
+
+So pulling `builtin` mid-unit is harmless, and minting `Equals` /
+`GetHashCode` / `ToString` is harmless. **Minting a `Destroy` ROW on TObject
+from a unit pre-scan is what corrupts the program.**
+
+That is consistent with WHEN each caller runs — the program-level caller runs at
+the END of pass 1, with every class already declared, while the unit pre-scan
+runs before its own unit's classes are parsed — but the mechanism by which an
+early `Destroy` row turns into a segfault is **not** established, and is
+deliberately not written here as a guess. (The obvious suspect, the inline
+`PXXClassFinalize` double-finalize, is explicitly guarded by `isNilPy` in
+`ir.inc`, so the obvious story does not survive a read.)
+
+## Fixed by removing the only way to reach it
+
+`EnsureTObjectRootMethods` is split: `EnsureTObjectRootMethodsEx(withDestroy)`
+carries the body, the old name calls it with `True`, and the unit pre-scan calls
+it with `False`. Destroy has nothing to do with that scan's trigger — a
+dot-preceded `Equals`/`GetHashCode`/`ToString` — and the routine's own comment
+already said Destroy is registered separately because it comes from a different
+unit. The program path still mints it at end of pass 1, after every class.
+
+Verified the fix protects the ACTUAL hazardous path, not just the current one:
+with the false trigger re-enabled so json.pas fires the scan again, both `.npy`
+tests pass. `test_tobject_root_methods_inside_a_unit` (a unit with a real
+`L.Equals(R)` call) and `test_pascal_free_through_base_destroy` (the ticket that
+put Destroy in this routine) are both unchanged.
+
+## Still open, and why this stays worth a ticket
+
+Nothing explains the crash. It is now unreachable rather than understood, so a
+future caller that mints a root method early can rediscover it — and the failure
+mode is a segfault in one program and a *silently missing output line* in
+another, which is the expensive kind. Re-file or reopen if a third caller
+appears. Reproduce by making the unit pre-scan call
+`EnsureTObjectRootMethodsEx(True)` and reverting the `function`/`procedure`
+guard beside it.
+
+Gate: `make compiler/pascal26` converged, `tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-25 — resolved, commit PENDING-COMMIT.

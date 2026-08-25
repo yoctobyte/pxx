@@ -486,6 +486,7 @@ function BuildMetaclassNew(crefNode, ci, mmi: Integer): Integer; forward;
 function ParseStatementAST: Integer; forward;
 procedure EnableCoroutineRuntime; forward;
 procedure EnsureTObjectRootMethods; forward;   { real body in pasparser_prog.inc; the per-unit pre-scan in pasparser_proc.inc mints TObject's rows before a unit body parses }
+procedure EnsureTObjectRootMethodsEx(withDestroy: Boolean); forward;   { …the unit pre-scan's variant: Equals/GetHashCode/ToString only }
 function ParseWithStatementAST: Integer; forward;
 function ParseAsmStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;
