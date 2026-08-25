@@ -140,4 +140,4 @@ that would have answered this ticket's root-cause question in one command.
   that does not exist yet, and keeps the old behaviour.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 99939b3a1.
