@@ -5,11 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 unfinished:21 blocked:7 backlog:291 backlog_new:15 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2329 rejected:40`
+`urgent:2 working:1 unfinished:21 blocked:7 backlog:290 backlog_new:16 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2332 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `feature-pascal-corpus-generics` [P] — owner: claude-A
 
 ## urgent (2) — jump the queue
 
@@ -59,7 +59,6 @@ _none — no lane is locked._
 - `[p 65] [B]` bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
 - `[p 65] [T]` bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
-- `[p 65] [P]` feature-pascal-corpus-generics
 - `[p 65] [P]` feature-pascal-corpus-oop
 - `[p 60] [N]` bug-n-inferred-return-type-of-true-division-is-int
 - `[p 60] [T]` bug-t-the-push-rate-starves-breadth-coverage-entirely
@@ -82,5 +81,6 @@ _none — no lane is locked._
 - `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
 - `[p 53] [S]` feature-esp-peripheral-callback-api
 - `[p 50] [U]` decide-release-signing-key-custody (unblocks 1)
+- `[p 50] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 
 _263 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

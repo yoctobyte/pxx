@@ -5,7 +5,7 @@ track: P
 prio: 45
 type: bug
 blocked-by: []
-status: backlog_new
+status: done
 owner: claude-A
 created: 2026-08-25
 summary: "Five copies of the same `is this node a call?` test each listed AN_CALL / AN_VIRTUAL_CALL / AN_INTF_CALL / AN_CALL_IND and every one of them forgot AN_CLASS_VIRTUAL_CALL, so `TFoo.Bump;` — a virtual class method called for its side effect, not its result — was refused at statement level. FIXED this session by normalising the five copies onto one predicate."
@@ -52,3 +52,6 @@ Regression test `test/test_virtual_class_method_called_as_a_statement.pas`,
 # Where it was found
 
 [[feature-pascal-corpus-generics]], wall at `generics.defaults.pas:1865`.
+
+## Log
+- 2026-08-25 — resolved, commit PENDING-COMMIT.

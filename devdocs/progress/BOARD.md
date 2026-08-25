@@ -11,9 +11,11 @@ lives in git, not in a timestamp._
 | bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method | N | 70 | bug | A callable value is silently accepted where `str` is declared, and no longer compares equal to itself — bisected to `9bbbbef6c` | — |
 | bug-t-the-native-tier-times-out-and-publishes-a-contentless-red | T | 70 | bug | Every native run on plexus since 14:28 today has ended at wall 3600.x — the one-hour cap — and publishes verdict RED. The last three carry new_red: [] AND still_red: [], i.e. a RED with nothing attributed: the run is killed before it can name anything. So Track T has had no usable verdict for six hours while looking, to --status and to every agent, exactly like a persistent regression. A timeout must not publish as RED. | — |
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 
 ## unfinished (21)
 
@@ -53,7 +55,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (291)
+## backlog (290)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -285,7 +287,6 @@ _none_
 | feature-parallel-load-sampler-refine | B | 20 | feature | Parallel load sampler — refinements (ramp/EMA, BSD/cgroup) | feature-os-targets-bsd-mac |
 | feature-pascal-builtin-tobject-class | P | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | — |
 | feature-pascal-corpus-expansion | P | 15 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
-| feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | — |
 | feature-pascal-corpus-oop | P | 65 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-pascal-corpus-passrc | P | 45 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
 | feature-pascal-management-operators-copy-and-addref | P | 35 | feature | `class operator Copy` / `AddRef` are recognised but never dispatched | — |
@@ -349,7 +350,7 @@ _none_
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (15)
+## backlog_new (16)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -357,6 +358,7 @@ _none_
 | bug-a-a-riscv32-diagnostic-names-the-wrong-target | A | 20 | bug | `--target=riscv32` on a program with an external cdecl symbol fails with `target esp32: external (dynamic) symbols not yet supported`. The user typed riscv32, the message says esp32, and the two are different things — riscv32 is a hosted Linux target in its own right, not only the ESP32-C3 profile. One shared arm, one hard-coded name. | — |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
 | bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent | P | 35 | bug | `PG = ^TG` with `TG = array[0..1, 0..2] of LongWord`: `qg^[i, j]` prints `0 1 2 1 2 10` where FPC prints `0 1 2 10 11 12` — the comma subscript is not flattened against the pointee's dims — and `Length(qg^)` answers 6 (the flat extent) where FPC answers 2 (the first dimension). Predates and is not caused by the single-dim fix; the metadata it needs is now present. | — |
+| bug-p-a-pointer-to-a-pointer-to-a-record-cannot-be-dereferenced-twice | P | 40 | bug | With `PPVmt = ^PVmt; PVmt = ^TVmt`, `pp^^.__ClassRef` is refused with `dereferenced value is not a pointer`, and Delphi mode's auto-deref spelling `PPVmt(pp)^.__ClassRef` resolves REC_NONE, so the member becomes a plain AN_FIELD of whatever name follows. Both work in fpc 3.2.2. This is the wall rtl-generics' Generics.Defaults stops at. | — |
 | bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 30 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
 | bug-p-an-array-returning-call-cannot-be-indexed-directly | P | 30 | bug | `MakeDyn(3)[2]` fails with `cannot index the result of an array-returning function directly — assign it to a variable first`. fpc 3.2.2 compiles and runs it. `Length(MakeDyn(3))` on the same call already works, so the call result IS materialised somewhere the intrinsic can reach; only the subscript path declines it. | — |
 | bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one | P | 30 | bug | `PDyn = ^TDyn` with `TDyn = array of LongWord`: after `SetLength(d, 5)`, `Length(pdy^)` answers 1 and `High(pdy^)` answers 0 where FPC answers 5 and 4 — while `pdy^[1]` reads the right element. The pointee is a HANDLE, so the [data-8] header is one indirection further than the runtime path looks. | — |
@@ -582,9 +584,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2329)
+## done (2332)
 
-2329 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2332 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -640,7 +642,6 @@ _none_
 - [p 65] [B] bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
 - [p 65] [T] bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - [p 65] [C] feature-c-csmith-differential-fuzzing
-- [p 65] [P] feature-pascal-corpus-generics
 - [p 65] [P] feature-pascal-corpus-oop
 - [p 60] [N] bug-n-inferred-return-type-of-true-division-is-int
 - [p 60] [T] bug-t-the-push-rate-starves-breadth-coverage-entirely
@@ -726,6 +727,7 @@ _none_
 - [p 40] [N] bug-n-tk-got-files-are-invisible-to-testmgr-privatization
 - [p 40] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
+- [p 40] [P] bug-p-a-pointer-to-a-pointer-to-a-record-cannot-be-dereferenced-twice
 - [p 40] [P] bug-p-a-record-typed-var-initialiser-is-refused
 - [p 40] [P] bug-p-length-of-a-string-literal-plus-anything-does-not-parse
 - [p 40] [T] bug-t-twatch-status-says-down-while-the-daemon-is-alive-and-testing

@@ -5,7 +5,7 @@ track: P
 prio: 45
 type: bug
 blocked-by: []
-status: backlog_new
+status: done
 owner: claude-A
 created: 2026-08-25
 summary: "TObject's three root methods are synthesised on demand by a pre-scan that only ran over the MAIN program's token range, so `obj.ToString` compiled at top level and failed with `unknown method` from inside a `uses`d unit. FIXED this session; ticket filed for the record with the regression test."
@@ -55,3 +55,6 @@ Regression test `test/test_tobject_root_methods_inside_a_unit.pas` +
 
 Driving `uses generics.defaults` for [[feature-pascal-corpus-generics]] — the wall
 at line 1569, after the class-const `@` fix moved it up from 411.
+
+## Log
+- 2026-08-25 — resolved, commit PENDING-COMMIT.

@@ -5,7 +5,7 @@ track: P
 prio: 45
 type: bug
 blocked-by: []
-status: backlog_new
+status: done
 owner: claude-A
 created: 2026-08-25
 summary: "Inside a class body, `const P: Pointer = @Other;` could not see `Other` — class consts live under a mangled symtab key, so the bare name missed `FindSym`, the `@` arm fell through to the ordinal path (which cannot consume `@name`), and the parser reported `unexpected token` at the NEXT declaration, several lines away. FIXED this session."
@@ -46,3 +46,6 @@ hit the arm consumes both tokens and yields the address form (`kind := 4`).
 [[feature-pascal-corpus-generics]] — this was the FIRST wall in
 `generics.defaults.pas` (line 411); clearing it moved the frontier to 1569 and
 then 1865, so it was blocking two further findings behind it.
+
+## Log
+- 2026-08-25 — resolved, commit PENDING-COMMIT.
