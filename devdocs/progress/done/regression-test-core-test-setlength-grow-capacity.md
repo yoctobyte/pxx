@@ -50,4 +50,4 @@ land on the same arm.
 
 The positive side is covered by `test/test_dynamic_array_concatenation.pas`.
 `tools/gate.sh quick` GREEN.
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 6ed9cf368.

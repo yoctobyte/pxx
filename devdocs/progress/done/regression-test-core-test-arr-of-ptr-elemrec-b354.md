@@ -78,4 +78,4 @@ Doctrine note for the next reader: the `582cdc934` write-up justified the shared
 placement with *"every reader names a FIELD offset"* and 141 lib units compiling
 unchanged. That sweep never compiled `test/`, which is where the counterexample
 lives — the widening was the guess, and Track T is what caught it.
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 6ed9cf368.
