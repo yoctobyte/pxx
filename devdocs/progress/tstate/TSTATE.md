@@ -9,6 +9,6 @@
 ## Open regressions
 - **lib-test#src:test/lib_mimic_xml_etree_elementtree.npy** — test/lib_mimic_xml_etree_elementtree.npy (plexus): bad `fd93e4a71c37`, last good `98ed38202254`, 137 commit(s) in range
 - **test-aarch64#src:test/test_forin_member_access.pas** — test/test_forin_member_access.pas tools/run_target.sh (plexus): bad `ab584382edcd`, last good `d2cb6721e175`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_type_name_of_a_big_int.npy** — test/test_nilpy_type_name_of_a_big_int.npy test/test_nilpy_type_name_of_a_big_int.expected (plexus): bad `44193e547f6d`, last good `d2cb6721e175`, 23 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_type_name_of_a_big_int.npy** — test/test_nilpy_type_name_of_a_big_int.npy test/test_nilpy_type_name_of_a_big_int.expected (plexus): bad `193d260af661`, last good `d2cb6721e175`, 11 commit(s) in range
 - **test-pascal-conformance#shard5/6** — tools/run_pascal_conformance.sh (plexus): bad `44193e547f6d`, last good `d2cb6721e175`, 23 commit(s) in range
 - **test-uforth#core** (plexus): bad `44193e547f6d`, last good `d2cb6721e175`, 23 commit(s) in range
