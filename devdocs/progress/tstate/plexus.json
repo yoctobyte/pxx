@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T20:38:47Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:test/fpcv.pas@2"
-   ],
-   "sha": "16a540b759c53a2be03c3013751d90741ef38e40",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T21:40:22Z",
    "fixed": [],
    "new_red": [],
@@ -481,12 +471,21 @@
    "sha": "5f080ccf35de868b5f88ea9be4fbbe350552f5a8",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-25T19:07:38Z",
+   "fixed": [
+    "test-core#src:test/test_indexing_length_for_new_inc_positive.pas"
+   ],
+   "new_red": [],
+   "sha": "6ac58fa4c0f835ee76e92f49c8fec2de9204ef44",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2358728B  data=61689B  bss=51420B  procs=1788] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
-  "test-core#src:test/test_indexing_length_for_new_inc_positive.pas": "pascal26:48: error: Length needs a string, an array or a PChar, not Integer | near: j  Length  i  >>>  b | pascal26:50: error: with needs a record, class or interface \u2014 Integer has no members | near: r    with i >>> do WriteLn | pascal26:51: error: cannot assign to the result of a function call | near:   F1    >>>",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter"
  },
  "job_tier": {
@@ -4878,7 +4877,7 @@
   "test-core#src:test/test_indexed_proc_call.pas": "pass",
   "test-core#src:test/test_indexed_property.pas": "pass",
   "test-core#src:test/test_indexing_a_string_value.pas": "pass",
-  "test-core#src:test/test_indexing_length_for_new_inc_positive.pas": "fail",
+  "test-core#src:test/test_indexing_length_for_new_inc_positive.pas": "pass",
   "test-core#src:test/test_inferred_pointer_keeps_its_depth.pas": "pass",
   "test-core#src:test/test_inheritance_dispatch.pas": "pass",
   "test-core#src:test/test_inherited.pas": "pass",
@@ -6654,11 +6653,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-25T18:57:43Z",
-  "sha": "5f080ccf35de868b5f88ea9be4fbbe350552f5a8",
+  "date": "2026-08-25T19:07:38Z",
+  "sha": "6ac58fa4c0f835ee76e92f49c8fec2de9204ef44",
   "tier": "native",
-  "verdict": "RED",
-  "wall": 509.7
+  "verdict": "GREEN",
+  "wall": 491.8
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6848,33 +6847,6 @@
     "fd93e4a71c37a7932b9ef73e4c9f8a7deceb3c34"
    ],
    "src": "test/lib_mimic_xml_etree_elementtree.npy",
-   "status": "fail"
-  },
-  {
-   "bad": "c59796cd1e1d0255c93b85e67ce8cd9ea422b3e9",
-   "good": "10dada0b7689fee546516eec7ea90d1da4256053",
-   "job": "test-core#src:test/test_indexing_length_for_new_inc_positive.pas",
-   "name": "test-core#1086",
-   "opened": "2026-08-25T18:15:53Z",
-   "pin_built": false,
-   "range": [
-    "1bbe78c3c27e217ba40217d23c08121edab30350",
-    "77c6dd854025709fd0dfe7a3756f1c6402e033d7",
-    "4c1b6b6e3bc797423efb3535ee7b3f7235619c42",
-    "eb57ef08299ed99563de21e06cf46148ef04250a",
-    "519fa45a054b0be52ec243a192d62e7084481957",
-    "8c38737be5a2ed3660d388961e919696efb79064",
-    "a5709669101de6917d5aa0cbc5d365615cd6be98",
-    "ae6251f917bb06e80679e1da8253957106b1fd13",
-    "6ed9cf36827e174292a5b270e80390c5883c3e22",
-    "9170a61935784e43f4f42ab5586f490ac2cb277e",
-    "e741c2a9911d0b1be14dec4e7c8c3e198ff9f604",
-    "f2914dea7766229fc751c4325757bea1ae9f61f2",
-    "53bb3e3a1dd8309efd80632c28427f5b376cf22f",
-    "2a129cfb9fefaaab07c2ed401fc6a0848ab341c9",
-    "c59796cd1e1d0255c93b85e67ce8cd9ea422b3e9"
-   ],
-   "src": "test/test_indexing_length_for_new_inc_positive.pas test/test_indexing_length_for_new_inc_positive.expected +1",
    "status": "fail"
   }
  ],
