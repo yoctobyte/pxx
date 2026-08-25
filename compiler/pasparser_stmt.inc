@@ -3436,7 +3436,14 @@ begin
     valueNode := CurASTNode;
     
     idx := AllocVar(names[0], tk);
-    if (tk = tyInteger) and (LastTypeEnumId >= 0) then SymEnumId[idx] := LastTypeEnumId;
+    { An ARRAY symbol's TypeKind IS its element kind, so `array[..] of TEnum`
+      lands here with tk=tyInteger and used to claim SymEnumId — the slot that
+      means "this VALUE is an enum". Element identity has its own slot. }
+    if (tk = tyInteger) and (LastTypeEnumId >= 0) then
+    begin
+      if isArr then SymElemEnumId[idx] := LastTypeEnumId
+      else SymEnumId[idx] := LastTypeEnumId;
+    end;
     if isArr then
     begin
       Syms[idx].IsArray := True;
@@ -3479,7 +3486,14 @@ begin
     for i := 0 to n - 1 do
     begin
       idx := AllocVar(names[i], tk);
-      if (tk = tyInteger) and (LastTypeEnumId >= 0) then SymEnumId[idx] := LastTypeEnumId;
+      { An ARRAY symbol's TypeKind IS its element kind, so `array[..] of TEnum`
+        lands here with tk=tyInteger and used to claim SymEnumId — the slot that
+        means "this VALUE is an enum". Element identity has its own slot. }
+      if (tk = tyInteger) and (LastTypeEnumId >= 0) then
+      begin
+        if isArr then SymElemEnumId[idx] := LastTypeEnumId
+        else SymEnumId[idx] := LastTypeEnumId;
+      end;
       if isArr then
       begin
         Syms[idx].IsArray := True;

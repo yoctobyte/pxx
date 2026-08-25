@@ -12,10 +12,10 @@ program test_writeln_of_an_enum_prints_its_name;
   enum where it right-aligns a string and a boolean — the third line asserts all
   three on one row), Write vs WriteLn, and Ord() still answering the number.
 
-  NOT covered, and deliberately not asserted here: an enum reached through an
-  array element, a record field, a function result, a cast or Succ/Pred. Those
-  still print the ordinal because the AST node does not carry the enum identity —
-  bug-p-an-enum-reached-through-a-field-or-index-still-writes-its-ordinal.
+  Every OTHER way of naming the same value — an array element, a record or class
+  field, a call result, a param, a typed const, a cast, Succ/Pred — lives in its
+  twin, test_enum_name_through_field_index_and_call.pas. It printed the ordinal
+  here until the identity was threaded through each of those shapes.
 
   .expected IS fpc 3.2.2's own output on this source. }
 {$mode objfpc}

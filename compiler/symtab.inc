@@ -1357,6 +1357,7 @@ begin
   SetLength(UFldArrLen, n);     SetLength(UFldDynDepth, n);     SetLength(UFldPub, n);
   SetLength(UFldVis, n);        SetLength(UFldStrCap, n);       SetLength(UFldIsSub, n);
   SetLength(UFldSubLo, n);      SetLength(UFldSubHi, n);        SetLength(UFldSetEnumId, n);
+  SetLength(UFldEnumId, n);
   SetLength(UFldSetElemTk, n);  SetLength(UFldBitWidth, n);     SetLength(UFldBitShift, n);
   SetLength(UFldBitBytes, n);   SetLength(UFldArrNDims, n);
   SetLength(UFldArrDimLo, n * MAX_ARR_DIMS);   SetLength(UFldArrDimSpan, n * MAX_ARR_DIMS);
@@ -1406,6 +1407,7 @@ begin
       UFldPtrBaseRec[dst+k] := UFldPtrBaseRec[src];
       UFldPtrAlias[dst+k] := UFldPtrAlias[src];
       UFldSetEnumId[dst+k] := UFldSetEnumId[src];
+      UFldEnumId[dst+k] := UFldEnumId[src];
       UFldSetElemTk[dst+k] := UFldSetElemTk[src];
       UFldIsArray[dst+k] := UFldIsArray[src];  UFldArrLen[dst+k] := UFldArrLen[src];
       UFldDynDepth[dst+k] := UFldDynDepth[src];
@@ -1456,6 +1458,11 @@ begin
     UFldPtrBaseTk[fi] := Ord(tyUnknown);
     UFldPtrBaseRec[fi] := REC_NONE;
   end;
+  { Never read LastTypeEnumId here: AddUField is the C frontend's chokepoint too,
+    and it arrives with tk=tyInteger and a stale LastTypeEnumId from whatever
+    Pascal type was parsed last. The Pascal field-decl site stamps this, the way
+    SymEnumId is stamped at var-decl sites and not inside AllocVar. }
+  UFldEnumId[fi] := -1;
   if tk = Ord(tySet) then
   begin
     UFldSetEnumId[fi] := LastTypeSetEnumId;
@@ -3701,6 +3708,7 @@ begin
   SetLength(SymElemDynDepth, n);   SetLength(SymDynElemRowLen, n);  SetLength(SymDynElemRowLo, n);
   SetLength(SymGenSlot, n);        SetLength(SymProcSig, n);        SetLength(SymElemProcSig, n);
   SetLength(SymSetEnumId, n);      SetLength(SymEnumId, n);         SetLength(SymSetElemTk, n);
+  SetLength(SymElemEnumId, n);
   SetLength(SymStrCap, n);         SetLength(SymIsSub, n);          SetLength(SymSubLo, n);
   SetLength(SymSubHi, n);          SetLength(SymPtrDepth, n);       SetLength(SymPtrBaseTk, n);
   SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymArrNDims, n);
@@ -3813,6 +3821,7 @@ begin
   SymElemProcSig[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
   SymEnumId[SymCount] := -1;
+  SymElemEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
   SymIsSub[SymCount] := LastTypeIsSub;
@@ -3949,6 +3958,7 @@ begin
   SymElemProcSig[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
   SymEnumId[SymCount] := -1;
+  SymElemEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
   SymIsSub[SymCount] := LastTypeIsSub;
@@ -4188,6 +4198,7 @@ begin
   SymGenSlot[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
   SymEnumId[SymCount] := -1;
+  SymElemEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
   SymIsSub[SymCount] := LastTypeIsSub;
@@ -4271,6 +4282,7 @@ begin
   SymGenSlot[SymCount] := -1;
   SymSetEnumId[SymCount] := -1;
   SymEnumId[SymCount] := -1;
+  SymElemEnumId[SymCount] := -1;
   SymSetElemTk[SymCount] := 0;
   SymStrCap[SymCount] := 0;
   SymIsSub[SymCount] := LastTypeIsSub;
@@ -4370,7 +4382,8 @@ begin
   Syms[SymCount].ArrLen   := 0;
   SymArrNDims[SymCount] := 0;   { slot recycling — see AllocParam }
   SymBlockId[SymCount] := CurBlockId;   { slot recycling — see AllocParam }
-  SymEnumId[SymCount] := -1;    { slot recycling — every Alloc* must reset EVERY parallel array }
+  SymEnumId[SymCount] := -1;
+  SymElemEnumId[SymCount] := -1;    { slot recycling — every Alloc* must reset EVERY parallel array }
   SymCaseSensitive[SymCount] := DeclCaseSensitive;
   SymUnitIdx[SymCount] := CurrentUnitIdx;
   SymSyncTypeRef(SymCount);
@@ -7771,6 +7784,7 @@ begin
   SetLength(ProcDbgMain, n);  SetLength(ProcGenElemTk, n);  SetLength(ProcGenElemRec, n);
   SetLength(ProcGenParamCnt, n);  SetLength(ProcGenInstSize, n);  SetLength(ProcRetElemTk, n);
   SetLength(ProcRetElemRec, n);  SetLength(ProcRetPtrElemTk, n);  SetLength(ProcRetProcSig, n);
+  SetLength(ProcRetEnumId, n);
   SetLength(ProcRetPtrDepth, n); SetLength(ProcRetPtrBaseTk, n); SetLength(ProcRetPtrBaseRec, n);
   SetLength(ProcRetDynDepth, n);
   SetLength(CProcHasLocalDef, n);  SetLength(ProcRetPtrElemRec, n);  SetLength(PyCapCount, n);
@@ -7829,6 +7843,7 @@ begin
   ProcRetElemTk[ProcCount]     := tyUnknown;
   ProcRetElemRec[ProcCount]    := REC_NONE;
   ProcRetPtrElemTk[ProcCount]  := Ord(tyUnknown);
+  ProcRetEnumId[ProcCount]     := -1;
   ProcRetPtrDepth[ProcCount]   := 0;
   ProcRetPtrBaseTk[ProcCount]  := Ord(tyUnknown);
   ProcRetPtrBaseRec[ProcCount] := REC_NONE;

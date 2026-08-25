@@ -2222,6 +2222,7 @@ var
   SymElemProcSig : array of Integer; { array-of-proctype var: signature proc index of the ELEMENT proc type, for an indexed indirect call `arr[i](args)`; -1 = element not proc-typed }
   SymSetEnumId : array of Integer; { set var: element enum type index for `set of TEnum`, else -1. Drives `for e in set` range }
   SymEnumId : array of Integer; { enum-typed var: enum type index, else -1. Set at decl sites (NOT inside AllocVar — LastTypeEnumId may be stale there); drives enum-identity diagnostics }
+  SymElemEnumId : array of Integer; { ARRAY var whose ELEMENT is an enum: that enum type index, else -1. An array symbol's TypeKind IS its element kind, so an enum element leaves TypeKind=tyInteger and SymEnumId would be the wrong slot to reuse — every reader of SymEnumId means "this VALUE is an enum", which an array is not. Set at the array decl sites beside SymEnumId's scalar arm; drives `WriteLn(a[i])` printing the member name. }
   SymSetElemTk : array of Integer; { set var: element TTypeKind ordinal (tyChar/tyInteger/enum-as-integer), else 0 }
   SymStrCap : array of Integer; { see decl below }
   SymIsSub : array of Boolean; { symbol declared via a named SUBRANGE type (T = lo..hi): {$R+} checks stores against SymSubLo/Hi. BSS-false default = unchecked (feature-pascal-range-checks-r-plus). }
@@ -2350,6 +2351,7 @@ var
   ProcRetElemTk : array of TTypeKind;    { element type of a dyn-array result }
   ProcRetElemRec : array of Integer;     { element record id of a dyn-array result }
   ProcRetPtrElemTk : array of Integer;   { pointed-at TTypeKind ord when the result is a typed pointer (tyUnknown otherwise) }
+  ProcRetEnumId : array of Integer;      { enum-typed RESULT: its enum type index, else -1. A call node has no symbol and no field to ask, so the callee's row is the only place the identity can live; read by NodeEnumIdOf's AN_CALL arm. }
   { ...and the rest of the returned pointer's identity, so `GetQ^` on a
     `function GetQ: ^PChar` knows a level remains. The pointee alone cannot say
     it: PChar and ^PChar have the SAME immediate pointee once you only look one
@@ -2976,6 +2978,7 @@ var
   VDElemRowLen   : Integer;
   VDElemRowLo    : Integer;
   VDElemProcSig  : Integer;
+  VDElemEnumId   : Integer;  { array element's enum type index, else -1 -> SymElemEnumId }
   VDNdCnt        : Integer;
   VDNdDimLo      : array[0..MAX_ARR_DIMS-1] of Integer;
   VDNdDimSpan    : array[0..MAX_ARR_DIMS-1] of Integer;
@@ -3952,6 +3955,7 @@ var
   UFldIsSub : array of Boolean; { field declared via a named SUBRANGE type: {$R+} checks stores against UFldSubLo/Hi (feature-pascal-range-checks-r-plus) }
   UFldSubLo : array of Int64;
   UFldSubHi : array of Int64;  { frozen fixed-string field capacity: N for a `string[N]` field (stored as tyString with an N+8 slot), 0 = plain `string` field (LOCAL_STR_CAP slot) or not a string field. Drives the truncating store clamp. }
+  UFldEnumId : array of Integer; { FIELD whose type is an enum — or whose ELEMENT type is, for an array field, since UFldTk is the element kind there too: that enum type index, else -1. A reader that means "this field's VALUE is an enum" must therefore check `not UFldIsArray[fi]` first. The record/class twin of SymEnumId, set at the Pascal field-decl site (never inside AddUField — the C frontend calls that with tyInteger constantly and LastTypeEnumId would be stale). Drives `WriteLn(r.f)` printing the member name. }
   UFldSetEnumId : array of Integer; { set field: element enum type index for `set of TEnum`, else -1. Drives `for e in obj.field` range }
   UFldSetElemTk : array of Integer; { set field: element TTypeKind ordinal (tyChar/enum-as-integer), else 0 }
   UFldBitWidth : array of Integer; { C named bit-field width in bits; 0 = ordinary field }
@@ -4090,6 +4094,7 @@ var
   ArrTypeLo     : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeHi     : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeElemTk : array[0..MAX_TYPEALIAS-1] of Integer;
+  ArrTypeElemEnumId : array[0..MAX_TYPEALIAS-1] of Integer; { named array type whose ELEMENT is an enum: that enum type index, else -1. Threaded to SymElemEnumId via VDElemEnumId when a var is declared with the alias, so `WriteLn(a[i])` prints the member name through the alias too. }
   ArrTypeElemRec: array[0..MAX_TYPEALIAS-1] of Integer;
   { A named array type whose element is itself a POINTER (`TPropList = array[..]
     of PPropInfo`) needs the pointee record id too -- ArrTypeElemRec above only

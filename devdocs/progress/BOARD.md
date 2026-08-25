@@ -358,7 +358,6 @@ _none_
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
 | bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 30 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
 | bug-p-an-array-returning-call-cannot-be-indexed-directly | P | 30 | bug | `MakeDyn(3)[2]` fails with `cannot index the result of an array-returning function directly — assign it to a variable first`. fpc 3.2.2 compiles and runs it. `Length(MakeDyn(3))` on the same call already works, so the call result IS materialised somewhere the intrinsic can reach; only the subscript path declines it. | — |
-| bug-p-an-enum-reached-through-a-field-or-index-still-writes-its-ordinal | P | 40 | bug | `WriteLn(e)` now prints the member name (FPC parity). Every OTHER way of naming the same value still prints the ordinal, because the enum identity is carried by the SYMBOL (SymEnumId) and by a folded member literal (ASTEnumId) and by nothing else — an array element, a record field, a function result, a cast and Succ/Pred all lose it. So the same enum prints two different ways in one program, which is a worse shape than the uniform wrongness it replaced. | — |
 | bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero | P | 40 | bug | `PFixed = ^TFixed` with `TFixed = array[0..3] of LongWord`: `Length(pfx^)` returns 0, fpc 3.2.2 returns 4. Indexing the same deref (`pfx^[2]`) is correct, so the pointer's element metadata IS reachable — Length just does not consult it and falls through to the runtime [data-8] header read on a value that has none. A wrong VALUE, silently, exit 0. | — |
 | bug-t-run-pascal-conformance-silently-fails-every-test-on-a-relative-compiler-path | T | 25 | bug | `tools/run_pascal_conformance.sh ./compiler/pascal26 ...` fails 51 of 107 tgeneric tests; the same run with `/home/neo/frank1/compiler/pascal26` passes 61 and fails 0. The runner `cd`s into the suite dir before invoking the compiler, so a relative `$CC` no longer resolves — and the failure surfaces as `compile error`, i.e. as a COMPILER bug, for every test at once. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 35 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
@@ -367,6 +366,7 @@ _none_
 | decide-typeref-gains-a-pointer-depth-field | U | 35 | decide | TTypeRef was landed to replace the 8-field tuple that ~90 sites redeclare, but as declared it carries PtrBaseTk/PtrBaseRec and DynDepth and no POINTER depth — so it cannot express `^PChar` any better than the pair it replaces. Every pointer table has since grown a depth field of its own (symbols, aliases, the type parser, C params, Pascal params, captures, proc returns). Either TTypeRef gains PtrDepth and the migration folds them all in, or depth is declared to live outside TTypeRef and the migration's value shrinks. Additive either way, but it changes a shared type mid-migration. | — |
 | feature-p-legacy-value-object-types | P | 35 | feature | Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone. | — |
 | refactor-p-one-lvalue-path-for-statements-and-expressions | P | 35 | refactor | An assignment TARGET is parsed by a second, smaller copy of the lvalue walk in pasparser_stmt.inc, which resolves every `.name` as a field and ends on Expect(':='). Every capability the expression path gains has to be re-added there by hand, and three bugs so far are exactly that omission: the builtin pointer-name fallback, the PChar adapter, and the deref-then-index shape. The statement path should delegate, as its own cast-headed-CALL arm already does. | — |
+| refactor-p-the-field-declaration-parser-exists-twice | P | 30 | refactor | `ParseRecordFields` (pasparser_decl.inc ~3199) and the class-body field arm inside `ParseTypeSection` (~4824) parse the same grammar — comma-separated names, inline fixed/dynamic array, named array alias, scalar — with the same locals under different names and the same AddUField tail. Every field-level feature has to be written twice, and the second copy is the one that stays broken. | — |
 
 ## experimental (20)
 
@@ -581,9 +581,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2327)
+## done (2328)
 
-2327 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2328 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -726,7 +726,6 @@ _none_
 - [p 40] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 40] [P] bug-p-a-record-typed-var-initialiser-is-refused
-- [p 40] [P] bug-p-an-enum-reached-through-a-field-or-index-still-writes-its-ordinal
 - [p 40] [P] bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero
 - [p 40] [P] bug-p-length-of-a-string-literal-plus-anything-does-not-parse
 - [p 40] [T] bug-t-twatch-status-says-down-while-the-daemon-is-alive-and-testing
@@ -855,6 +854,7 @@ _none_
 - [p 30] [A] refactor-a-the-const-cast-width-table-is-the-third-copy
 - [p 30] [A] refactor-a-the-greenfield-frontends-share-each-others-parser-helpers
 - [p 30] [N] refactor-n-two-import-handlers-are-twins
+- [p 30] [P] refactor-p-the-field-declaration-parser-exists-twice
 - [p 30] [D] task-d-document-warn-ignored-directives
 - [p 25] [A] bug-a-riscv32-sa-onstack-has-no-effect-under-qemu
 - [p 25] [N] bug-n-a-unicode-identifier-is-rejected-by-the-lexer

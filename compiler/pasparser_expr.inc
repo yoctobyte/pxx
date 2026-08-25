@@ -5028,6 +5028,9 @@ begin
         op := AllocNode(AN_BINOP);
         if CaseEqual(name, 'Succ') then ASTIVal[op] := Ord(tkPlus) else ASTIVal[op] := Ord(tkMinus);
         ASTLeft[op] := node; ASTRight[op] := left; ASTTk[op] := ASTTk[node];
+        { Succ/Pred of an enum is still that enum — the desugar to `e +/- 1`
+          would otherwise drop the identity and WriteLn would print the ordinal. }
+        ASTEnumId[op] := NodeEnumIdOf(node);
         { {$Q+}: FPC checks Succ/Pred too — the desugar IS a +/- binop, so
           tag it like one (feature-overflow-checks-cross-and-intrinsics). }
         if TokQChecks[TokPos - 1] then ASTQChk[op] := True;
@@ -5975,6 +5978,11 @@ begin
             ASTLeft[node] := CurASTNode;
             ASTIVal[node] := -1; { indicates built-in cast }
             ASTTk[node]   := Ord(castTk);
+            { `TEnum(i)` — the cast target IS the value's enum type, and the
+              reinterpret to tyInteger is the only trace left of it. Keep the
+              identity or WriteLn prints the ordinal. FindEnumType answers -1
+              for `Integer(x)` and every other builtin spelling. }
+            if castTk = tyInteger then ASTEnumId[node] := FindEnumType(name);
             { `Pointer(expr)^` — FPC's untyped deref, legal where only the
               ADDRESS matters (an untyped var/const argument: synautil's
               `Move(Pointer(Value)^, ...)` is the driving consumer). There is
@@ -8512,18 +8520,89 @@ begin
   end;
 end;
 
-{ Enum type index of an expression node, or -1. Ident-level only: enum
-  identity lives on the SYMBOL (SymEnumId, tagged at var decls). }
+{ Enum type index of an expression node, or -1.
+
+  Enum identity is not carried by the TYPE (a pxx enum is tyInteger at codegen),
+  so every shape that can name an enum value has to be asked separately:
+
+    ident            SymEnumId       tagged at the var decl
+    folded member    ASTEnumId       a member const folds to its ordinal literal
+    a[i]             SymElemEnumId   an array symbol's TypeKind IS its element kind,
+                                     so the ELEMENT's identity needs its own slot
+    r.f              UFldEnumId      the field twin of SymEnumId
+
+  ASTEnumId doubles as the stamp for anything the parser can DERIVE — Succ/Pred
+  of an enum, an explicit `TE(i)` cast — so those need no arm here.
+
+  Whatever migrates type identity into one vehicle
+  ([[feature-a-typeref-migrate-consumers]]) should absorb all four; until then a
+  shape that is missing here prints the ORDINAL where FPC prints the name, which
+  is the whole of bug-p-an-enum-reached-through-a-field-or-index-still-writes-its-ordinal. }
 function NodeEnumIdOf(node: Integer): Integer;
+var neBase, neRec, neFld: Integer;
 begin
   Result := -1;
   if node < 0 then Exit;
   if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) then
-    Result := SymEnumId[ASTIVal[node]]
-  else
-    { An enum MEMBER reached here as a folded ordinal literal; ASTEnumId is the only
-      thing that still remembers which enum minted it. }
-    Result := ASTEnumId[node];
+  begin
+    { An ARRAY ident is not an enum VALUE even when its elements are: SymEnumId
+      is deliberately left clear on it, and answering SymElemEnumId here would
+      make `WriteLn(a)` claim to be an enum. }
+    if not Syms[ASTIVal[node]].IsArray then Result := SymEnumId[ASTIVal[node]];
+    Exit;
+  end;
+  if ASTKind[node] = AN_INDEX then
+  begin
+    { ASTLeft of an AN_INDEX is the base NODE (defs.inc's "base sym idx" comment
+      predates the Pascal path), so an indexed array reaches its element identity
+      through the base ident's SymElemEnumId, and an indexed array FIELD through
+      that field's UFldEnumId — which holds the ELEMENT's enum for an array. }
+    neBase := ASTLeft[node];
+    { `dd[0][1]` over `array of array of TEnum`: every level has the same element
+      identity, so walk down to the base the declaration actually named. }
+    while (neBase >= 0) and (ASTKind[neBase] = AN_INDEX) do neBase := ASTLeft[neBase];
+    if neBase >= 0 then
+    begin
+      if (ASTKind[neBase] = AN_IDENT) and (ASTIVal[neBase] >= 0) and
+         (ASTIVal[neBase] < SymCount) then
+        Result := SymElemEnumId[ASTIVal[neBase]]
+      else if ASTKind[neBase] = AN_FIELD then
+      begin
+        neRec := ResolveNodeRec(ASTLeft[neBase]);
+        if neRec >= REC_UCLASS_BASE then
+        begin
+          neFld := FindUField(neRec - REC_UCLASS_BASE, GetASTIdentName(neBase));
+          if (neFld >= 0) and UFldIsArray[neFld] then Result := UFldEnumId[neFld];
+        end;
+      end;
+    end;
+    if Result < 0 then Result := ASTEnumId[node];
+    Exit;
+  end;
+  if ASTKind[node] = AN_FIELD then
+  begin
+    neRec := ResolveNodeRec(ASTLeft[node]);
+    if neRec >= REC_UCLASS_BASE then
+    begin
+      neFld := FindUField(neRec - REC_UCLASS_BASE, GetASTIdentName(node));
+      { UFldEnumId holds the ELEMENT's enum for an array field, so a WHOLE array
+        field must not answer it — same rule as the ident arm above. }
+      if (neFld >= 0) and (not UFldIsArray[neFld]) then Result := UFldEnumId[neFld];
+    end;
+    if Result < 0 then Result := ASTEnumId[node];
+    Exit;
+  end;
+  if (ASTKind[node] = AN_CALL) and (ASTIVal[node] >= 0) and (ASTIVal[node] < ProcCount) then
+  begin
+    { A call node has no symbol and no field, so the callee's row is the only
+      place the result's enum identity survives. }
+    Result := ProcRetEnumId[ASTIVal[node]];
+    if Result < 0 then Result := ASTEnumId[node];
+    Exit;
+  end;
+  { An enum MEMBER reached here as a folded ordinal literal; ASTEnumId is the only
+    thing that still remembers which enum minted it. }
+  Result := ASTEnumId[node];
 end;
 
 procedure ParseExpr;

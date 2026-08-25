@@ -1,0 +1,23 @@
+var    : Three
+arr    : Two One
+alias  : Three Two
+dyn    : One Three
+dyn2   : Two Three
+field  : One
+fldarr : Two Three
+nested : Two
+clsfld : Three
+clsarr : One Two
+method : Three
+const  : Two
+call   : Three
+callarr: One
+byvar  : Two
+byval  : Two
+byarr  : Two One
+succ   : Two Two
+succvar: Two Three
+cast   : Three One
+ord    : 1 0 2 1
+One Two Three 
+width  : [Two     ][One     ]

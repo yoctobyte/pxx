@@ -7720,6 +7720,17 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_writeln_of_an_enum_prints_its_name.pas $(TESTTMP)/test_wenum26
 	test "$$($(TESTTMP)/test_wenum26)" = "$$(cat test/test_writeln_of_an_enum_prints_its_name.expected)"
+	# ...and the other half: the SAME enum reached through an array element, a
+	# record or class field, a field array, a dynamic array, a call result, a
+	# param, a typed const, Succ/Pred or a cast. Every one of those printed the
+	# ordinal, so one program printed the same enum two different ways. Identity
+	# is not carried by the type (a pxx enum is tyInteger at codegen), so each
+	# shape is asked separately -- SymElemEnumId, UFldEnumId, ProcRetEnumId,
+	# SymEnumId on the param/const symbol, ASTEnumId where the parser derives it.
+	# The ord/width rows are load-bearing: an ordinal context must stay numeric.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_enum_name_through_field_index_and_call.pas $(TESTTMP)/test_enumid26
+	test "$$($(TESTTMP)/test_enumid26)" = "$$(cat test/test_enum_name_through_field_index_and_call.expected)"
 	# `a := nil` on a WHOLE dynamic array empties it, whatever the element type.
 	# An array symbol's TypeKind IS its element kind, so a record-shaped element
 	# routed the store into the record `:= nil` arms: they zeroed RecSize bytes

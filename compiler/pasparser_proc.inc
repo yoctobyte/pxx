@@ -470,6 +470,7 @@ var
   ptypes    : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   ptypesRec : array[0..MAX_PROC_PARAMS-1] of Integer;
   ptypesSetEnum : array[0..MAX_PROC_PARAMS-1] of Integer;  { `set of TEnum` param: element enum index, -1 otherwise }
+  ptypesEnum : array[0..MAX_PROC_PARAMS-1] of Integer;  { enum-typed param: its enum index (the ELEMENT's, for an array param), -1 otherwise }
   ptypesPtrElemTk : array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   ptypesPtrElemRec : array[0..MAX_PROC_PARAMS-1] of Integer;
   { The rest of a pointer PARAMETER's identity. Without these three a `^PChar`
@@ -517,6 +518,7 @@ var
   retFixedArrBytes : Integer;   { a FIXED-array result's byte size; 0 = not one }
   retArrAi : Integer;           { its ArrType index, so the Result slot can be shaped like the type; -1 = not one }
   retPtrElemTk, retPtrElemRec : Integer;
+  retEnumId : Integer;   { enum-typed result: its enum index, else -1 }
   retPtrDepth, retPtrBaseTk, retPtrBaseRec : Integer;
   retDynDepth : Integer;   { `array of` levels of a dyn-array result }
   savedSC, savedFS, savedCurProc : Integer;
@@ -687,10 +689,12 @@ begin
   { A local array is stack garbage until written, and the Self/capture insertion
     paths below fill some slots without going through the typed-param branch. }
   for i := 0 to MAX_PROC_PARAMS - 1 do ptypesSetEnum[i] := -1;
+  for i := 0 to MAX_PROC_PARAMS - 1 do ptypesEnum[i] := -1;
   retIsDynArr := False; retElemTk := tyUnknown; retElemRec := REC_NONE;
   retDynDepth := 0;
   retFixedArrBytes := 0; retArrAi := -1;
   retPtrElemTk := Ord(tyUnknown); retPtrElemRec := REC_NONE;
+  retEnumId := -1;
   retPtrDepth := 0; retPtrBaseTk := Ord(tyUnknown); retPtrBaseRec := REC_NONE;
 
   if CurTok.Kind = tkLParen then
@@ -886,6 +890,10 @@ begin
           set — it is not cleared for other kinds. }
         if tk = tySet then ptypesSetEnum[i] := LastTypeSetEnumId
         else ptypesSetEnum[i] := -1;
+        { ...and the same rule for a plain enum param: LastTypeEnumId is only
+          meaningful when the type just parsed WAS one. }
+        if tk = tyInteger then ptypesEnum[i] := LastTypeEnumId
+        else ptypesEnum[i] := -1;
         ptypesPtrElemTk[i] := LastTypePointerElemTk;
         ptypesPtrElemRec[i] := LastTypePointerElemRec;
         ptypesPtrDepth[i] := LastTypePointerDepth;
@@ -997,6 +1005,16 @@ begin
       end
       else
         retType := ParseTypeKind;
+      { Only a type just parsed by ParseTypeKind leaves a meaningful
+        LastTypeEnumId. An ARRAY result reaches here with retType = the ELEMENT
+        kind and whatever enum the last unrelated parse left behind, and the
+        RESULT of such a call is an array, not an enum value — so it gets -1
+        rather than its element's identity. }
+      if retType = tyInteger then
+      begin
+        if (retArrAi >= 0) or retIsDynArr then retEnumId := -1
+        else retEnumId := LastTypeEnumId;
+      end;
       if (retType = tyRecord) or (retType = tyClass) then
         retRecId := LastTypeRecId;
       if retType = tyPointer then
@@ -1217,6 +1235,7 @@ begin
     ProcRetElemTk[procIdx] := retElemTk;
     ProcRetElemRec[procIdx] := retElemRec;
     ProcRetPtrElemTk[procIdx] := retPtrElemTk;
+    ProcRetEnumId[procIdx] := retEnumId;
     ProcRetPtrElemRec[procIdx] := retPtrElemRec;
     ProcRetPtrDepth[procIdx] := retPtrDepth;
     ProcRetPtrBaseTk[procIdx] := retPtrBaseTk;
@@ -1265,6 +1284,7 @@ begin
       ptypes[i] := ptypes[i-1];
       ptypesRec[i] := ptypesRec[i-1];
       ptypesSetEnum[i] := ptypesSetEnum[i-1];
+      ptypesEnum[i] := ptypesEnum[i-1];
       ptypesPtrElemTk[i] := ptypesPtrElemTk[i-1];
       ptypesPtrElemRec[i] := ptypesPtrElemRec[i-1];
       ptypesPtrDepth[i] := ptypesPtrDepth[i-1];
@@ -1402,6 +1422,7 @@ begin
       ptypes[i] := ptypes[i-1];
       ptypesRec[i] := ptypesRec[i-1];
       ptypesSetEnum[i] := ptypesSetEnum[i-1];
+      ptypesEnum[i] := ptypesEnum[i-1];
       ptypesPtrElemTk[i] := ptypesPtrElemTk[i-1];
       ptypesPtrElemRec[i] := ptypesPtrElemRec[i-1];
       ptypesPtrDepth[i] := ptypesPtrDepth[i-1];
@@ -1555,6 +1576,7 @@ begin
       ProcRetElemTk[procIdx] := retElemTk;
       ProcRetElemRec[procIdx] := retElemRec;
       ProcRetPtrElemTk[procIdx] := retPtrElemTk;
+      ProcRetEnumId[procIdx] := retEnumId;
       ProcRetPtrElemRec[procIdx] := retPtrElemRec;
       ProcRetPtrDepth[procIdx] := retPtrDepth;
       ProcRetPtrBaseTk[procIdx] := retPtrBaseTk;
@@ -1588,6 +1610,7 @@ begin
   ProcRetElemTk[procIdx] := retElemTk;
   ProcRetElemRec[procIdx] := retElemRec;
   ProcRetPtrElemTk[procIdx] := retPtrElemTk;
+  ProcRetEnumId[procIdx] := retEnumId;
   ProcRetPtrElemRec[procIdx] := retPtrElemRec;
   ProcRetPtrDepth[procIdx] := retPtrDepth;
   ProcRetPtrBaseTk[procIdx] := retPtrBaseTk;
@@ -1767,6 +1790,13 @@ begin
   begin
     idx := AllocParam(pnames[i], ptypes[i], pbyref[i], parr[i]);
     Procs[procIdx].Params[i].SymIdx := idx;
+    { An enum param is an enum-typed value inside the body — the same stamp the
+      var-decl sites make, so WriteLn(p) prints the member name there too. }
+    if (ptypes[i] = tyInteger) and (ptypesEnum[i] >= 0) then
+    begin
+      if parr[i] then SymElemEnumId[idx] := ptypesEnum[i]
+      else SymEnumId[idx] := ptypesEnum[i];
+    end;
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamIsConst[procIdx * MAX_PROC_PARAMS + i] := pconst[i];
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamExplicitByRef[procIdx * MAX_PROC_PARAMS + i] := pbyref[i];
     if (procIdx >= 0) and (i < MAX_PROC_PARAMS) then ProcParamUntyped[procIdx * MAX_PROC_PARAMS + i] := puntyped[i];

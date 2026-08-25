@@ -702,6 +702,7 @@ begin
     elemResolved := False; VDElemDynDepth := 0;
     VDElemRowLen := 0; VDElemRowLo := 0;
     VDElemProcSig := -1;
+    VDElemEnumId := -1;
     VDIsArrND := False; VDNdCnt := 0;
     ai := -1;
     if CurTok.Kind = tkIdent then ai := FindArrayType(CurTok.SVal);
@@ -710,6 +711,7 @@ begin
       { Variable of a named array type. }
       VDIsArr := True;
       VDElemTk := IntToTypeKind(ArrTypeElemTk[ai]); VDTk := VDElemTk;
+      VDElemEnumId := ArrTypeElemEnumId[ai];
       LastTypeRecId := ArrTypeElemRec[ai];
       LastTypePointerElemRec := ArrTypePtrElemRec[ai];
       { The alias records its frozen-string element width; LastTypeStrCap here
@@ -812,6 +814,8 @@ begin
           if (ai >= 0) and ArrTypeIsDyn[ai] then
           begin
             VDElemTk := IntToTypeKind(ArrTypeElemTk[ai]);
+          VDElemEnumId := ArrTypeElemEnumId[ai];
+            VDElemEnumId := ArrTypeElemEnumId[ai];
             LastTypeRecId := ArrTypeElemRec[ai];
             LastTypePointerElemRec := ArrTypePtrElemRec[ai];
             VDDynDepth := VDDynDepth + ArrTypeDynDepth[ai];
@@ -831,6 +835,8 @@ begin
             if VDDynDepth > 1 then
               Error('array of array of <fixed array type> not supported');
             VDElemTk := IntToTypeKind(ArrTypeElemTk[ai]);
+          VDElemEnumId := ArrTypeElemEnumId[ai];
+            VDElemEnumId := ArrTypeElemEnumId[ai];
             LastTypeRecId := ArrTypeElemRec[ai];
             LastTypePointerElemRec := ArrTypePtrElemRec[ai];
             if (VDElemTk = tyAnsiString) or (VDElemTk = tyString) or
@@ -857,6 +863,7 @@ begin
         if (ai >= 0) and ArrTypeIsDyn[ai] then
         begin
           VDElemTk := IntToTypeKind(ArrTypeElemTk[ai]);
+          VDElemEnumId := ArrTypeElemEnumId[ai];
           LastTypeRecId := ArrTypeElemRec[ai];
           LastTypePointerElemRec := ArrTypePtrElemRec[ai];
           VDElemDynDepth := ArrTypeDynDepth[ai];
@@ -893,6 +900,7 @@ begin
           for di := 0 to VDNdCnt - 1 do flatLen := flatLen * VDNdDimSpan[di];
           VDArrLo := 0; VDArrHi := flatLen - 1;
           VDElemTk := IntToTypeKind(ArrTypeElemTk[ai]);
+          VDElemEnumId := ArrTypeElemEnumId[ai];
           LastTypeRecId := ArrTypeElemRec[ai];
           LastTypePointerElemRec := ArrTypePtrElemRec[ai];
           VDTk := VDElemTk;
@@ -903,6 +911,7 @@ begin
       if not elemResolved then
       begin
         VDElemTk := ParseTypeKind;
+        VDElemEnumId := LastTypeEnumId;
         VDTk := VDElemTk;
         { array of <proctype>: element carries a call signature (plain proc =>
           tyPointer, method pointer => tyRecord). Captured for indexed indirect
@@ -980,6 +989,9 @@ begin
       end;
     end;
     if VDElemProcSig >= 0 then SymElemProcSig[idx] := VDElemProcSig;  { array of proc-type: indexed indirect call arr[i](args) }
+    { array of TEnum: the element's enum identity. NOT SymEnumId — that one means
+      "this value is an enum", and an array is not one. }
+    if (VDElemTk = tyInteger) and (VDElemEnumId >= 0) then SymElemEnumId[idx] := VDElemEnumId;
   end
   else
   begin
@@ -1609,6 +1621,7 @@ procedure ParseConstSection(clsCi, clsVis: Integer);
   ours after (bug-pascal-class-const-visibility, C-frontend crtl-autopull leak). }
 var name: AnsiString; v: Int64;
     cTk, cElemTk: TTypeKind; cLo, cHi, cIdx, cElem, cClassIdx: Integer;
+    cEnumId: Integer;   { typed const of an enum type: its enum index, else -1 }
     isLocalConst: Boolean;
     constIsStatic: Boolean;   { routine-local typed const -> static BSS storage }
     cRec, fNameOff, fNameLen: Integer; fName: AnsiString; fTk: TTypeKind;
@@ -1999,6 +2012,7 @@ begin
       else
       begin
         cTk := ParseTypeKind;
+        cEnumId := LastTypeEnumId;
         if cTk = tySet then
         begin
           { Typed set constant `const S: TS = [..]`: bake the 32-byte mask and
@@ -2069,6 +2083,8 @@ begin
         AllocStaticLocal := constIsStatic;
         cIdx := AllocVar(name, cTk);
         AllocStaticLocal := False;
+        { `const K: TEnum = Two` is an enum-typed value like any var of that type. }
+        if (cTk = tyInteger) and (cEnumId >= 0) then SymEnumId[cIdx] := cEnumId;
         if cTk = tyPointer then
         begin
           { metaclass / pointer typed const: keep the pointee info so uses
@@ -2975,6 +2991,7 @@ var
   arrLen, curFieldOff, fAi, fAlign, fDynDepth, fRec, fSize, fStrCap: Integer;
   hiVal, loVal, i, nFldNames, fni, fNDims: Integer;
   tdLo, tdHi, tdi, classAlign: Integer;
+  fEnumId: Integer;   { enum type index of the field's type (its ELEMENT type when the field is an array), else -1 }
   opDepth: Integer;   { paren nesting while skipping a `class operator` signature }
   savedPCB: Integer;  { ParsingClassBodyCi around this body -- see below }
   isArr, fIsDyn: Boolean;
@@ -3186,6 +3203,7 @@ begin
       end;
       Expect(tkColon, ':');
       isArr := False;
+      fEnumId := -1;   { `f: TEnum` / `array[..] of TEnum`: the enum type index }
       arrLen := 1;
       fIsDyn := False;
       fDynDepth := 0;
@@ -3225,6 +3243,7 @@ begin
           Expect(tkOf, 'of');
           fTk := ParseTypeKind;
           fRec := LastTypeRecId;
+          fEnumId := LastTypeEnumId;
           isArr := True;
         end
         else
@@ -3241,6 +3260,7 @@ begin
           end;
           fTk := ParseTypeKind;
           fRec := LastTypeRecId;
+          fEnumId := LastTypeEnumId;
         end;
       end
       else
@@ -3257,6 +3277,7 @@ begin
           fDynDepth := ArrTypeDynDepth[fAi];
           fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
           fRec := ArrTypeElemRec[fAi];
+          fEnumId := ArrTypeElemEnumId[fAi];
           { AddUField reads the pointee record for a tyPointer field straight off
             the LastTypePointerElemRec global -- prime it here (see
             ArrTypePtrElemRec's comment in defs.inc for the general landmine). }
@@ -3273,6 +3294,7 @@ begin
           isArr := True;
           fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
           fRec := ArrTypeElemRec[fAi];
+          fEnumId := ArrTypeElemEnumId[fAi];
           LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
           if ArrTypeNDims[fAi] >= 2 then
           begin
@@ -3298,6 +3320,7 @@ begin
         begin
           fTk := ParseTypeKind;
           fRec := LastTypeRecId;
+          fEnumId := LastTypeEnumId;
         end;
       end;
       if fIsDyn then
@@ -3356,6 +3379,7 @@ begin
         end
         else
           AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
+        if (fTk = tyInteger) and (fEnumId >= 0) then UFldEnumId[UFldCount-1] := fEnumId;
         UFldIsArray[UFldCount-1] := isArr or fIsDyn;
         if fIsDyn then UFldArrLen[UFldCount-1] := -1
         else UFldArrLen[UFldCount-1] := arrLen;
@@ -3606,6 +3630,8 @@ var
   aLo, aHi: Integer; aElemTk: TTypeKind;
   tdCnt, tdLo, tdHi, tdi, tflatLen, fNDims: Integer;
   aElemStrCap: Integer;   { `array[..] of string[N]`: N, captured where it is parsed }
+  aElemEnumId: Integer;   { `array[..] of TEnum`: the enum type index, captured where it is parsed }
+  fEnumId2: Integer;      { CLASS-body field: enum type of the field (its ELEMENT for an array field), else -1 }
   aElemDynDepth: Integer; { `array[..] of TRow`, TRow a named DYNAMIC array: TRow's dyn depth }
   tdDimLo, tdDimSpan: array[0..MAX_ARR_DIMS-1] of Integer;
   mPNames: array[0..MAX_PROC_PARAMS-1] of AnsiString;
@@ -4800,6 +4826,7 @@ begin
             end;
             Expect(tkColon, ':');
             isArr := False;
+            fEnumId2 := -1;   { `f: TEnum` / `array[..] of TEnum` in a CLASS body }
             arrLen := 1;
             fIsDyn := False;
             fDynDepth := 0;
@@ -4836,6 +4863,7 @@ begin
                 Expect(tkOf, 'of');
                 fTk := ParseTypeKind;
                 fRec := LastTypeRecId;
+                fEnumId2 := LastTypeEnumId;
                 isArr := True;
               end
               else
@@ -4853,6 +4881,7 @@ begin
                 end;
                 fTk := ParseTypeKind;
                 fRec := LastTypeRecId;
+                fEnumId2 := LastTypeEnumId;
               end;
             end
             else
@@ -4869,6 +4898,7 @@ begin
                 fDynDepth := ArrTypeDynDepth[fAi];
                 fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
                 fRec := ArrTypeElemRec[fAi];
+                fEnumId2 := ArrTypeElemEnumId[fAi];
                 LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
                 Next;   { consume the named array type }
               end
@@ -4882,6 +4912,7 @@ begin
                 isArr := True;
                 fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
                 fRec := ArrTypeElemRec[fAi];
+                fEnumId2 := ArrTypeElemEnumId[fAi];
                 LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
                 if ArrTypeNDims[fAi] >= 2 then
                 begin
@@ -4907,6 +4938,7 @@ begin
               begin
                 fTk := ParseTypeKind;
                 fRec := LastTypeRecId;
+                fEnumId2 := LastTypeEnumId;
               end;
             end;
             if fIsDyn then
@@ -4950,6 +4982,7 @@ begin
               end
               else
                 AddUField(ci, fldNOffs[fni], fldNLens[fni], curFieldOff, Ord(fTk), fRec);
+              if (fTk = tyInteger) and (fEnumId2 >= 0) then UFldEnumId[UFldCount-1] := fEnumId2;
               UFldIsArray[UFldCount-1] := isArr or fIsDyn;
               if fIsDyn then UFldArrLen[UFldCount-1] := -1
               else UFldArrLen[UFldCount-1] := arrLen;
@@ -5195,6 +5228,7 @@ begin
             merge covers arbitrary nesting depth. }
           fAi := -1;
           aElemStrCap := 0;
+          aElemEnumId := -1;
           aElemDynDepth := 0;
           if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
           if (fAi >= 0) and ArrTypeIsDyn[fAi] then
@@ -5209,6 +5243,7 @@ begin
               while the inline spelling of the same type compiled and ran.
               bug-p-a-named-fixed-array-of-a-dynamic-array-type-loses-its-element-depth }
             aElemTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+            aElemEnumId := ArrTypeElemEnumId[fAi];
             aElemStrCap := ArrTypeElemStrCap[fAi];
             LastTypeRecId := ArrTypeElemRec[fAi];
             LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
@@ -5236,12 +5271,14 @@ begin
               Inc(tdCnt);
             end;
             aElemTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+            aElemEnumId := ArrTypeElemEnumId[fAi];
             LastTypeRecId := ArrTypeElemRec[fAi];
             Next;   { consume the named array type }
           end
           else
           begin
             aElemTk := ParseTypeKind;
+            aElemEnumId := LastTypeEnumId;
             aElemStrCap := LastTypeStrCap;
           end;
           if tdCnt = 1 then
@@ -5257,6 +5294,7 @@ begin
           ArrTypeLo[ArrTypeCount] := aLo;
           ArrTypeHi[ArrTypeCount] := aHi;
           ArrTypeElemTk[ArrTypeCount] := Ord(aElemTk);
+          ArrTypeElemEnumId[ArrTypeCount] := aElemEnumId;
           ArrTypeElemRec[ArrTypeCount] := LastTypeRecId;
           ArrTypePtrElemRec[ArrTypeCount] := LastTypePointerElemRec;
           if tdCnt >= 2 then ArrTypeNDims[ArrTypeCount] := tdCnt
@@ -5293,6 +5331,7 @@ begin
           ArrTypeElemRowLo[ArrTypeCount] := 0;
           fAi := -1;
           aElemStrCap := 0;
+          aElemEnumId := -1;
           if CurTok.Kind = tkIdent then fAi := FindArrayType(CurTok.SVal);
           if (fAi >= 0) and ArrTypeIsDyn[fAi] then
           begin
@@ -5310,6 +5349,7 @@ begin
             if (ArrTypeElemRowLen[fAi] <> 0) then
               Error('array of array of <fixed array type> not supported');
             aElemTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+            aElemEnumId := ArrTypeElemEnumId[fAi];
             aElemStrCap := ArrTypeElemStrCap[fAi];
             LastTypeRecId := ArrTypeElemRec[fAi];
             LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
@@ -5321,6 +5361,7 @@ begin
             if tdCnt > 1 then
               Error('array of array of <fixed array type> not supported');
             aElemTk := IntToTypeKind(ArrTypeElemTk[fAi]);
+            aElemEnumId := ArrTypeElemEnumId[fAi];
             LastTypeRecId := ArrTypeElemRec[fAi];
             LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
             if (aElemTk = tyAnsiString) or (aElemTk = tyString) or
@@ -5334,10 +5375,12 @@ begin
           else
           begin
             aElemTk := ParseTypeKind;
+            aElemEnumId := LastTypeEnumId;
             aElemStrCap := LastTypeStrCap;
           end;
           ArrTypeName[ArrTypeCount] := tname;
           ArrTypeElemTk[ArrTypeCount] := Ord(aElemTk);
+          ArrTypeElemEnumId[ArrTypeCount] := aElemEnumId;
           if (aElemTk = tyFixedString) or (aElemTk = tyShortString) then
             ArrTypeElemStrCap[ArrTypeCount] := aElemStrCap
           else
