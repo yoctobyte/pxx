@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 60
+prio: 82
 type: bug
 blocked-by: []
 summary: "`make test-fpjson` — the fcl-json 203-case suite, a rung recorded as green 203/203 — no longer compiles: `error: data ptr fixup overflow` from elfwriter.inc, i.e. the program needs more than `MAX_DATAPTRFIX = 4096` data→data pointer relocations. A fixed-size table, a real program that exceeds it, and nothing in any testmgr tier that would have caught it."
@@ -86,3 +86,22 @@ make test-fpjson        # needs PXX_ALLOW_FULL_SUITE=1 past the hook
 Rung: [[feature-pascal-corpus-fpjson]] (done, now red) · ladder
 [[feature-pascal-corpus-expansion]] · enrolment
 [[task-t-enrol-the-fgl-corpus-rung]]
+
+## Raised 60 -> 82 (coordinator, 2026-08-25)
+
+A real library we **cannot compile at all**, and it is a regression: fpjson
+landed green at 203/203 and nothing ran it again until today, because it sits in
+no testmgr tier. The corpus is pinned, so the change is ours. That is the
+project's stated priority order almost verbatim -- "we are not seeking utopia,
+we are seeking a pragmatic tool", real-world targets over edge cases -- and a
+pinned real program going from 203/203 to not-building is as real-world as the
+board gets.
+
+Ranked below the 88s (segfaults, and the text-`read` chain) and just under the
+NilPy 9s constant at 80, which pays out across the whole matrix rather than one
+corpus.
+
+Endorsing the reporter's judgement call explicitly so nobody "fixes" it the
+cheap way: **do not just bump MAX_DATAPTRFIX.** A fixed 4096-entry table that a
+class-dense real program outgrows will be outgrown again by the next one, and a
+larger constant only moves the cliff. See `devdocs/dev/root-cause-over-microfix.md`.

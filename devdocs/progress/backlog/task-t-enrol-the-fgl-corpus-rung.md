@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 60
+prio: 70
 type: task
 blocked-by: []
 summary: "Enrol the new `test-fgl` corpus target in a testmgr tier and add `fpc-rtl` to twatch's CORPUS_EXPECTED. The rung is wired and green (3 pass / 4 skip) but nothing in the matrix runs it, and the watcher will not warn when the tree is unfetched."
@@ -65,3 +65,17 @@ silently for however long. Worth bumping this ticket's priority accordingly.
 ## Links
 Rung: [[feature-pascal-corpus-fgl]] · umbrella
 [[feature-pascal-corpus-expansion]]
+
+## Raised 60 -> 70 (coordinator, 2026-08-25)
+
+Not for the wiring, which is small, but for what the wiring prevents. Two
+findings today are the same failure: **an unenrolled check asserts nothing while
+reporting success.** The fgl rung was guarded on `/usr/share/fpcsrc/3.2.2`, which
+is absent from this box, the watcher box and every fresh clone, so `test-core`
+printed `SKIP (no fpcsrc)` and PASSED without running once. fpjson was in no
+tier, so it rotted from 203/203 to not-compiling for an unknown period, silently.
+
+That is the same class as a torn-down Track T run publishing an empty
+`still_red` and having unreached jobs read as FIXED: a hole in coverage that
+presents itself as coverage. Cheap to fix, and the cost of leaving it is
+measured in how long a regression can hide rather than in developer minutes.
