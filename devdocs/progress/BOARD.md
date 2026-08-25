@@ -58,6 +58,7 @@ _none_
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost | A | 80 | bug | Measured 2026-08-25 (pin v374, this box): compiling `print(\"hi\")` costs 8.92s; compiling `begin end.` costs 0.25s. The ~8.7s is a FIXED per-invocation constant — it does not scale with program size — and it is pure user CPU, not I/O. It is ~29% of the entire test matrix's CPU (805 .npy jobs x 8.7s ~ 7000 of 24219 cpu-s) and it is 9 seconds on every NilPy user's hello-world. | — |
 | bug-a-low-high-of-a-char-indexed-array-answer-the-ordinal | P | 48 | bug | `Low(a)` / `High(a)` on `array['a'..'e'] of Integer` answer 97 and 101 where fpc answers 'a' and 'e', so `for c := Low(a) to High(a)` does not compile against a Char loop variable. The bound is folded as tyInteger because the array's INDEX type is not recorded anywhere. | — |
 | bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 58 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 20 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
@@ -88,7 +89,6 @@ _none_
 | bug-n-abs-of-a-complex-raises-typeerror | N | 12 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
 | bug-n-an-augmented-subscript-on-a-dunder-class-is-refused | N | 70 | bug | `obj[k] += v` on any class that reaches subscripting through `__getitem__`/`__setitem__` is a named compile-time refusal — `augmented assignment to a __getitem__/__setitem__ subscript is not supported`. Ordinary Python, and the counting idiom (`counts[k] += 1`) is the single most common thing a dict-like class is written for. The default-indexed-property arm beside it already desugars the augmented form; only the dunder arm does not. | — |
 | bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program | N | 78 | bug | `class X(mod.X)` — a class whose qualified base shares its name — is refused with `class X cannot inherit from itself` when written in the MAIN PROGRAM. The identical code in a pulled `.py` module compiles and dispatches correctly, and renaming either class makes the program case work too, so the variable is the name collision on the program path. This is how all ~100 of CPython's `encodings/*.py` and html5lib's filters are written. | — |
-| bug-n-every-nilpy-compile-pays-a-fixed-nine-second-cost | N | 60 | bug | Measured 2026-08-25 (pin v374, this box): compiling `print(\"hi\")` costs 8.92s; compiling `begin end.` costs 0.25s. The ~8.7s is a FIXED per-invocation constant — it does not scale with program size — and it is pure user CPU, not I/O. It is ~29% of the entire test matrix's CPU (805 .npy jobs x 8.7s ~ 7000 of 24219 cpu-s) and it is 9 seconds on every NilPy user's hello-world. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 20 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
 | bug-n-from-collections-import-counter-binds-something-that-always-answers-zero | N | 80 | bug | `from collections import Counter` binds a name that SILENTLY answers 0 for every key instead of counting — `Counter('aab')['a']` is 0, CPython says 2. And `OrderedDict` from the same import is `undefined variable`. The consume-and-ignore rule promises an unsupported name walls VISIBLY at its use site; Counter breaks that promise by answering wrongly instead. | — |
 | bug-n-hasattr-through-an-untyped-parameter-is-always-false | N | 80 | bug | `hasattr(x, name)` returns False for EVERYTHING when x is a parameter with no static type — `hasattr(a_dict, 'keys')` and `hasattr(a_list, 'append')` are both False. Silently wrong, never an error, and it is how CPython code dispatches on duck type. | — |
@@ -649,6 +649,7 @@ _none_
 - [p 88] [N] bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults [parked — re-claim, do not duplicate]
 - [p 88] [N] bug-n-inferred-return-type-of-true-division-is-int
 - [p 82] [N] bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
+- [p 80] [A] bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost
 - [p 80] [N] bug-n-a-class-base-that-is-an-expression-does-not-compile
 - [p 80] [N] bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - [p 80] [N] bug-n-hasattr-through-an-untyped-parameter-is-always-false
@@ -701,7 +702,6 @@ _none_
 - [p 62] [A] feature-unicodestring-model
 - [p 60] [B] bug-b-sysutils-string-gaps-found-by-differential
 - [p 60] [C] bug-c-driver-misses-the-shared-runtime-finalisation-step
-- [p 60] [N] bug-n-every-nilpy-compile-pays-a-fixed-nine-second-cost
 - [p 60] [N] bug-nilpy-a-keyword-call-through-a-statically-unknown-callee-does-not-compile
 - [p 60] [P] bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent
 - [p 60] [P] compat-pascal-calling-convention-directives-uneven

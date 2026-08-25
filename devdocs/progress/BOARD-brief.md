@@ -53,6 +53,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 88] [N]` bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
 - `[p 88] [N]` bug-n-inferred-return-type-of-true-division-is-int
 - `[p 82] [N]` bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
+- `[p 80] [A]` bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost
 - `[p 80] [N]` bug-n-a-class-base-that-is-an-expression-does-not-compile
 - `[p 80] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - `[p 80] [N]` bug-n-hasattr-through-an-untyped-parameter-is-always-false
@@ -78,6 +79,5 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` feature-p-delphi-string-helpers
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
-- `[p 68] [E]` feature-demo-songformatter-pxx-target
 
 _283 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
