@@ -11,4 +11,4 @@
 - **test-aarch64#src:test/test_forin_member_access.pas** — test/test_forin_member_access.pas tools/run_target.sh (plexus): bad `ab584382edcd`, last good `d2cb6721e175`, 1 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_type_name_of_a_big_int.npy** — test/test_nilpy_type_name_of_a_big_int.npy test/test_nilpy_type_name_of_a_big_int.expected (plexus): bad `ab584382edcd`, last good `d2cb6721e175`, 1 commit(s) in range
 - **test-pascal-conformance#shard5/6** — tools/run_pascal_conformance.sh (plexus): bad `ab584382edcd`, last good `d2cb6721e175`, 1 commit(s) in range
-- **test-uforth#core** (plexus): bad `224b06285ca3`, last good `d2cb6721e175`, 2 commit(s) in range
+- **test-uforth#core** (plexus): bad `ab584382edcd`, last good `d2cb6721e175`, 1 commit(s) in range
