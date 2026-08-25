@@ -3,8 +3,8 @@ track: P
 prio: 40
 type: bug
 blocked-by: []
-status: backlog
-owner: ""
+status: done
+owner: claude-A
 summary: "`Length('ab' + s)` is a PARSE ERROR (`Expected: ), but got: +`). Length's compile-time fold for a string literal fires on the first token being tkString and immediately demands `)`, so a literal that is merely the LEFT OPERAND of a concat is mistaken for the whole argument. `Length(s + 'ab')` works, and `Length(('ab') + s)` works — the same expression, three spellings, one of them refused."
 ---
 
@@ -76,3 +76,41 @@ fixing this one, and do not close this one without looking.
 Track P's, plus the five rows above in a test wired into `test-core`, each
 diffed against fpc 3.2.2 rather than reasoned about — including the two that
 already work, since the fix moves them onto a different path.
+
+
+## RESOLVED 2026-08-25 — the guard gained the one token of lookahead it lacked
+
+Exactly as this page diagnosed, and the diagnosis was right on the first read:
+
+```pascal
+if (CurTok.Kind = tkString) and (Tokens[TokPos].Kind = tkRParen) then
+```
+
+Anything else falls into the `ParseExpr` path below, which already lowers a
+concat r-value. All five rows now match fpc 3.2.2, plus six more the test adds:
+a longer chain, a call result on the right, a frozen `string[10]` operand, the
+empty literal, and — load-bearing — a `case Length('abc') of` arm, which proves
+the bare-literal fold is still a compile-time CONSTANT and was not quietly
+demoted to a runtime call by the new guard.
+
+Test: `test/test_length_of_a_string_literal_expression.pas`, wired into
+`test-core`, `.expected` = fpc's own output.
+
+## The sibling was looked at, as this page required — and it is worse
+
+`High`/`Low` have the same refuse-a-non-ident guard AND a wrong ANSWER on a
+shape that already compiles: for `s: AnsiString = 'qxy'`, fpc says
+`Low(s)=1, High(s)=3` and pxx says `0` and `2` — while `s[1]` is `'q'` in both.
+pxx indexes strings from 1, so `for i := Low(s) to High(s) do Write(s[i])` reads
+`s[0]` and drops the last character. That is a silent wrong value in idiomatic
+code, which outranks a parse error, so it is filed on its own at prio 55 rather
+than folded in here:
+[[bug-p-high-and-low-of-a-string-are-off-by-one]]. It also records the trap: fpc
+treats a bare string LITERAL as a 0-based array-of-char (`High('abc')` = 2) and
+a string EXPRESSION as a 1-based string (`High('ab' + s)` = 3), so the existing
+`Length-1` tail is right for one and wrong for the other.
+
+Gate: `make compiler/pascal26` converged in 1 round, `tools/gate.sh quick` GREEN.
+
+## Log
+- 2026-08-25 — resolved, commit PENDING-COMMIT.

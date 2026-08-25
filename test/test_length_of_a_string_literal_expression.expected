@@ -1,0 +1,11 @@
+litplus : 3
+litlit  : 4
+varplus : 3
+parens  : 3
+bare    : 2
+empty   : 0
+chain   : 6
+call    : 5
+frozen  : 4
+plain   : 1
+const   : 30

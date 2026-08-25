@@ -7797,6 +7797,15 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_a_nested_dynamic_array_result.pas $(TESTTMP)/test_nestdynres26
 	test "$$($(TESTTMP)/test_nestdynres26)" = "$$(cat test/test_a_nested_dynamic_array_result.expected)"
+	# `Length('ab' + s)` was a PARSE ERROR while `Length(s + 'ab')` compiled: the
+	# literal fold asked whether the argument STARTS with a literal and then
+	# demanded `)`. One expression, three spellings, only the one leading with the
+	# literal refused. Both already-working spellings are asserted too, since the
+	# fix moves the refused one onto the path they take, and the bare literal must
+	# keep its compile-time fold (the `const` row proves it is still constant).
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_length_of_a_string_literal_expression.pas $(TESTTMP)/test_lenlitexpr26
+	test "$$($(TESTTMP)/test_lenlitexpr26)" = "$$(cat test/test_length_of_a_string_literal_expression.expected)"
 	# The `in: <path>` line under a diagnostic must name the unit the error is
 	# actually IN. The token->file map is keyed on absolute token indices, and the
 	# generic-specialization splice inserts tens of thousands of tokens into the

@@ -4990,8 +4990,19 @@ begin
         Next; Expect(tkLParen, '(');
         { Length of a string LITERAL folds to its char count at compile time
           (FPC: Length('hello') = 5). Covers the common literal forms without
-          the runtime [-8]-header path, which only an lvalue string/array has. }
-        if CurTok.Kind = tkString then
+          the runtime [-8]-header path, which only an lvalue string/array has.
+
+          The `)` lookahead is load-bearing: this guard used to ask only whether
+          the argument STARTS with a literal and then demanded `)`, so
+          `Length('ab' + s)` — the literal as the LEFT operand of a concat — was
+          a PARSE ERROR, while `Length(s + 'ab')` and `Length(('ab') + s)`, the
+          same expression twice more, both compiled. A fast path that is not a
+          strict subset of the general one
+          (devdocs/dev/normalise-dont-special-case.md); anything but a bare
+          literal now falls into the ParseExpr path below, which already lowers
+          a concat r-value.
+          bug-p-length-of-a-string-literal-plus-anything-does-not-parse }
+        if (CurTok.Kind = tkString) and (Tokens[TokPos].Kind = tkRParen) then
         begin
           node := AllocNode(AN_INT_LIT);
           ASTIVal[node] := Length(CurTok.SVal); ASTTk[node] := Ord(tyInteger);
