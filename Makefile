@@ -5305,18 +5305,23 @@ test-core: $(COMPILER)
 	# what pinned still does. The property is that the flag changes nothing a
 	# program prints, so each is compared against its own plain output.
 	# refactor-a-one-program-driver-prologue-for-every-frontend
-	@for t in "test/test_fortran_skeleton.f90 test_fortran" \
-	          "test/test_algol_skeleton.alg test_algol" \
-	          "test/test_lolcode_skeleton.lol test_lolcode" \
-	          "test/test_ada_skeleton.adb test_ada" \
-	          "test/test_erlang_skeleton.erl test_erlang" \
-	          "test/test_ws_skeleton.ws test_ws"; do \
-	  set -- $$t; src=$$1; nm=$$2; \
-	  ./$(COMPILER) $$src $(TESTTMP)/$${nm}_plain26 >/dev/null; \
-	  ./$(COMPILER) --threadsafe $$src $(TESTTMP)/$${nm}_ts26 >/dev/null \
+	# The two binaries per language are named LITERALLY in the item list, not
+	# derived from $$nm in the body: testmgr privatizes /tmp by rewriting the
+	# recipe TEXT, and a path assembled at runtime is invisible to that scan, so
+	# two concurrent runs would share the file
+	# (chore-makefile-ws-skeleton-loop-hides-tmp-paths).
+	@for t in "test/test_fortran_skeleton.f90 test_fortran $(TESTTMP)/test_fortran_plain26 $(TESTTMP)/test_fortran_ts26" \
+	          "test/test_algol_skeleton.alg test_algol $(TESTTMP)/test_algol_plain26 $(TESTTMP)/test_algol_ts26" \
+	          "test/test_lolcode_skeleton.lol test_lolcode $(TESTTMP)/test_lolcode_plain26 $(TESTTMP)/test_lolcode_ts26" \
+	          "test/test_ada_skeleton.adb test_ada $(TESTTMP)/test_ada_plain26 $(TESTTMP)/test_ada_ts26" \
+	          "test/test_erlang_skeleton.erl test_erlang $(TESTTMP)/test_erlang_plain26 $(TESTTMP)/test_erlang_ts26" \
+	          "test/test_ws_skeleton.ws test_ws $(TESTTMP)/test_ws_plain26 $(TESTTMP)/test_ws_ts26"; do \
+	  set -- $$t; src=$$1; nm=$$2; plainbin=$$3; tsbin=$$4; \
+	  ./$(COMPILER) $$src $$plainbin >/dev/null; \
+	  ./$(COMPILER) --threadsafe $$src $$tsbin >/dev/null \
 	    || { echo "$$nm: --threadsafe does not COMPILE"; exit 1; }; \
-	  plain="$$($(TESTTMP)/$${nm}_plain26)"; \
-	  ts="$$(timeout 20 $(TESTTMP)/$${nm}_ts26)"; rc=$$?; \
+	  plain="$$($$plainbin)"; \
+	  ts="$$(timeout 20 $$tsbin)"; rc=$$?; \
 	  if [ "$$rc" = "124" ]; then echo "$$nm: --threadsafe HANGS (the missing I/O lock stubs are back)"; exit 1; fi; \
 	  if [ "$$plain" != "$$ts" ]; then echo "$$nm: --threadsafe changes the output"; echo "$$plain"; echo "---"; echo "$$ts"; exit 1; fi; \
 	done; echo "skeleton --threadsafe ok: fortran algol lolcode ada erlang whitespace"

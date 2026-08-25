@@ -3,6 +3,8 @@ track: A
 prio: 40
 type: chore
 summary: "The whitespace/fortran/algol skeleton loop in Makefile:5313 reaches /tmp through a shell variable, so split_jobs cannot merge the recipe and testmgr cannot privatize the path. tools/testmgr_tmp_var_devtest.py is RED on dev because of it, which stops `make tools-devtest` before the ~20 guards that sort after it."
+status: done
+owner: trackA-worker
 ---
 
 # The skeleton-language loop hides its /tmp paths in a shell variable
@@ -36,3 +38,6 @@ the specific entries to `ALLOWED` in the guard **with a reason**.
 
 `make tools-devtest` green (Track T's guard passes), and the skeleton tests
 still pass in the quick tier.
+
+## Log
+- 2026-08-25 — resolved, commit PENDING-COMMIT.
