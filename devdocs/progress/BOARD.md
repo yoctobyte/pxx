@@ -347,7 +347,7 @@ _none_
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (17)
+## backlog_new (18)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -357,6 +357,7 @@ _none_
 | bug-a-the-specialization-splice-does-not-adjust-the-body-pass-spans | A | 35 | bug | InsertTokens/RemoveTokens keep the body pass's DeclItem spans and body-begin marker in step with a token-stream edit. The specialization splice hand-rolls its own insert and calls neither — it now adjusts the token->file map (that fix landed) but still not the Pass2 spans. Either Pass2Active is always false there, in which case say so in a comment, or the spans drift. | — |
 | bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent | P | 35 | bug | `PG = ^TG` with `TG = array[0..1, 0..2] of LongWord`: `qg^[i, j]` prints `0 1 2 1 2 10` where FPC prints `0 1 2 10 11 12` — the comma subscript is not flattened against the pointee's dims — and `Length(qg^)` answers 6 (the flat extent) where FPC answers 2 (the first dimension). Predates and is not caused by the single-dim fix; the metadata it needs is now present. | — |
 | bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 30 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
+| bug-p-high-and-low-refuse-every-non-identifier-operand | P | 35 | bug | Both arms open with `if CurTok.Kind <> tkIdent then Error('High: expected array variable or ordinal type')`, so a string literal, a concat, or a parenthesised expression cannot be an operand at all. fpc takes all three — and gives each a DIFFERENT base, which is why widening the guard needs its own measured table rather than a one-line edit. | — |
 | bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one | P | 30 | bug | `PDyn = ^TDyn` with `TDyn = array of LongWord`: after `SetLength(d, 5)`, `Length(pdy^)` answers 1 and `High(pdy^)` answers 0 where FPC answers 5 and 4 — while `pdy^[1]` reads the right element. The pointee is a HANDLE, so the [data-8] header is one indirection further than the runtime path looks. | — |
 | bug-t-run-pascal-conformance-silently-fails-every-test-on-a-relative-compiler-path | T | 25 | bug | `tools/run_pascal_conformance.sh ./compiler/pascal26 ...` fails 51 of 107 tgeneric tests; the same run with `/home/neo/frank1/compiler/pascal26` passes 61 and fails 0. The runner `cd`s into the suite dir before invoking the compiler, so a relative `$CC` no longer resolves — and the failure surfaces as `compile error`, i.e. as a COMPILER bug, for every test at once. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 35 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
@@ -769,6 +770,7 @@ _none_
 - [p 35] [P] bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent
 - [p 35] [P] bug-p-a-typed-constant-of-pchar-type-is-a-parse-error
 - [p 35] [P] bug-p-a-typed-string-constant-cannot-be-assigned
+- [p 35] [P] bug-p-high-and-low-refuse-every-non-identifier-operand
 - [p 35] [P] bug-p-sizeof-rejects-a-pointer-deref-in-its-operand
 - [p 35] [A] chore-a-the-range-checked-fpc-seed-cannot-be-built
 - [p 35] [P] compat-pascal-calling-convention-directives-uneven
