@@ -6870,15 +6870,14 @@
    "status": "fail"
   },
   {
-   "bad": "224b06285ca3f94acc2586e7c5bd9fc6fd3ea947",
+   "bad": "ab584382edcd4ecc1084e12b44b394fe0d744de9",
    "good": "d2cb6721e17541fbb91eafc87992df0eca17c055",
    "job": "test-pascal-conformance#shard5/6",
    "name": "test-pascal-conformance#shard5/6",
    "opened": "2026-08-25T20:32:11Z",
    "pin_built": false,
    "range": [
-    "ab584382edcd4ecc1084e12b44b394fe0d744de9",
-    "224b06285ca3f94acc2586e7c5bd9fc6fd3ea947"
+    "ab584382edcd4ecc1084e12b44b394fe0d744de9"
    ],
    "src": "tools/run_pascal_conformance.sh",
    "status": "fail"
