@@ -234,4 +234,4 @@ does not need one to be useful (nothing outside `compiler/**` moved), so it does
 not add a third.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 042e13b5c.

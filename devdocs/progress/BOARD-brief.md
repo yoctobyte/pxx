@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:22 blocked:7 backlog:291 backlog_new:24 experimental:20 rainy-day:44 float:20 done-followup:3 decided:114 done:2362 rejected:40`
+`working:1 unfinished:22 blocked:7 backlog:291 backlog_new:24 experimental:20 rainy-day:44 float:20 done-followup:3 decided:114 done:2363 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -49,7 +49,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 ## Ready — top 30 of 325, ranked
 
 - `[p 88] [N]` bug-n-inferred-return-type-of-true-division-is-int
-- `[p 82] [A]` bug-a-the-fpjson-suite-overflows-the-fixed-4096-entry-data-ptr-fixup-table
 - `[p 82] [N]` bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
 - `[p 80] [A]` bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost
 - `[p 80] [N]` bug-n-a-class-base-that-is-an-expression-does-not-compile
@@ -78,5 +77,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [P]` regression-test-aarch64-test-forin-member-access
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-type-name-of-a-big-int
+- `[p 70] [T]` regression-test-pascal-conformance-shard5-6-2
 
 _295 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
