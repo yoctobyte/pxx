@@ -1708,6 +1708,35 @@ BREADTH_STALE_SECS = 6 * 3600
 BREADTH_RETRY_SECS = 2 * 3600
 
 
+def breadth_inflight(st, now=None):
+    """Is this host inside a reserved BREADTH run right now? -> (sha, age) or None.
+
+    A reserved breadth run pauses the fast verdict for ~40-67 minutes, so
+    commits pile up untested and `--status` crosses its 45-minute grace and
+    reports DOWN — which tells every dev agent to run its own full gate, the
+    exact ten-minute cost the watcher exists to save them. The watcher is not
+    down; it is doing the most expensive useful thing it does.
+
+    A remote reader cannot see the daemon's phase heartbeat (it is a file in the
+    clone), but `last_breadth_try` IS published in the host's state, which is
+    why it is written before the run rather than after.
+
+    Bounded by BREADTH_RETRY_SECS so a daemon that DIES mid-breadth cannot hide
+    behind this forever: past that bound the claim is stale and DOWN is the
+    honest answer again. In flight means the claim is newer than the host's last
+    completed run — once a run lands, `st["last"]` moves past it.
+    """
+    now = time.time() if now is None else now
+    claim = st.get("last_breadth_try") or {}
+    started = secs_since(claim.get("date") or "", now)
+    if started is None or started > BREADTH_RETRY_SECS:
+        return None
+    last_run = secs_since(((st.get("last") or {}).get("date")) or "", now)
+    if last_run is not None and last_run < started:
+        return None            # a run has landed since the claim: not in flight
+    return (claim.get("sha") or "?", started)
+
+
 def breadth_overdue(st, now=None):
     """Should this cycle run BREADTH even though there is a new commit to test?
 
@@ -4936,7 +4965,12 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
             untested_old = (sha, int(ct))
             break
     live, degraded = 0, 0
+    breadth_running = []          # (host, sha, seconds-since-it-started)
     for st in hosts:
+        if not st.get("retired_at"):
+            bf = breadth_inflight(st, now)
+            if bf:
+                breadth_running.append((st.get("host", "?"),) + bf)
         if st.get("retired_at"):
             # One line, no ledger, never QUIET: a retired host holds nothing,
             # so it must not appear among the hosts an agent could wait on.
@@ -5143,6 +5177,27 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
               "with a working remote to get an answer." % msg)
         return STATUS_UNKNOWN
 
+    if untested_old and breadth_running:
+        # NOT down: the fast verdict is paused because breadth has the slot, and
+        # breadth is the most expensive useful thing this watcher does. Calling
+        # it DOWN here would send every dev agent to run its own full gate — ten
+        # minutes each, to replace a matrix that is running right now.
+        #
+        # The claim is bounded (see breadth_inflight), so a daemon that dies
+        # mid-breadth still reports DOWN once the bound lapses. What this cannot
+        # do is stay silent: an agent reading UP must be told WHY its commit has
+        # no verdict yet, or the next thing it does is gate by hand anyway.
+        age = int((now - untested_old[1]) / 60)
+        for h, bsha, started in breadth_running:
+            print("tstate: %s is running BREADTH on %s (started %s ago) — the "
+                  "fast verdict is paused for this one run, so %s untested for "
+                  "%d min is EXPECTED, not a stalled watcher. Your commit gets "
+                  "its native verdict when this lands; do not widen your gate."
+                  % (h, bsha[:12], fmt_age(started),
+                     untested_old[0][:12], age))
+        print("tstate: UP (breadth in flight) — offload the matrix to T%s"
+              % ("" if fetched else "  [UNFETCHED]"))
+        return STATUS_UP
     if untested_old:
         age = int((now - untested_old[1]) / 60)
         return verdict_down("%s untested for %d min (> %d min grace)"
@@ -5157,8 +5212,11 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
         # stale read could still be describing a state the host has since left.
         return verdict_down("all %d live host(s) degraded (cannot build/run)"
                             % live)
-    stale = "" if fetched else "  [UNFETCHED — based on this checkout's " \
-                                "existing origin/master]"
+    # `ref`, not the literal origin/master: since the branch split this reader
+    # may be standing on dev, and naming the wrong ref in the one line that
+    # tells a reader how much to trust the answer is its own small lie.
+    stale = "" if fetched else ("  [UNFETCHED — based on this checkout's "
+                                "existing %s]" % ref)
     if newest_tested:
         print("tstate: UP — commits through %s tested; offload the matrix to T%s"
               % (newest_tested[0][:12], stale))

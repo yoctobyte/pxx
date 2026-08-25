@@ -115,6 +115,53 @@ def t_an_unparseable_date_does_not_wedge_the_daemon():
     return "garbage date -> %r" % (why or "no claim")
 
 
+def t_breadth_in_flight_is_visible_to_a_remote_reader():
+    """--status must not call a busy watcher DOWN.
+
+    A reserved breadth run pauses the fast verdict for 40-67 minutes, so commits
+    cross the 45-minute grace and `--status` reports DOWN — which tells every
+    dev agent to run its own full gate, ten minutes each, to replace a matrix
+    that is running right now. A remote reader cannot see the daemon's phase
+    heartbeat (it is a file in the clone), so `last_breadth_try` is published in
+    the host state and written BEFORE the run for exactly this reason.
+    """
+    st = state(full_age=tw.BREADTH_STALE_SECS + 3600, try_age=600)
+    st["last"] = {"sha": "c" * 40, "date": iso(1800), "verdict": "GREEN"}
+    bf = tw.breadth_inflight(st, NOW)
+    assert bf, "a breadth run 10 minutes in was not visible as in-flight"
+    sha, started = bf
+    assert sha == "b" * 40 and 590 < started < 610, "wrong sha/age: %r" % (bf,)
+    return "in flight, %ds in" % started
+
+
+def t_a_landed_run_ends_the_in_flight_claim():
+    """Once a run lands, st["last"] moves past the claim and the pause is over.
+    Without this the reader would suppress DOWN for the full bound after every
+    successful breadth run — masking a real outage for up to two hours."""
+    st = state(full_age=60, try_age=600)
+    st["last"] = {"sha": "c" * 40, "date": iso(30), "verdict": "GREEN"}
+    assert tw.breadth_inflight(st, NOW) is None, \
+        "a completed run did not clear the in-flight claim"
+    return "landing ends it"
+
+
+def t_a_daemon_that_dies_mid_breadth_still_reports_down():
+    """The bound is the whole reason this is safe to trust. A claim older than
+    BREADTH_RETRY_SECS is stale, and DOWN becomes the honest answer again."""
+    st = state(full_age=tw.BREADTH_STALE_SECS + 9999,
+               try_age=tw.BREADTH_RETRY_SECS + 60)
+    st["last"] = {"sha": "c" * 40, "date": iso(tw.BREADTH_RETRY_SECS + 600)}
+    assert tw.breadth_inflight(st, NOW) is None, \
+        "a stale claim still suppressed DOWN — a dead daemon would hide behind it"
+    return "the claim expires after %s" % tw.fmt_age(tw.BREADTH_RETRY_SECS)
+
+
+def t_a_host_that_never_claimed_breadth_is_not_in_flight():
+    assert tw.breadth_inflight(state(full_age=600), NOW) is None
+    assert tw.breadth_inflight({}, NOW) is None
+    return "no claim, no suppression"
+
+
 def main():
     rc = 0
     for fn in (t_fresh_breadth_does_not_take_the_slot,
@@ -122,7 +169,11 @@ def main():
                t_a_host_with_no_breadth_at_all_claims_one,
                t_the_backoff_stops_breadth_from_taking_every_slot,
                t_a_landed_run_clears_the_claim_even_inside_the_backoff,
-               t_an_unparseable_date_does_not_wedge_the_daemon):
+               t_an_unparseable_date_does_not_wedge_the_daemon,
+               t_breadth_in_flight_is_visible_to_a_remote_reader,
+               t_a_landed_run_ends_the_in_flight_claim,
+               t_a_daemon_that_dies_mid_breadth_still_reports_down,
+               t_a_host_that_never_claimed_breadth_is_not_in_flight):
         try:
             print("  ok   %s — %s" % (fn.__name__, fn()))
         except Exception as e:              # noqa: BLE001 - report, keep going
