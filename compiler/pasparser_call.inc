@@ -1795,6 +1795,25 @@ procedure RequireRecMember(recId: Integer; const fieldName: AnsiString);
   and read garbage (bug-pascal-undefined-field-on-empty-record-compiles).
   Builtin records keep the lax path — their field names are compiler-authored. }
 begin
+  { …and the same hole one step to the left: recId = REC_NONE, i.e. the
+    receiver is not a record or class AT ALL. RecFieldType's not-found default
+    fires the same way, so the fallthrough read the VALUE'S OWN BYTES at offset
+    0 and typed them tyInteger. With a `type helper for string` in scope,
+    `s.Twice.Twice` printed 24929 — the two bytes of 'aa' as an Int32 — and
+    `s.Twice.IsEmpty` printed 24929 as well, the trailing member silently
+    dropped, because a helper method's return type resets recId to REC_NONE and
+    the selector loop then kept going. `(F).Twice` printed 113, ord('q').
+
+    This is the sibling of the AN_IDENT-receiver refusal in pasparser_lval.inc
+    (bug-p-a-member-on-a-scalar-silently-reads-the-values-own-bytes), which was
+    narrowed to a declared VARIABLE and so never covered a computed receiver.
+    Here the guard costs nothing extra: every caller already asks this function
+    whether the member exists, so asking it about REC_NONE too is one arm, not a
+    fourth copy of member dispatch.
+    bug-p-a-member-on-a-computed-value-silently-reads-the-values-own-bytes }
+  if recId = REC_NONE then
+    ErrorRecover('"' + fieldName + '": this value has no members (only records, '
+                 + 'classes, interfaces and variants do)');
   if (recId >= REC_UCLASS_BASE) and
      (FindUField(recId - REC_UCLASS_BASE, fieldName) < 0) then
     { RECOVERABLE: the caller then falls into RecFieldType's not-found default

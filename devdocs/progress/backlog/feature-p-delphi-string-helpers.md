@@ -74,3 +74,40 @@ commit**, the way `test_asm_att_reject.pas` had to be re-pointed on
 2026-08-19. The neighbouring `test_scalar_member_int_fail.pas` — `a value of
 this type has no members` — is unaffected, since integer helpers are out of
 scope here.
+
+## Measured state, 2026-08-25 (probing before starting)
+
+Rather more of this already works than the ticket assumed, and one part of the
+scope was missing.
+
+**Works today, matching fpc 3.2.2 byte for byte:** a `type helper for string`
+declared in a UNIT and used from a program, on `string` and on `AnsiString`,
+with a plain VARIABLE receiver — `s.Twice`, `s.IsEmpty`, `(s + 'x').Twice`.
+So "whatever binds a helper to the built-in string kinds rather than to a named
+type" is not missing; it is done. What is left of the ticket is largely the
+**sysutils-side declaration** of `TStringHelper` with FPC's signatures — which
+is `lib/rtl` and therefore Track **B** file-ownership, not P. Worth re-tracking
+before someone claims this as a P item and finds themselves editing lib/.
+
+**Refused, and correctly so:** `sh.Twice` on a ShortString — FPC says
+`Illegal qualifier` too, so a `helper for string` does not apply to a
+ShortString in either compiler.
+
+**The real P-side gap, and an addition to Scope above: the RECEIVER must be
+generalised past a declared variable.** FPC accepts, and pxx does not:
+
+| spelling | fpc | pxx |
+| --- | --- | --- |
+| `'xy'.Twice` (literal receiver) | `xyxy` | parse error at the `.` |
+| `F.Twice` (call result) | `qq` | parse error at the `.` |
+| `Copy(s,1,1).Twice` | `aa` | parse error at the `.` |
+| `s.Twice.Twice` (chained) | `aaaa` | refused |
+| `(F).Twice` | `qq` | refused |
+
+The last two printed **wrong numbers** until 2026-08-25 — see
+[[bug-p-a-member-on-a-computed-value-silently-reads-the-values-own-bytes]],
+which made them loud. The dispatch is keyed on the receiver SYMBOL
+(`pasparser_lval.inc`, the TYPE-HELPER dispatch block, `if (idx >= 0) and ...`),
+and a helper method's Self is by-reference, so a computed receiver needs
+materialising into a temp first — the move `GenMakeStringValueIndex` already
+makes for `(s + 'x')[3]`.

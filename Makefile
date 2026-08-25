@@ -4833,6 +4833,16 @@ test-core: $(COMPILER)
 	grep -q "a string has no members here" $(TESTTMP)/test_smf.log
 	! ./$(COMPILER) test/test_scalar_member_int_fail.pas $(TESTTMP)/test_smi26 > $(TESTTMP)/test_smi.log 2>&1
 	grep -q "a value of this type has no members" $(TESTTMP)/test_smi.log
+	# ...and the half BOTH of those missed: a COMPUTED receiver. The guard above
+	# is keyed on a declared variable on purpose, so a call result kept the silent
+	# behaviour -- `(F).Twice` printed ord('q') and `s.Twice.Twice` printed the
+	# two bytes of 'aa' as an Int32, with the trailing member simply dropped.
+	# The refusal now lives in RequireRecMember, which every copy of member
+	# dispatch already calls.
+	! ./$(COMPILER) test/test_computed_member_fail.pas $(TESTTMP)/test_cmf26 > $(TESTTMP)/test_cmf.log 2>&1
+	grep -q "this value has no members" $(TESTTMP)/test_cmf.log
+	! ./$(COMPILER) test/test_chained_helper_member_fail.pas $(TESTTMP)/test_chmf26 > $(TESTTMP)/test_chmf.log 2>&1
+	grep -q "this value has no members" $(TESTTMP)/test_chmf.log
 	# ParamCount as a for-loop LIMIT: the node must carry tyInteger, or the hidden
 	# limit temp is untyped and i386 refuses the whole unit. The i386 build is the
 	# half that actually regressed (`uses pylib` could not target i386 at all);

@@ -1115,6 +1115,14 @@ begin
               Error('property is write-only')
             else
             begin
+              { The guard ParseSelectors and ParseClassRecordSelectors both
+                apply here, and this fourth copy of member dispatch did not:
+                without it `(F).Twice` on a string-returning F built a field
+                read at offset 0 and printed 113, ord('q'). RecFieldType's
+                not-found default (tyInteger at offset 0) is the same trap in
+                all four copies, so it is asked the same question in all four.
+                bug-p-a-member-on-a-computed-value-silently-reads-the-values-own-bytes }
+              RequireRecMember(baseRec, fieldName);
               fieldNode := AllocNode(AN_FIELD);
               ASTLeft[fieldNode] := node;
               ASTSOffset[fieldNode] := Tokens[prevTok].SOffset;
