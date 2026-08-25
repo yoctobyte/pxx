@@ -1,26 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T16:31:55Z",
-   "fixed": [
-    "test-asm#src:compiler/compiler.pas",
-    "test-core#src:test/test_rust_advanced.rs",
-    "test-core#src:test/test_rust_assoc_fns.rs",
-    "test-core#src:test/test_rust_chess_engine.rs",
-    "test-core#src:test/test_rust_chess_perft.rs",
-    "test-core#src:test/test_rust_chess_perft_full.rs",
-    "test-core#src:test/test_rust_chess_search.rs",
-    "test-core#src:test/test_rust_else_if.rs@1",
-    "test-core#src:test/test_rust_else_if.rs@2",
-    "test-core#src:test/test_rust_struct_array.rs",
-    "test-core#src:test/test_rust_tuple_struct.rs"
-   ],
-   "new_red": [],
-   "sha": "777bc43feb30c3b383b97e770ba68b82bdb071cb",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T17:33:21Z",
    "fixed": [
     "test-core#src:test/cstatic_same_module_dup.c"
@@ -490,13 +470,25 @@
    "sha": "10dada0b7689fee546516eec7ea90d1da4256053",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-25T18:15:53Z",
+   "fixed": [
+    "test-core#src:test/test_arr_of_ptr_elemrec_b354.pas",
+    "test-core#src:test/test_setlength_grow_capacity.pas"
+   ],
+   "new_red": [
+    "test-core#src:test/test_indexing_length_for_new_inc_positive.pas"
+   ],
+   "sha": "c59796cd1e1d0255c93b85e67ce8cd9ea422b3e9",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2358728B  data=61689B  bss=51420B  procs=1788] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
-  "test-core#src:test/test_arr_of_ptr_elemrec_b354.pas": "pascal26:51: error: \"A\": this value has no members (only records, classes, interfaces and variants do) | near: lst  i    >>> A | pascal26:51: error: \"B\": this value has no members (only records, classes, interfaces and variants do) | near: lst  i    >>> B | pascal26:51: error: \"C\": this value has no members (only records, classes, interfaces and variants do) | near: lst  i    >>> C",
-  "test-core#src:test/test_setlength_grow_capacity.pas": "ok: $TMP  [code=65250B  data=2016B  bss=42480B  procs=128]",
+  "test-core#src:test/test_indexing_length_for_new_inc_positive.pas": "pascal26:48: error: Length needs a string, an array or a PChar, not Integer | near: j  Length  i  >>>  b | pascal26:50: error: with needs a record, class or interface \u2014 Integer has no members | near: r    with i >>> do WriteLn | pascal26:51: error: cannot assign to the result of a function call | near:   F1    >>>",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter"
  },
  "job_tier": {
@@ -1030,11 +1022,11 @@
   "test-core#00": "native",
   "test-core#129": "full",
   "test-core#157": "full",
-  "test-core#159": "native",
   "test-core#160": "native",
   "test-core#161": "native",
   "test-core#162": "native",
   "test-core#163": "native",
+  "test-core#164": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
   "test-core#src:examples/tk/callbacks.npy": "native",
@@ -1506,6 +1498,8 @@
   "test-core#src:test/test_c_float.pas": "native",
   "test-core#src:test/test_c_gtk.pas": "native",
   "test-core#src:test/test_c_gtk_call.pas": "native",
+  "test-core#src:test/test_c_gtk_types.pas": "native",
+  "test-core#src:test/test_c_gtk_window.pas": "native",
   "test-core#src:test/test_c_header_case_sensitive_import.pas": "native",
   "test-core#src:test/test_c_import.pas": "native",
   "test-core#src:test/test_c_macro_soup.pas": "native",
@@ -2354,8 +2348,10 @@
   "test-core#src:test/test_tobject_methodaddress_b256.pas": "native",
   "test-core#src:test/test_tobject_param_b243.pas": "native",
   "test-core#src:test/test_tobject_root_methods_inside_a_unit.pas": "native",
+  "test-core#src:test/test_tobject_unitname.pas": "native",
   "test-core#src:test/test_type_helper_const_array.pas": "native",
   "test-core#src:test/test_type_helper_for_spelling.pas": "native",
+  "test-core#src:test/test_type_helper_on_a_value.pas": "native",
   "test-core#src:test/test_type_helper_typename_receiver.pas": "native",
   "test-core#src:test/test_type_runtime.pas": "native",
   "test-core#src:test/test_typed_class_const_scoping.pas": "native",
@@ -4113,11 +4109,11 @@
   "test-cjson#src:test/cjson/runner.c": "pass",
   "test-core#00": "pass",
   "test-core#157": "pass",
-  "test-core#159": "pass",
   "test-core#160": "pass",
   "test-core#161": "pass",
   "test-core#162": "pass",
   "test-core#163": "pass",
+  "test-core#164": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
@@ -4531,7 +4527,7 @@
   "test-core#src:test/test_ansistring_cast_extern_pchar.pas": "pass",
   "test-core#src:test/test_ansistring_cast_fnptr.pas": "pass",
   "test-core#src:test/test_ansistring_record_char_read.pas": "pass",
-  "test-core#src:test/test_arr_of_ptr_elemrec_b354.pas": "fail",
+  "test-core#src:test/test_arr_of_ptr_elemrec_b354.pas": "pass",
   "test-core#src:test/test_array_index_type_b284.pas": "pass",
   "test-core#src:test/test_array_of_const.pas": "pass",
   "test-core#src:test/test_array_of_const_cross_unit_overload.pas": "pass",
@@ -4588,6 +4584,9 @@
   "test-core#src:test/test_c_enum.pas": "pass",
   "test-core#src:test/test_c_float.pas": "pass",
   "test-core#src:test/test_c_gtk.pas": "pass",
+  "test-core#src:test/test_c_gtk_call.pas": "pass",
+  "test-core#src:test/test_c_gtk_types.pas": "pass",
+  "test-core#src:test/test_c_gtk_window.pas": "pass",
   "test-core#src:test/test_c_header_case_sensitive_import.pas": "pass",
   "test-core#src:test/test_c_import.pas": "pass",
   "test-core#src:test/test_c_macro_soup.pas": "pass",
@@ -4881,7 +4880,7 @@
   "test-core#src:test/test_indexed_proc_call.pas": "pass",
   "test-core#src:test/test_indexed_property.pas": "pass",
   "test-core#src:test/test_indexing_a_string_value.pas": "pass",
-  "test-core#src:test/test_indexing_length_for_new_inc_positive.pas": "pass",
+  "test-core#src:test/test_indexing_length_for_new_inc_positive.pas": "fail",
   "test-core#src:test/test_inferred_pointer_keeps_its_depth.pas": "pass",
   "test-core#src:test/test_inheritance_dispatch.pas": "pass",
   "test-core#src:test/test_inherited.pas": "pass",
@@ -5341,7 +5340,7 @@
   "test-core#src:test/test_set_subrange.pas": "pass",
   "test-core#src:test/test_set_symmetric_difference.pas": "pass",
   "test-core#src:test/test_setlength_dynarray_result.pas": "pass",
-  "test-core#src:test/test_setlength_grow_capacity.pas": "fail",
+  "test-core#src:test/test_setlength_grow_capacity.pas": "pass",
   "test-core#src:test/test_setlength_managed_field.pas": "pass",
   "test-core#src:test/test_sets.pas": "pass",
   "test-core#src:test/test_shadow_first_uses_hidden.pas": "pass",
@@ -5434,8 +5433,10 @@
   "test-core#src:test/test_tobject_methodaddress_b256.pas": "pass",
   "test-core#src:test/test_tobject_param_b243.pas": "pass",
   "test-core#src:test/test_tobject_root_methods_inside_a_unit.pas": "pass",
+  "test-core#src:test/test_tobject_unitname.pas": "pass",
   "test-core#src:test/test_type_helper_const_array.pas": "pass",
   "test-core#src:test/test_type_helper_for_spelling.pas": "pass",
+  "test-core#src:test/test_type_helper_on_a_value.pas": "pass",
   "test-core#src:test/test_type_helper_typename_receiver.pas": "pass",
   "test-core#src:test/test_type_runtime.pas": "pass",
   "test-core#src:test/test_typed_class_const_scoping.pas": "pass",
@@ -6655,11 +6656,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-25T16:38:22Z",
-  "sha": "10dada0b7689fee546516eec7ea90d1da4256053",
+  "date": "2026-08-25T18:15:53Z",
+  "sha": "c59796cd1e1d0255c93b85e67ce8cd9ea422b3e9",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.0
+  "wall": 468.4
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6852,41 +6853,30 @@
    "status": "fail"
   },
   {
-   "bad": "10dada0b7689fee546516eec7ea90d1da4256053",
-   "good": "d20300d288eb206e9e1aa157e9e052d546369817",
-   "job": "test-core#src:test/test_arr_of_ptr_elemrec_b354.pas",
-   "name": "test-core#89",
-   "opened": "2026-08-25T16:38:22Z",
+   "bad": "c59796cd1e1d0255c93b85e67ce8cd9ea422b3e9",
+   "good": "10dada0b7689fee546516eec7ea90d1da4256053",
+   "job": "test-core#src:test/test_indexing_length_for_new_inc_positive.pas",
+   "name": "test-core#1086",
+   "opened": "2026-08-25T18:15:53Z",
    "pin_built": false,
    "range": [
-    "a0ccba78f7ddfb64a3abc70300673a461400b65c",
-    "0d8fe0d03541372e4fd9fafb28f6d1cb5dc62ff8",
-    "f2bad72e923042f234d09920e9997b502f103ffa",
-    "3a1227d5df188f2c781dd5fe3db4d0e3d9965a8e",
-    "582cdc934c71b939d9dfa520933c8884f3fe40eb",
-    "383cada586f0206bf0d8fb6670626af405cc4e1a",
-    "10dada0b7689fee546516eec7ea90d1da4256053"
+    "1bbe78c3c27e217ba40217d23c08121edab30350",
+    "77c6dd854025709fd0dfe7a3756f1c6402e033d7",
+    "4c1b6b6e3bc797423efb3535ee7b3f7235619c42",
+    "eb57ef08299ed99563de21e06cf46148ef04250a",
+    "519fa45a054b0be52ec243a192d62e7084481957",
+    "8c38737be5a2ed3660d388961e919696efb79064",
+    "a5709669101de6917d5aa0cbc5d365615cd6be98",
+    "ae6251f917bb06e80679e1da8253957106b1fd13",
+    "6ed9cf36827e174292a5b270e80390c5883c3e22",
+    "9170a61935784e43f4f42ab5586f490ac2cb277e",
+    "e741c2a9911d0b1be14dec4e7c8c3e198ff9f604",
+    "f2914dea7766229fc751c4325757bea1ae9f61f2",
+    "53bb3e3a1dd8309efd80632c28427f5b376cf22f",
+    "2a129cfb9fefaaab07c2ed401fc6a0848ab341c9",
+    "c59796cd1e1d0255c93b85e67ce8cd9ea422b3e9"
    ],
-   "src": "test/test_arr_of_ptr_elemrec_b354.pas",
-   "status": "fail"
-  },
-  {
-   "bad": "10dada0b7689fee546516eec7ea90d1da4256053",
-   "good": "d20300d288eb206e9e1aa157e9e052d546369817",
-   "job": "test-core#src:test/test_setlength_grow_capacity.pas",
-   "name": "test-core#375",
-   "opened": "2026-08-25T16:38:22Z",
-   "pin_built": false,
-   "range": [
-    "a0ccba78f7ddfb64a3abc70300673a461400b65c",
-    "0d8fe0d03541372e4fd9fafb28f6d1cb5dc62ff8",
-    "f2bad72e923042f234d09920e9997b502f103ffa",
-    "3a1227d5df188f2c781dd5fe3db4d0e3d9965a8e",
-    "582cdc934c71b939d9dfa520933c8884f3fe40eb",
-    "383cada586f0206bf0d8fb6670626af405cc4e1a",
-    "10dada0b7689fee546516eec7ea90d1da4256053"
-   ],
-   "src": "test/test_setlength_grow_capacity.pas test/test_dynarray_concat_rejected.pas",
+   "src": "test/test_indexing_length_for_new_inc_positive.pas test/test_indexing_length_for_new_inc_positive.expected +1",
    "status": "fail"
   }
  ],
