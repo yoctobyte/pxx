@@ -1,0 +1,8 @@
+empty  : 00000
+filled : 22222
+cleared: 00000
+varparm: 00
+outparm: 45
+01234
+reout  : 22
+done   : 00

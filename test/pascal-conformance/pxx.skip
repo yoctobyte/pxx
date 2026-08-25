@@ -45,7 +45,6 @@ tarray7.pp	gap: open-array slice syntax a[lo..hi] passed to open-array param
 tarrconstr1.pp	gap: Delphi dynamic-array constructor TAB.Create(...)
 tarrconstr5.pp	gap: inline specialize TArray<specialize TArray<String>> in type decl
 tarrconstr6.pp	gap: dynarray-type constructor TLongIntArray.Create + open-array overload pick
-tarrconstr7.pp	gap: IInterface/TInterfacedObject; array constructor of interfaces refcount
 tclass15.pp	gap: nested class type + Classes TCustomMemoryStream/SetPointer
 tclass5.pp	gap: class constructor `fail` + range-check error 210 semantics
 tclass9.pp	gap: `class var` / `var` sections in class, class property with static method

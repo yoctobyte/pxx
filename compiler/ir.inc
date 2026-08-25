@@ -5845,6 +5845,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     swSelTmp, swDefault, swSeq, swMarker, swSelTk: Integer;
     rhsIsLValue: Boolean;
     isComIntf: Boolean;
+    lhsWholeArray: Boolean;   { `a := nil` on a WHOLE array is not a record-shaped := nil }
     intfTmpImt, intfTmpInst: Integer;
     intfResAddr: Integer;
     cv: Int64;
@@ -9593,14 +9594,36 @@ begin
           Ask about the CONTAINER, not the member: an array assignment is a whole
           -array copy and belongs to the paths below, whatever its elements are.
           bug-a-assigning-a-dynamic-array-of-interfaces-is-lowered-as-an-interface-assign }
+        { Asked ONCE and used by all three arms below, because the previous fix
+          answered it for exactly one of them and the other two kept the bug —
+          which is the sibling-arm miss devdocs/dev/normalise-dont-special-case.md
+          ends on ("if you fix a bug on one arm of a double case, grep for the
+          sibling before closing the ticket").
+
+          `a := nil` where `a: array of IFoo` / `array of TRec` /
+          `array of TNotifyEvent` means EMPTY THE ARRAY — release the handle and
+          store nil — and it reached the record-shaped `:= nil` arms instead,
+          because an array symbol's TypeKind IS its element kind and
+          ResolveNodeRec answers with the ELEMENT rec. Both arms then zeroed
+          RecSize bytes at the array's DATA pointer:
+
+            - handle non-nil: the first element is overwritten with zeros and
+              Length stays what it was. FPC reports 0; pxx reported 2. Silent.
+            - handle nil (an already-empty array, or an `out` parameter cleared
+              on entry by ClearManagedOutParam, which is spelled `d := nil`):
+              the zero-fill runs at address 0. SIGSEGV, in a program containing
+              no unsafe construct — fpc-testsuite tarray11.
+          bug-a-assigning-nil-to-a-whole-dynamic-array-of-records-or-interfaces }
+        lhsWholeArray := ASTNodeIsWholeArray(ASTLeft[node]);
         isComIntf := (varIdx >= REC_UCLASS_BASE) and
                      UClsIsInterface[varIdx - REC_UCLASS_BASE] and
                      UClsIsComInterface[varIdx - REC_UCLASS_BASE] and
-                     (not ASTNodeIsWholeArray(ASTLeft[node]));
+                     (not lhsWholeArray);
         { interface := nil — zero the whole fat pointer {nil, nil}. The RHS is a
           pointer/ordinal nil, not a class or interface, so it never reaches the
           record-copy path (which would dereference a bogus source). }
         if (varIdx >= REC_UCLASS_BASE) and UClsIsInterface[varIdx - REC_UCLASS_BASE] and
+           (not lhsWholeArray) and
            (IntToTypeKind(ASTTk[ASTRight[node]]) <> tyClass) and
            (IntToTypeKind(ASTTk[ASTRight[node]]) <> tyRecord) then
         begin
@@ -9638,6 +9661,7 @@ begin
           bug-a-assigning-nil-to-a-method-pointer-segfaults }
         if (ASTKind[ASTRight[node]] = AN_INT_LIT) and (ASTIVal[ASTRight[node]] = 0) and
            (IntToTypeKind(ASTTk[ASTRight[node]]) = tyPointer) and
+           (not lhsWholeArray) and
            (varIdx <> REC_NONE) then
         begin
           Result := IRAppend(IR_DEFAULT_MEM, IRLowerDestAddress(ASTLeft[node]),

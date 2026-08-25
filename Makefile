@@ -7720,6 +7720,16 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_writeln_of_an_enum_prints_its_name.pas $(TESTTMP)/test_wenum26
 	test "$$($(TESTTMP)/test_wenum26)" = "$$(cat test/test_writeln_of_an_enum_prints_its_name.expected)"
+	# `a := nil` on a WHOLE dynamic array empties it, whatever the element type.
+	# An array symbol's TypeKind IS its element kind, so a record-shaped element
+	# routed the store into the record `:= nil` arms: they zeroed RecSize bytes
+	# at the array's DATA pointer -- Length never changed (silent), and on an
+	# already-nil handle the zero-fill ran at address 0 (SIGSEGV, which is how
+	# fpc-testsuite tarray11 crashed). Interface, record and method-pointer
+	# elements, plus var and out parameters.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_nil_to_a_whole_dynamic_array.pas $(TESTTMP)/test_nilda26
+	test "$$($(TESTTMP)/test_nilda26)" = "$$(cat test/test_nil_to_a_whole_dynamic_array.expected)"
 	# Eight constructs FPC rejects used to compile clean -- five of them doing
 	# something silently wrong (a segfault, an out-of-bounds read, a scalar
 	# overwritten with a heap pointer, a destroyed string, a plausible wrong
