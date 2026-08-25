@@ -84,3 +84,44 @@ verdict.** That includes the whole of tonight's Track A run (90429d1b1 through
 d54cebf07). Each of those landed on `make compiler/pascal26` fixedpoint +
 `tools/gate.sh quick` GREEN, which is the documented per-fix loop, but the
 breadth those commits are *supposed* to get asynchronously has not happened.
+
+---
+
+## 2026-08-25 — item 3 is DONE (root cause found); items 1 and 2 remain
+
+**This stopped being an outage today.** The "measure why it grew 8x first"
+instruction in item 3 was the right one, and the answer was not load:
+
+`test/test_c_gtk_call.pas` began hanging on 08-21 because the BOX changed, not
+the repo. plexus was headless until borg's PSU failed on 08-20; gdm brought a
+desktop up at 06:04:48 and at-spi-bus-launcher three seconds later. From then
+on every test job inherited a live session bus, and GTK's accessibility bridge
+blocked forever after `gtk_init`. Measured at 9170a6193, same binary each run:
+hangs at 240s / at 90s built from pinned v374 / **0.31s with `NO_AT_BRIDGE=1`**;
+the sibling `test_c_gtk.pas` passes in 0.21s. Unsetting
+`DBUS_SESSION_BUS_ADDRESS` alone does NOT help — the bridge autolaunches a bus.
+
+One hang cost three days because two Track T defects amplified it:
+`learn_timeout()` recorded the kill time as the job's *duration*, and the
+outgrown-class path doubled that into the next budget with nothing bounding the
+result — 90s → 2902s → 3522s on record, a 7045s budget against a 3600s
+deadline, honoured. Fixed in `2a129cfb9`: the a11y bridge is off in
+`job_env()`, no budget may exceed half the deadline, a duration at the ceiling
+is not recorded, and a metric already latched is dropped on load (that fired on
+the live daemon: *"dropped a latched metric for test_c_gtk_call.pas (2902s…)"*).
+
+**First completed native tier since 08-22**, on `dev` at c59796cd1: **468.4s**,
+one attributable NEW-RED, two FIXED, `test_c_gtk_call.pas` PASS in 6.5s.
+
+**What is still open here — and it is the part this ticket is actually named
+after.** Items 1 and 2 were never about the GTK job:
+
+1. a torn-down run still publishes `verdict: RED`, not `TIMEOUT` /
+   `timed_out: true`, and `--status` still renders it as a failure;
+2. an incomplete run still empties `still_red`, reporting never-reached jobs as
+   fixed.
+
+Both are report-format work and both survive this fix — the next hang, in any
+job, publishes the same uninterpretable red. What has changed is the urgency:
+the tier fits its budget again, so this is no longer six hours of blind fleet.
+Whether it stays in `urgent/` is the coordinator's call, not mine.
