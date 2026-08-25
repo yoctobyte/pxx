@@ -113,4 +113,4 @@ nested concat peak at **392 KB RSS** — flat, and no double free.
 `make compiler/pascal26` converged in one round; `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit f2bad72e9.
