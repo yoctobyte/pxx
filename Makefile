@@ -13775,15 +13775,35 @@ demos: pxx-stable-check
 # a shared box manufactures exactly the false reds Track T exists to remove, so
 # it stays runnable by hand (`python3 tools/bench_timing_devtest.py`) and out of
 # the tier.
+# Runs EVERY guard and reports a tally -- it does not stop at the first red.
+#
+# It used to exit 1 on the first failure, which quietly made this target's
+# result unreadable: on 2026-08-25 one unrelated Makefile recipe defect
+# (ws-skeleton paths built at runtime, so testmgr could not privatize them)
+# failed an early guard and hid the other 24 entirely. They all happened to be
+# green, so nothing was lost that day -- by luck. The same defect could have
+# masked a real regression in the watcher's branch or pin-verify logic for days,
+# and the output would have looked exactly the same.
+#
+# That is the same defect class as a torn-down testmgr run publishing a verdict
+# as though it had finished: an INCOMPLETE run reporting in the vocabulary of a
+# complete one. The rule both share -- a report says what was actually decided,
+# and names what it never reached.
 tools-devtest:
-	@set -e; n=0; \
+	@n=0; bad=0; failed=''; \
 	for f in tools/*devtest*.py; do \
 	  case "$$f" in *bench_timing_devtest.py) continue ;; esac; \
 	  printf '  tools-devtest: %s\n' "$$f"; \
-	  python3 "$$f" > $(TESTTMP)/tools_devtest.log 2>&1 \
-	    || { echo "FAIL: $$f"; tail -25 $(TESTTMP)/tools_devtest.log; exit 1; }; \
-	  n=$$((n+1)); \
+	  if python3 "$$f" > $(TESTTMP)/tools_devtest.log 2>&1; then \
+	    n=$$((n+1)); \
+	  else \
+	    bad=$$((bad+1)); failed="$$failed $$f"; \
+	    echo "  FAIL: $$f"; tail -25 $(TESTTMP)/tools_devtest.log; \
+	  fi; \
 	done; \
+	if [ $$bad -gt 0 ]; then \
+	  echo "  tools-devtest: $$n green, $$bad RED --$$failed"; exit 1; \
+	fi; \
 	echo "  tools-devtest: $$n guard(s) green"
 
 c-interop-devtest: pxx-stable-check
