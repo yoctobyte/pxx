@@ -6,9 +6,10 @@
   `s.Twice.IsEmpty` printed 24929 as well, the trailing member silently
   DROPPED. Two different members, one wrong number, no diagnostic.
 
-  Helper methods on a computed receiver are a real gap
-  (feature-p-delphi-string-helpers) — FPC chains them fine. Refusing is the
-  honest answer until they work; reading the value's own bytes is not.
+  Chaining a real helper method now WORKS (test_type_helper_on_a_value pins
+  `s.Twice.Twice` against FPC), so the member here is deliberately one that
+  exists nowhere: the refusal has to survive the feature that made the valid
+  spelling compile, or the silent read comes back for every typo.
   bug-p-a-member-on-a-computed-value-silently-reads-the-values-own-bytes }
 {$mode objfpc}{$H+}{$modeswitch typehelpers}
 program test_chained_helper_member_fail;
@@ -20,5 +21,5 @@ function TStrH.Twice: string; begin Result := Self + Self; end;
 var s: string;
 begin
   s := 'a';
-  writeln(s.Twice.Twice);
+  writeln(s.Twice.NoSuchMember);
 end.

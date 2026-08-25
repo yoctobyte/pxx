@@ -51,6 +51,7 @@ function OpenArrayCtorRowLen(procIdx, argNo: Integer): Integer; forward;
 function ByRefArgStartsExpression(constVariantParam: Boolean): Boolean; forward;
 function ParamIsConstVariant(pi, slot: Integer): Boolean; forward;
 function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer; forward;
+function TypeHelperOnValue(valNode: Integer; var tk: TTypeKind): Integer; forward;  { `<value>.HelperMethod` (pasparser_lval.inc) }
 function ParseMetaclassMemberTail(node, mcCi: Integer; var outTk: TTypeKind;
                                   var outRec: Integer; var finished: Boolean): Integer; forward;  { the ONE member-on-a-class-reference parser -- see its body }
 function PyParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer; forward;  { NilPy twin (pyparser.inc) }

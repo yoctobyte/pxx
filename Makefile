@@ -4843,6 +4843,15 @@ test-core: $(COMPILER)
 	grep -q "this value has no members" $(TESTTMP)/test_cmf.log
 	! ./$(COMPILER) test/test_chained_helper_member_fail.pas $(TESTTMP)/test_chmf26 > $(TESTTMP)/test_chmf.log 2>&1
 	grep -q "this value has no members" $(TESTTMP)/test_chmf.log
+	# The constructive half: type-helper methods on a receiver that is a VALUE --
+	# a literal, a call result, a grouped expression, a chained helper result.
+	# Self is by-reference, so a computed receiver is bound to a hidden local
+	# once (which is also what makes it evaluate once -- the trailing counter);
+	# a VARIABLE receiver keeps the address-of-the-variable path, so a mutating
+	# helper still writes through, which the first row pins.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_type_helper_on_a_value.pas $(TESTTMP)/test_thov26
+	test "$$($(TESTTMP)/test_thov26)" = "$$(cat test/test_type_helper_on_a_value.expected)"
 	# ParamCount as a for-loop LIMIT: the node must carry tyInteger, or the hidden
 	# limit temp is untyped and i386 refuses the whole unit. The i386 build is the
 	# half that actually regressed (`uses pylib` could not target i386 at all);

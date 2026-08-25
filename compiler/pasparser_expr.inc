@@ -816,6 +816,24 @@ begin
             recName := ResolveNodeRec(node);
             Continue;
           end;
+          { …and a TYPE-HELPER method on the grouped VALUE: `(F).ToUpper`,
+            `(s + 'x').Twice`. Asked here rather than in the hand-rolled `.`
+            tail below because the tail has already consumed the dot by the
+            time it knows what it is looking at. A grouped record/class went to
+            the real dispatcher above, so this only ever sees the scalar shapes
+            that have no member path of their own.
+            feature-p-delphi-string-helpers }
+          if CurTok.Kind = tkDot then
+          begin
+            tk := IntToTypeKind(ASTTk[node]);
+            valNode := TypeHelperOnValue(node, tk);
+            if valNode >= 0 then
+            begin
+              node := valNode;
+              recName := ResolveNodeRec(node);
+              Continue;
+            end;
+          end;
         end;
 
         if CurTok.Kind = tkCaret then
@@ -7725,6 +7743,27 @@ begin
   end
   else
     ParseFactorCore;
+  { PASCAL type-helper suffix on a factor that is a VALUE, not an lvalue: a
+    string LITERAL (`'xy'.ToUpper`), a bare CALL RESULT (`F.Twice`,
+    `Copy(s,1,1).Twice`). Those never run through ParseLValueAST, so they
+    arrive here with CurTok still on the '.' — the same reason the NilPy
+    str-method loops below sit at this level, and for the same reason FACTOR
+    level is the only correct one: a method binds tighter than `+`, so
+    `'a' + 'b'.Twice` must be `'a' + ('b'.Twice)`.
+
+    A loop, so `F.Twice.Twice` chains. TypeHelperOnValue declines and consumes
+    nothing when the member is not a helper method, which leaves every other
+    '.' shape on the path it already took.
+    feature-p-delphi-string-helpers }
+  while (not PyExprMode) and (CurTok.Kind = tkDot) and (CurASTNode >= 0) and
+        (TokPos < TokCount) and (Tokens[TokPos].Kind = tkIdent) do
+  begin
+    smTk := IntToTypeKind(ASTTk[CurASTNode]);
+    smBase := TypeHelperOnValue(CurASTNode, smTk);
+    if smBase < 0 then Break;
+    CurASTNode := smBase;
+    LastExprTk := smTk;
+  end;
   { --- the Python SUFFIX cluster -------------------------------------------
     Nine loops follow, each claiming one (suffix token, receiver shape) pair:
     `.method()` on a str base, on a call result, on a class expression, on a

@@ -3636,6 +3636,67 @@ end;
   handled (a class result is already the instance). Shared by the function-call
   suffix and the method-call sites so `f(a).x`, `Self.M(a).x`, `obj.M(a).x` all
   resolve their trailing members. }
+{ `<value>.Method` — a TYPE-HELPER method on a receiver that is not a declared
+  variable: a call result, a chained helper result, a grouped expression.
+
+  The named-receiver dispatch (ParseSelectors, "TYPE-HELPER dispatch") keys on
+  the receiver SYMBOL and passes its AN_IDENT as Self, which is right and must
+  stay that way: a helper method's Self is BY REFERENCE, so a mutating method
+  on a variable has to write through to the variable itself. A computed value
+  has no such home, so it gets one — a hidden local, bound once, dispatched on.
+  `(t := value, t.M(...))`, the same materialise-then-use move
+  GenMakeStringValueIndex makes for `(s + 'x')[3]`.
+
+  Binding is what makes the receiver evaluate ONCE. `F.ToUpper` must call F a
+  single time, and the by-ref Self would otherwise need an address the call
+  result does not have.
+
+  Returns -1 and consumes nothing when this is not a helper call, so every
+  caller can ask before falling through to its own member path. CurTok must be
+  the '.', with the member name at TokPos.
+  feature-p-delphi-string-helpers }
+function TypeHelperOnValue(valNode: Integer; var tk: TTypeKind): Integer;
+var mci, tmpSym, tmpN, asgn, comma, callN: Integer; callTk, tmpTk: TTypeKind;
+begin
+  Result := -1;
+  if PyExprMode then Exit;
+  if valNode < 0 then Exit;
+  if CurTok.Kind <> tkDot then Exit;
+  if (TokPos >= TokCount) or (Tokens[TokPos].Kind <> tkIdent) then Exit;
+  { Only the shapes with no member path of their own. A record/class/interface
+    value resolves through the real selector machinery, and asking a helper
+    first would shadow a genuine member. }
+  if tk in [tyUnknown, tyRecord, tyClass, tyVariant, tyPointer] then Exit;
+  mci := FindHelperForType(tk, REC_NONE);
+  if mci < 0 then Exit;
+  if FindUMeth(mci, GetTokenStr(TokPos)) < 0 then Exit;
+  { The temp takes the HELPER'S declared target type, not the receiver's own.
+    FindHelperForType treats frozen tyString and managed tyAnsiString as one
+    family on purpose, so a `helper for string` legitimately matches a STRING
+    LITERAL — whose node is tyString. Binding that to a tyString temp gave it
+    the frozen default capacity and `'xy'.Twice` printed NOTHING where FPC
+    prints xyxy; and Self is by-reference, so handing a `Self: AnsiString`
+    parameter the address of a frozen slot would be wrong even when the
+    capacity happened to fit. The declared target is the one type both ends
+    agree on, and the assignment below does the conversion. }
+  tmpTk := IntToTypeKind(UClsHelperTk[mci]);
+  if tmpTk = tyUnknown then tmpTk := tk;
+  tmpSym := AllocVar('', tmpTk);
+  tmpN := AllocNode(AN_IDENT); ASTIVal[tmpN] := tmpSym; ASTTk[tmpN] := Ord(tmpTk);
+  asgn := AllocNode(AN_ASSIGN);
+  ASTLeft[asgn] := tmpN; ASTRight[asgn] := valNode;
+  tmpN := AllocNode(AN_IDENT); ASTIVal[tmpN] := tmpSym; ASTTk[tmpN] := Ord(tmpTk);
+  callTk := tmpTk;
+  { ParseClassRecordSelectors consumes the '.', the member and any tail — so a
+    chain like `s.Twice.ToUpper` unwinds through this one call. }
+  callN := ParseClassRecordSelectors(tmpN, REC_UCLASS_BASE + mci, callTk);
+  comma := AllocNode(AN_COMMA);
+  ASTLeft[comma] := asgn; ASTRight[comma] := callN;
+  ASTTk[comma] := Ord(callTk);
+  tk := callTk;
+  Result := comma;
+end;
+
 function ParseClassRecordSelectors(node, recId: Integer; var outTk: TTypeKind): Integer;
 var crBlob, crNode: Integer;   { class-reference ops on a chained value }
 var dfCi, dfPri, dfMmi, dfMpi, dfI, dfSelf, dfIdxHead, dfIdxTail: Integer;   { default property on a chained value }
@@ -3644,6 +3705,7 @@ var sub, prevTok: Integer; fieldName, accName: AnsiString; tk: TTypeKind;
     ci, mmi, mpi, callN, selfArg, lastA, aSeq, aNode, aIdx, mai: Integer;
     pri, i, w, margIdx: Integer; isAssign: Boolean;
     cvIdx: Integer;
+    thNode: Integer;   { a chained type-helper call on the value so far }
 begin
   { NilPy has its OWN copy of this routine (PyParseClassRecordSelectors,
     pyparser.inc), split out 2026-08-09 by
@@ -4060,6 +4122,25 @@ begin
           outTk := tk;
           Continue;
         end;
+      end;
+      { A CHAINED helper call: `s.Twice.ToUpper`. A helper method's return type
+        resets recId to REC_NONE and the loop keeps running, so the second
+        member arrives here with a receiver that is a VALUE. Asked before
+        RequireRecMember, which would otherwise refuse it — that refusal is the
+        honest fallback, not the answer (feature-p-delphi-string-helpers). }
+      if recId = REC_NONE then
+      begin
+        { Rewind two tokens and re-read, so CurTok is the '.' again with the
+          member name at TokPos — the position TypeHelperOnValue expects, and
+          the exact state `Next` restores if it declines. }
+        Dec(TokPos); Dec(TokPos); Next;
+        thNode := TypeHelperOnValue(node, tk);
+        if thNode >= 0 then
+        begin
+          node := thNode; outTk := tk; recId := REC_NONE;
+          Continue;
+        end;
+        Next;                        { not a helper: re-consume the member name }
       end;
       RequireRecMember(recId, fieldName);
       sub := AllocNode(AN_FIELD);

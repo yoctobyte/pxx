@@ -345,7 +345,7 @@ _none_
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (18)
+## backlog_new (19)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -363,6 +363,7 @@ _none_
 | decide-pchar-node-side-storage-or-a-pchar-type-kind | U | 40 | decide | The last thing owed by refactor-centralize-managed-string-pchar-conversion is slice 3, and its premise expired twice. WideChar got a real type kind (tyWideChar) and no longer wants node-side storage; PChar cannot copy that, because a PChar's pointee VARIES and a kind per pointee does not scale. Meanwhile the deref walk is now ONE function and 198/198 cross-product rows match fpc, so the third option — do nothing structural and keep extending the one walk — is live. This is a design call, not work. | — |
 | decide-typeref-gains-a-pointer-depth-field | U | 35 | decide | TTypeRef was landed to replace the 8-field tuple that ~90 sites redeclare, but as declared it carries PtrBaseTk/PtrBaseRec and DynDepth and no POINTER depth — so it cannot express `^PChar` any better than the pair it replaces. Every pointer table has since grown a depth field of its own (symbols, aliases, the type parser, C params, Pascal params, captures, proc returns). Either TTypeRef gains PtrDepth and the migration folds them all in, or depth is declared to live outside TTypeRef and the migration's value shrinks. Additive either way, but it changes a shared type mid-migration. | — |
 | feature-p-legacy-value-object-types | P | 35 | feature | Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone. | — |
+| feature-p-type-helper-on-a-computed-receiver | P | 45 | feature | Type-helper method dispatch keyed on the receiver SYMBOL, so only a plain declared variable worked. A literal, a call result, a grouped expression and a chained helper result were refused (two of them silently wrong until the same day). Self is by-reference, so a computed receiver needs an addressable home: bind it to a hidden local once. | — |
 | gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo | B | 40→65 | gap | PTypeData is declared as `= PTypeInfo` with a `same header for now` note, and TTypeInfo carries no OrdType / MinValue / MaxValue / FloatType. Any RTTI-driven code that switches on a type's ordinal width — Generics.Defaults' comparer selection, and the whole TypInfo idiom generally — cannot compile. | — |
 | refactor-a-two-predicates-answer-what-a-caret-yields | A | 35 | refactor | Two functions type a dereference. NodePtrElem knows more SPELLINGS (index-into-base, pointer FIELD, inline PTR_CAST, pointer arithmetic); ResolveDerefShape knows more ABOUT each (remaining depth, ultimate base). Swapping a call site from one to the other trades one kind of knowledge for the other, silently — which is exactly what shipped a regression on 2026-08-25. | — |
 | refactor-p-one-lvalue-path-for-statements-and-expressions | P | 35 | refactor | An assignment TARGET is parsed by a second, smaller copy of the lvalue walk in pasparser_stmt.inc, which resolves every `.name` as a field and ends on Expect(':='). Every capability the expression path gains has to be re-added there by hand, and three bugs so far are exactly that omission: the builtin pointer-name fallback, the PChar adapter, and the deref-then-index shape. The statement path should delegate, as its own cast-headed-CALL arm already does. | — |
@@ -705,6 +706,7 @@ _none_
 - [p 45] [O] feature-opt-bulk-copy-is-byte-at-a-time
 - [p 45] [O] feature-opt-dynarray-grows-in-place
 - [p 45] [P] feature-p-delphi-string-helpers
+- [p 45] [P] feature-p-type-helper-on-a-computed-receiver
 - [p 45] [P] feature-pascal-corpus-passrc
 - [p 45] [T] feature-t-fail-when-a-test-file-is-wired-into-no-build-rule
 - [p 45] [A] feature-toolchain-cli-ux
