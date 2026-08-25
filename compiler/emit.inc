@@ -81,6 +81,48 @@ begin
   RecordCodeRefAt(CodeLen, target);
 end;
 
+procedure AddDataPtrFix(dataPos, targetOff: Integer);
+{ Record a data->data 8-byte pointer relocation: the slot at dataPos is patched
+  at link time to (dataBase + targetOff). Used by RTTI and resource emission.
+  Grows instead of capping — see the table's note in defs.inc. Lived in
+  elfwriter.inc until 2026-08-25; it sits here now next to the other relocation
+  recorders, and early enough that every frontend can reach it. }
+var n: Integer;
+begin
+  if DataPtrFixCount >= DataPtrFixCapacity then
+  begin
+    if DataPtrFixCapacity = 0 then n := DATAPTRFIX_BASE else n := DataPtrFixCapacity * 2;
+    SetLength(DataPtrFix, n);
+    DataPtrFixCapacity := n;
+  end;
+  DataPtrFix[DataPtrFixCount].DataPos   := dataPos;
+  DataPtrFix[DataPtrFixCount].TargetOff := targetOff;
+  Inc(DataPtrFixCount);
+end;
+
+procedure AddMethodFix(dataPos, procIdx: Integer);
+{ Record a code-address relocation into Data[]: the 8-byte slot at dataPos is
+  patched to the entry address of Procs[procIdx]. Every VMT slot and every RTTI
+  method entry goes through here.
+
+  This is the ONE append point. There were nine, each a hand-written
+  guard/store/store/Inc quartet -- and two of them (NilPy's VMT emitter) had no
+  guard at all, so a class-dense NilPy program wrote past the end of the fixed
+  array with nothing to say so. A single chokepoint is what makes that class of
+  bug unstateable rather than merely unlikely. }
+var n: Integer;
+begin
+  if MethodFixCount >= MethodFixCapacity then
+  begin
+    if MethodFixCapacity = 0 then n := METHFIX_BASE else n := MethodFixCapacity * 2;
+    SetLength(MethodFixups, n);
+    MethodFixCapacity := n;
+  end;
+  MethodFixups[MethodFixCount].DataPos := dataPos;
+  MethodFixups[MethodFixCount].ProcIdx := procIdx;
+  Inc(MethodFixCount);
+end;
+
 procedure EmitI32(v: Int64);
 begin
   EmitB(Byte(v and $FF)); EmitB(Byte((v shr 8) and $FF));

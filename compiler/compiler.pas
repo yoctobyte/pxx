@@ -1690,6 +1690,9 @@ begin
   UClsCount := 0; UFldCount := 0; UMthCount := 0; CurSelfClass := REC_NONE;
   MethodFixCount := 0; UPropCount := 0; IMTCount := 0;
   DataPtrFixCount := 0;
+  { the two Data[] relocation tables grow on demand; drop the reserve so a
+    second compile in one process starts from the base again }
+  MethodFixCapacity := 0; DataPtrFixCapacity := 0;
   RTTIRegistryOff := -1; RTTIRegistryCount := 0;
   AnonDynArrayCount := 0;
   ResPendCount := 0; ResourceTableOff := -1; ResourceCount := 0;

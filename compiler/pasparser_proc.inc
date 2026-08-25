@@ -1767,19 +1767,13 @@ begin
     if UMthVirSlot[mmi] >= 0 then
     begin
       slot := UMthVirSlot[mmi];
-      if MethodFixCount >= MAX_METHFIX then Error('too many virtual method fixups');
-      MethodFixups[MethodFixCount].DataPos := UClsVMTOffset[methOwnerCi] + slot * 8;
-      MethodFixups[MethodFixCount].ProcIdx := procIdx;
-      Inc(MethodFixCount);
+      AddMethodFix(UClsVMTOffset[methOwnerCi] + slot * 8, procIdx);
 
       for otherCi := 0 to UClsCount-1 do
       begin
         if IsSubclassOf(otherCi, methOwnerCi) then
         begin
-          if MethodFixCount >= MAX_METHFIX then Error('too many virtual method fixups');
-          MethodFixups[MethodFixCount].DataPos := UClsVMTOffset[otherCi] + slot * 8;
-          MethodFixups[MethodFixCount].ProcIdx := procIdx;
-          Inc(MethodFixCount);
+          AddMethodFix(UClsVMTOffset[otherCi] + slot * 8, procIdx);
         end;
       end;
     end;

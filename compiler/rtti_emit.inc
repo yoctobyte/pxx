@@ -163,14 +163,6 @@ begin
   while i < n do begin DataPutB(0); Inc(i); end;
 end;
 
-procedure QueueMethCodeFixup(dataPos, procIdx: Integer);
-begin
-  if MethodFixCount >= MAX_METHFIX then Error('too many method fixups (RTTI)');
-  MethodFixups[MethodFixCount].DataPos := dataPos;
-  MethodFixups[MethodFixCount].ProcIdx := procIdx;
-  Inc(MethodFixCount);
-end;
-
 { Emit an enum type RTTI blob: name ptr, value count, ptr to array of name ptrs.
   Returns the Data[] offset of the header. }
 function EmitEnumRTTI(etid: Integer): Integer;
@@ -266,7 +258,7 @@ begin
     if mIdx >= 0 then
     begin
       procIdx := UMthProc_[mIdx];
-      if procIdx >= 0 then QueueMethCodeFixup(piPos + 32, procIdx);
+      if procIdx >= 0 then AddMethodFix(piPos + 32, procIdx);
     end;
   end;
 
@@ -286,7 +278,7 @@ begin
     if mIdx >= 0 then
     begin
       procIdx := UMthProc_[mIdx];
-      if procIdx >= 0 then QueueMethCodeFixup(piPos + 48, procIdx);
+      if procIdx >= 0 then AddMethodFix(piPos + 48, procIdx);
     end;
   end;
 
@@ -309,7 +301,7 @@ begin
   strIdx := InternStr(nm);
   AddDataPtrFix(miPos + 0, Strs[strIdx].Offset);
   procIdx := UMthProc_[mi];
-  if procIdx >= 0 then QueueMethCodeFixup(miPos + 8, procIdx);
+  if procIdx >= 0 then AddMethodFix(miPos + 8, procIdx);
   arity := 0;
   if procIdx >= 0 then
   begin
@@ -509,7 +501,7 @@ begin
               ' paramCount=', Procs[pi].ParamCount, ' firstUser=', firstUser,
               ' nUser=', nUser, ' reqN=', reqN, ' off=', DataLen);
     DataPutZeros(PYSIG_SIZE);
-    QueueMethCodeFixup(ProcSigOff[pi] + PYSIG_OFF_CODE, pi);
+    AddMethodFix(ProcSigOff[pi] + PYSIG_OFF_CODE, pi);
     PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_REQN, reqN);
     PatchDataU64(ProcSigOff[pi] + PYSIG_OFF_TOTN, nUser);
     if ProcPyStarIdx[pi] >= 0 then

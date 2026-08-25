@@ -226,7 +226,13 @@ const
   cgLLong = 12; cgULLong = 13; cgFloat = 14; cgDouble = 15; cgLDouble = 16;
   cgStruct = 17; cgPtr = 18; cgArray = 19; cgFunc = 20;
   MAX_RESOURCES   = 16;    { embedded R-directive resources }
-  MAX_DATAPTRFIX  = 4096;  { data->data 8-byte pointer relocations (RTTI blobs) }
+  { Initial reserve for the two Data[] relocation tables. Neither is a cap:
+    both grow geometrically (AddDataPtrFix / AddMethodFix in emit.inc), so
+    these only decide how many doublings a big program pays. 1024 entries is
+    8 KB apiece — the self-host needs 253 and 24, fcl-json 4582 and 2994.
+    feature-dynamic-compiler-tables }
+  DATAPTRFIX_BASE = 1024;  { data->data 8-byte pointer relocations (RTTI blobs) }
+  METHFIX_BASE    = 1024;  { code-address relocations into Data[] (VMT + RTTI) }
   { Named-operator keys for the OvrlOp* overload table — outside the
     TTokenKind range so they never collide with symbol operators
     (feature-pascal-class-management-operators). `operator :=`/Implicit
@@ -242,7 +248,6 @@ const
   OPK_FINALIZE   = 1006;
   OPK_ADDREF     = 1007;
   OPK_COPY       = 1008;
-  MAX_METHFIX     = 8192;  { code-address relocations into Data[] (VMT + RTTI) — blcksock's deep virtual hierarchy blew 1024 }
 
   { RTTI property kinds (OUR codes; streaming-grade subset) }
   RTTI_KIND_INT    = 0;   { integer / ordinal / boolean / sized ints }
@@ -1098,7 +1103,7 @@ const
     callable path -- do not trade it away for convenience.
 
     All fields 8 bytes, matching the RTTI blobs next door:
-      +0  code address        (patched by QueueMethCodeFixup, like RTTI_METH)
+      +0  code address        (patched by AddMethodFix, like RTTI_METH)
       +8  ReqN                user-space params with NO default (Self excluded)
       +16 TotN                user-space params in total (Self excluded)
       +24 StarIdx PLUS ONE    0 = no `*args`; folded in here rather than left
@@ -1856,10 +1861,19 @@ var
   GenericFuncCount   : Integer;
   PendingGFSpecs     : array[0..MAX_PENDING_GFSPECS-1] of TPendingGFSpec;
   PendingGFSpecCount : Integer;
-  MethodFixups       : array[0..MAX_METHFIX-1] of TMethodFixup;
+  { The two Data[] relocation tables. Both GROW (AddMethodFix / AddDataPtrFix in
+    emit.inc) rather than capping: their size is linear in the program's RTTI
+    surface — measured at ~5 data-ptr entries per class plus ~2.25 per published
+    member — so every fixed ceiling is a wall some real library walks into. The
+    old MAX_METHFIX was bumped 1024 -> 8192 for Synapse's blcksock and the old
+    MAX_DATAPTRFIX of 4096 still stopped fcl-json (which wants 4582) compiling
+    at all. feature-dynamic-compiler-tables }
+  MethodFixups       : array of TMethodFixup;
   MethodFixCount     : Integer;
-  DataPtrFix         : array[0..MAX_DATAPTRFIX-1] of TDataPtrFix;
+  MethodFixCapacity  : Integer;
+  DataPtrFix         : array of TDataPtrFix;
   DataPtrFixCount    : Integer;
+  DataPtrFixCapacity : Integer;
   { RTTI emission state }
   UClsRTTIOff        : array[0..MAX_UCLASS-1] of Integer; { Data[] off of class RTTI hdr, -1 if none }
   UClsLayoutOff      : array[0..MAX_UCLASS-1] of Integer; { Data[] off of a CLASS's managed-field layout descriptor (record-desc format + member kind 4 = COM interface), -1 if none; backlinked at [VMT-16] for PXXClassFinalize }
