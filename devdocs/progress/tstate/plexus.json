@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T17:33:21Z",
-   "fixed": [
-    "test-core#src:test/cstatic_same_module_dup.c"
-   ],
-   "new_red": [],
-   "sha": "13f7e0a1cda136c90169c1475f989511a78103f3",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T18:35:50Z",
    "fixed": [],
    "new_red": [],
@@ -481,6 +471,14 @@
     "test-core#src:test/test_indexing_length_for_new_inc_positive.pas"
    ],
    "sha": "c59796cd1e1d0255c93b85e67ce8cd9ea422b3e9",
+   "tier": "native",
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-25T18:26:56Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8f784646c5962264dd67acd74b5af51161e472d4",
    "tier": "native",
    "verdict": "RED"
   }
@@ -6656,11 +6654,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-25T18:15:53Z",
-  "sha": "c59796cd1e1d0255c93b85e67ce8cd9ea422b3e9",
+  "date": "2026-08-25T18:26:56Z",
+  "sha": "8f784646c5962264dd67acd74b5af51161e472d4",
   "tier": "native",
   "verdict": "RED",
-  "wall": 468.4
+  "wall": 481.4
  },
  "last_bench": {
   "conf_rows": 550,
