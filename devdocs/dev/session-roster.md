@@ -151,6 +151,33 @@ Each session is its OWN CHECKOUT, so two agents never share a working tree; they
 meet only at push/merge, which is ordinary git. Lane rules still apply — they
 prevent conflicting EDITS to the same file, not tree damage.
 
+## One box, three testmgr tenants
+
+Since borg died there are **three things that run testmgr on plexus**: the
+watcher daemon, Track T's own checkout, and whichever dev session is gating.
+The watcher is capped at **6 of 12 cores** (`CPUQuota`, since 2026-08-20); dev
+gates are not capped. That asymmetry is deliberate — the daemon must yield to a
+human — but it means a hand-run testmgr can starve the daemon rather than the
+other way round. If contention bites, `TESTMGR_MAX_CORES=6` in a worker's
+environment applies the same budget to a hand-run testmgr.
+
+This is also why a compile here can take 2-3x longer than on an idle box while
+the watcher is testing. **Slow is not stuck** — check before killing anything,
+and never `pkill -f` a bare tool name (`testmgr`, `twatch`, `gate.sh`): those
+patterns match all three tenants. PID-scoped kills only.
+
+## Retargeting the watcher to a branch
+
+`trackt config branch <name>` plus a restart — **not** `--branch` in the systemd
+unit. One key, read by twatch, by trackt's start path, and by
+`ensure_clone_on_branch` (which MOVES a clone that is on the wrong branch, since
+a daemon watching `dev` from a `master` checkout would run one branch's watcher
+code against another branch's commits). A unit saying `master` and a conf saying
+`dev` is a pair that can disagree, with the CLI winning silently — so the unit
+stays bare on purpose. `twatch.py --status` and `--follow` default to the branch
+the CHECKOUT is on, so from a `dev` checkout you get `dev`'s verdicts with no
+flag.
+
 ## The coordinator's actual job
 
 1. Own the **A/P slot**. A and P share `lexer.inc` and must never be
