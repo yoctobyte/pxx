@@ -67,4 +67,4 @@ Gate: `make compiler/pascal26` converged in 1 round, all five rows match,
 `test_cast_deref_pointer_field` / `test_pointer_to_a_pointer_through_a_cast_and_a_forward`
 / `test_new_as_a_function_over_a_pointer_type` unchanged, `tools/gate.sh quick`
 GREEN.
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit bfb7b4c59.
