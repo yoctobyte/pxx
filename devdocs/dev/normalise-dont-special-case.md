@@ -164,5 +164,22 @@ So when you find a second path, do not only check whether it is correct today.
 Check what makes it *look* correct, and whether the tests were written from the
 same sentence.
 
+### What this says about the grep
+
+Above, this note calls "grep for the sibling" the single highest-yield habit in
+it. That still holds -- it costs a minute and it has paid out. But be honest
+about tonight: **neither double case was found by the grep. Both were found by
+measurement.** And the third could not have been found by it even in principle,
+because the two unguarded append sites never mentioned `MAX_DATAPTRFIX`, so no
+grep for the constant could reach them.
+
+The grep finds siblings that are *spelled* alike. It cannot find one that was
+open-coded under a different name, and it cannot find one whose comment
+persuaded you it is not a sibling at all. So run it -- and do not let it stand
+in for a differential probe. The oracles in `differential-probes.md` are what
+made these visible; the grep is what makes the fix complete once you already
+know what you are looking for.
+
+
 See also: `differential-probes.md` (the oracles that make a silent sibling
 visible at all) and `debugging-playbook.md` (measure, do not reason).
