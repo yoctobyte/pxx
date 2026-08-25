@@ -1,7 +1,7 @@
 ---
 prio: 70
 track: P
-status: working
+status: done
 owner: trackP-worker
 ---
 
@@ -107,3 +107,4 @@ Neither is asserted after another diagnostic today, so neither is red — but bo
 are now unreachable in exactly the situation a multi-error file creates. That is a
 Track A question about where recovery draws the line (keep lowering for CHECKS and
 skip only emission?), not a Pascal-frontend one.
+- 2026-08-25 — resolved, commit 93c0ee76d9931ff84a57daf728eee930f87d3f96.
