@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-22T08:31:21Z",
-   "fixed": [
-    "test-core#src:test/fpcv.pas@2",
-    "test-core#src:test/test_generic_inherit_delphi.pas"
-   ],
-   "new_red": [],
-   "sha": "d7e5e44b0f6cb800a4bcbdbd3f1efb39309c9147",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-22T09:35:28Z",
    "fixed": [],
    "new_red": [],
@@ -471,6 +460,14 @@
    "sha": "8f403875d51a23fab4ade0d297483904bd4e754f",
    "tier": "full",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-25T21:48:26Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8f403875d51a23fab4ade0d297483904bd4e754f",
+   "tier": "slow",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -6659,11 +6656,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-25T21:41:55Z",
+  "date": "2026-08-25T21:48:26Z",
   "sha": "8f403875d51a23fab4ade0d297483904bd4e754f",
-  "tier": "full",
-  "verdict": "RED",
-  "wall": 2285.2
+  "tier": "slow",
+  "verdict": "GREEN",
+  "wall": 343.6
  },
  "last_bench": {
   "conf_rows": 550,
