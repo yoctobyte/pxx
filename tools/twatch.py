@@ -141,6 +141,11 @@ CONF_DEFAULTS = {"tier": "full", "mid_tier": "full",
                  # retargets it; the unit stays bare, so there is exactly one
                  # place to look and no CLI/conf pair to disagree.
                  "branch": "master",
+                 # seconds into a BREADTH run after which a push no longer
+                 # aborts it (see make_preempted). 0 = always preempt, the
+                 # pre-2026-08-25 behaviour, which measured out as zero full
+                 # tiers on a working day.
+                 "full_commit_secs": 300,
                  "max_cores": 0,       # cores testmgr may keep busy (--max-cores)
                  "max_mem_mb": 0,      # cap the cgroup MemoryMax (env override)
                  "web": True, "web_port": 8377}   # everything ON by default;
@@ -4086,13 +4091,51 @@ def needs_test(repo, sha):
     return any(not f.startswith(NOTEST_PREFIXES) for f in files)
 
 
-def make_preempted(clone, tested):
+def make_preempted(clone, tested, commit_after=None):
     """Abort-check for idle work (full backfill / opt sweep): a real push
     preempts, docs/tstate-only movement (e.g. our own fast-phase publish)
-    must not abort the work it queued."""
+    must not abort the work it queued.
+
+    `commit_after` seconds in, the run COMMITS: pushes stop aborting it and it
+    is allowed to finish. Only the breadth run passes it; the fast native
+    verdict — the one the lanes actually steer by — stays preemptive at every
+    moment, which is the whole reason this can be safe.
+
+    Why a commitment point exists at all (measured 2026-08-25, this box, after
+    the 6-core throttle): a full tier is ~40 min of wall, testable pushes on
+    `dev` arrive every ~26 min on average. A run that restarts on every push
+    therefore completes only when the gap happens to run long — observed
+    directly, a full tier was discarded at 73 of 3057 jobs and the replacement
+    started from zero. "Always preempt" is not "slightly degraded breadth", it
+    is ZERO breadth on any working day, and it gets worse as lanes are added.
+
+    The trade it accepts: a completed verdict may be tagged to a sha a few
+    commits behind HEAD. That is a true statement about that sha, and the thing
+    breadth catches — a cross-target divergence — is not usually introduced and
+    removed inside one 20-minute window. `staleness_note` already prints how
+    far behind the tested sha is, so the boundary of the claim stays visible.
+
+    The window before commitment is not wasted generosity: discarding 30s of
+    work to pick up a newer sha is nearly free, so freshness wins while the sunk
+    cost is small and loses once it is not. A committed run is still bounded —
+    testmgr's global --deadline caps it — and STOP still aborts it instantly,
+    so this cannot wedge the daemon.
+    """
+    t0 = time.monotonic()
+    committed = []
     def preempted():
         if STOP:
             return True
+        if commit_after is not None and not committed:
+            elapsed = time.monotonic() - t0
+            if elapsed >= commit_after:
+                committed.append(elapsed)
+                print("twatch: committed to this run (%.0f min in) — pushes no "
+                      "longer abort it; the verdict will be tagged to %s, which "
+                      "may be a few commits behind HEAD by the time it lands"
+                      % (elapsed / 60.0, tested[:12]), flush=True)
+        if committed:
+            return False           # also skips the fetch: nothing acts on it
         clone.fetch()
         h = clone.remote_head()
         if h == tested:
@@ -5343,8 +5386,15 @@ def main():
                           "pin verify keeps its priority from the next cycle"
                           % (nxt, tested[:12]), flush=True)
                     clear_idle_yield(clone, host)
-                r = test_sha(clone, host, st, tested, nxt,
-                             full=True, abort_check=make_preempted(clone, tested))
+                # The ONE run that gets a commitment point: breadth is the
+                # only phase whose wall exceeds the mean gap between pushes, so
+                # it is the only one that never finishes under pure preemption.
+                # Everything else here stays fully preemptive.
+                r = test_sha(clone, host, st, tested, nxt, full=True,
+                             abort_check=make_preempted(
+                                 clone, tested,
+                                 commit_after=(CONF.get("full_commit_secs")
+                                               or None)))
                 did_work = r != "busy"      # see the note above: never spin
             elif pin_deep:
                 # HEAD's ladder is exhausted: give the pin platform breadth too.
