@@ -15759,8 +15759,15 @@ begin
   if ASTKind[n] <> AN_CALL then Exit;
   if ASTIVal[n] < 0 then Exit;
   nm := LowerCase(Procs[ASTIVal[n]].Name);
+  { The whole pybound_new* family by PREFIX, not by three spellings. Every
+    pybound_new<suffix> is a {code, recv} constructor; naming them one by one is
+    how this predicate went blind when `pybound_new_sig` was added and both
+    producers switched to it (9bbbbef6c), so a bound method reaching a `str`
+    parameter stopped being refused and rendered as `<bound method at 0x..>`
+    again — the exact defect bug-nilpy-bound-method-coerced-to-string closed.
+    bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method }
   PyNodeIsCallableValue :=
-    (nm = 'pybound_new') or (nm = 'pybound_new_star') or
+    (Copy(nm, 1, 11) = 'pybound_new') or
     (nm = 'pyvar_of_callable') or
     (nm = 'pyclosure_src_new') or (nm = 'pyclosure_src_cap') or
     (nm = 'pyclosure_setarity') or
