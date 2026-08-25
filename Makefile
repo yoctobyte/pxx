@@ -7741,6 +7741,23 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_pointer_to_a_named_fixed_array.pas $(TESTTMP)/test_pfixarr26
 	test "$$($(TESTTMP)/test_pfixarr26)" = "$$(cat test/test_pointer_to_a_named_fixed_array.expected)"
+	# A VIRTUAL CLASS METHOD called through a metaclass receiver in STATEMENT
+	# position: `q.Emit(1);` was refused with `Expected: :=` while the same call
+	# as an expression worked. "is this statement a call?" was written five times
+	# in the statement parser and AN_CLASS_VIRTUAL_CALL was in none of the copies.
+	# Every receiver spelling is asserted, because that drift is what leaves one
+	# spelling working and its neighbour broken.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_virtual_class_method_called_as_a_statement.pas $(TESTTMP)/test_vclsmeth26
+	test "$$($(TESTTMP)/test_vclsmeth26)" = "$$(cat test/test_virtual_class_method_called_as_a_statement.expected)"
+	# TObject's root methods reached from inside a UNIT. Their default bodies live
+	# in `builtin`, pulled by a pre-scan for a dot-preceded .Equals/.GetHashCode/
+	# .ToString -- over the PROGRAM's tokens only, so the identical call compiled
+	# in a program and failed in a unit. The program here mentions none of the
+	# three names: the unit's use is what must pull them in.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) -Futest/tobject_units test/test_tobject_root_methods_inside_a_unit.pas $(TESTTMP)/test_torootu26
+	test "$$($(TESTTMP)/test_torootu26)" = "$$(cat test/test_tobject_root_methods_inside_a_unit.expected)"
 	# `a := nil` on a WHOLE dynamic array empties it, whatever the element type.
 	# An array symbol's TypeKind IS its element kind, so a record-shaped element
 	# routed the store into the record `:= nil` arms: they zeroed RecSize bytes

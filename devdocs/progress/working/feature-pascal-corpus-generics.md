@@ -1,7 +1,7 @@
 ---
 track: P
 prio: 65
-owner: frank1-ACP
+owner: claude-A
 blocked-by: []
 status: backlog
 type: feature
@@ -11,7 +11,7 @@ type: feature
 
 - **Type:** feature (compat — generics × classes × interfaces)
 - **Track:** P — tag: compat
-- **Status:** unblocked 2026-08-22 — TObject's root methods dispatch virtually now
+- **Status:** working
   runs, fpjson's suite is 203/203).
 - **Follows:** [[feature-pascal-corpus-fpjson]] (done). Parent umbrella:
   [[feature-pascal-corpus-oop]].
@@ -811,3 +811,40 @@ the same defect through its loud arm), with
 it was parked have been removed since; the next session on this rung should
 re-stage rtl-generics and drive `uses generics.defaults` until the line number
 moves, rather than starting from this entry's conclusions.
+
+## Recon 2026-08-25 — the wall moved 411 → 1569 → 1865, three bugs out
+
+Re-staged rtl-generics (FPC `release_3_2_2`) and drove `uses generics.defaults`
+as the entry above asked. The previous entry's "line 635" is gone: with today's
+compiler the first refusal is at **411**, and clearing walls moved the frontier
+twice more in one sitting. Three frontend defects fell out, all fixed and gated
+this session, all with fpc-derived regression tests in `test-core`:
+
+| wall | construct | ticket |
+| --- | --- | --- |
+| 411 | `const P: Pointer = @SiblingClassConst;` in a class body | [[bug-p-a-class-const-cannot-take-the-address-of-a-sibling-class-const]] |
+| 1569 | `t.ToString` referenced from inside a UNIT, not the program | [[bug-p-tobject-root-methods-are-invisible-inside-a-unit]] |
+| 1865 | a virtual CLASS method called as a statement | [[bug-p-a-virtual-class-method-cannot-be-called-as-a-statement]] |
+
+Note what the first two have in common with each other and with the rest of this
+rung's history: **a facility that works in the main program and is absent on the
+unit / class-body path.** Class consts live under a mangled key the `@` arm never
+asked the class registry for; the TObject root-method pre-scan ran over the main
+program's token range and no unit's. When the next wall here looks novel, check
+first whether it is the top-level path working and the nested one missing.
+
+### The current wall — `PPVmt(Self)^.__ClassRef` (line 1865+)
+
+Generics.Defaults reaches its factory VMT through
+`{$DEFINE EXTENDED_HASH_FACTORY := PPExtendedEqualityComparerVMT(Self)^.__ClassRef}`,
+spliced into roughly thirty call sites. Two independent defects sit under it —
+`pp^^` is refused outright, and the Delphi auto-deref spelling
+`PPVmt(x)^.field` resolves REC_NONE because `ResolveNodeRec`'s `AN_DEREF` branch
+has no `AN_PTR_CAST` arm. Measured, tabled against fpc, and filed as
+[[bug-p-a-pointer-to-a-pointer-to-a-record-cannot-be-dereferenced-twice]].
+
+**A partial fix was written and deliberately reverted** — adding the missing
+`ResolveNodeRec` arm makes the program compile and then SEGFAULT, because the
+lowering still emits one indirection where two are needed. Type resolution and
+address computation have to move together here; that ticket is this rung's next
+real blocker, and it is a bigger job than the three above.

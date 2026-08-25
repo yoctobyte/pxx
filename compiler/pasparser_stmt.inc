@@ -5932,9 +5932,7 @@ begin
               ordinals) matched at all: `array of string`, `array of Boolean` and
               `array of TRec` were "no overload matches: (Pointer)".
               bug-p-a-call-result-is-refused-as-a-const-open-array-argument }
-            if ((ASTKind[exprNode] = AN_CALL) or (ASTKind[exprNode] = AN_VIRTUAL_CALL) or
-                (ASTKind[exprNode] = AN_INTF_CALL) or (ASTKind[exprNode] = AN_CALL_IND) or
-                (ASTKind[exprNode] = AN_DYN_COPY)) and
+            if (ASTNodeIsCall(exprNode) or (ASTKind[exprNode] = AN_DYN_COPY)) and
                (NodeDynDepth(exprNode) >= 1) and (NodeDynBaseTk(exprNode) <> tyUnknown) then
               argTypes[i] := NodeDynBaseTk(exprNode);
             if ASTKind[exprNode] = AN_METHODREF then argTypes[i] := tyRecord;
@@ -6164,8 +6162,7 @@ begin
               end;
               if CurTok.Kind in [tkDot, tkLBrack] then
                 valNode := ParseClassRecordSelectors(valNode, REC_UCLASS_BASE + smci, castTk);
-              if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) or
-                 (ASTKind[valNode] = AN_INTF_CALL) then
+              if ASTNodeIsCall(valNode) then
                 { TClass(x).Method(args); — a method-call statement, not an assign.
                   AN_INTF_CALL covers the interface form IFoo(List[i]).M(args). }
                 node := valNode
@@ -6195,8 +6192,7 @@ begin
             ParseExpr;
             Dec(StmtCallDepth);
             node := CurASTNode;
-            if not ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
-                    (ASTKind[node] = AN_INTF_CALL) or (ASTKind[node] = AN_CALL_IND)) then
+            if not ASTNodeIsCall(node) then
               Error('statement is neither a call nor an assignment');
           end;
 
@@ -6527,8 +6523,7 @@ begin
                 ASTLeft[Result] := -1;
                 Exit;
               end;
-              if (ASTKind[valNode] = AN_CALL) or (ASTKind[valNode] = AN_VIRTUAL_CALL) or
-                 (ASTKind[valNode] = AN_INTF_CALL) or (ASTKind[valNode] = AN_CALL_IND) or
+              if ASTNodeIsCall(valNode) or
                  { with-scoped `Free;` desugars to a nil-guarded IF — a
                    statement, never an lvalue }
                  (ASTKind[valNode] = AN_IF) then
@@ -6705,8 +6700,7 @@ begin
     bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong }
   if (node >= 0) and
      (CurTok.Kind in [tkAssign, tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq]) and
-     ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
-      (ASTKind[node] = AN_INTF_CALL) or (ASTKind[node] = AN_CALL_IND)) then
+     ASTNodeIsCall(node) then
   begin
     ErrorRecover('cannot assign to the result of a function call');
     while not (CurTok.Kind in [tkSemicolon, tkEnd, tkElse, tkUntil, tkEOF]) do Next;

@@ -10499,6 +10499,26 @@ end;
 
 function ResolveNodeRec(node: Integer): Integer; forward;   { NodeMetaclassCi's FIELD arm needs it; real body just below }
 
+{ Every AST node kind that IS a routine call.
+
+  Written once because the test was copied five times in pasparser_stmt.inc
+  alone — "is this statement a call, or must a `:=` follow?" — and the copies
+  drifted: AN_CLASS_VIRTUAL_CALL (a VIRTUAL CLASS METHOD reached through a
+  metaclass receiver, `q.Emit(1);` where `q: TFooClass`) appeared in none of
+  them. It parsed correctly as an EXPRESSION — `k := q.Val(3)` worked — and was
+  refused in every statement position with `Expected: :=`, which names the
+  punctuation rather than the gap. rtl-generics' Generics.Defaults calls its
+  hash factory exactly that way.
+  bug-p-a-virtual-class-method-cannot-be-called-as-a-statement }
+function ASTNodeIsCall(node: Integer): Boolean;
+begin
+  Result := (node >= 0) and
+            ((ASTKind[node] = AN_CALL) or (ASTKind[node] = AN_VIRTUAL_CALL) or
+             (ASTKind[node] = AN_CLASS_VIRTUAL_CALL) or
+             (ASTKind[node] = AN_INTF_CALL) or (ASTKind[node] = AN_CALL_IND));
+end;
+
+
 { `p^` where p is a pointer to a named FIXED array — `PFixed = ^TFixed`. The
   pointee's extent survives on the pointer SYMBOL (SymPtrElemArrLen, and its low
   bound in the pointer row's otherwise-unused SymArrDimLo slot); a deref NODE

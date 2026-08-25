@@ -1,0 +1,11 @@
+var expr    : 6
+base emit 1
+var expr    : 30
+derived emit 2
+field expr  : 40
+derived emit 3
+elem expr   : 50
+base emit 4
+derived emit 5
+base emit 6
+derived emit 7

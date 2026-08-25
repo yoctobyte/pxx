@@ -9819,6 +9819,29 @@ begin
       TryParseInitValForm := True;
       Exit;
     end;
+    { A SIBLING class const or class var, named bare inside the class body:
+      `Comparer_Int8_Instance: Pointer = @Comparer_Int8_VMT;` — the shape
+      rtl-generics' Generics.Defaults builds its comparer table with. A typed
+      class const's storage is registered under a MANGLED key (so two classes'
+      same-named consts do not share a slot), so the bare name is invisible to
+      FindSym and the `@` arm fell through to the ordinal path, which cannot
+      consume `@name` — the section then desynced and reported `unexpected
+      token` at the NEXT declaration. Asked through the registry, like every
+      other access site (qualified, bare-in-method, const-fold).
+      Checked BEFORE the global lookup: a class member shadows a unit-level name
+      of the same spelling inside the class body, as in FPC. }
+    if ParsingClassConstCi >= 0 then
+    begin
+      si := FindClassConstSym(ParsingClassConstCi, GetTokenStr(TokPos));
+      if si < 0 then si := FindClassVar(ParsingClassConstCi, GetTokenStr(TokPos));
+      if si >= 0 then
+      begin
+        kind := 4; val := si;
+        Next; Next;
+        TryParseInitValForm := True;
+        Exit;
+      end;
+    end;
     si := FindSym(GetTokenStr(TokPos));
     if si >= 0 then
     begin

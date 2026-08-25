@@ -1,0 +1,4 @@
+eq     : TRUE FALSE TRUE FALSE
+text   : TNamed#7 TNamed#9
+root   : TRUE FALSE
+hash   : TRUE

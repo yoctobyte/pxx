@@ -485,6 +485,7 @@ function ParseArrayCtorAST(elemTk: TTypeKind; rowLen, rowLo: Integer): Integer; 
 function BuildMetaclassNew(crefNode, ci, mmi: Integer): Integer; forward;
 function ParseStatementAST: Integer; forward;
 procedure EnableCoroutineRuntime; forward;
+procedure EnsureTObjectRootMethods; forward;   { real body in pasparser_prog.inc; the per-unit pre-scan in pasparser_proc.inc mints TObject's rows before a unit body parses }
 function ParseWithStatementAST: Integer; forward;
 function ParseAsmStatementAST: Integer; forward;
 function ParseBlockAST: Integer; forward;

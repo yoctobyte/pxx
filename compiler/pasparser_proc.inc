@@ -3137,6 +3137,7 @@ var
   pyRootIdx: Integer;   { NilPy .py/.npy search over the library roots — see below }
   savedNestedComments, savedDelphiMode: Boolean;
   unitNeedsText: Boolean;
+  unitNeedsRootMeth: Boolean;   { this unit calls .Equals/.GetHashCode/.ToString }
   savedPasDefineCount, savedPasDefineCharLen, pdi: Integer;
   savedPasDefineActive: array[0..MAX_PAS_DEFINES-1] of Boolean;
   savedPasDefineHasValue: array[0..MAX_PAS_DEFINES-1] of Boolean;
@@ -4250,6 +4251,7 @@ begin
     startPos := LexAppend(UnitContent);
     i := startPos;
     unitNeedsText := False;
+    unitNeedsRootMeth := False;
     while i < TokCount do
     begin
       if Tokens[i].Kind in [tkTry, tkRaise] then EnableExceptionRuntime;
@@ -4267,7 +4269,30 @@ begin
         if CaseEqual(GetTokenStr(i), 'text') or CaseEqual(GetTokenStr(i), 'textfile') or
            CaseEqual(GetTokenStr(i), 'ioresult') then
           unitNeedsText := True;
+      { ...and the TObject ROOT METHODS, for exactly the reason above. `o.Equals(x)`
+        / `.GetHashCode` / `.ToString` resolve through rows EnsureTObjectRootMethods
+        mints only when the `builtin` unit's default bodies are visible, and the
+        program-level pre-scan that pulls that unit sees only the PROGRAM's tokens.
+        So the same call compiled in a program and failed with `"Equals": no such
+        member on this record/class` in a UNIT — rtl-generics' Generics.Defaults
+        hits it at TEquals.&Class, and any unit with a `constref L: TObject` helper
+        does. Dot-preceded, exactly as the program-level trigger is, so a class that
+        merely DECLARES a ToString does not drag 42 KB in. }
+      if (Tokens[i].Kind = tkIdent) and (i > startPos) and (Tokens[i - 1].Kind = tkDot) and
+         (RootVMTSlotCount > 0) and
+         (CaseEqual(GetTokenStr(i), 'equals') or CaseEqual(GetTokenStr(i), 'gethashcode')
+          or CaseEqual(GetTokenStr(i), 'tostring')) then
+        unitNeedsRootMeth := True;
       Inc(i);
+    end;
+
+    { The rows can only be minted once `builtin` is in — and, unlike the program
+      path (which mints them at the end of pass 1), a unit's bodies parse right
+      after this, so it happens here. Idempotent. }
+    if unitNeedsRootMeth and (not NoDefaultRtl) and (not TargetIsEspClass) then
+    begin
+      ParseUsesUnitAmbient('builtin');
+      EnsureTObjectRootMethods;
     end;
 
     { Load the implicit textfile surface (builtin first, for its numeric write
