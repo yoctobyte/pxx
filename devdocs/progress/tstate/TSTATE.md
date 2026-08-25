@@ -3,7 +3,7 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `a28bc3993a0e` | 2026-08-25T11:28:53Z | RED (native) | 3600.4s | `aa9f0989a4c0` RED |
+| plexus | `0bc0cfac61a8` | 2026-08-25T12:30:33Z | RED (native) | 3600.5s | `aa9f0989a4c0` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
@@ -11,3 +11,4 @@
 - **lib-test#src:test/lib_mimic_xml_etree_elementtree.npy** — test/lib_mimic_xml_etree_elementtree.npy (plexus): bad `fd93e4a71c37`, last good `98ed38202254`, 137 commit(s) in range
 - **test-core#src:test/test_nilpy_json_module.npy** — test/test_nilpy_json_module.npy (plexus): bad `a28bc3993a0e`, last good `d34ea0c3e6f0`, 9 commit(s) in range
 - **test-core#src:test/test_nilpy_json_reparse_heap.npy** — test/test_nilpy_json_reparse_heap.npy (plexus): bad `a28bc3993a0e`, last good `d34ea0c3e6f0`, 9 commit(s) in range
+- **test-core#src:test/test_cast_deref_chain_siblings.pas** — test/test_cast_deref_chain_siblings.pas (plexus): bad `0bc0cfac61a8`, last good `a28bc3993a0e`, 7 commit(s) in range
