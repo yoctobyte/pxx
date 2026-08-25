@@ -197,11 +197,24 @@ check_session_env() {
     env=$(tr '\0' '\n' < "/proc/$pid/environ" 2>/dev/null) || {
         warn env "cannot read /proc/$pid/environ"; return; }
     graphical=$(printf '%s\n' "$env" | grep -cE '^(DISPLAY|WAYLAND_DISPLAY|XAUTHORITY|DBUS_SESSION_BUS_ADDRESS)=')
-    guarded=$(printf '%s\n' "$env" | grep -cE '^(NO_AT_BRIDGE|GTK_A11Y)=')
+
+    # Look for the guard where it actually lives. testmgr sets NO_AT_BRIDGE and
+    # GTK_A11Y in the JOB environment, not the daemon's -- deliberately, so it
+    # applies however the run was launched, where a unit-level Environment=
+    # would silently stop applying the first time someone runs testmgr by hand.
+    # Checking the daemon's own /proc environ would therefore WARN forever on a
+    # correctly-fixed box, and a check that always warns is a check nobody
+    # reads.
+    if grep -q 'NO_AT_BRIDGE' "$REPO/tools/testmgr.py" 2>/dev/null; then
+        guarded=1
+    else
+        guarded=0
+    fi
+
     if [ "$graphical" -gt 0 ] && [ "$guarded" -eq 0 ]; then
-        warn env "watcher inherits $graphical graphical vars, no NO_AT_BRIDGE/GTK_A11Y guard"
+        fail env "watcher inherits $graphical graphical vars and testmgr sets no a11y guard"
     elif [ "$graphical" -gt 0 ]; then
-        ok env "inherits $graphical graphical vars but is guarded"
+        ok env "inherits $graphical graphical vars; testmgr guards the job env"
     else
         ok env "clean environment"
     fi
