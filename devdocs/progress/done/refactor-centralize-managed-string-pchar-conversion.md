@@ -633,4 +633,4 @@ side storage, or neither now that the walk is one function. Filed as
 [[decide-pchar-node-side-storage-or-a-pchar-type-kind]] (Track U) with a
 recommendation, so the next reader of "slice 3, still owed" does not build a
 `tyPChar` on the strength of "do what WideChar did".
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit f687061db.
