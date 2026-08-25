@@ -1,5 +1,13 @@
 #!/bin/sh
-# sync.sh — land your commits on origin/master without hand-resolving the board.
+# sync.sh — land your commits on your branch's upstream without hand-resolving
+# the board.
+#
+# BRANCH-AWARE since the dev-branch workflow (2026-08-25): this syncs whatever
+# branch you are ON against origin/<that branch>, rather than hardcoding master.
+# Workers live on `dev`; master is a stable snapshot that the coordinator
+# advances by MERGE, once or twice a day. Never run this to move master --
+# `git merge --no-ff dev` is that job, because a rebase would rewrite the shas
+# that tstate verdicts and the board's resolve citations are keyed by.
 #
 # Why this exists: BOARD.md is GENERATED, so any two agents that both touched
 # tickets conflict on it every single time (four times in one afternoon on
@@ -24,6 +32,14 @@ set -eu
 ROOT=$(git rev-parse --show-toplevel)
 cd "$ROOT"
 
+# The branch we are on IS the branch we sync. Resolved once, up front: a
+# detached HEAD or a mid-rebase state would otherwise silently retarget us.
+BRANCH=$(git rev-parse --abbrev-ref HEAD)
+if [ "$BRANCH" = "HEAD" ]; then
+    echo "sync: detached HEAD -- check out a branch first" >&2
+    exit 1
+fi
+
 # EVERY generated board file, not just BOARD.md. `board-md` also writes
 # BOARD-brief.md and BOARD-done.md (done/ alone was 190KB of BOARD.md, so the
 # archived tables were split out) — and the moment a second generated file
@@ -41,9 +57,9 @@ if [ -n "$(git status --porcelain --untracked-files=no)" ]; then
 fi
 
 rebase_onto_origin() {
-    git fetch --no-write-fetch-head -q origin master
+    git fetch --no-write-fetch-head -q origin "$BRANCH"
 
-    if ! git rebase -q origin/master 2>/dev/null; then
+    if ! git rebase -q "origin/$BRANCH" 2>/dev/null; then
         # Only the GENERATED board files may be auto-resolved. Anything else is
         # real content and belongs to a human.
         while true; do
@@ -87,14 +103,14 @@ rebase_onto_origin() {
 push_with_retry() {
     tries=0
     while [ "$tries" -lt 3 ]; do
-        if git push -q origin master 2>/dev/null; then
+        if git push -q origin "$BRANCH" 2>/dev/null; then
             return 0
         fi
         tries=$((tries + 1))
         echo "sync: push raced another writer — rebasing and retrying ($tries/3)" >&2
         rebase_onto_origin
     done
-    git push origin master          # let the real error out
+    git push origin "$BRANCH"       # let the real error out
 }
 
 # Fill in the commit citation of every ticket resolved without one.

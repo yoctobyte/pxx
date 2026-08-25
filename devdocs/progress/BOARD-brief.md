@@ -5,15 +5,14 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`urgent:2 unfinished:23 blocked:7 backlog:285 backlog_new:19 experimental:20 rainy-day:44 float:20 done-followup:3 decided:101 done:2353 rejected:40`
+`urgent:1 working:1 unfinished:23 blocked:7 backlog:279 backlog_new:22 experimental:20 rainy-day:44 float:20 done-followup:3 decided:114 done:2355 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N] — owner: frank1-72
 
-## urgent (2) — jump the queue
+## urgent (1) — jump the queue
 
-- `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
 - `bug-t-the-native-tier-times-out-and-publishes-a-contentless-red` [T]
 
 ## unfinished (23) — parked mid-flight; re-claim, do not duplicate
@@ -52,22 +51,31 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 290, ranked
+## Ready — top 30 of 312, ranked
 
-- `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [T]` bug-t-the-native-tier-times-out-and-publishes-a-contentless-red
+- `[p 88] [N]` bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
 - `[p 70] [N]` regression-lib-test-lib-mimic-xml-etree-elementtree-2
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-callable-to-str-param-fails
 - `[p 65] [B]` gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo (unblocks 1)
 - `[p 65] [B]` bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
+- `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 - `[p 65] [T]` bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - `[p 65] [C]` feature-c-csmith-differential-fuzzing
+- `[p 65] [N]` feature-nilpy-cpyext-c-api-from-source
+- `[p 65] [N]` feature-nilpy-thirdparty-libraries-as-targets
+- `[p 65] [P]` feature-pascal-corpus-fpc-testsuite
 - `[p 65] [P]` feature-pascal-corpus-oop
+- `[p 62] [N]` bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name
+- `[p 62] [B]` feature-b-the-module-shim-batch-blocking-the-python-corpus
+- `[p 60] [N]` bug-n-every-nilpy-compile-pays-a-fixed-nine-second-cost
 - `[p 60] [N]` bug-n-inferred-return-type-of-true-division-is-int
 - `[p 60] [T]` bug-t-the-push-rate-starves-breadth-coverage-entirely
 - `[p 60] [T]` feature-t-gate-quick-should-smoke-the-pinned-compiler
 - `[p 58] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - `[p 58] [O]` feature-opt-o3-register-pressure
+- `[p 55] [A]` feature-port-rtl-over-libc (unblocks 3)
+- `[p 55] [A]` feature-nilpy-object-reclamation (unblocks 1)
 - `[p 55] [T]` feature-t-freebsd-image-and-runner (unblocks 1)
 - `[p 55] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - `[p 55] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
@@ -75,14 +83,5 @@ _none — no lane is locked._
 - `[p 55] [N]` bug-n-hasattr-through-an-untyped-parameter-is-always-false
 - `[p 55] [N]` bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
 - `[p 55] [N]` bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
-- `[p 55] [N]` bug-nilpy-a-lambda-returned-directly-is-not-callable
-- `[p 55] [T]` chore-t-split-lib-test-into-jobs-that-name-what-failed
-- `[p 55] [N]` feature-a-declaration-phase
-- `[p 55] [B]` feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
-- `[p 55] [E]` feature-demo-portable-userland
-- `[p 55] [O]` feature-opt-heap-per-thread-cache
-- `[p 55] [T]` feature-t-tier-job-self-compile-differential-across-o-levels
-- `[p 53] [S]` feature-esp-peripheral-callback-api
-- `[p 50] [U]` decide-release-signing-key-custody (unblocks 1)
 
-_260 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_282 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

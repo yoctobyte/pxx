@@ -15759,8 +15759,15 @@ begin
   if ASTKind[n] <> AN_CALL then Exit;
   if ASTIVal[n] < 0 then Exit;
   nm := LowerCase(Procs[ASTIVal[n]].Name);
+  { The whole pybound_new* family by PREFIX, not by three spellings. Every
+    pybound_new<suffix> is a {code, recv} constructor; naming them one by one is
+    how this predicate went blind when `pybound_new_sig` was added and both
+    producers switched to it (9bbbbef6c), so a bound method reaching a `str`
+    parameter stopped being refused and rendered as `<bound method at 0x..>`
+    again — the exact defect bug-nilpy-bound-method-coerced-to-string closed.
+    bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method }
   PyNodeIsCallableValue :=
-    (nm = 'pybound_new') or (nm = 'pybound_new_star') or
+    (Copy(nm, 1, 11) = 'pybound_new') or
     (nm = 'pyvar_of_callable') or
     (nm = 'pyclosure_src_new') or (nm = 'pyclosure_src_cap') or
     (nm = 'pyclosure_setarity') or
@@ -40158,81 +40165,45 @@ begin
           case-sensitive and Pascal's proc lookup is not, so `Counter` used to
           answer for `counter`. }
         idx := FindProcExactCase(PyQualifyNested(name));
-        { Same fix as PyMakeFuncValue's twin case, needed here too since a
-          bare callable in an ordinary expression position (a `key=`/`cmp=`
-          keyword argument, not an assignment RHS) reaches THIS handler
-          instead: the first FindProc match may not be the SAFE overload
-          (`len`'s first declared one takes a TPyBytes, not a Variant), and
-          even the safe one's RETURN isn't the Variant-hidden-destination-
-          pointer convention every callable-value dispatcher assumes --
-          `sorted(xs, key=len)` crashed even though `f = len; sorted(xs,
-          key=f)` (going through PyMakeFuncValue) already worked.
-          feature-nilpy-callable-value-unified-dispatch }
-        altPi := PyFindVariantParamOverload(name, Procs[idx].ParamCount);
-        if altPi >= 0 then idx := altPi;
-        if Procs[idx].RetType <> tyVariant then
-        begin
-          paramsAllVariant := True;
-          for wpj := 0 to Procs[idx].ParamCount - 1 do
-            if Procs[idx].Params[wpj].TypeKind <> tyVariant then
-            begin
-              paramsAllVariant := False;
-              Break;
-            end;
-          if paramsAllVariant and (Procs[idx].ParamCount = 1) and
-             Procs[idx].IsFunc and PyScalarWrappableRetType(Procs[idx].RetType) then
-            idx := PyGetOrMakeCallableWrapper(idx);
-        end;
         Next;
-        { A nested def whose meaning depends on values live NOW (default-arg
-          expressions, captured enclosing locals) cannot travel as a bare
-          address — bind those values into a closure (uforth's DOES>).
-          -1 = nothing to bind, the plain address stays. }
-        node := PyNestedDefClosureValue(idx);
-        if node < 0 then
-        begin
-          { A callee that COLLECTS cannot travel as a bare address either: the
-            packing of surplus arguments into its one TPyList parameter is
-            work the CALL SITE does, and an address carries nothing that says
-            so. The {code, recv} pair does — pybound_new_star records the star
-            position — so a variadic def takes that road even with no captures.
-            `return wrapper` over `def wrapper(*args)` (the shape every Python
-            decorator has) otherwise called the body with loose Variants where
-            it declares a list. }
-          { ...and NEITHER CAN A CALLEE WITH DEFAULTS, for exactly the same
-            reason one word later. The star case above was written when the
-            pair's only extra cargo was the star position; the pair now also
-            carries the SIGNATURE record -- ReqN/TotN, the def-time default
-            values and the parameter names -- and a bare address carries none
-            of it. So a def with any defaulted parameter must take the same
-            road, or `fs = [g]` / `take(g)` on `def g(a, b=7)` enters a
-            two-parameter body through a one-parameter pointer and reads
-            whatever the previous call left where `b` lives.
+        { ONE builder for a bare def name in a value position. This arm used to
+          carry a COPY of PyMakeFuncValueFor's body -- the safe-overload pick,
+          the return-side wrapper, the nested-def closure -- and the copy
+          drifted, twice:
 
-            This is the sibling-arm shape from
-            devdocs/dev/normalise-dont-special-case.md: one concept ("this
-            callee cannot travel as a bare address") served by a condition
-            listing the reasons, and only the first reason was listed. Measured
-            rather than reasoned -- `f = g` went through PyMakeFuncValueFor and
-            worked while `fs = [g]` did not reach it at all, which is what
-            pointed here.
-            bug-n-a-module-level-def-taken-as-a-value-loses-its-defaults }
-          if (idx >= 0) and (idx < ProcCount) and
-             ((ProcPyStarIdx[idx] >= 0) or PyProcHasDefaultParam(idx)) then
-            node := PyMakeFuncValueFor(idx, name);
-          if node >= 0 then
-          begin
-            CurASTNode := node;
-            LastExprTk := tyVariant;
-            Exit;
-          end;
-          node := AllocNode(AN_PROCADDR);
-          ASTIVal[node] := idx;
-          ASTTk[node] := Ord(tyPointer);
+            * it capped the wrapper at ParamCount = 1, so a zero-argument or
+              two-argument scalar-returning callee got none here while the
+              assignment path (which had already been widened to any arity) gave
+              it one;
+            * and for the plain case -- no captures, no star, no defaults -- it
+              handed back a bare AN_PROCADDR typed tyPointer.
+
+          That second one is the leak. A tyPointer argument never reaches a
+          `const v: Variant` parameter: overload matching binds it to the Int64
+          overload instead, so `print(g)` and `str(g)` on a plain def rendered
+          the code address as a DECIMAL (6410667), while `a = g; print(a)` --
+          the identical value one assignment later, boxed by
+          PyMakeFuncValueFor -- rendered `<function at 0x...>` like CPython.
+          The tag-12 machinery underneath was already correct; the value simply
+          never got boxed on this road.
+
+          Delegating deletes the second implementation instead of patching it,
+          which is also what stops the next drift.
+          devdocs/dev/normalise-dont-special-case.md
+          bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method }
+        node := PyMakeFuncValueFor(idx, name);
+        if node >= 0 then
+        begin
           CurASTNode := node;
-          LastExprTk := tyPointer;
+          LastExprTk := tyVariant;
           Exit;
         end;
+        { PyMakeFuncValueFor could not build one (no pybound_new* in scope --
+          a program that pulls in no pylib). The bare address is what this arm
+          always did, and it stays as the floor. }
+        node := AllocNode(AN_PROCADDR);
+        ASTIVal[node] := idx;
+        ASTTk[node] := Ord(tyPointer);
         CurASTNode := node;
         LastExprTk := tyPointer;
         Exit;

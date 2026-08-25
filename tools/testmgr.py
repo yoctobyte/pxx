@@ -400,6 +400,58 @@ METRICS_ALPHA = 0.4             # EWMA weight of the newest observation
 # not safe to keep as a ceiling.
 OUTGROWN_MARGIN = 2.0
 
+# No per-job budget may exceed this fraction of the run's GLOBAL deadline.
+#
+# The outgrown-class path above raises a budget to fit a job that got slower.
+# Nothing bounded the result, so a job could be handed a budget LARGER than the
+# whole run is allowed to take -- and then be honoured. Measured on plexus,
+# 2026-08-25: test_c_gtk_call.pas held dur=3522s against a 3600s deadline, was
+# given 7045s, and every native tier from 08-22 onward spent its full hour on
+# that one job and published a contentless red. 34 runs, three days, no verdict
+# for the fleet.
+#
+# A budget past the deadline is not a budget, it is a promise the run cannot
+# keep: the job cannot pass, and the ONLY thing the extra time buys is the loss
+# of every other job's verdict. Half the deadline leaves the rest of the run
+# room to finish and still lets one genuinely long job run longer than any
+# other. The job then dies as a TIMEOUT -- a red with a reason, attributable and
+# bisectable -- instead of as the global teardown, which is a red with nothing
+# in it.
+MAX_JOB_DEADLINE_FRAC = 0.5
+
+# The global deadline is a WALL-CLOCK budget, so it has to move when we
+# deliberately take cores away.
+#
+# Measured 2026-08-25: the newest full tier on this host reports wall=3600.3s
+# against the 3600s default -- i.e. it did not finish, it was torn down, and the
+# RED it published is the contentless kind. That was on the WHOLE box. This box
+# then became a workstation and the watcher was capped at 6 of 12 cores, which
+# roughly doubles the wall of the same work: the matrix is ~24000 cpu-seconds,
+# so even packed perfectly it needs ~67 minutes at 6 cores and cannot fit an
+# hour at any packing.
+#
+# A deadline the run provably cannot meet does not protect anything -- it just
+# converts every breadth run into a teardown at the same minute. So the default
+# scales with the throttle: half the cores, twice the wall. An explicit
+# --deadline is never touched, and the per-job ceiling above is a FRACTION of
+# this number, so it follows automatically.
+DEFAULT_DEADLINE = 3600.0
+
+
+def scaled_deadline(explicit, nproc, budget):
+    """The run's global wall-clock budget, given the cores it may actually use.
+
+    An explicit --deadline is returned untouched: the caller said a number and
+    means it. Otherwise the default is stretched by exactly the factor the
+    throttle shrinks throughput by -- 6 of 12 cores doubles it. Never shrinks
+    below the default, because an unthrottled run is the case it was tuned for.
+    """
+    if explicit is not None:
+        return float(explicit)
+    ncpu = float(nproc or 1)
+    have = float(budget) if budget else ncpu
+    return DEFAULT_DEADLINE * max(1.0, ncpu / max(0.1, have))
+
 
 def metrics_key(job):
     """Identity of a job's learned metrics ACROSS commits.
@@ -2117,6 +2169,39 @@ def cpu_times():
     return idle, sum(vals)
 
 
+def job_env():
+    """The environment every job runs in.
+
+    Same rule as the stdin=DEVNULL note in launch(): a job must not get a
+    different answer depending on how the run was launched -- and "is anyone
+    logged in at this box" is exactly that kind of difference. It became real
+    on 2026-08-20, when borg's PSU died and the headless watcher box turned
+    into the human's workstation: jobs began inheriting a desktop session
+    environment, and from 08-21 test/test_c_gtk_call.pas hung forever after
+    printing `gtk_init resolved and called successfully!`.
+
+    Measured on plexus at 9170a6193, same binary each time:
+
+        default (session bus present)      hangs, killed at 240s
+        NO_AT_BRIDGE=1                     0.31s, rc=0
+        DBUS_SESSION_BUS_ADDRESS unset     STILL HANGS, killed at 45s
+
+    That third line is why unsetting the bus is not the fix: with no bus
+    address, GTK's at-spi bridge tries to AUTOLAUNCH one and blocks there
+    instead. NO_AT_BRIDGE (GTK2/3) and GTK_A11Y=none (GTK3+) turn the bridge
+    off outright, which is the only thing a test process wants from
+    accessibility. Nothing under test/ exercises a11y.
+
+    Set here rather than in the recipes: it is a property of "running as a
+    test", not of any one test, and the next GUI test to be written must not
+    have to know this.
+    """
+    env = dict(os.environ)
+    env["NO_AT_BRIDGE"] = "1"
+    env["GTK_A11Y"] = "none"
+    return env
+
+
 # -------------------------------------------------------------- executor ---
 class Manager:
     def __init__(self, jobs, args, scale, logdir):
@@ -2133,8 +2218,21 @@ class Manager:
         self._peer_polled = -PEER_POLL_PERIOD
         self.peer_last_seen = -1.0
         self.peer_repos = set()
-        self.metrics = load_metrics()
+        self.core_budget = core_budget(getattr(args, "max_cores", 0),
+                                       self.nproc)
+        if args.deadline is None:
+            # throttled runs get proportionally longer to do the same work
+            args.deadline = scaled_deadline(None, self.nproc, self.core_budget)
+            if args.deadline > DEFAULT_DEADLINE:
+                print("testmgr: deadline %.0fs (default %.0fs x %.1f — this run "
+                      "has %.0f of %d cores, so the same work takes longer in "
+                      "wall-clock)"
+                      % (args.deadline, DEFAULT_DEADLINE,
+                         args.deadline / DEFAULT_DEADLINE,
+                         self.core_budget, self.nproc), flush=True)
+        self.metrics = self.heal_latched_metrics(load_metrics(), args.deadline)
         outgrown = []
+        unschedulable = []
         for j in jobs:
             cls_to = CLASSES[j.cls]["timeout"]
             m = self.metrics.get(metrics_key(j))
@@ -2174,7 +2272,22 @@ class Manager:
                         outgrown.append((j, cls_to * scale))
             if j.timeout is None:
                 j.timeout = cls_to * scale
+            # THE clamp. Applies to every path above -- class ceiling, hang
+            # detector, outgrown raise -- because any of them can, with a
+            # ratcheted metric behind it, name a number the run cannot afford.
+            ceiling = args.deadline * MAX_JOB_DEADLINE_FRAC
+            if j.timeout > ceiling:
+                unschedulable.append((j, j.timeout))
+                j.timeout = ceiling
         self.outgrown = outgrown
+        for j, wanted in unschedulable:
+            print("testmgr: %s wanted a %.0fs budget against a %.0fs deadline — "
+                  "clamped to %.0fs. A job that cannot finish inside the run "
+                  "cannot pass, and letting it try costs every other job's "
+                  "verdict; it will TIMEOUT with a reason instead. Split it, "
+                  "reclassify it, or fix what made it hang."
+                  % (j.sel or j.name, wanted, args.deadline,
+                     args.deadline * MAX_JOB_DEADLINE_FRAC), flush=True)
         for j, budget in outgrown:
             print("testmgr: %s outgrew its `%s` budget — measured %.0fs against "
                   "%.0fs, so it could never pass. Budget raised to %.0fs for "
@@ -2209,8 +2322,9 @@ class Manager:
             -(j.exp_dur if j.exp_dur else CLASSES[j.cls]["timeout"])))
         # cores/mem-aware admission does the real throttling; the cap is just
         # a runaway guard, and >nproc lets io/qemu-idle jobs keep cores busy
-        self.core_budget = core_budget(getattr(args, "max_cores", 0),
-                                       self.nproc)
+        # (self.core_budget is set at the top of __init__ — the deadline is
+        # derived from it and is needed before this point).
+        #
         # The 2x oversubscription is a RATIO, not the number 24: it exists so
         # io- and qemu-idle jobs (cores < 1) can pack denser than the core
         # budget suggests. Tie it to the budget, or `--max-cores 6` would leave
@@ -2231,6 +2345,42 @@ class Manager:
         # running, waiting cannot help: it is a deadlock, not backpressure.
         self._last_progress = time.monotonic()
         self._degraded = False
+
+    @staticmethod
+    def heal_latched_metrics(metrics, deadline):
+        """Drop learned durations that can only have come from a harness kill.
+
+        learn_timeout() records "this job ran at least this long" so a job that
+        genuinely got slower can escape a stale-fast expectation. The number it
+        records, though, is OUR ceiling, not the job's duration -- and the
+        outgrown path then doubles it into the next budget. So a hang ratchets:
+        killed at the budget, budget raised from the kill, killed at the bigger
+        budget, forever. test_c_gtk_call.pas climbed 90s -> 2902s -> 3522s that
+        way while its three sibling GTK tests sat at 7-8s, and no run could
+        unstick it because the job never passes and only a pass calls learn().
+        The old comment claimed the class ceiling bounded this; the outgrown
+        path overrides that ceiling, so it did not.
+        
+        A stored duration at or past the deadline is therefore a SCAR, not a
+        measurement, and keeping it poisons every future run on this box. Drop
+        it and let the job re-measure honestly: worst case it times out once
+        more and re-learns a real number under the clamp.
+        """
+        ceiling = deadline * MAX_JOB_DEADLINE_FRAC
+        healed = []
+        for key, m in list(metrics.items()):
+            if (m or {}).get("dur", 0) >= ceiling:
+                healed.append((key, m["dur"]))
+                del metrics[key]
+        for key, dur in healed:
+            print("testmgr: dropped a latched metric for %s (%.0fs, at or past "
+                  "the %.0fs a job may have) — that figure is when the harness "
+                  "gave up, not how long the job takes, and it would have been "
+                  "doubled into the next budget" % (key, dur, ceiling),
+                  flush=True)
+        if healed:
+            save_metrics(metrics)
+        return metrics
 
     # -- lifecycle -----------------------------------------------------
     def launch(self, job):
@@ -2260,7 +2410,7 @@ class Manager:
         job.proc = subprocess.Popen(["sh", "-c", job.script()],
                                     stdin=subprocess.DEVNULL,
                                     stdout=logf, stderr=subprocess.STDOUT,
-                                    preexec_fn=presetup, cwd=REPO)
+                                    preexec_fn=presetup, cwd=REPO, env=job_env())
         logf.close()
         job.t0 = time.monotonic()
         job.status = "running"
@@ -2514,6 +2664,15 @@ class Manager:
         job demonstrably needed more time than we gave it.
         """
         observed = max(0.05, (job.t1 - job.t0) / self.scale)
+        # Same rule as heal_latched_metrics: at the clamp, this number is the
+        # harness giving up, not the job's duration. Recording it is what
+        # starts the ratchet -- so refuse at the source as well as on load.
+        if observed >= self.args.deadline * MAX_JOB_DEADLINE_FRAC:
+            print("testmgr: %s hit the per-job ceiling (%.0fs) — NOT recording "
+                  "that as its duration. A job at the ceiling is hung or badly "
+                  "misclassified; a bigger number cannot fix either."
+                  % (job.sel or job.name, observed), flush=True)
+            return
         key = metrics_key(job)
         m = dict(self.metrics.get(key) or {})
         if m.get("dur", 0) >= observed:
@@ -4117,8 +4276,9 @@ def main():
     ap.add_argument("--serial", action="store_true", help="PAR=1: one job at a time")
     ap.add_argument("--fail-fast", action="store_true",
                     help="first red kills the run (inner-loop mode)")
-    ap.add_argument("--deadline", type=float, default=3600,
-                    help="global wall-clock budget, seconds (default 3600)")
+    ap.add_argument("--deadline", type=float, default=None,
+                    help="global wall-clock budget, seconds (default 3600, "
+                         "scaled up when --max-cores throttles the run)")
     ap.add_argument("--list", action="store_true", help="print job table and exit")
     ap.add_argument("--job", metavar="GLOB",
                     help="run only jobs whose name matches (fnmatch), or "

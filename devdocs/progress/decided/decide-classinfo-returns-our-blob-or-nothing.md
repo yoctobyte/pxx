@@ -3,7 +3,7 @@ track: U
 prio: 35
 type: decide
 blocked-by: []
-status: backlog
+status: decided
 summary: "`TObject.ClassInfo` is the last unimplemented member of the TObject API. Returning our own class blob is right for identity comparison and wrong for anything that walks FPC's TTypeInfo layout. Three options: emit it as our blob, refuse it, or route it through the typinfo facade. Needs the owner's call on how far reflection parity goes."
 ---
 
@@ -58,3 +58,72 @@ so answering it for an arbitrary instance means every class carries a header —
 another +8 bytes per declared class in `.data`, on top of the +8 `UnitName`
 would want. That is the same budget conversation `--compact-classes` settled for
 the VMT slots, and may want the same answer.
+
+---
+
+# DECIDED 2026-08-25 — **option C: `ClassInfo` returns the typinfo-facade `PTypeInfo`**
+
+Decided by an agent under the no-human-available rule
+(`devdocs/progress/decided/README-agent-decisions.md`). **Derived.**
+
+`x.ClassInfo` returns exactly what `TypeInfo(TThatClass)` returns: the 24-byte
+`{Kind; NamePtr; DataPtr}` header, `DataPtr` pointing at that class's blob. The
+identity `o.ClassInfo = TypeInfo(TFoo)` is true, which is the property FPC code
+actually depends on and the one that `tclassinfo1.pp` asserts.
+
+This is the same decision as
+[[decide-tobject-classinfo-blob-or-refusal]], which asked the same question with
+a different option lettering. Both are answered here; neither is a separate call.
+
+## Why not A (our raw blob)
+
+`frontend-compat-philosophy.md`, and it is not a close reading:
+
+> *"a **silent wrong VALUE** is a bug in any dialect. Being our own dialect
+> licenses different SEMANTICS chosen on purpose; it never licenses a wrong
+> answer nobody chose."*
+
+A layout walker reading `PTypeInfo(x.ClassInfo)^.Kind` off our blob reads an
+interned-name pointer's low byte as a `TTypeKind`. That is garbage that looks
+like an answer, with no diagnostic — the exact failure this rule names. A is
+forbidden by a stated principle, not merely disfavoured.
+
+## Why not B (keep refusing)
+
+Refusing is defensible only while there is no correct answer available. There
+is one, it costs one word per class, and the precedent for reaching it is
+already settled: the typinfo facade is what unblocked the whole RTTI line, on
+the finding that *"nothing real reads below the facade"*. Refusing now would be
+choosing a loud gap over an available correct answer — and it blocks any vendor
+unit that merely mentions `ClassInfo` while comparing pointers, which is the
+common case, against the pragmatic goal of compiling real code.
+
+## The sub-question the ticket flagged: per-class, or on demand?
+
+**Per declared class.** `ClassInfo` is a runtime member on a possibly-dynamic
+receiver, so "on demand" cannot be answered statically — the only way to answer
+it for an arbitrary instance is for every class to carry a header.
+
+Cost is one word in `.data` per declared class, and `UnitName` just demonstrated
+that this header grows freely: nothing strides over these headers and every
+reader names a field offset. This is **not** the `--compact-classes` budget
+conversation, which was about per-class VMT *slots* multiplied by method count;
+this is one word, once, per class.
+
+## The line this shares with two sibling decisions
+
+The facade speaks FPC's numbering; our internal blob stays private. Same seam
+as [[decide-rtti-kind-numbering]] and
+[[decide-vartype-returns-pxx-tags-not-fpc-codes]] — three tickets, one policy,
+now written down in `README-agent-decisions.md`.
+
+## Re-filed as work
+
+Track **A**: `feature-a-classinfo-returns-the-typinfo-header`, prio 45 — mint a
+`TYPEINFO_REQ_CAT_CLASS` header per declared class, add the `ClassInfo` accessor
+arm, and unskip `tclassinfo1.pp`. Unblocks the ClassInfo rows of
+[[feature-pascal-builtin-tobject-class]] and
+[[feature-p-tobject-api-classparent-instancesize-tostring]].
+
+## Log
+- 2026-08-25 — decided, commit PENDING-COMMIT.

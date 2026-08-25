@@ -10,7 +10,7 @@ summary: "pxx evaluates Assert() by default; FPC ignores it unless -Sa. So Asser
 
 - **Type:** decision (Track U) — no code is wrong today; the question is which
   behaviour we commit to.
-- **Status:** backlog
+- **Status:** decided
 - **Opened:** 2026-08-21, from the exception-semantics differential in
   `bug-a-unhandled-exception-exits-1-not-217`.
 
@@ -74,3 +74,71 @@ its own merits, and once it exists the default stops being a one-way door.
   (`EAssertionFailed`), catchability, and the message all match.
 - If option 2 or 3 lands, the conformance sweep (`pxx.skip`'s `dialect-pass`
   entries) is where the FPC-parity spelling belongs, per the compat tag.
+
+---
+
+# DECIDED 2026-08-25 — **option 3: implement `{$ASSERTIONS}` / `{$C±}` / `-Sa`, default ON**
+
+Decided by an agent under the no-human-available rule
+(`devdocs/progress/decided/README-agent-decisions.md`). **Derived** — the
+dialect contract already specifies this shape for every divergence, so there was
+less to decide here than the ticket assumed.
+
+`meta-dialect-extensions-and-fpc-strict`, the contract every extension follows:
+
+> *"1. **Be available by default** (lenient) or behind an explicit opt-in switch
+> — never silently mandatory. 2. **Be disabled / rejected under the strict
+> family** (`--strict` / `--mimic-fpc` / the relevant `{$...}` strict
+> directive), so a strict compile is FPC-faithful."*
+
+Assertions-evaluated-by-default is a divergence from FPC in pxx's favour, so by
+clause 1 it is a legitimate default and by clause 2 it must be switchable off
+under the strict family. That is option 3 with the default ON, spelled out in
+advance. Options 1 and 2 each drop one of the two clauses.
+
+## What settles the ticket's own framing
+
+The ticket presents this as "ours is safer versus theirs is compatible" and
+treats it as a one-way door. It is not a door at all once the switch exists —
+which is why the contract asks for the switch *first*. The recommendation was
+already right; what was missing was noticing that it is mandated rather than
+preferred.
+
+## Direction of the default, since clause 1 permits either
+
+ON. An assertion that silently evaporates is a check the author believed they
+had, and code written *for* pxx would be the population harmed by a silent
+default-off — a failure mode invisible until it matters. The compat direction is
+served exactly and losslessly by the flag: `-Sa`-off is bit-identical to FPC's
+default, so no FPC program is denied a way to build.
+
+## The upward-compatibility objection, and why it does not carry
+
+The ticket invokes the N-track rule ("a program the reference accepts and runs
+must work here") applied to P. That rule is stated for **NilPy** specifically, in
+`frontend-compat-philosophy.md`, and the same document explicitly says Pascal
+does **not** inherit it: *"This is the one most likely to be got wrong, because
+it inverts the usual instinct."* Borrowing N's rule into P is the exact confusion
+the philosophy doc was written to stop.
+
+That said, the concern behind it is real and cheap to answer: `--mimic-fpc`
+should imply assertions-off along with the rest of the FPC-parity switches, so
+a corpus build gets FPC's behaviour without naming this flag. Folded into the
+work below.
+
+## Scope note
+
+`{$C+}`/`{$C-}` and `{$ASSERTIONS ON/OFF}` are the same switch under two
+spellings; per-unit granularity is what makes the switch worth having beyond a
+default flip. Contract clause 4 applies: a test on both sides — the assert fires
+in the default dialect, and the same source is a no-op under `-Sa`-off.
+
+## Re-filed as work
+
+Track **P**: `feature-p-assertions-switch-and-strict-default`, prio 30 —
+implement `{$ASSERTIONS ON/OFF}`, `{$C±}` and `-Sa` (default ON), wire
+`--mimic-fpc` to turn it off, and add the `pxx.skip` `dialect-pass` entry so the
+conformance sweep runs with FPC's polarity.
+
+## Log
+- 2026-08-25 — decided, commit PENDING-COMMIT.

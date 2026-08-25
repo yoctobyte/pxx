@@ -5305,18 +5305,23 @@ test-core: $(COMPILER)
 	# what pinned still does. The property is that the flag changes nothing a
 	# program prints, so each is compared against its own plain output.
 	# refactor-a-one-program-driver-prologue-for-every-frontend
-	@for t in "test/test_fortran_skeleton.f90 test_fortran" \
-	          "test/test_algol_skeleton.alg test_algol" \
-	          "test/test_lolcode_skeleton.lol test_lolcode" \
-	          "test/test_ada_skeleton.adb test_ada" \
-	          "test/test_erlang_skeleton.erl test_erlang" \
-	          "test/test_ws_skeleton.ws test_ws"; do \
-	  set -- $$t; src=$$1; nm=$$2; \
-	  ./$(COMPILER) $$src $(TESTTMP)/$${nm}_plain26 >/dev/null; \
-	  ./$(COMPILER) --threadsafe $$src $(TESTTMP)/$${nm}_ts26 >/dev/null \
+	# The two binaries per language are named LITERALLY in the item list, not
+	# derived from $$nm in the body: testmgr privatizes /tmp by rewriting the
+	# recipe TEXT, and a path assembled at runtime is invisible to that scan, so
+	# two concurrent runs would share the file
+	# (chore-makefile-ws-skeleton-loop-hides-tmp-paths).
+	@for t in "test/test_fortran_skeleton.f90 test_fortran $(TESTTMP)/test_fortran_plain26 $(TESTTMP)/test_fortran_ts26" \
+	          "test/test_algol_skeleton.alg test_algol $(TESTTMP)/test_algol_plain26 $(TESTTMP)/test_algol_ts26" \
+	          "test/test_lolcode_skeleton.lol test_lolcode $(TESTTMP)/test_lolcode_plain26 $(TESTTMP)/test_lolcode_ts26" \
+	          "test/test_ada_skeleton.adb test_ada $(TESTTMP)/test_ada_plain26 $(TESTTMP)/test_ada_ts26" \
+	          "test/test_erlang_skeleton.erl test_erlang $(TESTTMP)/test_erlang_plain26 $(TESTTMP)/test_erlang_ts26" \
+	          "test/test_ws_skeleton.ws test_ws $(TESTTMP)/test_ws_plain26 $(TESTTMP)/test_ws_ts26"; do \
+	  set -- $$t; src=$$1; nm=$$2; plainbin=$$3; tsbin=$$4; \
+	  ./$(COMPILER) $$src $$plainbin >/dev/null; \
+	  ./$(COMPILER) --threadsafe $$src $$tsbin >/dev/null \
 	    || { echo "$$nm: --threadsafe does not COMPILE"; exit 1; }; \
-	  plain="$$($(TESTTMP)/$${nm}_plain26)"; \
-	  ts="$$(timeout 20 $(TESTTMP)/$${nm}_ts26)"; rc=$$?; \
+	  plain="$$($$plainbin)"; \
+	  ts="$$(timeout 20 $$tsbin)"; rc=$$?; \
 	  if [ "$$rc" = "124" ]; then echo "$$nm: --threadsafe HANGS (the missing I/O lock stubs are back)"; exit 1; fi; \
 	  if [ "$$plain" != "$$ts" ]; then echo "$$nm: --threadsafe changes the output"; echo "$$plain"; echo "---"; echo "$$ts"; exit 1; fi; \
 	done; echo "skeleton --threadsafe ok: fortran algol lolcode ada erlang whitespace"
@@ -13770,15 +13775,35 @@ demos: pxx-stable-check
 # a shared box manufactures exactly the false reds Track T exists to remove, so
 # it stays runnable by hand (`python3 tools/bench_timing_devtest.py`) and out of
 # the tier.
+# Runs EVERY guard and reports a tally -- it does not stop at the first red.
+#
+# It used to exit 1 on the first failure, which quietly made this target's
+# result unreadable: on 2026-08-25 one unrelated Makefile recipe defect
+# (ws-skeleton paths built at runtime, so testmgr could not privatize them)
+# failed an early guard and hid the other 24 entirely. They all happened to be
+# green, so nothing was lost that day -- by luck. The same defect could have
+# masked a real regression in the watcher's branch or pin-verify logic for days,
+# and the output would have looked exactly the same.
+#
+# That is the same defect class as a torn-down testmgr run publishing a verdict
+# as though it had finished: an INCOMPLETE run reporting in the vocabulary of a
+# complete one. The rule both share -- a report says what was actually decided,
+# and names what it never reached.
 tools-devtest:
-	@set -e; n=0; \
+	@n=0; bad=0; failed=''; \
 	for f in tools/*devtest*.py; do \
 	  case "$$f" in *bench_timing_devtest.py) continue ;; esac; \
 	  printf '  tools-devtest: %s\n' "$$f"; \
-	  python3 "$$f" > $(TESTTMP)/tools_devtest.log 2>&1 \
-	    || { echo "FAIL: $$f"; tail -25 $(TESTTMP)/tools_devtest.log; exit 1; }; \
-	  n=$$((n+1)); \
+	  if python3 "$$f" > $(TESTTMP)/tools_devtest.log 2>&1; then \
+	    n=$$((n+1)); \
+	  else \
+	    bad=$$((bad+1)); failed="$$failed $$f"; \
+	    echo "  FAIL: $$f"; tail -25 $(TESTTMP)/tools_devtest.log; \
+	  fi; \
 	done; \
+	if [ $$bad -gt 0 ]; then \
+	  echo "  tools-devtest: $$n green, $$bad RED --$$failed"; exit 1; \
+	fi; \
 	echo "  tools-devtest: $$n guard(s) green"
 
 c-interop-devtest: pxx-stable-check

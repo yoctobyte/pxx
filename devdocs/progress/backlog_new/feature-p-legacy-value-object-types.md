@@ -2,9 +2,10 @@
 slug: feature-p-legacy-value-object-types
 title: "`TFoo = object ... end` — the legacy value-object type is not parsed at all"
 track: P
-prio: 35
+prio: 15
 type: feature
 blocked-by: []
+gated-by: decide-old-style-object-types
 status: backlog_new
 owner: ""
 created: 2026-08-25
@@ -91,3 +92,36 @@ constructor — use a class or an advanced record") rather than accepting them a
 being silently wrong, which is the failure mode
 `devdocs/dev/root-cause-over-microfix.md` is about. If that split is wrong, it
 is a Track U call; file `decide-how-much-of-legacy-object-we-implement`.
+
+---
+
+# RANKED DOWN 2026-08-25 — this is option B of a decision that chose option A
+
+[[decide-old-style-object-types]] was answered the same day this ticket was
+filed: **we do not implement `object` types now.** This ticket is not rejected —
+it is the correct *shape* of the work if the answer flips — but it is ranked to
+15 so it is not dispatched as ordinary queue work.
+
+The decision's basis, in one line: `frontend-compat-philosophy.md` says *"a
+corpus is a measuring instrument, not a dependency"* and *"do not justify core
+work with a corpus"*. This ticket's own motivation is *"five fpc-testsuite
+generics tests fail on this alone"* — conformance tests, which is exactly the
+population the rule names. Measured 2026-08-25: no `= object` declaration exists
+anywhere in `lib/`, `compiler/` or `examples/`, and no real-world target
+(self-host, the FPC RTL subset, Synapse, fgl, zlib, sqlite, QuickJS) needs it.
+The owner's standing framing is *a pragmatic compiler, not a conformance
+trophy*.
+
+**The revisit trigger, and it is narrow: actual source someone wants to build.**
+Not another failing conformance test. When that arrives, this ticket carries the
+work — in full (option B, a value type with a VMT), never the non-virtual subset,
+which the decision keeps refused as *"the bad middle"*.
+
+## One finding here that IS worth acting on independently
+
+This ticket records something the decision ticket did not know: **`object` is
+already claimed by an unrelated meaning in `ParseTypeKind`** (a rooted object
+*reference*, `feature-object-reference-type`). That is one keyword with two
+meanings in one parser, which `root-cause-over-microfix.md` would call a
+mechanism count of two for one token — worth a note wherever that feature is
+documented, independently of whether value-objects are ever built.

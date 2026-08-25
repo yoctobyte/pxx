@@ -137,11 +137,55 @@ CONF_DEFAULTS = {"tier": "full", "mid_tier": "full",
                  # max_cores is a CORE budget, not a job count: testmgr shapes
                  # admission around it and pins a cgroup CPUQuota to match, so
                  # half the box stays responsive for whoever else is on it.
+                 # which branch the daemon watches. `trackt config branch dev`
+                 # retargets it; the unit stays bare, so there is exactly one
+                 # place to look and no CLI/conf pair to disagree.
+                 "branch": "master",
+                 # seconds into a BREADTH run after which a push no longer
+                 # aborts it (see make_preempted). 0 = always preempt, the
+                 # pre-2026-08-25 behaviour, which measured out as zero full
+                 # tiers on a working day.
+                 "full_commit_secs": 300,
                  "max_cores": 0,       # cores testmgr may keep busy (--max-cores)
                  "max_mem_mb": 0,      # cap the cgroup MemoryMax (env override)
                  "web": True, "web_port": 8377}   # everything ON by default;
                                        # ./trackt flags / config opt OUT
 CONF = dict(CONF_DEFAULTS)            # effective config, set in main()
+
+# The branch this process is about, resolved once in main() and used by every
+# "origin/…" below. It was the literal `master` everywhere until 2026-08-25,
+# when the user moved day-to-day work onto `dev` and master became a snapshot
+# advanced once or twice a day. A watcher still pointed at master would spend
+# its day re-confirming a tree that has stopped moving while every actual fix
+# lands unwatched — and, worse, the revert-detection helpers would ask a branch
+# the sha under test is not on and answer "already reverted" about commits that
+# were not.
+#
+# Daemon: `--branch`, else twatch.conf's `branch`, else master.
+# Readers (--status/--follow): `--branch`, else the CHECKOUT's own branch, so a
+# dev worker is told about dev without having to know this flag exists.
+BRANCH = "master"
+
+
+def origin_ref(clone=None):
+    """`origin/<branch>` — the CLONE's branch when there is one, else BRANCH.
+
+    Passing the clone matters wherever a verdict is derived: those helpers must
+    ask the branch the sha under test is actually on. Ask the wrong one and the
+    answer is not an error, it is a confident wrong claim — "already reverted"
+    about a commit nobody reverted, on a branch that merely lacks it.
+    """
+    return "origin/%s" % (clone.branch if clone is not None else BRANCH)
+
+
+def repo_branch(repo):
+    """The branch `repo` is on, or master for a detached/unreadable checkout."""
+    try:
+        b = sh(["git", "symbolic-ref", "--short", "-q", "HEAD"],
+               cwd=repo, check=False).strip()
+    except (RuntimeError, OSError):
+        b = ""
+    return b or "master"
 
 
 def write_json_atomic(path, obj):
@@ -2352,7 +2396,7 @@ CASCADE_ROOT_JOBS = ("fpc-bootstrap", "selfhost-fixedpoint")
 
 
 def revert_of_range(clone, sha, parent):
-    """Has anything in (parent, sha] already been REVERTED on origin/master?
+    """Has anything in (parent, sha] already been REVERTED on the watched branch?
 
     Returns (revert_sha, reverted_subject) or None.
 
@@ -2387,7 +2431,7 @@ def revert_of_range(clone, sha, parent):
         if not suspects:
             return None
         for ln in sh(["git", "log", "--format=%H\x1f%s",
-                      "%s..origin/master" % sha],
+                      "%s..%s" % (sha, origin_ref(clone))],
                      cwd=clone.path).splitlines():
             h, _, subj = ln.partition("\x1f")
             subj = subj.strip()
@@ -2408,20 +2452,23 @@ def staleness_note(clone, sha, parent):
     and no build, so it can sit in the publish path unconditionally.
     """
     try:
-        behind = sh(["git", "rev-list", "--count", "%s..origin/master" % sha],
+        behind = sh(["git", "rev-list", "--count",
+                      "%s..%s" % (sha, origin_ref(clone))],
                     cwd=clone.path).strip()
     except (RuntimeError, OSError):
         behind = ""
     rev = revert_of_range(clone, sha, parent)
     if rev:
         return ("> **LIKELY ALREADY FIXED — verify before acting.** `%s` on "
-                "origin/master reverts `%s`, which is in this sha's range. The "
+                "%s reverts `%s`, which is in this sha's range. The "
                 "failures below were real at `%s`, but the cause may already be "
-                "gone. Re-check at current origin/master first; a green HEAD "
+                "gone. Re-check at current %s first; a green HEAD "
                 "here means *already fixed*, not *never broken*.\n"
-                % (rev[0][:12], rev[1], sha[:12]))
+                % (rev[0][:12], origin_ref(clone), rev[1], sha[:12],
+                   origin_ref(clone)))
     if behind and behind != "0":
-        return ("> **origin/master has advanced %s commit(s) since this sha.** "
+        return ("> **" + origin_ref(clone) + " has advanced %s commit(s) since "
+                "this sha.** "
                 "Re-verify at current HEAD before acting — the callback is "
                 "tagged to the sha that was tested, which may no longer be the "
                 "state of the tree.\n" % behind)
@@ -4044,13 +4091,51 @@ def needs_test(repo, sha):
     return any(not f.startswith(NOTEST_PREFIXES) for f in files)
 
 
-def make_preempted(clone, tested):
+def make_preempted(clone, tested, commit_after=None):
     """Abort-check for idle work (full backfill / opt sweep): a real push
     preempts, docs/tstate-only movement (e.g. our own fast-phase publish)
-    must not abort the work it queued."""
+    must not abort the work it queued.
+
+    `commit_after` seconds in, the run COMMITS: pushes stop aborting it and it
+    is allowed to finish. Only the breadth run passes it; the fast native
+    verdict — the one the lanes actually steer by — stays preemptive at every
+    moment, which is the whole reason this can be safe.
+
+    Why a commitment point exists at all (measured 2026-08-25, this box, after
+    the 6-core throttle): a full tier is ~40 min of wall, testable pushes on
+    `dev` arrive every ~26 min on average. A run that restarts on every push
+    therefore completes only when the gap happens to run long — observed
+    directly, a full tier was discarded at 73 of 3057 jobs and the replacement
+    started from zero. "Always preempt" is not "slightly degraded breadth", it
+    is ZERO breadth on any working day, and it gets worse as lanes are added.
+
+    The trade it accepts: a completed verdict may be tagged to a sha a few
+    commits behind HEAD. That is a true statement about that sha, and the thing
+    breadth catches — a cross-target divergence — is not usually introduced and
+    removed inside one 20-minute window. `staleness_note` already prints how
+    far behind the tested sha is, so the boundary of the claim stays visible.
+
+    The window before commitment is not wasted generosity: discarding 30s of
+    work to pick up a newer sha is nearly free, so freshness wins while the sunk
+    cost is small and loses once it is not. A committed run is still bounded —
+    testmgr's global --deadline caps it — and STOP still aborts it instantly,
+    so this cannot wedge the daemon.
+    """
+    t0 = time.monotonic()
+    committed = []
     def preempted():
         if STOP:
             return True
+        if commit_after is not None and not committed:
+            elapsed = time.monotonic() - t0
+            if elapsed >= commit_after:
+                committed.append(elapsed)
+                print("twatch: committed to this run (%.0f min in) — pushes no "
+                      "longer abort it; the verdict will be tagged to %s, which "
+                      "may be a few commits behind HEAD by the time it lands"
+                      % (elapsed / 60.0, tested[:12]), flush=True)
+        if committed:
+            return False           # also skips the fetch: nothing acts on it
         clone.fetch()
         h = clone.remote_head()
         if h == tested:
@@ -4338,7 +4423,8 @@ def head_detached(repo):
         return False
 
 
-def materialize_tstate(repo, ref="origin/master", dst=None):
+def materialize_tstate(repo, ref=None, dst=None):
+    # ref=None means "the branch this reader is about" — see BRANCH.
     """Extract the whole tstate tree out of a git REF into a directory.
 
     The one helper every "what is the state NOW" reader should share, instead of
@@ -4358,6 +4444,7 @@ def materialize_tstate(repo, ref="origin/master", dst=None):
     when the ref has no tstate (fresh clone, no remote) so the caller can fall
     back to the worktree deliberately rather than by accident.
     """
+    ref = ref or origin_ref()
     dst = dst or tempfile.mkdtemp(prefix="tstate-at.")
     try:
         with subprocess.Popen(["git", "archive", ref, TSTATE_REL], cwd=repo,
@@ -4621,12 +4708,13 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
     if fetch and tdir is None:
         try:
             sh(["git", "fetch", "--quiet", "--no-write-fetch-head", "origin",
-                "+refs/heads/master:refs/remotes/origin/master"], cwd=repo)
+                "+refs/heads/%s:refs/remotes/origin/%s"
+                % (BRANCH, BRANCH)], cwd=repo)
         except (RuntimeError, OSError) as e:
             fetched = False
-            print("tstate: could not fetch (%s) — reading whatever "
-                  "origin/master this checkout already has" %
-                  str(e).splitlines()[0][:80])
+            print("tstate: could not fetch (%s) — reading whatever %s this "
+                  "checkout already has"
+                  % (str(e).splitlines()[0][:80], origin_ref()))
 
     # origin/master is truth. A dev checkout drifts behind it constantly, and
     # `git log HEAD` then measures coverage over history this checkout cannot
@@ -4635,16 +4723,17 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
     # (still no network) and say so when it disagrees with HEAD.
     if ref == "HEAD":
         remote = sh(["git", "rev-parse", "--verify", "-q",
-                     "origin/master"], cwd=repo, check=False).strip()
+                     origin_ref()], cwd=repo, check=False).strip()
         if remote:
-            behind = sh(["git", "rev-list", "--count", "HEAD..origin/master"],
+            behind = sh(["git", "rev-list", "--count",
+                         "HEAD..%s" % origin_ref()],
                         cwd=repo, check=False).strip()
             if behind and behind != "0":
                 print("tstate: note — checkout is %s commit(s) behind "
-                      "origin/master; measuring coverage against "
-                      "origin/master (run `git pull --rebase` to refresh it)"
-                      % behind)
-            ref = "origin/master"
+                      "%s; measuring coverage against it "
+                      "(run `git pull --rebase` to refresh)"
+                      % (behind, origin_ref()))
+            ref = origin_ref()
     # BOTH inputs must come from the SAME ref. The walk above already prefers
     # origin/master; taking the tested-set from the worktree instead is what
     # made a healthy watcher report DOWN (2026-08-01, Track A). In the watcher's
@@ -4941,8 +5030,9 @@ def is_ancestor(repo, a, b):
         return False
 
 
-def sha_verdicts(repo, ref="origin/master"):
+def sha_verdicts(repo, ref=None):
     """{full sha: (verdict, tier, host, [new_red...])} for every judged sha."""
+    ref = ref or origin_ref()
     out = {}
     for st in states_at(repo, ref):
         host = st.get("host", "?")
@@ -4957,7 +5047,8 @@ def sha_verdicts(repo, ref="origin/master"):
     return out
 
 
-def follow(repo, shas, poll, branch="master", once=False, limit=20):
+def follow(repo, shas, poll, branch=None, once=False, limit=20):
+    branch = branch or BRANCH
     """Wait for Track T's verdict on shas, so the session that PUSHED them hears
     back while its context is still warm.
 
@@ -5070,7 +5161,11 @@ def main():
     ap.add_argument("--poll", type=float, default=30,
                     help="--follow: seconds between polls (default 30)")
     ap.add_argument("--remote", help="clone URL if the clone dir doesn't exist yet")
-    ap.add_argument("--branch", default="master")
+    ap.add_argument("--branch", default=None,
+                    help="branch to watch (daemon) or read verdicts for "
+                         "(--status/--follow). Default: twatch.conf's `branch` "
+                         "for the daemon, the checkout's own branch for a "
+                         "reader. `trackt config branch dev` is the retarget.")
     ap.add_argument("--tier", default=None,
                     choices=["quick", "native", "limited", "full"])
     ap.add_argument("--fast-tier", default=None,
@@ -5111,9 +5206,15 @@ def main():
                          "and a skipped job is invisible in a GREEN verdict)")
     args = ap.parse_args()
 
+    global BRANCH
     if args.status or args.follow is not None or args.retire_host:
         repo = os.path.abspath(os.path.expanduser(args.clone)) if args.clone \
             else os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        # A READER is about the branch it is standing on. A dev worker asking
+        # "did T judge my push?" means their branch, and must not be answered
+        # about master's frozen snapshot. --branch overrides for the rare case
+        # of asking about somebody else's.
+        BRANCH = args.branch or repo_branch(repo)
         if args.retire_host:
             if args.renamed and not args.into:
                 sys.exit("twatch: --renamed needs --into (renamed into WHAT?)")
@@ -5131,8 +5232,12 @@ def main():
     signal.signal(signal.SIGINT, stop)
     signal.signal(signal.SIGTERM, stop)
 
-    clone = Clone(os.path.abspath(os.path.expanduser(args.clone)),
-                  args.remote, args.branch)
+    # Conf BEFORE the Clone: the branch it watches comes from twatch.conf when
+    # --branch is absent, and Clone captures the branch at construction.
+    clone_path = os.path.abspath(os.path.expanduser(args.clone))
+    CONF.update(load_conf(clone_path))
+    BRANCH = args.branch or CONF.get("branch") or "master"
+    clone = Clone(clone_path, args.remote, BRANCH)
     host = re.sub(r"[^A-Za-z0-9_-]", "-", args.host)
 
     # config file fills in whatever the CLI didn't say (CLI wins); interval /
@@ -5281,8 +5386,15 @@ def main():
                           "pin verify keeps its priority from the next cycle"
                           % (nxt, tested[:12]), flush=True)
                     clear_idle_yield(clone, host)
-                r = test_sha(clone, host, st, tested, nxt,
-                             full=True, abort_check=make_preempted(clone, tested))
+                # The ONE run that gets a commitment point: breadth is the
+                # only phase whose wall exceeds the mean gap between pushes, so
+                # it is the only one that never finishes under pure preemption.
+                # Everything else here stays fully preemptive.
+                r = test_sha(clone, host, st, tested, nxt, full=True,
+                             abort_check=make_preempted(
+                                 clone, tested,
+                                 commit_after=(CONF.get("full_commit_secs")
+                                               or None)))
                 did_work = r != "busy"      # see the note above: never spin
             elif pin_deep:
                 # HEAD's ladder is exhausted: give the pin platform breadth too.

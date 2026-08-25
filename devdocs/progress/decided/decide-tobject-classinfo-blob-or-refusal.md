@@ -3,7 +3,7 @@ track: U
 prio: 42
 type: decide
 blocked-by: []
-status: backlog
+status: decided
 summary: "TObject.ClassInfo is the last member of feature-pascal-builtin-tobject-class still PXX-REJECT, and it is a judgment call, not an implementation choice: our RTTI blob is honest for identity comparison and wrong for anything that walks FPC's TTypeInfo layout. Answer or refuse — the third option is to answer and be silently wrong for the second caller."
 owner: ""
 ---
@@ -64,3 +64,33 @@ these headers and every reader names a field offset.
 `tclassinfo1.pp` (conformance), and the ClassInfo line of
 [[feature-pascal-builtin-tobject-class]] and
 [[feature-p-tobject-api-classparent-instancesize-tostring]].
+
+---
+
+# DECIDED 2026-08-25 — **option 3: answer with a real FPC-shaped `TTypeInfo`**
+
+Decided by an agent under the no-human-available rule
+(`devdocs/progress/decided/README-agent-decisions.md`). **Derived.**
+
+`x.ClassInfo` returns the typinfo facade's `PTypeInfo` header — the same value
+`TypeInfo(TThatClass)` already mints today (`{Kind; NamePtr; DataPtr}`, with
+`DataPtr` pointing at our class blob). Both caller kinds are then served:
+identity holds (`o.ClassInfo = TypeInfo(TFoo)`, which is what `tclassinfo1.pp`
+asserts), and a layout walker reads a real kind byte and a real name.
+
+**Option 2 is forbidden by a stated rule**, not merely disfavoured —
+`frontend-compat-philosophy.md`: *"a silent wrong VALUE is a bug in any
+dialect."* Option 1 (refuse) is the right answer only while no correct answer
+exists; one does, and the ticket's own note says why it is cheap: *"(3) is not
+much bigger than (2) once a blob word is being added at all — `UnitName` just
+showed the header can grow freely."*
+
+This ticket and [[decide-classinfo-returns-our-blob-or-nothing]] are the same
+question asked twice with different option letters, which is itself why it went
+undecided: each looked like it might be the other's duplicate. **The full
+derivation, including the per-class-vs-on-demand sub-question (answer: per
+declared class, one word each), is recorded in that ticket.** Work is re-filed
+there as `feature-a-classinfo-returns-the-typinfo-header` (Track A, prio 45).
+
+## Log
+- 2026-08-25 — decided, commit PENDING-COMMIT.
