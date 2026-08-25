@@ -5698,11 +5698,20 @@ end;
   Returns False when neither side is one, so every other pair falls through
   untouched.
 
-  The int arm exists because a bare `def` name in value position still escapes
-  UNBOXED as VT_INT64 -- the leak tag 12 was added to close and has not. An int
-  is read as a code address ONLY opposite a real callable, never int-vs-int, so
-  `d["k"] == f` keeps working while the leak lasts without making a function
-  equal to a number in general. Close the leak and this arm can go. }
+  A callable opposite a NON-callable is simply unequal. There used to be an arm
+  here reading an INT as a code address in that position, because a bare `def`
+  name in value position escaped UNBOXED -- it reached a Variant parameter as a
+  tyPointer, which overload matching bound to the Int64 overload. That leak is
+  closed (the value-position arm now builds the same {code, recv} pair the
+  assignment path always did), so the compensating arm went with it.
+
+  Measured before removing, not reasoned: instrumented to report every time it
+  answered True, it answered True ZERO times across the uforth smoke and four
+  ANS word sets, lib_mimic_xml_etree_elementtree, and the eleven callable-value
+  tests -- with the leak open as well as closed. Dropping it also drops the
+  divergence it carried: CPython says a function is never equal to a number,
+  whatever that number is.
+  bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method }
 function PyVarEqCallable(p, q: PPyVarRec; var res: Boolean): Boolean;
 var cp, rp, cq, rq: Pointer; isp, isq: Boolean;
 begin
@@ -5716,14 +5725,7 @@ begin
     res := (cp = cq) and (rp = rq);
     Exit;
   end;
-  if isp then
-  begin
-    res := (rp = nil) and ((q^.VType = 1) or (q^.VType = 2)) and
-           (Int64(NativeInt(cp)) = q^.Payload);
-    Exit;
-  end;
-  res := (rq = nil) and ((p^.VType = 1) or (p^.VType = 2)) and
-         (Int64(NativeInt(cq)) = p^.Payload);
+  res := False;
 end;
 
 function PyVarEq(p, q: PPyVarRec): Boolean;
