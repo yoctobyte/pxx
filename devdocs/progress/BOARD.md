@@ -42,10 +42,11 @@ _none_
 | feature-threadsafe-heap-optimize | A | 53 | feature | Threadsafe heap — optimize + cross-target (M5) | — |
 | refactor-a-two-dyn-array-depth-functions-that-drift | A | 30 | refactor | Two functions answer 'how many `array of` levels does this expression have': NodeDynDepth (ast_arena.inc) and DynArrayNodeDepth (symtab.inc). They have diverged at least twice and each divergence produced a silent wrong VALUE, not an error. Merge them. | — |
 
-## blocked (7)
+## blocked (8)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line | B | 88 | bug | `read(f, n)` / `readln(f, n)` on a Text file reads the whole LINE and Vals it, so any line with two numbers, or one number plus trailing spaces, silently yields 0. `readln(t, n, m)` on '42 3' gives 0 0 where FPC gives 42 3. Works only when the line holds exactly one number and nothing else. | bug-p-read-text-lowers-every-destination-to-a-whole-line-read |
 | bug-c-crtl-utoa-digit-loop-is-unbounded | C | 25 | bug | `__crtl_utoa`'s digit loop has no bound on its index, so a wrong `base` turns a printf into an unbounded stack write that smashes the routine's own parameters and then walks to the guard page. Do NOT fix in isolation — it is the amplifier for an unnamed defect and bounding it would hide that. | bug-b-reportlab-mimic-multi-font-heap-corruption |
 | bug-n-a-subpackage-directory-does-not-resolve-as-a-module | N | 55 | bug | `from .inner import X` (RELATIVE) where `inner` is a subpackage directory fails with `no unit named inner`, while the absolute `from pkg.inner import X` works — so directory-as-module resolution exists and the relative form just hands the resolver a bare name instead of the package-qualified one. html5lib has three real subpackages (_trie, treebuilders, treewalkers), so this is its next rung. | bug-a-a-python-module-s-identity-is-its-name-not-its-file |
 | bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module | N | 85 | bug | RE-SCOPED: not about import aliases. A name that names a `def` is resolved to that def at EVERY call site and any later rebinding is ignored — `def a…; def b…; b = a; b(1,5)` answers 18 (the original b) where CPython answers 5, with no import anywhere. The alias spelling is one way to rebind. Blocked: the correct destination is the dynamic call path, which cannot yet carry defaults (see the decision ticket). | decide-how-a-compiled-def-carries-its-signature-when-boxed |
@@ -54,7 +55,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (281)
+## backlog (287)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -72,7 +73,6 @@ _none_
 | bug-b-format-percent-u-prints-a-signed-value | B | 55 | bug | `Format('%u', [q])` on a QWord prints -1: sysutils' formatter aliases 'u' to 'd' and runs both through the signed IntToStr. FPC prints 18446744073709551615. The same line makes `%u` of Integer(-1) print -1 where FPC prints 4294967295. Filed from Track A+C+P — B owns lib/rtl. | — |
 | bug-b-inttostr-of-a-qword-above-2-63-renders-negative | B | 55 | bug | `IntToStr` of a QWord above 2^63 renders it negative | — |
 | bug-b-inttostr-of-a-qword-prints-it-signed | B | 55 | bug | IntToStr(q) where q: QWord >= 2^63 prints a NEGATIVE number — IntToStr(High(QWord)) answers -1 — because sysutils declares only IntToStr(Int64) and the QWord argument is passed through it. WriteLn(q) is correct, so the same value prints two different ways in one program. UIntToStr does not exist at all. Overload resolution on QWord vs Int64 already works, so this is purely two RTL functions. | — |
-| bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line | B | 88 | bug | `read(f, n)` / `readln(f, n)` on a Text file reads the whole LINE and Vals it, so any line with two numbers, or one number plus trailing spaces, silently yields 0. `readln(t, n, m)` on '42 3' gives 0 0 where FPC gives 42 3. Works only when the line holds exactly one number and nothing else. | — |
 | bug-b-sysutils-string-gaps-found-by-differential | B | 60 | bug | Four sysutils gaps from one 22-program string differential against FPC 3.2.2: Concat takes exactly two AnsiStrings (FPC's is variadic and takes Chars), AnsiQuotedStr and SameStr do not exist, and the TryStr* family leaves its value untouched on failure where FPC zeroes it. Everything else in the family — Copy/Pos/Delete/Insert bounds, StringReplace, Format, Trim, comparison, PChar interop, ShortString — was byte-identical. | — |
 | bug-b-the-fpc-vartype-constants-are-missing | B | 55 | bug | `VarType(v) = varInteger` does not compile — varEmpty/varNull/varInteger/varDouble/varString/... are not declared anywhere, so the ONLY way to test a variant's type is against this RTL's private 0..6 tags, which are not FPC's numbers either (FPC: varString = 256, varInteger = 3). | — |
 | bug-b-varisstr-is-false-for-a-one-character-string | B | 45 | bug | VarIsStr answers FALSE for a ONE-CHARACTER string variant. It tests `VarType(V) = 6` (VT_STRING) and a single char is tagged VT_CHAR = 5, so `v := \'x\'; VarIsStr(v)` is False while `v := \'xy\'` and `v := \'\'` are both True. The same unit already has the right predicate three lines below — IsTextTag(t) = (t = VT_STRING) or (t = VT_CHAR) — and VarCompareValue uses it and gets the one-char case right. Two mechanisms for one concept, disagreeing. | — |
@@ -117,10 +117,15 @@ _none_
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 55 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 70 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
+| bug-p-a-cast-as-lvalue-does-not-accept-a-builtin-type-name | P | 50 | bug | `TObject(p^) := o` compiles, but `Pointer(p^) := q` is `error: undefined variable (Pointer)` — the cast-as-lvalue path resolves a class/user type name but not a builtin one, so in lvalue position `Pointer` is parsed as a variable. Blocks `TFPGInterfacedObjectList` in real FPC `fgl.pp`. | — |
+| bug-p-a-diagnostic-in-a-used-unit-names-the-wrong-source-file | P | 40 | bug | An error raised while compiling a unit pulled in by `uses` reports the correct LINE NUMBER for that unit but names an unrelated file in its `in:` line — every fgl.pp wall was reported as `in: stable_linux_amd64/default/builtin/builtinheap.pas`. Costs real time on corpus work, where the whole job is locating a wall in third-party source. | — |
 | bug-p-a-parameterless-function-is-undefined-as-a-method-call-argument | P | 62 | bug | A parameterless function used as an ARGUMENT to a method call fails to resolve — `error: undefined variable (zero)` — while the identical argument to a free function compiles. Any argument position. Found writing lib/rtl/mimic_urllib_request.pas, where `headers.get(name, pynone)` would not compile but `HeaderFirst(raw, name, pynone)` did. | — |
+| bug-p-a-string-typecast-is-a-conversion-and-not-a-cast | P | 55 | bug | `String(x)` is routed to a conversion intrinsic that demands a Char/string operand, so the hard typecast `String(p^)` of an untyped-pointer deref is rejected — while `Integer(p^)`, `PtrUInt(p^)`, `Pointer(p^)` and `TObject(p^)` all compile. Blocks every string-instantiated FPC container (`TFPGList<string>`, `TFPGMap<string,…>`) in real `fgl.pp`. | — |
 | bug-p-a-typed-constant-of-pchar-type-is-a-parse-error | P | 55 | bug | `const KC: PChar = 'konst';` is `error: unexpected token` -- a TYPED constant whose type is a pointer does not parse. FPC takes it, and it is the ordinary way to name a C string constant. Untyped `const KC = 'konst';` works, and so does a `var` of the same type. | — |
 | bug-p-a-typed-string-constant-cannot-be-assigned | P | 55 | bug | `const S: string = 'a'; ... S := 'b';` is `undefined variable (S)`, though the same assignment works for a typed Integer, Char or ARRAY constant. Typed consts are writable here (fpc's default in non-Delphi modes) for every type except string, which is registered as a read-only literal alias with no storage. | — |
+| bug-p-inherited-ignores-the-parents-default-parameter-values | P | 55 | bug | `inherited Create;` where the parent's constructor/method declares a defaulted parameter is rejected with `inherited call argument count mismatch`, while the identical *direct* call `TBase.Create` applies the default and compiles. Blocks `TFPGObjectList` in real FPC `fgl.pp` (Pascal corpus rung 2). | — |
 | bug-p-sizeof-rejects-a-pointer-deref-in-its-operand | P | 55 | bug | `SizeOf(p^.A)` is a parse error (`Expected: ), but got: ^`). SizeOf's operand parser is a hand-rolled selector walk that handles `v`, `v.f.g` and `v[i]` but has no `^` case, so any pointer deref in the operand is rejected outright. | — |
+| bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped | P | 50 | bug | A token that starts no declaration is silently skipped in a UNIT's interface/implementation section, while the identical token in a PROGRAM's declaration section is correctly rejected. A typo'd section header (`cosnt K = 5;`) therefore discards the declarations behind it with no diagnostic; the error surfaces later at the use site, or not at all. FPC rejects at the typo. | — |
 | bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence | T | 40 | bug | file_cascade_ticket's Root-cause-suspects line falls back to 'likely a broken build or harness event' whenever no CASCADE_ROOT_JOBS entry is in the red set. That is a conclusion drawn from the absence of one narrow signal, printed with no hedge, and it is now directly contradicted by the Range section shipped in 8ec77190c — which on the live incident named the actual cause. Same defect class the Range work fixed for the sha: an auto-filed ticket asserting something it has no evidence for. | — |
 | bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio | T | 50 | bug | Float-accuracy assertions in the gated suites make a one-ulp move a CI RED, and a red job is worked at the priority of BEING RED - which overrides the owner's standing rule that float accuracy is low prio. Parking the tickets in float/ does not close this door; only the tests can. | — |
 | bug-t-a-pin-that-moves-mid-run-is-not-detected | T | 55 | bug | testmgr snapshots the HEAD-built compiler and reports `compiler_changed_mid_run`, but the PIN — which lib-test and demos actually build with — is read ONCE at startup and never re-checked. A `make pin` during a run silently splits those jobs across two stables while the report claims a single `pin=N`. The asymmetry is the tell: one binary is guarded, the other is announced. | — |
@@ -277,6 +282,7 @@ _none_
 | feature-parallel-load-sampler-refine | B | 20 | feature | Parallel load sampler — refinements (ramp/EMA, BSD/cgroup) | feature-os-targets-bsd-mac |
 | feature-pascal-builtin-tobject-class | P | 42 | feature | Builtin TObject class — `var o: TObject` + `TObject.Create` + root methods | decide-tobject-classinfo-blob-or-refusal |
 | feature-pascal-corpus-expansion | P | 75 | feature | Pascal real-world corpus expansion — the ladder Track P never had | — |
+| feature-pascal-corpus-fgl | P | 55 | feature | Pascal corpus rung 2 — real FPC 3.2.2 `fgl.pp` (the reference RTL's generic-container unit) as a wired, oracle-checked corpus target. Landed 2026-08-25: fetcher, runner, 7 drivers, skip list. Baseline 3 pass / 4 known-fail. Replaces a check that had silently printed `SKIP (no fpcsrc)` on every box without a system FPC source tree. | — |
 | feature-pascal-corpus-oop | P | 75 | feature | Pascal OOP corpus — real libraries that hammer classes/interfaces/generics | — |
 | feature-pascal-corpus-passrc | P | 30 | feature | Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests) | feature-pascal-corpus-fpcunit, feature-pascal-corpus-fpjson |
 | feature-pascal-management-operators-copy-and-addref | P | 30 | feature | `class operator Copy` / `AddRef` are recognised but never dispatched | — |
@@ -339,8 +345,9 @@ _none_
 | task-d-document-the-strict-overload-width-flag | D | 20 | task | `--strict-overload-width` shipped 2026-08-15 with no row in docs/reference/cli.md, modes.md or directives.md. One table row each, plus the one sentence that explains why it is standalone rather than part of the --strict-fpc umbrella. | — |
 | task-d-document-warn-ignored-directives | D | 20 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
+| task-t-enrol-the-fgl-corpus-rung | T | 50 | task | Enrol the new `test-fgl` corpus target in a testmgr tier and add `fpc-rtl` to twatch's CORPUS_EXPECTED. The rung is wired and green (3 pass / 4 skip) but nothing in the matrix runs it, and the watcher will not warn when the tree is unfetched. | — |
 
-## backlog_new (23)
+## backlog_new (24)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -355,6 +362,7 @@ _none_
 | bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 40 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
 | bug-p-high-and-low-refuse-every-non-identifier-operand | P | 30 | bug | Both arms open with `if CurTok.Kind <> tkIdent then Error('High: expected array variable or ordinal type')`, so a string literal, a concat, or a parenthesised expression cannot be an operand at all. fpc takes all three — and gives each a DIFFERENT base, which is why widening the guard needs its own measured table rather than a one-line edit. | — |
 | bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one | P | 50 | bug | `PDyn = ^TDyn` with `TDyn = array of LongWord`: after `SetLength(d, 5)`, `Length(pdy^)` answers 1 and `High(pdy^)` answers 0 where FPC answers 5 and 4 — while `pdy^[1]` reads the right element. The pointee is a HANDLE, so the [data-8] header is one indirection further than the runtime path looks. | — |
+| bug-p-read-text-lowers-every-destination-to-a-whole-line-read | P | 65→88 | bug | `ParseTextReadRest` lowers BOTH the numeric and the string destination of `read[ln](f, ...)` to `TextReadLn`, which eats a whole line and its terminator. So `readln(t, n, m)` on '42 3' gives 0 0, `read(f, s)` is indistinguishable from `readln(f, s)`, and `read(f,s); readln(f)` skips every other line. The RTL half landed (TextReadNumTok / TextReadStrTo, cursor-preserving, FPC-measured); this is the frontend half, and the whole lowering is already proven against FPC. | — |
 | bug-t-run-pascal-conformance-silently-fails-every-test-on-a-relative-compiler-path | T | 55 | bug | `tools/run_pascal_conformance.sh ./compiler/pascal26 ...` fails 51 of 107 tgeneric tests; the same run with `/home/neo/frank1/compiler/pascal26` passes 61 and fails 0. The runner `cd`s into the suite dir before invoking the compiler, so a relative `$CC` no longer resolves — and the failure surfaces as `compile error`, i.e. as a COMPILER bug, for every test at once. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 55 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
 | chore-doc-pascal-dialect-divergences-pointer-difference | D | 25 | chore | Re-filed from decide-pointer-difference-unit and decide-should-a-null-variant-raise-like-fpc, both decided 2026-08-25. Two divergences from FPC are now CHOSEN rather than merely inherited, and a chosen divergence that is not written down is indistinguishable from a bug to the next reader. Both entries land in devdocs/dev/pascal-dialect-divergences.md. | — |
@@ -645,7 +653,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 88] [B] bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
+- [p 88] [P] bug-p-read-text-lowers-every-destination-to-a-whole-line-read (unblocks 1)
 - [p 88] [N] bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults [parked — re-claim, do not duplicate]
 - [p 88] [N] bug-n-inferred-return-type-of-true-division-is-int
 - [p 82] [N] bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
@@ -727,8 +735,10 @@ _none_
 - [p 55] [N] bug-n-inline-cast-deref-loses-a-pointer-fields-pointee
 - [p 55] [N] bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic
 - [p 55] [N] bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only
+- [p 55] [P] bug-p-a-string-typecast-is-a-conversion-and-not-a-cast
 - [p 55] [P] bug-p-a-typed-constant-of-pchar-type-is-a-parse-error
 - [p 55] [P] bug-p-a-typed-string-constant-cannot-be-assigned
+- [p 55] [P] bug-p-inherited-ignores-the-parents-default-parameter-values
 - [p 55] [P] bug-p-sizeof-rejects-a-pointer-deref-in-its-operand
 - [p 55] [T] bug-t-a-pin-that-moves-mid-run-is-not-detected
 - [p 55] [T] bug-t-a-timed-out-sha-still-counts-as-tested
@@ -748,6 +758,7 @@ _none_
 - [p 55] [P] feature-p-assertions-directive-and-position
 - [p 55] [P] feature-p-tmethod-record-for-method-pointers
 - [p 55] [P] feature-p-uses-a-unit-in-an-explicit-file
+- [p 55] [P] feature-pascal-corpus-fgl
 - [p 55] [A] feature-pascal-type-helpers [parked — re-claim, do not duplicate]
 - [p 55] [A] feature-signal-siginfo-ucontext [parked — re-claim, do not duplicate]
 - [p 55] [A] refactor-a-two-predicates-answer-what-a-caret-yields
@@ -758,7 +769,9 @@ _none_
 - [p 50] [A] bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder
 - [p 50] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base
+- [p 50] [P] bug-p-a-cast-as-lvalue-does-not-accept-a-builtin-type-name
 - [p 50] [P] bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one
+- [p 50] [P] bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped
 - [p 50] [T] bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio
 - [p 50] [T] bug-t-regressions-are-blamed-on-commits-that-touch-no-code
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
@@ -768,6 +781,7 @@ _none_
 - [p 50] [T] feature-t-fpc-probe-needs-a-trunk-oracle
 - [p 50] [T] feature-t-tier-job-self-compile-differential-across-o-levels
 - [p 50] [C] refactor-c-string-literal-decay-belongs-at-the-producer
+- [p 50] [T] task-t-enrol-the-fgl-corpus-rung
 - [p 48] [P] bug-a-low-high-of-a-char-indexed-array-answer-the-ordinal
 - [p 48] [O] feature-opt-heap-per-thread-cache
 - [p 48] [P] feature-p-const-evaluator-carries-unsigned-64-bit
@@ -812,6 +826,7 @@ _none_
 - [p 40] [A] bug-a-rtti-kind-numbers-are-the-compilers-not-the-typinfo-enum-the-unit-documents
 - [p 40] [N] bug-n-tk-got-files-are-invisible-to-testmgr-privatization
 - [p 40] [N] bug-nilpy-shared-nonlocal-frame-cell-is-never-freed [parked — re-claim, do not duplicate]
+- [p 40] [P] bug-p-a-diagnostic-in-a-used-unit-names-the-wrong-source-file
 - [p 40] [P] bug-p-a-variant-refuses-wide-chars-and-interfaces
 - [p 40] [T] bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence
 - [p 40] [T] bug-t-a-pin-verifys-reds-carry-no-reasons
@@ -965,6 +980,7 @@ _none_
 - **3** — feature-port-windows-pe
 - **2** — feature-web-track-w-bootstrap
 - **1** — bug-b-reportlab-mimic-multi-font-heap-corruption
+- **1** — bug-p-read-text-lowers-every-destination-to-a-whole-line-read
 - **1** — decide-how-a-compiled-def-carries-its-signature-when-boxed
 - **1** — decide-how-much-string-machinery-the-basic-frontend-gets
 - **1** — decide-nilpy-dict-mutation-during-iteration

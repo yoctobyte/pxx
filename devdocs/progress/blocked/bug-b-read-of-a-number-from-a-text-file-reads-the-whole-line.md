@@ -2,9 +2,10 @@
 track: B
 prio: 88
 type: bug
-blocked-by: []
+blocked-by: [bug-p-read-text-lowers-every-destination-to-a-whole-line-read]
 summary: "`read(f, n)` / `readln(f, n)` on a Text file reads the whole LINE and Vals it, so any line with two numbers, or one number plus trailing spaces, silently yields 0. `readln(t, n, m)` on '42 3' gives 0 0 where FPC gives 42 3. Works only when the line holds exactly one number and nothing else."
-status: backlog
+status: working
+owner: frank1-B-read
 ---
 
 # `read(f, number)` from a Text file reads the whole line
@@ -143,3 +144,78 @@ behaviour, which is why it needed a special case in the trailing-skip logic. Aft
 this fix the special case disappears and all three arms behave alike. That
 collapse is the tell that this is a root-cause fix and not three microfixes:
 `devdocs/dev/normalise-dont-special-case.md`.
+
+
+## 2026-08-25 — the RTL half is DONE; the symptom waits on the frontend half
+
+Worked as Track B (`frank1-B-read`), which owns `lib/rtl` and does not rebuild
+the compiler. **Both halves are now settled; only one of them was mine to land.**
+
+### What was measured, not assumed
+
+The ticket's table reproduced exactly at `9170a6193`, all 12 numeric rows plus
+the appendix's 3 string rows. Then a second FPC program pinned down the part a
+value-only probe cannot see: it ran `read(t, n)` / `read(t, s)` on each file and
+**drained the rest of the file one character at a time**, so the CURSOR is
+visible, not inferred.
+
+| file | FPC value | FPC cursor afterwards |
+| --- | --- | --- |
+| `'42'#10` | 42 | `#10` — the terminator is NOT eaten |
+| `'42 3'#10` | 42 | `' 3'#10` — nor is the delimiting blank |
+| `'42  '#10` | 42 | `'  '#10` — **both** blanks, it stops at the first |
+| `#10#10'42'#10` | 42 | `#10` — blank lines are whitespace |
+| `'42'#13#10'9'#10` | 42 | `#13#10'9'#10` — CR delimits and stays |
+| `''` / `'   '#10'  '` | 0 | `''` — no error, FPC yields 0 too |
+| `'L1'#13#10` (string) | `L1` | `#13#10` — stops AT the CR |
+
+Two corrections to the ticket's own text fell out of this:
+
+* the ticket says `Val` fails on `'42 3'` because of the second token. True, but
+  FPC does the *same* whitespace-delimited scan — `'42,3'` is a **runtime error
+  106** there, not the `42` a stop-at-any-non-digit reader would give. So the
+  token rule is right and only the ERROR path diverges (we leave 0).
+* an expectation of mine, `'42  '#10` leaving one blank, was wrong. FPC leaves
+  two. Measured, then corrected in the test — which is the whole reason the
+  oracle drains the cursor.
+
+### The real shape of the root cause
+
+The ticket calls it "the numeric arm plus, in the appendix, the string arm". It
+is one defect with three faces, and the third only shows up once you write the
+replacement out: `ParseTextReadRest` has a **special case for the trailing
+end-of-line skip** (`trLastWasChar`) that exists *solely* because the string and
+numeric arms swallowed the terminator. Make all three arms cursor-preserving and
+the special case does not need adjusting — it **disappears**, `readln` emits one
+unconditional skip, and the three arms become the same shape. That collapse is
+the confirmation this is the root fix
+(`devdocs/dev/normalise-dont-special-case.md`), and it is a fourth thing to
+delete rather than a fourth case to get right.
+
+### Landed here (Track B)
+
+`lib/rtl/textfile.pas`:
+
+* `TFNextByte` / `TFPushBack` / `TFIsSpace` — the byte plumbing over the
+  one-slot lookahead `Eof` already fills. `TextReadChar` now IS `TFNextByte`
+  plus the `#26` substitution, which is provably what it already was.
+* `TextReadNumTok` — skip whitespace including line breaks, take the
+  whitespace-delimited token, push the delimiter back.
+* `TextReadStrTo` — up to but NOT over the terminator; `''` at an eoln, without
+  advancing.
+
+`test/lib_textreadnumtok.pas` (new, wired into `make lib-test`) asserts value
+**and cursor** on 26 shapes, every expectation taken from the FPC run above.
+
+### Handed off (Track P): `bug-p-read-text-lowers-every-destination-to-a-whole-line-read`
+
+`ParseTextReadRest` lives in `compiler/pasparser_stmt.inc`. Track B does not
+rebuild the compiler, so the lowering change is filed rather than made — but it
+is filed with the answer already known, because the emitted sequence was written
+out by hand and diffed against FPC's real `read`/`readln`: **17 shapes,
+0 divergences**, including the two `Eoln`-after-a-numeric-read rows and the
+`read(f,s); readln(f); read(f,s)` idiom. The frontend edit is three lines and a
+deletion.
+
+Until that lands the user-visible symptom is unchanged, so this ticket is
+`blocked-by:` the P one rather than resolved.

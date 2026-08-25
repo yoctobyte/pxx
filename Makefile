@@ -12625,6 +12625,13 @@ lib-test: pxx-stable-check
 	# TextReadLn — expectations measured against FPC, not reasoned about.
 	$(PXX_STABLE) -Fulib/rtl test/lib_textreadchar.pas $(TESTTMP)/lib_textreadchar
 	test "$$($(TESTTMP)/lib_textreadchar | tail -n 1)" = "TEXTREADCHAR OK"
+	# TextReadNumTok / TextReadStrTo — FPC's read(f, number) and read(f, s) stop
+	# where FPC stops and PUT THE DELIMITER BACK, so the assertions cover the
+	# cursor as well as the value. Both were measured against FPC 3.2.2 by
+	# draining the rest of the file after each read
+	# (bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line).
+	$(PXX_STABLE) -Fulib/rtl test/lib_textreadnumtok.pas $(TESTTMP)/lib_textreadnumtok
+	test "$$($(TESTTMP)/lib_textreadnumtok | tail -n 1)" = "TEXTNUMTOK OK"
 	# The FPC threading surface where FPC code looks for it: WaitFor as a
 	# FUNCTION returning ReturnValue, the BeginThread family, and an empty
 	# cthreads shim. Expectations are FPC's own output for the same program.

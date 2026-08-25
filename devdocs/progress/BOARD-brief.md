@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:23 blocked:7 backlog:281 backlog_new:23 experimental:20 rainy-day:44 float:20 done-followup:3 decided:114 done:2356 rejected:40`
+`working:1 unfinished:23 blocked:8 backlog:287 backlog_new:24 experimental:20 rainy-day:44 float:20 done-followup:3 decided:114 done:2356 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -37,8 +37,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-threadsafe-heap-optimize` [A]
 - `refactor-a-two-dyn-array-depth-functions-that-drift` [A]
 
-## blocked (7) — has an unmet blocker; do not claim
+## blocked (8) — has an unmet blocker; do not claim
 
+- `bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line` [B] — blocked-by: bug-p-read-text-lowers-every-destination-to-a-whole-line-read
 - `bug-c-crtl-utoa-digit-loop-is-unbounded` [C] — blocked-by: bug-b-reportlab-mimic-multi-font-heap-corruption
 - `bug-n-a-subpackage-directory-does-not-resolve-as-a-module` [N] — blocked-by: bug-a-a-python-module-s-identity-is-its-name-not-its-file
 - `bug-n-an-import-alias-binds-to-a-same-named-member-of-the-source-module` [N] — blocked-by: decide-how-a-compiled-def-carries-its-signature-when-boxed
@@ -47,9 +48,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 313, ranked
+## Ready — top 30 of 320, ranked
 
-- `[p 88] [B]` bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line
+- `[p 88] [P]` bug-p-read-text-lowers-every-destination-to-a-whole-line-read (unblocks 1)
 - `[p 88] [N]` bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
 - `[p 88] [N]` bug-n-inferred-return-type-of-true-division-is-int
 - `[p 82] [N]` bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
@@ -80,4 +81,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 
-_283 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_290 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
