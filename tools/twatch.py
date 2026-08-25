@@ -1695,6 +1695,67 @@ def host_quiet_secs(st, now=None):
 # warn another.
 BREADTH_STALE_SECS = 6 * 3600
 
+# How long a breadth attempt is allowed to hold off the fast verdict, and how
+# long we wait before trying again after one fails to land.
+BREADTH_RETRY_SECS = 2 * 3600
+
+
+def breadth_overdue(st, now=None):
+    """Should this cycle run BREADTH even though there is a new commit to test?
+
+    The ticket this comes from concluded "the fix is resumability plus bounding
+    consecutive idle, NOT reserving a slot", and under the measurement it had
+    that was correct: on 2026-08-19 the box was idle 54% of the window, so
+    breadth did not need a reservation, it needed the queue ahead of it to
+    stop being unfinishable.
+
+    That premise is gone. Measured 2026-08-25, after this box became a
+    workstation and the watcher was capped at 6 of 12 cores: a native run costs
+    ~490s (it was ~246s), and ~9 testable commits land during one. So `do_test`
+    is true on essentially every cycle, the idle ladder is never reached, and
+    breadth does not merely run rarely -- it cannot START. A commitment point
+    that lets a running breadth run finish is inert if none ever begins.
+
+    So the reservation exists now, narrowly: only when breadth is already STALE
+    by the threshold the reports have been printing all along, only one run at a
+    time, and with a retry backoff so a breadth run that keeps failing to land
+    cannot starve the fast verdict it is borrowing from. Everything else is
+    unchanged -- a fresh push still gets the fast verdict first on every
+    ordinary cycle.
+
+    Returns a reason string (for the log) or "".
+    """
+    now = time.time() if now is None else now
+    lf = st.get("last_full") or {}
+    unreadable = bool(lf.get("sha")) and secs_since(lf.get("date") or "",
+                                                    now) is None
+    if not lf.get("sha") or unreadable:
+        # Never a completed breadth run on this host. That is the strongest
+        # case for taking a slot, not the weakest -- but it is also what a
+        # brand-new host looks like, and a host with nothing tested at all has
+        # more urgent work, so the caller gates this on having tested something.
+        age = None
+    else:
+        age = secs_since(lf.get("date") or "", now)
+        if age is not None and age <= BREADTH_STALE_SECS:
+            return ""
+    last_try = secs_since((st.get("last_breadth_try") or {}).get("date") or "",
+                          now)
+    if last_try is not None and last_try < BREADTH_RETRY_SECS:
+        # A breadth run that started and did not land (torn down, aborted,
+        # infra) must not immediately claim the next cycle too. Without this,
+        # a breadth tier that cannot finish inside its deadline would take
+        # every slot forever and the fast verdict would stop entirely.
+        return ""
+    if age is None:
+        # Claiming the slot is the safe direction for an unreadable date: the
+        # thing we are unsure about is whether breadth ran, and breadth is what
+        # is missing. Say WHICH of the two it is, though — a reason line that
+        # misreports the state is the exact defect the rest of tonight was about.
+        return ("a completed breadth run is recorded with an unreadable date"
+                if unreadable else "no completed breadth run on this host yet")
+    return "the newest completed breadth run is %s old" % fmt_age(age)
+
 
 def secs_since(iso, now=None):
     """Seconds since an ISO-8601 Z timestamp, or None if unparseable."""
@@ -5402,7 +5463,27 @@ def main():
                 pin_deep = pin_verify_due(clone, host, st, (args.tier,))
             if do_test:
                 head = debounce(clone, args.debounce)
-                if not STOP:
+                # Does breadth get this slot instead of the fast verdict? Only
+                # when it is already stale past the threshold the reports print,
+                # and only if we have not just tried. See breadth_overdue() for
+                # why a reservation exists at all now — in short, the idle
+                # ladder below is unreachable on a busy day, so "when the repo
+                # is quiet" had quietly become "never".
+                why = breadth_overdue(st) if tested else ""
+                if why and not STOP:
+                    print("twatch: taking this slot for BREADTH on %s — %s. "
+                          "The fast verdict waits one run; a fresh push will "
+                          "not abort this one once it commits."
+                          % (head[:12], why), flush=True)
+                    st["last_breadth_try"] = {"sha": head, "date": utcnow()}
+                    save_state(clone, host, st)
+                    r = test_sha(clone, host, st, head, args.tier, full=True,
+                                 abort_check=make_preempted(
+                                     clone, head,
+                                     commit_after=(CONF.get("full_commit_secs")
+                                                   or None)))
+                    did_work = r != "busy"
+                elif not STOP:
                     # act fast: a new push gets the fast native verdict first;
                     # the full matrix backfills below when the repo is quiet
                     r = test_sha(clone, host, st, head, fast or args.tier,
