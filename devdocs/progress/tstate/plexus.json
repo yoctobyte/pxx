@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-21T13:24:40Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "a6105d12bd152acc5ac95eba798f55893f608613",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-21T14:28:49Z",
    "fixed": [],
    "new_red": [],
@@ -484,12 +476,21 @@
    "sha": "04a7bd2f0148eb9c45a826d4e77f9da7d7a2e6ea",
    "tier": "native",
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-25T14:35:09Z",
+   "fixed": [
+    "test-core#src:test/test_cast_deref_chain_siblings.pas"
+   ],
+   "new_red": [],
+   "sha": "5f39ba51fbe1837f2d29beb324d9447957c515f4",
+   "tier": "native",
+   "verdict": "RED"
   }
  ],
  "host": "plexus",
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2358728B  data=61689B  bss=51420B  procs=1788] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
-  "test-core#src:test/test_cast_deref_chain_siblings.pas": "ok: $TMP  [code=64635B  data=2112B  bss=42532B  procs=128]",
   "test-core#src:test/test_nilpy_json_module.npy": "ok: $TMP  [code=2404378B  data=77852B  bss=76212B  procs=2020] | Segmentation fault",
   "test-core#src:test/test_nilpy_json_reparse_heap.npy": "ok: $TMP  [code=2388648B  data=75864B  bss=75420B  procs=2002] | Segmentation fault",
   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy": "test_nilpy_callable_to_str_param_fails: FAIL - expected a compile error naming the parameter"
@@ -1421,6 +1422,7 @@
   "test-core#src:test/strict_fpc_case_fail.pas": "native",
   "test-core#src:test/string_compare.pas@1": "native",
   "test-core#src:test/strings.pas@1": "native",
+  "test-core#src:test/test_a_nested_dynamic_array_result.pas": "native",
   "test-core#src:test/test_a_record_field_named_like_a_class_operation.pas": "native",
   "test-core#src:test/test_abs_sqr.pas": "native",
   "test-core#src:test/test_absolute_alias_survives_residency.pas": "native",
@@ -4499,6 +4501,7 @@
   "test-core#src:test/strict_fpc_case_fail.pas": "pass",
   "test-core#src:test/string_compare.pas@1": "pass",
   "test-core#src:test/strings.pas@1": "pass",
+  "test-core#src:test/test_a_nested_dynamic_array_result.pas": "pass",
   "test-core#src:test/test_a_record_field_named_like_a_class_operation.pas": "pass",
   "test-core#src:test/test_abs_sqr.pas": "pass",
   "test-core#src:test/test_absolute_alias_survives_residency.pas": "pass",
@@ -4605,7 +4608,7 @@
   "test-core#src:test/test_case_unit_lookup.pas": "pass",
   "test-core#src:test/test_cast_as_lvalue_over_a_variable.pas": "pass",
   "test-core#src:test/test_cast_char_bool.pas": "pass",
-  "test-core#src:test/test_cast_deref_chain_siblings.pas": "fail",
+  "test-core#src:test/test_cast_deref_chain_siblings.pas": "pass",
   "test-core#src:test/test_cast_deref_pointer_field.pas": "pass",
   "test-core#src:test/test_cast_deref_varparam.pas": "pass",
   "test-core#src:test/test_cast_property.pas": "pass",
@@ -6640,11 +6643,11 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-25T13:32:37Z",
-  "sha": "04a7bd2f0148eb9c45a826d4e77f9da7d7a2e6ea",
+  "date": "2026-08-25T14:35:09Z",
+  "sha": "5f39ba51fbe1837f2d29beb324d9447957c515f4",
   "tier": "native",
   "verdict": "RED",
-  "wall": 3600.5
+  "wall": 3600.3
  },
  "last_bench": {
   "conf_rows": 550,
@@ -6876,25 +6879,6 @@
     "a28bc3993a0e0caa0370b71abb1759287d3e9909"
    ],
    "src": "test/test_nilpy_json_reparse_heap.npy",
-   "status": "fail"
-  },
-  {
-   "bad": "0bc0cfac61a878e4da78348389458d180061c417",
-   "good": "a28bc3993a0e0caa0370b71abb1759287d3e9909",
-   "job": "test-core#src:test/test_cast_deref_chain_siblings.pas",
-   "name": "test-core#125",
-   "opened": "2026-08-25T12:30:33Z",
-   "pin_built": false,
-   "range": [
-    "15ec54d7a197e5c19d5398dcf1ad29ce84550dbe",
-    "797ffdb7fac8dbddc5dcd82749d06314e35e9cb7",
-    "d539fbe65aef5936143bbdd5cc7f894ea88d22cd",
-    "7e69d825b7042f7e5d9b5d751d90ab92925fdf12",
-    "a99516e4f564922d85631258470fdaa5ccb7a0d3",
-    "8b8183da3a37bac2ccab2b28196f7b585784c343",
-    "0bc0cfac61a878e4da78348389458d180061c417"
-   ],
-   "src": "test/test_cast_deref_chain_siblings.pas",
    "status": "fail"
   }
  ],
