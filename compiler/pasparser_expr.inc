@@ -916,7 +916,7 @@ begin
               else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
                 Inc(mai);
               end;
-              Expect(tkRParen, ')');
+              ExpectCallRParen(mpi);
             end;
             node := mcallNode;
           end
@@ -1006,7 +1006,7 @@ begin
                 PyBindKwArgs(mpi, margSeq, mlastArg, nArgs);
                 ASTRight[ASTLeft[mcallNode]] := margSeq;
               end;
-              Expect(tkRParen, ')');
+              ExpectCallRParen(mpi);
             end;
             { result type for chaining (e.g. (o as T).GetChild.M) }
             if (Procs[mpi].RetType = tyClass) or (Procs[mpi].RetType = tyRecord) then

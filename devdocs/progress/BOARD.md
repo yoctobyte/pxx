@@ -11,9 +11,11 @@ lives in git, not in a timestamp._
 | bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method | N | 70 | bug | A callable value is silently accepted where `str` is declared, and no longer compares equal to itself — bisected to `9bbbbef6c` | — |
 | bug-t-the-native-tier-times-out-and-publishes-a-contentless-red | T | 70 | bug | Every native run on plexus since 14:28 today has ended at wall 3600.x — the one-hour cap — and publishes verdict RED. The last three carry new_red: [] AND still_red: [], i.e. a RED with nothing attributed: the run is killed before it can name anything. So Track T has had no usable verdict for six hours while looking, to --status and to every agent, exactly like a persistent regression. A timeout must not publish as RED. | — |
 
-## working (0)
+## working (1)
 
-_none_
+| Ticket | Track | Prio | Type | Summary | Blocked-by |
+| --- | --- | --- | --- | --- | --- |
+| feature-a-error-does-not-halt-so-a-parse-can-be-speculative | A | 45 | feature | `Error()` calls `Halt` directly, so nothing in the compiler can trial-parse and back out. That blocks NilPy's type inference (which needs to read an as-yet-unseen name speculatively), and it is also why the compiler stops at the FIRST error. Make the error path recoverable; several unrelated wants fall out of the same change. | — |
 
 ## unfinished (21)
 
@@ -53,7 +55,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (291)
+## backlog (290)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -182,7 +184,6 @@ _none_
 | feature-a-declaration-phase | N | 55 | feature | A real declaration phase: all decls before any body is typed | — |
 | feature-a-dynamic-array-of-frozen-strings | A | 30 | feature | In the FROZEN-string model (-uPXX_MANAGED_STRING, the self-host build), `array of string` is refused from SetLength up: the element is an inline fixed-capacity buffer and no path knows its stride. Delete/Insert refuse it downstream of that, which is why they carry a frozen-string exclusion. | — |
 | feature-a-emit-obj-record-class-abi-mode | A | 30 | feature | --emit-obj objects built with and without --compact-classes disagree on VMT slot numbers, and nothing diagnoses it. Record the class-ABI mode in the object and refuse a mismatched link, the way --threadsafe's hazard is meant to be handled. | — |
-| feature-a-error-does-not-halt-so-a-parse-can-be-speculative | A | 45 | feature | `Error()` calls `Halt` directly, so nothing in the compiler can trial-parse and back out. That blocks NilPy's type inference (which needs to read an as-yet-unseen name speculatively), and it is also why the compiler stops at the FIRST error. Make the error path recoverable; several unrelated wants fall out of the same change. | — |
 | feature-a-finalize-for-bare-dynarray-and-variant | A | 30 | feature | The VARIANT half landed 2026-08-24 (PXXVarClear through the slot address, FPC-identical on four targets); what remains is the DYNAMIC ARRAY only. A bare dyn-array lvalue still gets a clear compile error, because the release helper needs a per-symbol element descriptor that has no IR-level dataref sentinel (SYM_RTTI_DATAREF_BASE is declared but has no fixup branch). A record CONTAINING one is fully handled, and `a := nil` is the one-line workaround, so the gap is narrow. | — |
 | feature-a-getinterface-refcounting | A | 35 | feature | __pxxGetInterface stores the instance pointer into the caller's interface variable without an AddRef, so the slot holds a borrowed reference while the compiler treats the variable as managed and releases it at scope exit. Every Supports/GetInterface hit is therefore one release the object never got a retain for. Nothing observed to crash yet, which is why it is a ticket and not an urgent bug — but the asymmetry is real and worth settling deliberately. | — |
 | feature-a-io-lock-owner-from-tls-not-gettid | A | 35 | feature | The --threadsafe I/O lock issues a gettid SYSCALL on every I/O statement (measured: 43% overhead, one syscall per Writeln; caching it in TLS removed the whole penalty). The naive version is WRONG -- foreign threads (glibc pthread_create) inherit the creator's block and would answer 'lock already mine', silently losing mutual exclusion. Needs the stack-bounds validation design recorded in the ticket. | — |
@@ -349,13 +350,14 @@ _none_
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (8)
+## backlog_new (9)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-a-riscv32-diagnostic-names-the-wrong-target | A | 20 | bug | `--target=riscv32` on a program with an external cdecl symbol fails with `target esp32: external (dynamic) symbols not yet supported`. The user typed riscv32, the message says esp32, and the two are different things — riscv32 is a hosted Linux target in its own right, not only the ESP32-C3 profile. One shared arm, one hard-coded name. | — |
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
 | bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 30 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
+| bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong | P | 55 | bug | A 28-construct sweep of things fpc 3.2.2 rejects: pxx accepts 10 of them with NO diagnostic and exit 0. Laxness by itself is dialect policy, but five of these are not lax, they are WRONG -- `i[2]` on an Integer reads out of bounds (-2099249120), `for s := 1 to 3` makes the rest of the program not run, `New(i)` overwrites an Integer with a heap pointer, `Inc(s)` empties an AnsiString, `Length(i)` answers 1. That is the compat-tag escape rule: silent wrong behaviour is a bug, not a parity nitpick. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 35 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
 | decide-how-much-string-machinery-the-basic-frontend-gets | U | 35 | decide | String concat and comparison between BASIC variables need PXXStrConcat/PXXStrEq, whose bodies ship only in builtinheap, which a unit-free .bas never pulls — so `PRINT s + t` is a compiler-internal error. Every OTHER frontend solves this by pulling builtinheap unconditionally (a Pascal hello-world is 63 KB). BASIC's unit-free path is 559 bytes. The fork is size vs capability, and it is a product call, not a code one. | — |
 | decide-pchar-node-side-storage-or-a-pchar-type-kind | U | 40 | decide | The last thing owed by refactor-centralize-managed-string-pchar-conversion is slice 3, and its premise expired twice. WideChar got a real type kind (tyWideChar) and no longer wants node-side storage; PChar cannot copy that, because a PChar's pointee VARIES and a kind per pointee does not scale. Meanwhile the deref walk is now ONE function and 198/198 cross-product rows match fpc, so the third option — do nothing structural and keep extending the one walk — is live. This is a design call, not work. | — |
@@ -648,6 +650,7 @@ _none_
 - [p 55] [N] bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
 - [p 55] [N] bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
 - [p 55] [N] bug-nilpy-a-lambda-returned-directly-is-not-callable
+- [p 55] [P] bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong
 - [p 55] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 55] [N] feature-a-declaration-phase
 - [p 55] [B] feature-b-a-fourth-corpus-to-test-whether-the-ladder-walls-generalise
@@ -682,7 +685,6 @@ _none_
 - [p 45] [T] bug-t-two-devtests-measure-the-box-and-flake-the-fleet-job
 - [p 45] [T] chore-t-test-binaries-hardcode-unsweepable-tmp-paths
 - [p 45] [D] docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out
-- [p 45] [A] feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - [p 45] [B] feature-b-rtl-gap-inventory-22-sysutils-strutils-symbols
 - [p 45] [C] feature-c-gtk3-header-final-wiring
 - [p 45] [A] feature-cross-frontend-interop-contract

@@ -2294,7 +2294,7 @@ begin
               else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
               Inc(mai);
             end;
-            Expect(tkRParen, ')');
+            ExpectCallRParen(mpi);
           end;
           node := mcallNode;
           Result := node; Exit;
@@ -2479,7 +2479,7 @@ begin
               else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
               Inc(mai);
             end;
-            Expect(tkRParen, ')');
+            ExpectCallRParen(mpi);
             mnArgs := 0;
             PyBindKwArgs(mpi, mselfArg, mlastArg, mnArgs);
             ASTLeft[mcallNode] := mselfArg;
@@ -2711,7 +2711,7 @@ begin
       else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
       Inc(mai);
     end;
-    Expect(tkRParen, ')');
+    ExpectCallRParen(mpi);
   end;
   Result := mcallNode;
 end;
@@ -3884,7 +3884,7 @@ begin
             else if isNilPy and (CurTok.Kind = tkComma) then Next;  { Python trailing comma }
             Inc(mai);
           end;
-          Expect(tkRParen, ')');
+          ExpectCallRParen(mpi);
         end;
         tk := Procs[mpi].RetType;
         if (tk = tyClass) or (tk = tyRecord) then recId := ProcRetRecId[mpi]

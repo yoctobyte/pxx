@@ -3,8 +3,8 @@ track: A
 prio: 45
 type: feature
 summary: "`Error()` calls `Halt` directly, so nothing in the compiler can trial-parse and back out. That blocks NilPy's type inference (which needs to read an as-yet-unseen name speculatively), and it is also why the compiler stops at the FIRST error. Make the error path recoverable; several unrelated wants fall out of the same change."
-status: backlog
-owner: ""
+status: working
+owner: claude-A
 ---
 
 # `Error()` halts, so no parse can be speculative
@@ -320,3 +320,79 @@ Item 1 (speculative parse). `ErrorRecover` is the mechanism; nothing ties an
 error to a rollback point, so the state-unwind question in "Shape, not a
 prescription" is still unanswered. Syntax errors still halt at the first one,
 deliberately.
+
+## Slice 5 landed 2026-08-25 (claude-A) — three diagnostics that were WRONG, not merely early
+
+Slices 1-4 made the error path able to return and converted the name and
+overload sites. Slice 5 came from asking the obvious next question — *what else
+does an ordinary broken file get wrong?* — as a 28-construct sweep against fpc
+3.2.2, one construct per program. Eighteen were diagnosed correctly. Three were
+diagnosed **wrongly**, and each also halted, so a file containing any of them
+reported nothing else:
+
+| source | pxx before | what it should say |
+| --- | --- | --- |
+| `P1;` where `procedure P1(x: Integer)` | `undefined variable (P1)` | wrong number of parameters |
+| `c.M(1, 2)` on a parameterless method | `Expected: ), but got:` then `unexpected token` | wrong number of parameters |
+| `i(3)` where `i: Integer` | `Expected: :=, but got:` then `unexpected token` | i is not callable |
+
+A wrong diagnostic is worse than an early one — it sends the reader to the wrong
+place. `undefined variable (P1)` over a name declared eight lines up is the
+clearest case, and this repo had already fixed **the other arm of that exact
+bug**: `bug-p-parenless-call-to-an-all-defaulted-routine-is-an-undefined-variable`,
+whose note in `pasparser_stmt.inc` reads *"The diagnostic was the misleading
+part: the NAME had resolved, the ARITY had not."* That fix taught the
+all-defaulted case to work; the case with no default to fill kept the misleading
+message. One concept, two arms, one of them fixed — the sibling this repo's own
+`normalise-dont-special-case.md` says to grep for.
+
+### The method arm needed a shared tail, because there are seven copies
+
+`c.M(1, 2)` did not die in one place. **Every method-argument loop in the Pascal
+frontend is index-driven** — parse exactly `ParamCount` arguments, then
+`Expect(tkRParen)` — and there are **seven** of them: one in
+`pasparser_call.inc`, four in `pasparser_lval.inc`, two in `pasparser_expr.inc`.
+Patching the one the repro happened to hit would have left six.
+
+So the close is one shared tail, `ExpectCallRParen(mpi)`: report the arity, then
+swallow the surplus with paren-depth tracking so the parser lands after the `)`
+exactly where a good call would have left it. Six call sites replaced, and the
+compiler came out **4,582 bytes smaller** (9,054,001 → 9,049,419) — the usual
+sign that a consolidation removed real duplication rather than moving it.
+
+### Why all three are safe to recover
+
+The same reason slices 1 and 3 gave, and it holds more strongly here: the token
+stream is **well-formed** in every case. `P1;` is a single name and its
+terminator. A surplus argument list is consumed to its own `)`. `i(3)` is
+resynced to the statement terminator. Nothing is emitted regardless — the driver
+halts on `ErrCount` before RTTI, fixups or output.
+
+### Measured
+
+`test/test_bad_arity_and_noncallable_all_report_fail.pas`, gated in `test-core`:
+all four mistakes reported in ONE compile, on their own lines, exit 1, no binary
+written. fpc 3.2.2 reports the same first three at the same lines and then stops;
+pxx reports the fourth as well.
+
+**Gate:** `make compiler/pascal26` fixedpoint converged in one round;
+`tools/gate.sh quick` GREEN.
+
+### Found by the same sweep, and much worse — filed, not folded in
+
+Ten of the 28 constructs fpc rejects are accepted here with **no diagnostic and
+exit 0**, and five of those are not lax, they are wrong: `i[2]` on an Integer
+reads out of bounds, `for s := 1 to 3` makes the rest of the program not run,
+`New(i)` overwrites an Integer with a heap pointer, `Inc(s)` empties a string,
+`Length(i)` answers 1. Filed as
+[[bug-p-ten-constructs-fpc-rejects-are-accepted-and-silently-wrong]] at prio 55.
+Same call as slice 3's assignment finding: this ticket is about the error PATH,
+that one is about checks that were never written.
+
+### Still open, unchanged
+
+Item 1 (speculative parse). `ErrorRecover` is the mechanism; nothing ties an
+error to a rollback point, so the state-unwind question in "Shape, not a
+prescription" is still unanswered — and its only known consumer (NilPy typing)
+is deferred, so the ranking argument for doing it now is weak. Syntax errors
+still halt at the first one, deliberately.

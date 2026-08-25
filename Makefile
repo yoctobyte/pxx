@@ -2315,6 +2315,20 @@ test-nilpy: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q '^pascal26:33: error: no overload of F' \
 	   && test ! -e $(TESTTMP)/test_bad_calls26 \
 	  || { echo "test_bad_calls_all_report_fail: FAIL - rc=$$rc, $$n overload lines (want rc=1 and 4, on lines 30-33, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@# Three diagnostics that were WRONG, not merely early: a parenless call to
+	@# a routine that needs arguments said "undefined variable" over a name in
+	@# scope; too many arguments to a METHOD died on Expect(')') as a SYNTAX
+	@# error; and calling a non-callable died on Expect(':='). Each also halted.
+	@# All four mistakes must now be reported in one compile, and no binary.
+	@out=$$(./$(COMPILER) test/test_bad_arity_and_noncallable_all_report_fail.pas $(TESTTMP)/test_bad_arity26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:40: error: wrong number of parameters in call to P1' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:41: error: wrong number of parameters in call to TC.M' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:42: error: i is not a procedure or function' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:43: error: no overload of P1' \
+	   && test ! -e $(TESTTMP)/test_bad_arity26 \
+	  || { echo "test_bad_arity_and_noncallable_all_report_fail: FAIL - rc=$$rc (want rc=1, four diagnostics on lines 40-43, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	@# a SECOND class of the same name in one unit must be refused, naming it
 	@./$(COMPILER) test/test_pascal_duplicate_class_fail.pas $(TESTTMP)/test_pascal_dup_class26 2>&1 \
 	  | grep -q 'duplicate class name TFoo' \

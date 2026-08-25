@@ -1065,6 +1065,47 @@ end;
                          so `TMyTest.Suite` reaches TAssert.Suite with Self = TMyTest
                          and the class propagates down the chain;
     in an INSTANCE method the runtime class of Self -> __pxxRttiOf(Self). }
+{ Close a METHOD call's argument list, reporting a surplus instead of dying on
+  the paren.
+
+  Every method-argument loop in the Pascal frontend is INDEX-DRIVEN: it parses
+  exactly as many arguments as the method declares and then Expects `)`. So
+  `c.M(1, 2)` on a parameterless M died as `Expected: ), but got:` pointing at
+  the comma — a SYNTAX diagnostic for an ARITY mistake, and a halt, so nothing
+  else in the file was reported. The plain-routine call path has said "no
+  overload of X matches these arguments" and recovered since slice 3; the method
+  paths could not even name the problem.
+
+  There are SEVEN copies of that loop (pasparser_call, four in pasparser_lval,
+  two in pasparser_expr), which is exactly why this is a shared tail and not a
+  seventh hand-written guard — the copy is what stays broken
+  (devdocs/dev/normalise-dont-special-case.md).
+
+  Swallowing the surplus lands the parser after the `)` where a good call would
+  have left it, so there is nothing to resync. Nothing reaches codegen: the
+  driver halts on ErrCount before any emission.
+  feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+procedure ExpectCallRParen(mpi: Integer);
+var depth: Integer;
+begin
+  if (CurTok.Kind <> tkRParen) and (mpi >= 0) and (mpi < ProcCount) then
+  begin
+    ErrorRecover('wrong number of parameters in call to ' + Procs[mpi].Name);
+    depth := 0;
+    while CurTok.Kind <> tkEOF do
+    begin
+      if CurTok.Kind = tkLParen then Inc(depth)
+      else if CurTok.Kind = tkRParen then
+      begin
+        if depth = 0 then Break;
+        Dec(depth);
+      end;
+      Next;
+    end;
+  end;
+  Expect(tkRParen, ')');
+end;
+
 function GenMakeStaticMethodCall(mpi: Integer; selfNode: Integer): Integer;
 var callNode, lastArg, argSeq, exprNode, argIdx, ai: Integer;
     mkw, kwHead, kwCount: Integer;
@@ -1162,7 +1203,7 @@ begin
       else if ai < Procs[mpi].ParamCount - 1 then Expect(tkComma, ',');
       Inc(ai);
     end;
-    Expect(tkRParen, ')');
+    ExpectCallRParen(mpi);
     { The chain starts at the SELF argument, exactly as the instance path hands
       it over — PyKwArgIndex returns the ABSOLUTE parameter index, and self is
       parameter 0, so the two agree without an offset. A no-keyword chain is

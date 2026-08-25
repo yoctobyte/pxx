@@ -6399,6 +6399,36 @@ begin
                   Result := node; Exit;
                 end;
               end;
+              { The NAME resolved to a routine and the ARITY did not — `P1;`
+                for `procedure P1(x: Integer)`. Every dispatch above has
+                declined (the parenless branch takes only ParamCount = 0 or an
+                all-defaulted list), so the statement falls into the assignment
+                path and reports `undefined variable (P1)` over a name that is
+                right there in scope.
+
+                That misdirection was fixed once already, for the all-defaulted
+                case, and that ticket's own note says it exactly: *"the NAME had
+                resolved, the ARITY had not"*
+                (bug-p-parenless-call-to-an-all-defaulted-routine-is-an-undefined-variable).
+                This is the same sentence for the case where there is no default
+                to fill — one concept, and only one of its two arms had been
+                taught to say what actually went wrong.
+
+                RECOVERABLE, and trivially so: the statement is a single bare
+                name followed by its terminator, so discarding it resyncs
+                nothing and the next mistake in the file still gets reported.
+                feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+              if (idx < 0) and (si < 0) and (procIdx >= 0) and
+                 (Tokens[TokPos].Kind in [tkSemicolon, tkEnd, tkElse, tkUntil,
+                                          tkExcept, tkFinally, tkEOF]) then
+              begin
+                ErrorRecover('wrong number of parameters in call to ' + name +
+                             ' — called with none');
+                Next;
+                Result := AllocNode(AN_BLOCK);
+                ASTLeft[Result] := -1;
+                Exit;
+              end;
               Next;
               savedErrCount := ErrCount;
               valNode := ParseLValueAST(idx, TokPos - 2);
@@ -6443,6 +6473,23 @@ begin
               end
               else
               begin
+                { CALLING a value that is not callable — `i(3);` where i is an
+                  Integer. The lvalue parsed fine and the `(` is still sitting
+                  there, so Expect(':=') reported `unexpected token` pointing at
+                  a paren, which names neither the mistake nor the culprit, and
+                  halted. Say what is wrong and resync past the argument list —
+                  the token stream is well-formed, so discarding this one
+                  statement lands somewhere real.
+                  feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+                if CurTok.Kind = tkLParen then
+                begin
+                  ErrorRecover(name + ' is not a procedure or function, so it '
+                               + 'cannot be called');
+                  while not (CurTok.Kind in [tkSemicolon, tkEnd, tkEOF, tkElse, tkUntil]) do Next;
+                  Result := AllocNode(AN_BLOCK);
+                  ASTLeft[Result] := -1;
+                  Exit;
+                end;
                 Expect(tkAssign, ':=');
                 { Delphi-mode @-optional procedural value: `p := F` (no `@`) where
                   p is a proc-typed lvalue and F is a bare routine name not being
