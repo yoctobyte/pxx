@@ -4650,6 +4650,83 @@ begin
   lastNode := IRAppend(IR_LABEL, -1, -1, -1, bEnd, 0);
 end;
 
+{ Lower an ENUM-typed `write` argument to its member NAME, which is what FPC
+  prints. `WriteLn(e)` printed the ORDINAL — 1 where FPC prints `Two` — silently,
+  exit 0, in a construct as common as writing an enum gets.
+
+  Deliberately built as IRLowerBoolWrite's twin, because a Boolean IS an enum
+  with two members and the compiler already knew to print TRUE/FALSE for it: one
+  concept reached through two shapes, and only the two-member shape had the
+  answer (devdocs/dev/normalise-dont-special-case.md). Same construction — a
+  compare/branch chain over IR_JUMP_IF_FALSE / IR_WRITE(const_str) / IR_JUMP /
+  IR_LABEL, every one of which every backend already handles, so all targets get
+  it at once and no runtime helper is needed.
+
+  The value is SPILLED to a temp first and re-loaded per arm. IRLowerBoolWrite
+  can use its operand once and does; an N-way chain cannot, and re-referencing
+  one IR node from N places is the "a statement node run a SECOND time as an
+  operand" hazard documented at the top of this file. The C switch dispatch
+  spills its selector for exactly this reason.
+
+  Out of range — reachable, since EnumTypeHasHoles types are not contiguous and
+  this dialect lets an enum be incremented past its last member — falls through
+  to writing the ordinal, i.e. to precisely today's behaviour. Returns the first
+  node; writes the final node (the end label) into lastNode. }
+function IRLowerEnumWrite(value, wid, eid: Integer; var lastNode: Integer; fd: Integer): Integer;
+var k, base, n, tmp, bNext, bEnd, cond, pad: Integer; nm: AnsiString;
+begin
+  base := EnumTypeValBase[eid];
+  n := EnumTypeValCount[eid];
+  tmp := AllocVar('', tyInteger);
+  Result := IRAppend(IR_STORE_SYM, tmp, value, -1, 0, Ord(tyInteger));
+  bEnd := IRNewLabel;
+  for k := 0 to n - 1 do
+  begin
+    bNext := IRNewLabel;
+    cond := IRAppend(IR_BINOP,
+      IRAppend(IR_LOAD_SYM, tmp, -1, -1, 0, Ord(tyInteger)),
+      IRAppend(IR_CONST_INT, -1, -1, -1, EnumValOrd[base + k], Ord(tyInteger)),
+      Ord(tkEq), 0, Ord(tyBoolean));
+    IRAppend(IR_JUMP_IF_FALSE, bNext, cond, -1, 0, 0);
+    { The field width is applied HERE, by padding the constant, because FPC
+      LEFT-aligns an enum in its field where it right-aligns a string and a
+      boolean — measured, `WriteLn('[', e:8, ']')` gives `[Three   ]` against
+      `[    TRUE]` and `[     abc]` on the same line. The name is a compile-time
+      constant, so the padding is too, and the write goes out with no width
+      rather than teaching the writer a second alignment rule. }
+    nm := GetTokenStrFromRaw(EnumValNOff[base + k], EnumValNLen[base + k]);
+    pad := wid - Length(nm);
+    while pad > 0 do begin AppendChar(nm, ' '); Dec(pad); end;
+    IRAppend(IR_WRITE, IRSyntheticConstStr(nm), -1, -1, fd, Ord(tyString));
+    IRAppend(IR_JUMP, bEnd, -1, -1, 0, 0);
+    IRAppend(IR_LABEL, -1, -1, -1, bNext, 0);
+  end;
+  IRAppend(IR_WRITE, IRAppend(IR_LOAD_SYM, tmp, -1, -1, 0, Ord(tyInteger)),
+           wid, -1, fd, Ord(tyInteger));
+  lastNode := IRAppend(IR_LABEL, -1, -1, -1, bEnd, 0);
+end;
+
+{ The VALUE node of one `write` argument, whatever wrapper the parser gave it,
+  and the field width that goes with it. Three arms of the boolean dispatch
+  below differed only in this unwrapping and were written out three times;
+  adding a fourth construct meant writing it three more, which is how a
+  dispatch grows a bug in exactly one of its copies. }
+function WriteArgValueNode(item: Integer): Integer;
+begin
+  if (ASTKind[item] = AN_ARG) or (ASTKind[item] = AN_PAIR) then
+    WriteArgValueNode := ASTLeft[item]
+  else
+    WriteArgValueNode := item;
+end;
+
+function WriteArgWidth(item: Integer): Integer;
+begin
+  { AN_PAIR carries `value:width:decimals` for the FLOAT form and the boolean
+    dispatch never threaded a width through it; preserved exactly. }
+  if ASTKind[item] = AN_ARG then WriteArgWidth := ASTIVal[item]
+  else WriteArgWidth := -1;
+end;
+
 { Dispatch scan: walk the ENTIRE switch body (any depth — case/default labels are
   labels on arbitrarily nested statements, C 6.8.1) assigning each C marker an
   IR_LABEL and, for a case, emitting `if (sel == val) goto label`. Recurses into
@@ -5751,6 +5828,7 @@ var left, right, seq, item, value, outNode, first, last, leftAddr, argNode, argV
     foldOff, foldK, foldSym: Integer;
     bLastNode: Integer;
     writeFd: Integer;
+    wValNode, wEnumId: Integer;   { write(TEnum) -> the member NAME, like write(Boolean) }
     chArrCap, chArrCap2: Integer;   { static `array of Char` <-> string conversion }
     asgDstTk, asgSrcTk: TTypeKind;  { AN_ASSIGN incompatibility check }
     foldStr: AnsiString;
@@ -12300,22 +12378,25 @@ begin
         if ((ASTKind[item] = AN_ARG) or (ASTKind[item] = AN_PAIR)) and
            NodeIsWideCharVal(ASTLeft[item]) then
           ASTLeft[item] := WrapWideCharToUTF8(ASTLeft[item]);
-        if (ASTKind[item] = AN_ARG) and (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyBoolean) then
+        wValNode := WriteArgValueNode(item);
+        wEnumId := -1;
+        if (not CProgramMode) and (not isNilPy) and
+           (IntToTypeKind(ASTTk[wValNode]) <> tyBoolean) then
+          wEnumId := NodeEnumIdOf(wValNode);
+        if IntToTypeKind(ASTTk[wValNode]) = tyBoolean then
         begin
           { write(Boolean[:w]) -> FPC-style TRUE/FALSE text, branched at runtime. }
-          value := IRLowerAST(ASTLeft[item]);
-          outNode := IRLowerBoolWrite(value, ASTIVal[item], bLastNode, writeFd);
+          value := IRLowerAST(wValNode);
+          outNode := IRLowerBoolWrite(value, WriteArgWidth(item), bLastNode, writeFd);
         end
-        else if (ASTKind[item] = AN_PAIR) and (IntToTypeKind(ASTTk[ASTLeft[item]]) = tyBoolean) then
+        else if (wEnumId >= 0) and (wEnumId < EnumTypeCount) and
+                (EnumTypeValCount[wEnumId] > 0) then
         begin
-          value := IRLowerAST(ASTLeft[item]);
-          outNode := IRLowerBoolWrite(value, -1, bLastNode, writeFd);
-        end
-        else if (ASTKind[item] <> AN_ARG) and (ASTKind[item] <> AN_PAIR) and
-                (IntToTypeKind(ASTTk[item]) = tyBoolean) then
-        begin
-          value := IRLowerAST(item);
-          outNode := IRLowerBoolWrite(value, -1, bLastNode, writeFd);
+          { write(TEnum[:w]) -> the member NAME, the Boolean arm's own move with
+            N members instead of two. bug-p-writeln-of-an-enum-prints-its-ordinal }
+          value := IRLowerAST(wValNode);
+          outNode := IRLowerEnumWrite(value, WriteArgWidth(item), wEnumId,
+                                      bLastNode, writeFd);
         end
         else if ASTKind[item] = AN_ARG then
         begin

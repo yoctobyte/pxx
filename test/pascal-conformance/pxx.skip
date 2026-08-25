@@ -46,7 +46,6 @@ tarrconstr1.pp	gap: Delphi dynamic-array constructor TAB.Create(...)
 tarrconstr5.pp	gap: inline specialize TArray<specialize TArray<String>> in type decl
 tarrconstr6.pp	gap: dynarray-type constructor TLongIntArray.Create + open-array overload pick
 tarrconstr7.pp	gap: IInterface/TInterfacedObject; array constructor of interfaces refcount
-tclass12d.pp	gap: nested class const/type sections (class-scoped const SomeValue)
 tclass15.pp	gap: nested class type + Classes TCustomMemoryStream/SetPointer
 tclass5.pp	gap: class constructor `fail` + range-check error 210 semantics
 tclass9.pp	gap: `class var` / `var` sections in class, class property with static method
@@ -58,7 +57,6 @@ tenumerators1.pp	gap: Classes TList/TFPList GetEnumerator + custom enumerator cl
 terecs6.pp	gap: Delphi `class operator` names (Explicit/Implicit/Add/BitwiseOr/...)
 tforin1.pp	gap: for-in over subrange type / enum type / set (basic for-in forms)
 tforin24.pp	gap: enumerator SELECTION by loop-var type (exit 0 with wrong output — keep skipped; re-confirmed 2026-07-15)
-tforin28.pp	gap: for-in over a set constructor literal [One, Three]
 tforin2.pp	gap: for-in over a CALL-result string container (getstring(s)) + string op-enumerator
 tforin3.pp	gap: for-in over class GetEnumerator returning nil (segfault, want clean run)
 tforin4.pp	gap: for-in over function-returned and open/dynamic arrays with body mutation
@@ -99,7 +97,6 @@ tstring11.pp	gap: overload resolution RawByteString vs UnicodeString (char/array
 tstring1.pp	gap: shortstring Insert/Delete/Copy with out-of-range/negative indices crashes
 tstring3.pp	gap: typed-const array of short/ansistring initialized from char & resourcestring consts
 tstring4.pp	wontfix: reads ansistring refcount/length header words — FPC internal string layout
-tstring9.pp	gap: pchar / array-of-char assignment to string and widestring conversions
 tarray3.pp	gap: typed-const array-of-char from string literal, openstring {$P+}, char-array/string compare
 tarray6.pp	gap: local var-section initializers (`var S: AnsiString = 'abcd'`) + wide/ansi conversions
 tclass13a.pp	gap: nested `type` sections inside classes (nested class overriding parent's)
@@ -111,12 +108,8 @@ tenum6.pp	gap: `Str()` of boolean / ByteBool / WordBool / LongBool / QWordBool (
 texception10.pp	gap: constructor call as a bare statement; AV in ctor caught as Exception (Classes unit)
 texception3.pp	gap: RTL `ExitCode` variable missing; try/finally with exit/break/continue
 tforin12.pp	gap: initializing array-of-char elements from string literals in an array const
-tforin13.pp	gap: for-in over a set constructor with ranges (`for ch in ['a'..'c', ...]`)
-tforin14.pp	gap: for-in variant prints ADDRESSES not element values (silent wrong output, exit 0) — re-triaged 2026-07-15, needs its own minimal repro
 tforin15.pp	gap: `operator enumerator` (custom enumerator operator) not supported
 tforin16.pp	gap: for-in over a string constant
-tforin17.pp	gap: for-in over a string literal
-tforin19.pp	gap: for-in over an empty set constructor `[]`
 tforin26.pp	gap: user function named `Write` (builtin name shadowing) + for-in over array of const/TVarRec
 tforin27.pp	gap: user function named `Write` (builtin name shadowing) + for-in over dynamic array
 tgeneric1.pp	gap: objfpc `generic TList<_T> = class` / `specialize` syntax not parsed
@@ -134,7 +127,6 @@ tgeneric92.pp	gap: objfpc generic syntax + `with` over a generic type parameter 
 tinterface4.pp	wontfix: needs FPC's `variants` unit and FPC's IInterface/NewInstance refcount internals
 tinterface6.pp	gap: interface GUID/CORBA-UID usable as a typed constant (tguid/shortstring init)
 tobject2.pp	gap: old-style `object` types with virtual methods, constructor/destructor
-tobject4.pp	gap: direct destructor call as a statement (`o1.destroy;`) not parsed
 toperator1.pp	gap: operator overloading (+) on records declared in units; cross-unit operator resolution
 toperator6.pp	gap: `operator :=` implicit-conversion overload + qword/int64 overload selection
 tover3.pp	wontfix: dialect-pass — overload ambiguity — PXX deterministically ranks (picks longint for cardinal arg) by design; FPC-parity ambiguity errors belong to --strict-overload
@@ -172,8 +164,6 @@ terecs15.pp	gap: record constructors with overloads (advanced records)
 terecs20.pp	gap: `class threadvar` inside a record + threading RTL
 terecs3.pp	gap: advanced-record features from a unit — class var/const/nested type, static class methods
 terecs8.pp	gap: `class var` in a record referencing its own type + class property
-texception1.pp	gap: `on <ExceptionClass> do` handler without a variable name (bare `On TAObject do`)
-tforin25.pp	gap: for-in form prints nothing where FPC prints four 0 lines (silent wrong output, exit 0) — re-triaged 2026-07-15
 tforin6.pp	gap: `operator enumerator` for a class, returning an `object`-type enumerator
 tforin7.pp	gap: `enumerator MoveNext` / `enumerator Current` method+property directives
 tgenconstraint1.pp	gap: Delphi generic constraint syntax (class/record/constructor/interface constraints)
@@ -201,8 +191,6 @@ tgenfunc6.pp	gap: delphi-mode generic instance method Add<T>
 tgenfunc7.pp	gap: generic functions/methods imported from another unit and specialized
 tgenfunc9.pp	gap: generic methods with private/protected visibility specialized from caller
 tmoperator10.pp	wontfix: probes TypInfo GetTypeData ElType/ElType2 RTTI layout of dyn array
-tmoperator11.pp	gap: management operator class operator Initialize on records
-tmoperator1.pp	gap: management operators Initialize/Finalize (advancedrecords)
 tmoperator2.pp	gap: record Initialize/Finalize management operators with managed fields
 tmoperator3.pp	gap: record management operators Initialize/Finalize lifecycle
 tmoperator4.pp	gap: management operators across multiple record types

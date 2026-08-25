@@ -1,0 +1,10 @@
+var    : clGreen
+lit    : clRed clBlue
+holes  : hLow
+holes  : hMid
+holes  : hHigh
+one    : oOnly
+width  : [clBlue  ][    TRUE][     abc]
+width  : [clRed   ][clRed]
+ord    : 2 9
+cmp    : TRUE TRUE

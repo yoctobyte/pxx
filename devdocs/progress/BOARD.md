@@ -349,7 +349,7 @@ _none_
 | task-d-document-warn-ignored-directives | D | 30 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 12 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (12)
+## backlog_new (13)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -357,6 +357,7 @@ _none_
 | bug-a-basic-string-concat-in-a-unit-free-program-is-a-compiler-error | A | 35 | bug | Concatenating two string variables in a .bas program with no USES fails with `compiler error: call to a runtime stub that was never emitted`. The concat lowering reaches AnsiStrConcatAddr, which is 0 because the emitted AnsiString shims are not there -- and they cannot be, because every shim's body is a builtinheap procedure and BASIC pulls builtinheap only through USES. Present on pinned. The sibling of the PXXStrFromLit hole, one stub family over. | decide-how-much-string-machinery-the-basic-frontend-gets |
 | bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 30 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
 | bug-p-an-array-returning-call-cannot-be-indexed-directly | P | 30 | bug | `MakeDyn(3)[2]` fails with `cannot index the result of an array-returning function directly — assign it to a variable first`. fpc 3.2.2 compiles and runs it. `Length(MakeDyn(3))` on the same call already works, so the call result IS materialised somewhere the intrinsic can reach; only the subscript path declines it. | — |
+| bug-p-an-enum-reached-through-a-field-or-index-still-writes-its-ordinal | P | 40 | bug | `WriteLn(e)` now prints the member name (FPC parity). Every OTHER way of naming the same value still prints the ordinal, because the enum identity is carried by the SYMBOL (SymEnumId) and by a folded member literal (ASTEnumId) and by nothing else — an array element, a record field, a function result, a cast and Succ/Pred all lose it. So the same enum prints two different ways in one program, which is a worse shape than the uniform wrongness it replaced. | — |
 | bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero | P | 40 | bug | `PFixed = ^TFixed` with `TFixed = array[0..3] of LongWord`: `Length(pfx^)` returns 0, fpc 3.2.2 returns 4. Indexing the same deref (`pfx^[2]`) is correct, so the pointer's element metadata IS reachable — Length just does not consult it and falls through to the runtime [data-8] header read on a value that has none. A wrong VALUE, silently, exit 0. | — |
 | bug-t-run-pascal-conformance-silently-fails-every-test-on-a-relative-compiler-path | T | 25 | bug | `tools/run_pascal_conformance.sh ./compiler/pascal26 ...` fails 51 of 107 tgeneric tests; the same run with `/home/neo/frank1/compiler/pascal26` passes 61 and fails 0. The runner `cd`s into the suite dir before invoking the compiler, so a relative `$CC` no longer resolves — and the failure surfaces as `compile error`, i.e. as a COMPILER bug, for every test at once. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 35 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
@@ -724,6 +725,7 @@ _none_
 - [p 40] [N] bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells
 - [p 40] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 40] [P] bug-p-a-record-typed-var-initialiser-is-refused
+- [p 40] [P] bug-p-an-enum-reached-through-a-field-or-index-still-writes-its-ordinal
 - [p 40] [P] bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero
 - [p 40] [P] bug-p-length-of-a-string-literal-plus-anything-does-not-parse
 - [p 40] [T] bug-t-twatch-status-says-down-while-the-daemon-is-alive-and-testing

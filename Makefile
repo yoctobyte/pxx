@@ -7712,6 +7712,14 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_gfta26)" = "$$(cat test/test_generic_float_type_argument.expected)"
 	./$(COMPILER) test/test_generic_float_type_argument_delphi.pas $(TESTTMP)/test_gftad26
 	test "$$($(TESTTMP)/test_gftad26)" = "$$(cat test/test_generic_float_type_argument_delphi.expected)"
+	# WriteLn(e) over an enum prints the member NAME, as FPC does -- it printed
+	# the ordinal. A Boolean is an enum with two members and already printed
+	# TRUE/FALSE; the enum lowering is that one's twin with N arms. The width
+	# row is load-bearing: FPC LEFT-aligns an enum in its field where it
+	# right-aligns a string and a boolean.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_writeln_of_an_enum_prints_its_name.pas $(TESTTMP)/test_wenum26
+	test "$$($(TESTTMP)/test_wenum26)" = "$$(cat test/test_writeln_of_an_enum_prints_its_name.expected)"
 	# Eight constructs FPC rejects used to compile clean -- five of them doing
 	# something silently wrong (a segfault, an out-of-bounds read, a scalar
 	# overwritten with a heap pointer, a destroyed string, a plausible wrong
