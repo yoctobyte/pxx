@@ -69,3 +69,33 @@ the range is now decided per job from `job_tier` and widened only when the
 parent's run provably did not contain it. Tickets filed from later runs carry
 the corrected range; this one is annotated rather than rewritten, because the
 filed text is the record of what the watcher actually claimed.
+
+## It is NOT the harness ticket — ruled out by shape (coordinator, 2026-08-26)
+
+Worth stating up front because the obvious first move is to blame
+`bug-t-run-pascal-conformance-silently-fails-every-test-on-a-relative-compiler-path`,
+and that would cost an afternoon of archaeology before ruling it out.
+
+That bug fails **every** test in **every** shard when it fires: the runner `cd`s
+into the suite dir and a relative `$CC` stops resolving for all of them at once.
+Across both completed breadth runs, shards 0-4 PASS and only `shard5/6` is red.
+A harness fault cannot be that selective. So this is a genuine conformance
+divergence and it belongs to Track P.
+
+**Reproducible, not a flake.** Two completed full tiers now:
+`44193e547f6d` (wall 2492s of 7200) and `8f403875d51a` (wall 2285s), the second
+with **zero NEW-RED and zero FIXED** and the same five STILL-RED. Nothing in the
+commits between them changed the picture, which is exactly what a second breadth
+run is for.
+
+**Trap in the report text, read this before diagnosing.** The reason field shows
+two `SKIP` lines -- `tprocvar2.pp` and `tsetsize.pp`. Those are the **truncated
+head of the shard output**, not the failure, and reading them as the cause sends
+you after two tests that are being skipped on purpose. The failing test name is
+further down in the job log. Get from "the shard is red" to "this named case is
+red" from the log itself before forming any theory.
+
+And the blame range on this stub is **179 commits**, not the 23 it was filed
+with -- see the Track T annotation above. `test-pascal-conformance` does not run
+in the native tier, so the narrow window is precisely the set of commits that
+cannot have caused this.
