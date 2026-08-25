@@ -129,4 +129,4 @@ guard beside it.
 Gate: `make compiler/pascal26` converged, `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit f1cea0d74.
