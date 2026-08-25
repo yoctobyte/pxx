@@ -129,12 +129,32 @@ end;
   it ignores it.
   bug-a-a-parse-error-in-a-used-unit-reports-a-line-in-no-file }
 procedure WriteDiagSourceFile;
-var path: AnsiString; t: Integer;
+var path: AnsiString; t, dbgI: Integer;
 begin
   if Lexing then t := TokCount
   else if TokPos > 0 then t := TokPos - 1
   else t := 0;
   path := PasSrcOfTok(t);
+  { PXXDBG=a.srcmap — the token->file range table, plus the token index this
+    diagnostic actually asked about. `in:` has been seen naming a 707-line file
+    for an error on line 2074, and there is no way to tell from the outside
+    whether the RANGES are wrong or the token INDEX is: this prints both.
+    bug-a-a-diagnostic-in-a-used-unit-names-the-wrong-source-file }
+  if PxxDbgWants('a.srcmap', '*') then
+  begin
+    writeln('PXXDBG a.srcmap tok=', t, ' srcline=', Tokens[t].Line,
+            ' lexing=', Lexing, ' tokcount=', TokCount, ' -> ', path);
+    for dbgI := 0 to PasSrcRangeCount - 1 do
+      writeln('PXXDBG a.srcmap   [', dbgI, '] start=', PasSrcRangeStart[dbgI],
+              ' lines ', Tokens[PasSrcRangeStart[dbgI] - 1].Line, '|',
+              Tokens[PasSrcRangeStart[dbgI]].Line, ' ',
+              Tokens[PasSrcRangeStart[dbgI] + 1].Line, ' ',
+              Tokens[PasSrcRangeStart[dbgI] + 2].Line, '  ',
+              GetTokenStr(PasSrcRangeStart[dbgI]), ' ',
+              GetTokenStr(PasSrcRangeStart[dbgI] + 1), ' ',
+              GetTokenStr(PasSrcRangeStart[dbgI] + 2),
+              '  ', KeyStrs[PasSrcRangeId[dbgI]]);
+  end;
   if (path <> '') and (path <> DbgSrcName) then writeln('  in: ', path);
 end;
 
@@ -2711,6 +2731,7 @@ begin
     Tokens[insertPos + i] := srcTokens[i];
   Inc(TokCount, count);
   AdjustPass2Spans(insertPos, count);
+  AdjustSrcRanges(insertPos, count);
 end;
 
 { Remove `count` tokens starting at atPos (mirror of InsertTokens). Used by
@@ -2722,6 +2743,7 @@ begin
     Tokens[i] := Tokens[i + count];
   Dec(TokCount, count);
   AdjustPass2Spans(atPos, -count);
+  AdjustSrcRanges(atPos, -count);
 end;
 
 procedure Next;

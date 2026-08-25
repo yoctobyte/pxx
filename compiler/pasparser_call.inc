@@ -200,6 +200,9 @@ begin
       Tokens[j].SLen := Tokens[j + 1].SLen;
     end;
     Dec(TokCount);
+    { the file map is keyed on absolute token indices — move it with the tokens
+      (bug-a-a-diagnostic-in-a-used-unit-names-the-wrong-source-file) }
+    AdjustSrcRanges(i, -1);
     isFunc := True;
   end;
 
@@ -219,6 +222,7 @@ begin
     Tokens[j + 2].SLen := Tokens[j].SLen;
   end;
   Inc(TokCount, 2);
+  AdjustSrcRanges(TokPos, 2);   { …and the same for the insert }
 
   if isFunc then Tokens[TokPos].Kind := tkFunction
   else Tokens[TokPos].Kind := tkProcedure;

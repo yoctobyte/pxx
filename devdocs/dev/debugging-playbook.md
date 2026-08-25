@@ -92,6 +92,7 @@ PXXDBG=a.ir:myproc compiler/pascal26 prog.py out   # IR of ONE routine
 PXXDBG=a.ast:myproc compiler/pascal26 prog.py out  # its AST before lowering
 PXXDBG=a.symptr:p  compiler/pascal26 prog.pas out  # what a pointer DECL recorded
 PXXDBG=a.opovl     compiler/pascal26 prog.pas out  # operator lookups + candidates
+PXXDBG=a.srcmap:*  compiler/pascal26 prog.pas out  # token->file map + every plant
 make pxx-debug && gdb --args compiler/pascal26-debug prog.py /tmp/out
 ```
 
@@ -104,6 +105,17 @@ each candidate for that operator with its stored right-operand key, and the
 answer; "my operator did not fire" otherwise has four indistinguishable causes.
 Both were added while chasing a bug whose FIRST fix attempt was written against
 an assumed layout, compiled, and changed nothing.
+
+`a.srcmap:*` answers the third variant of the same question: *is the map wrong,
+or is the index into it wrong?* It prints the token->file range table (each
+range's start, the source lines and text of the tokens on either side of the
+boundary, and the path) plus the token index the diagnostic actually asked
+about, and a PLANT line for every mark as it is recorded. It exists because
+`in: <path>` was naming a 707-line RTL file for an error on line 2074 of a
+corpus unit, and from outside there is no way to tell whether the ranges drifted
+or the lookup was reading a different token — the first two guesses at the
+mechanism were both wrong, and the dump settled it in one run
+(`bug-a-a-diagnostic-in-a-used-unit-names-the-wrong-source-file`).
 
 No rebuild, no source patch. **This exists because patching a probe in and
 self-compiling (~90s) is how a wrong premise got recorded in a ticket** — the

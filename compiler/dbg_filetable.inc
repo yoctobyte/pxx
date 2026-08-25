@@ -127,6 +127,38 @@ begin
   PasSrcRangeStart[PasSrcRangeCount] := startTok;
   PasSrcRangeId[PasSrcRangeCount] := pathId;
   Inc(PasSrcRangeCount);
+  if PxxDbgWants('a.srcmap', '*') then
+    writeln('PXXDBG a.srcmap PLANT start=', startTok, ' tokcount=', TokCount,
+            ' lexing=', Lexing, ' ', path);
+end;
+
+procedure AdjustSrcRanges(atPos, delta: Integer);
+{ A token-stream EDIT at `atPos` of `delta` tokens (positive = insert, negative =
+  removal) moves every token after it — so it moves the file boundaries too.
+  AdjustPass2Spans is the same idea for the body pass's spans, and this is its
+  twin for the token->file map; both are called from InsertTokens/RemoveTokens
+  and from the nested-routine lift's hand-rolled shift.
+
+  Without it the map silently rots: the nested-routine lift removes a body from
+  the middle of the stream, every later token slides down, and every range
+  boundary above the edit now names the WRONG FILE for the tokens under it. The
+  visible symptom is a diagnostic whose `in:` line names a 707-line file for an
+  error on line 2074 — the LINE right (it rides on the token), the FILE wrong.
+  Measured with PXXDBG=a.srcmap, which prints the table and the token index the
+  diagnostic asked about.
+  bug-a-a-diagnostic-in-a-used-unit-names-the-wrong-source-file
+
+  Both tables move, for the same reason: DbgRange* is the DWARF line table's
+  copy of the identical question, so a drifted range there puts a routine's
+  line numbers in a different file's name under -g. }
+var i: Integer;
+begin
+  for i := 0 to PasSrcRangeCount - 1 do
+    if PasSrcRangeStart[i] >= atPos then
+      PasSrcRangeStart[i] := PasSrcRangeStart[i] + delta;
+  for i := 0 to DbgRangeCount - 1 do
+    if DbgRangeStart[i] >= atPos then
+      DbgRangeStart[i] := DbgRangeStart[i] + delta;
 end;
 
 function PasSrcOfTok(t: Integer): AnsiString;

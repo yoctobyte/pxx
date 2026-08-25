@@ -268,6 +268,14 @@ begin
     Inc(i);
   end;
   Inc(TokCount, subCount);
+  { A hand-rolled InsertTokens — so it owes the same bookkeeping. The token->file
+    map is keyed on absolute indices, and a specialization splice is by far the
+    largest edit any Pascal source sees (rtl-generics' Generics.Defaults grows by
+    tens of thousands of tokens), so a missed adjustment here moved every later
+    file boundary deep into the WRONG unit: the `in:` line then named a 707-line
+    RTL file for an error on line 2074 of the corpus unit.
+    bug-a-a-diagnostic-in-a-used-unit-names-the-wrong-source-file }
+  AdjustSrcRanges(TokPos, subCount);
 end;
 
 procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm: Boolean); forward;

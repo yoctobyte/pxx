@@ -6303,8 +6303,14 @@ begin
       Tokens[i - remCount] := Tokens[i];
     TokCount := TokCount - remCount;
     { The removed inner body shifts every later token down by remCount — keep the
-      body pass's still-pending DeclItem spans and body-begin marker in sync. }
+      body pass's still-pending DeclItem spans and body-begin marker in sync…
+      …and the token->file map, which is the same invariant and was missed here:
+      every source boundary above the edit went on naming the file for tokens
+      that had moved out from under it, so a later diagnostic reported the right
+      LINE in the wrong FILE.
+      bug-a-a-diagnostic-in-a-used-unit-names-the-wrong-source-file }
     AdjustPass2Spans(finalCur, -remCount);
+    AdjustSrcRanges(finalCur, -remCount);
   end;
 
   { CurTok is still the 'procedure'/'function' token; parse the forward decl now

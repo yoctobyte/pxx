@@ -7775,6 +7775,19 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_new_as_a_function_over_a_pointer_type.pas $(TESTTMP)/test_newfn26
 	test "$$($(TESTTMP)/test_newfn26)" = "$$(cat test/test_new_as_a_function_over_a_pointer_type.expected)"
+	# The `in: <path>` line under a diagnostic must name the unit the error is
+	# actually IN. The token->file map is keyed on absolute token indices, and the
+	# generic-specialization splice inserts tens of thousands of tokens into the
+	# middle of the stream without moving those boundaries -- so the file named
+	# drifted into whatever unit was lexed next. A COMPILE FAILURE is the point
+	# here, so the exit status is expected non-zero; what is asserted is which
+	# file the diagnostic names, and (just as load-bearing) which it does not.
+	@out="$$(./$(COMPILER) -Futest/srcmap_units test/test_diagnostic_names_the_right_unit.pas $(TESTTMP)/test_srcmap26 2>&1 || true)"; \
+	  echo "$$out" | grep -q 'in: .*srcmap_units/uspec\.pas' \
+	    || { echo 'test_diagnostic_names_the_right_unit: FAIL - expected `in:` to name uspec.pas'; echo "$$out"; exit 1; }; \
+	  echo "$$out" | grep -q 'uhelper\.pas' \
+	    && { echo 'test_diagnostic_names_the_right_unit: FAIL - `in:` named uhelper.pas (the map drifted)'; echo "$$out"; exit 1; }; \
+	  true
 	# `a := nil` on a WHOLE dynamic array empties it, whatever the element type.
 	# An array symbol's TypeKind IS its element kind, so a record-shaped element
 	# routed the store into the record `:= nil` arms: they zeroed RecSize bytes
