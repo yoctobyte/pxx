@@ -76,7 +76,7 @@ whole-array assignment uses the header-free mirror
 (`PXXStaticArrayRelease`/RetainImmediate pair) and is a fourth.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit bb06c2486.
 
 # Resolution, 2026-08-25
 
