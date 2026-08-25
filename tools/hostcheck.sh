@@ -70,8 +70,14 @@ try:
 except Exception:
     age = None
 
-# 3600s is the global deadline. Anything within 5s of it was killed, not run.
-if wall is not None and wall >= 3595:
+# Prefer the honest field the moment Track T publishes it; the wall test below
+# is a proxy for exactly this and should be deleted when the field is reliable.
+if last.get("timed_out") is True:
+    print("FAIL|%s %s TIMED OUT -- no verdict" % (tier, sha))
+# Wall proxy, native only. Unlike the full tier this does NOT overlap: a
+# completed native lands ~500s against a 3600s+ deadline, so a wall at the
+# ceiling really is a teardown. Do not copy this test to the breadth arm.
+elif wall is not None and wall >= 3595:
     print("FAIL|torn down at the %.0fs deadline (%s %s, %s) -- CONTENTLESS, "
           "T is blind" % (wall, tier, sha, verdict))
 elif age is None:
@@ -100,19 +106,30 @@ except Exception:
     fage = None
 if not full:
     print("WARN|breadth: no full tier on record at all")
-elif fw is not None and fw >= 3595:
-    # Deliberately a wide net. Deadlines are now scaled by the core throttle,
-    # so the ceiling is not always 3600 -- but a completed run landing within a
-    # few seconds ABOVE a tuned deadline is vanishingly unlikely, and a false
-    # "suspicious" costs a glance while a false "verdict" costs a bad merge.
-    print("FAIL|breadth: full %s wall %.0fs is AT the deadline -- torn down, "
-          "NO VERDICT (its still_red is empty for the same reason)" % (fsha, fw))
-elif fage is not None and fage > 24:
-    print("WARN|breadth: newest full tier %s is %.0fh old -- native is x86-64 "
-          "only, this is not matrix coverage" % (fsha, fage))
+elif full.get("timed_out") is True:
+    print("FAIL|breadth: full %s TIMED OUT (%.0fs) -- no verdict, and its "
+          "still_red is unreliable" % (fsha, fw or -1))
+elif full.get("timed_out") is False:
+    if fage is not None and fage > 24:
+        print("WARN|breadth: newest completed full %s is %.0fh old -- native "
+              "is x86-64 only, this is not current matrix coverage"
+              % (fsha, fage))
+    else:
+        print("OK|breadth: full %s %s, wall %.0fs, %.0fh old"
+              % (fsha, full.get("verdict", "?"), fw or -1, fage or 0))
 else:
-    print("OK|breadth: full %s %s, wall %.0fs, %.0fh old"
-          % (fsha, full.get("verdict", "?"), fw if fw is not None else -1, fage or 0))
+    # NO wall-based guess. A completed full tier at 6 of 12 cores lands around
+    # 2400-4000s, and a teardown lands at the (now scaled) deadline -- the
+    # ranges OVERLAP, so any threshold is aimed straight at the good run we are
+    # waiting for. A >= 3595 test would have dismissed a genuine 3800s
+    # completion as a teardown and kept gating native-only while real breadth
+    # sat on disk. "Cannot tell" is the only honest reading until the Track T
+    # `timed_out` field lands, at which point the arms above take over and this
+    # one goes quiet by itself.
+    print("WARN|breadth: full %s wall %.0fs, %.0fh old -- CANNOT distinguish "
+          "a teardown from a completion until `timed_out` lands; treat as NO "
+          "evidence, do not gate a sync-back on it"
+          % (fsha, fw or -1, fage or 0))
 ' 2>/dev/null | while IFS='|' read -r lvl msg; do
         case "$lvl" in
             OK)   ok   trackt "$msg" ;;
