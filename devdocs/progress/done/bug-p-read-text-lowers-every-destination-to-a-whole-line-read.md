@@ -207,4 +207,4 @@ FPC-shaped call is a compile error. Track B/F territory, unrelated to this
 ticket, and the test uses `Round(d * 100)` instead.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit e6064f14b.
