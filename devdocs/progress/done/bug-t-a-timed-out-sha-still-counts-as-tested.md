@@ -105,4 +105,4 @@ a hand-copied rule is a second path, and a second path is what this whole
 ticket family is about.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 0a4fbf624.
