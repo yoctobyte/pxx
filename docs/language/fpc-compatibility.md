@@ -92,8 +92,9 @@ emit a usage warning for them, and they are not accepted on `var` declarations.
 
 These are one group among several. Which routine directives are inert, which
 change what is compiled, and which are rejected outright is tabulated under
-[routine directives](./dialect.md#routine-directives) — `stdcall` and `varargs`
-in particular do not parse on a plain routine and need removing when porting.
+[routine directives](./dialect.md#routine-directives) — `varargs` in particular
+does not parse at all and needs removing when porting. Every calling-convention
+spelling now parses in every position, `stdcall` included.
 
 ## Common fixes
 

@@ -77,17 +77,23 @@ Both call the C function correctly. The second is not more correct, only more
 explicit for a human reader: the call uses the platform C ABI because the
 routine is `external`, not because `cdecl` is written.
 
-Which spellings are *accepted* is uneven today, and worth knowing before you
-port FPC sources:
+Every spelling is accepted in every position that can carry one, and exactly
+one combination means anything:
 
 | directive | on a routine or `external` | on a procedural type | on a method declaration |
 | --- | --- | --- | --- |
 | `cdecl` | accepted | **meaningful — see below** | accepted |
-| `register` | accepted | rejected | accepted |
-| `stdcall`, `safecall`, `pascal`, `mwpascal` | rejected | rejected | accepted |
+| `register`, `stdcall`, `safecall`, `pascal`, `mwpascal` | accepted | accepted | accepted |
 
-A rejected directive is a parse error, not a warning, so FPC code that writes
-`stdcall` on a plain routine will not compile as-is.
+Note that `register` on a procedural type is *not* the exception `cdecl` is:
+`register` is FPC's own convention, not C's, so marking a signature with it
+would be marking it the wrong way.
+
+FPC also *type-checks* the pairing — it refuses to assign a `register` routine
+to a `stdcall` procedural variable. PXX does not, because a convention it does
+not model cannot make two signatures incompatible. Code FPC accepts compiles
+here; code PXX accepts may need the conventions matched up before FPC will take
+it back.
 
 ### The exception: `cdecl` on a procedural type
 
@@ -142,7 +148,7 @@ nothing.
 
 | directive | why it is inert |
 | --- | --- |
-| `cdecl`, `register` | the calling convention is the target's — see above. `cdecl` on a *procedural type* is the exception |
+| `cdecl`, `register`, `stdcall`, `safecall`, `pascal`, `mwpascal` | the calling convention is the target's — see above. `cdecl` on a *procedural type* is the exception |
 | `inline` | the optimizer decides. At `-O2` it inlines any routine that qualifies (a function, scalar result, at most six scalar by-value parameters, not external or a generator) whether or not you wrote `inline`, and never inlines one that does not qualify because you did |
 | `stackful` | the default async strategy; accepted so it can be stated explicitly |
 | `static`, `reintroduce` | on a plain routine (`static` *is* meaningful on a class method) |
@@ -155,10 +161,8 @@ missing directive an error, the way FPC has it.
 
 ### Not accepted
 
-`stdcall`, `safecall`, `pascal` and `mwpascal` parse only on a *method*
-declaration — on a plain routine, an `external`, or a procedural type they are a
-parse error. `varargs` is not accepted at all. These are gaps rather than
-decisions; FPC sources using them need the directive removed.
+`varargs` is not accepted. That is a gap rather than a decision; FPC sources
+using it need the directive removed.
 
 ### On unfulfillable directives
 

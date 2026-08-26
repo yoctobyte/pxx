@@ -8513,6 +8513,16 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_dynlib_libc26)" = "$$(printf 'strlen: 5\nunloaded: TRUE')"
 	./$(COMPILER) test/test_cdecl_indirect.pas $(TESTTMP)/test_cdecl_indirect26
 	test "$$($(TESTTMP)/test_cdecl_indirect26)" = "$$(printf '4.0\n1024.0\n12.0')"
+	# Every convention spelling in every position that can carry one -- routine
+	# body, external, procedural type, method decl + impl. Four independent lists
+	# once disagreed (stdcall was fine on a method and a parse ERROR on the other
+	# three); the procedural type was the last one still hard-coding `cdecl`.
+	# The Double rows are the negative half: only `cdecl` marks a procedural type
+	# C-ABI, so register/stdcall/plain must all still reach a pxx routine the pxx
+	# way. Output is FPC 3.2.2's, byte for byte.
+	# compat-pascal-calling-convention-directives-uneven
+	./$(COMPILER) test/test_calling_convention_directives_everywhere.pas $(TESTTMP)/test_callconv26
+	$(TESTTMP)/test_callconv26 | diff -u test/test_calling_convention_directives_everywhere.expected -
 	./$(COMPILER) test/test_ansistring_cast_extern_pchar.pas $(TESTTMP)/test_ansistring_cast_extern_pchar26
 	test "$$($(TESTTMP)/test_ansistring_cast_extern_pchar26)" = "$$(printf 'direct=hello len=5\nviavar=hello len=5')"
 	./$(COMPILER) test/test_ansistring_cast_fnptr.pas $(TESTTMP)/test_ansistring_cast_fnptr26

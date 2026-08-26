@@ -204,7 +204,7 @@ begin
           RegisterMethodPtrTypeAlias sets it for the named form. }
         Next;
         if CurTok.Kind = tkIdent then Next;   { consume `object` }
-        EatProcTypeCdecl(aliasIdx);
+        EatProcTypeCallConv(aliasIdx);
         LastTypeRecId := EnsureMethodPtrRec;
         LastTypeProcSig := aliasIdx;
         Result := tyRecord;
@@ -213,7 +213,7 @@ begin
       begin
         { a plain procedural value is a code address — the pointer alias shape
           RegisterProcTypeAlias uses (tyPointer, depth 1, unknown pointee). }
-        EatProcTypeCdecl(aliasIdx);
+        EatProcTypeCallConv(aliasIdx);
         LastTypePointerDepth := 1;
         LastTypeProcSig := aliasIdx;
         Result := tyPointer;
@@ -3887,18 +3887,31 @@ begin
   Result := mpi;
 end;
 
-procedure EatProcTypeCdecl(mpi: Integer);
-{ Optional `; cdecl` on a procedural type (`T = function(...): R; cdecl;`).
-  Marks the signature C-ABI so an indirect call through a value of this type
-  marshals System V — needed for dlsym'd C functions. Other directives
-  (stdcall etc.) are not modelled yet. Shared by the named and anonymous forms. }
+procedure EatProcTypeCallConv(mpi: Integer);
+{ Optional calling-convention directive on a procedural type
+  (`T = function(...): R; cdecl;`). Shared by the named and anonymous forms.
+
+  ACCEPTS every spelling IsCallConvName knows. This was the last of the four
+  directive positions still hard-coding `cdecl` alone, so `stdcall` on a
+  procedural type was a parse error while the same word one line lower inside a
+  class body was fine — which spelling worked depended on where it was written
+  (compat-pascal-calling-convention-directives-uneven).
+
+  Only `cdecl` MARKS anything: it makes the signature C-ABI so an indirect call
+  through a value of this type marshals System V, which is what a dlsym'd C
+  function needs, and it is the one spelling whose meaning pxx models. The rest
+  are decoration — a calling convention is the target's, and on the targets pxx
+  has there is no second one to name. `register` in particular must NOT become
+  C-ABI: it is FPC's own convention, not C's. Whether `stdcall` and `safecall`
+  should mark anything is a question a real Windows target answers, not this
+  one (feature-port-windows-pe). }
 begin
   if (CurTok.Kind = tkSemicolon) and (TokPos < TokCount) and
-     (Tokens[TokPos].Kind = tkIdent) and CaseEqual(GetTokenStr(TokPos), 'cdecl') then
+     (Tokens[TokPos].Kind = tkIdent) and IsCallConvName(GetTokenStr(TokPos)) then
   begin
+    if CaseEqual(GetTokenStr(TokPos), 'cdecl') then ProcCdecl[mpi] := True;
     Next;   { consume ';' }
-    Next;   { consume 'cdecl' }
-    ProcCdecl[mpi] := True;
+    Next;   { consume the directive }
   end;
 end;
 
@@ -5762,7 +5775,7 @@ begin
         end
         else
           RegisterProcTypeAlias(tnOff, tnLen, mpi);
-        EatProcTypeCdecl(mpi);
+        EatProcTypeCallConv(mpi);
       end
       else if (CurTok.Kind = tkInteger) or (CurTok.Kind = tkMinus) or (CurTok.Kind = tkString) then
       begin

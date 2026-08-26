@@ -732,6 +732,21 @@ end;
 { Count the arguments of the call whose NAME is CurTok (Tokens[TokPos] = '('
   when parenthesized): top-level commas + 1; 0 for `()` or no parens. Used to
   pick among method OVERLOADS before the signature-driven arg loop parses. }
+function IsCallConvName(const s: AnsiString): Boolean;
+{ THE list of calling-convention directive spellings. Every position that
+  accepts one asks HERE, so adding a convention is one edit.
+
+  Only the spellings are shared, not the guard: a directive LIST looks at
+  CurTok and needs the not-reserved-word check below, while a procedural type's
+  tail peeks one token past its own ';'. Sharing the guard too is what made the
+  procedural-type site keep its own hard-coded `cdecl` and drift
+  (compat-pascal-calling-convention-directives-uneven). }
+begin
+  Result := CaseEqual(s, 'cdecl') or CaseEqual(s, 'stdcall') or
+            CaseEqual(s, 'safecall') or CaseEqual(s, 'register') or
+            CaseEqual(s, 'pascal') or CaseEqual(s, 'mwpascal');
+end;
+
 function IsCallConvDirectiveTok: Boolean;
 { A calling-convention directive in ANY directive list — class-body member
   (`function QueryInterface(...): HResult; virtual; cdecl;` — testutils),
@@ -744,7 +759,7 @@ function IsCallConvDirectiveTok: Boolean;
   spelling of the set and they drifted apart — the implementation-side loop
   knew `cdecl` and `register` but not `stdcall`, so `procedure TC.Poke;
   stdcall;` parsed in the class body and then died on its own body's header.
-  Add a convention here and every position accepts it.
+  Add a convention to IsCallConvName and every position accepts it.
 
   Guarded on a following ';' because these words are not reserved: a FIELD named
   `register` is legal, and `register: Integer;` has a ':' next, so it stays a
@@ -752,9 +767,7 @@ function IsCallConvDirectiveTok: Boolean;
 begin
   Result := False;
   if CurTok.Kind <> tkIdent then Exit;
-  if not (CaseEqual(CurTok.SVal, 'cdecl') or CaseEqual(CurTok.SVal, 'stdcall') or
-          CaseEqual(CurTok.SVal, 'safecall') or CaseEqual(CurTok.SVal, 'register') or
-          CaseEqual(CurTok.SVal, 'pascal') or CaseEqual(CurTok.SVal, 'mwpascal')) then Exit;
+  if not IsCallConvName(CurTok.SVal) then Exit;
   Result := (TokPos < TokCount) and (Tokens[TokPos].Kind = tkSemicolon);
 end;
 

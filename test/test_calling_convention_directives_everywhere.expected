@@ -1,0 +1,12 @@
+routines ok
+externals ok
+m cdecl
+m register
+m stdcall
+m safecall
+m pascal
+m mwpascal
+42 42 42 42 42
+6.0
+6.0
+6.0

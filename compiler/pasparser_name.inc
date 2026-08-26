@@ -499,7 +499,7 @@ function GenMakeStringValueIndex(valNode: Integer): Integer; forward;
   the anonymous inline form (ParseTypeKind) — mutually recursive with the latter,
   since a parameter's type is itself a type }
 function ParseProcTypeSignature: Integer; forward;
-procedure EatProcTypeCdecl(mpi: Integer); forward;
+procedure EatProcTypeCallConv(mpi: Integer); forward;
 procedure ParseRecordFields(ci: Integer; isPackedRecord: Boolean); forward;
 procedure ParseTypeSection; forward;  { body in pasparser_decl.inc; ParseRecordFields' nested-`type` arm sits ABOVE that body, which FPC's declaration order needs — bug-a-fpc-seed-drift-emitasmx64-forward }
 function IsHintDirectiveName(const nm: AnsiString): Boolean; forward;
