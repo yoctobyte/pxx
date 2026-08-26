@@ -4,6 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "testmgr snapshots the HEAD-built compiler and reports `compiler_changed_mid_run`, but the PIN — which lib-test and demos actually build with — is read ONCE at startup and never re-checked. A `make pin` during a run silently splits those jobs across two stables while the report claims a single `pin=N`. The asymmetry is the tell: one binary is guarded, the other is announced."
+status: done
+owner: pxx-aa
 ---
 
 # A pin that moves mid-run is not detected
@@ -88,3 +90,55 @@ Makefile target it shells out to. Harmless today because `demos` is `advisory`
 next non-advisory shell-out job would inherit the same blind spot. Either mark
 `PIN_BUILT_TARGETS` members `pin_built` by name regardless of recipe text, or
 resolve one level into the Makefile.
+
+## Resolved 2026-08-26 (pxx-aa, Track T)
+
+All three asks, as written.
+
+1. **The pin is read twice** — `pin_identity()` at the start (alongside the
+   existing banner) and again at the end. A move sets `pin_changed_mid_run` and
+   both versions are named in the run's output and JSON.
+2. **It does NOT invalidate the run.** The compiler snapshot invalidates
+   everything because every job used it; the pin is used by 191 of the full
+   tier's 3057. The pin-built jobs are listed in `pin_straddled` and everything
+   else stands.
+3. **twatch declines to open a ledger entry or file a ticket** for a straddled
+   pin-built job — and withholds **FIXED** as well as NEW-RED. Same
+   unattributable result, and the direction nobody checks: a spurious NEW-RED
+   sends someone looking, a spurious FIXED sends nobody. Their statuses still
+   land in `st["jobs"]`, so the next complete run diffs against a real picture
+   rather than a hole.
+
+The `demos` half of the adjacent gap was fixed earlier the same day (`af29523f1`).
+
+### Two things that would have made this a silent no-op
+
+**`pin_straddled` names jobs by SELECTOR, not by `j.name`.** twatch keys by
+`job_key()` — the stable `lib-test#src:<file>` form — while `lib-test#42` is a
+positional index into the target's recipe lines that renumbers when a line is
+inserted. A list of names is a list twatch matches nothing against: a guard
+that runs and never fires. Caught by reading `job_key`'s own docstring, which
+warns about exactly this and had been written for a different bug.
+
+**The start-of-run test was `j.target in PIN_BUILT_TARGETS`, the coarse list.**
+Now `j.pin_built`, the per-job fact — otherwise a pin-built job outside the
+named targets goes unannounced and unguarded, which `test-fpjson` was until
+this morning.
+
+### Verified
+
+Per the ticket's instruction not to force a real straddle, the comparison is
+proven functionally rather than by pinning during a live run: `pin_identity()`
+driven over a stubbed `pin_file` distinguishes v374 from v375 and compares
+equal across two reads of an unmoved pin. Report wiring confirmed on a real
+`--tier quick` run (`pin: null`, `pin_changed_mid_run: false`,
+`pin_straddled: []` — correct, quick has no pin-built jobs).
+
+`tools/testmgr_pin_straddle_devtest.py`, 6 cases.
+
+One of those guards went red on its first run against the **comment** that
+explains the rule it checks ("Deliberately NOT `invalid=True`"). It strips
+comment lines now. A text-shaped guard reads prose as eagerly as code.
+
+## Log
+- 2026-08-26 — resolved, commit 6556639b1.

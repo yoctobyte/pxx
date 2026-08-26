@@ -5,16 +5,17 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:22 blocked:7 backlog:288 backlog_new:28 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2375 rejected:40`
+`unfinished:23 blocked:7 backlog:283 backlog_new:28 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2382 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
-- `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N] — owner: frank1-72
+_none — no lane is locked._
 
-## unfinished (22) — parked mid-flight; re-claim, do not duplicate
+## unfinished (23) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
+- `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
 - `bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name` [N]
 - `bug-nilpy-shared-nonlocal-frame-cell-is-never-freed` [N]
 - `bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython` [O]
@@ -46,11 +47,9 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 326, ranked
+## Ready — top 30 of 322, ranked
 
-- `[p 82] [N]` bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
-- `[p 80] [A]` bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost
-- `[p 80] [N]` bug-n-a-class-base-that-is-an-expression-does-not-compile
+- `[p 85] [O]` feature-opt-o3-register-pressure
 - `[p 80] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - `[p 80] [N]` bug-n-hasattr-through-an-untyped-parameter-is-always-false
 - `[p 78] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
@@ -64,6 +63,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 72] [P]` feature-p-fpc-assigned-enum-ordinals-with-colon-equals
 - `[p 72] [P]` feature-p-fpc-global-operator-overload-declarations
 - `[p 72] [B]` feature-typinfo-facade-unit
+- `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [N]` bug-n-a-field-takes-its-type-from-the-first-token-of-its-right-hand-side
 - `[p 70] [N]` bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through
 - `[p 70] [N]` bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable
@@ -78,5 +78,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
+- `[p 68] [N]` feature-nilpy-user-defined-decorators
 
-_296 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_292 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

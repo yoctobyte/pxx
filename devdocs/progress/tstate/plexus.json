@@ -1,60 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-23T23:22:17Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:test/test_basic_comprehensive.bas"
-   ],
-   "sha": "7d4a3dbb99ce2bc83a5fbde50a6844292c5bd21a",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-24T00:23:52Z",
-   "fixed": [
-    "test-core#src:test/test_variant_string_ops.pas"
-   ],
-   "new_red": [],
-   "sha": "04eaec15ed31fe00e45c3307d568af3e7ff622e0",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-24T01:25:25Z",
-   "fixed": [
-    "test-core#src:test/test_basic_comprehensive.bas"
-   ],
-   "new_red": [],
-   "sha": "6e2e8c136234202907c5035b3940f3be061e6950",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-24T02:26:56Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "09d33d2d7ee6ee34fda2bb1ae676d2696e89ca22",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-24T03:28:27Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "aa9f0989a4c0847941f212d664495f8be96f2032",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-24T04:28:41Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "aa9f0989a4c0847941f212d664495f8be96f2032",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-24T04:34:02Z",
    "fixed": [],
    "new_red": [],
@@ -453,6 +399,57 @@
    "new_red": [],
    "sha": "17240388bca160ba3ed222360c2ed336653fe8fb",
    "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T03:26:31Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "736ec605c3e5985c2eea17f0eeccf0250b87fa22",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T03:35:32Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "1a44f3bdf7fb729ee3fd408170a03eb475f19bf9",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T03:43:54Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "c44655a7f78a9e7fb00624cb042712b062bf7c8d",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T03:51:24Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "2bda90ea1ae47a928e5ed675261738d34ecfd53a",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T03:59:48Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "9e83548c558f58a41b04bf4b7e5dbdacb8924b9b",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T04:06:48Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "284cdf12d7804b3651fbea300513a8a380679374",
+   "tier": "native",
+   "timed_out": false,
    "verdict": "GREEN"
   }
  ],
@@ -1002,11 +999,11 @@
   "test-core#129": "full",
   "test-core#157": "full",
   "test-core#160": "full",
-  "test-core#161": "native",
   "test-core#162": "native",
   "test-core#163": "native",
   "test-core#164": "native",
   "test-core#165": "native",
+  "test-core#166": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
   "test-core#src:examples/tk/callbacks.npy": "native",
@@ -1968,6 +1965,7 @@
   "test-core#src:test/test_nilpy_call_return_infer.npy": "native",
   "test-core#src:test/test_nilpy_class.npy": "native",
   "test-core#src:test/test_nilpy_class_attr.npy": "native",
+  "test-core#src:test/test_nilpy_class_base_is_an_alias.npy": "native",
   "test-core#src:test/test_nilpy_class_named_after_its_imported_base.npy": "native",
   "test-core#src:test/test_nilpy_configparser.npy": "native",
   "test-core#src:test/test_nilpy_convert.npy": "native",
@@ -2005,6 +2003,7 @@
   "test-core#src:test/test_nilpy_iter_next_cursor.npy": "native",
   "test-core#src:test/test_nilpy_json_module.npy": "native",
   "test-core#src:test/test_nilpy_json_reparse_heap.npy": "native",
+  "test-core#src:test/test_nilpy_key_callable_reads_every_default.npy": "native",
   "test-core#src:test/test_nilpy_kwarg_through_lifted_value.npy": "native",
   "test-core#src:test/test_nilpy_lambda_capture.npy": "native",
   "test-core#src:test/test_nilpy_lambda_container_result.npy": "native",
@@ -4104,11 +4103,11 @@
   "test-c-conformance-riscv32#shard5/6": "pass",
   "test-cjson#src:test/cjson/runner.c": "pass",
   "test-core#00": "pass",
-  "test-core#161": "pass",
   "test-core#162": "pass",
   "test-core#163": "pass",
   "test-core#164": "pass",
   "test-core#165": "pass",
+  "test-core#166": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
@@ -5068,6 +5067,7 @@
   "test-core#src:test/test_nilpy_call_return_infer.npy": "pass",
   "test-core#src:test/test_nilpy_class.npy": "pass",
   "test-core#src:test/test_nilpy_class_attr.npy": "pass",
+  "test-core#src:test/test_nilpy_class_base_is_an_alias.npy": "pass",
   "test-core#src:test/test_nilpy_class_named_after_its_imported_base.npy": "pass",
   "test-core#src:test/test_nilpy_configparser.npy": "pass",
   "test-core#src:test/test_nilpy_convert.npy": "pass",
@@ -5105,6 +5105,7 @@
   "test-core#src:test/test_nilpy_iter_next_cursor.npy": "pass",
   "test-core#src:test/test_nilpy_json_module.npy": "pass",
   "test-core#src:test/test_nilpy_json_reparse_heap.npy": "pass",
+  "test-core#src:test/test_nilpy_key_callable_reads_every_default.npy": "pass",
   "test-core#src:test/test_nilpy_kwarg_through_lifted_value.npy": "pass",
   "test-core#src:test/test_nilpy_lambda_capture.npy": "pass",
   "test-core#src:test/test_nilpy_lambda_container_result.npy": "pass",
@@ -6662,14 +6663,14 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T03:16:56Z",
+  "date": "2026-08-26T04:06:48Z",
   "deadline": 7200.0,
-  "sha": "17240388bca160ba3ed222360c2ed336653fe8fb",
+  "sha": "284cdf12d7804b3651fbea300513a8a380679374",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 481.7
+  "wall": 340.5
  },
  "last_bench": {
   "conf_rows": 550,

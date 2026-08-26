@@ -1,0 +1,69 @@
+# A class BASE that is a name bound to a class.
+# bug-n-a-class-base-that-is-an-expression-does-not-compile
+#
+# House rule for .npy: the expectation IS CPython's output, so this file must
+# run unmodified under `python3` and print exactly
+# test/test_nilpy_class_base_is_an_alias.expected.
+#
+# WITNESS, not smoke. Before the fix this file did not COMPILE at all --
+# `class Dog(Base)` was "Nil Python: unknown base class Base" -- so not one row
+# below could have passed by accident. The two CONTROL sections at the end are
+# the opposite kind of witness: they already worked, and the fix had to leave
+# them alone (a compile-time alias that swallowed a run-time choice would be a
+# silent wrong class, which is the failure this test exists to catch).
+
+import sys
+
+
+class Animal:
+    def __init__(self, name):
+        self.name = name
+
+    def speak(self):
+        return self.name + " makes a sound"
+
+
+# --- the ticket's own shape: a module-level name bound to a class -----------
+Base = Animal
+
+
+class Dog(Base):
+    def speak(self):
+        return self.name + " barks"
+
+
+print(Dog("rex").speak())
+print(Animal("generic").speak())
+
+# --- a CHAIN: the right-hand side of an alias may itself be an alias --------
+Base2 = Base
+
+
+class Cat(Base2):
+    def speak(self):
+        return self.name + " meows"
+
+
+print(Cat("tom").speak())
+
+# --- the alias is still an ordinary class VALUE, not just a base -----------
+print(Base is Animal)
+print(isinstance(Dog("d"), Base))
+print(isinstance(Animal("a"), Base))
+print(Base("viaalias").speak())
+
+# --- and inheritance through an alias is REAL inheritance ------------------
+print(isinstance(Dog("d"), Animal))
+print(isinstance(Cat("c"), Animal))
+print(Dog("rex").name)
+
+# --- CONTROL: a RUN-TIME chosen class must STAY run-time -------------------
+# Not an alias: the right-hand side is not a bare name. This already worked,
+# and the fix must not quietly bind it at compile time -- if it ever does, the
+# printed class is the wrong one and this line says so.
+Picked = Dog if len(sys.argv) > 99 else Cat
+print(Picked("runtime").speak())
+
+# --- CONTROL: a name bound to a class is still a plain variable ------------
+holder = Animal
+print(holder("held").speak())

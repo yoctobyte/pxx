@@ -4,6 +4,8 @@ prio: 80
 type: bug
 blocked-by: []
 summary: "Measured 2026-08-25 (pin v374, this box): compiling `print(\"hi\")` costs 8.92s; compiling `begin end.` costs 0.25s. The ~8.7s is a FIXED per-invocation constant — it does not scale with program size — and it is pure user CPU, not I/O. It is ~29% of the entire test matrix's CPU (805 .npy jobs x 8.7s ~ 7000 of 24219 cpu-s) and it is 9 seconds on every NilPy user's hello-world."
+status: done
+owner: agent-A-perf-9s
 ---
 
 # Every NilPy compile pays a fixed ~9-second cost
@@ -325,3 +327,169 @@ blocked on this box (`perf_event_paranoid = 4`), but `gdb` works and
 `make pxx-debug` yields DWARF with Pascal function names, so deterministic
 breakpoint timing is a usable profiler here. Async `interrupt` sampling in gdb
 batch mode is not.
+
+---
+
+## RESOLVED (2026-08-26, agent-A-perf-9s) — 8.62s -> 4.06s, no coverage given up
+
+**Binaries every number below came from.** Baseline = `compiler/pascal26`
+self-hosted at **`49b2eccd8`** (built here by `make bootstrap`; the build's own
+`cmp` fixedpoint passed, so it is a byte-identical self-host at that sha, not a
+stale or mid-bisect artifact). Final = `compiler/pascal26` self-hosted at
+**`66c9b8332`**, converged in one round. Both were re-timed **side by side, on
+the same box, in the same minute** (loadavg 4.1) rather than compared across
+sessions — a box under Track T load inflates every absolute number and that is
+exactly how a ratio gets misread.
+
+| workload | 49b2eccd8 | 66c9b8332 | |
+| --- | --- | --- | --- |
+| `empty.npy` (zero bytes) | 8.87 8.56 8.62 -> **8.62** | 4.05 4.07 4.06 -> **4.06** | **-53%** |
+| `tiny.npy` (`print("hi")`) | **8.62** | **4.11** | -52% |
+| `tiny.pas` (`begin end.`) | 0.25 | 0.24 | (was never the problem) |
+| `compiler.pas`, same source both | **32.08** | **23.36** | **-27%** |
+
+That last row is the one with the widest blast radius: it is `make
+compiler/pascal26`, the mandatory step in **every** agent's per-fix loop on
+every track.
+
+### The diagnosis above was right about the WORK and wrong about the HOTSPOT
+
+The 2026-08-25 diagnosis is correct that every `.npy` compile compiles
+`pylib.pas` + `pyeval.pas` from source, and correct that a zero-byte `.npy`
+costs the full 8.8s. Keep all of that.
+
+Its one wrong conclusion is *"there is no pathological function to optimise"*.
+That came from observing **linear** throughput — ~4 s/MB across a 150x range,
+matching the compiler's own self-compile — and **linear throughput does not rule
+out a hotspot, only a superlinear one.** A function that costs 3 microseconds
+per emitted instruction produces a perfectly straight line on that plot and is
+still 30% of the compile. There were four such functions.
+
+### How the profile was finally obtained — build the compiler with FPC and `-pg`
+
+The diagnosis says a profile was missing because `perf` is blocked here
+(`perf_event_paranoid = 4`) and treats that as the end of the road. It is not.
+`compiler.pas` is FPC-bootstrappable by construction, FPC supports `-pg`, and
+`gprof` is installed:
+
+```
+fpc -O2 -Tlinux -Px86_64 -pg -FU/tmp/units -o/tmp/pascal26-pg compiler/compiler.pas   # 11s
+/tmp/pascal26-pg /tmp/empty.npy /tmp/o                                                 # writes gmon.out
+gprof -b -p /tmp/pascal26-pg gmon.out          # flat profile, with CALL COUNTS
+gprof -b -q /tmp/pascal26-pg gmon.out          # call graph
+```
+
+Eleven seconds to build, and it names the function on the first run. Two
+caveats, both important:
+
+- **It is a different binary.** FPC's ansistrings and heap manager are not ours,
+  so the *time shares* are indicative, not ours. The **call counts** are
+  source-level facts and are exactly ours — and it was the counts, not the
+  times, that found every one of these ("284,481 calls issuing 20,058,632
+  AppendChar" is not a judgement call).
+- Every fix was then confirmed on the real self-hosted binary before it was
+  believed.
+
+### What the ~8.6s actually was
+
+Four causes, each measured, each fixed, each landed with the emitted bytes
+unchanged:
+
+1. **`AsmRegNum` built 64 register names per call, one character at a time**
+   (`617b53c62`). The text assembler resolves operands through it; it CaseEqual'd
+   32 literals and then *constructed* `r8..r15` in four sizes and `xmm0..ymm15`
+   with `AppendChar` — one `SetLength`, one heap realloc, per character — on
+   every call. The common case is a **miss** (AsmTextOperand asks it "is this
+   operand a register?" about immediates and displacements too) and a miss runs
+   the whole table. **284,481 calls -> 20,058,632 AppendChar and 10,679,880
+   CaseEqual: 72% of the whole compile's string-append traffic, from one
+   function.** Replaced with a character-driven, allocation-free decoder.
+   **9.10 -> 6.98s.**
+
+2. **The text assembler rebuilt every string by the character** (`a661ecf57`).
+   `CaseEqual` scanned to the end of the string on a MISS instead of bailing at
+   the first differing character. `AsmTextJccCode` — asked about *every*
+   mnemonic, because that is how EmitAsmX64 decides a line is a jump — answered
+   "no" by walking all 28 arms (3.9M CaseEqual calls). `AsmTextSizeKeyword`,
+   asked about every operand, cost four more. `AsmTextCStr` rebuilt each
+   instruction literal with one realloc per character, 139,722 times. **6.98 ->
+   5.64s.**
+
+3. **`ProcHideRank` scanned the whole proc table when the name hash chain was
+   right there** (`df36a5877`). Pascal scope hiding asks "which scope rank wins
+   for this name"; the answer was computed by walking `0..ProcCount-1` and
+   string-comparing against 1,700 names that cannot match. It is memoised, and
+   the memo's own comment warns that "recomputing per candidate would make
+   matching quadratic" — true, and it still left the MISS path linear in the
+   entire table. **6,559 misses issued 3,639,576 MatchEligBase calls, 555 per
+   miss.** `FindProc` had already been converted to walk `ProcHashNext`; this
+   loop had not. Textbook `normalise-dont-special-case.md`: one question, two
+   mechanisms, one of them updated. **5.64 -> 4.48s.**
+
+4. **Copying strings that needed no cut** (`66c9b8332`). `AsmTextTrim` was
+   called 725,334 times, overwhelmingly on already-tight strings, allocating a
+   copy each time; `FPC_ANSISTR_SETLENGTH` was the single biggest line left in
+   the profile. Trim and Slice now return the input when there is nothing to
+   cut. Also: `AsmTextLine`'s 16-arm zero-operand chain (`ret`/`leave`/`nop`/...)
+   now runs only for lines that HAVE no operands, instead of before every `mov`
+   in the program. **4.48 -> 4.06s.**
+
+### Why "byte-identical" is not a hope here
+
+Every commit was checked against the **baseline binary**, not against itself:
+
+- `empty.npy` -> the same 2,216,311-byte output, every time.
+- `test_nilpy_forin.npy`, `test_nilpy_str_format_conversion_and_containers.npy`,
+  `test_nilpy_c_pointer.npy`, `test/c_builtin_bits.c` -> identical.
+- `hello.pas` cross-compiled to **aarch64, arm32, riscv32 and i386** -> identical.
+  Those matter specifically because the cross backends share `AsmTextTrim` and
+  `AsmTextSlice` with the x86-64 one.
+- **`compiler.pas` compiled by the baseline binary and by the final binary ->
+  identical 9.1 MB output.** 198k lines, dense with overloads (including the
+  `EmitAsmX64` `array of const`/AnsiString pair that ProcHideRank's own comment
+  names as the thing scope-hiding must not break).
+- `AsmRegNum` additionally got an exhaustive differential harness: old
+  implementation vs new over **16,158,970 distinct inputs** — every string of
+  length 0..4 over a 34-character alphabet containing every character any
+  register name uses, plus mixed case and decoys, plus two exhaustive length-5
+  sweeps. **0 mismatches.**
+- `tools/gate.sh quick`: GREEN.
+
+### One trap for whoever touches asmtext.inc next
+
+Making `AsmTextTrim`/`AsmTextSlice` return the input unchanged makes the result
+an **alias**. Two places lowercased a slice IN PLACE and would have rewritten
+the caller's string — a silent-wrong-value bug of exactly the kind this repo's
+debugging note warns about. Both now go through `AsmTextLowerStr`, guarded by
+`AsmTextHasUpper` so the common case still allocates nothing, and the hazard is
+written at `AsmTextLowerStr`'s declaration rather than in a commit message.
+
+### What is left, and where it went
+
+**The remaining 4.06s is no longer an algorithmic problem.** The flat profile
+after four rounds has nothing above ~6%. Two follow-ups carry the rest, and the
+bigger one is not in this lane's shape at all:
+
+- **The compiler is ~3.8x slower than the same source built by FPC.**
+  `pascal26-fpc4` (identical source, `fpc -O2`) compiles `empty.npy` in **1.06s**
+  where our own `-O2` self-hosted build takes **4.06s** — same work, byte-identical
+  output. Isolated with microbenchmarks: a scalar loop over three locals runs
+  **0.78s under pxx -O2 (and -O3) against 0.19s under fpc -O2, 4.1x**, and `-S`
+  shows why — every variable is reloaded from memory for every use, the loop
+  bound is rematerialised twice per iteration, and the induction variable is
+  loaded four times per trip. Evidence appended to
+  **`feature-opt-o3-register-pressure`** (Track O, currently prio 35). **That
+  ticket is now the single largest lever on "testing overhead is 95% of
+  development time" and its priority no longer matches its value** — a call for
+  Track U / the coordinator, not for me.
+- **The fixed cost is halved, not removed** — an `.npy` compile still parses and
+  code-generates all 24,460 lines of `pylib` + `pyeval` before looking at the
+  user's program. That structural half is the original Fix A/B and is filed as
+  **`perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime`**.
+
+Gate run: `make compiler/pascal26` (byte-identical fixedpoint, one round) on
+every commit, plus `tools/gate.sh quick` GREEN, plus the differential checks
+above. Track T sweeps the matrix against the pushed shas.
+
+## Log
+- 2026-08-26 — resolved. Code landed as 617b53c62, a661ecf57, df36a5877, 66c9b8332 on `dev`; this write-up as ff10ec50e.

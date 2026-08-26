@@ -6948,12 +6948,31 @@ begin
      (HideRankName = name) then
   begin ProcHideRank := HideRankVal; Exit; end;
   best := -1; anyOverload := False;
-  for i := 0 to ProcCount - 1 do
+  { Walk the NAME chain, not the whole proc table. Every candidate here must
+    pass MatchEligBase, whose first test is ProcNameMatches -- exact or
+    CaseEqual -- and both imply case-FOLDED equality, which is exactly what
+    NameFoldHash buckets on. So the chain is a superset of the candidates and
+    the answer is unchanged; FindProc already depends on that same invariant.
+
+    This was the "same question, two mechanisms, one updated" shape
+    (devdocs/dev/normalise-dont-special-case.md): FindProc was converted to the
+    hash chain and this loop was not, so the memo above -- whose own comment
+    warns that "recomputing per candidate would make matching quadratic" -- was
+    protecting a scan that was still linear in the WHOLE proc table on every
+    miss. Measured on an empty .npy: 6,559 ProcHideRank misses issued 3,639,576
+    MatchEligBase calls, 555 per miss.
+    See bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost. }
+  i := ProcChainHead(name);
+  while i >= 0 do
   begin
-    if not MatchEligBase(i, name, demote, bIdx, userOnly, dropLateDef) then Continue;
-    r := ProcScopeRank(i, bIdx);
-    if r > best then begin best := r; anyOverload := ProcOverloadDirective[i]; end
-    else if (r = best) and ProcOverloadDirective[i] then anyOverload := True;
+    if i < ProcCount then
+      if MatchEligBase(i, name, demote, bIdx, userOnly, dropLateDef) then
+      begin
+        r := ProcScopeRank(i, bIdx);
+        if r > best then begin best := r; anyOverload := ProcOverloadDirective[i]; end
+        else if (r = best) and ProcOverloadDirective[i] then anyOverload := True;
+      end;
+    i := ProcHashNext[i];
   end;
   if anyOverload then best := -1;
   HideRankName := name; HideRankFlags := flags; HideRankProcCount := ProcCount;

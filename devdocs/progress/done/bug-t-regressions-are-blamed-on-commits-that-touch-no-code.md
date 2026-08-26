@@ -3,6 +3,8 @@ track: T
 prio: 50
 type: bug
 summary: "Nine open regressions in tstate name a `bad=` commit that changes only tstate/ or a progress .md. A docs commit cannot break test-c-conformance-arm32, so either the blame step is landing on a no-op or the failures are flaky and the bisect converged on noise. Either way the reports point Track A at the wrong place."
+status: done
+owner: pxx-aa
 ---
 
 # tstate blames regressions on commits that touch no compiler code
@@ -110,3 +112,48 @@ publish nothing) for the jobs it did not finish, never RED. A RED that is really
 "the box was busy" costs a dev agent a full triage cycle each time it reaches the
 top of the ranked queue -- four tickets at prio 70 this time -- and it trains
 everyone to distrust the queue, which is the expensive part.
+
+## Log
+- 2026-08-26 — resolved, commit 27ae5cc11.
+
+## Resolved 2026-08-26 (pxx-aa, Track T)
+
+This is a fifth report of one root cause — *the blame is computed from what
+changed, without asking whether the job could see it* — see
+[[bug-t-a-blame-range-is-computed-from-what-changed-not-from-what-the-job-can-see]].
+Two of its faces were already fixed and cover the **range** half of this
+ticket's evidence: the wrong anchor (`c68e6492e`) and untestable commits inside
+the range (`cf7d805d4`, which is literally this ticket's "132 in range" number).
+
+What remained was the **`bad=` sha** half, and it was not a computation bug at
+all. `bad` is the sha that was TESTED. The watcher tests whatever HEAD is, and
+HEAD is very often its own tstate publish commit — so `bad` is regularly a
+commit that changes four `.md` files. Leaving `bad` as observed is right: it is
+where the red was seen, and rewriting it would falsify the ledger. Publishing it
+as a *lead* without saying what it is, is the defect.
+
+`cascade_range_note()` has said the true thing for a while:
+
+> **The named sha CANNOT be the cause** — it touches no buildable file. It is
+> the sha that was TESTED, i.e. the upper bound of an untested range.
+
+and the **ordinary** path, where nearly every regression goes, could not reach
+that sentence. Same shape as every other face: the right answer existed on one
+path only. It is now a banner prefixed to all five range shapes, guarded by a
+test that asserts it reaches every one (a banner reaching four of five is this
+bug again, one path along).
+
+**Recomputed each pass, never cached.** The answer depends on
+`NOTEST_PREFIXES`, so a stamp written once and read forever would be the same
+one-way trap as a boolean repair flag, only quieter. One `git diff-tree` per
+open regression per idle pass is nothing.
+
+Verified against both regressions on the board right now — including
+`ab584382edcd`, the 250-line `prio:` frontmatter commit that was named as
+culprit for four unrelated jobs, and `fd93e4a71c37`, a tstate publish commit:
+
+```
+> **The named sha `ab584382edcd` CANNOT be the cause** — it touches no buildable
+> file (docs / tickets / tstate only). It is the sha that was TESTED, i.e. the
+> upper bound of an untested range; the cause is somewhere below it.
+```

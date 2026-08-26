@@ -234,6 +234,139 @@ have given the wrong answer three of those four times.
 
 ---
 
+## A one-way repair flag defeats the mechanism that would have corrected it
+
+Track T stored "this regression has been repaired" as a **boolean**. So
+*already repaired* was indistinguishable from *repaired under a rule we have
+since corrected* -- and the first rule was wrong, in the too-narrow direction. A
+range narrowed by the bad rule could never be re-widened. **The fix for a wrong
+rule had installed a flag saying do not revisit.**
+
+The shape is worth recognising anywhere state records that work was done:
+
+- **Store a rule VERSION, not a done bit.** Bump the constant and everything
+  re-derives on the next pass.
+- **Re-derive from the bounds; never filter the stored result in place.**
+  Filtering in place is one-way by construction -- information leaves and cannot
+  come back. Re-deriving from `good`/`bad` is idempotent and correctable in *both*
+  directions, and here it cost no extra storage, because the bounds were already
+  in the state file.
+
+A repair that cannot be repaired is the corrective mechanism eating itself, and
+it is invisible while the rule happens to be right.
+
+The sharpened rule, after the same author caught a weaker instance in their next
+commit -- a value stamped behind an existence check, write-once, whose answer
+depended on a prefix list that can change: **cache a fact about a frozen
+artifact, never a fact derived through a rule that can change.** A completed
+run's `timed_out`, a build's `pin_built` -- immutable, safe to persist forever. A
+verdict computed *through* a policy is a one-way cache wearing different clothes,
+and recomputing it is almost always cheaper than the machinery that would make it
+correctable. An audit on that criterion found every other persisted boolean in
+the file was a fact about a run, and clean.
+
+Its complement, for the other direction: **persist for the published artifact,
+derive for the live reader.** A reader that waits on a writer-side field is inert
+until the writer next happens to run -- so a status command that reads a stamp
+shows a human nothing until the daemon's idle repair fires, while one that
+re-derives (one `git diff-tree`, falling back to the stamp) answers tonight. The
+cache rule says what is safe to freeze; this says who should be freezing it.
+
+And a corollary from the same fix: **a distinction that is not recorded in the
+history decays after one iteration.** Marking the current run torn-down while the
+history rows stay unmarked buys exactly one cycle, until the pointer moves past
+that sha. A fix that expires is not a fix.
+
+## A guard that greps the source can only catch what is visible in the text
+
+Same session, second defect. A repair path called `testable_only()`, which reads
+like a module helper and is in fact a **closure nested inside another function**.
+It parsed. It read correctly. And it **passed the devtest written for it** --
+because that guard grepped the source for the call. The guard asserted the call
+existed; the call existed; the call was wrong. It would have raised `NameError`
+the first time an idle cycle reached that branch, hours later, in a process
+nobody watches.
+
+This is the same failure as the `137 -> 2` measurement above: **a check that
+runs, passes, and asserts nothing about the thing at issue.**
+
+The sharpest instance of the family is worth stating on its own, because it is
+the one that hides best: **the run that proved the least was the one that most
+effectively silenced the request for more.** Staleness asked *is there a record
+for this sha?* -- and a torn-down run leaves a record. A timed-out run is the
+weakest possible evidence about a sha and was being counted as the strongest,
+purely because its artifact is shaped like a completed one. Whenever a check asks
+whether an artifact EXISTS, ask what the artifact looks like when the work
+failed. Text-shaped guards
+are especially prone to it, because writing one feels like verification and the
+grep is trivially satisfiable by the broken code.
+
+Three separate text-shaped guards failed this way in one night, which is enough
+to call it: **a grep-guard is the weakest guard shape available.** One asserted a
+call existed when the call was a scoping error; one matched a name form the
+consumer never keys by; and one -- nearly a joke, and the clearest possible
+demonstration -- **went red on its first run against the comment explaining the
+rule it checks**, because the author had written the forbidden string three lines
+above while saying why it was forbidden. A grep reads prose as eagerly as code.
+Prefer a guard that executes the path. Where only text will do, strip comments
+and match on the form the CONSUMER uses, not the form that reads naturally.
+
+A related recurrence worth naming: the same fix nearly died twice on **coarse
+predicate where a precise one exists** -- `target in PIN_BUILT_TARGETS` (a list
+that is sufficient, never necessary) standing in for `j.pin_built` (the measured
+fact). Same author, same file, same pair of predicates, twelve hours after the
+first instance. A wrong distinction does not get learned once; it gets learned
+per call site. When you correct one, grep for the predicate, not for the bug.
+
+It was found by running the path end to end against a live case rather than
+trusting that it looked right.
+
+The response was a **narrow** checker rather than a linter (`tools/tools_scope_devtest.py`;
+there is no pyflakes/flake8/ruff on these boxes). It reports exactly one class:
+*a name LOADED where it is not in scope but BOUND somewhere else in the same
+file*. That pairing is what keeps it near false-positive-free -- an unbound name
+has a dozen innocent explanations, but a name bound in a **sibling function** and
+read here is almost never anything else, and it is precisely what a 5,000-line
+file of nested helpers invites. Verified by re-injecting the real defect, not a
+synthetic one.
+
+Deliberately not general, for the reason this file keeps arriving at: **a checker
+that reports everything gets suppressed, and a suppressed checker asserts
+nothing.**
+
+## "The pinned binary reproduces it" may be a claim about a MIXED compiler
+
+A ticket recorded that `$(PXX_STABLE)` reproduced a segfault, which made a
+brand-new feature's own hole read as a pre-existing bug and sent the next agent
+looking in the wrong century of the history. It was measured honestly and it was
+wrong.
+
+**A stable binary run from a directory with no `builtin/` beside it falls back to
+the CWD-relative `compiler/builtin/` -- that is, to the WORKING TREE.** So a
+"pinned" run launched from the repo root is the pinned executable driving
+whatever builtins are checked out right now, uncommitted work included. That is
+not the pinned compiler; it is a hybrid that exists on nobody's machine but
+yours, and it can fail in ways neither endpoint does.
+
+The rule this file already states -- *any result you report must name the sha of
+the binary it came from* -- is necessary and, here, not sufficient. The binary's
+identity was known. Its **builtin tree's** identity was not, and nothing in the
+invocation made the difference visible. So:
+
+- Run a pinned binary **from beside its own frozen `builtin/`**, or verify which
+  tree it actually resolved before believing the result.
+- When an endpoint measurement says "broken at both ends", suspect the harness
+  before concluding "latent since forever". Two greens and a red in the middle is
+  a shape a mixed compiler produces easily.
+- A provenance line in a ticket is evidence like any other, and it decays. The
+  agent that closed this one re-measured instead of inheriting, found v374 and
+  v375 both green, and turned "latent, unbounded" into "fixed two commits after
+  it was filed".
+
+Same family as `code : STALE` in the watcher and the frozen-builtin seam
+`gate.sh` now guards: **the artifact you are measuring is assembled from more
+parts than the one you named.**
+
 ## A number moving in the direction you hoped is not a check
 
 Track T narrowed a blame range from 137 commits to 2, ran it against the live
@@ -361,3 +494,42 @@ checked against a four-parameter callee and pronounced correct; a two-parameter
 one was silently wrong (`map` answered `[1,2,3]` where CPython says `[2,3,4]`).
 Boundaries are where these live — check the smallest and the largest case, not a
 comfortable middle.
+
+## `perf` being blocked is not "no profiler" — build the compiler with FPC and `-pg`
+
+`perf` is refused on plexus (`kernel.perf_event_paranoid = 4`) and cannot be
+lowered without root. A session concluded from that there was no way to profile
+the compiler, recorded *"there is no pathological function to optimise"* on the
+strength of a linearity argument instead, and was wrong: the next session's
+profile found **four** hotspots and cut the measured cost in half
+(`bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost`).
+
+`compiler.pas` is FPC-bootstrappable by construction. FPC supports `-pg`.
+`gprof` is installed. Eleven seconds:
+
+```sh
+fpc -O2 -Tlinux -Px86_64 -pg -FU/tmp/units -o/tmp/pascal26-pg compiler/compiler.pas
+/tmp/pascal26-pg /tmp/repro.npy /tmp/o        # writes gmon.out into $PWD
+gprof -b -p /tmp/pascal26-pg gmon.out         # flat profile WITH CALL COUNTS
+gprof -b -q /tmp/pascal26-pg gmon.out         # call graph: who called whom, how often
+```
+
+(`-FU` a scratch unit dir, or a `-pg` `.o` will collide with a later non-`-pg`
+build and fail at link with `undefined reference to mcount`. Run the compiler
+from the repo root — it resolves `pylib`/`builtin` relative to the working
+directory.)
+
+**Read the CALL COUNTS, not the percentages.** The `-pg` binary is FPC's
+codegen, FPC's ansistrings and FPC's heap manager, so its time shares are
+*indicative* of ours and no more — measured on the same workload, the FPC-built
+compiler runs 3.8x faster than our own build of the same source. But the counts
+are properties of the SOURCE and are exactly ours. "284,481 calls issuing
+20,058,632 AppendChar" is not a judgement call, and it is what named the
+function. Confirm every fix on the real self-hosted binary before believing it.
+
+**Linear throughput is not evidence against a hotspot.** The wrong conclusion
+above came from a good measurement read badly: compile time tracked emitted code
+volume at a near-constant ~4 s/MB across a 150x range, which rules out a
+*superlinear* blowup and nothing else. A function costing a fixed 3 microseconds
+per emitted instruction plots as a perfectly straight line and is still 30% of
+the compile.

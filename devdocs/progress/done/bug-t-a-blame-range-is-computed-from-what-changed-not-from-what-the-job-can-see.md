@@ -176,3 +176,34 @@ must stay unchanged.
 
 ## Log
 - 2026-08-26 — resolved, commit 4672796d0.
+
+## Two follow-ups the correction exposed
+
+**1. The repair was one-way, and would have latched the wrong rule in.**
+`pin_axis` was a boolean, so "already repaired" was indistinguishable from
+"repaired under a rule we have since corrected" — and the first rule *was*
+wrong. A regression narrowed by it could never have been re-widened. It is now
+a rule VERSION (`PIN_AXIS_RULE`), and the repair **re-derives from `good`/`bad`**
+rather than filtering the stored range in place. Filtering in place cannot give
+back what a wrong rule dropped, and storing the unfiltered range to make it
+reversible would put a novel in a git-committed state file. Bump the constant
+and every open regression re-derives on the next idle pass.
+
+**2. The repair called a name that was not in scope.** `testable_only` reads as
+a module helper and is a closure nested inside `test_sha`. It parsed, it read
+correctly, and it passed a devtest that grepped the source for the call — a
+text check cannot see a scoping bug. It would have raised `NameError` the first
+time the daemon reached that branch: on an idle cycle, hours later, in a
+process nobody was watching.
+
+There is no pyflakes/flake8/ruff on these boxes, so
+`tools/tools_scope_devtest.py` is the narrowest useful substitute. It reports
+exactly one class — *a name LOADED where it is not in scope but BOUND somewhere
+else in the same file* — which is the pairing that makes it near
+false-positive-free, and which is exactly the mistake a large file full of
+nested helpers invites. Verified against the real defect, not a synthetic one:
+re-injecting the call makes it print
+`bisect_step() calls 'testable_only', which is bound in another function's scope`.
+
+Deliberately not a general linter: a checker that reports everything gets
+suppressed, and a suppressed checker asserts nothing.

@@ -2375,6 +2375,31 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # opening ledger entries from a diff against nothing.
     had_baseline = bool(st["jobs"])
     now, new_red, fixed, still_red, first_seen = diff_jobs(st["jobs"], report)
+
+    # A PIN THAT MOVED MID-RUN, for the bounded set it actually affects. The
+    # $(PXX_STABLE) symlink is what lib-test builds with, so a `make pin`
+    # landing mid-run splits those jobs across two stables. Same reasoning as
+    # INVALID -- a result that cannot be attributed to one binary is not
+    # evidence -- but NOT the same blast radius: INVALID discards the run
+    # because every job used the compiler, while the pin is used by ~191 of the
+    # full tier's 3057. Dropping 3057 results because lib-test straddled a pin
+    # would trade a small wrong claim for a large lost one.
+    #
+    # So: those jobs open no ledger entry and file no ticket. Their statuses
+    # still land in st["jobs"], exactly as a baseline run's do, which means the
+    # NEXT complete run diffs against a real picture rather than a hole.
+    straddled = set(report.get("pin_straddled") or [])
+    if straddled:
+        blocked = [n for n in new_red if n in straddled]
+        if blocked:
+            print("twatch: %s — %d new red(s) on pin-built job(s) from a run "
+                  "that STRADDLED A PIN; no ledger entry and no ticket, their "
+                  "build is not attributable to one stable (%s)"
+                  % (sha[:12], len(blocked), ", ".join(blocked[:3])), flush=True)
+        new_red = [n for n in new_red if n not in straddled]
+        # FIXED is withheld for the same reason and it is the easier half to
+        # forget: a spurious FIXED reads as good news and sends nobody looking.
+        fixed = [n for n in fixed if n not in straddled]
     no_ticket = ticket_suppression(had_baseline, len(new_red),
                                    len(report["jobs"]))
     if incomplete and not no_ticket:
@@ -2524,12 +2549,29 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                      "cascade": sorted(new_red), "bad": sha, "good": good,
                      "range": rng, "opened": utcnow()})
     else:
+        # The named `bad` is the sha that was TESTED, not necessarily one that
+        # could have caused anything: the watcher tests whatever HEAD is, and
+        # HEAD is frequently its own tstate publish commit. Nine open
+        # regressions once named a docs-only sha this way
+        # (bug-t-regressions-are-blamed-on-commits-that-touch-no-code), and a
+        # reader sent to that commit finds four .md files.
+        #
+        # cascade_range_note() has said so out loud for a while -- "the named
+        # sha CANNOT be the cause ... it is the upper bound of an untested
+        # range" -- and the ORDINARY path, which is where nearly every
+        # regression goes, could not reach that sentence. Same shape as the
+        # rest of this ticket family: the right answer existed on one path only.
+        #
+        # `bad` is left as observed. It IS the sha where the red was seen, and
+        # rewriting it would falsify the ledger; what was wrong is publishing it
+        # as a lead without saying what it is.
+        bad_untestable = not needs_test(clone.path, sha)
         for name in new_red:
             # "job" is the stable selector; "name" is the positional name it
             # had at this sha — kept ONLY as the bisect fallback for older
             # commits, never as identity (see job_key).
             jrng, jgood = range_for(name)
-            pin_axis = False
+            pin_axis = 0
             if pinmap.get(name) and jrng and name not in first_seen:
                 # WRONG AXIS, not merely a wide range. This job builds with
                 # $(PXX_STABLE), so it is blind to every commit that does not
@@ -2548,7 +2590,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                 # are exactly the events the job can observe, they are still
                 # commits so bisect_step needs no teaching, and pin.log commits
                 # touch stable_*/** so testable_only() keeps them.
-                pin_axis = True
+                pin_axis = PIN_AXIS_RULE
                 obs = pin_observable(clone, jrng)
                 if len(obs) != len(jrng):
                     print("twatch: %s builds with the PIN — %d of %d commit(s) "
@@ -2592,6 +2634,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                          "status": statmap.get(name, "fail"),
                          "first_seen": name in first_seen,
                          "pin_axis": pin_axis,
+                         "bad_untestable": bad_untestable,
                          "pin_built": pinmap.get(name, False)})
     st["open_regressions"] = regs
 
@@ -2666,6 +2709,14 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     st["history"] = (st["history"] +
                      [{"sha": sha, "date": st["last"]["date"],
                        "verdict": report["verdict"], "tier": report["tier"],
+                       # Carried so STALENESS can tell a complete run from a
+                       # torn-down one. The verdict already says TIMEOUT, but
+                       # the staleness consumers ask a different question and
+                       # never look at it (bug-t-a-timed-out-sha-still-counts-
+                       # as-tested). Absent on legacy entries, which therefore
+                       # read as complete -- the same migration order
+                       # run_is_incomplete() uses.
+                       "timed_out": bool(report.get("timed_out")),
                        "new_red": new_red, "fixed": fixed}])[-HISTORY_CAP:]
     # PRUNE keys this run PROVED do not exist. Same predicate gone_keys uses to
     # close a regression — "a run whose tier covers this job's tier did not
@@ -2925,6 +2976,22 @@ def pin_immune(clone, reg):
     return all(q.startswith(PIN_IMMUNE_PREFIXES) for q in paths)
 
 
+# Version of the pin-observable RULE, stamped into `reg["pin_axis"]`.
+#
+# A boolean here would LATCH: "already repaired" is indistinguishable from
+# "repaired under a rule we have since corrected", so a regression narrowed by
+# a wrong rule could never be re-widened -- and the first cut of this rule WAS
+# wrong (pin moves only, discarding every lib/ and test/ commit). Bump this
+# whenever pin_observable's definition changes and every open regression
+# re-derives on the next idle pass.
+#
+# Re-derivation works because the repair recomputes from `good`/`bad` rather
+# than filtering the stored range in place. Filtering in place is one-way: it
+# cannot give back what a wrong rule dropped, and storing the unfiltered range
+# to make it reversible would put a novel in a git-committed state file.
+PIN_AXIS_RULE = 2
+
+
 def pin_observable(clone, shas):
     """The commits in `shas` a PIN-BUILT job can actually observe.
 
@@ -2959,47 +3026,75 @@ def pin_observable(clone, shas):
 def range_note(reg):
     """The Range section of a stub ticket — and it must not promise a bisect.
 
-    A stub used to say "the watcher narrows this by idle bisect" unconditionally.
-    With an empty range no ledger entry is opened, so `bisect_step` never sees
-    the job and the promise is one nothing can keep — which is how a real -O3
-    miscompile sat two days waiting for a bisect that was never coming. Say
-    what is true instead, so the reader knows immediately whether to bisect it
-    by hand.
+    A stub used to say "the watcher narrows this by idle bisect"
+    unconditionally. With an empty range no ledger entry is opened, so
+    `bisect_step` never sees the job and the promise is one nothing can keep —
+    which is how a real -O3 miscompile sat two days waiting for a bisect that
+    was never coming. Say what is true instead, so the reader knows immediately
+    whether to bisect it by hand.
+
+    Four cases now, and every one of them exists because the machinery already
+    knew the answer and had no way to say it:
+
+      * `bad` touches no buildable file — it is the sha that was TESTED, not
+        one that could have caused anything;
+      * the job builds with $(PXX_STABLE) — `compiler/` commits cannot be
+        causal and are not in its range;
+      * the job has never run before — no earlier passing sha exists at all;
+      * the ordinary case, which is unchanged.
     """
     n = len(reg.get("range") or [])
     bad = (reg.get("bad") or "")[:12] or "unknown"
     good = (reg.get("good") or "")[:12] or "unknown"
+
+    # The watcher tests whatever HEAD is, and HEAD is frequently its own tstate
+    # publish commit -- so `bad` is regularly a sha that changes four .md files.
+    # cascade_range_note() has said so out loud for a while; the ORDINARY path,
+    # where nearly every regression goes, could not reach the sentence.
+    banner = ""
+    if reg.get("bad_untestable"):
+        banner = ("> **The named sha `%s` CANNOT be the cause** — it touches no "
+                  "buildable file (docs / tickets / tstate only). It is the sha "
+                  "that was TESTED, i.e. the upper bound of an untested range; "
+                  "the cause is somewhere below it.\n\n" % bad)
+
     if reg.get("pin_axis"):
-        # This job builds with $(PXX_STABLE), so it is blind to every commit
-        # that does not move the pin. Its range is counted in PIN MOVES, and
-        # saying "commits" here would re-describe the right range in the wrong
-        # units -- which is how the reader gets sent back to the commit log.
+        # Blind to compiler/** (the pin freezes compiler/builtin/**), NOT blind
+        # to lib/ and test/, which the pin deliberately leaves live. Counting
+        # this range in "commits" would send the reader back to the full commit
+        # log, which is the axis that cannot answer.
         if not n:
-            return ("bad `%s`, and **nothing this job can observe changed** "
-                    "between `%s` and it — no pin move, no `lib/` or `test/` "
-                    "commit. It builds only with `$(PXX_STABLE)`, so the cause "
-                    "is in the box or the job's own inputs, **not** in the "
-                    "commits. **No idle bisect will happen**, and a commit "
-                    "range would name only innocents." % (bad, good))
-        return ("bad `%s`, last good `%s`, **%d observable commit(s)** in range "
-                "(it builds with `$(PXX_STABLE)`, so `compiler/` commits cannot "
-                "have caused it and are dropped; pin moves, `lib/` and `test/` "
-                "are kept) — the watcher narrows this by idle bisect."
-                % (bad, good, n))
+            return banner + (
+                "bad `%s`, and **nothing this job can observe changed** between "
+                "`%s` and it — no pin move, no `lib/` or `test/` commit. It "
+                "builds only with `$(PXX_STABLE)`, so the cause is in the box "
+                "or the job's own inputs, **not** in the commits. **No idle "
+                "bisect will happen**, and a commit range would name only "
+                "innocents." % (bad, good))
+        return banner + (
+            "bad `%s`, last good `%s`, **%d observable commit(s)** in range (it "
+            "builds with `$(PXX_STABLE)`, so `compiler/` commits cannot have "
+            "caused it and are dropped; pin moves, `lib/` and `test/` are kept) "
+            "— the watcher narrows this by idle bisect." % (bad, good, n))
+
     if reg.get("first_seen"):
-        return ("bad `%s`, and this is the job's **first-ever run** — there is "
-                "no earlier passing sha, so no interval contains the cause and "
-                "every commit a range could name is equally innocent. **No "
-                "idle bisect will happen**; a red here is a finding about the "
-                "job, not a regression from the commits around it." % bad)
+        return banner + (
+            "bad `%s`, and this is the job's **first-ever run** — there is no "
+            "earlier passing sha, so no interval contains the cause and every "
+            "commit a range could name is equally innocent. **No idle bisect "
+            "will happen**; a red here is a finding about the job, not a "
+            "regression from the commits around it." % bad)
+
     if not n:
-        return ("bad `%s`, range **unknown** (first run covering this job at "
-                "this tier, so there is no earlier passing sha to bound it) — "
-                "**no idle bisect will happen**; this one needs hand-triage."
-                % bad)
-    return ("bad `%s`, last good `%s`, %d commit(s) in range — the watcher "
-            "narrows this by idle bisect; check tstate/TSTATE.md for the "
-            "current range." % (bad, good, n))
+        return banner + (
+            "bad `%s`, range **unknown** (first run covering this job at this "
+            "tier, so there is no earlier passing sha to bound it) — **no idle "
+            "bisect will happen**; this one needs hand-triage." % bad)
+
+    return banner + (
+        "bad `%s`, last good `%s`, %d commit(s) in range — the watcher narrows "
+        "this by idle bisect; check tstate/TSTATE.md for the current range."
+        % (bad, good, n))
 
 
 PIN_LOG_PATH = "stable_linux_amd64/default/pin.log"
@@ -4610,7 +4705,29 @@ def bisect_step(clone, host, st, tier):
                   % (reg.get("job", "?"), len(rng) - len(clean)), flush=True)
             reg["range"] = rng = clean
             save_state(clone, host, st)
-        if reg.get("pin_built") and not reg.get("pin_axis") and rng:
+        if reg.get("bad"):
+            # RECOMPUTED every pass, not cached behind an existence check.
+            # The answer depends on NOTEST_PREFIXES, which can change -- and a
+            # stamp written once, read forever, is the same one-way trap as a
+            # boolean repair flag, just quieter (see PIN_AXIS_RULE). One
+            # git diff-tree per open regression per idle pass is nothing; the
+            # versioning machinery to make a cache correctable would cost more
+            # than the call it saves.
+            #
+            # It exists at all so the banner reaches regressions opened BEFORE
+            # it did -- including the one that motivated the ticket, whose
+            # `bad` is a tstate publish commit, and the aarch64 one blamed on a
+            # 250-line `prio:` frontmatter change.
+            was = reg.get("bad_untestable")
+            reg["bad_untestable"] = not needs_test(clone.path, reg["bad"])
+            if reg["bad_untestable"] != was:
+                if reg["bad_untestable"]:
+                    print("twatch: %s — its `bad` sha %s touches no buildable "
+                          "file; labelled as the tested upper bound, not a lead"
+                          % (reg.get("job", "?"), reg["bad"][:12]), flush=True)
+                save_state(clone, host, st)
+        if reg.get("pin_built") and reg.get("pin_axis") != PIN_AXIS_RULE \
+                and reg.get("good") and reg.get("bad"):
             # REPAIR ON READ, the same way the untestable-commit filter above
             # repairs a range recorded before that fix existed. A pin-built
             # regression opened before the pin-axis change carries a COMMIT
@@ -4619,14 +4736,23 @@ def bisect_step(clone, host, st, tier):
             # publish commit. Leaving those to age out means the board keeps
             # printing the wrong axis for as long as the regression stays open,
             # which for that job is already days.
-            obs = pin_observable(clone, rng)
-            print("twatch: %s — range cut to what a PIN-BUILT job can observe: "
-                  "%d commit(s) -> %d (dropped %d that change only "
+            # From the BOUNDS, not from the stored range: recomputing is what
+            # makes the repair correctable in both directions when the rule
+            # changes. Filtering the stored range would compound each rule's
+            # mistakes into the next.
+            # `needs_test`, not test_sha's nested `testable_only` helper --
+            # that one is a closure and is not in scope here. Same predicate.
+            base = [c for c in clone.commits_between(reg["good"], reg["bad"])
+                    if needs_test(clone.path, c)]
+            obs = pin_observable(clone, base)
+            print("twatch: %s — range re-derived for a PIN-BUILT job (rule v%d): "
+                  "%d commit(s) -> %d observable (dropped %d that change only "
                   "compiler/tools/docs)%s"
-                  % (reg.get("job", "?"), len(rng), len(obs), len(rng) - len(obs),
+                  % (reg.get("job", "?"), PIN_AXIS_RULE, len(base), len(obs),
+                     len(base) - len(obs),
                      "; NOTHING it can observe changed across the interval"
                      if not obs else ""), flush=True)
-            reg["pin_axis"] = True
+            reg["pin_axis"] = PIN_AXIS_RULE
             reg["range"] = rng = obs
             save_state(clone, host, st)
         if len(rng) <= 1:
@@ -5080,6 +5206,62 @@ def retire_host(repo, old, into=None, tdir=None, renamed=False):
 # fi`) treat 2 exactly like 1 and run their own gate -- the conservative
 # direction, and correct: when T's health is unknown you cover yourself.
 STATUS_UP, STATUS_DOWN, STATUS_UNKNOWN = 0, 1, 2
+# How fresh the daemon's heartbeat must be to count as ALIVE. It is rewritten
+# every 30s while a gate runs, so a minute is already several missed beats;
+# five is generous and still far below the 45-minute staleness grace this
+# qualifies.
+HEARTBEAT_FRESH_SECS = 300
+
+
+def local_daemon():
+    """(host, phase, age_secs) for a LIVE watcher daemon on this box, or None.
+
+    `status()` is a no-ping staleness heuristic -- "UP iff every commit older
+    than the grace window is tested by some host" -- and it cannot tell "nobody
+    is testing" from "the tester is busy with the commit before yours". Those
+    have opposite correct responses, and it was answering both with DOWN, whose
+    documented consequence in CLAUDE.md is that every dev agent runs a ten-minute
+    full gate instead of a thirty-second one. A productive night of pushes, or a
+    loaded box, manufactured it.
+
+    The information that settles it is already local and already read by the
+    sibling command: `trackt health` finds the clone and reads the heartbeat.
+    Same discovery order here (TRACKT_CLONE, ~/.config/trackt.path,
+    ~/trackt-watch), and the same two conditions -- a FRESH beat AND a live pid.
+    Neither alone is enough: a stale file outlives the process, and a pid can be
+    recycled.
+
+    Returns None when there is no clone on this box, which is the honest answer
+    for an agent on another machine: we genuinely cannot tell, so the existing
+    DOWN stands.
+    """
+    path = (os.environ.get("TRACKT_CLONE")
+            or _configured_clone()
+            or os.path.expanduser("~/trackt-watch"))
+    try:
+        with open(os.path.join(os.path.expanduser(path), WATCH_REL)) as f:
+            w = json.load(f)
+    except (OSError, ValueError):
+        return None
+    age = time.time() - float(w.get("ts") or 0)
+    if age > HEARTBEAT_FRESH_SECS:
+        return None
+    pid = w.get("pid")
+    try:
+        with open("/proc/%d/cmdline" % int(pid), "rb") as f:
+            if "twatch.py" not in f.read().decode(errors="replace"):
+                return None
+    except (OSError, ValueError, TypeError):
+        return None
+    return (w.get("host") or "?", w.get("phase") or "?", age)
+
+
+def _configured_clone():
+    try:
+        with open(os.path.expanduser("~/.config/trackt.path")) as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
 
 
 def adj(what):
@@ -5240,11 +5422,28 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
                         hosts.append(doc)
                 except (OSError, ValueError):
                     pass
-    tested = set()
+    # A TIMED-OUT run is the one shape that proves the LEAST -- torn down with
+    # jobs undecided -- and it was the one that most effectively silenced the
+    # request for more, because staleness asked "is there a record for this
+    # sha?" and a timeout leaves one. The verdict has been honest since
+    # 2026-08-25; this is the separate mechanism that never looked at it.
+    #
+    # A sha is redeemed by ANY complete run, on any host, at any tier: the
+    # timeout says this attempt was torn down, not that the sha is untestable.
+    tested, incomplete = set(), set()
     for st in hosts:
+        recs = list(st.get("history") or [])
         if st.get("last"):
-            tested.add(st["last"]["sha"])
-        tested.update(h["sha"] for h in st.get("history", []))
+            recs.append(st["last"])
+        for r in recs:
+            sha_r = r.get("sha")
+            if not sha_r:
+                continue
+            if r.get("timed_out") or r.get("verdict") == "TIMEOUT":
+                incomplete.add(sha_r)
+            else:
+                tested.add(sha_r)
+    incomplete -= tested
     if not hosts:
         # Deliberately NOT routed through verdict_down: "no state at all" in a
         # checkout that could not fetch is overwhelmingly a reader problem (a
@@ -5266,6 +5465,14 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
         if sha in tested:
             newest_tested = (sha, int(ct))
             break
+        if sha in incomplete:
+            # Do NOT break: keep walking back for a sha with a complete run.
+            # Reporting this one as coverage is the bug; reporting it as
+            # nothing would hide that an attempt was made and torn down.
+            print("tstate: `%s` was TESTED BUT TORN DOWN (timeout, jobs left "
+                  "undecided) — it does not count as covered; looking further "
+                  "back for a complete run" % sha[:12])
+            continue
         if not needs_test(repo, sha):
             continue        # tickets/docs/tstate-only: no gate run owed
         if now - int(ct) > grace_min * 60:
@@ -5461,8 +5668,33 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
                       % (nred, nswept, r["bad"][:12],
                          len(r.get("range", []))))
             else:
-                print("tstate:   open regression: %s bad=%s (%d in range)"
-                      % (r["job"], r["bad"][:12], len(r.get("range", []))))
+                # `--status` is the path a human actually runs, so the two
+                # qualifiers that decide what "bad=" MEANS belong here and not
+                # only in the stub ticket's range note. Terse on purpose: the
+                # full sentences live in range_note(), this is the flag that
+                # stops someone opening the commit.
+                # DERIVED here, not read from the stamp. `--status` is a
+                # READER, and a reader that waits for a writer-side field is
+                # inert until the daemon happens to run its idle repair -- for
+                # the two regressions on the board right now, that is the
+                # difference between a human seeing the qualifier tonight and
+                # seeing it whenever the repo next goes quiet. The stamp is for
+                # the published report; this is one git call per regression.
+                bad_untestable = r.get("bad_untestable")
+                try:
+                    bad_untestable = not needs_test(repo, r["bad"])
+                except Exception:       # noqa: BLE001 - a sha we cannot read
+                    pass                #   just falls back to the stamp
+                why = ""
+                if bad_untestable:
+                    why = " — bad touches NO buildable file: it is the tested"\
+                          " upper bound, not a lead"
+                elif r.get("pin_axis"):
+                    why = " — pin-built: compiler/ commits cannot be causal"
+                elif r.get("first_seen"):
+                    why = " — job's FIRST-ever run; no earlier pass exists"
+                print("tstate:   open regression: %s bad=%s (%d in range)%s"
+                      % (r["job"], r["bad"][:12], len(r.get("range", [])), why))
         if len(regs) > STATUS_REG_CAP:
             print("tstate:   ... and %d more open regression(s) — see "
                   "devdocs/progress/tstate/TSTATE.md"
@@ -5507,6 +5739,23 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
         return STATUS_UP
     if untested_old:
         age = int((now - untested_old[1]) / 60)
+        alive = local_daemon()
+        if alive:
+            # BEHIND, not DOWN. Same distinction the breadth case above draws,
+            # for the same reason: a reader told DOWN runs a ten-minute gate to
+            # replace work that is happening right now. The exit code is what
+            # CLAUDE.md and every agent branch on, so BEHIND exits 0 -- and it
+            # must still SAY why, or the agent reading UP with no verdict on its
+            # commit widens its gate anyway.
+            dhost, phase, hb = alive
+            print("tstate: %s daemon is ALIVE (phase=%s, heartbeat %s ago) but "
+                  "BEHIND — %s untested for %d min. The tree moved faster than "
+                  "one cycle; that is a busy tester, not a stalled one. Offload "
+                  "as usual and do NOT widen your gate."
+                  % (dhost, phase, fmt_age(hb), untested_old[0][:12], age))
+            print("tstate: UP (behind) — offload the matrix to T%s"
+                  % ("" if fetched else "  [UNFETCHED]"))
+            return STATUS_UP
         return verdict_down("%s untested for %d min (> %d min grace)"
                             % (untested_old[0][:12], age, grace_min))
     if live and degraded == live:

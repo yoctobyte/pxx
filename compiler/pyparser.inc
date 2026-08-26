@@ -5049,6 +5049,115 @@ begin
       UClsForward[AddUClass(Tokens[i + 1].SOffset, Tokens[i + 1].SLen)] := True;
 end;
 
+{ Does token i BIND the name nm? Every spelling of a binding, deliberately —
+  the single-binding test below is only as trustworthy as this list, and a form
+  it forgets is a name it wrongly believes is bound once. }
+function PyTokIsBindOf(i: Integer; const nm: AnsiString): Boolean;
+begin
+  Result := False;
+  if (i < 0) or (i >= MainProgramTokCount) then Exit;
+  if Tokens[i].Kind <> tkIdent then Exit;
+  if GetTokenStr(i) <> nm then Exit;
+  { `nm = ...`, and every augmented spelling — all of them REbind }
+  if (i + 1 < MainProgramTokCount) and
+     (Tokens[i + 1].Kind in [tkAssign, tkPlusEq, tkMinusEq, tkStarEq, tkSlashEq,
+                             tkModEq, tkTrueDivEq, tkAmpEq, tkPipeEq, tkXorEq,
+                             tkShlEq, tkShrEq, tkPowEq]) then
+  begin Result := True; Exit; end;
+  if i = 0 then Exit;
+  { `import x as nm`, `with f() as nm`, `except E as nm` — `as` is a plain
+    identifier in this lexer, not a keyword token }
+  if (Tokens[i - 1].Kind = tkIdent) and (GetTokenStr(i - 1) = 'as') then
+  begin Result := True; Exit; end;
+  { `for nm in ...`, `def nm(...)`, `class nm:` }
+  if Tokens[i - 1].Kind in [tkFor, tkFunction, tkClass] then Result := True;
+end;
+
+function PyNameBoundExactlyOnce(const nm: AnsiString): Boolean;
+var i, n: Integer;
+begin
+  n := 0;
+  for i := PyScanLo to MainProgramTokCount - 1 do
+    if PyTokIsBindOf(i, nm) then
+    begin
+      Inc(n);
+      if n > 1 then Break;
+    end;
+  Result := n = 1;
+end;
+
+{ A module-level `B = A` binds a SECOND NAME to a class, and CPython lets that
+  name stand everywhere the class name can — including as a BASE:
+  `B = A` then `class P(B)`.
+
+  The base position resolves through FindUClassNonRecord, which is ALREADY
+  alias-aware (it walks UClsAlias*, taught to do so for
+  `from m import Box as BoxAlias`). So the entire fix is to put this binding in
+  that same table: no new arm in the base-name chain at PyParseClass, and every
+  other alias-aware predicate — PyIsExactCtorName, IsClassType, the NilPy
+  construction intercept in pasparser_lval.inc — starts answering for the
+  plain-assignment spelling too, which is the point. Four spellings of "this
+  name means that class" already registered here (`from m import C as D`,
+  `import m as mm`, the Pascal `T = TList` alias, a qualified base); a bare
+  `B = A` was the one that did not, so it was the one that stayed broken.
+  normalise-dont-special-case: this is the missing arm of an existing
+  mechanism, not a sixth one.
+
+  REBINDING IS THE WHOLE DIFFICULTY, and it is why this is deliberately narrow.
+  The table is flat and global with no notion of a program point, so a name
+  bound more than once cannot be represented in it AT ALL:
+
+     B = A ; B = C ; class P(B)     -> CPython says C; "first binding wins"
+                                       would say A — a SILENT wrong base, and
+                                       a wrong base is a wrong layout and a
+                                       wrong vtable.
+
+  So a name is registered only when the module binds it EXACTLY ONCE, counting
+  every binding form at EVERY depth — not just the one shape matched here. A
+  name bound twice, or bound once at module level and again inside some
+  function, is left exactly as it was: still a compile error at the base
+  position. That is a refusal, not a wrong answer, and refusing is the only
+  safe direction for a table that cannot express "it depends".
+
+  The RUN-TIME spelling is untouched and must stay so: `B = A if cond else C`
+  is a genuine run-time choice that already works (test s5 / the ticket's own
+  control), and it does not match this pattern — the RHS is not a bare name.
+  The assignment still emits either way; this pass only ADDS a compile-time
+  name, it never removes the variable.
+  bug-n-a-class-base-that-is-an-expression-does-not-compile }
+procedure PyRegisterClassAliases;
+var i, depth, ci: Integer;
+    nm: AnsiString;
+begin
+  i := PyScanLo;
+  depth := 0;
+  while i < MainProgramTokCount - 2 do
+  begin
+    if Tokens[i].Kind = tkIndent then Inc(depth)
+    else if Tokens[i].Kind = tkDedent then Dec(depth)
+    else if (depth = 0) and (Tokens[i].Kind = tkIdent) and
+            ((i = PyScanLo) or
+             (Tokens[i - 1].Kind in [tkNewline, tkIndent, tkDedent, tkSemicolon])) and
+            (Tokens[i + 1].Kind = tkAssign) and
+            (Tokens[i + 2].Kind = tkIdent) and
+            ((i + 3 >= MainProgramTokCount) or
+             (Tokens[i + 3].Kind in [tkNewline, tkSemicolon, tkDedent])) then
+    begin
+      nm := GetTokenStr(i);
+      { The RHS must resolve to a class NOW — the shell pass and the import
+        prescan have both run, so a class declared further down the file is
+        already a row. Alias-aware itself, so `C = B` after `B = A` chains. }
+      ci := FindUClassNonRecord(GetTokenStr(i + 2));
+      { …and the LHS must not already name a class, so this can only ever ADD
+        a name, never redirect one. }
+      if (ci >= 0) and (FindUClassNonRecord(nm) < 0) and
+         PyNameBoundExactlyOnce(nm) then
+        RegisterUClassAlias(Tokens[i].SOffset, Tokens[i].SLen, ci);
+    end;
+    Inc(i);
+  end;
+end;
+
 { (PyCollectLocals and PyCollectModuleLocals, the token-scanning local-typing
   pre-passes, were retired by PyCollectLocalsAST and PyCollectModuleLocalsAST
   — feature-n-nilpy-ast-based-typing. Both parse instead of scanning.
@@ -34441,6 +34550,7 @@ begin
   PyRegisterClassShells;          { the class ROWS the field pre-pass fills in }
   PyPreScanImports;
   PyPullSlgenIfGenerators;        { a module that yields needs lib/rtl/slgen }
+  PyRegisterClassAliases;         { `B = A` names a class too — after imports }
   PyRegisterClassFieldsPrepass;
   PyRegisterDefShells;
   PyCollectModuleLocalsAST;
@@ -34843,6 +34953,7 @@ begin
     types (len, VariantToStr, pylib methods) resolve during inference. }
   PyPreScanImports;               { every top-level import, not just the leading ones }
   PyPullSlgenIfGenerators;        { a module that yields needs lib/rtl/slgen }
+  PyRegisterClassAliases;         { `B = A` names a class too — after imports }
   PyRegisterClassFieldsPrepass;   { fields must exist before local inference }
   PyRegisterDefShells;            { def signatures must exist before it too }
   PyCollectModuleLocalsAST;

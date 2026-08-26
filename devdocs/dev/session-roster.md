@@ -127,6 +127,26 @@ Its author injected the mismatch into a scratch tree and watched the step return
 been seen to fail is not yet a canary** -- it is an assertion about one.
 
 
+## Facts to get right when writing a worker brief
+
+The coordinator writes briefs from memory, and a wrong fact in a brief is copied
+into the work. Ones that have actually gone wrong:
+
+- **`quick` is `test-quick` ONLY.** `TIERS` in `tools/testmgr.py` says so:
+  `"quick": ["test-quick"]`. **`test-core` is in the NATIVE tier**, not quick.
+  Both are far more frequent than `test-nilpy` (limited/full only), so
+  "put the regression test in test-core" stays the right advice -- but say
+  *native*, not *quick*. This was told to two workers as "test-core runs in the
+  quick tier" and one of them checked and pushed back.
+- **`perf` does not work on this box** (`perf_event_paranoid = 4`). Do not send a
+  worker to it. The working recipe is FPC `-pg` + gprof on `compiler.pas`
+  (~11s to build), reading **call counts**, not percentages -- the percentages
+  are dominated by FPC RTL, the counts are ours. It named a hot function on the
+  first run.
+- **`working/` may hold a stale lock.** It is a live lock only while a session is
+  on it; a lock outliving its session is released, not respected. Say which locks
+  are real when a brief touches contended files.
+
 ## Reading the board at sync time: a NEW-RED on a first-ever run is not a NEW-RED
 
 The coordinator decides sync-backs by reading verdicts, so the coordinator is

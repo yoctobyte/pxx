@@ -123,6 +123,40 @@ reason this note exists at all, and it is **not** about speed or memory:
 Each constant expression gets its own uniquely-named variable, bound once and
 only read. The gain is that a future fix is single work instead of double.
 
+## Why the second path is the broken one: the special case gets the careful words
+
+Five times in one night, the same discovery: a helper already contained the
+exactly-right sentence for a situation, and the ordinary path -- where nearly
+every case goes -- could not reach it. `range_note()`, `cascade_range_note()`,
+and three others. Five is past coincidence, and the Track T agent who hit all
+five proposed the mechanism, which is worth more than any of the individual
+fixes:
+
+> **A special case gets the careful wording *because* it was noticed. The general
+> case keeps the wording from before anyone knew.**
+
+That inverts the intuition. You expect the common path to be the well-tended one,
+because it is the one everybody exercises. But wording is written at the moment
+of *understanding*, not at the moment of use -- and understanding arrives while
+staring at the weird case. Whoever finally worked out what an empty range means
+wrote a precise sentence about it, into the branch that made them think about it.
+The general branch kept the sentence from before that insight existed, and
+nothing about running it a thousand times a day updates it.
+
+So the practical form of this file's rule, for text as much as for logic:
+
+- **When you find a precise sentence in a rare branch, ask what the common branch
+  says.** It is very likely a sentence written by someone who did not yet know
+  what the rare branch taught.
+- **The fix is usually to route, not to write.** Four of the five needed no new
+  words at all -- the right ones already existed and nothing reached them. If you
+  are drafting fresh wording for the general case, check first whether you are
+  about to write a third copy of something that already exists twice.
+- **Rewrite the function rather than patch it a fourth time.** Incremental string
+  edits to one of these produced a silently unreachable branch, caught only
+  because the author printed the result instead of reading the diff.
+
+
 ## Four of these landed in two days (2026-08-25/26)
 
 Not a coincidence worth writing down for its own sake — worth writing down
