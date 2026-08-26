@@ -7196,53 +7196,17 @@ begin
           the argument count is a run-time fact, so it desugars to a dispatch on
           len(args) (PyStarForwardCall). Detected before the argument loop —
           which parses expressions, and `*x` is not one. }
-        else if isNilPy and (CurTok.Kind = tkStar) and (ProcPyStarIdx[procIdx] < 0) and
-                not PyStarIsIterableForm(name) then
+        else if isNilPy and (ProcPyStarIdx[procIdx] < 0) and
+                not PyStarIsIterableForm(name) and PyArgListHasStarElem then
         begin
-          Next;                          { the '*' }
-          { `f(**d)` with NO leading `*args`. `**` lexes as two tkStar, and only
-            the TRAILING star pair below ever looked ahead for the second one —
-            this leading position ate one star and handed `*d` to ParseArgExpr,
-            which reported `expected expression` at the call. One concept, two
-            sites, and only the second was told.
-
-            Lowered to the `f(*[], **d)` spelling that ALREADY works rather than
-            given a forwarding path of its own: PyStarForwardCall takes the dict
-            and binds its keys onto named slots, preserving defaults for the
-            absent ones. Building a second mechanism here would be the thing
-            normalise-dont-special-case warns about — measured by frank2, who
-            found the ticket's proposed keyword desugar already existed.
-            bug-a-nilpy-leading-double-star-in-a-call-is-not-detected }
-          if CurTok.Kind = tkStar then
-          begin
-            Next;                        { the second '*' }
-            ParseArgExpr;
-            fwdDict := CurASTNode;
-            { an empty positional list — same idiom the *args collectors use }
-            fwdList := PyMakeIdent(PyNewContainerTemp('TPyList', 'starkw'));
-            Expect(tkRParen, ')');
-            CurASTNode := PyStarForwardCall(procIdx, fwdList, fwdDict);
-            LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
-            Exit;
-          end;
-          ParseArgExpr;
-          fwdList := CurASTNode;
-          fwdDict := -1;
-          if CurTok.Kind = tkComma then
-          begin
-            Next;
-            if CurTok.Kind = tkStar then
-            begin
-              Next;
-              if CurTok.Kind = tkStar then Next;   { `**` is two tkStar }
-              ParseArgExpr;
-              fwdDict := CurASTNode;
-            end
-            else
-              Error('Nil Python: an argument after *unpacking is not supported yet');
-          end;
-          Expect(tkRParen, ')');
-          CurASTNode := PyStarForwardCall(procIdx, fwdList, fwdDict);
+          { ONE generic collector for every spelling — positional, `*iterable`,
+            `name=value`, `**mapping`, in any order. What stood here was two
+            hand-rolled shapes: a leading-`**` arm, and a leading-`*` arm that
+            accepted exactly one trailing star follower and refused everything
+            else with "an argument after *unpacking is not supported yet". Three
+            of the four spellings failed, each for a different reason.
+            bug-a-nilpy-double-star-in-a-mixed-argument-list }
+          CurASTNode := PyStarMixedForwardCall(procIdx);
           LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
           Exit;
         end;

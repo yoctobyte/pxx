@@ -16252,6 +16252,157 @@ begin
     ((ptk = tyClass) and (not Procs[procIdx].Params[k].IsRef));
 end;
 
+{ Is there a `*`/`**` ELEMENT anywhere in the argument list starting here?
+
+  The forwarding branch was reached only when the list STARTED with a star, so
+  `f(3, **e)` never entered it: the ordinary argument loop got the `**`, and `*`
+  is not the start of an expression, so it reported `expected expression` at the
+  call. Deciding by LOOKAHEAD instead of by first token is what makes the star's
+  position stop mattering — measured, `f(*lst, **e)` already worked and
+  `f(3, **e)` did not, and the only difference between them is which element
+  came first. bug-a-nilpy-double-star-in-a-mixed-argument-list
+
+  Element position is the whole predicate: `f(a * b)` has a depth-0 tkStar too,
+  and it is a multiplication. A star is an ELEMENT only where an element may
+  begin — at the head of the list or straight after a depth-0 comma. Anything
+  nested is somebody else's argument list or literal, so the scan tracks depth
+  and answers only for its own level.
+
+  CurTok is Tokens[TokPos-1] and the '(' is already consumed, so the scan starts
+  at depth 0 and stops on the ')' that would take it negative. }
+function PyArgListHasStarElem: Boolean;
+var i, depth: Integer; atElemStart: Boolean; tk: TTokenKind;
+begin
+  Result := False;
+  depth := 0;
+  atElemStart := True;
+  i := TokPos - 1;
+  while i < TokCount do
+  begin
+    tk := Tokens[i].Kind;
+    if tk = tkEOF then Exit;
+    if (tk = tkStar) and (depth = 0) and atElemStart then
+    begin
+      Result := True;
+      Exit;
+    end;
+    if (tk = tkLParen) or (tk = tkLBrack) or (tk = tkBegin) then
+      Inc(depth)
+    else if (tk = tkRParen) or (tk = tkRBrack) or (tk = tkEnd) then
+    begin
+      if depth = 0 then Exit;   { our own ')': the list ended, no star element }
+      Dec(depth);
+    end;
+    atElemStart := (tk = tkComma) and (depth = 0);
+    Inc(i);
+  end;
+end;
+
+{ One hoisted `pydict_merge_any(dst, <src>)` — `**mapping` into the forwarded
+  keyword dict.
+
+  The free function and not TPyDict.update, which is FOUR overloads (TPyList,
+  TPyDict, AnsiString, Variant) and PyContainerCall1 resolves a name with
+  FindUMeth, which answers the FIRST declaration. That would have bound a dict
+  to the TPyList arm. pydict_merge_any takes a Variant and decides at run time,
+  which is also what `**` means: CPython accepts any mapping there. }
+procedure PyHoistDictMergeAny(dstSym, srcNode: Integer);
+var a1, a2, callNode: Integer;
+begin
+  a2 := AllocNode(AN_ARG);
+  ASTLeft[a2] := srcNode;
+  a1 := AllocNode(AN_ARG);
+  ASTLeft[a1] := PyMakeIdent(dstSym);
+  ASTRight[a1] := a2;
+  callNode := AllocNode(AN_CALL);
+  ASTIVal[callNode] := FindProc('pydict_merge_any');
+  if ASTIVal[callNode] < 0 then
+    Error('Nil Python: pylib (pydict_merge_any) not loaded');
+  ASTTk[callNode] := Ord(tyInteger);
+  ASTLeft[callNode] := a1;
+  PyHoistStmt(callNode);
+end;
+
+{ ONE loop for every spelling of a call that forwards `*`/`**` into a callee
+  with ORDINARY parameters — positional, `*iterable`, `name=value`, `**mapping`,
+  in any order and any number.
+
+  It replaces two hand-rolled shapes, it does not join them: the branch used to
+  have a leading-`**` arm and a leading-`*` arm, and the second accepted exactly
+  one trailing star follower and nothing else. Three of the four spellings the
+  ticket measured failed, each for its own reason, which is what two parsers for
+  one concept looks like (devdocs/dev/normalise-dont-special-case.md). The
+  target form was never the difficulty — PyStarForwardCall has always taken a
+  positional LIST and a keyword DICT, and every spelling here is a different way
+  of filling those two.
+
+  Order is source order: the container calls are hoisted as they are parsed, so
+  `f(a(), *b(), c=d())` still evaluates a, b, d left to right, and a later
+  `**e` overwrites an earlier `c=` exactly as CPython's dict build does.
+
+  The dict temp is allocated LAZILY: `f(1, *xs)` has no keyword source, and
+  PyStarForwardCall reads a -1 dict as "no kwargs" and hoists the loud
+  pystar_no_kwargs guard for it. Handing it an always-empty dict would have
+  spent an allocation to lose that guard. }
+function PyStarMixedForwardCall(procIdx: Integer): Integer;
+var lstSym, dctSym, listCi, kwLit: Integer;
+    kwName: AnsiString;
+begin
+  listCi := FindUClass('TPyList');
+  if listCi < 0 then Error('Nil Python: pylib (TPyList) not loaded');
+  lstSym := PyNewContainerTemp('TPyList', 'fwdpos');
+  dctSym := -1;
+  while CurTok.Kind <> tkRParen do
+  begin
+    if CurTok.Kind = tkStar then
+    begin
+      Next;                              { the '*' }
+      if CurTok.Kind = tkStar then
+      begin
+        Next;                            { `**` is two tkStar }
+        ParseArgExpr;
+        if dctSym < 0 then dctSym := PyNewContainerTemp('TPyDict', 'fwdkw');
+        PyHoistDictMergeAny(dctSym, CurASTNode);
+      end
+      else
+      begin
+        ParseArgExpr;
+        { through the shared normalisation: `*s` over a str spreads characters,
+          and a Variant operand needs the run-time conversion }
+        PyContainerCall1(lstSym, 'TPyList', 'extend',
+                         PyStarOperandAsList(CurASTNode, listCi), -1);
+      end;
+    end
+    else if (CurTok.Kind = tkIdent) and (TokPos < TokCount) and
+            (Tokens[TokPos].Kind = tkAssign) then
+    begin
+      kwName := CurTok.SVal;
+      Next;                              { the name }
+      Next;                              { the '=' }
+      ParseArgExpr;
+      kwLit := AllocNode(AN_STR_LIT);
+      ASTSOffset[kwLit] := PyStoredName(kwName);
+      ASTSLen[kwLit] := Length(kwName);
+      ASTTk[kwLit] := Ord(tyString);
+      if dctSym < 0 then dctSym := PyNewContainerTemp('TPyDict', 'fwdkw');
+      { `store`, not `setitem`: setitem returns the dict for chaining and
+        PyContainerCall1 hoists a STATEMENT, which would drop the result. }
+      PyContainerCall1(dctSym, 'TPyDict', 'store', kwLit, CurASTNode);
+    end
+    else
+    begin
+      ParseArgExpr;
+      PyContainerCall1(lstSym, 'TPyList', 'append', CurASTNode, -1);
+    end;
+    if CurTok.Kind = tkComma then Next else Break;
+  end;
+  Expect(tkRParen, ')');
+  if dctSym >= 0 then
+    Result := PyStarForwardCall(procIdx, PyMakeIdent(lstSym), PyMakeIdent(dctSym))
+  else
+    Result := PyStarForwardCall(procIdx, PyMakeIdent(lstSym), -1);
+end;
+
 function PyStarForwardCall(procIdx, listNode, dictNode: Integer): Integer;
 var required, total, fwdTotal, n, k, i, argNode, lastArg, callNode, elemNode: Integer;
     nameNode, headNode, hasArg, hasCall: Integer;   { the parameter's name literal and the was-it-supplied test, for a kwargs fetch; the arg chain's head }
@@ -45321,53 +45472,17 @@ begin
           the argument count is a run-time fact, so it desugars to a dispatch on
           len(args) (PyStarForwardCall). Detected before the argument loop —
           which parses expressions, and `*x` is not one. }
-        else if (CurTok.Kind = tkStar) and (ProcPyStarIdx[procIdx] < 0) and
-                not PyStarIsIterableForm(name) then
+        else if (ProcPyStarIdx[procIdx] < 0) and
+                not PyStarIsIterableForm(name) and PyArgListHasStarElem then
         begin
-          Next;                          { the '*' }
-          { `f(**d)` with NO leading `*args`. `**` lexes as two tkStar, and only
-            the TRAILING star pair below ever looked ahead for the second one —
-            this leading position ate one star and handed `*d` to ParseArgExpr,
-            which reported `expected expression` at the call. One concept, two
-            sites, and only the second was told.
-
-            Lowered to the `f(*[], **d)` spelling that ALREADY works rather than
-            given a forwarding path of its own: PyStarForwardCall takes the dict
-            and binds its keys onto named slots, preserving defaults for the
-            absent ones. Building a second mechanism here would be the thing
-            normalise-dont-special-case warns about — measured by frank2, who
-            found the ticket's proposed keyword desugar already existed.
-            bug-a-nilpy-leading-double-star-in-a-call-is-not-detected }
-          if CurTok.Kind = tkStar then
-          begin
-            Next;                        { the second '*' }
-            ParseArgExpr;
-            fwdDict := CurASTNode;
-            { an empty positional list — same idiom the *args collectors use }
-            fwdList := PyMakeIdent(PyNewContainerTemp('TPyList', 'starkw'));
-            Expect(tkRParen, ')');
-            CurASTNode := PyStarForwardCall(procIdx, fwdList, fwdDict);
-            LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
-            Exit;
-          end;
-          ParseArgExpr;
-          fwdList := CurASTNode;
-          fwdDict := -1;
-          if CurTok.Kind = tkComma then
-          begin
-            Next;
-            if CurTok.Kind = tkStar then
-            begin
-              Next;
-              if CurTok.Kind = tkStar then Next;   { `**` is two tkStar }
-              ParseArgExpr;
-              fwdDict := CurASTNode;
-            end
-            else
-              Error('Nil Python: an argument after *unpacking is not supported yet');
-          end;
-          Expect(tkRParen, ')');
-          CurASTNode := PyStarForwardCall(procIdx, fwdList, fwdDict);
+          { ONE generic collector for every spelling — positional, `*iterable`,
+            `name=value`, `**mapping`, in any order. What stood here was two
+            hand-rolled shapes: a leading-`**` arm, and a leading-`*` arm that
+            accepted exactly one trailing star follower and refused everything
+            else with "an argument after *unpacking is not supported yet". Three
+            of the four spellings failed, each for a different reason.
+            bug-a-nilpy-double-star-in-a-mixed-argument-list }
+          CurASTNode := PyStarMixedForwardCall(procIdx);
           LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
           Exit;
         end;

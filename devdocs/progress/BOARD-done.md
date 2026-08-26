@@ -153,9 +153,11 @@ should not read it to find out what to do. Grep it freely._
 | bug-a-nilpy-and-or-in-unavailable-in-call-arguments | A | 65 | bug | NilPy `and` / `or` / `in` / `is` do not work in a CALL ARGUMENT | — |
 | bug-a-nilpy-class-variant-field-string-not-released-on-finalize | A | 55 | bug | A class's variant-typed field holding a managed string is not released on finalize — general, not Exception-specific | — |
 | bug-a-nilpy-container-equality-compares-identity | A | 55 | bug | NilPy: `==` on a list or dict compares IDENTITY, not contents | — |
+| bug-a-nilpy-double-star-in-a-mixed-argument-list | A | 58 | bug | After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix. | — |
 | bug-a-nilpy-floordiv-and-modulo-wrong-for-negatives | A | 75 | bug | NilPy: `//` and `%` are WRONG for negative operands, silently | — |
 | bug-a-nilpy-int-of-string-returns-a-pointer | A | 80 | bug | NilPy `int("42")` returns a POINTER, silently — and `float()` does not exist | — |
 | bug-a-nilpy-int-times-variant-in-sum-not-lowered | A | 60 | bug | NilPy: `total = total + k * v` with a VARIANT operand fails to lower | — |
+| bug-a-nilpy-leading-double-star-in-a-call-is-not-detected | A | 20 | bug | `f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today. | — |
 | bug-a-nilpy-list-augmented-add-segfaults | A | 55 | bug | NilPy: `xs += [2]` on a list SEGFAULTS | — |
 | bug-a-nilpy-managed-deref-to-const-arg-leaks | A | 35 | bug | isNilPy: inline managed-string deref to a const param leaks the temp | — |
 | bug-a-nilpy-method-call-on-variant-receiver | A | 70 | bug | NilPy: calling a method on a VARIANT receiver is a parse error | — |

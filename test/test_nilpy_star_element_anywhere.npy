@@ -1,0 +1,76 @@
+# `*` / `**` as an argument ELEMENT, wherever it sits in the list.
+#
+# The forwarding branch used to be entered only when the argument list STARTED
+# with a star, so `f(3, **e)` never reached it at all — the ordinary loop got
+# the `**`, and `*` is not the start of an expression, so the whole call died as
+# `expected expression`. `f(**d, b=7)` and `f(**d, **e)` did enter it and died
+# as `unexpected token`, because the branch's trailing handling accepted exactly
+# one star follower and nothing else.
+#
+# Three spellings, three different failures, one concept — so the branch's two
+# hand-rolled shapes were replaced by ONE generic collector over positional /
+# `*iterable` / `name=value` / `**mapping` elements in any order, and the guard
+# now asks whether a star element exists ANYWHERE rather than whether the list
+# begins with one. bug-a-nilpy-double-star-in-a-mixed-argument-list
+#
+# Every row below was oracled against CPython 3.
+
+def f(a=1, b=2):
+    return a + b * 10
+
+
+def g(x, y, z=0):
+    return x * 100 + y * 10 + z
+
+
+d = {"a": 5}
+e = {"b": 7}
+lst = [3]
+
+# the shapes that already worked, which must keep working
+print(f(**d))                 # 25
+print(f(*lst))                # 23
+print(f(*lst, **e))           # 73
+print(f(1, 2))                # 21
+print(f(b=7))                 # 71
+
+# `**` after a positional — never entered the branch at all
+print(f(3, **e))              # 73
+# a keyword after `**` — the branch's trailing handling refused it
+print(f(**d, b=7))            # 75
+# two mappings — same refusal, and the later key wins
+print(f(**d, **e))            # 75
+# a keyword BEFORE the mapping, which must not be overwritten by an absent key
+print(f(a=1, **e))            # 71
+# an ordinary argument AFTER a spread: "an argument after *unpacking is not
+# supported yet" was the branch's own error message
+print(f(*lst, 4))             # 43
+# an empty spread between two live elements
+print(f(3, *[], **e))         # 73
+
+# three parameters, so the run-time arity dispatch has more than one arm
+print(g(*[1, 2]))             # 120
+print(g(*[1, 2], **{"z": 9}))  # 129
+print(g(1, *[2], **{"z": 9}))  # 129
+print(g(1, y=2, **{"z": 9}))   # 129
+print(g(**{"x": 1, "y": 2, "z": 3}))  # 123
+
+# a `*args` COLLECTOR callee still collects rather than forwarding
+def h(a, *rest):
+    return a + len(rest)
+
+
+print(h(1, 2, 3))             # 3
+print(h(*[1, 2, 3]))          # 3
+
+# evaluation is SOURCE order across the element kinds, not positionals-then-rest
+order = []
+
+
+def note(v):
+    order.append(v)
+    return v
+
+
+print(g(note(1), *[note(2)], z=note(3)))   # 123
+print(order)                               # [1, 2, 3]

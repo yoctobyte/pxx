@@ -4,7 +4,7 @@ prio: 20
 type: bug
 blocked-by: []
 summary: "`f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today."
-status: working
+status: done
 ---
 
 # A leading `**` in a NilPy call is never detected
@@ -166,3 +166,27 @@ undone here only because the check would land at three or four method
 argument sites, and this file already warns that four sites asking one
 question is the shape to avoid — so it wants the shared-helper treatment, not
 a paste at each.
+
+## Outcome
+
+Already fixed by `a057789bc`; the ticket was left behind — `status: working` in
+its frontmatter while the file still sat in `backlog/`. Surfaced by
+`tools/progress.sh near` (23%) while checking for duplicates before filing a
+neighbouring ticket, which is the whole point of that command.
+
+Repro verified green at `cd5d54964`, this ticket's own two-key `d`:
+
+```
+pxx:     65
+cpython: 65
+```
+
+The branch it names has since been replaced outright: the guard now asks
+whether a `*`/`**` ELEMENT exists anywhere in the argument list rather than
+whether the list begins with one, and one generic collector handles every
+spelling. `f(**d)` is a row in `test/test_nilpy_star_element_anywhere.npy`, so
+it is gated rather than merely working.
+[[bug-a-nilpy-double-star-in-a-mixed-argument-list]]
+
+## Log
+- 2026-08-26 — resolved, commit PENDING-COMMIT.
