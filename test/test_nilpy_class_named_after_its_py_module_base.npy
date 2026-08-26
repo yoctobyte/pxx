@@ -1,0 +1,57 @@
+# `class Filter(nilpy_samenamepymod.Filter)` — a class whose QUALIFIED base
+# shares its own name, with the qualifier being a plain `.py` MODULE, written
+# in the MAIN PROGRAM.
+#
+# The sibling arm of test_nilpy_class_named_after_its_imported_base, which
+# covers the same shape with a PASCAL unit as the base. That one was fixed
+# (the forward-stub merge plus the cycle guard); this one kept answering
+# "class Filter cannot inherit from itself" for a while afterwards, because
+# the module path and the program path are different code in this frontend and
+# only one of them had been updated — the exact double case
+# devdocs/dev/normalise-dont-special-case.md is about.
+#
+# NOT a witness: this is GREEN at pinned v376, which is how the ticket was
+# closed — it was fixed by other work between v356 (where it was filed and
+# measured) and v376, and nothing had pinned the fixed behaviour down. That is
+# exactly why the test is here: the arm that was fixed by accident is the one
+# that regresses by accident, and this shape is how essentially all of
+# CPython's encodings/*.py and html5lib's filters are written.
+#
+# The rows pair the two directions deliberately: the SUBCLASS must reach its
+# own override AND the module's class must still be reachable under the same
+# name, because "resolve the qualified base to the module" and "resolve the
+# bare name to the program's class" are the two halves that can silently swap.
+#
+# bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program
+
+import nilpy_samenamepymod
+
+
+class Filter(nilpy_samenamepymod.Filter):
+    def go(self):
+        return 2
+
+
+class Other(nilpy_samenamepymod.Other):
+    pass
+
+
+f = Filter()
+print('override  ', f.go())
+print('inherited ', f.from_the_module())
+
+# the MODULE's same-named class, still reachable through the qualifier
+m = nilpy_samenamepymod.Filter()
+print('module    ', m.go(), m.from_the_module())
+
+# a base whose name is NOT reused — the arm that always worked, and the
+# control that says a regression is about the NAME COLLISION and not about
+# qualified bases in general
+print('nocollide ', Other().go())
+
+# dispatch through a base-typed reference still reaches the override
+def call_it(x):
+    return x.go()
+
+
+print('dispatch  ', call_it(f), call_it(m))

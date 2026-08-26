@@ -3754,6 +3754,19 @@ test-core: $(COMPILER)
 	# Only this half catches a future "first binding wins" silent wrong base.
 	! ./$(COMPILER) test/test_nilpy_class_base_alias_rebound_refused.npy $(TESTTMP)/test_nilpy_clsbaserebound26 > $(TESTTMP)/test_nilpy_clsbaserebound.log 2>&1
 	grep -q "unknown base class Base" $(TESTTMP)/test_nilpy_clsbaserebound.log
+	# `class Filter(mod.Filter)` where the qualifier is a plain `.py` MODULE and
+	# the class REUSES its base's name, in the MAIN PROGRAM. Sibling arm of
+	# test_nilpy_class_named_after_its_imported_base above, which covers the
+	# PASCAL-unit base; the module path and the program path are different code
+	# here and only one had been updated. GREEN at pinned v376 -- it was fixed
+	# by other work after the ticket was filed at v356 and nothing pinned the
+	# fixed behaviour down, which is the whole reason it is here: the arm fixed
+	# by accident is the arm that regresses by accident. Native tier because a
+	# regression is either a refusal or a SILENTLY WRONG base class.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program
+	./$(COMPILER) test/test_nilpy_class_named_after_its_py_module_base.npy $(TESTTMP)/test_nilpy_samenamepy26
+	$(TESTTMP)/test_nilpy_samenamepy26 | diff -u test/test_nilpy_class_named_after_its_py_module_base.expected -
 	# promotable int: arbitrary precision, exact against CPython (feature-a-promotable-int)
 	./$(COMPILER) test/test_promoint.pas $(TESTTMP)/test_promoint26
 	test "$$($(TESTTMP)/test_promoint26)" = "$$(printf '0\n12\n60\n7\n2\n2\n-5\n25\n7\nlt\ngt\neq\nsame\n265252859812191058636308480000000\n0\n265252859812191058636308480\n109361473\n-15511210043330985984000000\n15511210043330985984000000\n9223372036854775808\n18446744073709551614\n18446744073709551616\n-18446744073709551616\n18446744073709551616\n1\n42\n265252859812191058636308480000000\n265252859812191058636308480000000\n265252859812191058636308480000002\n530505719624382117272616960000000\nvgt\n10\n2\nogt\n1')"

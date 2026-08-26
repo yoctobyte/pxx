@@ -1,0 +1,5 @@
+override   2
+inherited  module
+module     1 module
+nocollide  10
+dispatch   2 1
