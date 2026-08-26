@@ -602,6 +602,23 @@ def report_pin_identity():
     sha = sha.split()[0][:16] if sha else "?"
     print("testmgr: pin=%s sha256=%s (lib-test and demos build with THIS, not HEAD)"
           % (ver or "?", sha), flush=True)
+    return (ver or "?", sha)
+
+
+def pin_identity():
+    """The pin's (VERSION, sha256-prefix) right now, or None if there is none.
+
+    Read TWICE per run -- at the start and at the end -- because $(PXX_STABLE)
+    is a SYMLINK and `make pin` moves it. The compiler built from HEAD has been
+    snapshotted and re-checked for a while; the pin, which is what lib-test
+    actually builds with, was read once and announced. That asymmetry is the
+    bug: one binary is guarded, the other is merely stated.
+    """
+    ver = pin_file("VERSION")
+    sha = pin_file("last.sha256")
+    if not (ver or sha):
+        return None
+    return (ver or "?", sha.split()[0][:16] if sha else "?")
 
 
 def pin_file(name):
@@ -4605,8 +4622,14 @@ def main():
               if mgr.core_budget <= mgr.nproc else ""),
              scale, logdir), flush=True)
     report_mem_floor()
-    if any(j.target in PIN_BUILT_TARGETS for j in run_jobs):
+    pin0 = None
+    if any(j.pin_built for j in run_jobs):
+        # `j.pin_built`, not `j.target in PIN_BUILT_TARGETS`: the target list is
+        # a coarse fallback for shell-out recipes, while pin_built is the
+        # per-job fact (see Job.__init__). Asking the coarse question here is
+        # how a pin-built job outside the named targets would go unannounced.
         report_pin_identity()
+        pin0 = pin_identity()
     t0 = time.monotonic()
     rc = mgr.run()
     wall = time.monotonic() - t0
@@ -4740,6 +4763,38 @@ def main():
               "(%s -> %s)%s" % (repo_sha0[:12], repo_sha1[:12],
                                 " — jobs ran against the snapshot, results stand"
                                 if snap_path else ""), flush=True)
+    # THE PIN, re-read. $(PXX_STABLE) is a symlink and `make pin` moves it, so
+    # a pin landing mid-run splits the pin-built jobs across two stables while
+    # the banner above states one version for all of them. lib-test reds are
+    # exactly the class whose triage question is "was it a lib change, or is the
+    # pin stale relative to what lib/ expects?" -- the question the banner
+    # exists to answer at a glance -- and it would have answered with a version
+    # half those jobs never used.
+    #
+    # DETECTION, not prevention: snapshotting the pinned binary the way the
+    # HEAD-built one is snapshotted would be stronger, but it is 27MB per run
+    # and the pin's whole purpose is to be the one binary every lane shares.
+    # Say what happened.
+    pin1 = pin_identity() if pin0 else None
+    pin_moved = bool(pin0 and pin1 and pin0 != pin1)
+    # SELECTOR, not name. twatch keys jobs by job_key() -- the stable
+    # `lib-test#src:<file>` selector -- because `lib-test#42` is a positional
+    # index into the target's recipe lines and renumbers when a line is
+    # inserted. Emitting names here would produce a list twatch matches nothing
+    # against, i.e. a guard that runs and silently never fires.
+    pin_straddled = ([j.sel or j.name for j in jobs if j.pin_built]
+                     if pin_moved else [])
+    if pin_moved:
+        # Deliberately NOT invalid=True. The compiler snapshot invalidates the
+        # whole run because every job used it; the pin is used by a bounded set
+        # (191 of the full tier's 3057 jobs, all lib-test, measured 2026-08-26).
+        # Invalidating 3057 results because lib-test straddled a pin trades a
+        # small wrong claim for a large lost one.
+        print("testmgr: PIN MOVED MID-RUN (v%s %s -> v%s %s). The %d pin-built "
+              "job(s) are UNATTRIBUTABLE — some built with the old stable, some "
+              "with the new. Every other result stands."
+              % (pin0[0], pin0[1], pin1[0], pin1[1], len(pin_straddled)),
+              flush=True)
     if rc == 0 and carried_red(carried):
         rc = 1
     verdict = verdict_for(rc, invalid)
@@ -4756,6 +4811,14 @@ def main():
                # identifiable after the fact instead of inferred from timestamps
                "compiler_sha256": snap_sha or repo_sha0,
                "compiler_changed_mid_run": repo_moved,
+               # The pin the pin-built jobs used, and whether it stayed put.
+               # `pin_straddled` names the jobs whose results cannot be
+               # attributed to one stable, so twatch can decline to open a
+               # regression on them the way it declines on INVALID -- without
+               # discarding the other ~2900 results.
+               "pin": ("v%s %s" % pin0) if pin0 else None,
+               "pin_changed_mid_run": pin_moved,
+               "pin_straddled": pin_straddled,
                "slow": slow,
                # ALWAYS present, both of them, so a consumer can test the field
                # instead of pattern-matching `wall` against a deadline it has to

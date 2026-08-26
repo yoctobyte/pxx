@@ -2375,6 +2375,31 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # opening ledger entries from a diff against nothing.
     had_baseline = bool(st["jobs"])
     now, new_red, fixed, still_red, first_seen = diff_jobs(st["jobs"], report)
+
+    # A PIN THAT MOVED MID-RUN, for the bounded set it actually affects. The
+    # $(PXX_STABLE) symlink is what lib-test builds with, so a `make pin`
+    # landing mid-run splits those jobs across two stables. Same reasoning as
+    # INVALID -- a result that cannot be attributed to one binary is not
+    # evidence -- but NOT the same blast radius: INVALID discards the run
+    # because every job used the compiler, while the pin is used by ~191 of the
+    # full tier's 3057. Dropping 3057 results because lib-test straddled a pin
+    # would trade a small wrong claim for a large lost one.
+    #
+    # So: those jobs open no ledger entry and file no ticket. Their statuses
+    # still land in st["jobs"], exactly as a baseline run's do, which means the
+    # NEXT complete run diffs against a real picture rather than a hole.
+    straddled = set(report.get("pin_straddled") or [])
+    if straddled:
+        blocked = [n for n in new_red if n in straddled]
+        if blocked:
+            print("twatch: %s — %d new red(s) on pin-built job(s) from a run "
+                  "that STRADDLED A PIN; no ledger entry and no ticket, their "
+                  "build is not attributable to one stable (%s)"
+                  % (sha[:12], len(blocked), ", ".join(blocked[:3])), flush=True)
+        new_red = [n for n in new_red if n not in straddled]
+        # FIXED is withheld for the same reason and it is the easier half to
+        # forget: a spurious FIXED reads as good news and sends nobody looking.
+        fixed = [n for n in fixed if n not in straddled]
     no_ticket = ticket_suppression(had_baseline, len(new_red),
                                    len(report["jobs"]))
     if incomplete and not no_ticket:

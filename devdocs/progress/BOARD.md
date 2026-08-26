@@ -54,7 +54,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (284)
+## backlog (283)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -130,7 +130,6 @@ _none_
 | bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped | P | 50 | bug | A token that starts no declaration is silently skipped in a UNIT's interface/implementation section, while the identical token in a PROGRAM's declaration section is correctly rejected. A typo'd section header (`cosnt K = 5;`) therefore discards the declarations behind it with no diagnostic; the error surfaces later at the use site, or not at all. FPC rejects at the typo. | — |
 | bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence | T | 40 | bug | file_cascade_ticket's Root-cause-suspects line falls back to 'likely a broken build or harness event' whenever no CASCADE_ROOT_JOBS entry is in the red set. That is a conclusion drawn from the absence of one narrow signal, printed with no hedge, and it is now directly contradicted by the Range section shipped in 8ec77190c — which on the live incident named the actual cause. Same defect class the Range work fixed for the sha: an auto-filed ticket asserting something it has no evidence for. | — |
 | bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio | T | 50 | bug | Float-accuracy assertions in the gated suites make a one-ulp move a CI RED, and a red job is worked at the priority of BEING RED - which overrides the owner's standing rule that float accuracy is low prio. Parking the tickets in float/ does not close this door; only the tests can. | — |
-| bug-t-a-pin-that-moves-mid-run-is-not-detected | T | 55 | bug | testmgr snapshots the HEAD-built compiler and reports `compiler_changed_mid_run`, but the PIN — which lib-test and demos actually build with — is read ONCE at startup and never re-checked. A `make pin` during a run silently splits those jobs across two stables while the report claims a single `pin=N`. The asymmetry is the tell: one binary is guarded, the other is announced. | — |
 | bug-t-a-pin-verifys-reds-carry-no-reasons | T | 40 | bug | A pin verify's reds carry no reasons | — |
 | bug-t-agents-kill-each-others-processes-with-pattern-pkill | T | 55 | bug | Two csmith batches were killed mid-run from outside their own session. Pattern-pkill (pkill -f <name>) cannot distinguish two agents running the same tool, and this repo ALREADY hit and solved this class once in tools/gui_shot.sh — the rule was written into that one script and never generalised, while devdocs/dev/debugging-playbook.md still actively teaches `pkill -9 -f <path>`. | — |
 | bug-t-fpc-seed-canary-red-cited-lines-that-cannot-contain-the-identifier | T | 30 | bug | One gate.sh quick run reported the FPC seed canary RED with 'symtab.inc(5934,30) Identifier not found ByRefArgNeedsLvalue' — but line 5934 of that file contains an unrelated loop, and the real call sites are at 6185/6186, AFTER the definition at 6099. Not reproducible: fpc compiled the identical tree rc=0 twice by hand and the next gate.sh run was GREEN. Evidence points at the canary reading a stale/other tree state, the same class the fixedpoint step already defends against; a false RED costs an agent a full investigation. | — |
@@ -604,9 +603,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2378)
+## done (2379)
 
-2378 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2379 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -747,7 +746,6 @@ _none_
 - [p 55] [P] bug-p-inherited-ignores-the-parents-default-parameter-values
 - [p 55] [P] bug-p-sizeof-rejects-a-pointer-deref-in-its-operand
 - [p 55] [A] bug-pchar-difference-in-writeln-arg-segfaults
-- [p 55] [T] bug-t-a-pin-that-moves-mid-run-is-not-detected
 - [p 55] [T] bug-t-agents-kill-each-others-processes-with-pattern-pkill
 - [p 55] [T] bug-t-the-push-rate-starves-breadth-coverage-entirely
 - [p 55] [T] bug-t-twatch-status-says-down-while-the-daemon-is-alive-and-testing
