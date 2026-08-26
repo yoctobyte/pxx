@@ -759,6 +759,33 @@ for clean. Its CANNOT-TELL branches had never executed on this box, so the
 devtest drives them with fakes on PATH -- a branch that has never run is not yet
 known to work.
 
+## A caveat attached to a claim is not the same as declining to make the claim
+
+The sharpest self-correction of 2026-08-26, and it came from someone who had
+already written the caveat that would have saved them:
+
+> *"105 logs is a partial view, so tell me if the clean result does not hold at
+> the end."*
+
+They wrote that, and then reported the hazard **absent** anyway — twice,
+confidently. The signature appeared at log 684. The caveat was true, was
+attached, and did no work at all, because **a hedge does not change what the
+reader does with the claim.** Everyone downstream acted on "absent"; nobody acted
+on "of 105".
+
+The rule: **if the caveat is load-bearing, the claim is not ready.** Report the
+observation (*"clean through 105 of ~3000"*) rather than the conclusion
+(*"the hazard is absent"*), and let the conclusion wait for the evidence that
+would justify it. This is the same failure as stopping a search at the point
+where the evidence agrees with you — the caveat is what you write instead of
+continuing to look.
+
+Its twin, from the same day: **when a fix works, count how many things you
+changed.** A gate went RED from a `/tmp` worktree; the worktree moved and the
+seed mtime changed in the same window; the RED went away; one story fit, so
+nobody looked for the second variable. Both errors are the same shape — stopping
+at the first sufficient explanation — and neither is caught by any test.
+
 ## Record the negative result, or someone will spend a night rediscovering it
 
 Track T profiled the test matrix and reported three findings, one of which was
