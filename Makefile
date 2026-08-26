@@ -3913,6 +3913,17 @@ test-core: $(COMPILER)
 	# `overload` is a real token: class-body directive loop must consume it (bug-pascal-class-body-overload-directive)
 	./$(COMPILER) test/test_class_overload_directive_b247.pas $(TESTTMP)/test_class_overload_directive_b24726
 	test "$$($(TESTTMP)/test_class_overload_directive_b24726)" = "$$(printf 'name=<none>\nbase ping\ntag=base\nderived ping\ntag=derived')"
+	# A SINGLE-candidate method call type-checks its arguments, like the identical
+	# free procedure already did. Negative half first: it must not compile, and
+	# fpc 3.2.2 refuses the same line. Then the positive half — the shapes the
+	# gate abstains on, each one a class that a naive TypesCompatible gate
+	# refused when it was measured (open array of const, nil into a procedural
+	# parameter, a routine as a value, untyped var, Variant).
+	@./$(COMPILER) test/test_method_arg_typecheck_fails.pas $(TESTTMP)/test_margfail26 2>&1 \
+	  | grep -q 'no overload of M matches these arguments' \
+	  || { echo 'test_method_arg_typecheck_fails: FAIL - expected a compile error naming the method'; exit 1; }
+	./$(COMPILER) test/test_method_arg_typecheck_ok.pas $(TESTTMP)/test_margok26
+	test "$$($(TESTTMP)/test_margok26)" = "$$(printf 'fmt %%s 1\nfmt %%d 2\nsetcmp TRUE\nsort FALSE\nraw\nraw\nany\nany\nstr z\nstr lit\nnum 7')"
 	# method + ctor overloads resolve by ARGUMENT TYPE, not first-name-match (bug-pascal-method-overload-ignores-arg-types)
 	./$(COMPILER) test/test_method_overload_types_b248.pas $(TESTTMP)/test_method_overload_types_b24826
 	test "$$($(TESTTMP)/test_method_overload_types_b24826)" = "$$(printf 'ctor=none\nint 1\nstr xy\nstr x\ntwice-int=42\ntwice-str=abab\nctor=str:zed\nctor=int\nsub-ctor=str:sub\nstr hi\nint 7')"

@@ -1457,6 +1457,7 @@ var
   cand: array[0..MAX_OVL_CAND-1] of Integer;
   argTk: array[0..MAX_PROC_PARAMS-1] of TTypeKind;
   argRec: array[0..MAX_PROC_PARAMS-1] of Integer;
+  argIsNil: array[0..MAX_PROC_PARAMS-1] of Boolean;   { the literal `nil` at argument j }
   nCand, nArgs, i, j, c, pi, base, want, curr, mbase, cnt, lp, savedCurIdx, best: Integer;
   score, bestScore, rank, pRec, aRec, upDist, upCurr: Integer;
   ok: Boolean;
@@ -1512,7 +1513,16 @@ begin
     curr := UClsParent[curr];
   end;
 
-  if nCand <= 1 then
+  { nCand = 1 probes too. It used to short-circuit to FindUMethArity, which
+    filters on ARITY alone, so the one-method case — most method calls in any
+    program — never looked at its argument types at all: `c.M(p)` with
+    `p: Pointer` and `M(const s: AnsiString)` compiled, while the identical free
+    `FreeProc(p)` was refused, because the free path goes through MatchCall*
+    which does check. Two resolvers for one concept and only one finished.
+    Selection for the single candidate is UNCHANGED below (still
+    FindUMethArity); the probe buys the REJECTION and nothing else.
+    bug-p-a-single-candidate-method-call-does-not-check-its-argument-types }
+  if nCand = 0 then
   begin
     Result := FindUMethArity(ci, name, nExplicitArgs);
     Exit;
@@ -1529,6 +1539,7 @@ begin
     lp := -1;
 
   nArgs := 0;
+  for i := 0 to MAX_PROC_PARAMS - 1 do argIsNil[i] := False;
   if (lp >= 0) and (nExplicitArgs > 0) then
   begin
     TokPos := lp + 1;
@@ -1555,6 +1566,12 @@ begin
         `(x, y: Integer)` overload above the tuple one. }
       ParseArgExpr;
       argTk[nArgs] := IntToTypeKind(ASTTk[CurASTNode]);
+      { the literal `nil`, for the single-candidate gate below. Read off the
+        node here rather than through MatchArgNil[], which is the FREE path's
+        side channel (pasparser_lval.inc:5704) and is not populated on this
+        one — consulting it from here answered False for every nil and refused
+        `SetOnKeyPtrCompare(nil)` across the whole fgl rung. }
+      argIsNil[nArgs] := IsNilLiteralNode(CurASTNode);
       if argTk[nArgs] = tyClass then
         argRec[nArgs] := ResolveNodeRec(CurASTNode)
       else
@@ -1620,6 +1637,70 @@ begin
       best := cand[c];
       bestScore := score;
     end;
+  end;
+
+  { The single candidate IS the method; the only question the probe answers for
+    it is whether its arguments are possible. Rank 3 is `not TypesCompatible`,
+    the same predicate the free-call path rejects on, so this is reaching the
+    shared answer rather than inventing a stricter one. }
+  if nCand = 1 then
+  begin
+    { An ALLOWLIST, and deliberately a narrow one.
+
+      The obvious gate — refuse whenever TypesCompatible says no — is UNSOUND
+      here, and measuring it is the only reason that is known. Four distinct
+      classes of legal call were refused, each traced to a channel this
+      speculative probe does not have and the free-call path does:
+
+        `CreateFmt('%s', [s])`      an `array of const` parameter, whose
+                                    TypeKind is its ELEMENT kind  (MatchArgArray)
+        `slist.Add('test', l)`      a generic type parameter, tyUnknown at the
+                                    declaration                   (7 conformance
+                                    programs and tgeneric9 between them)
+        `SetOnKeyPtrCompare(nil)`   nil binds any reference-shaped parameter
+                                                                  (MatchArgNil)
+        `inherited Sort(ItemPtrCompare)`  a bare routine name as a procedural
+                                    value, which the probe types as neither
+
+      Each of those five side channels in pasparser_lval.inc exists because a
+      previous agent hit the same wall: the KIND pair is not a sound predicate
+      on its own. A denylist of exemptions would only be as complete as the
+      corpora I happened to run, and an unsound gate that refuses a legal
+      program is strictly worse than the looseness it replaces — the ticket
+      notes the looseness is not a wrong answer, only a hidden one.
+
+      So: refuse ONLY a reference-shaped argument bound to a string or numeric
+      parameter. That is the shape the ticket was filed about (a `Pointer`
+      reaching a `const AnsiString`, printing empty today and crashing the day
+      the coercion is not benign), it cannot arise from any of the four classes
+      above, and everything else abstains ON PURPOSE.
+
+      Making the full check sound needs the probe to build an AN_ARG chain and
+      run the free path's own populate-and-match, which means extracting that
+      population out of pasparser_lval.inc into a helper both callers share.
+      That is the real fix and it is a refactor, not this. }
+    pi := UMthProc_[cand[0]];
+    ok := True;
+    for j := 0 to nArgs - 1 do
+      if (1 + j) < MAX_PROC_PARAMS then
+      begin
+        if Procs[pi].Params[1 + j].IsArray then continue;
+        if ProcParamUntyped[pi * MAX_PROC_PARAMS + 1 + j] then continue;
+        if argIsNil[j] then continue;
+        if not ((argTk[j] = tyPointer) or (argTk[j] = tyClass)) then continue;
+        if not (TypeIsOrdinal(Procs[pi].Params[1 + j].TypeKind) or
+                TypeIsFloat(Procs[pi].Params[1 + j].TypeKind) or
+                (Procs[pi].Params[1 + j].TypeKind = tyString) or
+                (Procs[pi].Params[1 + j].TypeKind = tyAnsiString) or
+                (Procs[pi].Params[1 + j].TypeKind = tyShortString) or
+                (Procs[pi].Params[1 + j].TypeKind = tyFixedString)) then continue;
+        if not TypesCompatible(Procs[pi].Params[1 + j].TypeKind, argTk[j]) then
+          ok := False;
+      end;
+    if not ok then
+      Error('no overload of ' + name + ' matches these arguments');
+    Result := FindUMethArity(ci, name, nExplicitArgs);
+    Exit;
   end;
 
   if best < 0 then best := FindUMethArity(ci, name, nExplicitArgs);
