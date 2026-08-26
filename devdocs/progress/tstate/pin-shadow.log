@@ -134,3 +134,4 @@
 2026-08-26T07:38:34Z	plexus	99f1dc81a039d8785db504b9f9b8917cf4e59783	would NOT pin 99f1dc81a039 — 3 red(s) the current pin does not have: test-fpjson#src:tools/install_lib_candidates.sh, test-nilpy#src:test/test_nilpy_isinstance_over_a_type_value.npy, test-nilpy#src:test/test_nilpy_lowercase_name_vs_class.npy
 2026-08-26T08:03:11Z	plexus	fffd29ea840d126f428af41a670b92779f89f4c3	would NOT pin fffd29ea840d — 3 red(s) the current pin does not have: test-fpjson#src:tools/install_lib_candidates.sh, test-nilpy#src:test/test_nilpy_isinstance_over_a_type_value.npy, test-nilpy#src:test/test_nilpy_lowercase_name_vs_class.npy
 2026-08-26T08:51:30Z	plexus	c923cdf4d07590afefa2686bef60984617c2309d	would NOT pin c923cdf4d075 — 2 red(s) the current pin does not have: optdiff#shard1/12, test-fpjson#src:tools/install_lib_candidates.sh
+2026-08-26T10:44:19Z	plexus	15f01d390e8039464ef5a4d3652f2ec836218389	would-pin PENDING 15f01d390e80 — qualifies, streak 1/2
