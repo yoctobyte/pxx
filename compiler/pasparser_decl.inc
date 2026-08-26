@@ -1829,7 +1829,8 @@ begin
                        (tk = tyShortString) or (tk = tyFixedString);
 end;
 
-procedure ParseParamDefaultValue(paramTk: TTypeKind; var val: Int64;
+procedure ParseParamDefaultValue(paramTk: TTypeKind; paramPtrElemTk: Integer;
+                                 var val: Int64;
                                  var isStr, isFloat, isSet: Boolean;
                                  var soff, slen: Integer);
 begin
@@ -1870,7 +1871,17 @@ begin
   if paramTk = tyVariant then Exit;
   if TypeKindIsStringy(paramTk) and (not isStr) then
     Error('a string parameter''s default must be a string literal');
-  if isStr and (not TypeKindIsStringy(paramTk)) and (paramTk <> tyChar) then
+  { …but a CHAR POINTER takes one, and FPC agrees: `procedure D(p: PChar = '-')`
+    and `= '--'` both print their default there. This arm refused BOTH lengths,
+    which is what separated it from the one-character family — nothing here
+    depended on the literal being one character, so it was not the same bug and
+    is fixed by the same rule. The call site rebuilds an AN_STR_LIT and the
+    ordinary argument marshalling gives a pointer parameter the +8 character-data
+    address, exactly as for a literal written out at the call.
+    InitValDestTakesStrLit is the same question asked of a typed-const slot.
+    bug-p-three-mechanisms-decide-what-becomes-a-pchar-and-they-disagree }
+  if isStr and (not TypeKindIsStringy(paramTk)) and (paramTk <> tyChar) and
+     (not InitValDestTakesStrLit(paramTk, paramPtrElemTk)) then
     Error('a string literal cannot be the default for a non-string parameter');
 end;
 
@@ -3072,7 +3083,7 @@ begin
       if CurTok.Kind = tkEq then
       begin
         Next;
-        ParseParamDefaultValue(curTk, rmDefVal, rmDefIsStr, rmDefIsFloat, rmDefIsSet,
+        ParseParamDefaultValue(curTk, Ord(LastTypePointerElemTk), rmDefVal, rmDefIsStr, rmDefIsFloat, rmDefIsSet,
                                rmDefSOff, rmDefSLen);
         for k := startIdx to nP - 1 do
         begin
@@ -4040,7 +4051,7 @@ begin
               if CurTok.Kind = tkEq then
               begin
                 Next;
-                ParseParamDefaultValue(mTk, mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
+                ParseParamDefaultValue(mTk, Ord(LastTypePointerElemTk), mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
                                        mDefaultIsSet, mDefaultSOff, mDefaultSLen);
                 mHasDefault := True;
               end;
@@ -4574,7 +4585,7 @@ begin
                   if CurTok.Kind = tkEq then
                   begin
                     Next;
-                    ParseParamDefaultValue(mTk, mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
+                    ParseParamDefaultValue(mTk, Ord(LastTypePointerElemTk), mDefaultVal, mDefaultIsStr, mDefaultIsFloat,
                                            mDefaultIsSet, mDefaultSOff, mDefaultSLen);
                     mHasDefault := True;
                   end;

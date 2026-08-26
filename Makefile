@@ -7978,6 +7978,22 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_writeable_typed_string_const.pas $(TESTTMP)/test_wtsc26
 	test "$$($(TESTTMP)/test_wtsc26)" = "$$(cat test/test_writeable_typed_string_const.expected)"
+	# When does a character-ish thing become a PChar? Three mechanisms used to
+	# answer that and two of them segfaulted: Show(Chr(45)) passed the ORDINAL
+	# (Chr of a constant was an un-folded call, so the conversion never saw a
+	# literal), and `procedure D(p: PChar = '-')` was a declaration-time error at
+	# BOTH lengths. The `dflt`/`tail` rows exercise the two SEPARATE fill paths
+	# deliberately -- the parser fills `D;`, the IR fills `D()` and E(1)'s tail --
+	# because a fix touching one of them passes the obvious repro.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_char_to_pchar_conversion.pas $(TESTTMP)/test_ctp26
+	test "$$($(TESTTMP)/test_ctp26)" = "$$(cat test/test_char_to_pchar_conversion.expected)"
+	# ...and the two shapes fpc REFUSES must still be refused: a Char VARIABLE and
+	# Chr(i) for a variable i. Both used to compile and dereference address 45.
+	# The second is what keeps the Chr fold honest. Asserted as "does not compile"
+	# rather than on the wording.
+	! ./$(COMPILER) test/test_char_var_as_pchar_refused.pas $(TESTTMP)/test_cvref26 >/dev/null 2>&1
+	! ./$(COMPILER) test/test_chr_of_a_variable_as_pchar_refused.pas $(TESTTMP)/test_chrvref26 >/dev/null 2>&1
 	# ...and the guard: a genuine `var` parameter must still REFUSE the same
 	# argument. This is what stops the fix from being ungated -- tried, and it
 	# let a call RESULT bind to a var parameter and COMPILE, because the method

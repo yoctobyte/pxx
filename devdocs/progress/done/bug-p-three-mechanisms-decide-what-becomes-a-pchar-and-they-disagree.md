@@ -3,6 +3,7 @@ summary: "Char/string-literal -> PChar conversion is decided in three places (ar
 type: bug
 track: P
 prio: 60
+status: done
 ---
 
 # Three mechanisms decide what becomes a `PChar`, and they disagree
@@ -67,6 +68,82 @@ back out is cheap once someone is in the code.
 `make compiler/pascal26` + each row above diffed against fpc 3.2.2 +
 `tools/gate.sh quick`. Two of the five rows segfault today, so a repro that
 merely *compiles* is not evidence.
+
+---
+
+## RESOLVED 2026-08-26
+
+| # | shape | fpc 3.2.2 | pxx now |
+| --- | --- | --- | --- |
+| 1 | `Show(c)`, `c: Char` var | *rejects* | **rejects**, by name |
+| 1 | `Show(Chr(i))`, `i: Integer` var | *rejects* | **rejects**, by name |
+| 1 | `Show(Chr(45))`, `Show(Chr(K))` | `-` | `-` |
+| 2 | `procedure D(p: PChar = '-')`, `D;` | `-` | `-` |
+| 2 | …the same, called `D()` | `-` | `-` |
+| 2 | `procedure E(n: Integer; p: PChar = '--')`, `E(1)` | `1 --` | `1 --` |
+| 2 | `procedure D(p: PChar = '--')` | `--` | `--` |
+| 3 | `Writeln('diff=', b - a)`, both PChar | `diff=2` | `diff=2` |
+
+`test/test_char_to_pchar_conversion.pas` (test-core, `test_ctp26`) pins every
+converting row byte-identically against fpc; the two refusals have their own
+files and are asserted as "does not compile".
+
+### The rule, which is FPC's and was measured rather than recalled
+
+> A character CONSTANT converts to a pointer to a NUL-terminated one-character
+> string. A character VARIABLE does not convert at all.
+
+That single sentence is what all three mechanisms disagreed about.
+
+### 1. Argument conversion — the shape was unrecognised, not the context broken
+
+`Show('-')`, `Show(#45)` and `Show(Dash)` were already right;
+`Show(Chr(45))` passed the ORDINAL and segfaulted. The conversion keys on
+`IsCharLitNode`, i.e. on the argument being a literal NODE, and `Chr(45)` was an
+un-folded `AN_CALL`. So the fix is not in the conversion at all: `Chr` of a
+constant now folds to the character constant it is (and `Ord` of one folds in
+the same breath — they are one arm, and leaving half of it emitting a call
+teaches the next reader the wrong rule).
+
+Folding made the *other* half mandatory rather than optional: with the constant
+case converting, the NON-constant case had to be refused explicitly or it would
+have kept compiling and dereferencing address 45. `CoerceCharLitArg` now says so
+for a `Char` value bound to a pointer parameter, in Pascal only — C's
+`f((char)x)` to a `char*` is the caller's business.
+
+### 2. Parameter defaults — and there are TWO mechanisms that fill one
+
+The declaration-time refusal covered every non-string parameter; a char pointer
+now passes the same `InitValDestTakesStrLit` test a typed-const slot does, so
+the two constructs cannot drift apart.
+
+Allowing the declaration was half the work, and the half that would have shipped
+alone: **two** unrelated mechanisms fill an omitted argument. The parser fills
+`D;` (`FillDefaultArgs` / `DefaultArgValueNode`, which builds the AN_STR_LIT and
+gets the ordinary +8 marshalling for free); the IR loop in `ir.inc` fills `D()`
+and the tail of `E(1)`, and it emitted the frozen string HANDLE, so the callee
+read the length prefix and printed nothing. `D` printed `-` and `D()` printed
+nothing — from one declaration, three lines apart. The test exercises both
+spellings deliberately.
+
+That split is itself worth a look one day: it is the same "count the
+mechanisms" observation this umbrella was opened on, one level down. Not filed
+— filing it would be the fourth ticket about the same sentence — but named here
+so the next reader of `DefaultArgValueNode` knows there is a sibling.
+
+### 3. Already fixed
+
+The `PChar - PChar` result type was correct by the time this umbrella was taken;
+the ticket was filed 2026-08-25 and something else settled it since. Verified
+against its own repro, then kept as a regression row, because nothing else
+pinned it.
+
+### Not done, and deliberately
+
+The +8 length-prefix skip is written inline at fifteen sites in `ir.inc`,
+including the one added here. Unifying them is
+[[refactor-centralize-managed-string-pchar-conversion]]'s job. What this ticket
+owed was that the default and the written argument agree, and they do.
 
 ---
 
@@ -270,3 +347,6 @@ plain `p - @buf[0]` when this is fixed.
 
 Track A: `make compiler/pascal26` (self-host fixedpoint) + the repro above
 printing `diff=2` and exiting 0.
+
+## Log
+- 2026-08-26 — resolved, commit PENDING-COMMIT.

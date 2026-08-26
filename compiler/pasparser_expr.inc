@@ -4901,6 +4901,38 @@ begin
         Next; Expect(tkLParen, '(');
         ParseExpr;
         Expect(tkRParen, ')');
+        { `Chr(<constant>)` IS a character constant, and `Ord(<constant>)` an
+          integer one — fold rather than emit a call. Not an optimisation: the
+          char-constant-to-PChar conversion keys on IsCharLitNode, i.e. on the
+          node being a literal, so `Show(Chr(45))` through a `PChar` parameter
+          passed the ORDINAL and SEGFAULTED while `Show('-')`, `Show(#45)` and
+          `Show(Dash)` were all already right. FPC's rule, measured: a character
+          CONSTANT converts and `Chr(i)` for a variable i does not — it is
+          "Incompatible type for arg no. 1: Got Char, expected PChar" there, and
+          it is refused here too, in CoerceCharLitArg.
+
+          Ord is folded in the same breath for the same reason its sibling is:
+          they are one arm, and leaving half of it emitting a call is how the
+          next reader learns the wrong rule.
+          bug-p-three-mechanisms-decide-what-becomes-a-pchar-and-they-disagree }
+        if (CurASTNode >= 0) and (ASTKind[CurASTNode] = AN_INT_LIT) then
+        begin
+          node := AllocNode(AN_INT_LIT);
+          if op = Ord(tkChr) then
+          begin
+            { a Char is one byte here, so the fold truncates exactly as a store
+              into a Char does }
+            ASTIVal[node] := ASTIVal[CurASTNode] and 255;
+            ASTTk[node]   := Ord(tyChar);
+          end
+          else
+          begin
+            ASTIVal[node] := ASTIVal[CurASTNode];
+            ASTTk[node]   := Ord(tyInteger);
+          end;
+          CurASTNode := node;
+          Exit;
+        end;
         node := AllocNode(AN_CALL); ASTIVal[node] := -op;
         if op = Ord(tkChr) then ASTTk[node] := Ord(tyChar) else ASTTk[node] := Ord(tyInteger);
         argSeq := AllocNode(AN_ARG); ASTLeft[argSeq] := CurASTNode;

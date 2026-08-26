@@ -1,0 +1,17 @@
+arg   : -
+arg   : --
+arg   : -
+arg   : -
+arg   : -
+arg   : -
+ord   : 45 65 45
+dflt  : -
+dflt  : -
+dflt  : z
+tail  : 1 --
+tail  : 2 y
+fnret : fn
+fnret : q
+meth  : meth
+meth  : x
+diff  : 2 2

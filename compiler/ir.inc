@@ -11298,6 +11298,39 @@ begin
             end;
             argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyVariant));
           end
+          else if ProcParamDefaultIsStr[cpi * MAX_PROC_PARAMS + pathIdx] and
+                  (Procs[cpi].Params[pathIdx].TypeKind = tyPointer) then
+          begin
+            { A CHAR-POINTER parameter's string default (`p: PChar = '-'`).
+              Build the AN_STR_LIT the call site would have written and hand it
+              to IRLowerCallArg, which is where a pointer parameter's +8
+              character-data adjustment lives — the arms below hand over the
+              frozen HANDLE instead, so the callee read the length prefix and
+              printed nothing.
+
+              This is the second of two mechanisms that fill an omitted
+              argument: the parser fills them for `D;` (DefaultArgValueNode,
+              which builds exactly this node), and this loop fills them for
+              `D()` and for a partial list like `E(1)`. That split is why `D`
+              printed `-` and `D()` printed nothing after the declaration was
+              allowed at all — a fix that only touched one of them would have
+              looked complete against the obvious repro.
+              bug-p-three-mechanisms-decide-what-becomes-a-pchar-and-they-disagree }
+            value := IRAppend(IR_CONST_STR, ProcParamDefaultSOff[cpi * MAX_PROC_PARAMS + pathIdx],
+                              ProcParamDefaultSLen[cpi * MAX_PROC_PARAMS + pathIdx], -1, 0,
+                              Ord(tyString));
+            { the +8 length-prefix skip, byte for byte what the WRITTEN-argument
+              walk a few lines up does for the same literal against the same
+              parameter. Spelled out rather than shared because that adjustment
+              is inline at fifteen sites in this file and unifying them is
+              refactor-centralize-managed-string-pchar-conversion's job, not
+              this fix's; what matters here is that the default and the written
+              argument now agree. }
+            value := IRAppend(IR_BINOP, value,
+                              IRAppend(IR_CONST_INT, -1, -1, -1, 8, Ord(tyInteger)),
+                              Ord(tkPlus), 0, Ord(tyPointer));
+            argNode := IRAppend(IR_ARG, value, -1, -1, 0, Ord(tyPointer));
+          end
           else if ProcParamDefaultIsStr[cpi * MAX_PROC_PARAMS + pathIdx] then
           begin
             { The default is a FROZEN literal (inline length prefix). A managed

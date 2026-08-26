@@ -886,7 +886,7 @@ begin
       if CurTok.Kind = tkEq then
       begin
         Next;
-        ParseParamDefaultValue(tk, defaultVal, defaultIsStr, defaultIsFloat,
+        ParseParamDefaultValue(tk, Ord(LastTypePointerElemTk), defaultVal, defaultIsStr, defaultIsFloat,
                                defaultIsSet, defaultSOff, defaultSLen);
         hasDefault := True;
       end;

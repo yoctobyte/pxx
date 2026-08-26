@@ -660,8 +660,30 @@ end;
   really is a character constant and the parameter really wants the string. }
 procedure CoerceCharLitArg(cpi, pi, argNode: Integer);
 begin
-  if IsCharLitNode(argNode) and ParamTakesCharLitAsStr(cpi, pi) then
+  if not ParamTakesCharLitAsStr(cpi, pi) then Exit;
+  if IsCharLitNode(argNode) then
+  begin
     RetagCharLitAsStr(argNode);
+    Exit;
+  end;
+  { …and a character VALUE that is NOT a constant does not convert at all.
+    FPC says so — "Incompatible type for arg no. 1: Got Char, expected PChar",
+    for a `Char` variable and for `Chr(i)` alike — and the reason to say it here
+    rather than let it through is that letting it through has no safe meaning:
+    the ordinal is passed where a pointer is expected and the callee
+    dereferences address 45. It COMPILED and SEGFAULTED, which is the worst of
+    the three outcomes available.
+
+    The constant case above is not an exception to FPC's rule, it IS FPC's rule:
+    a character constant converts to a pointer to a NUL-terminated one-character
+    string, a character variable does not convert.
+
+    Pascal only. C's `f((char)x)` to a `char*` is the caller's business, and the
+    Nil-Python frontend never builds this shape. }
+  if (argNode >= 0) and (IntToTypeKind(ASTTk[argNode]) = tyChar) and
+     (not CProgramMode) and (not PyExprMode) then
+    Error('argument type: a Char VALUE is not a PChar — only a character '
+          + 'CONSTANT converts (fpc refuses this too)');
 end;
 
 { The whole AN_ARG chain of a call whose callee is already resolved. Call it
