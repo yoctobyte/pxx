@@ -168,7 +168,7 @@ var
   fldSigPi, callIndNode, argsHead2, lastArg2, argSeq2, baseRecFld: Integer;
   isMethodPtr: Boolean;
   autoDeref, peRec: Integer;
-  dpaCount, dpaLo, dpaLoNode, dpaSubNode: Integer;   { `p^[i]` over a pointer to a named FIXED array }
+  dpaCount, dpaLo, dpaFlat, dpaLoNode, dpaSubNode: Integer;   { `p^[i]` over a pointer to a named FIXED array }
   ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { qualified TClass.Const }
   keyNode: Integer;   { __getitem__/__setitem__ subscript key }
   pyInitCall: Boolean;   { NilPy `Base.__init__(self, ...)` — run the ctor BODY on self, never construct }
@@ -1481,7 +1481,7 @@ begin
           recName := REC_NONE;
         end;
       end
-      else if DerefPtrArrayInfo(node, dpaCount, dpaLo) then
+      else if DerefPtrArrayInfo(node, dpaCount, dpaLo, dpaFlat) then
       begin
         { `p^[i]` where p points at a named FIXED ARRAY. The `^` arm already
           resolved tk/recName through PtrElemTk/PtrElemRec, which for this shape
@@ -1498,7 +1498,11 @@ begin
           ran one element past its end. Normalise the subscript here, the one
           place that knows the bound, rather than teaching the lowering about a
           second kind of base. }
-        if (dpaLo <> 0) and (ASTRight[indexNode] >= 0) then
+        { ...but NOT when the ND path above built the subscript: BuildFlatNDIndex
+          already subtracts EVERY dimension's low bound, dim 0 included, so
+          subtracting dpaLo here again would double-count it and index
+          (i - 2*lo0) — correct only for the lo=0 case that hid it. }
+        if (dpaLo <> 0) and (ASTRight[indexNode] >= 0) and (not isND) then
         begin
           dpaLoNode := AllocNode(AN_INT_LIT);
           ASTIVal[dpaLoNode] := dpaLo;

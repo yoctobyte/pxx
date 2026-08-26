@@ -10600,13 +10600,30 @@ end;
   question — they each used to fall through to a path that reads a [data-8]
   header off a value that has none, and answered 0 / -1 / the ELEMENT size while
   `p^[i]` indexed correctly.
-  bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero }
-function DerefPtrArrayInfo(node: Integer; var elemCount, lowBound: Integer): Boolean;
+  bug-p-length-of-a-dereferenced-pointer-to-array-answers-zero
+
+  TWO counts, because the callers want different ones and a MULTI-DIM pointee is
+  where they stop coinciding:
+
+    elemCount  the FIRST dimension's span   — Length/High/Low
+    flatCount  the whole pointee's element count (the product over every dim)
+                                            — SizeOf
+
+  For a 1-D pointee they are equal, which is why one number served until a
+  `^array[0..1, 0..2]` arrived: `Length(qg^)` answered 6 where FPC says 2. The
+  plain-VARIABLE arms beside each caller already make exactly this split — Length
+  of a whole multi-dim array folds to `SymArrDimSpan[sym*MAX+0]`, SizeOf to the
+  product — so this is the deref spelling catching up with the shape the rest of
+  the compiler already agreed on, not a new rule.
+  bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent }
+function DerefPtrArrayInfo(node: Integer;
+                           var elemCount, lowBound, flatCount: Integer): Boolean;
 var dpaSi: Integer;
 begin
   Result := False;
   elemCount := 0;
   lowBound := 0;
+  flatCount := 0;
   if node < 0 then Exit;
   if ASTKind[node] <> AN_DEREF then Exit;
   if ASTLeft[node] < 0 then Exit;
@@ -10614,8 +10631,12 @@ begin
   dpaSi := ASTIVal[ASTLeft[node]];
   if (dpaSi < 0) or (dpaSi >= SymCount) then Exit;
   if SymPtrElemArrLen[dpaSi] <= 0 then Exit;
-  elemCount := SymPtrElemArrLen[dpaSi];
+  flatCount := SymPtrElemArrLen[dpaSi];
   lowBound := SymArrDimLo[dpaSi * MAX_ARR_DIMS];
+  if SymPtrElemNDims[dpaSi] >= 2 then
+    elemCount := SymArrDimSpan[dpaSi * MAX_ARR_DIMS]
+  else
+    elemCount := flatCount;
   Result := True;
 end;
 

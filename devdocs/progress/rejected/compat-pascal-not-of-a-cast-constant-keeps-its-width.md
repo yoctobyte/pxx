@@ -1,11 +1,18 @@
 ---
 track: P
-prio: 3
+prio: 0
 type: compat
 blocked-by: []
 summary: "`not Byte(0)` folds to 255 in pxx and to -1 in FPC — FPC evaluates a constant `not` in the Int64 domain and drops the cast's width. pxx matches Delphi. Variables agree; only the constant-folded form differs."
 status: backlog
 ---
+
+> **REJECTED 2026-08-26 — never, and we are the ones who are right.** The
+> ticket's own analysis settles it: `not Byte(0)` = 255 is **Delphi's** answer
+> and FPC is the outlier, folding in its Int64 constant domain. "Fixing" this
+> would move pxx *away* from Delphi to reproduce an FPC constant-folding
+> artifact. We do not chase 100% FPC parity (`CLAUDE.md`), and least of all
+> when parity costs correctness against the other reference implementation.
 
 # `not Byte(0)` is 255 here and -1 in FPC
 

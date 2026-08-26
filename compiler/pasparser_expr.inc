@@ -342,7 +342,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     hlBoundTk: TTypeKind;
     hlValTk: TTypeKind; hlCap: Integer;          { High/Low over a STRING operand }
     hlIsFrozen, hlIsAnsi, hlIsArrOp: Boolean;
-    dpaCount, dpaLo: Integer;   { `p^` over a pointer-to-fixed-array: its extent and low bound }
+    dpaCount, dpaLo, dpaFlat: Integer;   { `p^` over a pointer-to-fixed-array: first-dim span, low bound, and total element count }
     mcCi: Integer; mcFin: Boolean;   { metaclass receiver at the end of a cast-deref chain }
  szElemTk: TTypeKind; szBTk: TTypeKind;
     seEtid, seOrd: Integer;
@@ -3372,15 +3372,17 @@ begin
             always does), so this answered the element size — 4 for an
             `array[0..3] of LongWord` where FPC says 16, and that number reaches
             GetMem and Move. }
-          if DerefPtrArrayInfo(szExprNode, dpaCount, dpaLo) then
+          if DerefPtrArrayInfo(szExprNode, dpaCount, dpaLo, dpaFlat) then
           begin
             Expect(tkRParen, ')');
             node := AllocNode(AN_INT_LIT);
             { a RECORD element is sized by its record id, not by TypeSize(tyRecord) }
+            { the FLAT count: SizeOf is the whole aggregate's width, so a
+              multi-dim pointee is every element, not the first dimension. }
             if szExprTk = tyRecord then
-              ASTIVal[node] := dpaCount * RecSize(ResolveNodeRec(szExprNode))
+              ASTIVal[node] := dpaFlat * RecSize(ResolveNodeRec(szExprNode))
             else
-              ASTIVal[node] := dpaCount * TypeSize(szExprTk);
+              ASTIVal[node] := dpaFlat * TypeSize(szExprTk);
             ASTTk[node] := Ord(tyInteger);
             CurASTNode := node;
             LastExprTk := tyInteger;
@@ -5032,7 +5034,7 @@ begin
             RecFieldArrLen(ResolveNodeRec(ASTLeft[valNode]), GetASTIdentName(valNode)) - 1;
           ASTTk[CurASTNode] := Ord(tyInteger);
         end
-        else if DerefPtrArrayInfo(valNode, dpaCount, dpaLo) then
+        else if DerefPtrArrayInfo(valNode, dpaCount, dpaLo, dpaFlat) then
         begin
           { `High(p^)` over a pointer to a named FIXED array — same fold as the
             whole-static-array arm, off the pointer symbol's pointee metadata. }
@@ -5163,7 +5165,7 @@ begin
           { Low of a whole multi-dim static array = the FIRST dimension's lower
             bound (SymArrDimLo[sym*MAX+0]); was silently 0. }
           ASTIVal[CurASTNode] := SymArrDimLo[idx * MAX_ARR_DIMS]
-        else if DerefPtrArrayInfo(valNode, dpaCount, dpaLo) then
+        else if DerefPtrArrayInfo(valNode, dpaCount, dpaLo, dpaFlat) then
           { `Low(p^)`: the pointee's declared lower bound. }
           ASTIVal[CurASTNode] := dpaLo
         else if (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx) and
@@ -5284,7 +5286,7 @@ begin
           ASTIVal[node] := SymArrDimSpan[ASTIVal[valNode] * MAX_ARR_DIMS]; ASTTk[node] := Ord(tyInteger);
           CurASTNode := node;
         end
-        else if DerefPtrArrayInfo(valNode, dpaCount, dpaLo) then
+        else if DerefPtrArrayInfo(valNode, dpaCount, dpaLo, dpaFlat) then
         begin
           { `Length(p^)` where p points at a named FIXED array. The pointee has
             no [data-8] header, so the runtime path read one off a value that has

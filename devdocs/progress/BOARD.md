@@ -53,7 +53,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (283)
+## backlog (279)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -151,18 +151,14 @@ _none_
 | compat-c-printf-p-of-null-prints-0x0-not-nil | C | 22 | compat | `printf(\"%p\", NULL)` prints `0x0`; glibc prints `(nil)`. Only the null case differs — a non-null pointer prints identically. It matters because it makes a gcc-oracle differential run report a divergence that is not a miscompile. | — |
 | compat-p-system-integer-is-smallint-in-fpc | P | 10 | compat | `System.Integer` is SmallInt in FPC, LongInt in pxx | — |
 | compat-pascal-a-string-n-field-makes-a-record-a-different-size-than-fpc | P | 25 | compat | `string[N]` is a word-prefix tyFixedString, so any record holding one is a different SIZE and LAYOUT than FPC's: `record s: string[10] end` is 24 bytes where FPC says 11. Values are all right; the bytes are not. | — |
-| compat-pascal-binop-operand-eval-order | A | 3 | compat | pxx evaluates binary-operator operands (and CALL ARGUMENTS) left-to-right; FPC evaluates right-to-left | — |
 | compat-pascal-calling-convention-directives-uneven | P | 60 | compat | `stdcall`/`safecall`/`pascal`/`mwpascal` are accepted on a class METHOD declaration but are a parse ERROR on a plain routine, an `external`, or a procedural type — so FPC sources that spell a convention on a routine do not compile, and which spelling works depends on where it is written. | — |
 | compat-pascal-class-helpers | P | 58 | compat | pxx rejects FPC's `class helper for T` at parse time — `TFooHelper = class helper for TFoo` is `error: unexpected token` | — |
 | compat-pascal-directive-in-comment-ignores-nested-comments-off | P | 5 | compat | With nested comments OFF (delphi mode), a {$...} sequence inside a brace comment does not end the comment in pxx, but does in FPC. Lax direction — pxx accepts sources FPC rejects | — |
 | compat-pascal-inline-generic-specialization | P | 60 | compat | pxx accepts only the declaration form `specialize Max<Integer> as MaxInt;` — FPC's inline `specialize Max<Integer>(a, b)` in an expression or statement is rejected with 'undefined variable' | — |
 | compat-pascal-ioresult-returns-a-negative-errno | B | 55 | compat | IOResult returns the raw negative errno (-2 for a missing file, -13 for permission denied) where FPC returns the positive DOS-style code (2, 5). Code written as `if IOResult = 2` silently takes the wrong branch. | — |
-| compat-pascal-method-impl-without-declaration | P | 8 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
-| compat-pascal-not-of-a-cast-constant-keeps-its-width | P | 3 | compat | `not Byte(0)` folds to 255 in pxx and to -1 in FPC — FPC evaluates a constant `not` in the Int64 domain and drops the cast's width. pxx matches Delphi. Variables agree; only the constant-folded form differs. | — |
 | compat-pascal-overload-prefers-signed-for-an-unsigned-argument | A | 12 | compat | Overload resolution picks the signed arm for an unsigned argument | — |
 | compat-pascal-set-storage-size-is-always-32-bytes | P | 22 | compat | Every set type is 32 bytes, whatever its element range: SizeOf(set of TE8) is 32 where FPC says 4, and a record holding one is 48 bytes where FPC lays out 12. Values are all correct — a layout divergence like compat-pascal-subrange-storage-size, and it costs 8x memory on small sets as well as breaking binary interop. | — |
 | compat-pascal-strict-fpc-abs-and-sqr-widths | A | 8 | compat | `--strict-fpc` reproduces FPC's shift widths but not its `Abs`/`Sqr` widths, so `Abs(Low(Integer))` and `Sqr(65536)` keep the native-width answer under the flag. Completes the strict-mode escape hatch the shift decision promised. | — |
-| compat-pascal-strict-fpc-should-reject-a-duplicate-identifier-in-one-scope | A | 5 | compat | pxx compiles `var p: Pointer;` and `procedure P(...)` in the SAME scope and resolves both correctly — bare p is the variable, P(x) the routine. FPC rejects it ('overloaded identifier \"p\" isn't a function'), since Pascal is case-insensitive and those are one identifier. Assumed to be dialect laxness rather than a defect, on the precedent set for overload widening; --strict-fpc should reject it. Not filed as a bug: nothing resolves wrongly. | — |
 | compat-pascal-string-n-is-not-a-shortstring | P | 25 | compat | `string[20]` is a managed string with a length CAP, not a Turbo/FPC shortstring: SizeOf is 8 (a handle) where FPC says 21, and `ss[0]` — the length byte — reads #0 instead of Chr(Length(ss)). Truncation to the declared length does work, and every character operation agrees. | — |
 | compat-pascal-subrange-storage-size | P | 22 | compat | Every subrange type gets the 4-byte default instead of the smallest type that holds it: SizeOf(10..20) is 4 where FPC says 1, so a `packed record` of subranges is 12 bytes where FPC lays out 3. Values are all correct — this is a layout divergence, not a wrong-value bug, and it breaks binary interop and costs 4x memory. | — |
 | compat-pascal-supports-three-arg-out-form | P | 45 | compat | Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error | — |
@@ -341,7 +337,7 @@ _none_
 | task-d-document-warn-ignored-directives | D | 20 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (31)
+## backlog_new (30)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -355,7 +351,6 @@ _none_
 | bug-dynarray-function-result-passed-directly-types-as-pointer | P | 55 | bug | A dynamic-array-returning function's result loses its type when passed DIRECTLY as an argument: overload resolution sees `Pointer` instead of the array type and rejects the call. Assigning the same call to a variable of that type first works, so the function and the parameter are both fine — only the un-assigned result's inferred type is wrong. FPC compiles it. | — |
 | bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable | N | 70 | bug | `import m` then `m.f(1)` compiles and runs, but `h = m.f` — the same member in VALUE position — is a COMPILE ERROR, `undefined variable (f)`, naming the attribute as if it were a bare name. Every value position fails the same way (assignment, dict value, `map(m.f, ...)`), so a module's functions cannot be used as callbacks at all. The import resolves; only the value position is broken. | — |
 | bug-p-a-char-value-is-accepted-where-a-pchar-is-wanted-and-segfaults | P | 60 | bug | A Char VALUE (a `c: Char` variable, or `Chr(45)`) is accepted where a PChar parameter is expected and its ordinal is passed as the pointer, so the callee dereferences address 45. FPC refuses the variable outright and const-folds `Chr(45)` into a character constant that converts. Two answers are defensible — refuse, or const-fold — and they are not the same answer for the two shapes. | — |
-| bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent | P | 60 | bug | `PG = ^TG` with `TG = array[0..1, 0..2] of LongWord`: `qg^[i, j]` prints `0 1 2 1 2 10` where FPC prints `0 1 2 10 11 12` — the comma subscript is not flattened against the pointee's dims — and `Length(qg^)` answers 6 (the flat extent) where FPC answers 2 (the first dimension). Predates and is not caused by the single-dim fix; the metadata it needs is now present. | — |
 | bug-p-a-string-literal-is-refused-as-a-pchar-parameter-default | P | 55 | bug | `procedure F(p: PChar = '-')` is refused outright — \"a string literal cannot be the default for a non-string parameter\" — at EVERY literal length, so it is not the one-char-literal bug. FPC accepts it and passes a pointer to the NUL-terminated data. A defaulted PChar parameter is ordinary C-binding shape. | — |
 | bug-p-a-typed-pchar-const-cannot-be-initialised-from-a-literal | P | 70 | bug | `const GP: PChar = '-'` COMPILES and segfaults (the ordinal is stored as the pointer); `const GP: PChar = '--'` is \"unexpected token\"; `const A: array[0..1] of PChar = ('-', '--')` is \"too many array constant elements\". A typed PChar const initialised from a literal is unimplemented in all three shapes, and the one-character shape fails SILENTLY. FPC gives the address of the NUL-terminated data. | — |
 | bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 40 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
@@ -605,11 +600,11 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2402)
+## done (2403)
 
-2402 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2403 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
-## rejected (40)
+## rejected (44)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -633,6 +628,10 @@ _none_
 | chore-inc-to-units | A | 50 | chore | `.inc` → real `.pas` units refactor | — |
 | chore-register-pxxc-domain-variants | W | 55 | chore | Register the pxxc domain variants (.com, .nl, .eu) — REJECTED | — |
 | chore-runtime-emission-size | A | 50 | chore | Finer runtime-support emission (code size) | — |
+| compat-pascal-binop-operand-eval-order | A | 0 | compat | pxx evaluates binary-operator operands (and CALL ARGUMENTS) left-to-right; FPC evaluates right-to-left | — |
+| compat-pascal-method-impl-without-declaration | P | 0 | compat | `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects) | — |
+| compat-pascal-not-of-a-cast-constant-keeps-its-width | P | 0 | compat | `not Byte(0)` folds to 255 in pxx and to -1 in FPC — FPC evaluates a constant `not` in the Int64 domain and drops the cast's width. pxx matches Delphi. Variables agree; only the constant-folded form differs. | — |
+| compat-pascal-strict-fpc-should-reject-a-duplicate-identifier-in-one-scope | A | 0 | compat | pxx compiles `var p: Pointer;` and `procedure P(...)` in the SAME scope and resolves both correctly — bare p is the variable, P(x) the routine. FPC rejects it ('overloaded identifier \"p\" isn't a function'), since Pascal is case-insensitive and those are one identifier. Assumed to be dialect laxness rather than a defect, on the precedent set for overload widening; --strict-fpc should reject it. Not filed as a bug: nothing resolves wrongly. | — |
 | decide-ismultithread-runtime-flag-vs-compile-time-mode | U | 55 | decide | Delphi/FPC do not detect threading at compile time at all — they always emit the lock and skip it at runtime on a global IsMultiThread boolean. Measured here: the branch costs +5% over an unlocked refcount where an unconditional lock costs +276%. That dissolves the auto-detect question and would let TThread live in Classes unconditionally | — |
 | decide-pin-the-bench-box-clock | U | 0 | decide | Should plexus run with turbo disabled (or a fixed governor) so bench rows are comparable by construction? It costs ~13-24% throughput on everything the box does, not just the bench, so it is not Track T's call to make silently | — |
 | decide-t-mem-floor-policy-on-a-small-box | U | 0 | decide | MEM_FLOOR is an absolute 1500 MB, so any box with under ~1.75 GB available admits no job of any class — including a 2 GB machine, not just the 512 MB Pi. Two questions that should not be guessed: what the floor should be relative to, and whether a below-floor box should run at all or refuse loudly. The silence is fixed; the policy is not. | — |
@@ -712,7 +711,6 @@ _none_
 - [p 60] [N] bug-n-bytes-getitem-returns-empty-instead-of-the-byte-value
 - [p 60] [N] bug-nilpy-a-keyword-call-through-a-statically-unknown-callee-does-not-compile
 - [p 60] [P] bug-p-a-char-value-is-accepted-where-a-pchar-is-wanted-and-segfaults
-- [p 60] [P] bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent
 - [p 60] [P] compat-pascal-calling-convention-directives-uneven
 - [p 60] [P] compat-pascal-inline-generic-specialization
 - [p 60] [N] feature-a-declaration-phase
@@ -972,16 +970,12 @@ _none_
 - [p 10] [P] compat-p-system-integer-is-smallint-in-fpc
 - [p 10] [A] feature-a-shrink-managed-header-on-32-bit
 - [p 10] [O] feature-opt-alloc-intent-hint
-- [p  8] [P] compat-pascal-method-impl-without-declaration
 - [p  8] [A] compat-pascal-strict-fpc-abs-and-sqr-widths
 - [p  5] [P] compat-pascal-directive-in-comment-ignores-nested-comments-off
-- [p  5] [A] compat-pascal-strict-fpc-should-reject-a-duplicate-identifier-in-one-scope
 - [p  5] [N] feature-nilpy-nested-def-as-value
 - [p  5] [A] idea-a-auto-enable-threadsafe-by-restarting-the-compile
 - [p  5] [A] idea-adaptive-heap-growth
 - [p  5] [A] meta-dialect-extensions-and-fpc-strict
-- [p  3] [A] compat-pascal-binop-operand-eval-order
-- [p  3] [P] compat-pascal-not-of-a-cast-constant-keeps-its-width
 
 ## Leverage (tickets each one unblocks)
 

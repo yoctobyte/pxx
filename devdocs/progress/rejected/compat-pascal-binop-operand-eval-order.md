@@ -1,6 +1,14 @@
 ---
-prio: 3
+prio: 0
 ---
+
+> **REJECTED 2026-08-26 — never.** Operand evaluation order is *unspecified* in
+> ISO Pascal and undocumented in FPC. Only a program that already relies on
+> unspecified behaviour can observe the difference, so no **correct** Pascal
+> source compiles or runs wrong here. That is the bottom row of the FPC-parity
+> table in `CLAUDE.md`: an observable no compiling-correct program can reach.
+> The measurement below is worth keeping — it is why a pasmith seed diverged —
+> so the ticket survives here as a record rather than as work.
 
 # pxx evaluates binary-operator operands (and CALL ARGUMENTS) left-to-right; FPC evaluates right-to-left
 

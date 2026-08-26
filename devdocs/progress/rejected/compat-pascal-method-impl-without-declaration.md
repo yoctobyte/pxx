@@ -1,7 +1,14 @@
 ---
-prio: 8
+prio: 0
 type: compat
 ---
+
+> **REJECTED 2026-08-26 — never.** pxx *accepts* an implementation for an
+> undeclared method; FPC rejects it. We are laxer, the registered method
+> dispatches consistently, and the ticket itself records "NOT
+> silent-wrong-value". Per the FPC-parity table in `CLAUDE.md` that is a dialect
+> choice, not a defect. Adding a `--strict-fpc` arm for it would buy a
+> diagnostic nobody asked for on code that already works.
 
 # `TC.Foo` implementation for a method the class never DECLARED compiles (FPC rejects)
 

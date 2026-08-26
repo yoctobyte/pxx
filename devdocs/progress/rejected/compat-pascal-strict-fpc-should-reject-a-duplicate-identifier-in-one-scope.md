@@ -1,10 +1,22 @@
 ---
 track: A
-prio: 5
+prio: 0
 type: compat
 blocked-by: []
 summary: "pxx compiles `var p: Pointer;` and `procedure P(...)` in the SAME scope and resolves both correctly — bare p is the variable, P(x) the routine. FPC rejects it ('overloaded identifier \"p\" isn't a function'), since Pascal is case-insensitive and those are one identifier. Assumed to be dialect laxness rather than a defect, on the precedent set for overload widening; --strict-fpc should reject it. Not filed as a bug: nothing resolves wrongly."
 ---
+
+> **REJECTED 2026-08-26 — never.** pxx *accepts* a program FPC rejects. Per the
+> FPC-parity table in `CLAUDE.md` that is a dialect choice, not a defect — the
+> same call NilPy makes for CPython, one direction only: code that works on the
+> reference must work here, not the reverse.
+>
+> The finding that made this worth filing is real and is NOT rejected with it:
+> **a differential probe written against pxx can silently fail to be
+> differential**, because FPC may refuse to compile it at all. That belongs to
+> the probe harness (`tools/fpc_diff_probe.sh` must fail loudly, not quietly,
+> when the oracle rejects the source), not to the compiler. It is banked in the
+> body below.
 
 # `--strict-fpc` should reject a duplicate identifier in one scope
 

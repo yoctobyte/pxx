@@ -17,13 +17,20 @@ program test_pointer_to_a_named_fixed_array;
   already used for `elem (*p)[N]` — one concept, one slot — with the low bound in
   the pointer symbol's otherwise-unused SymArrDimLo row.
 
+  A MULTI-DIM pointee is covered as of 2026-08-26: `qg^[i, j]` used to flatten
+  with the wrong dims (`0 1 2 1 2 10` for a 2x3 where fpc prints `0 1 2 10 11
+  12`) and Length answered the flattened 6 where fpc answers the first
+  dimension's 2. NodeArrNDInfo now accepts a deref base, and DerefPtrArrayInfo
+  reports the first-dim span and the flat count SEPARATELY — Length/High/Low
+  take the former, SizeOf the latter, which is the same split the
+  plain-variable arms beside them already make.
+  bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent
+
   NOT covered: a pointer to a named DYNAMIC array (`PDyn = ^TDyn`), whose
   Length/High still answer 1 and 0
-  (bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one); a MULTI-DIM
-  pointee, which indexes and measures flat
-  (bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent);
-  and a FORWARD `PA = ^TA` written ahead of TA's own declaration, which cannot
-  see an ArrType entry that does not exist yet.
+  (bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one); and a FORWARD
+  `PA = ^TA` written ahead of TA's own declaration, which cannot see an ArrType
+  entry that does not exist yet.
 
   .expected IS fpc 3.2.2's own output on this source. }
 {$mode objfpc}
@@ -37,13 +44,19 @@ type
   TRec  = record a, b, c: LongWord; end;
   TRA   = array[0..2] of TRec;
   PRA   = ^TRA;
+  TG    = array[0..1, 0..2] of LongWord;          { 2-D, zero lows }
+  PG    = ^TG;
+  TN    = array[1..2, 5..7] of LongWord;          { 2-D, non-zero lows on both }
+  PN    = ^TN;
 
 var
   w: TW;  qw: PW;
   l: TL;  ql: PL;
   o: TOne; qo: POne;
   ra: TRA; qra: PRA;
-  i: Integer;
+  g: TG;  qg: PG;
+  n: TN;  qn: PN;
+  i, j: Integer;
   r: TRec;
 
 begin
@@ -74,11 +87,25 @@ begin
   r := qra^[2];
   WriteLn('whole  : ', r.a, ' ', r.b, ' ', r.c);
 
-  { A 2-D pointee is deliberately absent: `qg^[i, j]` flattens with the wrong
-    dims and Length(qg^) answers the flattened count where FPC answers the first
-    dimension's. Both predate this fix and are filed as
-    bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent —
-    asserting today's answer would freeze it. }
+  { 2-D pointee: comma syntax, bracket-chain syntax, and the whole-array
+    measures. Length/High/Low answer the FIRST dimension; SizeOf the aggregate. }
+  for i := 0 to 1 do for j := 0 to 2 do g[i, j] := i * 10 + j;
+  qg := @g;
+  Write('2d     :');
+  for i := 0 to 1 do for j := 0 to 2 do Write(' ', qg^[i, j]);
+  WriteLn(' | ', Length(qg^), ' ', Low(qg^), ' ', High(qg^), ' ', SizeOf(qg^));
+  Write('2d brk :');
+  for i := 0 to 1 do for j := 0 to 2 do Write(' ', qg^[i][j]);
+  WriteLn;
+
+  { ...and with a non-zero low bound on BOTH dims, which is what separates a
+    correct flatten from one that subtracts the low bound twice. }
+  for i := 1 to 2 do for j := 5 to 7 do n[i, j] := i * 100 + j;
+  qn := @n;
+  Write('2d lowb:');
+  for i := 1 to 2 do for j := 5 to 7 do Write(' ', qn^[i, j]);
+  WriteLn(' | ', Length(qn^), ' ', Low(qn^), ' ', High(qn^), ' ', SizeOf(qn^));
+
 
   { writing THROUGH the pointer lands where the variable can see it }
   qw^[2] := 42; qra^[1].c := 77;

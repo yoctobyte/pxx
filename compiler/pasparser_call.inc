@@ -410,14 +410,36 @@ begin
   ASTLeft[Result] := diff; ASTRight[Result] := spanLit; ASTTk[Result] := Ord(tyInteger);
 end;
 
-{ If `node` is an N-D fixed array reference (a SymArrNDims ident or an
-  UFldArrNDims record field), fill NDInfo* and return True. Lets m[..] and
-  r.m[..] share one path. }
+{ If `node` is an N-D fixed array reference (a SymArrNDims ident, an
+  UFldArrNDims record field, or a DEREF of a pointer to one), fill NDInfo* and
+  return True. Lets m[..], r.m[..] and p^[..] share one path.
+
+  The deref arm reads the pointee's shape off the POINTER symbol, where
+  SymPtrElemNDims and the SymArrDimLo/Span rows already carry it (a pointer
+  symbol has SymArrNDims=0, so those slots are free — the C frontend's
+  `elem (*p)[A][B]` has stored them there all along). Without it a deref base
+  answered False, the comma chain fell through to the jagged/dynamic sugar, and
+  `qg^[i, j]` over `^array[0..1, 0..2]` indexed the FLAT extent as if it were
+  one dimension: `0 1 2 1 2 10` where FPC prints `0 1 2 10 11 12`. Silent, exit
+  0, and reading three elements past the row it was asked for.
+  bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent }
 function NodeArrNDInfo(node: Integer): Boolean;
 var baseRec, fIdx, sym, d, base: Integer; fname: AnsiString;
 begin
   Result := False;
-  if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and (SymArrNDims[ASTIVal[node]] >= 2) then
+  if (ASTKind[node] = AN_DEREF) and (ASTLeft[node] >= 0) and
+     (ASTKind[ASTLeft[node]] = AN_IDENT) and (ASTIVal[ASTLeft[node]] >= 0) and
+     (ASTIVal[ASTLeft[node]] < SymCount) and
+     (SymPtrElemNDims[ASTIVal[ASTLeft[node]]] >= 2) then
+  begin
+    sym := ASTIVal[ASTLeft[node]];
+    NDInfoNDims := SymPtrElemNDims[sym];
+    base := sym * MAX_ARR_DIMS;
+    for d := 0 to NDInfoNDims - 1 do
+    begin NDInfoLo[d] := SymArrDimLo[base + d]; NDInfoSpan[d] := SymArrDimSpan[base + d]; end;
+    Result := True;
+  end
+  else if (ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and (SymArrNDims[ASTIVal[node]] >= 2) then
   begin
     sym := ASTIVal[node];
     NDInfoNDims := SymArrNDims[sym];
