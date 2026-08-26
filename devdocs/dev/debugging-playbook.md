@@ -234,6 +234,39 @@ have given the wrong answer three of those four times.
 
 ---
 
+## "The pinned binary reproduces it" may be a claim about a MIXED compiler
+
+A ticket recorded that `$(PXX_STABLE)` reproduced a segfault, which made a
+brand-new feature's own hole read as a pre-existing bug and sent the next agent
+looking in the wrong century of the history. It was measured honestly and it was
+wrong.
+
+**A stable binary run from a directory with no `builtin/` beside it falls back to
+the CWD-relative `compiler/builtin/` -- that is, to the WORKING TREE.** So a
+"pinned" run launched from the repo root is the pinned executable driving
+whatever builtins are checked out right now, uncommitted work included. That is
+not the pinned compiler; it is a hybrid that exists on nobody's machine but
+yours, and it can fail in ways neither endpoint does.
+
+The rule this file already states -- *any result you report must name the sha of
+the binary it came from* -- is necessary and, here, not sufficient. The binary's
+identity was known. Its **builtin tree's** identity was not, and nothing in the
+invocation made the difference visible. So:
+
+- Run a pinned binary **from beside its own frozen `builtin/`**, or verify which
+  tree it actually resolved before believing the result.
+- When an endpoint measurement says "broken at both ends", suspect the harness
+  before concluding "latent since forever". Two greens and a red in the middle is
+  a shape a mixed compiler produces easily.
+- A provenance line in a ticket is evidence like any other, and it decays. The
+  agent that closed this one re-measured instead of inheriting, found v374 and
+  v375 both green, and turned "latent, unbounded" into "fixed two commits after
+  it was filed".
+
+Same family as `code : STALE` in the watcher and the frozen-builtin seam
+`gate.sh` now guards: **the artifact you are measuring is assembled from more
+parts than the one you named.**
+
 ## A number moving in the direction you hoped is not a check
 
 Track T narrowed a blame range from 137 commits to 2, ran it against the live
