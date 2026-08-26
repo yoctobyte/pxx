@@ -1,0 +1,66 @@
+# collections.Counter built from a STRING must be readable by a string key.
+#
+# Every row below was a MEASURED FAILURE before the fix: Counter(const s) stored
+# a bare Pascal `s[i]`, which is a Char (VT_CHAR), while every lookup arrives
+# carrying a VT_STRING. PyVarEq refuses a cross-tag VT_CHAR/VT_STRING pair, so
+# the entries were stored perfectly and then invisible -- `c["a"]` answered 0,
+# `.get` answered its default and `in` answered False, all with the entry
+# sitting right there in items(). A count of 0 reads as "not present" and simply
+# takes the other branch, which is why this had to be a value test and not a
+# smoke test.
+#
+# The LIST arm rows are the contrast that pins the diagnosis: they were already
+# correct at the broken sha, because a list element is already a string. Same
+# counts from the same characters, so a future regression that reintroduces a
+# char key shows up as the two arms disagreeing.
+#
+# .expected is CPython's own output, generated and not written by hand.
+# bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
+from collections import Counter
+
+cs = Counter("aab")
+cl = Counter(["a", "a", "b"])
+
+# subscript: 0 0 before the fix, and 0 is the silent wrong answer
+print("sub-str ", cs["a"], cs["b"], cs["z"])
+print("sub-list", cl["a"], cl["b"], cl["z"])
+
+# .get and `in` went through the same failing key compare
+print("get-str ", cs.get("a", -1), cs.get("b", -1), cs.get("z", -1))
+print("get-list", cl.get("a", -1), cl.get("b", -1), cl.get("z", -1))
+print("in-str  ", "a" in cs, "b" in cs, "z" in cs)
+print("in-list ", "a" in cl, "b" in cl, "z" in cl)
+
+# ...while len/items/keys were already right, which is what made it silent
+print("len     ", len(cs), len(cl))
+print("items   ", sorted(cs.items()), sorted(cl.items()))
+print("common  ", cs.most_common(), cl.most_common())
+
+# Counter.update(str) counts characters. It raised TypeError before the fix --
+# there was no string arm at all, so the one loop now lives in update and
+# Counter(s) delegates to it.
+cu = Counter()
+cu.update("aab")
+print("update  ", cu["a"], cu["b"], sorted(cu.items()))
+
+# ...including through a VARIANT parameter, which is what an unannotated
+# argument is: the literal call matches statically, this one does not.
+def feed(c, t):
+    c.update(t)
+
+cv = Counter()
+feed(cv, "aab")
+feed(cv, ["a", "c"])
+print("variant ", cv["a"], cv["b"], cv["c"])
+
+# a counted key must survive being incremented afterwards -- the read-modify-write
+# is the shape counting code actually uses
+cs["a"] += 1
+cs["z"] += 1
+print("incr    ", cs["a"], cs["b"], cs["z"], len(cs))
+
+# multi-character keys from the same constructor family still work
+cw = Counter("the quick the".split())
+print("words   ", cw["the"], cw["quick"], len(cw))
+
+print("empty   ", len(Counter("")), Counter("")["a"])

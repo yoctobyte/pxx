@@ -33453,10 +33453,14 @@ begin
 end;
 
 function PyImportIsConsumedOnly(const root, dotted: AnsiString): Boolean;
-{ `from X import a, b`. Adds `collections`: it HAS a unit (lib/rtl/collections),
+{ `from X import a, b`. Adds `collections`: it HAS a unit (lib/rtl/collections —
+  a Pascal generic TList, unrelated to Python's module and not a shim for it),
   but the names it exports that we support are ordinary pylib symbols
-  (Counter -> pylib's TPyCounter constructors), so consuming the from-import is
-  enough and an unsupported name walls visibly at its use site.
+  (Counter -> pylib's `function Counter` overloads, NOT TPyCounter, which is the
+  itertools.count shim and shares only a name), so consuming the from-import is
+  enough and an unsupported name walls visibly at its use site. Because those
+  symbols are plain pylib procs, `Counter(...)` also resolves with NO import —
+  the from-import binds nothing, it only avoids erroring on the module.
 
   NOTE the two arms test DIFFERENT things, and that is the point rather than an
   inconsistency. PyImportRootHasNoBackingUnit is keyed on the ROOT because those
@@ -33759,9 +33763,15 @@ begin
       { itertools is consumed-but-unresolved for now: uforth only needs
         count(); its use sites wall visibly until a shim lands (Track B). }
       { `collections` joins these: the names it exports that we support are
-        ordinary pylib symbols (Counter -> pylib's TPyCounter constructors), so
-        consuming the from-import is enough — an unsupported name from it walls
-        visibly at its use site as an undefined variable, same as itertools. }
+        ordinary pylib symbols (Counter -> pylib's `function Counter` overloads,
+        which is why the bare name resolves with no import at all), so consuming
+        the from-import is enough — an unsupported name from it walls visibly at
+        its use site as an undefined variable, same as itertools.
+        NOT TPyCounter, whatever the name suggests: that class is the
+        itertools.count shim, an unrelated int cursor, and reading the two as one
+        thing sent a ticket looking for a binding bug in this file when the
+        defect was a char-tagged dict key in pylib's Counter(str).
+        bug-n-from-collections-import-counter-binds-something-that-always-answers-zero }
       if PyImportIsConsumedOnly(impRoot, impName) then
       begin
         while CurTok.Kind = tkIdent do

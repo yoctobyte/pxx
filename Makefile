@@ -3712,6 +3712,15 @@ test-core: $(COMPILER)
 	# bug-n-a-class-base-that-is-an-expression-does-not-compile
 	./$(COMPILER) test/test_nilpy_class_base_is_an_alias.npy $(TESTTMP)/test_nilpy_clsbasealias26
 	$(TESTTMP)/test_nilpy_clsbasealias26 | diff -u test/test_nilpy_class_base_is_an_alias.expected -
+	# collections.Counter built from a STRING, read back by a string key. Here
+	# for the same reason as the test above -- test-core runs in the NATIVE tier
+	# -- and because the failure was a SILENT WRONG VALUE: a char-tagged key
+	# stored fine and then missed every lookup, so `c["a"]` answered 0 with the
+	# entry visible in items(). The list-arm rows are the contrast that pins it.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
+	./$(COMPILER) test/test_nilpy_counter_from_a_string.npy $(TESTTMP)/test_nilpy_counterstr26
+	$(TESTTMP)/test_nilpy_counterstr26 | diff -u test/test_nilpy_counter_from_a_string.expected -
 	# ...and the other side of the same rule: a REBOUND name is refused, never
 	# resolved to its first binding. CPython prints "second"; a compile-time
 	# alias table cannot say that, so it must decline rather than answer "first".
