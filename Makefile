@@ -7994,6 +7994,16 @@ test-core: $(COMPILER)
 	# rather than on the wording.
 	! ./$(COMPILER) test/test_char_var_as_pchar_refused.pas $(TESTTMP)/test_cvref26 >/dev/null 2>&1
 	! ./$(COMPILER) test/test_chr_of_a_variable_as_pchar_refused.pas $(TESTTMP)/test_chrvref26 >/dev/null 2>&1
+	# SizeOf of a field reached through a POINTER DEREF. `SizeOf(r.A)` has been
+	# right since RecFieldByteSize; `SizeOf(p^.A)` never reached that helper -- a
+	# `^` routes SizeOf to its expression path, where an array node carries its
+	# ELEMENT kind, so the answer was 4 where fpc says 16, into GetMem and Move.
+	# `SizeOf(p^)` over a pointer-to-RECORD was refused while the same spelling
+	# over a pointer-to-ARRAY answered correctly. The `plain` rows are pinned too:
+	# the fix only moves nothing onto a new path by accident if both are.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_sizeof_through_a_deref.pas $(TESTTMP)/test_sod26
+	test "$$($(TESTTMP)/test_sod26)" = "$$(cat test/test_sizeof_through_a_deref.expected)"
 	# ...and the guard: a genuine `var` parameter must still REFUSE the same
 	# argument. This is what stops the fix from being ungated -- tried, and it
 	# let a call RESULT bind to a var parameter and COMPILE, because the method

@@ -336,6 +336,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec, szQUnit: Integer;
     szNestCi, szHops, szI: Integer; szNestName: AnsiString;   { SizeOf(TOuter.TInner) — the SCOPED nested row }
     szScan, szBd, szExprNode: Integer;
+    szFldRec: Integer; szFldName: AnsiString;   { SizeOf(<expr>.field) — the OWNER's record and the field name }
     szIsExpr: Boolean;
     szExprTk: TTypeKind;
     hlBoundV: Int64;
@@ -3387,6 +3388,64 @@ begin
             CurASTNode := node;
             LastExprTk := tyInteger;
             Exit;
+          end;
+          { A FIELD reached as an EXPRESSION — `SizeOf(p^.A)`. The name path
+            below sizes `r.A` correctly through RecFieldByteSize; this path did
+            not exist for it, because a `^` anywhere in the operand routes to
+            the expression path and a field node carries its ELEMENT kind. So
+            `SizeOf(p^.A)` on an `array[0..3] of Integer` answered 4 where FPC
+            says 16 — silently, into GetMem and Move, which is the same failure
+            RecFieldByteSize was written to end
+            (bug-p-sizeof-an-array-field-returns-the-element-size). The ticket
+            for this row expected a PARSE error and got a wrong number instead:
+            the expression dispatch had since started accepting the operand
+            without teaching anything downstream to size it.
+
+            The same helper, deliberately: a second formula here is how the two
+            spellings of one question drift apart. It also sizes a RECORD-typed
+            field, which the refusal below would otherwise decline.
+            bug-p-every-compile-time-intrinsic-hand-rolls-its-own-operand-parser }
+          if ASTKind[szExprNode] = AN_FIELD then
+          begin
+            szFldName := GetASTIdentName(szExprNode);
+            szFldRec := ResolveNodeRec(ASTLeft[szExprNode]);
+            if (szFldRec <> REC_NONE) and (Length(szFldName) > 0) and
+               (RecFieldType(szFldRec, szFldName) <> tyUnknown) then
+            begin
+              prevTok := RecFieldByteSize(szFldRec, szFldName);
+              Expect(tkRParen, ')');
+              node := AllocNode(AN_INT_LIT);
+              ASTIVal[node] := prevTok;
+              ASTTk[node] := Ord(tyInteger);
+              CurASTNode := node;
+              LastExprTk := tyInteger;
+              Exit;
+            end;
+          end;
+          { A RECORD-typed expression that CAN name its record — `SizeOf(p^)`
+            where p is a `^TRec`. The refusal below is about a general node
+            carrying no record id; ResolveNodeRec is the compiler's own answer
+            to "which record is this node", and where it answers, the size is
+            not a guess. Asked here rather than widening the refusal's condition
+            so that the refusal keeps meaning exactly what its comment says.
+
+            `SizeOf(p^)` over a pointer-to-ARRAY is handled above, by
+            DerefPtrArrayInfo; over a pointer-to-RECORD it fell to this refusal,
+            so the two spellings of "the whole pointee" disagreed. }
+          if szExprTk = tyRecord then
+          begin
+            szFldRec := ResolveNodeRec(szExprNode);
+            if szFldRec <> REC_NONE then
+            begin
+              prevTok := RecSize(szFldRec);
+              Expect(tkRParen, ')');
+              node := AllocNode(AN_INT_LIT);
+              ASTIVal[node] := prevTok;
+              ASTTk[node] := Ord(tyInteger);
+              CurASTNode := node;
+              LastExprTk := tyInteger;
+              Exit;
+            end;
           end;
           { A record-typed expression needs a record id to be sized and the AST
             does not carry one on a general node, so refuse rather than answer

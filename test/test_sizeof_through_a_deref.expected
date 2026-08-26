@@ -1,0 +1,10 @@
+deref arr : 16
+deref sca : 4
+deref rec : 8
+deref nd  : 6
+deref dyn : 8
+deref sub : 4
+deref whol: 48
+plain arr : 16
+plain rec : 8
+whole     : 48
