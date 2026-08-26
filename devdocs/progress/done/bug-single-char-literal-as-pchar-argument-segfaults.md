@@ -222,4 +222,4 @@ to; each is broken at every literal length, so none of them is this defect:
 fixedpoint) on each of the three builds; `tools/gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commits e2f10dd78 (the argument boundary: one shared resolver, the three parser copies and the five method-call loops) and fae5b3931 (the comparison path + the named char const, and the regression test).
