@@ -12653,6 +12653,17 @@ pin:
 	@mkdir -p $(STABLE_DEFAULT_DIR)/builtin
 	@cp compiler/builtin/*.pas $(STABLE_DEFAULT_DIR)/builtin/
 	@echo "froze $$(ls $(STABLE_DEFAULT_DIR)/builtin/*.pas | wc -l) builtin RTL source(s) -> $(STABLE_DEFAULT_DIR)/builtin/"
+	@# Can the binary we just blessed still build the tree's RTL? Asked HERE,
+	@# after the freeze, because that is the first moment the question is even
+	@# answerable -- before it, the frozen set is the OLD pin's and the answer
+	@# is about a binary nobody is about to commit.
+	@# Sub-second. It is the same seam gate.sh guards (a builtin added to
+	@# compiler/builtin/** and used from lib/rtl/** breaks every $(PXX_STABLE)
+	@# build until a pin catches up); this is the other end of it -- a PIN that
+	@# does not fix such a break, taken while holding the repo-wide lock.
+	@# Non-fatal would be wrong: the whole cost of this failure is that nobody
+	@# looks, so it exits 1 and names the undo, rather than scrolling past.
+	@if [ -f test/test_uses_sysutils.pas ]; then 	  if ! $(STABLE_DEFAULT_DIR)/pinned test/test_uses_sysutils.pas 	       $(TESTTMP)/pinsmoke > $(TESTTMP)/pinsmoke.log 2>&1; then 	    echo "PIN VERIFY FAILED — the binary just pinned cannot build lib/rtl:"; 	    sed 's/^/  /' $(TESTTMP)/pinsmoke.log | head -6; 	    echo "  The pin HAS already moved. Undo with: make revert"; 	    echo "  An 'undefined variable' in lib/rtl means a builtin is referenced"; 	    echo "  that compiler/builtin/** does not define — fix that, then re-pin."; 	    exit 1; 	  fi; 	  echo "pin verify: pinned still builds lib/rtl (uses SysUtils)"; 	else 	  echo "pin verify: SKIPPED — test/test_uses_sysutils.pas is gone"; 	fi
 	@echo "Hand to track B:  git add -u stable_linux_amd64/ && git commit -m 'chore(stable): pin vN' -- stable_linux_amd64/"
 	@echo "  (-u stages the in-place-overwritten stable_pinned/stable_latest; all stable files are tracked, so nothing can dangle.)"
 
