@@ -9459,24 +9459,24 @@ begin
     bug-a-a-local-array-of-interfaces-is-not-zero-initialised.
 
     ManagedLocalZeroBytes is the shared answer to "which kinds, how far" — one
-    table, not a per-caller subset. Watermarked like the NilPy pass below so a
-    slot is nil'd exactly once, at the head of the statement that minted it:
-    re-zeroing at a later statement would drop a handle this local still owns.
+    table, not a per-caller subset.
+
+    A SymIsHiddenArgTemp temp is skipped: the per-backend walker at the head of
+    each IREmitMachineCode still owns those, and doing them here too doubled
+    every such store — 112 KB on the compiler's own code, ~1.2%, for no change
+    in behaviour. Folding those six copies into this pass instead was tried and
+    reverted (see 3dfc53cbb); until that is measured properly, the flagged half
+    keeps its proven owner and this pass covers the half nobody had.
+
+    No watermark, matching the two passes it sits beside: an unnamed temp does
+    not outlive the statement that minted it, so re-scanning from ScopeBase is
+    both safe and what they already do.
     bug-a-a-for-in-container-temp-is-not-zero-initialised }
   if CurProc >= 0 then
-  begin
-    { The second test also covers the zero-initialised globals on the very first
-      body, so no separate seeding is needed. }
-    if (LateZeroProc <> CurProc) or (LateZeroUpTo < Procs[CurProc].ScopeBase) then
-    begin
-      LateZeroProc := CurProc;
-      LateZeroUpTo := Procs[CurProc].ScopeBase;
-    end;
-    for iZeroTmp := LateZeroUpTo to SymCount - 1 do
-      if (Syms[iZeroTmp].Kind = skLocal) and (Syms[iZeroTmp].Name = '') then
+    for iZeroTmp := Procs[CurProc].ScopeBase to SymCount - 1 do
+      if (Syms[iZeroTmp].Kind = skLocal) and (Syms[iZeroTmp].Name = '') and
+         not SymIsHiddenArgTemp[iZeroTmp] then
         EmitZeroFrameSlot(Syms[iZeroTmp].Offset, ManagedLocalZeroBytes(iZeroTmp));
-    LateZeroUpTo := SymCount;
-  end;
   { NilPy: nil every tyClass local this proc has minted since the last
     statement (named comprehension targets, hidden desugar temps, handler
     binders — all created after the prologue zero-init pass). Same placement
