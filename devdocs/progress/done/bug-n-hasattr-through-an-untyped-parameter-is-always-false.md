@@ -166,4 +166,4 @@ attribute-related NilPy tests re-run individually and all match
 
 ## Log
 - 2026-08-26 — resolved.
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 79148ec99.
