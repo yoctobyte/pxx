@@ -1539,6 +1539,9 @@ function pybound_pair_call_kw(pair: Pointer; nPos: Integer;
                               kwNames, kwVals: TPyList): Variant;
 function pybound_code(const v: Variant): Pointer;
 function pybound_recv(const v: Variant): Pointer;
+{ The type name of a VALUE -- PyVarTypeName refined by the receiver for the one
+  tag (8) that is both a bound method and a plain def. See its definition. }
+function PyVarTypeNameOf(const v: Variant): AnsiString;
 { True when Code is a genuine Variant-returning FUNCTION (NilPy's default def
   ABI); False when Code is a real Pascal PROCEDURE (an explicit `-> None` def)
   that never sets up the hidden-destination-pointer return convention. Lets
@@ -4550,6 +4553,7 @@ begin
 end;
 
 function PyVarTypeName(t: Int64): AnsiString; forward;
+function PyVarTypeNameOf(const v: Variant): AnsiString; forward;
 
 function pydynattr_get_v(const v: Variant; const name: AnsiString): Variant;
 var obj: Pointer; tg: Int64; cn: AnsiString; declFound: Boolean; mi: PMethInfo;
@@ -4634,7 +4638,7 @@ begin
     if obj = nil then cn := 'NoneType' else cn := TObject(obj).ClassName;
   end
   else
-    cn := PyVarTypeName(tg);
+    cn := PyVarTypeNameOf(v);
   raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + name + '''');
 end;
 
@@ -4729,7 +4733,7 @@ begin
   tg := pyvartag(v);
   if tg <> 7 then
   begin
-    Result := PyVarTypeName(tg);
+    Result := PyVarTypeNameOf(v);
     Exit;
   end;
   obj := pyvarobj(v);
@@ -4818,7 +4822,7 @@ begin
     if obj = nil then cn := 'NoneType' else cn := TObject(obj).ClassName;
   end
   else
-    cn := PyVarTypeName(tg);
+    cn := PyVarTypeNameOf(v);
   raise AttributeError.Create('''' + cn + ''' object has no attribute ''' + mname + '''');
 end;
 
@@ -7914,7 +7918,19 @@ begin
     consequences of the tag collision VT_CALLABLE closed; naming the tags here
     is what turns the new tag into the right ANSWER rather than just a
     different wrong one. CPython spells a bound method 'method' and everything
-    else callable 'function'. }
+    else callable 'function'.
+
+    TAG 8 IS BOTH. `pybound_new(code, recv)` carries a bound method when recv is
+    an instance and a PLAIN DEF when recv is nil -- "a plain def is the same pair
+    with a nil receiver" (PyMakeFuncValue). A tag alone therefore cannot answer
+    for it, and answering 'method' unconditionally made `type(some_def).__name__`
+    say 'method' the moment fix(N) 293d70509 routed a bare def name in value
+    position through the pair as well. PyVarTypeNameOf below is the answer that
+    sees the receiver; every caller holding the VALUE uses it, and this one stays
+    for PyTypeError, which is handed a bare tag. 'method' is the safe default of
+    the two here: a caller with only a tag cannot have a plain def in hand
+    without having lost the value first.
+    regression-test-nilpy-test-nilpy-type-name-of-a-big-int }
   else if t = 8 then Result := 'method'
   else if (t = 9) or (t = 10) or (t = 12) then Result := 'function'
   else if (t = 11) or (t = 13) then Result := 'type'   { a class object, and a builtin type object }
@@ -13972,6 +13988,20 @@ begin
   pybound_recv := PPyBoundRec(NativeInt(PPyVarRec(@v)^.Payload))^.Recv;
 end;
 
+{ The type name of a VALUE. PyVarTypeName answers from the tag alone, which is
+  enough for every tag but 8: that one pair shape is a bound method when it
+  carries a receiver and a plain def when it does not, so only the value can
+  tell them apart. CPython spells them 'method' and 'function'. Everything else
+  defers to the tag-level answer unchanged -- this is the one refinement, not a
+  second table. }
+function PyVarTypeNameOf(const v: Variant): AnsiString;
+var t: Int64;
+begin
+  t := pyvartag(v);
+  if (t = 8) and (pybound_recv(v) = nil) then Result := 'function'
+  else Result := PyVarTypeName(t);
+end;
+
 function pybound_star(const v: Variant): Integer;
 begin
   pybound_star := PPyBoundRec(NativeInt(PPyVarRec(@v)^.Payload))^.StarIdx;
@@ -14104,7 +14134,7 @@ begin
                                             noNames, noVals);
 end;
 
-function pybound_pair_call_kw(pair: Pointer; nPos: Integer;
+function PyBoundPairCallKwBody(pair: Pointer; nPos: Integer;
                               const a0, a1, a2, a3: Variant;
                               kwNames, kwVals: TPyList): Variant;
 { The ONE dynamic-call bridge behind pybound_callv0..4.
@@ -14273,6 +14303,22 @@ begin
         3: begin mp3 := TPyCbMP3(code); mp3(recv, av[0], av[1], av[2]); end;
       else  begin mp4 := TPyCbMP4(code); mp4(recv, av[0], av[1], av[2], av[3]); end;
       end;
+  end;
+end;
+
+{ The pair's half of the ownership rule stated at pyboundfn_callvn_mask in
+  pyeval.pas -- the {code, recv} pair (tag 8) is the other road a callable
+  value travels, and a body that reassigns the attribute it came from frees it
+  exactly the same way. Same shape, same reason, one site per road. }
+function pybound_pair_call_kw(pair: Pointer; nPos: Integer;
+                              const a0, a1, a2, a3: Variant;
+                              kwNames, kwVals: TPyList): Variant;
+begin
+  PXXObjRetain(pair);
+  try
+    Result := PyBoundPairCallKwBody(pair, nPos, a0, a1, a2, a3, kwNames, kwVals);
+  finally
+    PXXObjRelease(pair);
   end;
 end;
 

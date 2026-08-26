@@ -144,6 +144,43 @@ def case_no_unit_installed_still_starts():
     return "no unit -> direct launch, unchanged"
 
 
+def case_a_running_daemon_stamps_the_code_it_loaded():
+    """RUNNING is not the same claim as "running the code on disk".
+
+    A daemon holds what it loaded at start; the clone pulls underneath it all
+    day. On 2026-08-26 three landed twatch fixes were absent from the daemon
+    that was publishing verdicts while every status line said RUNNING — and the
+    only reason it was noticed is that one of the three added a FIELD, whose
+    absence was visible in a report. Without that accident the fixes would have
+    read as live indefinitely.
+
+    A content hash, not a git sha: the question is "is this process running the
+    file that is on disk", and the clone is detached at the sha under test for
+    most of every cycle, so HEAD answers a different question.
+    """
+    import twatch
+    with tempfile.TemporaryDirectory() as td:
+        a = pathlib.Path(td) / "twatch.py"
+        a.write_text("print('one')\n")
+        fp1 = twatch.code_fingerprint(str(a))
+        assert len(fp1) == 12, f"expected a 12-char fingerprint, got {fp1!r}"
+        a.write_text("print('two')\n")
+        fp2 = twatch.code_fingerprint(str(a))
+        assert fp1 != fp2, "the fingerprint did not move when the file changed"
+        a.write_text("print('one')\n")
+        assert twatch.code_fingerprint(str(a)) == fp1, "not content-addressed"
+    return f"content-addressed, {fp1} -> {fp2}"
+
+
+def case_an_unreadable_file_does_not_break_status():
+    """Returning "" is what makes the caller's staleness test degrade to
+    silence rather than to a false STALE — status must never invent an alarm
+    out of a missing file."""
+    import twatch
+    assert twatch.code_fingerprint("/nonexistent/twatch.py") == ""
+    return "missing file -> empty, no alarm"
+
+
 CASES = [
     case_detached_clone_is_returned_to_the_branch,
     case_clone_already_current_is_left_alone,
@@ -151,6 +188,8 @@ CASES = [
     case_installed_unit_is_used_instead_of_a_bare_process,
     case_another_clones_unit_is_not_borrowed,
     case_no_unit_installed_still_starts,
+    case_a_running_daemon_stamps_the_code_it_loaded,
+    case_an_unreadable_file_does_not_break_status,
 ]
 
 

@@ -321,7 +321,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     isLiftedCall: Boolean;
     bitNot: Boolean; notOrdTk: TTypeKind; notConstV: Int64;
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec, szQUnit: Integer;
-    szNestCi, szScanCi: Integer;   { SizeOf(TOuter.TInner) — the SCOPED nested row }
+    szNestCi, szHops, szI: Integer; szNestName: AnsiString;   { SizeOf(TOuter.TInner) — the SCOPED nested row }
     szScan, szBd, szExprNode: Integer;
     szIsExpr: Boolean;
     szExprTk: TTypeKind;
@@ -334,6 +334,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
  szElemTk: TTypeKind; szBTk: TTypeKind;
     seEtid, seOrd: Integer;
     dfSym, dfRec, dfAi: Integer; dfTk: TTypeKind; dfSaveStatic: Boolean;  { Default(T) over an aggregate }
+    dfNestCi, dfHops, dfI: Integer; dfNestName: AnsiString;   { Default(TOuter.TInner) — the SCOPED nested row }
     lenFieldRec, lenFieldIdx: Integer;   { Length() of a static-array record field }
     cpyPi: Integer;   { Copy(s,i,n)[k]: the __pxxStrCopy proc index, kept past ci's reuse }
     ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { bare class-const in a method body }
@@ -441,6 +442,33 @@ begin
         { Default(T): zero value of the type — ordinals/pointers/chars in v1
           (records/strings later). `default` lexes as its own token. }
         Next; Expect(tkLParen, '(');
+        { `Default(TTest.TRecord)` — a type nested in a class or record body,
+          named through its owner. Strip the qualifier FIRST, so every check and
+          every dispatch below sees the type actually named: done later, the
+          file-type and unspecialized-generic diagnostics would interrogate the
+          OWNER's name instead. `dfNestCi` keeps the scope-correct row for the
+          aggregate arm — two owners may each declare a `TSub`, and the bare
+          lookup answers with whichever registered first.
+
+          Nothing is consumed unless the leading name really owns nested types
+          AND a `.ident` follows, which is the same guard the `var r:
+          TTest.TRecord` and `SizeOf` paths use. When the registry resolves
+          nothing (a nested subrange, enum or array is not a UClass row) the
+          single-qualifier strip is still right: pxx registers those flat, so
+          the qualifier only disambiguates the parse. }
+        dfNestCi := -1; dfHops := 0;
+        if (CurTok.Kind = tkIdent) and (NestedOwnerCi(CurTok.SVal) >= 0) and
+           (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+           (Tokens[TokPos + 1].Kind = tkIdent) then
+        begin
+          dfNestCi := ScanNestedTypeRun(CurTok.SVal, dfNestName, dfHops);
+          if dfHops = 0 then dfHops := 1;   { bare-name strip, one qualifier }
+          for dfI := 1 to dfHops do
+          begin
+            Next;   { past the owner name — CurTok is now '.' }
+            Next;   { past '.'            — CurTok is now the nested type name }
+          end;
+        end;
         { FPC-parity diagnostics: Default() is not defined for file types —
           neither TextFile itself nor a record that (transitively) contains one
           (bug-pascal-missing-diagnostics-fail-tests / tdefault2, tdefault6). }
@@ -478,7 +506,16 @@ begin
         dfTk := tyInt64;
         if CurTok.Kind = tkIdent then
         begin
-          dfRec := IsRecordType(CurTok.SVal);
+          { The SCOPED row when the qualifier resolved one and it is a record;
+            otherwise the flat bare-name lookup, unchanged. A nested CLASS is
+            not an aggregate — it keeps the integer 0 that is its correct nil,
+            exactly as an unqualified class does. }
+          if (dfNestCi >= 0) and UClsIsRecord[dfNestCi] then
+            dfRec := REC_UCLASS_BASE + dfNestCi
+          else if dfNestCi >= 0 then
+            dfRec := REC_NONE
+          else
+            dfRec := IsRecordType(CurTok.SVal);
           if dfRec <> REC_NONE then
           begin
             dfSaveStatic := AllocStaticLocal;
@@ -3370,38 +3407,31 @@ begin
           strip too: `SizeOf(TOuter.TInner)` on a class-nested type. Without it the parse
           died on the '.' while `var r: TOuter.TInner` already worked — a half-working
           feature is worse than an absent one. Same rule as ParseTypeKind: pxx registers
-          nested types globally, so the qualifier only disambiguates the parse. }
+          nested types globally, so the qualifier only disambiguates the parse.
+
+          The walk is ScanNestedTypeRun's, shared with Default() — it keeps the
+          row the qualifier NAMES rather than dropping the qualifier and looking
+          the bare name up flat. Two records may each declare a `TSub`; the flat
+          lookup answers with whichever registered first, so `SizeOf(TB.TSub)`
+          reported TA's width — silently, and only in SizeOf: `var y: TB.TSub`
+          already resolved through the registry and was right. The scope-blind
+          half of bug-a-duplicate-class-name-check-is-scope-blind. This was an
+          inline copy of that walk until Default() turned out to need a third
+          one; the bare-name strip stays as the fallback for the (common) case
+          where the nested type kept its unqualified registration. }
         szNestCi := -1;
         if (CurTok.Kind = tkIdent) and (FindUClass(name) >= 0) and
            (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) and
            (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkIdent) then
         begin
-          { Walk the NESTED-TYPE registry, keeping the row the qualifier names,
-            rather than dropping the qualifier and re-looking the bare name up
-            flat. Two records may each declare a `TSub`; the flat lookup answers
-            with whichever registered first, so `SizeOf(TB.TSub)` reported TA's
-            width — silently, and only in SizeOf: `var y: TB.TSub` already
-            resolved through the registry and was right. The scope-blind half of
-            bug-a-duplicate-class-name-check-is-scope-blind, one construct on.
-            The bare-name strip stays as the fallback for the (common) case where
-            the nested type kept its unqualified registration. }
-          szScanCi := NestedOwnerCi(name);
-          while (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) and
-                (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkIdent) and
-                (FindNestedType(szScanCi, GetTokenStr(TokPos + 1)) >= 0) do
+          szNestCi := ScanNestedTypeRun(name, szNestName, szHops);
+          if szHops = 0 then szHops := 1;   { bare-name strip, one qualifier }
+          for szI := 1 to szHops do
           begin
-            szScanCi := FindNestedType(szScanCi, GetTokenStr(TokPos + 1));
-            szNestCi := szScanCi;
             Next;             { past the owner name — CurTok is now '.' }
             Next;             { past '.'            — CurTok is now the nested name }
-            name := CurTok.SVal;
           end;
-          if szNestCi < 0 then
-          begin
-            Next;               { past the class name — CurTok is now '.' }
-            Next;               { past '.'            — CurTok is now the nested type name }
-            name := CurTok.SVal;
-          end;
+          name := CurTok.SVal;
         end;
         { A builtin type spelled as a KEYWORD token (Double, Char, String, ...)
           carries no SVal, so give `name` the token's own text -- then ONE

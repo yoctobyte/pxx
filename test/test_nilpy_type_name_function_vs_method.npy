@@ -1,0 +1,62 @@
+# `type(f).__name__` on a plain def answered 'method'. NilPy carries a plain def
+# and a bound method in the SAME {code, recv} pair (variant tag 8) -- "a plain
+# def is the same pair with a nil receiver" -- so the tag alone cannot tell them
+# apart, and the type-name table answered 'method' for both. It only became
+# reachable once a bare def name in value position started taking the pair road
+# too (fix(N) 293d70509); before that a plain def travelled as a bare code
+# address and never reached the table.
+#
+# What makes something a bound method is being bound to something, which is the
+# same rule PyCallableStr already used for `<function ...>` vs
+# `<bound method ...>` -- this is its sibling arm.
+# regression-test-nilpy-test-nilpy-type-name-of-a-big-int
+#
+# Every expectation is CPython's own output.
+
+
+def plain():
+    return 1
+
+
+def with_args(a, b=2):
+    return a + b
+
+
+lam = lambda x: x * 2
+
+
+class K:
+    def meth(self):
+        return 7
+
+    @staticmethod
+    def stat():
+        return 8
+
+
+k = K()
+
+# a plain def, however it is reached
+print(type(plain).__name__, type(with_args).__name__)
+alias = plain
+print(type(alias).__name__, type([plain][0]).__name__, type({"k": plain}["k"]).__name__)
+
+# a lambda is a function too
+print(type(lam).__name__)
+
+# a BOUND method is a method -- the other half of tag 8, and it must not move
+print(type(k.meth).__name__)
+
+# NOT asserted here: `type(k.stat).__name__` on a @staticmethod reached through
+# the INSTANCE. CPython says 'function'; NilPy says 'method', because the
+# attribute read binds the instance as a receiver for a staticmethod too. That
+# is a PRE-EXISTING divergence of the attribute read, not of the name table --
+# the values are all correct (K.stat(1,2), k.stat(3,4) and f=k.stat; f(5,6) all
+# agree with CPython) -- and it has its own ticket,
+# bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver.
+
+# the classes themselves
+print(type(K).__name__, type(k).__name__)
+
+# and every value still WORKS
+print(plain(), with_args(1), lam(3), k.meth(), K.stat())

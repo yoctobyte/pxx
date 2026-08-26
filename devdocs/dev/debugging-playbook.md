@@ -130,6 +130,45 @@ compiler inferred; print it.
 - **Lost stdout.** SIGTERM discards buffered stdout, so "the marker never fired"
   and "it fired and the output died" look identical. Give tests a clean exit.
 
+## A bisect can name the RIGHT commit and still be wrong
+
+Measured 2026-08-26, on `test-uforth#core` and a NilPy type-name red. Read this
+before you trust a bisect result, because the failure is not that the bisect
+missed.
+
+`293d70509` genuinely is the commit that changed the behaviour. It is also
+**correct**, and reverting it would have been the wrong fix. It removed a
+**leak** -- an unmanaged `tyPointer` handed back from a value-position arm and
+never released -- and that accidental permanent reference was the only thing
+keeping a borrowed closure alive. Deleting a real bug made a second, older real
+bug reachable: a use-after-free that had been latent all along.
+
+So the honest sequence is: bisect converges, names a commit, the commit really
+did flip the symptom, you revert it, **the crash goes away**, and you record a
+fix. You have restored a leak and re-hidden a use-after-free that will resurface
+the next time anyone tidies that arm.
+
+**The tell is that the named commit makes things better on inspection.** When a
+bisect lands on a change that looks like a cleanup, a leak fix, a lifetime
+tightening, or a removal of dead state, do not revert it. Ask what it was
+propping up. The question to answer is "what did this change stop compensating
+for", not "what did this change break".
+
+What actually found it: `-dPXX_HEAP_DEBUG` put `0xdddddddddddddddd` in `rax` at
+an `incq` -- a **retain** of a pointer read from freed memory, which is not a
+thing a leak fix can cause and is a thing a borrowed reference can.
+`-dPXX_OBJTRACE` then showed the free cascade. Endpoint measurement, not
+bisection, is what separated "the compiler changed" from "the RTL changed":
+pinned stable ran the repro clean, HEAD did not, and HEAD-compiler-plus-old-RTL
+still crashed.
+
+Related, and it compounds: the range that bisect ran over was anchored wrong, so
+it had already converged in four steps onto a commit whose entire diff was 250
+`prio:` frontmatter lines. A range can exclude the culprit *and* contain
+untestable commits, and neither failure announces itself -- see
+`normalise-dont-special-case.md` on why the compensating case is the one that
+punishes bisection specifically.
+
 ## When you are about to conclude something
 
 Check it against a second source before writing it down. Every wrong root cause

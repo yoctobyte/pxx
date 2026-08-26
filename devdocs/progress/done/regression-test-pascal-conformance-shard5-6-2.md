@@ -1,5 +1,7 @@
 ---
 prio: 70
+status: done
+owner: frank1-P-conf
 ---
 
 > **origin/dev has advanced 12 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
@@ -99,3 +101,114 @@ And the blame range on this stub is **179 commits**, not the 23 it was filed
 with -- see the Track T annotation above. `test-pascal-conformance` does not run
 in the native tier, so the narrow window is precisely the set of commits that
 cannot have caused this.
+
+## The runner is fixed — run it by hand and trust what you see (2026-08-26)
+
+`bug-t-run-pascal-conformance-silently-fails-every-test-on-a-relative-compiler-path`
+is **resolved** (`bc0ffebf9`). This matters to whoever takes this ticket because
+it sat directly in the path: the first thing anyone does is run the runner by
+hand, and the natural spelling is
+`tools/run_pascal_conformance.sh ./compiler/pascal26 ...`.
+
+Before that fix, the relative spelling gave **10 pass / 51 fail**, every failure
+reported as `compile error` — a wall of red that looks exactly like "my change
+broke the compiler", arriving at the precise moment you are looking for what
+your change broke. Relative and absolute now agree exactly: 62 pass, 0 fail,
+42 skip either way.
+
+So a red you see by hand is now a real red. Get from "the shard is red" to
+"this named case is red" from the job log — and remember the two `SKIP` lines in
+the report reason are the truncated HEAD of the output, not the failure.
+
+## RESOLVED — one named case, and it was never a regression (Track P, 2026-08-26)
+
+**The red case is `tdefault8.pp`, and it is the only one.** It was already in
+the filed log tail (`FAILURES: tdefault8.pp(compile)`) — the two `SKIP` lines in
+the report *reason* field are the truncated head of the shard output, as the
+coordinator's note warned. Reading the log rather than the reason gets you there
+in one step.
+
+```
+pascal26:27: error: incompatible types: cannot assign Int64 to record
+```
+line 27 is `trec := Default(TTest.TRecord);`.
+
+### What it actually was
+
+`Default()` carries a hand-rolled type dispatch that keys on the **bare leading
+token**. Given `Default(TTest.TRecord)` it asked `IsRecordType('TTest')` — TTest
+is a class, so REC_NONE — missed the aggregate arm entirely and fell through to
+the integer-zero arm, producing an **Int64 where a record belonged**.
+
+### Regression or latent? LATENT — and the type check is the hero, not the culprit
+
+Endpoint measurement, not bisection (per the playbook's new section):
+
+| binary | `Default(TTest.TRecord)` |
+| --- | --- |
+| `stable_linux_amd64/default/pinned` | compiles clean, **SEGFAULTS at runtime** |
+| HEAD | rejected at compile time |
+
+`tdefault8.pp` is `{ %NORUN }` — compile-only — so the conformance suite only
+ever *typed* it, and the type it had was wrong in a way nothing looked at. The
+bug is as old as `Default()`'s dispatch. What changed is that assignment
+type-checking landed and made a latent crash visible, which is exactly what it
+is for. The `Default()` code's own comment predicted this failure mode
+(`bug-p-default-of-a-record-segfaults-of-an-array-does-nothing`) — it fixed the
+UNQUALIFIED arm and the qualified one kept the old behaviour.
+
+**So the 179-commit range did not matter.** Neither would the 23. There is no
+culprit commit to find: a bisect over any window would have converged on
+whichever commit turned the type check on and named a *correct* commit as the
+cause — the precise failure mode the playbook section describes. Pinned-vs-HEAD
+took one command.
+
+### Not a divergence — FPC accepts it
+
+FPC 3.2.2 compiles `tdefault8.pp` with three "assigned but never used" notes and
+no errors. Nothing goes in `pxx.skip`.
+
+### The double case, and the sibling grep
+
+The rule `Default()` was missing already existed **twice**: `var r:
+TTest.TRecord` has it in `ParseTypeKind`, and `SizeOf(TTest.TRecord)` grew its
+own inline copy (with a comment saying a half-working feature is worse than an
+absent one). `Default()` is the third construct with a bare-token dispatch and
+the only one that never learned it — the second path is the one that stays
+broken.
+
+Fix = one resolver, `ScanNestedTypeRun` (`pasparser_class.inc`), called by
+`Default()`. It **scans without consuming**, because the caller must decide
+before it commits: a nested *record* has to be taken through the registry
+scope-correctly, while a nested subrange, enum or array is not a UClass row at
+all and belongs to `ParseTypeKind`'s own strip.
+
+Grep boundary, stated because it bit: a fourth site
+(`pasparser_expr.inc`, the `TOuter.TInner.Create` walk) open-codes the same walk
+under different names (`nestScanCi`/`nestScanPos`) and requires a trailing
+`Create`. It is a genuinely different shape and is left alone. **`SizeOf`'s
+inline copy IS folded onto `ScanNestedTypeRun`** (second commit) — two copies of
+the rule is not incidental to this bug, it is the mechanism by which the third
+construct went without it. Pure dedup, no behaviour change, verified by holding
+the scope-blind widths still.
+
+### Verified against the FPC oracle
+
+Four shapes, pxx vs FPC 3.2.2, agreeing exactly:
+
+- class-nested record — `Default(TTest.TRecord)`
+- doubly nested — `Default(TThree.TMid.TLeaf)`
+- record owner — `Default(TRecOwner.TInner)` (FPC needs `advancedrecords`; pxx
+  answer is self-consistent)
+- **same-named nested type in two owners** — `TA.TSub` (4 bytes) and `TB.TSub`
+  (32 bytes) both zero their own width; the flat lookup would have answered with
+  whichever registered first
+
+Plus the runtime probe that segfaulted under pinned now prints `f=0`.
+
+### Gate
+
+`make compiler/pascal26` (converged in 1 round — byte-identical self-host
+fixedpoint), the individual `tdefault*` cases (12 pass / 0 fail), the whole
+shard 5/6 (**55 pass / 1 fail -> 56 pass / 0 fail**), and `tools/gate.sh quick`.
+- 2026-08-26 — resolved, commit 8010d7729 (fix) + 44c28dc27 (SizeOf dedup).

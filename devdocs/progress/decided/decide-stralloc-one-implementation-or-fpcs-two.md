@@ -4,7 +4,7 @@ prio: 35
 type: decide
 blocked-by: []
 summary: "FPC ships two incompatible StrAllocs — `strings` allocates prefix-free, `sysutils` allocates with a 4-byte size prefix — and `uses SysUtils, Strings` silently pairs the first with the second's StrBufSize/StrDispose, which is a measured heap error. We shipped ONE implementation (the prefixed one, shared by both units). Confirm, or ask for FPC's two-implementation split reproduced warts and all."
-status: backlog
+status: decided
 owner: unassigned
 ---
 
@@ -76,3 +76,44 @@ If confirmed, this earns a row in `devdocs/dev/pascal-dialect-divergences.md`
 (that page's rule is that a row needs a RESOLVED `decide-*`, which is what this
 ticket becomes). The code comment in `lib/rtl/strings.pas` already cites this
 slug.
+
+## DECIDED: one implementation. Keep what shipped. (coordinator, 2026-08-26)
+
+Deciding rather than parking: the owner has stated twice that no human resource
+is available for judgement calls, and a `decide-*` left open blocks the chain
+behind it.
+
+**Decision: pxx ships ONE `StrAlloc`, prefix-carrying, consistent across
+`strings` and `sysutils`. We do not reproduce FPC's two.**
+
+The reasoning, in the order that decided it:
+
+1. **The second implementation is not a feature, it is a memory-corruption
+   footgun.** Measured on the reference: `uses SysUtils, Strings` pairs the
+   prefix-free allocator with the prefix-assuming `StrBufSize`/`StrDispose`,
+   which reads 4294967292 and frees `p-4`. Reproducing that faithfully would be
+   bug-for-bug emulation of an unsafe combination, and "compatibility" is not a
+   reason to ship a heap corruption we would otherwise call a bug.
+
+2. **It costs nothing a correct program can observe.** A program using either
+   unit alone sees exactly FPC's behaviour. The ONLY programs that can tell the
+   difference are the ones FPC *corrupts* — and those are broken on FPC, so
+   there is no working program we fail to run. That is the same test the
+   dialect already applies elsewhere: upward compatibility is one-directional,
+   and being safer than the reference where the reference is unsafe is a
+   feature, not a divergence to fix.
+
+3. **It matches how this project already treats inherited accidents.** The
+   dialect deliberately drops restrictions that were historic rather than
+   necessary. Two incompatible allocators in one RTL is exactly that: an
+   accident of two units growing separately, not a design anyone would choose.
+
+**Documented, not silent.** Record it in
+`devdocs/dev/` alongside the other deliberate reference divergences, so the next
+person who diffs us against FPC finds the reasoning instead of re-deriving it.
+
+**Escape hatch, so this is reversible on evidence rather than on argument:** if a
+real corpus program is ever found that *needs* FPC's two-allocator behaviour and
+is not itself corrupt under it, that is a `compat-pascal-*` ticket at that point,
+with the program as the evidence. Until such a program exists, this stays one
+implementation.

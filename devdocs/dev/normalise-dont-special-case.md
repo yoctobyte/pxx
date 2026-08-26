@@ -123,7 +123,7 @@ reason this note exists at all, and it is **not** about speed or memory:
 Each constant expression gets its own uniquely-named variable, bound once and
 only read. The gain is that a future fix is single work instead of double.
 
-## Three of these landed in one evening (2026-08-25)
+## Four of these landed in two days (2026-08-25/26)
 
 Not a coincidence worth writing down for its own sake — worth writing down
 because all three had the **same tell**, and it is not the one you would
@@ -164,6 +164,16 @@ So when you find a second path, do not only check whether it is correct today.
 Check what makes it *look* correct, and whether the tests were written from the
 same sentence.
 
+4. **The callable type-name table (Track N, the next day).** `PyCallableStr`
+   already answered "is this bound?" from the **receiver** — tag 8 is both a
+   bound method and a plain def, so the tag alone cannot tell you. The
+   type-name table still answered from the tag, so `type(f).__name__` said
+   `method` for a plain def. Same question, two mechanisms, one of them updated
+   when the answer changed.
+
+Four for four, all "same question, two mechanisms, one updated". That is no
+longer anecdote; it is the failure mode this file exists for.
+
 ### What this says about the grep
 
 Above, this note calls "grep for the sibling" the single highest-yield habit in
@@ -172,6 +182,21 @@ about tonight: **neither double case was found by the grep. Both were found by
 measurement.** And the third could not have been found by it even in principle,
 because the two unguarded append sites never mentioned `MAX_DATAPTRFIX`, so no
 grep for the constant could reach them.
+
+**And the first negative result, which is the point of the habit rather than an
+exception to it (2026-08-26).** After fixing `run_pascal_conformance.sh`, the
+sibling check on `run_c_conformance.sh` said: same argument shape, takes `$CC`
+and `$SUITE` the same way — **but it never `cd`s**, so a relative path keeps
+resolving and the bug cannot occur there. It was left untouched rather than
+"fixed" symmetrically, because an edit that changes no behaviour still has to be
+read by the next person, and a comment claiming to fix a bug that was never
+there is worse than no comment. The warning for whoever later adds a `cd` went
+in the ticket instead.
+
+Four positives and one negative in two days. **The grep earns its keep by the
+answers it gives, not by the fixes it produces** — and a sibling that merely
+looks alike is not one. Checking and concluding "not this one, and here is why"
+is a completed check, not a wasted minute.
 
 The grep finds siblings that are *spelled* alike. It cannot find one that was
 open-coded under a different name, and it cannot find one whose comment

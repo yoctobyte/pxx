@@ -1425,6 +1425,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-t-qemu-conformance-false-timeout-under-load | T | 55 | bug | c-conformance cross shards false-RED on a 10s per-test timeout under full load | — |
 | bug-t-resolve-cites-a-sha-the-rebase-then-rewrites | T | 60 | bug | The documented loop is commit -> resolve <slug> <sha> -> sync.sh, but sync.sh REBASES, so the sha written into the ticket no longer exists on origin. Four tickets in one session cited commits nobody else can look up. | — |
 | bug-t-run-must-invalidate-when-compiler-changes-mid-run | T | 70 | bug | A test run that spans a compiler rebuild reports PASS/FAIL as if it were one binary; it should hash the binary at start and end and report INVALID on mismatch | — |
+| bug-t-run-pascal-conformance-silently-fails-every-test-on-a-relative-compiler-path | T | 55 | bug | `tools/run_pascal_conformance.sh ./compiler/pascal26 ...` fails 51 of 107 tgeneric tests; the same run with `/home/neo/frank1/compiler/pascal26` passes 61 and fails 0. The runner `cd`s into the suite dir before invoking the compiler, so a relative `$CC` no longer resolves — and the failure surfaces as `compile error`, i.e. as a COMPILER bug, for every test at once. | — |
 | bug-t-selfhost-build-uses-fixed-tmp-paths-colliding-across-clones | T | 75 | bug | The self-host build writes fixed /tmp/pascal26-build\|verify paths, so the watcher's dedicated clone and a dev checkout on the same box overwrite each other's in-flight compiler — /tmp is not per-clone | — |
 | bug-t-split-jobs-misses-a-tmp-path-reached-through-a-shell-variable | T | 45 | bug | `split_jobs` keeps a producer with its consumer by union-find over literal /tmp paths, so a recipe that reaches its artifact through a shell variable (`$(TESTTMP)/$$bin` in a for-loop) exposes no shared token, is never merged, and runs under job isolation with a scratch dir where the artifact was never built. Third instance of the class the splitter's own comments describe. | — |
 | bug-t-status-reads-worktree-tstate-false-down | T | 80 | bug | twatch --status reads tstate from the WORKTREE but walks history from origin/master, so a detached or unpulled checkout reports Track T DOWN while it is healthy | — |
@@ -2317,6 +2318,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-nilpy-test-nilpy-qualifier-vs-cproc | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_qualifier_vs_cproc.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-sqlite-crud | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_sqlite_crud.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-str-isnumeric-istitle | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_str_isnumeric_istitle.npy red at 0d6de0cbeae1 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-type-name-of-a-big-int | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_type_name_of_a_big_int.npy red at 44193e547f6d (auto-filed by twatch) | — |
 | regression-test-nilpy-test-pascal-at-procvar-mode | P | 70 | regression | regression: test-nilpy#src:test/test_pascal_at_procvar_mode.pas@1 red at 23becd24b8e5 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-pascal-mode-switch-cli | P | 70 | regression | regression: test-nilpy#src:test/test_pascal_mode_switch_cli.pas@2 red at 23becd24b8e5 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-pascal-self-result-delphi | P | 70 | regression | regression: test-nilpy#src:test/test_pascal_self_result_delphi.pas@1 red at 23becd24b8e5 (auto-filed by twatch) | — |
@@ -2325,6 +2327,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-pascal-conformance-shard0-6 | T | 70 | regression | regression: test-pascal-conformance#shard0/6 red at 98ed38202254 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard4-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 red at 1b9b43e5b511 (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard4-6 | T | 70 | regression | regression: test-pascal-conformance#shard4/6 red at 61e2448bac6d (auto-filed by twatch) | — |
+| regression-test-pascal-conformance-shard5-6-2 | T | 70 | regression | regression: test-pascal-conformance#shard5/6 red at 44193e547f6d (auto-filed by twatch) | — |
 | regression-test-pascal-conformance-shard5-6 | T | 70 | regression | regression: test-pascal-conformance#shard5/6 red at 61e2448bac6d (auto-filed by twatch) | — |
 | regression-test-smoke-11 | T | 70 | regression | regression: test-smoke#11 red at 163ffea562fa (auto-filed by twatch) | — |
 | regression-test-smoke-compiler | T | 70 | regression | regression: test-smoke#src:compiler/compiler.pas red at b11e604f8043 (auto-filed by twatch) | — |
@@ -2337,6 +2340,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-sqlite-threads-x86-64-00 | T | 70 | regression | regression: test-sqlite-threads-x86_64#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-test-threads-test-parallel-for-capture-aggr | P | 70 | regression | regression: test-threads#src:test/test_parallel_for_capture_aggr.pas red at b936d125601e (auto-filed by twatch) | — |
 | regression-test-uforth-00 | T | 70 | regression | regression: test-uforth#00 red at 378295f7c218 (auto-filed by twatch) | — |
+| regression-test-uforth-core | T | 70 | regression | regression: test-uforth#core red at 44193e547f6d (auto-filed by twatch) | — |
 | regression-test-zlib-00 | T | 70 | regression | regression: test-zlib#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-testmgr-conformance-shard-timeout-under-load | T | 60 | regression | Track T: c-conformance shards time out under full parallel load (false REDs) | — |
 | regression-tools-devtest-00 | T | 70 | regression | regression: tools-devtest#00 red at 1b9b43e5b511 (auto-filed by twatch) | — |

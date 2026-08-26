@@ -278,8 +278,36 @@ def kill_child(proc, grace=30):
         pass
 
 
+def code_fingerprint(path=None):
+    """sha256 of twatch.py's own source, or "" if it cannot be read.
+
+    A running daemon holds the code it was STARTED with; the file underneath it
+    moves every time the clone pulls. `trackt status` said RUNNING and could not
+    say *what* was running, so a fix that had landed on origin, been pulled into
+    the clone, and passed its guards could still be absent from the process
+    actually publishing verdicts — indistinguishable from live. That happened on
+    2026-08-26 with three separate fixes, and the only reason it was noticed is
+    that one of them added a FIELD whose absence was visible in a report.
+
+    A content hash rather than a git sha on purpose: the question is "is the
+    process running the code that is on disk", which is independent of whether
+    the clone is on a branch, detached at a sha under test, or mid-rebase — and
+    the clone is usually detached, so HEAD would answer a different question.
+    """
+    try:
+        with open(path or os.path.abspath(__file__), "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()[:12]
+    except OSError:
+        return ""
+
+
+CODE_FP = ""            # set once at daemon start; "" for short-lived readers
+
+
 def set_phase(clone, host, phase, **kw):
-    d = {"ts": time.time(), "pid": os.getpid(), "host": host, "phase": phase}
+    d = {"ts": time.time(), "pid": os.getpid(), "host": host, "phase": phase,
+         # what code this process is actually running -- see code_fingerprint()
+         "code_fp": CODE_FP}
     d.update(kw)
     write_json_atomic(os.path.join(clone.path, WATCH_REL), d)
 HISTORY_CAP = 50
@@ -2379,6 +2407,31 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # since this JOB last ran under a tier that contained it.
     good = parent
 
+    def testable_only(commits):
+        """A blame range may contain only commits a gate could observe.
+
+        The bisect converged on `ab584382edcd` for four unrelated jobs on
+        2026-08-25 and named it as the single culprit. That commit's entire diff
+        is 250 lines of `prio:` frontmatter — no code. It cannot break
+        test-aarch64, and the watcher already knows that: `needs_test()` is the
+        same predicate the main loop uses to decide a push owes no gate run.
+
+        Two separate defects put it there and both are worth stating, because
+        fixing one alone leaves the other live. The range was anchored to the
+        wrong endpoint (fixed below), which excluded the real culprit — but
+        blame landing on a DOCS commit is independent of that, and would happen
+        again on any range whose midpoint lands on one. A range that cannot
+        contain a cause is a range that cannot mislead a bisect, and filtering
+        also makes every bisect cheaper by removing steps that test nothing.
+
+        Kept as a filter rather than pushed into commits_between(): that helper
+        answers a plain git question used in several places, and "which commits
+        could have caused this" is a different question wearing the same shape.
+        """
+        return [c for c in commits if needs_test(clone.path, c)]
+
+    rng = testable_only(rng)
+
     # PER-JOB RANGE, always — not only when the parent range is empty.
     #
     # `commits_between(parent, sha)` answers "since this host last tested
@@ -2407,7 +2460,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
             return rng, good        # the parent's run DID contain it
         y = last_covering_sha(st, prev_tier, sha)
         if y and y != sha:
-            wider = clone.commits_between(y, sha)
+            wider = testable_only(clone.commits_between(y, sha))
             if wider and len(wider) > len(rng):
                 return wider, y
         return rng, good
@@ -2415,7 +2468,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     if new_red and not rng:
         y = last_covering_sha(st, report["tier"], sha)
         if y and y != sha:
-            rng = clone.commits_between(y, sha)
+            rng = testable_only(clone.commits_between(y, sha))
             if rng:
                 good = y
                 print("twatch: parent range empty (%s re-tested at %s) — using "
@@ -4406,6 +4459,20 @@ def bisect_step(clone, host, st, tier):
     with ONLY the failing job."""
     for reg in st["open_regressions"]:
         rng = reg.get("range", [])
+        # Repair on read: entries opened before the range filter can still hold
+        # commits no gate could observe, and one of them is how `ab584382edcd`
+        # — 250 lines of `prio:` frontmatter, no code — got named as the single
+        # culprit for four unrelated jobs. A stale entry must not keep misfiring
+        # just because the code that created it has been fixed, so the range is
+        # re-filtered here and the correction persisted.
+        clean = [c for c in rng if needs_test(clone.path, c)]
+        if len(clean) != len(rng):
+            print("twatch: %s — dropped %d commit(s) from its range that change "
+                  "no code a gate can observe; a bisect over those does not "
+                  "fail, it names an innocent commit"
+                  % (reg.get("job", "?"), len(rng) - len(clean)), flush=True)
+            reg["range"] = rng = clean
+            save_state(clone, host, st)
         if len(rng) <= 1:
             continue
         if reg.get("cascade"):
@@ -5530,6 +5597,11 @@ def main():
     BRANCH = args.branch or CONF.get("branch") or "master"
     clone = Clone(clone_path, args.remote, BRANCH)
     host = re.sub(r"[^A-Za-z0-9_-]", "-", args.host)
+    # Stamped ONCE, here, and never recomputed: the point is to record what this
+    # process loaded, so re-reading the file later would answer the question the
+    # stamp exists to make answerable.
+    global CODE_FP
+    CODE_FP = code_fingerprint()
 
     # config file fills in whatever the CLI didn't say (CLI wins); interval /
     # autoticket / no_bisect reload every cycle so ./trackt config applies to
