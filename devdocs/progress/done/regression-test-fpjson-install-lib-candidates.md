@@ -58,4 +58,4 @@ filed for on 2026-08-25, a day before this rung was enrolled: the suite was at
 201/203 and the enrolment simply made that visible.
 
 Fixed there. `run: 203  failures: 0  errors: 0`.
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 4cd1a0c22.

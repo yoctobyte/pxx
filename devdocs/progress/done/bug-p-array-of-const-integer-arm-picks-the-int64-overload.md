@@ -121,4 +121,4 @@ IS Int64 and the element goes in as `vtInt64`, so both halves move together.
 Suite: `run: 203  failures: 0  errors: 0` — the recorded 203/203, reached.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 4cd1a0c22.
