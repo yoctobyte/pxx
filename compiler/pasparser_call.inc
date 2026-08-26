@@ -1437,6 +1437,34 @@ begin
   StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; Inc(StrConstCount);
 end;
 
+{ True when some argument in the call's parenthesised list STARTS with '[' at
+  bracket depth 0 -- an `array of const` literal (`TC.Log(fmt, ['answer', 42])`)
+  or an open-array constructor. Purely token-level: the real parse needs a
+  parameter to bind against before it can tell either from a SET literal, and
+  the speculative probe below has no parameter. lp is the index of the '('. }
+function ArgListHasBracketElem(lp: Integer): Boolean;
+var i, depth: Integer; atElemStart: Boolean; tk: TTokenKind;
+begin
+  Result := False;
+  if lp < 0 then Exit;
+  depth := 0; atElemStart := True; i := lp + 1;
+  while i < TokCount do
+  begin
+    tk := Tokens[i].Kind;
+    if tk = tkEOF then Exit;
+    if (tk = tkLBrack) and (depth = 0) and atElemStart then begin Result := True; Exit; end;
+    if (tk = tkLParen) or (tk = tkLBrack) then Inc(depth)
+    else if (tk = tkRBrack) then Dec(depth)
+    else if tk = tkRParen then
+    begin
+      if depth = 0 then Exit;
+      Dec(depth);
+    end;
+    atElemStart := (tk = tkComma) and (depth = 0);
+    Inc(i);
+  end;
+end;
+
 function FindUMethOverloadAhead(ci: Integer; const name: AnsiString; nExplicitArgs: Integer): Integer;
 { TYPE-aware method overload selection.
 
@@ -1537,6 +1565,37 @@ begin
     lp := TokPos - 1
   else
     lp := -1;
+
+  { An `array of const` LITERAL or an open-array constructor written as `[...]`
+    in an argument position. The probe parses arguments with ParseArgExpr, which
+    has no parameter to bind against, so it reads the '[' as a SET LITERAL and
+    dies on "set item must be one character" -- and Error halts, so the probe's
+    own "unsupported arg shape" escape further down is never reached. Both
+    conditions are required: a bare '[' really may be a set (that parses fine),
+    and an open-array param really may be handed a variable (that parses fine
+    too). It is the combination the probe cannot survive.
+
+    Answered BEFORE the probe runs, the same way the NilPy `**` case is answered
+    above -- a shape the probe cannot parse has to be settled before it, not
+    after. Selection then falls back to arity, which is exactly what these calls
+    had before the probe existed. Making the probe parameter-aware instead is
+    refactor-p-the-overload-probe-cannot-see-the-argument-match-channels.
+    regression-test-core-test-arrayofconst-to-method-b287 }
+  if ArgListHasBracketElem(lp) then
+  begin
+    ok := False;
+    for c := 0 to nCand - 1 do
+    begin
+      pi := UMthProc_[cand[c]];
+      for j := 1 to Procs[pi].ParamCount - 1 do
+        if (j < MAX_PROC_PARAMS) and Procs[pi].Params[j].IsArray then ok := True;
+    end;
+    if ok then
+    begin
+      Result := FindUMethArity(ci, name, nExplicitArgs);
+      Exit;
+    end;
+  end;
 
   nArgs := 0;
   for i := 0 to MAX_PROC_PARAMS - 1 do argIsNil[i] := False;
