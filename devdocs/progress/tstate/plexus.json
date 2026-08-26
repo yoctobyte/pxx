@@ -1,18 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-24T22:28:16Z",
-   "fixed": [
-    "test-core#src:test/test_default_of_aggregate.pas",
-    "test-core#src:test/test_named_operators.pas",
-    "test-core#src:test/test_operator_implicit_shortstring_b356.pas"
-   ],
-   "new_red": [],
-   "sha": "330466ca7f651c0f777b19859eaf0ae49a6d1cbd",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-24T23:29:53Z",
    "fixed": [],
    "new_red": [],
@@ -450,6 +438,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "fbbe5f2e15f67c0694185751b7df22c23d9778b7",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T05:25:25Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "9746f0dd248e43fa15bce1a8040161784de2791f",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -1001,11 +998,11 @@
   "test-core#129": "full",
   "test-core#157": "full",
   "test-core#160": "full",
-  "test-core#163": "native",
   "test-core#164": "native",
   "test-core#165": "native",
   "test-core#166": "native",
   "test-core#167": "native",
+  "test-core#168": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
   "test-core#src:examples/tk/callbacks.npy": "native",
@@ -1997,6 +1994,7 @@
   "test-core#src:test/test_nilpy_from_import_as_rename.npy": "native",
   "test-core#src:test/test_nilpy_from_import_binds_provided_names.npy": "native",
   "test-core#src:test/test_nilpy_genexp_isinstance_star.npy": "native",
+  "test-core#src:test/test_nilpy_hasattr_untyped_parameter.npy": "native",
   "test-core#src:test/test_nilpy_html_tempfile.npy": "native",
   "test-core#src:test/test_nilpy_import_alias.npy": "native",
   "test-core#src:test/test_nilpy_import_scope.npy": "native",
@@ -4106,11 +4104,11 @@
   "test-c-conformance-riscv32#shard5/6": "pass",
   "test-cjson#src:test/cjson/runner.c": "pass",
   "test-core#00": "pass",
-  "test-core#163": "pass",
   "test-core#164": "pass",
   "test-core#165": "pass",
   "test-core#166": "pass",
   "test-core#167": "pass",
+  "test-core#168": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
@@ -5100,6 +5098,7 @@
   "test-core#src:test/test_nilpy_from_import_as_rename.npy": "pass",
   "test-core#src:test/test_nilpy_from_import_binds_provided_names.npy": "pass",
   "test-core#src:test/test_nilpy_genexp_isinstance_star.npy": "pass",
+  "test-core#src:test/test_nilpy_hasattr_untyped_parameter.npy": "pass",
   "test-core#src:test/test_nilpy_html_tempfile.npy": "pass",
   "test-core#src:test/test_nilpy_import_alias.npy": "pass",
   "test-core#src:test/test_nilpy_import_scope.npy": "pass",
@@ -6667,14 +6666,14 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T05:18:08Z",
+  "date": "2026-08-26T05:25:25Z",
   "deadline": 7200.0,
-  "sha": "fbbe5f2e15f67c0694185751b7df22c23d9778b7",
+  "sha": "9746f0dd248e43fa15bce1a8040161784de2791f",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 364.5
+  "wall": 357.9
  },
  "last_bench": {
   "conf_rows": 550,
