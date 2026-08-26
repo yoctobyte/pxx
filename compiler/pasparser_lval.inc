@@ -5720,8 +5720,9 @@ begin
     if i < MAX_PROC_PARAMS then
     begin
       node := ASTLeft[currArg];
-      MatchArgScalar[i] := (TypeIsOrdinal(argTypes[i]) or TypeIsFloat(argTypes[i])) and
-                           (argTypes[i] <> tyChar) and (argTypes[i] <> tyPointer) and
+      MatchArgScalar[i] :=
+        ((TypeIsOrdinal(argTypes[i]) or TypeIsFloat(argTypes[i])) and
+         (argTypes[i] <> tyChar) and (argTypes[i] <> tyPointer)) and
         (((ASTKind[node] = AN_INT_LIT) or (ASTKind[node] = AN_FLOAT_LIT) or
           (ASTKind[node] = AN_BINOP)) or
          ((ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
@@ -5729,10 +5730,56 @@ begin
          ((ASTKind[node] = AN_CALL) and (ASTIVal[node] >= 0) and
           (ProcRetFixedArrBytes[ASTIVal[node]] = 0) and
           not ProcRetIsDynArray[ASTIVal[node]]));
+      { ...and the STRING twin of the same blindness. `array of AnsiString`
+        presents tyAnsiString exactly as a plain `AnsiString` parameter does, so
+        `P('hello')` bound whichever was DECLARED FIRST and the callee then read
+        a dyn-array header off a string handle: `P(const v: array of AnsiString)`
+        before `P(const v: AnsiString)` printed `arr 5` instead of `str hello`.
+        Silent wrong dispatch, no diagnostic -- the same failure the ordinal arm
+        above was added for, one kind later.
+        A string LITERAL is its own node shape (AN_STR_LIT) and has to be listed;
+        the rest reuse the shapes above unchanged, including AN_BINOP so a
+        concatenation counts. Char stays out for the same reason it is out
+        above: char<->string conversions are legitimate and ranked, not blocked.
+        bug-p-a-string-argument-binds-an-array-of-string-overload }
+      if (argTypes[i] = tyAnsiString) or (argTypes[i] = tyString) or
+         (argTypes[i] = tyShortString) or (argTypes[i] = tyFixedString) then
+        MatchArgScalar[i] :=
+          (ASTKind[node] = AN_STR_LIT) or (ASTKind[node] = AN_BINOP) or
+          ((ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+           (ASTIVal[node] < SymCount) and not Syms[ASTIVal[node]].IsArray) or
+          ((ASTKind[node] = AN_CALL) and (ASTIVal[node] >= 0) and
+           (ProcRetFixedArrBytes[ASTIVal[node]] = 0) and
+           not ProcRetIsDynArray[ASTIVal[node]]);
     end;
     currArg := ASTRight[currArg];
   end;
   MatchArgScalarValid := True;
+
+  { ...and the mirror channel: which arguments are DEFINITELY an array, which
+    disqualifies a SCALAR parameter. Not the negation of MatchArgScalar --
+    everything uncertain must stay False in BOTH, or an argument shape neither
+    channel recognises would be blocked from every candidate at once.
+    Same certainty discipline: a named array symbol, or a call to a routine
+    whose RESULT is a fixed or dynamic array. Nothing else.
+    bug-p-an-array-argument-binds-a-scalar-overload }
+  currArg := argsHead;
+  for i := 0 to nArgs-1 do
+  begin
+    if i < MAX_PROC_PARAMS then
+    begin
+      node := ASTLeft[currArg];
+      MatchArgArray[i] :=
+        ((ASTKind[node] = AN_IDENT) and (ASTIVal[node] >= 0) and
+         (ASTIVal[node] < SymCount) and
+         (Syms[ASTIVal[node]].IsArray or (SymDynDepth[ASTIVal[node]] > 0))) or
+        ((ASTKind[node] = AN_CALL) and (ASTIVal[node] >= 0) and
+         ((ProcRetFixedArrBytes[ASTIVal[node]] > 0) or
+          ProcRetIsDynArray[ASTIVal[node]]));
+    end;
+    currArg := ASTRight[currArg];
+  end;
+  MatchArgArrayValid := True;
 
   { FPC parity: an untyped integer LITERAL is typed by its VALUE — the smallest
     type that holds it — and overload resolution ranks against THAT. pxx types

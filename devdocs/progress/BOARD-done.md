@@ -554,6 +554,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-crtl-strtod-precision-cjson-floats | C | 60 | bug | crtl strtod/printf-%g precision: cJSON floats drift by 1 ulp (tstate red) | — |
 | bug-downcast-inherited-property-wrong-offset | A | 50 | bug | Downcast to an inherited PROPERTY reads the wrong offset (miscompile) | — |
 | bug-dynarray-concat-silent-miscompile | A | 50 | bug | Dynamic-array `a + b` concat silently miscompiles (compiles, no output) | — |
+| bug-dynarray-function-result-passed-directly-types-as-pointer | P | 55 | bug | A dynamic-array-returning function's result loses its type when passed DIRECTLY as an argument: overload resolution sees `Pointer` instead of the array type and rejects the call. Assigning the same call to a variable of that type first works, so the function and the parameter are both fine — only the un-assigned result's inferred type is wrong. FPC compiles it. | — |
 | bug-dynarray-in-record-corrupt | A | 50 | bug | Dynamic array as a record field is corrupted (value return + var-param assign) | — |
 | bug-dynarray-managed-record-field-reassign | A | 50 | bug | bug: assigning a local dynamic-array-of-managed-record to a field drops/frees the elements | — |
 | bug-dynarray-whole-var-assign-cross | A | 50 | bug | Whole dynamic-array variable assignment (`b := a`) unsupported on i386 + aarch64 | — |

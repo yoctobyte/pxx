@@ -6963,6 +6963,21 @@ begin
     Result := True;
     Exit;
   end;
+  { ...and the mirror: a definitely-ARRAY argument cannot bind a SCALAR
+    parameter. `S(ia)` on `S(v: Integer)` declared ahead of `S(const v: TIA)`
+    passed the dyn-array HANDLE as an integer and printed 1440743456; the fixed
+    twin printed the variable's address. tyPointer is exempt because a dyn-array
+    handle marshalling to a Pointer formal is a real convention, and an untyped
+    parameter is exempt because it takes anything by definition.
+    bug-p-an-array-argument-binds-a-scalar-overload }
+  if MatchArgArrayValid and (j < MAX_PROC_PARAMS) and MatchArgArray[j] and
+     (not Procs[i].Params[j].IsArray) and
+     (Procs[i].Params[j].TypeKind <> tyPointer) and
+     not ProcParamUntyped[i * MAX_PROC_PARAMS + j] then
+  begin
+    Result := True;
+    Exit;
+  end;
   if not MatchArgRecValid then Exit;
   if j >= MAX_PROC_PARAMS then Exit;
   { Records AND classes. Classes were excluded here, so an UNRELATED class bound

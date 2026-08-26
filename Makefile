@@ -8038,6 +8038,20 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_low_high_index_type.pas $(TESTTMP)/test_lhit26
 	test "$$($(TESTTMP)/test_lhit26)" = "$$(cat test/test_low_high_index_type.expected)"
+	# An array argument and a scalar argument must each reach their own overload,
+	# whichever order the two are declared in. pxx presents an array's ELEMENT
+	# kind as its type kind, so `array of AnsiString` and `AnsiString` (and
+	# `array of Integer` and `Integer`) were indistinguishable to resolution,
+	# which took whichever was declared FIRST -- in BOTH directions. P('hello')
+	# printed `arr 5`; S(ia) printed the dyn-array HANDLE as an integer; T(fa)
+	# printed the variable's ADDRESS. Silent wrong dispatch and silent wrong
+	# values. Both directions pinned: they are separate facts with separate
+	# evidence, and fixing one leaves the other wrong. The reversed-declaration
+	# pairs are pinned too -- they were always right, and are why this looked
+	# like it was not happening.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_array_and_scalar_overload_binding.pas $(TESTTMP)/test_asob26
+	test "$$($(TESTTMP)/test_asob26)" = "$$(cat test/test_array_and_scalar_overload_binding.expected)"
 	# ...and the guard: a genuine `var` parameter must still REFUSE the same
 	# argument. This is what stops the fix from being ungated -- tried, and it
 	# let a call RESULT bind to a var parameter and COMPILE, because the method

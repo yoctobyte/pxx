@@ -2100,6 +2100,19 @@ var
     bug-a-an-integer-argument-binds-a-fixed-array-overload }
   MatchArgScalar : array[0..MAX_PROC_PARAMS-1] of Boolean;
   MatchArgScalarValid : Boolean;
+  { ...and the MIRROR of it, which the scalar channel alone cannot cover: an
+    argument that is DEFINITELY an array cannot bind a SCALAR parameter. Same
+    blindness, opposite direction, and it needs its own channel because the two
+    facts have different evidence -- "this argument is certainly not an array"
+    and "this argument is certainly an array" are not each other's negation
+    when everything uncertain has to stay matchable. Without it `S(ia)` on
+    `S(v: Integer)` declared before `S(const v: TIA)` printed the dyn-array
+    HANDLE as an integer (1440743456), and the fixed-array twin printed the
+    variable's ADDRESS. Silent wrong values, no diagnostic, and which one you
+    got depended on declaration order.
+    bug-p-an-array-argument-binds-a-scalar-overload }
+  MatchArgArray : array[0..MAX_PROC_PARAMS-1] of Boolean;
+  MatchArgArrayValid : Boolean;
   BuiltinUnitIdxCache : Integer;  { cached InternStr('builtin') idx; the builtin intrinsic unit is fallback-only in MatchProcCall (see BuiltinUnitIdx). }
   BuiltinUnitIdxSet   : Boolean;  { BSS -> False: the cache above is computed lazily once per process. }
   PasAsmModeNonIntel : Boolean;  { {$asmMode att|direct} is in force: tolerated until an actual asm block needs reading (feature-pascal-asmmode-directive-tolerance) }

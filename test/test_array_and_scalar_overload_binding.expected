@@ -1,0 +1,16 @@
+str lit
+str var
+str varx
+str c!
+str fz
+Qstr lit
+Rstr lit
+Sarr 4
+Sarr 6
+Tfix 11
+Uarr 3
+arr 3
+Qarr 3
+Rarr 4
+open 3
+f/7

@@ -324,7 +324,7 @@ _none_
 | task-d-document-warn-ignored-directives | D | 20 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (25)
+## backlog_new (24)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -335,7 +335,6 @@ _none_
 | bug-a-error-recovery-silences-every-lowering-only-diagnostic | A | 45 | bug | Once ANY diagnostic is recovered, every lowering-only check stops firing | — |
 | bug-a-the-specialization-splice-does-not-adjust-the-body-pass-spans | A | 35 | bug | InsertTokens/RemoveTokens keep the body pass's DeclItem spans and body-begin marker in step with a token-stream edit. The specialization splice hand-rolls its own insert and calls neither — it now adjusts the token->file map (that fix landed) but still not the Pass2 spans. Either Pass2Active is always false there, in which case say so in a comment, or the spans drift. | — |
 | bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical | A | 50 | bug | Re-filed from decide-variant-bitwise-width, decided 2026-08-25 (option 2). pxx's static Pascal `shr` is a 64-bit LOGICAL shift on both Integer and Int64; its Variant `shr` is a 64-bit ARITHMETIC shift. Two different operators under one spelling inside one language. Fix: Pascal's Variant path emits a logical shift; NilPy keeps the arithmetic one (Python's >> sign-extends), split at the PyProgramMode seam that already exists. | — |
-| bug-dynarray-function-result-passed-directly-types-as-pointer | P | 55 | bug | A dynamic-array-returning function's result loses its type when passed DIRECTLY as an argument: overload resolution sees `Pointer` instead of the array type and rejects the call. Assigning the same call to a variable of that type first works, so the function and the parameter are both fine — only the un-assigned result's inferred type is wrong. FPC compiles it. | — |
 | bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable | N | 70 | bug | `import m` then `m.f(1)` compiles and runs, but `h = m.f` — the same member in VALUE position — is a COMPILE ERROR, `undefined variable (f)`, naming the attribute as if it were a bare name. Every value position fails the same way (assignment, dict value, `map(m.f, ...)`), so a module's functions cannot be used as callbacks at all. The import resolves; only the value position is broken. | — |
 | bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 40 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
 | bug-p-address-of-a-dynamic-array-captures-the-handle-not-the-variable | P | 55 | bug | `@dy` on a dynamic array yields the HANDLE, not the address of the variable, so a ^TDyn pointer goes stale on any reallocation and reads a freed buffer | — |
@@ -582,9 +581,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2410)
+## done (2411)
 
-2410 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2411 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (44)
 
@@ -713,7 +712,6 @@ _none_
 - [p 55] [B] bug-b-inttostr-of-a-qword-above-2-63-renders-negative
 - [p 55] [B] bug-b-inttostr-of-a-qword-prints-it-signed
 - [p 55] [B] bug-b-the-fpc-vartype-constants-are-missing
-- [p 55] [P] bug-dynarray-function-result-passed-directly-types-as-pointer
 - [p 55] [N] bug-n-a-field-assigned-from-a-module-global-expression-is-refused
 - [p 55] [N] bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence
 - [p 55] [N] bug-n-hasattr-with-a-computed-name-cannot-see-a-builtin-method
