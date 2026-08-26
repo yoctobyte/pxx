@@ -13,6 +13,7 @@ procedure ParseCUnit; forward;
 procedure RegisterCMacroConsts; forward;
 {$endif}
 procedure EmitAnsiStringRuntime; forward;
+procedure EmitVariantBlobs; forward;   { emitted at EmitAnsiStringRuntime's tail; defined after the two bodies it splices }
 procedure EmitDiv0Stub; forward;
 procedure EmitFpcFloatErrStub; forward;
 procedure EmitFpcMemErrStub; forward;
