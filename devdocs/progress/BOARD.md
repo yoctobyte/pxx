@@ -8,11 +8,9 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime | A | 85 | perf | The structural half of bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost, which halved the constant (8.62s -> 4.06s) by removing the hotspots but did NOT remove the WORK: every .npy compile still parses and code-generates all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. A zero-byte .npy costs 4.06s where `begin end.` costs 0.24s. | — |
+_none_
 
 ## unfinished (24)
 
@@ -343,7 +341,7 @@ _none_
 | task-d-document-warn-ignored-directives | D | 20 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (28)
+## backlog_new (31)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -372,6 +370,9 @@ _none_
 | feature-n-a-kwargs-collecting-callee-through-a-callable-value | N | 55 | feature | A callee that collects `**kwargs` cannot be called through a callable value at all — every shape raises TypeError, including `def f(a, **kw)` called as `zz(1)` with no defaults anywhere. The dynamic bridge has no way to synthesize the empty dict the body expects in the collector slot, so the collector is deliberately left counted in ReqN to make the call REFUSE loudly rather than dispatch at an arity the body does not have. Split out of the *args fix; that half is done and CPython-exact. | — |
 | feature-p-assertions-switch-and-strict-default | P | 30 | feature | Re-filed from decide-assertion-default-vs-fpc, decided 2026-08-25 (option 3, default ON). pxx evaluates Assert() always; FPC ignores it unless -Sa. The dialect contract requires every divergence to be switchable and disabled under the strict family, so the switch is mandated rather than merely preferred. Once it exists the default stops being a one-way door. | — |
 | feature-p-legacy-value-object-types | P | 15 | feature | Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone. | — |
+| perf-a-cache-the-compiled-nilpy-runtime-unit-image | A | 60 | perf | The structural remainder of perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime, which halved the tax again (5.36s -> 3.06s) by removing two hotspots but still does not remove the WORK: every .npy compile parses and lowers all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. Now that emission is fixed, the residual 2.9s is genuinely parse + AST/IR/symtab construction, so nothing short of caching the compiled unit image will move it. | — |
+| perf-o-promote-constant-divisor-strength-reduction-to-o2 | A+O | 55 | perf | `x div 2^k` / `x mod 2^k` are strength-reduced only at OptLevel >= 3, but -O2 is the default that the compiler and every program it emits are actually built at, so the idiv ships everywhere. Three such sites in the heap allocator were 11.4% of the compiler's own in-.text samples; they were fixed at the SOURCE, which leaves every other site in the RTL, the libraries and all user code still paying it. | — |
+| perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | Measured at 13e196cc8 on the real -O2 compiler: ParseFactorCore is 9.4% of the whole run — the largest single named function — because 41,032 calls issue 1,583,871 CaseEqual, i.e. 38.6 string compares per factor, walking a linear `else if CaseEqual(name, '...')` chain of 92 arms spread over ~7,180 lines. | — |
 | refactor-a-two-predicates-answer-what-a-caret-yields | A | 55 | refactor | Two functions type a dereference. NodePtrElem knows more SPELLINGS (index-into-base, pointer FIELD, inline PTR_CAST, pointer arithmetic); ResolveDerefShape knows more ABOUT each (remaining depth, ultimate base). Swapping a call site from one to the other trades one kind of knowledge for the other, silently — which is exactly what shipped a regression on 2026-08-25. | — |
 | refactor-p-one-lvalue-path-for-statements-and-expressions | P | 55 | refactor | An assignment TARGET is parsed by a second, smaller copy of the lvalue walk in pasparser_stmt.inc, which resolves every `.name` as a field and ends on Expect(':='). Every capability the expression path gains has to be re-added there by hand, and three bugs so far are exactly that omission: the builtin pointer-name fallback, the PChar adapter, and the deref-then-index shape. The statement path should delegate, as its own cast-headed-CALL arm already does. | — |
 | refactor-p-the-field-declaration-parser-exists-twice | P | 45 | refactor | `ParseRecordFields` (pasparser_decl.inc ~3199) and the class-body field arm inside `ParseTypeSection` (~4824) parse the same grammar — comma-separated names, inline fixed/dynamic array, named array alias, scalar — with the same locals under different names and the same AddUField tail. Every field-level feature has to be written twice, and the second copy is the one that stays broken. | — |
@@ -604,9 +605,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2395)
+## done (2396)
 
-2395 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2396 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -719,6 +720,8 @@ _none_
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
 - [p 60] [O] feature-opt-emitasmx64-reparses-fixed-strings
 - [p 60] [C] idea-c-realworld-test-targets
+- [p 60] [A] perf-a-cache-the-compiled-nilpy-runtime-unit-image
+- [p 60] [P] perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor
 - [p 58] [A] bug-a-nilpy-double-star-in-a-mixed-argument-list
 - [p 58] [P] compat-pascal-class-helpers
 - [p 58] [A] feature-cdecl-bodied-sysv-prologue
@@ -762,6 +765,7 @@ _none_
 - [p 55] [P] feature-pascal-corpus-fgl
 - [p 55] [A] feature-pascal-type-helpers [parked — re-claim, do not duplicate]
 - [p 55] [A] feature-signal-siginfo-ucontext [parked — re-claim, do not duplicate]
+- [p 55] [A+O] perf-o-promote-constant-divisor-strength-reduction-to-o2
 - [p 55] [A] refactor-a-two-predicates-answer-what-a-caret-yields
 - [p 55] [P] refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too
 - [p 55] [P] refactor-p-one-lvalue-path-for-statements-and-expressions
