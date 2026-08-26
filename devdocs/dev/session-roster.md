@@ -368,7 +368,11 @@ object store and the shared machine:
 - **Never `pkill -f` a bare tool name.** See the tenants section above.
 
 Two gotchas specific to gating IN a worktree, both of which produced a scary
-red today that was not a red:
+red today that was not a red. **Both now live with their tools** -- the `/tmp`
+one in `devdocs/dev/gating-and-waiting.md`, the seed-mtime one in CLAUDE.md under
+the per-fix loop -- because a gotcha belongs to the tool that has it, not to the
+role that happened to hit it, and whoever seeds a worktree next is usually not
+coordinating. Kept here in summary only:
 
 1. **Do not put the worktree under `/tmp`.** testmgr rewrites absolute `/tmp`
    paths in expected output, so a gate run from a `/tmp` worktree fails on its

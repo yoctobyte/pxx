@@ -96,3 +96,21 @@ print(tempfile.gettempdir() == "/tmp")  # assert the property instead
 ```
 
 Same rule for any path-shaped output: assert the property, or print a suffix.
+
+## Do not put a gating worktree under `/tmp`
+
+The direct consequence of the rule above, stated where someone about to run a
+gate will read it rather than only where the mechanism is explained: **testmgr
+rewrites absolute `/tmp` paths in expected output, so a gate run from a worktree
+under `/tmp` fails on its own path rewriting.** The red is real-looking and
+entirely self-inflicted. Put it in `.claude/worktrees/` instead.
+
+Filed here, and not only in `session-roster.md` where it was first written,
+because of a rule worth applying generally: **file a gotcha against the tool that
+has it, never against the role that happened to hit it.** The coordinator hit
+this one first, so it landed in the coordinator's document — where the next
+person to seed a worktree, who is usually not coordinating, has no reason to
+look. Right content, wrong reader. (Its sibling — that `make compiler/pascal26`
+is a no-op when a copied-in seed is newer than its sources — has moved to
+CLAUDE.md, under the claim it qualifies.)
+
