@@ -265,6 +265,18 @@ and recomputing it is almost always cheaper than the machinery that would make i
 correctable. An audit on that criterion found every other persisted boolean in
 the file was a fact about a run, and clean.
 
+Its complement, for the other direction: **persist for the published artifact,
+derive for the live reader.** A reader that waits on a writer-side field is inert
+until the writer next happens to run -- so a status command that reads a stamp
+shows a human nothing until the daemon's idle repair fires, while one that
+re-derives (one `git diff-tree`, falling back to the stamp) answers tonight. The
+cache rule says what is safe to freeze; this says who should be freezing it.
+
+And a corollary from the same fix: **a distinction that is not recorded in the
+history decays after one iteration.** Marking the current run torn-down while the
+history rows stay unmarked buys exactly one cycle, until the pointer moves past
+that sha. A fix that expires is not a fix.
+
 ## A guard that greps the source can only catch what is visible in the text
 
 Same session, second defect. A repair path called `testable_only()`, which reads
@@ -276,7 +288,16 @@ the first time an idle cycle reached that branch, hours later, in a process
 nobody watches.
 
 This is the same failure as the `137 -> 2` measurement above: **a check that
-runs, passes, and asserts nothing about the thing at issue.** Text-shaped guards
+runs, passes, and asserts nothing about the thing at issue.**
+
+The sharpest instance of the family is worth stating on its own, because it is
+the one that hides best: **the run that proved the least was the one that most
+effectively silenced the request for more.** Staleness asked *is there a record
+for this sha?* -- and a torn-down run leaves a record. A timed-out run is the
+weakest possible evidence about a sha and was being counted as the strongest,
+purely because its artifact is shaped like a completed one. Whenever a check asks
+whether an artifact EXISTS, ask what the artifact looks like when the work
+failed. Text-shaped guards
 are especially prone to it, because writing one feels like verification and the
 grep is trivially satisfiable by the broken code.
 
