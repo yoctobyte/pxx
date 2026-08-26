@@ -44,7 +44,21 @@ type
 
   TVarRec = record
     VType: NativeInt;
-    VInteger: NativeInt;
+    { LONGINT, exactly as FPC declares it — not NativeInt, which is what this
+      was. The union slot is pointer-sized either way (FixupTVarRecLayout
+      right-sizes the record), so the width here buys no storage; what it
+      decides is OVERLOAD BINDING at the reader. fpjson's VarRecToJSON does
+      `vtInteger: Result := CreateJSON(VInteger)` against a set of four
+      overloads — Integer, Int64, QWord, NativeInt — so a NativeInt-typed field
+      bound the wrong one and `CreateJSONArray([1])[0]` came back a
+      TJSONInt64Number where FPC gives a TJSONIntegerNumber. Silent, and in a
+      real library's public factory.
+      The tag side of the same agreement is in ir.inc's AN_VARREC_ARRAY: a
+      pointer-wide native int now goes in as vtInt64, which is what FPC does on
+      a 64-bit target (there NativeInt IS Int64), so nothing that used to fit
+      this slot loses its top half.
+      bug-p-array-of-const-integer-arm-picks-the-int64-overload }
+    VInteger: Longint;
     VAnsiString: Pointer;
     VBoolean: Boolean;
     VChar: Char;

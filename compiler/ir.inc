@@ -6153,7 +6153,17 @@ begin
                                     before, so consumers read a truncated pointer }
         else if vrElemTk = tyPointer then
           vrTag := 5              { vtPointer }
-        else if (vrElemTk = tyInt64) or (vrElemTk = tyUInt64) then
+        else if (vrElemTk = tyInt64) or (vrElemTk = tyUInt64) or
+                (((vrElemTk = tyNativeInt) or (vrElemTk = tyNativeUInt)) and
+                 (TARGET_PTR_SIZE = 8)) then
+          { …and a pointer-wide NATIVE int with it, on a 64-bit target. FPC
+            makes NativeInt an alias of Int64 there, so this is the tag it
+            already gets from the oracle. It used to fall through to vtInteger
+            below and store eight bytes under a tag that promises four, which
+            only worked while TVarRec.VInteger was (wrongly) NativeInt — the
+            two errors cancelled, and fixing either one alone would truncate.
+            On a 32-bit target NativeInt IS Longint and vtInteger stays right.
+            bug-p-array-of-const-integer-arm-picks-the-int64-overload }
           vrTag := 16             { vtInt64 (boxed) }
         else if (vrElemTk = tySingle) or (vrElemTk = tyDouble) or (vrElemTk = tyExtended) then
           vrTag := 3             { vtExtended (boxed) }

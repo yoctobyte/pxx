@@ -53,7 +53,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (286)
+## backlog (284)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -127,7 +127,6 @@ _none_
 | bug-p-a-string-typecast-is-a-conversion-and-not-a-cast | P | 55 | bug | `String(x)` is routed to a conversion intrinsic that demands a Char/string operand, so the hard typecast `String(p^)` of an untyped-pointer deref is rejected — while `Integer(p^)`, `PtrUInt(p^)`, `Pointer(p^)` and `TObject(p^)` all compile. Blocks every string-instantiated FPC container (`TFPGList<string>`, `TFPGMap<string,…>`) in real `fgl.pp`. | — |
 | bug-p-a-typed-constant-of-pchar-type-is-a-parse-error | P | 55 | bug | `const KC: PChar = 'konst';` is `error: unexpected token` -- a TYPED constant whose type is a pointer does not parse. FPC takes it, and it is the ordinary way to name a C string constant. Untyped `const KC = 'konst';` works, and so does a `var` of the same type. | — |
 | bug-p-a-typed-string-constant-cannot-be-assigned | P | 55 | bug | `const S: string = 'a'; ... S := 'b';` is `undefined variable (S)`, though the same assignment works for a typed Integer, Char or ARRAY constant. Typed consts are writable here (fpc's default in non-Delphi modes) for every type except string, which is registered as a read-only literal alias with no storage. | — |
-| bug-p-array-of-const-integer-arm-picks-the-int64-overload | P | 55 | bug | fcl-json's `CreateJSONArray([1])` yields a `TJSONInt64Number` where FPC yields a `TJSONIntegerNumber`. The direct `CreateJSON(1)` agrees with FPC; only the `array of const` path diverges, in `With Element do case VType of vtInteger: CreateJSON(VInteger)`. Two of the fpjson suite's 203 cases fail on it. | — |
 | bug-p-inherited-ignores-the-parents-default-parameter-values | P | 55 | bug | `inherited Create;` where the parent's constructor/method declares a defaulted parameter is rejected with `inherited call argument count mismatch`, while the identical *direct* call `TBase.Create` applies the default and compiles. Blocks `TFPGObjectList` in real FPC `fgl.pp` (Pascal corpus rung 2). | — |
 | bug-p-sizeof-rejects-a-pointer-deref-in-its-operand | P | 55 | bug | `SizeOf(p^.A)` is a parse error (`Expected: ), but got: ^`). SizeOf's operand parser is a hand-rolled selector walk that handles `v`, `v.f.g` and `v[i]` but has no `^` case, so any pointer deref in the operand is rejected outright. | — |
 | bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped | P | 50 | bug | A token that starts no declaration is silently skipped in a UNIT's interface/implementation section, while the identical token in a PROGRAM's declaration section is correctly rejected. A typo'd section header (`cosnt K = 5;`) therefore discards the declarations behind it with no diagnostic; the error surfaces later at the use site, or not at all. FPC rejects at the typo. | — |
@@ -337,7 +336,6 @@ _none_
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 | regression-optdiff-shard1-12 | T | 70 | regression | regression: optdiff#shard1/12 red at fffd29ea840d (auto-filed by twatch) | — |
-| regression-test-fpjson-install-lib-candidates | B | 70 | regression | regression: test-fpjson#src:tools/install_lib_candidates.sh red at 99f1dc81a039 (auto-filed by twatch) | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 15 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
 | task-d-document-the-strict-overload-width-flag | D | 20 | task | `--strict-overload-width` shipped 2026-08-15 with no row in docs/reference/cli.md, modes.md or directives.md. One table row each, plus the one sentence that explains why it is standalone rather than part of the --strict-fpc umbrella. | — |
@@ -608,9 +606,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2399)
+## done (2401)
 
-2399 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2401 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -684,7 +682,6 @@ _none_
 - [p 70] [P] feature-p-delphi-string-helpers
 - [p 70] [P] feature-pascal-typed-and-untyped-files
 - [p 70] [T] regression-optdiff-shard1-12
-- [p 70] [B] regression-test-fpjson-install-lib-candidates
 - [p 68] [N] bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - [p 68] [E] feature-demo-songformatter-pxx-target
 - [p 68] [N] feature-nilpy-user-defined-decorators
@@ -752,7 +749,6 @@ _none_
 - [p 55] [P] bug-p-a-string-typecast-is-a-conversion-and-not-a-cast
 - [p 55] [P] bug-p-a-typed-constant-of-pchar-type-is-a-parse-error
 - [p 55] [P] bug-p-a-typed-string-constant-cannot-be-assigned
-- [p 55] [P] bug-p-array-of-const-integer-arm-picks-the-int64-overload
 - [p 55] [P] bug-p-inherited-ignores-the-parents-default-parameter-values
 - [p 55] [P] bug-p-sizeof-rejects-a-pointer-deref-in-its-operand
 - [p 55] [A] bug-pchar-difference-in-writeln-arg-segfaults
