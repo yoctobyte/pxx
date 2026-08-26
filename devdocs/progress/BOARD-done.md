@@ -2147,6 +2147,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-lib-test-crtl-reachability-2 | C | 70 | regression | regression: lib-test#src:tools/crtl_reachability.py red at 98ed38202254 (auto-filed by twatch) | — |
 | regression-lib-test-crtl-reachability | C | 70 | regression | compiler/crtl_names.inc is a GENERATED file left stale by d9c71b8b3 (313 -> 323 functions). The red is the crtl-map step, NOT the crtl-reachability step the job is named after. Fix: python3 tools/gen_crtl_map.py. | — |
 | regression-lib-test-lib-classes-tthread | T | 70 | regression | regression: lib-test#src:test/lib_classes_tthread.pas red at 459e96f985d1 (auto-filed by twatch) | — |
+| regression-lib-test-lib-mimic-xml-etree-elementtree-2 | N | 45 | regression | regression: lib-test#src:test/lib_mimic_xml_etree_elementtree.npy red at fd93e4a71c37 (auto-filed by twatch) | — |
 | regression-lib-test-lib-mimic-xml-etree-elementtree | N | 70 | regression | regression: lib-test#src:test/lib_mimic_xml_etree_elementtree.npy red at 1b9b43e5b511 (auto-filed by twatch) | — |
 | regression-lib-test-lib-tls | T | 70 | regression | regression: lib-test#src:test/lib_tls.pas red at 459e96f985d1 (auto-filed by twatch) | — |
 | regression-nilpy-dataclass-dict-factory-test-core-red | N | 70 | regression | test-core RED: `test_nilpy_dataclass_dict_factory.npy` | — |
@@ -2335,8 +2336,10 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-nilpy-test-nilpy-import-c-header-still-works | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_c_header_still_works.npy red at 36d1bffda39d (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-import-sqlite | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_import_sqlite.npy red at 6840247771d5 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-int-promotion-default | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_int_promotion_default.npy red at 459e96f985d1 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-isinstance-over-a-type-value | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_isinstance_over_a_type_value.npy red at 99f1dc81a039 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-lambda-in-range-comprehension | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_lambda_in_range_comprehension.npy red at 4c9da77f9368 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-list-mutators-return-none | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_list_mutators_return_none.npy red at 9294bce2c800 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-lowercase-name-vs-class | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_lowercase_name_vs_class.npy red at 99f1dc81a039 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-operator-dunders | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_operator_dunders.npy red at 6840247771d5 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-pascal-unit-keeps-fpc-method-shadowing | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_pascal_unit_keeps_fpc_method_shadowing.npy red at 57b9b7148d32 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-pow-matches-cpython | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_pow_matches_cpython.npy red at 096da361dd93 (auto-filed by twatch) | — |

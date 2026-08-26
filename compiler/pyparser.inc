@@ -2252,6 +2252,38 @@ var xNode, node, left, term, callN, argN, tagCall: Integer;
     ASTTk[Result] := Ord(tyBoolean);
   end;
 
+  { Can this operand hold a class instance AT ALL?
+
+    The user-class arm below emits AN_IS_TEST, and that lowers to a VMT walk
+    through the operand read as an object pointer. A statically SCALAR operand
+    reached it anyway: `isinstance(3, B)` walked a VMT at address 3 and
+    `isinstance("s", B)` read the string body as one, so both SEGFAULTED where
+    CPython simply answers False. The variant arm above never had the problem —
+    it guards on the tag first — so this is the one road with no guard on it.
+
+    The answer for a scalar is known HERE, at compile time, and it is False:
+    nothing that is statically an int / a string / a float / a set can be an
+    instance of a user class. The unknown and pointer-shaped kinds keep the
+    test, so every operand that reaches it today still does.
+
+    A folded operand is not evaluated, which for a side-effecting one loses the
+    call — the same trade the header note above already records for the terms
+    that re-emit it. bug-n-isinstance-of-a-scalar-against-a-user-class-segfaults }
+  function CanHoldInstance(n: Integer): Boolean;
+  var k: TTypeKind;
+  begin
+    k := IntToTypeKind(ASTTk[n]);
+    Result := (k = tyUnknown) or (k = tyClass) or (k = tyPointer) or
+              (k = tyVariant) or (k = tyAuto) or (k = tyRecord);
+  end;
+
+  function FalseLit: Integer;
+  begin
+    Result := AllocNode(AN_BOOL_LIT);
+    ASTIVal[Result] := 0;
+    ASTTk[Result] := Ord(tyBoolean);
+  end;
+
 begin
   Next;                     { 'isinstance' }
   Expect(tkLParen, '(');
@@ -2405,6 +2437,8 @@ begin
         ASTLeft[term] := tagCall; ASTRight[term] := node;
         ASTTk[term] := Ord(tyBoolean);
       end
+      else if not CanHoldInstance(xNode) then
+        term := FalseLit
       else
       begin
         node := AllocNode(AN_IS_TEST);
@@ -5148,6 +5182,23 @@ begin
         prescan have both run, so a class declared further down the file is
         already a row. Alias-aware itself, so `C = B` after `B = A` chains. }
       ci := FindUClassNonRecord(GetTokenStr(i + 2));
+      { …spelled EXACTLY as the class is. FindUClassNonRecord matches
+        case-INSENSITIVELY, Pascal-style, so `g = f` beside a `class F`
+        registered `g` as an ALIAS OF F — and because this table is the one
+        every alias-aware predicate reads, PyIsExactCtorName then answered True
+        for `g` and `g(2, 3)` CONSTRUCTED an F where CPython calls the def.
+        Silent with a `pass` body (it printed an object), a segfault as soon as
+        the class declares an `__init__` the call does not fit.
+
+        The registration is the worst place in the family for the insensitive
+        lookup to survive, because it does not merely misread one site: it MINTS
+        a name that makes every other site — the four already fixed ones
+        included — answer wrongly, each of them correctly, from a bad row.
+        Fifth site of bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class,
+        after PyIsClassTypeExact (typing), PyIsExactCtorName (construction), the
+        MEMBER field lookup and the flat-namespace shadow rule. }
+      if (ci >= 0) and (not PyIsClassTypeExact(GetTokenStr(i + 2))) then
+        ci := -1;
       { …and the LHS must not already name a class, so this can only ever ADD
         a name, never redirect one. }
       if (ci >= 0) and (FindUClassNonRecord(nm) < 0) and

@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: N
+status: done
+owner: frank1
 ---
 
 > **Track guessed as N** from the test source. The ranker reads frontmatter, so an unset track parks a stub in Track T's queue regardless of what the body says -- correct the `track:` line if this is wrong.
@@ -46,3 +48,22 @@ Segmentation fault
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Root cause (frank1, 2026-08-26)
+
+Not the aliased-type feature the test is named for — that half works. The
+segfault is one line above it, in the arm that has always been there.
+
+`PyParseIsinstance` has two roads to a user class: a VARIANT operand gets
+`(tag = VT_OBJECT) and (pyvarobj(x) is C)`, and everything else gets a bare
+`AN_IS_TEST`, which lowers to a VMT walk through the operand read as an object
+pointer. A statically SCALAR operand took the second road with no guard on it,
+so `isinstance("s", A)` walked a VMT at the string body. `isinstance(3, B)` is
+the same crash one type over, and needs no alias at all — the test simply
+reached the aliased spelling first.
+
+The answer is known at compile time and it is False. `CanHoldInstance` now
+folds the term for every kind that cannot hold an instance, and the unknown /
+pointer-shaped kinds keep the test, so nothing that reached AN_IS_TEST before
+stops reaching it.
+- 2026-08-26 — resolved, commit PENDING-COMMIT.
