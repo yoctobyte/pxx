@@ -22,9 +22,13 @@ What must hold:
     clean batch so it means "consecutive".
 
 Exercises the decision predicates directly; no clone, no subprocess, no repo
-state.
+state — and, since 2026-08-26, no ambient TIMING either: every ratio is either a
+frozen literal or a supplied probe value (see probe_returning). The single
+exception is case_probe_returns_a_plausible_number, which confirms the real
+probe runs and asserts nothing about how long it took.
 Run: python3 tools/twatch_bench_quiet_devtest.py
 """
+import contextlib
 import pathlib
 import sys
 
@@ -32,6 +36,37 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import twatch  # noqa: E402
 
 TOL = twatch.BENCH_PROBE_TOL
+
+
+@contextlib.contextmanager
+def probe_returning(*seconds):
+    """Run box_speed() with speed_probe SUPPLIED — one value per box_speed call.
+
+    box_speed takes min() of BENCH_PROBE_SAMPLES probes, so a call consumes
+    that many; this hands the same value to each of them and moves to the next
+    value on the next call (the last value repeats if calls outrun it).
+
+    The subject under test is the reference ARITHMETIC — min-so-far, downward
+    tracking, per host — which is pure. Timing the real box to exercise it made
+    the assertions depend on who else was running: this file's own history is
+    the argument (bug-t-two-devtests-measure-the-box-and-flake-the-fleet-job).
+    Supplying the timings also lets the assertions be exact (== 4.0) where
+    observing them forced a loose one (> 2.0) that a fast second probe broke.
+    """
+    vals = list(seconds)
+    n = [0]
+
+    def fake(*_a, **_kw):
+        i = n[0] // twatch.BENCH_PROBE_SAMPLES
+        n[0] += 1
+        return vals[min(i, len(vals) - 1)]
+
+    orig = twatch.speed_probe
+    twatch.speed_probe = fake
+    try:
+        yield
+    finally:
+        twatch.speed_probe = orig
 
 
 def may_start(ratio):
@@ -51,18 +86,26 @@ def case_quiet_box_benches():
 
 
 def case_a_third_of_the_box_busy_is_fine():
-    """The point of the tolerance. Measured on the 12-core xeon: 4 busy cores
-    cost 9%. The box exists to be worked on, and ordinary agent work is 1-2
-    cores — refusing to bench through that would mean never benching."""
-    for ratio in (1.09, 1.19, 1.30):      # observed range for 4/12 busy + noise
+    """The point of the tolerance. The box exists to be worked on, and ordinary
+    agent work is 1-2 cores — refusing to bench through that would mean never
+    benching.
+
+    The ratios are FROZEN observations (12-core xeon, 2026-08-04: 4 busy cores
+    cost 9%), fed to the predicate as literals. This case does not time
+    anything, and the wording matters: a triage read "Measured on the 12-core
+    xeon" in the passing output and filed these three as the box-measuring
+    suspects, when the one that actually called box_speed() was further down.
+    """
+    for ratio in (1.09, 1.19, 1.30):      # frozen: 4/12 busy + noise, 2026-08-04
         assert may_start(ratio), f"4 busy cores of 12 blocked a batch at {ratio}"
         assert not must_abandon(ratio)
     return "1.09-1.30 (4 of 12 cores busy) still benches"
 
 
 def case_oversubscription_never_starts():
-    """Measured: 12 busy cores = 2.17x, and a full gate run (testmgr cap=24 on
-    12 cores) = 4.75x. That gate run is what inflated the 2026-08-04 batch."""
+    """Frozen observations, fed in as literals: 12 busy cores = 2.17x, and a
+    full gate run (testmgr cap=24 on 12 cores) = 4.75x. That gate run is what
+    inflated the 2026-08-04 batch. Nothing here is timed at run time."""
     for ratio in (2.17, 4.75):
         assert not may_start(ratio), f"started a batch at {ratio}x"
     return "2.17x / 4.75x refused"
@@ -97,23 +140,56 @@ def case_skip_counter_is_consecutive():
 
 def case_reference_is_self_calibrating():
     """No per-box constant: the reference is this host's fastest probe, and a
-    faster one replaces it."""
+    faster one replaces it.
+
+    Timings are SUPPLIED (see probe_returning). This case used to call
+    box_speed() three times against the real box and assert on the RELATIONSHIP
+    between three ambient measurements — `r2 > 2.0` holds only while the second
+    probe is no more than twice as fast as the first, so one scheduling stall on
+    the FIRST probe turned it red. That is a fact about the runner, not about
+    the reference.
+    """
     twatch._BENCH_RT.clear()
     try:
-        r1, t1 = twatch.box_speed("h")
-        assert r1 == 1.0, "the first probe on a fresh host must define the reference"
-        # a much FASTER best-ever reference => this same box now reads as slow
-        twatch._BENCH_RT["h"]["probe_ref"] = t1 / 4
-        r2, _ = twatch.box_speed("h")
-        assert r2 > 2.0, f"a 4x-faster reference did not register as slow: {r2}"
-        # ...and a probe faster than the stored reference pulls it back down
-        twatch._BENCH_RT["h"]["probe_ref"] = t1 * 4
-        r3, _ = twatch.box_speed("h")
-        assert r3 == 1.0, f"a probe faster than the reference still read slow: {r3}"
-        assert twatch._BENCH_RT["h"]["probe_ref"] < t1 * 4, "no downward tracking"
+        with probe_returning(0.010, 0.010, 0.010):
+            r1, t1 = twatch.box_speed("h")
+            assert t1 == 0.010, f"probe not supplied: {t1}"
+            assert r1 == 1.0, "the first probe on a fresh host must define the reference"
+            # a much FASTER best-ever reference => this same box now reads as slow
+            twatch._BENCH_RT["h"]["probe_ref"] = t1 / 4
+            r2, _ = twatch.box_speed("h")
+            assert r2 == 4.0, f"a 4x-faster reference did not register as 4x slow: {r2}"
+            # ...and a probe faster than the stored reference pulls it back down
+            twatch._BENCH_RT["h"]["probe_ref"] = t1 * 4
+            r3, _ = twatch.box_speed("h")
+            assert r3 == 1.0, f"a probe faster than the reference still read slow: {r3}"
+            assert twatch._BENCH_RT["h"]["probe_ref"] == t1, \
+                f"downward tracking did not store the faster probe: {twatch._BENCH_RT['h']}"
+        # a SLOWER probe must NOT raise the reference: min-so-far, not last-seen
+        with probe_returning(0.040):
+            r4, _ = twatch.box_speed("h")
+            assert r4 == 4.0, f"a 4x-slower probe did not read 4x slow: {r4}"
+            assert twatch._BENCH_RT["h"]["probe_ref"] == 0.010, \
+                "a slow probe raised the reference — min-so-far is not holding"
     finally:
         twatch._BENCH_RT.clear()
-    return "min-so-far, updates downward, per host, in memory"
+    return "min-so-far, updates downward only, per host, in memory"
+
+
+def case_probe_returns_a_plausible_number():
+    """The one deliberately ambient line, per the fix direction: everything
+    above supplies its timings, so something must still confirm the real probe
+    runs at all and returns seconds.
+
+    It asserts only what no amount of load can change — a monotonic clock across
+    real work is positive, and finite. NOT how long it took: that is the
+    assertion this whole file just removed.
+    """
+    t = twatch.speed_probe()
+    assert isinstance(t, float), f"probe returned {type(t).__name__}, not seconds"
+    assert t > 0, f"probe took no measurable time: {t}"
+    assert t < 300, f"probe took {t:.1f}s — that is not a probe any more"
+    return f"real probe ran, {t * 1000:.1f}ms (value asserted, duration not)"
 
 
 def case_reference_relaxes_rather_than_starving():
@@ -149,6 +225,7 @@ CASES = [
     case_push_preempts,
     case_skip_counter_is_consecutive,
     case_reference_is_self_calibrating,
+    case_probe_returns_a_plausible_number,
     case_reference_relaxes_rather_than_starving,
     case_probe_is_compiler_independent,
 ]
