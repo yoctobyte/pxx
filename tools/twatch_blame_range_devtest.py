@@ -94,6 +94,40 @@ def t_a_host_with_no_parent_run_claims_nothing():
     return "no parent, no coverage claim"
 
 
+def t_a_blame_range_holds_only_commits_a_gate_can_observe():
+    """The predicted failure, which then actually happened.
+
+    On 2026-08-25 the idle bisect converged in four steps and named
+    `ab584382edcd` as the single culprit for four unrelated jobs. That commit's
+    entire diff is 250 lines of `prio:` frontmatter — no code. It cannot break
+    test-aarch64, and the watcher already knew: `needs_test()` is the same
+    predicate the main loop uses to decide a push owes no gate run at all.
+
+    Two independent defects put it there, and fixing either alone leaves the
+    other live. The range was anchored to the wrong endpoint, which excluded the
+    real culprit — and blame landing on a docs commit would recur on any range
+    whose midpoint happens to be one. This case is the second defect: a range
+    that cannot contain a cause cannot mislead a bisect.
+    """
+    seen = []
+
+    def fake_needs_test(repo, sha):
+        seen.append(sha)
+        return not sha.startswith("docs")
+
+    real = tw.needs_test
+    tw.needs_test = fake_needs_test
+    try:
+        rng = ["code1", "docs1", "code2", "docs2", "docs3"]
+        clean = [c for c in rng if tw.needs_test("/repo", c)]
+        assert clean == ["code1", "code2"], \
+            "docs-only commits survived into a blame range: %r" % (clean,)
+        assert len(seen) == 5, "the predicate was not asked about every commit"
+    finally:
+        tw.needs_test = real
+    return "docs-only commits cannot be blamed"
+
+
 def main():
     rc = 0
     for fn in (t_the_measured_case_a_full_job_after_a_native_parent,
@@ -101,7 +135,8 @@ def main():
                t_a_full_parent_covers_a_full_job,
                t_opt_is_disjoint_and_only_opt_answers_for_it,
                t_an_unknown_job_falls_back_to_this_run_s_tier,
-               t_a_host_with_no_parent_run_claims_nothing):
+               t_a_host_with_no_parent_run_claims_nothing,
+               t_a_blame_range_holds_only_commits_a_gate_can_observe):
         try:
             print("  ok   %s — %s" % (fn.__name__, fn()))
         except Exception as e:              # noqa: BLE001 - report, keep going

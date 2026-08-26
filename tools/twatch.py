@@ -2379,6 +2379,31 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # since this JOB last ran under a tier that contained it.
     good = parent
 
+    def testable_only(commits):
+        """A blame range may contain only commits a gate could observe.
+
+        The bisect converged on `ab584382edcd` for four unrelated jobs on
+        2026-08-25 and named it as the single culprit. That commit's entire diff
+        is 250 lines of `prio:` frontmatter — no code. It cannot break
+        test-aarch64, and the watcher already knows that: `needs_test()` is the
+        same predicate the main loop uses to decide a push owes no gate run.
+
+        Two separate defects put it there and both are worth stating, because
+        fixing one alone leaves the other live. The range was anchored to the
+        wrong endpoint (fixed below), which excluded the real culprit — but
+        blame landing on a DOCS commit is independent of that, and would happen
+        again on any range whose midpoint lands on one. A range that cannot
+        contain a cause is a range that cannot mislead a bisect, and filtering
+        also makes every bisect cheaper by removing steps that test nothing.
+
+        Kept as a filter rather than pushed into commits_between(): that helper
+        answers a plain git question used in several places, and "which commits
+        could have caused this" is a different question wearing the same shape.
+        """
+        return [c for c in commits if needs_test(clone.path, c)]
+
+    rng = testable_only(rng)
+
     # PER-JOB RANGE, always — not only when the parent range is empty.
     #
     # `commits_between(parent, sha)` answers "since this host last tested
@@ -2407,7 +2432,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
             return rng, good        # the parent's run DID contain it
         y = last_covering_sha(st, prev_tier, sha)
         if y and y != sha:
-            wider = clone.commits_between(y, sha)
+            wider = testable_only(clone.commits_between(y, sha))
             if wider and len(wider) > len(rng):
                 return wider, y
         return rng, good
@@ -2415,7 +2440,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     if new_red and not rng:
         y = last_covering_sha(st, report["tier"], sha)
         if y and y != sha:
-            rng = clone.commits_between(y, sha)
+            rng = testable_only(clone.commits_between(y, sha))
             if rng:
                 good = y
                 print("twatch: parent range empty (%s re-tested at %s) — using "
@@ -4406,6 +4431,20 @@ def bisect_step(clone, host, st, tier):
     with ONLY the failing job."""
     for reg in st["open_regressions"]:
         rng = reg.get("range", [])
+        # Repair on read: entries opened before the range filter can still hold
+        # commits no gate could observe, and one of them is how `ab584382edcd`
+        # — 250 lines of `prio:` frontmatter, no code — got named as the single
+        # culprit for four unrelated jobs. A stale entry must not keep misfiring
+        # just because the code that created it has been fixed, so the range is
+        # re-filtered here and the correction persisted.
+        clean = [c for c in rng if needs_test(clone.path, c)]
+        if len(clean) != len(rng):
+            print("twatch: %s — dropped %d commit(s) from its range that change "
+                  "no code a gate can observe; a bisect over those does not "
+                  "fail, it names an innocent commit"
+                  % (reg.get("job", "?"), len(rng) - len(clean)), flush=True)
+            reg["range"] = rng = clean
+            save_state(clone, host, st)
         if len(rng) <= 1:
             continue
         if reg.get("cascade"):
