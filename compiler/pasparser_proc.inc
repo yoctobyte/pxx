@@ -283,7 +283,8 @@ begin
               CaseEqual(CurTok.SVal, 'experimental') or CaseEqual(CurTok.SVal, 'unimplemented') or
               CaseEqual(CurTok.SVal, 'library') or
               CaseEqual(CurTok.SVal, 'external'))) or
-            (CurTok.Kind = tkOverload) or IsCallConvDirectiveTok do
+            (CurTok.Kind = tkOverload) or IsCallConvDirectiveTok or
+            IsInertRoutineDirectiveTok do
       begin
         if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'external') then
         begin
@@ -1069,7 +1070,8 @@ begin
           CaseEqual(CurTok.SVal, 'experimental') or
           CaseEqual(CurTok.SVal, 'unimplemented') or
           CaseEqual(CurTok.SVal, 'library'))) or
-        (CurTok.Kind = tkOverload) or IsCallConvDirectiveTok do
+        (CurTok.Kind = tkOverload) or IsCallConvDirectiveTok or
+        IsInertRoutineDirectiveTok do
   begin
     if CurTok.Kind = tkOverload then declOverload := True;
     if (CurTok.Kind = tkIdent) and CaseEqual(CurTok.SVal, 'flexcolumn') then declFlexColumn := True;

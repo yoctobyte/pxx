@@ -771,6 +771,42 @@ begin
   Result := (TokPos < TokCount) and (Tokens[TokPos].Kind = tkSemicolon);
 end;
 
+function IsInertRoutineDirectiveTok: Boolean;
+{ A routine/method directive that pxx parses and IGNORES because it cannot mean
+  anything here — as opposed to one it ignores because it has not got round to
+  it. Same shape and same guard as IsCallConvDirectiveTok, and the same reason
+  for existing: five directive loops each grew their own spelling of the set.
+
+  - `noreturn`      a hint that the routine never returns. Nothing pxx emits
+                    depends on it; FPC uses it to suppress a warning.
+                    (fpc-source compiler/constexp.pas:93 is what needed it.)
+  - `nostackframe`  omit the frame. An optimisation pxx does not make; emitting
+                    a frame anyway is correct, only bigger.
+  - `noinline`      the inverse hint. pxx's optimiser decides inlining on
+                    shape, and already ignores a written `inline` for the same
+                    reason (docs/language/dialect.md).
+  - `far`, `near`   16-bit memory models. There is nothing to address far.
+  - `local`         FPC: not visible outside its unit. pxx is a whole-program
+                    compiler with no separate unit output, so a routine is
+                    local exactly when nothing else names it.
+
+  NOT here, deliberately, though they are all one-word directives that would
+  parse just as easily: `varargs` (changes how a call marshals), `public`,
+  `export`, `alias` and `weakexternal` (change linkage, which `--emit-obj` can
+  observe), `compilerproc`/`internproc`/`rtlproc` (mark a routine the compiler
+  supplies, and internproc has no body to parse), and `hardfloat`/`softfloat`
+  (select a float ABI, and pxx HAS arm32 and riscv32 targets where the two
+  differ). Ignoring any of those would make pxx compile something other than
+  what was written, which is worse than refusing it. }
+begin
+  Result := False;
+  if CurTok.Kind <> tkIdent then Exit;
+  if not (CaseEqual(CurTok.SVal, 'noreturn') or CaseEqual(CurTok.SVal, 'nostackframe') or
+          CaseEqual(CurTok.SVal, 'noinline') or CaseEqual(CurTok.SVal, 'far') or
+          CaseEqual(CurTok.SVal, 'near') or CaseEqual(CurTok.SVal, 'local')) then Exit;
+  Result := (TokPos < TokCount) and (Tokens[TokPos].Kind = tkSemicolon);
+end;
+
 function EatIntfMethodDirective: Boolean;
 { One directive on an INTERFACE method signature, plus its trailing ';'.
   An interface method is abstract and virtual by definition, so the dispatch
@@ -792,7 +828,7 @@ begin
   begin
     Next; Eat(tkSemicolon); Result := True; Exit;
   end;
-  if IsCallConvDirectiveTok then
+  if IsCallConvDirectiveTok or IsInertRoutineDirectiveTok then
   begin
     Next; Eat(tkSemicolon); Result := True; Exit;
   end;

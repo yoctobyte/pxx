@@ -154,6 +154,10 @@ nothing.
 | `static`, `reintroduce` | on a plain routine (`static` *is* meaningful on a class method) |
 | `iram` | on targets other than xtensa and riscv32, where there is no IRAM to place anything in |
 | `deprecated`, `platform`, `experimental`, `unimplemented`, `library` | hint directives — see [FPC compatibility](./fpc-compatibility.md#hint-directives). No usage warning is emitted yet |
+| `noreturn`, `noinline` | hints about a decision the compiler makes for itself |
+| `nostackframe` | an optimization PXX does not make; the frame is emitted anyway |
+| `far`, `near` | 16-bit memory models. There is nothing to address far |
+| `local` | FPC's unit-private visibility. PXX is whole-program and has no separate unit output, so a routine is local exactly when nothing else names it |
 
 `overload` is a case of its own: **inert by default**, required under
 `--strict-overload`. PXX resolves overloads without it; the flag makes the
@@ -161,8 +165,15 @@ missing directive an error, the way FPC has it.
 
 ### Not accepted
 
-`varargs` is not accepted. That is a gap rather than a decision; FPC sources
-using it need the directive removed.
+`varargs`, `public`, `export`, `alias`, `weakexternal`, `compilerproc`,
+`internproc`, `rtlproc`, `hardfloat` and `softfloat` are refused, and that is a
+decision rather than a gap. Each of them means something: `varargs` changes how
+a call marshals, the linkage group changes what `--emit-obj` produces,
+`compilerproc` and its neighbours mark a routine the compiler itself supplies,
+and `hardfloat`/`softfloat` select a float ABI — which is a real choice on the
+arm32 and riscv32 targets. Accepting one and ignoring it would compile something
+other than what was written, which is worse than refusing it. FPC sources using
+them need the directive removed, or the behaviour implemented.
 
 ### On unfulfillable directives
 

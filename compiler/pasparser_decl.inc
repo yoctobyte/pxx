@@ -3224,6 +3224,7 @@ begin
     (below), so its presence has to be observed rather than skipped. }
   rmSawStatic := False;
   while (CurTok.Kind = tkOverload) or IsCallConvDirectiveTok or
+        IsInertRoutineDirectiveTok or
         ((CurTok.Kind = tkIdent) and
          (CaseEqual(CurTok.SVal, 'inline') or CaseEqual(CurTok.SVal, 'static') or
           CaseEqual(CurTok.SVal, 'deprecated'))) do
@@ -4867,7 +4868,8 @@ begin
                    CaseEqual(CurTok.SVal, 'deprecated') or
                    CaseEqual(CurTok.SVal, 'platform') or
                    CaseEqual(CurTok.SVal, 'experimental'))) or
-                  (CurTok.Kind = tkOverload) or IsCallConvDirectiveTok do
+                  (CurTok.Kind = tkOverload) or IsCallConvDirectiveTok or
+                  IsInertRoutineDirectiveTok do
             begin
               { virtual/override/abstract drive dispatch; dynamic = virtual
                 (FPC: same semantics, different table — pxx has one VMT).

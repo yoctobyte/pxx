@@ -8523,6 +8523,14 @@ test-core: $(COMPILER)
 	# compat-pascal-calling-convention-directives-uneven
 	./$(COMPILER) test/test_calling_convention_directives_everywhere.pas $(TESTTMP)/test_callconv26
 	$(TESTTMP)/test_callconv26 | diff -u test/test_calling_convention_directives_everywhere.expected -
+	# FPC routine directives pxx can honestly ignore -- noreturn/nostackframe/
+	# noinline/far/near/local -- in all three positions that carry one. Found by
+	# marching the real FPC compiler sources: constexp.pas stopped dead on
+	# `procedure internalerror(i:longint); noreturn;`. varargs/public/export/
+	# compilerproc/hardfloat/softfloat stay REFUSED on purpose: ignoring those
+	# would make pxx compile something other than what was written.
+	./$(COMPILER) test/test_inert_routine_directives.pas $(TESTTMP)/test_inertdir26
+	$(TESTTMP)/test_inertdir26 | diff -u test/test_inert_routine_directives.expected -
 	./$(COMPILER) test/test_ansistring_cast_extern_pchar.pas $(TESTTMP)/test_ansistring_cast_extern_pchar26
 	test "$$($(TESTTMP)/test_ansistring_cast_extern_pchar26)" = "$$(printf 'direct=hello len=5\nviavar=hello len=5')"
 	./$(COMPILER) test/test_ansistring_cast_fnptr.pas $(TESTTMP)/test_ansistring_cast_fnptr26

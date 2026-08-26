@@ -94,7 +94,9 @@ These are one group among several. Which routine directives are inert, which
 change what is compiled, and which are rejected outright is tabulated under
 [routine directives](./dialect.md#routine-directives) — `varargs` in particular
 does not parse at all and needs removing when porting. Every calling-convention
-spelling now parses in every position, `stdcall` included.
+spelling now parses in every position, `stdcall` included, and so do the inert
+FPC directives `noreturn`, `nostackframe`, `noinline`, `far`, `near` and
+`local`.
 
 ## Common fixes
 

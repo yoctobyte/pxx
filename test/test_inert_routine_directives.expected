@@ -1,0 +1,9 @@
+routines ok
+m noreturn
+m nostackframe
+m noinline
+m far
+m near
+m local
+interface ok
+42
