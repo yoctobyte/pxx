@@ -4789,6 +4789,14 @@ test-core: $(COMPILER)
 	# FPC 3.2.2's values, except array[TGap] which FPC refuses outright.
 	./$(COMPILER) test/test_enum_explicit_ordinal_low_high.pas $(TESTTMP)/test_enumord26
 	test "$$($(TESTTMP)/test_enumord26 | tail -1)" = "total ok 24 / 24"
+	# Explicit enum ordinals spelled FPC's objfpc way -- `(ms_on := 1, ...)` --
+	# were refused; only the Delphi `=` parsed, which is the wall FPC's own
+	# compiler/globtype.pas:800 hit. Both spellings are now accepted
+	# unconditionally rather than behind a mode switch: one concept, one path.
+	# Every row is `fpc -O- -Mobjfpc` 3.2.2's, including the MIXED list, which
+	# FPC also accepts. feature-p-fpc-assigned-enum-ordinals-with-colon-equals
+	./$(COMPILER) test/test_enum_assigned_ordinal_colon_equals.pas $(TESTTMP)/test_enumassign26
+	test "$$($(TESTTMP)/test_enumassign26)" = "$$(cat test/test_enum_assigned_ordinal_colon_equals.expected)"
 	# `div`/`mod` picked signed-vs-unsigned from the DIVIDEND alone, so every
 	# unsigned-over-signed division ran unsigned: `Word(40000) div SmallInt(-25536)`
 	# was 0 where FPC says -1, at all four widths, silently. Pascal widens the pair

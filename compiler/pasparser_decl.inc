@@ -65,13 +65,22 @@ begin
   begin
     { Optional explicit ordinal: `(a = 1, b = 5, c)` -- a value sets the
       member's ordinal; the next valueless member continues from value+1
-      (FPC semantics). }
+      (FPC semantics).
+
+      BOTH spellings, unconditionally. FPC splits them by mode -- `=` in
+      {$mode delphi}, `:=` in {$mode objfpc} -- but they are one concept with
+      two surface tokens, and gating the second on a mode would be a second
+      path for the same thing (normalise-dont-special-case). pxx's dialect is
+      lax by default with FPC-parity strictness behind per-feature flags, so
+      accepting a form FPC would reject in the other mode is explicitly not a
+      defect here (the FPC-parity ceiling in CLAUDE.md). This is what lets
+      FPC's own globtype.pas tmsgstate parse. }
     enumNOff := Tokens[TokPos-1].SOffset; enumNLen := Tokens[TokPos-1].SLen;
     enumNm := CurTok.SVal;
     Next;
-    if CurTok.Kind = tkEq then
+    if (CurTok.Kind = tkEq) or (CurTok.Kind = tkAssign) then
     begin
-      Next;                 { consume '=' }
+      Next;                 { consume '=' or ':=' }
       hiVal := ordinal;     { the implicit next ordinal }
       ordinal := ConstEval; { explicit ordinal value }
       { A jump off the implicit 0..n-1 sequence makes the enum non-contiguous --
