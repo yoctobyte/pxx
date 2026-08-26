@@ -32,17 +32,20 @@ const
 { Rebuild a Pascal string from a NUL-terminated char-data pointer (a TVarRec
   VAnsiString element holds one). }
 function AsmTextCStr(p: Pointer): AnsiString;
-var b: PAsmTextByte; i: Integer;
+var b: PAsmTextByte; i, n: Integer;
 begin
   Result := '';
   if p = nil then Exit;
   b := PAsmTextByte(p);
-  i := 0;
-  while b[i] <> 0 do
-  begin
-    AppendChar(Result, Chr(b[i]));
-    Inc(i);
-  end;
+  { measure, then ONE SetLength + fill. The old loop AppendChar'd every
+    character, i.e. one heap realloc per character of every instruction string
+    the codegen emits (139,722 of them on an empty .npy). }
+  n := 0;
+  while b[n] <> 0 do Inc(n);
+  if n = 0 then Exit;
+  SetLength(Result, n);
+  for i := 0 to n - 1 do
+    Result[i + 1] := Chr(b[i]);
 end;
 
 function AsmTextIsSpace(c: Char): Boolean;
@@ -110,9 +113,18 @@ begin
   Result := v;
 end;
 
-{ Size in bytes of an explicit-size keyword (byte/word/dword/qword), else 0. }
+{ Size in bytes of an explicit-size keyword (byte/word/dword/qword), else 0.
+  The length+first-letter guard is not decoration: this is asked about EVERY
+  operand of every emitted instruction (251,900 times on an empty .npy) and the
+  answer is almost always "not a size keyword", which used to cost four
+  CaseEqual calls. }
 function AsmTextSizeKeyword(const w: AnsiString): Integer;
+var c: Char;
 begin
+  Result := 0;
+  if (Length(w) < 4) or (Length(w) > 5) then Exit;
+  c := AsmTextLower(w[1]);
+  if (c <> 'b') and (c <> 'w') and (c <> 'd') and (c <> 'q') then Exit;
   if CaseEqual(w, 'byte') then Result := 1
   else if CaseEqual(w, 'word') then Result := 2
   else if CaseEqual(w, 'dword') then Result := 4
@@ -186,19 +198,15 @@ var op, inner, baseStr, dispStr, firstWord: AnsiString;
     i, n, dummySize, memSize, p: Integer; sign: Integer;
 begin
   { trim }
-  op := '';
-  n := Length(opIn);
-  i := 1;
-  while (i <= n) and AsmTextIsSpace(AsmTextCharAt(opIn, i)) do Inc(i);
-  while (n >= i) and AsmTextIsSpace(AsmTextCharAt(opIn, n)) do Dec(n);
-  while i <= n do begin AppendChar(op, opIn[i]); Inc(i); end;
+  op := AsmTextTrim(opIn);
 
   if Length(op) = 0 then Error('EmitAsmX64: empty operand');
 
   { strip a leading explicit-size keyword (byte/word/dword/qword) if present }
-  firstWord := ''; p := 1;
-  while (p <= Length(op)) and not AsmTextIsSpace(AsmTextCharAt(op, p)) do
-    begin AppendChar(firstWord, AsmTextLower(op[p])); Inc(p); end;
+  p := 1;
+  while (p <= Length(op)) and not AsmTextIsSpace(AsmTextCharAt(op, p)) do Inc(p);
+  firstWord := AsmTextSlice(op, 1, p - 1);
+  for n := 1 to Length(firstWord) do firstWord[n] := AsmTextLower(firstWord[n]);
   memSize := AsmTextSizeKeyword(firstWord);
   if memSize > 0 then
   begin
@@ -209,10 +217,9 @@ begin
   { memory: [ base (+|-) disp ] }
   if AsmTextCharAt(op, 1) = '[' then
   begin
-    inner := '';
     i := 2;
-    while (i <= Length(op)) and (AsmTextCharAt(op, i) <> ']') do begin AppendChar(inner, op[i]); Inc(i); end;
-    inner := AsmTextTrim(inner);
+    while (i <= Length(op)) and (AsmTextCharAt(op, i) <> ']') do Inc(i);
+    inner := AsmTextTrim(AsmTextSlice(op, 2, i - 2));
 
     { absolute-address r/m: [@glob] / [@data] — the disp32 is a reloc hole, no
       base register. Kind 3 = glob (BSS), kind 4 = data; offset returned in
@@ -228,15 +235,16 @@ begin
     end;
 
     { split on + or - }
-    baseStr := ''; dispStr := ''; sign := 1;
+    dispStr := ''; sign := 1;
     i := 1;
     while (i <= Length(inner)) and (AsmTextCharAt(inner, i) <> '+') and (AsmTextCharAt(inner, i) <> '-') do
-      begin AppendChar(baseStr, inner[i]); Inc(i); end;
+      Inc(i);
+    baseStr := AsmTextSlice(inner, 1, i - 1);
     if i <= Length(inner) then
     begin
       if AsmTextCharAt(inner, i) = '-' then sign := -1;
       Inc(i);
-      while i <= Length(inner) do begin AppendChar(dispStr, inner[i]); Inc(i); end;
+      dispStr := AsmTextSlice(inner, i, Length(inner) - i + 1);
     end;
     { trim base }
     while AsmTextIsSpace(AsmTextCharAt(baseStr, Length(baseStr))) do
@@ -282,6 +290,14 @@ end;
   non-jump. Shared by the label-jump path and setcc decoding. }
 function AsmTextJccCode(const m: AnsiString; var cc: Integer): Boolean;
 begin
+  { EmitAsmX64 asks this about EVERY mnemonic it sees, to decide whether the
+    line is a jump at all, and the answer is nearly always no — which used to
+    walk all 28 CaseEqual calls below. Every jcc spelling starts with 'j' and is
+    2..4 chars, so one character settles it. 3.9M of the compile's 18.6M
+    CaseEqual calls came from this function's miss path. }
+  Result := False;
+  if (Length(m) < 2) or (Length(m) > 4) then Exit;
+  if AsmTextLower(m[1]) <> 'j' then Exit;
   Result := True;
   if CaseEqual(m, 'jo') then cc := 0
   else if CaseEqual(m, 'jno') then cc := 1
@@ -868,18 +884,16 @@ begin
       Error('EmitAsmX64: expected an instruction string');
     line := AsmTextCStr(items[i].VAnsiString);
 
-    { trim for label/jump classification }
-    trimmed := '';
-    j := 1;
-    while (j <= Length(line)) and AsmTextIsSpace(AsmTextCharAt(line, j)) do Inc(j);
-    while j <= Length(line) do begin AppendChar(trimmed, line[j]); Inc(j); end;
-    while AsmTextIsSpace(AsmTextCharAt(trimmed, Length(trimmed))) do
-      trimmed := AsmTextSlice(trimmed, 1, Length(trimmed) - 1);
+    { trim for label/jump classification — AsmTextTrim is exactly the
+      skip-leading / copy / strip-trailing the three loops here used to spell by
+      hand, and it is one SetLength+fill instead of an AppendChar per char. }
+    trimmed := AsmTextTrim(line);
 
     { first word = mnemonic }
-    mnem := ''; j := 1;
-    while (j <= Length(trimmed)) and not AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do
-      begin AppendChar(mnem, AsmTextLower(trimmed[j])); Inc(j); end;
+    j := 1;
+    while (j <= Length(trimmed)) and not AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do Inc(j);
+    mnem := AsmTextSlice(trimmed, 1, j - 1);
+    for k := 1 to Length(mnem) do mnem[k] := AsmTextLower(mnem[k]);
 
     isJmp := CaseEqual(mnem, 'jmp');
     if (Length(trimmed) >= 2) and (AsmTextCharAt(trimmed, Length(trimmed)) = ':') then
@@ -899,8 +913,7 @@ begin
         assembler cannot see (an EmitCallProc between two EmitAsmX64 calls,
         whose labels are per-call). Short range only (+-127). }
       while (j <= Length(trimmed)) and AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do Inc(j);
-      target := '';
-      while j <= Length(trimmed) do begin AppendChar(target, trimmed[j]); Inc(j); end;
+      target := AsmTextSlice(trimmed, j, Length(trimmed) - j + 1);
 
       if (Length(target) >= 1) and
          ((target[1] = '+') or (target[1] = '-') or

@@ -4743,24 +4743,29 @@ begin
   {$endif}
 end;
 
+{ Case-insensitive string equality. Bails on the FIRST differing character —
+  it used to set `match := False` and keep scanning to the end, which cost the
+  full length on every miss, and misses are the common case: this is the
+  primitive every keyword/mnemonic/register/overload-name chain in the compiler
+  is built out of, ~18.6M calls while compiling an EMPTY .npy.
+  See bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost. }
 function CaseEqual(const s1, s2: AnsiString): Boolean;
-var i, len: Integer; c1, c2: Char; match: Boolean;
+var i, len: Integer; c1, c2: Char;
 begin
   Result := False;
   len := Length(s1);
-  if len = Length(s2) then
+  if len <> Length(s2) then Exit;
+  i := 1;
+  while i <= len do
   begin
-    match := True;
-    for i := 1 to len do
-    begin
-      c1 := s1[i];
-      c2 := s2[i];
-      if (c1 >= 'A') and (c1 <= 'Z') then c1 := Chr(Ord(c1) + 32);
-      if (c2 >= 'A') and (c2 <= 'Z') then c2 := Chr(Ord(c2) + 32);
-      if c1 <> c2 then match := False;
-    end;
-    Result := match;
+    c1 := s1[i];
+    c2 := s2[i];
+    if (c1 >= 'A') and (c1 <= 'Z') then c1 := Chr(Ord(c1) + 32);
+    if (c2 >= 'A') and (c2 <= 'Z') then c2 := Chr(Ord(c2) + 32);
+    if c1 <> c2 then Exit;
+    Inc(i);
   end;
+  Result := True;
 end;
 
 { TRUE when a parameterised topic selects `name` — an exact (case-insensitive)
