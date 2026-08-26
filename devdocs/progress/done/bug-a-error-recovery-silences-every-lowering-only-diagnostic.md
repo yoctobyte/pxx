@@ -256,4 +256,4 @@ later, this ticket's test is the shape that will catch it.
 GREEN · pascal-conformance 346/0/170/34 · c-conformance 220/0 · fgl 7/7.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit a69f55fb7.
