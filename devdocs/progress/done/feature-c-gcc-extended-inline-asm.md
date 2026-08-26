@@ -8,7 +8,7 @@ blocked-by: []
 status: done
 owner: opus5-frank1
 created: 2026-08-26
-commit: PENDING-COMMIT
+commit: 7a62439f4
 summary: "The C frontend did not recognise `asm` at all, so a bare `asm(\"\")` failed as `call to undeclared function: asm` and the operand sections died at the first ':'. busybox's barrier() is `asm volatile (\"\":::\"memory\")`, expanded by INIT_G()/INIT_S(), so three applets stopped on their function's first statement. Empty template -> compiles to nothing (correct); anything else refused by name rather than silently dropped."
 ---
 
