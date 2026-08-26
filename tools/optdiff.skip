@@ -9,3 +9,10 @@ test_multithreading*
 # prints RTTI/prop POINTER values — binary-layout-dependent, differs
 # between binaries by construction
 test_rtti*
+# a GTK3 GUI program: with no display gtk_init prints a warning carrying the
+# BINARY NAME, the PID and a millisecond timestamp — and optdiff compiles the
+# three levels to d0/d2/d3, so the first of those differs by construction.
+# Dormant until 74702c14d stopped jobs inheriting the human's $DISPLAY: before
+# that it opened a real window on the workstation session and was skipped as
+# TIMEOUT-O0, so the sweep never compared it.
+t_rw*

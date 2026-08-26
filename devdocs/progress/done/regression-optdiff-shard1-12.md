@@ -1,5 +1,7 @@
 ---
 prio: 70
+status: done
+owner: frank1
 ---
 
 > **origin/dev has advanced 5 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.
@@ -31,3 +33,37 @@ optdiff shard 1/12: pass=132 skip=17 diff=1
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Root cause (frank1, 2026-08-26) — not a miscompile; the sweep started running a test it can never pass
+
+Reproduced exactly, by mimicking the harness (same `d0`/`d2` output names, empty
+environment):
+
+```
+r0=1 r2=1
+--- o0 ---
+(d0:1166619): Gtk-WARNING **: 10:39:01.745: cannot open display:
+--- o2 ---
+(d2:1166649): Gtk-WARNING **: 10:39:01.855: cannot open display:
+```
+
+Three independent sources of difference, none of them the compiler: the
+**binary name** (optdiff writes `$TMP/d0`, `d2`, `d3` — so the -O level is IN
+the compared text), the **PID**, and a **millisecond timestamp**. `test/t_rw.pas`
+is a GTK3 GUI program; with no display gtk_init prints that line and exits 1.
+
+**Why it went red now, with nothing in the GUI stack changed in the range.**
+`74702c14d fix(T): a test job no longer inherits the human's desktop session`
+is in the interval. plexus became the workstation on 2026-08-20, so until that
+commit every job inherited `DISPLAY` — t_rw opened a real window, ran forever,
+and was skipped as TIMEOUT-O0. The sweep had never compared it. Removing
+`DISPLAY` was correct and is what made the job start reporting.
+
+Same shape as the fpjson rung one ticket over: an unenrolled check asserts
+nothing while looking like coverage, and enrolling it is what surfaces the
+finding. `optdiff.skip` already carries `test_c_gtk_*` for exactly this class —
+the glob was just too narrow to cover the one Pascal GUI test in the tree
+(`grep -l gtk3 test/*` returns t_rw.pas and nothing else).
+
+Fixed by listing it, with the reason, as the file's header requires.
+- 2026-08-26 — resolved, commit PENDING-COMMIT.
