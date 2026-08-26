@@ -255,6 +255,16 @@ The shape is worth recognising anywhere state records that work was done:
 A repair that cannot be repaired is the corrective mechanism eating itself, and
 it is invisible while the rule happens to be right.
 
+The sharpened rule, after the same author caught a weaker instance in their next
+commit -- a value stamped behind an existence check, write-once, whose answer
+depended on a prefix list that can change: **cache a fact about a frozen
+artifact, never a fact derived through a rule that can change.** A completed
+run's `timed_out`, a build's `pin_built` -- immutable, safe to persist forever. A
+verdict computed *through* a policy is a one-way cache wearing different clothes,
+and recomputing it is almost always cheaper than the machinery that would make it
+correctable. An audit on that criterion found every other persisted boolean in
+the file was a fact about a run, and clean.
+
 ## A guard that greps the source can only catch what is visible in the text
 
 Same session, second defect. A repair path called `testable_only()`, which reads
