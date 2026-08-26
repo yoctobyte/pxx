@@ -118,15 +118,36 @@ still commits so `bisect_step` needs no teaching, and pin.log commits touch
 `stable_*/**` so `testable_only()` keeps them. `pins_in_range()` already
 computed precisely this set for a different purpose.
 
+### The first cut of this was WRONG in the dangerous direction — corrected same session
+
+The first attempt replaced the range with **pin moves only**: 137 commits down
+to 2. That is too narrow, and too narrow is the failure that matters
+(`last_covering_sha`'s own docstring: *"a too-wide range costs bisect steps; a
+too-narrow one can exclude the culprit"*). `make pin` freezes
+`compiler/builtin/**` and **deliberately leaves `lib/rtl` and `lib/pcl` live** —
+"track B's own editable lane, which B expects live" — and the job compiles
+`test/lib_mimic_xml_etree_elementtree.npy` from the live tree. So a pin-built
+job is blind to `compiler/**`, **not** to everything but the pin. Measured: the
+137 contain 2 `lib/` and 34 `test/` commits, all of them genuinely causal
+candidates, and the pin-move cut discarded every one.
+
+The right predicate already existed and was already correct: `PIN_IMMUNE_PREFIXES`
+(`compiler/`, `tools/`, `devdocs/`, `docs/`). `pin_immune()` applies it to the
+ONE accused commit; nothing applied it to the range. Which is this ticket's own
+thesis, one more time — the decision was right, the publication was wrong, and
+the predicate was sitting there.
+
 Measured against the live regression that motivated the ticket:
 
 ```
 lib-test#src:test/lib_mimic_xml_etree_elementtree.npy
-  commit range 137  ->  pin moves 2  [0635e2d4ea7f, 87013a79a477]
+  137 commits  ->  37 observable   (dropped 100 that change only compiler/tools/docs)
 ```
 
-A bisect over 2 candidates instead of 137 — and the 137 included the anchor
-`fd93e4a71c37`, a tstate publish commit, which changes nothing at all.
+A bisect over 37 candidates instead of 137, with nothing causal discarded — and
+the 100 dropped include the anchor `fd93e4a71c37`, a tstate publish commit,
+which changes nothing at all. An unknown file list never narrows: a commit whose
+paths cannot be read is kept.
 
 **Repaired on read**, like the untestable-commit filter: a regression opened
 before this change carries a commit range for a job that cannot observe
