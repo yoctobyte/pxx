@@ -368,5 +368,4 @@ Deliberate negative results, recorded so they are not re-hunted:
   most of which was the same idiv now fixed at the source.
 
 ## Log
-- 2026-08-26 — resolved. Code landed as 1202429f4 and 13e196cc8 on `dev`.
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved. Code landed as 1202429f4 and 13e196cc8; this write-up as 8df2eda4c.
