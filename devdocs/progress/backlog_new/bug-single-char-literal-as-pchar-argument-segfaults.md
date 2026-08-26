@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 65
+prio: 80
 type: bug
 blocked-by: []
 summary: "A ONE-character literal passed where a PChar parameter is expected segfaults: `StrCat(buf, '-')` faults, `StrCat(buf, '--')` works. The single-quoted literal types as Char rather than as a string, so its ORDINAL is passed as the pointer and the callee dereferences address 45. FPC converts it to a pointer to a NUL-terminated one-character string. Pre-existing — it hits StrCopy/StrCat/StrPos as much as anything new."
@@ -75,3 +75,27 @@ passes a one-character literal to a PChar parameter.
 
 Track P: `make compiler/pascal26` (self-host fixedpoint) + the repro above
 printing `x-` and exiting 0.
+
+## Raised 65 -> 80 (coordinator, 2026-08-26)
+
+It is a **segfault**, and the owner ranking rule is stated plainly: "compiler
+syntax, segfaults, etc, all prio." 65 ranked it as an ordinary defect.
+
+Three things make it worse than the one-line repro suggests:
+
+- **It is silent and shape-dependent in the cruellest way.** `StrCat(buf, '--')`
+  works and `StrCat(buf, '-')` faults. Nothing about the source says the second
+  is different, so a program works until the day someone shortens a separator.
+- **It has been reachable through `StrCopy`/`StrCat` all along**, so it is not a
+  consequence of the RTL work that found it -- that work only walked past it.
+- **A one-character literal typing as Char and passing its ORDINAL as a pointer
+  is a wild-pointer dereference**, not a refusal. The value is under the
+  program's control, which is the difference between a crash and a defect worth
+  ranking above a crash.
+
+Almost certainly a double case: the same literal reaches a PChar parameter
+through more than one path (direct call, overload resolution, an `array of
+const`). Whoever takes it should fix the conversion where the type is decided
+and then **grep for the sibling** -- and note the boundary of that grep, since
+a site that open-codes the conversion will not name whatever symbol you search
+for (`devdocs/dev/normalise-dont-special-case.md`).
