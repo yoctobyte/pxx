@@ -258,4 +258,4 @@ No Track A file was modified — `RegisterUClassAlias` / `FindUClassNonRecord`
 are called, not changed.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 10a186faa.
