@@ -2099,6 +2099,28 @@ begin
     Error('compiler error: div-zero check call must be exactly 5 bytes (jnz +5 would land mid-instruction)');
 end;
 
+function ConstPow2Shift(v: Int64; var k: Integer): Boolean;
+{ True when v is a positive power of two 2^k with 0 <= k <= 31, and k is that
+  exponent. The 31 ceiling is not arbitrary: every constant the div/mod
+  strength reduction below needs -- the mask 2^k-1 and the clear-mask -(2^k) --
+  must fit a SIGN-EXTENDED imm32, which they do exactly up to k = 31. A wider
+  divisor keeps the general idiv path rather than growing a movabs form for a
+  case that does not occur (feature-opt-o3-register-pressure, slice: constant
+  divisor). }
+var i: Integer;
+begin
+  Result := False;
+  k := 0;
+  if v <= 0 then Exit;
+  for i := 0 to 31 do
+    if v = (Int64(1) shl i) then
+    begin
+      k := i;
+      Result := True;
+      Exit;
+    end;
+end;
+
 procedure EmitObjBlobBody(const procName: AnsiString);
 { Body of an object retain/release blob: preserve every caller-clobbered GP
   reg, rdi := rax (the object), call the named Pascal proc, restore, ret. }
@@ -4081,6 +4103,7 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     slDepth, slElemSize, slRetainTop, pSlRetainDone, slBaseRec, slMek, slProcIdx: Integer;
     slBaseTk: TTypeKind;
     wid, decs: Integer;
+    pow2k: Integer;           { div/mod-by-power-of-two strength reduction }
     arg1Node, arg2Node, arg3Node, val1Node, val2Node: Integer;
     itemNode, trueCount, nextJmp, falseJmp: Integer;
     trueJumps: array[0..127] of Integer;
@@ -5458,6 +5481,73 @@ begin
           Exit;
         end;
 
+        { -O3 constant-divisor strength reduction: `x div 2^k` / `x mod 2^k`
+          become shifts and masks instead of a ~25-40 cycle idiv preceded by a
+          zero-check on a constant that is provably non-zero.
+
+          Why this is the first thing measured here: a sampling profile of the
+          compiler compiling a one-line NilPy file put 8.7% of the WHOLE run on
+          the two instructions following the two idivs in the heap allocator's
+          `((size + 7) div 8) * 8` and `Integer(size div 8) - 1`, and a third
+          idiv in PXXFree took another 3.5%. The divisor is the literal 8 at
+          every one of those sites.
+
+          Semantics are Pascal's, i.e. C99's: `div` truncates toward zero and
+          `mod` takes the sign of the DIVIDEND. A bare `sar` floors, which is
+          wrong for a negative dividend, so the signed form biases first:
+          add (2^k - 1) when the value is negative, which `sar 63; shr 64-k`
+          produces branchlessly, then shift. Signed mod subtracts the truncated
+          quotient scaled back up -- `t and -(2^k)` clears the low k bits, which
+          is (t sar k) shl k. Unsigned needs neither: `shr` and `and` are exact.
+
+          Operands arrive sign/zero-extended to the full 64-bit register (the
+          same contract the idiv path relies on), so 64-bit shifts are correct
+          for every narrower type and the store narrows the result as before. }
+        if (OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) and
+           ((op = tkDiv) or (op = tkMod)) and
+           (not TypeIsFloat(IntToTypeKind(IRTk[node]))) and
+           (IntToTypeKind(IRTk[node]) <> tyAnsiString) and
+           ConstPow2Shift(IRIVal[right], pow2k) then
+        begin
+          IREmitNode(left);                              { rax = dividend }
+          cmpUnsigned := TypeDivideUnsigned(IntToTypeKind(IRTk[left]),
+                                            IntToTypeKind(IRTk[right]));
+          if op = tkDiv then
+          begin
+            if pow2k > 0 then
+            begin
+              if cmpUnsigned then
+                begin EmitB($48); EmitB($C1); EmitB($E8); EmitB(pow2k); end     { shr rax, k }
+              else
+              begin
+                EmitB($48); EmitB($89); EmitB($C1);                             { mov rcx, rax }
+                EmitB($48); EmitB($C1); EmitB($F9); EmitB(63);                  { sar rcx, 63 }
+                EmitB($48); EmitB($C1); EmitB($E9); EmitB(64 - pow2k);          { shr rcx, 64-k }
+                EmitB($48); EmitB($01); EmitB($C8);                             { add rax, rcx }
+                EmitB($48); EmitB($C1); EmitB($F8); EmitB(pow2k);               { sar rax, k }
+              end;
+            end;
+            { k = 0 is `div 1`: the dividend IS the quotient, emit nothing. }
+          end
+          else
+          begin
+            if pow2k = 0 then
+              begin EmitB($48); EmitB($31); EmitB($C0); end                     { xor rax, rax  (x mod 1) }
+            else if cmpUnsigned then
+              begin EmitB($48); EmitB($25); EmitI32(Integer((Int64(1) shl pow2k) - 1)); end  { and rax, 2^k-1 }
+            else
+            begin
+              EmitB($48); EmitB($89); EmitB($C1);                               { mov rcx, rax }
+              EmitB($48); EmitB($C1); EmitB($F9); EmitB(63);                    { sar rcx, 63 }
+              EmitB($48); EmitB($C1); EmitB($E9); EmitB(64 - pow2k);            { shr rcx, 64-k }
+              EmitB($48); EmitB($01); EmitB($C1);                               { add rcx, rax }
+              EmitB($48); EmitB($81); EmitB($E1); EmitI32(Integer(-(Int64(1) shl pow2k))); { and rcx, -(2^k) }
+              EmitB($48); EmitB($29); EmitB($C8);                               { sub rax, rcx }
+            end;
+          end;
+          Exit;
+        end;
+
         { -O1 imm-fold: a constant right operand of an arith/logic op whose value
           fits imm32 folds straight into the instruction's immediate, dropping
           pass 1's separate `mov rcx, imm` — `mov rcx,k; add rax,rcx` becomes
@@ -5863,9 +5953,15 @@ begin
               end;
             end;
           
+          { -O3: a divisor that is a non-zero CONSTANT cannot be zero, so the
+            two-instruction pre-divide guard is dead code at every such site
+            (`div 10` in every number formatter, `div 3`, ...). The power-of-two
+            case never reaches here — it was strength-reduced above. }
           tkDiv:
             begin
-              EmitDivZeroCheckX64;
+              if not ((OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) and
+                      (IRIVal[right] <> 0)) then
+                EmitDivZeroCheckX64;
               if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
                 begin EmitB($48); EmitB($31); EmitB($D2); EmitB($48); EmitB($F7); EmitB($F1); end
               else
@@ -5873,7 +5969,9 @@ begin
             end;
           tkMod:
             begin
-              EmitDivZeroCheckX64;
+              if not ((OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) and
+                      (IRIVal[right] <> 0)) then
+                EmitDivZeroCheckX64;
               if TypeDivideUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
                 begin EmitB($48); EmitB($31); EmitB($D2); EmitB($48); EmitB($F7); EmitB($F1); end
               else

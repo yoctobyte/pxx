@@ -8,10 +8,10 @@ prio: 85
   file-ownership **Track A** — edits the shared `ir_codegen.inc` / `symtab.inc` /
   backends, so it obeys A's no-concurrent-edit rule + self-host gate) — umbrella
   for the next optimization campaign.
-- **Status:** backlog — not in progress; landed slices are green and PINNED (-O2 promotion of the W1 set); remaining = -O3 soak + the promotion gate (needs the full matrix / Track T).
+- **Status:** working
   `-O3`** (see gating); `-O2` stays the proven default and the stable fallback.
 - **Opened:** 2026-07-10 (post -O2-default flip, [[feature-optimization-levels]]).
-- **Owner:** — (unclaimed; parked to backlog 2026-07-14)
+- **Owner:** agent-O-regalloc
 
 ## Why — the measured opportunity
 
