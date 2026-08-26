@@ -361,6 +361,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-cross-double-to-int-conversion | C | 45 | bug | C double→int conversion missing on cross backends (i386/arm32/aarch64/riscv32) | — |
 | bug-c-crtl-auto-pull-depends-on-the-pascal-preludes-unit-count | C | 75 | bug | crtl's auto-pull silently no-ops when pxxcio's `uses` clause has two units | — |
 | bug-c-crtl-fopen-missing | B | 50 | bug | crtl: `fopen`/`fclose`/`fseek`/`ftell` declared but not defined (no file open) | — |
+| bug-c-crtl-headers-omit-surface-every-libc-exposes | C | 55 | bug | Four omissions in pxx's own C headers, all found by one busybox 1.37.0 sweep and all the same shape — a TYPE or MACRO that every libc puts in a specific header, absent from crtl's copy of that header, so code that includes the right header still fails. <sys/ioctl.h> had no _IOC family; <string.h> did not pull <strings.h> under __USE_MISC; <stddef.h> had no wchar_t; <wchar.h> had no mbstate_t. Together these were blocking 10 busybox files and every remaining non-library gap in the sweep. | — |
 | bug-c-crtl-long-double-math | B | 45 | bug | C crtl: long-double math (ldexpl, ...) missing — blocks tcc | — |
 | bug-c-crtl-missing-getpid | B | 50 | bug | C: crtl `unistd.h` misses `getpid` | — |
 | bug-c-crtl-missing-net-headers-enet | C | 45 | bug | crtl: missing <netinet/tcp.h>, <netdb.h>, <poll.h> — ENet falls back to host headers | — |

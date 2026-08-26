@@ -6214,6 +6214,34 @@ test-core: $(COMPILER)
 	# float arms, nesting, and the else arm's side effect. gcc -O0 oracle.
 	./$(COMPILER) test/cternary_elvis.c $(TESTTMP)/cternelvis26
 	test "$$($(TESTTMP)/cternelvis26)" = "$$(printf '7 7\n5\n1\n3\n2\n11 22\n90 90\n2.5 2.5\n7\n42\n-8 0 8 8 \n4\n0\n1\n1')"
+	# pxx's own <sys/ioctl.h> must supply the _IOC request-encoding family (glibc
+	# reaches it via <bits/ioctls.h> -> <asm/ioctl.h>). Real code spells its own
+	# ioctl numbers with it instead of including a linux/ uapi header: busybox
+	# writes _IOR(2, 0x04, struct floppy_struct) and _IOW(BTRFS_IOCTL_MAGIC,9,int)
+	# itself. Missing, the name survived preprocessing as a call with a TYPE for
+	# an argument and died as `expected C expression`. gcc -O0 oracle.
+	./$(COMPILER) test/ccrtl_ioctl_macros.c $(TESTTMP)/ccrtlioctl26
+	test "$$($(TESTTMP)/ccrtlioctl26)" = "$$(printf '1074041865\n2148532740\n513\n3221779459\n16 4\n1 148 9\n21505 21531')"
+	# <string.h> pulls in <strings.h> under __USE_MISC, as glibc's does, so a TU
+	# that includes only <string.h> still sees strcasecmp/strncasecmp/bzero/ffs
+	# — busybox's libbb.h never includes <strings.h>, and those two were the
+	# largest single cause of `call to undeclared function` in a busybox sweep.
+	./$(COMPILER) test/ccrtl_string_pulls_strings.c $(TESTTMP)/ccrtlstrings26
+	test "$$($(TESTTMP)/ccrtlstrings26)" = "$$(printf '0 1 1\n0 1\nbzero ok\n0 1 5\n2')"
+	# ...and the gate holds the other way: with no feature-test macro, <strings.h>
+	# must NOT leak, or every strict-ISO TU with a local named `index` breaks.
+	./$(COMPILER) test/ccrtl_string_strict_iso.c $(TESTTMP)/ccrtlstrict26
+	test "$$($(TESTTMP)/ccrtlstrict26)" = "7 4"
+	# C99 7.17: <stddef.h> defines wchar_t, and that is the header code reaches
+	# the type through — crtl had the typedef only in <wchar.h>, so busybox's
+	# libbb/lineedit.c read `wchar_t` as a stray token at top level. C99 7.24.1
+	# mbstate_t was missing outright, and code that IMPLEMENTS the multibyte
+	# conversions needs it only to name a parameter it ignores; without it the
+	# parameter list mis-parsed and the body hit IR lowering as a bare int
+	# literal. The <wchar.h> include sits mid-file so the part above it proves
+	# the <stddef.h> claim. gcc -O0 oracle.
+	./$(COMPILER) test/ccrtl_wchar_types.c $(TESTTMP)/ccrtlwchar26
+	test "$$($(TESTTMP)/ccrtlwchar26)" = "$$(printf '65 4\n-1 1\n97 8364 0\n8461\n1 90\n2 195 169')"
 	# Unary `!` in a C constant expression, and the negative array bound the idiom
 	# it appears in EXISTS to produce. CEvalConstPrimary's unary chain had -, +, ~
 	# and & and not !, so `char[1 - 2*!!(cond)]` — BUILD_BUG_ON, as busybox and the

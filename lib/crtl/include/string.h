@@ -44,4 +44,18 @@ char *strerror(int errnum);
    not GNU's char*-returning one — they disagree on the return type. */
 int strerror_r(int errnum, char *buf, size_t buflen);
 
+/* glibc's <string.h> pulls in <strings.h> under __USE_MISC, so a program that
+   includes only <string.h> still gets strcasecmp/strncasecmp/bzero/ffs. Real
+   code leans on that: busybox reaches strncasecmp from libbb.h, which includes
+   <string.h> and never <strings.h>, and it was the single largest cause of
+   "call to undeclared function" across a busybox sweep.
+
+   Gated the way glibc gates it, and for the same reason: <strings.h> defines
+   index() and ffs(), and `index` in particular is an extremely common local
+   variable name. A strict-ISO translation unit must not have those names
+   appear just because it asked for <string.h>. */
+#if defined(_GNU_SOURCE) || defined(_DEFAULT_SOURCE) || defined(_BSD_SOURCE)
+#include <strings.h>
+#endif
+
 #endif
