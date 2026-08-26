@@ -5030,6 +5030,23 @@ begin
           CurASTNode := node;
           Exit;
         end;
+        { A STRING-shaped operand — a literal, a parenthesised expression, or a
+          name with an operator after it — is legal in fpc and was refused here
+          for every spelling: `if CurTok.Kind <> tkIdent then Error(...)`.
+          `High(F)` escaped only because a NAME starts with an identifier.
+          HighLowOperandIsExpr decides by SHAPE rather than by the first token,
+          so `sh + 'x'` reaches the expression path instead of stopping the
+          lvalue parser at `sh`; and `High(3)` still reaches the arms below and
+          keeps its clear error rather than reaching the runtime Length tail and
+          producing garbage. }
+        if HighLowOperandIsExpr then
+        begin
+          idx := -1;
+          ParseExpr;
+          valNode := CurASTNode;
+        end
+        else
+        begin
         if CurTok.Kind <> tkIdent then Error('High: expected array variable or ordinal type');
         idx := FindSym(CurTok.SVal);
         if (idx < 0) and (FindProc(CurTok.SVal) >= 0) then
@@ -5053,6 +5070,7 @@ begin
           Next;
           { See Length below: ParseLValueAST handles implicit-Self + undefined. }
           valNode := ParseLValueAST(idx, TokPos - 2);
+        end;
         end;
         Expect(tkRParen, ')');
         { …and what KIND of value the operand turned out to be, which is what
@@ -5144,6 +5162,24 @@ begin
           LastExprTk := hlBoundTk;
           Exit;
         end
+        else if ASTKind[valNode] = AN_STR_LIT then
+        begin
+          { A string CONSTANT is an array-of-CHAR constant in fpc, so its bounds
+            are its OWN length, 0-based: High('abc') = 2. This has to sit ABOVE
+            the frozen arm — a literal's type kind is tyString, and the frozen
+            arm's 255 default would claim it and answer 255.
+
+            Keyed on the NODE, not on the token, deliberately: `High(('ab'))` is
+            1 in fpc too, so a token test would have had to know about
+            parentheses; and `High('ab' + s)` must NOT land here, because a
+            concatenation is a string EXPRESSION and takes the managed or frozen
+            base below. Low needs no twin — its tail already answers 0, which is
+            the same 0 a literal wants.
+            bug-p-high-and-low-refuse-every-non-identifier-operand }
+          CurASTNode := AllocNode(AN_INT_LIT);
+          ASTIVal[CurASTNode] := ASTSLen[valNode] - 1;
+          ASTTk[CurASTNode] := Ord(tyInteger);
+        end
         else if hlIsFrozen then
         begin
           { A FROZEN string's bounds are its declared CAPACITY, not its current
@@ -5200,6 +5236,23 @@ begin
           CurASTNode := node;
           Exit;
         end;
+        { A STRING-shaped operand — a literal, a parenthesised expression, or a
+          name with an operator after it — is legal in fpc and was refused here
+          for every spelling: `if CurTok.Kind <> tkIdent then Error(...)`.
+          `High(F)` escaped only because a NAME starts with an identifier.
+          HighLowOperandIsExpr decides by SHAPE rather than by the first token,
+          so `sh + 'x'` reaches the expression path instead of stopping the
+          lvalue parser at `sh`; and `High(3)` still reaches the arms below and
+          keeps its clear error rather than reaching the runtime Length tail and
+          producing garbage. }
+        if HighLowOperandIsExpr then
+        begin
+          idx := -1;
+          ParseExpr;
+          valNode := CurASTNode;
+        end
+        else
+        begin
         if CurTok.Kind <> tkIdent then Error('Low: expected array variable or ordinal type');
         idx := FindSym(CurTok.SVal);
         if (idx < 0) and (FindProc(CurTok.SVal) >= 0) then
@@ -5215,6 +5268,7 @@ begin
         begin
           Next;
           valNode := ParseLValueAST(idx, TokPos - 2);   { consume the array variable }
+        end;
         end;
         Expect(tkRParen, ')');
         { …and what KIND of value the operand turned out to be, which is what

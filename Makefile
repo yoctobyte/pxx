@@ -8004,6 +8004,18 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_sizeof_through_a_deref.pas $(TESTTMP)/test_sod26
 	test "$$($(TESTTMP)/test_sod26)" = "$$(cat test/test_sizeof_through_a_deref.expected)"
+	# What High/Low accept, and in which base. Both arms opened with
+	# `if CurTok.Kind <> tkIdent then Error(...)`, so a literal, a parenthesised
+	# expression, and a name with an OPERATOR after it were all refused; a proc
+	# NAME escaped only because a name starts with an identifier. Three bases --
+	# a string CONSTANT is 0..len-1, a MANAGED expression 1..Length, a FROZEN
+	# variable 0..capacity -- so "it starts with a quote" tells you nothing. The
+	# array/ordinal rows are pinned because the dispatch moved for all of them.
+	# Two shortstring-EXPRESSION rows deliberately diverge; see the test header
+	# and devdocs/dev/pascal-dialect-divergences.md.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_high_low_operand_shapes.pas $(TESTTMP)/test_hlo26
+	test "$$($(TESTTMP)/test_hlo26)" = "$$(cat test/test_high_low_operand_shapes.expected)"
 	# ...and the guard: a genuine `var` parameter must still REFUSE the same
 	# argument. This is what stops the fix from being ungated -- tried, and it
 	# let a call RESULT bind to a var parameter and COMPILE, because the method

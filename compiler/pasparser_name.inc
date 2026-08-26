@@ -658,6 +658,51 @@ end;
 
 { ONE argument slot. Safe to call unconditionally — a no-op unless the argument
   really is a character constant and the parameter really wants the string. }
+{ Is High(...)/Low(...)'s operand an EXPRESSION rather than a name?
+
+  CurTok sits just past the `(`. A NAME-shaped operand is `ident` optionally
+  followed by `.field`, `^` and `[...]` runs — exactly what ParseLValueAST
+  consumes — and those arms below carry the array and ordinal rules that an
+  expression's static type cannot reproduce. Anything else at paren/bracket
+  depth 0 means the operand is an expression: a literal, a parenthesised
+  expression, or a name with an OPERATOR after it (`sh + 'x'`, which stopped the
+  lvalue parser at `sh` and then died on the `+` with "unexpected token").
+
+  Same shape as SizeOf's own szIsExpr scan a few hundred lines up, and for the
+  same reason — dispatch, not replacement. It is not shared with that one
+  because the two admit different things: SizeOf's scan accepts a builtin TYPE
+  name run and refuses a subscript on a non-array, neither of which applies
+  here. Two scans that answer differently on purpose are not one mechanism.
+  bug-p-high-and-low-refuse-every-non-identifier-operand }
+function HighLowOperandIsExpr: Boolean;
+var i, depth: Integer;
+begin
+  HighLowOperandIsExpr := False;
+  if (CurTok.Kind = tkString) or (CurTok.Kind = tkLParen) then
+  begin
+    HighLowOperandIsExpr := True;
+    Exit;
+  end;
+  if CurTok.Kind <> tkIdent then Exit;   { the arms below give their own error }
+  i := TokPos;                           { the token AFTER CurTok }
+  depth := 0;
+  while i < TokCount do
+  begin
+    if Tokens[i].Kind = tkLBrack then Inc(depth)
+    else if Tokens[i].Kind = tkRBrack then Dec(depth)
+    else if depth = 0 then
+    begin
+      if Tokens[i].Kind = tkRParen then Exit;   { name-shaped all the way }
+      if not (Tokens[i].Kind in [tkIdent, tkDot, tkCaret]) then
+      begin
+        HighLowOperandIsExpr := True;
+        Exit;
+      end;
+    end;
+    Inc(i);
+  end;
+end;
+
 procedure CoerceCharLitArg(cpi, pi, argNode: Integer);
 begin
   if not ParamTakesCharLitAsStr(cpi, pi) then Exit;

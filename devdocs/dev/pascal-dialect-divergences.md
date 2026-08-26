@@ -102,3 +102,40 @@ Not a bug — do not "fix" it toward FPC in the default dialect.
 `bug-a-strict-fpc-does-not-reproduce-fpc-shift-widths` closed for shifts, and is
 filed as `compat-pascal-strict-fpc-abs-and-sqr-widths`. Until it lands, a port
 of FPC bit-twiddling can pin shift width with the flag but not `Abs`/`Sqr`.
+
+## `High`/`Low` of a SHORTSTRING expression
+
+`sh: string[10]`, `s: AnsiString`, measured against fpc 3.2.2:
+
+| operand | fpc `-Mobjfpc` | fpc `-Mdelphi` | pxx |
+| --- | --- | --- | --- |
+| `'abc'` | 0 .. 2 | 0 .. 2 | same |
+| `('ab')` | 0 .. 1 | 0 .. 1 | same |
+| `sh` | 0 .. 10 | 0 .. 10 | same |
+| `s` | 1 .. 3 | 1 .. 3 | same |
+| `'ab' + s` | 1 .. 5 | 1 .. 5 | same |
+| `s + 'x'` | 1 .. 4 | 1 .. 4 | same |
+| **`sh + 'x'`** | **0 .. 255** | 0 .. 255 | **1 .. 3** |
+| **`'ab' + 'cd'`** | **0 .. 255** | **1 .. 4** | 1 .. 4 |
+
+Only the last two rows differ, and both are the same fact: in FPC a
+concatenation whose operands are all short/frozen strings is itself a
+SHORTSTRING expression, so its bounds are the DEFAULT CAPACITY — 0 .. 255 —
+rather than anything to do with the value. pxx has no shortstring-expression
+type: `SizeOf(sh)` is 8 here and 11 in FPC, so the whole capacity model differs,
+and matching those two cells means changing the string model rather than the
+intrinsic.
+
+Two reasons the default stays ours:
+
+- FPC is not self-consistent about it. `'ab' + 'cd'` is 0 .. 255 in objfpc mode
+  and 1 .. 4 in Delphi mode — and 1 .. 4 is pxx's answer, so pxx already agrees
+  with one of FPC's own two answers.
+- 0 .. 255 is not a usable bound for the value: `for i := Low(sh + 'x') to
+  High(sh + 'x')` walks 254 characters that are not there. No correct program
+  depends on it.
+
+Recorded while closing the `High`/`Low` operand row of
+`bug-p-every-compile-time-intrinsic-hand-rolls-its-own-operand-parser`;
+`test/test_high_low_operand_shapes.pas` pins every row that DOES agree and says
+in its header which two do not.
