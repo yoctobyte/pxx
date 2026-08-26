@@ -120,6 +120,21 @@ working there; the lane letters cannot see a subagent you created.
 | cA | **out-of-band** — driven directly by the human, not a pxx dev session | none | none |
 | frank2-99 | idle, stale clone, unresponsive to roster pings | unknown | `/home/neo/frank2` |
 
+**Worktree workers are lane holders and are NOT in that table.** The coordinator
+dispatches ticket work as background agents, each in its own git worktree under
+`.claude/worktrees/`. They are not sessions, `ListAgents` does not show them, and
+they finish without announcing themselves to anyone but the coordinator -- yet
+each one HOLDS ITS LANE for the duration. That matters for exactly one rule: the
+**sole-A guard**. Before dispatching a Track A ticket, or a Track P one that
+touches the shared `lexer.inc`, the question "is anyone else on A right now?" is
+answered by the coordinator own dispatch record, not by the table above and not
+by `ListAgents`. Keep that record; it is the only place the answer exists.
+
+Live worker slots, 2026-08-26: **A** = the fixed nine-second NilPy compile cost;
+**N** = the sorted-by-key segfault. Two at a time is the sustainable number here
+-- four concurrent workers hit an account session limit on 2026-08-25 and all
+four died at once.
+
 **The borg-era layout is gone.** This file used to describe four checkouts under
 `/home/rene` on a second box. borg's PSU died 2026-08-20; the box is intact and
 awaiting a part (its disk read back 716,378 files / 254 GB with zero errors, the
