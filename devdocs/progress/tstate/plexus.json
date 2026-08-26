@@ -453,11 +453,6 @@
   }
  ],
  "host": "plexus",
- "idle_yield": {
-  "aborts": 1,
-  "phase": "pin-verify",
-  "target": "0a1acd15ff6e30c2108ffca92e143618066b6910"
- },
  "job_reason": {
   "optdiff#shard1/12": "OPT DIFF -O2: test/t_rw.pas (rc 1 vs 1) | OPT DIFF -O3: test/t_rw.pas (rc 1 vs 1) | optdiff skip SKIPLIST: test_rtti_emit.pas | optdiff skip TIMEOUT-O0: cfloat_lea_ptr_b195.c test_c_argspill.pas test_exception_unit_unhandled.pas | optdiff skip BUILD-FAIL: c_vla_const_fail.c crtl_tiny_regex_match.c except_b322_thrower.pas lazycasing_lib.c spill_lib.c test_assign_incompatible_types_fail.pas test_c_\u2026",
   "test-fpjson#src:tools/install_lib_candidates.sh": "> TTestIterator.TestString | > TTestIterator.TestArray | > TTestIterator.TestObject | run: 203  failures: 2  errors: 0  ignored: 0 | FAIL  TTestFactory.ArrayCreateInteger: \"Correct class\" expected: <TMyInteger> but was: <TMyInt64> | FAIL  TTestFactory.ObjectCreateInteger: \"Correct class\" expected: <TMyInteger> but was: <TMyInt64>"
