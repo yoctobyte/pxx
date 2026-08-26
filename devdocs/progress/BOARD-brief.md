@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:22 blocked:7 backlog:290 backlog_new:28 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2372 rejected:40`
+`working:1 unfinished:22 blocked:7 backlog:289 backlog_new:28 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2373 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -46,7 +46,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 328, ranked
+## Ready — top 30 of 327, ranked
 
 - `[p 82] [N]` bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
 - `[p 80] [A]` bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost
@@ -79,4 +79,4 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 
-_298 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_297 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
