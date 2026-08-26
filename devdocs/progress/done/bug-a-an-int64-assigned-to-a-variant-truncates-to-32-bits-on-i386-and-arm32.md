@@ -170,4 +170,4 @@ support to truncate. xtensa likewise.
 * `Makefile` — the new test wired into `test-core`.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 223e3d981.
