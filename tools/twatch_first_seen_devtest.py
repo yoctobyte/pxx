@@ -92,6 +92,44 @@ def t_range_note_says_no_bisect_for_an_empty_range():
     return "empty range reads as unknown + no bisect"
 
 
+def t_a_pin_built_range_is_counted_in_pin_moves():
+    """Face 3: a job that builds with $(PXX_STABLE) is blind to every commit
+    that does not move the pin, so a COMMIT range for it is the wrong axis --
+    not merely a wide one. Observed at 137 commits, anchored on a tstate
+    publish commit: a lead naming something that changes nothing at all."""
+    note = tw.range_note({"bad": "a" * 40, "good": "b" * 40,
+                          "range": ["c" * 40, "d" * 40], "pin_axis": True})
+    assert "pin move(s)" in note, "a pin-axis range must be counted in pin moves"
+    assert "commit(s) in range" not in note, (
+        "a pin-axis range described in commits sends the reader back to the "
+        "commit log, which is the axis that cannot answer")
+    return "pin-axis range reports 2 pin moves, not 2 commits"
+
+
+def t_no_pin_moved_is_a_real_verdict():
+    """The answer the system could not previously express. Every red on a
+    pin-built job implicitly asserted 'something in the compiler changed';
+    across an interval with no pin transition that is simply false."""
+    note = tw.range_note({"bad": "a" * 40, "good": "b" * 40,
+                          "range": [], "pin_axis": True})
+    low = note.lower()
+    assert "no pin moved" in low, (
+        "an empty pin-axis range must SAY no pin moved -- that is information, "
+        "not an absence of it")
+    assert "no idle bisect" in low
+    assert "not** in the commits" in note or "not* in the commits" in note \
+        or "not in the commits" in low
+    return "empty pin-axis range reads as a verdict, not a gap"
+
+
+def t_a_first_seen_note_says_first_ever_run():
+    note = tw.range_note({"bad": "a" * 40, "range": [], "first_seen": True})
+    low = note.lower()
+    assert "first-ever run" in low, "a first-seen red must say so"
+    assert "no idle bisect" in low
+    return "first-seen red reads as a finding, not a regression"
+
+
 def t_a_populated_range_still_promises_the_bisect():
     note = tw.range_note({"bad": "a" * 40, "good": "b" * 40,
                           "range": ["c" * 40, "d" * 40]})
@@ -107,6 +145,9 @@ def main():
                t_a_known_job_going_red_is_not_first_seen,
                t_a_first_seen_pass_is_not_a_fixed,
                t_range_note_says_no_bisect_for_an_empty_range,
+               t_a_pin_built_range_is_counted_in_pin_moves,
+               t_no_pin_moved_is_a_real_verdict,
+               t_a_first_seen_note_says_first_ever_run,
                t_a_populated_range_still_promises_the_bisect):
         try:
             print("  ok   %s — %s" % (fn.__name__, fn()))
