@@ -679,6 +679,25 @@ the one thing that cannot be skipped in the name of speed: a compiler that
 cannot reproduce itself is the single failure that would poison every lane at
 once, and this catches it in ~12s before the commit exists.
 
+**The one hole in that claim, and it opens exactly where verdicts matter most:**
+in a **fresh tree seeded with a copied-in binary**, `make compiler/pascal26` is a
+**no-op that exits 0**. `cp` stamps the seed with a newer mtime than the sources,
+so make has nothing to do and prints `make: 'compiler/pascal26' is up to date`
+where `converged after N round(s)` belongs — a success message in the wrong
+dialect, with everything downstream healthy. **No fixedpoint was proved and
+nothing says so.** In the normal loop this cannot happen, because the sources are
+what you just edited and are always newer. It only surfaces where the seed
+arrives from outside — a scratch worktree, a sweep, a gate run in a fresh
+checkout — which is precisely where the resulting verdict is load-bearing.
+Measured twice on 2026-08-26: once as a sync-back gate that went RED, and once as
+a full-tier sweep that would have returned a clean verdict for a sha using a
+**v226** binary predating the work it was meant to gate.
+
+**So when you seed a tree from outside, `touch` the sources after the copy (or
+`touch -d '2000-01-01'` the seed), and do not accept the build until you have
+seen `converged after N round(s)` and confirmed the binary's sha256 differs from
+`pinned`.** Absence of that line is the tell; there is no error to wait for.
+
 **`tools/gate.sh quick` (~30s) is now OPTIONAL on `dev`** — run it when you
 touched something you are nervous about, skip it when you are not. It is
 **REQUIRED before a sync-back to `master`**, which is the coordinator's call,
