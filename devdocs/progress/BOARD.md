@@ -122,7 +122,6 @@ _none_
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 70 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
 | bug-p-a-descendant-method-does-not-hide-the-inherited-one | P | 62 | bug | A method declared in a descendant WITHOUT `overload` must HIDE every inherited method of that name. pxx keeps the inherited ones as candidates, so a call can silently dispatch to the parent's differently-typed method — `l.Add(TFoo.Create(3))` on fgl's TFPGList<IFoo> reaches TFPSList.Add(Pointer), stores the object's VMT word, and the next read segfaults. | — |
 | bug-p-a-diagnostic-in-a-used-unit-names-the-wrong-source-file | P | 40 | bug | An error raised while compiling a unit pulled in by `uses` reports the correct LINE NUMBER for that unit but names an unrelated file in its `in:` line — every fgl.pp wall was reported as `in: stable_linux_amd64/default/builtin/builtinheap.pas`. Costs real time on corpus work, where the whole job is locating a wall in third-party source. | — |
-| bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped | P | 50 | bug | A token that starts no declaration is silently skipped in a UNIT's interface/implementation section, while the identical token in a PROGRAM's declaration section is correctly rejected. A typo'd section header (`cosnt K = 5;`) therefore discards the declarations behind it with no diagnostic; the error surfaces later at the use site, or not at all. FPC rejects at the typo. | — |
 | bug-p-the-constant-evaluator-erases-an-ordinals-type | P | 42 | bug | the const evaluator represents every ordinal as a bare Int64, so `const X = eB` prints 1 instead of eB and `const C = Low(TC)` prints 97 instead of 'a' | — |
 | bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence | T | 40 | bug | file_cascade_ticket's Root-cause-suspects line falls back to 'likely a broken build or harness event' whenever no CASCADE_ROOT_JOBS entry is in the red set. That is a conclusion drawn from the absence of one narrow signal, printed with no hedge, and it is now directly contradicted by the Range section shipped in 8ec77190c — which on the live incident named the actual cause. Same defect class the Range work fixed for the sha: an auto-filed ticket asserting something it has no evidence for. | — |
 | bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio | T | 50 | bug | Float-accuracy assertions in the gated suites make a one-ulp move a CI RED, and a red job is worked at the priority of BEING RED - which overrides the owner's standing rule that float accuracy is low prio. Parking the tickets in float/ does not close this door; only the tests can. | — |
@@ -317,6 +316,7 @@ _none_
 | refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too | P | 55 | refactor | The parser carve-out is done, but Pascal still shares lexer.inc with Track A — so the A/P no-concurrent-edit rule still binds, now over 2,566 lines instead of 37,249. Carve the Pascal-specific lexing into paslexer.inc the way C, NilPy, Rust and Zig already have their own, and the A/P slot stops existing. | — |
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
 | regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
+| regression-test-aarch64-test-parallel-for-capture-aggr | P | 70 | regression | regression: test-aarch64#src:test/test_parallel_for_capture_aggr.pas red at 70f6a360f475 (auto-filed by twatch) | — |
 | regression-test-core-test-char-array-is-a-string | P | 70 | regression | regression: test-core#src:test/test_char_array_is_a_string.pas red at 357217a73608 (auto-filed by twatch) | — |
 | regression-test-threads-test-parallel-for-capture-aggr-2 | P | 70 | regression | regression: test-threads#src:test/test_parallel_for_capture_aggr.pas red at 70f6a360f475 (auto-filed by twatch) | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
@@ -581,9 +581,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2414)
+## done (2415)
 
-2414 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2415 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (44)
 
@@ -659,6 +659,7 @@ _none_
 - [p 70] [N] feature-nilpy-staticmethod-and-classmethod
 - [p 70] [P] feature-p-delphi-string-helpers
 - [p 70] [P] feature-pascal-typed-and-untyped-files
+- [p 70] [P] regression-test-aarch64-test-parallel-for-capture-aggr
 - [p 70] [P] regression-test-core-test-char-array-is-a-string
 - [p 70] [P] regression-test-threads-test-parallel-for-capture-aggr-2
 - [p 68] [N] bug-n-importing-both-f-and-F-from-one-module-loses-the-class
@@ -746,7 +747,6 @@ _none_
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder
 - [p 50] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base
-- [p 50] [P] bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped
 - [p 50] [T] bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio
 - [p 50] [T] bug-t-a-skip-that-cannot-say-why-is-a-pass-in-the-verdict
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]

@@ -4572,6 +4572,61 @@ begin
   CurProc := -1;
 end;
 
+procedure SkipOperatorDeclHeader;
+{ Consume `operator <op> (params): T;` and any trailing directives, as ONE
+  declaration. Interface sections only -- the implementation form has a body and
+  goes to ParseOperatorDef. Paren depth is tracked because a two-operand header
+  spells its operands `(a: Double; b: TCx)`, with a semicolon INSIDE the parens
+  that does not end the declaration. }
+var depth: Integer;
+begin
+  Next;   { 'operator' }
+  depth := 0;
+  while CurTok.Kind <> tkEOF do
+  begin
+    if CurTok.Kind = tkLParen then Inc(depth)
+    else if CurTok.Kind = tkRParen then Dec(depth)
+    else if (CurTok.Kind = tkSemicolon) and (depth <= 0) then
+    begin
+      Next;
+      Break;
+    end;
+    Next;
+  end;
+  { `; inline;` / `; overload;` and the hint directives may follow the header }
+  while (CurTok.Kind = tkOverload) or
+        ((CurTok.Kind = tkIdent) and
+         (CaseEqual(CurTok.SVal, 'inline') or CaseEqual(CurTok.SVal, 'deprecated') or
+          CaseEqual(CurTok.SVal, 'platform') or CaseEqual(CurTok.SVal, 'experimental'))) do
+  begin
+    Next;
+    if CurTok.Kind = tkString then Next;   { deprecated 'message' }
+    Eat(tkSemicolon);
+  end;
+end;
+
+procedure UnitSectionStrayToken(const sect: AnsiString);
+{ A token that starts no declaration, at the top level of a unit's interface or
+  implementation section.
+
+  This used to be `Next` -- skip it and carry on. A PROGRAM's declaration
+  section rejected the same token, so the two paths through one concept disagreed
+  and the unit one lost. The damage is not the missing diagnostic: a MISTYPED
+  SECTION HEADER (`cosnt K = 5;`) had the whole declaration thrown away, and the
+  only complaint was `undefined variable (K)` at the use site, in another file.
+  Had nothing used K, the unit compiled clean with a declaration missing --
+  which quietly voids every "it compiled" signal the corpus ladder rests on.
+
+  Measured before turning this on: across test/ and lib/rtl the skip path fired
+  1949 times and every event was a piece of an operator DECLARATION header, now
+  consumed as a unit by SkipOperatorDeclHeader. Nothing else relied on it, and
+  the implementation section's copy of this never fired at all.
+  bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped }
+begin
+  Error('unexpected token in a unit ' + sect
+        + ' section: it starts no declaration (a mistyped section header?)');
+end;
+
 procedure ParseUnit;
 var
   uname: AnsiString;
@@ -4629,9 +4684,24 @@ begin
           string constants — pxx has no resource tables; the format-arg
           machinery lives in whoever consumes the string. }
         if CaseEqual(CurTok.SVal, 'resourcestring') then ParseConstSection(-1, 0)
-        else Next;
+        else if CaseEqual(CurTok.SVal, 'operator') then
+          { An operator DECLARATION in the interface: a header with no body. pxx
+            keys an operator on its operand types and registers it from the
+            IMPLEMENTATION section's definition, so the header carries nothing
+            this side needs -- consume it as a unit and move on.
+
+            Consuming it as a UNIT is the point. Until now it fell to the `else
+            Next` below and was chewed one token at a time; measured across
+            test/ and lib/rtl, that path fired 1949 times and every single event
+            was a piece of an operator header (`+`, `(`, `a`, `:`, `TBigInt`,
+            `;` ...). It looked harmless only because the implementation-side
+            definition registered the real thing, and it is the whole reason the
+            stray-token error below could not be turned on before. }
+          SkipOperatorDeclHeader
+        else
+          UnitSectionStrayToken('interface')
       else
-        Next;
+        UnitSectionStrayToken('interface');
     end;
   end;
 
@@ -4753,9 +4823,9 @@ begin
           else if CaseEqual(CurTok.SVal, 'resourcestring') then
             ParseConstSection(-1, 0)    { registers as plain string constants }
           else
-            Next;
+            UnitSectionStrayToken('implementation')
         else
-          Next;
+          UnitSectionStrayToken('implementation');
       end;
     end;
   end;

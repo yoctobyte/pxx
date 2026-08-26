@@ -8088,6 +8088,22 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_cast_as_lvalue_builtin_names.pas $(TESTTMP)/test_calb26
 	test "$$($(TESTTMP)/test_calb26)" = "$$(cat test/test_cast_as_lvalue_builtin_names.expected)"
+	# A stray token in a UNIT section is an ERROR, as it already was in a
+	# PROGRAM's declaration section. It used to be skipped silently, so a
+	# mistyped section header (`cosnt K = 5;`) discarded the declaration behind
+	# it and the only complaint was `undefined variable (K)` at the use site, in
+	# another file -- or nothing at all, if K went unused. NEGATIVE: the compile
+	# must FAIL. test/units/ustray.pas is the poisoned unit.
+	! ./$(COMPILER) -Futest/units test/test_unit_stray_token_refused.pas $(TESTTMP)/test_ustray26 >/dev/null 2>&1
+	# ...and the declaration this could not be turned on without: an `operator`
+	# HEADER in a unit interface. It has no body -- pxx registers the operator
+	# from the implementation-side definition -- and used to fall into the same
+	# silent skip, one token at a time. Measured across test/ and lib/rtl, that
+	# path fired 1949 times and EVERY event was a piece of an operator header.
+	# lib/rtl's bignum, ucomplex, pathlib and vecmath all declare operators this
+	# way, so these two are the regression guard for consuming it as a unit.
+	./$(COMPILER) -Fulib/rtl test/lib_ucomplex.pas $(TESTTMP)/test_uop26
+	test -n "$$($(TESTTMP)/test_uop26)"
 	# ...and the guard: a genuine `var` parameter must still REFUSE the same
 	# argument. This is what stops the fix from being ungated -- tried, and it
 	# let a call RESULT bind to a var parameter and COMPILE, because the method
