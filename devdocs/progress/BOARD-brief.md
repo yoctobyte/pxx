@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:22 blocked:7 backlog:289 backlog_new:26 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2367 rejected:40`
+`working:1 unfinished:22 blocked:7 backlog:288 backlog_new:26 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2368 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -46,7 +46,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 325, ranked
+## Ready — top 30 of 324, ranked
 
 - `[p 88] [N]` bug-n-inferred-return-type-of-true-division-is-int
 - `[p 82] [N]` bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
@@ -76,7 +76,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` feature-p-delphi-string-helpers
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 70] [P]` regression-test-aarch64-test-forin-member-access
-- `[p 70] [T]` regression-test-pascal-conformance-shard5-6-2
 - `[p 70] [T]` task-t-enrol-the-fgl-corpus-rung
+- `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 
-_295 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_294 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
