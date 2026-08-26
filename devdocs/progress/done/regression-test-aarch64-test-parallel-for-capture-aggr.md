@@ -46,4 +46,4 @@ against each other, which is the first thing that command found when it was
 built (bug-the-queue-makes-filing-a-duplicate-the-path-of-least-resistance).
 Kept as separate rows only because the watcher files per failing JOB; they close
 together because they were always one bug.
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit cd5d54964.

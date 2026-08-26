@@ -134,4 +134,4 @@ the top five); that is correct behaviour and is documented as such rather than
 tuned away.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit cd5d54964.
