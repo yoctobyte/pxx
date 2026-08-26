@@ -79,4 +79,4 @@ comment says the same thing in the code: *"Merging those two conventions is its
 own change; this is the step of the checklist that was simply missing."*
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 4865ee03f.
