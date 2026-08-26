@@ -4,6 +4,8 @@ prio: 88
 type: bug
 blocked-by: []
 summary: "A def with NO return annotation whose return expression is `/` infers an int return: `return x / 2` truncates to 2 for an unannotated param, and for `def b(x: int)` prints 4612811918334230528 — the float's raw bit pattern reinterpreted as an integer. Silent wrong values, no diagnostic."
+status: working
+owner: frank1-N-truediv
 ---
 
 # Inferred return type of `/` is int — the float is truncated, or reinterpreted

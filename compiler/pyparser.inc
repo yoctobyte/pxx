@@ -4287,10 +4287,44 @@ function PyInferExprType(startIdx, endIdx: Integer): TTypeKind;
 var i, ci, si, procIdx, depth, smArgs, fci, fi, k2, rcvCi: Integer; tk: TTypeKind;
     fldCi, fldAt: Integer; fldTk: TTypeKind;
     ternCi, ternElse, ternDepth: Integer; ternTk: TTypeKind;
+    divAt: Integer; divL, divR: TTypeKind;
     name, lo, smPName: AnsiString;
 begin
   Result := tyUnknown;
   PyInferLastCi := -1;
+  { REDUNDANT PARENTHESES first, once, for every rule below. Every arm of this
+    scan looks for its operator at DEPTH 0, so a whole expression wrapped in
+    parentheses hid all of them at once: `return (x > 1)` typed itself Integer
+    and printed 1 instead of True, and `return (x / 2)` handed back the double's
+    bit pattern — the same two rules that work perfectly without the brackets.
+    Stripping the wrapper here rather than teaching each arm to see through it
+    is the point (devdocs/dev/normalise-dont-special-case.md): the next arm
+    added gets it free.
+
+    Only a wrapper that spans the ENTIRE range and is not a TUPLE: `(a, b)` is a
+    TPyList and keeps its own arm below, `(a) + (b)` never matches because the
+    first paren closes before the end. }
+  if (endIdx - startIdx > 2) and (Tokens[startIdx].Kind = tkLParen) and
+     not PyTupleParenAt(startIdx) then
+  begin
+    depth := 0;
+    k2 := startIdx;
+    while k2 < endIdx do
+    begin
+      if Tokens[k2].Kind in [tkBegin, tkLBrack, tkLParen] then Inc(depth)
+      else if Tokens[k2].Kind in [tkEnd, tkRBrack, tkRParen] then
+      begin
+        Dec(depth);
+        if depth = 0 then Break;
+      end;
+      Inc(k2);
+    end;
+    if k2 = endIdx - 1 then
+    begin
+      Result := PyInferExprType(startIdx + 1, endIdx - 1);
+      Exit;
+    end;
+  end;
   { A CONDITIONAL EXPRESSION types as its THEN arm, so infer from the part
     before the `if` and stop. Without this the scanner walked straight through
     `x if c else y`, widening across the condition and the else-arm, and a
@@ -4382,6 +4416,56 @@ begin
   if (startIdx < endIdx) and (Tokens[startIdx].Kind = tkNot) then
   begin
     Result := tyBoolean;
+    Exit;
+  end;
+  { `/` is TRUE DIVISION and always yields a float, whatever its operands are —
+    `7 / 2` is 2.5, not 3. This scan types an expression by WIDENING over the
+    operand tokens it recognises, and PyWiden(Int64, Int64) is Int64, so an
+    unannotated `def f(x: int): return x / 2` registered an INTEGER result over
+    a body that computes a double: the caller then read the double's raw bit
+    pattern as a number and printed 4612811918334230528, or (with an
+    unannotated parameter, where the coercion runs instead) truncated 2.5 to 2.
+    Silently, either way.
+
+    The rule already exists everywhere the type is decided from the AST — the
+    `/` binop through FloatBinopResultTk (pasparser_expr.inc), `/=` through the
+    two augmented-assignment sites here, the codegen's force-jump to the double
+    path. This TOKEN scan was the one owner that had no copy of it, which is why
+    only the shapes that go through the pre-pass (a def's registered return
+    type, a field's declared type) were wrong while `print(5 / 2)` and
+    `r = x / 2; return r` were right — the same operator answering differently
+    through two paths is the tell (devdocs/dev/normalise-dont-special-case.md).
+
+    FloatBinopResultTk rather than a hardcoded tyDouble: on ESP (xtensa/riscv)
+    Single is first-class and int/int under `/` yields the native depth there.
+
+    Comparisons, `in`, `not` and the conditional expression are all settled
+    ABOVE this point, so `a / b > 1` is still a Boolean and `a / b if c else 0`
+    still widens across its two arms. Top-level `and`/`or` and a top-level comma
+    are excluded: Python hands back an OPERAND for the first and builds a tuple
+    for the second, so the `/` does not decide the whole expression's type.
+    bug-n-inferred-return-type-of-true-division-is-int }
+  divAt := -1;
+  depth := 0;
+  k2 := startIdx;
+  while k2 < endIdx do
+  begin
+    if Tokens[k2].Kind in [tkBegin, tkLBrack, tkLParen] then Inc(depth)
+    else if Tokens[k2].Kind in [tkEnd, tkRBrack, tkRParen] then Dec(depth)
+    else if depth = 0 then
+    begin
+      if Tokens[k2].Kind in [tkAnd, tkOr, tkComma] then begin divAt := -1; Break; end
+      else if (Tokens[k2].Kind = tkSlash) and (k2 > startIdx) and (divAt < 0) then
+        divAt := k2;
+    end;
+    Inc(k2);
+  end;
+  if divAt > 0 then
+  begin
+    divL := PyInferExprType(startIdx, divAt);
+    divR := PyInferExprType(divAt + 1, endIdx);
+    Result := FloatBinopResultTk(divL, divR);
+    PyInferLastCi := -1;
     Exit;
   end;
   { A parenthesised TUPLE is built as a TPyList, so it must INFER as one too —
