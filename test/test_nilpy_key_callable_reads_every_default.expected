@@ -1,0 +1,31 @@
+[1, 2, 3]
+(1, 7, 'hi')
+[3, 1, 2]
+[1, 2, 3]
+[1, 2, 3]
+[1, 2, 3]
+[1, 2, 3]
+saw 3 7 hi
+saw 1 7 hi
+saw 2 7 hi
+[1, 2, 3]
+saw 3 7 hi
+saw 1 7 hi
+saw 2 7 hi
+1
+saw 3 7 hi
+saw 1 7 hi
+saw 2 7 hi
+3
+saw 3 7 hi
+saw 1 7 hi
+saw 2 7 hi
+[3, 1, 2]
+saw 3 7 hi
+saw 1 7 hi
+saw 2 7 hi
+[3, 1, 2]
+[1, 2, 3]
+[3, 2, 1]
+(1, 7, 'hi')
+(1, 7, 'hi')

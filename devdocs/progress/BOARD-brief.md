@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:22 blocked:7 backlog:288 backlog_new:28 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2375 rejected:40`
+`working:1 unfinished:22 blocked:7 backlog:287 backlog_new:28 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2376 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -46,9 +46,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 326, ranked
+## Ready — top 30 of 325, ranked
 
-- `[p 82] [N]` bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
 - `[p 80] [A]` bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost
 - `[p 80] [N]` bug-n-a-class-base-that-is-an-expression-does-not-compile
 - `[p 80] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
@@ -78,5 +77,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
+- `[p 68] [N]` feature-nilpy-user-defined-decorators
 
-_296 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_295 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

@@ -1,0 +1,91 @@
+# A def reached as a callable VALUE -- `key=q`, `map(q, ...)`, `filter`, `min`,
+# `max` -- must enter its body at its OWN arity and see its OWN def-time
+# defaults in EVERY parameter position.
+#
+# It did not. A bare def name in an argument position lowered to a plain
+# AN_PROCADDR (a code address, which carries no signature), so the one-argument
+# pointer PyCallKey1 calls through entered a three-parameter body and
+# parameters 2..n read whatever the stack happened to hold. Fixed by
+# `e360f0c5c` (PyProcHasDefaultParam joins the star condition, so a DEFAULTED
+# callee travels as a {code, recv} pair like a collecting one) and completed by
+# `293d70509` (every bare def name in value position is boxed).
+#
+# bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
+#
+# THE BOUNDARY IS THE PARAMETER INDEX, NOT THE STRING. The ticket recorded it
+# as "a key returning a tuple containing a string", because it only varied the
+# RETURN: `(a, i)` was green and `(a, i, s)` segfaulted. Measured at the
+# crashing sha, `def q(a, x=1, y=2): return (a, x, y)` -- no string anywhere --
+# segfaults too, and `def q(a, i=7, s="hi"): return (a, i)` is green. What
+# decides it is whether the body READS the third parameter: garbage in slot 2
+# happened to be benign, garbage in slot 3 was not. So the rows below vary the
+# parameter each body touches, and keep one all-int row as the negative control
+# the original boundary would have called safe.
+#
+# Every expectation is CPython's own output.
+
+# the reported shape
+def q(a, i=7, s="hi"):
+    return (a, i, s)
+
+print(sorted([3, 1, 2], key=q))
+print(q(1))
+
+# the third parameter on its own -- the string default, returned alone
+def r(a, i=7, s="hi"):
+    return s
+
+print(sorted([3, 1, 2], key=r))
+
+# ALL-INT defaults, no string in sight: this crashed too
+def t(a, x=1, y=2):
+    return (a, x, y)
+
+print(sorted([3, 1, 2], key=t))
+
+# ...and the row the original boundary called safe, kept as a control
+def t2(a, x=1, y=2):
+    return (a, x)
+
+print(sorted([3, 1, 2], key=t2))
+
+# four parameters, mixed default kinds including None
+def u(a, i=7, s="hi", L=None):
+    return (a, i, s, L)
+
+print(sorted([3, 1, 2], key=u))
+
+# the string default FIRST of the two defaults
+def v(a, s="hi", i=7):
+    return (a, s, i)
+
+print(sorted([3, 1, 2], key=v))
+
+# what the callee ACTUALLY saw, through every builtin that carries the callable
+# as a raw pointer. map() did not crash -- it silently printed (3, None, ),
+# which is the same missing signature wearing the wrong-value hat.
+def w(a, i=7, s="hi"):
+    print("saw", a, i, s)
+    return a
+
+print(sorted([3, 1, 2], key=w))
+print(min([3, 1, 2], key=w))
+print(max([3, 1, 2], key=w))
+print(list(map(w, [3, 1, 2])))
+print(list(filter(w, [3, 1, 2])))
+
+# a lambda of the same shape takes a different road to the same dispatcher
+print(sorted([3, 1, 2], key=lambda a, i=7, s="hi": (a, i, s)))
+
+# reverse= walks the key list in the other direction over the same keys
+print(sorted([3, 1, 2], key=q, reverse=True))
+
+# the callable reached through a list element and through a parameter, both of
+# which used to lower to a bare address as well
+fs = [q]
+print(fs[0](1))
+
+def via_param(fn):
+    return fn(1)
+
+print(via_param(q))

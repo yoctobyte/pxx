@@ -8634,6 +8634,17 @@ test-core: $(COMPILER)
 	# a field assigned from an unannotated ctor parameter becomes a variant
 	./$(COMPILER) test/test_nilpy_field_from_unannotated_param.npy $(TESTTMP)/test_nilpy_fldparam26
 	test "$$($(TESTTMP)/test_nilpy_fldparam26)" = "$$(printf 'p f 0\nreassigned: q\nNone field: True\nafter store: set')"
+	# A def reached as a callable VALUE (`key=q`, `map`, `filter`, `min`, `max`)
+	# enters its body at its OWN arity and reads its OWN def-time defaults in
+	# every parameter position. It used to lower to a bare code address, so the
+	# one-argument pointer PyCallKey1 calls through entered a three-parameter
+	# body and slot 3 held stack garbage: SIGSEGV where the body READ it, a
+	# silently dropped default where it did not. The boundary is the PARAMETER
+	# INDEX, not the string the ticket named -- an all-int `def t(a, x=1, y=2)`
+	# crashed too, and the row that ticket called safe is kept as the control.
+	# bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
+	./$(COMPILER) test/test_nilpy_key_callable_reads_every_default.npy $(TESTTMP)/test_nilpy_keydflt26
+	$(TESTTMP)/test_nilpy_keydflt26 | diff -u test/test_nilpy_key_callable_reads_every_default.expected -
 	# the tkinter facade: compiled, not run - it needs an X display. Lives in
 	# examples/tk/ because a .npy in test/ resolving `tk` picks up test/strings.pas
 	# (a PROGRAM named Strings) ahead of the RTL unit tk.pas uses - the resolver
