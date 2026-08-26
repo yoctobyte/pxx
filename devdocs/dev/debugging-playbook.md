@@ -234,6 +234,40 @@ have given the wrong answer three of those four times.
 
 ---
 
+## Assert the INVARIANT, not the current numbers -- and expect it to catch you
+
+Two things happened within an hour on 2026-08-26 that belong together.
+
+**A guard whose first catch is its own author is working.** Track T measured
+which test tiers contain pin-built jobs (quick 0, native 0, limited 0, full 191)
+so that pins could be scheduled around them, then wrote a devtest asserting it
+so the answer could not silently go stale. One hour later, enrolling
+`test-fpjson` into `limited` turned that devtest RED, naming the breach exactly:
+*"limited now has 1 pin-built job(s) -- a pin taken during one of these runs can
+no longer be called safe."* The author broke their own invariant, and the guard
+said so before anyone planned a pin around a claim that had stopped being true.
+
+The resolution is the part to copy: **the invariant won, not the coverage.**
+`test-fpjson` became full-only rather than the guard being relaxed. "quick,
+native and limited are pin-free" is a property other people schedule around, and
+a property with an exception is not a property. `full` cycles ~40 minutes, so
+nothing was really lost.
+
+**Sufficient is not necessary -- do not assert equality where you mean subset.**
+The same guard also asserted that `full`'s pin-built target set EQUALS
+`PIN_BUILT_TARGETS`. Wrong direction. Membership in that list is *sufficient*
+(it rescues a shell-out recipe like `make demos`, where the pinned path lives one
+level down in the Makefile and the recipe body never names it) and never
+*necessary* -- a recipe naming the pinned path directly is pin-built whatever its
+target is called, which is exactly what `test-fpjson` was before it was listed.
+Equality did not encode the rule; it froze an accident of which targets happened
+to be enrolled that day. It is a subset check now.
+
+Both are the shape this file keeps returning to: **the system held the right
+answer internally and published something that could not express it.** An
+equality assertion cannot express "at least these"; a tier count with an
+exception cannot express "pin-free".
+
 ## The design counterpart: choose an ILLEGAL sentinel, never a plausible one
 
 Everything above is about finding a plausible wrong value after it has travelled.
