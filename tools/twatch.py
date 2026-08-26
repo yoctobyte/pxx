@@ -1585,6 +1585,20 @@ def update_job_reasons(st, report, jobs):
         st.pop("job_reason", None)
 
 
+# Mirrors testmgr.SUBJECT_NOTE. Duplicated deliberately: twatch does not import
+# testmgr (they run in different clones and at different shas), and a subject
+# with no note still renders -- the tag alone is the load-bearing part, the
+# prose is the courtesy.
+SUBJECT_NOTES = {
+    "float-accuracy":
+        "last-digit float accuracy is **LOW PRIO by the owner's standing "
+        "rule** (`devdocs/progress/float/README.md`). Do not let this "
+        "outrank a crash, a hang, or a wrong-at-scale value. A NaN/Inf "
+        "fault, a saturation or a crash in the same file is NOT this and "
+        "stays full strength.",
+}
+
+
 def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
                     st=None, not_reached=()):
     ts = utcnow().replace(":", "").replace("-", "")
@@ -1640,6 +1654,10 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
     srcmap = {job_key(j): j.get("src", "") for j in report["jobs"]}
     statmap = {job_key(j): j["status"] for j in report["jobs"]}
     reasonmap = {job_key(j): j.get("reason", "") for j in report["jobs"]}
+    # What the failing test SAYS it is about, from its own `PXX-SUBJECT:`
+    # marker. Absent for undeclared jobs, and "" never means "not float" -- it
+    # means the test did not say.
+    subjmap = {job_key(j): j.get("subject", "") for j in report["jobs"]}
     def label(n):
         return "%s — %s" % (n, srcmap[n]) if srcmap.get(n) else n
 
@@ -1662,7 +1680,16 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
         # bug-t-a-red-job-records-no-reason. Trimmed harder than tstate's copy
         # because this is a scannable list, not the durable record.
         why = (reasonmap.get(n) or "").strip()
-        return "%s\n  - `%s`" % (out, why[:160]) if why else out
+        if why:
+            out = "%s\n  - `%s`" % (out, why[:160])
+        # The de-ranking a `prio:` field cannot reach. A red is triaged at the
+        # priority of BEING RED unless the line itself says otherwise, so the
+        # note goes here, next to the failure, and not in a legend.
+        subj = subjmap.get(n) or ""
+        if subj:
+            out += "\n  - **subject: %s** — %s" % (subj, SUBJECT_NOTES.get(
+                subj, "declared by the test; no triage note registered here"))
+        return out
     for title, names in (("NEW-RED", new_red), ("FIXED", fixed),
                          ("STILL-RED", still_red),
                          # Last, and named as a question rather than a verdict:
@@ -4731,7 +4758,33 @@ def make_preempted(clone, tested, commit_after=None):
     return preempted
 
 
-def bisect_step(clone, host, st, tier):
+def repair_regressions(clone, host, st):
+    """Bring every open regression's classification up to the CURRENT rules.
+
+    THIS USED TO LIVE IN bisect_step(), AND THAT WAS THE BUG. bisect_step is the
+    LAST arm of an elif chain of idle phases -- pin verify, breadth backfill,
+    opt, bench, then bisect -- so a repair placed there runs only when every
+    earlier phase has declined. On this box pin verify is preempted by pushes
+    round after round ("pin verify preempted by a push -- will resume", three
+    times in one hour), and the sibling ticket
+    bug-t-the-push-rate-starves-breadth-coverage-entirely measures idle work
+    starved for 40h at a stretch. So a CORRECTION to what the board publishes
+    was gated behind the busiest lock in the system, and the entry it was
+    written for -- the aarch64 red blamed on 253 lines of `prio:` frontmatter --
+    kept publishing the wrong attribution while the fix sat in the tree.
+
+    Same shape as the defects it repairs: the right answer existed and the
+    common path could not reach it. So it runs every cycle now, on the way past,
+    regardless of phase. The cost is one diff-tree and one rev-list per OPEN
+    regression -- there are two -- against a cycle that otherwise spends
+    minutes compiling.
+
+    Idempotent and cheap by construction: every field is recomputed from the
+    BOUNDS rather than cached behind an existence check, so a rule change
+    (NOTEST_PREFIXES, PIN_AXIS_RULE) corrects entries in both directions.
+    """
+    for reg in st.get("open_regressions") or []:
+        rng = reg.get("range", [])
     """Idle work: narrow one open regression range by testing its midpoint
     with ONLY the failing job."""
     for reg in st["open_regressions"]:
@@ -4828,6 +4881,18 @@ def bisect_step(clone, host, st, tier):
             reg["pin_axis"] = PIN_AXIS_RULE
             reg["range"] = rng = obs
             save_state(clone, host, st)
+
+
+def bisect_step(clone, host, st, tier):
+    """Idle work: narrow one open regression range by testing its midpoint
+    with ONLY the failing job."""
+    # The classification repairs used to be inline here; they now run every
+    # cycle (see repair_regressions). Called again rather than assumed: this
+    # function is also reached directly, and a repair that depends on its
+    # caller having been polite is not a repair.
+    repair_regressions(clone, host, st)
+    for reg in st["open_regressions"]:
+        rng = reg.get("range", [])
         if len(rng) <= 1:
             continue
         if reg.get("cascade"):
@@ -6138,6 +6203,12 @@ def main():
                 continue
             clone.fetch()
             st = load_state(clone, host)
+            # Every cycle, before any phase decision: what the board says about
+            # an open regression must reflect the CURRENT rules, and must not
+            # wait for an idle slot that a busy box never grants. Two diff-trees
+            # and two rev-lists against a cycle that otherwise spends minutes
+            # compiling. See repair_regressions() for why this moved.
+            repair_regressions(clone, host, st)
             head = clone.remote_head()
             tested = (st["last"] or {}).get("sha")
             fast = args.fast_tier if args.fast_tier not in ("none", args.tier) \

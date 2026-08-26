@@ -140,4 +140,4 @@ The dead end the ticket records (`toolkit-accessibility` is false and the bridge
 runs anyway) was not revisited.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 74702c14d.

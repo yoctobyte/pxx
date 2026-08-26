@@ -2292,7 +2292,7 @@ begin
           if (not atIsGet) and (IntToTypeKind(ASTTk[atRecv]) = tyVariant) then
           begin
             atRecv := PyEvalOnce(atRecv);   { read once per candidate + once for the tag }
-            atDflt := PyHasAttrClassChain(atRecv, atName);
+            atDflt := PyHasAttrRuntimeChain(atRecv, atName);
           end
           else
             atDflt := -1;

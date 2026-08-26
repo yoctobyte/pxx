@@ -4,6 +4,7 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "SHAPE 2 SHIPPED AND DID NOTHING (see the 2026-08-19 correction: 9 saved, 0 carried, 100% loss — fixed under bug-t-a-saved-partial-is-evicted-by-the-next-run-of-different-work); this closes on carried_runs leaving zero, not on more code. Zero full-tier runs on HEAD in the 5h13m between 9bfb7fcfac03 (10:31:57Z) and ~15:45Z, while cross-target coverage read as fine because every native verdict was green. RE-MEASURED: the watcher is idle 54% of that window (~2.8h, 8x what a full tier needs) — breadth is not starved by pushes, it is queued behind pin verify, which needs a contiguous 21 minutes, gets idle slices with a median of 299s, and discards 100% on every abort. Breadth ran within minutes of pin verify finally retiring. Fix is resumability plus bounding consecutive idle, NOT reserving a slot."
+status: done
 ---
 
 # The push rate starves breadth coverage entirely
@@ -460,3 +461,81 @@ not" case.
 `carried_runs` leaving zero, per the summary line — the resume path is
 untouched by tonight's work. The reservation makes a full run *possible*;
 resumability is what makes a preempted one cheap. Still open.
+
+---
+
+## RESOLUTION 2026-08-26 — breadth recovered, and the fix was the shape this
+## ticket explicitly ruled out
+
+**Breadth is healthy.** Measured over 3,828 run records:
+
+| window | runs | full-to-full gap |
+| --- | --- | --- |
+| last 24h | 48 (42 native, **4 full**, 1 slow, 1 opt) | **median 1.3h**, worst 3.1h |
+| last 7d | 306 (254 native, **28 full**) | median 1.2h, worst 40.1h |
+
+Current staleness at the time of writing: **3.3h** since the last full. The
+ticket was filed on *0 full runs in 5h13m*.
+
+### The headline says the wrong thing, and the dates prove it
+
+The summary line reads: *"Fix is resumability plus bounding consecutive idle,
+**NOT reserving a slot**."* The evidence says the opposite — the thing it ruled
+out is the thing that worked.
+
+| landed | what | breadth afterwards |
+| --- | --- | --- |
+| **2026-08-19 17:56** `546771cbe` | shape 4 — an unfinishable idle phase yields the slot | — |
+| **2026-08-19 18:16** `e2449adc5` | shape 2 — resumable partials | gaps **got worse**: 12.8h, 9.4h, 21.6h, 19.2h, 31.5h, **40.1h** |
+| **2026-08-25 20:44** `572524c7c` | `commit_after` — a run 5 min in finishes instead of being discarded | last full before: 08-25 20:32 |
+| **2026-08-25 21:25** `7457f6aee` | `breadth_overdue` — breadth **reserves a slot** when stale, `commit_after=0` | next gaps: **1.1h, 3.1h, 1.3h** |
+
+Shapes 2 and 4 shipped six days before recovery and breadth degraded steadily
+across the whole interval. The reservation landed and the next three gaps are
+1-3h.
+
+**The confound, stated rather than hidden:** 2026-08-20 is also when borg's PSU
+failed and this box became the human's workstation, so load rose at almost the
+same moment shapes 2/4 landed. That is real, and it is why the fair reading is
+*shapes 2 and 4 were not harmful, they were insufficient against the new load*.
+But it does not rescue the headline, because **the confound never went away** —
+plexus is still a shared workstation, Track T is still throttled to ~50% of the
+box, pushes still arrive on the same cadence — and breadth recovered anyway.
+Load held constant, mechanism changed, outcome changed.
+
+### And the resume ledger says the same thing numerically
+
+```
+saved_partials 83   saved_jobs 22280   carried_runs 3   carried_jobs 73
+superseded     70   empty_partials 2   no_report_on_abort 4
+```
+
+**73 of 22,280 saved job-results were ever reused: 0.33%.** Not because the
+mechanism is broken — `superseded: 70` is the explanation and it is a correct
+one. A partial is keyed on `(sha, tier)`, and when the run is aborted the
+watcher re-targets to the *new* HEAD, so the partial it just saved is for a sha
+nobody will ask about again. **Resumability can only pay when the same (sha,
+tier) is retried, and the push-driven ladder almost never retries one.** That is
+a structural ceiling, not a bug, and it should be recorded as such rather than
+chased.
+
+The one place it does pay is the phase that *does* retry the same sha: pin
+verify, which is bounded to one pin. `last_note` confirms it — *"partial
+accepted — 56 job(s) already decided against this exact binary"* — and the live
+log carries `kept 432 decided job(s) from the aborted full run`.
+
+### What this ticket is worth to the next person
+
+Its close condition was `carried_runs` leaving zero. That is satisfied (3), but
+**the boolean was the wrong instrument and would have closed this ticket six
+days early, on a mechanism recovering 0.33% of what it saves, while breadth was
+in the middle of a 40-hour gap.** `resume_health()`'s own docstring says it:
+*"One line of RATES, not events."* The condition that actually answers "is
+breadth starved" is breadth staleness, which is now measured above and is the
+number to re-check.
+
+Resolved on the outcome, not on the bit.
+
+## Log
+- 2026-08-26 — measured; headline corrected; closed on breadth staleness.
+- 2026-08-26 — resolved, commit 18054e41c.

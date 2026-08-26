@@ -177,6 +177,54 @@ def main():
     check("a first-ever run is still reported as first-ever",
           "first-ever run" in note4, note4)
 
+    # ---- the repair must not be behind a starved phase --------------------
+    # It lived in bisect_step(), which is the LAST arm of an elif chain of idle
+    # phases. On this box pin verify is preempted by pushes round after round,
+    # so the chain never reached it: a dry run against the live state fired
+    # THREE repairs at once that had never reached the published board, two of
+    # them written hours earlier. A correction gated behind the busiest lock in
+    # the system is the same defect it repairs — the right answer exists and the
+    # common path cannot reach it.
+    check("repair_regressions is a module-level function, not inlined in a phase",
+          callable(getattr(tw, "repair_regressions", None)),
+          "if this is gone the repairs are behind an idle slot again")
+
+    st = {"open_regressions": [
+        {"job": "test-x#src:test/x.pas", "bad": doc2, "good": doc1,
+         "range": [doc2], "pin_built": False, "first_seen": False},
+    ]}
+    writes = []
+    real_save = tw.save_state
+    tw.save_state = lambda c, h, s: writes.append(1)
+    try:
+        tw.repair_regressions(clone, "h", st)
+        reg = st["open_regressions"][0]
+        check("repairing alone reclassifies — no bisect phase needed",
+              reg.get("no_testable_change") is True, reg)
+        check("...and drops the untestable commit from the range",
+              not reg.get("range"), reg.get("range"))
+        n1 = len(writes)
+        tw.repair_regressions(clone, "h", st)
+        check("a second pass is a no-op (idempotent, no rewrite storm)",
+              len(writes) == n1,
+              "wrote %d more time(s); a repair that always saves makes the "
+              "clone dirty every cycle and wedges the publish loop"
+              % (len(writes) - n1))
+
+        # bisect_step must not rely on its caller having been polite.
+        calls = []
+        real = tw.repair_regressions
+        tw.repair_regressions = lambda c, h, s: calls.append(1)
+        try:
+            tw.bisect_step(clone, "h", {"open_regressions": []}, "full")
+        except Exception:
+            pass          # it may bail for other reasons; we only care it called
+        tw.repair_regressions = real
+        check("bisect_step still repairs when reached directly", calls,
+              "a repair that depends on another path having run is not a repair")
+    finally:
+        tw.save_state = real_save
+
     if FAILS:
         print("\ntwatch_no_testable_change_devtest: %d RED" % len(FAILS))
         for f in FAILS:

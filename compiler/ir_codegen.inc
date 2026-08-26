@@ -2121,6 +2121,109 @@ begin
     end;
 end;
 
+function IsConstVal(n: Integer; v: Int64): Boolean;
+begin
+  IsConstVal := (n >= 0) and (IRKind[n] = IR_CONST_INT) and (IRIVal[n] = v);
+end;
+
+function NarrowCastFold(node: Integer; var srcNode, bytes: Integer;
+                        var isSigned: Boolean): Boolean;
+{ Recognise the IR shape a NARROWING ORDINAL CAST lowers to and hand back the
+  operand plus the width, so the backend can emit ONE instruction instead of
+  the three binops and three materialised constants the shape spells out.
+
+  IRLowerAST expands `Integer(x)` / `Byte(x)` / `ShortInt(x)` etc. into
+  target-agnostic IR: mask to the width, then for a signed target re-derive the
+  sign with the two's-complement identity (v xor signbit) - signbit. That is
+  the right thing to LOWER -- it needs no new IR op and every backend gets it
+  -- but taken literally on x86-64 the signed 32-bit form costs 39 bytes and
+  six uops (three of the constants do not fit a sign-extended imm32, so each
+  one is a 10-byte movabs) where `movsxd rax, eax` costs three bytes and one.
+
+  Matched shapes, where W is 1, 2 or 4 bytes:
+    unsigned:  BINOP(and, X, 2^(8W) - 1)
+    signed:    BINOP(-, BINOP(xor, BINOP(and, X, 2^(8W)-1), S), S)   S = 2^(8W-1)
+
+  Value-identical by construction, so a user who hand-writes `x and $FF` gets
+  the same single instruction and the same answer. }
+var maskNode, xorNode, andNode: Integer;
+    w: Integer;
+begin
+  NarrowCastFold := False;
+  srcNode := -1; bytes := 0; isSigned := False;
+  if (node < 0) or (IRKind[node] <> IR_BINOP) then Exit;
+
+  { signed form: (AND xor S) - S }
+  if IntToTokenKind(IRC[node]) = tkMinus then
+  begin
+    xorNode := IRA[node];
+    maskNode := IRB[node];
+    if (xorNode < 0) or (maskNode < 0) then Exit;
+    if IRKind[maskNode] <> IR_CONST_INT then Exit;
+    if (IRKind[xorNode] <> IR_BINOP) or (IntToTokenKind(IRC[xorNode]) <> tkXor) then Exit;
+    if not IsConstVal(IRB[xorNode], IRIVal[maskNode]) then Exit;
+    andNode := IRA[xorNode];
+    if (andNode < 0) or (IRKind[andNode] <> IR_BINOP) or
+       (IntToTokenKind(IRC[andNode]) <> tkAnd) then Exit;
+    for w := 0 to 2 do
+    begin
+      bytes := 1 shl w;
+      if IsConstVal(IRB[andNode], (Int64(1) shl (bytes * 8)) - 1) and
+         (IRIVal[maskNode] = (Int64(1) shl (bytes * 8 - 1))) then
+      begin
+        srcNode := IRA[andNode];
+        isSigned := True;
+        NarrowCastFold := True;
+        Exit;
+      end;
+    end;
+    bytes := 0;
+    Exit;
+  end;
+
+  { unsigned form: a plain mask to a byte/word/dword }
+  if IntToTokenKind(IRC[node]) = tkAnd then
+    for w := 0 to 2 do
+    begin
+      bytes := 1 shl w;
+      if IsConstVal(IRB[node], (Int64(1) shl (bytes * 8)) - 1) then
+      begin
+        srcNode := IRA[node];
+        isSigned := False;
+        NarrowCastFold := True;
+        Exit;
+      end;
+    end;
+  bytes := 0;
+end;
+
+{ -O1 pass 4 (compare-into-branch fusion) eligibility: an IR_BINOP condition
+  feeding IR_JUMP_IF_FALSE can skip setcc/movzx/test and branch straight off
+  the compare flags — but ONLY when the comparison would take the plain
+  integer `cmp rax, rcx` path. Exclude float (either operand -> ucomisd path),
+  AnsiString/String (dedicated compare helpers), and Variant. What remains is
+  the integer/pointer/char/boolean/enum ordinal compare that lowers to a bare
+  cmp + setcc — exactly the flags an inverted jcc can consume.
+
+  Hoisted above IREmitNode so the value-producing compare fold can ask the
+  same question: `x = k` as an rvalue and `if x = k` differ only in what
+  consumes the flags, and having ONE predicate decide both is the point. }
+function CmpFusible(node: Integer): Boolean;
+var opTk: Integer; lt, rt: TTypeKind;
+begin
+  CmpFusible := False;
+  opTk := IRC[node];
+  if not ((opTk = Ord(tkEq)) or (opTk = Ord(tkNeq)) or (opTk = Ord(tkLt)) or
+          (opTk = Ord(tkLe)) or (opTk = Ord(tkGt)) or (opTk = Ord(tkGe))) then Exit;
+  lt := IntToTypeKind(IRTk[IRA[node]]);
+  rt := IntToTypeKind(IRTk[IRB[node]]);
+  if TypeIsFloat(lt) or TypeIsFloat(rt) then Exit;
+  if (lt = tyAnsiString) or (lt = tyString) or
+     (rt = tyAnsiString) or (rt = tyString) then Exit;
+  if (lt = tyVariant) or (rt = tyVariant) then Exit;
+  CmpFusible := True;
+end;
+
 procedure EmitObjBlobBody(const procName: AnsiString);
 { Body of an object retain/release blob: preserve every caller-clobbered GP
   reg, rdi := rax (the object), call the named Pascal proc, restore, ret. }
@@ -2145,6 +2248,7 @@ end;
 procedure EmitAnsiStringRuntime;
 var pNilUnique, pNilUnique2, pDone, pDone2,
     pConcatNil, pConcatDone, pFail, pLfDone: Integer;
+    pRelNil, pRelLive: Integer;
 begin
   EmitAnsiStrFromLiteral;
 
@@ -2154,12 +2258,36 @@ begin
   EmitReleaseHeapLock;
   EmitB($C3);                                     { ret }
 
+  { Release blob: the FAST path (nil, or a refcount that stays above zero) does
+    no register traffic at all. It used to unconditionally push rax/rcx/rdx/
+    rsi/rdi and pop them again -- ten stack operations to guard a decrement --
+    and four of those five were saved a SECOND time by EmitHeapFreeLocked on
+    the only path that can clobber them. A sampling profile of the compiler
+    compiling a one-line NilPy file put ~11% of the whole run on those pushes
+    and pops; the retain blob two lines up was already written this way.
+
+    So: only rax is saved, and only across the free. Nothing on the fast path
+    touches a caller register (`test` and `dec` write flags, which the old form
+    did not restore either), and EmitHeapFreeLocked already preserves rsi/rdi/
+    rcx/rdx/r8-r11 around the call itself. Both lock helpers preserve rax, so
+    the lock still spans the whole body exactly as before. }
   AnsiStrReleaseAddr := CodeLen;
-  EmitAsmX64(['push rax', 'push rcx', 'push rdx', 'push rsi', 'push rdi']);
   EmitAcquireHeapLock;
-  EmitAnsiStrReleaseLocked;
+  EmitAsmX64(['test rax, rax']);
+  EmitB($74); pRelNil := CodeLen; EmitB(0);       { jz done }
+  if ThreadSafeMode then EmitAsmX64(['lock dec qword [rax-16]'])
+  else EmitAsmX64(['dec qword [rax-16]']);
+  EmitB($75); pRelLive := CodeLen; EmitB(0);      { jnz done }
+  { the refcount is at [rax-16] but the BLOCK BASE is 24 back — the kind word
+    sits below the refcount (devdocs/dev/managed-block-header.md). }
+  EmitAsmX64(['push rax']);
+  EmitAsmX64(['sub rax, %', 24]);
+  EmitHeapFreeLocked;
+  EmitAsmX64(['pop rax']);
+  Code[pRelNil] := Byte(CodeLen - (pRelNil + 1));
+  Code[pRelLive] := Byte(CodeLen - (pRelLive + 1));
   EmitReleaseHeapLock;
-  EmitAsmX64(['pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rax', 'ret']);
+  EmitB($C3);                                     { ret }
 
   { Object retain/release blobs (feature-nilpy-object-reclamation): thin
     reg-preserving wrappers over the Pascal PXXObjRetain/PXXObjRelease, which
@@ -4104,6 +4232,8 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     slBaseTk: TTypeKind;
     wid, decs: Integer;
     pow2k: Integer;           { div/mod-by-power-of-two strength reduction }
+    ncSrc, ncBytes: Integer;  { narrowing-cast fold }
+    ncSigned: Boolean;
     arg1Node, arg2Node, arg3Node, val1Node, val2Node: Integer;
     itemNode, trueCount, nextJmp, falseJmp: Integer;
     trueJumps: array[0..127] of Integer;
@@ -5478,6 +5608,70 @@ begin
         begin
           EmitFloatTree(node, 2);
           EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($D0); { movq rax, xmm2 }
+          Exit;
+        end;
+
+        { -O3 cmp-immediate, value-producing form. The branch form is folded in
+          IREmitMachineCode's IR_JUMP_IF_FALSE arm; this is the same fold for a
+          comparison whose result is a VALUE — which is where a short-circuit
+          `and`/`or` puts every operand, so `if (c >= 'A') and (c <= 'Z')` paid
+          `mov rcx, imm32` twice per character with the branch fold alone.
+          CmpFusible is the shared predicate: it is exactly the set that lowers
+          to a bare `cmp` + setcc. }
+        if (OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) and
+           (IRIVal[right] >= -2147483648) and (IRIVal[right] <= 2147483647) and
+           CmpFusible(node) then
+        begin
+          IREmitNode(left);
+          EmitB($48); EmitB($3D); EmitI32(Integer(IRIVal[right]));   { cmp rax, imm32 }
+          if TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
+            case op of
+              tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;  { sete   al }
+              tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;  { setne  al }
+              tkLt:  begin EmitB($0F); EmitB($92); EmitB($C0); end;  { setb   al }
+              tkLe:  begin EmitB($0F); EmitB($96); EmitB($C0); end;  { setbe  al }
+              tkGt:  begin EmitB($0F); EmitB($97); EmitB($C0); end;  { seta   al }
+              tkGe:  begin EmitB($0F); EmitB($93); EmitB($C0); end;  { setae  al }
+            end
+          else
+            case op of
+              tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;  { sete   al }
+              tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;  { setne  al }
+              tkLt:  begin EmitB($0F); EmitB($9C); EmitB($C0); end;  { setl   al }
+              tkLe:  begin EmitB($0F); EmitB($9E); EmitB($C0); end;  { setle  al }
+              tkGt:  begin EmitB($0F); EmitB($9F); EmitB($C0); end;  { setg   al }
+              tkGe:  begin EmitB($0F); EmitB($9D); EmitB($C0); end;  { setge  al }
+            end;
+          EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);            { movzx rax, al }
+          Exit;
+        end;
+
+        { -O3 narrowing-cast fold: the three-binop, three-constant shape a
+          narrowing ordinal cast lowers to collapses to one movsx/movzx.
+          See NarrowCastFold for the shapes and why they are value-identical. }
+        if (OptLevel >= 3) and
+           (not TypeIsFloat(IntToTypeKind(IRTk[node]))) and
+           NarrowCastFold(node, ncSrc, ncBytes, ncSigned) then
+        begin
+          IREmitNode(ncSrc);
+          if ncSigned then
+            case ncBytes of
+              1: begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($C0); end  { movsx  rax, al }
+            else
+              if ncBytes = 2 then
+                begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($C0); end   { movsx  rax, ax }
+              else
+                begin EmitB($48); EmitB($63); EmitB($C0); end;              { movsxd rax, eax }
+            end
+          else
+            case ncBytes of
+              1: begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0); end  { movzx rax, al }
+            else
+              if ncBytes = 2 then
+                begin EmitB($48); EmitB($0F); EmitB($B7); EmitB($C0); end   { movzx rax, ax }
+              else
+                begin EmitB($89); EmitB($C0); end;                          { mov eax, eax (zero-extends) }
+            end;
           Exit;
         end;
 
@@ -8400,29 +8594,6 @@ begin
   end;
 end;
 
-{ -O1 pass 4 (compare-into-branch fusion) eligibility: an IR_BINOP condition
-  feeding IR_JUMP_IF_FALSE can skip setcc/movzx/test and branch straight off
-  the compare flags — but ONLY when the comparison would take the plain
-  integer `cmp rax, rcx` path. Exclude float (either operand -> ucomisd path),
-  AnsiString/String (dedicated compare helpers), and Variant. What remains is
-  the integer/pointer/char/boolean/enum ordinal compare that lowers to a bare
-  cmp + setcc — exactly the flags an inverted jcc can consume. }
-function CmpFusible(node: Integer): Boolean;
-var opTk: Integer; lt, rt: TTypeKind;
-begin
-  CmpFusible := False;
-  opTk := IRC[node];
-  if not ((opTk = Ord(tkEq)) or (opTk = Ord(tkNeq)) or (opTk = Ord(tkLt)) or
-          (opTk = Ord(tkLe)) or (opTk = Ord(tkGt)) or (opTk = Ord(tkGe))) then Exit;
-  lt := IntToTypeKind(IRTk[IRA[node]]);
-  rt := IntToTypeKind(IRTk[IRB[node]]);
-  if TypeIsFloat(lt) or TypeIsFloat(rt) then Exit;
-  if (lt = tyAnsiString) or (lt = tyString) or
-     (rt = tyAnsiString) or (rt = tyString) then Exit;
-  if (lt = tyVariant) or (rt = tyVariant) then Exit;
-  CmpFusible := True;
-end;
-
 { ===== -O3 store->reload elimination (feature-opt-accumulator-value-tracker) =====
 
   The win is ordinary:
@@ -8665,7 +8836,7 @@ var i, lblId, pos, targetOffset, f, procIdx, excSkip: Integer;
     LabelFixupCount: Integer;
     condNode, cLeft, cRight: Integer;
     cOp: TTokenKind;
-    cmpUns, fused: Boolean;
+    cmpUns, fused, cmpImmOk: Boolean;
 begin
   CurWriteFd := STDOUT;   { default write target; IR_WRITE/IR_WRITELN override per-statement (fd 2 for StdErr) }
   { DWARF -g: per-body line-row state, reset before any backend runs (each backend
@@ -8812,7 +8983,19 @@ begin
               reload in the condition is redundant. }
             cLeft := IRA[condNode];
             cRight := IRB[condNode];
-            if IRKind[cRight] = IR_CONST_INT then
+            { -O3 cmp-immediate: `cmp rax, imm32` exists, so a constant right
+              operand needs no register at all. The `mov rcx, imm32` this
+              replaces sign-extends its immediate to 64 bits exactly as opcode
+              3D does, so signed and unsigned comparisons both keep their
+              meaning. A compiler compares against a literal constantly -- token
+              kinds, character ranges, array bounds -- and CaseEqual's inner
+              loop alone paid it four times per character. }
+            cmpImmOk := (OptLevel >= 3) and (IRKind[cRight] = IR_CONST_INT) and
+                        (IRIVal[cRight] >= -2147483648) and
+                        (IRIVal[cRight] <= 2147483647);
+            if cmpImmOk then
+              IREmitNode(cLeft)
+            else if IRKind[cRight] = IR_CONST_INT then
             begin
               IREmitNode(cLeft);
               if (IRIVal[cRight] >= -2147483648) and (IRIVal[cRight] <= 2147483647) then
@@ -8880,7 +9063,10 @@ begin
               IREmitNode(cLeft); EmitB($50);                       { push rax }
               IREmitNode(cRight); EmitB($48); EmitB($89); EmitB($C1); EmitB($58); { mov rcx,rax; pop rax }
             end;
-            EmitB($48); EmitB($3B); EmitB($C1);                    { cmp rax, rcx }
+            if cmpImmOk then
+              begin EmitB($48); EmitB($3D); EmitI32(Integer(IRIVal[cRight])); end  { cmp rax, imm32 }
+            else
+              begin EmitB($48); EmitB($3B); EmitB($C1); end;                       { cmp rax, rcx }
             cmpUns := TypeCompareUnsigned(IntToTypeKind(IRTk[cLeft]), IntToTypeKind(IRTk[cRight]));
             cOp := IntToTokenKind(IRC[condNode]);
             EmitB($0F);   { two-byte jcc, inverted (jump when comparison is FALSE) }

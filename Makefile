@@ -3703,6 +3703,17 @@ test-asm: $(COMPILER)
 	! grep -q "^    db " $(TESTTMP)/test_asm_dis_self26.s
 
 test-core: $(COMPILER)
+	# hasattr through an UNTYPED PARAMETER -- duck typing's load-bearing
+	# primitive on the one receiver shape whose type is a run-time fact. Here
+	# rather than in test-nilpy for the same reason as the class-base test
+	# below: test-core runs in the NATIVE tier, and this regresses SILENTLY --
+	# a wrong answer sends `if hasattr(x, "keys")` down the wrong branch, it
+	# never raises. The .expected is CPython's own output, generated not
+	# written; at pinned v376 ten of its rows are wrong in BOTH directions
+	# (str/float/dict-view names False, the int family True for everything).
+	# bug-n-hasattr-through-an-untyped-parameter-is-always-false
+	./$(COMPILER) test/test_nilpy_hasattr_untyped_parameter.npy $(TESTTMP)/test_nilpy_hasattr_untyped26
+	$(TESTTMP)/test_nilpy_hasattr_untyped26 | diff -u test/test_nilpy_hasattr_untyped_parameter.expected -
 	# A class BASE that is a name bound to a class -- `Base = Animal` then
 	# `class Dog(Base)`. Here rather than in test-nilpy because test-core runs in
 	# the NATIVE tier (the fast watcher verdict) while test-nilpy is limited/full

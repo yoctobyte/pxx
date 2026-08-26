@@ -18,6 +18,54 @@ wrong value far from the cause.** Three from one week:
 So: **reach for the tool that makes a wrong VALUE visible, not the one that
 makes a crash easier to locate.** A crash was never the expensive case.
 
+## Find your section
+
+The sections below accumulated in the order they were learned, which is the wrong
+order to read them in. Route by what you are holding:
+
+**You have a failing thing and want the tool**
+- `## Order` -- the tool per question, and the reason to reach for one at all
+- ``## `perf` being blocked is not "no profiler"`` -- FPC `-pg` + gprof, read call
+  counts not percentages
+
+**A measurement or a verdict is telling you something and you are about to believe it**
+- `## Two traps that produced confident wrong readings`
+- `## A bisect can name the RIGHT commit and still be wrong` -- the tell is that
+  the named commit looks like an improvement
+- `## A number moving in the direction you hoped is not a check` -- the
+  confirmation may be the symptom
+- ``## "The pinned binary reproduces it" may be a claim about a MIXED compiler``
+- `## A silent assertion makes the harness report something else, confidently`
+- `## When you are about to conclude something`
+
+**A check exists, passes, and you are trusting it**
+- `## Assert the INVARIANT, not the current numbers` -- and assert the
+  CONSEQUENCE, not the number
+- `## A guard that greps the source can only catch what is visible in the text`
+- ``## "Ruled out" and "could not look" must never print the same`` -- the
+  strongest instance of the asserts-nothing family, plus close conditions about
+  the wrong subject and diffs against a missing operand
+- `## A correct fix on an opportunistic path is inert` -- the tests answer *does
+  it work*, never *does it run*
+
+**You are about to write the fix**
+- `## A blocklist costs one outage per symptom; an allowlist closes the class`
+  -- and key an exemption on what a thing DECLARES, not what it appears to BE
+- `## A one-way repair flag defeats the mechanism that would have corrected it`
+  -- store a rule version, re-derive from bounds, never filter in place
+- `## The design counterpart: choose an ILLEGAL sentinel, never a plausible one`
+
+**You are reading a ticket, or writing one**
+- ``## A ticket's prescription is a hypothesis, and it can rule out the answer``
+  -- when a fix does not take, re-read what the ticket EXCLUDED
+- `## A comment is an unverified claim, and tickets inherit it`
+- `## Record the negative result` -- and record the option you measured and
+  declined, with its number
+
+Its sibling `normalise-dont-special-case.md` carries the structural half: why the
+second path is the broken one, and why a special case gets the careful wording
+while the general case keeps the words from before anyone knew.
+
 ## Order
 
 **1. Does it disagree with CPython (NilPy) or gcc/FPC (C/Pascal)?**
@@ -299,6 +347,16 @@ nobody watches.
 This is the same failure as the `137 -> 2` measurement above: **a check that
 runs, passes, and asserts nothing about the thing at issue.**
 
+A third costume, since it recurs: **a close condition about the wrong subject.**
+The breadth ticket above closed on `carried_runs != 0` -- satisfied from the day
+the mechanism shipped, so it would have closed the ticket **six days early, on a
+mechanism recovering 0.33% of what it saves, in the middle of a 40-hour breadth
+gap.** `resume_health()`'s own docstring stated the right standard -- *"One line
+of RATES, not events"* -- and the ticket closed on an event anyway. **The
+instrument that answers "is breadth starved" is breadth staleness**, and nothing
+else. Write close conditions on the symptom the ticket is about, not on the
+mechanism you happened to build.
+
 The sharpest instance of the family is worth stating on its own, because it is
 the one that hides best: **the run that proved the least was the one that most
 effectively silenced the request for more.** Staleness asked *is there a record
@@ -342,6 +400,129 @@ synthetic one.
 Deliberately not general, for the reason this file keeps arriving at: **a checker
 that reports everything gets suppressed, and a suppressed checker asserts
 nothing.**
+
+## A ticket's prescription is a hypothesis, and it can rule out the answer
+
+Stronger than "distrust the ticket's where-to-look", and more expensive: a ticket
+can name the fix that works and **explicitly exclude it**.
+
+`bug-t-the-push-rate-starves-breadth-coverage-entirely` summarised itself as
+*"Fix is resumability plus bounding consecutive idle, NOT reserving a slot."*
+The dates say the opposite and they are not close. The two prescribed shapes
+landed 2026-08-19, after which full-to-full gaps went 12.8h, 9.4h, 21.6h, 19.2h,
+31.5h, **40.1h**. The ruled-out shape -- breadth reserves a slot when stale --
+landed 2026-08-25, and the next three gaps were **1.1h, 3.1h, 1.3h**. Median
+full-to-full over the following 24h: **1.3h**, from 3,828 run records.
+
+Six days of degradation after the prescribed fix; recovery within the hour of the
+excluded one.
+
+- **A prescription in a ticket carries the confidence of a decision and the
+  evidence of a guess.** It was written before the work, by someone reasoning
+  about a system they had not yet measured, and then it sits there in the
+  imperative for months looking settled.
+- **This is a triage hazard, not just an engineering one.** The prio and the plan
+  both inherit the wrong frame, so a ticket can be correctly ranked for work that
+  cannot fix it.
+- **When a fix does not take, re-read what the ticket ruled out.** That set was
+  never tested; it was reasoned. It is the cheapest unexplored space available.
+
+**State the confound rather than let someone find it.** Here, 08-20 is when this
+box became a shared workstation, so load rose almost exactly when the prescribed
+shapes landed -- the fair reading is that they were not harmful but insufficient.
+That does not rescue the headline, because *the confound never went away*: still
+a shared workstation, still throttled, same push cadence. **Load held constant,
+mechanism changed, outcome changed** -- as close to a controlled comparison as a
+live box will give, and worth saying in exactly that form.
+
+### And a structural ceiling, recorded so nobody tries to raise it
+
+The resume ledger reused **73 of 22,280 saved job-results, 0.33%**, and
+`superseded: 70` is the whole explanation. A partial is keyed on `(sha, tier)`,
+and on abort the watcher re-targets to the new HEAD -- so the partial it just
+saved is for a sha nobody will ask about again. **Resumability can only pay where
+the same `(sha, tier)` is retried, and a push-driven ladder almost never retries
+one.** That is a ceiling, not a defect. It does pay for the one phase that does
+retry a single sha -- pin verify, where the log shows 56 jobs already decided
+against that exact binary.
+
+## A correct fix on an opportunistic path is inert, and nothing reports it
+
+The runtime twin of every routing defect in this file, and the one that hides
+best, because **the code is present, the tests pass, and the output stays wrong.**
+
+`repair_regressions` was correct. It lived inside `bisect_step`, which is the last
+arm of an elif chain of idle phases -- pin verify, breadth backfill, opt, bench,
+then bisect -- so it ran only once every earlier phase had declined. Pin verify
+alone was preempted by a push three times in one hour, and idle work on this box
+has been starved for 40 hours at a stretch. **A correction to what the board
+publishes was gated behind the busiest lock in the system.** A dry run found
+three repairs that had never reached the published board, two of them written
+hours earlier: 99 untestable commits still in one range, and a red still
+attributed to a commit that could not have caused it.
+
+The generalisation: **it is not enough for the right answer to exist and be
+correct; it has to be on a path that runs when the answer is needed.**
+
+- **The tell is a trigger that is a PHASE rather than an EVENT.** "Runs during
+  idle", "runs after the queue drains", "runs on the next full pass" -- each
+  inherits the availability of something unrelated to the thing it fixes.
+- **Correctness tests cannot see this.** They call the function directly, so they
+  answer *does it work*, never *does it run*. A guard that exercises the caller's
+  scheduling is a different test and usually does not exist.
+- **The honest status of such a fix is "fixed in the code, inert in this
+  configuration"** -- not "fixed". Say it that way; a count of closed tickets that
+  includes inert ones is worth less than a smaller honest count.
+- **Make the repair idempotent and call it unconditionally.** It now runs every
+  cycle before any phase decision, costing one `diff-tree` and one `rev-list` per
+  *open* regression -- two -- against a cycle that otherwise spends minutes
+  compiling. And `bisect_step` calls it too rather than assuming the loop did:
+  **a repair that depends on its caller having been polite is not a repair.**
+  Guard that a second pass is a no-op, or an always-saving repair dirties the
+  tree every cycle and wedges the publish loop.
+
+## A blocklist costs one outage per symptom; an allowlist closes the class
+
+When plexus stopped being headless, every test job began inheriting a live
+desktop session -- 24 variables, including `XDG_RUNTIME_DIR`, which is where
+at-spi autolaunches its bus. `test_c_gtk_call.pas` then hung forever after
+`gtk_init` and cost three days of native tiers their full hour.
+
+The first repair set `NO_AT_BRIDGE` and `GTK_A11Y`. It worked, and it fixed
+nothing: the next opportunistic client of a display, bus, keyring, portal or
+notification daemon hangs identically and looks just as mysterious, because the
+repo has not changed. **A blocklist buys one symptom at a time and leaves the
+class intact.** The allowlist -- 11 keys plus the `PXX_`/`TESTMGR_`/`LC_`/`QEMU_`
+families -- ends it.
+
+**And it found something a blocklist never would have**: an unrelated third-party
+API key from the login profile had been reaching ~3,000 job subprocesses per run
+for days. Nobody was looking for it. That is the general argument for enumerating
+what may pass rather than what may not -- you find out what was passing.
+
+### The pass-through rule was backwards in the dangerous direction
+
+The obvious reading of "plus whatever a job explicitly asks for" is *a job that
+runs `xvfb-run` or `Xvfb` is a display job, so give it the session.* **That is
+exactly wrong: those tools start a display of their own.** All three GTK jobs run
+under `xvfb-run -a`, including the one whose at-spi hang started the ticket -- so
+matching on the tool name would have re-admitted the session bus to the fix's own
+motivating case. The rule triggers on a literal reference to a session
+*variable* in the recipe text instead: a dependency the job states, not a guess
+about what it probably does.
+
+The generalisation: **an exemption keyed on what something appears to BE will
+re-admit the case you built it for; key it on what the thing DECLARES.**
+
+### Guard the mirror failure too
+
+Stripping an environment creates the opposite defect -- a job losing something it
+needs and going red with no cause in its log. Three things hold it off, and all
+three are worth copying: the run **prints** what it dropped and which jobs kept
+the session, into the same log as the verdicts it could change; a one-run
+rollback exists and is **implemented, not merely documented**; and the guard pins
+**both** directions, including that an `xvfb-run` job is *not* given the session
+and a job naming `$DISPLAY` *is* and actually receives it.
 
 ## A silent assertion makes the harness report something else, confidently
 
@@ -472,6 +653,14 @@ Three things to carry:
   "nothing killed it" -- it is *every hypothesis that would have left evidence
   did not happen*, which leaves the one that never does. That is a real narrowing
   and it is the most the evidence supports.
+
+**The most literal instance: a diff against a missing operand.** The bench
+harness emits `CANARY-DIFF vs -O0` for each optimisation level -- and when the
+`-O0` build itself fails, `ref_out` stays `None`, so every other level dutifully
+reports a difference from a baseline that was never produced. Three red rows, one
+defect, and nothing in the output separates *the levels disagree* from *there was
+nothing to compare against*. Any comparison must state that its reference exists
+before reporting a difference from it.
 
 The design counterpart is now in `tools/whokilled.sh`: **three verdicts, and any
 blind probe forces a distinct exit code**, so a caller cannot mistake blindness

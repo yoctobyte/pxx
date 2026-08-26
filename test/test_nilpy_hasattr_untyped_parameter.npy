@@ -1,0 +1,119 @@
+# hasattr through an UNTYPED PARAMETER — the receiver whose type is a run-time
+# fact. Every `probe*` below takes its receiver as a plain parameter, which is
+# how real duck-typing code is written and the one shape the predicate could not
+# see: it consulted the receiver's STATIC type, so it answered False for
+# everything a variant could hold (str, float, the dict views) and, in the int
+# family, True for everything a variant could hold.
+#
+# Read each block as a PAIR: the row that was wrong sits next to a sibling that
+# was already right, so a reintroduced bug shows up as the two arms disagreeing
+# rather than as one line changing.
+#
+# bug-n-hasattr-through-an-untyped-parameter-is-always-false
+
+def h_keys(x):
+    return hasattr(x, 'keys')
+def h_get(x):
+    return hasattr(x, 'get')
+def h_append(x):
+    return hasattr(x, 'append')
+def h_upper(x):
+    return hasattr(x, 'upper')
+def h_split(x):
+    return hasattr(x, 'split')
+def h_isint(x):
+    return hasattr(x, 'is_integer')
+def h_hex(x):
+    return hasattr(x, 'hex')
+def h_bitlen(x):
+    return hasattr(x, 'bit_length')
+def h_tobytes(x):
+    return hasattr(x, 'to_bytes')
+def h_len(x):
+    return hasattr(x, '__len__')
+def h_getitem(x):
+    return hasattr(x, '__getitem__')
+def h_nope(x):
+    return hasattr(x, 'no_such_attribute')
+def h_x(x):
+    return hasattr(x, 'x')
+def h_m(x):
+    return hasattr(x, 'm')
+
+
+class Base:
+    def __init__(self):
+        self.x = 1
+    def m(self):
+        return 'm'
+
+class Derived(Base):
+    def __init__(self):
+        Base.__init__(self)
+        self.y = 2
+
+
+d = {'a': 1}
+l = [1, 2]
+t = (1, 2)
+s = 'str'
+b = Base()
+dv = Derived()
+
+# --- the headline: a dict view name vs a dict method that already worked. The
+# first was False because pylib spells `keys` as `keylist` and the run-time
+# lookup goes through the RTTI, which knows only the Pascal name.
+print('keys   dict/list/str:', h_keys(d), h_keys(l), h_keys(s))
+print('get    dict/list/str:', h_get(d), h_get(l), h_get(s))
+print('append dict/list/str:', h_append(d), h_append(l), h_append(s))
+
+# --- str methods: a variant carries no static type, so the str table was never
+# consulted at all and every str method answered False.
+print('upper  str/dict/int/None:', h_upper(s), h_upper(d), h_upper(5), h_upper(None))
+print('split  str/dict/int/None:', h_split(s), h_split(d), h_split(5), h_split(None))
+
+# --- float methods, same shape one type over. `hex` is float's AND bytes',
+# which is why both must answer True and a dict must not.
+print('is_integer float/int/str/dict:', h_isint(1.5), h_isint(3), h_isint(s), h_isint(d))
+print('hex        float/bytes/int/dict:', h_hex(1.5), h_hex(b'ab'), h_hex(3), h_hex(d))
+
+# --- the int family is the WRONG-TRUE twin: the predicate asked a DISPATCH
+# question ("may an int method claim this receiver"), which is true of every
+# variant, so `hasattr(a_dict, "bit_length")` was True. bool is an int in
+# Python and must stay True.
+print('bit_length int/bool/float/str/dict/None:', h_bitlen(7), h_bitlen(True), h_bitlen(1.5), h_bitlen(s), h_bitlen(d), h_bitlen(None))
+print('to_bytes   int/bool/str/dict/None:', h_tobytes(7), h_tobytes(True), h_tobytes(s), h_tobytes(d), h_tobytes(None))
+
+# --- the sized/subscriptable duck tests, the reason `__len__` is worth a row
+print('__len__     dict/list/tuple/int:', h_len(d), h_len(l), h_len(t), h_len(5))
+print('__getitem__ dict/list/tuple/int:', h_getitem(d), h_getitem(l), h_getitem(t), h_getitem(5))
+
+# --- a fix that answered True for everything would pass every row above
+print('nope dict/list/str/int/float/None:', h_nope(d), h_nope(l), h_nope(s), h_nope(5), h_nope(1.5), h_nope(None))
+
+# --- user classes, which were already right and must stay right: a field, a
+# method, inheritance, and a name nobody declares
+print('user x/m/nope:', h_x(b), h_m(b), h_nope(b))
+print('derived x/m:', h_x(dv), h_m(dv))
+print('user x on a dict/str:', h_x(d), h_x(s))
+
+# --- the predicate must agree with the CALL standing next to it. Every one of
+# these ran fine while hasattr said the name did not exist; that disagreement is
+# the whole bug, so the test asserts both halves together.
+print('call keys  :', sorted(d.keys()))
+print('call upper :', s.upper())
+print('call isint :', (1.5).is_integer(), (3).is_integer())
+print('call bitlen:', (7).bit_length())
+print('call len   :', d.__len__(), l.__len__())
+
+# --- the guard idiom, which is where a wrong answer becomes a wrong BRANCH
+def describe(x):
+    if hasattr(x, 'keys'):
+        return 'mapping'
+    if hasattr(x, 'upper'):
+        return 'text'
+    if hasattr(x, 'append'):
+        return 'sequence'
+    return 'scalar'
+
+print('describe:', describe(d), describe(s), describe(l), describe(5))
