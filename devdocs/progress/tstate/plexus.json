@@ -6845,8 +6845,8 @@
   "sha": "a81adc5accb1c3a62ef43a765d85323a26b25b4b"
  },
  "last_slow": {
-  "date": "2026-08-26T12:15:23Z",
-  "sha": "a81adc5accb1c3a62ef43a765d85323a26b25b4b"
+  "date": "2026-08-26T17:12:12Z",
+  "sha": "b4d62b3dcfde3189556650457d574c72a975c90f"
  },
  "migrated_from": [
   "borg"
