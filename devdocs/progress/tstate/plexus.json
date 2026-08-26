@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-25T21:03:36Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "8f403875d51a23fab4ade0d297483904bd4e754f",
-   "tier": "native",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-25T21:41:55Z",
    "fixed": [],
    "new_red": [],
@@ -445,6 +437,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "ecc00f26811e69e4dcf6d9bf6cab75c46fd8b1e0",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T10:56:17Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "848a56a1b901927dc5c2c38f9ad455d4dc9cf708",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -1773,6 +1774,7 @@
   "test-core#src:test/test_inferred_pointer_keeps_its_depth.pas": "native",
   "test-core#src:test/test_inheritance_dispatch.pas": "native",
   "test-core#src:test/test_inherited.pas": "native",
+  "test-core#src:test/test_inherited_and_parenless_defaults.pas": "native",
   "test-core#src:test/test_initialize_finalize.pas": "native",
   "test-core#src:test/test_initsec.pas": "native",
   "test-core#src:test/test_inline_array_field_const_bound.pas": "native",
@@ -4895,6 +4897,7 @@
   "test-core#src:test/test_inferred_pointer_keeps_its_depth.pas": "pass",
   "test-core#src:test/test_inheritance_dispatch.pas": "pass",
   "test-core#src:test/test_inherited.pas": "pass",
+  "test-core#src:test/test_inherited_and_parenless_defaults.pas": "pass",
   "test-core#src:test/test_initialize_finalize.pas": "pass",
   "test-core#src:test/test_initsec.pas": "pass",
   "test-core#src:test/test_inline_array_field_const_bound.pas": "pass",
@@ -6692,14 +6695,14 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T10:50:19Z",
+  "date": "2026-08-26T10:56:17Z",
   "deadline": 7200.0,
-  "sha": "ecc00f26811e69e4dcf6d9bf6cab75c46fd8b1e0",
+  "sha": "848a56a1b901927dc5c2c38f9ad455d4dc9cf708",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 284.8
+  "wall": 284.5
  },
  "last_bench": {
   "conf_rows": 550,
