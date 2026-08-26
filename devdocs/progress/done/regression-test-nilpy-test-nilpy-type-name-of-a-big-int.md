@@ -130,4 +130,4 @@ have a plain def in hand without having lost the value first.
 is correct; the divergence is in the attribute read, is pre-existing, and is a
 different mechanism, so it is a ticket rather than scope creep. The new test
 carries the case as a comment naming that ticket instead of as an assertion.
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit c2c0e79e0.

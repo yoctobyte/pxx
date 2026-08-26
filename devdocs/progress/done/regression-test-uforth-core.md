@@ -173,4 +173,4 @@ table, which is the other red — fixed with it.
   the reduced shape plus the tag-8 and bound-method variants of the same hazard.
   Confirmed to SEGFAULT with the fix reverted and to match CPython with it.
 - `make compiler/pascal26` fixedpoint, `tools/gate.sh quick`.
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit c2c0e79e0.
