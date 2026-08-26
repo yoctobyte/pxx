@@ -492,4 +492,4 @@ every commit, plus `tools/gate.sh quick` GREEN, plus the differential checks
 above. Track T sweeps the matrix against the pushed shas.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved. Code landed as 617b53c62, a661ecf57, df36a5877, 66c9b8332 on `dev`; this write-up as ff10ec50e.
