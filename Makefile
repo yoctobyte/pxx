@@ -7968,6 +7968,16 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_nested_record_constant.pas $(TESTTMP)/test_nrc26
 	test "$$($(TESTTMP)/test_nrc26)" = "$$(cat test/test_nested_record_constant.expected)"
+	# A TYPED string constant is STORAGE, not a literal alias. `S := 'b'` used to
+	# answer `undefined variable (S)` -- a name-resolution error, which is the
+	# tell: there was no storage to be read-only. Integer/Char/array typed consts
+	# have always been assignable, so this one type was the outlier. The `local`
+	# rows check that a routine-local typed const is STATIC (R is called twice and
+	# the second call continues where the first stopped), and `U` checks that the
+	# UNTYPED form is still a literal alias, as it is in fpc.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_writeable_typed_string_const.pas $(TESTTMP)/test_wtsc26
+	test "$$($(TESTTMP)/test_wtsc26)" = "$$(cat test/test_writeable_typed_string_const.expected)"
 	# ...and the guard: a genuine `var` parameter must still REFUSE the same
 	# argument. This is what stops the fix from being ungated -- tried, and it
 	# let a call RESULT bind to a var parameter and COMPILE, because the method

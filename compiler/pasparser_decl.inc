@@ -2288,12 +2288,35 @@ begin
         else if cTk in [tyString, tyAnsiString, tyFixedString, tyShortString] then
         begin
           { Typed string constant `const Name: string = 'literal'` (and the
-            `'a' + 'b'` / `#65 + #66` concatenation form). Treated as a read-only
-            string-literal alias — registered in the StrConst table exactly like
-            the untyped `const Name = 'literal'` path, with NO storage var (a
-            phantom var would shadow a same-named variable and ParseInitVal has no
-            string case). A use of the name expands to AN_STR_LIT over the span,
-            which already coerces to a managed string where needed. }
+            `'a' + 'b'` / `#65 + #66` concatenation form). REAL STORAGE plus a
+            kind-1 pending init — the same two lines every other typed const
+            gets, and nothing else.
+
+            It used to be registered in the StrConst table instead, as a
+            read-only alias for the literal span, with no storage var at all.
+            The tell that this was wrong was the diagnostic: `S := 'b'` answered
+            *undefined variable (S)*, a NAME-RESOLUTION error, where a genuine
+            read-only constant would have said "cannot assign". There was no
+            storage to be read-only. Reading worked because a use expanded to
+            AN_STR_LIT, so only the store failed, and only for this one type —
+            `const N: Integer = 0`, `const C: Char = 'x'` and
+            `const A: array[..] of Integer = (..)` have always been assignable.
+
+            The two reasons the old comment gave were both real once and neither
+            is now. "ParseInitVal has no string case" — TryParseInitValForm has
+            had one since the record-field work, and init kind 1 is exactly this
+            assignment. "A phantom var would shadow a same-named variable" — that
+            is bug-set-of-char-const-corrupts-char-codegen, and it is why the SET
+            arm above still carries no storage; but a typed const of every OTHER
+            type already calls AllocVar with the bare name a few lines below, so
+            the string case was the outlier, not the rule.
+
+            This also matches FPC, which treats a TYPED const as an initialised
+            variable and refuses it in a constant expression: `const A: string =
+            'x'; B = A + 'y';` is *Illegal expression* there. The UNTYPED form
+            `const Name = 'literal'` is a literal alias in FPC too and keeps its
+            StrConst registration, untouched, in the arm further down.
+            bug-p-a-typed-string-constant-cannot-be-assigned }
           Expect(tkEq, '=');
           if CurTok.Kind <> tkString then
             Error('typed string constant: expected a string or char literal');
@@ -2318,23 +2341,25 @@ begin
               end;
               Next;
             end;
-            if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
-            StrConstName[StrConstCount] := name;
-            StrConstOwner[StrConstCount] := CurProc;
-            StrConstSOff[StrConstCount] := scOff;
-            StrConstSLen[StrConstCount] := scLen;
-            StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; Inc(StrConstCount);
           end
           else
           begin
-            if StrConstCount >= MAX_TYPEALIAS then Error('too many string constants');
-            StrConstName[StrConstCount] := name;
-            StrConstOwner[StrConstCount] := CurProc;
-            StrConstSOff[StrConstCount] := Tokens[TokPos-1].SOffset;
-            StrConstSLen[StrConstCount] := Tokens[TokPos-1].SLen;
-            StrConstUnitIdx[StrConstCount] := CurrentUnitIdx; Inc(StrConstCount);
+            scOff := Tokens[TokPos-1].SOffset;
+            scLen := Tokens[TokPos-1].SLen;
             Next;
           end;
+          AllocStaticLocal := constIsStatic;
+          cIdx := AllocVar(name, cTk);
+          AllocStaticLocal := False;
+          EnsurePendingInitCapacity(PendingInitCount);
+          PendingInitSym[PendingInitCount]    := cIdx;
+          PendingInitElem[PendingInitCount]   := PI_ELEM_NONE;
+          PendingInitFOff[PendingInitCount]   := -1;
+          PendingInitKind[PendingInitCount]   := 1;
+          PendingInitVal[PendingInitCount]    := scOff;
+          PendingInitValAux[PendingInitCount] := scLen;
+          PendingInitTk[PendingInitCount]     := Ord(cTk);
+          Inc(PendingInitCount);
         end
         else
         begin

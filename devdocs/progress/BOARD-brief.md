@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:24 blocked:7 backlog:266 backlog_new:26 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2407 rejected:44`
+`unfinished:24 blocked:7 backlog:266 backlog_new:26 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2408 rejected:44`
 
 ## Held now (working/ — do not touch these files)
 
@@ -68,7 +68,6 @@ _none — no lane is locked._
 - `[p 70] [N]` bug-n-an-augmented-subscript-on-a-dunder-class-is-refused
 - `[p 70] [N]` bug-nilpy-a-lambda-returned-directly-is-not-callable
 - `[p 70] [N]` bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it
-- `[p 70] [P]` bug-p-typed-constants-cannot-hold-a-pointer-a-nested-aggregate-or-storage
 - `[p 70] [A]` bug-the-queue-makes-filing-a-duplicate-the-path-of-least-resistance
 - `[p 70] [A]` feature-a-error-does-not-halt-so-a-parse-can-be-speculative
 - `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
@@ -80,5 +79,6 @@ _none — no lane is locked._
 - `[p 65] [N]` bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened
 - `[p 65] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - `[p 65] [N]` bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members
+- `[p 65] [N]` bug-n-a-unicode-identifier-is-rejected-by-the-lexer
 
 _274 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

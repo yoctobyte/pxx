@@ -3,6 +3,7 @@ summary: "Typed constants: `const N: T = v` fails for a PChar, for a nested aggr
 type: bug
 track: P
 prio: 70
+status: done
 ---
 
 # Typed constants — one declaration path, four filed symptoms
@@ -71,6 +72,88 @@ adding a fourth.
 
 `make compiler/pascal26` + each row above diffed against fpc 3.2.2 +
 `tools/gate.sh quick`.
+
+---
+
+## RESOLVED 2026-08-26 — all six rows, in three commits
+
+| the declaration | now |
+| --- | --- |
+| `const GP: PChar = '-'` | prints `-` (was: compiled, then SEGFAULTED) |
+| `const KC: PChar = 'konst'` | prints `konst` (was: `unexpected token`) |
+| `const A: array[0..1] of PChar = ('-', '--')` | prints both (was: `too many array constant elements`) |
+| `const S: string = 'a'` then `S := 'b'` | assigns (was: `undefined variable (S)`) |
+| `const CN: TNest = (p: (x: 1; y: 2); ...)` | works (was: `not a constant`) |
+| `const CR: TR = (a: ((x:1;y:2), ...); ...)` | works (was: `not a constant`) |
+
+Every row byte-identical against fpc 3.2.2. Three tests:
+`test_typed_const_pointer_values.pas`, `test_nested_record_constant.pas`,
+`test_writeable_typed_string_const.pas`, all in `test-core`.
+
+### The three gaps, as filed
+
+1. **TYPE.** `TryParseInitValForm`'s string arm keyed on the destination being a
+   string KIND, so a pointer destination fell through to ConstEval — where a
+   ONE-character literal is a perfectly good ordinal and an ordinal is a
+   perfectly good initialiser for a pointer-sized slot. The destination test is
+   one predicate now, `InitValDestTakesStrLit`, shared by the scalar,
+   record-field and array-element arms, using `IsNodePChar`'s own
+   char/uint8/int8 triple so the declaration and the lowering cannot disagree.
+
+2. **SHAPE.** The pending init's target is a field PATH — `FOff/FLen` for the
+   first span, `PIPath*` for the rest, and the emitter walks it as a loop. The
+   ticket asked for exactly this and said why an `F2Off`/`F2Len` pair would be
+   the wrong answer; the test walks three levels to show it is not one.
+
+3. **STORAGE.** A typed string constant gets `AllocVar` plus a kind-1 pending
+   init — the same two lines every other typed const already got. Both reasons
+   the old comment gave had expired: `TryParseInitValForm` grew a string case
+   with the record-field work, and the phantom-var shadowing hazard is the SET
+   arm's, which still carries no storage, while typed consts of every other type
+   have called `AllocVar` with the bare name all along.
+
+### Three more defects, found by measurement while fixing these
+
+None was filed first; each is the same missing fact one construct over, and each
+landed in the commit that exposed it.
+
+- **`ArrTypePtrElemTk` did not exist.** A named array type of pointers dropped
+  its element's pointee KIND at alias-definition time — the pointee RECORD id
+  got a slot in 2026 and the kind never did — so every use read whatever the
+  last unrelated pointer declaration anywhere in the unit had left in the
+  global. Not a const bug at all: `type TAp = array[0..1] of PChar; var a: TAp;`
+  then `a[0] := 'hey'; WriteLn(a[0])` printed `4304310`.
+
+- **SILENT WRONG WRITE.** An array-valued record-const field numbered its
+  elements from 0 regardless of the field's low bound, so `a: array[1..3] of T`
+  wrote one element BEFORE itself, over the previous field. `TGuid`'s
+  `array[0..7]` is the only shape that arm had ever seen. This is the write side
+  of [[bug-p-record-field-array-with-a-non-zero-low-bound-writes-out-of-bounds]].
+
+- **Init kind 7 conflated two facts.** It meant "array-valued record field
+  element" while occupying the slot that says what the VALUE is, so such an
+  element could only ever be a plain ordinal. It is retired: the index has its
+  own field, and with it went the refusal of an array-valued field inside an
+  ARRAY-of-record, and (via `LocalInitValAux`) the refusal of a string field in
+  a routine-LOCAL record constant.
+
+### Still refused, deliberately
+
+An array-valued field NESTED inside a record constant (`(p: (D4: (1, 2)))`).
+The index is applied after the FIRST span, so such a field must BE that span;
+the alternative is an index in the middle of a path, and the path carries spans
+only. It errors by name rather than writing the wrong slot.
+
+`const P: Pointer = 'x'` is also still taken as an ordinal rather than the
+literal's address. FPC refuses it outright, and pxx's own `p := 'abc'` on a
+plain `Pointer` stores the HANDLE — accepting it in the declaration would make
+the declaration disagree with the statement that spells it out.
+
+### Parked
+
+`{$WRITEABLECONST}` is still not implemented, so typed consts are now
+unconditionally writable — which is FPC's default. Whether the `OFF` form should
+be honoured is [[decide-should-writeableconst-off-be-honoured]], Track U.
 
 ---
 
@@ -383,3 +466,6 @@ mechanism.
 
 The repro compiles and its values match FPC; a test under `test/` pins the
 nested form alongside the two that already work.
+
+## Log
+- 2026-08-26 — resolved, commit PENDING-COMMIT.

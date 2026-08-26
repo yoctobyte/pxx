@@ -1,0 +1,7 @@
+read  : a abcd frz x 0 untyped
+write : b zz q y 1
+len   : 1 2 1
+qual  : foo 7
+meth  : foo 7
+local : rl!
+local : rl!!
