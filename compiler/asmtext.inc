@@ -74,6 +74,11 @@ begin
   last := from + len - 1;
   if last > Length(s) then last := Length(s);
   if last < from then begin Result := ''; Exit; end;
+  { the whole string: hand it back rather than copy it. Callers slice
+    already-tight strings constantly (the mnemonic of a one-word line, an
+    operand that is the whole `rest`), and a copy there is a heap allocation
+    bought for nothing. }
+  if (from = 1) and (last = Length(s)) then begin Result := s; Exit; end;
   count := last - from + 1;
   SetLength(Result, count);
   for i := 0 to count - 1 do
@@ -85,6 +90,31 @@ function AsmTextLower(c: Char): Char;
 begin
   if (c >= 'A') and (c <= 'Z') then Result := Chr(Ord(c) + 32)
   else Result := c;
+end;
+
+{ Does s contain an ASCII uppercase letter? Asked before lowercasing, so the
+  common case (already-lowercase mnemonics, which is every literal the codegen
+  emits) costs no allocation at all. }
+function AsmTextHasUpper(const s: AnsiString): Boolean;
+var i: Integer;
+begin
+  Result := False;
+  i := 1;
+  while i <= Length(s) do
+  begin
+    if (s[i] >= 'A') and (s[i] <= 'Z') then begin Result := True; Exit; end;
+    Inc(i);
+  end;
+end;
+
+{ Lowercase a whole string into a FRESH one. Never lowercase in place after an
+  AsmTextSlice/AsmTextTrim: those hand the argument straight back when there is
+  nothing to cut, so an in-place edit would rewrite the CALLER's string. }
+function AsmTextLowerStr(const s: AnsiString): AnsiString;
+var i: Integer;
+begin
+  SetLength(Result, Length(s));
+  for i := 1 to Length(s) do Result[i] := AsmTextLower(s[i]);
 end;
 
 { Parse a signed integer literal: decimal, or 0x.. / $.. hex. }
@@ -142,6 +172,11 @@ begin
   while (n >= i) and AsmTextIsSpace(AsmTextCharAt(s, n)) do Dec(n);
   count := n - i + 1;
   if count <= 0 then begin Result := ''; Exit; end;
+  { nothing to trim: hand the string back instead of copying it. 725,334 calls
+    on an empty .npy, and the overwhelming majority are already tight — an
+    operand that AsmTextLine trimmed being trimmed again by AsmTextOperand,
+    a one-word line, a `[rax]` inner. }
+  if (i = 1) and (n = Length(s)) then begin Result := s; Exit; end;
   { one SetLength + fill instead of per-char AppendChar realloc. }
   SetLength(Result, count);
   for k := 0 to count - 1 do
@@ -206,7 +241,7 @@ begin
   p := 1;
   while (p <= Length(op)) and not AsmTextIsSpace(AsmTextCharAt(op, p)) do Inc(p);
   firstWord := AsmTextSlice(op, 1, p - 1);
-  for n := 1 to Length(firstWord) do firstWord[n] := AsmTextLower(firstWord[n]);
+  if AsmTextHasUpper(firstWord) then firstWord := AsmTextLowerStr(firstWord);
   memSize := AsmTextSizeKeyword(firstWord);
   if memSize > 0 then
   begin
@@ -325,6 +360,7 @@ var
   i, n, holeCur, commaPos: Integer;
   k0, k1, r0, s0, r1, s1, mb0, md0, mb1, md1: Integer;
   ssePfx, sseOp: Integer;
+  mStart, mLow: Integer;
   imm0, imm1: Int64;
   haveOps: Boolean;
 begin
@@ -333,14 +369,21 @@ begin
   { skip leading spaces }
   i := 1;
   while (i <= n) and AsmTextIsSpace(AsmTextCharAt(line, i)) do Inc(i);
-  { mnemonic }
-  mnem := '';
-  while (i <= n) and not AsmTextIsSpace(AsmTextCharAt(line, i)) do begin AppendChar(mnem, AsmTextLower(line[i])); Inc(i); end;
-  { rest = operands (one slice; AsmTextSlice is SetLength+fill) }
-  rest := AsmTextSlice(line, i, n - i + 1);
+  { mnemonic — one slice, then lowercase in place (was an AppendChar, i.e. a
+    heap realloc, per character) }
+  mStart := i;
+  while (i <= n) and not AsmTextIsSpace(AsmTextCharAt(line, i)) do Inc(i);
+  mnem := AsmTextSlice(line, mStart, i - mStart);
+  if AsmTextHasUpper(mnem) then mnem := AsmTextLowerStr(mnem);
+  { rest = operands, trimmed once here rather than by each arm below }
+  rest := AsmTextTrim(AsmTextSlice(line, i, n - i + 1));
   haveOps := Length(rest) > 0;
 
-  { zero-operand forms }
+  { The zero-operand forms — reachable ONLY when the line carries no operands,
+    so the whole chain is skipped for the ~90% of lines that do. It used to run
+    16 CaseEqual calls before every `mov`/`lea`/`cmp` in the program. }
+  if not haveOps then
+  begin
   if CaseEqual(mnem, 'ret') then begin x64_ret; Exit; end;
   if CaseEqual(mnem, 'leave') then begin x64_leave; Exit; end;
   if CaseEqual(mnem, 'syscall') then begin x64_syscall; Exit; end;
@@ -360,11 +403,12 @@ begin
   if CaseEqual(mnem, 'cdq') then begin EncB($99); Exit; end;
   if CaseEqual(mnem, 'movsb') then begin x64_movsb; Exit; end;
   if CaseEqual(mnem, 'stosb') then begin x64_stosb; Exit; end;
+  Error('EmitAsmX64: unknown 0-operand mnemonic');
+  end;
 
   { rep prefix: `rep movsb` / `rep stosb` (rest holds the string op) }
   if CaseEqual(mnem, 'rep') then
   begin
-    rest := AsmTextTrim(rest);
     if CaseEqual(rest, 'movsb') then begin x64_rep_movsb; Exit; end;
     if CaseEqual(rest, 'stosb') then begin x64_rep_stosb; Exit; end;
     Error('EmitAsmX64: unsupported rep string op');
@@ -375,11 +419,9 @@ begin
   if CaseEqual(mnem, 'lock') then
   begin
     EncB($F0);
-    AsmTextLine(AsmTextTrim(rest), holes, nHoles);
+    AsmTextLine(rest, holes, nHoles);
     Exit;
   end;
-
-  if not haveOps then Error('EmitAsmX64: unknown 0-operand mnemonic');
 
   { split rest into op0 [, op1] on the first comma }
   commaPos := 0;
@@ -893,7 +935,7 @@ begin
     j := 1;
     while (j <= Length(trimmed)) and not AsmTextIsSpace(AsmTextCharAt(trimmed, j)) do Inc(j);
     mnem := AsmTextSlice(trimmed, 1, j - 1);
-    for k := 1 to Length(mnem) do mnem[k] := AsmTextLower(mnem[k]);
+    if AsmTextHasUpper(mnem) then mnem := AsmTextLowerStr(mnem);
 
     isJmp := CaseEqual(mnem, 'jmp');
     if (Length(trimmed) >= 2) and (AsmTextCharAt(trimmed, Length(trimmed)) = ':') then
