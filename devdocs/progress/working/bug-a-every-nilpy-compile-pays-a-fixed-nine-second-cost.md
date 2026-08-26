@@ -4,6 +4,8 @@ prio: 80
 type: bug
 blocked-by: []
 summary: "Measured 2026-08-25 (pin v374, this box): compiling `print(\"hi\")` costs 8.92s; compiling `begin end.` costs 0.25s. The ~8.7s is a FIXED per-invocation constant — it does not scale with program size — and it is pure user CPU, not I/O. It is ~29% of the entire test matrix's CPU (805 .npy jobs x 8.7s ~ 7000 of 24219 cpu-s) and it is 9 seconds on every NilPy user's hello-world."
+status: working
+owner: agent-A-perf-9s
 ---
 
 # Every NilPy compile pays a fixed ~9-second cost
