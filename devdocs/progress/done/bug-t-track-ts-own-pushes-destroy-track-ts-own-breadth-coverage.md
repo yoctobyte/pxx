@@ -3,7 +3,7 @@ slug: bug-t-track-ts-own-pushes-destroy-track-ts-own-breadth-coverage
 track: T
 type: bug
 prio: 45
-status: backlog
+status: done
 blocked-by: []
 summary: "NOTEST_PREFIXES is ('devdocs/', 'docs/'), so tools/** is testable — correct, since a testmgr change can change results. The consequence is that Track T is the only lane whose ordinary work systematically destroys its own coverage: any T tooling push aborts an in-flight idle-phase full tier and discards 100% of it. Measured 2026-08-19: one twatch push killed the first breadth run in 5h13m at ~207/2765 jobs. Batching by hand is a habit, not a property."
 ---
@@ -97,3 +97,72 @@ number — `carried_runs` leaving zero — and it is this ticket's fix-by condit
 as much as the other's. Until then option 1 (warn on a T push while a full tier
 is in flight) is still worth its low cost, because it is the only one of the
 three that does not depend on a measurement nobody has taken yet.
+
+---
+
+## RESOLUTION 2026-08-26 — dissolved, but NOT by the mechanism this ticket
+## nominated
+
+The ticket says: *"If shape 2 lands, close this as fixed-by."* Shape 2 landed on
+2026-08-19 (`e2449adc5`). **Closing on that would have been wrong**, and the
+numbers say why: over the mechanism's whole life, **73 of 22,280 saved
+job-results were ever reused — 0.33%** (`saved_partials 83, carried_runs 3,
+superseded 70`).
+
+Not because resume is broken. `superseded: 70` is the explanation and it is
+correct: a partial is keyed on `(sha, tier)`, and on abort the watcher
+re-targets to the **new** HEAD — so the partial it just saved belongs to a sha
+nobody will ask about again. **Resumability can only pay where the same
+`(sha, tier)` is retried**, and a push-driven ladder almost never retries one.
+That is a structural ceiling, not a defect. It is why "a T push turns *discard
+207 jobs* into *pause 207 jobs*" did not happen: the next run was not for that
+sha.
+
+### What actually dissolved it
+
+**A commitment point** (`572524c7c`, 2026-08-25): an idle-ladder breadth run
+that is `full_commit_secs` (default **60s**) in stops accepting preemption, and
+a *reserved* breadth run (`7457f6aee`) commits at **zero** seconds, because a
+reservation exists precisely for the case where pushes never stop.
+
+So the premise — *"any T tooling push aborts an in-flight idle-phase full tier
+and discards 100% of it"* — is now false except inside a 60-second window at the
+very start of an idle-ladder run. The motivating incident, a push landing at
+~207 of 2765 jobs, is far outside it and would survive today.
+
+Outcome, measured across 3,828 run records: breadth full-to-full gap **median
+1.3h over the last 24h** (worst 3.1h), against the 5h13m drought that opened
+the sibling ticket. See `bug-t-the-push-rate-starves-breadth-coverage-entirely`
+for the dated before/after.
+
+### Where resume DOES pay, so it is not written off
+
+The one phase that retries a single sha: **pin verify**. It is deliberately left
+fully preemptive — the commitment point is breadth's alone — and it relies on
+resume instead, which works for it exactly because the key is stable. The live
+log: `kept 432 decided job(s) from the aborted full run`, and
+`resume: partial accepted — 56 job(s) already decided against this exact
+binary`. Resume was built for the wrong ticket and turns out to be load-bearing
+for a different one.
+
+### Shape 1 was not implemented, deliberately
+
+*"`tools/sync.sh` warns when an idle-phase full tier is in flight."* With the
+commitment point in place, the cost it would make visible is a 60-second window
+on one phase — and a warning that fires on a cost that is usually zero trains
+people to ignore warnings. If breadth staleness regresses, this is the cheap
+thing to add back.
+
+### And the ticket's own instinct was right
+
+> a property that holds only because an agent remembered is a habit, not a
+> property.
+
+That is exactly why it should not have closed on shape 2: the property it wanted
+— *a T push does not cost breadth* — was never delivered by resume, and only
+looked delivered because `carried_runs` had left zero. **A close condition can be
+about the wrong subject just as easily as a test can.**
+
+## Log
+- 2026-08-26 — measured; closed on the commitment point, not on shape 2.
+- 2026-08-26 — resolved, commit PENDING-COMMIT.
