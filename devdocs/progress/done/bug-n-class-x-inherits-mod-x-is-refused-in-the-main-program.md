@@ -169,4 +169,4 @@ three tickets in this batch changed shape under that measurement — one was
 already fixed, one had its named mechanism disproved.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 4fb78cf2d (no code change was needed -- test only).

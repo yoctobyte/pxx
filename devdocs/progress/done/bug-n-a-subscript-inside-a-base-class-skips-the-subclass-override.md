@@ -138,4 +138,4 @@ method-call path has emitted virtual calls all along — so they are their own
 finding, not part of this fix.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 18d98d765 (the fix), 4fb78cf2d (the write-up).

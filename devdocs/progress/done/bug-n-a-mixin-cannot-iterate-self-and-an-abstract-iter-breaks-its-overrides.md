@@ -175,4 +175,4 @@ Track B's call, not done here.
   green.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 18d98d765 (the fix), 4fb78cf2d (the write-up).
