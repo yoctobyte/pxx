@@ -155,6 +155,22 @@ TIERS = {
     # ordinary ticket, while a tier-1 red is what the tracks are building on.
     "full": [
         "test-smoke",
+        # The self-compile differential across -O levels. FULL, not native, on
+        # cost: ~200s measured (4x ~23s builds, then each stage compiling
+        # compiler.pas plus four dense test programs). Against native's ~350s
+        # wall that is ~10% of the tier's core-seconds for one job; against
+        # full's ~12,300 cpu-sec it is 1.6%. A differential thinned to fit a
+        # faster tier would be worse than one that runs less often -- the weak
+        # version also discharges the urge to look.
+        #
+        # It closes the hole CLAUDE.md names in its own claims section: the
+        # self-host fixedpoint proves the compiler reproduces itself at ONE
+        # optimisation level, and a -O0-only self-compile failure passed the
+        # entire gate on 2026-08-19 and was found by a benchmark. Its value
+        # grows as Track O ramps up: compiler.pas is the densest program we can
+        # run the optimizer over, and if -O0 and -O3 builds disagree about the
+        # bytes they emit, that is an optimizer bug wherever it lives.
+        "test-selfcompile-odiff",
         # Track B's ENTIRE gate: 166 jobs of RTL smoke, PAL-cross under qemu and
         # ESP object emission that used to run only when a B agent typed
         # `make lib-test` (task-t-enroll-libtest-demos-watcher, ENROLLED
@@ -1849,7 +1865,19 @@ def classify(lines):
     text = "\n".join(lines)
     if "optdiff.sh" in text:
         return "opt"
-    if "compiler.pas" in text or "compiler/compiler.pas" in text:
+    if "compiler.pas" in text or "compiler/compiler.pas" in text \
+            or "selfcompile" in text:
+        # `selfcompile` matches the FAMILY, not one script — same call as the
+        # conformance regex below.
+        #
+        # DEFENSIVE, not load-bearing today, and worth saying which:
+        # tools/selfcompile_odiff.sh does ~200s of work and would be killed at
+        # the 90s `unit` timeout as a false red — but the job classes selfhost
+        # anyway, because `make -n` expands the $(COMPILER) prerequisite and
+        # THAT text contains compiler.pas. So the class is currently correct by
+        # accident of the prerequisite, not by anything about the script. This
+        # arm makes it correct on purpose, and covers any selfcompile-* tool
+        # invoked without that prerequisite in front of it.
         return "selfhost"
     # Any run_<lang>_conformance.sh, not just C's: the Pascal battery
     # (run_pascal_conformance.sh) is the same shape — one script, hundreds of
@@ -4313,7 +4341,20 @@ def run_bench():
     # compiler compiling the compiler source; canary = every stage's output
     # for a fixed input must be byte-identical (optimizing the compiler must
     # not change what it emits).
+    # THREE RED ROWS, ONE DEFECT — the thing this loop got wrong on 2026-08-19.
+    # `ref_out` is the -O0 build's output, and it is the baseline every other
+    # level is diffed against. When the -O0 BUILD failed, ref_out stayed None,
+    # so -O2 and -O3 both reported CANARY-DIFF vs -O0 — against a baseline that
+    # was never produced. One failure, three red rows, and the reader cannot
+    # tell "the levels disagree" (an optimizer bug) from "there was nothing to
+    # compare against" (the baseline is missing). A diff against a missing
+    # operand is the asserts-nothing family in its most literal form.
+    #
+    # So the baseline's ABSENCE is tracked separately from its VALUE, and a
+    # missing baseline is reported as exactly that, once per level, without the
+    # word DIFF anywhere near it.
     ref_out = None
+    ref_ok = False           # did -O0 produce a baseline at all?
     for lvl in BENCH_LEVELS:
         stage = os.path.join(tmp, "p26" + lvl.replace("-", "_"))
         if subprocess.run([cc, lvl, COMPILER_SRC, stage], cwd=REPO,
@@ -4331,8 +4372,24 @@ def run_bench():
             out = None
         if lvl == "-O0":
             ref_out = out
-        if out is None or ref_out is None or out != ref_out:
-            print("  bench %-12s %-4s CANARY-DIFF vs -O0" % ("selfcompile", lvl))
+            ref_ok = out is not None
+        if not ref_ok:
+            # NOT a diff: there is no baseline. Named so the -O0 row is the one
+            # anybody investigates, and so a level that is fine does not get
+            # counted as a second and third optimizer defect.
+            print("  bench %-12s %-4s NO-BASELINE (-O0 produced none; this "
+                  "level was NOT compared)" % ("selfcompile", lvl))
+            red.append("selfcompile %s no-baseline" % lvl)
+            continue
+        if out is None:
+            print("  bench %-12s %-4s CANARY-MISSING (this level's build "
+                  "emitted nothing to compare)" % ("selfcompile", lvl))
+            red.append("selfcompile %s canary-missing" % lvl)
+            continue
+        if out != ref_out:
+            print("  bench %-12s %-4s CANARY-DIFF vs -O0 (%d bytes vs %d) — "
+                  "optimizing the compiler changed what it emits"
+                  % ("selfcompile", lvl, len(out), len(ref_out)))
             red.append("selfcompile %s canary" % lvl)
             continue
         dt, clk = bench_time([stage, COMPILER_SRC,

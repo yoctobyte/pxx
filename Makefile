@@ -73,7 +73,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 .PHONY: test-esp-idf
 .PHONY: fuzz-csmith
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-fgl test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-fgl test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-selfcompile-odiff test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos tools-devtest c-interop-devtest tls-openssl-devtest tls13-handshake-devtest truststore-devtest tls-native-seam-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -12397,6 +12397,21 @@ test-smoke: test-quick
 	cp $(TESTTMP)/pascal26-fixedpoint $(TESTTMP)/pascal26-s5.$$$$.tmp && mv -f $(TESTTMP)/pascal26-s5.$$$$.tmp $(TESTTMP)/pascal26-s5
 
 # test-opt: the -O gate (feature-optimization-levels). Differential corpus —
+# The self-compile differential across -O levels: build the compiler at every
+# level and check that the results EMIT identical bytes. Closes the hole
+# CLAUDE.md names in its own claims section — the self-host fixedpoint proves
+# reproducibility at ONE optimisation level, and a -O0-only self-compile
+# failure passed the entire gate on 2026-08-19 and was found by a benchmark.
+#
+# Two lines here on purpose: the logic is tools/selfcompile_odiff.sh (Track T's
+# lane), and this target is only the enrolment point so testmgr can schedule it.
+# ~200s, classed `selfhost` (600s timeout). It classes that way because make -n
+# expands the $(COMPILER) prerequisite above and that text names compiler.pas;
+# classify() also matches `selfcompile` directly so the class does not depend on
+# that accident. A `unit` class would kill it at 90s and publish a false red.
+test-selfcompile-odiff: $(COMPILER)
+	tools/selfcompile_odiff.sh
+
 # every program compiled at -O0 and -O1 must produce IDENTICAL runtime
 # output — plus the -O1 self-compile fixedpoint. Run whenever an opt pass
 # changes; -O0 stays covered by the ordinary byte-identity gates.
