@@ -29,7 +29,7 @@ procedure CompilePendingLocalInits;
   before the body). Mirror of CompilePendingGlobalInits over the LocalInit list;
   the list is reset by the caller at routine entry. }
 var i, identNode, valNode, idxLit, target, assignNode, initTk: Integer;
-    innerAddr: Integer;
+    innerAddr, pk: Integer;
 begin
   { -O2 register-residency: suppress r14/r15 residency assignment for these
     per-initializer CompileAST calls. Each would otherwise re-emit the save+load
@@ -49,12 +49,23 @@ begin
 
     if LocalInitFOff[i] >= 0 then
     begin
-      { Record typed-const field: `sym.field := value`. }
+      { Record typed-const field: `sym.field := value`, and then any DEEPER
+        spans — `sym.p.x`. One loop over the path, exactly as
+        CompilePendingGlobalInits does it; the two emitters must not drift. }
       target := AllocNode(AN_FIELD);
       ASTLeft[target] := identNode;
       ASTSOffset[target] := LocalInitFOff[i];
       ASTSLen[target] := LocalInitFLen[i];
       ASTTk[target] := initTk;
+      for pk := 0 to LocalInitPCount[i] - 1 do
+      begin
+        valNode := AllocNode(AN_FIELD);
+        ASTLeft[valNode] := target;
+        ASTSOffset[valNode] := PIPathOff[LocalInitPStart[i] + pk];
+        ASTSLen[valNode] := PIPathLen[LocalInitPStart[i] + pk];
+        ASTTk[valNode] := initTk;
+        target := valNode;
+      end;
     end
     else if LocalInitElem[i] <> PI_ELEM_NONE then   { an index MAY be negative — see PI_ELEM_NONE }
     begin
@@ -73,7 +84,7 @@ begin
     begin
       valNode := AllocNode(AN_STR_LIT);
       ASTSOffset[valNode] := LocalInitVal[i];
-      ASTSLen[valNode] := LocalInitFLen[i];
+      ASTSLen[valNode] := LocalInitValAux[i];
       ASTTk[valNode] := Ord(tyString);
     end
     else if LocalInitKind[i] = 5 then

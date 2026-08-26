@@ -1056,10 +1056,10 @@ begin
 end;
 
 { `(f1: v1; f2: v2; ...)` — FPC's named-field record initialiser, for a typed
-  CONST and for an initialised VAR alike. Each scalar field is recorded as a
-  `sym.field := value` init (the field-name span drives an AN_FIELD target in
-  the init emitter); an array-valued field becomes one `sym.field[k] := v` per
-  element (Kind 7).
+  CONST and for an initialised VAR alike. Each field becomes one pending init
+  whose TARGET is a path: `sym.f`, `sym[e].f`, `sym.f[k]`, `sym.p.x`,
+  `sym.a[k].y`, to any depth. The emitter walks that path; see
+  PendingInitPStart in defs.inc.
 
   Extracted from ParseConstSection, which was the only caller, because the VAR
   path did not have it: `var R: TRec = (n: 7)` answered *"parenthesised
@@ -1070,18 +1070,38 @@ end;
   call this now, so a fix to the field rules cannot land on one and miss the
   other.
   bug-p-a-record-typed-var-initialiser-is-refused }
-procedure ParseRecordInitializerInto(symIdx, recId, elemIdx: Integer; isLocal: Boolean);
+
+procedure ParseRecordInitFieldsInto(symIdx, recId, elemIdx: Integer; isLocal: Boolean;
+                                    baseFOff, baseFLen, basePStart, basePCount,
+                                    baseFIdx: Integer);
+{ baseFOff < 0 means "this record IS the symbol (or its element)", so the field
+  named here is the FIRST span and goes in FOff/FLen. Otherwise we are already
+  inside a nested aggregate: FOff/FLen stay the outer field's and this field's
+  span is appended to the path.
+
+  The recursion is the whole point. `(p: (x: 1; y: 2); tag: 'k')` used to reach
+  the inner `(` with a scalar reader and report *not a constant* pointing at the
+  identifier `x` — the parser said so itself, at the head of this routine:
+  "Nested record/array fields are not handled yet". The array half of that
+  sentence was implemented afterwards (TGuid's D4) and the record half was not,
+  which is exactly the shape where the second path stays broken.
+
+  baseFIdx is the index the emitter applies immediately after the FIRST span, so
+  an array-valued field must BE that first span. Nesting one deeper
+  (`(p: (D4: (1, 2)))`) would need the index in the middle of the path, and the
+  path carries spans only; that shape is refused by name rather than written to
+  the wrong slot. Nested RECORD fields have no such limit — they are path, all
+  the way down. }
 var
   fName: AnsiString;
   fNameOff, fNameLen, rElem: Integer;
   fTk: TTypeKind;
   fvKind, fvAux: Integer;
   fvVal: Int64;
+  myFOff, myFLen, myPStart, myPCount, pk: Integer;
+  fRec, fPtrElemTk: Integer;
+  fIsArr: Boolean;
 begin
-        { Record typed constant: `const r: TRec = (f1: v1; f2: v2; ...)` (FPC
-          named-field form). Each scalar field initializer is recorded as a
-          `r.field := value` init (field span drives an AN_FIELD target in the
-          init emitter). Nested record/array fields are not handled yet. }
         Expect(tkLParen, '(');
         while CurTok.Kind <> tkRParen do
         begin
@@ -1093,31 +1113,108 @@ begin
           Expect(tkColon, ':');
           fTk := RecFieldType(recId, fName);
           if fTk = tyUnknown then Error('unknown field in record constant: ' + fName);
-          if RecFieldIsArray(recId, fName) and (CurTok.Kind = tkLParen) then
+          fIsArr := RecFieldIsArray(recId, fName);
+          fPtrElemTk := Ord(RecFieldPtrElemTk(recId, fName));
+
+          { This field's target spans. At depth 0 it is simply FOff/FLen, which
+            is what every init this routine has ever written looked like; deeper
+            down, the inherited prefix is COPIED into the pool and this field's
+            span appended, so each init's spans stay contiguous and a sibling
+            cannot see them move. }
+          if baseFOff < 0 then
           begin
-            { Array-valued field: `D4: ($C0, 0, ..., $46)` (TGuid). Each
-              element is a `sym.field[k] := v` init (Kind 7 — the emitter
-              builds FIELD then INDEX). Global-only for now. }
+            myFOff := fNameOff; myFLen := fNameLen;
+            myPStart := 0; myPCount := 0;
+          end
+          else
+          begin
+            myFOff := baseFOff; myFLen := baseFLen;
+            myPStart := PIPathCount;
+            for pk := 0 to basePCount - 1 do
+            begin
+              EnsurePIPathCapacity(PIPathCount);
+              PIPathOff[PIPathCount] := PIPathOff[basePStart + pk];
+              PIPathLen[PIPathCount] := PIPathLen[basePStart + pk];
+              Inc(PIPathCount);
+            end;
+            EnsurePIPathCapacity(PIPathCount);
+            PIPathOff[PIPathCount] := fNameOff;
+            PIPathLen[PIPathCount] := fNameLen;
+            Inc(PIPathCount);
+            myPCount := basePCount + 1;
+          end;
+
+          if (fTk = tyRecord) and (not fIsArr) and (CurTok.Kind = tkLParen) then
+          begin
+            { A RECORD-typed field written as an aggregate: `(p: (x: 1; y: 2))`.
+              Recurse — the field just became part of the path. }
+            fRec := RecFieldRecId(recId, fName);
+            if fRec = REC_NONE then Error('unknown record type for field in record constant: ' + fName);
+            ParseRecordInitFieldsInto(symIdx, fRec, elemIdx, isLocal,
+                                      myFOff, myFLen, myPStart, myPCount, baseFIdx);
+          end
+          else if fIsArr and (CurTok.Kind = tkLParen) then
+          begin
+            { Array-valued field: `D4: ($C0, 0, ..., $46)` (TGuid), and
+              `a: ((x:1;y:2), ...)` when the element is itself a record.
+              Each element is one init indexed through PendingInitFIdx.
+              Global-only for now. }
             if isLocal then Error('array-valued field in a LOCAL record constant is not supported');
-            { Kind 7 spends PendingInitElem on PI_ELEM_NONE and ValAux on the
-              FIELD array's index, so there is nowhere left to carry an OUTER
-              element index. Refuse loudly rather than silently write element 0. }
-            if elemIdx <> PI_ELEM_NONE then
-              Error('array-valued field inside an ARRAY-of-record initializer is not supported');
+            { The index lives in its own field, so it composes with an OUTER
+              element index the way `sym[e].f[k]` reads. It did not use to:
+              kind 7 spent ValAux on this index and PendingInitElem had to be
+              PI_ELEM_NONE, and the arm refused an array-of-record outright
+              rather than silently write element 0. That refusal is gone with
+              the reason for it. }
+            if baseFOff >= 0 then
+              Error('array-valued field nested inside a record constant is not supported: ' + fName);
+            fRec := RecFieldRecId(recId, fName);
             Next;   { consume '(' }
-            rElem := 0;
+            { …from the field's own LOW BOUND, not from 0. The AN_INDEX the
+              emitter builds is an ordinary indexed access and subtracts the
+              bound like any other, so `a: array[1..3] of T` initialised from 0
+              wrote one element BEFORE the field — over the record's previous
+              field, silently, exactly as
+              bug-p-record-field-array-with-a-non-zero-low-bound-writes-out-of-bounds
+              describes for the read side. TGuid's `D4: array[0..7]` is the only
+              shape this arm had ever seen, and 0 is right for it. }
+            rElem := RecFieldArrLo(recId, fName);
             while CurTok.Kind <> tkRParen do
             begin
-              EnsurePendingInitCapacity(PendingInitCount);
-              PendingInitSym[PendingInitCount]  := symIdx;
-              PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
-              PendingInitFOff[PendingInitCount] := fNameOff;
-              PendingInitFLen[PendingInitCount] := fNameLen;
-              PendingInitKind[PendingInitCount] := 7;
-              PendingInitValAux[PendingInitCount] := rElem;
-              PendingInitVal[PendingInitCount]  := ParseInitValTk(fTk);
-              PendingInitTk[PendingInitCount]   := Ord(fTk);
-              Inc(PendingInitCount);
+              if (fTk = tyRecord) and (CurTok.Kind = tkLParen) then
+              begin
+                { array OF RECORD element with named fields —
+                  `a: ((x:1; y:2), (x:3; y:4))`. One more level down, with this
+                  element's index riding in baseFIdx: the emitter builds
+                  FIELD(a) then INDEX(k) then the path, which is `a[k].x`. }
+                if fRec = REC_NONE then Error('unknown record type for field in record constant: ' + fName);
+                ParseRecordInitFieldsInto(symIdx, fRec, elemIdx, isLocal,
+                                          myFOff, myFLen, myPStart, myPCount, rElem);
+              end
+              else
+              begin
+                EnsurePendingInitCapacity(PendingInitCount);
+                PendingInitSym[PendingInitCount]  := symIdx;
+                PendingInitElem[PendingInitCount] := elemIdx;
+                PendingInitFOff[PendingInitCount] := myFOff;
+                PendingInitFLen[PendingInitCount] := myFLen;
+                PendingInitPStart[PendingInitCount] := myPStart;
+                PendingInitPCount[PendingInitCount] := myPCount;
+                PendingInitFIdx[PendingInitCount] := rElem;   { this element }
+                if TryParseInitValForm(fTk, fPtrElemTk, fvKind, fvVal, fvAux) then
+                begin
+                  PendingInitKind[PendingInitCount]   := fvKind;
+                  PendingInitVal[PendingInitCount]    := fvVal;
+                  PendingInitValAux[PendingInitCount] := fvAux;
+                end
+                else
+                begin
+                  PendingInitKind[PendingInitCount] := 0;
+                  PendingInitVal[PendingInitCount]  := ParseInitValTk(fTk);
+                end;
+                PendingInitTk[PendingInitCount]   := Ord(fTk);
+                Inc(PendingInitCount);
+              end;
               Inc(rElem);
               if not Eat(tkComma) then Break;
             end;
@@ -1128,20 +1225,20 @@ begin
             if LocalInitCount >= MAX_LOCAL_INITS then Error('too many local initializers');
             LocalInitSym[LocalInitCount]  := symIdx;
             LocalInitElem[LocalInitCount] := elemIdx;
-            LocalInitFOff[LocalInitCount] := fNameOff;
-            LocalInitFLen[LocalInitCount] := fNameLen;
-            if TryParseInitValForm(fTk, Ord(RecFieldPtrElemTk(recId, fName)), fvKind, fvVal, fvAux) then
+            LocalInitFOff[LocalInitCount] := myFOff;
+            LocalInitFLen[LocalInitCount] := myFLen;
+            LocalInitPStart[LocalInitCount] := myPStart;
+            LocalInitPCount[LocalInitCount] := myPCount;
+            if TryParseInitValForm(fTk, fPtrElemTk, fvKind, fvVal, fvAux) then
             begin
-              { A LOCAL record const has no ValAux slot, and FLen is already
-                spoken for by the field NAME span the FIELD target reads. A
-                string value would have to overwrite it, so refuse rather than
-                corrupt the target -- the same call, and the same wording, the
-                array-of-record path above already makes. `@proc` / `@var`
-                carry everything in Val and are fine. }
-              if fvKind = 1 then
-                Error('record constant with string fields must be global');
+              { A string field used to be refused here: FLen was the field NAME
+                span the FIELD target reads AND the string literal's length, so
+                a value could only have it by corrupting the target. It has its
+                own slot now (LocalInitValAux), and the refusal went with the
+                reason for it. }
               LocalInitKind[LocalInitCount] := fvKind;
               LocalInitVal[LocalInitCount]  := fvVal;
+              LocalInitValAux[LocalInitCount] := fvAux;
             end
             else
             begin
@@ -1156,9 +1253,12 @@ begin
             EnsurePendingInitCapacity(PendingInitCount);
             PendingInitSym[PendingInitCount]  := symIdx;
             PendingInitElem[PendingInitCount] := elemIdx;
-            PendingInitFOff[PendingInitCount] := fNameOff;
-            PendingInitFLen[PendingInitCount] := fNameLen;
-            if TryParseInitValForm(fTk, Ord(RecFieldPtrElemTk(recId, fName)), fvKind, fvVal, fvAux) then
+            PendingInitFOff[PendingInitCount] := myFOff;
+            PendingInitFLen[PendingInitCount] := myFLen;
+            PendingInitPStart[PendingInitCount] := myPStart;
+            PendingInitPCount[PendingInitCount] := myPCount;
+            PendingInitFIdx[PendingInitCount] := baseFIdx;   { inherited: `a[k].x` }
+            if TryParseInitValForm(fTk, fPtrElemTk, fvKind, fvVal, fvAux) then
             begin
               PendingInitKind[PendingInitCount]   := fvKind;
               PendingInitVal[PendingInitCount]    := fvVal;
@@ -1176,6 +1276,13 @@ begin
           if not Eat(tkSemicolon) then Eat(tkComma);
         end;
         Expect(tkRParen, ')');
+end;
+
+procedure ParseRecordInitializerInto(symIdx, recId, elemIdx: Integer; isLocal: Boolean);
+{ Entry point: the record IS the symbol (or the symbol's element elemIdx), so
+  there is no inherited field path yet. }
+begin
+  ParseRecordInitFieldsInto(symIdx, recId, elemIdx, isLocal, -1, 0, 0, 0, PI_ELEM_NONE);
 end;
 
 procedure ParseVarSection;
@@ -1376,7 +1483,7 @@ begin
 	        begin
 	          LocalInitKind[LocalInitCount] := 1;
 	          LocalInitVal[LocalInitCount]  := Tokens[TokPos - 1].SOffset;
-	          LocalInitFLen[LocalInitCount] := Tokens[TokPos - 1].SLen;
+	          LocalInitValAux[LocalInitCount] := Tokens[TokPos - 1].SLen;
 	          Next;
 	        end
 	        else
@@ -2055,7 +2162,7 @@ begin
                 LocalInitFOff[LocalInitCount] := -1;
                 LocalInitKind[LocalInitCount] := 1;
                 LocalInitVal[LocalInitCount]  := scOff;
-                LocalInitFLen[LocalInitCount] := scLen;
+                LocalInitValAux[LocalInitCount] := scLen;
                 LocalInitTk[LocalInitCount]   := Ord(cElemTk);
                 Inc(LocalInitCount);
               end

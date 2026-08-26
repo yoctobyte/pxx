@@ -3750,7 +3750,32 @@ var
     `sym.field := value` instead of `sym[elem]`. SOff = -1 when not a field. }
   PendingInitFOff : array of Integer;
   PendingInitFLen : array of Integer;
+  { The target a pending init writes is a PATH, not a field: `C.p.x`, and
+    `C.a[k].y`, are as ordinary in an FPC record constant as `C.f` is. FOff/FLen
+    above carry the FIRST field span and FIdx the index that follows it; every
+    deeper span lives in the PIPath* pool, which the emitter walks as a loop
+    instead of building one AN_FIELD.
+
+    Adding an F2Off/F2Len pair instead would have made one-level nesting work in
+    about ten lines and left `a.b.c.d` rejected for the next person to add F3 —
+    the second path devdocs/dev/normalise-dont-special-case.md is about. A pool
+    plus a start/count costs the same and has no depth in it at all.
+
+    FIdx also RETIRES init kind 7, which used to mean "array-valued record field
+    element" while sitting in the slot that says what the VALUE is: a kind-7 init
+    could therefore only ever hold a plain ordinal, because every other value form
+    needed that same slot. Target shape and value form are two facts and now have
+    two fields. bug-p-typed-constants-cannot-hold-a-pointer-a-nested-aggregate-or-storage }
+  PendingInitFIdx : array of Integer;  { index applied AFTER the FOff field, or PI_ELEM_NONE }
+  PendingInitPStart: array of Integer; { first PIPath* entry of this init's extra field spans }
+  PendingInitPCount: array of Integer; { how many; 0 = the FOff field is the whole path }
   PendingInitCount: Integer;
+  { The span pool PendingInitPStart/PCount index into. Append-only within a
+    compile and reset with PendingInitCount; a nested field's prefix is COPIED in
+    front of it for each leaf, so an init's spans are always contiguous. }
+  PIPathOff : array of Integer;
+  PIPathLen : array of Integer;
+  PIPathCount: Integer;
 
   { Routine-LOCAL typed-const initializers (`const T: array[..] of X = (..)`
     inside a routine). Same shape as PendingInit but compiled into the routine's
@@ -3763,6 +3788,18 @@ var
   LocalInitTk   : array[0..MAX_LOCAL_INITS-1] of Integer;
   LocalInitFOff : array[0..MAX_LOCAL_INITS-1] of Integer;  { record-field span (SOff=-1 if not a field) }
   LocalInitFLen : array[0..MAX_LOCAL_INITS-1] of Integer;  { field-name length, or (Kind=1) string literal length }
+  { The nested-field path, mirroring PendingInitPStart/PCount and sharing the
+    same PIPath* pool. A ROUTINE-LOCAL `var R: TMid = (q: (x:1; y:2); ...)` is
+    the same declaration as the global one and has to reach the same emitter
+    shape; without these it was refused by name while the identical global
+    compiled — the second spelling this whole routine exists to keep in step. }
+  LocalInitPStart: array[0..MAX_LOCAL_INITS-1] of Integer;
+  LocalInitPCount: array[0..MAX_LOCAL_INITS-1] of Integer;
+  { …and the string literal's LENGTH, which used to have to borrow FLen. That
+    borrow is why a local record constant refused a string field outright: FLen
+    was already the field NAME span the AN_FIELD target reads, so a string value
+    could only have it by corrupting the target. Mirrors PendingInitValAux. }
+  LocalInitValAux: array[0..MAX_LOCAL_INITS-1] of Integer;
   LocalInitCount: Integer;
 
   BFixupTargetLines : array[0..255] of Int64;

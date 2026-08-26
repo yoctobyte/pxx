@@ -5020,13 +5020,30 @@ end;
   is safe between argument marshalling and the call, and between the call and
   its return-value bridging. No-op unless FxSaveOn (-O3 x86-64 non-asm bodies
   only), so -O0/-O2 stay byte-identical. }
+procedure ClearPendingInitTarget(n: Integer);
+{ Reset the TARGET-SHAPE fields of slot n. Every PendingInit writer sets Sym /
+  Elem / FOff / Kind for itself, but the index-and-path pair is written by ONE
+  arm each, so without this a nested or indexed target from an earlier
+  initializer would decorate the next unrelated one — and PendingInit slots are
+  reused across compiles as well as within one. Called from
+  EnsurePendingInitCapacity, which every writer already calls first. }
+begin
+  PendingInitFIdx[n]   := PI_ELEM_NONE;
+  PendingInitPStart[n] := 0;
+  PendingInitPCount[n] := 0;
+end;
+
 procedure EnsurePendingInitCapacity(n: Integer);
 { Grow the PendingInit* tables to hold index n (see defs.inc — dynamic since
   quickjs; the old fixed cap silently dropped C global initializers). }
 var cap: Integer;
 begin
   cap := Length(PendingInitSym);
-  if n < cap then Exit;
+  if n < cap then
+  begin
+    ClearPendingInitTarget(n);
+    Exit;
+  end;
   if cap = 0 then cap := MAX_PENDING_INITS;
   while cap <= n do cap := cap * 2;
   SetLength(PendingInitSym, cap);
@@ -5037,7 +5054,25 @@ begin
   SetLength(PendingInitTk, cap);
   SetLength(PendingInitFOff, cap);
   SetLength(PendingInitFLen, cap);
+  SetLength(PendingInitFIdx, cap);
+  SetLength(PendingInitPStart, cap);
+  SetLength(PendingInitPCount, cap);
+  ClearPendingInitTarget(n);
 end;
+
+procedure EnsurePIPathCapacity(n: Integer);
+{ Grow the nested-field span pool to hold index n. Same shape as the tables it
+  serves; see PIPathOff in defs.inc. }
+var cap: Integer;
+begin
+  cap := Length(PIPathOff);
+  if n < cap then Exit;
+  if cap = 0 then cap := MAX_PENDING_INITS;
+  while cap <= n do cap := cap * 2;
+  SetLength(PIPathOff, cap);
+  SetLength(PIPathLen, cap);
+end;
+
 
 function PendingInitHasRoom(n: Integer): Boolean;
 { Boolean wrapper for use inside compound `if` conditions: grows, never full. }

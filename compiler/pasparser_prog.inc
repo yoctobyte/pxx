@@ -164,7 +164,7 @@ procedure CompilePendingGlobalInits;
 { Emit the recorded constant global-var initializers as assignments, at the
   current code position (just before `main begin`). }
 var i, identNode, valNode, idxLit, target, assignNode, lenVal, innerAddr: Integer;
-    initTk: Integer;
+    initTk, pk: Integer;
 begin
   for i := 0 to PendingInitCount - 1 do
   begin
@@ -207,16 +207,35 @@ begin
       ASTTk[target] := initTk;
     end;
 
-    if PendingInitKind[i] = 7 then
+    if PendingInitFIdx[i] <> PI_ELEM_NONE then
     begin
-      { Array-valued record-const field element: `sym.field[ValAux] := v`.
-        The FIELD target was just built above; index into it (TGuid's D4). }
+      { Array-valued record-const field element: `sym.field[FIdx] := v`.
+        The FIELD target was just built above; index into it (TGuid's D4).
+
+        This used to key on init KIND 7, which meant such an element could only
+        ever be a plain ordinal — kind is what says AN_STR_LIT / AN_PROCADDR /
+        AN_CLASSREF, and it was spent saying "indexed". The index has its own
+        field now and the kind chain below is free to describe the value.
+        ValAux is likewise free again, which is what lets a string element
+        through: it carries the literal's LENGTH. }
       idxLit := AllocNode(AN_INT_LIT);
-      ASTIVal[idxLit] := PendingInitValAux[i];
+      ASTIVal[idxLit] := PendingInitFIdx[i];
       ASTTk[idxLit] := Ord(tyInteger);
       valNode := AllocNode(AN_INDEX);
       ASTLeft[valNode] := target;
       ASTRight[valNode] := idxLit;
+      ASTTk[valNode] := initTk;
+      target := valNode;
+    end;
+
+    { ...and then any DEEPER field spans: `C.p.x`, `C.a[k].y`. One loop, so the
+      depth is the data's rather than the emitter's — see PendingInitPStart. }
+    for pk := 0 to PendingInitPCount[i] - 1 do
+    begin
+      valNode := AllocNode(AN_FIELD);
+      ASTLeft[valNode] := target;
+      ASTSOffset[valNode] := PIPathOff[PendingInitPStart[i] + pk];
+      ASTSLen[valNode] := PIPathLen[PendingInitPStart[i] + pk];
       ASTTk[valNode] := initTk;
       target := valNode;
     end;
@@ -539,6 +558,7 @@ var jmpPatch, i, j, wdDepth: Integer; needsPromoInt: Boolean;
     dummyTypes: array[0..7] of TTypeKind;
 begin
   PendingInitCount := 0;
+  PIPathCount := 0;
   ArrTypeCount := 0;
   StrConstCount := 0;
   SetConstCount := 0;

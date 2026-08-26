@@ -7958,6 +7958,16 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_typed_const_pointer_values.pas $(TESTTMP)/test_tcpv26
 	test "$$($(TESTTMP)/test_tcpv26)" = "$$(cat test/test_typed_const_pointer_values.expected)"
+	# Record constants whose value is itself an aggregate: a record-typed field, an
+	# array-of-record field, three levels of nesting, and the routine-LOCAL
+	# spellings that were refused by name while the identical global compiled. All
+	# of these answered `not a constant` -- a pending init recorded ONE field span
+	# and the target is a PATH now. The `lo` row is the neighbour-clobbering
+	# regression guard: an array-valued field with low bound 1 used to number its
+	# elements from 0 and write one element BEFORE itself.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_nested_record_constant.pas $(TESTTMP)/test_nrc26
+	test "$$($(TESTTMP)/test_nrc26)" = "$$(cat test/test_nested_record_constant.expected)"
 	# ...and the guard: a genuine `var` parameter must still REFUSE the same
 	# argument. This is what stops the fix from being ungated -- tried, and it
 	# let a call RESULT bind to a var parameter and COMPILE, because the method
