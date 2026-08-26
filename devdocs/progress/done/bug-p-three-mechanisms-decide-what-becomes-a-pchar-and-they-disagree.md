@@ -349,4 +349,4 @@ Track A: `make compiler/pascal26` (self-host fixedpoint) + the repro above
 printing `diff=2` and exiting 0.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 48efb280b.
