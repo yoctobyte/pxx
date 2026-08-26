@@ -53,7 +53,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (260)
+## backlog (259)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -71,7 +71,6 @@ _none_
 | bug-b-sysutils-string-gaps-found-by-differential | B | 60 | bug | Four sysutils gaps from one 22-program string differential against FPC 3.2.2: Concat takes exactly two AnsiStrings (FPC's is variadic and takes Chars), AnsiQuotedStr and SameStr do not exist, and the TryStr* family leaves its value untouched on failure where FPC zeroes it. Everything else in the family — Copy/Pos/Delete/Insert bounds, StringReplace, Format, Trim, comparison, PChar interop, ShortString — was byte-identical. | — |
 | bug-b-the-fpc-vartype-constants-are-missing | B | 55 | bug | `VarType(v) = varInteger` does not compile — varEmpty/varNull/varInteger/varDouble/varString/... are not declared anywhere, so the ONLY way to test a variant's type is against this RTL's private 0..6 tags, which are not FPC's numbers either (FPC: varString = 256, varInteger = 3). | — |
 | bug-b-varisstr-is-false-for-a-one-character-string | B | 45 | bug | VarIsStr answers FALSE for a ONE-CHARACTER string variant. It tests `VarType(V) = 6` (VT_STRING) and a single char is tagged VT_CHAR = 5, so `v := \'x\'; VarIsStr(v)` is False while `v := \'xy\'` and `v := \'\'` are both True. The same unit already has the right predicate three lines below — IsTextTag(t) = (t = VT_STRING) or (t = VT_CHAR) — and VarCompareValue uses it and gets the one-char case right. Two mechanisms for one concept, disagreeing. | — |
-| bug-c-driver-misses-the-shared-runtime-finalisation-step | C | 60 | bug | The C driver calls EmitIoLockStubsForTarget directly instead of the shared EmitProgramRuntimeStubsForTarget, so a C program still ships with no signal runtime. Every other frontend was moved over on 2026-08-21; C was left alone because cparser.inc is Track C's file-lane. One line. | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
 | bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly | N | 70 | bug | `obj == 1` and `obj < 1` do not call the class's __eq__/__lt__ when the right operand is an INT — they answer False regardless of what the method returns. A __eq__ that returns True is simply not consulted, so an equality test silently answers the opposite of CPython, with no inheritance and no error. | — |
 | bug-n-a-field-assigned-from-a-module-global-expression-is-refused | N | 55 | bug | `G = 7 / 2` then `self.v = G` REFUSES to compile — \"cannot infer the type of field self.v - annotate it\". `G = 3.5` is accepted. PyModuleGlobalLiteralType reads a global's type off its initialiser token and can only see a bare LITERAL, so any global initialised by an expression is untypeable to the field pre-pass. | — |
@@ -575,9 +574,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2427)
+## done (2428)
 
-2427 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2428 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (44)
 
@@ -679,7 +678,6 @@ _none_
 - [p 62] [N] feature-nilpy-list-sort-inplace-key-reverse
 - [p 62] [A] feature-unicodestring-model
 - [p 60] [B] bug-b-sysutils-string-gaps-found-by-differential
-- [p 60] [C] bug-c-driver-misses-the-shared-runtime-finalisation-step
 - [p 60] [N] bug-n-bytes-getitem-returns-empty-instead-of-the-byte-value
 - [p 60] [N] bug-nilpy-a-keyword-call-through-a-statically-unknown-callee-does-not-compile
 - [p 60] [P] compat-pascal-calling-convention-directives-uneven

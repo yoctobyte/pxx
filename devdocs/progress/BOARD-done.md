@@ -373,6 +373,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-double-ptr-deref-narrow-to-single | A | 45 | bug | C: `(float)*doubleptr` narrows to 0 when a single value is live (x86-64) | — |
 | bug-c-double-value-model | A | 50 | bug | C `double` value model broken — lua floats all garbage | — |
 | bug-c-double-vararg | C | 50 | bug | C: double passed as a variadic arg reads 0 | — |
+| bug-c-driver-misses-the-shared-runtime-finalisation-step | C | 60 | bug | The C driver calls EmitIoLockStubsForTarget directly instead of the shared EmitProgramRuntimeStubsForTarget, so a C program still ships with no signal runtime. Every other frontend was moved over on 2026-08-21; C was left alone because cparser.inc is Track C's file-lane. One line. | — |
 | bug-c-duktape-double-formatting | A | 55 | bug | duktape: JS number formatting wrong (doubles scaled by ~5^13) | — |
 | bug-c-dwarf-lines-index-the-preprocessed-text | C | 55 | bug | `-g` on a C file gives line numbers from the PREPROCESSED text | — |
 | bug-c-exit-shadows-pascal-exit | A | 70 | bug | crtl's C `exit()` shadows Pascal's `Exit` — order-dependent | — |

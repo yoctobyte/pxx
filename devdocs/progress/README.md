@@ -90,6 +90,14 @@ working as intended: skip it rather than tuning the score to hide it.
 Both take `--track`, `--limit` and `--floor`. `tools/progress_near_devtest.py`
 pins the calibration.
 
+### Before you CLAIM: run the repro
+
+The same waste one step later. Three tickets closed on 2026-08-26 were already
+fixed — the change had landed days earlier and nobody moved the file, and in one
+case the fix's own commit message named the ticket. A ticket's `## Repro` block
+costs a minute to run and is the cheapest possible check that the work still
+needs doing. Run it before you start, not after.
+
 ## Filename convention
 
 `<type>-<slug>.md`, lowercase kebab. The name does **not** change when the file
