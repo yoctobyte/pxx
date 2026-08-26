@@ -52,17 +52,8 @@ begin
 end;
 
 function RoundTripParam(d: Variant): Int64;
-{ Through a LOCAL, not `RoundTripParam := d` directly. Assigning a Variant to
-  the function result under the FUNCTION-NAME spelling skips the Variant
-  conversion entirely and stores the slot ADDRESS -- on every target, x86-64
-  included, while the `Result :=` spelling of the same line converts correctly.
-  That is a separate defect, filed as
-  bug-p-a-variant-assigned-to-the-result-by-function-name-is-not-converted;
-  routing around it here keeps this test about the boxing it is named for. }
-var t: Int64;
 begin
-  t := d;
-  RoundTripParam := t;
+  RoundTripParam := d;
 end;
 
 var

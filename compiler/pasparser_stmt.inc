@@ -4641,17 +4641,9 @@ begin
           AN_ASSIGN(Result, expr) as the non-keyword own-name path in the tkIdent
           case. See bug-virtual-keyword-name-result. }
         Next;   { consume the keyword-name token }
-        if CurTok.Kind = tkAssign then
-        begin
-          Expect(tkAssign, ':=');
-          valNode := AllocNode(AN_IDENT);
-          ASTIVal[valNode] := Procs[CurProc].RetSymIdx;
-        end
-        else
-        begin
-          valNode := ParseLValueAST(Procs[CurProc].RetSymIdx, TokPos - 2);
-          Expect(tkAssign, ':=');
-        end;
+        { One path for both shapes -- see the note on the tkIdent twin below. }
+        valNode := ParseLValueAST(Procs[CurProc].RetSymIdx, TokPos - 2);
+        Expect(tkAssign, ':=');
         ParseExpr;
         node := AllocNode(AN_ASSIGN);
         ASTLeft[node] := valNode;
@@ -5857,20 +5849,27 @@ begin
                CaseEqual(name, LastDotName(Procs[CurProc].Name))) then
       begin
         Next;
-        if CurTok.Kind = tkAssign then
-        begin
-          Expect(tkAssign, ':=');
-          valNode := AllocNode(AN_IDENT);
-          ASTIVal[valNode] := Procs[CurProc].RetSymIdx;
-        end
-        else
-        begin
-          { `FuncName.field := ` / `FuncName[i] := ` — assign through the result
-            value's lvalue (FPC allows the function name as a synonym for Result;
-            `Result.field` already worked). }
-          valNode := ParseLValueAST(Procs[CurProc].RetSymIdx, TokPos - 2);
-          Expect(tkAssign, ':=');
-        end;
+        { `FuncName := `, `FuncName.field := `, `FuncName[i] := `, `FuncName^ := `
+          — FPC allows the function name as a synonym for Result, and all four
+          shapes go through ParseLValueAST, which is what the `Result` spelling
+          reaches through the ordinary identifier path.
+
+          The bare `FuncName := ` case used to take a shortcut and hand-build
+          `AN_IDENT(RetSymIdx)` with NO ASTTk stamped. Everything that reads the
+          assignment target's TYPE then had nothing to read, so the conversion
+          the right-hand side needed was never applied: `F := v` with v a Variant
+          stored the variant SLOT ADDRESS and `F` returned 4350216 where
+          `Result := v` — the same line, the other spelling — returned
+          5000000000. Wrong for an Int64, a Double and an AnsiString result
+          alike, on every target, and silently: the caller gets a plausible
+          number. The Boolean row agreed by luck, a non-zero address being
+          truthy, which is what kept it hidden.
+
+          Not a Variant special case in this arm: the shortcut was the defect,
+          so it is gone. normalise-dont-special-case.md.
+          bug-p-a-variant-assigned-to-the-result-by-function-name-is-not-converted }
+        valNode := ParseLValueAST(Procs[CurProc].RetSymIdx, TokPos - 2);
+        Expect(tkAssign, ':=');
 
         ParseExpr;
         node := AllocNode(AN_ASSIGN);

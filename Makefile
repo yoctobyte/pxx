@@ -5860,6 +5860,13 @@ test-core: $(COMPILER)
 	# wrong operand. The high word now comes from the payload's TYPE.
 	./$(COMPILER) -Fulib/rtl test/test_wide_int_boxes_into_a_variant.pas $(TESTTMP)/test_wideboxv26
 	test "$$($(TESTTMP)/test_wideboxv26 | tail -1)" = "ALL OK"
+	# `F := expr` and `Result := expr` are the same statement and must apply the
+	# same conversion. The function-NAME spelling hand-built an AN_IDENT with no
+	# ASTTk, so nothing downstream could read the target's type and the
+	# right-hand side was never converted: `F := v` with v a Variant stored the
+	# slot ADDRESS. Wrong for Int64, Double and AnsiString results alike.
+	./$(COMPILER) -Fulib/rtl test/test_result_by_function_name_converts.pas $(TESTTMP)/test_rbfn26
+	test "$$($(TESTTMP)/test_rbfn26 | tail -1)" = "ALL OK"
 	# A builtin type NAME means the same thing in a cast as in a declaration.
 	# The name->kind table used to exist twice; a dozen names that declared fine
 	# were "undefined variable" in a cast, and where the two overlapped they
