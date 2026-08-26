@@ -4812,6 +4812,21 @@ test-core: $(COMPILER)
 	@# range"). The bound is UNSIGNED, so it reaches the array parser as the bit
 	@# pattern -1 and reads as a perfectly ordinary `array[0..-1]`. Only the KIND
 	@# tells 2^64-1 from -1, which is why this could not be checked before.
+	@# A diagnostic inside a SPECIALIZED generic body must name the file the
+	@# TEMPLATE came from. The line always rode on the token and was right; the
+	@# file rode on the token INDEX, and a splice moves tokens from one file's
+	@# index range into another's -- so `in:` named the using file, or printed
+	@# nothing when that was the main source, which reads as "the error is in
+	@# what you typed". Asserts the provenance line, not the error.
+	@# bug-p-a-diagnostic-in-a-used-unit-names-the-wrong-source-file
+	@rm -f $(TESTTMP)/test_diagspec26
+	@out=$$(./$(COMPILER) -Futest/units test/test_diag_in_specialized_body_names_the_template_file_fail.pas $(TESTTMP)/test_diagspec26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q 'in: test/units/ugenericbad.pas' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:21: error: undefined variable' \
+	   && test ! -e $(TESTTMP)/test_diagspec26 \
+	  || { echo "test_diag_in_specialized_body_names_the_template_file_fail: FAIL - rc=$$rc (want rc=1, line 21, in: test/units/ugenericbad.pas, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	@rm -f $(TESTTMP)/test_arrtoobig26
 	@out=$$(./$(COMPILER) test/test_array_range_too_large_fail.pas $(TESTTMP)/test_arrtoobig26 2>&1); \
 	 rc=$$?; \

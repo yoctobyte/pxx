@@ -149,6 +149,23 @@ begin
   Result := (FindSpecialization(nm) >= 0) or (FindUClass(nm) >= 0);
 end;
 
+{ Which template a TemplateTokens[] pool index belongs to, as a KeyStrs id for
+  its source file (-1 when unknown). Templates are captured in pool order and
+  there are at most MAX_TEMPLATES of them, so a linear scan is the whole
+  implementation. }
+function TemplateSrcKeyOfTok(t: Integer): Integer;
+var i: Integer;
+begin
+  TemplateSrcKeyOfTok := -1;
+  for i := 0 to TemplateCount - 1 do
+    if (t >= Templates[i].TokStart) and
+       (t < Templates[i].TokStart + Templates[i].TokCount) then
+    begin
+      TemplateSrcKeyOfTok := TemplateSrcKey[i];
+      Exit;
+    end;
+end;
+
 procedure SpecializeStream(tokStart, count: Integer; const specName: AnsiString);
 { Substitutions come from the SpecSub* globals (param name -> concrete
   name/kind), set by the caller — multi-param generics replace every type
@@ -276,6 +293,11 @@ begin
     RTL file for an error on line 2074 of the corpus unit.
     bug-a-a-diagnostic-in-a-used-unit-names-the-wrong-source-file }
   AdjustSrcRanges(TokPos, subCount);
+  { ...and the pasted region's own provenance, which the adjustment above cannot
+    supply: these tokens are the TEMPLATE's, not this file's. Without it the
+    specialized body's diagnostics carried fgl.pp's line numbers under the
+    program's file name. }
+  PasSpliceTokFile(TokPos, subCount, TemplateSrcKeyOfTok(tokStart));
 end;
 
 procedure ParseGenericTemplateNamed(const templateNameIn: AnsiString; delphiForm: Boolean); forward;
@@ -669,6 +691,13 @@ begin
   TemplateIsDelphi[TemplateCount] := delphiForm;
   Templates[TemplateCount].TokStart := TemplateTokenCount;
   Templates[TemplateCount].TokCount := 0;
+  { Where this template's tokens CAME from, captured now because it is the only
+    moment the answer is available: at splice time the body has been copied into
+    the template pool and its origin index is gone. }
+  if PasSrcOfTok(startTok) <> '' then
+    TemplateSrcKey[TemplateCount] := InternKey(PasSrcOfTok(startTok))
+  else
+    TemplateSrcKey[TemplateCount] := -1;
 
   for cur := startTok to finalCur - 1 do
   begin

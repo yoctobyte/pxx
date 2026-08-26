@@ -161,6 +161,75 @@ begin
       DbgRangeStart[i] := DbgRangeStart[i] + delta;
 end;
 
+{ A token-stream SPLICE pastes tokens that came from ANOTHER FILE into the
+  middle of this one — the generic specialization body is the case, and it is a
+  big one: rtl-generics' Generics.Defaults pastes tens of thousands of tokens.
+
+  AdjustSrcRanges keeps the boundaries around such an edit correct, but it
+  cannot make the pasted REGION right, because the range table is positional and
+  the paste's provenance is not its neighbours'. The tokens keep the template's
+  `.Line` (it rides on the token) and inherited the destination file (it rides on
+  the index), so a diagnostic inside a specialized body reported the right LINE
+  against the WRONG FILE — `in:` naming the program for an error on line 892 of
+  fgl.pp, or naming nothing at all when the destination was the main file and the
+  `in:` line is suppressed. Line and file came from two different places; this is
+  what makes them come from one.
+
+  Two entries: the pasted region belongs to `srcKeyId`, and the token just past
+  it resumes whatever covered the splice point. Inserted IN ORDER, because
+  PasSrcOfTok scans backwards and assumes the table is sorted by start — a plain
+  append would be invisible to every lookup below it.
+  bug-p-a-diagnostic-in-a-used-unit-names-the-wrong-source-file }
+procedure PasInsertSrcRangeAt(startTok, keyId: Integer);
+var i, j: Integer;
+begin
+  if PasSrcRangeCount >= MAX_DBG_RANGES then Exit;
+  i := PasSrcRangeCount;
+  while (i > 0) and (PasSrcRangeStart[i - 1] > startTok) do
+  begin
+    PasSrcRangeStart[i] := PasSrcRangeStart[i - 1];
+    PasSrcRangeId[i] := PasSrcRangeId[i - 1];
+    Dec(i);
+  end;
+  { An entry already starting exactly here is REPLACED, not stacked -- the same
+    rule PasMarkTokFile uses, and it keeps a repeated splice at one point from
+    growing the table without bound. }
+  if (i > 0) and (PasSrcRangeStart[i - 1] = startTok) then
+  begin
+    for j := i to PasSrcRangeCount - 1 do
+    begin
+      PasSrcRangeStart[j] := PasSrcRangeStart[j + 1];
+      PasSrcRangeId[j] := PasSrcRangeId[j + 1];
+    end;
+    PasSrcRangeId[i - 1] := keyId;
+    Exit;
+  end;
+  PasSrcRangeStart[i] := startTok;
+  PasSrcRangeId[i] := keyId;
+  Inc(PasSrcRangeCount);
+end;
+
+procedure PasSpliceTokFile(startTok, count, srcKeyId: Integer);
+var destKeyId, i: Integer;
+begin
+  if (count <= 0) or (srcKeyId < 0) then Exit;
+  destKeyId := -1;
+  for i := PasSrcRangeCount - 1 downto 0 do
+    if startTok >= PasSrcRangeStart[i] then
+    begin
+      destKeyId := PasSrcRangeId[i];
+      Break;
+    end;
+  if destKeyId = srcKeyId then Exit;   { pasted into its own file: nothing moved }
+  { the resume entry FIRST: planting the region entry first would make the
+    backward scan for destKeyId above see the region we are about to add }
+  if destKeyId >= 0 then PasInsertSrcRangeAt(startTok + count, destKeyId);
+  PasInsertSrcRangeAt(startTok, srcKeyId);
+  if PxxDbgWants('a.srcmap', '*') then
+    writeln('PXXDBG a.srcmap SPLICE start=', startTok, ' count=', count,
+            ' src=', KeyStrs[srcKeyId], ' resumes=', destKeyId);
+end;
+
 function PasSrcOfTok(t: Integer): AnsiString;
 { The Pascal source a token came from, or '' when no range covers it (the main
   file before its first marker, and every token of a frontend that plants no

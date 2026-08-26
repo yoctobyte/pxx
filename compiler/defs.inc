@@ -1763,6 +1763,12 @@ var
     to Templates[]/Specializations[] (flat ti*MAX_TEMPLATE_PARAMS+k layout). }
   TemplateParamNames : array[0..MAX_TEMPLATES*MAX_TEMPLATE_PARAMS-1] of AnsiString;
   TemplateNParams    : array[0..MAX_TEMPLATES-1] of Integer;
+  { KeyStrs[] index of the source file each template was CAPTURED from, so a
+    specialization splice can say where its pasted tokens came from. -1 when the
+    template came from a source with no range mark (the main file before its
+    first marker). See PasSpliceTokFile.
+    bug-p-a-diagnostic-in-a-used-unit-names-the-wrong-source-file }
+  TemplateSrcKey     : array[0..MAX_TEMPLATES-1] of Integer;
   { Was this template written in the mode-Delphi surface (`TFoo<T> = class`)
     rather than objfpc's `generic TFoo<T>`? Remembered per template because the
     use-rewriting sweep is re-run over EARLIER templates once a later one
