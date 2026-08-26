@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import datetime as _dt
 import os
+import math
 import re
 import shutil
 import subprocess
@@ -1498,6 +1499,233 @@ def set_field(path: Path, marker: str, value: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+# ---------------------------------------------------------------------------
+# Near-neighbour search.
+#
+# The queue could rank but not SEARCH, so filing a duplicate was the cheapest
+# action available to a filer holding a fresh incident: `next` and `ready` hand
+# you work, neither tells you the problem is already on the board in someone
+# else's words. Two agents filed the same defect four days apart, both at
+# prio 65, and nobody noticed for four days — which is the ranking damage, not
+# the tidiness one: a problem rediscovered twice is evidence a seam matters, and
+# split across two tickets it reads as two ordinary 65s.
+#
+# Deliberately a REPORT, never a merge. The filer is the only party holding
+# enough context to judge a match, so the cost of this is one prompt to them.
+# bug-the-queue-makes-filing-a-duplicate-the-path-of-least-resistance
+
+# Buckets that still describe project state. A duplicate can sit in any of them
+# — float/ and experimental/ are unranked, not closed, and a ticket parked there
+# is exactly the one a filer will not have seen.
+OPEN_STATUSES = tuple(st for st in STATUSES
+                      if st not in ("done", "decided", "rejected", "done-followup"))
+
+# Words that appear in nearly every ticket and carry no signal about WHICH
+# ticket this is. Left short on purpose: IDF already discounts common words, and
+# a long hand-maintained list is a second mechanism that drifts from the first.
+_STOP = frozenset("""
+a an and are as at be been but by can do does for from had has have how i if in
+into is it its make makes not of on one only or over so than that the their then
+there these they this to under up was were what when where which while who why
+will with would you your
+bug feature decide fix fixed issue ticket track prio status owner summary
+""".split())
+
+_TOK_RE = re.compile(r"[a-z0-9_]+")
+
+
+def _tokens(text: str) -> set[str]:
+    """Content words of a ticket, as a SET.
+
+    A set, not a bag: a ticket that says "variant" thirty times is not thirty
+    times more about variants than one that says it twice, and term frequency
+    would rank long tickets against each other on verbosity. Slug-shaped words
+    are split on their hyphens by the tokenizer, so a filer who types a title
+    matches the slug of an existing ticket that spells the same words.
+    """
+    out = set()
+    for w in _TOK_RE.findall(text.lower()):
+        if len(w) < 3 or w in _STOP or w.isdigit():
+            continue
+        out.add(w)
+    return out
+
+
+class Similarity:
+    """IDF-weighted Jaccard over ticket token sets.
+
+    IDF is what stops the boilerplate every ticket shares — "measured", "repro",
+    "acceptance", "self-host", "gate" — from making every pair look alike. The
+    weight of a shared word is how RARE it is on this board, so two tickets that
+    both say "PXXVarBinOp" score far above two that both say "compiler".
+
+    IDF-weighted COSINE, and the two callers compare like with like.
+
+    Three metrics were measured against the known duplicate pair that prompted
+    this ticket before picking one, because the obvious choices both fail in a
+    way that is invisible until you look:
+
+      * Jaccard scored the known pair 0.179 against a median open pair of
+        0.039 — fine for ticket-vs-ticket — but a six-word TITLE typed by a
+        filer scored under 0.03 against EVERY ticket, since the union is then
+        just "the whole ticket" and the query rounds away.
+      * Containment (over the smaller side) fixed that and broke worse: a long
+        ticket trivially contains a short query, so a title about a Variant
+        shift scored 0.86 against `feature-dwarf-debug-info`, which merely
+        happened to use the words "static", "arithmetic" and "logical"
+        somewhere in its prose.
+
+    Cosine's sqrt(w(a)·w(b)) denominator penalises exactly that length
+    asymmetry. And the remaining half of the fix is not in the metric at all:
+    `near` compares a filer's title against ticket HEADS (slug + title +
+    summary), which are the same KIND of object, while `dupes` compares full
+    ticket bodies against each other. Comparing a title to a whole ticket was
+    the real mistake; no coefficient rescues it.
+    """
+
+    def __init__(self, docs: dict[str, set[str]]) -> None:
+        n = max(1, len(docs))
+        df: dict[str, int] = {}
+        for toks in docs.values():
+            for w in toks:
+                df[w] = df.get(w, 0) + 1
+        # +1 smoothing: a word in every ticket gets a small positive weight
+        # rather than zero, so an all-boilerplate pair scores low instead of
+        # dividing by nothing.
+        self.idf = {w: math.log((n + 1) / (c + 1)) + 0.05 for w, c in df.items()}
+
+    def weight(self, toks: set[str]) -> float:
+        return sum(self.idf.get(w, 1.0) for w in toks)
+
+    def score(self, a: set[str], b: set[str]) -> float:
+        if not a or not b:
+            return 0.0
+        inter = self.weight(a & b)
+        denom = math.sqrt(self.weight(a) * self.weight(b))
+        return inter / denom if denom else 0.0
+
+
+def _ticket_head(t: "Ticket") -> str:
+    """A ticket's own one-line description of itself: slug, title, summary.
+
+    What `near` matches a filer's intended TITLE against, because that is the
+    same kind of object — a sentence about what the ticket is. The slug counts
+    twice over: it is the most deliberate description anyone wrote, and it is
+    hyphen-separated, so the tokenizer turns it back into the words a filer
+    would type."""
+    return " ".join((t.slug.replace("-", " "), t.fm.get("title", ""), t.summary))
+
+
+def _ticket_doc(t: "Ticket") -> str:
+    """The whole ticket — head plus prose. What `dupes` compares, because two
+    tickets can describe one defect in different words and only agree in the
+    body (the pair that prompted this names two different runtime hooks in
+    their titles and the same seam in their evidence)."""
+    return " ".join((_ticket_head(t), t.text))
+
+
+def _near_rows(board: "Board", toks: set[str], exclude: str, track: str,
+               limit: int, floor: float, head_only: bool = True) -> list[tuple[float, "Ticket"]]:
+    field = _ticket_head if head_only else _ticket_doc
+    docs = {t.slug: _tokens(field(t))
+            for t in board.tickets if t.status in OPEN_STATUSES}
+    sim = Similarity(docs)
+    rows = []
+    for t in board.tickets:
+        if t.status not in OPEN_STATUSES or t.slug == exclude:
+            continue
+        if track and not board.track_matches(t.track, track):
+            continue
+        sc = sim.score(toks, docs[t.slug])
+        if sc >= floor:
+            rows.append((sc, t))
+    rows.sort(key=lambda r: (-r[0], r[1].slug))
+    return rows[:limit]
+
+
+def _fmt_near(rows: list[tuple[float, "Ticket"]]) -> str:
+    out = []
+    for sc, t in rows:
+        out.append("  %4.0f%%  [p %2d] [%s] %s  (%s)\n"
+                   % (sc * 100, t.prio, t.track or "?", t.slug, t.status))
+        summ = t.summary
+        if summ:
+            out.append("         %s\n" % (summ[:150] + ("…" if len(summ) > 150 else "")))
+    return "".join(out)
+
+
+def cmd_near(args: argparse.Namespace) -> int:
+    """Run this BEFORE writing a new ticket file, with the title you mean to use.
+
+    Takes free text or an existing slug. There is no `file` subcommand to hang
+    this off — tickets are created by writing the markdown — so it is a
+    deliberate step, and it is cheap enough to be one.
+    """
+    board = Board()
+    query = " ".join(args.text).strip()
+    if not query:
+        print("near: give the title you are about to file, or an existing slug",
+              file=sys.stderr)
+        return 2
+    exclude = ""
+    if query in board.by_slug:
+        exclude = query
+        toks = _tokens(_ticket_head(board.by_slug[query]))
+    else:
+        toks = _tokens(query)
+    rows = _near_rows(board, toks, exclude, getattr(args, "track", "") or "",
+                      args.limit, args.floor)
+    if not rows:
+        print("near: nothing on the open board resembles that. File it.")
+        return 0
+    print("near: OPEN tickets that resemble this — read them before filing.")
+    print("      A match is not a duplicate; you are the one who can tell.")
+    sys.stdout.write(_fmt_near(rows))
+    return 0
+
+
+def cmd_dupes(args: argparse.Namespace) -> int:
+    """Every close pair already on the open board.
+
+    The pair that prompted this ticket was found by LUCK — `next` happened to
+    hand one agent the second ticket right after it closed the first. Luck does
+    not scale to 300 open tickets, so this asks the question over all of them at
+    once.
+    """
+    board = Board()
+    track = getattr(args, "track", "") or ""
+    open_ts = [t for t in board.tickets
+               if t.status in OPEN_STATUSES
+               and (not track or board.track_matches(t.track, track))]
+    docs = {t.slug: _tokens(_ticket_doc(t)) for t in open_ts}
+    # IDF over the WHOLE open board, not just the --track slice: how rare a word
+    # is, is a property of the board, and computing it per-slice would make the
+    # same pair score differently depending on how you asked.
+    sim = Similarity({t.slug: _tokens(_ticket_doc(t))
+                      for t in board.tickets if t.status in OPEN_STATUSES})
+    pairs = []
+    for i in range(len(open_ts)):
+        for j in range(i + 1, len(open_ts)):
+            a, b = open_ts[i], open_ts[j]
+            sc = sim.score(docs[a.slug], docs[b.slug])
+            if sc >= args.floor:
+                pairs.append((sc, a, b))
+    pairs.sort(key=lambda r: (-r[0], r[1].slug, r[2].slug))
+    if not pairs:
+        print("dupes: no open pair scores at or above %.2f." % args.floor)
+        return 0
+    print("dupes: %d open pair(s) at or above %.2f, closest first."
+          % (len(pairs), args.floor))
+    print("       A pair is a QUESTION, not a verdict — read both.")
+    for sc, a, b in pairs[:args.limit]:
+        print("  %4.0f%%" % (sc * 100))
+        print("      [p %2d] [%s] %s  (%s)" % (a.prio, a.track or "?", a.slug, a.status))
+        print("      [p %2d] [%s] %s  (%s)" % (b.prio, b.track or "?", b.slug, b.status))
+    if len(pairs) > args.limit:
+        print("  ... %d more not shown (--limit)" % (len(pairs) - args.limit))
+    return 0
+
+
 def cmd_claim(args: argparse.Namespace) -> int:
     src = find_ticket(args.slug)
     dst = PROG / "working" / f"{args.slug}.md"
@@ -1562,6 +1790,23 @@ def cmd_resolve(args: argparse.Namespace) -> int:
     print(f"staged, not committed. regenerate the board ({Path(sys.argv[0]).name} board-md) and commit.", file=sys.stderr)
     if commit == PENDING_COMMIT:
         print(f"{PENDING_COMMIT} will be filled in by tools/sync.sh once the commit lands on origin.", file=sys.stderr)
+    # The same question in reverse: this change closed one ticket, does it also
+    # close any of these? The pair that prompted this feature was TWO tickets
+    # closed by ONE change, and the second was found only because the queue
+    # happened to hand it over next. Asking here costs the resolver one glance
+    # at the moment they still hold the change in their head.
+    try:
+        board = Board()
+        toks = _tokens(_ticket_head(board.by_slug[args.slug])) if args.slug in board.by_slug else set()
+        rows = _near_rows(board, toks, args.slug, "", 5, 0.30) if toks else []
+        if rows:
+            print("", file=sys.stderr)
+            print("near: still-open tickets that resemble the one just closed —", file=sys.stderr)
+            print("      does this change also close any of them?", file=sys.stderr)
+            sys.stderr.write(_fmt_near(rows))
+    except Exception:
+        # Advisory only. A resolve must never fail because the adviser did.
+        pass
     return 0
 
 
@@ -1569,7 +1814,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="progress.sh",
         usage="%(prog)s [next|ready|leverage|autorate|board|board-md|check|all] [--track A|B|C|D|E|F|M|N|O|P|R|S|T|U|W|Z]\n"
-        "       %(prog)s autorate [--write] | claim <slug> <owner> | resolve <slug> [<commit>]",
+        "       %(prog)s autorate [--write] | claim <slug> <owner> | resolve <slug> [<commit>]\n"
+        "       %(prog)s near <title or slug> [--track T] [--limit N] [--floor F]\n"
+        "       %(prog)s dupes [--track T] [--limit N] [--floor F]",
     )
     sub = p.add_subparsers(dest="cmd")
     for name in ["next", "ready", "leverage", "autorate", "board", "board-md", "check", "all"]:
@@ -1581,6 +1828,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     sp.add_argument("slug")
     sp.add_argument("owner")
     sub.add_parser("pending")
+    sp = sub.add_parser("near")
+    sp.add_argument("text", nargs="+")
+    sp.add_argument("--track", default="")
+    sp.add_argument("--limit", type=int, default=8)
+    sp.add_argument("--floor", type=float, default=0.22)
+    sp = sub.add_parser("dupes")
+    sp.add_argument("--track", default="")
+    sp.add_argument("--limit", type=int, default=20)
+    sp.add_argument("--floor", type=float, default=0.30)
     sp = sub.add_parser("resolve")
     sp.add_argument("slug")
     # Optional on purpose: the sha you can name here is the PRE-push one, and a
@@ -1600,6 +1856,10 @@ def main(argv: list[str]) -> int:
         return cmd_pending(args)
     if args.cmd == "resolve":
         return cmd_resolve(args)
+    if args.cmd == "near":
+        return cmd_near(args)
+    if args.cmd == "dupes":
+        return cmd_dupes(args)
 
     board = Board()
     cmd = args.cmd or "all"

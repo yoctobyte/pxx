@@ -54,6 +54,42 @@ new findings still reach the queue — the split is a filing convenience, not a
 parking lot. Contrast `float/` and `experimental/`, which are loaded but
 deliberately unranked. `urgent/` is unchanged and still means act-first.
 
+### Before you file: `near`
+
+Filing is free, and that is the point — but free filing makes a *duplicate* the
+cheapest thing an agent can produce, because searching 260 open tickets by hand
+costs more than typing a new one
+(`bug-the-queue-makes-filing-a-duplicate-the-path-of-least-resistance`).
+
+```
+tools/progress.sh near "a method call does not type-check its arguments"
+```
+
+prints the closest open tickets to that text with a similarity score. Run it on
+the title you were about to write, **before** you write the file. Tickets are
+created by writing markdown into `backlog_new/` — there is no `file` subcommand
+to hang this off, so it is a habit, not a gate.
+
+Reading the scores: ≥0.50 is almost always the same defect, 0.30–0.50 is worth
+opening before you decide, and below ~0.20 is noise. The metric is IDF-weighted
+cosine over the ticket text, so it rewards the rare words (`variant`, `dynarray`,
+`selfhost`) and ignores the ones every ticket has.
+
+Two places ask the question for you:
+
+- `resolve` prints the near-neighbours of the ticket you just closed. Often the
+  fix you landed already covers one of them.
+- `tools/progress.sh dupes` scans every open pair and lists the ones that
+  overlap. Its first run found three watcher-filed regression stubs that were
+  already fixed.
+
+Its loudest *non*-duplicate is a `decide-*` ticket beside the `feature-*` that
+implements it — same vocabulary, same subject, two different jobs. That shape is
+working as intended: skip it rather than tuning the score to hide it.
+
+Both take `--track`, `--limit` and `--floor`. `tools/progress_near_devtest.py`
+pins the calibration.
+
 ## Filename convention
 
 `<type>-<slug>.md`, lowercase kebab. The name does **not** change when the file
@@ -153,6 +189,7 @@ to Y. Landing X then makes Y ready automatically — no re-ranking.
 ```
 tools/progress.sh next --track C   # the single top ticket to grab (+ why)
 tools/progress.sh ready --track C  # the whole ranked queue for your track
+tools/progress.sh near "<title>"  # before FILING: is this already on the board?
 tools/progress.sh claim <slug> <your-agent-id>   # -> working/, sets Owner
 # ... do the work; land only green (your lane's gate) ...
 tools/progress.sh resolve <slug>                 # -> done/, logs the commit

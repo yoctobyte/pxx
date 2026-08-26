@@ -1490,6 +1490,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-testmgr-aarch64-conformance-shard3-timeout-flake | T | 35 | bug | test-c-conformance-aarch64#shard3 00040.c times out (exit 124) under full parallel load; passes standalone — recurring flake | — |
 | bug-testmgr-starves-and-orphans-systemd-scope | T | 75 | bug | testmgr 'hangs' = starvation + invisible systemd-scoped orphans; make it self-heal | — |
 | bug-textfile-primitives-not-ambient-in-units | A | 50 | bug | Text-file primitives (`Assign`/`Rewrite`/`Reset`/`Close`) not visible inside a unit | — |
+| bug-the-queue-makes-filing-a-duplicate-the-path-of-least-resistance | A | 70 | bug | The queue makes filing a duplicate the path of least resistance | — |
 | bug-threadsafe-layout-rtti-helper-races | A | 50 | bug | Thread-safe layout RTTI helper races | feature-rtti-layout-table |
 | bug-tobject-destroy-not-virtual-override | A | 50 | bug | Built-in TObject has no virtual `Destroy`/`Create` to `override` — breaks the universal FPC idiom | — |
 | bug-tobject-param-truncated-32bit | A | 60 | bug | TObject-typed parameter is 32-bit-truncated in methods, unmatched in plain routines | — |
@@ -2183,6 +2184,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-aarch64-test-asyncecho | T | 70 | regression | regression: test-aarch64#src:test/test_asyncecho.pas red at 88986014e07d (auto-filed by twatch) | — |
 | regression-test-aarch64-test-forin-member-access | A | 70 | regression | regression: test-aarch64#src:test/test_forin_member_access.pas red at 44193e547f6d (auto-filed by twatch) | — |
 | regression-test-aarch64-test-lfm | T | 70 | regression | regression: test-aarch64#src:test/test_lfm.pas red at adaecd1206f3 (auto-filed by twatch) | — |
+| regression-test-aarch64-test-parallel-for-capture-aggr | P | 70 | regression | regression: test-aarch64#src:test/test_parallel_for_capture_aggr.pas red at 70f6a360f475 (auto-filed by twatch) | — |
 | regression-test-aarch64-test-set-runtime | P | 70 | regression | regression: test-aarch64#src:test/test_set_runtime.pas red at 61e2448bac6d (auto-filed by twatch) | — |
 | regression-test-aarch64-test-streaming-enumset | T | 70 | regression | regression: test-aarch64#src:test/test_streaming_enumset.pas red at adaecd1206f3 (auto-filed by twatch) | — |
 | regression-test-arm32-httpdemo | T | 70 | regression | regression: test-arm32#src:examples/net/httpdemo.pas red at be7f80936b0c (auto-filed by twatch) | — |
@@ -2252,6 +2254,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-core-test-c-unit-globals | T | 70 | regression | regression: test-core#src:test/test_c_unit_globals.pas red at 60502ed0c353 (auto-filed by twatch) | — |
 | regression-test-core-test-call-result-member | P | 70 | regression | regression: test-core#src:test/test_call_result_member.pas red at a76303231306 (auto-filed by twatch) | — |
 | regression-test-core-test-cast-deref-chain-siblings | P | 70 | regression | regression: test-core#src:test/test_cast_deref_chain_siblings.pas red at 0bc0cfac61a8 (auto-filed by twatch) | — |
+| regression-test-core-test-char-array-is-a-string | P | 70 | regression | regression: test-core#src:test/test_char_array_is_a_string.pas red at 357217a73608 (auto-filed by twatch) | — |
 | regression-test-core-test-classref | P | 70 | regression | regression: test-core#src:test/test_classref.pas red at 392ea5d94545 (auto-filed by twatch) | — |
 | regression-test-core-test-conformance-1 | P | 70 | regression | test_conformance_1's expected output still encodes the OLD Variant-typecast behaviour: it asserts `v int=1` where `v := 123`. 24204e10d made `Integer(v)` convert rather than reinterpret, so the compiler is now right and the expectation is wrong — and it holds every full tier RED. | — |
 | regression-test-core-test-ctor-result-member | P | 70 | regression | regression: test-core#src:test/test_ctor_result_member.pas red at a76303231306 (auto-filed by twatch) | — |
@@ -2390,6 +2393,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-sqlite-threads-i386-00 | T | 70 | regression | regression: test-sqlite-threads-i386#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-i386-run-sqlite-thread-test | T | 70 | regression | regression: test-sqlite-threads-i386#src:tools/run_sqlite_thread_test.sh red at 940b261f8678 (auto-filed by twatch) | — |
 | regression-test-sqlite-threads-x86-64-00 | T | 70 | regression | regression: test-sqlite-threads-x86_64#00 red at 83006e927e35 (auto-filed by twatch) | — |
+| regression-test-threads-test-parallel-for-capture-aggr-2 | P | 70 | regression | regression: test-threads#src:test/test_parallel_for_capture_aggr.pas red at 70f6a360f475 (auto-filed by twatch) | — |
 | regression-test-threads-test-parallel-for-capture-aggr | P | 70 | regression | regression: test-threads#src:test/test_parallel_for_capture_aggr.pas red at b936d125601e (auto-filed by twatch) | — |
 | regression-test-uforth-00 | T | 70 | regression | regression: test-uforth#00 red at 378295f7c218 (auto-filed by twatch) | — |
 | regression-test-uforth-core | T | 70 | regression | regression: test-uforth#core red at 44193e547f6d (auto-filed by twatch) | — |
