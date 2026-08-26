@@ -122,4 +122,4 @@ builtin change and its pin. The compile canary reports the thing that is
 actually broken. Do not grow both.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 1cc54252e.
