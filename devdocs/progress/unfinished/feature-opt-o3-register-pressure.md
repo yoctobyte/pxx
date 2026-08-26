@@ -8,10 +8,19 @@ prio: 85
   file-ownership **Track A** — edits the shared `ir_codegen.inc` / `symtab.inc` /
   backends, so it obeys A's no-concurrent-edit rule + self-host gate) — umbrella
   for the next optimization campaign.
-- **Status:** working
-  `-O3`** (see gating); `-O2` stays the proven default and the stable fallback.
+- **Status:** UNFINISHED (parked 2026-08-26) — five more slices landed green at
+  `-O3` (see the 2026-08-26 log at the bottom: **1.29x on the self-compile**,
+  gap to fpc 4.06x -> 3.24x). Nothing is half-applied; every commit passed the
+  `-O3` self-host fixedpoint and `gate.sh quick`. Parked because the umbrella's
+  core — W2, a real register allocator — is a multi-session project, and the
+  measurements plus the next slice are now banked below.
+  **Two things wait on someone else:** the `-O2` promotion of the four `-O3`
+  passes (coordinator's call — that is where most of the 1.29x still sits), and
+  Track T's sweep of `e7c0d1d2a`.
+  New passes still land behind **`-O3`** (see gating); `-O2` stays the proven
+  default and the stable fallback.
 - **Opened:** 2026-07-10 (post -O2-default flip, [[feature-optimization-levels]]).
-- **Owner:** agent-O-regalloc
+- **Owner:** — (agent-O-regalloc released it 2026-08-26)
 
 ## Why — the measured opportunity
 
@@ -414,3 +423,154 @@ The hotspot work that produced this measurement already took `empty.npy` from
 8.62s to 4.06s and `make compiler/pascal26` from 32.08s to 23.36s. That was the
 easy half. This is the remaining 3.8x, and it is the reason the prio field no
 longer matched the value.
+
+---
+
+## 2026-08-26 (agent-O-regalloc) — four passes landed at -O3; **1.29x on the self-compile**, and the ticket's own headline is now measured to be the SMALLER half
+
+Claimed at prio 85 with the brief "the remaining 3.8x is register allocation".
+**It is about half register allocation.** The first thing done was to profile
+rather than to trust the ticket, and the profile named three misses the ticket
+does not mention, each larger than anything the register allocator would have
+bought in the same time.
+
+### The instrument (reusable — `bench-o/`, not committed)
+
+`perf` is blocked on plexus (`perf_event_paranoid = 4`) and yama
+`ptrace_scope = 1` forbids attaching to a non-descendant, so gdb cannot attach
+either. **`bench-o/pxxprof.c`** (60 lines) solves both: it forks the target
+itself, `PTRACE_SEIZE`s its own child, and samples RIP with `PTRACE_INTERRUPT`
+on a timer. It profiles any binary including pxx's own custom-ELF output;
+`bench-o/symbolize.py` resolves addresses against a symbol map, which for a pxx
+binary comes from `-g`'s DWARF `DW_TAG_subprogram` low_pcs.
+**Two traps recorded so we do not re-learn them:**
+- FPC's `-pg` + gprof gives usable **call counts** and useless **times** here
+  (three samples for 1.03 s of user time). Read the counts, not the percentages
+  — which is exactly what the debugging playbook already says.
+- The profiler's own samples land in the **vDSO** at a rate that swings 8% -> 38%
+  between runs of the same binary. Exclude out-of-`.text` samples; do not read
+  them as time.
+
+Wall-clock discipline: the box also runs Track T's watcher (load 4-15 during
+this session), so every timing below is `%U` user time, **A/B alternating**,
+reported as the **minimum** of N — the least noise-contaminated estimator.
+`bench-o/ab.sh`.
+
+### What the profile actually said
+
+Compiler compiling a **one-line** NilPy file, compiler built at `-O2`, sha
+`e7f6312d9`. 56% of the run was inside the first 5 KB of `.text` — the runtime
+blobs and the builtin heap — and the individual hot instructions were:
+
+| what | share | why |
+| --- | --- | --- |
+| two `idiv`s in `PXXAlloc` | 8.7% | `((size + 7) div 8) * 8` and `Integer(size div 8) - 1` — **divisor is the literal 8** |
+| a third `idiv` in `PXXFree` | 3.5% | same shape |
+| the `AnsiStrRelease` blob's push/pop wall | ~11% | ten stack ops to guard a decrement |
+| `AsmText*` + `EmitAsmX64` | ~12% | the mini-assembler re-lexing fixed strings — filed separately |
+
+None of that is register allocation. `x div 8` was emitting a real 25-40 cycle
+`idiv`, preceded by a zero-check on a constant that is provably non-zero.
+`Integer(x)` was emitting **six instructions and 39 bytes** (three of its
+constants do not fit a sign-extended imm32, so each became a 10-byte `movabs`)
+where `movsxd rax, eax` is three bytes.
+
+### Landed (all `-O3`-gated except where noted)
+
+| sha | pass |
+| --- | --- |
+| `e9317428d` | **div/mod by a constant power of two** -> shifts and masks. Signed forms bias with `sar 63; shr 64-k` first (Pascal's `div` truncates toward zero; a bare `sar` floors). A non-zero constant divisor also drops the pre-divide zero check — dead code at every such site, `div 10` in every number formatter included. |
+| `029f79b26` | **`AnsiStrRelease` blob fast path** (ALL opt levels — a runtime stub, not a pass): only `rax` is saved, and only across the free. Four of the five registers it used to push were being saved a SECOND time by `EmitHeapFreeLocked` on the only path that can clobber them. **+ `-O3` cmp-immediate** in the compare-into-branch fusion. |
+| `f9d9da4b5` | **narrowing ordinal cast -> one `movsx`/`movzx`.** `NarrowCastFold` recognises the mask (`movzx`) and the mask/xor/sub triple (`movsx`) the IR lowering spells out, for 1/2/4-byte widths. Value-identical, so a hand-written `x and $FF` folds too. |
+| `6692d08b8` | **cmp-immediate for the VALUE-producing compare.** The branch form left the bigger half on the table: a short-circuit `and`/`or` lowers each operand to a boolean VALUE, so `if (c >= 'A') and (c <= 'Z')` still paid `mov rcx, imm32` twice per character — CaseEqual's inner loop, 3.2% on its own. `CmpFusible` moved above `IREmitNode` rather than being restated. |
+| `e7c0d1d2a` | **residency refresh reads `rax`, not the slot it just wrote.** This one IS the ticket's subject: the `-O3` residency pass exists to break the loop-carried store-forward chain through a frame slot, and **its own refresh was re-creating one** — every store to a resident emitted `mov [rbp+off], eax; movsxd rax, [rbp+off]; mov r12, rax`. Re-extending `rax`'s low bytes is the same value by construction. `IR_ZERO_SYM` and the `IR_EXC_ENTER` landing pad keep the reloading form on purpose: there the slot, not `rax`, is the authority. |
+
+### Numbers
+
+Same source built by each compiler; baseline binary self-hosted from
+`e7f6312d9`, final from `e7c0d1d2a`; plexus, watcher running, min of N.
+
+| workload | base `-O2` (today's default) | base `-O3` | **new `-O3`** | fpc `-O2` |
+| --- | --- | --- | --- | --- |
+| compile `empty.npy` | 3.65 s | 4.40 s | **2.91 s** | 0.90 s |
+| self-compile `compiler.pas` | 18.03 s | — | **13.96 s** | — |
+
+- **`-O3` codegen alone: 1.25x** on `empty.npy` (base `-O3` -> new `-O3`).
+- **1.29x on the self-compile** — `make compiler/pascal26`'s own workload, the
+  one every agent pays on every fix, on every track.
+- **The gap to fpc went 4.06x -> 3.24x**; 27% of it is closed.
+- Compiler binary at `-O3`: 9,321,568 -> 9,161,656 bytes (**-1.7%**).
+- At today's `-O2` default only the release-blob change is live: **1.018x**.
+  Everything else is waiting on the promotion below.
+
+Note the `-O3` baseline is *slower* than the `-O2` baseline (4.40 vs 3.65) —
+the register-residency passes were a net LOSS on this workload before
+`e7c0d1d2a`, which is what the refresh-reload bug was doing.
+
+### Correctness
+
+Where output changes, byte-identity of the emitted code is not available, so:
+- **differentials against two oracles** — `-O0/-O1/-O2/-O3` must agree with each
+  other AND with `fpc -O2` on the same source. ~153M div/mod evaluations
+  (k = 0..31, div and mod, Int64/Integer/UInt64/Cardinal, dense -300k..300k plus
+  a sparse wide sweep and the type extremes); ~134M comparisons (140k values x 4
+  types x 20 constants including the imm32 sign-extension boundaries x 6
+  operators x branch and value forms); every narrowing ordinal cast plus the
+  hand-written idioms **and four deliberate near-misses that must NOT fold**; a
+  residency stress whose every store overflows its declared type (so a missing
+  re-extension shows at once) including a try/except that stores to residents
+  inside the protected block; a string-churn program under `--threadsafe` with
+  max RSS as a leak canary. Generators in `bench-o/gen_*.py`.
+- `-O3` **self-host fixedpoint byte-identical** after every commit.
+- The `-O3`-built compiler's `-O2` output **byte-identical** to the `-O2`-built
+  compiler's.
+- All four compilers emit **byte-identical output for `empty.npy`**.
+- `tools/gate.sh quick` GREEN after every commit (5 runs).
+
+### The one decision left: `-O2` promotion (COORDINATOR / Track U)
+
+All four codegen passes gate `OptLevel >= 3`, so **today's default `-O2` gets
+1.018x of the 1.29x**. Promotion needs this ticket's stated bar (500-program
+`-O0`-vs differential, four cross targets, `-O2` fixedpoint, `make test` +
+`make test-opt`) — breadth this lane may not run. Recommendation: **promote all
+four**, because they are in the mechanically-local class the July slice already
+promoted (no register-lifetime state, no reordering), except the residency
+refresh which touches only a mechanism that does not exist below `-O3`. Each is
+backed by a two-oracle differential in the tens of millions of cases. Handing
+the call to the coordinator with the sha; Track T's sweep of `e7c0d1d2a` is the
+evidence path.
+
+### Next slice, in priority order (measured, not guessed)
+
+1. **The three-local loop is still 3x off fpc** — `0.65 s` vs `0.22 s` at `-O3`
+   (was 0.76). What remains is exactly W2: only ONE of the three locals gets a
+   register (the eligibility threshold is *>3 loop accesses*, which excludes the
+   accumulator `s` at exactly 3), and the other two live in the frame across the
+   whole loop. Two cheap experiments before building anything bigger: **lower the
+   threshold**, and **use all four free callee-saved registers** rather than two.
+   A `for`-loop induction variable should also be resident unconditionally.
+2. **Globals are not residency candidates at all** — the ticket's own headline
+   `-S` dump uses program-level `var`s, which is why `-O3` "bought nothing" on
+   it. A global with no address taken and no call in the loop body is as
+   register-able as a local.
+3. **The boolean temp** the short-circuit `and`/`or` lowering materialises:
+   `setae al; movzx rax, al; mov [rbp-31], al; movzx rax, [rbp-31]; test rax, rax`
+   — a frame round-trip per condition operand, four per CaseEqual iteration. The
+   `-O3` store->reload eliminator already handles the non-resident case; a
+   resident destination is explicitly excluded by `ReloadElimSym`, and that
+   exclusion's stated reason (the refresh clobbers rax via a reload) **is no
+   longer true after `e7c0d1d2a`**. Revisit it.
+4. **`EmitAsmX64` re-lexes fixed strings** — ~12% of a NilPy compile, filed as
+   [[feature-opt-emitasmx64-reparses-fixed-strings]] (Track A+O, prio 60). Not
+   codegen; a different file set; kept out of this ticket deliberately.
+5. Non-power-of-two constant divisors via magic-number reciprocals (`div 10` is
+   in every number formatter). Cheap once someone wants it.
+
+### One thing to keep in mind when touching `IR_BINOP`
+
+Three of these passes add arms to `IREmitNode`'s `IR_BINOP` guard chain, and
+`IRFirstEvaluated` / `IRStmtFirstEvaluated` MIRROR that chain to decide whether
+a reload is redundant — the file says "MUST MOVE TOGETHER" and it means it.
+Each new arm was checked against the mirror: all of them evaluate the same node
+first as the arm they preempt (const-right -> left first), so the mirrors did
+not need to change. The next arm might not be so lucky.
