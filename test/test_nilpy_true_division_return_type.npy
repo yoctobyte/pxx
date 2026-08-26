@@ -1,0 +1,142 @@
+# bug-n-inferred-return-type-of-true-division-is-int
+#
+# `/` is TRUE division in Python and always yields a float, even on two ints.
+# The token-scan type inference that decides a def's registered return type (and
+# a field's declared type) widened over the operand tokens instead, and
+# PyWiden(Int64, Int64) is Int64 -- so the body computed a double and handed it
+# back through an integer result slot: 2.5 came out as 2, or as
+# 4612811918334230528, the double's raw bit pattern read as an integer.
+#
+# Every arm of that scan looks for its operator at DEPTH 0, so a redundantly
+# parenthesised expression hid the rule -- and every other rule with it, which
+# is why `return (x > 1)` printed 1 instead of True. Both are asserted here.
+#
+# The `//` and mixed-type controls sit beside every broken shape on purpose: a
+# test that only covers the fixed case cannot catch the next regression in its
+# sibling. Expected output generated from CPython 3.
+
+# --- the ticket's five arms -------------------------------------------------
+def a(x):
+    return x / 2
+def b(x: int):
+    return x / 2
+def c(x: float):
+    return x / 2
+def d(x: int) -> float:
+    return x / 2
+def e(x):
+    r = x / 2
+    return r
+
+print(a(5)); print(b(5)); print(c(5.0)); print(d(5)); print(e(5))
+
+# --- floor division is NOT true division (the control that must stay int) ----
+def fd(x: int):
+    return x // 2
+def fdneg(x: int):
+    return x // 2
+def md(x: int):
+    return x % 2
+
+print(fd(7)); print(fdneg(-7)); print(md(7))
+print(7 / 2, 7 // 2, -7 // 2, 7 % 2)
+
+# --- `/` reached through every operand shape --------------------------------
+def lit():
+    return 7 / 2
+def after(x: int):
+    return x / 2 + 1
+def before(x: int):
+    return 1 + x / 2
+def paren(x: int):
+    return (x / 2)
+def parens2(x: int):
+    return ((x / 2))
+def lparen(x: int):
+    return (x + 1) / 2
+def rparen(x: int):
+    return x / (2 + 0)
+def chained(x: int):
+    return x / 2 / 2
+def unary(x: int):
+    return -x / 2
+def bothints(x: int, y: int):
+    return x / y
+def rhsfloat(x: int):
+    return x / 2.0
+def viaint(x: int):
+    return int(x / 2)
+def guarded(x: int):
+    if x > 0:
+        return x / 2
+    return 0
+def tern(x: int):
+    return x / 2 if x else 1
+def ternelse(x: int):
+    return 1 if x else x / 2
+def viacall(x: int):
+    return abs(x) / 2
+def vialocal(x: int):
+    n = x
+    return n / 2
+def infstr(x: int):
+    return f"{x / 2}"
+def inlist(x: int):
+    return [x / 2]
+
+print(lit()); print(after(5)); print(before(5))
+print(paren(5)); print(parens2(5)); print(lparen(5)); print(rparen(5))
+print(chained(8)); print(unary(5)); print(bothints(5, 2)); print(rhsfloat(5))
+print(viaint(5)); print(guarded(5)); print(tern(5)); print(ternelse(0))
+print(viacall(-5)); print(vialocal(5)); print(infstr(5)); print(inlist(5))
+
+# --- `/` is NOT the whole expression when a comparison encloses it ----------
+def cmpdiv(x: int):
+    return x / 2 > 2
+def indiv(x: int):
+    return x / 2 in [2.5]
+
+print(cmpdiv(5)); print(indiv(5))
+
+# --- redundant parentheses hid every depth-0 rule, not only division --------
+def pcmp(x: int):
+    return (x > 1)
+def pstr(x: int):
+    return ("a" + "b")
+def plist(x: int):
+    return ([1, 2])
+def ptuple(x: int):
+    return (x, x)
+def pnot(x: int):
+    return (not x)
+
+print(pcmp(5)); print(pstr(5)); print(plist(5)); print(ptuple(5)); print(pnot(0))
+
+# --- a field's declared type comes off the same scan ------------------------
+class Frac:
+    def __init__(self, n):
+        self.v = n / 2
+    def get(self):
+        return self.v
+    def halve(self):
+        return self.v / 2
+
+print(Frac(5).get()); print(Frac(5).halve())
+
+# --- module level and a plain local were always right; keep them that way ---
+g = 7 / 2
+print(g)
+h = lambda x: x / 2
+print(h(5))
+print([n / 2 for n in [1, 3]])
+
+def auglocal():
+    n = 5
+    n /= 2
+    return n
+def augnamed(x: int):
+    y = x
+    y /= 2
+    return y
+
+print(auglocal()); print(augnamed(5))

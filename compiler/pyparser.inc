@@ -29304,8 +29304,33 @@ begin
         chainRec := -1;
         for k := bodyScanStart to j - 1 do
           if (Tokens[k].Kind = tkIdent) and (k + 1 < TokCount) and
-             (Tokens[k + 1].Kind = tkAssign) and
              CaseEqual(GetTokenStr(k), GetTokenStr(j + 1)) then
+          begin
+          { `x /= 2` REBINDS x to a float, whatever it held before, because `/`
+            is true division. The chase below only looks for `=`, so
+
+                def aug(x: int):
+                    x /= 2
+                    return x
+
+            registered an Int64 result over a body that stores a double and the
+            caller printed 4612811918334230528. The AST side already knows this
+            — both augmented-assignment sites call FloatBinopResultTk and note
+            the local as a float — so this token chase was the third owner of
+            the one rule with no copy of it, exactly like PyInferExprType above.
+            Handled in the SAME ordered walk rather than a second loop, so a
+            later plain `x = 5` still wins over an earlier `/=`.
+            bug-n-inferred-return-type-of-true-division-is-int }
+            if Tokens[k + 1].Kind = tkTrueDivEq then
+            begin
+              t2 := FloatBinopResultTk(chainCur, tyInteger);
+              cur := t2;
+              chainCur := t2;
+              chainRec := -1;
+              rec2 := -1;
+              PyInferLastCi := -1;
+            end
+            else if Tokens[k + 1].Kind = tkAssign then
           begin
             e2 := k + 2;
             while (e2 < TokCount) and not (Tokens[e2].Kind in [tkNewline, tkDedent, tkEOF]) do
@@ -29346,6 +29371,7 @@ begin
               chainRec := PyInferLastCi;
               rec2 := PyInferLastCi;
             end;
+          end;
           end;
         if (cur = tyClass) and (rec2 >= 0) then
           PyInferLastCi := rec2;
