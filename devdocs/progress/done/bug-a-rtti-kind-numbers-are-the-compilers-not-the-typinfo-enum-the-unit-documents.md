@@ -180,4 +180,4 @@ GREEN · pascal-conformance 346/0/170/34 · c-conformance 220/0 · fgl 7/7 · th
 five existing RTTI tests byte-identical output.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 7d2c984f8.
