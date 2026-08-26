@@ -8570,6 +8570,57 @@ begin
   ASTRight[node] := PromoWidenToDouble(ASTRight[node]);
 end;
 
+{ The two arithmetic refusals that had no home outside IR lowering.
+
+  Both already exist in `ir.inc`'s AN_BINOP chain and STAY there as the backstop
+  for nodes nobody parsed. But a diagnostic that lives ONLY in lowering is one
+  that vanishes the moment anything EARLIER in the file was reported: error
+  recovery stops lowering at the first recovered diagnostic (`if ErrCount > 0
+  then Exit` in CompileAST), so a file with two mistakes reported the first and
+  wrote a binary. A dialect rule belongs in the dialect's parser -- the same
+  move `93c0ee76d` made for the record-ORDERING rule, whose refusal sits at the
+  relational level for exactly this reason.
+
+  Called from the TAIL of ParseTerm's and ParseSimpleExpr's loops, after the
+  node's type is settled and after every arm that REWRITES the node has already
+  `continue`d away: `a + b` over two dynamic arrays is a concatenation
+  (MakeDynConcat) and an overloaded operator is a call, and neither reaches
+  here. So the two conditions below are the leftovers, and they match the
+  lowering arms' conditions term for term.
+
+  RECOVERS rather than halting -- the node left behind is an ordinary typed
+  AN_BINOP, so the parse carries on and the file's later mistakes are reported
+  too, which is the whole point of moving the check here.
+
+  NilPy is excluded: its records reach lowering through arms of their own, and
+  its backstop is unchanged. C is excluded for the reason the lowering arm gives
+  -- struct pointer/array arithmetic tags operands tyRecord legitimately.
+  bug-a-error-recovery-silences-every-lowering-only-diagnostic }
+procedure CheckArithOperandsHaveAMeaning(op: TTokenKind; left, right: Integer);
+begin
+  if CProgramMode or PyExprMode then Exit;
+  if not ((op = tkPlus) or (op = tkMinus) or (op = tkStar) or (op = tkSlash) or
+          (op = tkDiv) or (op = tkMod)) then Exit;
+  { A dynamic array on ONE side (two is concatenation and never arrives here).
+    Adding the two handles produced a wild pointer and a runtime SIGSEGV. }
+  if ((NodeDynDepth(left) > 0) or (NodeDynDepth(right) > 0)) and
+     ((op = tkPlus) or (op = tkMinus) or (op = tkStar) or (op = tkDiv)) then
+  begin
+    ErrorRecover('arithmetic operator not supported for dynamic arrays '
+                 + '(only `a + b` over two dynamic arrays is defined, as concatenation)');
+    Exit;
+  end;
+  { A record operand with no registered overload: this used to add the records'
+    first qwords and produce garbage, or a wild pointer copy, at run time. }
+  if ((IntToTypeKind(ASTTk[left]) = tyRecord) or
+      (IntToTypeKind(ASTTk[right]) = tyRecord)) and
+     (FindOpOverload2(Ord(op), ASTTk[left], ResolveNodeRec(left),
+                      ASTTk[right], ResolveNodeRec(right)) < 0) then
+    ErrorRecover('no operator overload found for record operands '
+                 + '(operator not declared, or its unit not compiled?)'
+                 + ' — PXXDBG=a.opovl prints the lookup and every candidate');
+end;
+
 procedure ParseTerm;
 var op: TTokenKind; left, right, node, opSOffset, opSLen, opci: Integer;
     ixTry: Integer;   { a repeat count coerced through __index__ }
@@ -8868,6 +8919,7 @@ begin
       ASTTk[node] := Ord(TypeArithmeticResult(IntToTypeKind(ASTTk[left]), IntToTypeKind(ASTTk[right])))
     else
       ASTTk[node] := Ord(tyInteger);
+    CheckArithOperandsHaveAMeaning(op, left, right);
     CurASTNode := node;
     { Keep the side channel with the VALUE. LastExprTk was last written by
       ParseFactor, so after `7 / 2` it held the type of the `2` — and every
@@ -9207,6 +9259,7 @@ begin
     end
     else
       ASTTk[node] := Ord(tyInteger);
+    CheckArithOperandsHaveAMeaning(op, left, right);
     CurASTNode := node;
     { the additive level's half of the same rule — see ParseTerm's note }
     LastExprTk := IntToTypeKind(ASTTk[node]);

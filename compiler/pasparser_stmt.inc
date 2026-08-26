@@ -2680,6 +2680,34 @@ begin
   Result := node;
 end;
 
+procedure ValidateParsedCaseLabels(condNode, branchSeq: Integer);
+{ Run the case-label rules (ast_arena.inc) at PARSE time, recovering.
+
+  They used to run only at AN_CASE lowering, which never happens once anything
+  earlier in the file was recovered — so in a file with two mistakes the case
+  one silently vanished (bug-a-error-recovery-silences-every-lowering-only-
+  diagnostic). They are pure AST checks; the only thing lowering knew that the
+  parser does not is whether the SELECTOR is a string.
+
+  So classify the selector from its AST tag, and only when the tag settles the
+  question the same way the lowering's `IRTk in [tyString, tyAnsiString]` test
+  would. Anything else — an unresolved tag, a frozen string kind, a variant, an
+  auto — is left alone here and still checked by the lowering's backstop call.
+  Deliberately conservative: a wrong isStr answer would report labels that are
+  in fact fine, and this runs on every case statement that compiles. }
+var selTk: TTypeKind;
+begin
+  selTk := IntToTypeKind(ASTTk[condNode]);
+  if (selTk = tyString) or (selTk = tyAnsiString) then
+    ValidateCaseLabels(branchSeq, True, True)
+  else if (selTk = tyInteger) or (selTk = tyBoolean) or (selTk = tyChar) or
+          (selTk = tyInt8) or (selTk = tyUInt8) or (selTk = tyInt16) or
+          (selTk = tyUInt16) or (selTk = tyInt32) or (selTk = tyUInt32) or
+          (selTk = tyInt64) or (selTk = tyUInt64) or
+          (selTk = tyNativeInt) or (selTk = tyNativeUInt) then
+    ValidateCaseLabels(branchSeq, False, True);
+end;
+
 function ParseCaseStatementAST: Integer;
 var
   condNode, branchSeq, lastBranch, branchPair, labelsHead, lastLabel, labelValNode: Integer;
@@ -2789,6 +2817,7 @@ begin
   node := AllocNode(AN_CASE);
   ASTLeft[node] := condNode;
   ASTRight[node] := branchSeq;
+  ValidateParsedCaseLabels(condNode, branchSeq);
   Result := node;
 end;
 

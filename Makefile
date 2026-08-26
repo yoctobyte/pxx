@@ -4827,6 +4827,29 @@ test-core: $(COMPILER)
 	   && printf '%s\n' "$$out" | grep -q '^pascal26:21: error: undefined variable' \
 	   && test ! -e $(TESTTMP)/test_diagspec26 \
 	  || { echo "test_diag_in_specialized_body_names_the_template_file_fail: FAIL - rc=$$rc (want rc=1, line 21, in: test/units/ugenericbad.pas, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@# Every lowering-owned dialect refusal must survive an EARLIER recovered
+	@# diagnostic. `ErrCount > 0 -> Exit` at the top of CompileAST silently made
+	@# each of these unreachable in exactly the multi-error file they exist for.
+	@# Run twice: the always-on rules, then the --strict-case pair on top.
+	@# bug-a-error-recovery-silences-every-lowering-only-diagnostic
+	@rm -f $(TESTTMP)/test_diagsurv26
+	@out=$$(./$(COMPILER) test/test_diags_survive_error_recovery_fail.pas $(TESTTMP)/test_diagsurv26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:27: error: undefined variable' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:28: error: no operator overload found for record operands' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:29: error: arithmetic operator not supported for dynamic arrays' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:31: error: case label does not match the ordinal selector type' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:35: error: case of string: label must be a string constant' \
+	   && test ! -e $(TESTTMP)/test_diagsurv26 \
+	  || { echo "test_diags_survive_error_recovery_fail: FAIL - rc=$$rc (want rc=1, five diagnostics on lines 27/28/29/31/35, no binary)"; printf '%s\n' "$$out"; exit 1; }
+	@out=$$(./$(COMPILER) --strict-case test/test_diags_survive_error_recovery_fail.pas $(TESTTMP)/test_diagsurv26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:38: error: case range: lower bound is greater than upper bound' \
+	   && printf '%s\n' "$$out" | grep -q '^pascal26:40: error: duplicate or overlapping case label' \
+	   && test ! -e $(TESTTMP)/test_diagsurv26 \
+	  || { echo "test_diags_survive_error_recovery_fail (--strict-case): FAIL - rc=$$rc (want rc=1, the inverted-range and duplicate-label rows on lines 38/40, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	@rm -f $(TESTTMP)/test_arrtoobig26
 	@out=$$(./$(COMPILER) test/test_array_range_too_large_fail.pas $(TESTTMP)/test_arrtoobig26 2>&1); \
 	 rc=$$?; \

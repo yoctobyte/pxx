@@ -313,3 +313,195 @@ begin
   else if (ASTKind[node] = AN_FIELD) or (ASTKind[node] = AN_DEREF) then
     Result := DynTargetIsRereadable(ASTLeft[node]);
 end;
+
+function IsConstStrLitNode(n: Integer): Boolean;
+{ A compile-time string-or-char literal (foldable in an ESP tyString concat). }
+begin
+  Result := (ASTKind[n] = AN_STR_LIT) or
+            ((ASTKind[n] = AN_INT_LIT) and (IntToTypeKind(ASTTk[n]) = tyChar));
+end;
+
+function ConstStrLitValue(n: Integer): AnsiString;
+{ The string value of a node accepted by IsConstStrLitNode. }
+begin
+  if ASTKind[n] = AN_STR_LIT then
+    Result := GetTokenStrFromRaw(ASTSOffset[n], ASTSLen[n])
+  else
+  begin
+    Result := '';
+    AppendChar(Result, Chr(Integer(ASTIVal[n])));
+  end;
+end;
+
+{ ===== case-statement label validation ===================================
+  Checks every label against the selector's type (string vs ordinal), rejects
+  inverted ranges (lo > hi) and any duplicate/overlapping label pair — FPC
+  rejects all of these at compile time
+  (bug-case-of-string-segfault-and-label-validation).
+
+  Pure AST: no lowered type is read, only the caller's isStr answer. That is
+  why it lives HERE and not in ir.inc, where it sat until
+  bug-a-error-recovery-silences-every-lowering-only-diagnostic: these are
+  Pascal DIALECT rules, and a rule reachable only through lowering stops
+  firing the moment anything earlier in the file is recovered
+  (`ErrCount > 0 -> Exit` at the top of CompileAST). The Pascal parser now
+  calls this as soon as the branch list is built, with recover=True; the
+  AN_CASE lowering keeps its own fatal call as the backstop for case nodes no
+  Pascal parse produced. See devdocs/dev/the-substrate-is-ast-and-ir-not-the-parser.md. }
+
+procedure CaseLabelDiag(lab: Integer; const msg: AnsiString; recover: Boolean);
+{ One label diagnostic, against the LABEL's own line — the caller may be the
+  parser (position already past `end`) or the lowering (position meaningless). }
+begin
+  if recover then ErrorAtRecover(ASTLine[lab], msg)
+  else ErrorAt(ASTLine[lab], msg);
+end;
+
+{ Lexicographic 3-way compare; orders string labels exactly the way the
+  runtime comparison (EmitAnsiStrCmp3Reg et al.) orders them: byte-wise on
+  the common prefix, then by length. }
+function CaseStrCmp3(const a, b: AnsiString): Integer;
+var i, n: Integer;
+begin
+  n := Length(a);
+  if Length(b) < n then n := Length(b);
+  i := 1;
+  while i <= n do
+  begin
+    if a[i] <> b[i] then
+    begin
+      if Ord(a[i]) < Ord(b[i]) then Result := -1 else Result := 1;
+      Exit;
+    end;
+    Inc(i);
+  end;
+  if Length(a) < Length(b) then Result := -1
+  else if Length(a) > Length(b) then Result := 1
+  else Result := 0;
+end;
+
+{ One label's [lo,hi] interval (hi = lo for a plain label), typed per the
+  selector. Also the type check: a string selector needs string-constant
+  labels (a char literal counts — its source span is preserved so the
+  lowering can rebuild the literal); an ordinal selector rejects multi-char
+  string labels. }
+function CaseLabelBounds(lab: Integer; isStr, recover: Boolean;
+                         var lo, hi: Int64; var slo, shi: AnsiString): Boolean;
+{ False = this label was refused, so lo/hi/slo/shi hold nothing usable and the
+  caller must skip it. Only reachable under recover=True; a fatal caller never
+  returns from CaseLabelDiag. }
+begin
+  Result := False;
+  if isStr then
+  begin
+    if (not IsConstStrLitNode(lab)) or
+       ((ASTKind[lab] = AN_INT_LIT) and (ASTSLen[lab] = 0)) then
+    begin
+      CaseLabelDiag(lab, 'case of string: label must be a string constant', recover);
+      Exit;
+    end;
+    slo := ConstStrLitValue(lab);
+    shi := slo;
+    if ASTRight[lab] <> -1 then
+    begin
+      if (not IsConstStrLitNode(ASTRight[lab])) or
+         ((ASTKind[ASTRight[lab]] = AN_INT_LIT) and (ASTSLen[ASTRight[lab]] = 0)) then
+      begin
+        CaseLabelDiag(ASTRight[lab], 'case of string: label must be a string constant', recover);
+        Exit;
+      end;
+      shi := ConstStrLitValue(ASTRight[lab]);
+    end;
+    if StrictCase and (CaseStrCmp3(slo, shi) > 0) then
+    begin
+      CaseLabelDiag(lab, 'case range: lower bound is greater than upper bound', recover);
+      Exit;
+    end;
+  end
+  else
+  begin
+    if ASTKind[lab] = AN_STR_LIT then
+    begin
+      CaseLabelDiag(lab, 'case label does not match the ordinal selector type', recover);
+      Exit;
+    end;
+    lo := ASTIVal[lab];
+    hi := lo;
+    if ASTRight[lab] <> -1 then
+    begin
+      if ASTKind[ASTRight[lab]] = AN_STR_LIT then
+      begin
+        CaseLabelDiag(ASTRight[lab], 'case label does not match the ordinal selector type', recover);
+        Exit;
+      end;
+      hi := ASTIVal[ASTRight[lab]];
+    end;
+    if StrictCase and (lo > hi) then
+    begin
+      CaseLabelDiag(lab, 'case range: lower bound is greater than upper bound', recover);
+      Exit;
+    end;
+  end;
+  Result := True;
+end;
+
+{ O(n^2) pairwise overlap check straight over the AST branch chain (no label
+  arrays -- a case can be arbitrarily large). branchSeqHead = AN_SEQ chain of
+  AN_PAIR(labels, stmt); the else branch has labels = -1. }
+procedure ValidateCaseLabels(branchSeqHead: Integer; isStr, recover: Boolean);
+var
+  bs, ln, bs2, ln2: Integer;
+  lo, hi, lo2, hi2: Int64;
+  slo, shi, slo2, shi2: AnsiString;
+  clash: Boolean;
+begin
+  lo := 0; hi := 0; lo2 := 0; hi2 := 0;
+  bs := branchSeqHead;
+  while bs <> -1 do
+  begin
+    if ASTLeft[bs] = -1 then ln := -1        { empty chain / else branch }
+    else ln := ASTLeft[ASTLeft[bs]];
+    while (ln <> -1) and (ASTLeft[ln] <> -1) do
+    begin
+      if not CaseLabelBounds(ASTLeft[ln], isStr, recover, lo, hi, slo, shi) then
+      begin
+        { refused and recovered: it has no interval, so it cannot be compared }
+        ln := ASTRight[ln];
+        continue;
+      end;
+      { against every label after this one -- FPC-parity duplicate/overlap
+        rejection is opt-in (--strict-case); the lax dialect keeps first-match
+        semantics for overlapping labels. The CaseLabelBounds walk above stays
+        unconditional: it carries the selector-type checks the lowering needs. }
+      if StrictCase then
+      begin
+        ln2 := ASTRight[ln];
+        bs2 := bs;
+        while bs2 <> -1 do
+        begin
+          while (ln2 <> -1) and (ASTLeft[ln2] <> -1) do
+          begin
+            if not CaseLabelBounds(ASTLeft[ln2], isStr, recover, lo2, hi2, slo2, shi2) then
+            begin
+              ln2 := ASTRight[ln2];
+              continue;
+            end;
+            if isStr then
+              clash := not ((CaseStrCmp3(shi, slo2) < 0) or (CaseStrCmp3(shi2, slo) < 0))
+            else
+              clash := not ((hi < lo2) or (hi2 < lo));
+            if clash then
+              CaseLabelDiag(ASTLeft[ln2], 'duplicate or overlapping case label', recover);
+            ln2 := ASTRight[ln2];
+          end;
+          bs2 := ASTRight[bs2];
+          if bs2 = -1 then ln2 := -1
+          else if ASTLeft[bs2] = -1 then ln2 := -1
+          else ln2 := ASTLeft[ASTLeft[bs2]];
+        end;
+      end;
+      ln := ASTRight[ln];
+    end;
+    bs := ASTRight[bs];
+  end;
+end;

@@ -3998,152 +3998,10 @@ begin
   Result := value;
 end;
 
-function IsConstStrLitNode(n: Integer): Boolean;
-{ A compile-time string-or-char literal (foldable in an ESP tyString concat). }
-begin
-  Result := (ASTKind[n] = AN_STR_LIT) or
-            ((ASTKind[n] = AN_INT_LIT) and (IntToTypeKind(ASTTk[n]) = tyChar));
-end;
-
-function ConstStrLitValue(n: Integer): AnsiString;
-{ The string value of a node accepted by IsConstStrLitNode. }
-begin
-  if ASTKind[n] = AN_STR_LIT then
-    Result := GetTokenStrFromRaw(ASTSOffset[n], ASTSLen[n])
-  else
-  begin
-    Result := '';
-    AppendChar(Result, Chr(Integer(ASTIVal[n])));
-  end;
-end;
-
-{ ===== Pascal case-statement label validation ============================
-  Runs at AN_CASE lowering, before any IR is emitted. Checks every label
-  against the selector's type (string vs ordinal), rejects inverted ranges
-  (lo > hi) and any duplicate/overlapping label pair — FPC rejects all of
-  these at compile time (bug-case-of-string-segfault-and-label-validation). }
-
-{ Lexicographic 3-way compare; orders string labels exactly the way the
-  runtime comparison (EmitAnsiStrCmp3Reg et al.) orders them: byte-wise on
-  the common prefix, then by length. }
-function CaseStrCmp3(const a, b: AnsiString): Integer;
-var i, n: Integer;
-begin
-  n := Length(a);
-  if Length(b) < n then n := Length(b);
-  i := 1;
-  while i <= n do
-  begin
-    if a[i] <> b[i] then
-    begin
-      if Ord(a[i]) < Ord(b[i]) then Result := -1 else Result := 1;
-      Exit;
-    end;
-    Inc(i);
-  end;
-  if Length(a) < Length(b) then Result := -1
-  else if Length(a) > Length(b) then Result := 1
-  else Result := 0;
-end;
-
-{ One label's [lo,hi] interval (hi = lo for a plain label), typed per the
-  selector. Also the type check: a string selector needs string-constant
-  labels (a char literal counts — its source span is preserved so the
-  lowering can rebuild the literal); an ordinal selector rejects multi-char
-  string labels. }
-procedure CaseLabelBounds(lab: Integer; isStr: Boolean;
-                          var lo, hi: Int64; var slo, shi: AnsiString);
-begin
-  if isStr then
-  begin
-    if (not IsConstStrLitNode(lab)) or
-       ((ASTKind[lab] = AN_INT_LIT) and (ASTSLen[lab] = 0)) then
-      Error('case of string: label must be a string constant');
-    slo := ConstStrLitValue(lab);
-    shi := slo;
-    if ASTRight[lab] <> -1 then
-    begin
-      if (not IsConstStrLitNode(ASTRight[lab])) or
-         ((ASTKind[ASTRight[lab]] = AN_INT_LIT) and (ASTSLen[ASTRight[lab]] = 0)) then
-        Error('case of string: label must be a string constant');
-      shi := ConstStrLitValue(ASTRight[lab]);
-    end;
-    if StrictCase and (CaseStrCmp3(slo, shi) > 0) then
-      Error('case range: lower bound is greater than upper bound');
-  end
-  else
-  begin
-    if ASTKind[lab] = AN_STR_LIT then
-      Error('case label does not match the ordinal selector type');
-    lo := ASTIVal[lab];
-    hi := lo;
-    if ASTRight[lab] <> -1 then
-    begin
-      if ASTKind[ASTRight[lab]] = AN_STR_LIT then
-        Error('case label does not match the ordinal selector type');
-      hi := ASTIVal[ASTRight[lab]];
-    end;
-    if StrictCase and (lo > hi) then
-      Error('case range: lower bound is greater than upper bound');
-  end;
-end;
-
-{ O(n^2) pairwise overlap check straight over the AST branch chain (no label
-  arrays -- a case can be arbitrarily large). branchSeqHead = AN_SEQ chain of
-  AN_PAIR(labels, stmt); the else branch has labels = -1. }
-procedure IRValidateCaseLabels(branchSeqHead: Integer; isStr: Boolean);
-var
-  bs, ln, bs2, ln2: Integer;
-  lo, hi, lo2, hi2: Int64;
-  slo, shi, slo2, shi2: AnsiString;
-  clash: Boolean;
-begin
-  lo := 0; hi := 0; lo2 := 0; hi2 := 0;
-  bs := branchSeqHead;
-  while bs <> -1 do
-  begin
-    if ASTLeft[bs] = -1 then ln := -1        { empty chain / else branch }
-    else ln := ASTLeft[ASTLeft[bs]];
-    while (ln <> -1) and (ASTLeft[ln] <> -1) do
-    begin
-      CaseLabelBounds(ASTLeft[ln], isStr, lo, hi, slo, shi);
-      { against every label after this one -- FPC-parity duplicate/overlap
-        rejection is opt-in (--strict-case); the lax dialect keeps first-match
-        semantics for overlapping labels. The CaseLabelBounds walk above stays
-        unconditional: it carries the selector-type checks the lowering needs. }
-      if StrictCase then
-      begin
-        ln2 := ASTRight[ln];
-        bs2 := bs;
-        while bs2 <> -1 do
-        begin
-          while (ln2 <> -1) and (ASTLeft[ln2] <> -1) do
-          begin
-            CaseLabelBounds(ASTLeft[ln2], isStr, lo2, hi2, slo2, shi2);
-            if isStr then
-              clash := not ((CaseStrCmp3(shi, slo2) < 0) or (CaseStrCmp3(shi2, slo) < 0))
-            else
-              clash := not ((hi < lo2) or (hi2 < lo));
-            if clash then
-              Error('duplicate or overlapping case label');
-            ln2 := ASTRight[ln2];
-          end;
-          bs2 := ASTRight[bs2];
-          if bs2 = -1 then ln2 := -1
-          else if ASTLeft[bs2] = -1 then ln2 := -1
-          else ln2 := ASTLeft[ASTLeft[bs2]];
-        end;
-      end;
-      ln := ASTRight[ln];
-    end;
-    bs := ASTRight[bs];
-  end;
-end;
-
 { The IR constant for one case-label value node: a string-case label becomes
   IR_CONST_STR from its preserved source span (char literals kept theirs, so
   a length-1 label still rebuilds); an ordinal label the usual IR_CONST_INT.
-  Type mismatches were already rejected by IRValidateCaseLabels. }
+  Type mismatches were already rejected by ValidateCaseLabels. }
 function IRCaseLabelConst(lab: Integer; isStr: Boolean): Integer;
 begin
   if isStr then
@@ -12282,7 +12140,12 @@ begin
         IRAppend(IR_STORE_SYM, selTmpSym, selectorValNode, -1, 0, IRTk[selectorValNode]);
         selectorValNode := IRAppend(IR_LOAD_SYM, selTmpSym, -1, -1, 0, selTmpTk);
       end;
-      IRValidateCaseLabels(ASTRight[node], caseIsStr);
+      { Backstop. The Pascal parser already ran this over the same branch list
+        (ValidateParsedCaseLabels), recovering, so a Pascal case never gets here
+        with a bad label — this call covers AN_CASE nodes no Pascal parse built
+        and selector types the parser declined to classify. Fatal, because there
+        is no well-formed stand-in to lower past a bad label. }
+      ValidateCaseLabels(ASTRight[node], caseIsStr, False);
       endLabel := IRNewLabel;
 
       first := -1;

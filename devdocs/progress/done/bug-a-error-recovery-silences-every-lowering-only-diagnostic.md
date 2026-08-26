@@ -2,8 +2,8 @@
 slug: bug-a-error-recovery-silences-every-lowering-only-diagnostic
 track: A
 prio: 45
-status: unfinished
-owner: ""
+status: done
+owner: opus5-frank1
 ---
 
 # Once ANY diagnostic is recovered, every lowering-only check stops firing
@@ -164,3 +164,96 @@ the sweep should look for dialect rules generally, not only operator ones.
 Parked here rather than half-done: the next worker starts from a sized problem
 instead of a design question. Repro above is a two-minute check that it is still
 live.
+
+## Outcome — 2026-08-27
+
+Option 2, applied to **the whole list at once** — which is what the ticket asks
+for when it says not to close this by fixing individual diagnostics. All six
+user-facing dialect rules the 2026-08-26 measurement enumerated now run in the
+Pascal frontend, recovering, and every one of them survives an earlier recovered
+diagnostic. The lowering keeps its own call in each case, fatal, as the backstop.
+
+### The list, closed
+
+| rule | was | now |
+| --- | --- | --- |
+| `no operator overload found for record operands` | `ir.inc` binop lowering | `CheckArithOperandsHaveAMeaning`, tail of `ParseTerm` / `ParseSimpleExpr` |
+| `arithmetic operator not supported for dynamic arrays` | same arm | same |
+| `case range: lower bound is greater than upper bound` (x2) | `CaseLabelBounds` | `ValidateParsedCaseLabels`, tail of `ParseCaseStatementAST` |
+| `case of string: label must be a string constant` (x2) | same | same |
+| `case label does not match the ordinal selector type` (x2) | same | same |
+| `duplicate or overlapping case label` | `IRValidateCaseLabels` | same |
+
+That last row was not on the filed list and came along for free: it lives in the
+same walker, so moving the walker moved it.
+
+### Why the case rules could move at all
+
+They read **nothing** the lowering computes. `CaseLabelBounds` and the pairwise
+overlap walk are pure AST — `ASTKind`, `ASTIVal`, `ASTSOffset/ASTSLen` — and the
+single thing the lowering knew that the parser did not is whether the SELECTOR
+is a string. So the walker moved to `ast_arena.inc` (language-agnostic, included
+before every frontend and before `ir.inc`) and the *selector classification*
+stayed at each caller, which is the only part that legitimately differs.
+
+`ValidateParsedCaseLabels` is deliberately conservative about that one question:
+it classifies only the tags that settle it the same way the lowering's
+`IRTk in [tyString, tyAnsiString]` test would, and leaves an unresolved tag, a
+frozen string kind, a variant or an auto to the backstop. A wrong `isStr` answer
+would refuse labels that are in fact fine, on every case statement that
+compiles — much worse than a missed diagnostic, which the backstop still catches.
+
+Two supporting shape changes:
+
+- **`CaseLabelDiag(lab, msg, recover)`** — one dispatcher, so the same rule is
+  fatal from the lowering and recovering from the parser without a mode flag.
+  It reports against `ASTLine[lab]`, the label's own line. The old `Error(msg)`
+  used `CurTok`, which at lowering time is past the end of the file; the
+  positions in the table below are new information, not just surviving ones.
+- **`CaseLabelBounds` returns a Boolean** — a refused label has no interval, so
+  under recovery the overlap walk must skip it rather than compare the garbage
+  `ASTIVal` of a string node. Only reachable when `recover` is true; a fatal
+  caller never returns from `CaseLabelDiag`.
+
+### Measured
+
+`test/test_diags_survive_error_recovery_fail.pas` (wired into `test-core`, two
+invocations). One file, one recovered parser diagnostic on line 27, then six
+lowering-owned refusals after it. **Before this change the file reported exactly
+one error and the rest were silent.**
+
+```
+pascal26:27: error: undefined variable (undefinedthing)
+pascal26:28: error: no operator overload found for record operands (...)
+pascal26:29: error: arithmetic operator not supported for dynamic arrays (...)
+pascal26:31: error: case label does not match the ordinal selector type
+pascal26:35: error: case of string: label must be a string constant
+--strict-case adds:
+pascal26:38: error: case range: lower bound is greater than upper bound
+pascal26:40: error: duplicate or overlapping case label
+```
+
+No binary in either run. The healthy control — ordinal and string `case` with
+ranges and an `else`, under `--strict-case` — still compiles and runs.
+
+This is the shape the ticket says *"nothing systematically covers"*: a
+lowering-owned refusal asserted AFTER an earlier recovered one. It is covered now.
+
+### What is deliberately NOT closed
+
+`ErrCount > 0 -> Exit` stays. The 2026-08-26 count stands: option 1 is 619 sites
+and option 3 is "revert". The 223 checks in `ir.inc` + `ir_codegen.inc` are
+overwhelmingly internal consistency assertions — `unknown IR opcode`, `invalid
+symbol in lea` — and skipping those on a poisoned AST is exactly what the guard
+is for. What is fixed is the enumerable set of **user-facing dialect rules that
+were squatting in shared IR**, which was a smell on its own terms
+(`the-substrate-is-ast-and-ir-not-the-parser.md`). If another one is added there
+later, this ticket's test is the shape that will catch it.
+
+### Gate
+
+`make compiler/pascal26` byte-identical (267f769b05bd) · `tools/gate.sh quick`
+GREEN · pascal-conformance 346/0/170/34 · c-conformance 220/0 · fgl 7/7.
+
+## Log
+- 2026-08-27 — resolved, commit PENDING-COMMIT.
