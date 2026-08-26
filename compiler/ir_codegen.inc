@@ -2145,6 +2145,7 @@ end;
 procedure EmitAnsiStringRuntime;
 var pNilUnique, pNilUnique2, pDone, pDone2,
     pConcatNil, pConcatDone, pFail, pLfDone: Integer;
+    pRelNil, pRelLive: Integer;
 begin
   EmitAnsiStrFromLiteral;
 
@@ -2154,12 +2155,36 @@ begin
   EmitReleaseHeapLock;
   EmitB($C3);                                     { ret }
 
+  { Release blob: the FAST path (nil, or a refcount that stays above zero) does
+    no register traffic at all. It used to unconditionally push rax/rcx/rdx/
+    rsi/rdi and pop them again -- ten stack operations to guard a decrement --
+    and four of those five were saved a SECOND time by EmitHeapFreeLocked on
+    the only path that can clobber them. A sampling profile of the compiler
+    compiling a one-line NilPy file put ~11% of the whole run on those pushes
+    and pops; the retain blob two lines up was already written this way.
+
+    So: only rax is saved, and only across the free. Nothing on the fast path
+    touches a caller register (`test` and `dec` write flags, which the old form
+    did not restore either), and EmitHeapFreeLocked already preserves rsi/rdi/
+    rcx/rdx/r8-r11 around the call itself. Both lock helpers preserve rax, so
+    the lock still spans the whole body exactly as before. }
   AnsiStrReleaseAddr := CodeLen;
-  EmitAsmX64(['push rax', 'push rcx', 'push rdx', 'push rsi', 'push rdi']);
   EmitAcquireHeapLock;
-  EmitAnsiStrReleaseLocked;
+  EmitAsmX64(['test rax, rax']);
+  EmitB($74); pRelNil := CodeLen; EmitB(0);       { jz done }
+  if ThreadSafeMode then EmitAsmX64(['lock dec qword [rax-16]'])
+  else EmitAsmX64(['dec qword [rax-16]']);
+  EmitB($75); pRelLive := CodeLen; EmitB(0);      { jnz done }
+  { the refcount is at [rax-16] but the BLOCK BASE is 24 back — the kind word
+    sits below the refcount (devdocs/dev/managed-block-header.md). }
+  EmitAsmX64(['push rax']);
+  EmitAsmX64(['sub rax, %', 24]);
+  EmitHeapFreeLocked;
+  EmitAsmX64(['pop rax']);
+  Code[pRelNil] := Byte(CodeLen - (pRelNil + 1));
+  Code[pRelLive] := Byte(CodeLen - (pRelLive + 1));
   EmitReleaseHeapLock;
-  EmitAsmX64(['pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rax', 'ret']);
+  EmitB($C3);                                     { ret }
 
   { Object retain/release blobs (feature-nilpy-object-reclamation): thin
     reg-preserving wrappers over the Pascal PXXObjRetain/PXXObjRelease, which
@@ -8665,7 +8690,7 @@ var i, lblId, pos, targetOffset, f, procIdx, excSkip: Integer;
     LabelFixupCount: Integer;
     condNode, cLeft, cRight: Integer;
     cOp: TTokenKind;
-    cmpUns, fused: Boolean;
+    cmpUns, fused, cmpImmOk: Boolean;
 begin
   CurWriteFd := STDOUT;   { default write target; IR_WRITE/IR_WRITELN override per-statement (fd 2 for StdErr) }
   { DWARF -g: per-body line-row state, reset before any backend runs (each backend
@@ -8812,7 +8837,19 @@ begin
               reload in the condition is redundant. }
             cLeft := IRA[condNode];
             cRight := IRB[condNode];
-            if IRKind[cRight] = IR_CONST_INT then
+            { -O3 cmp-immediate: `cmp rax, imm32` exists, so a constant right
+              operand needs no register at all. The `mov rcx, imm32` this
+              replaces sign-extends its immediate to 64 bits exactly as opcode
+              3D does, so signed and unsigned comparisons both keep their
+              meaning. A compiler compares against a literal constantly -- token
+              kinds, character ranges, array bounds -- and CaseEqual's inner
+              loop alone paid it four times per character. }
+            cmpImmOk := (OptLevel >= 3) and (IRKind[cRight] = IR_CONST_INT) and
+                        (IRIVal[cRight] >= -2147483648) and
+                        (IRIVal[cRight] <= 2147483647);
+            if cmpImmOk then
+              IREmitNode(cLeft)
+            else if IRKind[cRight] = IR_CONST_INT then
             begin
               IREmitNode(cLeft);
               if (IRIVal[cRight] >= -2147483648) and (IRIVal[cRight] <= 2147483647) then
@@ -8880,7 +8917,10 @@ begin
               IREmitNode(cLeft); EmitB($50);                       { push rax }
               IREmitNode(cRight); EmitB($48); EmitB($89); EmitB($C1); EmitB($58); { mov rcx,rax; pop rax }
             end;
-            EmitB($48); EmitB($3B); EmitB($C1);                    { cmp rax, rcx }
+            if cmpImmOk then
+              begin EmitB($48); EmitB($3D); EmitI32(Integer(IRIVal[cRight])); end  { cmp rax, imm32 }
+            else
+              begin EmitB($48); EmitB($3B); EmitB($C1); end;                       { cmp rax, rcx }
             cmpUns := TypeCompareUnsigned(IntToTypeKind(IRTk[cLeft]), IntToTypeKind(IRTk[cRight]));
             cOp := IntToTokenKind(IRC[condNode]);
             EmitB($0F);   { two-byte jcc, inverted (jump when comparison is FALSE) }
