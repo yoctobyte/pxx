@@ -711,6 +711,17 @@ Three things to carry:
   did not happen*, which leaves the one that never does. That is a real narrowing
   and it is the most the evidence supports.
 
+**And the most dangerous: a corrupted input arriving dressed as a finding.** A
+differential probe used fixed paths -- `/tmp/fdp.pas`, `/tmp/fdp_f`, `/tmp/fdp_p`
+-- so two concurrent copies overwrote each other's source and binaries. The
+result was not a crash. It was a **report**: `new divergences: 34`, `no-oracle
+skips: 90`, rows reading `fpc=[]`. An oracle whose binary had been overwritten
+mid-run presented as an oracle that *disagreed*. This is worse than a torn-down
+run publishing in the vocabulary of a completed one, because the tool's entire
+job is to be believed about findings, and the corruption is indistinguishable
+from its output. **A tool that reports divergences must isolate its workspace
+(`mktemp -d` + trap), or its worst failure looks exactly like its best work.**
+
 **The most literal instance: a diff against a missing operand.** The bench
 harness emits `CANARY-DIFF vs -O0` for each optimisation level -- and when the
 `-O0` build itself fails, `ref_out` stays `None`, so every other level dutifully
