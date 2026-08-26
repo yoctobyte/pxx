@@ -1,16 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-24T00:23:52Z",
-   "fixed": [
-    "test-core#src:test/test_variant_string_ops.pas"
-   ],
-   "new_red": [],
-   "sha": "04eaec15ed31fe00e45c3307d568af3e7ff622e0",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-24T01:25:25Z",
    "fixed": [
     "test-core#src:test/test_basic_comprehensive.bas"
@@ -450,6 +440,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "736ec605c3e5985c2eea17f0eeccf0250b87fa22",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T03:35:32Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "1a44f3bdf7fb729ee3fd408170a03eb475f19bf9",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -2003,6 +2001,7 @@
   "test-core#src:test/test_nilpy_iter_next_cursor.npy": "native",
   "test-core#src:test/test_nilpy_json_module.npy": "native",
   "test-core#src:test/test_nilpy_json_reparse_heap.npy": "native",
+  "test-core#src:test/test_nilpy_key_callable_reads_every_default.npy": "native",
   "test-core#src:test/test_nilpy_kwarg_through_lifted_value.npy": "native",
   "test-core#src:test/test_nilpy_lambda_capture.npy": "native",
   "test-core#src:test/test_nilpy_lambda_container_result.npy": "native",
@@ -5103,6 +5102,7 @@
   "test-core#src:test/test_nilpy_iter_next_cursor.npy": "pass",
   "test-core#src:test/test_nilpy_json_module.npy": "pass",
   "test-core#src:test/test_nilpy_json_reparse_heap.npy": "pass",
+  "test-core#src:test/test_nilpy_key_callable_reads_every_default.npy": "pass",
   "test-core#src:test/test_nilpy_kwarg_through_lifted_value.npy": "pass",
   "test-core#src:test/test_nilpy_lambda_capture.npy": "pass",
   "test-core#src:test/test_nilpy_lambda_container_result.npy": "pass",
@@ -6660,14 +6660,14 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T03:26:31Z",
+  "date": "2026-08-26T03:35:32Z",
   "deadline": 7200.0,
-  "sha": "736ec605c3e5985c2eea17f0eeccf0250b87fa22",
+  "sha": "1a44f3bdf7fb729ee3fd408170a03eb475f19bf9",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 474.7
+  "wall": 381.0
  },
  "last_bench": {
   "conf_rows": 550,
