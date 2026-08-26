@@ -6868,6 +6868,15 @@ begin
         { An enum MEMBER const folds to its ordinal here, which is where the enum
           identity would be lost — carry it on the literal (see ASTEnumId). }
         ASTEnumId[node] := SymEnumId[idx];
+        { A CHAR const folds to a bare ordinal too, and a bare ordinal is not a
+          one-character STRING to anything downstream: `pv := Dash` stored 45
+          into a PChar and segfaulted, while `pv := '-'` and `pv := #45` — which
+          both carry the literal's char-pool span — were already right. Give the
+          folded node the same span a written literal has, so the PChar assign
+          in ir.inc, `case s of Dash`, and the argument coercion all see ONE
+          shape rather than two spellings of it.
+          bug-single-char-literal-as-pchar-argument-segfaults }
+        if IntToTypeKind(ASTTk[node]) = tyChar then EnsureCharLitSpan(node);
         CurASTNode := node; Next;
       end
       else if (CurProc >= 0) and Procs[CurProc].IsFunc and
@@ -9224,6 +9233,19 @@ begin
       `= tyUInt64` for years, i.e. it fixed the 8-byte arm of a rule that
       applies at every width; it is the same normalisation `div`/`mod` needs,
       so both now call the one helper. }
+    { ...but a ONE-CHARACTER literal against a PChar is a STRING comparison, and
+      it has to be normalised to the string BEFORE that unsigned retag runs. A
+      pointer is an unsigned operand, so NormalizeUnsignedLiteralOperand claimed
+      `'-'` first and retagged it tyUInt64 — after which the PChar wrap below
+      could no longer recognise a char operand, and `p = '-'` silently compared
+      the POINTER against 45 and answered False. `p = '--'` was right all along,
+      the same length boundary as the argument case, and equally invisible.
+      bug-single-char-literal-as-pchar-argument-segfaults }
+    if not CProgramMode then
+    begin
+      if IsNodePChar(left) then RetagCharLitAsStr(right)
+      else if IsNodePChar(right) then RetagCharLitAsStr(left);
+    end;
     NormalizeUnsignedLiteralOperand(left, right);
     NormalizeUnsignedLiteralOperand(right, left);
     { A PChar compared against a string or a char compares CONTENTS, as in FPC.

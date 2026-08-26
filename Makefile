@@ -5787,6 +5787,14 @@ test-core: $(COMPILER)
 	# the next read; and `p = 'alpha'` compared pointers, not contents.
 	./$(COMPILER) -Fulib/rtl test/test_pchar_from_a_string_literal.pas $(TESTTMP)/test_pcharlit26
 	test "$$($(TESTTMP)/test_pcharlit26 | tail -1)" = "ALL OK"
+	# ...and the ARGUMENT boundary of the same rule: `StrCat(buf, '-')` passed
+	# the ORDINAL 45 where the pointer goes and the callee dereferenced address
+	# 45, while `StrCat(buf, '--')` was fine. Covers the plain call, an
+	# overloaded call, a method call, #45, a named char const, the assignment,
+	# the comparison and the RTL PChar family -- and the two-character controls
+	# beside each, so a fix cannot repair one boundary and break the other.
+	./$(COMPILER) -Fulib/rtl test/test_char_literal_to_pchar_param.pas $(TESTTMP)/test_charlitpchar26
+	test "$$($(TESTTMP)/test_charlitpchar26 | tail -1)" = "ALL OK"
 	# A value typecast to a narrower ordinal truncates in EVERY spelling: Char
 	# and Boolean are lexer tokens and AnsiChar an identifier, and the two
 	# spellings built different nodes, so Char(258) answered 258 and

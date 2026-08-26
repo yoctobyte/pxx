@@ -597,17 +597,21 @@ end;
   segfaulted while `pv := '-'` and `pv := #45` were both already right, and a
   shape working in three spellings out of four is the tell that the SHAPE was
   unrecognised rather than the context broken. }
+procedure EnsureCharLitSpan(node: Integer);
+begin
+  if not IsCharLitNode(node) then Exit;
+  if ASTSLen[node] > 0 then Exit;
+  if TokCharLen + 1 > STRING_CAP then Error('token char pool overflow');
+  ASTSOffset[node] := TokCharLen;
+  ASTSLen[node]    := 1;
+  TokChars[TokCharLen] := Chr(Integer(ASTIVal[node]) and 255);
+  Inc(TokCharLen);
+end;
+
 procedure RetagCharLitAsStr(node: Integer);
 begin
   if not IsCharLitNode(node) then Exit;
-  if ASTSLen[node] <= 0 then
-  begin
-    if TokCharLen + 1 > STRING_CAP then Error('token char pool overflow');
-    ASTSOffset[node] := TokCharLen;
-    ASTSLen[node]    := 1;
-    TokChars[TokCharLen] := Chr(Integer(ASTIVal[node]) and 255);
-    Inc(TokCharLen);
-  end;
+  EnsureCharLitSpan(node);
   ASTKind[node] := AN_STR_LIT;
   ASTTk[node]   := Ord(tyString);
 end;
