@@ -125,8 +125,17 @@ compiler inferred; print it.
 ## Two traps that produced confident wrong readings
 
 - **Stale binary.** A still-running instance makes the compiler's write a silent
-  no-op (ETXTBSY) while still printing `ok:`. `pkill -9` first, or use a fresh
-  output name and check it changed.
+  no-op (ETXTBSY) while still printing `ok:`. **Use a fresh output name and check
+  it changed** — that is the whole fix, it needs no signal at all, and it cannot
+  hurt anybody else. If you genuinely must kill the running copy, kill **the pid
+  you started** (`$!`, or `setsid` and kill the group), never a name pattern:
+  `pkill -f <tool>` asks *"is there a process whose command line contains this
+  text?"* when your question is *"is there a process **I** started?"*. Those
+  coincide exactly while one agent runs the tool and diverge silently the moment
+  two do — and several agents share this box. `tools/gui_shot.sh:52` carries the
+  same rule, learned when one agent's pattern-kill took down another's live Xvfb
+  mid-capture; a `pgrep` waiter has the mirror-image bug, because it matches
+  *itself* and never returns.
 - **Lost stdout.** SIGTERM discards buffered stdout, so "the marker never fired"
   and "it fired and the output died" look identical. Give tests a clean exit.
 
@@ -334,6 +343,33 @@ Deliberately not general, for the reason this file keeps arriving at: **a checke
 that reports everything gets suppressed, and a suppressed checker asserts
 nothing.**
 
+## A comment is an unverified claim, and tickets inherit it
+
+Two N tickets in a row named the wrong mechanism, and the second one shows how a
+wrong lead becomes durable. `PyImportIsConsumedOnly` carried a comment asserting
+that `Counter` maps to *"pylib's TPyCounter constructors"*. It does not:
+`TPyCounter` is the `itertools.count` shim, sharing four letters with `Counter`
+and nothing else. The comment was wrong, the ticket quoted it as its "where to
+look", and the investigation started up the wrong tree with a citation behind it.
+
+The real binding was ordinary and discoverable in a minute: pylib has three
+`function Counter` overloads returning a dict in counter mode, so `Counter("aab")`
+compiles **with no import at all** and the from-import binds nothing.
+
+- **A comment is documentation of an intent, not of a fact**, and unlike code it
+  is never executed, so nothing ever contradicts it. It rots silently and in
+  place.
+- **A wrong comment is worse than none, because it launders into tickets.** Once
+  quoted, it arrives with apparent provenance and the next reader has no signal
+  that it was one person's belief.
+- **Verify the lead before following it.** Find what a name is *actually* bound
+  to -- read the binding site, or print it (`PXXDBG=n.locals`, `n.sig`) -- before
+  theorising about why it misbehaves. That check is cheap and it is exactly the
+  step the ticket's confident wording persuades you to skip.
+
+The companion habit, from the same fix: **when you disprove a comment, correct
+it in place, and grep for its copies.** That one had two.
+
 ## "The pinned binary reproduces it" may be a claim about a MIXED compiler
 
 A ticket recorded that `$(PXX_STABLE)` reproduced a segfault, which made a
@@ -366,6 +402,90 @@ invocation made the difference visible. So:
 Same family as `code : STALE` in the watcher and the frozen-builtin seam
 `gate.sh` now guards: **the artifact you are measuring is assembled from more
 parts than the one you named.**
+
+## "Ruled out" and "could not look" must never print the same
+
+The sharpest version of this file's refrain, and it cost six days. A ticket
+recorded: *the kernel log is unreadable unprivileged, so OOM can be neither
+confirmed nor excluded.* That sentence made **ruled out** and **not looked at**
+indistinguishable -- and a hypothesis nobody can check is the one an
+investigation drifts toward, because nothing ever pushes back on it.
+
+It was also false. `dmesg` is blocked here (`kernel.dmesg_restrict=1`), but
+**`journalctl -k` is not, for anyone in group `adm`, and this account is.**
+Everyone who hit the wall hit it with `dmesg` and stopped. The real answer took
+minutes: **0 kernel OOM kills across three boots**, 35,486 kernel lines, journal
+reaching back far enough to cover the date in question.
+
+Three things to carry:
+
+- **One blocked tool is not a blocked question.** Before writing "cannot be
+  determined", find the second reader. Privilege here is per-interface, not per-
+  fact: `dmesg` restricted, `journalctl -k` open to `adm`.
+- **Check the mechanism that logs somewhere else.** `systemd-oomd` kills on cgroup
+  PSI *before* the kernel is out of memory, logs to its own unit rather than the
+  kernel log, and targets the heaviest cgroup -- here, a fuzz batch or the test
+  matrix. A kernel-only answer would have read as an all-clear with the actual
+  candidate unexamined. (It had killed nothing, ever.)
+- **State exactly how far the exclusion reaches.** Kernel OOM and oomd both leave
+  a durable record; a peer's `SIGKILL` leaves none. So excluding them is not
+  "nothing killed it" -- it is *every hypothesis that would have left evidence
+  did not happen*, which leaves the one that never does. That is a real narrowing
+  and it is the most the evidence supports.
+
+The design counterpart is now in `tools/whokilled.sh`: **three verdicts, and any
+blind probe forces a distinct exit code**, so a caller cannot mistake blindness
+for clean. Its CANNOT-TELL branches had never executed on this box, so the
+devtest drives them with fakes on PATH -- a branch that has never run is not yet
+known to work.
+
+## Record the negative result, or someone will spend a night rediscovering it
+
+Track T profiled the test matrix and reported three findings, one of which was
+that **the scheduler is fine** -- 90% core utilisation, ~1,343 idle core-seconds
+out of 13,663, near the floor for a job graph with dependencies. Nothing to
+unpick. They wrote it down deliberately, in the owning ticket, in the same
+prominence as the positive findings: *"I would rather cost myself the finding
+than have the next person spend a night discovering it."*
+
+That instinct is right and it is rare, because a negative result feels like an
+absence of work. It is not. "The obvious suspect is innocent" is expensive to
+establish and free to forget, and it is the single most re-derived kind of fact
+in a long-running project -- the scheduler, the allocator, the disk, whichever
+component *looks* like it should be the problem will be re-measured by every new
+arrival until someone writes down that it was not.
+
+So: when a measurement clears a suspect, **say so in the ticket, name the number,
+and say plainly that nobody should start there.** The same applies to a plausible
+fix you tried that did not help. An unrecorded dead end is a trap that resets
+itself.
+
+**And record the option you measured and DECLINED, with its number.** Track T
+priced a skip cache for pin-built jobs -- provably unchanged verdicts, genuine
+repeated work, the predicate already written -- at **~3% of the matrix**, and
+turned it down. The reason is the one worth copying: its failure mode is *a job
+that should have run and did not, reported as a pass*, which is the exact defect
+class removed five times in two days (the unenrolled rung asserting nothing, the
+torn-down run silencing the request for coverage, unreached jobs reading as
+FIXED). **Adding a sixth source of silent under-coverage to save 3% is a bad
+trade at any exchange rate** -- and the fact that the mechanism would have been
+easy to build is not a point in its favour.
+
+The general form: **price a saving in what it costs you in assurance, not only in
+what it costs to build.** A cache, a skip, a memo and an early-exit are all the
+same bet -- that a thing you did not check is unchanged -- and the bet is only as
+good as the predicate, forever, including after someone edits the predicate. In
+the ticket it now sits as *declined, with the number and the reason*, plus the
+condition that would reopen it: if the NilPy tax is fixed, 3% becomes a large
+share of what remains and the trade is worth re-pricing.
+
+That is the difference between a decision and an oversight, and only the write-up
+tells them apart later.
+
+The companion rule, also demonstrated: **do not extrapolate across a moved
+denominator.** They declined to state a post-fix matrix total until the next full
+lands, because the compiler's own cost had changed underneath the measurement.
+Multiplying two estimates is how a number stops being a measurement.
 
 ## A number moving in the direction you hoped is not a check
 

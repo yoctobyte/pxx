@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:23 blocked:7 backlog:283 backlog_new:28 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2382 rejected:40`
+`unfinished:23 blocked:7 backlog:284 backlog_new:28 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2385 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -47,10 +47,10 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 322, ranked
+## Ready — top 30 of 323, ranked
 
 - `[p 85] [O]` feature-opt-o3-register-pressure
-- `[p 80] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
+- `[p 85] [A]` perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime
 - `[p 80] [N]` bug-n-hasattr-through-an-untyped-parameter-is-always-false
 - `[p 78] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - `[p 78] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
@@ -80,4 +80,4 @@ _none — no lane is locked._
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 
-_292 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_293 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
