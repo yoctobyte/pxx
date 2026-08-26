@@ -190,4 +190,4 @@ fixedpoint). `tools/gate.sh quick` — **GREEN** (self-host fixedpoint, testmgr
 quick tier, pinned-builds-lib/rtl, FPC seed canary).
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 5d3d349a3.
