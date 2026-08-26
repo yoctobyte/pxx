@@ -705,6 +705,33 @@ begin
   else SizeOfLiteralToken := 8;
 end;
 
+{ Stamp a folded Low/High bound with its array's INDEX type.
+
+  The value was always right; only the type was missing, so `Low(c)` over
+  `array['a'..'e']` printed 97 instead of 'a' and `Low(e)` over `array[TE]`
+  printed 0 instead of eA. WriteLn picks the rendering off the node's type,
+  which is the whole of the difference.
+
+  idxTk = 0 means no index type was recorded -- an ordinary integer range, or a
+  table slot nothing ever wrote -- and leaves the node exactly as the caller
+  built it. That is what keeps every path this does NOT reach (params, record
+  fields, the C frontend) answering what it answered before.
+
+  An ENUM index reads back as tyInteger plus an ASTEnumId, which is the same
+  pair an enum-valued expression carries; there is no tyEnum to stamp.
+
+  ONE function because both fold sites must move together: the type-name arm
+  (Low(TC)) and the variable arm (Low(c)) disagreeing is worse than both being
+  wrong, and that is exactly what the umbrella ticket warns about.
+  bug-p-every-compile-time-intrinsic-hand-rolls-its-own-operand-parser }
+procedure StampArrIdxType(node, idxTk, idxEnumId: Integer);
+begin
+  if (node < 0) or (idxTk = 0) then Exit;
+  ASTTk[node] := idxTk;
+  if (idxTk = Ord(tyInteger)) and (idxEnumId >= 0) then
+    ASTEnumId[node] := idxEnumId;
+end;
+
 { Is High(...)/Low(...)'s operand an EXPRESSION rather than a name?
 
   CurTok sits just past the `(`. A NAME-shaped operand is `ident` optionally

@@ -728,6 +728,7 @@ begin
     VDElemRowLen := 0; VDElemRowLo := 0;
     VDElemProcSig := -1;
     VDElemEnumId := -1;
+    VDIdxTk := 0; VDIdxEnumId := -1;
     VDIsArrND := False; VDNdCnt := 0;
     ai := -1;
     if CurTok.Kind = tkIdent then ai := FindArrayType(CurTok.SVal);
@@ -737,6 +738,7 @@ begin
       VDIsArr := True;
       VDElemTk := IntToTypeKind(ArrTypeElemTk[ai]); VDTk := VDElemTk;
       VDElemEnumId := ArrTypeElemEnumId[ai];
+      VDIdxTk := ArrTypeIdxTk[ai]; VDIdxEnumId := ArrTypeIdxEnumId[ai];
       LastTypeRecId := ArrTypeElemRec[ai];
       LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[ai]);
       LastTypePointerElemRec := ArrTypePtrElemRec[ai];
@@ -794,6 +796,10 @@ begin
           Next;   { consume '[' }
           repeat
             ParseArrayDimBounds(dLo, dHi);
+            { dimension 0 only: Low/High report the first dimension, and
+              LastArrIdxTk is clobbered by the next call }
+            if VDNdCnt = 0 then
+            begin VDIdxTk := LastArrIdxTk; VDIdxEnumId := LastArrIdxEnumId; end;
             if VDNdCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
             VDNdDimLo[VDNdCnt] := dLo; VDNdDimSpan[VDNdCnt] := dHi - dLo + 1; Inc(VDNdCnt);
           until not Eat(tkComma);
@@ -1003,6 +1009,7 @@ begin
     begin
       LastTypeElemDynDepth := VDElemDynDepth;  { fixed array of a dyn-array element (consumed + reset by AllocArray) }
       idx := AllocArray(nm, VDElemTk, VDArrLo, VDArrHi);
+      SymArrIdxTk[idx] := VDIdxTk; SymArrIdxEnumId[idx] := VDIdxEnumId;
       if VDElemTk = tyRecord then
       begin
         Syms[idx].ElemRecName := LastTypeRecId;
@@ -1664,15 +1671,24 @@ begin
   only read as a TYPE when it is not followed by `..` AND it names an enum type. Otherwise
   it falls through to the ordinary constant range. }
 procedure ParseArrayDimBounds(var lo, hi: Integer);
+{ Also records the dimension's INDEX TYPE in LastArrIdxTk/LastArrIdxEnumId, so
+  Low/High can answer 'a' rather than 97 for `array['a'..'e']`. The bounds
+  themselves are plain Integers and always were; the index type is a separate
+  fact that used to be dropped here and could not be recovered downstream --
+  which is the whole of bug-a-low-high-of-a-char-indexed-array-answer-the-ordinal.
+
+  0 means "an ordinary integer range", and it is also what an unwritten table
+  slot holds, so a caller that does not capture these keeps the old answer. }
 var eid: Integer; btk: TTypeKind; blo, bhi: Int64;
 begin
+  LastArrIdxTk := 0; LastArrIdxEnumId := -1;
   if CurTok.Kind = tkBoolean_T then
   begin
-    lo := 0; hi := 1; Next; Exit;
+    lo := 0; hi := 1; LastArrIdxTk := Ord(tyBoolean); Next; Exit;
   end;
   if CurTok.Kind = tkChar_T then
   begin
-    lo := 0; hi := 255; Next; Exit;
+    lo := 0; hi := 255; LastArrIdxTk := Ord(tyChar); Next; Exit;
   end;
   { A SMALL ordinal type as the whole index: `array[Byte] of ...`
     (rtl-generics' bucket tables). Only when the type IS the dimension (next
@@ -1697,9 +1713,22 @@ begin
     eid := FindEnumType(CurTok.SVal);
     if eid >= 0 then
     begin
-      EnumTypeOrdRange(eid, lo, hi); Next; Exit;
+      EnumTypeOrdRange(eid, lo, hi);
+      { an enum index reads back as tyInteger PLUS the enum identity -- the same
+        pair an enum-valued expression carries, so the folded bound prints the
+        member name through the ordinary WriteLn path }
+      LastArrIdxTk := Ord(tyInteger); LastArrIdxEnumId := eid;
+      Next; Exit;
     end;
   end;
+  { A CHARACTER range (`array['a'..'e']`) is an ordinary constant range as far
+    as the bounds go -- it is only the literal in front of ConstEval that says
+    the index is a Char, and after ConstEval that evidence is gone. Peek here.
+    Deliberately narrow: a bare single-character literal, not a named Char
+    constant or a `#65`, because those are the shapes measured to matter and
+    widening the guess is how a wrong type gets stamped on a right value. }
+  if (CurTok.Kind = tkString) and (Length(CurTok.SVal) = 1) then
+    LastArrIdxTk := Ord(tyChar);
   lo := ConstEval;
   Expect(tkDotDot, '..');
   hi := ConstEval;
@@ -3837,6 +3866,7 @@ var
   mFullName: AnsiString;
   aLo, aHi: Integer; aElemTk: TTypeKind;
   tdCnt, tdLo, tdHi, tdi, tflatLen, fNDims: Integer;
+  tdIdxTk, tdIdxEnumId: Integer;   { dimension 0's index type -> ArrTypeIdxTk }
   aElemStrCap: Integer;   { `array[..] of string[N]`: N, captured where it is parsed }
   aElemEnumId: Integer;   { `array[..] of TEnum`: the enum type index, captured where it is parsed }
   fEnumId2: Integer;      { CLASS-body field: enum type of the field (its ELEMENT for an array field), else -1 }
@@ -5424,12 +5454,16 @@ begin
             (`array[a] of array[b] of T`) is merged into `array[a,b] of T`
             (identical FPC layout). Previously skipped → TA was not an array. }
           tdCnt := 0;
+          tdIdxTk := 0; tdIdxEnumId := -1;
           tMoreDims := True;
           while tMoreDims do
           begin
             Next;   { consume '[' }
             repeat
               ParseArrayDimBounds(tdLo, tdHi);
+              { dimension 0 only -- see the var-decl twin }
+              if tdCnt = 0 then
+              begin tdIdxTk := LastArrIdxTk; tdIdxEnumId := LastArrIdxEnumId; end;
               if tdCnt >= MAX_ARR_DIMS then Error('too many array dimensions');
               tdDimLo[tdCnt] := tdLo; tdDimSpan[tdCnt] := tdHi - tdLo + 1; Inc(tdCnt);
             until not Eat(tkComma);
@@ -5520,6 +5554,8 @@ begin
           ArrTypeElemRec[ArrTypeCount] := LastTypeRecId;
           ArrTypePtrElemRec[ArrTypeCount] := LastTypePointerElemRec;
           ArrTypePtrElemTk[ArrTypeCount]  := Ord(LastTypePointerElemTk);
+          ArrTypeIdxTk[ArrTypeCount]      := tdIdxTk;
+          ArrTypeIdxEnumId[ArrTypeCount]  := tdIdxEnumId;
           if tdCnt >= 2 then ArrTypeNDims[ArrTypeCount] := tdCnt
           else ArrTypeNDims[ArrTypeCount] := 0;
           for tdi := 0 to tdCnt - 1 do

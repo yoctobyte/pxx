@@ -8027,6 +8027,17 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_sizeof_of_a_literal.pas $(TESTTMP)/test_sol26
 	test "$$($(TESTTMP)/test_sol26)" = "$$(cat test/test_sizeof_of_a_literal.expected)"
+	# Low/High of an array report the bound in the INDEX's type. array['a'..'e']
+	# answered 97/101 and array[TE] answered 0/2 -- the values were right and
+	# only the type was missing, because an array's index type was never stored
+	# next to its bounds. Both fold sites (type NAME and VARIABLE) had to move
+	# together or Low(TC) and Low(c) would disagree, so both go through one
+	# StampArrIdxType. The plain-integer and multi-dim rows are pinned because
+	# the type-stamping moved for ALL array Low/High folds, and the Ord() row
+	# because the bound must still behave as an ordinal where one is wanted.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_low_high_index_type.pas $(TESTTMP)/test_lhit26
+	test "$$($(TESTTMP)/test_lhit26)" = "$$(cat test/test_low_high_index_type.expected)"
 	# ...and the guard: a genuine `var` parameter must still REFUSE the same
 	# argument. This is what stops the fix from being ungated -- tried, and it
 	# let a call RESULT bind to a var parameter and COMPILE, because the method

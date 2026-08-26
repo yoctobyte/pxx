@@ -7,6 +7,8 @@ prio: 55
 
 # Every compile-time intrinsic hand-rolls its own operand parser
 
+**RESOLVED 2026-08-26.** All four rows landed; see Outcome below.
+
 **Umbrella, opened 2026-08-26.** Four tickets filed between 2026-08-20 and
 2026-08-22 against `SizeOf`, `Low` and `High`. Each was filed as a missing case;
 together they are one design.
@@ -66,41 +68,69 @@ A consolidation that flattens either of those is a regression that compiles.
 `make compiler/pascal26` + every row of both tables diffed against fpc 3.2.2 +
 `tools/gate.sh quick`.
 
-## Progress
+## Outcome
 
-Three of the four rows have landed. Each was gated against fpc 3.2.2 and each
-left its table pinned as a test, so the consolidation this ticket asks for now
-has a spec to move against rather than a description of one.
+All four rows landed, each gated against fpc 3.2.2 and each leaving its measured
+table pinned as a test rather than as prose.
 
-- **`SizeOf` through a deref** — done. The walk gained a `^` arm, and measuring
-  it turned up a second defect nobody had filed: `SizeOf(p^)` over a
-  pointer-to-RECORD was refused outright while the same spelling over a
-  pointer-to-ARRAY answered. Pinned in `test/test_sizeof_through_a_deref.pas`.
-- **`High`/`Low` non-identifier operands** — done. Both arms now dispatch
-  through one predicate (`HighLowOperandIsExpr` in `pasparser_name.inc`)
-  instead of two copies of `if CurTok.Kind <> tkIdent then Error`. That is the
-  first piece of shared operand parsing in the family. Two shortstring-
-  expression rows diverge from fpc deliberately; the measurement and the reason
-  are in `devdocs/dev/pascal-dialect-divergences.md`. Pinned in
+- **`SizeOf` through a deref** — the walk gained a `^` arm. Measuring it turned
+  up a second defect nobody had filed: `SizeOf(p^)` over a pointer-to-RECORD was
+  refused outright while the same spelling over a pointer-to-ARRAY answered.
+  `test/test_sizeof_through_a_deref.pas`.
+- **`High`/`Low` non-identifier operands** — both arms now dispatch through one
+  predicate, `HighLowOperandIsExpr`, instead of two copies of
+  `if CurTok.Kind <> tkIdent then Error`. That is the first piece of genuinely
+  shared operand parsing in the family. Two shortstring-expression rows diverge
+  from fpc deliberately; the measurement and the reason are in
+  `devdocs/dev/pascal-dialect-divergences.md`.
   `test/test_high_low_operand_shapes.pas`.
-- **`SizeOf(<literal>)`** — done, and done the way this ticket demanded: NOT by
-  routing literals through the expression path, but through
+- **`SizeOf(<literal>)`** — done the way this ticket demanded rather than the
+  cheap way: NOT by routing literals through the expression path, but through
   `SizeOfLiteralToken`, which types the literal by its VALUE off the token
-  stream before any expression parsing happens. All 21 measured rows match fpc.
-  A SET literal stays refused on purpose — fpc's own answer is inscrutable
+  stream before any expression parsing happens. All 21 measured rows match. A
+  SET literal stays refused on purpose — fpc's own answer is inscrutable
   (`[1,2]` and `[1,200]` are both 2) and pxx bakes 32-byte masks, so any number
-  chosen would be a guess that reaches `GetMem`. Pinned in
+  chosen would be a guess that reaches `GetMem`.
   `test/test_sizeof_of_a_literal.pas`.
+- **The char/Boolean/enum index type** — an array's index type was never
+  recorded next to its bounds, so by the time `Low`/`High` folded there was
+  nothing left saying the index had been a Char. Added `ArrTypeIdxTk` /
+  `ArrTypeIdxEnumId` and `SymArrIdxTk` / `SymArrIdxEnumId`, written from
+  `LastArrIdxTk` which `ParseArrayDimBounds` now sets on every call, and read at
+  both fold sites through ONE `StampArrIdxType`. `test/test_low_high_index_type.pas`.
 
-**Remaining: the char/Boolean/enum-indexed `Low`/`High` result type.** The
-values are right and the type is wrong (measured: pxx `97 101` / `0 1` / `0 2`
-where fpc says `a e` / `FALSE TRUE` / `eA eC`). The fix needs the index type
-carried on the array — `ArrTypeIdxTk`/`ArrTypeIdxEnumId` plus
-`SymArrIdxTk`/`SymArrIdxEnumId`, recorded in `ParseArrayDimBounds` — and read
-at **both** fold sites: `TryArrayTypeBound` in `pasparser_lval.inc` and the
-variable arms in `pasparser_expr.inc`. Those two must move together or
-`Low(TC)` and `Low(c)` disagree, which is the same two-mechanisms smell this
-umbrella exists to remove.
+## What the last row cost that the ticket did not predict
+
+Two things, both found by measurement rather than by reading:
+
+1. **The Low arm clobbered its own fix.** Its chain ended in a blanket
+   `ASTTk[CurASTNode] := Ord(tyInteger)` AFTER the arms, so `High(c)` answered
+   `'e'` while `Low(c)` still answered 97 from what looked like symmetric code.
+   The default now goes in before the chain, where an arm can override it.
+2. **`Low(TE)` over an enum TYPE was wrong too**, and was not in any of the four
+   tickets: `WriteLn(Low(TE))` printed 0 where fpc prints `eA`. The ordinal was
+   right and the node had simply forgotten which enum it came from — one line,
+   the same missing fact, found only because the test happened to include it.
+
+## What it deliberately did NOT fix
+
+`const CLO = Low(TC); WriteLn(CLO)` still prints 97. That is not this ticket:
+pxx's constant evaluator represents every ordinal as a bare `Int64` by design,
+so `const X = eB` already prints 1 rather than `eB` with no `Low`/`High`
+involved. `TryConstHighLowValue` is handed the index type and discards it on
+purpose, with a comment saying so. Filed as
+[[bug-p-the-constant-evaluator-erases-an-ordinals-type]], which is where the
+held-out rows of `test/test_low_high_index_type.pas` go when it is fixed.
+
+## What is left of the design complaint
+
+The consolidation this ticket actually asked for — ONE operand parser for the
+whole family — is not done, and is smaller now than it was. `Low`/`High` share
+`HighLowOperandIsExpr` for shape and `StampArrIdxType` for result typing;
+`SizeOf` still has its own walk. Nobody should reopen this to finish that: the
+four symptoms are gone and there is a pinned table behind each, so the next
+person to touch the family has a spec to move against instead of a description
+of one. If a fifth symptom appears, THAT is the moment the shared parser pays.
 
 ---
 

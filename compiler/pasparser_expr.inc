@@ -5077,6 +5077,7 @@ begin
         begin
           Expect(tkRParen, ')');
           CurASTNode := node;
+          LastExprTk := IntToTypeKind(ASTTk[node]);
           Exit;
         end;
         { A STRING-shaped operand — a literal, a parenthesised expression, or a
@@ -5164,6 +5165,8 @@ begin
         begin
           CurASTNode := AllocNode(AN_INT_LIT);
           ASTIVal[CurASTNode] := Syms[idx].ConstVal + Syms[idx].ArrLen - 1; ASTTk[CurASTNode] := Ord(tyInteger);
+          StampArrIdxType(CurASTNode, SymArrIdxTk[idx], SymArrIdxEnumId[idx]);
+          LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
         end
         else if (idx >= 0) and (ASTKind[valNode] = AN_IDENT) and (ASTIVal[valNode] = idx) and
                 Syms[idx].IsArray and (Syms[idx].ArrLen >= 0) and (Syms[idx].Kind <> skParam) and
@@ -5176,6 +5179,8 @@ begin
           CurASTNode := AllocNode(AN_INT_LIT);
           ASTIVal[CurASTNode] := SymArrDimLo[idx * MAX_ARR_DIMS] + SymArrDimSpan[idx * MAX_ARR_DIMS] - 1;
           ASTTk[CurASTNode] := Ord(tyInteger);
+          StampArrIdxType(CurASTNode, SymArrIdxTk[idx], SymArrIdxEnumId[idx]);
+          LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
         end
         else if (ASTKind[valNode] = AN_FIELD) and
                 RecFieldIsArray(ResolveNodeRec(ASTLeft[valNode]), GetASTIdentName(valNode)) and
@@ -5266,7 +5271,11 @@ begin
           ASTLeft[CurASTNode] := node; ASTRight[CurASTNode] := valNode;
           ASTTk[CurASTNode] := Ord(tyInteger);
         end;
-        LastExprTk := tyInteger;
+        { read the folded node rather than asserting Integer: a char-, Boolean-
+          or enum-indexed array's bound is typed by its INDEX, and the arms
+          above stamp that on the node. Every other arm still builds a
+          tyInteger node, so this is the same answer for them. }
+        LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
         Exit;
       end;
 
@@ -5283,6 +5292,7 @@ begin
         begin
           Expect(tkRParen, ')');
           CurASTNode := node;
+          LastExprTk := IntToTypeKind(ASTTk[node]);
           Exit;
         end;
         { A STRING-shaped operand — a literal, a parenthesised expression, or a
@@ -5351,14 +5361,27 @@ begin
         hlCap := DEFAULT_STR_CAP;
         if hlIsFrozen and (SymStrCap[idx] > 0) then hlCap := SymStrCap[idx];
         CurASTNode := AllocNode(AN_INT_LIT);
+        { the DEFAULT type, set before the chain rather than after it: the array
+          arms below stamp the index type on this node, and a blanket
+          `ASTTk := tyInteger` at the bottom used to overwrite them -- which is
+          why High(c) answered 'e' while Low(c) still answered 97. }
+        ASTTk[CurASTNode] := Ord(tyInteger);
         if (idx >= 0) and Syms[idx].IsArray and (Syms[idx].Kind <> skParam) and
            (SymArrNDims[idx] <= 1) then
-          ASTIVal[CurASTNode] := Syms[idx].ConstVal
+        begin
+          ASTIVal[CurASTNode] := Syms[idx].ConstVal;
+          StampArrIdxType(CurASTNode, SymArrIdxTk[idx], SymArrIdxEnumId[idx]);
+          LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+        end
         else if (idx >= 0) and Syms[idx].IsArray and (Syms[idx].Kind <> skParam) and
                 (SymArrNDims[idx] >= 2) then
+        begin
           { Low of a whole multi-dim static array = the FIRST dimension's lower
             bound (SymArrDimLo[sym*MAX+0]); was silently 0. }
-          ASTIVal[CurASTNode] := SymArrDimLo[idx * MAX_ARR_DIMS]
+          ASTIVal[CurASTNode] := SymArrDimLo[idx * MAX_ARR_DIMS];
+          StampArrIdxType(CurASTNode, SymArrIdxTk[idx], SymArrIdxEnumId[idx]);
+          LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+        end
         else if DerefPtrArrayInfo(valNode, dpaCount, dpaLo, dpaFlat) then
           { `Low(p^)`: the pointee's declared lower bound. }
           ASTIVal[CurASTNode] := dpaLo
@@ -5385,8 +5408,11 @@ begin
             length byte, which is exactly why fpc reports 0 for `string[N]` and
             for a ShortString while reporting 1 for a managed one. }
           ASTIVal[CurASTNode] := 0;
-        ASTTk[CurASTNode] := Ord(tyInteger);
-        LastExprTk := tyInteger;
+        { read the folded node rather than asserting Integer: a char-, Boolean-
+          or enum-indexed array's bound is typed by its INDEX, and the arms
+          above stamp that on the node. Every other arm still builds a
+          tyInteger node, so this is the same answer for them. }
+        LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
         Exit;
       end;
 

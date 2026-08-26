@@ -6226,7 +6226,8 @@ begin
   Result := OrdinalTypeBound(tkOut, wantHigh, v);
 end;
 
-function TryArrayTypeBound(const nm: AnsiString; wantHigh: Boolean; var v: Int64): Boolean;
+function TryArrayTypeBound(const nm: AnsiString; wantHigh: Boolean; var v: Int64;
+                           var idxTk, idxEnumId: Integer): Boolean;
 { Low(T)/High(T) where T is a named ARRAY type -- `TA = array[5..9] of Integer`
   answered `undefined variable (TA)` while `Low(a)` over a VARIABLE of that type
   worked, so the idiomatic `for i := Low(TA) to High(TA)` had to be spelled with
@@ -6240,15 +6241,18 @@ function TryArrayTypeBound(const nm: AnsiString; wantHigh: Boolean; var v: Int64
   comments already say, so the array rule lands as ONE function rather than a
   third copy. Does not consume the name; the callers do that.
 
-  The bound's TYPE is Integer here, matching what the variable path already
-  answers: `Low(c)` over `array['a'..'e']` prints 97, not 'a', in pxx today.
-  That is a real divergence from fpc, but it is the VARIABLE path's divergence
-  and predates this -- filed as bug-a-low-high-of-a-char-indexed-array-answer-
-  the-ordinal. Answering differently here would make the type name and the
-  variable disagree, which is worse than either answer. }
+  The bound's TYPE comes back in idxTk/idxEnumId, in the ArrTypeIdxTk encoding
+  (0 = nothing recorded = an ordinary Integer index). It used to be hard-wired
+  to Integer here to MATCH the variable path, which printed 97 rather than 'a'
+  for `array['a'..'e']` -- the comment that stood here said so, and said that
+  answering differently would make `Low(TC)` and `Low(c)` disagree, which is
+  worse than either answer. Both now read the recorded index type, and they
+  stay together because there is one StampArrIdxType between them.
+  bug-a-low-high-of-a-char-indexed-array-answer-the-ordinal }
 var ai, base: Integer;
 begin
   Result := False;
+  idxTk := 0; idxEnumId := -1;
   ai := FindArrayType(nm);
   if ai < 0 then Exit;
   if ArrTypeIsDyn[ai] or (ArrTypeDynDepth[ai] > 0) then
@@ -6269,6 +6273,7 @@ begin
   end
   else if wantHigh then v := ArrTypeHi[ai]
   else v := ArrTypeLo[ai];
+  idxTk := ArrTypeIdxTk[ai]; idxEnumId := ArrTypeIdxEnumId[ai];
   Result := True;
 end;
 
@@ -6278,6 +6283,7 @@ function TryConstHighLowValue(wantHigh: Boolean; var v: Int64): Boolean;
   in v and the type name is consumed (bug-pascal-high-low-in-const-expr —
   ZenGL's `array[0..High(LongWord) shr 1 - 1]`). }
 var btk: TTypeKind; etid, aliasIdx, eLo, eHi: Integer; nm: AnsiString;
+    tabIdxTk, tabIdxEnumId: Integer;   { TryArrayTypeBound's index-type pair }
 begin
   Result := False;
   if (CurTok.Kind = tkInteger_T) or (CurTok.Kind = tkLongWord_T) or
@@ -6325,7 +6331,9 @@ begin
     Result := True; Exit;
   end;
 
-  if TryArrayTypeBound(nm, wantHigh, v) then
+  { a CONST context has nowhere to put a type, so the pair is discarded here
+    on purpose -- `const N = High(TC)` is a number }
+  if TryArrayTypeBound(nm, wantHigh, v, tabIdxTk, tabIdxEnumId) then
   begin
     Next;
     Result := True; Exit;
@@ -6334,6 +6342,7 @@ end;
 
 function TryFoldHighLowType(wantHigh: Boolean; var outNode: Integer): Boolean;
 var btk: TTypeKind; bv: Int64; etid, aliasIdx, eLo, eHi: Integer; nm: AnsiString;
+    tabIdxTk, tabIdxEnumId: Integer;   { TryArrayTypeBound's index-type pair }
 begin
   Result := False;
   if (CurTok.Kind = tkInteger_T) or (CurTok.Kind = tkLongWord_T) or
@@ -6382,12 +6391,19 @@ begin
     EnumTypeOrdRange(etid, eLo, eHi);
     if wantHigh then bv := eHi else bv := eLo;
     Next; outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv; ASTTk[outNode] := Ord(tyInteger);
+    { carry the enum identity, or `WriteLn(Low(TE))` prints 0 where fpc prints
+      eA -- the ordinal was right and the node simply forgot which enum it came
+      from. The same missing fact as the array-index case below. }
+    ASTEnumId[outNode] := etid;
     Result := True; Exit;
   end;
 
-  if TryArrayTypeBound(nm, wantHigh, bv) then
+  if TryArrayTypeBound(nm, wantHigh, bv, tabIdxTk, tabIdxEnumId) then
   begin
     Next; outNode := AllocNode(AN_INT_LIT); ASTIVal[outNode] := bv; ASTTk[outNode] := Ord(tyInteger);
+    { the type-name twin of the variable arms in pasparser_expr.inc -- same
+      helper, so `Low(TC)` and `Low(c)` cannot drift apart }
+    StampArrIdxType(outNode, tabIdxTk, tabIdxEnumId);
     Result := True; Exit;
   end;
 end;

@@ -2304,6 +2304,8 @@ var
     Horner( (i_d - lo_d) over span_d ). NDims=0 means single-dimension. Per-dim
     lo/span live in flat side tables indexed [sym*MAX_ARR_DIMS + d]. }
   SymArrNDims  : array of Integer;
+  SymArrIdxTk  : array of Integer; { array VARIABLE: the INDEX type of dimension 0, as Ord(TTypeKind); same convention as ArrTypeIdxTk -- 0 means nothing recorded, i.e. a plain Integer index. Written only at the var-declaration AllocArray site (from VDIdxTk), so params, record fields and the C frontend leave it 0 and keep their previous answer. }
+  SymArrIdxEnumId : array of Integer; { the enum type index when SymArrIdxTk is Ord(tyInteger). Guarded exactly like ArrTypeIdxEnumId: 0 is a real enum id, so the tk is the only thing that says whether this slot means anything. }
   SymArrDimLo  : array of Integer;
   SymArrDimSpan: array of Integer;
   SymRTTIOff  : array of Integer; { Data[] offset of layout RTTI descriptor, -1 if none }
@@ -2579,6 +2581,8 @@ var
                            {Code@0, Data@8} minted on first `of object` proc
                            type; REC_NONE until then }
   LastTypePointerElemTk : TTypeKind;
+  LastArrIdxTk     : Integer;  { set by ParseArrayDimBounds on every call: the INDEX type of the dimension it just parsed, as Ord(TTypeKind), or 0 for an ordinary integer range. The one producer of ArrTypeIdxTk/SymArrIdxTk. Valid only immediately after the call -- the next dimension overwrites it, which is why the callers capture it for dimension 0 and drop the rest. }
+  LastArrIdxEnumId : Integer;  { its enum type index when LastArrIdxTk is Ord(tyInteger), else -1. }
   LastTypePointerElemRec : Integer;
   LastTypePointerAlias : Integer;  { set by ParseTypeKind when a pointer type resolves through a NAMED alias: that alias index, else -1 (see UFldPtrAlias) }
   LastTypePointerElemArrAi : Integer;  { set by ParseTypeKind when a pointer's POINTEE is a named FIXED-array type: that ArrType index, else -1. Carries the pointee's extent so Length/High/SizeOf of `p^` can fold it. }
@@ -3047,6 +3051,8 @@ var
   VDElemRowLo    : Integer;
   VDElemProcSig  : Integer;
   VDElemEnumId   : Integer;  { array element's enum type index, else -1 -> SymElemEnumId }
+  VDIdxTk        : Integer;  { the declared array's dimension-0 INDEX type -> SymArrIdxTk. Reset per declaration beside VDElemEnumId; filled either from the named type's ArrTypeIdxTk or from LastArrIdxTk after the inline `[..]` list. }
+  VDIdxEnumId    : Integer;  { its enum type index when VDIdxTk is Ord(tyInteger) -> SymArrIdxEnumId. }
   VDNdCnt        : Integer;
   VDNdDimLo      : array[0..MAX_ARR_DIMS-1] of Integer;
   VDNdDimSpan    : array[0..MAX_ARR_DIMS-1] of Integer;
@@ -4210,6 +4216,8 @@ var
   ArrTypeLo     : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeHi     : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeElemTk : array[0..MAX_TYPEALIAS-1] of Integer;
+  ArrTypeIdxTk : array[0..MAX_TYPEALIAS-1] of Integer; { named array type: the INDEX type of dimension 0, as Ord(TTypeKind). 0 (tyUnknown) means "nothing recorded", which reads as a plain Integer index and is what every row that predates this holds -- so an unwritten slot keeps the old answer instead of claiming a type. Only ParseArrayDimBounds writes it, via LastArrIdxTk. Read by Low/High to type the folded bound: `array['a'..'e']` must answer 'a', not 97. Dimension 0 is the only one stored because Low/High report dim 0 and nothing else asks. }
+  ArrTypeIdxEnumId : array[0..MAX_TYPEALIAS-1] of Integer; { the enum type index when ArrTypeIdxTk is Ord(tyInteger) -- an enum-indexed `array[TE] of T`. Meaningless (and possibly a stale 0, which IS a valid enum id) unless ArrTypeIdxTk says so; never read it without that guard. }
   ArrTypeElemEnumId : array[0..MAX_TYPEALIAS-1] of Integer; { named array type whose ELEMENT is an enum: that enum type index, else -1. Threaded to SymElemEnumId via VDElemEnumId when a var is declared with the alias, so `WriteLn(a[i])` prints the member name through the alias too. }
   ArrTypeElemRec: array[0..MAX_TYPEALIAS-1] of Integer;
   { A named array type whose element is itself a POINTER (`TPropList = array[..]
