@@ -6264,6 +6264,47 @@ begin
           Expect(tkLParen, '(');
           ParseExpr;
           Expect(tkRParen, ')');
+          { `TFn(p)(args)` -- CALL straight through a procedural-type cast, the
+            natural way to dispatch through a hand-built VMT (rtl-generics
+            reaches its comparers this way). The capability was entirely
+            present: `f := TFn(p); f(args)` worked, only the direct spelling was
+            `unexpected token` -- on the CALL line, so it read as a problem with
+            the argument list.
+
+            ONE site, and that is the whole answer to the question this ticket
+            was parked on ("count the cast paths and decide whether they should
+            be one"). The other cast flavours -- the builtin scalar names, the
+            PChar adapter, enums, `string` -- can NEVER produce a callable
+            value, because a procedural type is always user-DECLARED and so is
+            always a type ALIAS. So the call postfix has exactly one possible
+            receiver shape and belongs here, rather than being a fifth
+            per-flavour postfix handler. (`^`, `.field` and `[i]` after a cast
+            already work; `(` was the only postfix missing.)
+
+            A method-pointer alias is tyRecord -- 16 bytes of {Code, Data} --
+            and the cast is a pure retype of the operand, which records already
+            carry by address; the pointer form needs the AN_PTR_CAST wrapper.
+            Same split the record arm below states for the non-call case.
+            bug-p-cannot-call-directly-through-a-procedural-type-cast }
+          if (AliasProcSig[aliasIdx] >= 0) and (CurTok.Kind = tkLParen) then
+          begin
+            if AliasTk[aliasIdx] = Ord(tyRecord) then
+            begin
+              ASTTk[CurASTNode] := Ord(tyRecord);
+              node := CurASTNode;
+            end
+            else
+            begin
+              node := AllocNode(AN_PTR_CAST);
+              ASTLeft[node] := CurASTNode;
+              ASTIVal[node] := aliasIdx;
+              ASTTk[node]   := Ord(tyPointer);
+            end;
+            CurASTNode := BuildIndirectCallAST(node, AliasProcSig[aliasIdx],
+                                               AliasTk[aliasIdx] = Ord(tyRecord));
+            LastExprTk := IntToTypeKind(ASTTk[CurASTNode]);
+            Exit;
+          end;
           if (AliasTk[aliasIdx] = Ord(tyAnsiString)) or
              (AliasTk[aliasIdx] = Ord(tyString)) then
           begin

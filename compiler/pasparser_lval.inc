@@ -32,6 +32,52 @@
   Nothing is ever emitted from a poisoned parse: the driver halts on ErrCount
   after ParseProgram, before any output.
   feature-a-error-does-not-halt-so-a-parse-can-be-speculative }
+{ ===== the indirect-call tail =====
+
+  `(args)` applied to a value that is already known to be callable — a proc-var
+  ident, a method-pointer field, or a procedural-type CAST. CurTok is on the
+  '('; on return it is past the ')'.
+
+  ONE copy of it, because there were about to be three: ParseProcVarCallAST and
+  the anonymous proc-var arm inside ParseLValueAST had already written this loop
+  out twice, and `TFn(p)(args)` needed a third. Two is a smell
+  (root-cause-over-microfix.md), so the callers now differ only in how they
+  produce the CALLEE NODE, which is the only thing that actually differs
+  between them.
+
+  `isMethodPtr` marks a 16-byte {Code, Data} method pointer, whose lowering
+  injects Data as Self and calls Code; ASTSLen carries the flag, as it did in
+  both originals.
+  bug-p-cannot-call-directly-through-a-procedural-type-cast }
+function BuildIndirectCallAST(calleeNode, sigPi: Integer; isMethodPtr: Boolean): Integer;
+var argsHead, lastArg, argSeq, nArgs, callIndNode: Integer;
+begin
+  Expect(tkLParen, '(');
+  argsHead := -1; lastArg := -1; nArgs := 0;
+  while CurTok.Kind <> tkRParen do
+  begin
+    ParseExpr;
+    argSeq := AllocNode(AN_ARG);
+    ASTLeft[argSeq] := CurASTNode;
+    if argsHead = -1 then argsHead := argSeq
+    else ASTRight[lastArg] := argSeq;
+    lastArg := argSeq;
+    Inc(nArgs);
+    if CurTok.Kind = tkComma then Next
+    else if CurTok.Kind <> tkRParen then Error('expected comma or close parenthesis');
+  end;
+  Expect(tkRParen, ')');
+  if nArgs <> Procs[sigPi].ParamCount then
+    Error('procedural call: wrong number of arguments');
+  callIndNode := AllocNode(AN_CALL_IND);
+  ASTLeft[callIndNode]  := argsHead;
+  ASTRight[callIndNode] := calleeNode;
+  ASTIVal[callIndNode]  := sigPi;
+  ASTTk[callIndNode]    := Ord(Procs[sigPi].RetType);
+  if isMethodPtr then ASTSLen[callIndNode] := 1 else ASTSLen[callIndNode] := 0;
+  BuildIndirectCallAST := callIndNode;
+end;
+
 procedure ReportUndefinedName(const nm: AnsiString);
 begin
   ErrorIdent := nm;
@@ -198,30 +244,7 @@ begin
     ASTIVal[node] := idx;
     if isMethodPtr then ASTTk[node] := Ord(tyRecord)
     else ASTTk[node] := Ord(tyPointer);
-    Next; { consume '(' }
-    argsHead2 := -1; lastArg2 := -1; i := 0;
-    while CurTok.Kind <> tkRParen do
-    begin
-      ParseExpr;
-      argSeq2 := AllocNode(AN_ARG);
-      ASTLeft[argSeq2] := CurASTNode;
-      if argsHead2 = -1 then argsHead2 := argSeq2
-      else ASTRight[lastArg2] := argSeq2;
-      lastArg2 := argSeq2;
-      Inc(i);
-      if CurTok.Kind = tkComma then Next
-      else if CurTok.Kind <> tkRParen then Error('expected comma or close parenthesis');
-    end;
-    Expect(tkRParen, ')');
-    if i <> Procs[fldSigPi].ParamCount then
-      Error('procedural call: wrong number of arguments');
-    callIndNode := AllocNode(AN_CALL_IND);
-    ASTLeft[callIndNode]  := argsHead2;
-    ASTRight[callIndNode] := node;
-    ASTIVal[callIndNode]  := fldSigPi;
-    ASTTk[callIndNode]    := Ord(Procs[fldSigPi].RetType);
-    if isMethodPtr then ASTSLen[callIndNode] := 1 else ASTSLen[callIndNode] := 0;
-    Result := callIndNode;
+    Result := BuildIndirectCallAST(node, fldSigPi, isMethodPtr);
     Exit;
   end;
 
@@ -4964,7 +4987,7 @@ function ParseProcVarCallAST(calleeSym, sigPi: Integer): Integer;
   proc index (marshalling + return type). A method-pointer var is a 16-byte
   {Code,Data} record (TypeKind tyRecord): ASTSLen[node]=1 flags it so lowering
   injects Self (Data) and calls Code. }
-var node, calleeNode, argsHead, lastArg, argSeq, nArgs: Integer; isMethod: Boolean;
+var node, calleeNode, argsHead, nArgs: Integer; isMethod: Boolean;
 begin
   isMethod := (Syms[calleeSym].TypeKind = tyRecord);
   Next;                                  { consume the variable name }
@@ -4972,29 +4995,11 @@ begin
   ASTIVal[calleeNode] := calleeSym;
   if isMethod then ASTTk[calleeNode] := Ord(tyRecord)
   else ASTTk[calleeNode] := Ord(tyPointer);
-  Expect(tkLParen, '(');
-  argsHead := -1; lastArg := -1; nArgs := 0;
-  while CurTok.Kind <> tkRParen do
-  begin
-    ParseExpr;
-    argSeq := AllocNode(AN_ARG);
-    ASTLeft[argSeq] := CurASTNode;
-    if argsHead = -1 then argsHead := argSeq
-    else ASTRight[lastArg] := argSeq;
-    lastArg := argSeq;
-    Inc(nArgs);
-    if CurTok.Kind = tkComma then Next
-    else if CurTok.Kind <> tkRParen then Error('expected comma or close parenthesis');
-  end;
-  Expect(tkRParen, ')');
-  if nArgs <> Procs[sigPi].ParamCount then
-    Error('procedural call: wrong number of arguments');
-  node := AllocNode(AN_CALL_IND);
-  ASTLeft[node]  := argsHead;
-  ASTRight[node] := calleeNode;
-  ASTIVal[node]  := sigPi;
-  ASTTk[node]    := Ord(Procs[sigPi].RetType);
-  if isMethod then ASTSLen[node] := 1 else ASTSLen[node] := 0;
+  node := BuildIndirectCallAST(calleeNode, sigPi, isMethod);
+  { read back off the node the helper built -- the arity is the signature's,
+    which the helper has already checked }
+  argsHead := ASTLeft[node];
+  nArgs := Procs[sigPi].ParamCount;
   { NilPy: the value in a `Callable[...]` parameter may be a lambda or a closure
     — a heap OBJECT, not a code address — and the typed indirect call above
     jumps straight into it. Branch at run time; a compiled def keeps this exact

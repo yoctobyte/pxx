@@ -8730,6 +8730,16 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_op_fpc_named_result26)" = "$$(printf '5/6\n1/6\n3/2\n1/6\n1/6\n4/12')"
 	./$(COMPILER) test/test_op_unit_scope.pas $(TESTTMP)/test_op_unit_scope26
 	test "$$($(TESTTMP)/test_op_unit_scope26)" = "$$(printf 'in:5/6\n5/6\n3/2\n1/6')"
+	# `TFn(p)(args)` -- calling straight through a procedural-type cast -- was
+	# `unexpected token`, while `f := TFn(p); f(args)` worked, so only the
+	# spelling was refused. ONE site, not a fifth per-flavour postfix handler: a
+	# procedural type is always user-declared and therefore always a type ALIAS,
+	# so the alias cast is the only flavour that can produce a callable. The
+	# three copies of the indirect-call argument loop are now one
+	# (BuildIndirectCallAST). fpc -O1 -Mobjfpc 3.2.2's values.
+	# bug-p-cannot-call-directly-through-a-procedural-type-cast
+	./$(COMPILER) test/test_call_through_a_procedural_cast.pas $(TESTTMP)/test_proccast26
+	test "$$($(TESTTMP)/test_proccast26)" = "$$(cat test/test_call_through_a_procedural_cast.expected)"
 	# Three gaps in unit-scope operator overloading, all visible in FPC's own
 	# compiler/constexp.pas, which declares 22 operators on one record:
 	# a UNARY overload was routed to the binary arity check and refused; the
