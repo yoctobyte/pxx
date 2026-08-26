@@ -2432,6 +2432,10 @@ begin
     'pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rbx',
     'ret'
   ]);
+
+  { Last: the variant clear/retain blobs call AnsiStrRelease/Retain and the
+    object blobs, whose addresses are set above. See EmitVariantBlobs. }
+  EmitVariantBlobs;
 end;
 
 procedure EmitLoadManagedHandleRdi(symIdx: Integer);
@@ -2534,7 +2538,7 @@ begin
   Code[doneOutPatch] := Byte(CodeLen - (doneOutPatch + 1));
 end;
 
-procedure EmitVariantClear;
+procedure EmitVariantClearBody;
 { rax = address of a 16-byte variant slot. Release a managed payload, then
   reset the slot to VT_EMPTY. Preserves the slot address in rax. The jne
   target is patched manually (not via EmitAsmX64's `.label` form) because it
@@ -2608,12 +2612,12 @@ begin
   IREmitCodeCall(ObjRetainBlobAddr);
 end;
 
-procedure EmitVariantRetain;
+procedure EmitVariantRetainBody;
 { rax = address of a variant slot. Retain a managed payload. Preserves rax.
-  See EmitVariantClear for why the jne target is patched manually. }
+  See EmitVariantClearBody for why the jne target is patched manually. }
 var pDone, pDone2, pHit, pObj, pObj2, pSkip: Integer;
 begin
-  { Same managed-payload test as EmitVariantClear — see there, including the
+  { Same managed-payload test as EmitVariantClearBody — see there, including the
     object-tag arm and its population-tag guard. }
   EmitAsmX64(['push rax', 'mov rcx, [rax]', 'cmp rcx, %', VT_STRING]);
   EmitB($0F); EmitB($84); pHit := CodeLen; EmitI32(0);   { je retain }
@@ -2643,6 +2647,49 @@ begin
   Patch32(pDone2, CodeLen - (pDone2 + 4));
   Patch32(pSkip, CodeLen - (pSkip + 4));
   EmitAsmX64(['pop rax']);
+end;
+
+{ The variant clear/retain pair, emitted ONCE as callable blobs, exactly like
+  the ansistring pair above it and the object pair next to that.
+
+  Why: EmitVariantClear used to splice its ~96-byte body in at every site. On a
+  ZERO-BYTE .npy that is 9,859 sites -- ~946 KB, i.e. ~42% of the whole 2.23 MB
+  output -- and, because the body is written through the readable text
+  assembler, 138,026 of the compiler's 139,657 AsmTextLine calls, each of which
+  re-parses instruction text and issues ~36 CaseEqual. One inline helper was
+  ~99% of the text assembler's entire traffic.
+
+  This is the `normalise-dont-special-case` sibling case, not a new idea: four
+  managed-payload helpers, two already out of line (AnsiStrRetain/Release,
+  ObjRetain/Release), two left inline. The bodies are unchanged and stay
+  position-independent -- every jump in them is patched CodeLen-relative within
+  the body -- so moving them behind a `call` is a placement change, not a
+  semantic one. The blobs sit at the tail of EmitAnsiStringRuntime, which makes
+  them exactly as conditional as the status quo: the bodies call
+  AnsiStrReleaseAddr and ObjReleaseBlobAddr, so any program that could reach
+  them already ran that emitter, and IREmitCodeCall's addr=0 guard turns a
+  missed one into a compiler error rather than a jump to the ELF entry point. }
+procedure EmitVariantBlobs;
+begin
+  VariantClearBlobAddr := CodeLen;
+  EmitVariantClearBody;
+  EmitB($C3);                                     { ret }
+  VariantRetainBlobAddr := CodeLen;
+  EmitVariantRetainBody;
+  EmitB($C3);                                     { ret }
+end;
+
+procedure EmitVariantClear;
+{ rax = address of a 16-byte variant slot. Preserves rax; clobbers rcx and
+  flags, exactly as the inline body did. }
+begin
+  IREmitCodeCall(VariantClearBlobAddr);
+end;
+
+procedure EmitVariantRetain;
+{ rax = address of a variant slot. Preserves rax; clobbers rcx and flags. }
+begin
+  IREmitCodeCall(VariantRetainBlobAddr);
 end;
 
 procedure EmitAnsiStrFromInlineString;

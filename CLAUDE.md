@@ -614,8 +614,24 @@ critical path:
 
 - **`dev` is the working branch. Fix, commit, push. Do not wait for tests.**
   Read, analyse, fix, commit, push, next. A red `dev` is expected and cheap.
-- **`master` is a stable snapshot**, advanced once or twice a day, only from a
-  `dev` state Track T has reported green.
+- **`master` is a stable snapshot, advanced ONLY when there is a new fully
+  tested and PINNED version** (user, 2026-08-26). The pin is the trigger, not a
+  clock: pins are already the deliberate, repo-lock-holding event where a binary
+  is blessed, so coupling master to them means every master sha is a sha some
+  lane can actually build against. *Fully tested* means Track T has swept that
+  sha, not that `gate.sh quick` passed on the merge.
+  **This replaces "once or twice a day"**, which was the earlier wording and is
+  too weak to hold: read as a permission rather than a bound, it produced **nine
+  syncs in under six hours** on 2026-08-26 — one carrying zero `compiler/` or
+  `lib/` files — each spending a full gate run on the box whose contention is
+  the binding constraint on the test matrix. A green is the *precondition* for a
+  sync, never the *trigger*.
+  **The consequence, named before it bites: Track T's throughput is now master's
+  throughput.** Breadth staleness stops being an informational number and becomes
+  the project's rate limit. So the first time master feels slow, the tempting fix
+  will be to relax what *fully tested* means — and that is the one adjustment that
+  puts us back where we started while keeping the appearance of rigour. **The
+  honest lever is fewer commits between pins, not a thinner sweep.**
 - **You may land non-green on `dev`** — this is the whole point, and it is the
   one freedom the old loop did not give you. Commit mid-refactor, bank a partial
   fix, and *deliberately craft regressions* to see what catches them. What you
@@ -662,6 +678,25 @@ build. It is also, for free, the byte-identical self-host fixedpoint, so it is
 the one thing that cannot be skipped in the name of speed: a compiler that
 cannot reproduce itself is the single failure that would poison every lane at
 once, and this catches it in ~12s before the commit exists.
+
+**The one hole in that claim, and it opens exactly where verdicts matter most:**
+in a **fresh tree seeded with a copied-in binary**, `make compiler/pascal26` is a
+**no-op that exits 0**. `cp` stamps the seed with a newer mtime than the sources,
+so make has nothing to do and prints `make: 'compiler/pascal26' is up to date`
+where `converged after N round(s)` belongs — a success message in the wrong
+dialect, with everything downstream healthy. **No fixedpoint was proved and
+nothing says so.** In the normal loop this cannot happen, because the sources are
+what you just edited and are always newer. It only surfaces where the seed
+arrives from outside — a scratch worktree, a sweep, a gate run in a fresh
+checkout — which is precisely where the resulting verdict is load-bearing.
+Measured twice on 2026-08-26: once as a sync-back gate that went RED, and once as
+a full-tier sweep that would have returned a clean verdict for a sha using a
+**v226** binary predating the work it was meant to gate.
+
+**So when you seed a tree from outside, `touch` the sources after the copy (or
+`touch -d '2000-01-01'` the seed), and do not accept the build until you have
+seen `converged after N round(s)` and confirmed the binary's sha256 differs from
+`pinned`.** Absence of that line is the tell; there is no error to wait for.
 
 **`tools/gate.sh quick` (~30s) is now OPTIONAL on `dev`** — run it when you
 touched something you are nervous about, skip it when you are not. It is

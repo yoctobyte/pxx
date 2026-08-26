@@ -18,6 +18,29 @@ wrong value far from the cause.** Three from one week:
 So: **reach for the tool that makes a wrong VALUE visible, not the one that
 makes a crash easier to locate.** A crash was never the expensive case.
 
+## If you can name the hot spot without measuring, that is evidence it is not the hot spot
+
+Three times in one day, in three domains sharing nothing — matrix composition,
+devtest attribution, compiler hot path — a careful person named the obvious
+candidate and was wrong, and the real answer fell out of a measurement in under
+an hour:
+
+- The matrix looked like it was made of Pascal micro-tests (44% of jobs). They
+  are 7.4% of the time. **70% is one target**, and the tax is not part of a NilPy
+  job — a zero-byte `.npy` costs nearly what a 288-line test costs.
+- A flaky devtest file "obviously" flaked in the three cases whose notes said
+  *measured on the 12-core xeon*. Those feed frozen literals and measure nothing.
+  The offender was a fourth case that **passed**.
+- A compiler slow at compiling looked like a register-allocation problem. **56%
+  of a one-line NilPy compile was in the first 5 KB of `.text`** — runtime blobs
+  and the builtin heap — with 8.7% in two `idiv`s dividing by the literal 8.
+
+The mechanism is not that intuition is bad. It is that **the obvious candidate is
+the one everyone has already optimised**, so the surviving cost is *definitionally*
+in the place nobody looked. Which sharpens "measure first" into something you can
+act on directly: **your ability to name a hot spot without measuring is itself
+evidence that it was named — and therefore fixed — before you got there.**
+
 ## Find your section
 
 The sections below accumulated in the order they were learned, which is the wrong
@@ -27,8 +50,12 @@ order to read them in. Route by what you are holding:
 - `## Order` -- the tool per question, and the reason to reach for one at all
 - ``## `perf` being blocked is not "no profiler"`` -- FPC `-pg` + gprof, read call
   counts not percentages
+- ``## Profile the SHIPPING binary`` -- and `tools/pxxprof`, for when `perf` and
+  gdb-attach are both refused
 
 **A measurement or a verdict is telling you something and you are about to believe it**
+- ``## Profile the SHIPPING binary`` -- `-g` alone silently means `-O0`, so
+  `make pxx-debug` profiles a different program and says nothing about it
 - `## Two traps that produced confident wrong readings`
 - `## A bisect can name the RIGHT commit and still be wrong` -- the tell is that
   the named commit looks like an improvement
@@ -334,6 +361,29 @@ history decays after one iteration.** Marking the current run torn-down while th
 history rows stay unmarked buys exactly one cycle, until the pointer moves past
 that sha. A fix that expires is not a fix.
 
+## A property that holds for the wrong reason will stop holding silently
+
+Track T set a new job's class to `selfhost` for its 600s timeout, then found it
+was **already** classed that way -- but only because `classify()` matches on the
+expanded `make -n` text, and the `$(COMPILER)` prerequisite expands to text
+naming `compiler.pas`. The class was right by accident of a prerequisite, not by
+anything about the job. A comment had been written asserting the opposite.
+
+This is the quiet cousin of every defect in this file. Nothing is failing;
+something is **passing through a path nobody chose**, and the day that
+prerequisite is refactored the timeout silently drops to the default and a
+600-second job starts getting killed -- with no change to the job, no change to
+the class, and no diff to blame.
+
+- **When you find a property already true, ask WHY before being pleased.** "It
+  already works" and "it works for the reason I would have chosen" are different
+  facts, and only the second survives someone else's refactor.
+- **Then make it true on purpose.** They changed `classify()` to match
+  `selfcompile` directly, so the class no longer depends on how a prerequisite
+  happens to expand. Same cost, and now the reason is the one written down.
+- **Correct the comment that asserted the other thing.** This one had been wrong
+  from the start and nothing had ever contradicted it.
+
 ## A guard that greps the source can only catch what is visible in the text
 
 Same session, second defect. A repair path called `testable_only()`, which reads
@@ -564,6 +614,40 @@ A cross-target size difference in particular is the **null hypothesis, not
 evidence**: two targets emit different amounts of code for the same source, and
 that is the expected state of the world.
 
+## A guard's human-readable note is triage evidence, so it must say what the guard DID
+
+A devtest file flaked intermittently. The ticket fingered three cases; all three
+were innocent, and they were innocent in a way that should have been visible:
+they feed **frozen literals** to the predicate and measure nothing at all. The
+real offender was a fourth case, **absent from the ticket entirely because it
+passed** -- it called the timing probe three times against the real box and
+asserted on the relationship between three ambient numbers.
+
+What sent triage to the wrong three was a note in the *passing* output:
+`Measured on the 12-core xeon`. That describes **where a constant came from**. It
+was read as describing **what the case does at run time**. Meanwhile the one case
+that genuinely measured the box said nothing about measuring. So the file
+advertised the wrong suspects and concealed the real one, and every word of it
+was true.
+
+- **Anything a guard prints is read during triage, under time pressure, by
+  someone who has not read the code.** Provenance and behaviour are different
+  claims and must not share a phrasing.
+- Say `FROZEN observations, fed in as literals` where a triager will see it, and
+  say plainly when a case *does* touch the live environment.
+- **An intermittent-flake ticket that cannot say WHY it is intermittent is
+  usually pointing at the wrong line.** Here the explanation only appeared once
+  the right case was found: the probe takes `min()` of three samples, so a
+  momentary stall is absorbed -- the flake needs a load window spanning all three
+  samples of the first call that has lifted by the second, i.e. a tier finishing
+  mid-devtest. That is exactly the recorded observation (red during a full,
+  green on immediate rerun) and exactly why it never reproduced on demand.
+- **Supplying the timings made the assertions stronger, not weaker**: `r2 == 4.0`
+  where observing had forced a loose `> 2.0`, and an exact reference where the
+  old file could only bound it -- plus one it had never made at all, that a
+  slower probe must not raise the reference. Determinism is not a weaker test; it
+  is what lets you assert the thing you actually mean.
+
 ## A comment is an unverified claim, and tickets inherit it
 
 Two N tickets in a row named the wrong mechanism, and the second one shows how a
@@ -654,6 +738,17 @@ Three things to carry:
   did not happen*, which leaves the one that never does. That is a real narrowing
   and it is the most the evidence supports.
 
+**And the most dangerous: a corrupted input arriving dressed as a finding.** A
+differential probe used fixed paths -- `/tmp/fdp.pas`, `/tmp/fdp_f`, `/tmp/fdp_p`
+-- so two concurrent copies overwrote each other's source and binaries. The
+result was not a crash. It was a **report**: `new divergences: 34`, `no-oracle
+skips: 90`, rows reading `fpc=[]`. An oracle whose binary had been overwritten
+mid-run presented as an oracle that *disagreed*. This is worse than a torn-down
+run publishing in the vocabulary of a completed one, because the tool's entire
+job is to be believed about findings, and the corruption is indistinguishable
+from its output. **A tool that reports divergences must isolate its workspace
+(`mktemp -d` + trap), or its worst failure looks exactly like its best work.**
+
 **The most literal instance: a diff against a missing operand.** The bench
 harness emits `CANARY-DIFF vs -O0` for each optimisation level -- and when the
 `-O0` build itself fails, `ref_out` stays `None`, so every other level dutifully
@@ -667,6 +762,64 @@ blind probe forces a distinct exit code**, so a caller cannot mistake blindness
 for clean. Its CANNOT-TELL branches had never executed on this box, so the
 devtest drives them with fakes on PATH -- a branch that has never run is not yet
 known to work.
+
+## A caveat attached to a claim is not the same as declining to make the claim
+
+The sharpest self-correction of 2026-08-26, and it came from someone who had
+already written the caveat that would have saved them:
+
+> *"105 logs is a partial view, so tell me if the clean result does not hold at
+> the end."*
+
+They wrote that, and then reported the hazard **absent** anyway — twice,
+confidently. The signature appeared at log 684. The caveat was true, was
+attached, and did no work at all, because **a hedge does not change what the
+reader does with the claim.** Everyone downstream acted on "absent"; nobody acted
+on "of 105".
+
+The rule: **if the caveat is load-bearing, the claim is not ready.** Report the
+observation (*"clean through 105 of ~3000"*) rather than the conclusion
+(*"the hazard is absent"*), and let the conclusion wait for the evidence that
+would justify it. This is the same failure as stopping a search at the point
+where the evidence agrees with you — the caveat is what you write instead of
+continuing to look.
+
+Its twin, from the same day: **when a fix works, count how many things you
+changed.** A gate went RED from a `/tmp` worktree; the worktree moved and the
+seed mtime changed in the same window; the RED went away; one story fit, so
+nobody looked for the second variable. Both errors are the same shape — stopping
+at the first sufficient explanation — and neither is caught by any test.
+
+## A suite that never sets the flag is blind to what the flag guards
+
+A green suite is evidence about the code the suite *reached*. For anything behind
+a gate, the gate is what decides whether it was reached — so the same property
+that makes a feature safe to land makes the suite unable to say anything about it.
+
+The instance, 2026-08-26: four `-O3` optimisation passes, and the question was
+whether to promote them to `-O2`. The tempting evidence was a full-tier verdict at
+the sha that contained them. But **almost nothing in the tier compiles at `-O3`**
+— the NilPy recipes are `./$(COMPILER) test/x.npy out`, no `-O` flag at all — so a
+full-tier GREEN would have proven mainly that *the gate kept the passes out of the
+default path*. That is a fact about the gate, not about the passes, and reading it
+as "they are safe to promote" inverts what it shows.
+
+**The same reasoning tells you which evidence does bear on it:** the two-oracle
+differential run across all four `-O` levels, and `test-selfcompile-odiff`, which
+actually varies the flag. Ask *what in this suite sets the flag* before treating
+its verdict as coverage.
+
+**The corollary that catches bugs rather than just weak evidence:** if a change
+carries a gated half and an ungated half, the tier can only see the ungated half —
+so when a gated-feature window produces a regression, the ungated half is the
+first suspect, however small it looked in the commit message. A commit whose
+subject was `-O3 cmp-immediate` also carried an ansistring runtime blob change
+that no gate guarded, and that half is the only part of the work the suite could
+observe.
+
+The general form: **a flag makes a feature invisible in exactly the tier you
+would use to judge it.** Coverage is not "did the suite pass", it is "did the
+suite execute this path", and a gate is a machine for guaranteeing it did not.
 
 ## Record the negative result, or someone will spend a night rediscovering it
 
@@ -882,3 +1035,71 @@ volume at a near-constant ~4 s/MB across a 150x range, which rules out a
 *superlinear* blowup and nothing else. A function costing a fixed 3 microseconds
 per emitted instruction plots as a perfectly straight line and is still 30% of
 the compile.
+
+## Profile the SHIPPING binary — `-g` alone silently means `-O0`
+
+The section above gets you call counts. When you want *shares* — where the time
+actually goes — the trap is one line of `compiler.pas`:
+
+```
+compiler.pas:739    OptLevel := 2;        { the default }
+compiler.pas:1536   if DebugInfo and not OptLevelExplicit then OptLevel := 0;
+```
+
+So **`make pxx-debug` builds a `-O0` compiler.** For gdb that is the point (1:1
+codegen keeps breakpoints on the lines you set them on). For a profile it is a
+different program from the one everyone runs, and *nothing in the output says
+so* — you get a plausible, well-shaped, confidently wrong weighting.
+
+Build the real one explicitly, and check you got it:
+
+```sh
+./compiler/pascal26 -O2 -g compiler/compiler.pas /tmp/p26-g-O2
+# its code=NNNN must match the plain default build's code=NNNN.
+# If it does not, -g changed the codegen and the profile is of something else.
+```
+
+Measured 2026-08-26 on the same zero-byte `.npy`: the `-O0` build put 53.5% of
+in-`.text` samples in the builtin runtime blob range, the real `-O2` build 48.1%,
+and the parser's share moved with it. The *ranking* happened to survive; the
+numbers did not, and there is no way to tell which you are holding from the
+report alone. **Record the `-O` level of the profiled binary the way you already
+record its sha.**
+
+### `tools/pxxprof` — when `perf` AND gdb-attach are both refused
+
+`perf_event_paranoid = 4` blocks `perf`; yama `ptrace_scope = 1` blocks
+attaching to a non-descendant. `tools/pxxprof` forks the target and
+`PTRACE_SEIZE`s its own child, so it needs neither:
+
+```sh
+cc -O2 -o /tmp/pxxprof tools/pxxprof.c
+/tmp/pxxprof /tmp/samples.txt 150 /tmp/p26-g-O2 /tmp/repro.npy /tmp/o
+python3 tools/pxxprof_symbolize.py /tmp/syms.txt /tmp/samples.txt | head -30
+```
+
+Two things it will not tell you, both of which have to be read around:
+
+- **The `<outside .text / vdso>` bucket is not time.** Its own header warns the
+  share swings 8-38%; measured, it was **70% in one run and 0.9% in the next of
+  the same binary**, with the address moving under ASLR
+  (`75522eaa642c` -> `73d5a58a642c`). Cross-check against `/usr/bin/time`: if
+  `user` is within a few percent of `wall`, the process is pure user CPU and the
+  bucket is sampling noise. **Exclude it and renormalise on in-`.text` samples**
+  — every percentage that includes it is deflated by an amount that changes per
+  run.
+- **The builtin runtime carries no DWARF**, so `PXXAlloc`, `PXXFree` and the
+  hand-emitted retain/release blobs all fall into the FIRST symbol's range and
+  show up under the *file* name. When that range is hot — it was 48% — read it
+  by histogramming the raw addresses and disassembling around the hot ones, not
+  by trusting the label. That is how three `idiv`s by the literal 8 turned out
+  to be 11.4% of the whole compile.
+
+**It did not compile as committed** (`open()` with no `<fcntl.h>`; fixed in
+`1202429f4`). Worth naming because of what it cost rather than what it was: a
+profiler that does not build is a profiler nobody reaches for, and the published
+figure it was committed with — 56% in the first 5 KB of `.text` — is closer to
+what the `-O0` debug build gives than the `-O2` one. **A tool that fails to
+build fails silently in the worst possible way: as an absence of measurements,
+which reads exactly like an absence of anything to measure.** Build it before
+you trust a number attributed to it.

@@ -2252,6 +2252,38 @@ var xNode, node, left, term, callN, argN, tagCall: Integer;
     ASTTk[Result] := Ord(tyBoolean);
   end;
 
+  { Can this operand hold a class instance AT ALL?
+
+    The user-class arm below emits AN_IS_TEST, and that lowers to a VMT walk
+    through the operand read as an object pointer. A statically SCALAR operand
+    reached it anyway: `isinstance(3, B)` walked a VMT at address 3 and
+    `isinstance("s", B)` read the string body as one, so both SEGFAULTED where
+    CPython simply answers False. The variant arm above never had the problem —
+    it guards on the tag first — so this is the one road with no guard on it.
+
+    The answer for a scalar is known HERE, at compile time, and it is False:
+    nothing that is statically an int / a string / a float / a set can be an
+    instance of a user class. The unknown and pointer-shaped kinds keep the
+    test, so every operand that reaches it today still does.
+
+    A folded operand is not evaluated, which for a side-effecting one loses the
+    call — the same trade the header note above already records for the terms
+    that re-emit it. bug-n-isinstance-of-a-scalar-against-a-user-class-segfaults }
+  function CanHoldInstance(n: Integer): Boolean;
+  var k: TTypeKind;
+  begin
+    k := IntToTypeKind(ASTTk[n]);
+    Result := (k = tyUnknown) or (k = tyClass) or (k = tyPointer) or
+              (k = tyVariant) or (k = tyAuto) or (k = tyRecord);
+  end;
+
+  function FalseLit: Integer;
+  begin
+    Result := AllocNode(AN_BOOL_LIT);
+    ASTIVal[Result] := 0;
+    ASTTk[Result] := Ord(tyBoolean);
+  end;
+
 begin
   Next;                     { 'isinstance' }
   Expect(tkLParen, '(');
@@ -2405,6 +2437,8 @@ begin
         ASTLeft[term] := tagCall; ASTRight[term] := node;
         ASTTk[term] := Ord(tyBoolean);
       end
+      else if not CanHoldInstance(xNode) then
+        term := FalseLit
       else
       begin
         node := AllocNode(AN_IS_TEST);
@@ -5148,6 +5182,23 @@ begin
         prescan have both run, so a class declared further down the file is
         already a row. Alias-aware itself, so `C = B` after `B = A` chains. }
       ci := FindUClassNonRecord(GetTokenStr(i + 2));
+      { …spelled EXACTLY as the class is. FindUClassNonRecord matches
+        case-INSENSITIVELY, Pascal-style, so `g = f` beside a `class F`
+        registered `g` as an ALIAS OF F — and because this table is the one
+        every alias-aware predicate reads, PyIsExactCtorName then answered True
+        for `g` and `g(2, 3)` CONSTRUCTED an F where CPython calls the def.
+        Silent with a `pass` body (it printed an object), a segfault as soon as
+        the class declares an `__init__` the call does not fit.
+
+        The registration is the worst place in the family for the insensitive
+        lookup to survive, because it does not merely misread one site: it MINTS
+        a name that makes every other site — the four already fixed ones
+        included — answer wrongly, each of them correctly, from a bad row.
+        Fifth site of bug-nilpy-a-lowercase-name-is-hijacked-by-a-case-matching-class,
+        after PyIsClassTypeExact (typing), PyIsExactCtorName (construction), the
+        MEMBER field lookup and the flat-namespace shadow rule. }
+      if (ci >= 0) and (not PyIsClassTypeExact(GetTokenStr(i + 2))) then
+        ci := -1;
       { …and the LHS must not already name a class, so this can only ever ADD
         a name, never redirect one. }
       if (ci >= 0) and (FindUClassNonRecord(nm) < 0) and
@@ -19287,6 +19338,53 @@ end;
   censused use is `with open(...) as f`, and pyopen reads the whole file
   eagerly, so there is nothing to close. A `with` without `as` runs the body
   after evaluating EXPR for its effect. }
+{ The CALL NODE every PyCallMethN builds — virtual when the method owns a VMT
+  slot and its class actually participates in a hierarchy, direct otherwise.
+
+  This exists because the three PyCallMethN helpers used to allocate a bare
+  AN_CALL, i.e. they bound every dunder STATICALLY to the method found on the
+  RECEIVER'S DECLARED class. The ordinary method-call path
+  (PyParseMethodCallArgs, ~5000 lines below) has made exactly this test since
+  virtual slots landed, so `self.helper()` reached a subclass override while
+  `len(self)`, `str(self)`, `k in self`, `self[k]`, `self == other` and every
+  arithmetic dunder silently ran the BASE's version — one concept, two
+  mechanisms, only one of them virtual. `for x in self` was already correct
+  because the for-header desugarer builds its own AN_VIRTUAL_CALL.
+
+  The PyClassInHierarchy guard is copied verbatim from that path and matters:
+  a receiver whose exact class is known and that has neither parent nor children
+  is what Python means by a direct call, and it must not pay a VMT indirection
+  that cannot change the answer.
+
+  PYLIB'S OWN CLASSES ARE EXCLUDED, the same exclusion every other dunder
+  branch in this file makes (see PyRecIsPylibOwnClass). TPyList's `at`/`count`,
+  TPyDict's `fetch`/`store` and friends are reached through PyCallMeth1 too, and
+  `class D(dict)` puts TPyDict in a hierarchy — so without this, EVERY container
+  read in such a program silently changed node kind. That is not hypothetical:
+  it broke `del d[k]`, whose lowering reads the subscript back off the node the
+  grammar already built and tests it for AN_CALL. A builtin subclass's dunder
+  override is settled by PyRecOverridesDunder, per OPERATION, which is a
+  different and already-correct mechanism —
+  bug-n-a-builtin-subclass-subscript-operator-skips-the-override.
+
+  ASTRight is deliberately NOT used for the return's rec id here — on an
+  AN_VIRTUAL_CALL it IS the slot, and ResolveNodeRec already reads a call's
+  class from ProcRetRecId. Same note as the method-call path's.
+  bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override }
+function PyAllocMethCallNode(ci, mmi, mpi: Integer): Integer;
+begin
+  if (UMthVirSlot[mmi] >= 0) and PyClassInHierarchy(ci) and
+     (not PyRecIsPylibOwnClass(REC_UCLASS_BASE + ci)) then
+  begin
+    Result := AllocNode(AN_VIRTUAL_CALL);
+    ASTRight[Result] := UMthVirSlot[mmi];
+  end
+  else
+    Result := AllocNode(AN_CALL);
+  ASTIVal[Result] := mpi;
+  ASTTk[Result] := Ord(Procs[mpi].RetType);
+end;
+
 function PyCallMeth3(ci: Integer; const mname: AnsiString;
                      selfNode, arg1, arg2, arg3: Integer): Integer;
 { Three explicit args -- `__exit__(self, exc_type, exc_value, traceback)` is the
@@ -19307,9 +19405,7 @@ begin
   ASTRight[a1] := a2;
   ASTRight[a2] := a3;
   ASTRight[a3] := -1;
-  Result := AllocNode(AN_CALL);
-  ASTIVal[Result] := mpi;
-  ASTTk[Result] := Ord(Procs[mpi].RetType);
+  Result := PyAllocMethCallNode(ci, mmi, mpi);
   ASTLeft[Result] := selfArg;
 end;
 
@@ -19660,9 +19756,7 @@ begin
     ASTLeft[valArg] := argNode;
     ASTRight[selfArg] := valArg;
   end;
-  Result := AllocNode(AN_CALL);
-  ASTIVal[Result] := mpi;
-  ASTTk[Result] := Ord(Procs[mpi].RetType);
+  Result := PyAllocMethCallNode(ci, mmi, mpi);
   ASTLeft[Result] := selfArg;
 end;
 
@@ -19918,9 +20012,7 @@ begin
   a2 := AllocNode(AN_ARG); ASTLeft[a2] := arg2;
   ASTRight[selfArg] := a1;
   ASTRight[a1] := a2;
-  Result := AllocNode(AN_CALL);
-  ASTIVal[Result] := mpi;
-  ASTTk[Result] := Ord(Procs[mpi].RetType);
+  Result := PyAllocMethCallNode(ci, mmi, mpi);
   ASTLeft[Result] := selfArg;
 end;
 
@@ -25083,7 +25175,15 @@ begin
       same reasoning as PyNoSetitemError on the assignment arm.
       bug-nilpy-delitem-dunder-not-supported }
     delCi := -1; delRecv := -1; delKey := -1;
-    if (ASTKind[delBase] = AN_CALL) and (ASTLeft[delBase] >= 0) and
+    { AN_VIRTUAL_CALL as well as AN_CALL: the read is built by PyCallMeth1,
+      which dispatches a user class's `__getitem__` through the VMT whenever
+      that class has a parent or a subclass — so `class D(dict)` with a
+      `__delitem__` reached this test as a virtual call and fell all the way to
+      the refusal at the bottom, which then listed the very form being used.
+      The proc index is in ASTIVal for both kinds, so nothing below cares which
+      it was. bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override }
+    if ((ASTKind[delBase] = AN_CALL) or (ASTKind[delBase] = AN_VIRTUAL_CALL)) and
+       (ASTLeft[delBase] >= 0) and
        (ASTRight[ASTLeft[delBase]] >= 0) then
     begin
       delRecv := ASTLeft[ASTLeft[delBase]];
@@ -27537,6 +27637,7 @@ end;
   of the header grammar — see the PyHdr* declaration for why that matters. }
 function PyInferDefRetType(methodStart: Integer; var retRec: Integer): TTypeKind; forward; { defined with the pre-pass helpers below }
 function PyDefHasValueReturn(defIdx: Integer): Boolean; forward; { lying `-> None` detector (with the pre-pass helpers) }
+function PyDefBodyRaises(defIdx: Integer): Boolean; forward; { abstract-method detector (with the pre-pass helpers) }
 { the annotation-vs-body join; PyParseDefHeader below calls it and its body sits
   with the pre-pass helpers, so FPC needs the forward even though pxx does not }
 function PyJoinRetAnnotation(annTk: TTypeKind; methodStart: Integer;
@@ -29807,6 +29908,37 @@ begin
     Result := tyVariant;
     retRec := REC_NONE;
   end;
+  { The ABSTRACT METHOD — a body that RAISES and never returns a value.
+
+    The scan's floor is tyInteger, so `def __iter__(self): raise
+    NotImplementedError` registered a method RETURNING AN INTEGER. That is a
+    fiction: the body cannot return at all. It stayed harmless until the class
+    was SUBCLASSED, because PyRegisterClassMembers' override block then makes
+    the override adopt the base's signature — the two share a VMT slot and must
+    agree — so the invented Integer was imposed on every override. `def
+    __getitem__(self, k): return 'val-' + k` in the subclass came back as a
+    POINTER printed as a number, and the whole collections-ABC mixin pattern
+    (an abstract base whose entire value is dispatching down) was unusable.
+    Track B's mimic_collections_abc.py carries the workaround this deletes:
+    every abstract method ends in a dead `return iter([])` after the raise,
+    purely so a type could be inferred.
+
+    tyVariant is the honest answer and the one already used a few lines above
+    for the other "produces no value of its own" shape. Nothing is lost: the
+    body never reaches a return, so a variant Result is simply never written
+    (zero-init = VT_EMPTY = None), and an override of ANY type now marshals
+    through a slot wide enough to carry it.
+
+    Both consumers — PyParseDefHeader (the frame) and PyMethodRetType (the
+    signature) — reach this through PyInferDefRetType, so putting the rule here
+    keeps them in step by construction rather than by two copies agreeing.
+    bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides }
+  if (not sawNone) and (not PyDefHasValueReturn(methodStart)) and
+     PyDefBodyRaises(methodStart) then
+  begin
+    Result := tyVariant;
+    retRec := REC_NONE;
+  end;
 end;
 
 { Does the def's body contain a VALUE-bearing `return`? (`return` bare and
@@ -29943,6 +30075,54 @@ begin
         Result := True;
         Exit;
       end;
+    end;
+    Inc(j);
+  end;
+end;
+
+{ Does this def's body RAISE? Same skeleton as PyDefHasValueReturn above (and
+  the same nested-def skip, for the same reason): a `raise` belonging to a
+  helper declared inside this def is not this def's.
+
+  Asked only together with "and has no value-bearing return", to recognise the
+  ABSTRACT METHOD — `def __iter__(self): raise NotImplementedError`. See
+  PyInferDefRetType for why that shape must not be typed. }
+function PyDefBodyRaises(defIdx: Integer): Boolean;
+var j, pdepth, bdepth, k: Integer;
+begin
+  Result := False;
+  j := defIdx + 2;
+  pdepth := 0;
+  while j < TokCount do
+  begin
+    if Tokens[j].Kind = tkLParen then Inc(pdepth)
+    else if Tokens[j].Kind = tkRParen then
+    begin
+      Dec(pdepth);
+      if pdepth = 0 then begin Inc(j); Break; end;
+    end;
+    Inc(j);
+  end;
+  bdepth := 0;
+  while j < TokCount do
+  begin
+    if Tokens[j].Kind = tkIndent then Inc(bdepth)
+    else if Tokens[j].Kind = tkDedent then
+    begin
+      Dec(bdepth);
+      if bdepth <= 0 then Exit;
+    end
+    else if Tokens[j].Kind = tkFunction then
+    begin
+      k := PySkipNestedSuite(j);
+      if k < 0 then Exit;
+      j := k;
+      Continue;
+    end
+    else if (Tokens[j].Kind = tkRaise) and (bdepth >= 1) then
+    begin
+      Result := True;
+      Exit;
     end;
     Inc(j);
   end;

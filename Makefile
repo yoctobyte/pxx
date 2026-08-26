@@ -73,7 +73,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 .PHONY: test-esp-idf
 .PHONY: fuzz-csmith
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-fgl test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-fgl test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-selfcompile-odiff test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos tools-devtest c-interop-devtest tls-openssl-devtest tls13-handshake-devtest truststore-devtest tls-native-seam-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -99,9 +99,21 @@ print-%:
 #
 # -g here is the compiler's own DWARF (it is a pxx-built binary like any other),
 # which is why `break PyClassCreate` works. See devdocs/dev/debug-switches.md.
+#
+# THIS IS A -O0 BUILD, and deliberately so: compiler.pas:1536 drops OptLevel to
+# 0 when -g is passed without an explicit -O, because 1:1 codegen is what keeps
+# breakpoints on the lines you set them on. The DEFAULT is -O2 (compiler.pas:739).
+#
+# So this target is right for gdb and WRONG FOR A PROFILE -- it is a different
+# program from the one every track runs, and nothing in a profile of it says so.
+# To profile the shipping configuration, ask for both:
+#     ./compiler/pascal26 -O2 -g compiler/compiler.pas /tmp/p26-g-O2
+# and check its reported code=NNNN matches the plain build's. See the section
+# "Profile the SHIPPING binary" in devdocs/dev/debugging-playbook.md.
 pxx-debug: $(COMPILER)
 	$(COMPILER) -g $(COMPILER_SRC) $(COMPILER)-debug
-	@echo "built $(COMPILER)-debug  —  gdb --args $(COMPILER)-debug <in> <out>"
+	@echo "built $(COMPILER)-debug (-O0, for gdb — NOT for profiling; see debugging-playbook.md)"
+	@echo "  gdb --args $(COMPILER)-debug <in> <out>"
 
 # Regenerate SYMBOLS.md — concise routine index (universal-ctags). Navigation
 # aid for humans and agents; re-run after code changes.
@@ -3732,12 +3744,41 @@ test-core: $(COMPILER)
 	# bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 	./$(COMPILER) test/test_nilpy_counter_from_a_string.npy $(TESTTMP)/test_nilpy_counterstr26
 	$(TESTTMP)/test_nilpy_counterstr26 | diff -u test/test_nilpy_counter_from_a_string.expected -
+	# A DUNDER OPERATOR written on `self` inside a base-class method, and the
+	# ABSTRACT (raise-only) base whose invented return type poisoned every
+	# override. Here rather than in test-nilpy for the reason the tests above
+	# give -- test-core is the NATIVE tier, and BOTH failures were silent wrong
+	# VALUES: `len(self)` answered the base's 1 with a subclass returning 42,
+	# and a str-returning override of an abstract base came back as a POINTER.
+	# Every row is a PAIR (external receiver, then `self`), so a reintroduced
+	# bug reads as the two arms DISAGREEING rather than one number changing;
+	# the `iter` and `solo` rows are the arms that were already correct and are
+	# what named the specification. At pinned v376 six rows are wrong and the
+	# program then dies outright at section 2.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
+	# bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
+	./$(COMPILER) test/test_nilpy_dunder_on_self_reaches_the_override.npy $(TESTTMP)/test_nilpy_dunderself26
+	$(TESTTMP)/test_nilpy_dunderself26 | diff -u test/test_nilpy_dunder_on_self_reaches_the_override.expected -
 	# ...and the other side of the same rule: a REBOUND name is refused, never
 	# resolved to its first binding. CPython prints "second"; a compile-time
 	# alias table cannot say that, so it must decline rather than answer "first".
 	# Only this half catches a future "first binding wins" silent wrong base.
 	! ./$(COMPILER) test/test_nilpy_class_base_alias_rebound_refused.npy $(TESTTMP)/test_nilpy_clsbaserebound26 > $(TESTTMP)/test_nilpy_clsbaserebound.log 2>&1
 	grep -q "unknown base class Base" $(TESTTMP)/test_nilpy_clsbaserebound.log
+	# `class Filter(mod.Filter)` where the qualifier is a plain `.py` MODULE and
+	# the class REUSES its base's name, in the MAIN PROGRAM. Sibling arm of
+	# test_nilpy_class_named_after_its_imported_base above, which covers the
+	# PASCAL-unit base; the module path and the program path are different code
+	# here and only one had been updated. GREEN at pinned v376 -- it was fixed
+	# by other work after the ticket was filed at v356 and nothing pinned the
+	# fixed behaviour down, which is the whole reason it is here: the arm fixed
+	# by accident is the arm that regresses by accident. Native tier because a
+	# regression is either a refusal or a SILENTLY WRONG base class.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program
+	./$(COMPILER) test/test_nilpy_class_named_after_its_py_module_base.npy $(TESTTMP)/test_nilpy_samenamepy26
+	$(TESTTMP)/test_nilpy_samenamepy26 | diff -u test/test_nilpy_class_named_after_its_py_module_base.expected -
 	# promotable int: arbitrary precision, exact against CPython (feature-a-promotable-int)
 	./$(COMPILER) test/test_promoint.pas $(TESTTMP)/test_promoint26
 	test "$$($(TESTTMP)/test_promoint26)" = "$$(printf '0\n12\n60\n7\n2\n2\n-5\n25\n7\nlt\ngt\neq\nsame\n265252859812191058636308480000000\n0\n265252859812191058636308480\n109361473\n-15511210043330985984000000\n15511210043330985984000000\n9223372036854775808\n18446744073709551614\n18446744073709551616\n-18446744073709551616\n18446744073709551616\n1\n42\n265252859812191058636308480000000\n265252859812191058636308480000000\n265252859812191058636308480000002\n530505719624382117272616960000000\nvgt\n10\n2\nogt\n1')"
@@ -12397,6 +12438,21 @@ test-smoke: test-quick
 	cp $(TESTTMP)/pascal26-fixedpoint $(TESTTMP)/pascal26-s5.$$$$.tmp && mv -f $(TESTTMP)/pascal26-s5.$$$$.tmp $(TESTTMP)/pascal26-s5
 
 # test-opt: the -O gate (feature-optimization-levels). Differential corpus —
+# The self-compile differential across -O levels: build the compiler at every
+# level and check that the results EMIT identical bytes. Closes the hole
+# CLAUDE.md names in its own claims section — the self-host fixedpoint proves
+# reproducibility at ONE optimisation level, and a -O0-only self-compile
+# failure passed the entire gate on 2026-08-19 and was found by a benchmark.
+#
+# Two lines here on purpose: the logic is tools/selfcompile_odiff.sh (Track T's
+# lane), and this target is only the enrolment point so testmgr can schedule it.
+# ~200s, classed `selfhost` (600s timeout). It classes that way because make -n
+# expands the $(COMPILER) prerequisite above and that text names compiler.pas;
+# classify() also matches `selfcompile` directly so the class does not depend on
+# that accident. A `unit` class would kill it at 90s and publish a false red.
+test-selfcompile-odiff: $(COMPILER)
+	tools/selfcompile_odiff.sh
+
 # every program compiled at -O0 and -O1 must produce IDENTICAL runtime
 # output — plus the -O1 self-compile fixedpoint. Run whenever an opt pass
 # changes; -O0 stays covered by the ordinary byte-identity gates.

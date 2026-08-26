@@ -4,6 +4,8 @@ prio: 55
 type: bug
 blocked-by: []
 summary: "fcl-json's `CreateJSONArray([1])` yields a `TJSONInt64Number` where FPC yields a `TJSONIntegerNumber`. The direct `CreateJSON(1)` agrees with FPC; only the `array of const` path diverges, in `With Element do case VType of vtInteger: CreateJSON(VInteger)`. Two of the fpjson suite's 203 cases fail on it."
+status: done
+owner: frank1
 ---
 
 # An `array of const` integer arm picks the Int64 overload
@@ -87,3 +89,36 @@ above ordinary parity work.
 ## Links
 [[feature-pascal-corpus-fpjson]] ·
 [[bug-a-the-fpjson-suite-overflows-the-fixed-4096-entry-data-ptr-fixup-table]]
+
+## Measured (frank1, 2026-08-26) — it was (2), then one layer further down
+
+The ticket's own two candidates, resolved by probe against fpjson's real
+overload set rather than a standalone `Show([1])`:
+
+```
+Mimic([1]):
+  VType         = 0        <- the TAG IS RIGHT, so not (1)
+  arm taken     = vtInteger
+  CreateJSON -> TJSONInt64Number
+direct CreateJSON(Longint var)   -> TJSONIntegerNumber   <- binding is right
+CreateJSON(E2.VInteger)          -> TJSONInt64Number     <- the field is not
+```
+
+So (2), and the `with` is innocent — a plain `E.VInteger` field read fails the
+same way. The cause is one line of our own RTL: `builtinheap.TVarRec` declared
+**`VInteger: NativeInt`** where FPC declares `Longint`. FixupTVarRecLayout
+right-sizes the record regardless, so the width bought no storage; all it did
+was pick a different overload at every reader. The ticket's third confounder
+(`CreateJSON(NativeInt)`) is exactly the one it handed the argument to.
+
+**Two errors were cancelling, which is why neither showed alone.** AN_VARREC_ARRAY
+tagged a pointer-wide native int `vtInteger` and then stored eight bytes under a
+tag that promises four — harmless only while `VInteger` was NativeInt and read
+all eight back. Narrowing the field alone would have truncated
+`Format('%d', [NativeInt])`. FPC has no such pair: on a 64-bit target NativeInt
+IS Int64 and the element goes in as `vtInt64`, so both halves move together.
+
+Suite: `run: 203  failures: 0  errors: 0` — the recorded 203/203, reached.
+
+## Log
+- 2026-08-26 — resolved, commit 4cd1a0c22.

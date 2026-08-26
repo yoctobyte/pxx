@@ -4,6 +4,8 @@ prio: 50
 type: feature
 blocked-by: []
 summary: "Every FPC-parity finding we produce is measured against installed FPC 3.2.2, so it inherits 3.2.2's bugs — and that has now twice produced a false 'pxx diverges from FPC' where pxx actually agreed with FPC trunk and only 3.2.2 was wrong. Give the probes a three-way verdict: pxx vs FPC-stable vs FPC-trunk."
+status: done
+owner: trackt-1
 ---
 
 # The FPC probes need a trunk oracle, not just installed stable
@@ -130,3 +132,118 @@ The manual recipe below is sufficient for the once-or-twice-a-year case; the
 Worth keeping in view, though: pxx and FPC are close enough in problem domain
 that a genuinely NEW upstream bug is plausible, and that is the case where
 reporting it upstream matters.
+
+---
+
+## Resolution (2026-08-26) — items 1 and 2 built; item 3 needs the owner
+
+### What landed
+
+**Item 1 — `FPC=` / `FPC_TRUNK=` overrides.** Both accept a **full command line**,
+not a binary path. That is not generality for its own sake: a freshly built trunk
+compiler needs `-Fu<its own RTL>`, and a path-only override would fail with `PPU
+Invalid Version` — one of the two traps this ticket recorded — which reads as a
+compiler bug rather than a configuration mistake.
+
+**Item 2 — trunk consulted on untagged divergences only.** Never across the
+corpus, per the cost constraint. A `known` / `bydesign` row was already
+classified by a human; spending the expensive oracle there would spend it on the
+rows that need it least. Guarded: the devtest asserts trunk invocations equal
+the untagged-row count exactly, and zero for tagged rows.
+
+**Item 3 — NOT done, and not mine to do.** A persistent trunk oracle installs
+into `~`. This ticket says to ask the user first, and that permission cannot come
+from a peer agent. The manual recipe below remains the path until the owner says
+where a trunk build should live and how it gets refreshed — and the ticket's own
+warning stands, that a stale trunk build reintroduces this problem one release
+later.
+
+### Two corrections to the design in this ticket
+
+**The verdict table conflates an observation with a judgement.** It lists
+`B|A|A` ("pxx divergence — ours to own") and `A|B|B` ("FPC bug still live") as
+separate rows. They are the **same observation** — pxx differs from two FPCs
+that agree — separated only by a view about who is *right*, which no output can
+supply. Reporting them as distinct rows would mean the tool asserting a
+correctness judgement it cannot make. So the implementation reports what is
+actually visible: whether the two FPC versions agree with each other, and which
+one pxx matches when they do not. FPC disagreeing with FPC is the fact worth
+having, because it is proof the reference moved.
+
+Implemented states:
+
+| the two FPCs | pxx matches | row | counts as |
+| --- | --- | --- | --- |
+| agree | neither | `DIFF ... (trunk agrees with stable)` | divergence, run RED |
+| disagree | trunk | `FPC-STABLE-BUG` | **not** a divergence, run GREEN |
+| disagree | neither | `3-WAY` | needs a human, run RED |
+| trunk cannot build it | — | `DIFF` + *"trunk cast no vote"* | divergence, run RED |
+
+**Row `A|A|B` is structurally invisible, by consequence of item 2.** "Upstream
+changed and pxx matches the OLD stable" cannot be seen when trunk is consulted
+only on cases that already diverge — if pxx and stable agree, `probe()` returns
+before trunk is reached. Seeing it needs the third oracle across the whole
+corpus, which is exactly the cost that was ruled out. This is a real trade, not
+an oversight, and it is stated in the script header so a clean run is read as
+*"no divergence from stable, and what we found is classified"* and never as
+*"we agree with trunk"*.
+
+### The defect found on the way, which is worth more than the feature
+
+The probe wrote to fixed paths — `/tmp/fdp.pas`, `/tmp/fdp_f`, `/tmp/fdp_p`,
+`/tmp/fdp_c.log`. **Two copies running at once overwrite each other's source and
+binaries, and the result is not a crash but a REPORT.** Measured 2026-08-26 when
+the new devtest overlapped a live corpus run:
+
+```
+new divergences: 34   known/filed: 11   by design: 0   no-oracle skips: 90
+DIFF        format-percent-and-exp fpc=[] pxx=[11|11<LF>10|10<LF>...]
+```
+
+`fpc=[]` is an oracle whose binary had been overwritten mid-run, presenting as
+an oracle that **disagreed**. Both numbers are fiction. This is the torn-down-run
+failure class — an incomplete run reporting in the vocabulary of a complete one —
+in its worst location: the corruption arrives dressed as findings, in a tool
+whose entire job is to be believed about findings. A run overlapping a sibling's
+would have been triaged as 34 real parity bugs.
+
+Fixed with `mktemp -d` + an EXIT trap. **Residual, stated in the header:** four
+Pascal file-I/O probes still name fixed paths (`/tmp/fdp_io.txt` and friends)
+inside their *quoted* heredocs. Unquoting those to inject `$WORK` would let `$`
+sequences in the Pascal source expand instead, which is a worse trade; two
+concurrent runs can still race on those four files.
+
+Secondary consequence, and the reason this had to be fixed before anything else:
+**a differential tool that cannot survive a second copy of itself cannot be
+exercised by a devtest.** The guard below is only possible because of this fix.
+
+### A process failure worth recording
+
+The `/tmp` replacement was first done as a blind string substitution, which
+turned `/tmp/fdp_file.txt` inside a Pascal literal into `"$WORK/f"e.txt`. That is
+**rule 5 of `devdocs/dev/differential-probes.md`** — *never edit a probe by
+slicing between markers* — broken in the same session, in the same file, while
+adding rule 1b to that document. It was caught by reading the diff, not by a
+test. Redone with replacements scoped to the harness block, and verified by
+confirming no removed line touched a Pascal literal.
+
+### Also fixed
+
+A `3-WAY` row did not fail the run: the exit code keyed on `new` alone, so "we
+match neither FPC" exited 0. Now `new + threeway`. `FPC-STABLE-BUG` stays
+excluded — that row is a fact about 3.2.2, not about pxx.
+
+The summary now always states the oracle's **reach**. `STABLE ONLY` says in
+words what it cannot distinguish, because a two-way run and a three-way run that
+found nothing are different facts and only one of them is worth much. A typo'd
+`FPC_TRUNK` exits 2 rather than silently degrading to a two-way run — the worst
+outcome being an operator who believes rows are classified when they are not.
+
+### Docs
+
+`devdocs/dev/differential-probes.md` gains **rule 1b: an oracle can be RIGHT and
+still be OLD.** Rule 1 catches an oracle that looks broken; this is the one that
+does not look broken at all.
+
+## Log
+- 2026-08-26 — resolved, commit 59db465cc.

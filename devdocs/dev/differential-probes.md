@@ -14,7 +14,7 @@ record traps that cost real sessions.
 
 | tool | oracle | answers | lane that owns the TOOL |
 | --- | --- | --- | --- |
-| `tools/fpc_diff_probe.sh` | FPC | does our Pascal agree with FPC? | B |
+| `tools/fpc_diff_probe.sh` | FPC stable **+ optional trunk** (`FPC=` / `FPC_TRUNK=`) | does our Pascal agree with FPC — and when it does not, is it FPC 3.2.2 that is wrong? | B |
 | `tools/gcc_diff_probe.sh` | gcc's libc | does our C / crtl agree with gcc? | B |
 | `tools/pydiff.py` | CPython | does NilPy agree with CPython? | N |
 | `tools/lib_cross_sweep.sh` | **pxx on x86-64** | does a cross target agree with the native build? | B |
@@ -41,6 +41,39 @@ These are not style preferences. Each was learned by chasing a phantom.
 **1. When the ORACLE looks wrong, it is the harness.** gcc segfaulting, FPC
 printing garbage, CPython raising — none of those is a pxx bug. Check that
 first; it is always quick.
+
+**1b. An oracle can be RIGHT and still be OLD.** Rule 1 catches an oracle that
+looks broken. This is the one that does not look broken at all: `fpc` on this box
+is **3.2.2, released 2021**, so every FPC-parity verdict is "pxx vs a four-year-old
+FPC", and a bug upstream has since fixed is indistinguishable from one of ours.
+Twice that produced a false *"pxx diverges from FPC"* — once costing a Track U
+decide ticket, a `DELIBERATE DIVERGENCE` comment on a test that was not one, and
+a nearly-filed upstream report against an already-fixed bug.
+
+`fpc_diff_probe.sh` now takes `FPC=` and `FPC_TRUNK=` (each may carry flags — a
+freshly built trunk compiler needs `-Fu<its own RTL>`), and consults trunk **on
+divergences only**, never across the corpus. It reports what outputs can actually
+settle:
+
+| the two FPCs | pxx matches | verdict |
+| --- | --- | --- |
+| agree | neither | `DIFF` — a real divergence, ours to account for |
+| disagree | **trunk** | `FPC-STABLE-BUG` — fixed upstream; **not** our divergence, does not fail the run |
+| disagree | neither | `3-WAY` — the reference moved and we match neither side |
+| trunk cannot build it | — | `DIFF` + *"trunk cast no vote"* — never silence |
+
+Two things it deliberately does not claim. *"pxx is wrong"* and *"FPC is wrong in
+both versions"* are the **same observation** wearing different labels — pxx
+differs from two FPCs that agree — and no output can separate them; a human does.
+And when pxx and stable already agree, trunk is never consulted, so an upstream
+behaviour change we both predate is **structurally invisible** to the cheap
+design. A clean run means *"no divergence from stable, and what we found is
+classified"* — never *"we agree with trunk"*.
+
+Build recipe for a trunk oracle: `feature-t-fpc-probe-needs-a-trunk-oracle`. Two
+traps encoded there — `make -C rtl FPC=<new>` silently builds the RTL with the
+*installed* compiler (it wants `PP=`, and the only symptom is `PPU Invalid
+Version` at use time), and remote tips must be read with `%cd`, not `%ad`.
 
 **2. Never read a side effect in the argument list of the call that causes it.**
 

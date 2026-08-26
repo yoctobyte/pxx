@@ -18296,6 +18296,21 @@ begin
   begin
     fv := TNoArgV(mi^.Code);
     res := fv(Pointer(o));
+    { A VARIANT-returning dunder that hands back an OBJECT takes the same extra
+      reference the RetKind=6 arm below takes, and for the same reason: every
+      caller here reads the payload out with pyvarobj and keeps the raw pointer
+      AFTER its own `res` dies, so a balanced variant leaves them holding freed
+      memory. pyiter_of_userobj is the one that proved it — `def __iter__(self)
+      -> Any: return iter(xs)` returned a cursor over a list that was already
+      gone, so `list(obj)` answered [] and -dPXX_HEAP_DEBUG turned the same
+      program into a SEGV. The class-returning spelling of the identical method
+      was correct, because THIS retain is what kept its cursor alive.
+
+      Two arms of one rule where only one had been updated: the dunder's
+      declared return KIND is an implementation detail of type inference, and
+      nothing above this line should change ownership because of it.
+      bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides }
+    if pyvar_is_objtag(res) then PXXObjRetain(pyvarobj(res));
     PyUserObjNoArgDunder := True;
     Exit;
   end;

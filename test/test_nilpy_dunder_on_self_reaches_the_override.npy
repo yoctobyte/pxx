@@ -1,0 +1,230 @@
+# Every row is a PAIR: the arm that was already correct, then the arm that was
+# broken. A reintroduced bug shows up as the two arms of a pair DISAGREEING,
+# which is louder than a single row changing value.
+#
+# Three mechanisms, all of them "one concept served by two mechanisms and only
+# one of them was updated":
+#
+#   1. a DUNDER OPERATOR written on `self` inside a base-class method bound
+#      STATICALLY to the declaring class, while the same operator on an
+#      external receiver dispatched through the VMT. PyCallMeth1/2/3 allocated
+#      a bare AN_CALL; the ordinary method-call path had allocated an
+#      AN_VIRTUAL_CALL since virtual slots landed.
+#      bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
+#
+#   2. an ABSTRACT base method (a body that only raises) was typed tyInteger by
+#      the return-type scan's floor, and the override-signature block then
+#      imposed that invented type on every override -- a str override came back
+#      as a POINTER, a str argument as "expected a number, got str".
+#
+#   3. a VARIANT-returning __iter__ handed pyiter_of_userobj a cursor nobody
+#      retained, so it iterated freed memory: [] under -O2, SEGV under
+#      -dPXX_HEAP_DEBUG. The class-returning spelling of the same method was
+#      correct, and its retain is what this restores.
+#      bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
+
+print('== 1. dunders on self vs on an external receiver ==')
+
+
+class Concrete:
+    def __len__(self):
+        return 1
+
+    def __contains__(self, k):
+        return False
+
+    def __str__(self):
+        return 'concrete-str'
+
+    def __getitem__(self, k):
+        return 'concrete-' + k
+
+    def __iter__(self):
+        return iter(['concrete'])
+
+    # every one of these asks the question from INSIDE, where `self` is
+    # statically the BASE class
+    def inner_len(self):
+        return len(self)
+
+    def inner_contains(self, k):
+        return k in self
+
+    def inner_str(self):
+        return str(self)
+
+    def inner_getitem(self, k):
+        return self[k]
+
+    def inner_iter(self):
+        out = []
+        for x in self:
+            out.append(x)
+        return out
+
+
+class Derived(Concrete):
+    def __len__(self):
+        return 42
+
+    def __contains__(self, k):
+        return True
+
+    def __str__(self):
+        return 'derived-str'
+
+    def __getitem__(self, k):
+        return 'derived-' + k
+
+    def __iter__(self):
+        return iter(['a', 'b'])
+
+
+d = Derived()
+
+# left = outside (was already right), right = inside (was the bug)
+print('len     ', len(d), d.inner_len())
+print('contains', 'q' in d, d.inner_contains('q'))
+print('str     ', str(d), d.inner_str())
+print('getitem ', d['k'], d.inner_getitem('k'))
+# the for-header desugarer built its own AN_VIRTUAL_CALL all along, so THIS
+# pair was green before the fix -- it is the sibling that named the spec
+print('iter    ', [x for x in d], d.inner_iter())
+
+# two levels of inheritance: the slot is inherited twice
+class Deeper(Derived):
+    def __len__(self):
+        return 99
+
+    def __str__(self):
+        return 'deeper-str'
+
+
+e = Deeper()
+print('len2    ', len(e), e.inner_len())
+print('str2    ', str(e), e.inner_str())
+
+# a base with NO subclass must keep answering its own -- the PyClassInHierarchy
+# guard, and the row that catches "made everything virtual" as a fix
+c = Concrete()
+print('solo    ', len(c), c.inner_len())
+
+print('== 2. concrete base vs abstract (raise-only) base ==')
+
+
+class ConcreteBase:
+    def fetch(self, k):
+        return 'base-' + k
+
+    def size(self):
+        return 0
+
+
+class AbstractBase:
+    def fetch(self, k):
+        raise NotImplementedError('abstract')
+
+    def size(self):
+        raise NotImplementedError('abstract')
+
+
+class FromConcrete(ConcreteBase):
+    def fetch(self, k):
+        return 'sub-' + k
+
+    def size(self):
+        return 7
+
+
+class FromAbstract(AbstractBase):
+    def fetch(self, k):
+        return 'sub-' + k
+
+    def size(self):
+        return 7
+
+
+# left = override of a CONCRETE base (already right), right = override of an
+# ABSTRACT one (came back as a pointer, or refused the str argument)
+print('str ret ', FromConcrete().fetch('x'), FromAbstract().fetch('x'))
+print('int ret ', FromConcrete().size(), FromAbstract().size())
+
+# ...and the abstract base's own method still raises when nothing overrode it
+try:
+    AbstractBase().size()
+    print('raise   ', 'NO RAISE')
+except NotImplementedError:
+    print('raise   ', 'NotImplementedError')
+
+print('== 3. __iter__ by declared return kind ==')
+
+
+class IterAsClass:
+    def __iter__(self):
+        return iter(['a', 'b'])
+
+
+class IterAsVariant:
+    # `-> Any` makes the method VARIANT-returning, which is exactly what an
+    # abstract base now forces onto its overrides -- the shape that iterated
+    # freed memory
+    def __iter__(self):
+        raise NotImplementedError('abstract')
+
+
+class IterFromAbstract(IterAsVariant):
+    def __iter__(self):
+        return iter(['a', 'b'])
+
+
+# left = class-returning (already right), right = variant-returning (the UAF)
+print('for     ', [x for x in IterAsClass()], [x for x in IterFromAbstract()])
+print('list    ', list(IterAsClass()), list(IterFromAbstract()))
+print('keys    ', sorted(IterAsClass()), sorted(IterFromAbstract()))
+
+
+# the collections-ABC mixin pattern end to end: a base that stores nothing and
+# whose whole value is dispatching DOWN into the subclass
+class Mapping:
+    def __iter__(self):
+        raise NotImplementedError('abstract')
+
+    def __getitem__(self, k):
+        raise KeyError(k)
+
+    def keys(self):
+        out = []
+        for k in self:
+            out.append(k)
+        return out
+
+    def items(self):
+        out = []
+        for k in self:
+            out.append((k, self[k]))
+        return out
+
+    def get(self, k, default):
+        try:
+            return self[k]
+        except KeyError:
+            return default
+
+
+class Bag(Mapping):
+    def __init__(self):
+        self.d = {'a': 1, 'b': 2}
+
+    def __iter__(self):
+        return iter(sorted(self.d.keys()))
+
+    def __getitem__(self, k):
+        if k in self.d:
+            return self.d[k]
+        raise KeyError(k)
+
+
+b = Bag()
+print('mixin k ', b.keys())
+print('mixin i ', b.items())
+print('mixin g ', b.get('a', 0), b.get('zz', -1))

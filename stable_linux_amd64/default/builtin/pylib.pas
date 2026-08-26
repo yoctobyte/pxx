@@ -370,6 +370,16 @@ type
       merges them. The mode picks which, which is why they share a name. }
     function update(l: TPyList): Variant;   { None, see TPyList.remove }
     function update(d: TPyDict): Variant; overload;
+    { …and a STRING, which CPython counts CHARACTER BY CHARACTER
+      (`Counter().update("aab")`). Its own arm rather than a str->list detour
+      because the key it stores must be a one-character STRING: a bare `s[i]` is
+      a Pascal Char, VT_CHAR, and PyVarEq refuses VT_CHAR against VT_STRING, so
+      every key stored fine and then missed on lookup — `Counter("aab")["a"]`
+      answered 0 with the entry sitting right there in items(). Same shape as
+      bug-nilpy-tuple-dict-key-never-matches, and pystr_ofchar is the boundary
+      list(s) and set(s) already cross at.
+      bug-n-from-collections-import-counter-binds-something-that-always-answers-zero }
+    function update(const s: AnsiString): Variant; overload;
     { ...and a VARIANT argument, which is what an unannotated PARAMETER is.
       Neither typed overload can be chosen for one, and the pair was resolved to
       the TPyList arm — so `def f(sec): m.update(sec)` read a TPyDict as a
@@ -7605,6 +7615,14 @@ var o: TObject;
 begin
   Result := pynone;
   if Self = nil then Exit;
+  { A STRING argument reaches the char-counting arm — an unannotated parameter
+    arrives as a Variant, so `def f(t): c.update(t)` is the spelling that would
+    otherwise miss it while the literal `c.update("aab")` matched statically. }
+  if (pyvartag(v) = 6) or (pyvartag(v) = 5) then
+  begin
+    Result := Self.update(PyVarText(PPyVarRec(@v)));
+    Exit;
+  end;
   if pyvartag(v) <> 7 then
     raise TypeError.Create('dict.update expects a mapping or an iterable of pairs');
   o := TObject(pyvarobj(v));
@@ -7613,6 +7631,24 @@ begin
   else if o is TPyList then Result := Self.update(TPyList(o))
   else
     raise TypeError.Create('dict.update expects a mapping or an iterable of pairs');
+end;
+
+{ Counter.update(str) counts CHARACTERS. A plain dict's update(str) is an error
+  in CPython too ("dictionary update sequence element #0 has length 1; 2 is
+  required"), so the mode decides here exactly as it does in the list arm. }
+function TPyDict.update(const s: AnsiString): Variant;
+var i: Integer; k: Variant;
+begin
+  Result := pynone;
+  if not FCounterMode then
+    raise TypeError.Create('dict.update expects a mapping or an iterable of pairs');
+  for i := 1 to Length(s) do
+  begin
+    { pystr_ofchar, NOT a bare s[i]. See the interface note: a raw Char is
+      VT_CHAR and never equals the VT_STRING a lookup arrives with. }
+    k := pystr_ofchar(s[i]);
+    store(k, pyvar_to_int(fetch(k)) + 1);
+  end;
 end;
 
 { CPython's Counter.update(mapping) ADDS the mapping's values; a plain dict's
@@ -7700,12 +7736,15 @@ begin
 end;
 
 function Counter(const s: AnsiString): TPyDict;
-var c: TPyDict; i: Integer;
+var c: TPyDict;
 begin
   c := TPyDict.Create;
   c.FCounterMode := True;
-  for i := 1 to Length(s) do
-    c.store(s[i], pyvar_to_int(c.fetch(s[i])) + 1);
+  { ONE string-counting loop, in update — CPython's Counter(x) IS
+    `Counter(); update(x)`, and the list arm above already delegates the same
+    way. The copy that used to live here stored a raw `s[i]` Char key, which is
+    the whole bug this routes around rather than fixing twice. }
+  c.update(s);
   Result := c;
 end;
 
@@ -18257,6 +18296,21 @@ begin
   begin
     fv := TNoArgV(mi^.Code);
     res := fv(Pointer(o));
+    { A VARIANT-returning dunder that hands back an OBJECT takes the same extra
+      reference the RetKind=6 arm below takes, and for the same reason: every
+      caller here reads the payload out with pyvarobj and keeps the raw pointer
+      AFTER its own `res` dies, so a balanced variant leaves them holding freed
+      memory. pyiter_of_userobj is the one that proved it — `def __iter__(self)
+      -> Any: return iter(xs)` returned a cursor over a list that was already
+      gone, so `list(obj)` answered [] and -dPXX_HEAP_DEBUG turned the same
+      program into a SEGV. The class-returning spelling of the identical method
+      was correct, because THIS retain is what kept its cursor alive.
+
+      Two arms of one rule where only one had been updated: the dunder's
+      declared return KIND is an implementation detail of type inference, and
+      nothing above this line should change ownership because of it.
+      bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides }
+    if pyvar_is_objtag(res) then PXXObjRetain(pyvarobj(res));
     PyUserObjNoArgDunder := True;
     Exit;
   end;

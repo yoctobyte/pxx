@@ -5,13 +5,13 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:23 blocked:7 backlog:284 backlog_new:28 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2389 rejected:40`
+`unfinished:24 blocked:7 backlog:283 backlog_new:31 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2402 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
-- `feature-opt-o3-register-pressure` [O] — owner: agent-O-regalloc
+_none — no lane is locked._
 
-## unfinished (23) — parked mid-flight; re-claim, do not duplicate
+## unfinished (24) — parked mid-flight; re-claim, do not duplicate
 
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
@@ -28,6 +28,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-nilpy-cpyext-c-api-from-source` [N]
 - `feature-nilpy-object-reclamation` [A]
 - `feature-nilpy-thirdparty-libraries-as-targets` [N]
+- `feature-opt-o3-register-pressure` [O]
 - `feature-pascal-corpus-fpc-testsuite` [P]
 - `feature-pascal-corpus-generics` [P] — blocked-by: gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo
 - `feature-pascal-type-helpers` [A]
@@ -47,21 +48,20 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 323, ranked
+## Ready — top 30 of 326, ranked
 
-- `[p 85] [A]` perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime
-- `[p 78] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
-- `[p 78] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
-- `[p 78] [N]` bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program
+- `[p 85] [O]` feature-opt-o3-register-pressure
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
+- `[p 72] [N]` bug-n-an-arithmetic-dunder-on-self-is-pointer-arithmetic
 - `[p 72] [N]` bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
 - `[p 72] [N]` feature-nilpy-stdlib-coverage-gaps-measured
 - `[p 72] [P]` feature-p-fpc-assigned-enum-ordinals-with-colon-equals
 - `[p 72] [P]` feature-p-fpc-global-operator-overload-declarations
 - `[p 72] [B]` feature-typinfo-facade-unit
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
+- `[p 70] [N]` bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly
 - `[p 70] [N]` bug-n-a-field-takes-its-type-from-the-first-token-of-its-right-hand-side
 - `[p 70] [N]` bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through
 - `[p 70] [N]` bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable
@@ -79,5 +79,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [N]` bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened
 - `[p 65] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
+- `[p 65] [N]` bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members
 
-_293 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_296 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

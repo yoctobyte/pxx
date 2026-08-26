@@ -3628,6 +3628,16 @@ var
                                    population-tag guard + finalizer hook live in the
                                    Pascal proc (feature-nilpy-object-reclamation) }
   ObjReleaseBlobAddr : Integer;  { same, over PXXObjRelease }
+  { The variant clear/retain pair, out of line for the same reason the
+    ansistring and object pairs are. It used to be emitted INLINE at every site
+    -- ~96 bytes x 9,859 sites on a zero-byte .npy, i.e. ~42% of the whole
+    2.23 MB output, and 138,026 of the text assembler's 139,657 AsmTextLine
+    calls (perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime).
+    Emitted by EmitVariantBlobs at the tail of EmitAnsiStringRuntime, which is
+    exactly as conditional as the status quo: the body calls AnsiStrReleaseAddr
+    and ObjReleaseBlobAddr, so any program that can reach it already ran that. }
+  VariantClearBlobAddr  : Integer;  { rax = variant slot address; preserves rax }
+  VariantRetainBlobAddr : Integer;  { same }
 
   TokChars   : array[0..STRING_CAP-1] of Char;
   TokCharLen : Integer;

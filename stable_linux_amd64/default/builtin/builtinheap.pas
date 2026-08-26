@@ -44,7 +44,21 @@ type
 
   TVarRec = record
     VType: NativeInt;
-    VInteger: NativeInt;
+    { LONGINT, exactly as FPC declares it — not NativeInt, which is what this
+      was. The union slot is pointer-sized either way (FixupTVarRecLayout
+      right-sizes the record), so the width here buys no storage; what it
+      decides is OVERLOAD BINDING at the reader. fpjson's VarRecToJSON does
+      `vtInteger: Result := CreateJSON(VInteger)` against a set of four
+      overloads — Integer, Int64, QWord, NativeInt — so a NativeInt-typed field
+      bound the wrong one and `CreateJSONArray([1])[0]` came back a
+      TJSONInt64Number where FPC gives a TJSONIntegerNumber. Silent, and in a
+      real library's public factory.
+      The tag side of the same agreement is in ir.inc's AN_VARREC_ARRAY: a
+      pointer-wide native int now goes in as vtInt64, which is what FPC does on
+      a 64-bit target (there NativeInt IS Int64), so nothing that used to fit
+      this slot loses its top half.
+      bug-p-array-of-const-integer-arm-picks-the-int64-overload }
+    VInteger: Longint;
     VAnsiString: Pointer;
     VBoolean: Boolean;
     VChar: Char;
@@ -708,8 +722,17 @@ procedure free(p: Pointer); external;
 function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 var p: Int64;
 begin
+  { `(size + 7) and not 7`, not `((size + 7) div 8) * 8`: `div` by a literal is
+    strength-reduced only at -O3, so at the -O2 DEFAULT every one of these
+    lowered to a 64-bit `idiv` preceded by a zero-check on the constant 8. A
+    sampling profile of the real -O2 compiler compiling a zero-byte .npy put
+    11.4% of all in-.text samples on the three idivs in this file
+    (perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime). Every
+    site is guarded non-negative just above, so mask and shift are exact --
+    checked against `div` over 40,001 consecutive values and near 2^63, under
+    both pxx and FPC. }
   if size <= 0 then size := 8;
-  size := ((size + 7) div 8) * 8;
+  size := (size + 7) and (not NativeInt(7));
   p := Int64(calloc(1, NativeUInt(size + 8)));   { zeroed: keeps the contract }
   PWord(p)^ := size;                             { 8-byte size header }
   Result := Pointer(p + 8);                      { payload }
@@ -751,7 +774,7 @@ function PXXAlloc(size: NativeInt; align: Integer): Pointer;
 var p: Int64;
 begin
   if size <= 0 then size := 8;
-  size := ((size + 7) div 8) * 8;
+  size := (size + 7) and (not NativeInt(7));
   p := Int64(pxx_libc_calloc(1, NativeUInt(size + 8)));
   PWord(p)^ := size;                             { 8-byte size header }
   Result := Pointer(p + 8);                      { payload }
@@ -793,7 +816,7 @@ begin
     tsIgnore := tsIgnore + 1;
 {$endif}
   if size <= 0 then size := 8;
-  size := ((size + 7) div 8) * 8;          { round up to 8 }
+  size := (size + 7) and (not NativeInt(7));   { round up to 8 -- see the note at PXXAlloc }
 
   { Free-list nodes are payload addresses; the size header is at [cur-8] and the
     next link is parked in the payload at [cur]. A reused block holds stale bytes,
@@ -805,7 +828,7 @@ begin
     so the head is always an exact fit and there is nothing to walk. }
   if size <= HEAP_BIN_MAX then
   begin
-    bin := Integer(size div 8) - 1;
+    bin := Integer(size shr 3) - 1;
     cur := FreeBins[bin];
     if cur <> 0 then
     begin
@@ -1055,7 +1078,7 @@ begin
   sz := PWord(addr - 8)^;
   if (sz >= 8) and (sz <= HEAP_BIN_MAX) then
   begin
-    bin := Integer(sz div 8) - 1;
+    bin := Integer(sz shr 3) - 1;
     PWord(addr)^ := FreeBins[bin];
     FreeBins[bin] := addr;
   end
@@ -1099,7 +1122,7 @@ begin
   sz := PWord(addr - 8)^;
   if (sz >= 8) and (sz <= HEAP_BIN_MAX) then
   begin
-    bin := Integer(sz div 8) - 1;
+    bin := Integer(sz shr 3) - 1;
     PWord(addr)^ := FreeBins[bin];
     FreeBins[bin] := addr;
   end
@@ -1129,7 +1152,7 @@ begin
     Exit;
   end;
   if newSize <= 0 then newSize := 8;
-  newSize := ((newSize + 7) div 8) * 8;
+  newSize := (newSize + 7) and (not NativeInt(7));
   oldSize := PWord(addr - 8)^;
   if newSize <= oldSize then
   begin

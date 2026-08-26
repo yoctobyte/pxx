@@ -96,3 +96,47 @@ print(tempfile.gettempdir() == "/tmp")  # assert the property instead
 ```
 
 Same rule for any path-shaped output: assert the property, or print a suffix.
+
+## A gating worktree must not live under `/tmp` — and expected output must not name one
+
+**Two rules, one mechanism.** testmgr rewrites absolute `/tmp` paths in expected
+output and in recipe lines. So:
+
+1. **An expected output must never contain an absolute `/tmp` path.** The program
+   prints `/tmp`, the rewritten expectation says `/tmp/testmgr-scratch-N`, and
+   they cannot match. A property of the test.
+2. **A gating worktree must not live under `/tmp`.** Most recipe lines address
+   the tree relatively after a `cd <REPO>` prefix that `Job.script()` builds
+   *outside* the rewrite loop — but **not all of them do**, and one that names the
+   tree by absolute path gets that path grafted into the scratch dir:
+
+   ```
+   pascal26: error: cannot read input file:
+     /tmp/testmgr-scratch-541517/claude-1000/…/sweep/test/quick_canary_argv0.pas
+   ```
+
+   **It does not corrupt a random job — it corrupts the path job.** In a
+   3081-job sweep exactly one job failed this way, and it was
+   `quick_canary_argv0.pas`: the job whose *subject* is absolute-path handling is
+   the one that names the tree absolutely. That is a prediction, not a
+   coincidence, and it is why a single unexplained red in a `/tmp` run is worth
+   checking against this before anything else.
+
+   `.claude/worktrees/` is the right place. `/dev/shm` also works — its paths do
+   not match `TMP_RE` at all.
+
+**The failure mode is asymmetric and that matters operationally: it can only
+produce a false RED, never a false GREEN.** A rewritten path makes a file
+unreadable; it cannot make a failing test pass. So a run from a `/tmp` worktree
+has trustworthy greens, and only its reds need triage — filter them by the
+signature `testmgr-scratch-N/<your worktree dirs>` and re-run exactly those in a
+clean tree. That is usually cheaper than restarting.
+
+**Provenance of these two rules, kept because the process is the lesson.**
+Rule 2 was first written from an incident whose own cause was **never
+established** — a gate went RED from a `/tmp` worktree, the worktree moved, the
+RED went away, and the seed-mtime no-op (now in CLAUDE.md) was live in the same
+tree at the same time and alone explains that RED. Two variables changed, one
+story fit. It was then narrowed away on a search of 105 job logs that found
+nothing — and the signature appeared at log **684**. A correct rule, held for a
+wrong reason, nearly deleted on an incomplete search.

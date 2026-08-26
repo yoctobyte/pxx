@@ -8,13 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| feature-opt-o3-register-pressure | O | 85 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
+_none_
 
-## unfinished (23)
+## unfinished (24)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -33,6 +31,7 @@ _none_
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
+| feature-opt-o3-register-pressure | O | 85 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-pascal-corpus-fpc-testsuite | P | 65 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 | feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
@@ -54,7 +53,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (284)
+## backlog (283)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -67,6 +66,7 @@ _none_
 | bug-a-riscv32-sa-onstack-has-no-effect-under-qemu | A | 12 | bug | riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware. | — |
 | bug-a-rtti-kind-numbers-are-the-compilers-not-the-typinfo-enum-the-unit-documents | A | 40 | bug | typinfo.pas documents RetKind / TypeKind / ParamKinds as Ord(TTypeKind) and declares TTypeKind as FPC's enum (Int64 = 19), but the compiler fills those fields with its OWN internal TTypeKind (Int64 = 13). A user comparing a reported kind against the enum in the same unit gets a silently wrong answer; the unit's own TypeKindSize/TypeKindSigned already decode the compiler numbering, so the two halves of one file disagree. | decide-rtti-kind-numbering |
 | bug-a-the-div-by-zero-check-is-still-missing-on-xtensa | A+S | 25 | bug | The last target without a pre-divide zero check. The other five landed 2026-08-23; xtensa was left out because it cannot be RUN on this box (bare profile emits an ESP image, not a Linux ELF), its branches carry only an 8-bit displacement, its windowed ABI rotates the register window on a call, and its divide is two shapes depending on XtensaSoftDivide. | — |
+| bug-a-the-selfhost-rule-is-a-no-op-when-the-seed-is-newer-than-its-sources | A | 45 | bug | `make compiler/pascal26` is described as the one unskippable gate because it IS the byte-identical self-host fixedpoint. In a tree whose seed arrived from outside (a copied-in pinned binary), the seed is newer than the sources, make declares the target up to date, and the rule exits 0 having proved nothing. Caught 2026-08-26 when a full-tier sweep was about to report a verdict for a sha against a binary built from a pin 133 commits older. | — |
 | bug-b-crtl-esp-close-cannot-dispatch-socket-vs-file | S | 30 | bug | On ESP-IDF, close() cannot serve both file and socket fds — PalClose is fclose(ptr), PalSocketClose is lwip_close. crtl now has one close() (the file one), so socket close is wrong there | — |
 | bug-b-format-percent-u-prints-a-signed-value | B | 55 | bug | `Format('%u', [q])` on a QWord prints -1: sysutils' formatter aliases 'u' to 'd' and runs both through the signed IntToStr. FPC prints 18446744073709551615. The same line makes `%u` of Integer(-1) print -1 where FPC prints 4294967295. Filed from Track A+C+P — B owns lib/rtl. | — |
 | bug-b-inttostr-of-a-qword-above-2-63-renders-negative | B | 55 | bug | `IntToStr` of a QWord above 2^63 renders it negative | — |
@@ -76,25 +76,24 @@ _none_
 | bug-b-varisstr-is-false-for-a-one-character-string | B | 45 | bug | VarIsStr answers FALSE for a ONE-CHARACTER string variant. It tests `VarType(V) = 6` (VT_STRING) and a single char is tagged VT_CHAR = 5, so `v := \'x\'; VarIsStr(v)` is False while `v := \'xy\'` and `v := \'\'` are both True. The same unit already has the right predicate three lines below — IsTextTag(t) = (t = VT_STRING) or (t = VT_CHAR) — and VarCompareValue uses it and gets the one-char case right. Two mechanisms for one concept, disagreeing. | — |
 | bug-c-driver-misses-the-shared-runtime-finalisation-step | C | 60 | bug | The C driver calls EmitIoLockStubsForTarget directly instead of the shared EmitProgramRuntimeStubsForTarget, so a C program still ships with no signal runtime. Every other frontend was moved over on 2026-08-21; C was left alone because cparser.inc is Track C's file-lane. One line. | — |
 | bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict | N | 40 | bug | pylib treats VT_CHAR and VT_STRING as ONE string type in ordering, repr, concat and text extraction — but `PyVarEq` bails on `p^.VType <> q^.VType` before it ever gets there, and `PyVarHashKey` has no VT_CHAR arm either. So a char-tagged key stores fine and then misses every lookup. No NilPy-reachable repro today (the pystr_ofchar boundary converts at every crossing), but this is the mechanism that turned Counter(str) into a SILENT 0 instead of a loud KeyError. | — |
+| bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly | N | 70 | bug | `obj == 1` and `obj < 1` do not call the class's __eq__/__lt__ when the right operand is an INT — they answer False regardless of what the method returns. A __eq__ that returns True is simply not consulted, so an equality test silently answers the opposite of CPython, with no inheritance and no error. | — |
 | bug-n-a-field-assigned-from-a-module-global-expression-is-refused | N | 55 | bug | `G = 7 / 2` then `self.v = G` REFUSES to compile — \"cannot infer the type of field self.v - annotate it\". `G = 3.5` is accepted. PyModuleGlobalLiteralType reads a global's type off its initialiser token and can only see a bare LITERAL, so any global initialised by an expression is untypeable to the field pre-pass. | — |
 | bug-n-a-field-takes-its-type-from-the-first-token-of-its-right-hand-side | N | 70 | bug | `self.v = n / 2` with `n: int` declares an Int64 field and prints 4612811918334230528; `self.v = n + 1.5` prints the same class of garbage. The `self.NAME = expr` pre-pass types the field from the FIRST token of the right-hand side — the parameter, or the leading literal — and only reaches the expression scanner when that first token says nothing. | — |
 | bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened | N | 65 | bug | `self.v = n` in the ctor then `self.v = 1.5` (or `self.v = self.v / 2`) in another method keeps the Int64 field and prints 4609434218613702656 — the double's bits. The field pre-pass only ADDS names; a second assignment of a different type is invisible, unlike a LOCAL, which widens across its rebinds. | — |
 | bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function | N | 65 | bug | `g = f` BOXES the function on the heap; every other path (a dict value, a return value, the bare name) keeps the raw code pointer. So `g == f` and `g is f` are False, two assignments of the same function are unequal to each other, and `id(g)` is a heap address while `id(f)` is the code address. CPython answers True to all of it. | — |
 | bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through | N | 70 | bug | sys.version_info throws at RUNTIME with a message admitting its own guard failed: 'the code guarding that (the flag its except-branch sets) let this call through anyway'. Two defects — the member is missing, and the compile-time guard meant to catch that does not fire. A guard that reports its own failure and continues is worse than no guard. | — |
 | bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart | N | 45 | bug | `hasattr([1], 'add')` and `hasattr([1], 'update')` are True: list and set are both TPyList at run time, so every `is`-test-based introspection answers set questions about a list. `type(x).__name__` DOES tell them apart, so the discriminator exists and the predicate is not using it. | — |
-| bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides | N | 78 | bug | A base class whose __iter__ only raises poisons every subclass override: `for k in self` inside a base method calls the BASE __iter__, and the subclass's real __iter__ is never reached — `iter() returned non-iterator of type 'Sub'`. This is the whole ABC mixin pattern. | — |
 | bug-n-a-module-level-rebinding-still-loses-to-a-def-of-the-same-name | N | 62 | bug | The MODULE-level arm of the local-binding-beats-a-def fix: `f = o.f` written after `def f` still calls the def. The local/parameter arm is fixed and gated; this one needs module-level bindings to carry a token position, which is a mechanism rather than a patch, so it was split out rather than guessed at. | — |
 | bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members | N | 65 | bug | A module that defines a name equal to its own module name makes every QUALIFIED access to the module's other members fail: `import bisect; bisect.bisect_left(...)` gives `no class declares a method or callable field .bisect_left()`, because `bisect` resolves to the module's member rather than the module. CPython's own Lib/bisect.py has `bisect = bisect_right`, so this is ordinary stdlib-shaped code. From-imports are unaffected. | — |
 | bug-n-a-staticmethod-read-through-an-instance-binds-a-receiver | N | 25 | bug | bug(N): a @staticmethod read through an INSTANCE binds a receiver, so `type(k.stat).__name__` says 'method' | — |
-| bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override | N | 78 | bug | `self[k]` written inside a base-class method binds to that class's own __getitem__ instead of the subclass override, so a mixin written the natural way raises the base's KeyError. Sibling arm of the already-fixed bug-n-a-builtin-subclass-subscript-operator-skips-the-override. | — |
 | bug-n-a-uforth-corpus-timeout-is-reported-as-a-cpython-divergence | N | 55 | bug | Six `timeout N` literals are hardcoded inside the test-nilpy and test-uforth recipes. The three uforth ones are the damaging pair of shapes: `wait $pp \|\| true` discards timeout's exit 124, the kill truncates p.out mid-stream, and the truncation is then reported as `DIFF <corpus>` — a pxx-versus-CPython divergence — and counted into `bad`. A machine under load thus manufactures a Nil-Python frontend finding. Filed by Track T, which owns the harness but not the Makefile. | — |
 | bug-n-a-unicode-identifier-is-rejected-by-the-lexer | N | 65 | bug | `_κ = 5` is legal Python 3 and the NilPy lexer rejects it with `unexpected character`. Non-ASCII in a STRING literal already works, so this is the identifier path only. Two tinycss2 files (color4.py, color5.py) use Greek letters as names for colour-space constants. | — |
 | bug-n-abs-of-a-complex-raises-typeerror | N | 12 | bug | `abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set. | — |
+| bug-n-an-arithmetic-dunder-on-self-is-pointer-arithmetic | N | 72 | bug | `self + 1` inside a class does not dispatch to __add__ at all — it falls through to POINTER ARITHMETIC on the instance handle and prints an address where CPython prints the method's result. The identical expression on a NAMED receiver (`a + 1`) dispatches correctly. Silent wrong value, no diagnostic, one class and no inheritance needed. | — |
 | bug-n-an-augmented-subscript-on-a-dunder-class-is-refused | N | 70 | bug | `obj[k] += v` on any class that reaches subscripting through `__getitem__`/`__setitem__` is a named compile-time refusal — `augmented assignment to a __getitem__/__setitem__ subscript is not supported`. Ordinary Python, and the counting idiom (`counts[k] += 1`) is the single most common thing a dict-like class is written for. The default-indexed-property arm beside it already desugars the augmented form; only the dunder arm does not. | — |
 | bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising | N | 50 | bug | `None.bit_length()` returns 0 where CPython raises AttributeError — the int-method arm on a variant receiver unboxes without checking the tag, and None's payload reads as the integer 0. dict/list/str receivers do raise, so None is the one shape that answers. | — |
 | bug-n-augmented-true-division-does-not-widen-an-annotated-int-parameter | N | 62 | bug | `def f(x: int): x /= 2; print(x)` prints 4612811918334230528 — the double's bit pattern stored in the Int64 parameter slot. PyNoteLocalType DOES note the float (PXXDBG=n.locals shows tk=19), but a PARAMETER's symbol keeps its declared type, so the note is dropped. No return is involved: the plain print is already wrong. | — |
 | bug-n-bytes-getitem-returns-empty-instead-of-the-byte-value | N | 60 | bug | `b'abc'.__getitem__(0)` prints nothing where CPython prints 97 — a silent wrong value, not a diagnostic. `b'abc'.__len__()` on the same receiver is correct, and `str.__len__` / `str.__getitem__` raise AttributeError for methods CPython has. | — |
-| bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program | N | 78 | bug | `class X(mod.X)` — a class whose qualified base shares its name — is refused with `class X cannot inherit from itself` when written in the MAIN PROGRAM. The identical code in a pulled `.py` module compiles and dispatches correctly, and renaming either class makes the program case work too, so the variable is the name collision on the program path. This is how all ~100 of CPython's `encodings/*.py` and html5lib's filters are written. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 20 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
 | bug-n-hasattr-with-a-computed-name-cannot-see-a-builtin-method | N | 55 | bug | `hasattr(x, n)` with the name in a VARIABLE answers False for every builtin-container, str, int and float method — `n = 'keys'; hasattr(a_dict, n)` is False while `hasattr(a_dict, 'keys')` is True. The literal and computed spellings of one question resolve through two different mechanisms and only the literal one was fixed. | — |
 | bug-n-importing-both-f-and-F-from-one-module-loses-the-class | N | 68 | bug | Importing a lowercase function and an uppercase class of the same letter from one module breaks the class: `from M import f` plus `from M import F` gives `undefined variable (VAL)` on `F.VAL`, in EITHER order, while importing F alone works. Pre-existing (fails on pinned v351). CPython keeps them apart because it is case-sensitive; the flat namespace here folds case. | — |
@@ -108,6 +107,7 @@ _none_
 | bug-n-super-as-an-expression-fails-with-a-misleading-diagnostic | N | 55 | bug | `return super().hi()` (super() in expression position, documented as unsupported) is refused with `error: Nil Python: annotate the type / too dynamic [a=22 b=8]` reported at line 1 — a diagnostic that names neither the construct nor the right line. Also: `B.__init__(self)` for a second base is `class method not found`. | — |
 | bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop | N | 72 | bug | A class with __getitem__/__len__ now iterates with `for`, but every OTHER consumer of iteration still refuses it — and `list(b)` returns [] SILENTLY. Found while fixing feature-nilpy-for-loop-getitem-protocol-fallback; the for-loop was one path of several serving one concept. | — |
 | bug-n-tk-got-files-are-invisible-to-testmgr-privatization | N | 40 | bug | The tk loop in `test-nilpy` spells its BINARIES by full path — that was the callbacks fix — but still captures output to `$(TESTTMP)/$$src.got`. `make -n` yields `/tmp/$src.got`, which testmgr's filename scan cannot match, so those three files are never privatized and two concurrent runs share them. Found by T's new lint, in the recipe whose earlier fix was believed complete. | — |
+| bug-n-two-node-consumers-know-an-call-but-not-its-virtual-sibling | N | 40 | bug | Found by inspection, NOT reproduced: NodeEnumIdOf's call arm and PyEvalOnce's chained-receiver test both match AN_CALL without AN_VIRTUAL_CALL, so a VIRTUAL method call loses its enum result identity and a chained call receiver is re-evaluated per link. Both predate the dunder-dispatch fix that surfaced them. | — |
 | bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind | N | 45 | bug | NilPy's TypeInfo path carries the same two defects Track A just fixed on the Pascal side: it reads GetTokenStr(TokPos) — one token PAST the type name, because Next already advanced — and it resolves the type from the TOKEN KIND rather than the spelling, so TypeInfo(byte) answers Integer (byte and integer share tkInteger_T). | — |
 | bug-nilpy-a-generator-instance-leaks-its-locals-and-argument-cells | N | 35 | bug | A Nil Python generator instance leaks its locals and its argument cells | — |
 | bug-nilpy-a-keyword-call-through-a-statically-unknown-callee-does-not-compile | N | 60 | bug | `a = mk(1); a(x=5)` fails to COMPILE — `error: undefined variable (x)` — because the keyword-argument lowering only fires when the frontend can resolve the callee to a def/lambda by name. The runtime dispatcher handles this fine (a callee reached as a PARAMETER works), so it is the parse-time gate, not the call path. | — |
@@ -127,7 +127,6 @@ _none_
 | bug-p-a-string-typecast-is-a-conversion-and-not-a-cast | P | 55 | bug | `String(x)` is routed to a conversion intrinsic that demands a Char/string operand, so the hard typecast `String(p^)` of an untyped-pointer deref is rejected — while `Integer(p^)`, `PtrUInt(p^)`, `Pointer(p^)` and `TObject(p^)` all compile. Blocks every string-instantiated FPC container (`TFPGList<string>`, `TFPGMap<string,…>`) in real `fgl.pp`. | — |
 | bug-p-a-typed-constant-of-pchar-type-is-a-parse-error | P | 55 | bug | `const KC: PChar = 'konst';` is `error: unexpected token` -- a TYPED constant whose type is a pointer does not parse. FPC takes it, and it is the ordinary way to name a C string constant. Untyped `const KC = 'konst';` works, and so does a `var` of the same type. | — |
 | bug-p-a-typed-string-constant-cannot-be-assigned | P | 55 | bug | `const S: string = 'a'; ... S := 'b';` is `undefined variable (S)`, though the same assignment works for a typed Integer, Char or ARRAY constant. Typed consts are writable here (fpc's default in non-Delphi modes) for every type except string, which is registered as a read-only literal alias with no storage. | — |
-| bug-p-array-of-const-integer-arm-picks-the-int64-overload | P | 55 | bug | fcl-json's `CreateJSONArray([1])` yields a `TJSONInt64Number` where FPC yields a `TJSONIntegerNumber`. The direct `CreateJSON(1)` agrees with FPC; only the `array of const` path diverges, in `With Element do case VType of vtInteger: CreateJSON(VInteger)`. Two of the fpjson suite's 203 cases fail on it. | — |
 | bug-p-inherited-ignores-the-parents-default-parameter-values | P | 55 | bug | `inherited Create;` where the parent's constructor/method declares a defaulted parameter is rejected with `inherited call argument count mismatch`, while the identical *direct* call `TBase.Create` applies the default and compiles. Blocks `TFPGObjectList` in real FPC `fgl.pp` (Pascal corpus rung 2). | — |
 | bug-p-sizeof-rejects-a-pointer-deref-in-its-operand | P | 55 | bug | `SizeOf(p^.A)` is a parse error (`Expected: ), but got: ^`). SizeOf's operand parser is a hand-rolled selector walk that handles `v`, `v.f.g` and `v[i]` but has no `^` case, so any pointer deref in the operand is rejected outright. | — |
 | bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped | P | 50 | bug | A token that starts no declaration is silently skipped in a UNIT's interface/implementation section, while the identical token in a PROGRAM's declaration section is correctly rejected. A typo'd section header (`cosnt K = 5;`) therefore discards the declarations behind it with no diagnostic; the error surfaces later at the use site, or not at all. FPC rejects at the typo. | — |
@@ -135,9 +134,9 @@ _none_
 | bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio | T | 50 | bug | Float-accuracy assertions in the gated suites make a one-ulp move a CI RED, and a red job is worked at the priority of BEING RED - which overrides the owner's standing rule that float accuracy is low prio. Parking the tickets in float/ does not close this door; only the tests can. | — |
 | bug-t-a-pin-verifys-reds-carry-no-reasons | T | 40 | bug | A pin verify's reds carry no reasons | — |
 | bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing | T | 45 | bug | 2461 Makefile assertions are a bare `test \"$$(...)\" = \"...\"`, which prints NOTHING when it fails. job_reason() is the log tail by deliberate design, so for those jobs the reason it records is whatever the recipe printed just before — and for the 480 cross-target ones that is two compile summaries with different code sizes, which reads exactly like a codegen divergence. It misled a Track T session for hours. The repo already uses `diff -u` in 362 places; the good pattern exists and is not reached. Fix edits Makefile, which is Track A's file-lane. | — |
+| bug-t-a-skip-that-cannot-say-why-is-a-pass-in-the-verdict | T | 50 | bug | testmgr records `reason: \"\"` on every skipped job. A full-tier sweep on 2026-08-26 skipped ~50 jobs — every conformance shard and every real-program corpus — and the report could not say why for any of them. The verdict line says RED/GREEN with no skip count, so a run that silently covered 3031 of 3081 jobs reports in the vocabulary of one that covered all of them. | — |
 | bug-t-fpc-seed-canary-red-cited-lines-that-cannot-contain-the-identifier | T | 30 | bug | One gate.sh quick run reported the FPC seed canary RED with 'symtab.inc(5934,30) Identifier not found ByRefArgNeedsLvalue' — but line 5934 of that file contains an unrelated loop, and the real call sites are at 6185/6186, AFTER the definition at 6099. Not reproducible: fpc compiled the identical tree rc=0 twice by hand and the next gate.sh run was GREEN. Evidence points at the canary reading a stale/other tree state, the same class the fixedpoint step already defends against; a false RED costs an agent a full investigation. | — |
 | bug-t-twatch-web-lists-a-target-that-cannot-be-built | T | 15 | bug | tools/twatch_web.py lists riscv64 in CROSS_TARGETS, but no compiler backend can produce a riscv64 binary and the test manager never mentions the target. The dashboard therefore carries a column that is structurally empty, and an empty column reads as 'no news' rather than 'impossible'. | — |
-| bug-t-two-devtests-measure-the-box-and-flake-the-fleet-job | T | 45 | bug | Two guards in the tools/*devtest*.py family assert on ambient timing and go red when the box is busy — which on plexus means whenever the watcher runs a tier, i.e. whenever the fleet job runs. bench_timing was FIXED (c194b01e9/415d8e9f2); twatch_bench_quiet_devtest.py is the surviving one, observed red at load 14 and green on immediate rerun. tools-devtest#00 stops at the first failing file, so one flake masks all 50 other guards. | — |
 | bug-the-queue-makes-filing-a-duplicate-the-path-of-least-resistance | A | 70 | bug | The queue makes filing a duplicate the path of least resistance | — |
 | chore-a-delete-the-dead-pascal-lvalue-statement-path | A | 30 | chore | `ParseLValue` and `CompileLValueAddress` in pasparser_lval.inc have no callers anywhere in compiler/** — ~130 lines of pre-AST statement-assignment parsing, including direct machine-code emission, that nothing reaches. | — |
 | chore-a-re-include-bench-timing-in-tools-devtest | A | 30 | chore | One line: `tools-devtest` skips `bench_timing_devtest.py` with an explicit `case ... continue`, added by a1fd5715e because the guard was load-sensitive. It has been fixed (c194b01e9) and is green under load average 14. Deleting the skip re-arms the only guard for bug-t-bench-sub-second-timings-quantized-to-50ms, which has not run in the fleet since the family was wired up. | — |
@@ -170,6 +169,7 @@ _none_
 | compat-pascal-uses-sysutils-withdraws-the-variadic-concat | P | 45 | compat | The variadic `Concat` intrinsic is shadowed by `sysutils`'s two-argument `Concat`, so `uses sysutils` breaks `Concat('a','b','c')` — which compiles fine without it. The shadow rule is `procIdx < 0`, i.e. ANY user Concat disables the intrinsic outright. Loud, not silent. | — |
 | decide-release-signing-key-custody | U | 25 | decide | feature-release-checksums-repro sits at the head of Track A's queue and cannot be finished by an agent: signing a release needs a PRIVATE KEY the user generates and holds, and a public key committed to the repo. Which tool (minisign vs GPG vs sigstore), who holds the secret, and where the public half is published are all human calls. The checksum and reproducible-build halves are agent-work and are listed below as what to do once this is answered. | — |
 | decide-t-refuse-unscoped-pattern-kills-in-a-hook | U | 45 | decide | Layer 2 of the pattern-pkill ticket is a PreToolUse hook refusing `pkill -f <toolname>` / `killall` with a bare pattern. It is a .claude/ config change binding every agent on this box, so it is the owner's call, not a track agent's or a peer's. Layers 1 and 3 landed without it; this is the only part left. | — |
+| decide-where-a-persistent-fpc-trunk-oracle-lives | U | 30 | decide | The FPC trunk oracle works but has nowhere to live: a trunk build is ~4 min and ~1GB, it must sit OUTSIDE the repo, and installing into ~ needs the owner's say-so. Three options with different refresh obligations. Filed because closing feature-t-fpc-probe-needs-a-trunk-oracle with item 3 undone would otherwise lose it. | — |
 | docs-d-document-exec-eval-and-the-builtins-incompatibility | D | 35 | docs | docs/targets/nil-python.md tells the public `eval`/`exec` do not exist (\"No eval of runtime-constructed code\") — but the explicit-dict form has worked since 2026-07-31 via pyeval's tree-walker. Document what exec/eval DO support, the refused ambient form, and the decided __builtins__ incompatibility (decided 2026-08-19, permanent for now). | — |
 | docs-d-name-resolution-pages-state-the-import-rule-with-no-cpyext-carve-out | D | 45 | docs | docs/language/name-resolution.md:47 and docs/targets/nil-python.md:260 quote the bare-import refusal message and state the rule with no carve-out. As of 2026-08-20 a unit declaring {$PYEXTENSION} and binding the cpyext runtime IS bare-importable, so both pages are now wrong in the direction that makes a working program look unsupported. | — |
 | docs-d-nilchecks-directive-and-flag | D | 30 | docs | {$NILCHECKS ON\|OFF} and --no-nil-check shipped 2026-08-21 and are not in docs/reference/directives.md or modes.md. The row is unusual enough to be worth a sentence: the directive is tri-state, so ON and OFF do different things depending on which site class you are looking at. | — |
@@ -259,6 +259,7 @@ _none_
 | feature-opt-arch-level-and-dispatch | O | 25 | feature | What x86-64 feature level does pxx emit for? Referenced as 'if raised' by two existing tickets and never filed; raised by the user 2026-08-15 when FMA came up. MEASURED: our own gate box plexus is a Xeon E5-2620 v2 (Ivy Bridge, 2013) with AVX but NO FMA and no AVX2 — x86-64-v2, not v3. So a v2 bump is safe and FMA would SIGILL on the machine that gates every push. Includes the answer to the 'dispatch defeats inlining' objection: multiversion whole FUNCTIONS, not instructions. | — |
 | feature-opt-bulk-copy-is-byte-at-a-time | O | 65 | feature | The runtime's bulk-copy primitives move ONE BYTE per iteration. Copy() on a 64-element array is ~23x slower than FPC's (2.54s vs 0.11s over 3M copies). A word-at-a-time loop -- ~10 lines, portable, no backend work -- was prototyped and measured at 3.3x of that back. | — |
 | feature-opt-dynarray-grows-in-place | O | 40 | feature | A growing dynamic array leaves its whole geometric series behind as garbage | — |
+| feature-opt-emitasmx64-reparses-fixed-strings | O | 60 | feature | `EmitAsmX64` re-parses the same hardcoded assembly strings on every compile — ~12% of a NilPy compile | — |
 | feature-opt-heap-per-thread-cache | O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-opt-inline-float-and-record-returning-leaves | O | 45 | feature | The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers. | — |
 | feature-opt-rtti-emit-on-use | O | 32 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
@@ -295,12 +296,10 @@ _none_
 | feature-promo-launch-plan | W | 15 | feature | Promo & launch plan — visibility now, 0.1 beta next, the loud moment last | — |
 | feature-release-checksums-repro | A | 50 | feature | Verifiable releases: checksums + signatures + the reproducible-build claim | — |
 | feature-t-fail-when-a-test-file-is-wired-into-no-build-rule | T | 45 | feature | A file in test/ is not a test until a build rule runs it. Two confirmed cases of a test that existed, passed, and was referenced by nothing — one ungated for two weeks. Proposed: a check (progress.sh check or testmgr) that fails when a test/*.expected or test/*.npy has no rule referencing it, converting the class from 'someone notices' to 'CI notices'. | — |
-| feature-t-fpc-probe-needs-a-trunk-oracle | T | 50 | feature | Every FPC-parity finding we produce is measured against installed FPC 3.2.2, so it inherits 3.2.2's bugs — and that has now twice produced a false 'pxx diverges from FPC' where pxx actually agreed with FPC trunk and only 3.2.2 was wrong. Give the probes a three-way verdict: pxx vs FPC-stable vs FPC-trunk. | — |
 | feature-t-freebsd-image-and-runner | T | 20→55 | feature | Nothing on plexus can boot a FreeBSD kernel — qemu-system-x86_64 and qemu-img are not installed, /var/lib/libvirt/images does not exist, and no *freebsd* image is anywhere on the filesystem. That is the only thing standing between feature-port-freebsd-native and a start, and it is infrastructure, not compiler work, so it belongs to T. | — |
 | feature-t-nilpy-cpython-differential-fuzzer | T | 45 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
 | feature-t-pasmith-rung-selftest | T | 30 | feature | A fuzz rung that has only ever been SILENT is indistinguishable from one that does not work. Proposes a --selftest that proves each rung's fold actually observes its construct, by MUTATING the generated program rather than by rebuilding an old compiler — cheaper, needs no checkout, and applies to rungs that were never written against a specific fix. | — |
 | feature-t-record-host-cpu-features-in-tstate | T | 20 | feature | tstate records host, sha, tier, wall and compiler_sha256 — nothing about the machine. So 'can we emit FMA?' could not be answered from the repo and needed an ssh into plexus. Record CPU model and the x86-64 feature level per host, once, in the host json. | — |
-| feature-t-tier-job-self-compile-differential-across-o-levels | T | 50 | feature | DECIDED 2026-08-19: a Track T tier job that compiles compiler.pas at every -O level and DIFFS the results across levels. Not in the per-fix loop — quick-gating must not slow down. The point is optimizer differential coverage as Track O ramps up, NOT the code-size issue that surfaced it; compiler.pas is the largest, densest program we can run the optimizer over. | — |
 | feature-t-uforth-bench-on-the-watcher-idle-phase | T | 25 | feature | tools/uforth_bench.py is standalone + a make target, so uforth rows only exist when a human types it. Hang it off the watcher's idle bench phase so rows land per-sha automatically — which is also the only way to get the quiet-box baseline the harness has never had, and the instrument for the open slow-creep question. | — |
 | feature-t-uforth-bench-restore-the-elfhash-outlier | T | 15 | feature | blocktest-elfhash SKIPs in the uforth bench: blocktest.fth needs uforth's block-word preamble (FIRST-TEST-BLOCK / LIMIT-TEST-BLOCK / [?IF]) that tester.fr alone does not supply. It is the tracked ~100x-slow outlier, so while it skips the harness has no visibility on the worst case. | — |
 | feature-t-windows-wine-harness | M | 20 | feature | Windows/Wine test bed — scratch-prefix wine runner + mingw-w64 differential oracle, hello-world gate | — |
@@ -321,7 +320,6 @@ _none_
 | meta-constant-normalisation | A | 20 | meta | Standing index: stop writing compiler code that branches on constant-vs-variable. Each constant expression becomes its own uniquely-named read-only variable, so downstream has ONE shape to handle. Goal is less double work on future fixes, not speed. | — |
 | meta-dialect-extensions-and-fpc-strict | A | 5 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-t-dev-throughput-and-track-a-t-integration | T | 30 | meta | META: development is wait-limited, not token-limited. Dev tracks stop running suites; T owns breadth and its report LATENCY becomes the product. Coordinates the tooling tickets that get us there. | — |
-| perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime | A | 85 | perf | The structural half of bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost, which halved the constant (8.62s -> 4.06s) by removing the hotspots but did NOT remove the WORK: every .npy compile still parses and code-generates all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. A zero-byte .npy costs 4.06s where `begin end.` costs 0.24s. | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 25 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 40 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-a-backend-machine-code-lives-in-six-shared-files | A | 25 | refactor | A backend is not ir_codegen_<arch>.inc + asmtext_<arch>.inc. Six shared files emit or name per-arch machine code: symtab.inc (three full function epilogues), asmenc.inc (inline-asm text for all five targets), ir_codegen.inc (the shared -O pipeline calls two aarch64 passes by name), asmfront.inc, exception_emit.inc, and -- the one that crosses a lane -- cparser.inc, the C FRONTEND, which writes the C _start entry stub as raw rv32_/a64_/arm32_ emission. Measured by the omission defines, which turn every one of these into a compile error. | — |
@@ -336,14 +334,14 @@ _none_
 | refactor-nilpy-three-places-decide-a-locals-class-identity | N | 40 | refactor | Three separate places decide a NilPy local's class identity | — |
 | refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too | P | 55 | refactor | The parser carve-out is done, but Pascal still shares lexer.inc with Track A — so the A/P no-concurrent-edit rule still binds, now over 2,566 lines instead of 37,249. Carve the Pascal-specific lexing into paslexer.inc the way C, NilPy, Rust and Zig already have their own, and the A/P slot stops existing. | — |
 | refactor-p-three-hand-rolled-postfix-loops | P | 55 | refactor | The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy. | — |
-| regression-lib-test-lib-mimic-xml-etree-elementtree-2 | N | 45 | regression | regression: lib-test#src:test/lib_mimic_xml_etree_elementtree.npy red at fd93e4a71c37 (auto-filed by twatch) | — |
+| regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native | N | 60 | regression | Three .npy dispatch tests that PASSED at the last full tier (43b462833, new_red: []) are RED at e7c0d1d2a. Test sources are byte-identical across the range, so the compiler is the only variable. Track O is EXONERATED by measurement. Two predate the -O window; the third narrows by exclusion to 79148ec99 fix(N) hasattr. They were invisible because test-nilpy is in limited/full, NOT native — by design. | — |
 | task-a-add-fu-to-the-compiler-usage-line | A | 40 | task | One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off. | — |
 | task-d-document-own-language-first-in-the-language-reference | D | 15 | task | The user-facing half of the name-resolution rules: 'a name from your own language wins, and an explicit foreign import overrides it'. Internal map is devdocs/dev/name-resolution.md; the language reference says nothing. Blocked until the symbol rule is actually built — documenting behaviour the compiler does not have is worse than documenting nothing. | feature-a-own-language-first-symbol-resolution |
 | task-d-document-the-strict-overload-width-flag | D | 20 | task | `--strict-overload-width` shipped 2026-08-15 with no row in docs/reference/cli.md, modes.md or directives.md. One table row each, plus the one sentence that explains why it is standalone rather than part of the --strict-fpc umbrella. | — |
 | task-d-document-warn-ignored-directives | D | 20 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (28)
+## backlog_new (31)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -372,6 +370,9 @@ _none_
 | feature-n-a-kwargs-collecting-callee-through-a-callable-value | N | 55 | feature | A callee that collects `**kwargs` cannot be called through a callable value at all — every shape raises TypeError, including `def f(a, **kw)` called as `zz(1)` with no defaults anywhere. The dynamic bridge has no way to synthesize the empty dict the body expects in the collector slot, so the collector is deliberately left counted in ReqN to make the call REFUSE loudly rather than dispatch at an arity the body does not have. Split out of the *args fix; that half is done and CPython-exact. | — |
 | feature-p-assertions-switch-and-strict-default | P | 30 | feature | Re-filed from decide-assertion-default-vs-fpc, decided 2026-08-25 (option 3, default ON). pxx evaluates Assert() always; FPC ignores it unless -Sa. The dialect contract requires every divergence to be switchable and disabled under the strict family, so the switch is mandated rather than merely preferred. Once it exists the default stops being a one-way door. | — |
 | feature-p-legacy-value-object-types | P | 15 | feature | Turbo/Object Pascal's value `object` (a record with methods and single inheritance, `new`/`dispose`-able) has never been supported: `type TO = object X: Integer; ... end` fails with `Expected: begin, but got: X`. `object` is claimed by an unrelated meaning in ParseTypeKind (a rooted object REFERENCE, feature-object-reference-type), so the type-declaration position has no arm for it. Five fpc-testsuite generics tests fail on this alone. | — |
+| perf-a-cache-the-compiled-nilpy-runtime-unit-image | A | 60 | perf | The structural remainder of perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime, which halved the tax again (5.36s -> 3.06s) by removing two hotspots but still does not remove the WORK: every .npy compile parses and lowers all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. Now that emission is fixed, the residual 2.9s is genuinely parse + AST/IR/symtab construction, so nothing short of caching the compiled unit image will move it. | — |
+| perf-o-promote-constant-divisor-strength-reduction-to-o2 | A+O | 55 | perf | `x div 2^k` / `x mod 2^k` are strength-reduced only at OptLevel >= 3, but -O2 is the default that the compiler and every program it emits are actually built at, so the idiv ships everywhere. Three such sites in the heap allocator were 11.4% of the compiler's own in-.text samples; they were fixed at the SOURCE, which leaves every other site in the RTL, the libraries and all user code still paying it. | — |
+| perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor | P | 60 | perf | Measured at 13e196cc8 on the real -O2 compiler: ParseFactorCore is 9.4% of the whole run — the largest single named function — because 41,032 calls issue 1,583,871 CaseEqual, i.e. 38.6 string compares per factor, walking a linear `else if CaseEqual(name, '...')` chain of 92 arms spread over ~7,180 lines. | — |
 | refactor-a-two-predicates-answer-what-a-caret-yields | A | 55 | refactor | Two functions type a dereference. NodePtrElem knows more SPELLINGS (index-into-base, pointer FIELD, inline PTR_CAST, pointer arithmetic); ResolveDerefShape knows more ABOUT each (remaining depth, ultimate base). Swapping a call site from one to the other trades one kind of knowledge for the other, silently — which is exactly what shipped a regression on 2026-08-25. | — |
 | refactor-p-one-lvalue-path-for-statements-and-expressions | P | 55 | refactor | An assignment TARGET is parsed by a second, smaller copy of the lvalue walk in pasparser_stmt.inc, which resolves every `.name` as a field and ends on Expect(':='). Every capability the expression path gains has to be re-added there by hand, and three bugs so far are exactly that omission: the builtin pointer-name fallback, the PChar adapter, and the deref-then-index shape. The statement path should delegate, as its own cast-headed-CALL arm already does. | — |
 | refactor-p-the-field-declaration-parser-exists-twice | P | 45 | refactor | `ParseRecordFields` (pasparser_decl.inc ~3199) and the class-body field arm inside `ParseTypeSection` (~4824) parse the same grammar — comma-separated names, inline fixed/dynamic array, named array alias, scalar — with the same locals under different names and the same AddUField tail. Every field-level feature has to be written twice, and the second copy is the one that stays broken. | — |
@@ -604,9 +605,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2389)
+## done (2402)
 
-2389 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2402 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -655,19 +656,18 @@ _none_
 
 ## Ready (no unmet blocker)
 
-- [p 85] [A] perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime
-- [p 78] [N] bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
-- [p 78] [N] bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
-- [p 78] [N] bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program
+- [p 85] [O] feature-opt-o3-register-pressure [parked — re-claim, do not duplicate]
 - [p 75] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 75] [P] feature-pascal-corpus-expansion
 - [p 75] [P] feature-pascal-corpus-oop
+- [p 72] [N] bug-n-an-arithmetic-dunder-on-self-is-pointer-arithmetic
 - [p 72] [N] bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
 - [p 72] [N] feature-nilpy-stdlib-coverage-gaps-measured
 - [p 72] [P] feature-p-fpc-assigned-enum-ordinals-with-colon-equals
 - [p 72] [P] feature-p-fpc-global-operator-overload-declarations
 - [p 72] [B] feature-typinfo-facade-unit
 - [p 70] [N] bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method [parked — re-claim, do not duplicate]
+- [p 70] [N] bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly
 - [p 70] [N] bug-n-a-field-takes-its-type-from-the-first-token-of-its-right-hand-side
 - [p 70] [N] bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through
 - [p 70] [N] bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable
@@ -718,7 +718,11 @@ _none_
 - [p 60] [N] feature-a-declaration-phase
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
+- [p 60] [O] feature-opt-emitasmx64-reparses-fixed-strings
 - [p 60] [C] idea-c-realworld-test-targets
+- [p 60] [A] perf-a-cache-the-compiled-nilpy-runtime-unit-image
+- [p 60] [P] perf-p-parsefactorcore-walks-a-92-arm-name-chain-per-factor
+- [p 60] [N] regression-n-three-nilpy-dispatch-tests-red-and-invisible-to-native
 - [p 58] [A] bug-a-nilpy-double-star-in-a-mixed-argument-list
 - [p 58] [P] compat-pascal-class-helpers
 - [p 58] [A] feature-cdecl-bodied-sysv-prologue
@@ -743,7 +747,6 @@ _none_
 - [p 55] [P] bug-p-a-string-typecast-is-a-conversion-and-not-a-cast
 - [p 55] [P] bug-p-a-typed-constant-of-pchar-type-is-a-parse-error
 - [p 55] [P] bug-p-a-typed-string-constant-cannot-be-assigned
-- [p 55] [P] bug-p-array-of-const-integer-arm-picks-the-int64-overload
 - [p 55] [P] bug-p-inherited-ignores-the-parents-default-parameter-values
 - [p 55] [P] bug-p-sizeof-rejects-a-pointer-deref-in-its-operand
 - [p 55] [A] bug-pchar-difference-in-writeln-arg-segfaults
@@ -762,6 +765,7 @@ _none_
 - [p 55] [P] feature-pascal-corpus-fgl
 - [p 55] [A] feature-pascal-type-helpers [parked — re-claim, do not duplicate]
 - [p 55] [A] feature-signal-siginfo-ucontext [parked — re-claim, do not duplicate]
+- [p 55] [A+O] perf-o-promote-constant-divisor-strength-reduction-to-o2
 - [p 55] [A] refactor-a-two-predicates-answer-what-a-caret-yields
 - [p 55] [P] refactor-p-carve-out-paslexer-so-p-owns-its-lexer-too
 - [p 55] [P] refactor-p-one-lvalue-path-for-statements-and-expressions
@@ -775,12 +779,11 @@ _none_
 - [p 50] [P] bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one
 - [p 50] [P] bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped
 - [p 50] [T] bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio
+- [p 50] [T] bug-t-a-skip-that-cannot-say-why-is-a-pass-in-the-verdict
 - [p 50] [D] docs-devnotes-ai-assisted-build [parked — re-claim, do not duplicate]
 - [p 50] [C] feature-c-import-a-pascal-unit-under-a-mangled-name [parked — re-claim, do not duplicate]
 - [p 50] [A] feature-nested-routine-fixed-array-capture
 - [p 50] [A] feature-release-checksums-repro
-- [p 50] [T] feature-t-fpc-probe-needs-a-trunk-oracle
-- [p 50] [T] feature-t-tier-job-self-compile-differential-across-o-levels
 - [p 50] [C] refactor-c-string-literal-decay-belongs-at-the-producer
 - [p 48] [P] bug-a-low-high-of-a-char-indexed-array-answer-the-ordinal
 - [p 48] [O] feature-opt-heap-per-thread-cache
@@ -788,12 +791,12 @@ _none_
 - [p 48] [P] feature-p-nested-record-field-in-a-typed-record-constant
 - [p 45] [W] feature-web-track-w-bootstrap (unblocks 2)
 - [p 45] [A] bug-a-error-recovery-silences-every-lowering-only-diagnostic
+- [p 45] [A] bug-a-the-selfhost-rule-is-a-no-op-when-the-seed-is-newer-than-its-sources
 - [p 45] [B] bug-b-varisstr-is-false-for-a-one-character-string
 - [p 45] [N] bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart
 - [p 45] [N] bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value
 - [p 45] [N] bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind
 - [p 45] [T] bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing
-- [p 45] [T] bug-t-two-devtests-measure-the-box-and-flake-the-fleet-job
 - [p 45] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 45] [P] compat-pascal-supports-three-arg-out-form
 - [p 45] [P] compat-pascal-uses-sysutils-withdraws-the-variadic-concat
@@ -822,13 +825,13 @@ _none_
 - [p 45] [A] refactor-a-one-program-driver-prologue-for-every-frontend
 - [p 45] [N] refactor-n-two-import-handlers-are-twins
 - [p 45] [P] refactor-p-the-field-declaration-parser-exists-twice
-- [p 45] [N] regression-lib-test-lib-mimic-xml-etree-elementtree-2
 - [p 42] [P] feature-pascal-builtin-tobject-class
 - [p 40] [A] bug-a-a-dynarray-delete-temp-holds-the-new-buffer-until-scope-exit
 - [p 40] [A] bug-a-nilpy-on-cross-targets-four-remaining-walls [parked — re-claim, do not duplicate]
 - [p 40] [A] bug-a-rtti-kind-numbers-are-the-compilers-not-the-typinfo-enum-the-unit-documents
 - [p 40] [N] bug-n-a-char-key-and-a-string-key-are-equal-everywhere-except-in-a-dict
 - [p 40] [N] bug-n-tk-got-files-are-invisible-to-testmgr-privatization
+- [p 40] [N] bug-n-two-node-consumers-know-an-call-but-not-its-virtual-sibling
 - [p 40] [N] bug-nilpy-shared-nonlocal-frame-cell-is-never-freed [parked — re-claim, do not duplicate]
 - [p 40] [P] bug-p-a-diagnostic-in-a-used-unit-names-the-wrong-source-file
 - [p 40] [P] bug-p-a-variant-refuses-wide-chars-and-interfaces
@@ -878,6 +881,7 @@ _none_
 - [p 30] [T] bug-t-fpc-seed-canary-red-cited-lines-that-cannot-contain-the-identifier
 - [p 30] [A] chore-a-delete-the-dead-pascal-lvalue-statement-path
 - [p 30] [A] chore-a-re-include-bench-timing-in-tools-devtest
+- [p 30] [U] decide-where-a-persistent-fpc-trunk-oracle-lives
 - [p 30] [D] docs-d-nilchecks-directive-and-flag
 - [p 30] [A] feature-a-finalize-for-bare-dynarray-and-variant
 - [p 30] [A] feature-a-unreferenced-class-rtti-keeps-every-method-alive

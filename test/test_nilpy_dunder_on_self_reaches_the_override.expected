@@ -1,0 +1,20 @@
+== 1. dunders on self vs on an external receiver ==
+len      42 42
+contains True True
+str      derived-str derived-str
+getitem  derived-k derived-k
+iter     ['a', 'b'] ['a', 'b']
+len2     99 99
+str2     deeper-str deeper-str
+solo     1 1
+== 2. concrete base vs abstract (raise-only) base ==
+str ret  sub-x sub-x
+int ret  7 7
+raise    NotImplementedError
+== 3. __iter__ by declared return kind ==
+for      ['a', 'b'] ['a', 'b']
+list     ['a', 'b'] ['a', 'b']
+keys     ['a', 'b'] ['a', 'b']
+mixin k  ['a', 'b']
+mixin i  [('a', 1), ('b', 2)]
+mixin g  1 -1
