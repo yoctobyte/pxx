@@ -147,4 +147,4 @@ one line of surface, not a feature. The `operator :=` exact-match wall
 behind that.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit f9c4d55e5.
