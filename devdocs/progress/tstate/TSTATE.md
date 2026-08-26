@@ -8,4 +8,4 @@
 
 ## Open regressions
 - **test-core#src:test/test_arrayofconst_to_method_b287.pas** — test/test_arrayofconst_to_method_b287.pas (plexus): bad `a195f67d754b`, last good `90892318c94c`, 1 commit(s) in range
-- **test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy** — test/test_nilpy_star_unpack_into_a_collecting_callee.npy test/test_nilpy_star_unpack_into_a_collecting_callee.expected (plexus): bad `b4d62b3dcfde`, last good `90892318c94c`, 2 commit(s) in range
+- **test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy** — test/test_nilpy_star_unpack_into_a_collecting_callee.npy test/test_nilpy_star_unpack_into_a_collecting_callee.expected (plexus): bad `547163758314`, last good `90892318c94c`, 1 commit(s) in range
