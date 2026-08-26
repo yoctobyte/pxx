@@ -182,4 +182,4 @@ load, with `case_probe_returns_a_plausible_number` reporting a 241ms real probe
 (~5x its idle time, i.e. the loaded box the old case could not survive).
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 4ab326451.
