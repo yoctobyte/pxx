@@ -3847,6 +3847,7 @@ var
   parentIntfCi, ancCur, ij, implOrig: Integer; alreadyImpl: Boolean;
   imName: AnsiString;
   isConstructor, isDestructor, isVirtual, isOverride, isAbstract, isClassMethod: Boolean;
+  isOverloadDir: Boolean;   { the `overload` directive on this declaration — its absence is what HIDES the inherited methods of the name }
   hadParens: Boolean;
   clsSealed, clsAbstract: Boolean;
   savedPCB: Integer;   { nested-type scoping — see AddClassLikeType }
@@ -4758,6 +4759,7 @@ begin
             isVirtual := False;
             isOverride := False;
             isAbstract := False;
+            isOverloadDir := False;
             { `overload` is a real TOKEN (tkOverload), every other directive is a
               plain identifier — so a tkIdent-only guard silently walked past it.
               A lone trailing `overload;` then got skipped by luck, but
@@ -4791,6 +4793,14 @@ begin
                 carry a message string literal. }
               if CaseEqual(CurTok.SVal, 'virtual') or CaseEqual(CurTok.SVal, 'dynamic') then isVirtual := True;
               if CaseEqual(CurTok.SVal, 'override') then isOverride := True;
+              { `overload` is no longer parse-and-ignore. Its ABSENCE is what
+                makes a descendant method HIDE every inherited method of the
+                same name, which is the rule the note above assumed away:
+                "overload resolution is signature-keyed anyway" holds only
+                while no two candidates both accept the argument. When they
+                do, the call went silently to the parent's.
+                bug-p-a-descendant-method-does-not-hide-the-inherited-one }
+              if CurTok.Kind = tkOverload then isOverloadDir := True;
               if CaseEqual(CurTok.SVal, 'abstract') then
               begin
                 isVirtual := True;   { abstract implies virtual }
@@ -4811,6 +4821,13 @@ begin
             AddUMeth(ci, mnOff, mnLen, mpi);
             mmi := UMthCount - 1;
             UMthIsStatic[mmi] := isClassMethod;
+            { No `overload` and no `override` => this declaration HIDES every
+              inherited method of the name. A CONSTRUCTOR is excluded: FPC
+              treats constructors as always overloaded across a hierarchy
+              (`TDer.Create` alongside an inherited `Create(x)` is ordinary),
+              and hiding them would break every class that adds a ctor. }
+            UMthHidesInherited[mmi] :=
+              (not isOverloadDir) and (not isOverride) and (not isConstructor);
             UMthIsCtor[mmi] := isConstructor;
             UMthPub[mmi] := curPublished;
             UMthVis[mmi] := curVis;

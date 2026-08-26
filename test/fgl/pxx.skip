@@ -7,10 +7,15 @@
 # Baseline 2026-08-25 (pxx VERSION 374): 3 pass / 4 known-fail of 7 drivers.
 # 2026-08-26: 6 pass / 1 known-fail. objectlist.pas passes (inherited default
 # parameters fixed); list_str and map_str pass (String-typecast in rvalue position,
-# then cast-as-lvalue for builtin type names). ifclist.pas now COMPILES -- its
-# `Pointer(Dest^) := Pointer(Src^)` wall is gone -- and fails one layer deeper at
-# RUNTIME, on the ticket its entry now names.
+# then cast-as-lvalue for builtin type names).
+# 2026-08-26, later: **7 pass / 0 known-fail** — the list is empty. ifclist.pas
+# was the last one: its `Pointer(Dest^) := Pointer(Src^)` wall went first, then
+# it failed a layer deeper at RUNTIME because pxx did not implement Object
+# Pascal METHOD HIDING, so `l.Add(TFoo.Create(3))` bound the hidden inherited
+# TFPSList.Add(Pointer) and stored the object's VMT word
+# (bug-p-a-descendant-method-does-not-hide-the-inherited-one).
+# An empty list is the point of this file, not a reason to delete it: the next
+# gap gets a line here, and until then every driver is enforced.
 # All seven build and run correctly under FPC 3.2.2, which is where the
 # .expected files come from — so every entry below is a pxx gap, never a bad
 # driver.
-ifclist.pas	gap: compiles now; `l.Add(TFoo.Create(3))` binds the HIDDEN inherited TFPSList.Add(Pointer) instead of TFPGList.Add(const Item: T), storing the object's VMT word -- pxx does not implement method hiding. bug-p-a-descendant-method-does-not-hide-the-inherited-one

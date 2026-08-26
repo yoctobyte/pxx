@@ -4108,6 +4108,17 @@ var
   UMthProc_  : array[0..MAX_UMETH-1] of Integer;
   UMthVirSlot : array[0..MAX_UMETH-1] of Integer;
   UMthIsStatic : array[0..MAX_UMETH-1] of Boolean;
+  { This method HIDES every inherited method of its name — Object Pascal's rule
+    for a method declared in a descendant without `overload`. Set only at the
+    Pascal CLASS-BODY declaration site, so it is False for the other frontends'
+    methods (NilPy, C, Rust, Zig have no such rule and their resolution is
+    unchanged), for interface methods (an interface's parent chain is its IMT
+    layout, not a hiding relation) and for record methods (pxx's records do not
+    inherit, so there is nothing to hide). `override` clears it too: an override
+    CONTINUES the inherited method rather than introducing a new one, so it must
+    not hide the parent's other overloads of the same name.
+    bug-p-a-descendant-method-does-not-hide-the-inherited-one }
+  UMthHidesInherited : array[0..MAX_UMETH-1] of Boolean;
   UMthIsCtor   : array[0..MAX_UMETH-1] of Boolean; { declared `constructor` — TClass.AnyCtor(args) builds a metaclass-new, not a method call }
   UMthPub    : array[0..MAX_UMETH-1] of Integer;  { 1 = published, 0 = other }
   UMthVis    : array[0..MAX_UMETH-1] of Integer;  { member visibility (see UFldVis) }

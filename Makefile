@@ -5867,6 +5867,14 @@ test-core: $(COMPILER)
 	# slot ADDRESS. Wrong for Int64, Double and AnsiString results alike.
 	./$(COMPILER) -Fulib/rtl test/test_result_by_function_name_converts.pas $(TESTTMP)/test_rbfn26
 	test "$$($(TESTTMP)/test_rbfn26 | tail -1)" = "ALL OK"
+	# Object Pascal HIDING: a method declared in a descendant without `overload`
+	# hides every inherited method of that name. pxx kept the inherited ones as
+	# candidates, so `l.Add(TFoo.Create(3))` on fgl's TFPGList<IFoo> bound the
+	# hidden TFPSList.Add(Pointer), which dereferences its argument and stored
+	# the object's VMT word. The rows that must NOT hide (override, overload,
+	# constructors) are half the test.
+	./$(COMPILER) -Fulib/rtl test/test_descendant_method_hides_inherited.pas $(TESTTMP)/test_dmhi26
+	test "$$($(TESTTMP)/test_dmhi26 | tail -1)" = "ALL OK"
 	# A builtin type NAME means the same thing in a cast as in a declaration.
 	# The name->kind table used to exist twice; a dozen names that declared fine
 	# were "undefined variable" in a cast, and where the two overlapped they

@@ -1499,6 +1499,16 @@ begin
       end;
       Inc(i);
     end;
+    { Object Pascal HIDING: a method declared in a descendant without
+      `overload` hides every inherited method of that name, so the walk stops
+      after the level that declares it. Without this the parent's differently
+      typed method stayed a candidate and could out-rank the descendant's:
+      `l.Add(TFoo.Create(3))` on fgl's TFPGList<IFoo> bound
+      TFPSList.Add(Item: Pointer) — a class instance IS compatible with
+      Pointer — which dereferences its argument and stored the object's VMT
+      word. The next read segfaulted.
+      bug-p-a-descendant-method-does-not-hide-the-inherited-one }
+    if UClsLevelHidesMeth(curr, name, lo) then Break;
     curr := UClsParent[curr];
   end;
 

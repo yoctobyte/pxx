@@ -4,8 +4,8 @@ prio: 62
 type: bug
 blocked-by: []
 summary: "A method declared in a descendant WITHOUT `overload` must HIDE every inherited method of that name. pxx keeps the inherited ones as candidates, so a call can silently dispatch to the parent's differently-typed method — `l.Add(TFoo.Create(3))` on fgl's TFPGList<IFoo> reaches TFPSList.Add(Pointer), stores the object's VMT word, and the next read segfaults."
-status: backlog
-owner: —
+status: done
+owner: opus5-frank1
 ---
 
 # A descendant method does not hide the inherited one
@@ -137,3 +137,120 @@ Gate = `make compiler/pascal26` (self-host fixedpoint) + `tools/gate.sh quick`.
 Rung: [[feature-pascal-corpus-fgl]] · umbrella
 [[feature-pascal-corpus-expansion]] ·
 found behind [[bug-p-a-cast-as-lvalue-does-not-accept-a-builtin-type-name]]
+
+# Outcome — 2026-08-26
+
+Implemented, and the fgl rung is now **7 pass / 0 fail / 0 skip** —
+`test/fgl/pxx.skip` has no entries left.
+
+## The three parts, as filed
+
+1. **Record the directive.** `UMthHidesInherited` beside `UMthIsStatic`, set at
+   the Pascal CLASS-BODY declaration site to
+   `(not overload) and (not override) and (not constructor)`.
+
+   `override` had to clear it: an override CONTINUES the inherited method
+   rather than introducing a new one, so hiding there would have made
+   `b.G(1)` — an inherited `overload` sibling — disappear. Constructors had to
+   be excluded too: FPC treats them as always overloaded across a hierarchy, so
+   hiding them would break every class that adds a `Create`. Both are measured
+   rows in the test, not guesses.
+
+   The flag stays False for the other frontends (NilPy, C, Rust, Zig register
+   their methods through the same `AddUMeth` but have no such rule), for
+   INTERFACE methods (an interface's parent chain is its IMT layout, not a
+   hiding relation) and for RECORD methods (pxx's records do not inherit). That
+   is `the-substrate-is-ast-and-ir-not-the-parser.md`'s "normalise within a
+   language, duplicate across languages" — and it is why the change costs NilPy
+   nothing.
+
+2. **Stop the ranked walk.** `FindUMethOverloadAhead`'s candidate collection
+   breaks out of the parent chain after a level that hides the name.
+
+3. **Stop the by-name walks too**, which is the part the ticket said was the
+   real work. It turned out to be one line in one more place:
+
+   * `FindUMeth` already implements hiding for free — it returns the FIRST name
+     match walking outward, so it never sees a shadowed parent method.
+   * `FindUMethArity` needed the break, and needed it EVEN WHEN THE ARITY DID
+     NOT FIT: falling through to a parent's same-name method of another arity
+     is exactly the wrong answer rather than a helpful fallback.
+   * `FindUMethForSig` (the IMT builder) and `FindUMethByProc` are keyed by
+     signature and by proc index, not by name, so hiding does not apply.
+   * The remaining `UClsParent` walks in `symtab.inc` are property lookups and
+     virtual-slot lookups — neither is a method-name resolution.
+
+   Both name walks call ONE shared predicate, `UClsLevelHidesMeth`, rather than
+   inlining the rule twice. Two copies of a rule is how the ranked path and the
+   by-name paths start disagreeing, which is the failure this ticket exists to
+   avoid.
+
+The microfix the ticket warned against — hiding only in the ranked path — was
+not taken.
+
+## Verification
+
+The nine-line repro no longer dispatches to the hidden parent. Seven shapes
+measured against fpc 3.2.2 -Mobjfpc -O1, **all identical**, and they are chosen
+so that half of them are cases where hiding must NOT happen:
+
+| shape | fpc | pxx |
+| --- | --- | --- |
+| virtual call through a base reference | TB.F | TB.F |
+| `override` direct | TB.F | TB.F |
+| `overload` keeps the inherited one visible | TA.G int | TA.G int |
+| `overload` own | TB.G str | TB.G str |
+| a constructor does not hide | TA.H int | TA.H int |
+| hidden name binds the descendant's | TB.H str | TB.H str |
+| hiding through TWO levels | TC.H dbl | TC.H dbl |
+
+Blast radius, measured rather than argued:
+
+* **self-host** converged after 1 round, byte-identical — compiler.pas is
+  itself a large class hierarchy.
+* `tools/gate.sh quick` GREEN.
+* `tools/run_pascal_conformance.sh`: 346 pass, **0 fail**, 170 skip, 34
+  auto-gated (of 550) — and the pass/fail SETS diff clean against the sweep
+  taken before the change, not just the totals.
+* `tools/run_fgl_corpus.sh` against real FPC 3.2.2 `fgl.pp`: **7/7**, up from
+  6/7. `ifclist.pas` un-skipped and now enforced.
+* Every one of the 1344 `test/*.pas` files compiled and the failures
+  categorised: 169, all of them pre-existing — unit-not-a-program, missing
+  demo units, and the `*_fail.pas` negative tests. No new resolution failure.
+
+## The residual, deliberately not fixed here
+
+The ticket's gate line asked for `d.Add(p)` to be REFUSED as fpc refuses it.
+It is no longer mis-dispatched — it binds `TDer.Add`, the visible method — but
+pxx then coerces the `Pointer` to `AnsiString` instead of erroring.
+
+That is not this defect. CLAUDE.md's parity ceiling is explicit: *accepting a
+form FPC rejects is not a defect*. And the cause is general, not about hiding
+at all — `FindUMethOverloadAhead` type-ranks only when there are 2+ candidates,
+so a SINGLE-candidate method call checks arity and nothing else, while the
+identical free procedure is refused:
+
+```
+FreeProc(p)  -> error: no overload of FreeProc matches these arguments
+c.M(p)       -> compiles
+```
+
+Filed as
+[[bug-p-a-single-candidate-method-call-does-not-check-its-argument-types]].
+The hiding fix is what made it visible: it narrowed `d.Add(p)` from two
+candidates (a real wrong answer) to one (a looseness).
+
+## Files
+
+* `compiler/defs.inc` — `UMthHidesInherited`.
+* `compiler/symtab.inc` — initialised and relocated in `AddUMeth`; new
+  `UClsLevelHidesMeth`; `FindUMethArity` breaks the chain.
+* `compiler/pasparser_decl.inc` — `isOverloadDir` observed; the flag set at the
+  class-body site.
+* `compiler/pasparser_call.inc` — `FindUMethOverloadAhead` breaks the chain.
+* `test/test_descendant_method_hides_inherited.pas` — new, 8 rows.
+* `test/fgl/pxx.skip` — `ifclist.pas` removed; header records 7/7.
+* `Makefile` — the new test wired into `test-core`.
+
+## Log
+- 2026-08-26 — resolved, commit PENDING-COMMIT.

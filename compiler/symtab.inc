@@ -1528,6 +1528,7 @@ begin
       UMthProc_[dst+k] := UMthProc_[src];
       UMthVirSlot[dst+k] := UMthVirSlot[src];
       UMthIsStatic[dst+k] := UMthIsStatic[src];
+      UMthHidesInherited[dst+k] := UMthHidesInherited[src];
       UMthIsCtor[dst+k] := UMthIsCtor[src];
       UMthPub[dst+k] := UMthPub[src];
       UMthVis[dst+k] := UMthVis[src];
@@ -1540,6 +1541,7 @@ begin
   UMthNOff[mi] := noff; UMthNLen[mi] := nlen; UMthProc_[mi] := procIdx;
   UMthVirSlot[mi] := -1;
   UMthIsStatic[mi] := False;
+  UMthHidesInherited[mi] := False;
   UMthIsCtor[mi] := False;
   UMthPub[mi] := 0;
   UMthVis[mi] := VIS_PUBLIC;
@@ -6820,6 +6822,36 @@ begin
     ((FindProc(nm) < 0) and (FindSym(nm) < 0));
 end;
 
+function UClsLevelHidesMeth(curr: Integer; const name, lo: AnsiString): Boolean;
+{ True when class level `curr` declares `name` and at least one of those
+  declarations HIDES — i.e. was written without `overload` and without
+  `override`. Object Pascal's rule: such a declaration hides every inherited
+  method of that name, so a chain walk must stop after this level.
+
+  Asked as a question about the LEVEL, not about one method row, because the
+  level may declare the name several times and a single non-overload
+  declaration among them closes the chain.
+
+  One routine, called by every name-based chain walk, rather than the same three
+  lines inlined at each: the reason this defect existed at all is that the ranked
+  path and the by-name paths can disagree about which methods EXIST, and two
+  copies of a rule is how they start to.
+  bug-p-a-descendant-method-does-not-hide-the-inherited-one }
+var i, base, cnt: Integer;
+begin
+  Result := False;
+  if curr < 0 then Exit;
+  base := UClsMBase[curr];
+  cnt  := UClsMCount[curr];
+  for i := 0 to cnt - 1 do
+    if UMthHidesInherited[base + i] and
+       UMemberNameMatch(UMthNOff[base + i], UMthNLen[base + i], curr, name, lo) then
+    begin
+      Result := True;
+      Exit;
+    end;
+end;
+
 function FindUMethArity(ci: Integer; const name: AnsiString; nExplicitArgs: Integer): Integer;
 { Overload-aware method lookup: first name match (walking the parent chain)
   whose proc accepts the call's EXPLICIT arg count (self added per entry;
@@ -6846,6 +6878,11 @@ begin
       end;
       Inc(i);
     end;
+    { A hiding declaration at this level ends the walk even when its ARITY did
+      not fit: the inherited methods are not candidates, they are invisible, so
+      falling through to a parent's same-name method of a different arity is
+      exactly the wrong answer rather than a helpful fallback. }
+    if UClsLevelHidesMeth(curr, name, lo) then Break;
     curr := UClsParent[curr];
   end;
   Result := FindUMeth(ci, name);
