@@ -8531,6 +8531,13 @@ test-core: $(COMPILER)
 	# would make pxx compile something other than what was written.
 	./$(COMPILER) test/test_inert_routine_directives.pas $(TESTTMP)/test_inertdir26
 	$(TESTTMP)/test_inertdir26 | diff -u test/test_inert_routine_directives.expected -
+	# A subrange bound parses at the SIMPLE-EXPRESSION level, below the relational
+	# one -- otherwise the `=` that starts a typed constant's initialiser is eaten
+	# as an equality operator: `array[0..3] of 0..15 = (0,8,4,12)` read the high
+	# bound as `15 = (0` and then demanded a ')'. FPC's own reverse_byte
+	# (compiler/cutils.pas:303) is the row that found it. FPC 3.2.2's output.
+	./$(COMPILER) test/test_subrange_bound_stops_at_the_initialiser.pas $(TESTTMP)/test_subbound26
+	$(TESTTMP)/test_subbound26 | diff -u test/test_subrange_bound_stops_at_the_initialiser.expected -
 	./$(COMPILER) test/test_ansistring_cast_extern_pchar.pas $(TESTTMP)/test_ansistring_cast_extern_pchar26
 	test "$$($(TESTTMP)/test_ansistring_cast_extern_pchar26)" = "$$(printf 'direct=hello len=5\nviavar=hello len=5')"
 	./$(COMPILER) test/test_ansistring_cast_fnptr.pas $(TESTTMP)/test_ansistring_cast_fnptr26

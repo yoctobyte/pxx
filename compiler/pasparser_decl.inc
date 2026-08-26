@@ -34,9 +34,9 @@ begin
       is an integer subrange). Without this the `..hi` leaked and the
       type-skip loop in ParseVarSection corrupted the variable's type away
       from tySet, so set ops/membership read garbage. }
-    ConstEval;
+    ConstEvalOrdBound;
     Expect(tkDotDot, '..');
-    ConstEval;
+    ConstEvalOrdBound;
     elemTk := tyInteger;
   end
   else
@@ -152,9 +152,9 @@ begin
         "the same treatment as an inline `var x: lo..hi` subrange" -- it was
         aspirational, there was no inline form. }
       if CurTok.Kind = tkString then Result := tyChar else Result := tyInteger;
-      LastTypeSubLo := ConstEval;      { low bound }
+      LastTypeSubLo := ConstEvalOrdBound;      { low bound }
       Expect(tkDotDot, '..');
-      LastTypeSubHi := ConstEval;      { high bound }
+      LastTypeSubHi := ConstEvalOrdBound;      { high bound }
       LastTypeIsSub := True;
       Exit;
     end;
@@ -1738,10 +1738,10 @@ begin
     widening the guess is how a wrong type gets stamped on a right value. }
   if (CurTok.Kind = tkString) and (Length(CurTok.SVal) = 1) then
     LastArrIdxTk := Ord(tyChar);
-  blo := ConstEval;
+  blo := ConstEvalOrdBound;
   bLoUns := TkIsUnsigned64(CEOrdTk);
   Expect(tkDotDot, '..');
-  bhi := ConstEval;
+  bhi := ConstEvalOrdBound;
   bHiUns := TkIsUnsigned64(CEOrdTk);
   { An UNSIGNED bound arrives as a bit pattern, so `High(PtrUInt)` is -1 here and
     would sail through the 32-bit range test below as a perfectly ordinary
@@ -5786,9 +5786,9 @@ begin
           tyInteger) — same treatment as an inline `var x: lo..hi` subrange (the
           bounds are not retained). }
         if CurTok.Kind = tkString then fTk := tyChar else fTk := tyInteger;
-        subLoVal := ConstEval;     { low bound }
+        subLoVal := ConstEvalOrdBound;     { low bound }
         Expect(tkDotDot, '..');
-        subHiVal := ConstEval;     { high bound }
+        subHiVal := ConstEvalOrdBound;     { high bound }
         RegisterGeneralAlias(tnOff, tnLen, Ord(fTk), REC_NONE);
         { RETAIN the bounds ({$R+} checks stores against them —
           feature-pascal-range-checks-r-plus; they used to be dropped). }

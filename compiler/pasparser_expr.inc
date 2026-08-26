@@ -10050,6 +10050,7 @@ begin
 end;
 
 function ConstEval: Int64; forward;
+function ConstEvalOrdBound: Int64; forward;
 procedure ParseArrayDimBounds(var lo, hi: Integer); forward;   { body sits with the const helpers }
 
 function ConstEvalFactor: Int64;
@@ -10427,6 +10428,30 @@ begin
     CEOrdTk := tyBoolean; CEEnumId := -1;
   end;
   Result := r;
+end;
+
+function ConstEvalOrdBound: Int64;
+{ ONE BOUND of an ordinal subrange -- `lo..hi` in `var n: 1..5`, `set of 1..10`,
+  `type T = 'a'..'z'`, `array[0..15]`. Evaluated at the SIMPLE-EXPRESSION level,
+  not ConstEval's.
+
+  Deliberately not ConstEval. A subrange bound is an ORDINAL, so a relational
+  operator cannot legally appear at its top level -- and ConstEval's relational
+  level (added for `const Is64 = SizeOf(Pointer) = 8`) ate the `=` that STARTS
+  the initialiser of a typed constant:
+
+    const t: array[0..3] of 0..15 = (%0000, %1000, %0100, %1100);
+
+  parsed the high bound as `15 = (0`, then demanded a ')' and found a ','.
+  (fpc-source compiler/cutils.pas:306 -- reverse_byte's nibble table.) Every
+  operator a bound can actually contain lives at this level or below, including
+  ZenGL's `High(LongWord) shr 1 - 1`.
+
+  One function for all four sites, because they are one construct: the anonymous
+  subrange in ParseTypeKind, the named `T = lo..hi` in ParseTypeSection, the
+  element of `set of lo..hi`, and an array dimension. }
+begin
+  ConstEvalOrdBound := ConstEvalAdd;
 end;
 
 { ===== REAL-valued constant expressions =====
