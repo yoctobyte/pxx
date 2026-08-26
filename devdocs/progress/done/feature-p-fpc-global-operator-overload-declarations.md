@@ -162,4 +162,4 @@ One thing behind the wall is NOT yet filed and will surface once it clears:
 GREEN · pascal-conformance 346/0/170/34 · c-conformance 220/0 · fgl 7/7.
 
 ## Log
-- 2026-08-27 — resolved, commit PENDING-COMMIT.
+- 2026-08-27 — resolved, commit bf88c89c5.
