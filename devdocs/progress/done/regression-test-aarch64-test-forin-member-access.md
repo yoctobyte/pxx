@@ -1,7 +1,7 @@
 ---
 prio: 70
 track: A
-status: working
+status: done
 owner: frank1-A-aarch64
 ---
 
@@ -124,8 +124,16 @@ again — the walker zeroes a flagged temp of ANY kind while `ManagedLocalZeroBy
 answers 0 for kinds it does not consider managed; and the walker emits inline
 stores while `EmitZeroFrameSlot` routes anything wider than a pointer to a CALL
 to `PXXMemZero`, which a promo slot (16 bytes) always crosses. The revert commit
-carries the full note. Cost of not doing it: the compiler's own code grew
-9123619 -> 9236120 bytes, because the flagged temps are now nil'd twice.
+carries the full note.
+
+Cost of not doing it: none, in the end. The late-mint pass now SKIPS flagged
+temps (`50c4dd2dc`) rather than duplicating the backends' stores — leaving them
+in doubled every such slot, +112 KB / +1.2% on the compiler's own code. With the
+skip the compiler comes out at 9123569 bytes against 9124696 before the fix, i.e.
+1127 bytes SMALLER, because the unnamed unflagged temps the x86-64 safety net
+already nil'd now go through EmitZeroFrameSlot's single-store path. So the
+remaining duplication is only conceptual (two tables, one flagged half and one
+unflagged), not paid for in emitted bytes.
 
 ### Gate
 `make compiler/pascal26` converged (self-host fixedpoint) · `tools/gate.sh quick`
@@ -139,3 +147,4 @@ frame-dirtying call in front, so the witness does not depend on a target's
 accidental frame layout. Verified to FAIL (3102 / 7692) against a self-hosted
 pre-fix build on all five targets. Wired into `test-core` and into the i386,
 aarch64, arm32 and riscv32 cross lists.
+- 2026-08-26 — resolved, commit PENDING-COMMIT.
