@@ -168,4 +168,4 @@ it is a refactor of a Track A/P shared file, and the four classes above are the
 acceptance test somebody now has for it. Filed as its own ticket.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 547163758.
