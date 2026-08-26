@@ -376,6 +376,42 @@ Same family as `code : STALE` in the watcher and the frozen-builtin seam
 `gate.sh` now guards: **the artifact you are measuring is assembled from more
 parts than the one you named.**
 
+## "Ruled out" and "could not look" must never print the same
+
+The sharpest version of this file's refrain, and it cost six days. A ticket
+recorded: *the kernel log is unreadable unprivileged, so OOM can be neither
+confirmed nor excluded.* That sentence made **ruled out** and **not looked at**
+indistinguishable -- and a hypothesis nobody can check is the one an
+investigation drifts toward, because nothing ever pushes back on it.
+
+It was also false. `dmesg` is blocked here (`kernel.dmesg_restrict=1`), but
+**`journalctl -k` is not, for anyone in group `adm`, and this account is.**
+Everyone who hit the wall hit it with `dmesg` and stopped. The real answer took
+minutes: **0 kernel OOM kills across three boots**, 35,486 kernel lines, journal
+reaching back far enough to cover the date in question.
+
+Three things to carry:
+
+- **One blocked tool is not a blocked question.** Before writing "cannot be
+  determined", find the second reader. Privilege here is per-interface, not per-
+  fact: `dmesg` restricted, `journalctl -k` open to `adm`.
+- **Check the mechanism that logs somewhere else.** `systemd-oomd` kills on cgroup
+  PSI *before* the kernel is out of memory, logs to its own unit rather than the
+  kernel log, and targets the heaviest cgroup -- here, a fuzz batch or the test
+  matrix. A kernel-only answer would have read as an all-clear with the actual
+  candidate unexamined. (It had killed nothing, ever.)
+- **State exactly how far the exclusion reaches.** Kernel OOM and oomd both leave
+  a durable record; a peer's `SIGKILL` leaves none. So excluding them is not
+  "nothing killed it" -- it is *every hypothesis that would have left evidence
+  did not happen*, which leaves the one that never does. That is a real narrowing
+  and it is the most the evidence supports.
+
+The design counterpart is now in `tools/whokilled.sh`: **three verdicts, and any
+blind probe forces a distinct exit code**, so a caller cannot mistake blindness
+for clean. Its CANNOT-TELL branches had never executed on this box, so the
+devtest drives them with fakes on PATH -- a branch that has never run is not yet
+known to work.
+
 ## Record the negative result, or someone will spend a night rediscovering it
 
 Track T profiled the test matrix and reported three findings, one of which was
