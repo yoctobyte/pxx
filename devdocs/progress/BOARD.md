@@ -55,7 +55,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (283)
+## backlog (282)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -146,7 +146,6 @@ _none_
 | chore-t-lint-a-job-that-runs-a-binary-it-does-not-compile | T | 20 | chore | The second, weaker half of the split_jobs lint: flag any job that RUNS a /tmp binary no line in that job produces. Prototyped and deliberately NOT shipped — it yields 5-7 candidates depending on how recipe lines are segmented, and every one needs individual adjudication. Shipping it half-tuned would produce exactly the noisy guard that gets muted. | — |
 | chore-t-split-lib-test-into-jobs-that-name-what-failed | T | 45 | chore | One lib-test job bundles several sources, so its tstate key names only the FIRST of them: `lib-test#src:test/crtl_exp2.c` is really `crtl_exp2.c examples/tk/hello.npy +5`, and a timeout in the tk step reads as a C-math regression. Split it so a job names what failed. Do it while lib-test is green — the baseline is recorded here. | — |
 | chore-t-test-binaries-hardcode-unsweepable-tmp-paths | T | 35 | chore | 60 /tmp paths are hardcoded in 37 COMPILED TEST SOURCES and written by the test binary at runtime, so no Makefile sweep can reach them and testmgr does not privatize them either. Two concurrent runs still share those files EVEN UNDER testmgr. Split out of chore-makefile-testtmp-parameterize, which closed the recipe half. | — |
-| chore-t-test-runs-inherit-the-desktop-session | T | 55 | chore | Every systemd-run --user job on plexus inherits a full desktop session — DBUS_SESSION_BUS_ADDRESS, DISPLAY=:0, WAYLAND_DISPLAY, XAUTHORITY — because systemctl --user show-environment carries them and the watcher's own /proc/<pid>/environ has them all. a11y was the symptom that hung a job for three days; anything that opportunistically talks to a display or session bus can hang the same way. Strip the environment for test runs instead of blocklisting symptoms one variable at a time. | — |
 | chore-t-unit-class-est-mem-is-below-what-lib-test-00-actually-peaks-at | T | 25 | chore | testmgr's own advisory, printed at the end of every full tier: `lib-test#00 peaked at 596 MB against a 550 MB estimate` for class `unit`. The scheduler admitted it on a promise the box did not have to keep. Raise the CLASSES row to max*1.5, or give the outlier its own class. | — |
 | chore-web-secrets-sops-age | W | 45 | chore | Website secrets: SOPS + age, encrypted-in-git, paper-backed key | feature-web-track-w-bootstrap |
 | compat-c-printf-p-of-null-prints-0x0-not-nil | C | 22 | compat | `printf(\"%p\", NULL)` prints `0x0`; glibc prints `(nil)`. Only the null case differs — a non-null pointer prints identically. It matters because it makes a gcc-oracle differential run report a divergence that is not a miscompile. | — |
@@ -604,9 +603,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2385)
+## done (2386)
 
-2385 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2386 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -747,7 +746,6 @@ _none_
 - [p 55] [A] bug-pchar-difference-in-writeln-arg-segfaults
 - [p 55] [T] bug-t-the-push-rate-starves-breadth-coverage-entirely
 - [p 55] [A] chore-a-the-range-checked-fpc-seed-cannot-be-built
-- [p 55] [T] chore-t-test-runs-inherit-the-desktop-session
 - [p 55] [B] compat-pascal-ioresult-returns-a-negative-errno
 - [p 55] [A] feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets [parked — re-claim, do not duplicate]
 - [p 55] [C] feature-c-gtk3-header-final-wiring

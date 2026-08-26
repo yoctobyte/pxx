@@ -2273,11 +2273,125 @@ def job_env():
     Set here rather than in the recipes: it is a property of "running as a
     test", not of any one test, and the next GUI test to be written must not
     have to know this.
+
+    A BLOCKLIST WAS THE WRONG SHAPE, and the two lines below are what is left
+    of it. NO_AT_BRIDGE/GTK_A11Y fixed a11y; the next opportunistic client of a
+    display, session bus, keyring, portal or notification daemon hangs exactly
+    the same way and costs another multi-day outage to find, because the repo
+    will not have changed. Measured on this box: 22 desktop/session variables
+    reach every job, among them DBUS_SESSION_BUS_ADDRESS, DISPLAY,
+    WAYLAND_DISPLAY, XAUTHORITY, XDG_RUNTIME_DIR (which is where at-spi
+    autolaunches its bus) -- and an unrelated third-party API key.
+
+    So: allowlist. A job starts from a declared environment and inherits
+    nothing else.
+
+    THE FAILURE MODE THIS MUST NOT HAVE is the mirror image of the one it
+    fixes: strip something a job needs and a green turns red for a reason
+    nobody can see from the log. Three things keep that from happening.
+
+      * **Pass-through is by DEMONSTRATED need, not by guess.** A job whose
+        recipe TEXT names a session variable gets the session environment. That
+        is not a signature list that goes stale -- it is a direct read of the
+        thing being executed, and it is exactly right for the six Xvfb jobs and
+        the handful that reference $DISPLAY. A program that opens a display
+        WITHOUT its recipe saying so is the GTK case, and is precisely what
+        this is for.
+      * **It is reported, not silent.** The run prints what it stripped and
+        which jobs kept the session, once, so a changed verdict has a visible
+        cause in the same log.
+      * **There is an escape hatch.** TESTMGR_INHERIT_ENV=1 restores the old
+        behaviour for one run, for when you are debugging this and not with it.
     """
-    env = dict(os.environ)
-    env["NO_AT_BRIDGE"] = "1"
-    env["GTK_A11Y"] = "none"
+    if os.environ.get("TESTMGR_INHERIT_ENV") == "1":
+        env = dict(os.environ)
+        env.update(BASE_ENV_KEEP)
+        return env
+    keep = dict(BASE_ENV_KEEP)
+    for k, v in os.environ.items():
+        if k in ENV_ALLOW or k.startswith(ENV_ALLOW_PREFIXES):
+            keep[k] = v
+    return keep
+
+
+# Exact names every job gets. Deliberately short: this is the environment a
+# build-and-run needs, not the environment a login shell has.
+ENV_ALLOW = frozenset({
+    "PATH", "HOME", "USER", "LOGNAME", "SHELL", "PWD", "TMPDIR",
+    "LANG", "LANGUAGE", "TERM",
+    "CC", "CXX", "AR", "LD", "MAKEFLAGS", "MAKELEVEL", "MFLAGS",
+    "LD_LIBRARY_PATH", "PKG_CONFIG_PATH", "SOURCE_DATE_EPOCH",
+})
+# Families kept whole. PXX_/TESTMGR_ are ours; LC_ is locale; QEMU_ is the
+# cross-target runner's.
+ENV_ALLOW_PREFIXES = ("PXX_", "TESTMGR_", "LC_", "QEMU_")
+# Set for every job regardless of what the parent had.
+BASE_ENV_KEEP = {
+    "NO_AT_BRIDGE": "1",       # GTK2/3: do not start the a11y bridge
+    "GTK_A11Y": "none",        # GTK3+: same, newer spelling
+}
+# The session/desktop family. A job gets these ONLY if its own recipe names one
+# of them -- see job_env_for(). Kept as an explicit set so the report can say
+# what it dropped by name instead of "some variables".
+SESSION_ENV = (
+    "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY", "XDG_RUNTIME_DIR",
+    "DBUS_SESSION_BUS_ADDRESS", "SSH_AUTH_SOCK", "GPG_AGENT_INFO",
+    "GTK_MODULES", "QT_ACCESSIBILITY", "QT_IM_MODULE", "QT_IM_MODULES",
+    "XMODIFIERS", "DESKTOP_SESSION", "GDMSESSION",
+    "GNOME_DESKTOP_SESSION_ID", "GNOME_SETUP_DISPLAY",
+    "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "XDG_SESSION_DESKTOP",
+    "XDG_SESSION_CLASS", "XDG_MENU_PREFIX", "XDG_DATA_DIRS",
+    "XDG_CONFIG_DIRS", "IM_CONFIG_ENTRY",
+)
+
+
+def job_needs_session(job):
+    """Does this job's own recipe text name a session variable, or Xvfb?
+
+    A direct dependency read, not a heuristic about behaviour: if the recipe
+    names $DISPLAY it needs DISPLAY. Anything that reaches a display without
+    its recipe saying so is the failure this whole function exists to stop.
+
+    Deliberately NOT triggered by `xvfb-run` / `Xvfb` / `gui_shot`, which was
+    the first draft and is backwards. Those tools START A DISPLAY OF THEIR OWN
+    and hand it to the child — the three GTK jobs here all run under
+    `xvfb-run -a` — so they are precisely the jobs that want the session
+    stripped, not passed through. Matching on the tool name would have
+    re-admitted the session bus to the exact jobs whose at-spi hang started
+    this. Only a literal reference to a session VARIABLE counts.
+    """
+    body = "\n".join(getattr(job, "lines", []) or [])
+    return any(v in body for v in SESSION_ENV)
+
+
+def job_env_for(job):
+    """job_env(), plus the session environment for jobs that demonstrably need it."""
+    env = job_env()
+    if job_needs_session(job):
+        for v in SESSION_ENV:
+            if v in os.environ:
+                env[v] = os.environ[v]
     return env
+
+
+def env_strip_report(jobs):
+    """One line naming what was dropped and who kept it. "" if nothing to say."""
+    dropped = sorted(v for v in SESSION_ENV if v in os.environ)
+    if not dropped:
+        return ""
+    kept = [j.sel or j.name for j in jobs if job_needs_session(j)]
+    head = ("testmgr: job environment is an ALLOWLIST — dropped %d session/"
+            "desktop variable(s) (%s%s)"
+            % (len(dropped), ", ".join(dropped[:6]),
+               ", +%d more" % (len(dropped) - 6) if len(dropped) > 6 else ""))
+    if kept:
+        head += ("\ntestmgr:   %d job(s) name one in their recipe and keep the "
+                 "session: %s%s"
+                 % (len(kept), ", ".join(kept[:3]),
+                    ", +%d more" % (len(kept) - 3) if len(kept) > 3 else ""))
+    else:
+        head += "\ntestmgr:   no job in this tier names one; all run session-free"
+    return head
 
 
 # -------------------------------------------------------------- executor ---
@@ -2494,7 +2608,8 @@ class Manager:
         job.proc = subprocess.Popen(["sh", "-c", job.script()],
                                     stdin=subprocess.DEVNULL,
                                     stdout=logf, stderr=subprocess.STDOUT,
-                                    preexec_fn=presetup, cwd=REPO, env=job_env())
+                                    preexec_fn=presetup, cwd=REPO,
+                                    env=job_env_for(job))
         logf.close()
         job.t0 = time.monotonic()
         job.status = "running"
@@ -4621,6 +4736,12 @@ def main():
              (" cores<=%.0f/%d" % (mgr.core_budget, mgr.nproc)
               if mgr.core_budget <= mgr.nproc else ""),
              scale, logdir), flush=True)
+    # Say what the job environment dropped, in the same log as the verdicts it
+    # could change. A stripped environment that nobody announced is exactly the
+    # silent-degradation shape this run is otherwise full of guards against.
+    envnote = env_strip_report(run_jobs)
+    if envnote:
+        print(envnote, flush=True)
     report_mem_floor()
     pin0 = None
     if any(j.pin_built for j in run_jobs):
