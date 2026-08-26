@@ -8,19 +8,19 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (2)
+## working (1)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost | A | 80 | bug | Measured 2026-08-25 (pin v374, this box): compiling `print(\"hi\")` costs 8.92s; compiling `begin end.` costs 0.25s. The ~8.7s is a FIXED per-invocation constant — it does not scale with program size — and it is pure user CPU, not I/O. It is ~29% of the entire test matrix's CPU (805 .npy jobs x 8.7s ~ 7000 of 24219 cpu-s) and it is 9 seconds on every NilPy user's hello-world. | — |
-| bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method | N | 70 | bug | A callable value is silently accepted where `str` is declared, and no longer compares equal to itself — bisected to `9bbbbef6c` | — |
 
-## unfinished (22)
+## unfinished (23)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
 | bug-a-nilpy-on-cross-targets-four-remaining-walls | A | 40 | bug | After the string-tagged-binop gate was lifted, NilPy still does not RUN on any cross target: arm32 builds and SIGILLs, i386 refuses on `symbol kind not supported yet (load)`, aarch64 on `aggregate result with more than 8 params`, riscv32 on bare-metal mmap. Four separate walls, one campaign — ~53 .npy tests are cross-blind until they fall. | — |
 | bug-b-reportlab-mimic-multi-font-heap-corruption | N | 30 | bug | ROOT-CAUSED to bug-p-constructor-with-a-defaulted-variant-param-corrupts-memory and largely fixed by a workaround. The original font-count table was WRONG — an artefact of small samples against an intermittent fault. A rarer residual remains | — |
+| bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method | N | 70 | bug | A callable value is silently accepted where `str` is declared, and no longer compares equal to itself — bisected to `9bbbbef6c` | — |
 | bug-n-an-attribute-on-an-unresolved-import-degrades-to-a-bare-name | N | 62 | bug | `X.attr` where X came from an import that did not resolve is compiled as the BARE NAME `attr`, so `ModuleType.__name__` fails with `undefined variable (__name__)` — a message naming the attribute and never the unresolved import that caused it. Now the first wall on 4 html5lib files. | — |
 | bug-nilpy-shared-nonlocal-frame-cell-is-never-freed | N | 40 | bug | A `nonlocal` capture's shared frame cell (pycell_new) is never freed — ~23 B per escaping closure, the only closure shape still leaking now that the bound-fn object is refcounted | — |
 | bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython | O | 65 | bug | uforth's blocktest word set takes 413s compiled by pxx against CPython's 196s interpreting the same source — the AOT compiler is 2.1x SLOWER than the interpreter it is differentially tested against, and it is now the pole of two test tiers | — |
@@ -671,6 +671,7 @@ _none_
 - [p 72] [P] feature-p-fpc-assigned-enum-ordinals-with-colon-equals
 - [p 72] [P] feature-p-fpc-global-operator-overload-declarations
 - [p 72] [B] feature-typinfo-facade-unit
+- [p 70] [N] bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method [parked — re-claim, do not duplicate]
 - [p 70] [N] bug-n-a-field-takes-its-type-from-the-first-token-of-its-right-hand-side
 - [p 70] [N] bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through
 - [p 70] [N] bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable
