@@ -334,6 +334,29 @@ history decays after one iteration.** Marking the current run torn-down while th
 history rows stay unmarked buys exactly one cycle, until the pointer moves past
 that sha. A fix that expires is not a fix.
 
+## A property that holds for the wrong reason will stop holding silently
+
+Track T set a new job's class to `selfhost` for its 600s timeout, then found it
+was **already** classed that way -- but only because `classify()` matches on the
+expanded `make -n` text, and the `$(COMPILER)` prerequisite expands to text
+naming `compiler.pas`. The class was right by accident of a prerequisite, not by
+anything about the job. A comment had been written asserting the opposite.
+
+This is the quiet cousin of every defect in this file. Nothing is failing;
+something is **passing through a path nobody chose**, and the day that
+prerequisite is refactored the timeout silently drops to the default and a
+600-second job starts getting killed -- with no change to the job, no change to
+the class, and no diff to blame.
+
+- **When you find a property already true, ask WHY before being pleased.** "It
+  already works" and "it works for the reason I would have chosen" are different
+  facts, and only the second survives someone else's refactor.
+- **Then make it true on purpose.** They changed `classify()` to match
+  `selfcompile` directly, so the class no longer depends on how a prerequisite
+  happens to expand. Same cost, and now the reason is the one written down.
+- **Correct the comment that asserted the other thing.** This one had been wrong
+  from the start and nothing had ever contradicted it.
+
 ## A guard that greps the source can only catch what is visible in the text
 
 Same session, second defect. A repair path called `testable_only()`, which reads
