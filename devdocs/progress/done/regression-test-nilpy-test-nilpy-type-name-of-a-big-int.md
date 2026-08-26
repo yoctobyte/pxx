@@ -131,3 +131,29 @@ is correct; the divergence is in the attribute read, is pre-existing, and is a
 different mechanism, so it is a ticket rather than scope creep. The new test
 carries the case as a comment naming that ticket instead of as an assertion.
 - 2026-08-26 — resolved, commit c2c0e79e0.
+
+## The bisect result in this ticket named an innocent commit (Track T, 2026-08-26)
+
+`ab584382edcd` appears above as the bisected culprit. It is not. That commit's
+entire diff is 250 lines of `prio:` frontmatter — no code — and it cannot affect
+this job or any other.
+
+The real cause was `293d70509`, which `git merge-base --is-ancestor 293d70509
+d2cb6721e175` confirms is an **ancestor of the filed last-good sha**: not merely
+outside the 23-commit window, but on the wrong side of the endpoint that window
+was anchored to. Fixed in `c2c0e79e0`.
+
+Two independent defects produced that line, and both are now fixed:
+
+1. the blame range was anchored to "since this host last tested anything"
+   rather than "since this job last ran", which excluded the real cause
+   (`c68e6492e`);
+2. the range contained commits no gate could observe, so a midpoint search
+   could land on one (`cf7d805d4`). A bisect over such a range does not fail
+   and does not report not-found — it narrows, confidently, onto an innocent
+   commit, and by this repo's rule a core-job red is a revert candidate. The
+   next step after this line would have been reverting a pure re-triage commit
+   and wondering why the job stayed red.
+
+Left in place rather than deleted: the line is the record of what the watcher
+actually claimed, and this note is what stops the claim outliving the bug.
