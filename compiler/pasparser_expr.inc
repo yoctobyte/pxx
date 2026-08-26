@@ -334,6 +334,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
  szElemTk: TTypeKind; szBTk: TTypeKind;
     seEtid, seOrd: Integer;
     dfSym, dfRec, dfAi: Integer; dfTk: TTypeKind; dfSaveStatic: Boolean;  { Default(T) over an aggregate }
+    dfNestCi, dfHops, dfI: Integer; dfNestName: AnsiString;   { Default(TOuter.TInner) — the SCOPED nested row }
     lenFieldRec, lenFieldIdx: Integer;   { Length() of a static-array record field }
     cpyPi: Integer;   { Copy(s,i,n)[k]: the __pxxStrCopy proc index, kept past ci's reuse }
     ccReg, ccNode: Integer; ccKey: AnsiString; ccTk: TTypeKind;   { bare class-const in a method body }
@@ -441,6 +442,33 @@ begin
         { Default(T): zero value of the type — ordinals/pointers/chars in v1
           (records/strings later). `default` lexes as its own token. }
         Next; Expect(tkLParen, '(');
+        { `Default(TTest.TRecord)` — a type nested in a class or record body,
+          named through its owner. Strip the qualifier FIRST, so every check and
+          every dispatch below sees the type actually named: done later, the
+          file-type and unspecialized-generic diagnostics would interrogate the
+          OWNER's name instead. `dfNestCi` keeps the scope-correct row for the
+          aggregate arm — two owners may each declare a `TSub`, and the bare
+          lookup answers with whichever registered first.
+
+          Nothing is consumed unless the leading name really owns nested types
+          AND a `.ident` follows, which is the same guard the `var r:
+          TTest.TRecord` and `SizeOf` paths use. When the registry resolves
+          nothing (a nested subrange, enum or array is not a UClass row) the
+          single-qualifier strip is still right: pxx registers those flat, so
+          the qualifier only disambiguates the parse. }
+        dfNestCi := -1; dfHops := 0;
+        if (CurTok.Kind = tkIdent) and (NestedOwnerCi(CurTok.SVal) >= 0) and
+           (TokPos + 1 < TokCount) and (Tokens[TokPos].Kind = tkDot) and
+           (Tokens[TokPos + 1].Kind = tkIdent) then
+        begin
+          dfNestCi := ScanNestedTypeRun(CurTok.SVal, dfNestName, dfHops);
+          if dfHops = 0 then dfHops := 1;   { bare-name strip, one qualifier }
+          for dfI := 1 to dfHops do
+          begin
+            Next;   { past the owner name — CurTok is now '.' }
+            Next;   { past '.'            — CurTok is now the nested type name }
+          end;
+        end;
         { FPC-parity diagnostics: Default() is not defined for file types —
           neither TextFile itself nor a record that (transitively) contains one
           (bug-pascal-missing-diagnostics-fail-tests / tdefault2, tdefault6). }
@@ -478,7 +506,16 @@ begin
         dfTk := tyInt64;
         if CurTok.Kind = tkIdent then
         begin
-          dfRec := IsRecordType(CurTok.SVal);
+          { The SCOPED row when the qualifier resolved one and it is a record;
+            otherwise the flat bare-name lookup, unchanged. A nested CLASS is
+            not an aggregate — it keeps the integer 0 that is its correct nil,
+            exactly as an unqualified class does. }
+          if (dfNestCi >= 0) and UClsIsRecord[dfNestCi] then
+            dfRec := REC_UCLASS_BASE + dfNestCi
+          else if dfNestCi >= 0 then
+            dfRec := REC_NONE
+          else
+            dfRec := IsRecordType(CurTok.SVal);
           if dfRec <> REC_NONE then
           begin
             dfSaveStatic := AllocStaticLocal;

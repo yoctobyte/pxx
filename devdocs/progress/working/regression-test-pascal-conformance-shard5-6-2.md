@@ -1,5 +1,7 @@
 ---
 prio: 70
+status: working
+owner: frank1-P-conf
 ---
 
 > **origin/dev has advanced 12 commit(s) since this sha.** Re-verify at current HEAD before acting — the callback is tagged to the sha that was tested, which may no longer be the state of the tree.

@@ -190,6 +190,49 @@ begin
   if Result < 0 then Result := FindUClass(nm);
 end;
 
+{ Scan — WITHOUT consuming — the `TOuter.TInner[.TDeeper…]` qualifier run that
+  starts at the current token (`nm` = the outermost spelling, CurTok = that
+  identifier, Tokens[TokPos] = the '.' after it). Returns the DEEPEST nested
+  UClass row the registry resolves, -1 when the leading name owns no nested
+  types or the run resolves none. `hops` is how many `.ident` pairs resolved and
+  `lastName` the final bare spelling.
+
+  Scanning rather than consuming is what lets a caller decide before it commits:
+  a nested RECORD must be taken through the registry (scope-correctly), while a
+  nested subrange/enum/array is not a UClass row at all and belongs to
+  ParseTypeKind, which has its own strip. A resolver that ate the tokens first
+  would have to hand a half-parsed run to that fallback.
+
+  ONE resolver for a rule three constructs need. `var r: TTest.TRecord` had it
+  (ParseTypeKind), `SizeOf(TTest.TRecord)` grew its own copy, and `Default()` —
+  which also carries a hand-rolled type dispatch — never learned it at all, so
+  `Default(TTest.TRecord)` fell past the aggregate arm to the integer-zero one
+  and produced an Int64 where a record belonged. It compiled: tdefault8.pp is
+  `%NORUN`, so the conformance suite only ever typed it, and at runtime the
+  record assignment copied RecSize bytes from address 0 and SEGFAULTED.
+  devdocs/dev/normalise-dont-special-case.md }
+function ScanNestedTypeRun(const nm: AnsiString; var lastName: AnsiString;
+                           var hops: Integer): Integer;
+var scanCi, scanPos: Integer;
+begin
+  Result := -1;
+  hops := 0;
+  lastName := nm;
+  scanCi := NestedOwnerCi(nm);
+  if scanCi < 0 then Exit;
+  scanPos := TokPos;          { the '.' following the outermost name }
+  while (scanPos + 1 < TokCount) and (Tokens[scanPos].Kind = tkDot) and
+        (Tokens[scanPos + 1].Kind = tkIdent) and
+        (FindNestedType(scanCi, GetTokenStr(scanPos + 1)) >= 0) do
+  begin
+    scanCi := FindNestedType(scanCi, GetTokenStr(scanPos + 1));
+    Result := scanCi;
+    lastName := GetTokenStr(scanPos + 1);
+    Inc(hops);
+    scanPos := scanPos + 2;
+  end;
+end;
+
 { Register `nm` as a type declared inside class `ownerCi`'s body. Idempotent per
   (owner, name): a re-parse of the same body must not grow the table. }
 procedure AddNestedType(ownerCi: Integer; const nm: AnsiString; ci: Integer);
