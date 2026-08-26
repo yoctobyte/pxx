@@ -141,4 +141,4 @@ explains the rule it checks ("Deliberately NOT `invalid=True`"). It strips
 comment lines now. A text-shaped guard reads prose as eagerly as code.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 6556639b1.
