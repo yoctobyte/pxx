@@ -6103,6 +6103,7 @@ end;
 
 function ParseCStatementAST: Integer;
 var node, exprNode, seq, seq2, blk: Integer;
+    asmSections, asmDepth: Integer; asmEmpty: Boolean;   { GCC inline asm }
 begin
   Result := -1;
   if CurTok.Kind = tkEOF then Exit;
@@ -6214,6 +6215,82 @@ begin
   end;
 
   { `goto label;` }
+  { GCC extended inline asm as a STATEMENT.
+
+    It was not recognised at all, so `asm` parsed as an ordinary call and the
+    error was `call to undeclared function: asm` — or, with the operand
+    sections, `Expected: ), but got:` at the first ':'. busybox reaches this
+    through libbb.h's
+
+        #define barrier() asm volatile ("":::"memory")
+
+    which SET_PTR_TO_GLOBALS -> INIT_G()/INIT_S() expands, so coreutils/test.c,
+    editors/ed.c and util-linux/acpid.c all stopped on their first statement.
+
+    An EMPTY template with no output operands is a pure COMPILER barrier: it
+    orders the compiler, not the machine, and pxx does not reorder across a
+    statement boundary. So it is correctly compiled to nothing, and that is the
+    only case accepted.
+
+    Anything else is REFUSED, by name. Parsing real instructions and dropping
+    them would be a silent miscompilation of exactly the code that cares most
+    about what the machine does -- the failure class this project treats as the
+    most expensive. The diagnostic says which part is unsupported so a reader
+    is not left to infer it from a parse error.
+    feature-c-gcc-extended-inline-asm }
+  if (CurTok.Kind = tkIdent) and
+     ((CurTok.SVal = 'asm') or (CurTok.SVal = '__asm__') or
+      (CurTok.SVal = '__asm')) then
+  begin
+    Next;
+    if (CurTok.Kind = tkIdent) and
+       ((CurTok.SVal = 'volatile') or (CurTok.SVal = '__volatile__') or
+        (CurTok.SVal = 'goto') or (CurTok.SVal = 'inline')) then Next;
+    Expect(tkLParen, '(');
+    if CurTok.Kind <> tkString then
+      Error('C: inline asm expects a template string');
+    asmEmpty := (CurTok.SVal = '');
+    Next;
+    { adjacent string-literal concatenation in the template }
+    while CurTok.Kind = tkString do
+    begin
+      if CurTok.SVal <> '' then asmEmpty := False;
+      Next;
+    end;
+    asmSections := 0;
+    while CurTok.Kind = tkColon do
+    begin
+      Inc(asmSections);
+      Next;
+      { skip this section's operand list; nested parens belong to a constraint's
+        expression, e.g. "+r"(x) }
+      asmDepth := 0;
+      while (CurTok.Kind <> tkEOF) and
+            ((asmDepth > 0) or
+             ((CurTok.Kind <> tkColon) and (CurTok.Kind <> tkRParen))) do
+      begin
+        if CurTok.Kind = tkLParen then Inc(asmDepth)
+        else if CurTok.Kind = tkRParen then Dec(asmDepth);
+        Next;
+      end;
+    end;
+    Expect(tkRParen, ')');
+    Eat(tkSemicolon);
+    { sections 0..3 are outputs/inputs/clobbers; only a clobbers-only barrier
+      (":::") or a bare `asm("")` carries no operand this must honour. An OUTPUT
+      section means the statement produces a value, which an empty template
+      cannot have produced. }
+    if not asmEmpty then
+      Error('C: inline asm with a non-empty template is not supported'
+            + ' — the instructions would be silently dropped');
+    if asmSections = 1 then
+      Error('C: inline asm with an output operand list is not supported'
+            + ' — nothing would ever be written to it');
+    node := AllocNode(AN_BLOCK); ASTLeft[node] := -1;
+    Result := node;
+    Exit;
+  end;
+
   if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'goto') then
   begin
     Next;

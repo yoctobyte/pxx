@@ -6188,6 +6188,18 @@ test-core: $(COMPILER)
 	# AN_IDENT but not over an AN_FIELD. gcc -O0 oracle; pinned cannot compile it.
 	./$(COMPILER) test/cfnptr_array_callable.c $(TESTTMP)/cfnptr_array26
 	test "$$($(TESTTMP)/cfnptr_array26)" = "$$(printf 'local  11 30 -1\nfield  11 30 -1\ngfield 11 30\narrow  11 30\nvaridx 30 30\n16 48 8 \nderef  11 30\nnolist 5 13\nglobal 11 30\nraw    11 30\ntemp   -1\ndirect 11\nplain  9 7')"
+	# GCC extended inline asm. Not recognised at all, so `asm` parsed as a call to
+	# an undeclared function and the operand sections died at the first ':'.
+	# busybox's libbb.h defines barrier() as `asm volatile ("":::"memory")`, which
+	# INIT_G()/INIT_S() expands, so three applets stopped on their first statement.
+	# An empty template orders the COMPILER only and compiles to nothing; a template
+	# with instructions is REFUSED, because dropping them would silently miscompile.
+	# Negative half first, then every accepted spelling. gcc -O0 oracle.
+	@./$(COMPILER) test/casm_nonempty_template_fails.c $(TESTTMP)/casmfail26 2>&1 \
+	  | grep -q 'inline asm with a non-empty template' \
+	  || { echo 'casm_nonempty_template_fails: FAIL - real instructions were accepted and dropped'; exit 1; }
+	./$(COMPILER) test/casm_barrier.c $(TESTTMP)/casmbarrier26
+	test "$$($(TESTTMP)/casmbarrier26)" = "43 2"
 	# A ternary as the CALLEE of a call. (*fp)(a), (fp)(a), (name)(a), (a,fn)(x),
 	# arr[i](a) and s.f[i](a) were all recognised and `(c ? f : g)(a)` was not —
 	# busybox opens libbb/copy_file.c with `(FLAGS_DEREF ? stat : lstat)(...)`.
