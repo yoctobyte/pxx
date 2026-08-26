@@ -354,8 +354,8 @@ _none_
 | bug-p-a-string-literal-is-refused-as-a-pchar-parameter-default | P | 55 | bug | `procedure F(p: PChar = '-')` is refused outright — \"a string literal cannot be the default for a non-string parameter\" — at EVERY literal length, so it is not the one-char-literal bug. FPC accepts it and passes a pointer to the NUL-terminated data. A defaulted PChar parameter is ordinary C-binding shape. | — |
 | bug-p-a-typed-pchar-const-cannot-be-initialised-from-a-literal | P | 70 | bug | `const GP: PChar = '-'` COMPILES and segfaults (the ordinal is stored as the pointer); `const GP: PChar = '--'` is \"unexpected token\"; `const A: array[0..1] of PChar = ('-', '--')` is \"too many array constant elements\". A typed PChar const initialised from a literal is unimplemented in all three shapes, and the one-character shape fails SILENTLY. FPC gives the address of the NUL-terminated data. | — |
 | bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 40 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
+| bug-p-address-of-a-dynamic-array-captures-the-handle-not-the-variable | P | 55 | bug | `@dy` on a dynamic array yields the HANDLE, not the address of the variable, so a ^TDyn pointer goes stale on any reallocation and reads a freed buffer | — |
 | bug-p-high-and-low-refuse-every-non-identifier-operand | P | 30 | bug | Both arms open with `if CurTok.Kind <> tkIdent then Error('High: expected array variable or ordinal type')`, so a string literal, a concat, or a parenthesised expression cannot be an operand at all. fpc takes all three — and gives each a DIFFERENT base, which is why widening the guard needs its own measured table rather than a one-line edit. | — |
-| bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one | P | 50 | bug | `PDyn = ^TDyn` with `TDyn = array of LongWord`: after `SetLength(d, 5)`, `Length(pdy^)` answers 1 and `High(pdy^)` answers 0 where FPC answers 5 and 4 — while `pdy^[1]` reads the right element. The pointee is a HANDLE, so the [data-8] header is one indirection further than the runtime path looks. | — |
 | bug-pchar-difference-in-writeln-arg-segfaults | A | 55 | bug | `Writeln(p - q)` where p, q are PChar segfaults: the pointer DIFFERENCE keeps pointer type in argument position, so Writeln renders the small integer as a PChar and dereferences it. Assigning the same expression to an Integer first works and gives the right value, so the arithmetic is fine — only the inferred type of the un-assigned result is wrong. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 55 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
 | chore-doc-pascal-dialect-divergences-pointer-difference | D | 25 | chore | Re-filed from decide-pointer-difference-unit and decide-should-a-null-variant-raise-like-fpc, both decided 2026-08-25. Two divergences from FPC are now CHOSEN rather than merely inherited, and a chosen divergence that is not written down is indistinguishable from a bug to the next reader. Both entries land in devdocs/dev/pascal-dialect-divergences.md. | — |
@@ -600,9 +600,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2403)
+## done (2404)
 
-2403 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2404 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (44)
 
@@ -745,6 +745,7 @@ _none_
 - [p 55] [P] bug-p-a-string-typecast-is-a-conversion-and-not-a-cast
 - [p 55] [P] bug-p-a-typed-constant-of-pchar-type-is-a-parse-error
 - [p 55] [P] bug-p-a-typed-string-constant-cannot-be-assigned
+- [p 55] [P] bug-p-address-of-a-dynamic-array-captures-the-handle-not-the-variable
 - [p 55] [P] bug-p-inherited-ignores-the-parents-default-parameter-values
 - [p 55] [P] bug-p-sizeof-rejects-a-pointer-deref-in-its-operand
 - [p 55] [A] bug-pchar-difference-in-writeln-arg-segfaults
@@ -774,7 +775,6 @@ _none_
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder
 - [p 50] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base
 - [p 50] [P] bug-p-a-cast-as-lvalue-does-not-accept-a-builtin-type-name
-- [p 50] [P] bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one
 - [p 50] [P] bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped
 - [p 50] [T] bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio
 - [p 50] [T] bug-t-a-skip-that-cannot-say-why-is-a-pass-in-the-verdict

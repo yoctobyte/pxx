@@ -3717,7 +3717,7 @@ begin
   SetLength(SymElemEnumId, n);
   SetLength(SymStrCap, n);         SetLength(SymIsSub, n);          SetLength(SymSubLo, n);
   SetLength(SymSubHi, n);          SetLength(SymPtrDepth, n);       SetLength(SymPtrBaseTk, n);
-  SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymArrNDims, n);
+  SetLength(SymPtrBaseRec, n);     SetLength(SymPtrElemArrLen, n);  SetLength(SymPtrElemNDims, n);  SetLength(SymPtrElemDynDepth, n);  SetLength(SymArrNDims, n);
   SetLength(SymRTTIOff, n);        SetLength(SymIsHiddenArgTemp, n); SetLength(SymBlockId, n);
   SetLength(SymStaticLocal, n);   SetLength(SymAbsAliased, n);
   SetLength(SymDeclTok, n);        SetLength(SymHashPrev, n);       SetLength(SymPtrPointeeConst, n);
@@ -3844,6 +3844,7 @@ begin
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
   SymPtrElemNDims[SymCount] := 0;
+  SymPtrElemDynDepth[SymCount] := 0;
   SymDynElemRowLen[SymCount] := 0;
   SymDynElemRowLo[SymCount] := 0;
   if TypeIsFrozenString(tk) and (tk <> tyString) then
@@ -3874,7 +3875,23 @@ begin
       otherwise-unused SymArrDim* rows) is what lets Length/High/SizeOf of `p^`
       fold, and what tells the index path the subscript changes the address
       rather than the type. }
-    if LastTypePointerElemArrAi >= 0 then
+    { ...but only when the pointee is a FIXED array. A dynamic-array alias has
+      no compile-time extent, and ArrTypeLo/Hi are never written for one — the
+      dyn branch of the alias parser skips them — so they held 0/0 and this
+      computed an extent of exactly 1. That is where `Length(pdy^)` = 1 and
+      `High(pdy^)` = 0 came from: not a missing case, a CONFIDENT wrong answer
+      derived from two fields that were never set.
+      bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one }
+    if (LastTypePointerElemArrAi >= 0) and
+       ArrTypeIsDyn[LastTypePointerElemArrAi] then
+    begin
+      { A dyn pointee has no extent to record, but `p^` is still a dyn-array
+        VALUE and everything downstream needs to know that. One slot says so. }
+      SymPtrElemDynDepth[SymCount] := ArrTypeDynDepth[LastTypePointerElemArrAi];
+      if SymPtrElemDynDepth[SymCount] < 1 then SymPtrElemDynDepth[SymCount] := 1;
+    end;
+    if (LastTypePointerElemArrAi >= 0) and
+       (not ArrTypeIsDyn[LastTypePointerElemArrAi]) then
     begin
       SymPtrElemArrLen[SymCount] := ArrTypeHi[LastTypePointerElemArrAi] -
                                     ArrTypeLo[LastTypePointerElemArrAi] + 1;
@@ -4002,6 +4019,7 @@ begin
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
   SymPtrElemNDims[SymCount] := 0;
+  SymPtrElemDynDepth[SymCount] := 0;
   SymDynElemRowLen[SymCount] := 0;
   SymDynElemRowLo[SymCount] := 0;
   if TypeIsFrozenString(tk) and (tk <> tyString) then
@@ -4028,7 +4046,15 @@ begin
       otherwise-unused SymArrDim* rows) is what lets Length/High/SizeOf of `p^`
       fold, and what tells the index path the subscript changes the address
       rather than the type. }
-    if LastTypePointerElemArrAi >= 0 then
+    { ...but only when the pointee is a FIXED array. A dynamic-array alias has
+      no compile-time extent, and ArrTypeLo/Hi are never written for one — the
+      dyn branch of the alias parser skips them — so they held 0/0 and this
+      computed an extent of exactly 1. That is where `Length(pdy^)` = 1 and
+      `High(pdy^)` = 0 came from: not a missing case, a CONFIDENT wrong answer
+      derived from two fields that were never set.
+      bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one }
+    if (LastTypePointerElemArrAi >= 0) and
+       (not ArrTypeIsDyn[LastTypePointerElemArrAi]) then
     begin
       SymPtrElemArrLen[SymCount] := ArrTypeHi[LastTypePointerElemArrAi] -
                                     ArrTypeLo[LastTypePointerElemArrAi] + 1;
@@ -4263,6 +4289,7 @@ begin
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
   SymPtrElemNDims[SymCount] := 0;
+  SymPtrElemDynDepth[SymCount] := 0;
   SymDynElemRowLen[SymCount] := 0;
   SymDynElemRowLo[SymCount] := 0;
   if (elemType = tyFixedString) or (elemType = tyShortString) then
@@ -4290,7 +4317,15 @@ begin
       otherwise-unused SymArrDim* rows) is what lets Length/High/SizeOf of `p^`
       fold, and what tells the index path the subscript changes the address
       rather than the type. }
-    if LastTypePointerElemArrAi >= 0 then
+    { ...but only when the pointee is a FIXED array. A dynamic-array alias has
+      no compile-time extent, and ArrTypeLo/Hi are never written for one — the
+      dyn branch of the alias parser skips them — so they held 0/0 and this
+      computed an extent of exactly 1. That is where `Length(pdy^)` = 1 and
+      `High(pdy^)` = 0 came from: not a missing case, a CONFIDENT wrong answer
+      derived from two fields that were never set.
+      bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one }
+    if (LastTypePointerElemArrAi >= 0) and
+       (not ArrTypeIsDyn[LastTypePointerElemArrAi]) then
     begin
       SymPtrElemArrLen[SymCount] := ArrTypeHi[LastTypePointerElemArrAi] -
                                     ArrTypeLo[LastTypePointerElemArrAi] + 1;
@@ -4369,6 +4404,7 @@ begin
   SymPtrBaseRec[SymCount] := REC_NONE;
   SymPtrElemArrLen[SymCount] := 0;
   SymPtrElemNDims[SymCount] := 0;
+  SymPtrElemDynDepth[SymCount] := 0;
   { `array of T` where T is a named FIXED array: the parser leaves the row
     shape in LastTypeDynElemRowLen/Lo; stamp it (depth-1 only) and reset. }
   if (depth = 1) and (LastTypeDynElemRowLen > 0) then
@@ -4408,7 +4444,15 @@ begin
       otherwise-unused SymArrDim* rows) is what lets Length/High/SizeOf of `p^`
       fold, and what tells the index path the subscript changes the address
       rather than the type. }
-    if LastTypePointerElemArrAi >= 0 then
+    { ...but only when the pointee is a FIXED array. A dynamic-array alias has
+      no compile-time extent, and ArrTypeLo/Hi are never written for one — the
+      dyn branch of the alias parser skips them — so they held 0/0 and this
+      computed an extent of exactly 1. That is where `Length(pdy^)` = 1 and
+      `High(pdy^)` = 0 came from: not a missing case, a CONFIDENT wrong answer
+      derived from two fields that were never set.
+      bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one }
+    if (LastTypePointerElemArrAi >= 0) and
+       (not ArrTypeIsDyn[LastTypePointerElemArrAi]) then
     begin
       SymPtrElemArrLen[SymCount] := ArrTypeHi[LastTypePointerElemArrAi] -
                                     ArrTypeLo[LastTypePointerElemArrAi] + 1;

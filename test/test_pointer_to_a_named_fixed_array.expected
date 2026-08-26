@@ -6,4 +6,7 @@ whole  : 2 12 102
 2d     : 0 1 2 10 11 12 | 2 0 1 24
 2d brk : 0 1 2 10 11 12
 2d lowb: 105 106 107 205 206 207 | 2 1 2 24
+dyn    : 0 3 6 9 12 | 5 0 4 tot=1000
+dyn intact: 0 3 6 9 12 | 5
+dynstr : alpha beta gamma | 3 2
 write  : 42 77

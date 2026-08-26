@@ -11001,7 +11001,9 @@ begin
                      IRLowerAST(ASTLeft[ASTLeft[item]]), -1, -1, 0, Ord(tyAnsiString));
         end
         else if (cpi < 0) and (-cpi = Ord(tkLength)) and (pathIdx = 0) and
-           (not IsASTLValue(ASTLeft[item])) and (NodeDynDepth(ASTLeft[item]) > 0) then
+           ((not IsASTLValue(ASTLeft[item])) or
+            (ASTKind[ASTLeft[item]] = AN_DEREF)) and
+           (NodeDynDepth(ASTLeft[item]) > 0) then
         begin
           { Keyed on the VALUE's shape, not on one spelling of it. This arm used
             to test `AN_CALL with ProcRetIsDynArray` and hardcode depth 1, so
@@ -11019,7 +11021,17 @@ begin
           Syms[dynLenTmp].ElemType := NodeDynBaseTk(ASTLeft[item]);
           Syms[dynLenTmp].ElemRecName := NodeDynBaseRec(ASTLeft[item]);
           SymSyncTypeRef(dynLenTmp);
-          callVal := IRLowerAST(ASTLeft[item]);
+          if ASTKind[ASTLeft[item]] = AN_DEREF then
+            { `Length(p^)` where p: ^TDyn. MEASURED, because the obvious readings
+              are both wrong: `@dy` in pxx yields the HANDLE (the data pointer),
+              not the address of the dy variable — unlike `@s` on a managed
+              string, which was corrected to the slot address, and unlike fpc,
+              which gives the slot for both. So p already IS the handle: lowering
+              the DEREF derefs it once too often (segfault), and loading from p
+              likewise (segfault). The value of p is the handle, full stop. }
+            callVal := IRLowerAST(ASTLeft[ASTLeft[item]])
+          else
+            callVal := IRLowerAST(ASTLeft[item]);
           IRAppend(IR_STORE_SYM, dynLenTmp, callVal, -1, 0, Ord(tyPointer));
           value := IRAppend(IR_LEA, dynLenTmp, -1, -1, 0, Ord(tyPointer));
         end

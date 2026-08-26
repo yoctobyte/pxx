@@ -156,6 +156,18 @@ begin
     AN_IDENT:
       if Syms[ASTIVal[node]].IsArray and (Syms[ASTIVal[node]].ArrLen = -1) then
         Result := SymDynDepth[ASTIVal[node]];
+    AN_DEREF:
+      { `p^` where p: ^TDyn. The pointee's nesting lives on the POINTER symbol
+        (SymPtrElemDynDepth) because a dyn pointee has no extent to put in the
+        fixed-array slot. Without this arm the deref was not a dyn-array value
+        to anything downstream, so Length(p^) took the force-address path and
+        read the DATA as a header: 0x900000000 -- the array's own elements 1 and
+        0 packed into one 8-byte word -- where fpc says 5.
+        bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one }
+      if (ASTLeft[node] >= 0) and (ASTKind[ASTLeft[node]] = AN_IDENT) and
+         (Integer(ASTIVal[ASTLeft[node]]) >= 0) and
+         (Integer(ASTIVal[ASTLeft[node]]) < SymCount) then
+        Result := SymPtrElemDynDepth[ASTIVal[ASTLeft[node]]];
     AN_FIELD:
       Result := RecFieldDynDepth(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node));
     AN_CALL, AN_VIRTUAL_CALL, AN_INTF_CALL, AN_CALL_IND:
@@ -226,6 +238,11 @@ begin
        ProcRetIsDynArray[ASTIVal[node]] then
       Result := ProcRetElemTk[ASTIVal[node]];
   end
+  else if (ASTKind[node] = AN_DEREF) and (ASTLeft[node] >= 0) and
+          (ASTKind[ASTLeft[node]] = AN_IDENT) and
+          (SymPtrElemDynDepth[ASTIVal[ASTLeft[node]]] > 0) then
+    { `p^` over ^TDyn: the pointee's element type is the pointer's PtrElemTk. }
+    Result := IntToTypeKind(Ord(Syms[ASTIVal[ASTLeft[node]]].PtrElemTk))
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldType(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
   else if (ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DYN_COPY) or
@@ -250,6 +267,10 @@ begin
        ProcRetIsDynArray[ASTIVal[node]] then
       Result := ProcRetElemRec[ASTIVal[node]];
   end
+  else if (ASTKind[node] = AN_DEREF) and (ASTLeft[node] >= 0) and
+          (ASTKind[ASTLeft[node]] = AN_IDENT) and
+          (SymPtrElemDynDepth[ASTIVal[ASTLeft[node]]] > 0) then
+    Result := Syms[ASTIVal[ASTLeft[node]]].PtrElemRec
   else if ASTKind[node] = AN_FIELD then
     Result := RecFieldRecId(ResolveNodeRec(ASTLeft[node]), GetASTIdentName(node))
   else if (ASTKind[node] = AN_INDEX) or (ASTKind[node] = AN_DYN_COPY) or

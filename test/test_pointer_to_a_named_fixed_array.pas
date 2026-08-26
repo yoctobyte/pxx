@@ -26,11 +26,23 @@ program test_pointer_to_a_named_fixed_array;
   plain-variable arms beside them already make.
   bug-p-a-pointer-to-a-multidim-array-indexes-and-measures-the-flat-extent
 
-  NOT covered: a pointer to a named DYNAMIC array (`PDyn = ^TDyn`), whose
-  Length/High still answer 1 and 0
-  (bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one); and a FORWARD
-  `PA = ^TA` written ahead of TA's own declaration, which cannot see an ArrType
-  entry that does not exist yet.
+  A pointer to a named DYNAMIC array is covered as of 2026-08-26. Its extent is
+  not a compile-time constant, so it does NOT go through the fixed-array slot —
+  it never should have: ArrTypeLo/Hi are never written for a dyn alias, and
+  reading them anyway computed an extent of exactly 1, which is where the old
+  `Length(pdy^)` = 1 and `High(pdy^)` = 0 came from. Not a missing case; a
+  confident wrong answer derived from two fields nobody had set.
+  bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one
+
+  NOT covered, and NOT a gap in this test: a pointer to a dyn array goes STALE
+  when the array is reallocated, because `@dy` in pxx yields the HANDLE rather
+  than the address of the dy variable. After `SetLength(dy, 9)` fpc's
+  `Length(pdy^)` is 9 and ours is 5 — off the old buffer, which SetLength may
+  already have freed. Deliberately not asserted here; that divergence is
+  bug-p-address-of-a-dynamic-array-captures-the-handle-not-the-variable.
+
+  Still NOT covered: a FORWARD `PA = ^TA` written ahead of TA's own declaration,
+  which cannot see an ArrType entry that does not exist yet.
 
   .expected IS fpc 3.2.2's own output on this source. }
 {$mode objfpc}
@@ -48,6 +60,10 @@ type
   PG    = ^TG;
   TN    = array[1..2, 5..7] of LongWord;          { 2-D, non-zero lows on both }
   PN    = ^TN;
+  TDyn  = array of LongWord;                      { DYNAMIC pointee — no extent }
+  PDyn  = ^TDyn;
+  TDStr = array of AnsiString;                    { ...with a MANAGED element }
+  PDStr = ^TDStr;
 
 var
   w: TW;  qw: PW;
@@ -56,7 +72,9 @@ var
   ra: TRA; qra: PRA;
   g: TG;  qg: PG;
   n: TN;  qn: PN;
-  i, j: Integer;
+  dy: TDyn; qdy: PDyn;
+  ds: TDStr; qds: PDStr;
+  i, j, k, tot: Integer;
   r: TRec;
 
 begin
@@ -106,6 +124,31 @@ begin
   for i := 1 to 2 do for j := 5 to 7 do Write(' ', qn^[i, j]);
   WriteLn(' | ', Length(qn^), ' ', Low(qn^), ' ', High(qn^), ' ', SizeOf(qn^));
 
+
+  { A DYNAMIC pointee: the extent is a runtime read of the handle's [-8] header,
+    not a fold. Called in a loop because the hidden dyn-array temp the lowering
+    binds the handle to holds it BORROWED — if it ever owned it, the first
+    finalize would free the array and every later read would be a use-after-free. }
+  SetLength(dy, 5);
+  for i := 0 to 4 do dy[i] := i * 3;
+  qdy := @dy;
+  tot := 0;
+  for k := 1 to 200 do tot := tot + Length(qdy^);
+  Write('dyn    :');
+  for i := 0 to 4 do Write(' ', qdy^[i]);
+  WriteLn(' | ', Length(qdy^), ' ', Low(qdy^), ' ', High(qdy^), ' tot=', tot);
+  Write('dyn intact:');
+  for i := 0 to 4 do Write(' ', dy[i]);
+  WriteLn(' | ', Length(dy));
+
+  { a MANAGED element type is the harsher ownership case — a wrong free here
+    drops refcounts and the strings come back as garbage }
+  SetLength(ds, 3);
+  ds[0] := 'alpha'; ds[1] := 'beta'; ds[2] := 'gamma';
+  qds := @ds;
+  for k := 1 to 200 do tot := tot + Length(qds^);
+  WriteLn('dynstr : ', ds[0], ' ', ds[1], ' ', ds[2], ' | ',
+          Length(qds^), ' ', High(qds^));
 
   { writing THROUGH the pointer lands where the variable can see it }
   qw^[2] := 42; qra^[1].c := 77;
