@@ -183,6 +183,21 @@ measurement.** And the third could not have been found by it even in principle,
 because the two unguarded append sites never mentioned `MAX_DATAPTRFIX`, so no
 grep for the constant could reach them.
 
+**And the first negative result, which is the point of the habit rather than an
+exception to it (2026-08-26).** After fixing `run_pascal_conformance.sh`, the
+sibling check on `run_c_conformance.sh` said: same argument shape, takes `$CC`
+and `$SUITE` the same way — **but it never `cd`s**, so a relative path keeps
+resolving and the bug cannot occur there. It was left untouched rather than
+"fixed" symmetrically, because an edit that changes no behaviour still has to be
+read by the next person, and a comment claiming to fix a bug that was never
+there is worse than no comment. The warning for whoever later adds a `cd` went
+in the ticket instead.
+
+Four positives and one negative in two days. **The grep earns its keep by the
+answers it gives, not by the fixes it produces** — and a sibling that merely
+looks alike is not one. Checking and concluding "not this one, and here is why"
+is a completed check, not a wasted minute.
+
 The grep finds siblings that are *spelled* alike. It cannot find one that was
 open-coded under a different name, and it cannot find one whose comment
 persuaded you it is not a sibling at all. So run it -- and do not let it stand

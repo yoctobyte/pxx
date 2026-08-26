@@ -99,3 +99,21 @@ And the blame range on this stub is **179 commits**, not the 23 it was filed
 with -- see the Track T annotation above. `test-pascal-conformance` does not run
 in the native tier, so the narrow window is precisely the set of commits that
 cannot have caused this.
+
+## The runner is fixed — run it by hand and trust what you see (2026-08-26)
+
+`bug-t-run-pascal-conformance-silently-fails-every-test-on-a-relative-compiler-path`
+is **resolved** (`bc0ffebf9`). This matters to whoever takes this ticket because
+it sat directly in the path: the first thing anyone does is run the runner by
+hand, and the natural spelling is
+`tools/run_pascal_conformance.sh ./compiler/pascal26 ...`.
+
+Before that fix, the relative spelling gave **10 pass / 51 fail**, every failure
+reported as `compile error` — a wall of red that looks exactly like "my change
+broke the compiler", arriving at the precise moment you are looking for what
+your change broke. Relative and absolute now agree exactly: 62 pass, 0 fail,
+42 skip either way.
+
+So a red you see by hand is now a real red. Get from "the shard is red" to
+"this named case is red" from the job log — and remember the two `SKIP` lines in
+the report reason are the truncated HEAD of the output, not the failure.
