@@ -8198,6 +8198,15 @@ test-core: $(COMPILER)
 	# (-Mobjfpc -O1) oracle.
 	./$(COMPILER) test/test_const_eval_ordinal_type.pas $(TESTTMP)/test_ceord26
 	test "$$($(TESTTMP)/test_ceord26)" = "$$(cat test/test_const_eval_ordinal_type.expected)"
+	# A WideChar/UCS4Char stored into a Variant. Both were refused outright while
+	# every neighbouring kind was accepted. The obvious route is wrong: VT_CHAR's
+	# payload is ONE BYTE, so tagging them VT_CHAR would truncate everything
+	# outside Latin-1 — trading a refusal for a silently wrong value. They convert
+	# to their UTF-8 string first, as every other string context already does, so
+	# the euro/emoji rows are the ones that matter. The Word rows guard the other
+	# side: `v := someWord` must stay a NUMBER.
+	./$(COMPILER) test/test_variant_widechar_store.pas $(TESTTMP)/test_vws26
+	test "$$($(TESTTMP)/test_vws26)" = "$$(cat test/test_variant_widechar_store.expected)"
 	# An array argument and a scalar argument must each reach their own overload,
 	# whichever order the two are declared in. pxx presents an array's ELEMENT
 	# kind as its type kind, so `array of AnsiString` and `AnsiString` (and

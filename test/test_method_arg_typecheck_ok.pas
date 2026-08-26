@@ -7,7 +7,13 @@
   free-call path has. Every one of them is a row below.
   bug-p-a-single-candidate-method-call-does-not-check-its-argument-types
 
-  Oracled against fpc 3.2.2. }
+  Oracled against fpc 3.2.2 -- with one boundary worth stating rather than
+  leaving implied. fpc reaches the `raw`/`raw` rows and then dies with RTE 217,
+  which is measured and is why `uses Variants` is there; but the Variants unit
+  cannot be resolved on this box (even with -Fu pointed at a present,
+  version-correct variants.ppu), so no fpc binary that gets PAST that point can
+  be built here. The first six rows are an fpc diff; the four after them are
+  not, and rest on pxx's own semantics. }
 {$mode objfpc}
 program margok;
 

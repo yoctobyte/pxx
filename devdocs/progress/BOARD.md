@@ -328,7 +328,7 @@ _none_
 | bug-a-nilpy-a-star-argument-in-a-constructor-call-does-not-parse | A | 40 | bug | `C(**d)` and `C(*lst)` on a class with an ordinary `__init__` fail with `expected expression` — on the PINNED compiler too, so this is not a regression. The ctor path in pyparser.inc:45097 builds its own AN_ARG chain and never consults the star-forwarding branch that plain calls use. Routing it there needs the receiver prepended, which PyStarForwardCall's signature does not take. | — |
 | bug-a-the-specialization-splice-does-not-adjust-the-body-pass-spans | A | 35 | bug | InsertTokens/RemoveTokens keep the body pass's DeclItem spans and body-begin marker in step with a token-stream edit. The specialization splice hand-rolls its own insert and calls neither — it now adjusts the token->file map (that fix landed) but still not the Pass2 spans. Either Pass2Active is always false there, in which case say so in a comment, or the spans drift. | — |
 | bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable | N | 70 | bug | `import m` then `m.f(1)` compiles and runs, but `h = m.f` — the same member in VALUE position — is a COMPILE ERROR, `undefined variable (f)`, naming the attribute as if it were a bare name. Every value position fails the same way (assignment, dict value, `map(m.f, ...)`), so a module's functions cannot be used as callbacks at all. The import resolves; only the value position is broken. | — |
-| bug-p-a-variant-refuses-wide-chars-and-interfaces | P | 40 | bug | `v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD. | — |
+| bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 55 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
 | chore-doc-pascal-dialect-divergences-pointer-difference | D | 25 | chore | Re-filed from decide-pointer-difference-unit and decide-should-a-null-variant-raise-like-fpc, both decided 2026-08-25. Two divergences from FPC are now CHOSEN rather than merely inherited, and a chosen divergence that is not written down is indistinguishable from a bug to the next reader. Both entries land in devdocs/dev/pascal-dialect-divergences.md. | — |
 | decide-c-crtl-rand-max-is-conforming-but-breaks-real-code | U | 40 | decide | crtl defines RAND_MAX as 32767 and rand() returns [0,32767]. C99 7.20.2.1 only requires RAND_MAX >= 32767, so this is conforming — but every mainstream libc uses 2147483647 and real programs branch on the value. busybox editors/awk.c has an #error for anything else and is the only busybox file still blocked on a non-library gap. Raising it is a behaviour change to a shipped library, not a defect fix, so it is a call to make, not a bug to close. | — |
@@ -574,9 +574,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2437)
+## done (2438)
 
-2437 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2438 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (44)
 
@@ -787,7 +787,7 @@ _none_
 - [p 40] [N] bug-n-two-node-consumers-know-an-call-but-not-its-virtual-sibling
 - [p 40] [N] bug-nilpy-shared-nonlocal-frame-cell-is-never-freed [parked — re-claim, do not duplicate]
 - [p 40] [P] bug-p-a-diagnostic-in-a-used-unit-names-the-wrong-source-file
-- [p 40] [P] bug-p-a-variant-refuses-wide-chars-and-interfaces
+- [p 40] [P] bug-p-a-variant-cannot-hold-an-interface
 - [p 40] [T] bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence
 - [p 40] [T] bug-t-a-pin-verifys-reds-carry-no-reasons
 - [p 40] [U] decide-c-crtl-rand-max-is-conforming-but-breaks-real-code

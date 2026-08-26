@@ -9463,6 +9463,30 @@ begin
           ASTRight[node] := WrapPCharToString(ASTRight[node]);
       end;
 
+      { A WIDE CHARACTER stored into a Variant, for the same reason and through
+        the same conversion as the string arm above. The variant's only
+        character slot is VT_CHAR, whose payload is ONE BYTE, so routing a
+        UTF-16 code unit or a UCS-4 code point through it would truncate every
+        character outside Latin-1 — `v := WideChar($20AC)` would come back as
+        #$AC. Converting to the UTF-8 string first is what every other string
+        context already does with these two kinds, and the variant's string
+        slot is a string context: the store then sees tyAnsiString and needs no
+        new tag.
+
+        Keyed on the KINDS, not on the tyUInt16 heuristic the string arm uses.
+        That heuristic is sound there — assigning a Word to a string is
+        meaningless, so it can only have been a widechar — and unsound here,
+        because `v := someWord` is a perfectly ordinary NUMBER.
+        bug-p-a-variant-refuses-wide-chars-and-interfaces }
+      if lhsTk = tyVariant then
+      begin
+        if (IntToTypeKind(ASTTk[ASTRight[node]]) = tyWideChar) or
+           NodeIsWideCharVal(ASTRight[node]) then
+          ASTRight[node] := WrapWideCharToUTF8(ASTRight[node])
+        else if IntToTypeKind(ASTTk[ASTRight[node]]) = tyUCS4Char then
+          ASTRight[node] := WrapUCS4ToUTF8(ASTRight[node]);
+      end;
+
       { NilPy-user class-local/global rebinding ARC
         (feature-nilpy-object-reclamation slice 4): retain the new value UNLESS
         it is a construction (whose rc=1 transfers to the binding), release the

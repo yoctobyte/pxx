@@ -5,8 +5,8 @@ track: P
 prio: 40
 type: bug
 blocked-by: []
-status: backlog_new
-owner: ""
+status: done
+owner: opus5-frank1
 created: 2026-08-24
 summary: "`v := wc` (WideChar), `v := u` (UCS4Char) and `v := ifc` (any interface) do not compile: `Variant := this type not yet supported`. fpc 3.2.2 accepts all three, and pxx already accepts every neighbouring kind — Char, ShortString, Single, Currency — so this is a hole in one enumeration, not a design position. Present on `pinned` as well as HEAD."
 ---
@@ -80,3 +80,63 @@ The 625-pair fpc/pxx assignment cross-product built for
 [[bug-p-an-assignment-is-not-type-checked-at-all]]. These two pairs are the
 *entire* set of "fpc accepts, pxx refuses" in that matrix — everything else pxx
 refuses, fpc refuses too.
+
+# Outcome
+
+The two wide-character kinds are fixed. The interface half is split off as
+[[bug-p-a-variant-cannot-hold-an-interface]], at exactly the seam this ticket
+named.
+
+## The ticket's own suggested route was wrong, and measurement said so
+
+"route them through the same widening the `tyChar` arm already uses" would
+truncate. `VT_CHAR`'s payload is ONE BYTE (defs.inc), so `v := WideChar($20AC)`
+would have come back as `#$AC` — trading an honest refusal for a silently wrong
+value, which is strictly worse than the bug. Every character outside Latin-1
+would have been destroyed, and nothing in the ticket's repro would have shown
+it, because its repro used `WideChar` uninitialised.
+
+What the two kinds actually are is documented in defs.inc: they "convert as
+UTF-8". So the fix is the conversion every other string context already applies
+to them — `WrapWideCharToUTF8` / `WrapUCS4ToUTF8`, both of which already existed
+— applied at the assignment lowering when the target is a Variant. The store
+then sees an ordinary `tyAnsiString` and needs no new tag, no new payload
+encoding and no backend change at all.
+
+Keyed on the KINDS, not on the `tyUInt16` heuristic the string arm next door
+uses. That heuristic is sound there — assigning a Word to a string is
+meaningless, so it can only have been a widechar — and unsound here, because
+`v := someWord` is a perfectly ordinary number. The test pins `v := Word(65)`
+staying `65` for exactly that reason.
+
+## Wider than expected, and measured rather than assumed
+
+The single site also fixed the record-field, array-element and by-value
+parameter forms; all three are pinned in the test.
+
+## Oracle, stated exactly
+
+fpc 3.2.2's ACCEPTANCE of all three source types is what this ticket measured on
+2026-08-24 and it stands. Its printed OUTPUT could not be diffed here: `uses
+Variants` does not resolve on this box even with `-Fu` pointed at a present,
+version-correct `variants.ppu`, so no fpc binary that prints a Variant can be
+built. The expected values come from pxx's own documented UTF-8 rule for these
+kinds. The test header says so rather than claiming an fpc diff it does not
+have.
+
+While checking that, `test/test_method_arg_typecheck_ok.pas` turned out to
+carry the same overstatement from earlier today — its header said "Oracled
+against fpc 3.2.2" when only its first six rows can be, fpc dying at RTE 217
+after them (which IS measured, and is why its `uses Variants` is there).
+Corrected in place.
+
+## Gate
+
+`test/test_variant_widechar_store.pas` (+ `.expected`) in `test-core`: the
+euro and emoji rows are the ones a byte-wide slot would have destroyed, and the
+Word rows guard the other side. Self-host byte-identical. pascal-conformance
+346/0/170/34 and fgl 7/7 unchanged. `gate.sh quick` GREEN.
+
+
+## Log
+- 2026-08-26 — resolved, commit PENDING-COMMIT.
