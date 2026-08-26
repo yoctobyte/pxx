@@ -6870,7 +6870,7 @@
   },
   {
    "bad": "5471637583146d0cc6be263940d953c1cf85d62d",
-   "bad_untestable": true,
+   "bad_untestable": false,
    "first_seen": false,
    "good": "90892318c94c71922d879eddd89061bd22e9a7e8",
    "job": "test-nilpy#src:test/test_nilpy_star_unpack_into_a_collecting_callee.npy",
