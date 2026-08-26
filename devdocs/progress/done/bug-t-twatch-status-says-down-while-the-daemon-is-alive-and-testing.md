@@ -127,4 +127,4 @@ cause. This generalises it: *a busy tester is not a stalled one*, whatever it
 happens to be busy with.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit e66093fb7.
