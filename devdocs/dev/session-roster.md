@@ -5648,3 +5648,36 @@ T is triaging; if it bisects, it files Track A.
 route them through me, including the one it had banked *inside* a `working/` ticket — a
 banked finding is invisible to `ready`/`next`, which is the same failure that hid rung 3's
 ticket from me this morning.
+
+## `find` over a working tree answers a different question than you asked
+
+I told a worker it had never filed three tickets it had in fact pushed twenty
+minutes earlier, and told the user the same. The check was:
+
+```
+git fetch -q origin && ... && find devdocs/progress -name '*<slug>*'
+```
+
+The `fetch` is real but updates **refs, not files**. `find`, `ls` and `grep`
+then read the working tree — so the question they answer is *"has this checkout
+pulled it yet"*, never *"did the worker land it"*. Those diverge by however long
+since the last pull.
+
+**Ask the ref, not the tree:**
+
+```
+git fetch -q origin dev && git ls-tree -r --name-only origin/dev -- devdocs/progress | grep -i <slug>
+```
+
+**This gets worse, not better, from here.** On `dev` the gap is minutes. On
+`master` it is now unbounded, because master advances only on a pin — so a
+coordinator checking `master`'s working tree for a worker's output can be days
+behind and see a clean, confident, wrong answer.
+
+**The failure mode is the dangerous direction: a false negative that accuses.**
+It reads as *the worker did not do the work*, which is the one conclusion that
+gets findings re-derived from scratch by the next agent. Nothing in the output
+says "stale checkout" — an empty `find` and a genuinely-missing file are the
+same empty string. Before telling a worker its output is missing, check the ref;
+and phrase the first message as a question, because the cost of being wrong is
+that a worker spends a session proving it already did its job.
