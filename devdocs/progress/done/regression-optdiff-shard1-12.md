@@ -66,4 +66,4 @@ the glob was just too narrow to cover the one Pascal GUI test in the tree
 (`grep -l gtk3 test/*` returns t_rw.pas and nothing else).
 
 Fixed by listing it, with the reason, as the file's header requires.
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 10cbe3470.
