@@ -1,15 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-26T06:53:32Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "1202429f42b2377305de4b95e25e39f5e5877902",
-   "tier": "native",
-   "timed_out": false,
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-26T07:09:11Z",
    "fixed": [],
    "new_red": [],
@@ -481,6 +472,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "7df97e555d8e4686d170cc39568642318375d2ce",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "RED"
+  },
+  {
+   "date": "2026-08-26T17:59:18Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "8e78afd6e5cebfa3e0976e36ff716e37ff63efc4",
    "tier": "native",
    "timed_out": false,
    "verdict": "RED"
@@ -1087,6 +1087,7 @@
   "test-core#src:test/carray_param_b37.c": "native",
   "test-core#src:test/carray_typedef_element_init.c": "native",
   "test-core#src:test/carrow_on_array_call_rhs_b136.c": "native",
+  "test-core#src:test/casm_nonempty_template_fails.c": "native",
   "test-core#src:test/cassign_compound_lvalue_once.c": "native",
   "test-core#src:test/cassign_dest_call_once.c": "native",
   "test-core#src:test/cassign_value_b43.c": "native",
@@ -4262,6 +4263,7 @@
   "test-core#src:test/carray_param_b37.c": "pass",
   "test-core#src:test/carray_typedef_element_init.c": "pass",
   "test-core#src:test/carrow_on_array_call_rhs_b136.c": "pass",
+  "test-core#src:test/casm_nonempty_template_fails.c": "pass",
   "test-core#src:test/cassign_compound_lvalue_once.c": "pass",
   "test-core#src:test/cassign_dest_call_once.c": "pass",
   "test-core#src:test/cassign_value_b43.c": "pass",
@@ -6812,14 +6814,14 @@
   "tools-devtest-sh#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T17:53:02Z",
+  "date": "2026-08-26T17:59:18Z",
   "deadline": 7200.0,
-  "sha": "7df97e555d8e4686d170cc39568642318375d2ce",
+  "sha": "8e78afd6e5cebfa3e0976e36ff716e37ff63efc4",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "RED",
-  "wall": 301.0
+  "wall": 302.1
  },
  "last_bench": {
   "conf_rows": 550,
