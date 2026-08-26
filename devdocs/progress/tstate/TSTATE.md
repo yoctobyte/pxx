@@ -3,10 +3,11 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `fffd29ea840d` | 2026-08-26T08:07:45Z | GREEN (slow) | 263.1s | `fffd29ea840d` RED |
+| plexus | `fffd29ea840d` | 2026-08-26T08:20:31Z | RED (opt) | 746.1s | `fffd29ea840d` RED |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
 - **test-fpjson#src:tools/install_lib_candidates.sh** — tools/install_lib_candidates.sh test/fpjson/testutils.pas +1 (plexus): bad `99f1dc81a039`, last good `unknown`, 0 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_isinstance_over_a_type_value.npy** — test/test_nilpy_isinstance_over_a_type_value.npy test/test_nilpy_isinstance_over_a_type_value.expected (plexus): bad `99f1dc81a039`, last good `43b46283325f`, 54 commit(s) in range
 - **test-nilpy#src:test/test_nilpy_lowercase_name_vs_class.npy** — test/test_nilpy_lowercase_name_vs_class.npy test/test_nilpy_lowercase_name_vs_class.expected (plexus): bad `99f1dc81a039`, last good `43b46283325f`, 54 commit(s) in range
+- **optdiff#shard1/12** — tools/optdiff.sh (plexus): bad `fffd29ea840d`, last good `8f403875d51a`, 63 commit(s) in range
