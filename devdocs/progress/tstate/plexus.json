@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-24T04:28:41Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "aa9f0989a4c0847941f212d664495f8be96f2032",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-24T04:34:02Z",
    "fixed": [],
    "new_red": [],
@@ -447,6 +439,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "9e83548c558f58a41b04bf4b7e5dbdacb8924b9b",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T04:06:48Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "284cdf12d7804b3651fbea300513a8a380679374",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -998,11 +999,11 @@
   "test-core#129": "full",
   "test-core#157": "full",
   "test-core#160": "full",
-  "test-core#161": "native",
   "test-core#162": "native",
   "test-core#163": "native",
   "test-core#164": "native",
   "test-core#165": "native",
+  "test-core#166": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
   "test-core#src:examples/tk/callbacks.npy": "native",
@@ -1964,6 +1965,7 @@
   "test-core#src:test/test_nilpy_call_return_infer.npy": "native",
   "test-core#src:test/test_nilpy_class.npy": "native",
   "test-core#src:test/test_nilpy_class_attr.npy": "native",
+  "test-core#src:test/test_nilpy_class_base_is_an_alias.npy": "native",
   "test-core#src:test/test_nilpy_class_named_after_its_imported_base.npy": "native",
   "test-core#src:test/test_nilpy_configparser.npy": "native",
   "test-core#src:test/test_nilpy_convert.npy": "native",
@@ -4101,11 +4103,11 @@
   "test-c-conformance-riscv32#shard5/6": "pass",
   "test-cjson#src:test/cjson/runner.c": "pass",
   "test-core#00": "pass",
-  "test-core#161": "pass",
   "test-core#162": "pass",
   "test-core#163": "pass",
   "test-core#164": "pass",
   "test-core#165": "pass",
+  "test-core#166": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
@@ -5065,6 +5067,7 @@
   "test-core#src:test/test_nilpy_call_return_infer.npy": "pass",
   "test-core#src:test/test_nilpy_class.npy": "pass",
   "test-core#src:test/test_nilpy_class_attr.npy": "pass",
+  "test-core#src:test/test_nilpy_class_base_is_an_alias.npy": "pass",
   "test-core#src:test/test_nilpy_class_named_after_its_imported_base.npy": "pass",
   "test-core#src:test/test_nilpy_configparser.npy": "pass",
   "test-core#src:test/test_nilpy_convert.npy": "pass",
@@ -6660,14 +6663,14 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T03:59:48Z",
+  "date": "2026-08-26T04:06:48Z",
   "deadline": 7200.0,
-  "sha": "9e83548c558f58a41b04bf4b7e5dbdacb8924b9b",
+  "sha": "284cdf12d7804b3651fbea300513a8a380679374",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 346.2
+  "wall": 340.5
  },
  "last_bench": {
   "conf_rows": 550,
