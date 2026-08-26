@@ -1498,6 +1498,28 @@ def diff_jobs(prev_jobs, report):
     # stay readable, they simply under-report coverage until the host publishes
     # again.
     now = {job_key(j): j["status"] for j in report["jobs"]}
+    # NEVER SEEN is not the same fact as WAS GREEN, and `.get(n, "pass")`
+    # answers both questions with one default. For the VERDICT the default is
+    # right -- a job that is red the first time it ever runs must be reported
+    # red, not silently absorbed. For the RANGE it is a fabrication: the job has
+    # no earlier passing sha, so there is no interval that contains its cause,
+    # and every commit the range would name is equally innocent.
+    #
+    # That bites exactly when a rung is ENROLLED. test-fgl had spent its whole
+    # life printing `SKIP (no fpcsrc)` inside test-core and test-fpjson was in
+    # no tier at all; enrolling them (task-t-enrol-the-fgl-corpus-rung) is what
+    # manufactures never-seen jobs in the first place. Their first execution
+    # would have been filed as a NEW-RED against a green history they never
+    # had, and the ledger would have opened a range over commits in which they
+    # did not run once.
+    #
+    # This is the fourth face of one defect -- the range is computed from what
+    # CHANGED without asking whether the job could SEE it -- and the worst of
+    # the four, because a bisect over such a range does not fail. It terminates,
+    # prints a sha, and is indistinguishable downstream from a correct answer.
+    # See bug-t-a-blame-range-is-computed-from-what-changed-not-from-what-the-
+    # job-can-see.
+    first_seen = sorted(n for n in now if n not in prev_jobs)
     new_red = sorted(n for n, s in now.items()
                      if s not in PASSLIKE
                      and prev_jobs.get(n, "pass") in PASSLIKE)
@@ -1507,7 +1529,7 @@ def diff_jobs(prev_jobs, report):
     still_red = sorted(n for n, s in now.items()
                        if s not in PASSLIKE
                        and prev_jobs.get(n, "pass") not in PASSLIKE)
-    return now, new_red, fixed, still_red
+    return now, new_red, fixed, still_red, first_seen
 
 
 # ---------------------------------------------------------------- reports --
@@ -2352,7 +2374,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # honest and get published; what must not happen is filing tickets or
     # opening ledger entries from a diff against nothing.
     had_baseline = bool(st["jobs"])
-    now, new_red, fixed, still_red = diff_jobs(st["jobs"], report)
+    now, new_red, fixed, still_red, first_seen = diff_jobs(st["jobs"], report)
     no_ticket = ticket_suppression(had_baseline, len(new_red),
                                    len(report["jobs"]))
     if incomplete and not no_ticket:
@@ -2507,7 +2529,20 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
             # had at this sha — kept ONLY as the bisect fallback for older
             # commits, never as identity (see job_key).
             jrng, jgood = range_for(name)
-            if len(jrng) != len(rng):
+            if name in first_seen:
+                # No earlier passing sha exists, so no interval can contain the
+                # cause. An EMPTY range is the honest answer and the machinery
+                # already speaks it: range_note() says "no idle bisect will
+                # happen; this one needs hand-triage", and bisect_step skips a
+                # range of <= 1. Say it out loud too -- a first execution
+                # arriving as a red is a finding, not a regression from the
+                # commits around it.
+                print("twatch: %s ran for the FIRST time at %s and is red — "
+                      "no range opened; it has no earlier passing sha, so "
+                      "every commit a range could name is equally innocent"
+                      % (name, sha[:12]), flush=True)
+                jrng, jgood = [], ""
+            elif len(jrng) != len(rng):
                 print("twatch: %s last ran under `%s`, not at the parent — "
                       "range widened from %d to %d commit(s) since %s, or a "
                       "bisect would narrow onto a commit that cannot be causal"
@@ -2517,6 +2552,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                          "src": srcmap.get(name, ""), "bad": sha,
                          "good": jgood, "range": jrng, "opened": utcnow(),
                          "status": statmap.get(name, "fail"),
+                         "first_seen": name in first_seen,
                          "pin_built": pinmap.get(name, False)})
     st["open_regressions"] = regs
 

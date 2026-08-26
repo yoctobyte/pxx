@@ -60,7 +60,7 @@ def main():
         ("unknown job defaults pass", {}, {"a": "skip"},
          lambda n, nr, f, sr: "a" not in nr, "a first-seen skip is not a finding"),
     ]:
-        n, nr, f, sr = tw.diff_jobs(prev, report(**cur))
+        n, nr, f, sr, _fs = tw.diff_jobs(prev, report(**cur))
         check(pred(n, nr, f, sr), name, why)
 
     print("\nreg_open — skip is pass-like for closing, but never opens anything")

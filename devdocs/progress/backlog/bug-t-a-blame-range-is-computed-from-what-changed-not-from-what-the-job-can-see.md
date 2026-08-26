@@ -75,3 +75,35 @@ computed from what changed, without asking whether the job could see it… the
 three look like one thing from here."* Filed as one ticket rather than three
 because the third fix should delete the shared defect, not add a third case
 (`devdocs/dev/root-cause-over-microfix.md`).
+
+## Face 4: a job's FIRST run inherits a range it never earned (fixed 2026-08-26)
+
+`diff_jobs()` read a job's previous status as `prev_jobs.get(n, "pass")`. One
+default answering two questions that are still distinct at that exact point in
+the code — *was it green* and *did it ever run* — and collapsing them where the
+information to tell them apart still exists.
+
+For the **verdict** the default is right: a job that is red the first time it
+runs must be reported red, not absorbed. For the **range** it is fiction: there
+is no earlier passing sha, so no interval contains the cause, and every commit
+a range could name is equally innocent.
+
+Worst of the four, because a bisect over such a range does not fail. It
+terminates, prints a sha, and is indistinguishable downstream from a correct
+answer.
+
+**Surfaced by enrolling test-fgl and test-fpjson**, and structurally so:
+enrolling a rung is the only thing that creates a never-seen job, so only
+whoever enrols can trip it — and nothing had been enrolled in long enough for
+it to matter.
+
+Fix: `diff_jobs()` returns `first_seen`; a first-seen red opens with an **empty
+range**, which routes it to the sentence `range_note()` already contained and
+nothing could reach — *"range unknown (first run covering this job at this
+tier, so there is no earlier passing sha to bound it) — no idle bisect will
+happen; this one needs hand-triage."* The regression carries `first_seen: True`
+so a reader can tell the two cases apart. `tools/twatch_first_seen_devtest.py`
+guards both halves, including the one that must NOT change (red on arrival is
+still a NEW-RED) and the mirror case (a first-ever PASS is not a FIXED).
+
+Face 3 (the pin axis) remains open; this ticket stays in the backlog for it.
