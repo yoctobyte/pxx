@@ -388,6 +388,28 @@ and say plainly that nobody should start there.** The same applies to a plausibl
 fix you tried that did not help. An unrecorded dead end is a trap that resets
 itself.
 
+**And record the option you measured and DECLINED, with its number.** Track T
+priced a skip cache for pin-built jobs -- provably unchanged verdicts, genuine
+repeated work, the predicate already written -- at **~3% of the matrix**, and
+turned it down. The reason is the one worth copying: its failure mode is *a job
+that should have run and did not, reported as a pass*, which is the exact defect
+class removed five times in two days (the unenrolled rung asserting nothing, the
+torn-down run silencing the request for coverage, unreached jobs reading as
+FIXED). **Adding a sixth source of silent under-coverage to save 3% is a bad
+trade at any exchange rate** -- and the fact that the mechanism would have been
+easy to build is not a point in its favour.
+
+The general form: **price a saving in what it costs you in assurance, not only in
+what it costs to build.** A cache, a skip, a memo and an early-exit are all the
+same bet -- that a thing you did not check is unchanged -- and the bet is only as
+good as the predicate, forever, including after someone edits the predicate. In
+the ticket it now sits as *declined, with the number and the reason*, plus the
+condition that would reopen it: if the NilPy tax is fixed, 3% becomes a large
+share of what remains and the trade is worth re-pricing.
+
+That is the difference between a decision and an oversight, and only the write-up
+tells them apart later.
+
 The companion rule, also demonstrated: **do not extrapolate across a moved
 denominator.** They declined to state a post-fix matrix total until the next full
 lands, because the compiler's own cost had changed underneath the measurement.
