@@ -150,4 +150,6 @@ the quick tier — `test-nilpy` does not). Forty assertions: all five arms of th
 ticket, every operand shape above, the `//` / `%` / negative / mixed-type
 controls that must stay integer, division under a comparison and under `in`, and
 the five redundant-paren shapes. The pinned binary fails 15 of the 40 lines.
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commits a8c5b3f39 (the `/` and redundant-paren fix in
+  `PyInferExprType`), 38ea22aa7 (the `/=` arm of the ident chase + the
+  regression test), 0f8aae90a (board + the four sibling tickets).
