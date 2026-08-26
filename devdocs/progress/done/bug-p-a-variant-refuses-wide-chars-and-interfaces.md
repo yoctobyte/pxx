@@ -139,4 +139,4 @@ Word rows guard the other side. Self-host byte-identical. pascal-conformance
 
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 47f5c5124.
