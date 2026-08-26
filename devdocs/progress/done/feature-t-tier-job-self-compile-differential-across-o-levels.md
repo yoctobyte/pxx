@@ -149,4 +149,4 @@ enrolment point with the logic in T's lane.
 
 ## Log
 - 2026-08-26 — built, run green, sized, enrolled in `full`.
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit ab8d17d20.
