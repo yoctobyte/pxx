@@ -124,7 +124,7 @@ pass	tdefault4.pp	tdefault	-
 skip	tdefault5.pp	tdefault	gap	Default() on record/object containing TextFile field (delphi mode)
 pass	tdefault6.pp	tdefault	-	
 pass	tdefault7.pp	tdefault	-	
-fail	tdefault8.pp	tdefault	-	compile error
+pass	tdefault8.pp	tdefault	-	
 pass	tdefault9.pp	tdefault	-	
 skip	tenum1.pp	tenum	gap	subrange type over an enum (`weekend = sat..sun`) not parsed
 skip	tenum2.pp	tenum	wontfix	dialect-pass — inc(enum) past range — PXX's lax enum-as-ordinal model, deterministic; not a bug, FPC-strict candidate
