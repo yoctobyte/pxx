@@ -343,6 +343,49 @@ Deliberately not general, for the reason this file keeps arriving at: **a checke
 that reports everything gets suppressed, and a suppressed checker asserts
 nothing.**
 
+## A blocklist costs one outage per symptom; an allowlist closes the class
+
+When plexus stopped being headless, every test job began inheriting a live
+desktop session -- 24 variables, including `XDG_RUNTIME_DIR`, which is where
+at-spi autolaunches its bus. `test_c_gtk_call.pas` then hung forever after
+`gtk_init` and cost three days of native tiers their full hour.
+
+The first repair set `NO_AT_BRIDGE` and `GTK_A11Y`. It worked, and it fixed
+nothing: the next opportunistic client of a display, bus, keyring, portal or
+notification daemon hangs identically and looks just as mysterious, because the
+repo has not changed. **A blocklist buys one symptom at a time and leaves the
+class intact.** The allowlist -- 11 keys plus the `PXX_`/`TESTMGR_`/`LC_`/`QEMU_`
+families -- ends it.
+
+**And it found something a blocklist never would have**: an unrelated third-party
+API key from the login profile had been reaching ~3,000 job subprocesses per run
+for days. Nobody was looking for it. That is the general argument for enumerating
+what may pass rather than what may not -- you find out what was passing.
+
+### The pass-through rule was backwards in the dangerous direction
+
+The obvious reading of "plus whatever a job explicitly asks for" is *a job that
+runs `xvfb-run` or `Xvfb` is a display job, so give it the session.* **That is
+exactly wrong: those tools start a display of their own.** All three GTK jobs run
+under `xvfb-run -a`, including the one whose at-spi hang started the ticket -- so
+matching on the tool name would have re-admitted the session bus to the fix's own
+motivating case. The rule triggers on a literal reference to a session
+*variable* in the recipe text instead: a dependency the job states, not a guess
+about what it probably does.
+
+The generalisation: **an exemption keyed on what something appears to BE will
+re-admit the case you built it for; key it on what the thing DECLARES.**
+
+### Guard the mirror failure too
+
+Stripping an environment creates the opposite defect -- a job losing something it
+needs and going red with no cause in its log. Three things hold it off, and all
+three are worth copying: the run **prints** what it dropped and which jobs kept
+the session, into the same log as the verdicts it could change; a one-run
+rollback exists and is **implemented, not merely documented**; and the guard pins
+**both** directions, including that an `xvfb-run` job is *not* given the session
+and a job naming `$DISPLAY` *is* and actually receives it.
+
 ## A silent assertion makes the harness report something else, confidently
 
 The most expensive misread of 2026-08-26 traces to one shell idiom. A red job's
