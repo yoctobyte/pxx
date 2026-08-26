@@ -4,6 +4,7 @@ prio: 62
 type: bug
 blocked-by: []
 summary: "A parameterless function used as an ARGUMENT to a method call fails to resolve — `error: undefined variable (zero)` — while the identical argument to a free function compiles. Any argument position. Found writing lib/rtl/mimic_urllib_request.pas, where `headers.get(name, pynone)` would not compile but `HeaderFirst(raw, name, pynone)` did."
+status: done
 ---
 
 # A parameterless function is `undefined variable` as a METHOD-call argument
@@ -97,3 +98,74 @@ way it does partly because of this.
 matters. Its `HeaderFirst` free function is **not** a workaround to unwind — it
 is one lookup shared by three CPython spellings and should stay — but the
 comment there that explains the constraint can come out once this is fixed.
+
+## Log
+- 2026-08-26 — resolved, commit PENDING-COMMIT.
+
+# Resolved 2026-08-26
+
+The ticket's framing — "works for a free function, fails for a method" — is
+true but is not the boundary. Varying the shape narrowed it much further:
+
+| shape | before |
+| --- | --- |
+| FREE function, `const Variant` param, bare `zero` | compiles |
+| method, `const Variant`, bare `zero` | **`undefined variable (zero)`** |
+| method, by-VALUE `Variant`, bare `zero` | compiles |
+| method, `const AnsiString`, bare `zstr` | compiles |
+| method, `const Variant`, explicit `zero()` | compiles |
+| method, `var Variant`, bare `zero` | refused (correctly) |
+
+So it is not method-vs-free and not by-ref-vs-by-value: it is **method +
+`const Variant` + a BARE name**, one cell.
+
+## Cause
+
+`ByRefArgStartsExpression` (`compiler/pasparser_call.inc`) decides whether a
+by-ref argument is an expression or a bare variable lvalue. Its last line
+admits an unresolvable name only when a `(` follows — that is the type-cast
+lvalue case (`PChar(s)^`). A bare `zero` names no *symbol*, so it fell to the
+bare-lvalue arm, reached `ParseLValueAST` with `FindSym = -1`, and was reported
+as an undefined variable. `PXXDBG=a.qual` showed it exactly:
+`MEMBER field=z flat=-1` — the parser was looking `zero` up as a class member.
+
+A name that resolves to no symbol but to a parameterless (or all-defaulted)
+FUNCTION is now an expression. A `const Variant` parameter is by-ref internally
+but is never a var-binding target, so a call's result is a legal argument.
+
+## The gate on that clause is load-bearing — this was measured, not assumed
+
+The clause was first written **ungated**, on the reasoning that "it is a call,
+so it is an expression" holds for any by-ref parameter and would also let a
+genuine `var` parameter produce the *right* refusal instead of the wrong one.
+
+That is wrong, and the negative test caught it: the method by-ref path has **no
+validator that rejects a non-lvalue argument** — it relies on this predicate
+answering False to force the bare-lvalue parse. Ungated, `o.f(zero)` with
+`var b: Variant` COMPILED, binding a call result to a var parameter where fpc
+says "Can't take the address of constant expressions". Silently accepting is
+worse than a badly worded refusal, so the clause stays inside the existing
+`PyExprMode or constVariantParam` gate.
+
+Corroborating measurement: `o.f(a + b2)` with a `var` param answers `wrong
+number of parameters` — the parse stopped at the `+`. That is the same missing
+validator seen from another angle.
+
+## Known wart, left open deliberately
+
+Method + `var Variant` + a bare paramless function still says
+`undefined variable (zero)` rather than naming the real problem. It is wrong
+WORDING on a CORRECT refusal, it predates this fix, and fixing it properly
+means giving the method by-ref path the non-lvalue validator it lacks — which
+is a real change to a gated path and is not what this ticket is about.
+`test/test_paramless_fn_as_var_arg_refused.pas` asserts only that the program
+does not compile, so the wart is documented without being frozen.
+
+## Verified against fpc 3.2.2, byte-identical
+
+`test/test_paramless_fn_as_const_variant_arg.pas` covers the free call, the
+method call, an OVERLOADED method (which takes the arity-probe path), a static
+class method, a record method, an all-defaulted function, the explicit-parens
+spelling, by-value Variant and `const AnsiString`. All ten rows match fpc.
+The original two-file unit repro from this ticket now prints `7 / 7 / 7`, the
+same as fpc.

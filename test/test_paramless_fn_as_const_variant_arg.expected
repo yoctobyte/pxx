@@ -1,0 +1,10 @@
+free    : 7
+method  : 7
+ovl1    : 7
+ovl2    : 7
+static  : 7
+record  : 7
+alldeflt: 3
+explicit: 7
+byval   : 7
+constatr: str

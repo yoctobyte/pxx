@@ -7928,6 +7928,24 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_pointer_to_a_named_fixed_array.pas $(TESTTMP)/test_pfixarr26
 	test "$$($(TESTTMP)/test_pfixarr26)" = "$$(cat test/test_pointer_to_a_named_fixed_array.expected)"
+	# A parameterless function called BY NAME as an argument to a `const Variant`
+	# parameter. The free-function call compiled and the METHOD call reported
+	# `undefined variable (zero)` -- pointing at the argument, for a name that is
+	# a perfectly good function. A `const Variant` param is by-ref internally but
+	# is never a var-binding target, so a call producing a value is legal there.
+	# The `var` row is the guard: it must still be REFUSED, which is what stops
+	# this fix from letting a temporary bind to a genuine var parameter.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_paramless_fn_as_const_variant_arg.pas $(TESTTMP)/test_plessarg26
+	test "$$($(TESTTMP)/test_plessarg26)" = "$$(cat test/test_paramless_fn_as_const_variant_arg.expected)"
+	# ...and the guard: a genuine `var` parameter must still REFUSE the same
+	# argument. This is what stops the fix from being ungated -- tried, and it
+	# let a call RESULT bind to a var parameter and COMPILE, because the method
+	# by-ref path has no non-lvalue validator and relies on the predicate
+	# answering False. Asserted as "does not compile" rather than on the message
+	# text: the message here is still the imperfect `undefined variable`, and
+	# pinning that wording would freeze a wart we would rather fix.
+	! ./$(COMPILER) test/test_paramless_fn_as_var_arg_refused.pas $(TESTTMP)/test_plessvar26 >/dev/null 2>&1
 	# A VIRTUAL CLASS METHOD called through a metaclass receiver in STATEMENT
 	# position: `q.Emit(1);` was refused with `Expected: :=` while the same call
 	# as an expression worked. "is this statement a call?" was written five times

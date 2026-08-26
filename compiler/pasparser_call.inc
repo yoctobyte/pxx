@@ -1940,6 +1940,39 @@ begin
       Result := True;
       Exit;
     end;
+    { ...and a bare name that ENDS the argument (`obj.m(zero)`) is an expression
+      when it names no symbol but DOES name a parameterless — or all-defaulted —
+      function. It is a call producing a value, and a `const Variant` parameter
+      takes values, so there is nothing to bind by reference.
+
+      Without this the name fell to the bare-lvalue arm, reached ParseLValueAST
+      with FindSym = -1, and came out as `undefined variable (zero)` — a
+      diagnostic pointing at the ARGUMENT, naming a perfectly good function
+      undefined, while the identical call through a FREE function compiled.
+
+      Measured boundary: only METHOD + `const Variant` + a BARE name failed.
+      By-value Variant, `const AnsiString`, and an explicit `zero()` (the `(`
+      reaches the clause below) all compiled already.
+
+      GATED, and the gate is load-bearing — this was tried ungated and it is a
+      regression, not a generalisation. The method by-ref path has no validator
+      that rejects a non-lvalue: it relies on this predicate answering False to
+      force the bare-lvalue parse. Ungating therefore let a call RESULT bind to
+      a genuine `var` parameter and the program COMPILED, where fpc says "Can't
+      take the address of constant expressions". A wrong diagnostic beats a
+      silent accept.
+      bug-p-a-parameterless-function-is-undefined-as-a-method-call-argument }
+    if FindSym(CurTok.SVal) < 0 then
+    begin
+      bd := FindProc(CurTok.SVal);
+      if (bd >= 0) and Procs[bd].IsFunc and
+         ((Procs[bd].ParamCount = 0) or
+          ProcParamHasDefault[bd * MAX_PROC_PARAMS + 0]) then
+      begin
+        Result := True;
+        Exit;
+      end;
+    end;
   end;
   Result := (FindSym(CurTok.SVal) < 0) and (TokPos < TokCount) and
             (Tokens[TokPos].Kind = tkLParen);
