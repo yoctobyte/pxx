@@ -5870,6 +5870,40 @@ begin
   end;
 end;
 
+{ UNARY-operator lookup: `-a` / `not a` on a record or class operand.
+
+  Shares the table and the (opKind, leftKind, leftRec) key with the binary
+  overloads -- FPC lets one symbol carry both, and constexp.pas declares
+  exactly that pair on Tconstexprint:
+
+      operator - (const a,b:Tconstexprint):Tconstexprint;   { binary }
+      operator - (const a:Tconstexprint):Tconstexprint;     { unary  }
+
+  so the ARITY is the only thing separating the two entries and this reads it
+  explicitly. The binary side reads it too (see FindOpOverload2's firstHit),
+  because without that its aggregate fallback would happily answer `a - b` with
+  the one-parameter proc. }
+function FindOpOverloadUnary(opKind, typeKind, recId: Integer): Integer;
+var i, pi: Integer;
+begin
+  Result := -1;
+  i := 0;
+  while i < OvrlCount do
+  begin
+    if (OvrlOpKind[i] = opKind) and (OvrlTypeKind[i] = typeKind) and
+       (OvrlRecId[i] = recId) then
+    begin
+      pi := OvrlProcIdx[i];
+      if Procs[pi].ParamCount = 1 then
+      begin
+        Result := pi;
+        Exit;
+      end;
+    end;
+    Inc(i);
+  end;
+end;
+
 { Binary-operator lookup on BOTH operands.
 
   The table's key is the LEFT operand plus, since
@@ -5909,7 +5943,11 @@ begin
     if (OvrlOpKind[i] = opKind) and (OvrlTypeKind[i] = typeKind) and (OvrlRecId[i] = recId) then
     begin
       pi := OvrlProcIdx[i];
-      if firstHit < 0 then firstHit := pi;
+      { A one-parameter entry under this key is the UNARY overload of the same
+        symbol (`operator - (const a:T):T` beside `operator - (const a,b:T):T`)
+        and must never answer a binary query -- the fallback below would
+        otherwise hand `a - b` a proc that takes one argument. }
+      if (firstHit < 0) and (Procs[pi].ParamCount = 2) then firstHit := pi;
       exact := (Procs[pi].ParamCount = 2) and (OvrlRightTk[i] = rightTk) and
                ((not TkIsRecordOrClass(rightTk)) or (OvrlRightRec[i] = rightRec));
       if PxxDbgEnabled('a.opovl') then
@@ -11094,6 +11132,29 @@ begin
        TkIsRecordOrClass(ASTTk[ASTRight[node]]) then
       fIdx := FindOpOverload2(ASTIVal[node], ASTTk[ASTLeft[node]], ResolveNodeRec(ASTLeft[node]),
                               ASTTk[ASTRight[node]], ResolveNodeRec(ASTRight[node]));
+    if fIdx >= 0 then
+      Result := ProcRetRecId[fIdx]
+    else
+      Result := REC_NONE;
+  end
+  else if (ASTKind[node] = AN_NEG) or (ASTKind[node] = AN_NOT) then
+  begin
+    { The UNARY twin of the AN_BINOP arm above, and needed for the same reason:
+      `(-a) + b` looks up the `+` overload on the NEG node's record, and an
+      inferred `var c := -a` sizes its storage from it. Without this both got
+      REC_NONE -- the first as "no operator overload found", the second as a
+      truncated copy. Same aggregate guard, so a plain `-x` never consults the
+      table. feature-p-fpc-global-operator-overload-declarations }
+    fIdx := -1;
+    if TkIsRecordOrClass(ASTTk[ASTLeft[node]]) then
+    begin
+      if ASTKind[node] = AN_NEG then
+        fIdx := FindOpOverloadUnary(Ord(tkMinus), ASTTk[ASTLeft[node]],
+                                    ResolveNodeRec(ASTLeft[node]))
+      else
+        fIdx := FindOpOverloadUnary(Ord(tkNot), ASTTk[ASTLeft[node]],
+                                    ResolveNodeRec(ASTLeft[node]));
+    end;
     if fIdx >= 0 then
       Result := ProcRetRecId[fIdx]
     else

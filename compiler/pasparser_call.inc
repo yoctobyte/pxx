@@ -92,7 +92,15 @@ begin
   end;
   opKind := CurTok.Kind;
   opKey := -1;
-  if opKind in [tkPlus, tkMinus, tkStar, tkSlash, tkDiv, tkMod, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe] then
+  { The KEYWORD-spelled operators (and/or/xor/shl/shr/not) belong in this list
+    beside the punctuation ones: they are the same overloadable operators with a
+    different lexeme, and FPC's own constexp.pas declares five of them on
+    Tconstexprint. Leaving them out made `operator and (const a,b:T):T` a syntax
+    error while `operator + (const a,b:T):T` was fine, which is a distinction
+    the language does not draw. `not` is the unary one; the arity branch below
+    is what separates it. }
+  if opKind in [tkPlus, tkMinus, tkStar, tkSlash, tkDiv, tkMod, tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe,
+                tkAnd, tkOr, tkXor, tkShl, tkShr, tkNot] then
     opKey := Ord(opKind)
   else if opKind = tkAssign then
     { `operator :=(src): TDst` — implicit conversion at assignment }
@@ -111,7 +119,19 @@ begin
     else if CaseEqual(CurTok.SVal, 'initialize') then opKey := OPK_INITIALIZE
     else if CaseEqual(CurTok.SVal, 'finalize') then opKey := OPK_FINALIZE
     else if CaseEqual(CurTok.SVal, 'addref') then opKey := OPK_ADDREF
-    else if CaseEqual(CurTok.SVal, 'copy') then opKey := OPK_COPY;
+    else if CaseEqual(CurTok.SVal, 'copy') then opKey := OPK_COPY
+    { `shr` is here rather than in the token list above because THE LEXER DOES
+      NOT GIVE IT A TOKEN: `shl` lexes as tkShl (lexer.inc:327) and Pascal `shr`
+      lexes as a plain tkIdent whose text is 'shr' -- ParseTerm spells the pair
+      `(CurTok.Kind in [... tkShl]) or ((CurTok.Kind = tkIdent) and
+      (CurTok.SVal = 'shr'))` at every one of its three sites for exactly that
+      reason. So the OVERLOAD KEY has to be Ord(tkIdent) too, because that is
+      what `ASTIVal[node] := Ord(op)` stores on the AN_BINOP the use site builds
+      and what FindOpOverload2 is then queried with. The asymmetry is
+      pre-existing and wrong -- one concept, two lexings -- but unifying it is a
+      lexer change with three parser sites behind it, so it is flagged, not
+      folded in here. }
+    else if CaseEqual(CurTok.SVal, 'shr') then opKey := Ord(tkIdent);
   end;
   if opKey < 0 then
     Error('expected operator symbol after operator keyword');
@@ -294,6 +314,27 @@ begin
        (recId = REC_NONE) and TypeIsOrdinal(IntToTypeKind(opTypeKind)) and
        TypeIsOrdinal(Procs[procIdx].RetType) then
       Error('impossible operator overload: a standard conversion between these types exists');
+  end
+  else if ((opKey = Ord(tkMinus)) or (opKey = Ord(tkNot))) and
+          (Procs[procIdx].ParamCount = 1) then
+  begin
+    { The UNARY overload of a symbol that is also binary. `-` carries both in
+      FPC and in real code -- constexp.pas declares the pair on Tconstexprint --
+      so the arity is what tells them apart, here and in FindOpOverloadUnary.
+      `not` is unary only, and rides the same branch rather than getting one of
+      its own.
+
+      Unary `+` is deliberately NOT here: ParseSimpleExpr eats a leading plus as
+      an identity before any node exists, so there is nothing to dispatch on and
+      supporting it would mean a second mechanism somewhere else. If a corpus
+      ever needs it, that is the ticket to open, not a line to add here.
+
+      Same operand rule as the binary branch: the operation must not already be
+      predefined, i.e. the operand has to be an aggregate. }
+    if recId = REC_NONE then
+      Error('impossible operator overload: this operation is predefined for built-in operand types');
+    if not Procs[procIdx].IsFunc then
+      Error('a unary operator must be a function (it has a result)');
   end
   else
   begin

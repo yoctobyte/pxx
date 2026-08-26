@@ -7860,6 +7860,24 @@ begin
 
     AN_NEG:
     begin
+      { A UNARY operator overload on a record/class operand -- `-a` where
+        `operator - (const a:T):T` is declared. Same shape as the binary case in
+        the AN_BINOP arm: one IR_ARG, one call, result typed by the node the
+        parser already tagged. Before every arm below, because none of them
+        means anything for an aggregate operand.
+        feature-p-fpc-global-operator-overload-declarations }
+      if TkIsRecordOrClass(ASTTk[ASTLeft[node]]) then
+      begin
+        cpi := FindOpOverloadUnary(Ord(tkMinus), ASTTk[ASTLeft[node]],
+                                   ResolveNodeRec(ASTLeft[node]));
+        if cpi >= 0 then
+        begin
+          left  := IRLowerCallArg(cpi, 0, ASTLeft[node], Procs[cpi].Params[0].IsRef);
+          first := IRAppend(IR_ARG, left, -1, -1, 0, ASTTk[ASTLeft[node]]);
+          Result := IRAppendCall(cpi, first, -1, ASTTk[node]);
+          Exit;
+        end;
+      end;
       if TypeIsPromoInt(IntToTypeKind(ASTTk[ASTLeft[node]])) then
       begin
         { `-p` on a promotable int: rewrite to `0 - p` so the ordinary promo
@@ -8049,6 +8067,24 @@ begin
 
     AN_NOT:
     begin
+      { A UNARY operator overload on a record/class operand -- `-a` where
+        `operator - (const a:T):T` is declared. Same shape as the binary case in
+        the AN_BINOP arm: one IR_ARG, one call, result typed by the node the
+        parser already tagged. Before every arm below, because none of them
+        means anything for an aggregate operand.
+        feature-p-fpc-global-operator-overload-declarations }
+      if TkIsRecordOrClass(ASTTk[ASTLeft[node]]) then
+      begin
+        cpi := FindOpOverloadUnary(Ord(tkNot), ASTTk[ASTLeft[node]],
+                                   ResolveNodeRec(ASTLeft[node]));
+        if cpi >= 0 then
+        begin
+          left  := IRLowerCallArg(cpi, 0, ASTLeft[node], Procs[cpi].Params[0].IsRef);
+          first := IRAppend(IR_ARG, left, -1, -1, 0, ASTTk[ASTLeft[node]]);
+          Result := IRAppendCall(cpi, first, -1, ASTTk[node]);
+          Exit;
+        end;
+      end;
       if IntToTypeKind(ASTTk[ASTLeft[node]]) = tyVariant then
       begin
         { PASCAL's `not` is BITWISE on an integer and LOGICAL on a Boolean, and

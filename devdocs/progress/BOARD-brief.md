@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:25 blocked:7 backlog:256 backlog_new:23 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2442 rejected:44`
+`unfinished:25 blocked:7 backlog:255 backlog_new:24 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2443 rejected:44`
 
 ## Held now (working/ — do not touch these files)
 
@@ -58,7 +58,6 @@ _none — no lane is locked._
 - `[p 72] [N]` bug-n-an-arithmetic-dunder-on-self-is-pointer-arithmetic
 - `[p 72] [N]` bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
 - `[p 72] [N]` feature-nilpy-stdlib-coverage-gaps-measured
-- `[p 72] [P]` feature-p-fpc-global-operator-overload-declarations
 - `[p 72] [B]` feature-typinfo-facade-unit
 - `[p 70] [N]` bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method
 - `[p 70] [N]` bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly
@@ -81,5 +80,6 @@ _none — no lane is locked._
 - `[p 65] [N]` bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members
 - `[p 65] [N]` bug-n-a-unicode-identifier-is-rejected-by-the-lexer
 - `[p 65] [N]` bug-n-isinstance-does-not-accept-a-qualified-class-name
+- `[p 65] [O]` bug-o-uforth-blocktest-runs-slower-under-pxx-than-under-cpython
 
 _262 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

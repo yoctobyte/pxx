@@ -333,6 +333,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     helperPi, sci: Integer;
     isLiftedCall: Boolean;
     bitNot: Boolean; notOrdTk: TTypeKind; notConstV: Int64;
+    unOvl: Integer;   { unary operator overload on a record/class operand }
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec, szQUnit: Integer;
     szNestCi, szHops, szI: Integer; szNestName: AnsiString;   { SizeOf(TOuter.TInner) — the SCOPED nested row }
     szScan, szBd, szExprNode: Integer;
@@ -1255,6 +1256,16 @@ begin
       end
       else if NegWidensToInt64(IntToTypeKind(ASTTk[left])) then ASTTk[node] := Ord(tyInt64)
       else ASTTk[node] := ASTTk[left];
+      { A UNARY operator overload on a record/class operand answers with its own
+        result type, exactly as the binary case does in ParseSimpleExpr. Only
+        the tag is set here; ir.inc turns the node into the call. Guarded on the
+        operand being an aggregate so a plain `-x` never touches the table.
+        feature-p-fpc-global-operator-overload-declarations }
+      if TkIsRecordOrClass(ASTTk[left]) then
+      begin
+        unOvl := FindOpOverloadUnary(Ord(tkMinus), ASTTk[left], ResolveNodeRec(left));
+        if unOvl >= 0 then ASTTk[node] := Ord(Procs[unOvl].RetType);
+      end;
       { {$Q+} region: unary minus is overflow-checked too. FPC raises
         EIntOverflow on `-Low(Int64)` and on nothing else once the widening
         above is in place — every narrower type's negation fits an Int64.
@@ -1309,8 +1320,19 @@ begin
         Do not re-add a node-kind arm here. If a shape is wrong, the tag is
         wrong; fix the tag. }
       node := AllocNode(AN_NOT); ASTLeft[node] := left;
+      { `not` over an aggregate is only ever a user overload -- see the AN_NEG
+        arm above; same guard, same reason. Ahead of the bitwise/logical split
+        because neither answer is meaningful for a record. }
+      unOvl := -1;
+      if TkIsRecordOrClass(ASTTk[left]) then
+        unOvl := FindOpOverloadUnary(Ord(tkNot), ASTTk[left], ResolveNodeRec(left));
       bitNot := (ASTTk[left] = 1) or ((ASTTk[left] >= 7) and (ASTTk[left] <= 16));
-      if bitNot then
+      if unOvl >= 0 then
+      begin
+        ASTTk[node] := Ord(Procs[unOvl].RetType);
+        LastExprTk := IntToTypeKind(ASTTk[node]);
+      end
+      else if bitNot then
       begin
         ASTTk[node] := ASTTk[left];
         { FPC complements `ord(x)` at the OPERAND's width: ord(char/boolean) is

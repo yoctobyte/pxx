@@ -8693,6 +8693,18 @@ test-core: $(COMPILER)
 	test "$$($(TESTTMP)/test_op_fpc_named_result26)" = "$$(printf '5/6\n1/6\n3/2\n1/6\n1/6\n4/12')"
 	./$(COMPILER) test/test_op_unit_scope.pas $(TESTTMP)/test_op_unit_scope26
 	test "$$($(TESTTMP)/test_op_unit_scope26)" = "$$(printf 'in:5/6\n5/6\n3/2\n1/6')"
+	# Three gaps in unit-scope operator overloading, all visible in FPC's own
+	# compiler/constexp.pas, which declares 22 operators on one record:
+	# a UNARY overload was routed to the binary arity check and refused; the
+	# KEYWORD-spelled operators (and/or/xor/shl/shr/not) were not in the
+	# accepted-symbol list at all; and an AN_NEG/AN_NOT node had no record
+	# identity, so `(-a) + b` could not find the `+` overload. The unary and
+	# binary `-` entries now differ only by arity, which is what
+	# FindOpOverloadUnary reads and what FindOpOverload2's aggregate fallback
+	# now excludes. fpc -O- -Mobjfpc 3.2.2's values.
+	# feature-p-fpc-global-operator-overload-declarations
+	./$(COMPILER) test/test_operator_unary_and_keyword_forms.pas $(TESTTMP)/test_opunary26
+	test "$$($(TESTTMP)/test_opunary26)" = "$$(cat test/test_operator_unary_and_keyword_forms.expected)"
 	./$(COMPILER) test/test_loop_control.pas $(TESTTMP)/test_loop_control26
 	test "$$($(TESTTMP)/test_loop_control26)" = "$$(printf '8\n5\n8\n7\n3')"
 	./$(COMPILER) test/test_goto.pas $(TESTTMP)/test_goto26

@@ -54,7 +54,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (256)
+## backlog (255)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -245,7 +245,6 @@ _none_
 | feature-p-const-evaluator-carries-unsigned-64-bit | P | 48 | feature | `High(QWord)`, `Low(UInt64)`, `High(NativeUInt)` and `High(PtrUInt)` are rejected at compile time — the const evaluator carries Int64, which cannot hold 2^64-1. Every other integer type name folds. Idiomatic FPC code that spells a machine-word bound this way does not compile. | — |
 | feature-p-defineglobal-a-define-that-crosses-unit-boundaries | P | 45 | feature | `{$DEFINEGLOBAL xyz}` — a conditional define that outlives the unit that sets it. Measured: pxx matches FPC today, a unit's {$DEFINE} does not reach the program, which is correct Pascal and is also why two units cannot coordinate. The motivating case is 'first implementation loaded claims the name, second skips itself' — the shape that would have dissolved the pylib/sysutils Exception problem. | — |
 | feature-p-delphi-string-helpers | P | 70 | feature | feature(P): Delphi's TStringHelper surface — `s.Length`, `s.ToUpper`, `s.Trim`, `s.Substring` | — |
-| feature-p-fpc-global-operator-overload-declarations | P | 72 | feature | `operator := (const u:qword):Tconstexprint;` — FPC's UNIT-SCOPE operator overload declaration — is not parsed. It is the first wall behind the FPC-compiler define profile: constexp.pas:58, and constexp is what cutils and cstreams pull in first. | — |
 | feature-p-packrecords-c-directive | P | 58 | feature | `{$packrecords c}` is refused with 'invalid packrecords value: c'. It means 'lay records out the way this platform's C compiler does', which is what every FPC header binding to a C library uses — and it is what blocks the arm profile of --mimic-fpc-compiler, since fpcdefs.inc's arm branch sets it. | — |
 | feature-p-tmethod-record-for-method-pointers | P | 55 | feature | `TMethod` is undefined — `var m: TMethod` fails with `unknown type: TMethod`. It is the standard system record `record Code, Data: Pointer end` that names the two halves of a `procedure of object` value, and the documented way real code takes a method pointer apart or builds one. | — |
 | feature-p-tobject-api-classparent-instancesize-tostring | P | 15 | feature | Was six TObject members pxx rejected; five landed. Only ClassInfo is left, and it is a Track U question (decide-classinfo-returns-our-blob-or-nothing), not an implementation choice. UnitName -- not in the original six -- is the other gap, tracked in feature-pascal-builtin-tobject-class. | — |
@@ -315,7 +314,7 @@ _none_
 | task-d-document-warn-ignored-directives | D | 20 | task | New --warn-ignored-directives flag needs a row in docs/reference/cli.md, and the routine-directive table in docs/language/dialect.md should point at it as the way to find out which markers are inert | — |
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 
-## backlog_new (23)
+## backlog_new (24)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -326,6 +325,7 @@ _none_
 | bug-a-the-specialization-splice-does-not-adjust-the-body-pass-spans | A | 35 | bug | InsertTokens/RemoveTokens keep the body pass's DeclItem spans and body-begin marker in step with a token-stream edit. The specialization splice hand-rolls its own insert and calls neither — it now adjusts the token->file map (that fix landed) but still not the Pass2 spans. Either Pass2Active is always false there, in which case say so in a comment, or the spans drift. | — |
 | bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable | N | 70 | bug | `import m` then `m.f(1)` compiles and runs, but `h = m.f` — the same member in VALUE position — is a COMPILE ERROR, `undefined variable (f)`, naming the attribute as if it were a bare name. Every value position fails the same way (assignment, dict value, `map(m.f, ...)`), so a module's functions cannot be used as callbacks at all. The import resolves; only the value position is broken. | — |
 | bug-p-a-variant-cannot-hold-an-interface | P | 40 | bug | `v := ifc` for any interface does not compile. Split off from bug-p-a-variant-refuses-wide-chars-and-interfaces, which fixed the two wide-character kinds and left this at the seam the ticket itself named: an interface is REFCOUNTED and pxx spells it tyRecord (a 16-byte fat pointer {IMT, instance}). Storing the fat pointer without the AddRef/Release pairing would trade an honest diagnostic for a use-after-free, so this is not one more tag arm — it is a lifetime problem. | — |
+| bug-p-an-implicit-conversion-operator-needs-an-exact-type-kind-match | P | 45 | bug | `operator := (const s: Int64): TCe` is found only when the source expression's type kind is EXACTLY tyInt64, so `c := 10` fails with `cannot assign Integer to record` while `c := someInt64` works. FPC applies the conversion to any assignment-compatible source. Found behind feature-p-fpc-global-operator-overload-declarations; it is the wall after the High(QWord) one in FPC's constexp.pas. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 55 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
 | chore-doc-pascal-dialect-divergences-pointer-difference | D | 25 | chore | Re-filed from decide-pointer-difference-unit and decide-should-a-null-variant-raise-like-fpc, both decided 2026-08-25. Two divergences from FPC are now CHOSEN rather than merely inherited, and a chosen divergence that is not written down is indistinguishable from a bug to the next reader. Both entries land in devdocs/dev/pascal-dialect-divergences.md. | — |
 | decide-c-crtl-rand-max-is-conforming-but-breaks-real-code | U | 40 | decide | crtl defines RAND_MAX as 32767 and rand() returns [0,32767]. C99 7.20.2.1 only requires RAND_MAX >= 32767, so this is conforming — but every mainstream libc uses 2147483647 and real programs branch on the value. busybox editors/awk.c has an #error for anything else and is the only busybox file still blocked on a non-library gap. Raising it is a behaviour change to a shipped library, not a defect fix, so it is a call to make, not a bug to close. | — |
@@ -571,9 +571,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2442)
+## done (2443)
 
-2442 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2443 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (44)
 
@@ -633,7 +633,6 @@ _none_
 - [p 72] [N] bug-n-an-arithmetic-dunder-on-self-is-pointer-arithmetic
 - [p 72] [N] bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
 - [p 72] [N] feature-nilpy-stdlib-coverage-gaps-measured
-- [p 72] [P] feature-p-fpc-global-operator-overload-declarations
 - [p 72] [B] feature-typinfo-facade-unit
 - [p 70] [N] bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method [parked — re-claim, do not duplicate]
 - [p 70] [N] bug-n-a-comparison-dunder-against-a-non-class-operand-answers-wrongly
@@ -744,6 +743,7 @@ _none_
 - [p 45] [N] bug-n-a-list-and-a-set-share-one-class-so-introspection-cannot-tell-them-apart
 - [p 45] [N] bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value
 - [p 45] [N] bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind
+- [p 45] [P] bug-p-an-implicit-conversion-operator-needs-an-exact-type-kind-match
 - [p 45] [T] bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing
 - [p 45] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 45] [P] compat-pascal-supports-three-arg-out-form
