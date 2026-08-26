@@ -123,7 +123,7 @@ reason this note exists at all, and it is **not** about speed or memory:
 Each constant expression gets its own uniquely-named variable, bound once and
 only read. The gain is that a future fix is single work instead of double.
 
-## Three of these landed in one evening (2026-08-25)
+## Four of these landed in two days (2026-08-25/26)
 
 Not a coincidence worth writing down for its own sake — worth writing down
 because all three had the **same tell**, and it is not the one you would
@@ -163,6 +163,16 @@ then teaches the next reader — and the next test — to stop looking.
 So when you find a second path, do not only check whether it is correct today.
 Check what makes it *look* correct, and whether the tests were written from the
 same sentence.
+
+4. **The callable type-name table (Track N, the next day).** `PyCallableStr`
+   already answered "is this bound?" from the **receiver** — tag 8 is both a
+   bound method and a plain def, so the tag alone cannot tell you. The
+   type-name table still answered from the tag, so `type(f).__name__` said
+   `method` for a plain def. Same question, two mechanisms, one of them updated
+   when the answer changed.
+
+Four for four, all "same question, two mechanisms, one updated". That is no
+longer anecdote; it is the failure mode this file exists for.
 
 ### What this says about the grep
 
