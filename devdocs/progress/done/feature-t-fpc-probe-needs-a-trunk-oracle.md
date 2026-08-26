@@ -246,4 +246,4 @@ still be OLD.** Rule 1 catches an oracle that looks broken; this is the one that
 does not look broken at all.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 59db465cc.
