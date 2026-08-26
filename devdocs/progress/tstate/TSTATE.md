@@ -3,9 +3,8 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `75a1c06bb1a1` | 2026-08-26T09:17:21Z | GREEN (native) | 279.1s | `c923cdf4d075` RED |
+| plexus | `75a1c06bb1a1` | 2026-08-26T09:43:29Z | GREEN (full) | 1102.1s | `75a1c06bb1a1` GREEN |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-fpjson#src:tools/install_lib_candidates.sh** — tools/install_lib_candidates.sh test/fpjson/testutils.pas +1 (plexus): bad `99f1dc81a039`, last good `unknown`, 0 commit(s) in range
 - **optdiff#shard1/12** — tools/optdiff.sh (plexus): bad `fffd29ea840d`, last good `8f403875d51a`, 63 commit(s) in range
