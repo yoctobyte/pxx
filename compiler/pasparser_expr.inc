@@ -24,23 +24,17 @@ procedure ParseFactor; forward;
   suffix uniformly — this body has 67 Exit points, so a suffix loop written at
   its tail would silently miss most of them (it missed str(t).upper(), the exact
   uforth shape). }
-{ Zero every managed local in [fromSym, SymCount) — see the zero-init contract
-  above EmitZeroFrameSlot. Extracted from the Pascal routine-body path so the
-  NilPy def/method paths get the SAME guarantee: they build their locals through
-  their own pre-pass and never ran this loop, which was invisible while an
-  inferred NilPy string local was a FROZEN string (nothing to release) and
-  became a release of stale stack bytes the moment those locals turned managed
-  (bug-nilpy-string-local-truncates-at-255). }
-procedure EmitManagedLocalsZeroInit(fromSym: Integer);
-var i, zeroBytes: Integer;
+{ How many bytes of THIS local's frame slot the zero-init contract must cover,
+  0 when it holds nothing managed. Split out of the loop below so the "which
+  kinds are managed, and how far do they reach" table has exactly ONE owner: the
+  late-temp pass in ir_codegen.inc (hidden locals minted DURING a body's parse,
+  after this prologue pass has already run) needs the same answer and must not
+  grow a second copy of it — the copies are what let the for-in container temp
+  fall through every arm at once
+  (bug-a-a-for-in-container-temp-is-not-zero-initialised). }
+function ManagedLocalZeroBytes(i: Integer): Integer;
+var zeroBytes: Integer;
 begin
-  { Managed locals (dynamic arrays, AnsiStrings, and records/arrays containing
-    them) hold managed pointer slots. Zero their full extent before the body so
-    a first SetLength / assignment sees nil rather than stale stack bytes — and
-    so an ARC-correct whole-record copy can safely release the (nil) old fields. }
-  for i := fromSym to SymCount - 1 do
-    if Syms[i].Kind = skLocal then
-    begin
       { Fixed array whose elements are dynamic-array handles (`array[..] of TA`):
         nil every pointer-sized slot so SetLength on an element does not release
         a garbage "old" handle. }
@@ -125,9 +119,28 @@ begin
           still refcount-alive the whole time.
           bug-nilpy-write-after-free-on-a-callable-held-in-a-dataclass-field }
         zeroBytes := TypeSize(Syms[i].TypeKind);
+  ManagedLocalZeroBytes := zeroBytes;
+end;
+
+{ Zero every managed local in [fromSym, SymCount) — see the zero-init contract
+  above EmitZeroFrameSlot. Extracted from the Pascal routine-body path so the
+  NilPy def/method paths get the SAME guarantee: they build their locals through
+  their own pre-pass and never ran this loop, which was invisible while an
+  inferred NilPy string local was a FROZEN string (nothing to release) and
+  became a release of stale stack bytes the moment those locals turned managed
+  (bug-nilpy-string-local-truncates-at-255).
+
+  Managed locals (dynamic arrays, AnsiStrings, and records/arrays containing
+  them) hold managed pointer slots. Zero their full extent before the body so a
+  first SetLength / assignment sees nil rather than stale stack bytes — and so an
+  ARC-correct whole-record copy can safely release the (nil) old fields. }
+procedure EmitManagedLocalsZeroInit(fromSym: Integer);
+var i: Integer;
+begin
+  for i := fromSym to SymCount - 1 do
+    if Syms[i].Kind = skLocal then
       { One owner for the guarantee, every target, every size. }
-      EmitZeroFrameSlot(Syms[i].Offset, zeroBytes);
-    end;
+      EmitZeroFrameSlot(Syms[i].Offset, ManagedLocalZeroBytes(i));
 end;
 
 function PyMakeUnsupportedOperand: Integer;

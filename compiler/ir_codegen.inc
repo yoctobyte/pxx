@@ -9439,22 +9439,44 @@ begin
   end;
   IRReset;
   IRLowerAST(node);
-  { Nil the COM-interface temps that lowering just allocated (e.g. an `as`-cast
-    temp from IRMaterializeIntfCast). Such temps are created AFTER the prologue's
-    managed-local zero-init pass ran, so they miss it — yet EmitManagedLocalCleanup
-    releases every skLocal COM-interface temp at scope exit. A temp built inside a
-    branch the run skips would then be released UNINITIALISED: PXXIntfRelease on
-    stale stack bytes → heap corruption / SIGSEGV (bug-pascal-interface-finalization
-    -crash). Emit the nil-stores here, at the head of this body's code (before
-    IREmitMachineCode lays down the body), so the release always sees an empty slot.
-    Scoped to COM-interface temps (a single pointer -> one plain store, no register
-    clobber): the compiler declares no Pascal interfaces, so its own codegen and the
-    self-host fixedpoint stay byte-identical. }
+  { Nil the HIDDEN MANAGED LOCALS this body's parse/lowering minted — the
+    `as`-cast interface temp from IRMaterializeIntfCast, the for-in container
+    temp ParseForInNodeAST materialises for `for x in obj.Items`, and every other
+    unnamed local created after the prologue's EmitManagedLocalsZeroInit already
+    ran. They miss that pass, yet every managed kind's store arm and the
+    scope-exit cleanup RELEASE them — so an unwritten (or first-written) slot is
+    released as if the stale stack bytes under it were a live handle.
+
+    This used to be scoped to COM interfaces, on the reasoning that a single
+    pointer is a cheap store. That scoping is exactly what left the for-in
+    container temp out: its very first IR_STORE_SYM releases the "old" handle,
+    and when the frame garbage there was a live heap pointer the block's
+    refcount was decremented by a name that never owned it. It presented as an
+    aarch64-only wrong ANSWER (test_forin_member_access printing 41 for 30+12)
+    because only that target's frame layout happened to leave a live pointer in
+    the slot — with a stack-dirtying routine in front of the call, every target
+    reproduces it. Same shape, and the same red herring, as
+    bug-a-a-local-array-of-interfaces-is-not-zero-initialised.
+
+    ManagedLocalZeroBytes is the shared answer to "which kinds, how far" — one
+    table, not a per-caller subset. Watermarked like the NilPy pass below so a
+    slot is nil'd exactly once, at the head of the statement that minted it:
+    re-zeroing at a later statement would drop a handle this local still owns.
+    bug-a-a-for-in-container-temp-is-not-zero-initialised }
   if CurProc >= 0 then
-    for iZeroTmp := Procs[CurProc].ScopeBase to SymCount - 1 do
-      if (Syms[iZeroTmp].Kind = skLocal) and (Syms[iZeroTmp].Name = '') and
-         SymIsComInterface(iZeroTmp) then
-        EmitZeroFrameSlot(Syms[iZeroTmp].Offset, RecSize(SymTR[iZeroTmp].RecId));
+  begin
+    { The second test also covers the zero-initialised globals on the very first
+      body, so no separate seeding is needed. }
+    if (LateZeroProc <> CurProc) or (LateZeroUpTo < Procs[CurProc].ScopeBase) then
+    begin
+      LateZeroProc := CurProc;
+      LateZeroUpTo := Procs[CurProc].ScopeBase;
+    end;
+    for iZeroTmp := LateZeroUpTo to SymCount - 1 do
+      if (Syms[iZeroTmp].Kind = skLocal) and (Syms[iZeroTmp].Name = '') then
+        EmitZeroFrameSlot(Syms[iZeroTmp].Offset, ManagedLocalZeroBytes(iZeroTmp));
+    LateZeroUpTo := SymCount;
+  end;
   { NilPy: nil every tyClass local this proc has minted since the last
     statement (named comprehension targets, hidden desugar temps, handler
     binders — all created after the prologue zero-init pass). Same placement

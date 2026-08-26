@@ -1,6 +1,8 @@
 ---
 prio: 70
 track: P
+status: working
+owner: frank1-A-aarch64
 ---
 
 > **Track guessed as P** from the test source. The ranker reads frontmatter, so an unset track parks a stub in Track T's queue regardless of what the body says -- correct the `track:` line if this is wrong.
