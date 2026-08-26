@@ -1,0 +1,6 @@
+cast   [hey]
+len 3
+block  [alpha] 5
+generic boxed 99
+char   [q] 1
+str    [kept]

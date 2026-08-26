@@ -5,10 +5,12 @@
 # fixed — the runner then enforces the pass.
 #
 # Baseline 2026-08-25 (pxx VERSION 374): 3 pass / 4 known-fail of 7 drivers.
+# 2026-08-26: 4 pass / 3 known-fail. objectlist.pas passes (inherited default
+# parameters fixed). list_str/map_str now COMPILE -- the String-typecast wall is
+# gone -- and fail one layer deeper, on the cast-as-lvalue their entries now name.
 # All seven build and run correctly under FPC 3.2.2, which is where the
 # .expected files come from — so every entry below is a pxx gap, never a bad
 # driver.
 ifclist.pas	gap: `Pointer(Dest^) := Pointer(Src^)` — cast-as-lvalue resolves a class type name but not a builtin one (fgl.pp:1189). bug-p-a-cast-as-lvalue-does-not-accept-a-builtin-type-name
-list_str.pas	gap: `T(p^)` with T = string — `String(...)` is routed to the conversion intrinsic instead of a typecast (fgl.pp:892). bug-p-a-string-typecast-is-a-conversion-and-not-a-cast
-map_str.pas	gap: same String-typecast wall on the map key path (fgl.pp:1602). bug-p-a-string-typecast-is-a-conversion-and-not-a-cast
-objectlist.pas	gap: `inherited Create` where TFPSList.Create has a defaulted parameter — `inherited call argument count mismatch` (fgl.pp:1061). bug-p-inherited-ignores-the-parents-default-parameter-values
+list_str.pas	gap: `string(p^) := v` — the same cast-as-lvalue wall, and WORSE for a string: it is accepted and silently writes nothing, so the list reads back empty (fgl.pp:892). The READ half `T(p^)` with T=string was fixed 2026-08-26. bug-p-a-cast-as-lvalue-does-not-accept-a-builtin-type-name
+map_str.pas	gap: same cast-as-lvalue wall on the map key path; the key is stored as a silently-empty string, so lookup raises EListError (fgl.pp:1602). bug-p-a-cast-as-lvalue-does-not-accept-a-builtin-type-name

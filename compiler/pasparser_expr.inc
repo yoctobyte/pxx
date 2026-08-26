@@ -1605,18 +1605,36 @@ begin
           CurASTNode := vcNode;
           LastExprTk := tyString;
         end
-        else if IntToTypeKind(ASTTk[CurASTNode]) = tyPointer then
+        else
         begin
-          { `String(p)` on a PChar -- the NUL-terminated-to-Pascal conversion.
-            PChar is tyPointer here, so it fell to the error below, while every
-            other spelling of the same conversion worked: `AnsiString(p)`, the
-            implicit `s := p`, and `StrPas(p)`. One concept, four spellings, and
-            the one FPC code actually writes was the broken one -- exactly the
-            shape devdocs/dev/normalise-dont-special-case.md is about, and the
-            reason it survived is that `String` is a KEYWORD token (tkString_T)
-            with its own branch, so it never reached the identifier-cast path
-            where `ansistring` is handled. Build the same AN_PTR_CAST that path
-            builds, with the same managed/frozen choice of string kind.
+          { EVERYTHING else is a TYPECAST, which is what `String(x)` is in every
+            position the conversions above do not claim.
+
+            This arm used to be `if tyPointer then cast else Error`. The pointer
+            half was itself a fix -- `String(p)` on a PChar was rejected while
+            `AnsiString(p)`, `s := p` and `StrPas(p)` all worked -- and it landed
+            as one more operand kind rather than as the rule, so the next operand
+            kind hit the same wall. It did: `String(p^)` over an UNTYPED pointer
+            deref, where `Integer(p^)`, `PtrUInt(p^)`, `Pointer(p^)`,
+            `TObject(p^)` and `AnsiString(p^)` all compile and only the `String`
+            spelling does not. That takes out every string-instantiated container
+            in FPC's own fgl.pp, whose `T(FList.Items[i]^)` is this exact shape.
+
+            The reason it kept happening is structural and worth stating once:
+            `String` is a KEYWORD token (tkString_T) with its own branch, so it
+            never reaches the identifier-cast path that serves `ansistring`,
+            `shortstring` and the rest. Two mechanisms for one concept. So the
+            branch now ENDS in the cast the identifier path builds rather than in
+            an error, and the conversions above stay what they are: a Char, a
+            managed string and a Variant are genuine conversions and are answered
+            before this.
+
+            No operand kind is refused here any more, which matches what the
+            identifier path already does -- pxx accepts `AnsiString(i)` where fpc
+            says "Illegal type conversion". Accepting a form fpc rejects is not a
+            defect (see the FPC-parity ceiling in CLAUDE.md); the two spellings
+            DISAGREEING was.
+            bug-p-a-string-typecast-is-a-conversion-and-not-a-cast
             bug-p-string-of-a-pchar-is-rejected-while-ansistring-of-it-works }
           node := AllocNode(AN_PTR_CAST);
           ASTLeft[node] := CurASTNode;
@@ -1627,9 +1645,7 @@ begin
             ASTTk[node] := Ord(tyString);
           CurASTNode := node;
           LastExprTk := IntToTypeKind(ASTTk[node]);
-        end
-        else
-          Error('String(): operand must be Char or string');
+        end;
       end;
     end;
     tkSysOpen:

@@ -8063,6 +8063,20 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_pointer_to_a_dynamic_array.pas $(TESTTMP)/test_ptda26
 	test "$$($(TESTTMP)/test_ptda26)" = "$$(cat test/test_pointer_to_a_dynamic_array.expected)"
+	# `String(x)` in cast position is a TYPECAST, not the char->string conversion.
+	# `String` is a KEYWORD token with its own branch, so it never reached the
+	# identifier-cast path that serves `ansistring` -- and that branch ENDED in
+	# an error, so `String(p^)` was rejected while Integer/PtrUInt/Pointer/
+	# TObject/AnsiString of the same operand all compiled. That is fgl.pp's
+	# `T(FList.Items[i]^)`, so it took out every string-instantiated container.
+	# The char and string rows are the guard: the conversions must survive, so
+	# `String(c)` still yields a one-character STRING rather than reinterpreting
+	# the char's bits. The generic rows are how library code reaches it, with
+	# the Integer instantiation pinned because it always worked -- it is what
+	# says the generic machinery was never the problem.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_string_typecast_is_a_cast.pas $(TESTTMP)/test_stc26
+	test "$$($(TESTTMP)/test_stc26)" = "$$(cat test/test_string_typecast_is_a_cast.expected)"
 	# ...and the guard: a genuine `var` parameter must still REFUSE the same
 	# argument. This is what stops the fix from being ungated -- tried, and it
 	# let a call RESULT bind to a var parameter and COMPILE, because the method

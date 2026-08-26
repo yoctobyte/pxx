@@ -10,6 +10,10 @@ owner: —
 
 # A `String(...)` typecast is treated as a conversion, not as a cast
 
+**RESOLVED 2026-08-26.** The branch now ENDS in the cast instead of in an error.
+See Outcome at the end -- including what the two fgl drivers hit one layer
+deeper, which is NOT this.
+
 - **Type:** bug (Pascal frontend — typecast vs intrinsic)
 - **Track:** P — tag: compat
 - **Found:** 2026-08-25, bringing up the fgl rung of the Pascal real-world
@@ -84,3 +88,61 @@ Gate = `make compiler/pascal26` (self-host fixedpoint) + `tools/gate.sh quick`.
 ## Links
 Rung: [[feature-pascal-corpus-fgl]] · umbrella
 [[feature-pascal-corpus-expansion]]
+
+
+---
+
+## Outcome (2026-08-26)
+
+Fixed as the ticket asked: not a third special case, but by making the
+`tkString_T` branch END in the same `AN_PTR_CAST` the identifier-cast path
+builds. The conversions above it are untouched -- a Char, a managed string and a
+Variant are genuine conversions and are still answered first -- and everything
+past them is a cast.
+
+The shape of the old code is the lesson. The branch read
+`if tyPointer then <cast> else Error`, and that pointer arm was ITSELF a previous
+fix of this same wall ([[bug-p-string-of-a-pchar-is-rejected-while-ansistring-of-it-works]]):
+`String(p)` on a PChar had been rejected while `AnsiString(p)`, `s := p` and
+`StrPas(p)` all worked. It landed as one more operand KIND rather than as the
+rule, so the next operand kind hit the wall unchanged -- which is exactly what
+`devdocs/dev/normalise-dont-special-case.md` predicts and what
+`root-cause-over-microfix.md` means by two mechanisms being a smell.
+
+No operand kind is refused there any more. That matches what the identifier path
+already did: pxx accepts `AnsiString(i)` where fpc says *Illegal type conversion*.
+Accepting a form fpc rejects is not a defect under the FPC-parity ceiling; the
+two spellings DISAGREEING was.
+
+Pinned in `test/test_string_typecast_is_a_cast.pas` -- the untyped-deref rows, the
+raw-block row that is fgl's own shape, the generic rows (with the Integer
+instantiation, which always worked and is what says the generic machinery was
+never the problem), and the char/string rows that prove the cast did not swallow
+the conversions.
+
+## The fgl rung: 3 pass -> 4 pass, and what the last two really hit
+
+`objectlist.pas` un-skipped and PASSES -- that is
+[[bug-p-inherited-ignores-the-parents-default-parameter-values]], fixed earlier
+the same day, whose skip line nobody had removed.
+
+`list_str.pas` and `map_str.pas` now COMPILE: the String-typecast wall this ticket
+names is gone from both. They fail one layer deeper, and measuring that split it
+cleanly:
+
+```pascal
+ps := PStr(blk); ps^ := 'alpha';
+WriteLn(String(p^));       { read  through the cast: 'alpha'  -- fixed here }
+string(p^) := s;           { WRITE through the cast: silently writes NOTHING }
+```
+
+So the read half is this ticket and is done; the write half is
+[[bug-p-a-cast-as-lvalue-does-not-accept-a-builtin-type-name]], which
+`ifclist.pas` was already skip-listed against. Their skip lines are rewritten to
+name that ticket and to record the extra fact measurement turned up: for a
+STRING target the cast-as-lvalue is not rejected the way `Pointer(Dest^) :=` is
+-- it is ACCEPTED and silently writes nothing, so the list reads back empty and
+the map raises EListError on a key it thinks it stored. Silent, which is worse
+than the error its sibling gives.
+
+Fixing that one closes all three remaining fgl drivers.
