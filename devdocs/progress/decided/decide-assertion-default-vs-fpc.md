@@ -141,4 +141,4 @@ implement `{$ASSERTIONS ON/OFF}`, `{$C±}` and `-Sa` (default ON), wire
 conformance sweep runs with FPC's polarity.
 
 ## Log
-- 2026-08-25 — decided, commit PENDING-COMMIT.
+- 2026-08-25 — decided, commit 28c19f214.

@@ -221,7 +221,7 @@ Until that lands the user-visible symptom is unchanged, so this ticket is
 `blocked-by:` the P one rather than resolved.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 55fc6eaee.
 
 ## Closed by the Track P half (coordinator, 2026-08-25)
 

@@ -121,4 +121,4 @@ than leaving it only in a unit header — is folded into
 creates the same file's next entry.
 
 ## Log
-- 2026-08-25 — decided, commit PENDING-COMMIT.
+- 2026-08-25 — decided, commit 28c19f214.

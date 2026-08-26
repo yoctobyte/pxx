@@ -141,4 +141,4 @@ prio 50 — a genuine self-inconsistency producing a wrong value, not a parity
 nicety, which is why it outranks its parent decision's 30.
 
 ## Log
-- 2026-08-25 — decided, commit PENDING-COMMIT.
+- 2026-08-25 — decided, commit 28c19f214.

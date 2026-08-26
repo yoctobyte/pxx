@@ -145,4 +145,4 @@ their reason, so the next conformance sweep does not re-open the question.
 Folded into the skip file's normal maintenance rather than given a ticket.
 
 ## Log
-- 2026-08-25 — decided, commit PENDING-COMMIT.
+- 2026-08-25 — decided, commit 28c19f214.

@@ -93,4 +93,4 @@ declared class, one word each), is recorded in that ticket.** Work is re-filed
 there as `feature-a-classinfo-returns-the-typinfo-header` (Track A, prio 45).
 
 ## Log
-- 2026-08-25 — decided, commit PENDING-COMMIT.
+- 2026-08-25 — decided, commit 28c19f214.

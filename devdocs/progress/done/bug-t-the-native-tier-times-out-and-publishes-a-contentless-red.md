@@ -182,4 +182,4 @@ separate mechanism from the report format and expanding scope at the end of a
 session is how the next incomplete fix gets written.
 
 ## Log
-- 2026-08-25 — resolved, commit PENDING-COMMIT.
+- 2026-08-25 — resolved, commit 414874044.

@@ -125,4 +125,4 @@ convention, which is the first fold worth taking because it is where the four
 bugs came from.
 
 ## Log
-- 2026-08-25 — decided, commit PENDING-COMMIT.
+- 2026-08-25 — decided, commit 28c19f214.

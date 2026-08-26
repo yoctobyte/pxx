@@ -125,4 +125,4 @@ exists so the next reader of *"slice 3, still owed"* finds an answer instead of
 an instinct.
 
 ## Log
-- 2026-08-25 — decided, commit PENDING-COMMIT.
+- 2026-08-25 — decided, commit 28c19f214.
