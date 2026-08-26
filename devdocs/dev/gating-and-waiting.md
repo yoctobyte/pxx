@@ -97,20 +97,27 @@ print(tempfile.gettempdir() == "/tmp")  # assert the property instead
 
 Same rule for any path-shaped output: assert the property, or print a suffix.
 
-## Do not put a gating worktree under `/tmp`
+## An expected output must never contain an absolute `/tmp` path
 
-The direct consequence of the rule above, stated where someone about to run a
-gate will read it rather than only where the mechanism is explained: **testmgr
-rewrites absolute `/tmp` paths in expected output, so a gate run from a worktree
-under `/tmp` fails on its own path rewriting.** The red is real-looking and
-entirely self-inflicted. Put it in `.claude/worktrees/` instead.
+This is the durable form of the rule above. testmgr rewrites absolute `/tmp`
+paths in expected output, so a test whose expectation string literally contains
+one can never match: the program prints `/tmp`, the rewritten expectation says
+`/tmp/testmgr-scratch-N`. **That is a property of the TEST, not of where your
+checkout lives.**
 
-Filed here, and not only in `session-roster.md` where it was first written,
-because of a rule worth applying generally: **file a gotcha against the tool that
-has it, never against the role that happened to hit it.** The coordinator hit
-this one first, so it landed in the coordinator's document — where the next
-person to seed a worktree, who is usually not coordinating, has no reason to
-look. Right content, wrong reader. (Its sibling — that `make compiler/pascal26`
-is a no-op when a copied-in seed is newer than its sources — has moved to
-CLAUDE.md, under the claim it qualifies.)
+**Corrected 2026-08-26.** This section previously said *"do not put a gating
+worktree under `/tmp`"*. That was inferred from one incident and is over-broad.
+Track T measured it directly while running a full tier from a worktree under
+`/tmp`: `TMP_RE` does match such a path, but the rewrite is applied per **recipe
+line**, and `Job.script()` builds its `cd <REPO>` prefix *outside* that loop —
+REPO is never rewritten, and recipe lines address the tree relatively after the
+`cd`. Result: 105 job logs, 0 suspect, no damage signature. A worktree under
+`/tmp` is implicated only if a recipe line names the tree by absolute path.
 
+**The original incident's cause was never established.** A gate went RED from a
+`/tmp` worktree, the worktree was moved, the RED went away — but the *seed-mtime
+no-op* (now in CLAUDE.md) was live in the same tree at the same time and alone
+explains a "fixedpoint failed" RED. Two variables changed; the failing
+expectation string was not kept. Recorded as unverified rather than quietly
+dropped, because the broad rule would have cost the next person a restart for a
+hazard that measurement says is not there.
