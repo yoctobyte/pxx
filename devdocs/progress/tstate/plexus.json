@@ -1,19 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-25T18:15:53Z",
-   "fixed": [
-    "test-core#src:test/test_arr_of_ptr_elemrec_b354.pas",
-    "test-core#src:test/test_setlength_grow_capacity.pas"
-   ],
-   "new_red": [
-    "test-core#src:test/test_indexing_length_for_new_inc_positive.pas"
-   ],
-   "sha": "c59796cd1e1d0255c93b85e67ce8cd9ea422b3e9",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-25T18:26:56Z",
    "fixed": [],
    "new_red": [],
@@ -446,6 +433,15 @@
    "tier": "full",
    "timed_out": false,
    "verdict": "RED"
+  },
+  {
+   "date": "2026-08-26T08:07:45Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "fffd29ea840d126f428af41a670b92779f89f4c3",
+   "tier": "slow",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
@@ -6684,14 +6680,14 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T08:03:11Z",
+  "date": "2026-08-26T08:07:45Z",
   "deadline": 7200.0,
   "sha": "fffd29ea840d126f428af41a670b92779f89f4c3",
-  "tier": "full",
+  "tier": "slow",
   "timed_out": false,
   "unreached": 0,
-  "verdict": "RED",
-  "wall": 1116.3
+  "verdict": "GREEN",
+  "wall": 263.1
  },
  "last_bench": {
   "conf_rows": 550,
