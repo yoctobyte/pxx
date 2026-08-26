@@ -36,6 +36,21 @@ SHARD_I=0; SHARD_N=1
 ALL=0; ONLY=""; REPORT=""
 case "${1:-}" in ''|--*) ;; *) CC="$1"; shift ;; esac
 case "${1:-}" in ''|--*) ;; *) SUITE="$1"; shift ;; esac
+# Absolutise both IMMEDIATELY, before anything can cd.
+#
+# Every compile below runs from inside another directory (`cd "$SUITE"`, `cd
+# "$WORK"`), so a relative $CC stops resolving there — and the failure surfaces
+# per test as `compile error: timeout: failed to execute process`, i.e. as a
+# COMPILER bug, for every test at once. Measured: `./compiler/pascal26` gives
+# "10 pass, 51 fail" where the absolute path gives "61 pass, 0 fail".
+#
+# The defaults are absolute and testmgr passes absolute paths, so only an
+# operator invoking this by hand hits it — which is precisely the debugging
+# position where a wall of red is most expensive, because it reads as "my change
+# broke 51 tests" at the exact moment someone is looking for what their change
+# broke.
+case "$CC"    in /*) ;; *) CC="$(CDPATH= cd -- "$(dirname -- "$CC")" 2>/dev/null && pwd)/$(basename -- "$CC")" ;; esac
+case "$SUITE" in /*) ;; *) SUITE="$(CDPATH= cd -- "$SUITE" 2>/dev/null && pwd)" ;; esac
 while [ $# -gt 0 ]; do
   case "$1" in
     --shard)   SHARD_I="${2%%/*}"; SHARD_N="${2##*/}"; shift ;;
@@ -64,7 +79,13 @@ if [ ! -d "$SUITE" ]; then
   echo "$LABEL: SKIP — no suite at $SUITE (run tools/install_lib_candidates.sh fpc-testsuite)"
   exit 0
 fi
-[ -x "$CC" ] || { echo "$LABEL: compiler not found: $CC" >&2; exit 2; }
+# Checked AFTER absolutisation, which is what makes the check meaningful: it
+# used to run against the path as given, so a relative path that would not
+# resolve once we cd'd passed here and failed 51 times later, one test at a
+# time. A compiler that cannot be executed is a hard error, never a per-test
+# compile failure — the whole difference between "your setup is wrong" and
+# "your compiler is broken".
+[ -x "$CC" ] || { echo "$LABEL: compiler not found or not executable: $CC" >&2; exit 2; }
 
 mkdir -p "$WORK"
 trap 'rm -rf "$WORK"' EXIT

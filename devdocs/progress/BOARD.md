@@ -347,7 +347,7 @@ _none_
 | task-pascal-conformance-long-tail | P | 15 | task | FPC-conformance long tail: RTL gaps, runtime faults, small parser holes | — |
 | task-t-enrol-the-fgl-corpus-rung | T | 70 | task | Enrol the new `test-fgl` corpus target in a testmgr tier and add `fpc-rtl` to twatch's CORPUS_EXPECTED. The rung is wired and green (3 pass / 4 skip) but nothing in the matrix runs it, and the watcher will not warn when the tree is unfetched. | — |
 
-## backlog_new (27)
+## backlog_new (26)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -366,7 +366,6 @@ _none_
 | bug-p-length-of-a-pointer-to-a-dynamic-array-answers-one | P | 50 | bug | `PDyn = ^TDyn` with `TDyn = array of LongWord`: after `SetLength(d, 5)`, `Length(pdy^)` answers 1 and `High(pdy^)` answers 0 where FPC answers 5 and 4 — while `pdy^[1]` reads the right element. The pointee is a HANDLE, so the [data-8] header is one indirection further than the runtime path looks. | — |
 | bug-pchar-difference-in-writeln-arg-segfaults | A | 55 | bug | `Writeln(p - q)` where p, q are PChar segfaults: the pointer DIFFERENCE keeps pointer type in argument position, so Writeln renders the small integer as a PChar and dereferences it. Assigning the same expression to an Integer first works and gives the right value, so the arithmetic is fine — only the inferred type of the un-assigned result is wrong. | — |
 | bug-single-char-literal-as-pchar-argument-segfaults | P | 80 | bug | A ONE-character literal passed where a PChar parameter is expected segfaults: `StrCat(buf, '-')` faults, `StrCat(buf, '--')` works. The single-quoted literal types as Char rather than as a string, so its ORDINAL is passed as the pointer and the callee dereferences address 45. FPC converts it to a pointer to a NUL-terminated one-character string. Pre-existing — it hits StrCopy/StrCat/StrPos as much as anything new. | — |
-| bug-t-run-pascal-conformance-silently-fails-every-test-on-a-relative-compiler-path | T | 55 | bug | `tools/run_pascal_conformance.sh ./compiler/pascal26 ...` fails 51 of 107 tgeneric tests; the same run with `/home/neo/frank1/compiler/pascal26` passes 61 and fails 0. The runner `cd`s into the suite dir before invoking the compiler, so a relative `$CC` no longer resolves — and the failure surfaces as `compile error`, i.e. as a COMPILER bug, for every test at once. | — |
 | chore-a-the-range-checked-fpc-seed-cannot-be-built | A | 55 | chore | `fpc -Cr compiler/compiler.pas` does not compile: five `$`-constants in the aarch64/arm32 encoders are rejected as out of Integer range while being folded into an Integer parameter. So the one build that would report an array index out of bounds — the FPC seed with range checking — is unavailable, and the repo debugs out-of-bounds writes by guessing instead. | — |
 | chore-doc-pascal-dialect-divergences-pointer-difference | D | 25 | chore | Re-filed from decide-pointer-difference-unit and decide-should-a-null-variant-raise-like-fpc, both decided 2026-08-25. Two divergences from FPC are now CHOSEN rather than merely inherited, and a chosen divergence that is not written down is indistinguishable from a bug to the next reader. Both entries land in devdocs/dev/pascal-dialect-divergences.md. | — |
 | compat-pascal-strict-fpc-pointer-difference-bytes | P | 15 | compat | Re-filed from decide-pointer-difference-unit, decided 2026-08-25 (option 2 + parity behind the flag). The default dialect keeps the uniform element rule; FPC's byte answer for a difference involving an untyped Pointer is a BEHAVIOUR (deterministic, dependable) not a bug, so the dialect contract puts it in the strict family. Ranked 15 deliberately: no corpus target has asked for it. | — |
@@ -607,9 +606,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2366)
+## done (2367)
 
-2366 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2367 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -753,7 +752,6 @@ _none_
 - [p 55] [T] bug-t-a-pin-that-moves-mid-run-is-not-detected
 - [p 55] [T] bug-t-a-timed-out-sha-still-counts-as-tested
 - [p 55] [T] bug-t-agents-kill-each-others-processes-with-pattern-pkill
-- [p 55] [T] bug-t-run-pascal-conformance-silently-fails-every-test-on-a-relative-compiler-path
 - [p 55] [T] bug-t-the-push-rate-starves-breadth-coverage-entirely
 - [p 55] [T] bug-t-twatch-status-says-down-while-the-daemon-is-alive-and-testing
 - [p 55] [A] chore-a-the-range-checked-fpc-seed-cannot-be-built

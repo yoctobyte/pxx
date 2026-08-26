@@ -5,7 +5,7 @@ track: T
 prio: 55
 type: bug
 blocked-by: []
-status: backlog_new
+status: done
 owner: ""
 created: 2026-08-25
 summary: "`tools/run_pascal_conformance.sh ./compiler/pascal26 ...` fails 51 of 107 tgeneric tests; the same run with `/home/neo/frank1/compiler/pascal26` passes 61 and fails 0. The runner `cd`s into the suite dir before invoking the compiler, so a relative `$CC` no longer resolves — and the failure surfaces as `compile error`, i.e. as a COMPILER bug, for every test at once."
@@ -60,3 +60,36 @@ before the `cd`, so it passes on a relative path that will not resolve later.
 
 `tools/run_c_conformance.sh` should be checked for the same shape (it is the
 file this one was written from).
+
+## Fixed 2026-08-26 (Track T)
+
+Both paths are absolutised immediately after the positional arguments are taken,
+before anything can `cd`, and the `[ -x "$CC" ]` check moved to *after* that —
+which is what makes it meaningful. It used to run against the path as given, so
+a relative path that would not resolve post-`cd` passed the check and then
+failed 51 times, one test at a time. A compiler that cannot be executed is now a
+hard error: the difference between "your setup is wrong" and "your compiler is
+broken" is exactly what this ticket is about.
+
+Verified, same command as the symptom above:
+
+| invocation | before | after |
+| --- | --- | --- |
+| `./compiler/pascal26 library_candidates/...` | 10 pass, **51 fail** | **62 pass, 0 fail**, 42 skip |
+| absolute paths | 61 pass, 0 fail | 62 pass, 0 fail, 42 skip |
+
+Relative and absolute now agree exactly, which is the property that was missing.
+
+**`tools/run_c_conformance.sh` does NOT have this bug** — checked, because this
+file was written from it and the ticket asked. It takes `$CC` and `$SUITE` the
+same way, but it never `cd`s, so a relative path keeps resolving and the failure
+cannot occur. Same argument shape, no manifestation. Left alone rather than
+"fixed" symmetrically: an edit that changes no behaviour still has to be read
+and understood by the next person, and a comment claiming to fix a bug that was
+never there is worse than no comment.
+
+If a `cd` is ever added there, this is the trap to remember — which is why that
+sentence is in this ticket rather than in a comment nobody will find.
+
+## Log
+- 2026-08-26 — resolved, commit PENDING-COMMIT.
