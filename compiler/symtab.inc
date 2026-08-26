@@ -4898,6 +4898,56 @@ begin
   EmitB($49); EmitB($89); EmitB($C0 or (rreg - 8));                 { mov r12..r15, rax }
 end;
 
+{ Refresh a resident's register cache from the value ALREADY IN RAX, instead of
+  reloading the frame slot that was written one instruction ago.
+
+  EmitStoreVar's dual-write stores rax's low `sz` bytes to the slot and then had
+  to get the canonically extended value back into the register -- and did it by
+  reading the slot, which is a store-to-load forward on the critical path of
+  every store to a resident. Re-extending rax's low bytes yields the identical
+  value by construction (the slot holds exactly those bytes), so the load is
+  pure latency. rax is left holding the extended value too, exactly as the
+  reloading form leaves it, so nothing downstream can tell them apart.
+
+  This is the -O3 residency mechanism working AGAINST itself: the pass exists to
+  break the loop-carried store-forward chain through the frame slot, and the
+  refresh was re-creating one per store.
+
+  Only EmitStoreVar may use this form. The other two callers of
+  RegcallRefreshResident -- IR_ZERO_SYM and the IR_EXC_ENTER landing pad --
+  refresh from memory because there the frame slot, not rax, is the authority. }
+procedure RegcallRefreshResidentFromRax(idx: Integer);
+var tk: TTypeKind; sz: Integer; sgn: Boolean; rreg: Integer;
+begin
+  rreg := ResidentRegOf(idx);
+  if rreg = 0 then Exit;
+  tk := Syms[idx].TypeKind;
+  if TypeIsFloat(tk) or ((Syms[idx].Kind = skParam) and Syms[idx].IsRef) then
+  begin
+    RegcallRefreshResident(idx);   { not a plain scalar in rax -- take the slow form }
+    Exit;
+  end;
+  sz := TypeSize(tk);
+  sgn := TypeSigned(tk);
+  if sz = 1 then
+  begin
+    if sgn then begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($C0); end  { movsx rax, al }
+    else begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0); end;        { movzx rax, al }
+  end
+  else if sz = 2 then
+  begin
+    if sgn then begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($C0); end  { movsx rax, ax }
+    else begin EmitB($48); EmitB($0F); EmitB($B7); EmitB($C0); end;        { movzx rax, ax }
+  end
+  else if sz = 4 then
+  begin
+    if sgn then begin EmitB($48); EmitB($63); EmitB($C0); end              { movsxd rax, eax }
+    else begin EmitB($89); EmitB($C0); end;                                { mov eax, eax }
+  end;
+  { sz = 8: rax already holds the canonical value }
+  EmitB($49); EmitB($89); EmitB($C0 or (rreg - 8));                        { mov r12..r15, rax }
+end;
+
 { Reload every float resident's register cache from its authoritative frame
   slot (dual-write keeps the frame current). Emitted on the IR_EXC_ENTER
   landing pad after the pool restore: a resident stored-to inside the try block
@@ -5090,7 +5140,12 @@ begin
     it reads the frame, not the stale register) to reuse the exact size/sign
     extension every other load applies, then copy into the resident register. }
   if ResidentRegOf(idx) <> 0 then
-    RegcallRefreshResident(idx);
+  begin
+    if OptLevel >= 3 then
+      RegcallRefreshResidentFromRax(idx)   { same value, no store-to-load forward }
+    else
+      RegcallRefreshResident(idx);
+  end;
 end;
 
 procedure EmitCmpRaxVar(idx: Integer);
