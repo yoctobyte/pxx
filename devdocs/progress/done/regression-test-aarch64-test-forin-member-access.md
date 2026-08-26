@@ -141,10 +141,20 @@ unflagged), not paid for in emitted bytes.
 aarch64 cross target, both `test_forin_member_access` and the new
 `test_forin_member_temp_zeroinit`, against their x86-64 differential partners.
 
-### Regression test
-`test/test_forin_member_temp_zeroinit.pas` — the same for-in shape with a
-frame-dirtying call in front, so the witness does not depend on a target's
-accidental frame layout. Verified to FAIL (3102 / 7692) against a self-hosted
-pre-fix build on all five targets. Wired into `test-core` and into the i386,
-aarch64, arm32 and riscv32 cross lists.
+### Regression tests
+Two, both wired into `test-core` and into the i386 / aarch64 / arm32 / riscv32
+cross lists, and both verified to fail against a self-hosted PRE-FIX build:
+
+- `test/test_forin_member_temp_zeroinit.pas` — the filed shape with a
+  frame-dirtying call in front, so the witness does not depend on a target's
+  accidental frame layout. Pre-fix: 3102 / 7692 on all five targets.
+- `test/test_hidden_dynarray_temp_zeroinit.pas` — the SIBLINGS. Grepping before
+  closing (per `normalise-dont-special-case.md`) found three more mint sites for
+  the same unnamed dyn-array temp: `for x in MakeArr` and `for x in [a, b]`
+  (`pasparser_stmt.inc`) and `MakeArr[0]` (`pasparser_lval.inc`,
+  `ApplyCallResultPtrSuffix`). All three carry the identical hazard and all three
+  are fixed by the one shared pass — which is the argument for having fixed it
+  there rather than in `ParseForInNodeAST`. Pre-fix this one SIGSEGVs on
+  x86-64, i386, aarch64, arm32 AND riscv32, so it is a crash witness, not a
+  wrong-answer one.
 - 2026-08-26 — resolved, commit PENDING-COMMIT.
