@@ -31,3 +31,6 @@ Unhandled exception: TypeError: can only concatenate str (not "method") to str
 
 *Stub ticket: signal only. Track T agent (face 2) enriches or a dev track
 takes it from the repro line.*
+
+## Log
+- 2026-08-26 — auto-closed by the plexus watcher: `lib-test#src:test/lib_mimic_xml_etree_elementtree.npy` passes at 99f1dc81a039 (tier full); it was red at fd93e4a71c37. Reopening is by a fresh NEW-RED stub, since a second red is a second finding with its own range.
