@@ -12,6 +12,11 @@ BENCH_BATCH ?= 3
 BENCH_RUNTIME_RUNS ?= 3
 
 COMPILER     := compiler/pascal26
+# The PROOF that $(COMPILER) is a fixedpoint of these sources, as opposed to a
+# file that happens to sit at that path. Records the converged binary's sha256,
+# so a copied-in seed cannot satisfy the gate by being NEWER than the sources.
+# bug-a-the-selfhost-rule-is-a-no-op-when-the-seed-is-newer-than-its-sources
+COMPILER_STAMP := compiler/.pascal26.fixedpoint
 COMPILER_MANAGED := compiler/pascal26-managed
 COMPILER_SRC := compiler/compiler.pas
 COMPILER_INC := $(wildcard compiler/*.inc) $(wildcard compiler/builtin/*.pas) $(wildcard lib/rtl/*.pas) $(wildcard lib/asmcore/*.pas)
@@ -75,7 +80,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
 .PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-fgl test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-selfcompile-odiff test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
-        pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos tools-devtest c-interop-devtest tls-openssl-devtest tls13-handshake-devtest truststore-devtest tls-native-seam-devtest \
+        pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos tools-devtest tools-devtest-sh c-interop-devtest tls-openssl-devtest tls13-handshake-devtest truststore-devtest tls-native-seam-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
 
 all: $(COMPILER)
@@ -154,7 +159,24 @@ bootstrap-managed: bootstrap-check
 # property enforced is still "the compiler reproduces itself," never weakened
 # to "in however many rounds it takes," just no longer mis-timed to the seed's
 # staleness.
-$(COMPILER): $(COMPILER_SRC) $(COMPILER_INC)
+# The WORK is the stamp's, not the binary's, and that is the whole fix.
+#
+# With `$(COMPILER)` as the target, a seed that arrives from OUTSIDE the build --
+# a pinned binary copied into a scratch worktree -- has an mtime newer than every
+# source, so make declares the target up to date, the recipe never runs, and the
+# gate that "cannot be skipped" exits 0 having proved nothing. The tell was not
+# an error: it was `make: 'compiler/pascal26' is up to date.` standing exactly
+# where `converged after 1 round(s)` belonged. A full-tier sweep was about to
+# report a verdict for one sha against a binary built from a pin 133 commits
+# older. bug-a-the-selfhost-rule-is-a-no-op-when-the-seed-is-newer-than-its-sources
+#
+# A copied-in binary cannot forge the stamp, so the property stops depending on
+# where the binary came from. The stamp is written LAST, which makes it newer
+# than $(COMPILER) and so keeps $(COMPILER)'s own recipe running on every make --
+# that is deliberate, and it is what ends the second half of the bug: a gate
+# whose pass and whose skip print the same thing is not a gate. The recipe never
+# touches the binary, so nothing downstream rebuilds.
+$(COMPILER_STAMP): $(COMPILER_SRC) $(COMPILER_INC)
 	@test -x $(COMPILER) || \
 	  (echo "self-hosted compiler seed missing. Run: make bootstrap"; exit 1)
 	@cur="./$(COMPILER)"; max=4; \
@@ -166,12 +188,37 @@ $(COMPILER): $(COMPILER_SRC) $(COMPILER_INC)
 	    echo "converged after $$r round(s)"; \
 	    mv "$$a" $(COMPILER); \
 	    rm -f "$$b"; \
+	    printf 'rounds %s\nsha256 %s\n' "$$r" "$$(sha256sum $(COMPILER) | cut -d' ' -f1)" \
+	      > $(COMPILER_STAMP); \
 	    exit 0; \
 	  fi; \
 	  cur="$$a"; \
 	done; \
 	echo "FAIL: no fixedpoint after $$max rounds -- a real self-host regression, not a stale seed"; \
 	exit 1
+
+# Unconditional, because mtime is not provenance and that is the whole bug. The
+# first cut had $(COMPILER) depend on the stamp alone, reasoning that a stamp
+# written LAST is always newer so the recipe always runs. Measured, and false:
+# `cp` a different binary over compiler/pascal26 and it is newer than the stamp
+# again, so make skips the verify and prints `is up to date` — the same silence,
+# one level up. A PHONY prerequisite is the only thing that makes the check run
+# regardless of any timestamp. It costs one sha256sum, and every target that
+# depends on $(COMPILER) is itself PHONY, so nothing cascades.
+.PHONY: selfhost-verify
+selfhost-verify: $(COMPILER_STAMP)
+
+$(COMPILER): $(COMPILER_SRC) $(COMPILER_INC) $(COMPILER_STAMP) selfhost-verify
+	@have=$$(sha256sum $(COMPILER) | cut -d' ' -f1); \
+	 want=$$(sed -n 's/^sha256 //p' $(COMPILER_STAMP)); \
+	 if [ "$$have" != "$$want" ]; then \
+	   echo "$(COMPILER) is not the binary $(COMPILER_STAMP) proves a fixedpoint for."; \
+	   echo "  stamp:  $$want"; \
+	   echo "  binary: $$have"; \
+	   echo "Something replaced the binary without rebuilding. Delete $(COMPILER_STAMP) and re-run make."; \
+	   exit 1; \
+	 fi; \
+	 echo "self-host fixedpoint: verified — $$(sed -n 's/^rounds //p' $(COMPILER_STAMP)) round(s), $$(echo $$want | cut -c1-12)"
 
 $(COMPILER_MANAGED): $(COMPILER_SRC) $(COMPILER_INC)
 	@test -x $(COMPILER_MANAGED) || \
@@ -12939,6 +12986,7 @@ clean:
 
 distclean: clean
 	rm -f $(COMPILER)
+	rm -f $(COMPILER_STAMP)
 
 # ============================================================================
 # Library / demo track (Claude B). These build against the PINNED stable
@@ -14293,6 +14341,38 @@ tools-devtest:
 	  echo "  tools-devtest: $$n green, $$bad RED --$$failed"; exit 1; \
 	fi; \
 	echo "  tools-devtest: $$n guard(s) green"
+
+# ...and the SHELL half of the same family. It was `tools/*devtest*.py` only, so
+# a guard written in shell was wired into nothing at all -- the exact condition
+# the comment above records for the five broken Python ones, one file extension
+# to the left. devtest_selfhost_race.sh had been sitting unrun; it is green, and
+# now it is also reachable.
+#
+# The five excluded here are not skipped, they have RULES of their own
+# (c-interop-devtest, tls-openssl-devtest, tls13-handshake-devtest,
+# truststore-devtest, tls-native-seam-devtest) and are deliberately outside the
+# default gate: each needs a network peer or a system library, so folding them
+# in here would import exactly the non-hermetic reds those rules exist to keep
+# out. Same tally-don't-stop-at-first-red behaviour as the Python half.
+tools-devtest-sh:
+	@n=0; bad=0; failed=''; \
+	for f in tools/*devtest*.sh; do \
+	  case "$$f" in \
+	    *c_interop_devtest.sh|*tls_openssl_devtest.sh|*tls13_handshake_devtest.sh) continue ;; \
+	    *truststore_devtest.sh|*tls_native_seam_devtest.sh) continue ;; \
+	  esac; \
+	  printf '  tools-devtest-sh: %s\n' "$$f"; \
+	  if bash "$$f" > $(TESTTMP)/tools_devtest_sh.log 2>&1; then \
+	    n=$$((n+1)); \
+	  else \
+	    bad=$$((bad+1)); failed="$$failed $$f"; \
+	    echo "  FAIL: $$f"; tail -25 $(TESTTMP)/tools_devtest_sh.log; \
+	  fi; \
+	done; \
+	if [ $$bad -gt 0 ]; then \
+	  echo "  tools-devtest-sh: $$n green, $$bad RED --$$failed"; exit 1; \
+	fi; \
+	echo "  tools-devtest-sh: $$n guard(s) green"
 
 c-interop-devtest: pxx-stable-check
 	tools/c_interop_devtest.sh

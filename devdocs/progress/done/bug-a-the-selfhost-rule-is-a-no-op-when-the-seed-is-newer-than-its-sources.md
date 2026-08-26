@@ -3,9 +3,10 @@ slug: bug-a-the-selfhost-rule-is-a-no-op-when-the-seed-is-newer-than-its-sources
 track: A
 type: bug
 prio: 45
-status: backlog
+status: done
 blocked-by: []
 summary: "`make compiler/pascal26` is described as the one unskippable gate because it IS the byte-identical self-host fixedpoint. In a tree whose seed arrived from outside (a copied-in pinned binary), the seed is newer than the sources, make declares the target up to date, and the rule exits 0 having proved nothing. Caught 2026-08-26 when a full-tier sweep was about to report a verdict for a sha against a binary built from a pin 133 commits older."
+owner: opus5-frank1
 ---
 
 # The self-host gate silently passes when the seed is newer than the sources
@@ -94,3 +95,97 @@ or benchmark that cannot show that line has not established its own provenance.
 - The scope note already in CLAUDE.md's claims section: the fixedpoint proves
   self-reproduction **at one optimisation level**. This is a second, independent
   way the same claim can be weaker than it reads.
+
+## Outcome
+
+Fixed with option 2 — *"a stamp file as the real target"* — which the ticket
+calls the one that makes the property true rather than usually-true. Option 3
+("refuse silence") falls out of it for free, and it took a second cut to
+actually get.
+
+### The change
+
+`compiler/.pascal26.fixedpoint` records the converged binary's sha256 and round
+count, and **the fixedpoint loop is that stamp's recipe, not the binary's**:
+
+```make
+$(COMPILER_STAMP): $(COMPILER_SRC) $(COMPILER_INC)
+	... the loop, unchanged ... then: printf 'rounds %s\nsha256 %s\n' > $(COMPILER_STAMP)
+
+.PHONY: selfhost-verify
+selfhost-verify: $(COMPILER_STAMP)
+
+$(COMPILER): $(COMPILER_SRC) $(COMPILER_INC) $(COMPILER_STAMP) selfhost-verify
+	... sha256sum the binary, compare against the stamp, print the provenance ...
+```
+
+A binary copied in from outside cannot forge the stamp, so the property stops
+depending on where the binary came from. Gitignored beside `compiler/pascal26`
+and removed by `distclean`.
+
+### The first cut was wrong, and measuring is how I know
+
+I had `$(COMPILER)` depend on the stamp alone, reasoning that a stamp written
+LAST is always newer than the binary, so the verify recipe always runs. Then I
+tested it:
+
+```
+$ cp stable_linux_amd64/default/pinned compiler/pascal26
+$ make compiler/pascal26
+make: 'compiler/pascal26' is up to date.
+```
+
+The `cp` made the binary newer than the stamp, so the verify was skipped — the
+same silence, one level up. **Mtime is not provenance**, which is the whole bug,
+and I had reintroduced it in the fix. Only a PHONY prerequisite makes the check
+independent of every timestamp. It costs one `sha256sum`, and every target that
+depends on `$(COMPILER)` is itself PHONY (they are all `test-*`, `benchmark-*`,
+`all`), so nothing cascades.
+
+### Measured
+
+| scenario | before | after |
+| --- | --- | --- |
+| **the reported bug** — binary newer than every source, no stamp | `make: 'compiler/pascal26' is up to date.`, exit 0, nothing proved | `converged after 1 round(s)` / `self-host fixedpoint: verified — 1 round(s), 4164c65f338c` |
+| binary replaced behind the stamp's back | `is up to date`, exit 0 | names both shas, says what happened and how to recover, **exit 1** |
+| the recovery it names (delete the stamp, re-run) | — | `converged after 2 round(s)` from the pinned seed |
+| nothing changed | `is up to date` | `self-host fixedpoint: verified — 1 round(s), 4164c65f338c` |
+| a source changed | rebuilds | rebuilds |
+
+The fourth row is option 3: a gate whose pass and whose skip print the same
+thing is not a gate. They now print different things.
+
+### Gate
+
+`tools/selfhost_stamp_devtest.sh`, 7 checks. It uses `make -n`, so it **runs
+nothing** — it asks make which recipe it would choose, which is exactly the
+question the bug got wrong. Under a second, never builds, never mutates a
+binary, never races the watcher; the one file it touches is the stamp, moved
+aside and restored.
+
+Wiring it needed a rule: `tools-devtest` globs `tools/*devtest*.py` only, so a
+guard written in shell was wired into **nothing at all** — the same condition
+`chore-t-five-tool-devtests-are-broken-on-master-and-nothing-runs-them` records
+for the Python ones, one file extension to the left. Added `tools-devtest-sh`
+beside it (same tally-don't-stop-at-first-red behaviour, in the same
+limited/full tiers), which also picks up `tools/devtest_selfhost_race.sh` —
+green, and until now run by nothing.
+
+The five TLS/C-interop shell devtests are excluded by name: they have rules of
+their own and are deliberately outside the default gate, each needing a network
+peer or a system library.
+
+`tools/gate.sh quick` GREEN. Note `gate.sh`'s own self-host step runs
+`tools/selfhost_fixedpoint.sh`, which is independent of this rule and unaffected.
+
+### Not done
+
+The stamp records a sha, not a tree state, so it answers *"is this binary a
+fixedpoint of the sources as they are now?"* — which is the question make is
+asking. It does not answer *"…of sha X"*; a consumer wanting that still has to
+pair it with `git status`. The ticket's aside that every sweep, pin and
+benchmark needs a machine-readable provenance answer is now half-served and
+worth its own ticket if someone wants the other half.
+
+## Log
+- 2026-08-26 — resolved, commit PENDING-COMMIT.
