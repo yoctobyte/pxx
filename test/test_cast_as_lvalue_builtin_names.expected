@@ -1,0 +1,12 @@
+Integer   1234
+LongWord  4000000000
+Char      z
+Boolean   TRUE
+Int64     5000000000
+PtrUInt   987654321
+Pointer   TRUE 5
+string    [alpha] 5
+rewrite   [beta-longer] 11
+typed ptr [beta-longer]
+AnsiString[gamma]
+rvalue    [roundtrip]

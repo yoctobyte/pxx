@@ -120,8 +120,8 @@ _none_
 | bug-nilpy-except-tuple-binder-is-typed-by-the-first-arm-only | N | 55 | bug | `except (A, B) as e` binds ONE variable typed as the FIRST listed class, so when B is caught its object is read at A's field offsets. Harmless inside the Python tree (every arm descends from PyException) and a SILENT WRONG VALUE the moment a tuple crosses hierarchies — measured: `except (ValueError, su.Exception) as e` prints an EMPTY message once the two classes' layouts differ by one field. | — |
 | bug-nilpy-four-remaining-absent-builtins | N | 12 | bug | The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan. | — |
 | bug-nilpy-redefining-a-def-rebinds-calls-that-came-before-it | N | 70 | bug | Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition. | — |
-| bug-p-a-cast-as-lvalue-does-not-accept-a-builtin-type-name | P | 50 | bug | `TObject(p^) := o` compiles, but `Pointer(p^) := q` is `error: undefined variable (Pointer)` — the cast-as-lvalue path resolves a class/user type name but not a builtin one, so in lvalue position `Pointer` is parsed as a variable. Blocks `TFPGInterfacedObjectList` in real FPC `fgl.pp`. | — |
 | bug-p-a-diagnostic-in-a-used-unit-names-the-wrong-source-file | P | 40 | bug | An error raised while compiling a unit pulled in by `uses` reports the correct LINE NUMBER for that unit but names an unrelated file in its `in:` line — every fgl.pp wall was reported as `in: stable_linux_amd64/default/builtin/builtinheap.pas`. Costs real time on corpus work, where the whole job is locating a wall in third-party source. | — |
+| bug-p-an-interface-retrieved-from-a-generic-container-segfaults | P | 52 | bug | `f := l[0]` where l is a `specialize TFPGList<IFoo>` segfaults — Add succeeds and Count is right, so the store works and reading an INTERFACE element back out does not. Blocks the last fgl driver, ifclist.pas. | — |
 | bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped | P | 50 | bug | A token that starts no declaration is silently skipped in a UNIT's interface/implementation section, while the identical token in a PROGRAM's declaration section is correctly rejected. A typo'd section header (`cosnt K = 5;`) therefore discards the declarations behind it with no diagnostic; the error surfaces later at the use site, or not at all. FPC rejects at the typo. | — |
 | bug-p-the-constant-evaluator-erases-an-ordinals-type | P | 42 | bug | the const evaluator represents every ordinal as a bare Int64, so `const X = eB` prints 1 instead of eB and `const C = Low(TC)` prints 97 instead of 'a' | — |
 | bug-t-a-cascade-ticket-concludes-harness-event-with-no-evidence | T | 40 | bug | file_cascade_ticket's Root-cause-suspects line falls back to 'likely a broken build or harness event' whenever no CASCADE_ROOT_JOBS entry is in the red set. That is a conclusion drawn from the absence of one narrow signal, printed with no hedge, and it is now directly contradicted by the Range section shipped in 8ec77190c — which on the live incident named the actual cause. Same defect class the Range work fixed for the sha: an auto-filed ticket asserting something it has no evidence for. | — |
@@ -581,9 +581,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2413)
+## done (2414)
 
-2413 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2414 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (44)
 
@@ -741,11 +741,11 @@ _none_
 - [p 55] [P] refactor-p-one-lvalue-path-for-statements-and-expressions
 - [p 55] [P] refactor-p-three-hand-rolled-postfix-loops
 - [p 53] [A] feature-threadsafe-heap-optimize [parked — re-claim, do not duplicate]
+- [p 52] [P] bug-p-an-interface-retrieved-from-a-generic-container-segfaults
 - [p 50] [A] bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical
 - [p 50] [N] bug-n-an-int-method-on-a-none-receiver-returns-0-instead-of-raising
 - [p 50] [N] bug-n-kwargs-collector-alongside-named-params-needs-the-remainder
 - [p 50] [N] bug-n-str-of-a-pascal-declared-exception-ignores-str-when-caught-as-a-base
-- [p 50] [P] bug-p-a-cast-as-lvalue-does-not-accept-a-builtin-type-name
 - [p 50] [P] bug-p-stray-tokens-in-a-unit-declaration-section-are-silently-skipped
 - [p 50] [T] bug-t-a-one-ulp-move-turns-the-fleet-red-and-outranks-its-own-prio
 - [p 50] [T] bug-t-a-skip-that-cannot-say-why-is-a-pass-in-the-verdict

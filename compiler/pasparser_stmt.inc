@@ -4441,6 +4441,73 @@ begin
     end;
 end;
 
+function ParseCastAsLValueStore(castTk: TTypeKind): Integer;
+{ `<TypeName>(target) := value` as a STATEMENT. Call with the type name already
+  consumed and CurTok on the `(`; castTk is what the name resolved to.
+
+  ONE body for both spellings of the same concept. It used to live inline in the
+  `tkInteger_T, tkLongWord_T, tkChar_T, tkBoolean_T` case, which is why only
+  those four worked: a builtin type spelled as an IDENTIFIER (`Pointer`,
+  `PtrUInt`, `Int64`, `AnsiString`) never reached it and was looked up as a
+  VARIABLE, giving `undefined variable (Pointer)` for a line whose rvalue twin
+  `a := Pointer(b)` compiles. The same name, two lookup paths, one of them
+  blind -- and the C4 pointer-alias arm below carries a comment saying exactly
+  that about ITS own version of this bug, which is the third time this shape has
+  been fixed one name at a time.
+  devdocs/dev/normalise-dont-special-case.md
+
+  The retag is the point of the whole thing: the target deref is stamped with the
+  CAST's kind, so the store writes at the cast's width rather than the pointer's.
+  bug-p-a-cast-as-lvalue-does-not-accept-a-builtin-type-name }
+var valNode, node, castPrevTok: Integer;
+begin
+  Expect(tkLParen, '(');
+  ParseExpr;
+  valNode := CurASTNode;
+  Expect(tkRParen, ')');
+  if ASTKind[valNode] <> AN_DEREF then
+  begin
+    { `Integer(v) := x` over a plain LVALUE, not a pointer deref: ordinary
+      FPC, and the ONLY way to write through an untyped `var x` parameter
+      (`procedure SetI(var x); begin Integer(x) := 99; end`) -- the
+      Move/FillChar-shaped routine this dialect otherwise supports on the
+      READ side, since `Integer(x)` as an r-value already worked.
+
+      Normalised into the shape that already works rather than given a
+      second store path: `Integer(v) := x` becomes `PInteger(@v)^ := x`,
+      an AN_DEREF over AN_ADDR tagged with the cast's type. The deref arm
+      below then retags and stores at the CAST's width, which is the whole
+      point -- an untyped param is declared tyPointer, so storing through
+      it directly would write 8 bytes into a 4-byte Integer.
+      devdocs/dev/normalise-dont-special-case.md }
+    if not IsASTLValue(valNode) then
+      Error('cast-as-lvalue statement requires a variable or a pointer deref inside the cast');
+    { FPC's rule is same-SIZE reinterpretation: `Integer(b) := 5` on a Byte
+      is "Typecast has different size" there, and silently writing 4 bytes
+      into 1 here would corrupt the neighbour. An UNTYPED var parameter is
+      exempt -- it has no declared width to disagree with, which is what
+      makes it the interesting case. }
+    castPrevTok := -1;
+    if ASTKind[valNode] = AN_IDENT then castPrevTok := ASTIVal[valNode];
+    if not ((castPrevTok >= 0) and (castPrevTok < SymCount) and
+            IsUntypedVarParamSym(castPrevTok)) then
+      if TypeSize(castTk) <> TypeSize(IntToTypeKind(ASTTk[valNode])) then
+        Error('cast-as-lvalue: the cast type must be the same size as the variable');
+    node := AllocNode(AN_ADDR);
+    ASTLeft[node] := valNode;
+    ASTTk[node] := Ord(tyPointer);
+    valNode := AllocNode(AN_DEREF);
+    ASTLeft[valNode] := node;
+  end;
+  ASTTk[valNode] := Ord(castTk);
+  Expect(tkAssign, ':=');
+  ParseExpr;
+  node := AllocNode(AN_ASSIGN);
+  ASTLeft[node] := valNode;
+  ASTRight[node] := CurASTNode;
+  ParseCastAsLValueStore := node;
+end;
+
 function ParseStatementAST: Integer;
 var
   smmiS, pvSig, pvTarget, smSelfNode, fanSym: Integer;
@@ -4518,9 +4585,11 @@ begin
     tkInteger_T, tkLongWord_T, tkChar_T, tkBoolean_T:
     begin
       { Cast-as-lvalue store: `Integer(expr^) := v` (fgl's
-        `T(inherited Insert(Index)^) := Item` after substitution). The inner
-        expression's trailing ^ yields an AN_DEREF; retag it to the cast's
-        width so the store truncates like the cast. }
+        `T(inherited Insert(Index)^) := Item` after substitution). The body is
+        ParseCastAsLValueStore, shared with the IDENTIFIER-spelled builtin type
+        names below -- `Pointer(p^) := q` is the same statement and used to be
+        `undefined variable (Pointer)` because only these four keyword tokens
+        reached the code. }
       castTk := tyInteger;
       if CurTok.Kind = tkLongWord_T then castTk := tyUInt32
       else if CurTok.Kind = tkChar_T then castTk := tyChar
@@ -4528,50 +4597,27 @@ begin
       else if CaseEqual(CurTok.SVal, 'byte') then castTk := tyUInt8
       else if CaseEqual(CurTok.SVal, 'longint') or CaseEqual(CurTok.SVal, 'integer') then castTk := tyInteger
       else if CaseEqual(CurTok.SVal, 'int64') then castTk := tyInt64;
-      Next; Expect(tkLParen, '(');
-      ParseExpr;
-      valNode := CurASTNode;
-      Expect(tkRParen, ')');
-      if ASTKind[valNode] <> AN_DEREF then
+      Next;
+      node := ParseCastAsLValueStore(castTk);
+    end;
+    tkString_T:
+    begin
+      { `string(p^) := v`. This did NOT fall through to an error the way the
+        identifier-spelled names did -- it parsed as something else and SILENTLY
+        WROTE NOTHING, which is how fgl's string list read back empty and its
+        string map raised EListError on a key it thought it had stored. Silent is
+        worse than the sibling's diagnostic, and it is the same statement.
+        Managed/frozen chosen exactly as the expression-side cast chooses it.
+        bug-p-a-cast-as-lvalue-does-not-accept-a-builtin-type-name }
+      if (TokPos < TokCount) and (Tokens[TokPos].Kind = tkLParen) then
       begin
-        { `Integer(v) := x` over a plain LVALUE, not a pointer deref: ordinary
-          FPC, and the ONLY way to write through an untyped `var x` parameter
-          (`procedure SetI(var x); begin Integer(x) := 99; end`) -- the
-          Move/FillChar-shaped routine this dialect otherwise supports on the
-          READ side, since `Integer(x)` as an r-value already worked.
-
-          Normalised into the shape that already works rather than given a
-          second store path: `Integer(v) := x` becomes `PInteger(@v)^ := x`,
-          an AN_DEREF over AN_ADDR tagged with the cast's type. The deref arm
-          below then retags and stores at the CAST's width, which is the whole
-          point -- an untyped param is declared tyPointer, so storing through
-          it directly would write 8 bytes into a 4-byte Integer.
-          devdocs/dev/normalise-dont-special-case.md }
-        if not IsASTLValue(valNode) then
-          Error('cast-as-lvalue statement requires a variable or a pointer deref inside the cast');
-        { FPC's rule is same-SIZE reinterpretation: `Integer(b) := 5` on a Byte
-          is "Typecast has different size" there, and silently writing 4 bytes
-          into 1 here would corrupt the neighbour. An UNTYPED var parameter is
-          exempt -- it has no declared width to disagree with, which is what
-          makes it the interesting case. }
-        castPrevTok := -1;
-        if ASTKind[valNode] = AN_IDENT then castPrevTok := ASTIVal[valNode];
-        if not ((castPrevTok >= 0) and (castPrevTok < SymCount) and
-                IsUntypedVarParamSym(castPrevTok)) then
-          if TypeSize(castTk) <> TypeSize(IntToTypeKind(ASTTk[valNode])) then
-            Error('cast-as-lvalue: the cast type must be the same size as the variable');
-        node := AllocNode(AN_ADDR);
-        ASTLeft[node] := valNode;
-        ASTTk[node] := Ord(tyPointer);
-        valNode := AllocNode(AN_DEREF);
-        ASTLeft[valNode] := node;
-      end;
-      ASTTk[valNode] := Ord(castTk);
-      Expect(tkAssign, ':=');
-      ParseExpr;
-      node := AllocNode(AN_ASSIGN);
-      ASTLeft[node] := valNode;
-      ASTRight[node] := CurASTNode;
+        if PasDefineExists('PXX_MANAGED_STRING') then castTk := tyAnsiString
+        else castTk := tyString;
+        Next;
+        node := ParseCastAsLValueStore(castTk);
+      end
+      else
+        Error('a statement cannot start with a type name');
     end;
     tkVar:
     begin
@@ -6349,6 +6395,38 @@ begin
               node := AllocNode(AN_ASSIGN);
               ASTLeft[node]  := valNode;
               ASTRight[node] := CurASTNode;
+            end;
+          end;
+
+          if node = -1 then
+          begin
+            { A builtin SCALAR type name spelled as an IDENTIFIER -- `Pointer`,
+              `PtrUInt`, `Int64`, `AnsiString`, `Double`, `Variant`. Only the
+              four names that lex as KEYWORD tokens (Integer, LongWord, Char,
+              Boolean) reached the cast-as-lvalue arm, so these were looked up as
+              VARIABLES and answered `undefined variable (Pointer)` -- for a line
+              whose rvalue twin `a := Pointer(b)` compiles two lines up.
+
+              This is the THIRD time this exact shape has been fixed here one
+              name at a time: the C4 fallback immediately below carries the same
+              story for builtin POINTER names, and the expression site had it
+              before that. Hence one lookup (BuiltinTypeNameTk, the same function
+              the expression side uses) rather than a fourth list of names.
+
+              Guarded by `FindSym(name) < 0` so a VARIABLE that happens to be
+              named `pointer` still parses as a variable, which is what the
+              lookup order everywhere else in this file already promises.
+              bug-p-a-cast-as-lvalue-does-not-accept-a-builtin-type-name }
+            if (Tokens[TokPos].Kind = tkLParen) and (FindSym(name) < 0) and
+               (FindTypeAlias(name) < 0) and (IsRecordType(name) = REC_NONE) and
+               (not IsClassType(name)) then
+            begin
+              castTk := BuiltinTypeNameTk(name);
+              if castTk <> tyUnknown then
+              begin
+                Next;   { the type name }
+                node := ParseCastAsLValueStore(castTk);
+              end;
             end;
           end;
 

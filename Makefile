@@ -8077,6 +8077,17 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_string_typecast_is_a_cast.pas $(TESTTMP)/test_stc26
 	test "$$($(TESTTMP)/test_stc26)" = "$$(cat test/test_string_typecast_is_a_cast.expected)"
+	# `<BuiltinType>(target) := value` as a statement, for every spelling of the
+	# type name. Only the four that lex as KEYWORD tokens reached the
+	# cast-as-lvalue arm; Pointer/PtrUInt/Int64/AnsiString lex as identifiers,
+	# were looked up as VARIABLES and gave `undefined variable (Pointer)` for a
+	# line whose rvalue twin compiles. `string(p^) := v` was worse: accepted and
+	# silently wrote NOTHING, which is how fgl's string list read back empty.
+	# The keyword rows are pinned because the body they run moved out from under
+	# them into the shared ParseCastAsLValueStore.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_cast_as_lvalue_builtin_names.pas $(TESTTMP)/test_calb26
+	test "$$($(TESTTMP)/test_calb26)" = "$$(cat test/test_cast_as_lvalue_builtin_names.expected)"
 	# ...and the guard: a genuine `var` parameter must still REFUSE the same
 	# argument. This is what stops the fix from being ungated -- tried, and it
 	# let a call RESULT bind to a var parameter and COMPILE, because the method
