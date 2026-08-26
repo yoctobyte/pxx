@@ -1,7 +1,7 @@
 ---
 summary: "`file of T` and untyped `file` are refused outright — only TextFile works. Blocks the classic Pascal record-file idiom (Assign/Rewrite/Write/Seek/FileSize/BlockRead)."
 type: feature
-prio: 35
+prio: 70
 track: P
 ---
 

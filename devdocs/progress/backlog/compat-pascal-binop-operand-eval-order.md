@@ -1,5 +1,5 @@
 ---
-prio: 15
+prio: 3
 ---
 
 # pxx evaluates binary-operator operands (and CALL ARGUMENTS) left-to-right; FPC evaluates right-to-left

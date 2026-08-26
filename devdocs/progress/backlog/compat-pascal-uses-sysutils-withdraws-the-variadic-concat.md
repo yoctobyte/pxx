@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 25
+prio: 45
 type: compat
 blocked-by: []
 summary: "The variadic `Concat` intrinsic is shadowed by `sysutils`'s two-argument `Concat`, so `uses sysutils` breaks `Concat('a','b','c')` — which compiles fine without it. The shadow rule is `procIdx < 0`, i.e. ANY user Concat disables the intrinsic outright. Loud, not silent."

@@ -5106,10 +5106,7 @@ begin
           slot := ResolveVMTSlotProc(ci, i);
           if slot >= 0 then
           begin
-            if MethodFixCount >= MAX_METHFIX then Error('too many virtual method fixups');
-            MethodFixups[MethodFixCount].DataPos := UClsVMTOffset[ci] + i * 8;
-            MethodFixups[MethodFixCount].ProcIdx := slot;
-            Inc(MethodFixCount);
+            AddMethodFix(UClsVMTOffset[ci] + i * 8, slot);
           end;
         end;
 
@@ -5140,10 +5137,7 @@ begin
             mmi := FindUMethForSig(ci, imName, UMthProc_[UClsMBase[tmpCi] + imSlot]);
             if mmi < 0 then Error('class does not implement interface method: ' + imName);
             imProc := UMthProc_[mmi];
-            if MethodFixCount >= MAX_METHFIX then Error('too many method fixups (IMT)');
-            MethodFixups[MethodFixCount].DataPos := DataLen;
-            MethodFixups[MethodFixCount].ProcIdx := imProc;
-            Inc(MethodFixCount);
+            AddMethodFix(DataLen, imProc);
             for i := 0 to 7 do begin if DataLen >= MAX_DATA then Error('data overflow'); Data[DataLen] := 0; Inc(DataLen); end;
           end;
         end;

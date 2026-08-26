@@ -2,7 +2,7 @@
 slug: bug-t-run-pascal-conformance-silently-fails-every-test-on-a-relative-compiler-path
 title: "run_pascal_conformance.sh reports every test as a COMPILE ERROR when given a relative compiler path"
 track: T
-prio: 25
+prio: 55
 type: bug
 blocked-by: []
 status: backlog_new

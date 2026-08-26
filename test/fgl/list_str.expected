@@ -1,0 +1,4 @@
+count=3
+indexof=2
+items: gamma alpha beta
+after-del head=alpha

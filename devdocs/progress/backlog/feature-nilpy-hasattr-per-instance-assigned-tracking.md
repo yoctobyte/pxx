@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 40
+prio: 45
 type: feature
 summary: "hasattr reports True for a field the instance never assigned — `if flag: self.m = 1` then hasattr(a,\"m\") on a False path answers True where CPython answers False. The remaining half of the DECIDED decide-nilpy-hasattr-per-instance-semantics: the per-instance assigned bit."
 ---

@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 20
+prio: 12
 type: bug
 blocked-by: []
 summary: "The residue of the 2026-08-12 builtin sweep: `slice`, `dir`, `vars`, `memoryview` are `undefined variable`, and `complex` is a numeric TYPE this dialect does not have rather than a missing name. None has appeared in any corpus scan."

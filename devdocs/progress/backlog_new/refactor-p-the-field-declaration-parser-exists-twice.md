@@ -2,7 +2,7 @@
 slug: refactor-p-the-field-declaration-parser-exists-twice
 title: "A record's field-declaration parser and a class's are two copies of the same 120 lines"
 track: P
-prio: 30
+prio: 45
 type: refactor
 blocked-by: []
 status: backlog_new

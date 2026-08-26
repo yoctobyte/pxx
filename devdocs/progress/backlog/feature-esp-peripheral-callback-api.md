@@ -1,5 +1,5 @@
 ---
-prio: 53  # auto
+prio: 30
 ---
 
 # ESP32 peripheral callback API (timer / GPIO / ADC) — the user-facing "interrupt"

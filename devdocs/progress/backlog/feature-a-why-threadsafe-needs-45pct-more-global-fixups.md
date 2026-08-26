@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 35
+prio: 20
 type: investigation
 summary: "--threadsafe self-compile emits 45% more global fixups than the normal one (65657 vs 45326). Raising the cap unblocked it; nobody has explained the +45%, and it may be one fixup per TLS access that dedupes away"
 ---

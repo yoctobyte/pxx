@@ -2,7 +2,7 @@
 slug: refactor-a-two-predicates-answer-what-a-caret-yields
 title: "`NodePtrElem` and `ResolveDerefShape` both answer 'what does `^` yield', and neither is a superset"
 track: A
-prio: 35
+prio: 55
 type: refactor
 blocked-by: []
 status: backlog_new

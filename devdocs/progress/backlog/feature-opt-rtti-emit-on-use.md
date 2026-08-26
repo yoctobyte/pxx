@@ -1,5 +1,5 @@
 ---
-prio: 40
+prio: 32
 ---
 
 # RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded

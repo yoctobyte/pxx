@@ -1,5 +1,5 @@
 ---
-prio: 45
+prio: 30
 ---
 
 # Pascal corpus: fcl-passrc — ENDGAME. Deep class hierarchy + resolver (60k src, 40k tests)

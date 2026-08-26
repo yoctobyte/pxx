@@ -2,7 +2,7 @@
 slug: refactor-p-one-lvalue-path-for-statements-and-expressions
 title: "Two lvalue parsers, and the statement one keeps missing what the expression one learned"
 track: P
-prio: 35
+prio: 55
 type: refactor
 blocked-by: []
 status: backlog_new

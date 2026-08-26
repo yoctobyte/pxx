@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 30
+prio: 20
 type: chore
 blocked-by: []
 summary: "The second, weaker half of the split_jobs lint: flag any job that RUNS a /tmp binary no line in that job produces. Prototyped and deliberately NOT shipped — it yields 5-7 candidates depending on how recipe lines are segmented, and every one needs individual adjudication. Shipping it half-tuned would produce exactly the noisy guard that gets muted."

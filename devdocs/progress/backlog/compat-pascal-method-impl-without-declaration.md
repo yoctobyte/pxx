@@ -1,5 +1,5 @@
 ---
-prio: 20
+prio: 8
 type: compat
 ---
 

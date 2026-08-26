@@ -99,15 +99,9 @@ begin
   Data[pos+3] := Byte((v shr 24) and $FF);
 end;
 
-procedure AddDataPtrFix(dataPos, targetOff: Integer);
-{ Record a data->data 8-byte pointer relocation: the slot at dataPos is patched
-  at link time to (dataBase + targetOff). Used by RTTI blob emission. }
-begin
-  if DataPtrFixCount >= MAX_DATAPTRFIX then Error('data ptr fixup overflow');
-  DataPtrFix[DataPtrFixCount].DataPos   := dataPos;
-  DataPtrFix[DataPtrFixCount].TargetOff := targetOff;
-  Inc(DataPtrFixCount);
-end;
+{ AddDataPtrFix moved to emit.inc (2026-08-25) — next to the other relocation
+  recorders, and included early enough that AddMethodFix, its sibling, is
+  visible to the frontends that append VMT slots. }
 
 procedure DataPutZ(const s: AnsiString);
 var i: Integer;

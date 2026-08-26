@@ -1,5 +1,5 @@
 ---
-prio: 40
+prio: 35
 ---
 
 # No signal distinguishes "full tier is lagging" from "full tier never completes"

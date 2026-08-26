@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 25
+prio: 55
 type: bug
 blocked-by: []
 summary: "`return super().hi()` (super() in expression position, documented as unsupported) is refused with `error: Nil Python: annotate the type / too dynamic [a=22 b=8]` reported at line 1 — a diagnostic that names neither the construct nor the right line. Also: `B.__init__(self)` for a second base is `class method not found`."

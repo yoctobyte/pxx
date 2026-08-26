@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 25
+prio: 15
 type: feature
 blocked-by: []
 summary: "`import 'sysutils.pas' as su` works; `from 'sysutils.pas' import Trim` does not. The quoted cross-language import was built for the PLAIN arm only, because the from-arms thread impName/impRoot through member binding, alias recording and PyStdAliasRecord. Nothing needs it today — the refusal diagnostic points at the plain spelling, which works — so this is filed to be visible rather than to be urgent."

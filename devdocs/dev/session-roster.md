@@ -166,6 +166,53 @@ the watcher is testing. **Slow is not stuck** — check before killing anything,
 and never `pkill -f` a bare tool name (`testmgr`, `twatch`, `gate.sh`): those
 patterns match all three tenants. PID-scoped kills only.
 
+## One worker, one worktree — the shared-index rule
+
+**Every parallel worker gets its own git worktree.** Not a convenience: a
+worktree per worker is what makes running several agents at once safe at all,
+and the alternative was measured today rather than imagined.
+
+Five agents in one checkout share one **git index**, and the index is the thing
+that bites, not the files. What actually happened on 2026-08-25:
+
+- A Track A worker ran `git add -A` and staged the Track N worker LIVE
+  `pyparser.inc` — caught before the push, by luck.
+- A `git reset --mixed` onto a commit-tree commit left stale working copies
+  that silently reverted another worker committed Makefile fix, and showed
+  Track T `twatch.py`, a tstate report, and a devtest as uncommitted DELETIONS.
+- A Track N worker gate was invalidated because, while it ran, a sibling
+  patched a `WriteLn(ErrOutput, ...)` debug probe into `pylib.pas` in the same
+  tree. **A gate on a tree carrying another agent live probe is not a verdict.**
+- `tools/sync.sh` refuses on a dirty tree — correctly — so in a shared checkout
+  it refuses for EVERY worker whenever any ONE of them has uncommitted work.
+  Workers then push by hand, which is where rebase mistakes come from.
+
+So: spawn workers with worktree isolation, and if you are a worker and find
+yourself in a tree someone else is editing, say so rather than working around
+it. Two rules survive even with worktrees, because they are about the shared
+object store and the shared machine:
+
+- **Never `git add -A`.** Stage explicit paths. This is the single highest-value
+  habit in a multi-agent repo and it costs nothing.
+- **Never `pkill -f` a bare tool name.** See the tenants section above.
+
+Two gotchas specific to gating IN a worktree, both of which produced a scary
+red today that was not a red:
+
+1. **Do not put the worktree under `/tmp`.** testmgr rewrites absolute `/tmp`
+   paths in expected output, so a gate run from a `/tmp` worktree fails on its
+   own path rewriting. `.claude/worktrees/` is the right place.
+2. **A fresh worktree has no compiler, and seeding is not building.** `make
+   compiler/pascal26` refuses without a seed ("self-hosted compiler seed
+   missing"), so you copy `stable_linux_amd64/default/stable_pinned` into place
+   — and then `cp` stamps it with NOW, which is newer than every source file, so
+   make says "up to date" and skips the build, leaving the PINNED binary where
+   the built one should be. `gate.sh` then compares the fixedpoint reached from
+   pinned against that binary, finds they differ, and reports the FIXEDPOINT
+   FAILED. Nothing is wrong: one is built from these sources and the other is an
+   older blessed binary. `touch -d '2000-01-01' compiler/pascal26` after the
+   copy, then build.
+
 ## Retargeting the watcher to a branch
 
 `trackt config branch <name>` plus a restart — **not** `--branch` in the systemd

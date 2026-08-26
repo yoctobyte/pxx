@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 45
+prio: 60
 type: bug
 blocked-by: []
 summary: "`a = mk(1); a(x=5)` fails to COMPILE — `error: undefined variable (x)` — because the keyword-argument lowering only fires when the frontend can resolve the callee to a def/lambda by name. The runtime dispatcher handles this fine (a callee reached as a PARAMETER works), so it is the parse-time gate, not the call path."

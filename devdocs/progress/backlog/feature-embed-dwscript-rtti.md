@@ -1,5 +1,5 @@
 ---
-prio: 45  # auto
+prio: 40
 ---
 
 # DWScript — compile under pxx + RTTI auto-bind (scripting stress test)

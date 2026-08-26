@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 20
+prio: 35
 type: bug
 blocked-by: []
 summary: "A dict VALUE as the `*=` target still rebinds, so an alias of it keeps the old contents. The parameter half landed 2026-08-15 (pymul_v_inplace); this is the residue, and `+=` has the same split."

@@ -45,33 +45,102 @@ fail() { say FAIL "$1" "$2"; rc=1; }
 check_trackt() {
     git -C "$REPO" fetch --no-write-fetch-head -q origin 2>/dev/null
 
-    json=
+    json= ; runs=
     for ref in origin/dev origin/master; do
         json=$(git -C "$REPO" show "$ref:devdocs/progress/tstate/plexus.json" \
-               2>/dev/null) && [ -n "$json" ] && break
+               2>/dev/null) && [ -n "$json" ] && {
+            # The per-run LOG, not just the latched summary. plexus.json
+            # last_full carries only date/sha/tier/verdict/wall -- it DROPS
+            # timed_out, deadline and unreached, which are exactly the fields
+            # the breadth arm needs in order to stop guessing. They live only
+            # here, so without this the arm can never see them and says
+            # "cannot distinguish" about a run that plainly finished.
+            runs=$(git -C "$REPO" show \
+                   "$ref:devdocs/progress/tstate/runs-plexus.ndjson" 2>/dev/null)
+            break
+        }
     done
     if [ -z "$json" ]; then
         fail trackt "no tstate/plexus.json on origin/dev or origin/master"
         return
     fi
 
-    printf '%s' "$json" | python3 -c '
+    printf '%s\n---RUNS---\n%s' "$json" "$runs" | python3 -c '
 import json, sys, time, calendar
-d = json.load(sys.stdin)
-last = d.get("last") or {}
+raw = sys.stdin.read()
+_p, _, _r = raw.partition("\n---RUNS---\n")
+RUNS = []
+for _line in _r.splitlines():
+    _line = _line.strip()
+    if _line:
+        try: RUNS.append(json.loads(_line))
+        except Exception: pass
+
+def enrich(rec):
+    """Fill a latched summary from its own run-log row, which carries every
+    field. plexus.json keeps only date/sha/tier/verdict/wall, so timed_out,
+    deadline and unreached are invisible to any consumer reading it alone."""
+    if not rec or rec.get("timed_out") is not None:
+        return rec
+    want_full = bool(rec.get("full")) or rec.get("tier") == "full"
+    for r in reversed(RUNS):
+        if r.get("sha") == rec.get("sha") and bool(r.get("full")) == want_full:
+            merged = dict(rec)
+            for k in ("timed_out", "deadline", "unreached"):
+                if r.get(k) is not None:
+                    merged[k] = r[k]
+            return merged
+    return rec
+d = json.loads(_p)
+last = enrich(d.get("last") or {})
 wall = last.get("wall")
 date = last.get("date", "")
 sha  = (last.get("sha") or "")[:12]
 tier = last.get("tier", "?")
 verdict = last.get("verdict", "?")
 
+# Is this run a TEARDOWN rather than a verdict? Returns True / False / None,
+# and None genuinely means "cannot tell" -- it is never quietly folded into
+# False, because "we do not know" and "it finished" are the two readings this
+# whole file exists to keep apart.
+#
+# "wall >= 3595" was a proxy for this and is now wrong in the direction that
+# HIDES the failure: deadlines are SCALED per run since b61125007, so 3600
+# stopped being the universal ceiling. A run given a scaled-DOWN budget and
+# torn down at, say, 1800s reads as a clean completion under a fixed 3595 test.
+# So ask the run what ITS OWN deadline was.
+def torn_down(rec):
+    if rec.get("timed_out") is not None:
+        return rec["timed_out"] is True
+    if rec.get("verdict") == "TIMEOUT":       # exit 124, the timeout(1) convention
+        return True
+    w, dl = rec.get("wall"), rec.get("deadline")
+    if w is not None and dl:
+        return w >= dl - 5
+    return None                                # legacy row, pre-2026-08-25
+
+# How big is the hole? For a torn-down run the still_red list is not merely
+# stale, it is WRONG: jobs the clock never reached were pruned from the job map,
+# and an absent job reads as having passed the next time round. "unreached" is
+# the count of those, so print it -- that number is the size of what nobody knows.
+def hole(rec):
+    n = rec.get("unreached")
+    return " -- %d job(s) never reached" % n if n else ""
+
+
 try:
     age = (time.time() - calendar.timegm(time.strptime(date, "%Y-%m-%dT%H:%M:%SZ"))) / 60.0
 except Exception:
     age = None
 
-# 3600s is the global deadline. Anything within 5s of it was killed, not run.
-if wall is not None and wall >= 3595:
+# Prefer the honest field the moment Track T publishes it; the wall test below
+# is a proxy for exactly this and should be deleted when the field is reliable.
+if torn_down(last) is True:
+    print("FAIL|%s %s TIMED OUT -- no verdict%s" % (tier, sha, hole(last)))
+# Wall proxy, native only. Unlike the full tier this does NOT overlap: a
+# completed native lands ~500s against a 3600s+ deadline, so a wall at the
+# ceiling really is a teardown. Do not copy this test to the breadth arm.
+elif torn_down(last) is None and wall is not None and wall >= 3595:
     print("FAIL|torn down at the %.0fs deadline (%s %s, %s) -- CONTENTLESS, "
           "T is blind" % (wall, tier, sha, verdict))
 elif age is None:
@@ -83,6 +152,47 @@ elif age > 90:
 else:
     print("OK|%s %s %s, wall %.0fs, %.0f min ago"
           % (verdict, tier, sha, wall if wall is not None else -1, age))
+
+# The BREADTH record, reported separately and never folded into the line above.
+# A native verdict is x86-64 only; reading it as matrix coverage is the mistake
+# this line exists to prevent. And a full tier is torn down at the deadline the
+# same way a native one is -- the 1d14h-old "full RED" that gating was leaning
+# on had wall 3600.3s against a 3600s deadline, i.e. NO VERDICT, published as a
+# red. Its still_red list is empty for the same reason, so jobs it never reached
+# read as FIXED.
+full = enrich(d.get("last_full") or {})
+fw, fsha = full.get("wall"), (full.get("sha") or "")[:12]
+try:
+    fage = (time.time() - calendar.timegm(time.strptime(
+        full.get("date", ""), "%Y-%m-%dT%H:%M:%SZ"))) / 3600.0
+except Exception:
+    fage = None
+if not full:
+    print("WARN|breadth: no full tier on record at all")
+elif torn_down(full) is True:
+    print("FAIL|breadth: full %s TIMED OUT (%.0fs) -- no verdict, and its "
+          "still_red is unreliable%s" % (fsha, fw or -1, hole(full)))
+elif torn_down(full) is False:
+    if fage is not None and fage > 24:
+        print("WARN|breadth: newest completed full %s is %.0fh old -- native "
+              "is x86-64 only, this is not current matrix coverage"
+              % (fsha, fage))
+    else:
+        print("OK|breadth: full %s %s, wall %.0fs, %.0fh old"
+              % (fsha, full.get("verdict", "?"), fw or -1, fage or 0))
+else:
+    # NO wall-based guess. A completed full tier at 6 of 12 cores lands around
+    # 2400-4000s, and a teardown lands at the (now scaled) deadline -- the
+    # ranges OVERLAP, so any threshold is aimed straight at the good run we are
+    # waiting for. A >= 3595 test would have dismissed a genuine 3800s
+    # completion as a teardown and kept gating native-only while real breadth
+    # sat on disk. "Cannot tell" is the only honest reading until the Track T
+    # `timed_out` field lands, at which point the arms above take over and this
+    # one goes quiet by itself.
+    print("WARN|breadth: full %s wall %.0fs, %.0fh old -- CANNOT distinguish "
+          "a teardown from a completion until `timed_out` lands; treat as NO "
+          "evidence, do not gate a sync-back on it"
+          % (fsha, fw or -1, fage or 0))
 ' 2>/dev/null | while IFS='|' read -r lvl msg; do
         case "$lvl" in
             OK)   ok   trackt "$msg" ;;
@@ -92,11 +202,37 @@ else:
     done
 
     # `while` above runs in a subshell, so its rc never reaches us. Re-derive.
-    printf '%s' "$json" | python3 -c '
+    printf '%s\n---RUNS---\n%s' "$json" "$runs" | python3 -c '
 import json,sys
-l=(json.load(sys.stdin).get("last") or {})
-w=l.get("wall")
-sys.exit(1 if (w is not None and w>=3595) else 0)' 2>/dev/null || rc=1
+raw = sys.stdin.read()
+_p, _, _r = raw.partition("\n---RUNS---\n")
+RUNS = []
+for _line in _r.splitlines():
+    _line = _line.strip()
+    if _line:
+        try: RUNS.append(json.loads(_line))
+        except Exception: pass
+
+def enrich(rec):
+    """Fill a latched summary from its own run-log row, which carries every
+    field. plexus.json keeps only date/sha/tier/verdict/wall, so timed_out,
+    deadline and unreached are invisible to any consumer reading it alone."""
+    if not rec or rec.get("timed_out") is not None:
+        return rec
+    want_full = bool(rec.get("full")) or rec.get("tier") == "full"
+    for r in reversed(RUNS):
+        if r.get("sha") == rec.get("sha") and bool(r.get("full")) == want_full:
+            merged = dict(rec)
+            for k in ("timed_out", "deadline", "unreached"):
+                if r.get(k) is not None:
+                    merged[k] = r[k]
+            return merged
+    return rec
+l=enrich(json.loads(_p).get("last") or {})
+if l.get("timed_out") is not None: sys.exit(1 if l["timed_out"] else 0)
+if l.get("verdict")=="TIMEOUT": sys.exit(1)
+w,dl=l.get("wall"),l.get("deadline")
+sys.exit(1 if (w is not None and w >= ((dl-5) if dl else 3595)) else 0)' 2>/dev/null || rc=1
 }
 
 # The daemon being ALIVE is a separate, weaker fact. Report it as its own line

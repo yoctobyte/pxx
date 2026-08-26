@@ -2,7 +2,7 @@
 summary: "nilpy: os.system / subprocess-shaped process spawning over the RTL's libc-free execve"
 type: feature
 track: N
-prio: 45
+prio: 60
 ---
 
 # nilpy: spawn a process (open a file in the desktop's viewer)

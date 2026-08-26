@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 45
+prio: 70
 type: feature
 summary: "`Error()` calls `Halt` directly, so nothing in the compiler can trial-parse and back out. That blocks NilPy's type inference (which needs to read an as-yet-unseen name speculatively), and it is also why the compiler stops at the FIRST error. Make the error path recoverable; several unrelated wants fall out of the same change."
 status: backlog

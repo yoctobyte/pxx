@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 10
+prio: 3
 type: compat
 blocked-by: []
 summary: "`not Byte(0)` folds to 255 in pxx and to -1 in FPC — FPC evaluates a constant `not` in the Int64 domain and drops the cast's width. pxx matches Delphi. Variables agree; only the constant-folded form differs."

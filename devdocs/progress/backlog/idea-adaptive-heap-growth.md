@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 10
+prio: 5
 type: idea
 ---
 

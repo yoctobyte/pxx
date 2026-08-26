@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 50
+prio: 68
 type: bug
 blocked-by: []
 summary: "Importing a lowercase function and an uppercase class of the same letter from one module breaks the class: `from M import f` plus `from M import F` gives `undefined variable (VAL)` on `F.VAL`, in EITHER order, while importing F alone works. Pre-existing (fails on pinned v351). CPython keeps them apart because it is case-sensitive; the flat namespace here folds case."

@@ -3,7 +3,7 @@ summary: "Publish a live compatibility/corpus status report on the website — t
 type: idea
 track: D
 tags: []
-prio: 30
+prio: 25
 ---
 
 # Public, live status report on the website

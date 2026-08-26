@@ -1,7 +1,7 @@
 ---
 slug: compat-pascal-overload-prefers-signed-for-an-unsigned-argument
 track: A
-prio: 15
+prio: 12
 status: backlog
 ---
 

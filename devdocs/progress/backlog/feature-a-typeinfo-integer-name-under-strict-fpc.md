@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 20
+prio: 12
 type: feature
 blocked-by: []
 summary: "TypeInfo(Integer)^.Name returns `Integer` in pxx and `LongInt` in FPC. The underlying type already matches (both 4 bytes on x86-64) — only the string differs. Report `LongInt` under strict-FPC mode and keep `Integer` by default: one new strict flag, one line in EnableStrictFpc, one line in TypeInfoOrdName's case."

@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 55
+prio: 72
 type: bug
 blocked-by: []
 summary: "A class with __getitem__/__len__ now iterates with `for`, but every OTHER consumer of iteration still refuses it — and `list(b)` returns [] SILENTLY. Found while fixing feature-nilpy-for-loop-getitem-protocol-fallback; the for-loop was one path of several serving one concept."

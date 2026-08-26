@@ -1,5 +1,5 @@
 ---
-prio: 55  # auto — flagship showcase of the ir-as-substrate + PAL thesis; also a NilPy forcing function
+prio: 35
 ---
 
 # PXX portable userland (mini OS-personality) — one shell, any kernel

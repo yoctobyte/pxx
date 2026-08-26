@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 45
+prio: 35
 type: chore
 summary: "60 /tmp paths are hardcoded in 37 COMPILED TEST SOURCES and written by the test binary at runtime, so no Makefile sweep can reach them and testmgr does not privatize them either. Two concurrent runs still share those files EVEN UNDER testmgr. Split out of chore-makefile-testtmp-parameterize, which closed the recipe half."
 ---

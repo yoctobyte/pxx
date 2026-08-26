@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 30
+prio: 25
 type: feature
 ---
 

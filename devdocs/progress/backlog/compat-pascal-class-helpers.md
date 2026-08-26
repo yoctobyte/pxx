@@ -2,7 +2,7 @@
 summary: "pxx rejects FPC's `class helper for T` at parse time — `TFooHelper = class helper for TFoo` is `error: unexpected token`"
 type: compat
 track: P
-prio: 25
+prio: 58
 ---
 
 # `class helper for` is not parsed

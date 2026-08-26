@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 45
+prio: 62
 type: bug
 blocked-by: []
 summary: "The MODULE-level arm of the local-binding-beats-a-def fix: `f = o.f` written after `def f` still calls the def. The local/parameter arm is fixed and gated; this one needs module-level bindings to carry a token position, which is a mechanism rather than a patch, so it was split out rather than guessed at."

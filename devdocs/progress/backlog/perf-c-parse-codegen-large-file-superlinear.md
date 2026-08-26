@@ -1,5 +1,5 @@
 ---
-prio: 30
+prio: 25
 ---
 
 # perf: C parse+codegen shows mild superlinear scaling on very large amalgamations

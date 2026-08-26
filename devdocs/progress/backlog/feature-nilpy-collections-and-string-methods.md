@@ -1,5 +1,5 @@
 ---
-prio: 50  # auto — blocks the portable-userland demo; also the main gap to NilPy being "real"
+prio: 30
 ---
 
 # NilPy: list / dict + string methods (split/join/strip)

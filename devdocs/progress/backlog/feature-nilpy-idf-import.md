@@ -1,5 +1,5 @@
 ---
-prio: 45  # auto
+prio: 20
 ---
 
 # nilpy includes anything from ESP-IDF and it just works

@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 35
+prio: 45
 type: feature
 blocked-by: []
 summary: "__pxxGetInterface stores the instance pointer into the caller's interface variable without an AddRef, so the slot holds a borrowed reference while the compiler treats the variable as managed and releases it at scope exit. Every Supports/GetInterface hit is therefore one release the object never got a retain for. Nothing observed to crash yet, which is why it is a ticket and not an urgent bug — but the asymmetry is real and worth settling deliberately."

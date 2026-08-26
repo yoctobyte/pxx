@@ -432,10 +432,7 @@ begin
     slots — the decl-time fill loop only runs for a class the PARSER declares. }
   if UClsVMTOffset[ci] >= 0 then
   begin
-    if MethodFixCount >= MAX_METHFIX then Error('too many virtual method fixups');
-    MethodFixups[MethodFixCount].DataPos := UClsVMTOffset[ci] + slot * 8;
-    MethodFixups[MethodFixCount].ProcIdx := pi;
-    Inc(MethodFixCount);
+    AddMethodFix(UClsVMTOffset[ci] + slot * 8, pi);
   end;
 end;
 
@@ -499,10 +496,7 @@ begin
   if ResolveVMTSlotProc(ci, slot) >= 0 then Exit;
   hp := FindProc(helper);
   if hp < 0 then Exit;
-  if MethodFixCount >= MAX_METHFIX then Error('too many virtual method fixups');
-  MethodFixups[MethodFixCount].DataPos := UClsVMTOffset[ci] + slot * 8;
-  MethodFixups[MethodFixCount].ProcIdx := hp;
-  Inc(MethodFixCount);
+  AddMethodFix(UClsVMTOffset[ci] + slot * 8, hp);
 end;
 
 procedure FillRootVMTSlotDefaults;

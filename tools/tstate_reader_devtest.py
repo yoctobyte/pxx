@@ -65,6 +65,10 @@ ALLOWED = {
         "os.makedirs on its own tempdir's devdocs/progress/tstate",
     "devtest_wedge_on_own_writes.py":
         "joins TSTATE_REL onto the fixture clone it creates at line 66",
+    "twatch_timeout_verdict_devtest.py":
+        "joins TSTATE_REL onto a tempfile.mkdtemp() it just made, so "
+        "write_report_md has a reports/ dir to write into; it never touches "
+        "the repo's tstate",
     "autotriage.py":
         "reads tstate off the REF by default (git show origin/master:...) — the "
         "path join remains only for the explicit `--rev ''` worktree opt-in, "

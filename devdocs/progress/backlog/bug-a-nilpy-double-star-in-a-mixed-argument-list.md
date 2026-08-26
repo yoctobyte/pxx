@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 35
+prio: 58
 type: bug
 blocked-by: []
 summary: "After a057789bc, `f(**d)` works but every MIXED form still fails: `f(3, **d)` (expected expression), `f(**d, b=7)` and `f(**d, **e)` (unexpected token). `f(3, **d)` never reaches the star-forwarding branch at all — that branch is guarded on tkStar at the START of the argument list — so this is the ordinary argument loop's gap, not an extension of the previous fix."

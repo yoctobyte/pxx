@@ -1,5 +1,5 @@
 ---
-prio: 45  # auto
+prio: 30
 ---
 
 # Toolchain CLI / user tooling (install, config, discovery, doctor, selfcheck)

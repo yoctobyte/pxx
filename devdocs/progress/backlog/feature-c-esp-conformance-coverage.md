@@ -1,5 +1,5 @@
 ---
-prio: 35
+prio: 18
 ---
 
 # C conformance / feature coverage on ESP (xtensa + ESP32-C3 riscv32 bare)

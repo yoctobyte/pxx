@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 35
+prio: 25
 type: feature
 blocked-by: []
 summary: "Make pystr_isascii O(1) by reading PXX_FLAG_ASCII — but first MEASURE whether every string reaching it carries a header, because a false positive there is a silent wrong answer on exactly the non-ASCII strings the character surface exists for"

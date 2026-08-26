@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 30
+prio: 25
 type: feature
 summary: "NilPy: `while x in (\"a\",\"b\")` now rebuilds the constant tuple on every test. A provably-constant container build is loop-invariant and should be hoisted to a variable once — what a person would write by hand — while everything else keeps being folded into the condition."
 ---

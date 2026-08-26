@@ -1,5 +1,5 @@
 ---
-prio: 45  # auto
+prio: 40
 ---
 
 # Inline expansion — remaining slices (branch-with-locals + non-leaf)

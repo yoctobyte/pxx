@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 40
+prio: 45
 type: refactor
 summary: "Five frontend drivers each open-code the same program prologue (entry stub, div0 stub, signal runtime, I/O lock stubs, System intrinsics, the emitted AnsiString runtime). The copies drift in one direction — whatever the Pascal driver gained last — and the BASIC one has now been caught missing four of them, one at a time."
 ---

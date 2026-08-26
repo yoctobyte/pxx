@@ -1,7 +1,7 @@
 ---
 slug: bug-a-numeric-goto-labels-are-not-supported
 track: A
-prio: 15
+prio: 25
 status: backlog
 ---
 

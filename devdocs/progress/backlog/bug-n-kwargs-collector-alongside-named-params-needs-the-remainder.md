@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 30
+prio: 50
 type: bug
 blocked-by: []
 summary: "`def f(a=1, **kw)` called as `f(**{'a':5,'x':7,'y':8})` must give a=5 and kw={'x':7,'y':8} — the collector takes the UNCONSUMED keys. pylib has no helper that subtracts consumed names, and adding one is compiler/builtin/** which NEEDS A PIN, so this is coordinator-scheduled, not worker-startable."

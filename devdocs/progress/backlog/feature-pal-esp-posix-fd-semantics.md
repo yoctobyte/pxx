@@ -1,5 +1,5 @@
 ---
-prio: 30  # ESP parked (user 2026-07-12): Pascal has prio; also runtime-blocked on bug-esp-idf-heap-linux-mmap-ecall
+prio: 20
 ---
 
 # ESP PAL: exact POSIX fd semantics over ESP-IDF VFS

@@ -1,6 +1,6 @@
 ---
 track: B
-prio: 30
+prio: 55
 type: bug
 blocked-by: []
 summary: "IOResult returns the raw negative errno (-2 for a missing file, -13 for permission denied) where FPC returns the positive DOS-style code (2, 5). Code written as `if IOResult = 2` silently takes the wrong branch."

@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 45
+prio: 70
 type: bug
 blocked-by: []
 summary: "sys.version_info throws at RUNTIME with a message admitting its own guard failed: 'the code guarding that (the flag its except-branch sets) let this call through anyway'. Two defects — the member is missing, and the compile-time guard meant to catch that does not fire. A guard that reports its own failure and continues is worse than no guard."

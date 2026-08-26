@@ -1,5 +1,5 @@
 ---
-prio: 25
+prio: 40
 track: N
 type: feature
 blocked-by: []

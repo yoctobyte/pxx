@@ -1,0 +1,106 @@
+# A COLLECTING callee reached through a callable value must fill the parameters
+# the caller omitted from the callee's own def-time defaults, exactly as a
+# non-collecting one does. The dynamic bridge used to treat "collects *args" as
+# a reason to skip the whole signature record -- the comment there said a
+# collecting callee "has no omitted parameters to fill", which is untrue the
+# moment a defaulted parameter sits before the star. One dropped default became
+# a plausible wrong number, two dereferenced garbage, and a `**kwargs` on the
+# end as well killed the process.
+# bug-n-calling-through-a-function-alias-with-a-default-omitted-segfaults
+#
+# Every line below prints the DIRECT call's value beside the value reached
+# through the callable value. A test that only checked "does not crash" passes
+# on the one-default shape while it is still silently wrong, so the assertion
+# has to be the returned value.
+
+def one(a, lo=7, *rest):
+    return (a, lo, rest)
+
+zz = one
+print(one(1), zz(1))
+print(one(1, 2), zz(1, 2))
+print(one(1, 2, 3), zz(1, 2, 3))
+print(one(1, 2, 3, 4), zz(1, 2, 3, 4))
+
+def two(a, lo=7, hi=8, *rest):
+    return (a, lo, hi, rest)
+
+ww = two
+print(two(1), ww(1))
+print(two(1, 2), ww(1, 2))
+print(two(1, 2, 3), ww(1, 2, 3))
+print(two(1, 2, 3, 4), ww(1, 2, 3, 4))
+
+# no defaults at all: the shape that already worked, kept as the control
+def none_(a, *rest):
+    return (a, rest)
+
+nn = none_
+print(none_(1), nn(1))
+print(none_(1, 2, 3), nn(1, 2, 3))
+
+# a KEYWORD argument binds by name and must WIN over the default, then the
+# remaining holes fill. Through a star callee this used to be refused outright
+# ("not supported yet for a callee that collects *args").
+print(two(1, hi=3), ww(1, hi=3))
+print(two(1, lo=2), ww(1, lo=2))
+print(two(1, hi=3, lo=2), ww(1, hi=3, lo=2))
+
+# non-integer defaults travel the same record. Kept to three fixed parameters:
+# the bridge packs at most four arguments, so a star at position 4 is refused
+# with a message of its own and is a different (loud, pre-existing) limit.
+def mixed(a, s="hi", L=None, *rest):
+    return (a, s, L, rest)
+
+mm = mixed
+print(mixed(1), mm(1))
+print(mixed(1, "z"), mm(1, "z"))
+print(mixed(1, "z", 3, 9), mm(1, "z", 3, 9))
+
+# a default is evaluated ONCE at def time, star or no star
+def acc(v, bucket=[], *rest):
+    bucket.append(v)
+    return len(bucket)
+
+gg = acc
+print(gg(1), gg(2), acc(3))
+
+# the packed surplus is a TUPLE, not a list -- filling a default must not
+# disturb what the body sees in `rest`
+print(type(zz(1)[2]).__name__, type(zz(1, 2, 3)[2]).__name__)
+
+# a BOUND METHOD collects too, with Self excluded from the numbering
+class K:
+    def m(self, a, lo=7, *rest):
+        return (a, lo, rest)
+
+k = K()
+cb = k.m
+print(k.m(1), cb(1))
+print(k.m(1, 2), cb(1, 2))
+print(k.m(1, 2, 3, 4), cb(1, 2, 3, 4))
+
+# the callback shapes: a dispatch table, a list element and a parameter all
+# reach the same bridge
+tbl = {"one": one, "two": two}
+print(tbl["one"](1), tbl["two"](1))
+
+lst = [one, two]
+print(lst[0](1), lst[1](1))
+
+def via_param(fn):
+    return fn(1)
+
+print(via_param(one), via_param(two))
+print(list(map(one, [1, 2])))
+
+# too FEW arguments is still an error: a star callee does not make `a` optional
+def needs_two(a, b, *rest):
+    return (a, b, rest)
+
+n2 = needs_two
+try:
+    n2(1)
+    print("no error")
+except TypeError:
+    print("TypeError")

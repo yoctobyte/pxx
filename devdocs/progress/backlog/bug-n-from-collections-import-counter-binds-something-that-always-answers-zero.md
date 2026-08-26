@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 58
+prio: 80
 type: bug
 blocked-by: []
 summary: "`from collections import Counter` binds a name that SILENTLY answers 0 for every key instead of counting — `Counter('aab')['a']` is 0, CPython says 2. And `OrderedDict` from the same import is `undefined variable`. The consume-and-ignore rule promises an unsupported name walls VISIBLY at its use site; Counter breaks that promise by answering wrongly instead."

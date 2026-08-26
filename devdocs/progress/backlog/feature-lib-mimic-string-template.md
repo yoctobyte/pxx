@@ -1,6 +1,6 @@
 ---
 track: B
-prio: 15
+prio: 12
 type: feature
 blocked-by: []
 summary: "string.Template — the $-placeholder class (substitute, safe_substitute) — is the one member of Python's string module still missing, and it is what logging/__init__.py uses. Deliberately NOT urgent: `import logging` does not resolve at all today, so nothing can reach Template until a logging shim exists. Split out of feature-lib-mimic-string, which shipped every constant and both capwords forms."

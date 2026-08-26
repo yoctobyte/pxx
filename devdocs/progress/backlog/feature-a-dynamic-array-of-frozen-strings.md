@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 30
+prio: 45
 type: feature
 summary: "In the FROZEN-string model (-uPXX_MANAGED_STRING, the self-host build), `array of string` is refused from SetLength up: the element is an inline fixed-capacity buffer and no path knows its stride. Delete/Insert refuse it downstream of that, which is why they carry a frozen-string exclusion."
 ---

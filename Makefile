@@ -73,7 +73,7 @@ FROZEN_PXXFLAGS := -uPXX_MANAGED_STRING
 .PHONY: test-esp-idf
 .PHONY: fuzz-csmith
 .PHONY: test-c-conformance-i386 test-c-conformance-aarch64 test-c-conformance-arm32 test-c-conformance-riscv32 test-c-conformance-cross
-.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
+.PHONY: all bootstrap bootstrap-check fpc-check test-fpc seed-from-stable test test-quick test-smoke test-opt stabilize-fast stabilize-record test-core test-threads test-asm test-asm-emit test-debug-g test-nilpy qemu-env-check test-lua test-cjson test-c-conformance test-c test-zlib test-chess-perft test-duktape test-fpjson test-fgl test-uforth bench-uforth test-quickjs test-i386 test-aarch64 test-arm32 test-riscv32 test-emit-obj test-sqlite-threads test-sqlite-parity stabilize check-stable selfcheck revert benchmark benchmark-compiler-runtime benchmark-opt-levels benchmark-check clean distclean symbols \
         bootstrap-managed bootstrap-frozen test-managed test-frozen stabilize-managed stabilize-frozen check-stable-managed revert-managed test-nilpy-managed test-nilpy-frozen \
         pxx-stable-check pin lib-test library-suite library-suite-green library-suite-discovery gui-test demos tools-devtest c-interop-devtest tls-openssl-devtest tls13-handshake-devtest truststore-devtest tls-native-seam-devtest \
         progress-check cross-bootstrap cross-bootstrap-aarch64 cross-bootstrap-arm32 cross-bootstrap-i386 test-esp-bare test-esp-softfloat
@@ -897,6 +897,8 @@ test-nilpy: $(COMPILER)
 	$(TESTTMP)/test_nilpy_locbind26 | diff -u test/test_nilpy_local_binding_beats_a_def.expected -
 	./$(COMPILER) test/test_nilpy_callable_value_defaults.npy $(TESTTMP)/test_nilpy_cvdflt26
 	$(TESTTMP)/test_nilpy_cvdflt26 | diff -u test/test_nilpy_callable_value_defaults.expected -
+	./$(COMPILER) test/test_nilpy_callable_value_defaults_with_star_args.npy $(TESTTMP)/test_nilpy_cvdfltstar26
+	$(TESTTMP)/test_nilpy_cvdfltstar26 | diff -u test/test_nilpy_callable_value_defaults_with_star_args.expected -
 	./$(COMPILER) test/test_nilpy_str_line_continuation.npy $(TESTTMP)/test_nilpy_linecont26
 	$(TESTTMP)/test_nilpy_linecont26 | diff -u test/test_nilpy_str_line_continuation.expected -
 	./$(COMPILER) test/test_nilpy_user_class_keys_items_values.npy $(TESTTMP)/test_nilpy_ukiv26
@@ -4277,6 +4279,16 @@ test-core: $(COMPILER)
 	# multi-dimension array is still ONE tkArray, not a nested one.
 	./$(COMPILER) -Fulib/rtl test/test_typeinfo_array_pointer.pas $(TESTTMP)/test_typeinfo_arrptr26
 	test "$$($(TESTTMP)/test_typeinfo_arrptr26)" = "$$(printf 'TArr 12\nTDyn 21\nTArr2 12\nPointer 29\nVariant 11')"
+	# …and the TTypeData payloads those headers' DataPtr now carries — OrdType,
+	# MinValue/MaxValue, a set's element enum, an array's element type and its
+	# per-dimension bounds. Diffed against an FPC 3.2.2 oracle; the LAYOUT is
+	# ours (nothing outside lib/rtl/typinfo.pas reads these bytes, so no
+	# byte-parity is owed) but every VALUE below is FPC's, with exactly two
+	# documented exceptions: a SUBRANGE's ord is OUR storage width (4, where FPC
+	# narrows to 1 — its bounds still match), and LongWord's max is honest at
+	# 4294967295 where FPC's 32-bit MaxValue slot truncates it to -1.
+	./$(COMPILER) -Fulib/rtl test/test_typeinfo_typedata.pas $(TESTTMP)/test_typeinfo_typedata26
+	test "$$($(TESTTMP)/test_typeinfo_typedata26)" = "$$(printf 'ShortInt kind=1 name=ShortInt ord=0 min=-128 max=127\nByte kind=1 name=Byte ord=1 min=0 max=255\nSmallInt kind=1 name=SmallInt ord=2 min=-32768 max=32767\nWord kind=1 name=Word ord=3 min=0 max=65535\nInteger kind=1 name=Integer ord=4 min=-2147483648 max=2147483647\nLongWord kind=1 name=LongWord ord=5 min=0 max=4294967295\nInt64 kind=19 name=Int64 ord=6 min=-9223372036854775808 max=9223372036854775807\nBoolean kind=18 name=Boolean ord=1 min=0 max=1\nChar kind=2 name=Char ord=1 min=0 max=255\nSingle kind=4 name=Single float=0\nDouble kind=4 name=Double float=1\nTSub kind=1 name=TSub ord=4 min=1 max=10\nTSubB kind=1 name=TSubB ord=4 min=-5 max=5\nTMyInt kind=1 name=Integer ord=4 min=-2147483648 max=2147483647\nTStr20 kind=7 name=TStr20 ord=0 min=0 max=20\nTS kind=5 name=TS ord=5 elemkind=3 elemsize=4 min=0 max=2 comp=TEn compcount=3\nTArr kind=12 name=TArr elemkind=1 elemsize=4 elemcount=4 dims=1 [0..3]\nTArr2 kind=12 name=TArr2 elemkind=1 elemsize=1 elemcount=6 dims=2 [1..2] [1..3]\nTDyn kind=21 name=TDyn elemkind=1 elemsize=4 elemcount=0 dims=1\nPointer kind=29 name=Pointer <no typedata>\nVariant kind=11 name=Variant <no typedata>')"
 	# TypeInfo(T) where T is a GENERIC PARAMETER — the case the ticket was opened
 	# for. Needs no separate path (pxx substitutes the parameter's token
 	# textually before the parser sees the body), and this proves it instead of
@@ -5808,11 +5820,18 @@ test-core: $(COMPILER)
 	# FPC-compat batch 2: method overloads, method pointers, setter-prop writes, nested class types, CreateFmt, mem builtins
 	./$(COMPILER) -Fulib/rtl test/test_fpc_compat_batch2.pas $(TESTTMP)/test_fpc_compat_batch226
 	test "$$($(TESTTMP)/test_fpc_compat_batch226 | tail -1)" = "total ok 13 / 13"
-	# flagship FPC-compat: compile+run REAL FPC 3.2.2 fgl.pp (skipped when fpcsrc absent)
-	@if [ -d /usr/share/fpcsrc/3.2.2/rtl/objpas ]; then \
-	  ./$(COMPILER) --mimic-fpc -Fu/usr/share/fpcsrc/3.2.2/rtl/objpas test/test_fgl_use.pas $(TESTTMP)/test_fgl_use26 >/dev/null && \
+	# flagship FPC-compat: compile+run REAL FPC 3.2.2 fgl.pp. Prefers the fetched
+	# corpus tree (tools/install_lib_candidates.sh fpc-rtl) and only then a system
+	# fpcsrc -- it used to check ONLY /usr/share/fpcsrc, which is absent on most
+	# boxes, so this printed "SKIP (no fpcsrc)" and passed forever. The full rung,
+	# with its skip list and the other fgl containers, is `make test-fgl`.
+	@fglsrc=""; \
+	if [ -f library_candidates/fpc-rtl/rtl/objpas/fgl.pp ]; then fglsrc=library_candidates/fpc-rtl/rtl/objpas; \
+	elif [ -f /usr/share/fpcsrc/3.2.2/rtl/objpas/fgl.pp ]; then fglsrc=/usr/share/fpcsrc/3.2.2/rtl/objpas; fi; \
+	if [ -n "$$fglsrc" ]; then \
+	  ./$(COMPILER) --mimic-fpc -Fu$$fglsrc test/test_fgl_use.pas $(TESTTMP)/test_fgl_use26 >/dev/null && \
 	  test "$$($(TESTTMP)/test_fgl_use26 | tail -1)" = "map count=3 m[5]=50 m[2]=20" && echo "fgl(real FPC source): OK"; \
-	else echo "fgl(real FPC source): SKIP (no fpcsrc)"; fi
+	else echo "fgl(real FPC source): SKIP (no FPC RTL source -- tools/install_lib_candidates.sh fpc-rtl)"; fi
 	# implicit (sloppy) locals: --auto-locals infers int/string/for-counter/for-in from first assignment; default OFF still errors
 	./$(COMPILER) --auto-locals test/test_auto_locals.pas $(TESTTMP)/test_auto_locals26
 	test "$$($(TESTTMP)/test_auto_locals26 2>/dev/null)" = "total ok 4 / 4"
@@ -7468,6 +7487,15 @@ test-core: $(COMPILER)
 	# file yields #26 — all 25 assertions are FPC 3.2.2's own output.
 	./$(COMPILER) test/test_read_text_char.pas $(TESTTMP)/test_read_text_char26
 	test "$$($(TESTTMP)/test_read_text_char26 | tail -1)" = "total ok 25 / 25"
+	# ...and the other two arms, which used to take a whole LINE: a numeric
+	# destination now takes one whitespace-delimited token and a string one stops
+	# BEFORE the terminator, so `readln(t, n, m)` on '42 3' is 42 3 and not 0 0.
+	# Every case asserts the CURSOR too, by draining the rest of the file a
+	# character at a time — a value-only assertion cannot see the half of this
+	# bug where the value is right and the cursor is a line too far. All 55
+	# expectations are FPC 3.2.2's own output for this same program.
+	./$(COMPILER) test/test_read_text_value_cursor.pas $(TESTTMP)/test_read_text_value_cursor26
+	test "$$($(TESTTMP)/test_read_text_value_cursor26 | tail -1)" = "total ok 55 / 55"
 	# `class operator Initialize/Finalize` -- FPC's MANAGEMENT operators, invoked
 	# at a variable's LIFETIME events. Desugared into Initialize + try..finally
 	# Finalize around the declaring routine's body (and the main body, for
@@ -11377,6 +11405,22 @@ test-quickjs: $(COMPILER)
 	  echo "test-quickjs: FAIL — js-sha256 output mismatch"; head -12 "$$wd/diff2.txt"; exit 1; \
 	fi
 
+# fgl corpus rung (Pascal real-world ladder rung 2, feature-pascal-corpus-fgl).
+# Compiles REAL FPC 3.2.2 fgl.pp -- the reference RTL's generic-container unit --
+# with pxx --mimic-fpc and runs test/fgl/*.pas against it, asserting each
+# driver's stdout byte-matches its .expected. Those .expected files were produced
+# by building the SAME drivers against the SAME fgl.pp with FPC 3.2.2 itself, so
+# this asserts BEHAVIOURAL parity with the reference compiler on real library
+# code -- it says nothing about the machine code we emit.
+# Known-fails are EXPLICIT in test/fgl/pxx.skip, one ticket-referenced line each;
+# anything else failing = regression, exit 1. The suite dir is spelled out so
+# testmgr's CORPUS_RE sees library_candidates/fpc-rtl and the job self-skips
+# LOUDLY on a box that has not fetched it (this rung spent its whole life as a
+# silent `SKIP (no fpcsrc)` inside test-core -- that is the bug being fixed).
+FPC_RTL_OBJPAS ?= library_candidates/fpc-rtl/rtl/objpas
+test-fgl: $(COMPILER)
+	tools/run_fgl_corpus.sh ./$(COMPILER) $(FPC_RTL_OBJPAS)
+
 # fcl-json's own 203-case suite (fpjson + fpcunit, FPC release_3_2_2 sources)
 # under a pxx-built runner — the strongest OOP/RTL exerciser in the Pascal
 # corpus (feature-fpjson-fpcunit-suite-target). Track B shape: builds with
@@ -12602,6 +12646,31 @@ lib-test: pxx-stable-check
 	# TextReadLn — expectations measured against FPC, not reasoned about.
 	$(PXX_STABLE) -Fulib/rtl test/lib_textreadchar.pas $(TESTTMP)/lib_textreadchar
 	test "$$($(TESTTMP)/lib_textreadchar | tail -n 1)" = "TEXTREADCHAR OK"
+	# TextReadNumTok / TextReadStrTo — FPC's read(f, number) and read(f, s) stop
+	# where FPC stops and PUT THE DELIMITER BACK, so the assertions cover the
+	# cursor as well as the value. Both were measured against FPC 3.2.2 by
+	# draining the rest of the file after each read
+	# (bug-b-read-of-a-number-from-a-text-file-reads-the-whole-line).
+	$(PXX_STABLE) -Fulib/rtl test/lib_textreadnumtok.pas $(TESTTMP)/lib_textreadnumtok
+	test "$$($(TESTTMP)/lib_textreadnumtok | tail -n 1)" = "TEXTNUMTOK OK"
+	# The PChar family (StrPCopy/StrNew/StrAlloc/StrECopy/StrMove/StrUpper...).
+	# Half of it existed and half did not, which is the worst shape: code
+	# compiles up to its second call. Expectations measured against FPC by
+	# running the SAME program under both — StrNew('') is nil, StrECopy returns
+	# the end cursor, StrBufSize(StrNew('abc')) is 4.
+	$(PXX_STABLE) -Fulib/rtl test/lib_strings_pchar.pas $(TESTTMP)/lib_strings_pchar
+	test "$$($(TESTTMP)/lib_strings_pchar | tail -n 1)" = "STRINGSPCHAR OK"
+	# StrUtils' three disagreeing split models (ExtractWord vs ExtractDelimited
+	# vs ExtractSubstr) plus SplitString, pinned on 'a,b,,c' — the row with an
+	# empty field, where they differ. Measured against FPC.
+	$(PXX_STABLE) -Fulib/rtl test/lib_strutils_words.pas $(TESTTMP)/lib_strutils_words
+	test "$$($(TESTTMP)/lib_strutils_words | tail -n 1)" = "STRUTILSWORDS OK"
+	# SysUtils directory manipulation, DateToStr/TimeToStr/DateTimeToStr,
+	# GetTickCount64 and TextToFloat. CreateDir on an existing directory is
+	# FALSE and DateTimeToStr drops the time half at midnight — both measured,
+	# both the kind of thing a plausible implementation gets backwards.
+	$(PXX_STABLE) -Fulib/rtl test/lib_sysutils_dirs_dates.pas $(TESTTMP)/lib_sysutils_dirs_dates
+	test "$$($(TESTTMP)/lib_sysutils_dirs_dates | tail -n 1)" = "SYSUTILSDIRSDATES OK"
 	# The FPC threading surface where FPC code looks for it: WaitFor as a
 	# FUNCTION returning ReturnValue, the BeginThread family, and an empty
 	# cthreads shim. Expectations are FPC's own output for the same program.

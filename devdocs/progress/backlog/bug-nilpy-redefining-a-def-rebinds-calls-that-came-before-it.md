@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 35
+prio: 70
 type: bug
 blocked-by: []
 summary: "Redefining a `def` makes calls written BEFORE the redefinition run the LATER body. `def q: 'first'; print(q(1)); def q: 'second'; print(q(2))` prints second/second where CPython prints first/second. Silent wrong value on a valid CPython program, and there is no diagnostic — the name resolves once, statically, to the last definition."

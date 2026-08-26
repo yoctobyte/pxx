@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 55
+prio: 78
 type: bug
 blocked-by: []
 summary: "`self[k]` written inside a base-class method binds to that class's own __getitem__ instead of the subclass override, so a mixin written the natural way raises the base's KeyError. Sibling arm of the already-fixed bug-n-a-builtin-subclass-subscript-operator-skips-the-override."

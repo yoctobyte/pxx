@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 15
+prio: 10
 type: feature
 summary: "On ILP32 the managed-block header wastes 12 of its 24 bytes: three 8-byte slots each carrying a 4-byte value. Packing to 4-byte slots halves it — and the DEADLINE is phase 2, because it caps the meta word at 32 usable bits"
 ---

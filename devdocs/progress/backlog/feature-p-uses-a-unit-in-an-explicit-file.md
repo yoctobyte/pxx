@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 30
+prio: 55
 type: feature
 blocked-by: []
 summary: "`uses mymod in 'mymod.pas';` — the FPC/Delphi spelling for naming a unit's source file — does not parse. pxx has the quoted-path form (`uses './mymod.pas' as m;`, shipped 2026-06-30) but not the standard `in` one, so ordinary FPC project sources are refused at the uses clause."

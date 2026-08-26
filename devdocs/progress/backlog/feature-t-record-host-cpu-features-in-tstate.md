@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 25
+prio: 20
 type: feature
 blocked-by: []
 summary: "tstate records host, sha, tier, wall and compiler_sha256 — nothing about the machine. So 'can we emit FMA?' could not be answered from the repo and needed an ssh into plexus. Record CPU model and the x86-64 feature level per host, once, in the host json."

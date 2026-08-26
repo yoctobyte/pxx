@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 30
+prio: 18
 type: refactor
 blocked-by: []
 summary: "Omitting rparser.inc breaks zparser.inc in 123 places, plus gparser/eparser/fparser — the greenfield frontends call each other's support functions, which is exactly what the-substrate-is-ast-and-ir-not-the-parser.md says not to do. Costs nothing today; makes R and Z individually unomittable and couples two language specs."

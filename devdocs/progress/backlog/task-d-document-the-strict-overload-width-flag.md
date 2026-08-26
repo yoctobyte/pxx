@@ -1,6 +1,6 @@
 ---
 track: D
-prio: 35
+prio: 20
 type: task
 blocked-by: []
 summary: "`--strict-overload-width` shipped 2026-08-15 with no row in docs/reference/cli.md, modes.md or directives.md. One table row each, plus the one sentence that explains why it is standalone rather than part of the --strict-fpc umbrella."

@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 45
+prio: 50
 type: bug
 summary: "Nine open regressions in tstate name a `bad=` commit that changes only tstate/ or a progress .md. A docs commit cannot break test-c-conformance-arm32, so either the blame step is landing on a no-op or the failures are flaky and the bisect converged on noise. Either way the reports point Track A at the wrong place."
 ---

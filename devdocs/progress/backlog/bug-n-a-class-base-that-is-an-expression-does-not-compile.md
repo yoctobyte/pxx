@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 45
+prio: 80
 type: bug
 blocked-by: []
 summary: "A class base which is a NAME bound to a type, or a call, does not compile: `B = object; class P(B)` fails where `class P(object)` and `class P(SomeClass)` both work. Blocks six.with_metaclass, which html5lib's parser spells as `class Phase(with_metaclass(...))` — the single remaining wall on html5parser.py."

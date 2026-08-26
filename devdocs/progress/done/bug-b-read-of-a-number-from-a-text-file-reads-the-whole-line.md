@@ -1,10 +1,11 @@
 ---
 track: B
-prio: 65
+prio: 88
 type: bug
-blocked-by: []
+blocked-by: [bug-p-read-text-lowers-every-destination-to-a-whole-line-read]
 summary: "`read(f, n)` / `readln(f, n)` on a Text file reads the whole LINE and Vals it, so any line with two numbers, or one number plus trailing spaces, silently yields 0. `readln(t, n, m)` on '42 3' gives 0 0 where FPC gives 42 3. Works only when the line holds exactly one number and nothing else."
-status: backlog
+status: done
+owner: frank1-B-read
 ---
 
 # `read(f, number)` from a Text file reads the whole line
@@ -143,3 +144,114 @@ behaviour, which is why it needed a special case in the trailing-skip logic. Aft
 this fix the special case disappears and all three arms behave alike. That
 collapse is the tell that this is a root-cause fix and not three microfixes:
 `devdocs/dev/normalise-dont-special-case.md`.
+
+
+## 2026-08-25 — the RTL half is DONE; the symptom waits on the frontend half
+
+Worked as Track B (`frank1-B-read`), which owns `lib/rtl` and does not rebuild
+the compiler. **Both halves are now settled; only one of them was mine to land.**
+
+### What was measured, not assumed
+
+The ticket's table reproduced exactly at `9170a6193`, all 12 numeric rows plus
+the appendix's 3 string rows. Then a second FPC program pinned down the part a
+value-only probe cannot see: it ran `read(t, n)` / `read(t, s)` on each file and
+**drained the rest of the file one character at a time**, so the CURSOR is
+visible, not inferred.
+
+| file | FPC value | FPC cursor afterwards |
+| --- | --- | --- |
+| `'42'#10` | 42 | `#10` — the terminator is NOT eaten |
+| `'42 3'#10` | 42 | `' 3'#10` — nor is the delimiting blank |
+| `'42  '#10` | 42 | `'  '#10` — **both** blanks, it stops at the first |
+| `#10#10'42'#10` | 42 | `#10` — blank lines are whitespace |
+| `'42'#13#10'9'#10` | 42 | `#13#10'9'#10` — CR delimits and stays |
+| `''` / `'   '#10'  '` | 0 | `''` — no error, FPC yields 0 too |
+| `'L1'#13#10` (string) | `L1` | `#13#10` — stops AT the CR |
+
+Two corrections to the ticket's own text fell out of this:
+
+* the ticket says `Val` fails on `'42 3'` because of the second token. True, but
+  FPC does the *same* whitespace-delimited scan — `'42,3'` is a **runtime error
+  106** there, not the `42` a stop-at-any-non-digit reader would give. So the
+  token rule is right and only the ERROR path diverges (we leave 0).
+* an expectation of mine, `'42  '#10` leaving one blank, was wrong. FPC leaves
+  two. Measured, then corrected in the test — which is the whole reason the
+  oracle drains the cursor.
+
+### The real shape of the root cause
+
+The ticket calls it "the numeric arm plus, in the appendix, the string arm". It
+is one defect with three faces, and the third only shows up once you write the
+replacement out: `ParseTextReadRest` has a **special case for the trailing
+end-of-line skip** (`trLastWasChar`) that exists *solely* because the string and
+numeric arms swallowed the terminator. Make all three arms cursor-preserving and
+the special case does not need adjusting — it **disappears**, `readln` emits one
+unconditional skip, and the three arms become the same shape. That collapse is
+the confirmation this is the root fix
+(`devdocs/dev/normalise-dont-special-case.md`), and it is a fourth thing to
+delete rather than a fourth case to get right.
+
+### Landed here (Track B)
+
+`lib/rtl/textfile.pas`:
+
+* `TFNextByte` / `TFPushBack` / `TFIsSpace` — the byte plumbing over the
+  one-slot lookahead `Eof` already fills. `TextReadChar` now IS `TFNextByte`
+  plus the `#26` substitution, which is provably what it already was.
+* `TextReadNumTok` — skip whitespace including line breaks, take the
+  whitespace-delimited token, push the delimiter back.
+* `TextReadStrTo` — up to but NOT over the terminator; `''` at an eoln, without
+  advancing.
+
+`test/lib_textreadnumtok.pas` (new, wired into `make lib-test`) asserts value
+**and cursor** on 26 shapes, every expectation taken from the FPC run above.
+
+### Handed off (Track P): `bug-p-read-text-lowers-every-destination-to-a-whole-line-read`
+
+`ParseTextReadRest` lives in `compiler/pasparser_stmt.inc`. Track B does not
+rebuild the compiler, so the lowering change is filed rather than made — but it
+is filed with the answer already known, because the emitted sequence was written
+out by hand and diffed against FPC's real `read`/`readln`: **17 shapes,
+0 divergences**, including the two `Eoln`-after-a-numeric-read rows and the
+`read(f,s); readln(f); read(f,s)` idiom. The frontend edit is three lines and a
+deletion.
+
+Until that lands the user-visible symptom is unchanged, so this ticket is
+`blocked-by:` the P one rather than resolved.
+
+## Log
+- 2026-08-25 — resolved, commit PENDING-COMMIT.
+
+## Closed by the Track P half (coordinator, 2026-08-25)
+
+Both halves are in. RTL primitives `e9c73de51` (Track B), frontend lowering
+`e6064f14b` (Track P). Resolving this one from the coordinator seat because the
+work was split across two lanes and neither worker may close the other ticket.
+
+The reason to trust it is the probe, not the two green gates. The Track P worker
+built 31 cursor-level programs -- read a value, then drain the rest of the file
+one byte at a time so the CURSOR is visible rather than inferred -- and compiled
+each under both `fpc -Mobjfpc` and the fixed compiler. **0 divergences over 31.**
+The same probe against the pinned pre-fix compiler gives **14 divergences over
+the first 24**, which is the part that matters: the probe is agreeing because
+the behaviour is right, not because it cannot see. A value-only differential
+could not have produced either number.
+
+The confirmation that this was the ROOT fix and not three microfixes is that
+`trLastWasChar` DISAPPEARED -- var, all three assignments, and the guard, with
+nothing put in its place. It existed only to paper over two arms that consumed
+their terminator and one that did not; once all three arms preserve the cursor
+the special case has no reason to exist and `readln` emits one unconditional
+skip. A change that DELETES a case is the shape you want here
+(`devdocs/dev/normalise-dont-special-case.md`).
+
+Two of this ticket's own claims were wrong and are corrected in the write-ups:
+FPC scans a number to WHITESPACE, not to the first character a number cannot
+use, so `'42,3'` is a runtime error 106 rather than `42`; and `'42  '` leaves
+two blanks, not one. Both found by measuring FPC instead of reasoning about it.
+
+Regression coverage: `test/lib_textreadnumtok.pas` (26 shapes, value + cursor)
+and `test/test_read_text_value_cursor.pas` (55 assertions over 22 shapes, every
+expectation being FPC own output for the same program -- it compiles unchanged
+under fpc and prints 55/55 there too, and 25/55 against the pre-fix compiler).

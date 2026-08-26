@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 35
+prio: 55
 type: refactor
 blocked-by: []
 summary: "The `^ / .field / [i]` suffix chain is parsed by THREE hand-rolled loops — the shared one in pasparser_lval.inc plus private copies in pasparser_expr.inc for the record-name cast and the pointer-alias cast — and a fourth byte-identical copy sits in Track N's pyparser.inc. They have already diverged and produced silent wrong values at least four separate times, each fixed in one copy."

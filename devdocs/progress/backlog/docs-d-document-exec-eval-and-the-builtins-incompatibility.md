@@ -1,6 +1,6 @@
 ---
 track: D
-prio: 40
+prio: 35
 type: docs
 summary: "docs/targets/nil-python.md tells the public `eval`/`exec` do not exist (\"No eval of runtime-constructed code\") — but the explicit-dict form has worked since 2026-07-31 via pyeval's tree-walker. Document what exec/eval DO support, the refused ambient form, and the decided __builtins__ incompatibility (decided 2026-08-19, permanent for now)."
 ---

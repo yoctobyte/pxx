@@ -141,11 +141,19 @@ CONF_DEFAULTS = {"tier": "full", "mid_tier": "full",
                  # retargets it; the unit stays bare, so there is exactly one
                  # place to look and no CLI/conf pair to disagree.
                  "branch": "master",
-                 # seconds into a BREADTH run after which a push no longer
-                 # aborts it (see make_preempted). 0 = always preempt, the
-                 # pre-2026-08-25 behaviour, which measured out as zero full
-                 # tiers on a working day.
-                 "full_commit_secs": 300,
+                 # Seconds into an IDLE-LADDER breadth run after which a push
+                 # no longer aborts it (see make_preempted). A reserved run
+                 # ignores this and commits at once.
+                 #
+                 # It was 300 for about an hour, tuned against an estimated
+                 # ~26-minute gap between testable pushes. The estimate was
+                 # wrong: measured on dev the same evening, the median gap
+                 # between commits is 85s and 26 of 29 are under 300s, so a
+                 # 300s window aborts essentially every run it governs — the
+                 # behaviour it was written to replace, one threshold later.
+                 # 60s keeps the cheap-to-discard property for a burst landing
+                 # in the first seconds without pretending pushes are rare.
+                 "full_commit_secs": 60,
                  "max_cores": 0,       # cores testmgr may keep busy (--max-cores)
                  "max_mem_mb": 0,      # cap the cgroup MemoryMax (env override)
                  "web": True, "web_port": 8377}   # everything ON by default;
@@ -1228,6 +1236,32 @@ def covered_tiers(tier):
     return {tier}                     # opt (and any future disjoint tier)
 
 
+def job_bounding_tier(st, name, report_tier):
+    """The tier whose last run bounds this job's blame range.
+
+    `job_tier` holds the tier that last spoke for each job, and at diff time it
+    has not been updated for the current run — so it names where the job's
+    PREVIOUS status came from, which is exactly what bounds the range. Falls
+    back to this run's tier for a job with no recorded history.
+    """
+    return (st.get("job_tier") or {}).get(name) or report_tier
+
+
+def parent_ran_job(st, name, report_tier):
+    """Did the run recorded in st["last"] actually CONTAIN this job?
+
+    If it did, `commits_between(parent, sha)` is the right range. If it did not
+    — a full-tier-only job whose parent run was `native` — that range is too
+    NARROW, and a too-narrow range is the dangerous direction: a bisect over
+    commits that do not contain the culprit does not fail, it narrows
+    confidently onto an innocent one.
+    """
+    parent_tier = (st.get("last") or {}).get("tier") or ""
+    if not parent_tier:
+        return False
+    return job_bounding_tier(st, name, report_tier) in covered_tiers(parent_tier)
+
+
 def last_covering_sha(st, tier, exclude_sha):
     """Newest earlier run that certainly CONTAINED this tier's jobs, or None.
 
@@ -1494,7 +1528,7 @@ def update_job_reasons(st, report, jobs):
 
 
 def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
-                    st=None):
+                    st=None, not_reached=()):
     ts = utcnow().replace(":", "").replace("-", "")
     rel = os.path.join(TSTATE_REL, "reports",
                        "%s-%s-%s.md" % (ts, sha[:7], host))
@@ -1515,6 +1549,14 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
              # does not name the binary (task-t-seed-from-stable-defeats-rebuild).
              "compiler_sha256: %s" % (report.get("compiler_sha256") or "unknown"),
              "---", ""]
+    if report.get("timed_out") or report.get("verdict") == "TIMEOUT":
+        lines += ["> **THIS RUN HAS NO VERDICT.** It hit its %s-second deadline "
+                  "at %ss with %s job(s) never reached, and was torn down. What "
+                  "it measured stands; what it did not reach is UNKNOWN, not "
+                  "fixed. Do not read this as a regression, do not revert on "
+                  "it, and do not count it as coverage of this tree."
+                  % (report.get("deadline", "?"), report.get("wall"),
+                     report.get("unreached", "?")), ""]
     # How stale BREADTH was when this verdict was published. A native report is
     # the document a reader reaches for days later, and "GREEN" on it says
     # nothing about the cross targets — which run in `full` and nowhere else.
@@ -1564,7 +1606,12 @@ def write_report_md(clone, host, sha, parent, report, new_red, fixed, still_red,
         why = (reasonmap.get(n) or "").strip()
         return "%s\n  - `%s`" % (out, why[:160]) if why else out
     for title, names in (("NEW-RED", new_red), ("FIXED", fixed),
-                         ("STILL-RED", still_red)):
+                         ("STILL-RED", still_red),
+                         # Last, and named as a question rather than a verdict:
+                         # these jobs were red at the last look and this run
+                         # never got to them. Unknown is not fixed.
+                         ("NOT REACHED — red at last look, unknown now",
+                          list(not_reached))):
         if names:
             lines.append("## %s" % title)
             lines += ["- %s" % listed(n) for n in names]
@@ -1681,6 +1728,96 @@ def host_quiet_secs(st, now=None):
 # failed here was a correctness property depending on one agent remembering to
 # warn another.
 BREADTH_STALE_SECS = 6 * 3600
+
+# How long a breadth attempt is allowed to hold off the fast verdict, and how
+# long we wait before trying again after one fails to land.
+BREADTH_RETRY_SECS = 2 * 3600
+
+
+def breadth_inflight(st, now=None):
+    """Is this host inside a reserved BREADTH run right now? -> (sha, age) or None.
+
+    A reserved breadth run pauses the fast verdict for ~40-67 minutes, so
+    commits pile up untested and `--status` crosses its 45-minute grace and
+    reports DOWN — which tells every dev agent to run its own full gate, the
+    exact ten-minute cost the watcher exists to save them. The watcher is not
+    down; it is doing the most expensive useful thing it does.
+
+    A remote reader cannot see the daemon's phase heartbeat (it is a file in the
+    clone), but `last_breadth_try` IS published in the host's state, which is
+    why it is written before the run rather than after.
+
+    Bounded by BREADTH_RETRY_SECS so a daemon that DIES mid-breadth cannot hide
+    behind this forever: past that bound the claim is stale and DOWN is the
+    honest answer again. In flight means the claim is newer than the host's last
+    completed run — once a run lands, `st["last"]` moves past it.
+    """
+    now = time.time() if now is None else now
+    claim = st.get("last_breadth_try") or {}
+    started = secs_since(claim.get("date") or "", now)
+    if started is None or started > BREADTH_RETRY_SECS:
+        return None
+    last_run = secs_since(((st.get("last") or {}).get("date")) or "", now)
+    if last_run is not None and last_run < started:
+        return None            # a run has landed since the claim: not in flight
+    return (claim.get("sha") or "?", started)
+
+
+def breadth_overdue(st, now=None):
+    """Should this cycle run BREADTH even though there is a new commit to test?
+
+    The ticket this comes from concluded "the fix is resumability plus bounding
+    consecutive idle, NOT reserving a slot", and under the measurement it had
+    that was correct: on 2026-08-19 the box was idle 54% of the window, so
+    breadth did not need a reservation, it needed the queue ahead of it to
+    stop being unfinishable.
+
+    That premise is gone. Measured 2026-08-25, after this box became a
+    workstation and the watcher was capped at 6 of 12 cores: a native run costs
+    ~490s (it was ~246s), and ~9 testable commits land during one. So `do_test`
+    is true on essentially every cycle, the idle ladder is never reached, and
+    breadth does not merely run rarely -- it cannot START. A commitment point
+    that lets a running breadth run finish is inert if none ever begins.
+
+    So the reservation exists now, narrowly: only when breadth is already STALE
+    by the threshold the reports have been printing all along, only one run at a
+    time, and with a retry backoff so a breadth run that keeps failing to land
+    cannot starve the fast verdict it is borrowing from. Everything else is
+    unchanged -- a fresh push still gets the fast verdict first on every
+    ordinary cycle.
+
+    Returns a reason string (for the log) or "".
+    """
+    now = time.time() if now is None else now
+    lf = st.get("last_full") or {}
+    unreadable = bool(lf.get("sha")) and secs_since(lf.get("date") or "",
+                                                    now) is None
+    if not lf.get("sha") or unreadable:
+        # Never a completed breadth run on this host. That is the strongest
+        # case for taking a slot, not the weakest -- but it is also what a
+        # brand-new host looks like, and a host with nothing tested at all has
+        # more urgent work, so the caller gates this on having tested something.
+        age = None
+    else:
+        age = secs_since(lf.get("date") or "", now)
+        if age is not None and age <= BREADTH_STALE_SECS:
+            return ""
+    last_try = secs_since((st.get("last_breadth_try") or {}).get("date") or "",
+                          now)
+    if last_try is not None and last_try < BREADTH_RETRY_SECS:
+        # A breadth run that started and did not land (torn down, aborted,
+        # infra) must not immediately claim the next cycle too. Without this,
+        # a breadth tier that cannot finish inside its deadline would take
+        # every slot forever and the fast verdict would stop entirely.
+        return ""
+    if age is None:
+        # Claiming the slot is the safe direction for an unreadable date: the
+        # thing we are unsure about is whether breadth ran, and breadth is what
+        # is missing. Say WHICH of the two it is, though — a reason line that
+        # misreports the state is the exact defect the rest of tonight was about.
+        return ("a completed breadth run is recorded with an unreadable date"
+                if unreadable else "no completed breadth run on this host yet")
+    return "the newest completed breadth run is %s old" % fmt_age(age)
 
 
 def secs_since(iso, now=None):
@@ -2016,6 +2153,20 @@ def pin_shadow(clone, host, st, sha, report, authoritative, now=None):
               flush=True)
 
 
+def run_is_incomplete(report):
+    """Did this run stop before deciding everything it set out to decide?
+
+    Two spellings of the same fact, because the field is newer than the verdict:
+    `timed_out` is what testmgr writes now, `verdict == "TIMEOUT"` is what a
+    report says on its face. A report from before either existed answers False,
+    which is the old behaviour and the only safe default — every consumer of
+    this predicate uses it to WITHHOLD an inference, so a wrong False costs what
+    we already had, while a wrong True would silently stop the map from ever
+    being pruned.
+    """
+    return bool(report.get("timed_out")) or report.get("verdict") == "TIMEOUT"
+
+
 def no_measurement(report):
     """Did this run produce no measurement at all? Returns a reason, or "".
 
@@ -2129,6 +2280,34 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
               flush=True)
         return False
 
+    # TIMEOUT: the run ran out of clock. Unlike INFRA and INVALID this is NOT a
+    # reason to throw the run away — the jobs it decided were decided against
+    # this sha with this compiler, and a red it actually found is a real red.
+    # What it is not is COMPLETE, and every inference below that assumes
+    # completeness has to be switched off:
+    #
+    #   * it may not evict or prune the job map. The eviction rule's premise is
+    #     "this run was capable of running that job and did not produce it, so
+    #     the job is gone" — a teardown falsifies the premise, and the effect
+    #     was that every job the clock cut off had its red ERASED. It then came
+    #     back as NEW-RED later, or, worse, silently read as fixed because
+    #     `prev_jobs.get(n, "pass")` counts an absent job as having passed.
+    #   * it may not record breadth coverage. `aa9f0989a4c0` sat for a day and a
+    #     half as "the newest full tier" while being a teardown at wall 3600.3s,
+    #     and a coordinator nearly gated a merge on it.
+    #   * it files no tickets and opens no ledger entries, for the same reason a
+    #     baseline run does not: the diff is against an incomplete picture.
+    #
+    # It still publishes: the verdict, the job statuses it measured, and — the
+    # part that was missing — what it never reached.
+    incomplete = run_is_incomplete(report)
+    if incomplete:
+        print("twatch: %s TIMED OUT at %ss (deadline %ss) with %s job(s) "
+              "unreached — publishing what it measured, NOT a verdict on this "
+              "tree, and not touching the jobs it never got to"
+              % (sha[:12], report.get("wall"), report.get("deadline", "?"),
+                 report.get("unreached", "?")), flush=True)
+
     parent = (st["last"] or {}).get("sha")
     # Captured BEFORE the diff, because the diff is what consumes it. NEW-RED
     # means "red now, green in this host's recorded map", and on a host's first
@@ -2140,6 +2319,9 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     now, new_red, fixed, still_red = diff_jobs(st["jobs"], report)
     no_ticket = ticket_suppression(had_baseline, len(new_red),
                                    len(report["jobs"]))
+    if incomplete and not no_ticket:
+        no_ticket = ("the run timed out — its diff is against an incomplete "
+                     "picture, so a red here is recorded but not filed")
 
     # open-regression bookkeeping.  Two invariants keep this ledger a list of
     # REAL, actionable regressions instead of a dump of every red job:
@@ -2196,6 +2378,40 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
     # So when it is empty, ask the narrower question the ledger actually needs:
     # since this JOB last ran under a tier that contained it.
     good = parent
+
+    # PER-JOB RANGE, always — not only when the parent range is empty.
+    #
+    # `commits_between(parent, sha)` answers "since this host last tested
+    # ANYTHING", and that is the right range only if the parent run actually
+    # CONTAINED the job that just went red. Measured 2026-08-25 on the first
+    # completed breadth run on dev: four NEW-REDs on full-tier-only jobs
+    # (test-aarch64, test-uforth, two conformance shards) were filed against a
+    # 23-commit range, because the parent was a NATIVE run — while those jobs
+    # had not run for 1d15h and ~120 commits. A bisect over 23 commits that do
+    # not contain the culprit does not fail; it narrows confidently onto an
+    # innocent one.
+    #
+    # last_covering_sha() already reasons correctly about this and its docstring
+    # already states the rule — "a too-wide range costs bisect steps; a
+    # too-narrow one can exclude the culprit, which is the failure that
+    # matters". It was simply gated on the empty-range case, which is the
+    # SYMPTOM that was noticed first (same sha re-tested at a widening tier)
+    # rather than the general one.
+    #
+    # `job_tier` holds the tier that last spoke for each job and has not been
+    # updated for this run yet, so it names the tier the job's PREVIOUS status
+    # came from — which is exactly the tier whose last run bounds the range.
+    def range_for(name):
+        prev_tier = job_bounding_tier(st, name, report["tier"])
+        if parent_ran_job(st, name, report["tier"]):
+            return rng, good        # the parent's run DID contain it
+        y = last_covering_sha(st, prev_tier, sha)
+        if y and y != sha:
+            wider = clone.commits_between(y, sha)
+            if wider and len(wider) > len(rng):
+                return wider, y
+        return rng, good
+
     if new_red and not rng:
         y = last_covering_sha(st, report["tier"], sha)
         if y and y != sha:
@@ -2229,26 +2445,60 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
             # "job" is the stable selector; "name" is the positional name it
             # had at this sha — kept ONLY as the bisect fallback for older
             # commits, never as identity (see job_key).
+            jrng, jgood = range_for(name)
+            if len(jrng) != len(rng):
+                print("twatch: %s last ran under `%s`, not at the parent — "
+                      "range widened from %d to %d commit(s) since %s, or a "
+                      "bisect would narrow onto a commit that cannot be causal"
+                      % (name, (st.get("job_tier") or {}).get(name, "?"),
+                         len(rng), len(jrng), (jgood or "?")[:12]), flush=True)
             regs.append({"job": name, "name": namemap.get(name, ""),
                          "src": srcmap.get(name, ""), "bad": sha,
-                         "good": good, "range": rng, "opened": utcnow(),
+                         "good": jgood, "range": jrng, "opened": utcnow(),
                          "status": statmap.get(name, "fail"),
                          "pin_built": pinmap.get(name, False)})
     st["open_regressions"] = regs
 
+    # Jobs that were red before and that this run never produced a status for.
+    # On a COMPLETE run this set is empty or means "the job is gone" (handled by
+    # the prune below). On an incomplete one it is the honest answer to "what
+    # about the rest?" — and its absence is what let a torn-down run render an
+    # empty STILL-RED section that reads as "everything recovered".
+    not_reached = sorted(n for n, v in st["jobs"].items()
+                         if n not in now and v not in PASSLIKE) \
+        if incomplete else []
+
     changed = bool(new_red or fixed)
     rel = None
-    if changed or report["verdict"] == "RED":
+    if changed or report["verdict"] in ("RED", "TIMEOUT"):
         rel = write_report_md(clone, host, sha, parent, report,
-                              new_red, fixed, still_red, st)
+                              new_red, fixed, still_red, st,
+                              not_reached=not_reached)
 
     # A run that measured something proves the box works again — drop any
     # degraded marker, so the host stops reporting DOWN on its own the moment
     # it recovers (a reseed usually does it) with no manual clearing.
     st.pop("infra", None)
+    # The latched summary carries the three fields that decide what it MEANS.
+    #
+    # It used to hold date/sha/tier/verdict/wall only, and `last_full` is a copy
+    # of it — so the one document every consumer reads first dropped exactly the
+    # evidence that separates a completed run from a teardown, and left it in
+    # `runs-<host>.ndjson` one file over. A coordinator's health check duly
+    # reported CANNOT DISTINGUISH about a run that had finished comfortably
+    # (2492s against a 7200s deadline, unreached 0) — not caution, blindness,
+    # and every consumer would have had to learn the same cross-file join to
+    # avoid it.
+    #
+    # A summary that omits the field determining its meaning is the same defect
+    # as a report that omits what it never reached: the reader is left to infer
+    # from a number what a field could have told them.
     st["last"] = {"sha": sha, "date": utcnow(), "verdict": report["verdict"],
-                  "wall": report["wall"], "tier": report["tier"]}
-    if full:
+                  "wall": report["wall"], "tier": report["tier"],
+                  "timed_out": bool(report.get("timed_out")),
+                  "deadline": report.get("deadline"),
+                  "unreached": report.get("unreached")}
+    if full and not incomplete:
         # Evict by COVERAGE, not wholesale.
         #
         # The intent of replacing here is to drop jobs that no longer exist in
@@ -2310,6 +2560,12 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
         f.write(json.dumps({"sha": sha, "date": st["last"]["date"],
                             "tier": report["tier"], "full": full,
                             "verdict": report["verdict"],
+                            # so the archive can tell a run that FAILED from one
+                            # that merely stopped. Every row before 2026-08-25
+                            # lacks it; absent means "not known", not "false".
+                            "timed_out": bool(report.get("timed_out")),
+                            "unreached": report.get("unreached"),
+                            "deadline": report.get("deadline"),
                             "wall": report["wall"], "new_red": new_red,
                             "fixed": fixed,
                             # still_red too, not just the transitions. Without
@@ -4793,7 +5049,12 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
             untested_old = (sha, int(ct))
             break
     live, degraded = 0, 0
+    breadth_running = []          # (host, sha, seconds-since-it-started)
     for st in hosts:
+        if not st.get("retired_at"):
+            bf = breadth_inflight(st, now)
+            if bf:
+                breadth_running.append((st.get("host", "?"),) + bf)
         if st.get("retired_at"):
             # One line, no ledger, never QUIET: a retired host holds nothing,
             # so it must not appear among the hosts an agent could wait on.
@@ -4812,12 +5073,18 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
             live += 1
             if inf:
                 degraded += 1
+        # TIMEOUT renders as what it is. The ticket asks for "no verdict"
+        # rather than a failure, and the parenthetical is what stops a reader
+        # (or a sibling agent skimming) from filing it as a regression.
+        lastv = last.get("verdict", "never")
+        if lastv == "TIMEOUT":
+            lastv = "TIMEOUT — no verdict, torn down at the deadline"
         print("tstate: host %-12s last %s %s (%s, %s)%s%s" %
               (st["host"], (last.get("sha") or "")[:12],
-               last.get("verdict", "never"), last.get("tier", "?"),
+               lastv, last.get("tier", "?"),
                last.get("date", ""),
                "; full through %s %s" % (lf["sha"][:12], lf["verdict"])
-               if lf.get("sha") else "",
+               if lf.get("sha") else "",   # only COMPLETE runs land in last_full
                "  [QUIET %s — not publishing]" % fmt_age(quiet) if quiet
                # Before a host has one recorded job map, its NEW-RED is a diff
                # against nothing. Say so where the host is read, so a fresh
@@ -4994,6 +5261,27 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
               "with a working remote to get an answer." % msg)
         return STATUS_UNKNOWN
 
+    if untested_old and breadth_running:
+        # NOT down: the fast verdict is paused because breadth has the slot, and
+        # breadth is the most expensive useful thing this watcher does. Calling
+        # it DOWN here would send every dev agent to run its own full gate — ten
+        # minutes each, to replace a matrix that is running right now.
+        #
+        # The claim is bounded (see breadth_inflight), so a daemon that dies
+        # mid-breadth still reports DOWN once the bound lapses. What this cannot
+        # do is stay silent: an agent reading UP must be told WHY its commit has
+        # no verdict yet, or the next thing it does is gate by hand anyway.
+        age = int((now - untested_old[1]) / 60)
+        for h, bsha, started in breadth_running:
+            print("tstate: %s is running BREADTH on %s (started %s ago) — the "
+                  "fast verdict is paused for this one run, so %s untested for "
+                  "%d min is EXPECTED, not a stalled watcher. Your commit gets "
+                  "its native verdict when this lands; do not widen your gate."
+                  % (h, bsha[:12], fmt_age(started),
+                     untested_old[0][:12], age))
+        print("tstate: UP (breadth in flight) — offload the matrix to T%s"
+              % ("" if fetched else "  [UNFETCHED]"))
+        return STATUS_UP
     if untested_old:
         age = int((now - untested_old[1]) / 60)
         return verdict_down("%s untested for %d min (> %d min grace)"
@@ -5008,8 +5296,11 @@ def status(repo, grace_min, tdir=None, ref="HEAD", fetch=True):
         # stale read could still be describing a state the host has since left.
         return verdict_down("all %d live host(s) degraded (cannot build/run)"
                             % live)
-    stale = "" if fetched else "  [UNFETCHED — based on this checkout's " \
-                                "existing origin/master]"
+    # `ref`, not the literal origin/master: since the branch split this reader
+    # may be standing on dev, and naming the wrong ref in the one line that
+    # tells a reader how much to trust the answer is its own small lie.
+    stale = "" if fetched else ("  [UNFETCHED — based on this checkout's "
+                                "existing %s]" % ref)
     if newest_tested:
         print("tstate: UP — commits through %s tested; offload the matrix to T%s"
               % (newest_tested[0][:12], stale))
@@ -5322,7 +5613,32 @@ def main():
                 pin_deep = pin_verify_due(clone, host, st, (args.tier,))
             if do_test:
                 head = debounce(clone, args.debounce)
-                if not STOP:
+                # Does breadth get this slot instead of the fast verdict? Only
+                # when it is already stale past the threshold the reports print,
+                # and only if we have not just tried. See breadth_overdue() for
+                # why a reservation exists at all now — in short, the idle
+                # ladder below is unreachable on a busy day, so "when the repo
+                # is quiet" had quietly become "never".
+                why = breadth_overdue(st) if tested else ""
+                if why and not STOP:
+                    print("twatch: taking this slot for BREADTH on %s — %s. "
+                          "The fast verdict waits one run; a fresh push will "
+                          "not abort this one once it commits."
+                          % (head[:12], why), flush=True)
+                    st["last_breadth_try"] = {"sha": head, "date": utcnow()}
+                    save_state(clone, host, st)
+                    # commit_after=0, NOT the configured window: a RESERVED
+                    # breadth run is taken precisely because pushes never stop,
+                    # so letting one abort it rebuilds the starvation the
+                    # reservation exists to end. Measured: with a median gap of
+                    # 85s between commits, the first reserved run was aborted at
+                    # 68s of 3057 jobs. The window is for the idle ladder, where
+                    # a push is genuine news because the repo had gone quiet.
+                    r = test_sha(clone, host, st, head, args.tier, full=True,
+                                 abort_check=make_preempted(clone, head,
+                                                            commit_after=0))
+                    did_work = r != "busy"
+                elif not STOP:
                     # act fast: a new push gets the fast native verdict first;
                     # the full matrix backfills below when the repo is quiet
                     r = test_sha(clone, host, st, head, fast or args.tier,

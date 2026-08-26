@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 25
+prio: 22
 type: compat
 blocked-by: []
 summary: "Every set type is 32 bytes, whatever its element range: SizeOf(set of TE8) is 32 where FPC says 4, and a record holding one is 48 bytes where FPC lays out 12. Values are all correct — a layout divergence like compat-pascal-subrange-storage-size, and it costs 8x memory on small sets as well as breaking binary interop."

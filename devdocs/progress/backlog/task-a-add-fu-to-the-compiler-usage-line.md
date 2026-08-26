@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 25
+prio: 40
 type: task
 blocked-by: []
 summary: "One line: `-FuDIR` is missing from the compiler's own `usage:` output, so the flag that makes a third-party Python package resolvable is undiscoverable from the compiler itself. The docs half is done (doc-n-fu-is-how-a-python-package-is-found); this is the code half that ticket split off."

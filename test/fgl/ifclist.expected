@@ -1,0 +1,3 @@
+count=2 v0=3 v1=4
+after-del count=1 head=4
+freed

@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 40
+prio: 20
 type: bug
 blocked-by: []
 summary: "`f(**d)` fails with \"expected expression\" because parser.inc:15874 enters the NilPy star-forwarding branch on a single tkStar, consumes one, and then tries to parse `*d` as an expression. `**` is two tkStar and the TRAILING position twelve lines below already knows that; the leading position never looks ahead. ~5 lines. The runtime already works — `f(*[], **d)` compiles and matches CPython today."

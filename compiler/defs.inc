@@ -226,7 +226,13 @@ const
   cgLLong = 12; cgULLong = 13; cgFloat = 14; cgDouble = 15; cgLDouble = 16;
   cgStruct = 17; cgPtr = 18; cgArray = 19; cgFunc = 20;
   MAX_RESOURCES   = 16;    { embedded R-directive resources }
-  MAX_DATAPTRFIX  = 4096;  { data->data 8-byte pointer relocations (RTTI blobs) }
+  { Initial reserve for the two Data[] relocation tables. Neither is a cap:
+    both grow geometrically (AddDataPtrFix / AddMethodFix in emit.inc), so
+    these only decide how many doublings a big program pays. 1024 entries is
+    8 KB apiece — the self-host needs 253 and 24, fcl-json 4582 and 2994.
+    feature-dynamic-compiler-tables }
+  DATAPTRFIX_BASE = 1024;  { data->data 8-byte pointer relocations (RTTI blobs) }
+  METHFIX_BASE    = 1024;  { code-address relocations into Data[] (VMT + RTTI) }
   { Named-operator keys for the OvrlOp* overload table — outside the
     TTokenKind range so they never collide with symbol operators
     (feature-pascal-class-management-operators). `operator :=`/Implicit
@@ -242,7 +248,6 @@ const
   OPK_FINALIZE   = 1006;
   OPK_ADDREF     = 1007;
   OPK_COPY       = 1008;
-  MAX_METHFIX     = 8192;  { code-address relocations into Data[] (VMT + RTTI) — blcksock's deep virtual hierarchy blew 1024 }
 
   { RTTI property kinds (OUR codes; streaming-grade subset) }
   RTTI_KIND_INT    = 0;   { integer / ordinal / boolean / sized ints }
@@ -1098,7 +1103,7 @@ const
     callable path -- do not trade it away for convenience.
 
     All fields 8 bytes, matching the RTTI blobs next door:
-      +0  code address        (patched by QueueMethCodeFixup, like RTTI_METH)
+      +0  code address        (patched by AddMethodFix, like RTTI_METH)
       +8  ReqN                user-space params with NO default (Self excluded)
       +16 TotN                user-space params in total (Self excluded)
       +24 StarIdx PLUS ONE    0 = no `*args`; folded in here rather than left
@@ -1195,6 +1200,41 @@ const
     array type always DEFINES something, so it always keeps its own name. }
   TYPEINFO_REQ_CAT_ARRAY  = 5;
   MAX_TYPEINFO_REQ = 512;
+  { The TTypeData payload a TypeInfo header's DataPtr points at: TEN uniform
+    8-byte slots, the same discipline TTypeInfoHdr itself uses
+    (feature-typeinfo-ttypedata-payloads). FPC's TTypeData is a VARIANT record
+    keyed on TTypeKind; ours is one fixed shape, because real code reaches RTTI
+    through the typinfo UNIT's declarations, which WE supply -- so no
+    BYTE-LAYOUT parity with FPC is owed, and only the VALUES are diffed against
+    it. A kind with nothing to say for a slot leaves it zero, which is what lets
+    one shape serve every category instead of a second code path per kind.
+      +0  OrdType   Ord(TOrdType) for an ordinal; the ELEMENT's TOrdType for
+                    tkSet; 0 when the kind has none
+      +8  FloatType Ord(TFloatType) for tkFloat; 0 otherwise. Its OWN slot
+                    rather than an overlay on OrdType, because the consumer
+                    spells it `td^.FloatType` and a fixed-shape record has no
+                    variant part to spell it through -- 8 bytes buys the reader
+                    the name it already uses.
+      +16 MinValue  ordinal low bound; 0 for a string[N]
+      +24 MaxValue  ordinal high bound; N for a string[N]. otUQWord's 2^64-1
+                    does not fit a signed slot, so it is the BIT PATTERN (-1)
+                    and the reader casts -- which is exactly what FPC's own
+                    32-bit MaxValue does to LongWord (measured: it prints -1).
+      +32 ElemKind  Ord(TTypeKind) of the element/component type, 0 = none
+      +40 ElemRef   -> the element type's OWN RTTI blob (PEnumRTTI for an enum
+                    element, PClassRTTI for a class one), nil when it has none.
+                    The TPropInfo.TypeRef idiom, deliberately NOT a nested
+                    PTypeInfo: a nested header would mean emitting type info for
+                    types the program never named in a TypeInfo() call.
+      +48 ElemSize  bytes per element (arrays, sets); 0 for a scalar
+      +56 ElemCount total element count of a static array
+      +64 DimCount  static array: dimension count; dynamic array: nesting depth
+      +72 DimsPtr   -> DimCount {Lo:Int64; Hi:Int64} pairs; nil for a dyn array
+    Classes and records do NOT get one: their DataPtr already points at the
+    TClassRTTI / record layout descriptor typinfo.pas has always read there, and
+    re-pointing it would break every existing reader. }
+  TYPEDATA_SIZE = 80;
+  TYPEDATA_DIM_SIZE = 16;   { one {Lo,Hi} pair in the DimsPtr table }
 
   SYS_READ  = 0;
   SYS_WRITE = 1;
@@ -1821,10 +1861,19 @@ var
   GenericFuncCount   : Integer;
   PendingGFSpecs     : array[0..MAX_PENDING_GFSPECS-1] of TPendingGFSpec;
   PendingGFSpecCount : Integer;
-  MethodFixups       : array[0..MAX_METHFIX-1] of TMethodFixup;
+  { The two Data[] relocation tables. Both GROW (AddMethodFix / AddDataPtrFix in
+    emit.inc) rather than capping: their size is linear in the program's RTTI
+    surface — measured at ~5 data-ptr entries per class plus ~2.25 per published
+    member — so every fixed ceiling is a wall some real library walks into. The
+    old MAX_METHFIX was bumped 1024 -> 8192 for Synapse's blcksock and the old
+    MAX_DATAPTRFIX of 4096 still stopped fcl-json (which wants 4582) compiling
+    at all. feature-dynamic-compiler-tables }
+  MethodFixups       : array of TMethodFixup;
   MethodFixCount     : Integer;
-  DataPtrFix         : array[0..MAX_DATAPTRFIX-1] of TDataPtrFix;
+  MethodFixCapacity  : Integer;
+  DataPtrFix         : array of TDataPtrFix;
   DataPtrFixCount    : Integer;
+  DataPtrFixCapacity : Integer;
   { RTTI emission state }
   UClsRTTIOff        : array[0..MAX_UCLASS-1] of Integer; { Data[] off of class RTTI hdr, -1 if none }
   UClsLayoutOff      : array[0..MAX_UCLASS-1] of Integer; { Data[] off of a CLASS's managed-field layout descriptor (record-desc format + member kind 4 = COM interface), -1 if none; backlinked at [VMT-16] for PXXClassFinalize }

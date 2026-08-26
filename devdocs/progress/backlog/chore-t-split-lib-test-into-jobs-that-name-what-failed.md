@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 55
+prio: 45
 type: chore
 blocked-by: []
 summary: "One lib-test job bundles several sources, so its tstate key names only the FIRST of them: `lib-test#src:test/crtl_exp2.c` is really `crtl_exp2.c examples/tk/hello.npy +5`, and a timeout in the tk step reads as a C-math regression. Split it so a job names what failed. Do it while lib-test is green — the baseline is recorded here."

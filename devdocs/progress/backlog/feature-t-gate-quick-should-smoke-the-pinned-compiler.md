@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 60
+prio: 65
 type: feature
 blocked-by: []
 summary: "Add one line to gate.sh quick: compile a trivial `uses SysUtils` program with $(PXX_STABLE). Track B's ground was silently broken for a day because a Track A commit added a symbol to compiler/builtin/** and used it from lib/rtl/** without moving the pin — the pinned binary's embedded builtin lacked the symbol, so every Track B build died. Nothing in the dev loop builds with the PINNED compiler, so nothing noticed."

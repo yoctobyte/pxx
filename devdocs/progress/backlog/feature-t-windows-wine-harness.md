@@ -2,7 +2,7 @@
 summary: "Windows/Wine test bed — scratch-prefix wine runner + mingw-w64 differential oracle, hello-world gate"
 type: feature
 track: M
-prio: 25
+prio: 20
 ---
 
 # Windows/Wine test harness (Track T)

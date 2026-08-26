@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 35
+prio: 12
 type: bug
 blocked-by: []
 summary: "`abs(z)` on a complex raises `TypeError: expected a number, got object` where CPython returns the magnitude. Found while writing the parity assertion for `(-8.0) ** 0.5` — `type()`, `.real`, `.imag` and `round()` on a complex all match CPython exactly, so `abs` is the one hole in the set."

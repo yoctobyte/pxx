@@ -1,7 +1,7 @@
 ---
 slug: bug-a-riscv32-sa-onstack-has-no-effect-under-qemu
 track: A
-prio: 25
+prio: 12
 type: bug
 blocked-by: []
 summary: "riscv32 registers a signal alt stack correctly — the sigaltstack syscall succeeds and the flags word assembles to $18000004 — but the handler still runs on the FAULTING stack under qemu-riscv32, so a stack-overflow SIGSEGV kills the process. The identical construction works under qemu-i386/arm/aarch64 of the same build, which points at qemu-user rather than at us. Unverifiable without hardware."

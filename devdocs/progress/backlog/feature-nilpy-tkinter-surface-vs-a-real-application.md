@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 45
+prio: 60
 type: feature
 blocked-by: []
 summary: "The tkinter façade is built and now genuinely gated (it runs under Xvfb), but its widget/option surface has never been proven against a real application. songformatter's GUI is the forcing target: tkinter.font metrics (descent/measure), Canvas.create_text anchoring, Notebook, PanedWindow. Measurable for the first time now that a running harness exists."

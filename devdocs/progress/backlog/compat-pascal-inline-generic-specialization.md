@@ -2,7 +2,7 @@
 summary: "pxx accepts only the declaration form `specialize Max<Integer> as MaxInt;` — FPC's inline `specialize Max<Integer>(a, b)` in an expression or statement is rejected with 'undefined variable'"
 type: compat
 track: P
-prio: 35
+prio: 60
 ---
 
 # Inline `specialize F<T>(...)` for generic ROUTINES

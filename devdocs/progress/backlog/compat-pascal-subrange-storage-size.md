@@ -1,6 +1,6 @@
 ---
 track: P
-prio: 30
+prio: 22
 type: compat
 blocked-by: []
 summary: "Every subrange type gets the 4-byte default instead of the smallest type that holds it: SizeOf(10..20) is 4 where FPC says 1, so a `packed record` of subranges is 12 bytes where FPC lays out 3. Values are all correct — this is a layout divergence, not a wrong-value bug, and it breaks binary interop and costs 4x memory."

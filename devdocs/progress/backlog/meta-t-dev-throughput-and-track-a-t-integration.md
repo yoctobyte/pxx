@@ -2,7 +2,7 @@
 summary: "META: development is wait-limited, not token-limited. Dev tracks stop running suites; T owns breadth and its report LATENCY becomes the product. Coordinates the tooling tickets that get us there."
 type: meta
 track: T
-prio: 40
+prio: 30
 ---
 
 # META: dev throughput — Track A+* / Track T integration

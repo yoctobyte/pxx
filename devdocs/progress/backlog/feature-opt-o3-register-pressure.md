@@ -1,5 +1,5 @@
 ---
-prio: 58  # auto — greenlit optimization campaign; real speed win but exploratory, behind -O3
+prio: 35
 ---
 
 # -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator

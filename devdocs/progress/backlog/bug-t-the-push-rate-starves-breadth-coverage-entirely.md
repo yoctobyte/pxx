@@ -1,6 +1,6 @@
 ---
 track: T
-prio: 60
+prio: 55
 type: bug
 blocked-by: []
 summary: "SHAPE 2 SHIPPED AND DID NOTHING (see the 2026-08-19 correction: 9 saved, 0 carried, 100% loss — fixed under bug-t-a-saved-partial-is-evicted-by-the-next-run-of-different-work); this closes on carried_runs leaving zero, not on more code. Zero full-tier runs on HEAD in the 5h13m between 9bfb7fcfac03 (10:31:57Z) and ~15:45Z, while cross-target coverage read as fine because every native verdict was green. RE-MEASURED: the watcher is idle 54% of that window (~2.8h, 8x what a full tier needs) — breadth is not starved by pushes, it is queued behind pin verify, which needs a contiguous 21 minutes, gets idle slices with a median of 299s, and discards 100% on every abort. Breadth ran within minutes of pin verify finally retiring. Fix is resumability plus bounding consecutive idle, NOT reserving a slot."
@@ -410,3 +410,53 @@ after an eight-second run — an artifact of `teardown()`, not a verdict. Filed
 and fixed separately as [[bug-t-a-killed-job-is-published-as-a-failed-job]],
 because it is a phantom red on the **published** path too, not only on this
 ticket's resume path.
+
+## 2026-08-25 — the premise expired, and a reservation now exists
+
+**This ticket's own conclusion — "the fix is resumability plus bounding
+consecutive idle, NOT reserving a slot" — was right for its measurement and is
+wrong for today's.** Recorded here rather than edited away: on 2026-08-19 the
+box was idle 54% of the window, so breadth did not need a slot reserved, it
+needed the unfinishable item ahead of it (pin verify) to stop holding the queue.
+
+What changed is the box, not the queue. Plexus became a workstation on 08-20 and
+the watcher was capped at 6 of 12 cores. Measured tonight:
+
+| | 08-19 | 08-25 |
+| --- | --- | --- |
+| a native run | ~246s | **~490s** |
+| testable commits landing during one | — | **~9** |
+| cycles where `do_test` is true | some | **essentially all** |
+| idle ladder reached | 54% of the window | **never** |
+
+So breadth no longer merely runs rarely — **it cannot start.** `do_test`
+outranks the ladder unconditionally, and a new commit is always pending by the
+time a native run ends. That also made the commitment point (`572524c7c`, which
+lets a *running* breadth run survive a push) inert: nothing was ever running.
+
+### What landed
+
+1. **`572524c7c`** — a breadth run past `full_commit_secs` (300s) finishes
+   instead of being discarded. Native stays preemptive at every moment.
+2. **`b61125007`** — the global deadline scales with the core budget. At 6 of 12
+   cores the matrix (~24000 cpu-seconds) cannot fit an hour at any packing, so
+   the old fixed 3600s ceiling was unsatisfiable by construction and every
+   breadth run would have been torn down at the same minute.
+3. **`breadth_overdue()`** — the reservation, deliberately narrow: it fires only
+   when breadth is already stale past `BREADTH_STALE_SECS` (the threshold the
+   reports have been printing all along), takes one run, and is guarded by a
+   `BREADTH_RETRY_SECS` backoff.
+
+The backoff is the part that matters more than the reservation. A breadth run
+that does not LAND leaves `last_full` untouched, so the staleness test stays
+true forever — without a backoff the reservation fires every cycle and the fast
+verdict, which is what every lane actually steers by, stops entirely. That
+failure would be strictly worse than no breadth. `twatch_breadth_slot_devtest.py`
+fences it, along with the "a landed run releases the slot immediately, backoff or
+not" case.
+
+### What this ticket still owes
+
+`carried_runs` leaving zero, per the summary line — the resume path is
+untouched by tonight's work. The reservation makes a full run *possible*;
+resumability is what makes a preempted one cheap. Still open.

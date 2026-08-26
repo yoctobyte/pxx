@@ -1,6 +1,6 @@
 ---
 track: N
-prio: 45
+prio: 65
 type: bug
 blocked-by: []
 summary: "`isinstance(x, mod.Class)` is a compile error — `unknown type in isinstance: cabc` — so any code that imports a module and tests against one of its classes must first rebind the class to a bare name."

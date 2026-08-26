@@ -2,7 +2,7 @@
 summary: "Supports(obj, IFoo) works but FPC's three-argument Supports(obj, IFoo, out Ref) — the form that both tests AND retrieves the interface — is a parse error"
 type: compat
 track: P
-prio: 30
+prio: 45
 ---
 
 # `Supports(obj, IFoo, Ref)` — the three-argument form

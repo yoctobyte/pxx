@@ -1,7 +1,7 @@
 ---
 summary: "`string[N]` is a word-prefix tyFixedString, so any record holding one is a different SIZE and LAYOUT than FPC's: `record s: string[10] end` is 24 bytes where FPC says 11. Values are all right; the bytes are not."
 type: compat
-prio: 40
+prio: 25
 track: P
 ---
 

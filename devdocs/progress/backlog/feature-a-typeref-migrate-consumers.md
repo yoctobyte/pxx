@@ -1,7 +1,7 @@
 ---
 track: A
 owner: claude-A
-prio: 40
+prio: 62
 type: feature
 ---
 
