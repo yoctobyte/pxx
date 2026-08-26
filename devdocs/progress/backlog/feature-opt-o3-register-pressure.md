@@ -1,5 +1,5 @@
 ---
-prio: 35
+prio: 85
 ---
 
 # -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator
@@ -386,3 +386,31 @@ Recorded here rather than acted on: the fix is a register allocator, which is
 this ticket's whole subject and a campaign, not a session. Reproduce the two
 benchmarks above before starting — they are 30 seconds each and they are the
 scoreboard.
+
+
+## Re-prioritised 35 -> 85 by the coordinator, 2026-08-26
+
+The Track A worker that measured the 3.8x gap flagged this field as a decision
+rather than an engineering call and correctly left it alone. Raising it.
+
+**The number is what changed, not the opinion.** The same source built by
+`fpc -O2` compiles `empty.npy` in 1.06s against our own `-O2` build's 4.06s,
+producing byte-identical output -- so this is not a semantics question, it is
+purely how well we allocate registers. Isolated to scalar codegen: a three-local
+loop runs 0.78s under pxx at both `-O2` and `-O3` versus 0.19s under fpc, and the
+`-S` dump above shows the induction variable loaded four times per iteration, the
+loop bound rematerialised twice, and `s` stored then reloaded one instruction
+later.
+
+**Why 85 and not higher:** it sits below live segfaults and wrong-value bugs,
+which remain the owner's stated top rank (*"compiler syntax, segfaults, etc, all
+prio"*). It sits above essentially everything else because it is now the largest
+single lever on the owner's other standing complaint -- *"we see testing overhead
+taking 95% of our development time"* -- and unlike tiering, sharding or dropping
+jobs it **costs no coverage at all**. Every lane pays this tax on every
+`make compiler/pascal26`, which is mandatory in every agent's per-fix loop.
+
+The hotspot work that produced this measurement already took `empty.npy` from
+8.62s to 4.06s and `make compiler/pascal26` from 32.08s to 23.36s. That was the
+easy half. This is the remaining 3.8x, and it is the reason the prio field no
+longer matched the value.

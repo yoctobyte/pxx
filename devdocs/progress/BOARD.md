@@ -258,7 +258,7 @@ _none_
 | feature-opt-dynarray-grows-in-place | O | 40 | feature | A growing dynamic array leaves its whole geometric series behind as garbage | — |
 | feature-opt-heap-per-thread-cache | O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-opt-inline-float-and-record-returning-leaves | O | 45 | feature | The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers. | — |
-| feature-opt-o3-register-pressure | O | 35 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
+| feature-opt-o3-register-pressure | O | 85 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-opt-rtti-emit-on-use | O | 32 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
 | feature-p-assertions-directive-and-position | P | 55 | feature | RE-TYPED 2026-08-19 feature -> bug for half 1: `{$ASSERTIONS OFF}` is ACCEPTED AND IGNORED — measured on v363, an Assert whose condition has a side effect still runs it (n=1 where FPC gives n=0), so the two dialects take different paths with no diagnostic. Implement FPC assertion parity: {$ASSERTIONS ON/OFF} and -Sa gating (Assert compiled OUT when off, so its side effects do not run), plus the '(file, line N)' suffix FPC appends to the message | — |
 | feature-p-class-helper-for-a-class-type | P | 58 | feature | `class helper for TC` is refused with `Expected: :, but got: for` while `record helper for T` and `type helper for T` both work — the third spelling of one concept was never wired. fpc compiles and runs it; the helper method sees the class's fields through Self. | — |
@@ -653,6 +653,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 85] [O] feature-opt-o3-register-pressure
 - [p 80] [N] bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - [p 80] [N] bug-n-hasattr-through-an-untyped-parameter-is-always-false
 - [p 78] [N] bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
@@ -863,7 +864,6 @@ _none_
 - [p 35] [E] feature-demo-ide-jump-into-includes-and-units
 - [p 35] [E] feature-demo-portable-userland
 - [p 35] [N] feature-nilpy-walrus-operator
-- [p 35] [O] feature-opt-o3-register-pressure
 - [p 35] [P] feature-pascal-management-operators-nested-and-array
 - [p 35] [T] feature-twatch-full-tier-coverage-age
 - [p 35] [A] refactor-a-the-const-cast-width-table-is-the-third-copy
