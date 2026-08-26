@@ -786,6 +786,37 @@ seed mtime changed in the same window; the RED went away; one story fit, so
 nobody looked for the second variable. Both errors are the same shape — stopping
 at the first sufficient explanation — and neither is caught by any test.
 
+## A suite that never sets the flag is blind to what the flag guards
+
+A green suite is evidence about the code the suite *reached*. For anything behind
+a gate, the gate is what decides whether it was reached — so the same property
+that makes a feature safe to land makes the suite unable to say anything about it.
+
+The instance, 2026-08-26: four `-O3` optimisation passes, and the question was
+whether to promote them to `-O2`. The tempting evidence was a full-tier verdict at
+the sha that contained them. But **almost nothing in the tier compiles at `-O3`**
+— the NilPy recipes are `./$(COMPILER) test/x.npy out`, no `-O` flag at all — so a
+full-tier GREEN would have proven mainly that *the gate kept the passes out of the
+default path*. That is a fact about the gate, not about the passes, and reading it
+as "they are safe to promote" inverts what it shows.
+
+**The same reasoning tells you which evidence does bear on it:** the two-oracle
+differential run across all four `-O` levels, and `test-selfcompile-odiff`, which
+actually varies the flag. Ask *what in this suite sets the flag* before treating
+its verdict as coverage.
+
+**The corollary that catches bugs rather than just weak evidence:** if a change
+carries a gated half and an ungated half, the tier can only see the ungated half —
+so when a gated-feature window produces a regression, the ungated half is the
+first suspect, however small it looked in the commit message. A commit whose
+subject was `-O3 cmp-immediate` also carried an ansistring runtime blob change
+that no gate guarded, and that half is the only part of the work the suite could
+observe.
+
+The general form: **a flag makes a feature invisible in exactly the tier you
+would use to judge it.** Coverage is not "did the suite pass", it is "did the
+suite execute this path", and a gate is a machine for guaranteeing it did not.
+
 ## Record the negative result, or someone will spend a night rediscovering it
 
 Track T profiled the test matrix and reported three findings, one of which was
