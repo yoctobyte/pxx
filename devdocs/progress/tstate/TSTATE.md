@@ -3,10 +3,8 @@
 | host | last tested | date | verdict | wall | full through |
 |------|-------------|------|---------|------|--------------|
 | borg _(retired 2026-08-12T07:46:31Z → plexus)_ | `b5b50be85d2d` | 2026-07-31T17:51:50Z | GREEN (native) | 160.5s | `f3d420def527` RED |
-| plexus | `23e3ba7435cc` | 2026-08-26T15:48:14Z | GREEN (native) | 302.9s | `3fe59c874c35` RED |
+| plexus | `23e3ba7435cc` | 2026-08-26T16:08:15Z | GREEN (full) | 1182.2s | `23e3ba7435cc` GREEN |
 | xeon _(retired 2026-08-07T16:44:07Z → plexus)_ | `0db7276f06a0` | 2026-08-04T23:13:51Z | RED (native) | 124.5s | `7d8929633721` GREEN |
 
 ## Open regressions
-- **test-aarch64#src:test/test_parallel_for_capture_aggr.pas** — test/test_parallel_for_capture_aggr.pas tools/run_target.sh (plexus): bad `70f6a360f475`, last good `902e53050f07`, 3 commit(s) in range
-- **test-arm32#src:test/test_parallel_for_capture_aggr.pas** — test/test_parallel_for_capture_aggr.pas tools/run_target.sh (plexus): bad `70f6a360f475`, last good `902e53050f07`, 3 commit(s) in range
-- **test-i386#src:test/test_parallel_for_capture_aggr.pas** — test/test_parallel_for_capture_aggr.pas tools/run_target.sh (plexus): bad `70f6a360f475`, last good `902e53050f07`, 3 commit(s) in range
+- none
