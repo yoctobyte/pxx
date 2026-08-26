@@ -1,17 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-25T11:28:53Z",
-   "fixed": [],
-   "new_red": [
-    "test-core#src:test/test_nilpy_json_module.npy",
-    "test-core#src:test/test_nilpy_json_reparse_heap.npy"
-   ],
-   "sha": "a28bc3993a0e0caa0370b71abb1759287d3e9909",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-25T12:30:33Z",
    "fixed": [],
    "new_red": [
@@ -443,6 +432,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "61a41c41f8e38a0839ec594c5fffb835f3d4eea1",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T06:39:16Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "316210ff90291d5b71e6aa258d5b6118f9b5f393",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -6666,14 +6664,14 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T06:31:35Z",
+  "date": "2026-08-26T06:39:16Z",
   "deadline": 7200.0,
-  "sha": "61a41c41f8e38a0839ec594c5fffb835f3d4eea1",
+  "sha": "316210ff90291d5b71e6aa258d5b6118f9b5f393",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 366.2
+  "wall": 377.1
  },
  "last_bench": {
   "conf_rows": 550,
