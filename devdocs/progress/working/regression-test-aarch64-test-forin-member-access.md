@@ -1,6 +1,6 @@
 ---
 prio: 70
-track: P
+track: A
 status: working
 owner: frank1-A-aarch64
 ---
@@ -53,3 +53,89 @@ the range is now decided per job from `job_tier` and widened only when the
 parent's run provably did not contain it. Tickets filed from later runs carry
 the corrected range; this one is annotated rather than rewritten, because the
 filed text is the record of what the watcher actually claimed.
+
+
+## ROOT CAUSE — not aarch64, not the code size (frank1-A-aarch64, 2026-08-26)
+
+**Not a backend bug, and the code-size difference in the log tail is a red
+herring.** The two `ok:` lines are the aarch64 build and the x86-64 build of the
+*same* source — 152328B vs 65652B is aarch64's fixed-width encoding against
+x86-64's variable-length one, which is what that ratio always looks like here.
+The IR is byte-identical between the two targets (`PXXDBG=a.ir:TGame.SumIds`,
+diffed); nothing about this was backend-local.
+
+**The bug:** `for x in <member access>` does not iterate the container in place.
+`ParseForInNodeAST` materialises it into a HIDDEN dyn-array local
+(`fnSym := AllocDynArray('', ...)`), so the container is evaluated exactly once,
+and drives the ordinary bare-variable loop with that. The hidden local is minted
+*while the body is being parsed* — after `EmitManagedLocalsZeroInit` has already
+run in the prologue — so it was never zero-initialised. The loop's first
+`IR_STORE_SYM` into it does the normal managed publish: retain new, store,
+**release old** — and "old" was whatever the frame happened to hold.
+
+When those bytes were a live heap pointer, that decremented a refcount nobody
+owned. In `test_forin_member_access` the victim was the second TItem, whose
+`Id` sat exactly where `PXXHdrRC` looked, so `30 + 12` printed 41. A silently
+decremented field, one indirection away from the loop, on a target chosen by
+frame layout — the "plausible wrong value far from the cause" case.
+
+**It is not aarch64-specific.** With a routine in front of the call that leaves a
+live pointer in the slot, x86-64, i386, aarch64, arm32 and riscv32 all print the
+same wrong answer, at -O0 and -O2. aarch64 was simply the only target whose
+natural frame layout put a live pointer there for *this* test. Measured against
+a self-hosted pre-fix build of `origin/dev`:
+
+```
+pre-fix, test_forin_member_temp_zeroinit (frame dirtied on purpose)
+  x86_64 3102 | i386 7692 | aarch64 3102 | arm32 7692 | riscv32 7692
+pre-fix, test_forin_member_access (frame NOT dirtied)
+  x86_64 42 | i386 42 | aarch64 41 | arm32 42 | riscv32 42   <- the filed red
+```
+
+**The 179-commit range did not matter** and no bisect was run. Endpoint
+measurement plus shape variation found it in one pass, which is the cheaper
+route the ticket's own correction note recommends.
+
+### The design flaw behind it
+
+"A managed local minted after the prologue must start nil" had SEVEN partial
+owners, and the for-in container temp was covered by none:
+
+1. the prologue's `EmitManagedLocalsZeroInit` — declared locals only;
+2-7. one `SymIsHiddenArgTemp` walker per backend — flagged temps only, and the
+   flag is not set on this one;
+8. an x86-64-only "safety net" for unnamed temps the flag missed — and it was
+   scoped `not IsArray` AnsiString/Variant, so a dyn ARRAY temp slipped past
+   even the net, on the one target that had a net at all.
+
+**Fix (`50fac8e29`):** split the "which kinds are managed, and how far do they
+reach" table out of `EmitManagedLocalsZeroInit` as `ManagedLocalZeroBytes`, and
+give `CompileAST` a late-mint pass that asks it the same question for every
+unnamed managed `skLocal` the body's parse/lowering minted — replacing the
+COM-interface-only scoping that stood there. One table, every kind, every target.
+
+### Follow-up left on the table
+
+Folding the six per-backend flagged walkers into that one pass was tried
+(`20afac6c6`) and **reverted** (`3dfc53cbb`): it self-hosted and passed this
+bug's cross-target repro, then segfaulted `quick_canary_nilpy` and every
+promo-int test. The two tables disagree in ways worth measuring before trying
+again — the walker zeroes a flagged temp of ANY kind while `ManagedLocalZeroBytes`
+answers 0 for kinds it does not consider managed; and the walker emits inline
+stores while `EmitZeroFrameSlot` routes anything wider than a pointer to a CALL
+to `PXXMemZero`, which a promo slot (16 bytes) always crosses. The revert commit
+carries the full note. Cost of not doing it: the compiler's own code grew
+9123619 -> 9236120 bytes, because the flagged temps are now nil'd twice.
+
+### Gate
+`make compiler/pascal26` converged (self-host fixedpoint) · `tools/gate.sh quick`
+· the repro on x86-64 / i386 / aarch64 / arm32 / riscv32 at -O0 and -O2 · the
+aarch64 cross target, both `test_forin_member_access` and the new
+`test_forin_member_temp_zeroinit`, against their x86-64 differential partners.
+
+### Regression test
+`test/test_forin_member_temp_zeroinit.pas` — the same for-in shape with a
+frame-dirtying call in front, so the witness does not depend on a target's
+accidental frame layout. Verified to FAIL (3102 / 7692) against a self-hosted
+pre-fix build on all five targets. Wired into `test-core` and into the i386,
+aarch64, arm32 and riscv32 cross lists.
