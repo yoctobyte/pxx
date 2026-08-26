@@ -438,11 +438,12 @@ bought in the same time.
 
 `perf` is blocked on plexus (`perf_event_paranoid = 4`) and yama
 `ptrace_scope = 1` forbids attaching to a non-descendant, so gdb cannot attach
-either. **`bench-o/pxxprof.c`** (60 lines) solves both: it forks the target
-itself, `PTRACE_SEIZE`s its own child, and samples RIP with `PTRACE_INTERRUPT`
-on a timer. It profiles any binary including pxx's own custom-ELF output;
-`bench-o/symbolize.py` resolves addresses against a symbol map, which for a pxx
-binary comes from `-g`'s DWARF `DW_TAG_subprogram` low_pcs.
+either. **`tools/pxxprof.c`** (60 lines, committed) solves both: it forks the
+target itself, `PTRACE_SEIZE`s its own child, and samples RIP with
+`PTRACE_INTERRUPT` on a timer. It profiles any binary including pxx's own
+custom-ELF output; **`tools/pxxprof_symbolize.py`** resolves addresses against a
+symbol map, which for a pxx binary comes from `-g`'s DWARF `DW_TAG_subprogram`
+low_pcs (both headers carry the recipes).
 **Two traps recorded so we do not re-learn them:**
 - FPC's `-pg` + gprof gives usable **call counts** and useless **times** here
   (three samples for 1.03 s of user time). Read the counts, not the percentages
@@ -454,7 +455,7 @@ binary comes from `-g`'s DWARF `DW_TAG_subprogram` low_pcs.
 Wall-clock discipline: the box also runs Track T's watcher (load 4-15 during
 this session), so every timing below is `%U` user time, **A/B alternating**,
 reported as the **minimum** of N — the least noise-contaminated estimator.
-`bench-o/ab.sh`.
+An A/B harness doing exactly that is three lines of shell; it was scratch, not committed.
 
 ### What the profile actually said
 
@@ -520,7 +521,7 @@ Where output changes, byte-identity of the emitted code is not available, so:
   residency stress whose every store overflows its declared type (so a missing
   re-extension shows at once) including a try/except that stores to residents
   inside the protected block; a string-churn program under `--threadsafe` with
-  max RSS as a leak canary. Generators in `bench-o/gen_*.py`.
+  max RSS as a leak canary. The generators were scratch (`bench-o/`, not committed) — they are a page of Python each and the shapes are described above, which is what a re-run needs.
 - `-O3` **self-host fixedpoint byte-identical** after every commit.
 - The `-O3`-built compiler's `-O2` output **byte-identical** to the `-O2`-built
   compiler's.
