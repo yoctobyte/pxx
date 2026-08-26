@@ -8617,20 +8617,52 @@ begin
   LabelFixupCount := 0;
   ScratchDepth := 0;   { -O3 W1 scratch registers all free at body start (balanced Inc/Dec, but never trust a prior body's aborted state) }
 
-  { The hidden-arg-temp nil-init pass that stood here — one copy per backend,
-    six in all — is gone: CompileAST's late-mint pass now nils EVERY unnamed
-    managed skLocal through the shared ManagedLocalZeroBytes table, at the same
-    point in the body (both ran before any body code). It is a strict superset —
-    this copy sized a flagged VARIANT temp at one word when a variant is two,
-    and it never covered an unflagged temp at all — so the deletion is one owner
-    replacing seven partial ones, not a guarantee dropped.
-    bug-a-a-for-in-container-temp-is-not-zero-initialised }
+  { Nil-init hidden owning locals synthesised for materialised managed-string
+    arguments. They are created during this body's IR lowering, after the
+    parser's prologue zero-init pass, so they would otherwise hold stale stack
+    bytes and the first store's release-of-old would free garbage. Main-program
+    temps are skGlobal (BSS, already zeroed), so only in-proc skLocal needs it. }
+  if CurProc >= 0 then
+    for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+      if SymIsHiddenArgTemp[i] and (Syms[i].Kind = skLocal) then
+      begin
+        if (Syms[i].TypeKind = tyRecord) and not Syms[i].IsArray and
+           (RecSize(SymTR[i].RecId) > TARGET_PTR_SIZE) then
+        begin
+          { Managed-record temp (e.g. a hidden aggregate-result dest): zero the
+            full record so every managed field starts nil, not just the first
+            qword. }
+          EmitAsmX64([
+            'lea rdi, [rbp+%]', Syms[i].Offset,
+            'xor rax, rax',
+            'mov rcx, %', RecSize(SymTR[i].RecId),
+            'rep stosb'
+          ]);
+        end
+        else
+          EmitAsmX64(['mov qword [rbp+%], 0', Syms[i].Offset]);
+      end;
 
-  { The x86-64-only "safety net for lowering temps the flag missed" is gone with
-    it, and it is the one that came closest to catching this bug: it already
-    walked the UNNAMED skLocals, but it was scoped to `not IsArray` AnsiString /
-    Variant — so the for-in container temp, a dyn ARRAY, slipped past even here,
-    on the one target that had a net at all. }
+  { Safety net for lowering temps the flag missed: an UNNAMED managed skLocal
+    (str-method-chain / ternary result, etc.) whose init lives on a branch a run
+    may skip would otherwise be freed uninitialised at the epilogue (decq on
+    stale stack bytes -> SIGSEGV, or a corrupted value). Nil it here. Scoped to
+    UNNAMED (Name='') UNFLAGGED AnsiString/Variant temps: the compiler's own
+    hidden temps are all flagged (handled above), so it emits nothing extra here
+    and the self-host fixedpoint stays byte-identical. }
+  if CurProc >= 0 then
+    for i := Procs[CurProc].ScopeBase to SymCount - 1 do
+      if (Syms[i].Kind = skLocal) and (Syms[i].Name = '') and
+         not Syms[i].IsArray and not SymIsHiddenArgTemp[i] then
+      begin
+        if Syms[i].TypeKind = tyAnsiString then
+          EmitAsmX64(['mov qword [rbp+%], 0', Syms[i].Offset])
+        else if Syms[i].TypeKind = tyVariant then
+        begin
+          EmitAsmX64(['mov qword [rbp+%], 0', Syms[i].Offset]);
+          EmitAsmX64(['mov qword [rbp+%], 0', Syms[i].Offset + 8]);
+        end;
+      end;
 
   for i := 0 to IRCount - 1 do
   begin
