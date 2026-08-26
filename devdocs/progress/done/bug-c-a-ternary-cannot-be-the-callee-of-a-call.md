@@ -8,7 +8,7 @@ blocked-by: []
 status: done
 owner: opus5-frank1
 created: 2026-08-26
-commit: PENDING-COMMIT
+commit: c3582bdb7
 summary: "CNodeProcSig is a chain of arms, one per node shape — AN_IDENT, AN_PROCADDR, AN_CALL, AN_CALL_IND, AN_INDEX, AN_FIELD, AN_PTR_CAST, AN_COMMA — and AN_TERNARY was not among them, so `(c ? f : g)(args)` died as `Expected: ), but got:` at the `?`. busybox opens libbb/copy_file.c with exactly that. Fixed by RECURSING like the AN_COMMA arm rather than adding a ninth shape."
 ---
 
