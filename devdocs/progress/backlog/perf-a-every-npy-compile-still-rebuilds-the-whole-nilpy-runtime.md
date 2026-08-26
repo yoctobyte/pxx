@@ -1,6 +1,6 @@
 ---
 track: A
-prio: 45
+prio: 85
 type: perf
 blocked-by: []
 summary: "The structural half of bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost, which halved the constant (8.62s -> 4.06s) by removing the hotspots but did NOT remove the WORK: every .npy compile still parses and code-generates all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. A zero-byte .npy costs 4.06s where `begin end.` costs 0.24s."
@@ -142,3 +142,36 @@ work in the matrix, it costs no coverage to remove, and it is 4.2 seconds on
 every NilPy user's hello-world as well. `prio: 45` looks low against that;
 raising it is the coordinator's call, not T's, so this is a flag rather than an
 edit.
+
+
+## Re-prioritised 45 -> 85 by the coordinator, 2026-08-26
+
+Track T measured this from the harness side and flagged the field rather than
+editing it. Raising it, on the measurement and not on the opinion.
+
+**It is ~70% of the test matrix.** `test-nilpy` is 719 of the full tier's 3,063
+jobs -- 23% of the count, **70% of the CPU**. And the tax is not part of a NilPy
+job, it IS the job: at HEAD, after the hotspot work, a zero-byte `.npy` costs
+4.49s and a real 288-line test costs 5.58s. **The test content is nearly free.**
+A Pascal program whose whole body is `uses pylib;` costs 2.93s, so ~2.7s is
+`pylib.pas` (18,996 lines) before `pyeval.pas` or any frontend setup.
+
+Paying that once instead of 719 times is **~3,016 CPU-seconds per full tier, at
+zero coverage cost** -- and the same 4.2s lands on every NilPy user's hello-world,
+so this is not only a test-harness concern.
+
+**Peer of `feature-opt-o3-register-pressure`, also 85.** Between them they are
+most of the matrix cost. The order between the two does not matter; both sit
+below live segfaults and wrong-value bugs, which stay the owner's top rank.
+
+**Why it is Track A's and cannot be worked around in the harness:** the compiler
+offers no precompiled-unit or unit-cache facility -- `-Fu` adds a *search root*,
+not a cache. A harness cannot share an artifact the compiler has no way to emit
+or consume. Track T looked, found nothing to build on, and declined to invent
+something that would look like progress. T owns the tool, never the bug.
+
+**Recorded so nobody re-measures it: the scheduler is NOT the problem.** Same
+run, 12,319 CPU-seconds against 13,663 core-seconds available (2277s x 6 cores)
+= **90% utilisation**, ~1,343 idle core-seconds, near the floor for a job graph
+with dependencies. There is no serialisation to unpick and no parallelism to
+reclaim. Do not start with the scheduler.

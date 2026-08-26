@@ -318,7 +318,7 @@ _none_
 | meta-constant-normalisation | A | 20 | meta | Standing index: stop writing compiler code that branches on constant-vs-variable. Each constant expression becomes its own uniquely-named read-only variable, so downstream has ONE shape to handle. Goal is less double work on future fixes, not speed. | — |
 | meta-dialect-extensions-and-fpc-strict | A | 5 | meta | Meta: pxx dialect extensions ⟷ FPC compatibility (two aims, switch-guarded) | — |
 | meta-t-dev-throughput-and-track-a-t-integration | T | 30 | meta | META: development is wait-limited, not token-limited. Dev tracks stop running suites; T owns breadth and its report LATENCY becomes the product. Coordinates the tooling tickets that get us there. | — |
-| perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime | A | 45 | perf | The structural half of bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost, which halved the constant (8.62s -> 4.06s) by removing the hotspots but did NOT remove the WORK: every .npy compile still parses and code-generates all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. A zero-byte .npy costs 4.06s where `begin end.` costs 0.24s. | — |
+| perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime | A | 85 | perf | The structural half of bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost, which halved the constant (8.62s -> 4.06s) by removing the hotspots but did NOT remove the WORK: every .npy compile still parses and code-generates all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. A zero-byte .npy costs 4.06s where `begin end.` costs 0.24s. | — |
 | perf-c-parse-codegen-large-file-superlinear | A | 25 | perf | perf: C parse+codegen shows mild superlinear scaling on very large amalgamations | — |
 | perf-nilpy-remaining-perbyte-string-builders | N | 40 | perf | NilPy: remaining pylib string builders still append per-byte (O(n²)) | — |
 | refactor-a-backend-machine-code-lives-in-six-shared-files | A | 25 | refactor | A backend is not ir_codegen_<arch>.inc + asmtext_<arch>.inc. Six shared files emit or name per-arch machine code: symtab.inc (three full function epilogues), asmenc.inc (inline-asm text for all five targets), ir_codegen.inc (the shared -O pipeline calls two aarch64 passes by name), asmfront.inc, exception_emit.inc, and -- the one that crosses a lane -- cparser.inc, the C FRONTEND, which writes the C _start entry stub as raw rv32_/a64_/arm32_ emission. Measured by the omission defines, which turn every one of these into a compile error. | — |
@@ -653,6 +653,7 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 85] [O] feature-opt-o3-register-pressure
+- [p 85] [A] perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime
 - [p 80] [N] bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - [p 80] [N] bug-n-hasattr-through-an-untyped-parameter-is-always-false
 - [p 78] [N] bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
@@ -816,7 +817,6 @@ _none_
 - [p 45] [B] feature-real-dynlib-loader [parked — re-claim, do not duplicate]
 - [p 45] [T] feature-t-fail-when-a-test-file-is-wired-into-no-build-rule
 - [p 45] [T] feature-t-nilpy-cpython-differential-fuzzer
-- [p 45] [A] perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime
 - [p 45] [A] refactor-a-one-program-driver-prologue-for-every-frontend
 - [p 45] [N] refactor-n-two-import-handlers-are-twins
 - [p 45] [P] refactor-p-the-field-declaration-parser-exists-twice

@@ -367,6 +367,32 @@ Same family as `code : STALE` in the watcher and the frozen-builtin seam
 `gate.sh` now guards: **the artifact you are measuring is assembled from more
 parts than the one you named.**
 
+## Record the negative result, or someone will spend a night rediscovering it
+
+Track T profiled the test matrix and reported three findings, one of which was
+that **the scheduler is fine** -- 90% core utilisation, ~1,343 idle core-seconds
+out of 13,663, near the floor for a job graph with dependencies. Nothing to
+unpick. They wrote it down deliberately, in the owning ticket, in the same
+prominence as the positive findings: *"I would rather cost myself the finding
+than have the next person spend a night discovering it."*
+
+That instinct is right and it is rare, because a negative result feels like an
+absence of work. It is not. "The obvious suspect is innocent" is expensive to
+establish and free to forget, and it is the single most re-derived kind of fact
+in a long-running project -- the scheduler, the allocator, the disk, whichever
+component *looks* like it should be the problem will be re-measured by every new
+arrival until someone writes down that it was not.
+
+So: when a measurement clears a suspect, **say so in the ticket, name the number,
+and say plainly that nobody should start there.** The same applies to a plausible
+fix you tried that did not help. An unrecorded dead end is a trap that resets
+itself.
+
+The companion rule, also demonstrated: **do not extrapolate across a moved
+denominator.** They declined to state a post-fix matrix total until the next full
+lands, because the compiler's own cost had changed underneath the measurement.
+Multiplying two estimates is how a number stops being a measurement.
+
 ## A number moving in the direction you hoped is not a check
 
 Track T narrowed a blame range from 137 commits to 2, ran it against the live

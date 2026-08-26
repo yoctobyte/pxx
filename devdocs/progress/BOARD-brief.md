@@ -50,6 +50,7 @@ _none — no lane is locked._
 ## Ready — top 30 of 322, ranked
 
 - `[p 85] [O]` feature-opt-o3-register-pressure
+- `[p 85] [A]` perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime
 - `[p 80] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - `[p 80] [N]` bug-n-hasattr-through-an-untyped-parameter-is-always-false
 - `[p 78] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
@@ -78,6 +79,5 @@ _none — no lane is locked._
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
 - `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
-- `[p 68] [N]` feature-nilpy-user-defined-decorators
 
 _292 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
