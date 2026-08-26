@@ -116,6 +116,29 @@ TIERS = {
         "test-emit-obj",
         # the real-program corpus, native only — the cross variants stay in full
         "test-lua", "test-cjson", "test-zlib",
+        # The only two rungs in the matrix that compile real third-party OBJECT
+        # PASCAL (fgl.pp from FPC's own RTL; fcl-json's 203-case fpcunit suite).
+        # Enrolled 2026-08-26 (task-t-enrol-the-fgl-corpus-rung), and the reason
+        # is the enrolment gap itself: test-fgl lived inside test-core guarded on
+        # /usr/share/fpcsrc — absent from every box here — so it printed
+        # `SKIP (no fpcsrc)` and PASSED for its entire life without running once,
+        # and test-fpjson was in NO tier, landed at 203/203, and had rotted to
+        # not-compiling by the first hand-run since. An unenrolled check asserts
+        # nothing while reporting success; that is the failure being fixed here,
+        # not the wiring.  Both self-skip on a box without their tree, which is
+        # why CORPUS_EXPECTED gains fpc-rtl/fcl-json in the same change — a
+        # silent skip is how this class of hole reappears.
+        #
+        # test-fgl only. test-fpjson is FULL-ONLY, and deliberately: it builds
+        # with $(PXX_STABLE), so enrolling it here would make `limited` the
+        # first tier below `full` to carry a pin-built job -- and "quick,
+        # native and limited are pin-free, so a pin taken during one of those
+        # runs cannot corrupt its verdict" is a property other lanes now plan
+        # their pins around. It is worth more than running fpjson twice as
+        # often, and `full` cycles ~40min anyway. The devtest below pins the
+        # counts, which is how this was caught: the guard went red on the same
+        # change that wrote the property down.
+        "test-fgl",
         "test-sqlite-threads-x86_64",
         # T's own guards (tools/*devtest*.py, ~30s). They were in no target at
         # all, so nothing ran them and five had rotted into failure on master
@@ -168,6 +191,9 @@ TIERS = {
         "test-c-conformance-arm32", "test-c-conformance-riscv32",
         "test-lua-cross",
         "test-lua", "test-cjson", "test-zlib",
+        # see the note in `limited`; fpjson is full-only because it is
+        # pin-built and `limited` is kept pin-free on purpose
+        "test-fgl", "test-fpjson",
         "test-sqlite-threads-x86_64", "test-sqlite-threads-i386",
         "test-sqlite-threads-aarch64", "test-sqlite-threads-arm32",
         "tools-devtest",        # T's own guards; see the note in `limited`
@@ -546,8 +572,15 @@ LIVE_PATH = os.path.join(REPO, ".testmgr", "live.json")
 LOCK_PATH = os.path.join(REPO, ".testmgr", "run.lock")
 # How long the scheduler may make NO progress (nothing running, nothing
 # admitted) before it forces a job through the memory gates. See admit_forced().
-# Targets that build with $(PXX_STABLE) (the PIN) rather than HEAD.
-PIN_BUILT_TARGETS = ("lib-test", "demos")
+# Targets that build with $(PXX_STABLE) (the PIN) rather than HEAD. Used two
+# ways: report_pin_identity() prints which pinned binary they will use, and
+# Job.pin_built falls back to this list for a target whose recipe SHELLS OUT
+# (`make demos`), where the pinned path is one level down in the Makefile and
+# the regex would read the wrapper instead of the work.
+# NOT the complete set of pin-built JOBS -- a recipe naming the pinned path
+# directly is pin_built whatever its target is called (test-fpjson was, before
+# it was listed here). Membership is sufficient, never necessary.
+PIN_BUILT_TARGETS = ("lib-test", "demos", "test-fpjson")
 STARVE_GRACE = 90.0
 
 

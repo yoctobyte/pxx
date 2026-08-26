@@ -66,6 +66,89 @@ Standing gate for everyone: `make compiler/pascal26` + the repro +
 
 ---
 
+## When `pinned builds live lib/rtl` fails, that is a PIN request addressed to you
+
+`gate.sh` runs a ~1s step in every mode (since `1cc54252e`): compile a
+`uses SysUtils` program with the **pinned** binary. It exists because `make pin`
+freezes `compiler/builtin/**` into the stable tree, so a Track A change that adds
+a builtin and calls it from `lib/rtl` self-hosts cleanly, passes the entire quick
+gate, and then kills every `$(PXX_STABLE)` build the moment it lands. Self-host
+cannot see it by construction -- self-host never uses the pinned builtins. The
+one instance found so far, `97b1812fe`, took out B/D/E until v369 and was found
+by accident, which means the class has an unknown population.
+
+Triage is decidable in about ten seconds, and it is worth knowing that **the
+canary has exactly one subject**:
+
+- **`error: undefined variable (Name)` or `unknown identifier`, with
+  `in: .../lib/rtl/<unit>.pas` on the next line.** This is the real thing. **Do
+  not revert** -- the change is coherent, it is only ungrounded. The fix is to
+  **pin after it lands**, which is the coordinator's call because a pin holds the
+  repo-wide lock. The whole value of the check is that it converts "three lanes
+  lose an evening" into "the coordinator schedules a pin."
+- **Anything else -- syntax error, missing unit, I/O error, the pinned binary
+  refusing to start -- is not this canary's subject.** The pin/source mismatch is
+  not what broke; something about the tree or the pin is, and that is an ordinary
+  bug in whatever the message points at. Not a false positive so much as a
+  different bug arriving through the same door.
+- **The one shape that looks like a false positive is not one.** A lane editing
+  `lib/rtl/sysutils.pas` to reference something legitimately absent -- a Track B
+  mid-refactor state, which `dev` now explicitly permits -- fires it. It is still
+  a TRUE report: `$(PXX_STABLE)` really is broken for everyone at that sha. Read
+  it as "B needs to finish or revert", never as a bad check.
+
+Its author injected the mismatch into a scratch tree and watched the step return
+1 through `gate.sh`s own wrapper before shipping it. **A canary that has never
+been seen to fail is not yet a canary** -- it is an assertion about one.
+
+
+## Reading the board at sync time: a NEW-RED on a first-ever run is not a NEW-RED
+
+The coordinator decides sync-backs by reading verdicts, so the coordinator is
+the one who has to know when a verdict cannot mean what it says.
+
+`diff_jobs()` classifies a job as NEW-RED when it is red now and was passing
+before -- and asks the second half with `prev_jobs.get(name, "pass")`. **A job
+never seen before defaults to "pass".** So the first-ever execution of a newly
+enrolled rung arrives as a NEW-RED against a green history it never had, and
+`range_for()` then bounds it with the commits since the last covering full run:
+a range over commits in which the job did not run once. Every sha in it is
+equally the first failing one, which is the same statement as *there is no first
+failing one*, and nothing downstream is shaped to say that.
+
+That is the whole hazard, and it is worse than a wrong answer: the range prints
+cleanly, names a sha, and is indistinguishable from a correct one. It enters the
+ledger with full authority.
+
+**Operational rule until this is fixed** (Track T is on it -- it is the fourth
+face of `bug-t-a-blame-range-is-computed-from-what-changed-not-from-what-the-job-can-see`):
+when a rung has just been enrolled or just been provisioned, treat its first
+appearance as **unlocalizable by construction, whatever range the board prints**.
+File it as a finding, do not hold the sync for it, and do not let it start a
+bisect. Ask "has this job ever run anywhere?" before "what changed?" -- the
+answer is not on the board, it is in the run history.
+
+**The mirror case is the one to actually watch for, because it reads as good
+news.** The same `.get(n, "pass")` fabricated in both directions: a job appearing
+GREEN for the first time was published as **FIXED** -- a recovery from a failure
+it never had. Nobody had ever reported that, because a spurious FIXED costs
+nothing visible and so gets no scrutiny, whereas a spurious NEW-RED sends someone
+looking. When reading the board at sync time, a FIXED next to a newly enrolled
+rung is worth exactly as little as a NEW-RED next to one. Both are now asserted.
+
+**And note that LANDED is not LIVE.** The daemon loads the clone's `twatch.py`
+at process start, so a fix is inert until `trackt restart` -- and the clone must
+have pulled it first. `trackt status` carries a `code : STALE` line naming the
+gap; that check exists because three landed fixes were once absent from the
+publishing daemon while status said RUNNING. So a rule written here is not
+belt-and-braces over a landed fix; it is the only protection during a window that
+opens every single time, because *landed* and *live* are different states and
+only one of them is visible in a commit log.
+
+The verdict half is right and should stay: a job that is red on arrival is red.
+What must not be inherited is the RANGE. Those are two questions, and one `.get`
+default currently answers both at the point where the distinction still exists.
+
 ## Roles — LIVE, 2026-08-25
 
 Sessions address each other by these names. **`ListAgents` lists them and
@@ -83,6 +166,21 @@ working there; the lane letters cannot see a subagent you created.
 | neo-4a | host/sysadmin, no lane | none | none (cwd `/home/neo`) |
 | cA | **out-of-band** — driven directly by the human, not a pxx dev session | none | none |
 | frank2-99 | idle, stale clone, unresponsive to roster pings | unknown | `/home/neo/frank2` |
+
+**Worktree workers are lane holders and are NOT in that table.** The coordinator
+dispatches ticket work as background agents, each in its own git worktree under
+`.claude/worktrees/`. They are not sessions, `ListAgents` does not show them, and
+they finish without announcing themselves to anyone but the coordinator -- yet
+each one HOLDS ITS LANE for the duration. That matters for exactly one rule: the
+**sole-A guard**. Before dispatching a Track A ticket, or a Track P one that
+touches the shared `lexer.inc`, the question "is anyone else on A right now?" is
+answered by the coordinator own dispatch record, not by the table above and not
+by `ListAgents`. Keep that record; it is the only place the answer exists.
+
+Live worker slots, 2026-08-26: **A** = the fixed nine-second NilPy compile cost;
+**N** = the sorted-by-key segfault. Two at a time is the sustainable number here
+-- four concurrent workers hit an account session limit on 2026-08-25 and all
+four died at once.
 
 **The borg-era layout is gone.** This file used to describe four checkouts under
 `/home/rene` on a second box. borg's PSU died 2026-08-20; the box is intact and

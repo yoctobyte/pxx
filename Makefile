@@ -9177,6 +9177,12 @@ test-core: $(COMPILER)
 	$(TESTTMP)/test_nilpy_rebind_cls26 | diff -u test/test_nilpy_rebind_across_unrelated_classes.expected -
 	./$(COMPILER) test/test_nilpy_str_float.npy $(TESTTMP)/test_nilpy_str_float26
 	test "$$($(TESTTMP)/test_nilpy_str_float26)" = "$$(printf '3.14\n2.5\n-1.25\npi=3.14159\n3\n2')"
+	# `/` is TRUE division: an unannotated `return x / 2` must register a FLOAT
+	# result, not an Int64 the double's bit pattern is then read through. Carries
+	# the `//` / `%` controls that must stay integer, and the redundant-paren
+	# shapes (`return (x > 1)`) the same depth-0 blindness broke.
+	./$(COMPILER) test/test_nilpy_true_division_return_type.npy $(TESTTMP)/test_nilpy_truediv26
+	$(TESTTMP)/test_nilpy_truediv26 | diff -u test/test_nilpy_true_division_return_type.expected -
 	./$(COMPILER) test/test_sets.pas $(TESTTMP)/test_sets26
 	test "$$($(TESTTMP)/test_sets26 | tail -1)" = "all set tests completed!"
 	./$(COMPILER) test/test_set_shapes.pas $(TESTTMP)/test_set_shapes26

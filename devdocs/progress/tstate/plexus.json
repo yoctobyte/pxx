@@ -1,37 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-22T18:58:19Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "fd93e4a71c37a7932b9ef73e4c9f8a7deceb3c34",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-22T21:01:34Z",
-   "fixed": [
-    "demos#00",
-    "lib-test#src:tools/crtl_reachability.py",
-    "test-pascal-conformance#shard0/6",
-    "test-pascal-conformance#shard4/6"
-   ],
-   "new_red": [
-    "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy"
-   ],
-   "sha": "fd93e4a71c37a7932b9ef73e4c9f8a7deceb3c34",
-   "tier": "full",
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-22T21:07:18Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "fd93e4a71c37a7932b9ef73e4c9f8a7deceb3c34",
-   "tier": "slow",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-22T21:16:08Z",
    "fixed": [],
    "new_red": [],
@@ -463,9 +432,38 @@
    "sha": "a13097c8e59cd4f417d29123a60b034fb2416edf",
    "tier": "native",
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T02:28:40Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "1137c9192da4ab5db75e8fc4cdbc248a069afe80",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T02:47:00Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "80c5229fb60ad15aa79bbc847b2287b184430edf",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T02:56:21Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "49b2eccd8a2e87ffdfc920178c7fbcb3745ef77d",
+   "tier": "native",
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
+ "idle_yield": {
+  "aborts": 1,
+  "phase": "pin-verify",
+  "target": "c6542612700fb5ef45bc55e8ab69f0f219f220d9"
+ },
  "job_reason": {
   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy": "note: xml_etree_elementtree -> mimic_xml_etree_elementtree (shim, subset) | ok: $TMP  [code=2360557B  data=62137B  bss=51420B  procs=1794] | Unhandled exception: TypeError: can only concatenate str (not \"method\") to str",
   "test-aarch64#src:test/test_forin_member_access.pas": "ok: $TMP  [code=152328B  data=3040B  bss=42368B  procs=130] | ok: $TMP  [code=65652B  data=3088B  bss=42504B  procs=130]"
@@ -2050,6 +2048,7 @@
   "test-core#src:test/test_nilpy_subclass_unit_base.npy": "native",
   "test-core#src:test/test_nilpy_subscript_container_literal.npy": "native",
   "test-core#src:test/test_nilpy_ternary_comp.npy": "native",
+  "test-core#src:test/test_nilpy_true_division_return_type.npy": "native",
   "test-core#src:test/test_nilpy_truthy_value_ops.npy": "native",
   "test-core#src:test/test_nilpy_try_else.npy": "native",
   "test-core#src:test/test_nilpy_tuple_dict_key.npy": "native",
@@ -5149,6 +5148,7 @@
   "test-core#src:test/test_nilpy_subclass_unit_base.npy": "pass",
   "test-core#src:test/test_nilpy_subscript_container_literal.npy": "pass",
   "test-core#src:test/test_nilpy_ternary_comp.npy": "pass",
+  "test-core#src:test/test_nilpy_true_division_return_type.npy": "pass",
   "test-core#src:test/test_nilpy_truthy_value_ops.npy": "pass",
   "test-core#src:test/test_nilpy_try_else.npy": "pass",
   "test-core#src:test/test_nilpy_tuple_dict_key.npy": "pass",
@@ -6664,14 +6664,14 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T02:19:30Z",
+  "date": "2026-08-26T02:56:21Z",
   "deadline": 7200.0,
-  "sha": "a13097c8e59cd4f417d29123a60b034fb2416edf",
+  "sha": "49b2eccd8a2e87ffdfc920178c7fbcb3745ef77d",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 488.7
+  "wall": 469.0
  },
  "last_bench": {
   "conf_rows": 550,

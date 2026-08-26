@@ -118,6 +118,36 @@ stale_binary_hint() {
   fi
 }
 
+# The seam between the pinned binary's FROZEN builtin RTL and the repo's LIVE
+# lib/rtl. `make pin` copies compiler/builtin/** into
+# stable_linux_amd64/default/builtin/, so from that moment the pinned compiler
+# builds a frozen builtin set against whatever lib/rtl says TODAY. A Track A
+# change that adds a builtin and uses it from lib/rtl is coherent, self-hosts,
+# and passes the whole quick gate -- and breaks every $(PXX_STABLE) build the
+# instant it lands, because `pinned` still has the pre-change builtin.
+#
+# That happened on 97b1812fe: `undefined variable (PXXNilRefHook)`, and Tracks
+# B, D and E were dead on master until the next pin. It was found by accident,
+# by an unrelated scratch compile. Nothing stood in this seam, because both
+# halves of `gate.sh quick` build with the FRESHLY BUILT compiler -- the gate
+# was not weak here, it was looking somewhere else entirely.
+#
+# Compile only; running the program is not the point. Any live-RTL/frozen-
+# builtin mismatch IS a compile error, which is the entire failure mode.
+# ~1s, so it runs in every mode rather than earning its own tier.
+#
+# Proven failable before landing (a canary that has never been seen to fail is
+# not yet a canary): in a scratch copy of the tree, adding one reference to an
+# absent builtin in lib/rtl/sysutils.pas reproduces the original error shape
+# and exit 1.
+pinned_rtl_canary() {
+  local pin=stable_linux_amd64/default/pinned
+  local src=test/test_uses_sysutils.pas
+  [ -x "$pin" ] || { echo "gate: (no pinned binary at $pin)"; return 0; }
+  [ -f "$src" ] || { echo "gate: (canary fixture $src is gone)"; return 0; }
+  "./$pin" "$src" "$LOGDIR/pinned-rtl-canary.bin"
+}
+
 echo "gate: mode=$MODE  logs=$LOGDIR"
 note_contention
 
@@ -135,6 +165,19 @@ if [ "$MODE" = check ]; then
 fi
 
 RC=0
+
+# Before the case, so it covers quick, lib and full alike from ONE place. The
+# three-branch version of this was the first draft; a check that has to be
+# remembered in each new mode is the check that will be missing from the next
+# one.
+if [ -x stable_linux_amd64/default/pinned ] && [ -f test/test_uses_sysutils.pas ]
+then
+  step "pinned builds live lib/rtl" "$LOGDIR/pinned-rtl-canary.log" \
+       pinned_rtl_canary                                              || RC=1
+else
+  echo "  SKIP  pinned builds live lib/rtl (no pinned binary or fixture)"
+fi
+
 case "$MODE" in
   quick|full)
     # QUICK = the native confirm CLAUDE.md actually prescribes: testmgr --tier

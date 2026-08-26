@@ -39,7 +39,7 @@ def report_of(statuses):
 def case_empty_baseline_makes_every_red_new():
     """The mechanism the guard exists for — documented, not assumed."""
     rep = report_of(["fail", "pass", "fail"])
-    _now, new_red, _fixed, _still = twatch.diff_jobs({}, rep)
+    _now, new_red, _fixed, _still, _first = twatch.diff_jobs({}, rep)
     assert len(new_red) == 2, new_red
     return "2 reds against an empty map -> 2 NEW-RED"
 

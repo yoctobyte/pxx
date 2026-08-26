@@ -157,7 +157,7 @@ def t_unreached_jobs_keep_their_red():
     assert not_reached == ["job-b"], \
         "expected job-b to be named as unreached, got %r" % (not_reached,)
     # and the fixed-list must not claim it
-    _, _, fixed, _ = tw.diff_jobs(prev, {"jobs": [
+    _, _, fixed, _, _ = tw.diff_jobs(prev, {"jobs": [
         {"name": "job-a", "sel": "job-a", "status": "pass"}]})
     assert "job-b" not in fixed, "an unreached job was reported as FIXED"
     return "unreached red survives and is named"

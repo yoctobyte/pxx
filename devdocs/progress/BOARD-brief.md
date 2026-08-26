@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:22 blocked:7 backlog:287 backlog_new:28 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2370 rejected:40`
+`working:1 unfinished:22 blocked:7 backlog:289 backlog_new:28 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2373 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -46,9 +46,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 325, ranked
+## Ready — top 30 of 327, ranked
 
-- `[p 88] [N]` bug-n-inferred-return-type-of-true-division-is-int
 - `[p 82] [N]` bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
 - `[p 80] [A]` bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost
 - `[p 80] [N]` bug-n-a-class-base-that-is-an-expression-does-not-compile
@@ -65,6 +64,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 72] [P]` feature-p-fpc-assigned-enum-ordinals-with-colon-equals
 - `[p 72] [P]` feature-p-fpc-global-operator-overload-declarations
 - `[p 72] [B]` feature-typinfo-facade-unit
+- `[p 70] [N]` bug-n-a-field-takes-its-type-from-the-first-token-of-its-right-hand-side
 - `[p 70] [N]` bug-n-a-guard-reports-its-own-failure-and-lets-the-call-through
 - `[p 70] [N]` bug-n-a-resolved-module-member-as-a-value-is-an-undefined-variable
 - `[p 70] [N]` bug-n-an-augmented-subscript-on-a-dunder-class-is-refused
@@ -75,8 +75,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
 - `[p 70] [P]` feature-p-delphi-string-helpers
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
-- `[p 70] [T]` task-t-enrol-the-fgl-corpus-rung
 - `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
+- `[p 68] [N]` feature-nilpy-user-defined-decorators
 
-_295 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_297 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
