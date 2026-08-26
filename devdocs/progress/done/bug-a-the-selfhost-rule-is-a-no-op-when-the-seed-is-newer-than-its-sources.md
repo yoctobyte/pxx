@@ -188,4 +188,4 @@ benchmark needs a machine-readable provenance answer is now half-served and
 worth its own ticket if someone wants the other half.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 33aa06327.
