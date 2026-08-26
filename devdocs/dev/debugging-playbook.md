@@ -18,6 +18,29 @@ wrong value far from the cause.** Three from one week:
 So: **reach for the tool that makes a wrong VALUE visible, not the one that
 makes a crash easier to locate.** A crash was never the expensive case.
 
+## If you can name the hot spot without measuring, that is evidence it is not the hot spot
+
+Three times in one day, in three domains sharing nothing — matrix composition,
+devtest attribution, compiler hot path — a careful person named the obvious
+candidate and was wrong, and the real answer fell out of a measurement in under
+an hour:
+
+- The matrix looked like it was made of Pascal micro-tests (44% of jobs). They
+  are 7.4% of the time. **70% is one target**, and the tax is not part of a NilPy
+  job — a zero-byte `.npy` costs nearly what a 288-line test costs.
+- A flaky devtest file "obviously" flaked in the three cases whose notes said
+  *measured on the 12-core xeon*. Those feed frozen literals and measure nothing.
+  The offender was a fourth case that **passed**.
+- A compiler slow at compiling looked like a register-allocation problem. **56%
+  of a one-line NilPy compile was in the first 5 KB of `.text`** — runtime blobs
+  and the builtin heap — with 8.7% in two `idiv`s dividing by the literal 8.
+
+The mechanism is not that intuition is bad. It is that **the obvious candidate is
+the one everyone has already optimised**, so the surviving cost is *definitionally*
+in the place nobody looked. Which sharpens "measure first" into something you can
+act on directly: **your ability to name a hot spot without measuring is itself
+evidence that it was named — and therefore fixed — before you got there.**
+
 ## Find your section
 
 The sections below accumulated in the order they were learned, which is the wrong

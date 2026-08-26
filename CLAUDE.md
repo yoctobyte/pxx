@@ -626,6 +626,12 @@ critical path:
   `lib/` files — each spending a full gate run on the box whose contention is
   the binding constraint on the test matrix. A green is the *precondition* for a
   sync, never the *trigger*.
+  **The consequence, named before it bites: Track T's throughput is now master's
+  throughput.** Breadth staleness stops being an informational number and becomes
+  the project's rate limit. So the first time master feels slow, the tempting fix
+  will be to relax what *fully tested* means — and that is the one adjustment that
+  puts us back where we started while keeping the appearance of rigour. **The
+  honest lever is fewer commits between pins, not a thinner sweep.**
 - **You may land non-green on `dev`** — this is the whole point, and it is the
   one freedom the old loop did not give you. Commit mid-refactor, bank a partial
   fix, and *deliberately craft regressions* to see what catches them. What you
