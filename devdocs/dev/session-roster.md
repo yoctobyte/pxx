@@ -66,6 +66,42 @@ Standing gate for everyone: `make compiler/pascal26` + the repro +
 
 ---
 
+## When `pinned builds live lib/rtl` fails, that is a PIN request addressed to you
+
+`gate.sh` runs a ~1s step in every mode (since `1cc54252e`): compile a
+`uses SysUtils` program with the **pinned** binary. It exists because `make pin`
+freezes `compiler/builtin/**` into the stable tree, so a Track A change that adds
+a builtin and calls it from `lib/rtl` self-hosts cleanly, passes the entire quick
+gate, and then kills every `$(PXX_STABLE)` build the moment it lands. Self-host
+cannot see it by construction -- self-host never uses the pinned builtins. The
+one instance found so far, `97b1812fe`, took out B/D/E until v369 and was found
+by accident, which means the class has an unknown population.
+
+Triage is decidable in about ten seconds, and it is worth knowing that **the
+canary has exactly one subject**:
+
+- **`error: undefined variable (Name)` or `unknown identifier`, with
+  `in: .../lib/rtl/<unit>.pas` on the next line.** This is the real thing. **Do
+  not revert** -- the change is coherent, it is only ungrounded. The fix is to
+  **pin after it lands**, which is the coordinator's call because a pin holds the
+  repo-wide lock. The whole value of the check is that it converts "three lanes
+  lose an evening" into "the coordinator schedules a pin."
+- **Anything else -- syntax error, missing unit, I/O error, the pinned binary
+  refusing to start -- is not this canary's subject.** The pin/source mismatch is
+  not what broke; something about the tree or the pin is, and that is an ordinary
+  bug in whatever the message points at. Not a false positive so much as a
+  different bug arriving through the same door.
+- **The one shape that looks like a false positive is not one.** A lane editing
+  `lib/rtl/sysutils.pas` to reference something legitimately absent -- a Track B
+  mid-refactor state, which `dev` now explicitly permits -- fires it. It is still
+  a TRUE report: `$(PXX_STABLE)` really is broken for everyone at that sha. Read
+  it as "B needs to finish or revert", never as a bad check.
+
+Its author injected the mismatch into a scratch tree and watched the step return
+1 through `gate.sh`s own wrapper before shipping it. **A canary that has never
+been seen to fail is not yet a canary** -- it is an assertion about one.
+
+
 ## Roles — LIVE, 2026-08-25
 
 Sessions address each other by these names. **`ListAgents` lists them and
