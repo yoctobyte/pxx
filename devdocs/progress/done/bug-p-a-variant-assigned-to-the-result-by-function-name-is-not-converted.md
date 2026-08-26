@@ -163,4 +163,4 @@ and `lib_textreadnumtok` (which is built on `Read := …`) both still pass.
 * `Makefile` — the new test wired into `test-core`.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 240f4ecb7.
