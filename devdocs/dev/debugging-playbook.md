@@ -343,6 +343,46 @@ Deliberately not general, for the reason this file keeps arriving at: **a checke
 that reports everything gets suppressed, and a suppressed checker asserts
 nothing.**
 
+## A silent assertion makes the harness report something else, confidently
+
+The most expensive misread of 2026-08-26 traces to one shell idiom. A red job's
+recorded `reason` was:
+
+```
+ok: $TMP [code=152328B ...] | ok: $TMP [code=65652B ...]
+```
+
+Two compile summaries with wildly different code sizes, which reads unmistakably
+as a codegen divergence -- and was passed between two agents and put at the top
+of a worker brief as "the strongest signal" before anyone checked. **They are the
+aarch64 and x86-64 builds of the same source.** The job compiles for two targets
+and then compares their *output*; the sizes were never supposed to match.
+
+The mechanism is worth knowing because it will do this again. `job_reason` is the
+**log tail**, by deliberate design. The recipe's actual assertion is a bare
+
+```sh
+test "$a" = "$b"
+```
+
+which prints **nothing** when it fails. So the tail is necessarily the two lines
+*before* the assertion -- the last thing that did print, which was the two `ok:`
+summaries. The harness reported them faithfully. Nothing was broken.
+
+- **A silent assertion does not merely fail to explain itself. It causes a
+  confident wrong explanation to be published in its place**, because a tail-based
+  reporter always has something to show and no way to know it is unrelated.
+- **Every failing check should print what it compared.** `test "$a" = "$b" ||
+  { echo "outputs differ: ..."; exit 1; }` costs one line and removes an entire
+  class of misdirection.
+- **When a `reason` reads as a smoking gun, check whether the tool that produced
+  it knows what the failure was.** A log tail does not. Read the recipe before
+  reading meaning into its output.
+
+A cross-target size difference in particular is the **null hypothesis, not
+evidence**: two targets emit different amounts of code for the same source, and
+that is the expected state of the world.
+
 ## A comment is an unverified claim, and tickets inherit it
 
 Two N tickets in a row named the wrong mechanism, and the second one shows how a

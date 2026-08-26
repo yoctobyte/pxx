@@ -2628,6 +2628,37 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                       "bisect would narrow onto a commit that cannot be causal"
                       % (name, (st.get("job_tier") or {}).get(name, "?"),
                          len(rng), len(jrng), (jgood or "?")[:12]), flush=True)
+            # An empty range on a job that HAS an earlier passing sha is not
+            # a missing bound -- it is EVIDENCE, and of the one thing a range
+            # can never show. The job passed at `good` and failed at `bad` with
+            # nothing testable in between, so it was the same compiler binary
+            # both times (between two devdocs/-only commits the self-host
+            # fixedpoint guarantees byte-identity). Same binary, same test,
+            # two verdicts: that is nondeterminism, by construction, and no
+            # commit can be the cause because no commit is there.
+            #
+            # The machinery already said exactly this for pin-built jobs --
+            # "the cause is in the box or the job's own inputs, not in the
+            # commits" -- and a non-pin job with an empty range fell through to
+            # a branch claiming "first run covering this job at this tier",
+            # which is FALSE for a job with a recorded `good`, and whose real
+            # case already has its own `first_seen` branch above. The right
+            # sentence existed on the rarer path and was unreachable from the
+            # common one, for the sixth time in this ticket family.
+            #
+            # It does NOT suppress the red. The job did fail; only the
+            # ATTRIBUTION is impossible, so we decline to name a commit rather
+            # than decline to report. Losing a red would be a coverage hole;
+            # this loses nothing but a false lead.
+            no_testable_change = bool(
+                jgood and not jrng and not pin_axis and name not in first_seen)
+            if no_testable_change:
+                print("twatch: %s — NOTHING TESTABLE changed between %s and "
+                      "%s, so the same compiler binary produced both verdicts. "
+                      "This is nondeterminism in the job or the box, not a "
+                      "regression from the commits; no range opened and no "
+                      "commit named"
+                      % (name, (jgood or "?")[:12], sha[:12]), flush=True)
             regs.append({"job": name, "name": namemap.get(name, ""),
                          "src": srcmap.get(name, ""), "bad": sha,
                          "good": jgood, "range": jrng, "opened": utcnow(),
@@ -2635,6 +2666,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                          "first_seen": name in first_seen,
                          "pin_axis": pin_axis,
                          "bad_untestable": bad_untestable,
+                         "no_testable_change": no_testable_change,
                          "pin_built": pinmap.get(name, False)})
     st["open_regressions"] = regs
 
@@ -3085,11 +3117,24 @@ def range_note(reg):
             "will happen**; a red here is a finding about the job, not a "
             "regression from the commits around it." % bad)
 
+    if reg.get("no_testable_change"):
+        return banner + (
+            "bad `%s`, last good `%s`, and **nothing testable changed between "
+            "them** — every commit in the interval touches only `devdocs/` or "
+            "`docs/`. The compiler binary was therefore identical for both "
+            "runs, so the same binary running the same test produced two "
+            "verdicts: **this is nondeterminism in the job or the box, not a "
+            "regression from the commits.** **No idle bisect will happen** and "
+            "no commit is named, because none can be the cause. Triage it as a "
+            "flake — look at load, timeouts and shared resources at the time, "
+            "not at the diff. (The red itself stands: the job did fail. What "
+            "cannot be done is attribute it.)" % (bad, good))
+
     if not n:
         return banner + (
-            "bad `%s`, range **unknown** (first run covering this job at this "
-            "tier, so there is no earlier passing sha to bound it) — **no idle "
-            "bisect will happen**; this one needs hand-triage." % bad)
+            "bad `%s`, range **unknown** — there is no earlier passing sha to "
+            "bound it, or the bound is not recorded. **No idle bisect will "
+            "happen**; this one needs hand-triage." % bad)
 
     return banner + (
         "bad `%s`, last good `%s`, %d commit(s) in range — the watcher narrows "
@@ -4726,6 +4771,34 @@ def bisect_step(clone, host, st, tier):
                           "file; labelled as the tested upper bound, not a lead"
                           % (reg.get("job", "?"), reg["bad"][:12]), flush=True)
                 save_state(clone, host, st)
+        if reg.get("good") and reg.get("bad") and not reg.get("pin_built") \
+                and not reg.get("first_seen"):
+            # Recomputed from the BOUNDS every pass, exactly like
+            # bad_untestable above and for the same reason: the answer depends
+            # on NOTEST_PREFIXES, and a stamp written once and read forever is
+            # a one-way trap. Cheap -- one rev-list per open regression per
+            # idle pass.
+            #
+            # This repair is what reaches the regression that motivated the
+            # rule: test-aarch64#src:test/test_forin_member_access.pas, opened
+            # 2026-08-25 against `bad` ab584382edcd -- a 253-file commit that
+            # edits nothing but `prio:` fields in ticket frontmatter -- whose
+            # `good` is likewise devdocs-only. It has been published as a
+            # regression naming that commit ever since, while the job passes
+            # 12/12 at HEAD.
+            cs = [c for c in clone.commits_between(reg["good"], reg["bad"])
+                  if needs_test(clone.path, c)]
+            was = reg.get("no_testable_change")
+            reg["no_testable_change"] = not cs
+            if reg["no_testable_change"] != was:
+                if reg["no_testable_change"]:
+                    print("twatch: %s — no testable commit between %s and %s; "
+                          "reclassified as nondeterminism, not a regression "
+                          "(the red stands, the attribution does not)"
+                          % (reg.get("job", "?"), reg["good"][:12],
+                             reg["bad"][:12]), flush=True)
+                save_state(clone, host, st)
+
         if reg.get("pin_built") and reg.get("pin_axis") != PIN_AXIS_RULE \
                 and reg.get("good") and reg.get("bad"):
             # REPAIR ON READ, the same way the untestable-commit filter above

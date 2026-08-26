@@ -5,11 +5,12 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:23 blocked:7 backlog:284 backlog_new:28 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2385 rejected:40`
+`working:2 unfinished:23 blocked:7 backlog:282 backlog_new:28 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2386 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
-_none — no lane is locked._
+- `bug-n-hasattr-through-an-untyped-parameter-is-always-false` [N] — owner: agent-a34da8ba
+- `feature-opt-o3-register-pressure` [O] — owner: agent-O-regalloc
 
 ## unfinished (23) — parked mid-flight; re-claim, do not duplicate
 
@@ -47,11 +48,9 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 323, ranked
+## Ready — top 30 of 321, ranked
 
-- `[p 85] [O]` feature-opt-o3-register-pressure
 - `[p 85] [A]` perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime
-- `[p 80] [N]` bug-n-hasattr-through-an-untyped-parameter-is-always-false
 - `[p 78] [N]` bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - `[p 78] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
 - `[p 78] [N]` bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program
@@ -79,5 +78,7 @@ _none — no lane is locked._
 - `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
+- `[p 65] [N]` bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened
+- `[p 65] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 
-_293 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_291 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

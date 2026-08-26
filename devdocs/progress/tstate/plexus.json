@@ -1,22 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-24T17:17:29Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "982f34a70f6df139f3f52bcde35850f0b7a1c03f",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
-   "date": "2026-08-24T18:19:05Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "6d2af7ca7c2378a2e33e0500c1ff732e33bbd00e",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-24T19:22:32Z",
    "fixed": [],
    "new_red": [
@@ -453,11 +437,29 @@
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T04:46:23Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "d424445cea52300cff6b742a5775a2098333f03d",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T04:55:26Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "0788cc81b0797d44698fe737369639c6fd998f65",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
   }
  ],
  "host": "plexus",
  "idle_yield": {
-  "aborts": 1,
+  "aborts": 2,
   "phase": "pin-verify",
   "target": "b924d8b4ae326e7cc866cabd5ab9715519e65cb2"
  },
@@ -1001,11 +1003,11 @@
   "test-core#129": "full",
   "test-core#157": "full",
   "test-core#160": "full",
-  "test-core#162": "native",
   "test-core#163": "native",
   "test-core#164": "native",
   "test-core#165": "native",
   "test-core#166": "native",
+  "test-core#167": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
   "test-core#src:examples/tk/callbacks.npy": "native",
@@ -1972,6 +1974,7 @@
   "test-core#src:test/test_nilpy_configparser.npy": "native",
   "test-core#src:test/test_nilpy_convert.npy": "native",
   "test-core#src:test/test_nilpy_counter.npy": "native",
+  "test-core#src:test/test_nilpy_counter_from_a_string.npy": "native",
   "test-core#src:test/test_nilpy_ctor_suffix_defaults.npy": "native",
   "test-core#src:test/test_nilpy_dataclass_dict_factory.npy": "native",
   "test-core#src:test/test_nilpy_dataclass_eq.npy": "native",
@@ -4105,11 +4108,11 @@
   "test-c-conformance-riscv32#shard5/6": "pass",
   "test-cjson#src:test/cjson/runner.c": "pass",
   "test-core#00": "pass",
-  "test-core#162": "pass",
   "test-core#163": "pass",
   "test-core#164": "pass",
   "test-core#165": "pass",
   "test-core#166": "pass",
+  "test-core#167": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
@@ -5074,6 +5077,7 @@
   "test-core#src:test/test_nilpy_configparser.npy": "pass",
   "test-core#src:test/test_nilpy_convert.npy": "pass",
   "test-core#src:test/test_nilpy_counter.npy": "pass",
+  "test-core#src:test/test_nilpy_counter_from_a_string.npy": "pass",
   "test-core#src:test/test_nilpy_ctor_suffix_defaults.npy": "pass",
   "test-core#src:test/test_nilpy_dataclass_dict_factory.npy": "pass",
   "test-core#src:test/test_nilpy_dataclass_eq.npy": "pass",
@@ -6665,14 +6669,14 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T04:39:16Z",
+  "date": "2026-08-26T04:55:26Z",
   "deadline": 7200.0,
-  "sha": "9a8ba2057e50537771d536fa01378e84fd8df534",
+  "sha": "0788cc81b0797d44698fe737369639c6fd998f65",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 340.4
+  "wall": 348.1
  },
  "last_bench": {
   "conf_rows": 550,
