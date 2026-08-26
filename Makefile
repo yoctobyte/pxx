@@ -5885,6 +5885,11 @@ test-core: $(COMPILER)
 	# above (41 for 30+12) was the same bug wearing a layout accident.
 	./$(COMPILER) test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_forin_member_temp_zeroinit26
 	test "$$($(TESTTMP)/test_forin_member_temp_zeroinit26)" = "$$(printf '42\n42\n30 12')"
+	# ...and its three siblings: the SAME hidden dyn-array temp reached through a
+	# call result, an indexed call result, and an array constructor. Pre-fix all
+	# three SIGSEGV on every target, so this one is a crash witness.
+	./$(COMPILER) test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_hidden_dynarray_temp_zeroinit26
+	test "$$($(TESTTMP)/test_hidden_dynarray_temp_zeroinit26)" = "$$(printf '42\n42\n42\n30 12')"
 	./$(COMPILER) test/test_object_ref_array_identity.pas $(TESTTMP)/test_object_ref_array_identity26
 	test "$$($(TESTTMP)/test_object_ref_array_identity26)" = "B"
 	./$(COMPILER) test/test_call_result_member.pas $(TESTTMP)/test_call_result_member26
@@ -9730,6 +9735,9 @@ test-i386: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_i386_fimz
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_i386_fimz_x64
 	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_fimz)" = "$$($(TESTTMP)/test_i386_fimz_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_i386_hdtz
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_i386_hdtz_x64
+	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_hdtz)" = "$$($(TESTTMP)/test_i386_hdtz_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=i386 test/test_call_result_member.pas $(TESTTMP)/test_i386_crm
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_call_result_member.pas $(TESTTMP)/test_i386_crm_x64
 	test "$$(tools/run_target.sh i386 $(TESTTMP)/test_i386_crm)" = "$$($(TESTTMP)/test_i386_crm_x64)"
@@ -10127,6 +10135,9 @@ test-aarch64: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_aarch64_fimz
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_aarch64_fimz_x64
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_fimz)" = "$$($(TESTTMP)/test_aarch64_fimz_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_aarch64_hdtz
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_aarch64_hdtz_x64
+	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_hdtz)" = "$$($(TESTTMP)/test_aarch64_hdtz_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=aarch64 test/test_call_result_member.pas $(TESTTMP)/test_aarch64_crm
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_call_result_member.pas $(TESTTMP)/test_aarch64_crm_x64
 	test "$$(tools/run_target.sh aarch64 $(TESTTMP)/test_aarch64_crm)" = "$$($(TESTTMP)/test_aarch64_crm_x64)"
@@ -10612,6 +10623,9 @@ test-riscv32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_rv32x_fimz
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_rv32x_fimz_x64
 	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_fimz)" = "$$($(TESTTMP)/test_rv32x_fimz_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_rv32x_hdtz
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_rv32x_hdtz_x64
+	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_hdtz)" = "$$($(TESTTMP)/test_rv32x_hdtz_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=riscv32 test/test_call_result_member.pas $(TESTTMP)/test_rv32x_crm
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_call_result_member.pas $(TESTTMP)/test_rv32x_crm_x64
 	test "$$(tools/run_target.sh riscv32 $(TESTTMP)/test_rv32x_crm)" = "$$($(TESTTMP)/test_rv32x_crm_x64)"
@@ -10957,6 +10971,9 @@ test-arm32: $(COMPILER)
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_arm32_fimz
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_forin_member_temp_zeroinit.pas $(TESTTMP)/test_arm32_fimz_x64
 	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_fimz)" = "$$($(TESTTMP)/test_arm32_fimz_x64)"
+	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_arm32_hdtz
+	./$(COMPILER) -dPXX_MANAGED_STRING test/test_hidden_dynarray_temp_zeroinit.pas $(TESTTMP)/test_arm32_hdtz_x64
+	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_hdtz)" = "$$($(TESTTMP)/test_arm32_hdtz_x64)"
 	./$(COMPILER) -dPXX_MANAGED_STRING --target=arm32 test/test_call_result_member.pas $(TESTTMP)/test_arm32_crm
 	./$(COMPILER) -dPXX_MANAGED_STRING test/test_call_result_member.pas $(TESTTMP)/test_arm32_crm_x64
 	test "$$(tools/run_target.sh arm32 $(TESTTMP)/test_arm32_crm)" = "$$($(TESTTMP)/test_arm32_crm_x64)"
