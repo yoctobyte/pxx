@@ -18,8 +18,13 @@ program test_char_literal_to_pchar_param;
   bug-single-char-literal-as-pchar-argument-segfaults
 
   Every row is measured against fpc 3.2.2 -Mobjfpc -Sh, which prints exactly
-  these values. A char VARIABLE is deliberately NOT here: FPC refuses one where
-  a PChar is wanted, and there is no constant to materialise. }
+  these values. A char VARIABLE and `Chr(45)` are deliberately NOT here: FPC
+  refuses the variable and const-folds the Chr, so the two shapes want
+  different answers and the second half is a dialect-strictness call --
+  bug-p-a-char-value-is-accepted-where-a-pchar-is-wanted-and-segfaults. A typed
+  `const P: PChar = '-'` is absent for the same reason (a separate machinery,
+  broken at every literal length) --
+  bug-p-a-typed-pchar-const-cannot-be-initialised-from-a-literal. }
 uses sysutils;
 
 const

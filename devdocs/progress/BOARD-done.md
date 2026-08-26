@@ -1365,6 +1365,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-setlength-record-field-via-var-param | A | 50 | bug | SetLength on a record string/array field via a `var` parameter fails codegen | — |
 | bug-shl-signed-integer-width | A | 50 | bug | bug: `shl` on a 32-bit Integer does not wrap at 32-bit width | — |
 | bug-shr-signed-integer-width | A | 50 | bug | `shr` on a negative 32-bit Integer shifts at 64-bit width (miscompile) | — |
+| bug-single-char-literal-as-pchar-argument-segfaults | P | 80 | bug | A ONE-character literal passed where a PChar parameter is expected segfaults: `StrCat(buf, '-')` faults, `StrCat(buf, '--')` works. The single-quoted literal types as Char rather than as a string, so its ORDINAL is passed as the pointer and the callee dereferences address 45. FPC converts it to a pointer to a NUL-terminated one-character string. Pre-existing — it hits StrCopy/StrCat/StrPos as much as anything new. | — |
 | bug-sizeof-array-and-typename-wrong | A | 50 | bug | `SizeOf` wrong for static arrays, and rejects most named types | — |
 | bug-sizeof-variable-unsupported | A | 50 | bug | SizeOf intrinsic does not support variable or expression operands | — |
 | bug-stack-corruption-inline-string-concat | A | 50 | bug | Stack frame corruption on inline string concatenation assignments | — |
