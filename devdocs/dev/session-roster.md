@@ -128,6 +128,23 @@ File it as a finding, do not hold the sync for it, and do not let it start a
 bisect. Ask "has this job ever run anywhere?" before "what changed?" -- the
 answer is not on the board, it is in the run history.
 
+**The mirror case is the one to actually watch for, because it reads as good
+news.** The same `.get(n, "pass")` fabricated in both directions: a job appearing
+GREEN for the first time was published as **FIXED** -- a recovery from a failure
+it never had. Nobody had ever reported that, because a spurious FIXED costs
+nothing visible and so gets no scrutiny, whereas a spurious NEW-RED sends someone
+looking. When reading the board at sync time, a FIXED next to a newly enrolled
+rung is worth exactly as little as a NEW-RED next to one. Both are now asserted.
+
+**And note that LANDED is not LIVE.** The daemon loads the clone's `twatch.py`
+at process start, so a fix is inert until `trackt restart` -- and the clone must
+have pulled it first. `trackt status` carries a `code : STALE` line naming the
+gap; that check exists because three landed fixes were once absent from the
+publishing daemon while status said RUNNING. So a rule written here is not
+belt-and-braces over a landed fix; it is the only protection during a window that
+opens every single time, because *landed* and *live* are different states and
+only one of them is visible in a commit log.
+
 The verdict half is right and should stay: a job that is red on arrival is red.
 What must not be inherited is the RANGE. Those are two questions, and one `.get`
 default currently answers both at the point where the distinction still exists.
