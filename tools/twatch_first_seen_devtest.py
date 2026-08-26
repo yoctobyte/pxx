@@ -145,6 +145,29 @@ def t_a_pin_built_range_keeps_lib_and_test_commits():
     return "keeps lib/test/pin/mixed/unknown, drops compiler-only and docs-only"
 
 
+def t_the_repair_is_versioned_so_a_wrong_rule_can_be_undone():
+    """A boolean here would LATCH. "Already repaired" would be
+    indistinguishable from "repaired under a rule we have since corrected", and
+    the first cut of this rule WAS wrong -- pin moves only, discarding every
+    lib/ and test/ commit. A regression narrowed by it could never be
+    re-widened.
+
+    Two halves, and the second is what makes the first work: the stamp is a
+    RULE VERSION, and the repair recomputes from good/bad rather than filtering
+    the stored range in place. Filtering in place is one-way -- it cannot give
+    back what a wrong rule dropped.
+    """
+    assert isinstance(tw.PIN_AXIS_RULE, int) and tw.PIN_AXIS_RULE >= 2, (
+        "pin_axis must be a rule VERSION, not a boolean, and must have been "
+        "bumped past the pin-moves-only rule")
+    src = open(os.path.join(HERE, "twatch.py")).read()
+    repair = src.split('reg.get("pin_axis") != PIN_AXIS_RULE', 1)[1][:1500]
+    assert "commits_between(reg[" in repair, (
+        "the repair must re-derive from the BOUNDS; filtering the stored range "
+        "compounds each rule's mistakes into the next")
+    return "stamp is rule v%d and the repair re-derives from good/bad" % tw.PIN_AXIS_RULE
+
+
 def t_a_pin_built_note_counts_observable_commits():
     note = tw.range_note({"bad": "a" * 40, "good": "b" * 40,
                           "range": ["c" * 40, "d" * 40], "pin_axis": True})
@@ -194,6 +217,7 @@ def main():
                t_a_first_seen_pass_is_not_a_fixed,
                t_range_note_says_no_bisect_for_an_empty_range,
                t_a_pin_built_range_keeps_lib_and_test_commits,
+               t_the_repair_is_versioned_so_a_wrong_rule_can_be_undone,
                t_a_pin_built_note_counts_observable_commits,
                t_nothing_observable_changed_is_a_real_verdict,
                t_a_first_seen_note_says_first_ever_run,

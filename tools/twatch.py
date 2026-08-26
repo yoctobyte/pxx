@@ -2529,7 +2529,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
             # had at this sha — kept ONLY as the bisect fallback for older
             # commits, never as identity (see job_key).
             jrng, jgood = range_for(name)
-            pin_axis = False
+            pin_axis = 0
             if pinmap.get(name) and jrng and name not in first_seen:
                 # WRONG AXIS, not merely a wide range. This job builds with
                 # $(PXX_STABLE), so it is blind to every commit that does not
@@ -2548,7 +2548,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                 # are exactly the events the job can observe, they are still
                 # commits so bisect_step needs no teaching, and pin.log commits
                 # touch stable_*/** so testable_only() keeps them.
-                pin_axis = True
+                pin_axis = PIN_AXIS_RULE
                 obs = pin_observable(clone, jrng)
                 if len(obs) != len(jrng):
                     print("twatch: %s builds with the PIN — %d of %d commit(s) "
@@ -2923,6 +2923,22 @@ def pin_immune(clone, reg):
     if not paths:
         return False            # cannot tell -> say nothing
     return all(q.startswith(PIN_IMMUNE_PREFIXES) for q in paths)
+
+
+# Version of the pin-observable RULE, stamped into `reg["pin_axis"]`.
+#
+# A boolean here would LATCH: "already repaired" is indistinguishable from
+# "repaired under a rule we have since corrected", so a regression narrowed by
+# a wrong rule could never be re-widened -- and the first cut of this rule WAS
+# wrong (pin moves only, discarding every lib/ and test/ commit). Bump this
+# whenever pin_observable's definition changes and every open regression
+# re-derives on the next idle pass.
+#
+# Re-derivation works because the repair recomputes from `good`/`bad` rather
+# than filtering the stored range in place. Filtering in place is one-way: it
+# cannot give back what a wrong rule dropped, and storing the unfiltered range
+# to make it reversible would put a novel in a git-committed state file.
+PIN_AXIS_RULE = 2
 
 
 def pin_observable(clone, shas):
@@ -4610,7 +4626,8 @@ def bisect_step(clone, host, st, tier):
                   % (reg.get("job", "?"), len(rng) - len(clean)), flush=True)
             reg["range"] = rng = clean
             save_state(clone, host, st)
-        if reg.get("pin_built") and not reg.get("pin_axis") and rng:
+        if reg.get("pin_built") and reg.get("pin_axis") != PIN_AXIS_RULE \
+                and reg.get("good") and reg.get("bad"):
             # REPAIR ON READ, the same way the untestable-commit filter above
             # repairs a range recorded before that fix existed. A pin-built
             # regression opened before the pin-axis change carries a COMMIT
@@ -4619,14 +4636,23 @@ def bisect_step(clone, host, st, tier):
             # publish commit. Leaving those to age out means the board keeps
             # printing the wrong axis for as long as the regression stays open,
             # which for that job is already days.
-            obs = pin_observable(clone, rng)
-            print("twatch: %s — range cut to what a PIN-BUILT job can observe: "
-                  "%d commit(s) -> %d (dropped %d that change only "
+            # From the BOUNDS, not from the stored range: recomputing is what
+            # makes the repair correctable in both directions when the rule
+            # changes. Filtering the stored range would compound each rule's
+            # mistakes into the next.
+            # `needs_test`, not test_sha's nested `testable_only` helper --
+            # that one is a closure and is not in scope here. Same predicate.
+            base = [c for c in clone.commits_between(reg["good"], reg["bad"])
+                    if needs_test(clone.path, c)]
+            obs = pin_observable(clone, base)
+            print("twatch: %s — range re-derived for a PIN-BUILT job (rule v%d): "
+                  "%d commit(s) -> %d observable (dropped %d that change only "
                   "compiler/tools/docs)%s"
-                  % (reg.get("job", "?"), len(rng), len(obs), len(rng) - len(obs),
+                  % (reg.get("job", "?"), PIN_AXIS_RULE, len(base), len(obs),
+                     len(base) - len(obs),
                      "; NOTHING it can observe changed across the interval"
                      if not obs else ""), flush=True)
-            reg["pin_axis"] = True
+            reg["pin_axis"] = PIN_AXIS_RULE
             reg["range"] = rng = obs
             save_state(clone, host, st)
         if len(rng) <= 1:

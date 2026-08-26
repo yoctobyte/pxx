@@ -5,10 +5,11 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:22 blocked:7 backlog:287 backlog_new:28 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2376 rejected:40`
+`working:2 unfinished:22 blocked:7 backlog:286 backlog_new:28 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2376 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
+- `bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost` [A] — owner: agent-A-perf-9s
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N] — owner: frank1-72
 
 ## unfinished (22) — parked mid-flight; re-claim, do not duplicate
@@ -46,9 +47,8 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 325, ranked
+## Ready — top 30 of 324, ranked
 
-- `[p 80] [A]` bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost
 - `[p 80] [N]` bug-n-a-class-base-that-is-an-expression-does-not-compile
 - `[p 80] [N]` bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 - `[p 80] [N]` bug-n-hasattr-through-an-untyped-parameter-is-always-false
@@ -78,5 +78,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
+- `[p 65] [N]` bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened
 
-_295 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_294 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
