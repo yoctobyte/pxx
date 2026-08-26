@@ -3928,14 +3928,22 @@ begin
       masking (`v & 0xFFFFFFFFFFFFFFFF` normalising a cell to 64 bits), and a
       soft-typed stack means the operand is a variant, not a static int.
       The shift count is already in rcx, so cl is the low byte. `shr` is
-      ARITHMETIC (sar): Python's >> on a negative int sign-extends. A float
-      operand never reaches here — it is diverted to the double path above,
-      where a bitwise op is correctly rejected, as in Python. }
+      LOGICAL under Pascal (shr) and ARITHMETIC under NilPy (sar): Python's >>
+      on a negative int sign-extends, Pascal's `shr` does not, and a Variant
+      must answer what the same operator answers on a static operand of the
+      same language. Split on PyProgramMode, the same seam `pasPlus` above
+      uses. A float operand never reaches here — it is diverted to the double
+      path above, where a bitwise op is correctly rejected, as in Python.
+      bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical }
     else if opTk = Ord(tkAnd)   then begin EmitB($48); EmitB($21); EmitB($C8); end             { and  rax,rcx }
     else if opTk = Ord(tkOr)    then begin EmitB($48); EmitB($09); EmitB($C8); end             { or   rax,rcx }
     else if opTk = Ord(tkXor)   then begin EmitB($48); EmitB($31); EmitB($C8); end             { xor  rax,rcx }
     else if opTk = Ord(tkShl)   then begin EmitB($48); EmitB($D3); EmitB($E0); end             { shl  rax,cl }
-    else if opTk = Ord(tkShr)   then begin EmitB($48); EmitB($D3); EmitB($F8); end             { sar  rax,cl }
+    else if opTk = Ord(tkShr)   then
+    begin
+      EmitB($48); EmitB($D3);
+      if PyProgramMode then EmitB($F8) else EmitB($E8);   { sar / shr  rax,cl }
+    end
     else Error('Variant arithmetic: unsupported operator (string pending)');
     EmitB($48); EmitB($8D); EmitB($14); EmitB($25); EmitGlobRef(resultOff);       { lea rdx,[result] }
     EmitB($48); EmitB($C7); EmitB($02); EmitI32(VT_INT64);                        { mov qword[rdx],VT_INT64 }
@@ -4014,7 +4022,11 @@ begin
     else if opTk = Ord(tkOr)  then begin EmitB($48); EmitB($09); EmitB($C8); end { or  rax,rcx }
     else if opTk = Ord(tkXor) then begin EmitB($48); EmitB($31); EmitB($C8); end { xor rax,rcx }
     else if opTk = Ord(tkShl) then begin EmitB($48); EmitB($D3); EmitB($E0); end { shl rax,cl }
-    else if opTk = Ord(tkShr) then begin EmitB($48); EmitB($D3); EmitB($F8); end { sar rax,cl }
+    else if opTk = Ord(tkShr) then
+    begin
+      EmitB($48); EmitB($D3);
+      if PyProgramMode then EmitB($F8) else EmitB($E8);   { sar / shr rax,cl }
+    end
     else begin
     { The double arm has its OWN idiv and needs the same guard as the integer
       one -- `v(1.5) div v(0.0)` truncates to 1 div 0 and SIGFPE'd here after

@@ -23,13 +23,23 @@ program test_variant_bitwise_and_not;
   than True/False on every target except x86-64 -- a separate, pre-existing
   defect (bug-a-a-boolean-variant-writes-as-1-or-0-off-x86-64), so this test
   reads tags and values instead of rendering them.
-  Also not covered: `v(-12) shr 1`. Pascal's shr is logical, x86-64 emits an
-  arithmetic sar, and FPC narrows a Variant to 32 bits first and answers
-  2147483642 -- three answers, parked as decide-variant-bitwise-width. Every
-  non-negative row below agrees under all three readings. }
+  A NEGATIVE `shr` is covered now, and it is the fourth defect of the same
+  shape. pxx's static `shr` is a 64-bit LOGICAL shift on Integer and on Int64
+  alike; its Variant `shr` was ARITHMETIC, because that arm was written for
+  NilPy (Python's `>>` sign-extends) and Pascal reached the same emitter.
+  `v(-12) shr 1` answered -6 where `Int64(-12) shr 1` answers
+  9223372036854775802 -- two different operators under one spelling inside one
+  language, which is the disagreement that matters. FPC is a THIRD answer
+  (2147483642: it narrows a Variant to 32 bits first) and we deliberately do
+  not copy that narrowing -- decide-variant-bitwise-width, decided 2026-08-25,
+  option 2. So the negative rows below assert VARIANT-EQUALS-STATIC, computing
+  the want from the static operator rather than hard-coding a constant: that is
+  the property being claimed, and it is the one an FPC oracle cannot express.
+  bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical }
 uses variants;
 var
   a, b, c: Variant;
+  l: Int64;
   fails: Integer;
 
 procedure ChkI(const what: AnsiString; got, want: Int64);
@@ -101,6 +111,43 @@ begin
   a := -12; b := 10;
   ChkI('neg and', a and b, 0);
   ChkI('neg shl', a shl 1, -24);
+
+  { A NEGATIVE operand under every bitwise operator, each row asserting that the
+    Variant answers what the SAME operator answers on a static Int64. The want
+    is COMPUTED from the static operator on purpose -- a hard-coded constant
+    would still pass if both sides drifted together, and drifting together is
+    not the property. Both operand shapes are covered: a Variant right-hand
+    side and a plain integer literal, because the literal boxes through a
+    different path.
+
+    The Variant is loaded from a LITERAL, not from `l`, on purpose: assigning
+    an Int64 VARIABLE to a Variant truncates to 32 bits on i386 and arm32 --
+    their backends move four bytes into the 8-byte payload and zero the rest,
+    so `a := l` with l = -12 makes a Variant holding 4294967284 and every row
+    below then answers correctly for the WRONG operand. That is the fat-slot
+    model's own gap, filed as
+    bug-a-an-int64-assigned-to-a-variant-truncates-to-32-bits-on-i386-and-arm32,
+    and it is not what these rows are about. A literal boxes correctly on all
+    four targets. }
+  l := -12;
+  a := -12; b := 1;
+  ChkI('agree shr var', a shr b, l shr 1);
+  ChkI('agree shr lit', a shr 1, l shr 1);
+  ChkI('agree shl var', a shl b, l shl 1);
+  ChkI('agree or',      a or 5,  l or 5);
+  ChkI('agree xor',     a xor 5, l xor 5);
+  ChkI('agree and',     a and 5, l and 5);
+
+  { A result WIDER than 32 bits. The payload of an integer Variant is a full
+    Int64 on every target, but the runtime renderer read it back through a
+    MACHINE word -- four bytes on i386 and arm32 -- so `v(1) shl 40` wrote 0
+    and `v(3000000000) * 2` wrote 1705032704 there while x86-64 and aarch64,
+    where a machine word happens to be eight bytes, printed both correctly.
+    Measured 2026-08-26 on x86-64, i386, arm32 and aarch64: all four now agree
+    with the static row below. }
+  l := 1;
+  a := 1; b := 40;
+  ChkI('wide shl', a shl b, l shl 40);
 
   if fails = 0 then writeln('ALL OK') else writeln(fails, ' FAILURES');
 end.

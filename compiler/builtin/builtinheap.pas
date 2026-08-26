@@ -3642,21 +3642,31 @@ type
 
 { The bitwise operator set, named once. tkAnd = 30, tkOr = 31, tkShl = 103,
   tkXor = 117, tkShr = 119 — the TTokenKind ordinals from defs.inc, which the
-  runtime cannot see. }
+  runtime cannot see.
+
+  1119 is not a token: it is the out-of-band opcode PXXVarBinOpPas substitutes
+  for tkShr, spelling "shift right, LOGICALLY". The runtime cannot see
+  PyProgramMode, so the language split is made by the CALLER — Pascal enters
+  through PXXVarBinOpPas and rewrites the opcode, NilPy enters PXXVarBinOp
+  directly and keeps 119. Same seam, same reason, as the string rule that
+  wrapper already carries. }
 function VarOpIsBitwise(opTk: NativeInt): Boolean;
 begin
   VarOpIsBitwise := (opTk = 30) or (opTk = 31) or (opTk = 103) or
-                    (opTk = 117) or (opTk = 119);
+                    (opTk = 117) or (opTk = 119) or (opTk = 1119);
 end;
 
 { Apply one of them to two already-integral operands. Kept apart from its two
   call sites so the INTEGER arm and the FLOAT arm of PXXVarBinOp cannot drift
   the way this function and x86-64's EmitVarBinOp did.
-  `shr` is ARITHMETIC (sign-extending), matching the `sar` x86-64 emits and
-  Python's `>>`. Pascal's own `shr` is logical, and FPC's Variant `shr` is
-  neither — it narrows to 32 bits first, so `v(-12) shr 1` is 2147483642
-  there. All three agree on non-negative operands, which is every row anyone
-  has actually written; the fork is parked as decide-variant-bitwise-width. }
+  119 (`shr`) is ARITHMETIC (sign-extending), matching the `sar` x86-64 emits
+  for NilPy and Python's `>>`; 1119 is LOGICAL, which is what Pascal's own
+  `shr` does on a static Integer or Int64, so a Variant answers the same. FPC's
+  Variant `shr` is a third thing — it narrows to 32 bits first, so
+  `v(-12) shr 1` is 2147483642 there — and that narrowing is a behaviour we do
+  not copy (decide-variant-bitwise-width, decided 2026-08-25, option 2).
+  All of them agree on non-negative operands.
+  bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical }
 function VarBitwiseInt(lVal, rVal: Int64; opTk: NativeInt): Int64;
 var r: Int64;
 begin
@@ -3664,7 +3674,8 @@ begin
   else if opTk = 31 then r := lVal or rVal
   else if opTk = 117 then r := lVal xor rVal
   else if opTk = 103 then r := lVal shl rVal
-  else if lVal < 0 then r := not ((not lVal) shr rVal)   { arithmetic shr }
+  else if opTk = 1119 then r := lVal shr rVal             { Pascal: logical shr }
+  else if lVal < 0 then r := not ((not lVal) shr rVal)    { NilPy: arithmetic shr }
   else r := lVal shr rVal;
   VarBitwiseInt := r;
 end;
@@ -4748,7 +4759,18 @@ begin
   end
   else if (tag = 1) or (tag = 2) then          { VT_INT / VT_INT64 }
   begin
-    iv := PWord(Int64(v) + 8)^;
+    { PInt64, NOT PWord. The payload of BOTH integer tags is a full Int64 (see
+      defs.inc: VT_INT is "payload = sign-extended Int64"), and PWord is a
+      MACHINE word — four bytes on i386 and arm32. Reading it as PWord threw
+      away the high half of every integer variant on those two targets, so
+      `v := 3000000000; v := v * 2` wrote 1705032704 and `v(1) shl 40` wrote 0,
+      while x86-64 and aarch64 — where a machine word happens to BE eight bytes
+      — printed both correctly. Silent, target-dependent, and invisible until a
+      variant carried a value that did not fit 32 bits. The other three PWord
+      reads in this routine are right as they are: a tag, a Boolean's 0/1, and a
+      string HANDLE really are machine words.
+      bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical }
+    iv := PInt64(Int64(v) + 8)^;
     write(iv);
   end
   else if tag = 3 then  { VT_DOUBLE }

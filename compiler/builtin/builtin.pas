@@ -959,9 +959,22 @@ var
   lp, rp: Pointer;
   lStr, rStr: Boolean;
   dr: PVariantRecord;
+  effOp: NativeInt;
 begin
   lp := left;
   rp := right;
+  { tkShr = 119. Pascal's `shr` is a LOGICAL shift — `Int64(-12) shr 1` is
+    9223372036854775802, not -6 — and a Variant must answer what the same
+    operator answers on a static operand. The raw dispatch's `shr` is
+    ARITHMETIC because that is Python's `>>`, so this wrapper substitutes the
+    out-of-band opcode 1119 that VarBitwiseInt reads as "logical". The choice
+    is made HERE for the same reason the string rule is: the runtime cannot see
+    PyProgramMode, so the language is expressed by WHICH entry point ran.
+    x86-64 never reaches this — it hand-emits shr vs sar in EmitVarBinOp off
+    the same flag, and the two must move together.
+    bug-a-variant-shr-is-arithmetic-where-static-shr-is-logical }
+  effOp := opTk;
+  if opTk = 119 then effOp := 1119;
   { NULL PROPAGATION, ahead of everything else -- FPC's rule, inherited from OLE
     and shared with SQL: an ARITHMETIC operator with a Null operand yields Null.
     pxx read VT_EMPTY's payload as 0 and carried on, so `Null + 5` was 5 and
@@ -1026,7 +1039,7 @@ begin
       rp := PXXVarNumCoerce(right, @ra);
     end;
   end;
-  Result := PXXVarBinOp(dest, lp, rp, opTk, isCompare);
+  Result := PXXVarBinOp(dest, lp, rp, effOp, isCompare);
 end;
 
 function VariantToInt64(const v: Variant): Int64;
