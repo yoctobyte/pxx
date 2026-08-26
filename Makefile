@@ -12422,6 +12422,26 @@ test-quick: $(COMPILER)
 	# The env tier outranks the file tier: PXX_HOME wins over `home`, and it is
 	# the whole root that switches, not a field of it.
 	cd $(TESTTMP)/cliux_cfg && PXX_HOME=/nonexistent-pxx-home ./bin/pxx --where | grep -q '/nonexistent-pxx-home/lib/rtl/'
+	# feature-dynamic-include-paths-config, tier 4: the host `<>` fallback roots.
+	# That list is DATA now (CSysIncludeDirs, filled by BuildCSysIncludeDirs and
+	# walked by one loop) where it was SIXTEEN copy-pasted blocks, each carrying
+	# a hand-counted string length. --where prints it for the same reason it
+	# prints the other three tiers.
+	./$(COMPILER) --where | grep -q 'Host system <> fallback roots'
+	# Both gates must say NOT SEARCHED and print no roots underneath it: a reader
+	# chasing a missing header would read a printed list as the answer.
+	./$(COMPILER) -nostdinc --where | grep -qF '(not searched: cross target, or -nostdinc)'
+	./$(COMPILER) --target=aarch64 --where | grep -qF '(not searched: cross target, or -nostdinc)'
+	! ./$(COMPILER) -nostdinc --where | sed -n '/Host system <> fallback/,/^$$/p' | grep -q '^  /'
+	# ...and the regression the slice exists for. The versioned gcc/clang roots
+	# are DISCOVERED by scanning their parent, never written in: they were `13`
+	# and `18`, and BOTH had gone stale on the box this was found on, so those
+	# two entries had been searching nothing for however long, in silence. A
+	# scanned root exists by construction -- so a [MISSING] on one of these
+	# lines means a hardcoded version came back.
+	./$(COMPILER) --where > $(TESTTMP)/cliux_sysinc.txt
+	! grep -E '(/usr/lib/gcc/|/lib/clang/)' $(TESTTMP)/cliux_sysinc.txt | grep -q MISSING || \
+	  { echo "a versioned host include root is [MISSING] -- hardcoded version?"; exit 1; }
 
 # test-smoke: the pre-commit iteration gate = test-quick + the full self-host
 # byte-identity chain (the artifacts stabilize-core pins). Catches self-host

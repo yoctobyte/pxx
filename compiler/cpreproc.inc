@@ -1959,6 +1959,91 @@ begin
   Inc(CIncludeDirCount);
 end;
 
+{ ---- the host system `<>` fallback search list ----------------------------
+
+  Tier 4, below `-I` roots and below pxx's own crtl headers: the host's own
+  headers, searched only for a NATIVE build and only without -nostdinc.
+
+  Built once into a table so the `#include` fallback is one loop instead of the
+  sixteen copy-pasted blocks it used to be, and so the list is a DATA structure
+  a config file can extend (feature-dynamic-include-paths-config).
+
+  The GTK/GLib family is here because pxx's PCL binds GTK2 directly; those roots
+  are ordinary system library headers with no pxx-shipped twin. The multiarch
+  triple stays spelled out, which is honest rather than tidy: the whole block is
+  already gated on TARGET_X86_64, so a wrong triple cannot be reached. }
+procedure AddCSysIncludeDir(const d: AnsiString);
+begin
+  if Length(d) = 0 then Exit;
+  if CSysIncludeCount >= MAX_C_SYS_INCLUDE_DIRS then Exit;
+  CSysIncludeDirs[CSysIncludeCount] := d;
+  Inc(CSysIncludeCount);
+end;
+
+{ …and the two entries that must NOT be literals. gcc's and clang's own
+  freestanding headers (stddef.h, stdarg.h, the __builtin shims) live under a
+  VERSION directory, and the version was written into the source as `13` and
+  `18`. Both were already stale on the box this was found on — gcc is 15 there,
+  so `/usr/lib/gcc/x86_64-linux-gnu/13/include` did not exist and that entry had
+  been searching nothing for however long. A hardcoded version number is a
+  fallback that expires silently.
+
+  So: scan the parent and take whatever versions are actually installed. Every
+  one of them, not the newest — these are freestanding headers, near-identical
+  across versions, and picking a winner would need a version COMPARE (string
+  compare puts "9" after "15") for no gain. Names are copied out of DirEntNames
+  before the nested scan, because PxxListDir writes one global buffer. }
+procedure AddCSysVersionedIncludeDirs(const parent, tail: AnsiString);
+var i: Integer;
+begin
+  PxxListDir(parent);
+  if DirEntTruncated then Exit;
+  for i := 0 to DirEntCount - 1 do
+  begin
+    if DirEntNames[i] = '.' then Continue;
+    if DirEntNames[i] = '..' then Continue;
+    AddCSysIncludeDir(parent + DirEntNames[i] + tail);
+  end;
+end;
+
+procedure BuildCSysIncludeDirs;
+var i, n: Integer;
+    llvm: array[0..15] of AnsiString;
+begin
+  if CSysIncludeBuilt then Exit;
+  CSysIncludeBuilt := True;
+  CSysIncludeCount := 0;
+  { entry 0 is the bare system root, and the warning above is keyed on that }
+  AddCSysIncludeDir('/usr/include/');
+  AddCSysIncludeDir('/usr/include/gtk-2.0/');
+  AddCSysIncludeDir('/usr/lib/x86_64-linux-gnu/gtk-2.0/include/');
+  AddCSysIncludeDir('/usr/include/glib-2.0/');
+  AddCSysIncludeDir('/usr/lib/x86_64-linux-gnu/glib-2.0/include/');
+  AddCSysIncludeDir('/usr/include/pango-1.0/');
+  AddCSysIncludeDir('/usr/include/cairo/');
+  AddCSysIncludeDir('/usr/include/gdk-pixbuf-2.0/');
+  AddCSysIncludeDir('/usr/include/atk-1.0/');
+  AddCSysIncludeDir('/usr/include/x86_64-linux-gnu/');
+  AddCSysIncludeDir('/usr/include/harfbuzz/');
+  AddCSysIncludeDir('/usr/include/freetype2/');
+  AddCSysIncludeDir('/usr/include/pixman-1/');
+  AddCSysIncludeDir('/usr/include/fontconfig/');
+  { …and the versioned compiler-internal roots, discovered rather than guessed }
+  AddCSysVersionedIncludeDirs('/usr/lib/gcc/x86_64-linux-gnu/', '/include/');
+  PxxListDir('/usr/lib/');
+  n := 0;
+  if not DirEntTruncated then
+    for i := 0 to DirEntCount - 1 do
+      if (Length(DirEntNames[i]) > 5) and (Copy(DirEntNames[i], 1, 5) = 'llvm-') and
+         (n < 16) then
+      begin
+        llvm[n] := DirEntNames[i];
+        Inc(n);
+      end;
+  for i := 0 to n - 1 do
+    AddCSysVersionedIncludeDirs('/usr/lib/' + llvm[i] + '/lib/clang/', '/include/');
+end;
+
 { Auto-register pxx's own C headers (lib/crtl/include) as a default `<>` search
   root, like a real C compiler searching its own freestanding/hosted headers.
   Anchored to the compiler binary (ExeDir = <root>/compiler/) so it resolves
@@ -2201,135 +2286,45 @@ begin
          -nostdinc is not set: these are the host's headers, wrong for any cross
          target — our libraries are meant to be cross-platform and must resolve
          from project/-I roots or pxx's own crtl headers, not /usr. -nostdinc
-         disables both this fallback and the default crtl search. }
+         disables both this fallback and the default crtl search.
+
+         ONE table, ONE loop. This was SIXTEEN copies of the same five-line
+         block, each differing only by a literal path and a HAND-COUNTED length
+         — and a hand-counted length is a silent truncation waiting to happen,
+         which is the whole reason the table stores whole strings instead. The
+         list is also what the ticket asks for: a search order that can be
+         EXTENDED from config rather than recompiled
+         (feature-dynamic-include-paths-config). }
     if (CPIncludeLength(depth) = 0) and (TargetArch = TARGET_X86_64) and (not NoStdInc) then
     begin
-    if CPIncludeLength(depth) = 0 then
-    begin
-      SetLength(CPrepPath, 0);
-      CPAppendRange(CPrepPath, '/usr/include/', 1, 13);
-      CPAppendRange(CPrepPath, line, a, p - 1);
-      CPLoadInclude(depth);
-      { A header pxx has no `-I`/crtl-anchored match for fell all the way through
-        to the bare host system root. Harmless for a genuinely host-only header
-        (X11, GTK, ...) but silently wrong for a libc header pxx SHIPS its own
-        version of (stdarg.h, math.h, ...): the host's va_list/gcc-builtin
-        spellings pxx does not understand, or a constant like M_SQRT2 the host
-        header defines a way pxx's preprocessor cannot follow, both degrade to
-        "undefined identifier, treated as 0" with no further diagnostic
-        (bug-crtl-headers-lost-when-cwd-is-not-the-repo-root). This is exactly
-        the case that anchor was supposed to prevent — warn so a user sees why,
-        instead of chasing a wrong VALUE with no lead back to its cause. }
-      if CPIncludeLength(depth) > 0 then
-        Warn('#include <' + Copy(line, a, p - a) +
-             '> resolved from the host system (/usr/include), not pxx''s own headers — ' +
-             'ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave');
-    end;
-    if CPIncludeLength(depth) = 0 then
-    begin
-      SetLength(CPrepPath, 0);
-      CPAppendRange(CPrepPath, '/usr/include/gtk-2.0/', 1, 21);
-      CPAppendRange(CPrepPath, line, a, p - 1);
-      CPLoadInclude(depth);
-    end;
-    if CPIncludeLength(depth) = 0 then
-    begin
-      SetLength(CPrepPath, 0);
-      CPAppendRange(CPrepPath, '/usr/lib/x86_64-linux-gnu/gtk-2.0/include/', 1, 42);
-      CPAppendRange(CPrepPath, line, a, p - 1);
-      CPLoadInclude(depth);
-    end;
-    if CPIncludeLength(depth) = 0 then
-    begin
-      SetLength(CPrepPath, 0);
-      CPAppendRange(CPrepPath, '/usr/include/glib-2.0/', 1, 22);
-      CPAppendRange(CPrepPath, line, a, p - 1);
-      CPLoadInclude(depth);
-    end;
-    if CPIncludeLength(depth) = 0 then
-    begin
-      SetLength(CPrepPath, 0);
-      CPAppendRange(CPrepPath, '/usr/lib/x86_64-linux-gnu/glib-2.0/include/', 1, 43);
-      CPAppendRange(CPrepPath, line, a, p - 1);
-      CPLoadInclude(depth);
-    end;
-    if CPIncludeLength(depth) = 0 then
-    begin
-      SetLength(CPrepPath, 0);
-      CPAppendRange(CPrepPath, '/usr/include/pango-1.0/', 1, 23);
-      CPAppendRange(CPrepPath, line, a, p - 1);
-      CPLoadInclude(depth);
-    end;
-    if CPIncludeLength(depth) = 0 then
-    begin
-      SetLength(CPrepPath, 0);
-      CPAppendRange(CPrepPath, '/usr/include/cairo/', 1, 19);
-      CPAppendRange(CPrepPath, line, a, p - 1);
-      CPLoadInclude(depth);
-    end;
-    if CPIncludeLength(depth) = 0 then
-    begin
-      SetLength(CPrepPath, 0);
-      CPAppendRange(CPrepPath, '/usr/include/gdk-pixbuf-2.0/', 1, 28);
-      CPAppendRange(CPrepPath, line, a, p - 1);
-      CPLoadInclude(depth);
-    end;
-    if CPIncludeLength(depth) = 0 then
-    begin
-      SetLength(CPrepPath, 0);
-      CPAppendRange(CPrepPath, '/usr/include/atk-1.0/', 1, 21);
-      CPAppendRange(CPrepPath, line, a, p - 1);
-      CPLoadInclude(depth);
-    end;
-    if CPIncludeLength(depth) = 0 then
-    begin
-      SetLength(CPrepPath, 0);
-      CPAppendRange(CPrepPath, '/usr/include/x86_64-linux-gnu/', 1, 30);
-      CPAppendRange(CPrepPath, line, a, p - 1);
-      CPLoadInclude(depth);
-    end;
-    if CPIncludeLength(depth) = 0 then
-    begin
-      SetLength(CPrepPath, 0);
-      CPAppendRange(CPrepPath, '/usr/include/harfbuzz/', 1, 22);
-      CPAppendRange(CPrepPath, line, a, p - 1);
-      CPLoadInclude(depth);
-    end;
-    if CPIncludeLength(depth) = 0 then
-    begin
-      SetLength(CPrepPath, 0);
-      CPAppendRange(CPrepPath, '/usr/include/freetype2/', 1, 23);
-      CPAppendRange(CPrepPath, line, a, p - 1);
-      CPLoadInclude(depth);
-    end;
-    if CPIncludeLength(depth) = 0 then
-    begin
-      SetLength(CPrepPath, 0);
-      CPAppendRange(CPrepPath, '/usr/include/pixman-1/', 1, 22);
-      CPAppendRange(CPrepPath, line, a, p - 1);
-      CPLoadInclude(depth);
-    end;
-    if CPIncludeLength(depth) = 0 then
-    begin
-      SetLength(CPrepPath, 0);
-      CPAppendRange(CPrepPath, '/usr/include/fontconfig/', 1, 24);
-      CPAppendRange(CPrepPath, line, a, p - 1);
-      CPLoadInclude(depth);
-    end;
-    if CPIncludeLength(depth) = 0 then
-    begin
-      SetLength(CPrepPath, 0);
-      CPAppendRange(CPrepPath, '/usr/lib/gcc/x86_64-linux-gnu/13/include/', 1, 41);
-      CPAppendRange(CPrepPath, line, a, p - 1);
-      CPLoadInclude(depth);
-    end;
-    if CPIncludeLength(depth) = 0 then
-    begin
-      SetLength(CPrepPath, 0);
-      CPAppendRange(CPrepPath, '/usr/lib/llvm-18/lib/clang/18/include/', 1, 38);
-      CPAppendRange(CPrepPath, line, a, p - 1);
-      CPLoadInclude(depth);
-    end;
+      BuildCSysIncludeDirs;
+      k := 0;
+      while (CPIncludeLength(depth) = 0) and (k < CSysIncludeCount) do
+      begin
+        CPConcat2(CSysIncludeDirs[k], '', CPrepPath);
+        CPAppendRange(CPrepPath, line, a, p - 1);
+        CPLoadInclude(depth);
+        { A header pxx has no `-I`/crtl-anchored match for fell all the way
+          through to the bare host system root. Harmless for a genuinely
+          host-only header (X11, GTK, ...) but silently wrong for a libc header
+          pxx SHIPS its own version of (stdarg.h, math.h, ...): the host's
+          va_list/gcc-builtin spellings pxx does not understand, or a constant
+          like M_SQRT2 the host header defines a way pxx's preprocessor cannot
+          follow, both degrade to "undefined identifier, treated as 0" with no
+          further diagnostic (bug-crtl-headers-lost-when-cwd-is-not-the-repo-
+          root). This is exactly the case the crtl anchor was supposed to
+          prevent — warn so a user sees why, instead of chasing a wrong VALUE
+          with no lead back to its cause.
+
+          Scoped to entry 0, the bare `/usr/include/`, exactly as before the
+          table: the library roots below it (gtk, glib, ...) have no pxx-shipped
+          twin to be confused with, so warning on them would be noise. }
+        if (CPIncludeLength(depth) > 0) and (k = 0) then
+          Warn('#include <' + Copy(line, a, p - a) +
+               '> resolved from the host system (/usr/include), not pxx''s own headers — ' +
+               'ABI/macro mismatches (e.g. va_list, M_SQRT2) may silently misbehave');
+        Inc(k);
+      end;
     end;  { native (x86_64) system-fallback block }
     if CPIncludeLength(depth) = 0 then
     begin

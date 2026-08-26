@@ -112,6 +112,7 @@ function GetOrAllocSymRTTI(symIdx: Integer): Integer; forward;
 {$include asmtext_xtensa.inc}
 {$ifndef PXX_NO_CFRONT}procedure CPreprocess(var src: AnsiString; const baseDir: AnsiString); forward;{$endif}
 procedure AddDefaultCIncludeDirs; forward;   { the C unit pull in pasparser_proc.inc needs it too }
+procedure BuildCSysIncludeDirs; forward;    { the host `<>` fallback table — cpreproc.inc fills it, --where prints it }
 { stubs for any frontend omitted from this build; no-op in the default }
 {$include frontend_stubs.inc}
 { Cross-frontend forward declarations the FPC seed needs, and the map of where
@@ -415,6 +416,24 @@ begin
     WriteLn('  (none — -nostdinc)');
   for i := 0 to CIncludeDirCount - 1 do
     ShowWhereDir(CIncludeDirs[i], '');
+  WriteLn;
+
+  { …and the tier BELOW those: the host's own headers, searched last and only
+    for a native build. Listed because two of these entries are DISCOVERED
+    (gcc's and clang's versioned freestanding roots) rather than written into
+    the source, and a search list you cannot see is one you cannot debug — the
+    hardcoded versions they replaced had gone stale without anyone noticing.
+    feature-dynamic-include-paths-config }
+  BuildCSysIncludeDirs;
+  WriteLn('Host system <> fallback roots, searched LAST (native only, off under -nostdinc):');
+  if (TargetArch <> TARGET_X86_64) or NoStdInc then
+    { …and then say NOTHING else. Printing the note and the list together reads
+      as a contradiction, and a reader chasing a missing header would take the
+      list as the answer. }
+    WriteLn('  (not searched: cross target, or -nostdinc)')
+  else
+    for i := 0 to CSysIncludeCount - 1 do
+      ShowWhereDir(CSysIncludeDirs[i], '');
   WriteLn;
 {$endif}
 

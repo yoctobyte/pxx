@@ -44,6 +44,15 @@ begin
   Error('internal: AddDefaultCIncludeDirs reached in a build without the C frontend');
 end;
 
+{ Not an Error: --where PRINTS this list, and a diagnostic flag must answer in
+  every build. With no C frontend there are no C headers to search, and an empty
+  list says exactly that. }
+procedure BuildCSysIncludeDirs;
+begin
+  CSysIncludeCount := 0;
+  CSysIncludeBuilt := True;
+end;
+
 procedure ParseCUnit;
 begin
   Error('internal: ParseCUnit reached in a build without the C frontend');

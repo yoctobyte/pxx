@@ -120,6 +120,7 @@ const
   MAX_CPREP_INCLUDES = 128;
   MAX_CPREP_CHARS = 8388608;  { 8 MB }
   MAX_C_INCLUDE_DIRS = 64;    { user `-I` C include search roots }
+  MAX_C_SYS_INCLUDE_DIRS = 64; { host system `<>` fallback roots — the tier-4 table BuildCSysIncludeDirs fills (feature-dynamic-include-paths-config). Was sixteen copy-pasted blocks in cpreproc.inc, two of them naming a hardcoded gcc/clang VERSION that had already gone stale. }
   MAX_PAS_UNIT_DIRS  = 64;    { user `-Fu`/`-I` Pascal unit search roots }
   MAX_DIRENT         = 4096;  { entries one PxxListDir scan reports; lib/rtl is 109 }
   { The compiler's own GENERATION number, tracking the pinned-stable line. ONE
@@ -4380,6 +4381,11 @@ var
   DirEntNames     : array[0..MAX_DIRENT-1] of AnsiString;
   DirEntCount     : Integer;
   DirEntTruncated : Boolean;
+
+  { The host system `<>` fallback search list — see BuildCSysIncludeDirs. }
+  CSysIncludeDirs  : array[0..MAX_C_SYS_INCLUDE_DIRS-1] of AnsiString;
+  CSysIncludeCount : Integer;
+  CSysIncludeBuilt : Boolean;
 
   PxxCfgLoaded    : Boolean;
   PxxCfgPath      : AnsiString;   { the file in effect, '' when none was found }
