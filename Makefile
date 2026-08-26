@@ -3732,6 +3732,22 @@ test-core: $(COMPILER)
 	# bug-n-from-collections-import-counter-binds-something-that-always-answers-zero
 	./$(COMPILER) test/test_nilpy_counter_from_a_string.npy $(TESTTMP)/test_nilpy_counterstr26
 	$(TESTTMP)/test_nilpy_counterstr26 | diff -u test/test_nilpy_counter_from_a_string.expected -
+	# A DUNDER OPERATOR written on `self` inside a base-class method, and the
+	# ABSTRACT (raise-only) base whose invented return type poisoned every
+	# override. Here rather than in test-nilpy for the reason the tests above
+	# give -- test-core is the NATIVE tier, and BOTH failures were silent wrong
+	# VALUES: `len(self)` answered the base's 1 with a subclass returning 42,
+	# and a str-returning override of an abstract base came back as a POINTER.
+	# Every row is a PAIR (external receiver, then `self`), so a reintroduced
+	# bug reads as the two arms DISAGREEING rather than one number changing;
+	# the `iter` and `solo` rows are the arms that were already correct and are
+	# what named the specification. At pinned v376 six rows are wrong and the
+	# program then dies outright at section 2.
+	# The .expected is CPython's own output, generated not written.
+	# bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
+	# bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
+	./$(COMPILER) test/test_nilpy_dunder_on_self_reaches_the_override.npy $(TESTTMP)/test_nilpy_dunderself26
+	$(TESTTMP)/test_nilpy_dunderself26 | diff -u test/test_nilpy_dunder_on_self_reaches_the_override.expected -
 	# ...and the other side of the same rule: a REBOUND name is refused, never
 	# resolved to its first binding. CPython prints "second"; a compile-time
 	# alias table cannot say that, so it must decline rather than answer "first".
