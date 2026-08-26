@@ -178,4 +178,4 @@ at HEAD. No compiler source was touched: the diff is one test, its `.expected`,
 and eleven Makefile lines.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 1bb8bff8c.
