@@ -78,6 +78,28 @@ gate each must stay green** — it is NOT an ontology of the codebase. So:
   error REPORTING is low prio by that same call, the way float accuracy is low
   prio by Track F's.
 
+  **We do not chase 100% FPC parity** (user, 2026-08-26): *"we don't strive to
+  mimic FPC 100%. We just care for correct compiling pascal code, not emulating
+  every behaviour."* This is the ceiling the two rulings above were each
+  approaching from one side, stated once and generally. The bar a compat ticket
+  must clear is now explicit:
+
+  | the ticket says | verdict |
+  | --- | --- |
+  | real Pascal source compiles wrong, or not at all | **bug** — own lane, own prio, not compat |
+  | real Pascal source compiles but *runs* wrong | **bug** — silent-wrong-behavior escape, as above |
+  | FPC accepts a form we reject | **compat**, ranked by how much real code uses it |
+  | we accept a form FPC rejects | **not a defect** — same call NilPy makes for CPython; note it in the divergences doc |
+  | our diagnostic/message/error number differs | **defer** — error reporting, low prio by the ruling above |
+  | our output *formatting* of a value differs | **F** if it's a float, else compat at low prio |
+  | an observable that no compiling program can reach | **never** — close it `rejected/`, cite this row |
+
+  The last two rows are where the backlog actually leaks. "FPC prints this
+  differently" and "FPC's RTTI spells this name differently" are *not* on the
+  path to compiling correct Pascal, and a ticket that cannot name a program
+  whose behaviour changes is a `rejected/` ticket, not a low-prio one — parking
+  it at prio 10 keeps it in the ranker's scan forever at zero value.
+
 Two axes cut the repo, and the tracks follow them:
 
 1. **Accepted languages (frontends)** — what the compiler *parses*: **P** Pascal
@@ -597,75 +619,59 @@ Workers need nothing extra — their lane rules are the track sections above. Th
 roster is only for whoever is coordinating, plus the live "who holds what" table.
 
 ## Workflow norms (all tracks)
-- **All tracks work on `dev`** (one branch, no worktrees/clones). Commit in small
-  units. (Historic: every track worked directly on `master` until 2026-08-25;
-  C used a `feat/cfront` worktree until it merged at v80. Both are retired.
-  Exception: Track T's watcher daemon runs in its own dedicated clone — it's
-  infra, not a dev agent.) **Every "Works on `master`" line in the track
-  sections above now means `dev`** — they were written before the split and are
-  not individually corrected.
+- **All tracks work on `master`** (one branch, no worktrees/clones). Commit in
+  small units. (Historic: a `dev` branch carried the work from 2026-08-25 to
+  2026-08-26 and is retired — see BRANCHES below; C used a `feat/cfront`
+  worktree until it merged at v80, also retired. Exception: Track T's watcher
+  daemon runs in its own dedicated clone — it's infra, not a dev agent.)
 
-### BRANCHES — `dev` is where work happens, `master` is a snapshot
+### BRANCHES — one branch, `master`, and why `dev` came and went
 
-**Decided by the user, 2026-08-25.** The old rule was "land only green, on
-master". It bought stability by making every fix wait to be provably green, and
-the wait — not the tests — was the cost. The new rule moves the proof off the
-critical path:
+**Retired by the user, 2026-08-26**, one day after it was created: *"let's work
+in master again, as we are the only agent."*
 
-- **`dev` is the working branch. Fix, commit, push. Do not wait for tests.**
-  Read, analyse, fix, commit, push, next. A red `dev` is expected and cheap.
-- **`master` is a stable snapshot, advanced ONLY when there is a new fully
-  tested and PINNED version** (user, 2026-08-26). The pin is the trigger, not a
-  clock: pins are already the deliberate, repo-lock-holding event where a binary
-  is blessed, so coupling master to them means every master sha is a sha some
-  lane can actually build against. *Fully tested* means Track T has swept that
-  sha, not that `gate.sh quick` passed on the merge.
-  **This replaces "once or twice a day"**, which was the earlier wording and is
-  too weak to hold: read as a permission rather than a bound, it produced **nine
-  syncs in under six hours** on 2026-08-26 — one carrying zero `compiler/` or
-  `lib/` files — each spending a full gate run on the box whose contention is
-  the binding constraint on the test matrix. A green is the *precondition* for a
-  sync, never the *trigger*.
-  **The consequence, named before it bites: Track T's throughput is now master's
-  throughput.** Breadth staleness stops being an informational number and becomes
-  the project's rate limit. So the first time master feels slow, the tempting fix
-  will be to relax what *fully tested* means — and that is the one adjustment that
-  puts us back where we started while keeping the appearance of rigour. **The
-  honest lever is fewer commits between pins, not a thinner sweep.**
-- **You may land non-green on `dev`** — this is the whole point, and it is the
-  one freedom the old loop did not give you. Commit mid-refactor, bank a partial
-  fix, and *deliberately craft regressions* to see what catches them. What you
-  must not do is push something you know is broken and say nothing: note it in
-  the commit message so the sync-back can route around it.
-- **Pins happen on `dev` only.** `stable_linux_amd64/**` is 27MB of committed
-  binary that changes ~3.4×/day, and binaries do not merge. One writer, one
-  branch. Track B/D/E build on `dev`'s `pinned` like everyone else.
+`dev` existed to decouple **many lanes'** pushes from a shared gate. With a
+single agent there are no other lanes to decouple, so the branch cost a merge
+ceremony per pin and bought nothing — and the sync-back itself became the
+expensive event it was meant to remove. The collapse landed as `8b2a6bae6`.
 
-**Sync-back to `master` is the COORDINATOR's job, and it is a MERGE:**
+**What survives the collapse — this is the part worth keeping:**
 
-```
-git checkout master && git merge --no-ff dev && git push origin master
-```
+- **You may land non-green.** This was `dev`'s actual contribution and it is
+  independent of where the commits sit. Read, analyse, fix, commit, push, next;
+  do not wait for tests. Commit mid-refactor, bank a partial fix, deliberately
+  craft a regression to see what catches it. What you must **not** do is push
+  something you know is broken and say nothing — **note it in the commit
+  message**, because with no sync-back gate left, that message is the only
+  warning anyone gets.
+- **Quick gating only.** `make compiler/pascal26` plus your repro is the loop
+  (next section). Track T owns breadth and sweeps your exact sha
+  asynchronously. `gate.sh quick` (~30s) is optional — run it when you touched
+  something you're nervous about.
+- **`gate.sh quick` is REQUIRED before a pin**, which is the one remaining
+  deliberate brake. Pins hold the repo lock: `make stabilize-fast && make pin`.
 
-**Never rebase and never squash `dev` into `master`.** Both tstate verdicts and
-the board's `resolve` citations are keyed by **sha**. A rebase at sync time
-invalidates every Track T verdict earned on the branch and mints a fresh batch
-of dead-commit citations — the board already carries 349 of those. The merge
-commit is the price of keeping a day of test results meaningful, and it is
-cheap.
+**What is gone:** the `git merge --no-ff dev` sync-back, the "master is a
+snapshot advanced only at a pin" rule, and the never-rebase-never-squash
+constraint that protected it. Rebasing `master` is still wrong for the same
+reason it always was — tstate verdicts and the board's `resolve` citations are
+keyed by **sha** — but `git pull --rebase` of your *own* unpushed commits is the
+normal loop and always was.
 
-If Track T reports `dev` red at sync time, **sync to the newest sha T called
-green** rather than blocking the whole day's work — `--first-parent` walk, merge
-that sha, leave the rest on `dev`. All-or-nothing is what turns one regression
-into a lost day.
+**Re-split when a second agent returns.** The reason `dev` was created has not
+been disproven; it was simply not load-bearing for one agent. If the user staffs
+concurrent lanes again, read this section's history (`git log -- CLAUDE.md`)
+rather than reinventing the split — the failure mode it hit is documented there:
+nine syncs in under six hours, each spending a full gate run on the box whose
+contention is the binding constraint on the test matrix.
 
 `tools/sync.sh` is branch-aware: it syncs whatever branch you are ON against
-`origin/<that branch>`. It is for landing your own commits on `dev`. It is
-**not** how master moves — the merge above is.
+`origin/<that branch>`. On one branch that is simply `pull --rebase` + push, and
+it fills in the sha a `resolve` landed as.
 
 ### THE PER-FIX LOOP — this file is the authority on it
 
-**Per fix, on `dev`, in full:**
+**Per fix, on `master`, in full:**
 
 ```
 make compiler/pascal26     # ~12s — and it IS the byte-identical self-host fixedpoint
@@ -698,11 +704,11 @@ a full-tier sweep that would have returned a clean verdict for a sha using a
 seen `converged after N round(s)` and confirmed the binary's sha256 differs from
 `pinned`.** Absence of that line is the tell; there is no error to wait for.
 
-**`tools/gate.sh quick` (~30s) is now OPTIONAL on `dev`** — run it when you
-touched something you are nervous about, skip it when you are not. It is
-**REQUIRED before a sync-back to `master`**, which is the coordinator's call,
-not yours. This is the change of 2026-08-25: the proof moved off the critical
-path, it did not disappear.
+**`tools/gate.sh quick` (~30s) is OPTIONAL per fix** — run it when you touched
+something you are nervous about, skip it when you are not. It is **REQUIRED
+before a pin**, which is now the only place the proof is mandatory. This is the
+change of 2026-08-25, surviving the `dev` collapse of 2026-08-26: the proof
+moved off the critical path, it did not disappear.
 
 **That is the entire gate. Nothing is missing from it.** Breadth — the full
 suites, cross targets, the corpus, regressions elsewhere — is **Track T's job**,
