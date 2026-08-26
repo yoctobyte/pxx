@@ -81,4 +81,4 @@ presents itself as coverage. Cheap to fix, and the cost of leaving it is
 measured in how long a regression can hide rather than in developer minutes.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit ecf2895db.
