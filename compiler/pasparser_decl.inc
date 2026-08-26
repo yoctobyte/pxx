@@ -738,6 +738,7 @@ begin
       VDElemTk := IntToTypeKind(ArrTypeElemTk[ai]); VDTk := VDElemTk;
       VDElemEnumId := ArrTypeElemEnumId[ai];
       LastTypeRecId := ArrTypeElemRec[ai];
+      LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[ai]);
       LastTypePointerElemRec := ArrTypePtrElemRec[ai];
       { The alias records its frozen-string element width; LastTypeStrCap here
         is whatever the last unrelated `string[N]` anywhere left behind. }
@@ -842,6 +843,7 @@ begin
           VDElemEnumId := ArrTypeElemEnumId[ai];
             VDElemEnumId := ArrTypeElemEnumId[ai];
             LastTypeRecId := ArrTypeElemRec[ai];
+            LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[ai]);
             LastTypePointerElemRec := ArrTypePtrElemRec[ai];
             VDDynDepth := VDDynDepth + ArrTypeDynDepth[ai];
             Next;                 { consume the alias name }
@@ -863,6 +865,7 @@ begin
           VDElemEnumId := ArrTypeElemEnumId[ai];
             VDElemEnumId := ArrTypeElemEnumId[ai];
             LastTypeRecId := ArrTypeElemRec[ai];
+            LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[ai]);
             LastTypePointerElemRec := ArrTypePtrElemRec[ai];
             if (VDElemTk = tyAnsiString) or (VDElemTk = tyString) or
                (VDElemTk = tyFixedString) or (VDElemTk = tyShortString) or
@@ -890,6 +893,7 @@ begin
           VDElemTk := IntToTypeKind(ArrTypeElemTk[ai]);
           VDElemEnumId := ArrTypeElemEnumId[ai];
           LastTypeRecId := ArrTypeElemRec[ai];
+          LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[ai]);
           LastTypePointerElemRec := ArrTypePtrElemRec[ai];
           VDElemDynDepth := ArrTypeDynDepth[ai];
           Next;                 { consume the alias name }
@@ -927,6 +931,7 @@ begin
           VDElemTk := IntToTypeKind(ArrTypeElemTk[ai]);
           VDElemEnumId := ArrTypeElemEnumId[ai];
           LastTypeRecId := ArrTypeElemRec[ai];
+          LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[ai]);
           LastTypePointerElemRec := ArrTypePtrElemRec[ai];
           VDTk := VDElemTk;
           elemResolved := True;
@@ -1125,7 +1130,7 @@ begin
             LocalInitElem[LocalInitCount] := elemIdx;
             LocalInitFOff[LocalInitCount] := fNameOff;
             LocalInitFLen[LocalInitCount] := fNameLen;
-            if TryParseInitValForm(fTk, fvKind, fvVal, fvAux) then
+            if TryParseInitValForm(fTk, Ord(RecFieldPtrElemTk(recId, fName)), fvKind, fvVal, fvAux) then
             begin
               { A LOCAL record const has no ValAux slot, and FLen is already
                 spoken for by the field NAME span the FIELD target reads. A
@@ -1153,7 +1158,7 @@ begin
             PendingInitElem[PendingInitCount] := elemIdx;
             PendingInitFOff[PendingInitCount] := fNameOff;
             PendingInitFLen[PendingInitCount] := fNameLen;
-            if TryParseInitValForm(fTk, fvKind, fvVal, fvAux) then
+            if TryParseInitValForm(fTk, Ord(RecFieldPtrElemTk(recId, fName)), fvKind, fvVal, fvAux) then
             begin
               PendingInitKind[PendingInitCount]   := fvKind;
               PendingInitVal[PendingInitCount]    := fvVal;
@@ -1924,6 +1929,7 @@ begin
           end;
           cElemTk := IntToTypeKind(ArrTypeElemTk[cAi]);
           LastTypeRecId := ArrTypeElemRec[cAi];
+          LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[cAi]);
           LastTypePointerElemRec := ArrTypePtrElemRec[cAi];
         end
         else
@@ -2010,9 +2016,23 @@ begin
           else
           begin
             if cElem >= cFlatLen then Error('too many array constant elements');
-            if cElemTk in [tyString, tyAnsiString, tyFixedString, tyShortString] then
+            if (cElemTk in [tyString, tyAnsiString, tyFixedString, tyShortString]) or
+               ((CurTok.Kind = tkString) and
+                InitValDestTakesStrLit(cElemTk, Ord(Syms[cIdx].PtrElemTk))) then
             begin
-              { String/AnsiString array-const elements can't go through
+              { An array of PCHAR reaches the same arm, and for the same reason
+                the scalar `const GP: PChar = '-'` does — see
+                InitValDestTakesStrLit. `('-', '--')` reported *too many array
+                constant elements*: the one-character element folded to its
+                ordinal and the two-character one did not consume its token at
+                all, so cElem and the token stream desynced and the count came
+                out wrong. Guarded on the TOKEN as well as the type, because a
+                PChar element may equally be `nil` or `@buf`, which belong on
+                the ordinal path below; a string-KINDED element has no such
+                second form, which is why that half of the test stays a plain
+                type check and keeps its own diagnostic.
+
+                String/AnsiString array-const elements can't go through
                 ParseInitVal/ConstEval (ConstEvalFactor only special-cases
                 single-char literals as an ordinal; a multi-char literal falls
                 through without consuming the token, desyncing cElem from the
@@ -2285,12 +2305,19 @@ begin
           PendingInitElem[PendingInitCount] := PI_ELEM_NONE;
           PendingInitFOff[PendingInitCount] := -1;
           { Same non-ordinal value forms the record-field path takes, for a
-            SCALAR typed const: `const P: Pointer = @Something`. The string arm
-            cannot fire here -- a string-typed const is handled well above this
-            point -- but @proc / @var / @TClass.Method all reach it.
-            rtl-generics publishes its comparer instances this way
-            (`Comparer_Int8_Instance: Pointer = @Comparer_Int8_VMT`). }
-          if TryParseInitValForm(cTk, fvKind, fvVal, fvAux) then
+            SCALAR typed const: `const P: Pointer = @Something`.
+            @proc / @var / @TClass.Method all reach it; rtl-generics publishes
+            its comparer instances this way
+            (`Comparer_Int8_Instance: Pointer = @Comparer_Int8_VMT`).
+
+            The string arm reaches it too, for ONE destination: a char pointer.
+            A string-TYPED const is still handled well above this point (it has
+            no storage at all — see the StrConst arm), but `const GP: PChar =
+            '-'` has real pointer storage and lands here, which is where it used
+            to fold to the ordinal 45 and compile. Syms[cIdx].PtrElemTk is
+            already populated: SetSymPointerType ran a few lines up, before the
+            `=`. }
+          if TryParseInitValForm(cTk, Ord(Syms[cIdx].PtrElemTk), fvKind, fvVal, fvAux) then
           begin
             PendingInitKind[PendingInitCount]   := fvKind;
             PendingInitVal[PendingInitCount]    := fvVal;
@@ -3317,6 +3344,7 @@ begin
           { AddUField reads the pointee record for a tyPointer field straight off
             the LastTypePointerElemRec global -- prime it here (see
             ArrTypePtrElemRec's comment in defs.inc for the general landmine). }
+          LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
           LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
           Next;   { consume the named array type }
         end
@@ -3331,6 +3359,7 @@ begin
           fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
           fRec := ArrTypeElemRec[fAi];
           fEnumId := ArrTypeElemEnumId[fAi];
+          LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
           LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
           if ArrTypeNDims[fAi] >= 2 then
           begin
@@ -4936,6 +4965,7 @@ begin
                 fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
                 fRec := ArrTypeElemRec[fAi];
                 fEnumId2 := ArrTypeElemEnumId[fAi];
+                LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
                 LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
                 Next;   { consume the named array type }
               end
@@ -4950,6 +4980,7 @@ begin
                 fTk := IntToTypeKind(ArrTypeElemTk[fAi]);
                 fRec := ArrTypeElemRec[fAi];
                 fEnumId2 := ArrTypeElemEnumId[fAi];
+                LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
                 LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
                 if ArrTypeNDims[fAi] >= 2 then
                 begin
@@ -5293,6 +5324,7 @@ begin
             aElemEnumId := ArrTypeElemEnumId[fAi];
             aElemStrCap := ArrTypeElemStrCap[fAi];
             LastTypeRecId := ArrTypeElemRec[fAi];
+            LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
             LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
             aElemDynDepth := ArrTypeDynDepth[fAi];
             Next;   { consume the alias name }
@@ -5344,6 +5376,7 @@ begin
           ArrTypeElemEnumId[ArrTypeCount] := aElemEnumId;
           ArrTypeElemRec[ArrTypeCount] := LastTypeRecId;
           ArrTypePtrElemRec[ArrTypeCount] := LastTypePointerElemRec;
+          ArrTypePtrElemTk[ArrTypeCount]  := Ord(LastTypePointerElemTk);
           if tdCnt >= 2 then ArrTypeNDims[ArrTypeCount] := tdCnt
           else ArrTypeNDims[ArrTypeCount] := 0;
           for tdi := 0 to tdCnt - 1 do
@@ -5399,6 +5432,7 @@ begin
             aElemEnumId := ArrTypeElemEnumId[fAi];
             aElemStrCap := ArrTypeElemStrCap[fAi];
             LastTypeRecId := ArrTypeElemRec[fAi];
+            LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
             LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
             tdCnt := tdCnt + ArrTypeDynDepth[fAi];
             Next;               { consume the alias name }
@@ -5410,6 +5444,7 @@ begin
             aElemTk := IntToTypeKind(ArrTypeElemTk[fAi]);
             aElemEnumId := ArrTypeElemEnumId[fAi];
             LastTypeRecId := ArrTypeElemRec[fAi];
+            LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[fAi]);
             LastTypePointerElemRec := ArrTypePtrElemRec[fAi];
             if (aElemTk = tyAnsiString) or (aElemTk = tyString) or
                (aElemTk = tyFixedString) or (aElemTk = tyShortString) or
@@ -5434,6 +5469,7 @@ begin
             ArrTypeElemStrCap[ArrTypeCount] := 0;
           ArrTypeElemRec[ArrTypeCount] := LastTypeRecId;
           ArrTypePtrElemRec[ArrTypeCount] := LastTypePointerElemRec;
+          ArrTypePtrElemTk[ArrTypeCount]  := Ord(LastTypePointerElemTk);
           ArrTypeNDims[ArrTypeCount] := 0;
           ArrTypeIsDyn[ArrTypeCount] := True;
           ArrTypeElemDynDepth[ArrTypeCount] := 0;

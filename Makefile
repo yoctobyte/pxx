@@ -7947,6 +7947,17 @@ test-core: $(COMPILER)
 	# redundant. .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_inherited_and_parenless_defaults.pas $(TESTTMP)/test_inhdef26
 	test "$$($(TESTTMP)/test_inhdef26)" = "$$(cat test/test_inherited_and_parenless_defaults.expected)"
+	# Typed constants in a POINTER slot, plus the named-array alias that has to
+	# carry the pointee KIND for them to work. `const GP: PChar = '-'` used to
+	# compile and SEGFAULT (a one-char literal is an ordinal, and an ordinal
+	# initialises a pointer-sized slot fine); `= 'konst'` was a parse error. The
+	# `alias`/`var alia` rows are the second bug: the pointee RECORD id had a slot
+	# in the ArrType table and the pointee KIND never did, so a use of the alias
+	# read whatever pointer was declared last anywhere in the unit -- the `PR`
+	# declaration in the test exists to BE that leak, so do not delete it.
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_typed_const_pointer_values.pas $(TESTTMP)/test_tcpv26
+	test "$$($(TESTTMP)/test_tcpv26)" = "$$(cat test/test_typed_const_pointer_values.expected)"
 	# ...and the guard: a genuine `var` parameter must still REFUSE the same
 	# argument. This is what stops the fix from being ungated -- tried, and it
 	# let a call RESULT bind to a var parameter and COMPILE, because the method

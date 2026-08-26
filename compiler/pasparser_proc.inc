@@ -767,6 +767,7 @@ begin
           param was scalar and indexing it read garbage.) }
         tk := IntToTypeKind(ArrTypeElemTk[paramAi]);
         LastTypeRecId := ArrTypeElemRec[paramAi];
+        LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[paramAi]);
         LastTypePointerElemRec := ArrTypePtrElemRec[paramAi];
         isArr := True;
         { Named dynamic-array type param (`TDynArr = array of T`): mark it a real
@@ -831,6 +832,7 @@ begin
           begin
             tk := IntToTypeKind(ArrTypeElemTk[paramAi]);
             LastTypeRecId := ArrTypeElemRec[paramAi];
+            LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[paramAi]);
             LastTypePointerElemRec := ArrTypePtrElemRec[paramAi];
             if (tk = tyAnsiString) or (tk = tyString) or
                (tk = tyFixedString) or (tk = tyShortString) or
@@ -854,6 +856,7 @@ begin
               pointer-sized stride and tags m[i] as a handle. }
             tk := IntToTypeKind(ArrTypeElemTk[paramAi]);
             LastTypeRecId := ArrTypeElemRec[paramAi];
+            LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[paramAi]);
             LastTypePointerElemRec := ArrTypePtrElemRec[paramAi];
             paramElemDynDepth := ArrTypeDynDepth[paramAi];
             if paramElemDynDepth <= 0 then paramElemDynDepth := 1;
@@ -958,6 +961,7 @@ begin
       if retDynDepth < 1 then retDynDepth := 1;
       retElemTk := IntToTypeKind(ArrTypeElemTk[paramAi]);
       retElemRec := ArrTypeElemRec[paramAi];
+      retPtrElemTk  := ArrTypePtrElemTk[paramAi];
       retPtrElemRec := ArrTypePtrElemRec[paramAi];
     end
     else
@@ -998,6 +1002,7 @@ begin
           ArrType entry, as ParseVarSection does for a variable of the alias. }
         retType := IntToTypeKind(ArrTypeElemTk[retArrAi]);
         LastTypeRecId := ArrTypeElemRec[retArrAi];
+        LastTypePointerElemTk := IntToTypeKind(ArrTypePtrElemTk[retArrAi]);
         LastTypePointerElemRec := ArrTypePtrElemRec[retArrAi];
         if (retType = tyFixedString) or (retType = tyShortString) then
           LastTypeStrCap := ArrTypeElemStrCap[retArrAi];

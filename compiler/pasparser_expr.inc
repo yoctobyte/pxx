@@ -10181,6 +10181,37 @@ begin
   else ParseInitValTk := ParseInitVal;
 end;
 
+{ Does a STRING LITERAL, written in a slot of this type, mean "the address of
+  the literal's character data"?
+
+  Every string kind, obviously — and a CHAR POINTER, which is the whole of the
+  gap this exists to close. `const GP: PChar = '-'` used to fall through to
+  ConstEval, where a ONE-character literal is a perfectly good ordinal and an
+  ordinal is a perfectly good initialiser for a pointer-sized slot: the
+  declaration compiled and the program then dereferenced address 45. Two or more
+  characters had no ordinal, so those at least refused, loudly and with an
+  unrelated message.
+
+  The char/uint8/int8 triple is IsNodePChar's, deliberately: this predicate and
+  that one answer the same question about the same slot at two different times
+  (declaration vs. lowering), and the pending-init emitter hands the AN_STR_LIT
+  it records straight to IsNodePChar. If they disagreed, the const would parse
+  and then store the wrong thing — the identical defect one construct over.
+
+  A plain `Pointer` is NOT included: FPC refuses `const P: Pointer = 'x'`, and
+  more to the point pxx's own ASSIGNMENT path refuses to guess there too —
+  `p := 'abc'` on a `Pointer` stores the HANDLE, so accepting the literal here
+  would make the declaration disagree with the statement that spells it out.
+  bug-p-typed-constants-cannot-hold-a-pointer-a-nested-aggregate-or-storage }
+function InitValDestTakesStrLit(tk: TTypeKind; ptrElemTk: Integer): Boolean;
+begin
+  InitValDestTakesStrLit :=
+    TypeIsFrozenString(tk) or (tk in [tyString, tyAnsiString, tyShortString]) or
+    ((tk = tyPointer) and ((ptrElemTk = Ord(tyChar)) or
+                           (ptrElemTk = Ord(tyUInt8)) or
+                           (ptrElemTk = Ord(tyInt8))));
+end;
+
 { Recognise the constant-initializer value forms that are NOT plain ordinals, so
   a record-constant field can carry them: a string literal, `@proc`, and `@var`.
   ConstEval cannot evaluate any of these -- and, crucially, does not CONSUME them
@@ -10197,7 +10228,8 @@ end;
 
   Returns True and sets kind/val/aux with the tokens consumed; returns False with
   NOTHING consumed, so the caller falls through to the ordinal path unchanged. }
-function TryParseInitValForm(tk: TTypeKind; var kind: Integer; var val: Int64; var aux: Integer): Boolean;
+function TryParseInitValForm(tk: TTypeKind; ptrElemTk: Integer;
+                             var kind: Integer; var val: Int64; var aux: Integer): Boolean;
 var pi, si, ci, mi: Integer;
 begin
   TryParseInitValForm := False;
@@ -10209,8 +10241,7 @@ begin
     `C: Char = 'Z'` printed garbage (test_typed_const_record). Same hazard the
     array-of-record path documents a few hundred lines below; it is the token
     being ambiguous, so only the target can decide. }
-  if (CurTok.Kind = tkString) and
-     (TypeIsFrozenString(tk) or (tk in [tyString, tyAnsiString, tyShortString])) then
+  if (CurTok.Kind = tkString) and InitValDestTakesStrLit(tk, ptrElemTk) then
   begin
     kind := 1;
     val  := Tokens[TokPos - 1].SOffset;

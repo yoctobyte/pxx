@@ -1,0 +1,8 @@
+scalar  : - konst
+array   : - --
+alias   : n0 n1 x
+record  : field Z 5
+arr/rec : a p bb 2
+nilptr  : ok
+loc     : local y
+var alia: hey you now

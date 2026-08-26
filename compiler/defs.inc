@@ -4188,6 +4188,18 @@ var
     resolved against whatever pointer type was parsed last in the unit, e.g. a
     local var in the last routine, instead of the array's real element type). }
   ArrTypePtrElemRec: array[0..MAX_TYPEALIAS-1] of Integer;
+  { ...and the pointee's TYPE KIND, which was dropped in exactly the same way and
+    for exactly as long. The comment above explains the Rec half's leak; the Tk
+    half leaked identically and more visibly: `TAp = array[0..1] of PChar` then
+    `a[0] := 'hey'; WriteLn(a[0])` printed 4304310 — the POINTER — because every
+    consumer of the alias read whatever LastTypePointerElemTk the last unrelated
+    pointer declaration anywhere in the unit had left behind, so IsNodePChar's
+    "element of an array of typed pointers" arm never recognised the element.
+    Fixing only the Rec half in 2026 and leaving this one is precisely the second
+    path devdocs/dev/normalise-dont-special-case.md is about; both halves are now
+    written and read together, at every site.
+    bug-p-typed-constants-cannot-hold-a-pointer-a-nested-aggregate-or-storage }
+  ArrTypePtrElemTk : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeNDims  : array[0..MAX_TYPEALIAS-1] of Integer;
   ArrTypeDimLo  : array[0..MAX_TYPEALIAS*MAX_ARR_DIMS-1] of Integer;
   ArrTypeDimSpan: array[0..MAX_TYPEALIAS*MAX_ARR_DIMS-1] of Integer;
