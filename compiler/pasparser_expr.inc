@@ -9991,7 +9991,13 @@ begin
     else
     begin
       Result := not r;
-      CEOrdTk := tyInteger; CEEnumId := -1;   { bitwise `not` of an ordinal is a number }
+      { bitwise `not` of an ordinal is a number -- but an unsigned 64-bit one
+        stays unsigned, as it does in FPC: `not High(QWord)` is 0 either way,
+        while `not QWord(0) - 1` is 2^64-2 unsigned and -2 signed. Clearing the
+        kind here would have made the sign depend on which operator came next,
+        which is the partial answer this feature refused to ship. }
+      if not TkIsUnsigned64(CEOrdTk) then CEOrdTk := tyInteger;
+      CEEnumId := -1;
     end;
     Exit;
   end;
@@ -10012,7 +10018,14 @@ begin
     Next; Expect(tkLParen, '(');
     r := ConstEval(); Expect(tkRParen, ')');
     r := ConstApplyCast(r, castBytes, castSigned);
-    CEOrdTk := tyInteger; CEEnumId := -1;   { an integer typecast, whatever the operand was }
+    { An integer typecast REPLACES the operand's kind, whatever it was -- and an
+      8-byte UNSIGNED cast is how `QWord(x)` and `NativeUInt(x)` are spelled, so
+      the cast is also the way to ENTER unsigned folding without a High()/Low().
+      FPC's constexp.pas leans on exactly this: `r>qword(high(int64))` at line
+      329 casts a signed bound up and then compares unsigned. }
+    if (castBytes = 8) and (not castSigned) then CEOrdTk := tyUInt64
+    else CEOrdTk := tyInteger;
+    CEEnumId := -1;
   end
   else if CurTok.Kind = tkInteger then begin r := CurTok.IVal; Next; end
   else if CurTok.Kind = tkTrue  then begin r := 1; CEOrdTk := tyBoolean; Next; end
@@ -10149,7 +10162,12 @@ begin
       { a named ordinal const keeps its own kind through the fold, so
         `const A = 1 > 0; B = A and True;` types B as Boolean too, and
         `const C = 'z'; D = C;` types D as Char rather than 122. }
-      if (Syms[idx].TypeKind = tyBoolean) or (Syms[idx].TypeKind = tyChar) then
+      if (Syms[idx].TypeKind = tyBoolean) or (Syms[idx].TypeKind = tyChar) or
+         TkIsUnsigned64(Syms[idx].TypeKind) then
+        { ...and an UNSIGNED 64-bit const keeps its kind for the same reason and
+          with more at stake: `const A = High(QWord); B = A > 5;` reads A back
+          as the bit pattern -1, so without this B folds signed and is FALSE.
+          feature-p-const-evaluator-carries-unsigned-64-bit }
         CEOrdTk := Syms[idx].TypeKind
       else
         CEOrdTk := tyInteger;
@@ -10176,6 +10194,7 @@ function ConstEvalTerm: Int64;
   shr, left-associative. `shr` is lexed as an identifier (no tkShr token), like
   the runtime term parser. }
 var r, v: Int64; op: TTokenKind; lTk: TTypeKind; lEid: Integer;
+    unsg: Boolean;
 begin
   r := ConstEvalFactor;
   lTk := CEOrdTk; lEid := CEEnumId;
@@ -10183,10 +10202,30 @@ begin
         ((CurTok.Kind = tkIdent) and (CurTok.SVal = 'shr')) do
   begin
     if CurTok.Kind = tkIdent then
-    begin Next; v := ConstEvalFactor; r := r shr v; lTk := tyInteger; lEid := -1; end
+    begin
+      { `shr` -- the first of the seven operations where the Int64 this
+        evaluator carries is only a BIT PATTERN and the sign question is real.
+        `High(QWord) shr 1` is 2^63-1; an arithmetic shift of -1 answers -1.
+        The unsignedness rides in on CEOrdTk from TryConstHighLowValue and
+        SURVIVES the operation, because a qword shifted is still a qword --
+        that propagation is what makes `high(qword) div bb < aa` (FPC's own
+        constexp.pas:321) fold correctly rather than one operator too late.
+        feature-p-const-evaluator-carries-unsigned-64-bit }
+      unsg := TkIsUnsigned64(lTk);
+      Next; v := ConstEvalFactor;
+      if unsg or TkIsUnsigned64(CEOrdTk) then
+      begin
+        r := Int64(UInt64(r) shr UInt64(v));
+        lTk := tyUInt64;
+      end
+      else
+      begin r := r shr v; lTk := tyInteger; end;
+      lEid := -1;
+    end
     else
     begin
       op := CurTok.Kind; Next; v := ConstEvalFactor;
+      unsg := TkIsUnsigned64(lTk) or TkIsUnsigned64(CEOrdTk);
       { `and` over two Booleans is a Boolean; over anything else it is the
         bitwise operator and the result is an integer. Same rule as fpc's, and
         the reason `const F = (a > b) and (c < d)` types as Boolean here.
@@ -10194,12 +10233,17 @@ begin
         not a char -- so everything else clears, exactly as before. }
       if (op = tkAnd) and (lTk = tyBoolean) and (CEOrdTk = tyBoolean) then
         lTk := tyBoolean
+      else if unsg then
+      begin lTk := tyUInt64; lEid := -1; end
       else
       begin lTk := tyInteger; lEid := -1; end;
+      { *, and and shl are bit-identical signed or unsigned on two's-complement,
+        so only div and mod branch. Listing them separately rather than casting
+        every arm keeps the signed path byte-for-byte what it was. }
       case op of
         tkStar: r := r * v;
-        tkDiv:  r := r div v;
-        tkMod:  r := r mod v;
+        tkDiv:  if unsg then r := Int64(UInt64(r) div UInt64(v)) else r := r div v;
+        tkMod:  if unsg then r := Int64(UInt64(r) mod UInt64(v)) else r := r mod v;
         tkAnd:  r := r and v;
         tkShl:  r := r shl v;
       end;
@@ -10225,6 +10269,13 @@ begin
     { same rule as `and` in ConstEvalTerm: boolean only when both sides are }
     if (op in [tkOr, tkXor]) and (lTk = tyBoolean) and (CEOrdTk = tyBoolean) then
       lTk := tyBoolean
+    { +, -, or and xor are bit-identical on two's-complement, so no arm below
+      changes -- but the KIND has to survive them, or `High(QWord) - 1 > 0`
+      would compare signed one level up and answer FALSE. Propagating the type
+      through the operations that do not need it is the whole reason the
+      relational level can trust it. }
+    else if TkIsUnsigned64(lTk) or TkIsUnsigned64(CEOrdTk) then
+    begin lTk := tyUInt64; lEid := -1; end
     else
     begin lTk := tyInteger; lEid := -1; end;
     case op of
@@ -10253,19 +10304,31 @@ function ConstEval: Int64;
   fact is carried out of band in CEOrdTk for the const declaration to read --
   otherwise the const is declared tyInteger and `WriteLn(F)` prints 1 rather
   than TRUE. }
-var r, v: Int64; op: TTokenKind;
+var r, v: Int64; op: TTokenKind; unsg: Boolean;
 begin
   r := ConstEvalAdd;
   if CurTok.Kind in [tkEq, tkNeq, tkLt, tkLe, tkGt, tkGe] then
   begin
+    { The last of the seven sign-sensitive operations. = and <> compare bit
+      patterns and are the same either way; the four ORDERED ones are not, and
+      this is where the whole unsigned channel pays off: `high(qword) div bb <
+      aa` -- FPC's constexp.pas:321, the expression this feature was opened for
+      -- reads a huge positive left operand, which as an Int64 is -1 and would
+      be less than everything. }
+    unsg := TkIsUnsigned64(CEOrdTk);
     op := CurTok.Kind; Next; v := ConstEvalAdd;
+    unsg := unsg or TkIsUnsigned64(CEOrdTk);
     case op of
       tkEq:  if r =  v then r := 1 else r := 0;
       tkNeq: if r <> v then r := 1 else r := 0;
-      tkLt:  if r <  v then r := 1 else r := 0;
-      tkLe:  if r <= v then r := 1 else r := 0;
-      tkGt:  if r >  v then r := 1 else r := 0;
-      tkGe:  if r >= v then r := 1 else r := 0;
+      tkLt:  if (unsg and (UInt64(r) <  UInt64(v))) or
+                ((not unsg) and (r <  v)) then r := 1 else r := 0;
+      tkLe:  if (unsg and (UInt64(r) <= UInt64(v))) or
+                ((not unsg) and (r <= v)) then r := 1 else r := 0;
+      tkGt:  if (unsg and (UInt64(r) >  UInt64(v))) or
+                ((not unsg) and (r >  v)) then r := 1 else r := 0;
+      tkGe:  if (unsg and (UInt64(r) >= UInt64(v))) or
+                ((not unsg) and (r >= v)) then r := 1 else r := 0;
     end;
     CEOrdTk := tyBoolean; CEEnumId := -1;
   end;

@@ -4797,6 +4797,28 @@ test-core: $(COMPILER)
 	# FPC also accepts. feature-p-fpc-assigned-enum-ordinals-with-colon-equals
 	./$(COMPILER) test/test_enum_assigned_ordinal_colon_equals.pas $(TESTTMP)/test_enumassign26
 	test "$$($(TESTTMP)/test_enumassign26)" = "$$(cat test/test_enum_assigned_ordinal_colon_equals.expected)"
+	# High(QWord) and friends were REFUSED by the const evaluator, deliberately:
+	# 2^64-1 does not fit the Int64 it carries, and answering -1 would make
+	# `High(QWord) div 2` fold to 0. The fix was the TYPE travelling with the
+	# value (CEOrdTk), not a table row -- only div, mod, shr and the four
+	# ORDERED relationals branch on it; *, +, -, and, or, xor, shl, = and <>
+	# are bit-identical and untouched, which is what the signed control row at
+	# the end defends. fpc -O- -Mobjfpc 3.2.2's values.
+	# feature-p-const-evaluator-carries-unsigned-64-bit
+	./$(COMPILER) test/test_const_unsigned_64bit_fold.pas $(TESTTMP)/test_cu64fold26
+	test "$$($(TESTTMP)/test_cu64fold26)" = "$$(cat test/test_const_unsigned_64bit_fold.expected)"
+	@# ...and the hole that folding High(PtrUInt) at all opened up: FPC's own
+	@# tarray5.pp (%fail, "the number of elements doesn't fit in the address
+	@# range"). The bound is UNSIGNED, so it reaches the array parser as the bit
+	@# pattern -1 and reads as a perfectly ordinary `array[0..-1]`. Only the KIND
+	@# tells 2^64-1 from -1, which is why this could not be checked before.
+	@rm -f $(TESTTMP)/test_arrtoobig26
+	@out=$$(./$(COMPILER) test/test_array_range_too_large_fail.pas $(TESTTMP)/test_arrtoobig26 2>&1); \
+	 rc=$$?; \
+	 test "$$rc" = "1" \
+	   && printf '%s\n' "$$out" | grep -q 'array range too large' \
+	   && test ! -e $(TESTTMP)/test_arrtoobig26 \
+	  || { echo "test_array_range_too_large_fail: FAIL - rc=$$rc (want rc=1, the range diagnostic, no binary)"; printf '%s\n' "$$out"; exit 1; }
 	# `div`/`mod` picked signed-vs-unsigned from the DIVIDEND alone, so every
 	# unsigned-over-signed division ran unsigned: `Word(40000) div SmallInt(-25536)`
 	# was 0 where FPC says -1, at all four widths, silently. Pascal widens the pair

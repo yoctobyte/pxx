@@ -1688,7 +1688,7 @@ procedure ParseArrayDimBounds(var lo, hi: Integer);
 
   0 means "an ordinary integer range", and it is also what an unwritten table
   slot holds, so a caller that does not capture these keeps the old answer. }
-var eid: Integer; btk: TTypeKind; blo, bhi: Int64;
+var eid: Integer; btk: TTypeKind; blo, bhi: Int64; bLoUns, bHiUns: Boolean;
 begin
   LastArrIdxTk := 0; LastArrIdxEnumId := -1;
   if CurTok.Kind = tkBoolean_T then
@@ -1738,9 +1738,44 @@ begin
     widening the guess is how a wrong type gets stamped on a right value. }
   if (CurTok.Kind = tkString) and (Length(CurTok.SVal) = 1) then
     LastArrIdxTk := Ord(tyChar);
-  lo := ConstEval;
+  blo := ConstEval;
+  bLoUns := TkIsUnsigned64(CEOrdTk);
   Expect(tkDotDot, '..');
-  hi := ConstEval;
+  bhi := ConstEval;
+  bHiUns := TkIsUnsigned64(CEOrdTk);
+  { An UNSIGNED bound arrives as a bit pattern, so `High(PtrUInt)` is -1 here and
+    would sail through the 32-bit range test below as a perfectly ordinary
+    negative bound -- `array[0..High(ptruint)]` becoming an EMPTY array rather
+    than a rejected one. The kind is the only thing that separates the two
+    readings, and ConstEval now carries it. }
+  if (bLoUns and (blo < 0)) or (bHiUns and (bhi < 0)) then
+    Error('array range too large: its element count does not fit the address range');
+  { The same rule the index-TYPE arm above already enforces ("a 4-billion-element
+    static array is a mistake, and FPC's own targets reject most of them too"),
+    applied to the RANGE spelling of the same thing, which never had it: `lo` and
+    `hi` are Integers and ConstEval answers an Int64, so `array[0..High(PtrUInt)]
+    of Byte` truncated in silence and produced an array of nothing.
+    FPC rejects it -- its tarray5.pp is a %fail test whose whole comment is
+    "the number of elements doesn't fit in the address range" -- and pxx accepted
+    it, allocated 0 bytes and let the program index into whatever followed.
+
+    Only reachable now that High(QWord)/High(PtrUInt) FOLD at all; before that
+    the same declaration failed as "undefined variable", which is why the hole
+    stayed hidden. `array[0..High(Int64)]` had it open the whole time.
+
+    The cap is the representation's own: both bounds must fit a 32-bit signed
+    Integer (which is what lo/hi and AllocArray's totalSize are), and the element
+    COUNT must fit one too. ZenGL's `array[0..High(LongWord) shr 1 - 1]` -- the
+    largest real declaration in any corpus here -- is exactly 2147483647
+    elements and stays legal.
+    feature-p-const-evaluator-carries-unsigned-64-bit }
+  if (blo < -2147483648) or (blo > 2147483647) or
+     (bhi < -2147483648) or (bhi > 2147483647) then
+    Error('array range bound does not fit a 32-bit index');
+  if (bhi >= blo) and (bhi - blo + 1 > 2147483647) then
+    Error('array range too large: its element count does not fit the address range');
+  lo := blo;
+  hi := bhi;
 end;
 
 { Accumulate a constant set TERM into mask[0..31]: either a `[...]` literal (elements and
@@ -2709,6 +2744,16 @@ begin
             its own site, which is what made this look narrower than it is:
             a char survived only when it was written as a literal. }
           AddConst(name, tyChar, v)
+        else if TkIsUnsigned64(CEOrdTk) then
+          { A folded UNSIGNED 64-BIT expression -- `const HQ = High(QWord)`,
+            `const D2 = High(QWord) div 2`. The VALUE always survived (ConstVal
+            is an Int64 and the bit pattern is exact); declaring it tyInteger is
+            what made `WriteLn(HQ)` print -1, because the write path picks
+            signed or unsigned formatting from the declared type and nothing
+            else. The Int64-widening arm below cannot reach this case: 2^64-1
+            looks like -1 to its range test, so it would declare tyInteger.
+            feature-p-const-evaluator-carries-unsigned-64-bit }
+          AddConst(name, CEOrdTk, v)
         else if CEEnumId >= 0 then
         begin
           { A folded ENUM expression -- `const X = eB`, `const Z = Low(TE)`,

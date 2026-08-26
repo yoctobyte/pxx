@@ -5972,6 +5972,17 @@ end;
 { Compile-time low/high bound of a built-in ordinal type. Returns False for a
   non-ordinal (float/string/record/etc). Ranges match FPC. UInt64/NativeInt high
   overflows signed Int64 storage, so it is left unsupported (returns False). }
+{ The two kinds whose values do not fit the Int64 the const evaluator carries,
+  so the bit pattern is exact and only the INTERPRETATION differs. Everything
+  that folds a constant asks this before choosing signed or unsigned semantics;
+  it is one predicate rather than a repeated pair of comparisons so the set
+  cannot drift between the fold sites.
+  feature-p-const-evaluator-carries-unsigned-64-bit }
+function TkIsUnsigned64(tk: TTypeKind): Boolean;
+begin
+  TkIsUnsigned64 := (tk = tyUInt64) or (tk = tyNativeUInt);
+end;
+
 function OrdinalTypeBound(tk: TTypeKind; wantHigh: Boolean; var v: Int64): Boolean;
 begin
   Result := True;
@@ -5987,11 +5998,20 @@ begin
     { The 64-bit ALIASES answered nothing at all, so `High(NativeInt)` and
       `High(PtrInt)` — the idiomatic way FPC code spells a machine-word bound —
       were rejected with "expected an ordinal type name" while `High(Int64)`
-      was fine. The unsigned 64-bit names (QWord/UInt64/NativeUInt/PtrUInt)
-      stay out on purpose: their High is 2^64-1, which this evaluator's Int64
-      cannot carry, and answering -1 would turn a refusal into a wrong value.
-      bug-p-high-low-reject-the-64-bit-type-aliases }
+      was fine. bug-p-high-low-reject-the-64-bit-type-aliases }
     tyNativeInt: if wantHigh then v := 9223372036854775807 else v := -9223372036854775807 - 1;
+    { The UNSIGNED 64-bit names were refused for a real reason, now answered
+      rather than removed: 2^64-1 does not fit the Int64 this returns, so the
+      bit pattern comes back as -1 and the VALUE is only correct if the caller
+      knows the type is unsigned. Both callers do, and both say so —
+      TryFoldHighLowType stamps ASTTk with `btk`, and TryConstHighLowValue
+      publishes it through CEOrdTk, which ConstEvalTerm/Add/ConstEval then read
+      to pick unsigned div/mod/shr and unsigned ordering. Without that half this
+      would be exactly the wrong answer the old comment here warned about
+      (`High(QWord) div 2` = 0 rather than 2^63-1), which is why the two halves
+      landed together. feature-p-const-evaluator-carries-unsigned-64-bit }
+    tyUInt64:     if wantHigh then v := -1 else v := 0;   { -1 = $FFFFFFFFFFFFFFFF }
+    tyNativeUInt: if wantHigh then v := -1 else v := 0;
     tyBoolean: if wantHigh then v := 1 else v := 0;
     tyChar:    if wantHigh then v := 255 else v := 0;
   else
@@ -6350,7 +6370,8 @@ begin
   begin
     btk := ParseTypeKind;   { consumes the type token, disambiguating byte/word/etc }
     Result := OrdinalTypeBound(btk, wantHigh, v);
-    if Result and ((btk = tyBoolean) or (btk = tyChar)) then CEOrdTk := btk;
+    if Result and ((btk = tyBoolean) or (btk = tyChar) or TkIsUnsigned64(btk)) then
+      CEOrdTk := btk;
     Exit;
   end;
   if CurTok.Kind <> tkIdent then Exit;
@@ -6372,7 +6393,7 @@ begin
       begin
         if wantHigh then v := AliasSubHi[aliasIdx] else v := AliasSubLo[aliasIdx];
         btk := IntToTypeKind(AliasTk[aliasIdx]);
-        if (btk = tyBoolean) or (btk = tyChar) then CEOrdTk := btk;
+        if (btk = tyBoolean) or (btk = tyChar) or TkIsUnsigned64(btk) then CEOrdTk := btk;
         Next;
         Result := True; Exit;
       end;
@@ -6381,7 +6402,7 @@ begin
   end;
   if (btk <> tyUnknown) and OrdinalTypeBound(btk, wantHigh, v) then
   begin
-    if (btk = tyBoolean) or (btk = tyChar) then CEOrdTk := btk;
+    if (btk = tyBoolean) or (btk = tyChar) or TkIsUnsigned64(btk) then CEOrdTk := btk;
     Next;
     Result := True; Exit;
   end;
