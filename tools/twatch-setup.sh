@@ -78,7 +78,17 @@ else
 fi
 
 say "-- corpus trees (gitignored; jobs self-skip when absent) --"
-for t in lua sqlite zlib c-testsuite tcc cjson tiny-regex-c; do
+# Derived from twatch.CORPUS_EXPECTED, never copied: the hardcoded list this
+# replaced had drifted from it (missing fpc-testsuite), so the setup script
+# reported a complete clone while a corpus job self-skipped. Fail loudly if the
+# constant cannot be read -- a fallback list would just recreate the drift.
+corpus_trees=$(python3 -c "
+import importlib.util
+s = importlib.util.spec_from_file_location('tw', 'tools/twatch.py')
+m = importlib.util.module_from_spec(s); s.loader.exec_module(m)
+print(' '.join(m.CORPUS_EXPECTED))") || {
+  say "  ERROR    cannot read CORPUS_EXPECTED from tools/twatch.py"; exit 1; }
+for t in $corpus_trees; do
   if [ -d "library_candidates/$t" ]; then
     say "  ok       library_candidates/$t"
   else

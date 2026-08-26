@@ -76,6 +76,10 @@ def t_only_the_full_tier_can_straddle_a_pin():
     for tier in ("quick", "native", "limited", "full"):
         jobs = list(tm.generate(tier))
         counts[tier] = sum(1 for j in jobs if j.pin_built)
+    # The nesting chain below `full` is kept pin-free ON PURPOSE, not by luck.
+    # This guard failed the hour it was written, on enrolling a pin-built
+    # test-fpjson into `limited` -- which is the whole reason to assert a
+    # measurement rather than remember it.
     for tier in ("quick", "native", "limited"):
         assert counts[tier] == 0, (
             "%s now has %d pin-built job(s) — a pin taken during one of these "
@@ -84,13 +88,31 @@ def t_only_the_full_tier_can_straddle_a_pin():
     return "quick/native/limited 0, full %d" % counts["full"]
 
 
-def t_the_full_tiers_pin_built_set_is_the_known_targets():
-    jobs = [j for j in tm.generate("full") if j.pin_built]
-    targets = sorted({j.target for j in jobs})
-    assert targets == sorted(tm.PIN_BUILT_TARGETS), (
-        "pin-built targets drifted from PIN_BUILT_TARGETS: %s vs %s"
-        % (targets, sorted(tm.PIN_BUILT_TARGETS)))
-    return "full's pin-built set is exactly %s" % (targets,)
+def t_every_named_pin_built_target_is_flagged():
+    """SUBSET, not equality — and the difference is the whole point.
+
+    Written as equality first, and it went red the same day, on enrolling
+    test-fpjson: a target whose recipe names the pinned path directly is
+    pin_built without being listed, which is correct and is exactly what the
+    regex half is for. Membership in PIN_BUILT_TARGETS is SUFFICIENT (it
+    rescues a shell-out recipe), never NECESSARY. Asserting equality pinned an
+    accident of which targets happened to be enrolled.
+
+    What must hold: a target we have declared pin-built never reports
+    otherwise. That is the direction a silent failure would take -- twatch
+    blaming a compiler commit for a red the compiler cannot have caused.
+    """
+    jobs = list(tm.generate("full"))
+    flagged = {j.target for j in jobs if j.pin_built}
+    present = {j.target for j in jobs}
+    for t in tm.PIN_BUILT_TARGETS:
+        if t not in present:
+            continue            # not in this tier; nothing to check
+        assert t in flagged, (
+            "%s is declared pin-built but no job of it is flagged" % t)
+    extra = sorted(flagged - set(tm.PIN_BUILT_TARGETS))
+    return ("declared targets all flagged; %d also flagged by recipe: %s"
+            % (len(extra), extra))
 
 
 def main():
@@ -100,7 +122,7 @@ def main():
                t_the_head_compiler_overrides_the_target_name,
                t_an_ordinary_job_is_not_pin_built,
                t_only_the_full_tier_can_straddle_a_pin,
-               t_the_full_tiers_pin_built_set_is_the_known_targets):
+               t_every_named_pin_built_target_is_flagged):
         try:
             print("  ok   %s — %s" % (fn.__name__, fn()))
         except Exception as e:              # noqa: BLE001 - report, keep going

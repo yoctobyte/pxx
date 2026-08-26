@@ -4,8 +4,8 @@ prio: 70
 type: task
 blocked-by: []
 summary: "Enrol the new `test-fgl` corpus target in a testmgr tier and add `fpc-rtl` to twatch's CORPUS_EXPECTED. The rung is wired and green (3 pass / 4 skip) but nothing in the matrix runs it, and the watcher will not warn when the tree is unfetched."
-status: backlog
-owner: —
+status: done
+owner: pxx-aa
 ---
 
 # Enrol the fgl corpus rung in the tiers and the watcher
@@ -79,3 +79,6 @@ That is the same class as a torn-down Track T run publishing an empty
 `still_red` and having unreached jobs read as FIXED: a hole in coverage that
 presents itself as coverage. Cheap to fix, and the cost of leaving it is
 measured in how long a regression can hide rather than in developer minutes.
+
+## Log
+- 2026-08-26 — resolved, commit PENDING-COMMIT.

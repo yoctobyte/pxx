@@ -1195,8 +1195,16 @@ def save_state(clone, host, st):
 # missing a corpus quietly publishes "green" for tests it never ran.  That is
 # how the i386/arm32/riscv32 c-conformance reds stayed hidden on a box without
 # c-testsuite.  A watcher must be loud about this on startup.
+# Corpus trees a complete watcher clone should have. This list is the ONLY
+# copy: tools/twatch-setup.sh reads it from here rather than keeping its own,
+# because the two had already drifted (fpc-testsuite was in this tuple and not
+# in the script's loop) and a provisioning list that silently omits a tree
+# produces exactly the failure this repo keeps rediscovering -- a job that
+# self-skips and reports success.
+# fpc-rtl (test-fgl) and fcl-json (test-fpjson) added 2026-08-26 with the
+# enrolment of those two rungs; see the note in testmgr.TIERS["limited"].
 CORPUS_EXPECTED = ("lua", "sqlite", "zlib", "c-testsuite", "tcc", "cjson",
-                   "tiny-regex-c", "fpc-testsuite")
+                   "tiny-regex-c", "fpc-testsuite", "fpc-rtl", "fcl-json")
 
 
 def missing_corpus(path):
