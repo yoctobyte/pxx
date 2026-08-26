@@ -77,4 +77,4 @@ Corpora: pascal-conformance 346/0/170/34 and fgl 7/7, both unchanged.
 `gate.sh quick` GREEN.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 8c7daed85.
