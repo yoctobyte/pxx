@@ -115,6 +115,13 @@ output and in recipe lines. So:
      /tmp/testmgr-scratch-541517/claude-1000/…/sweep/test/quick_canary_argv0.pas
    ```
 
+   **It does not corrupt a random job — it corrupts the path job.** In a
+   3081-job sweep exactly one job failed this way, and it was
+   `quick_canary_argv0.pas`: the job whose *subject* is absolute-path handling is
+   the one that names the tree absolutely. That is a prediction, not a
+   coincidence, and it is why a single unexplained red in a `/tmp` run is worth
+   checking against this before anything else.
+
    `.claude/worktrees/` is the right place. `/dev/shm` also works — its paths do
    not match `TMP_RE` at all.
 
