@@ -165,4 +165,4 @@ about the wrong subject just as easily as a test can.**
 
 ## Log
 - 2026-08-26 — measured; closed on the commitment point, not on shape 2.
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 7b76b6049.
