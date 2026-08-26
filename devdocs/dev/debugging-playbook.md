@@ -587,6 +587,40 @@ A cross-target size difference in particular is the **null hypothesis, not
 evidence**: two targets emit different amounts of code for the same source, and
 that is the expected state of the world.
 
+## A guard's human-readable note is triage evidence, so it must say what the guard DID
+
+A devtest file flaked intermittently. The ticket fingered three cases; all three
+were innocent, and they were innocent in a way that should have been visible:
+they feed **frozen literals** to the predicate and measure nothing at all. The
+real offender was a fourth case, **absent from the ticket entirely because it
+passed** -- it called the timing probe three times against the real box and
+asserted on the relationship between three ambient numbers.
+
+What sent triage to the wrong three was a note in the *passing* output:
+`Measured on the 12-core xeon`. That describes **where a constant came from**. It
+was read as describing **what the case does at run time**. Meanwhile the one case
+that genuinely measured the box said nothing about measuring. So the file
+advertised the wrong suspects and concealed the real one, and every word of it
+was true.
+
+- **Anything a guard prints is read during triage, under time pressure, by
+  someone who has not read the code.** Provenance and behaviour are different
+  claims and must not share a phrasing.
+- Say `FROZEN observations, fed in as literals` where a triager will see it, and
+  say plainly when a case *does* touch the live environment.
+- **An intermittent-flake ticket that cannot say WHY it is intermittent is
+  usually pointing at the wrong line.** Here the explanation only appeared once
+  the right case was found: the probe takes `min()` of three samples, so a
+  momentary stall is absorbed -- the flake needs a load window spanning all three
+  samples of the first call that has lifted by the second, i.e. a tier finishing
+  mid-devtest. That is exactly the recorded observation (red during a full,
+  green on immediate rerun) and exactly why it never reproduced on demand.
+- **Supplying the timings made the assertions stronger, not weaker**: `r2 == 4.0`
+  where observing had forced a loose `> 2.0`, and an exact reference where the
+  old file could only bound it -- plus one it had never made at all, that a
+  slower probe must not raise the reference. Determinism is not a weaker test; it
+  is what lets you assert the thing you actually mean.
+
 ## A comment is an unverified claim, and tickets inherit it
 
 Two N tickets in a row named the wrong mechanism, and the second one shows how a
