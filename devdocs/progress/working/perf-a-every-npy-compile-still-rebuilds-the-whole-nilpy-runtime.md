@@ -4,6 +4,8 @@ prio: 85
 type: perf
 blocked-by: []
 summary: "The structural half of bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost, which halved the constant (8.62s -> 4.06s) by removing the hotspots but did NOT remove the WORK: every .npy compile still parses and code-generates all 24,460 lines of pylib.pas + pyeval.pas before it looks at the user's program. A zero-byte .npy costs 4.06s where `begin end.` costs 0.24s."
+status: working
+owner: agent-A-npytax
 ---
 
 # Every `.npy` compile still rebuilds the whole NilPy runtime from source
