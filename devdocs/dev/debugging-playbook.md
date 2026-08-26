@@ -247,6 +247,16 @@ so the answer could not silently go stale. One hour later, enrolling
 no longer be called safe."* The author broke their own invariant, and the guard
 said so before anyone planned a pin around a claim that had stopped being true.
 
+And the author's own account of why it caught them is the part to copy into the
+next guard you write: **it asserted the CONSEQUENCE, not the number.** The
+message was "a pin taken during one of these runs can no longer be called safe",
+not "expected 0 pin-built jobs, got 1". Their words: *"the number would have
+been just as red and I might well have edited it."* A count mismatch invites you
+to update the count -- it reads as a stale expectation, which is usually what a
+red count is. A sentence naming what breaks tells you which side is wrong, and
+makes editing the guard visibly the wrong move. Assert the property somebody
+downstream depends on, in the words they would use.
+
 The resolution is the part to copy: **the invariant won, not the coverage.**
 `test-fpjson` became full-only rather than the guard being relaxed. "quick,
 native and limited are pin-free" is a property other people schedule around, and
