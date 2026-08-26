@@ -143,4 +143,4 @@ pascal-conformance 346/0/170/34, fgl 7/7, c-conformance 220/0 — all unchanged.
 
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 3f63772de.
