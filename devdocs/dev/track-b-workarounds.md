@@ -24,6 +24,23 @@ before assuming the workaround is still needed.
 | `lib/rtl/ed25519.pas` (EC points) | a point's 4 field coords are **4 separate standalone TGf vars**, never an `array of TGf` or a record of TGf | [[bug-aggregate-member-array-as-var-param]] — passing an aggregate-member array by ref segfaults | a `TPoint = array[0..3] of TGf` / record |
 | `lib/rtl/mimic_xml_sax_xmlreader.py` (`AttributesImpl.copy`, `AttributesNSImpl.copy`) | the class named explicitly where CPython writes `self.__class__(...)` | [[bug-n-self-class-cannot-be-called-as-a-constructor]] — calling `__class__` as a constructor does not compile; reading `self.__class__.__name__` is fine, only the call form fails | `self.__class__(...)` — and it is not cosmetic: only that form gives a SUBCLASS an instance of itself |
 | `lib/rtl/math.pas` (`SinCosFast`, `FastTrigReduce`) | sin/cos returned in a `TSinCos` **record** by reference, and the reduction in a `TDd`, instead of `var sn, cs: Double` out-parameters | [[bug-a-i386-var-float-parameter-faults-on-first-access]] — ANY access through a by-reference float parameter segfaults on i386 (read, write, `out`, `Single`, every `-O` level); a record by reference is fine. Without this, the default-mode `Sin`/`Cos`/`Tan` crash on i386 | plain `var sn, cs: Double` — *but only if it reads better, which it does not:* the record mirrors `SinCosDd` and is the shape to keep |
+> **REVERTABLE as of 2026-08-26 (`ec5ecd88b`, plus `79148ec99`).** Three of the
+> four `mimic_collections_abc.py` rows below are fixed and the workarounds should
+> now be removed by Track B, verifying each against `$(PXX_STABLE)` **after the
+> next pin** — the dunder-retain half of the fix is in `compiler/builtin/pylib.pas`,
+> which a pin freezes, so B/E do not have it yet.
+> - `for k in self` inside a base method now reaches a subclass override, so the
+>   `self.keys()` detour and the dead `return iter([])` are both unnecessary. Note
+>   the mixin ticket was **half a misdiagnosis**: `for x in self` was already
+>   correct (the for-header builds its own virtual call); what was broken was
+>   every *other* dunder on `self`.
+> - `self[k]` / `self[k] = v` now dispatch, so the explicit
+>   `self.__getitem__(k)` spellings can go.
+> - `hasattr(other, "keys")` now answers the receiver, so `update()` can lead with
+>   CPython's own test instead of the narrower `isinstance` pair.
+>
+> The fourth row (`isinstance(x, cabc.Mapping)`) is **still open** and stays.
+
 | `lib/rtl/mimic_collections_abc.py` (every `Mapping`/`MutableMapping` mixin) | mixins walk `self.keys()` instead of `for k in self`, and each abstract method carries a dead `return iter([])` after its `raise` | [[bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides]] — `for k in self` inside a base method binds to the BASE `__iter__`, so a subclass override is never reached and the runtime reports `iter() returned non-iterator of type 'Sub'` | `for k in self`, and a bare `raise` with no trailing return |
 | `lib/rtl/mimic_collections_abc.py` (`items`, `values`, `get`, `pop`, `setdefault`, `update`) | every internal subscript spelled `self.__getitem__(k)` / `self.__setitem__(k, v)` | [[bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override]] — the `[]` operator inside a base class binds statically to that class's own dunder; the explicit method call dispatches correctly | `self[k]` / `self[k] = v` |
 | `lib/rtl/mimic_collections_abc.py` (`MutableMapping.update`) | mapping-vs-pairs discriminated by `isinstance(other, dict) or isinstance(other, Mapping)` | [[bug-n-hasattr-through-an-untyped-parameter-is-always-false]] — CPython leads with `hasattr(other, "keys")`, which answers False for *everything* reached through an untyped parameter, so a dict silently takes the pairs branch and `pair[0]` indexes a one-character string | the `hasattr(other, "keys")` test — and note the workaround is NARROWER than CPython: a duck-typed object with `keys()` and no `dict`/`Mapping` relation still lands in the pairs branch |

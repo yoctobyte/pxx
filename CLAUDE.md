@@ -614,8 +614,18 @@ critical path:
 
 - **`dev` is the working branch. Fix, commit, push. Do not wait for tests.**
   Read, analyse, fix, commit, push, next. A red `dev` is expected and cheap.
-- **`master` is a stable snapshot**, advanced once or twice a day, only from a
-  `dev` state Track T has reported green.
+- **`master` is a stable snapshot, advanced ONLY when there is a new fully
+  tested and PINNED version** (user, 2026-08-26). The pin is the trigger, not a
+  clock: pins are already the deliberate, repo-lock-holding event where a binary
+  is blessed, so coupling master to them means every master sha is a sha some
+  lane can actually build against. *Fully tested* means Track T has swept that
+  sha, not that `gate.sh quick` passed on the merge.
+  **This replaces "once or twice a day"**, which was the earlier wording and is
+  too weak to hold: read as a permission rather than a bound, it produced **nine
+  syncs in under six hours** on 2026-08-26 — one carrying zero `compiler/` or
+  `lib/` files — each spending a full gate run on the box whose contention is
+  the binding constraint on the test matrix. A green is the *precondition* for a
+  sync, never the *trigger*.
 - **You may land non-green on `dev`** — this is the whole point, and it is the
   one freedom the old loop did not give you. Commit mid-refactor, bank a partial
   fix, and *deliberately craft regressions* to see what catches them. What you
