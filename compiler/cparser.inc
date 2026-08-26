@@ -2390,6 +2390,33 @@ end;
   bug-a-fpc-seed-drift-emitasmx64-forward for the same shape. }
 function CIsCastAhead: Boolean; forward;
 
+{ An array EXTENT may not be negative, and refusing one is the entire point of
+  the idiom that produces one:
+
+      #define BUILD_BUG_ON(cond) ((void)sizeof(char[1 - 2*!!(cond)]))
+
+  The bound is 1 when the condition is false and -1 when it holds, so the
+  assertion IS the refusal. Accepting it silently does not merely differ from
+  gcc (`size of unnamed array is negative`) -- it inverts the program's intent,
+  turning every compile-time assertion in the source into a no-op that reports
+  success. busybox has hundreds of them.
+
+  Zero stays legal: `char pad[0]` is a GNU extension pxx already accepts and
+  sizeof answers 0 for, matching gcc. Unsized `[]` never reaches here -- both
+  callers handle tkRBrack before folding.
+
+  Called from BOTH extent readers, because there are two: the declarator's in
+  the declaration parser and the abstract type-name's in ParseCSizeof. Adding
+  the test at one of them is how this stayed half-true for a build
+  (devdocs/dev/normalise-dont-special-case.md).
+  bug-c-logical-not-is-not-folded-in-a-constant-expression }
+procedure CCheckArrayExtent(n: Int64);
+begin
+  if n < 0 then
+    Error('C: array dimension is negative (' + AIntToStr(n) + ')'
+          + ' — a BUILD_BUG_ON/static-assert of this shape is FAILING');
+end;
+
 function ParseCSizeof: Integer;
 var node, sz, si, depth, recId, arrLen, savedPos, procIdx, cRec, cPtrRec, cArrLen: Integer;
     cNDims, cDim, cSpanSym: Integer;
@@ -2419,7 +2446,7 @@ begin
       begin
         Next;
         if CurTok.Kind = tkRBrack then cArrLen := -1   { `[]` — count the init }
-        else cArrLen := CEvalConstExpr;
+        else begin cArrLen := CEvalConstExpr; CCheckArrayExtent(cArrLen); end;
         Expect(tkRBrack, ']');
       end;
       cOK := False;
@@ -2472,7 +2499,9 @@ begin
           Expect(tkRBrack, ']')
         else
         begin
-          sz := sz * CEvalConstExpr;   { extent }
+          cArrLen := CEvalConstExpr;   { extent }
+          CCheckArrayExtent(cArrLen);
+          sz := sz * cArrLen;
           Expect(tkRBrack, ']');
         end;
       end;
@@ -5194,8 +5223,33 @@ begin
             TokPos := vlaPos - 1; Next;
             vlaDim := ParseCExpr;
             dimVal := 1;
-          end;
+          end
+          else
+            { INSIDE the folded branch, and only there. The `[]` arm above sets
+              dimVal := -1 for an unsized array sized from its initializer, and
+              a check after the if/else sees that -1 and refuses `int x[] = {1,
+              0}` — three c-testsuite programs, caught by the sweep and not by
+              reasoning. A VLA's dimVal is the placeholder 1, also not an
+              extent. Only the fold produces a real one. }
+            CCheckArrayExtent(dimVal);
         end;
+        { A NEGATIVE bound is a constraint violation, and refusing it is the
+          entire point of the idiom that produces one:
+
+              #define BUILD_BUG_ON(cond) ((void)sizeof(char[1 - 2*!!(cond)]))
+
+          The bound is 1 when the condition is false and -1 when it holds, so
+          the assertion IS the refusal. Accepting it silently does not merely
+          differ from gcc (`size of unnamed array is negative`) -- it inverts
+          the program's intent, turning every compile-time assertion in the
+          source into a no-op that reports success. busybox has hundreds.
+
+          Scoped to < 0 on purpose. dimVal = -1 arrives here only from the
+          `[]` arm above, which sets it before this point and never reaches
+          CEvalConstExpr, so an unsized array is not caught by this. Zero stays
+          legal: `char x[0]` is a GNU extension pxx already accepts and sizeof
+          answers 0 for it, matching gcc.
+          bug-c-logical-not-is-not-folded-in-a-constant-expression }
         Expect(tkRBrack, ']');
         if dimCount >= MAX_ARR_DIMS then Error('too many C array dimensions');
         dimSpan[dimCount] := dimVal;
@@ -11151,6 +11205,29 @@ begin
   else if CurTok.Kind = tkMinus then begin Next; Result := -CEvalConstPrimary(); end
   else if CurTok.Kind = tkPlus then begin Next; Result := CEvalConstPrimary(); end
   else if CurTok.Kind = tkNot then begin Next; Result := CEvalConstPrimary() xor (-1); end  { ~ : bitwise NOT (xor -1 sidesteps the `not <call>`=boolean typing quirk) }
+  { `!` : logical NOT. The unary chain had `-`, `+`, `~` and `&` and not this
+    one, so a constant expression containing `!` was not folded at all -- and an
+    array DIMENSION is the place that shows, because the bracket then hit a
+    token the dimension reader could not use and reported `Expected: ], but
+    got:` with no mention of `!`.
+
+    That is BUILD_BUG_ON, which busybox and the Linux kernel spell as
+
+        #define BUILD_BUG_ON(cond) ((void)sizeof(char[1 - 2*!!(cond)]))
+
+    -- a negative array bound when the condition holds, so the whole idiom is
+    unary `!` inside a dimension. It refused 7 of busybox's 307 libbb/coreutils
+    /editors/util-linux files, coreutils/cat.c among them.
+    bug-c-logical-not-is-not-folded-in-a-constant-expression
+
+    The rest of the chain was already complete: CEvalConstEquality and
+    CEvalConstRelational fold the `cond` these wrap, which is why only the
+    unary arm was missing. }
+  else if CurTok.Kind = tkLogNot then
+  begin
+    Next;
+    if CEvalConstPrimary() = 0 then Result := 1 else Result := 0;
+  end
   else if CurTok.Kind = tkAmp then begin Next; Result := CEvalConstOffsetofAddress(); end
   else if CurTok.Kind = tkInteger then begin Result := CurTok.IVal; Next; end
   else if (CurTok.Kind = tkIdent) and (CurTok.SVal = 'sizeof') then

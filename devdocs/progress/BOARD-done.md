@@ -423,6 +423,7 @@ should not read it to find out what to do. Grep it freely._
 | bug-c-local-nested-aggregate-init | C | 55 | bug | C: LOCAL nested aggregate initializers fail ("expected C expression") — extend the elision walker to locals | — |
 | bug-c-local-static-const-multidim-array-init-sqlite | C | 50 | bug | C: local static const multidimensional array initializer in sqlite | — |
 | bug-c-local-static-record-array-vfs-sqlite | C | 50 | bug | C: block-scope static record arrays in sqlite VFS init | — |
+| bug-c-logical-not-is-not-folded-in-a-constant-expression | C | 55 | bug | CEvalConstPrimary's unary chain had -, + , ~ and & and not !, so `char[1 - 2*!!(cond)]` — BUILD_BUG_ON, as busybox and the Linux kernel spell it — died as `Expected: ], but got:` with no mention of !. Folded, the second half appeared: pxx ACCEPTED the -1 bound the macro produces, so every compile-time assertion in a source compiled and never fired. Found by compiling busybox 1.37.0; +5 files. | — |
 | bug-c-long-long-bitfield-promotion | C | 15 | bug | RESIDUAL (compat, deferred): gcc's exact-bit-PRECISION arithmetic on >32-bit bitfields (bitfld-3.c) needs per-node arbitrary-precision masking in the IR; the valuable half (storage/read/layout, bf64-1.c) landed in 307128d5 | — |
 | bug-c-lshift-promotion-aarch64 | C | 50 | bug | bug: left-shift result type / integer promotion wrong on aarch64 (00200.c) | — |
 | bug-c-lua-tests-regressed-segfault | C | 50 | bug | C: lua runner tests regressed (segfault on most scripts) | — |

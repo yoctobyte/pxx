@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:25 blocked:7 backlog:258 backlog_new:23 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2430 rejected:44`
+`unfinished:25 blocked:7 backlog:260 backlog_new:23 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2431 rejected:44`
 
 ## Held now (working/ — do not touch these files)
 
@@ -49,7 +49,7 @@ _none — no lane is locked._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 294, ranked
+## Ready — top 30 of 296, ranked
 
 - `[p 85] [O]` feature-opt-o3-register-pressure
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
@@ -73,13 +73,13 @@ _none — no lane is locked._
 - `[p 70] [N]` feature-nilpy-staticmethod-and-classmethod
 - `[p 70] [P]` feature-p-delphi-string-helpers
 - `[p 70] [P]` feature-pascal-typed-and-untyped-files
+- `[p 70] [P]` regression-test-core-test-arrayofconst-to-method-b287
+- `[p 70] [N]` regression-test-nilpy-test-nilpy-star-unpack-into-a-collecting-callee
 - `[p 68] [N]` bug-n-importing-both-f-and-F-from-one-module-loses-the-class
 - `[p 68] [E]` feature-demo-songformatter-pxx-target
 - `[p 68] [N]` feature-nilpy-user-defined-decorators
 - `[p 65] [N]` bug-n-a-fields-type-is-fixed-by-its-first-assignment-and-never-widened
 - `[p 65] [N]` bug-n-a-function-stored-in-a-variable-is-not-equal-to-the-function
 - `[p 65] [N]` bug-n-a-module-member-named-like-its-module-hides-the-modules-other-members
-- `[p 65] [N]` bug-n-a-unicode-identifier-is-rejected-by-the-lexer
-- `[p 65] [N]` bug-n-isinstance-does-not-accept-a-qualified-class-name
 
-_264 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_266 more ready — `tools/progress.sh ready --track X` for a lane's full queue._

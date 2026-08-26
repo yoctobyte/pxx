@@ -6188,6 +6188,19 @@ test-core: $(COMPILER)
 	# AN_IDENT but not over an AN_FIELD. gcc -O0 oracle; pinned cannot compile it.
 	./$(COMPILER) test/cfnptr_array_callable.c $(TESTTMP)/cfnptr_array26
 	test "$$($(TESTTMP)/cfnptr_array26)" = "$$(printf 'local  11 30 -1\nfield  11 30 -1\ngfield 11 30\narrow  11 30\nvaridx 30 30\n16 48 8 \nderef  11 30\nnolist 5 13\nglobal 11 30\nraw    11 30\ntemp   -1\ndirect 11\nplain  9 7')"
+	# Unary `!` in a C constant expression, and the negative array bound the idiom
+	# it appears in EXISTS to produce. CEvalConstPrimary's unary chain had -, +, ~
+	# and & and not !, so `char[1 - 2*!!(cond)]` — BUILD_BUG_ON, as busybox and the
+	# Linux kernel spell it — died as `Expected: ], but got:` with no mention of !.
+	# Then, folded, pxx ACCEPTED the -1 bound, so the assertion compiled and never
+	# fired. Negative half first; then everything that must keep compiling, which
+	# includes the zero-length and unsized arrays a naive check also refuses.
+	# gcc -O0 oracle on both.
+	@./$(COMPILER) test/cconst_negative_array_bound_fails.c $(TESTTMP)/cnegbound26 2>&1 \
+	  | grep -q 'array dimension is negative' \
+	  || { echo 'cconst_negative_array_bound_fails: FAIL - a failing BUILD_BUG_ON was accepted'; exit 1; }
+	./$(COMPILER) test/cconst_logical_not_array_bound.c $(TESTTMP)/clognot26
+	test "$$($(TESTTMP)/clognot26)" = "$$(printf '0 1\n0 1\n1 1\n1\n2\n1 2\n2 4\n3 4 0')"
 	# `(char*)"abc"` pointed at the string's 8-byte LENGTH PREFIX, not its data:
 	# b - a was -8 and b[0] was 3. A literal's IR value is the frozen string's
 	# HANDLE, and the assign, return and call-argument paths each carry their own
