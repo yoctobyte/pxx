@@ -2524,6 +2524,23 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                      "cascade": sorted(new_red), "bad": sha, "good": good,
                      "range": rng, "opened": utcnow()})
     else:
+        # The named `bad` is the sha that was TESTED, not necessarily one that
+        # could have caused anything: the watcher tests whatever HEAD is, and
+        # HEAD is frequently its own tstate publish commit. Nine open
+        # regressions once named a docs-only sha this way
+        # (bug-t-regressions-are-blamed-on-commits-that-touch-no-code), and a
+        # reader sent to that commit finds four .md files.
+        #
+        # cascade_range_note() has said so out loud for a while -- "the named
+        # sha CANNOT be the cause ... it is the upper bound of an untested
+        # range" -- and the ORDINARY path, which is where nearly every
+        # regression goes, could not reach that sentence. Same shape as the
+        # rest of this ticket family: the right answer existed on one path only.
+        #
+        # `bad` is left as observed. It IS the sha where the red was seen, and
+        # rewriting it would falsify the ledger; what was wrong is publishing it
+        # as a lead without saying what it is.
+        bad_untestable = not needs_test(clone.path, sha)
         for name in new_red:
             # "job" is the stable selector; "name" is the positional name it
             # had at this sha — kept ONLY as the bisect fallback for older
@@ -2592,6 +2609,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                          "status": statmap.get(name, "fail"),
                          "first_seen": name in first_seen,
                          "pin_axis": pin_axis,
+                         "bad_untestable": bad_untestable,
                          "pin_built": pinmap.get(name, False)})
     st["open_regressions"] = regs
 
@@ -2975,47 +2993,75 @@ def pin_observable(clone, shas):
 def range_note(reg):
     """The Range section of a stub ticket — and it must not promise a bisect.
 
-    A stub used to say "the watcher narrows this by idle bisect" unconditionally.
-    With an empty range no ledger entry is opened, so `bisect_step` never sees
-    the job and the promise is one nothing can keep — which is how a real -O3
-    miscompile sat two days waiting for a bisect that was never coming. Say
-    what is true instead, so the reader knows immediately whether to bisect it
-    by hand.
+    A stub used to say "the watcher narrows this by idle bisect"
+    unconditionally. With an empty range no ledger entry is opened, so
+    `bisect_step` never sees the job and the promise is one nothing can keep —
+    which is how a real -O3 miscompile sat two days waiting for a bisect that
+    was never coming. Say what is true instead, so the reader knows immediately
+    whether to bisect it by hand.
+
+    Four cases now, and every one of them exists because the machinery already
+    knew the answer and had no way to say it:
+
+      * `bad` touches no buildable file — it is the sha that was TESTED, not
+        one that could have caused anything;
+      * the job builds with $(PXX_STABLE) — `compiler/` commits cannot be
+        causal and are not in its range;
+      * the job has never run before — no earlier passing sha exists at all;
+      * the ordinary case, which is unchanged.
     """
     n = len(reg.get("range") or [])
     bad = (reg.get("bad") or "")[:12] or "unknown"
     good = (reg.get("good") or "")[:12] or "unknown"
+
+    # The watcher tests whatever HEAD is, and HEAD is frequently its own tstate
+    # publish commit -- so `bad` is regularly a sha that changes four .md files.
+    # cascade_range_note() has said so out loud for a while; the ORDINARY path,
+    # where nearly every regression goes, could not reach the sentence.
+    banner = ""
+    if reg.get("bad_untestable"):
+        banner = ("> **The named sha `%s` CANNOT be the cause** — it touches no "
+                  "buildable file (docs / tickets / tstate only). It is the sha "
+                  "that was TESTED, i.e. the upper bound of an untested range; "
+                  "the cause is somewhere below it.\n\n" % bad)
+
     if reg.get("pin_axis"):
-        # This job builds with $(PXX_STABLE), so it is blind to every commit
-        # that does not move the pin. Its range is counted in PIN MOVES, and
-        # saying "commits" here would re-describe the right range in the wrong
-        # units -- which is how the reader gets sent back to the commit log.
+        # Blind to compiler/** (the pin freezes compiler/builtin/**), NOT blind
+        # to lib/ and test/, which the pin deliberately leaves live. Counting
+        # this range in "commits" would send the reader back to the full commit
+        # log, which is the axis that cannot answer.
         if not n:
-            return ("bad `%s`, and **nothing this job can observe changed** "
-                    "between `%s` and it — no pin move, no `lib/` or `test/` "
-                    "commit. It builds only with `$(PXX_STABLE)`, so the cause "
-                    "is in the box or the job's own inputs, **not** in the "
-                    "commits. **No idle bisect will happen**, and a commit "
-                    "range would name only innocents." % (bad, good))
-        return ("bad `%s`, last good `%s`, **%d observable commit(s)** in range "
-                "(it builds with `$(PXX_STABLE)`, so `compiler/` commits cannot "
-                "have caused it and are dropped; pin moves, `lib/` and `test/` "
-                "are kept) — the watcher narrows this by idle bisect."
-                % (bad, good, n))
+            return banner + (
+                "bad `%s`, and **nothing this job can observe changed** between "
+                "`%s` and it — no pin move, no `lib/` or `test/` commit. It "
+                "builds only with `$(PXX_STABLE)`, so the cause is in the box "
+                "or the job's own inputs, **not** in the commits. **No idle "
+                "bisect will happen**, and a commit range would name only "
+                "innocents." % (bad, good))
+        return banner + (
+            "bad `%s`, last good `%s`, **%d observable commit(s)** in range (it "
+            "builds with `$(PXX_STABLE)`, so `compiler/` commits cannot have "
+            "caused it and are dropped; pin moves, `lib/` and `test/` are kept) "
+            "— the watcher narrows this by idle bisect." % (bad, good, n))
+
     if reg.get("first_seen"):
-        return ("bad `%s`, and this is the job's **first-ever run** — there is "
-                "no earlier passing sha, so no interval contains the cause and "
-                "every commit a range could name is equally innocent. **No "
-                "idle bisect will happen**; a red here is a finding about the "
-                "job, not a regression from the commits around it." % bad)
+        return banner + (
+            "bad `%s`, and this is the job's **first-ever run** — there is no "
+            "earlier passing sha, so no interval contains the cause and every "
+            "commit a range could name is equally innocent. **No idle bisect "
+            "will happen**; a red here is a finding about the job, not a "
+            "regression from the commits around it." % bad)
+
     if not n:
-        return ("bad `%s`, range **unknown** (first run covering this job at "
-                "this tier, so there is no earlier passing sha to bound it) — "
-                "**no idle bisect will happen**; this one needs hand-triage."
-                % bad)
-    return ("bad `%s`, last good `%s`, %d commit(s) in range — the watcher "
-            "narrows this by idle bisect; check tstate/TSTATE.md for the "
-            "current range." % (bad, good, n))
+        return banner + (
+            "bad `%s`, range **unknown** (first run covering this job at this "
+            "tier, so there is no earlier passing sha to bound it) — **no idle "
+            "bisect will happen**; this one needs hand-triage." % bad)
+
+    return banner + (
+        "bad `%s`, last good `%s`, %d commit(s) in range — the watcher narrows "
+        "this by idle bisect; check tstate/TSTATE.md for the current range."
+        % (bad, good, n))
 
 
 PIN_LOG_PATH = "stable_linux_amd64/default/pin.log"
@@ -4626,6 +4672,27 @@ def bisect_step(clone, host, st, tier):
                   % (reg.get("job", "?"), len(rng) - len(clean)), flush=True)
             reg["range"] = rng = clean
             save_state(clone, host, st)
+        if reg.get("bad"):
+            # RECOMPUTED every pass, not cached behind an existence check.
+            # The answer depends on NOTEST_PREFIXES, which can change -- and a
+            # stamp written once, read forever, is the same one-way trap as a
+            # boolean repair flag, just quieter (see PIN_AXIS_RULE). One
+            # git diff-tree per open regression per idle pass is nothing; the
+            # versioning machinery to make a cache correctable would cost more
+            # than the call it saves.
+            #
+            # It exists at all so the banner reaches regressions opened BEFORE
+            # it did -- including the one that motivated the ticket, whose
+            # `bad` is a tstate publish commit, and the aarch64 one blamed on a
+            # 250-line `prio:` frontmatter change.
+            was = reg.get("bad_untestable")
+            reg["bad_untestable"] = not needs_test(clone.path, reg["bad"])
+            if reg["bad_untestable"] != was:
+                if reg["bad_untestable"]:
+                    print("twatch: %s — its `bad` sha %s touches no buildable "
+                          "file; labelled as the tested upper bound, not a lead"
+                          % (reg.get("job", "?"), reg["bad"][:12]), flush=True)
+                save_state(clone, host, st)
         if reg.get("pin_built") and reg.get("pin_axis") != PIN_AXIS_RULE \
                 and reg.get("good") and reg.get("bad"):
             # REPAIR ON READ, the same way the untestable-commit filter above

@@ -201,6 +201,44 @@ def t_a_first_seen_note_says_first_ever_run():
     return "first-seen red reads as a finding, not a regression"
 
 
+def t_an_untestable_bad_sha_says_it_cannot_be_the_cause():
+    """The watcher tests whatever HEAD is, and HEAD is frequently its own
+    tstate publish commit -- so `bad` is regularly a sha that changes four .md
+    files. Nine open regressions once named one that way, and Track A followed
+    the lead. cascade_range_note() has warned about this for a while; the
+    ORDINARY path, where nearly every regression goes, could not reach the
+    sentence."""
+    note = tw.range_note({"bad": "a" * 40, "good": "b" * 40,
+                          "range": ["c" * 40], "bad_untestable": True})
+    assert "CANNOT be the cause" in note, (
+        "an untestable bad sha must be labelled, or a reader is sent to a "
+        "commit that changes four .md files")
+    assert "upper bound" in note, "say WHAT it is, not only what it is not"
+    assert "commit(s) in range" in note, (
+        "the banner must PREFIX the range note, not replace it")
+    return "untestable bad sha is banner-prefixed on the ordinary path"
+
+
+def t_the_banner_reaches_every_case():
+    """It is prefixed to all four range shapes. A banner that reaches three of
+    four is the same hole one path along -- which is the defect this whole
+    ticket family is about."""
+    shapes = [
+        {"range": ["c" * 40]},                                    # ordinary
+        {"range": []},                                            # no range
+        {"range": [], "first_seen": True},                        # first run
+        {"range": ["c" * 40], "pin_axis": 2},                     # pin-built
+        {"range": [], "pin_axis": 2},                             # pin, empty
+    ]
+    for extra in shapes:
+        reg = dict({"bad": "a" * 40, "good": "b" * 40,
+                    "bad_untestable": True}, **extra)
+        note = tw.range_note(reg)
+        assert note.startswith("> **The named sha"), (
+            "banner missing for shape %s" % (sorted(extra),))
+    return "all %d range shapes carry the banner" % len(shapes)
+
+
 def t_a_populated_range_still_promises_the_bisect():
     note = tw.range_note({"bad": "a" * 40, "good": "b" * 40,
                           "range": ["c" * 40, "d" * 40]})
@@ -221,6 +259,8 @@ def main():
                t_a_pin_built_note_counts_observable_commits,
                t_nothing_observable_changed_is_a_real_verdict,
                t_a_first_seen_note_says_first_ever_run,
+               t_an_untestable_bad_sha_says_it_cannot_be_the_cause,
+               t_the_banner_reaches_every_case,
                t_a_populated_range_still_promises_the_bisect):
         try:
             print("  ok   %s — %s" % (fn.__name__, fn()))
