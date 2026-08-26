@@ -110,4 +110,4 @@ header to supply the macro). Filed separately — not a compiler defect.
 
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit a08822ab3.
