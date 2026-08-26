@@ -2121,6 +2121,82 @@ begin
     end;
 end;
 
+function IsConstVal(n: Integer; v: Int64): Boolean;
+begin
+  IsConstVal := (n >= 0) and (IRKind[n] = IR_CONST_INT) and (IRIVal[n] = v);
+end;
+
+function NarrowCastFold(node: Integer; var srcNode, bytes: Integer;
+                        var isSigned: Boolean): Boolean;
+{ Recognise the IR shape a NARROWING ORDINAL CAST lowers to and hand back the
+  operand plus the width, so the backend can emit ONE instruction instead of
+  the three binops and three materialised constants the shape spells out.
+
+  IRLowerAST expands `Integer(x)` / `Byte(x)` / `ShortInt(x)` etc. into
+  target-agnostic IR: mask to the width, then for a signed target re-derive the
+  sign with the two's-complement identity (v xor signbit) - signbit. That is
+  the right thing to LOWER -- it needs no new IR op and every backend gets it
+  -- but taken literally on x86-64 the signed 32-bit form costs 39 bytes and
+  six uops (three of the constants do not fit a sign-extended imm32, so each
+  one is a 10-byte movabs) where `movsxd rax, eax` costs three bytes and one.
+
+  Matched shapes, where W is 1, 2 or 4 bytes:
+    unsigned:  BINOP(and, X, 2^(8W) - 1)
+    signed:    BINOP(-, BINOP(xor, BINOP(and, X, 2^(8W)-1), S), S)   S = 2^(8W-1)
+
+  Value-identical by construction, so a user who hand-writes `x and $FF` gets
+  the same single instruction and the same answer. }
+var maskNode, xorNode, andNode: Integer;
+    w: Integer;
+begin
+  NarrowCastFold := False;
+  srcNode := -1; bytes := 0; isSigned := False;
+  if (node < 0) or (IRKind[node] <> IR_BINOP) then Exit;
+
+  { signed form: (AND xor S) - S }
+  if IntToTokenKind(IRC[node]) = tkMinus then
+  begin
+    xorNode := IRA[node];
+    maskNode := IRB[node];
+    if (xorNode < 0) or (maskNode < 0) then Exit;
+    if IRKind[maskNode] <> IR_CONST_INT then Exit;
+    if (IRKind[xorNode] <> IR_BINOP) or (IntToTokenKind(IRC[xorNode]) <> tkXor) then Exit;
+    if not IsConstVal(IRB[xorNode], IRIVal[maskNode]) then Exit;
+    andNode := IRA[xorNode];
+    if (andNode < 0) or (IRKind[andNode] <> IR_BINOP) or
+       (IntToTokenKind(IRC[andNode]) <> tkAnd) then Exit;
+    for w := 0 to 2 do
+    begin
+      bytes := 1 shl w;
+      if IsConstVal(IRB[andNode], (Int64(1) shl (bytes * 8)) - 1) and
+         (IRIVal[maskNode] = (Int64(1) shl (bytes * 8 - 1))) then
+      begin
+        srcNode := IRA[andNode];
+        isSigned := True;
+        NarrowCastFold := True;
+        Exit;
+      end;
+    end;
+    bytes := 0;
+    Exit;
+  end;
+
+  { unsigned form: a plain mask to a byte/word/dword }
+  if IntToTokenKind(IRC[node]) = tkAnd then
+    for w := 0 to 2 do
+    begin
+      bytes := 1 shl w;
+      if IsConstVal(IRB[node], (Int64(1) shl (bytes * 8)) - 1) then
+      begin
+        srcNode := IRA[node];
+        isSigned := False;
+        NarrowCastFold := True;
+        Exit;
+      end;
+    end;
+  bytes := 0;
+end;
+
 procedure EmitObjBlobBody(const procName: AnsiString);
 { Body of an object retain/release blob: preserve every caller-clobbered GP
   reg, rdi := rax (the object), call the named Pascal proc, restore, ret. }
@@ -4129,6 +4205,8 @@ var left, right, valNode, symIdx, si, nextJmp2, pNil: Integer;
     slBaseTk: TTypeKind;
     wid, decs: Integer;
     pow2k: Integer;           { div/mod-by-power-of-two strength reduction }
+    ncSrc, ncBytes: Integer;  { narrowing-cast fold }
+    ncSigned: Boolean;
     arg1Node, arg2Node, arg3Node, val1Node, val2Node: Integer;
     itemNode, trueCount, nextJmp, falseJmp: Integer;
     trueJumps: array[0..127] of Integer;
@@ -5503,6 +5581,35 @@ begin
         begin
           EmitFloatTree(node, 2);
           EmitB($66); EmitB($48); EmitB($0F); EmitB($7E); EmitB($D0); { movq rax, xmm2 }
+          Exit;
+        end;
+
+        { -O3 narrowing-cast fold: the three-binop, three-constant shape a
+          narrowing ordinal cast lowers to collapses to one movsx/movzx.
+          See NarrowCastFold for the shapes and why they are value-identical. }
+        if (OptLevel >= 3) and
+           (not TypeIsFloat(IntToTypeKind(IRTk[node]))) and
+           NarrowCastFold(node, ncSrc, ncBytes, ncSigned) then
+        begin
+          IREmitNode(ncSrc);
+          if ncSigned then
+            case ncBytes of
+              1: begin EmitB($48); EmitB($0F); EmitB($BE); EmitB($C0); end  { movsx  rax, al }
+            else
+              if ncBytes = 2 then
+                begin EmitB($48); EmitB($0F); EmitB($BF); EmitB($C0); end   { movsx  rax, ax }
+              else
+                begin EmitB($48); EmitB($63); EmitB($C0); end;              { movsxd rax, eax }
+            end
+          else
+            case ncBytes of
+              1: begin EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0); end  { movzx rax, al }
+            else
+              if ncBytes = 2 then
+                begin EmitB($48); EmitB($0F); EmitB($B7); EmitB($C0); end   { movzx rax, ax }
+              else
+                begin EmitB($89); EmitB($C0); end;                          { mov eax, eax (zero-extends) }
+            end;
           Exit;
         end;
 
