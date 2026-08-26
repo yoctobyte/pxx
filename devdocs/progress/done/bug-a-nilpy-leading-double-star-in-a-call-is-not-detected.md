@@ -189,4 +189,4 @@ it is gated rather than merely working.
 [[bug-a-nilpy-double-star-in-a-mixed-argument-list]]
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 5c5115038.

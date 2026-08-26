@@ -192,4 +192,4 @@ Both were checked against the **pinned** compiler, so both are pre-existing:
   new failure.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 5c5115038.
