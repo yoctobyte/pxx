@@ -7297,20 +7297,13 @@ begin
           end;
         end;
 
-        currArg := argsHead;
-        for i := 0 to nArgs - 1 do
-        begin
-          exprNode := ASTLeft[currArg];
-          if (TypeIsFrozenString(Procs[procIdx].Params[i].TypeKind)) and (IntToTypeKind(ASTTk[exprNode]) = tyChar) then
-          begin
-            if ASTKind[exprNode] = AN_INT_LIT then
-            begin
-              ASTKind[exprNode] := AN_STR_LIT;
-              ASTTk[exprNode] := Ord(tyString);
-            end;
-          end;
-          currArg := ASTRight[currArg];
-        end;
+        { A one-character literal argument is BOTH a Char and a one-character
+          string; the PARAMETER decides. One resolver, pasparser_name.inc —
+          this loop and its byte-identical twin in the overloaded-call path
+          (pasparser_stmt.inc) each used to open-code the frozen-string half
+          and neither knew about a PChar parameter.
+          bug-single-char-literal-as-pchar-argument-segfaults }
+        CoerceCharLitArgs(procIdx, argsHead);
 
         currArg := argsHead;
         for i := 0 to nArgs - 1 do

@@ -4,8 +4,8 @@ prio: 80
 type: bug
 blocked-by: []
 summary: "A ONE-character literal passed where a PChar parameter is expected segfaults: `StrCat(buf, '-')` faults, `StrCat(buf, '--')` works. The single-quoted literal types as Char rather than as a string, so its ORDINAL is passed as the pointer and the callee dereferences address 45. FPC converts it to a pointer to a NUL-terminated one-character string. Pre-existing — it hits StrCopy/StrCat/StrPos as much as anything new."
-status: backlog
-owner: unassigned
+status: working
+owner: frank1-P-pchar
 ---
 
 # `StrCat(buf, '-')` segfaults; `StrCat(buf, '--')` is fine

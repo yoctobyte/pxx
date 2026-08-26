@@ -552,3 +552,128 @@ end;
 
 { GetTokenStrFromRaw moved up to lexer.inc (before its lexer.inc use) for FPC
   declaration-order; see there. }
+
+{ ===== A ONE-CHARACTER LITERAL IS BOTH A CHAR AND A STRING =================
+
+  In Pascal `'-'` is a Char AND a one-character string; the CONTEXT decides
+  which. pxx parses it as an AN_INT_LIT tagged tyChar carrying the ORDINAL
+  (pasparser_expr.inc's tkString arm, `Length(SVal) = 1`), so every context
+  that wants the STRING has to say so and retag the node.
+
+  That rule was open-coded in four places — the direct-call argument loop
+  (pasparser_expr.inc), its byte-identical twin in the OVERLOADED-call loop
+  (pasparser_stmt.inc), Val's first argument (pasparser_stmt.inc) and the
+  assignment path (ir.inc) — and every copy knew about a different set of
+  destinations. NONE of them knew about a PChar PARAMETER, so `StrCat(buf,
+  '-')` passed the ORDINAL 45 where the pointer goes and the callee
+  dereferenced address 45, while `StrCat(buf, '--')` one character longer was
+  fine. Nothing in the source distinguishes the two, which is the cruellest
+  shape-dependence there is: the program works until someone shortens a
+  separator. bug-single-char-literal-as-pchar-argument-segfaults
+
+  So: ONE node predicate, ONE retag, ONE parameter-side rule, and one argument
+  walk the call-building sites ask instead of each rolling its own.
+  devdocs/dev/normalise-dont-special-case.md }
+
+{ The compile-time CHARACTER-constant node shape: a one-char literal, `#45`, a
+  named `const Dash = '-'` folded to its ordinal, or `Chr(45)` folded the same
+  way. A Char VARIABLE is deliberately NOT this — FPC refuses a char variable
+  where a PChar is wanted, and there is no constant to materialise. }
+function IsCharLitNode(node: Integer): Boolean;
+begin
+  IsCharLitNode := (node >= 0) and (ASTKind[node] = AN_INT_LIT) and
+                   (IntToTypeKind(ASTTk[node]) = tyChar);
+end;
+
+{ Retag a character constant IN PLACE as the one-character string literal it
+  also is. A no-op on anything else, so every caller may ask unconditionally.
+
+  The span is normally already on the node: the tkString arm copies the
+  token's, and `#45` arrives DECODED because the lexer stores a token's value
+  in the char pool rather than its source text. A NAMED constant is the case
+  that has none — `const Dash = '-'` folds to a bare ordinal with SLen = 0 —
+  so synthesise the span from the ordinal, the same materialise-a-span move
+  LabelSpanOfTok above makes for a numeric goto label. Without it `pv := Dash`
+  segfaulted while `pv := '-'` and `pv := #45` were both already right, and a
+  shape working in three spellings out of four is the tell that the SHAPE was
+  unrecognised rather than the context broken. }
+procedure RetagCharLitAsStr(node: Integer);
+begin
+  if not IsCharLitNode(node) then Exit;
+  if ASTSLen[node] <= 0 then
+  begin
+    if TokCharLen + 1 > STRING_CAP then Error('token char pool overflow');
+    ASTSOffset[node] := TokCharLen;
+    ASTSLen[node]    := 1;
+    TokChars[TokCharLen] := Chr(Integer(ASTIVal[node]) and 255);
+    Inc(TokCharLen);
+  end;
+  ASTKind[node] := AN_STR_LIT;
+  ASTTk[node]   := Ord(tyString);
+end;
+
+{ Does parameter `pi` of Procs[cpi] want a character constant as the one-char
+  STRING it also is? Two families, and they are exactly the two the argument
+  marshalling already knows how to convert:
+
+    * a FROZEN string parameter (tyString / ShortString / FixedString) — the
+      rule that was already here, kept bit-for-bit so nothing that used to
+      compile changes shape;
+
+    * a POINTER parameter — PChar and friends. IRLowerCallArg gives a tyString
+      argument bound to a pointer parameter the +8 length-prefix skip ("auto
+      const char* marshalling"), i.e. the address of the NUL-terminated
+      character data. That is precisely what FPC hands a PChar parameter for a
+      character constant: measured against FPC 3.2.2, `'-'`, `#45`, a named
+      `const Dash = '-'` and `Chr(45)` all print `-` through a PChar parameter,
+      and only a char VARIABLE is refused.
+
+  NOT by-ref or open-array (a literal cannot bind one), NOT untyped (that takes
+  the ARGUMENT's address, whatever it is), NOT procedural, and NOT a variadic
+  slot past ParamCount — a C `...` argument is promoted the way C promotes it,
+  and FPC passes a Char there as an integer, so `%c` would break. }
+function ParamTakesCharLitAsStr(cpi, pi: Integer): Boolean;
+var tk: TTypeKind;
+begin
+  ParamTakesCharLitAsStr := False;
+  if (cpi < 0) or (cpi >= ProcCount) then Exit;
+  if (pi < 0) or (pi >= MAX_PROC_PARAMS) or (pi >= Procs[cpi].ParamCount) then Exit;
+  tk := Procs[cpi].Params[pi].TypeKind;
+  if TypeIsFrozenString(tk) then
+  begin
+    ParamTakesCharLitAsStr := True;
+    Exit;
+  end;
+  ParamTakesCharLitAsStr :=
+    (tk = tyPointer) and
+    (not Procs[cpi].Params[pi].IsRef) and
+    (not Procs[cpi].Params[pi].IsArray) and
+    (not ProcParamUntyped[cpi * MAX_PROC_PARAMS + pi]) and
+    (ProcParamProcSig[cpi * MAX_PROC_PARAMS + pi] < 0);
+end;
+
+{ ONE argument slot. Safe to call unconditionally — a no-op unless the argument
+  really is a character constant and the parameter really wants the string. }
+procedure CoerceCharLitArg(cpi, pi, argNode: Integer);
+begin
+  if IsCharLitNode(argNode) and ParamTakesCharLitAsStr(cpi, pi) then
+    RetagCharLitAsStr(argNode);
+end;
+
+{ The whole AN_ARG chain of a call whose callee is already resolved. Call it
+  AFTER overload selection: retagging earlier would change what the match sees,
+  and the match must keep reading the argument as the Char it also is (that is
+  how `Ov('-')` picks the PChar overload over the Integer one at all). }
+procedure CoerceCharLitArgs(cpi, argsHead: Integer);
+var a, i: Integer;
+begin
+  if (cpi < 0) or (argsHead < 0) then Exit;
+  a := argsHead;
+  i := 0;
+  while (a >= 0) and (i < MAX_PROC_PARAMS) do
+  begin
+    CoerceCharLitArg(cpi, i, ASTLeft[a]);
+    a := ASTRight[a];
+    Inc(i);
+  end;
+end;
