@@ -4764,6 +4764,31 @@ end;
   reads neither of the last two, while the record arm would index the RTTI table
   with a REC_NONE element id and compute a garbage offset.
   bug-a-delete-on-a-dynamic-array-of-interfaces-dangles-every-survivor }
+{ Emit `SetLength(sym, 0)` on a dyn-array symbol: the -102 call, tagged as a
+  statement-level side-effect call. PXXDynSetLen's newLen <= 0 path nils the slot
+  and calls PXXDynArrayRelease, which DECREMENTS and only walks the elements at
+  refcount zero — so this drops exactly one reference and destroys nothing that
+  another owner still holds.
+
+  ONE copy, because there were three: the AN_DYN_COPY, AN_DYN_DELETE and
+  AN_DYN_INSERT arms each spelled out the same seven lines to empty their fresh
+  temp before sizing it, and the hand-off release added below is a fourth caller
+  of the same seven. }
+procedure IREmitDynSetLenZero(sym: Integer);
+var identNode, zeroNode, a1, a2, callNode, val: Integer;
+begin
+  identNode := AllocNode(AN_IDENT); ASTIVal[identNode] := sym;
+  ASTTk[identNode] := Ord(tyPointer);
+  zeroNode := AllocNode(AN_INT_LIT);
+  ASTIVal[zeroNode] := 0; ASTTk[zeroNode] := Ord(tyInteger);
+  a1 := AllocNode(AN_ARG); ASTLeft[a1] := identNode;
+  a2 := AllocNode(AN_ARG); ASTLeft[a2] := zeroNode;
+  ASTRight[a1] := a2;
+  callNode := AllocNode(AN_CALL); ASTIVal[callNode] := -102; ASTLeft[callNode] := a1;
+  val := IRLowerAST(callNode);
+  IRIVal[val] := 1;   { statement-level: side-effect call }
+end;
+
 function AppendDynWalkTail(last, depth, elemTk, elemRec: Integer): Integer;
 var argNode, kind: Integer;
 begin
@@ -6464,14 +6489,7 @@ begin
         copy + element-retain its contents into the fresh block — refs the raw
         fill below then overwrites (managed-element leak). From an empty
         handle the sizing SetLength copies nothing. }
-      dcZeroIdent := AllocNode(AN_INT_LIT);
-      ASTIVal[dcZeroIdent] := 0; ASTTk[dcZeroIdent] := Ord(tyInteger);
-      dcSlArg1 := AllocNode(AN_ARG); ASTLeft[dcSlArg1] := dcTempIdent;
-      dcSlArg2 := AllocNode(AN_ARG); ASTLeft[dcSlArg2] := dcZeroIdent;
-      ASTRight[dcSlArg1] := dcSlArg2;
-      dcSlCall := AllocNode(AN_CALL); ASTIVal[dcSlCall] := -102; ASTLeft[dcSlCall] := dcSlArg1;
-      dcSetlenVal := IRLowerAST(dcSlCall);
-      IRIVal[dcSetlenVal] := 1;
+      IREmitDynSetLenZero(dcTempSym);
       dcSlArg1 := AllocNode(AN_ARG); ASTLeft[dcSlArg1] := dcTempIdent;
       dcSlArg2 := AllocNode(AN_ARG); ASTLeft[dcSlArg2] := dcCountIdent;
       ASTRight[dcSlArg1] := dcSlArg2;
@@ -6568,6 +6586,11 @@ begin
         handle (pointer-sized), so tag it tyPointer (an element-typed tag would
         make the assignment store only the element's width and truncate the
         64-bit handle). }
+      { Hand the fresh buffer OFF to the assignment the parser wrapped this node
+        in, instead of holding a second reference until scope exit. See
+        DynResultTempSym; the AN_ASSIGN arm empties this temp right after its
+        store. }
+      DynResultTempSym := dcTempSym;
       Result := IRAppend(IR_LEA, dcTempSym, -1, -1, 0, Ord(tyPointer));
     end;
 
@@ -6649,14 +6672,7 @@ begin
         copy + element-retain its contents into the fresh block — refs the raw
         fill below then overwrites (managed-element leak). From an empty
         handle the sizing SetLength copies nothing. }
-      dcZeroIdent := AllocNode(AN_INT_LIT);
-      ASTIVal[dcZeroIdent] := 0; ASTTk[dcZeroIdent] := Ord(tyInteger);
-      dcSlArg1 := AllocNode(AN_ARG); ASTLeft[dcSlArg1] := dcTempIdent;
-      dcSlArg2 := AllocNode(AN_ARG); ASTLeft[dcSlArg2] := dcZeroIdent;
-      ASTRight[dcSlArg1] := dcSlArg2;
-      dcSlCall := AllocNode(AN_CALL); ASTIVal[dcSlCall] := -102; ASTLeft[dcSlCall] := dcSlArg1;
-      dcSetlenVal := IRLowerAST(dcSlCall);
-      IRIVal[dcSetlenVal] := 1;
+      IREmitDynSetLenZero(dcTempSym);
       dcSlArg1 := AllocNode(AN_ARG); ASTLeft[dcSlArg1] := dcTempIdent;
       dcSlArg2 := AllocNode(AN_ARG); ASTLeft[dcSlArg2] := dcCountIdent;
       ASTRight[dcSlArg1] := dcSlArg2;
@@ -6712,6 +6728,11 @@ begin
         IRIVal[dcSetlenVal] := 1;   { statement-level: side-effect call }
       end;
 
+      { Hand the fresh buffer OFF to the assignment the parser wrapped this node
+        in, instead of holding a second reference until scope exit. See
+        DynResultTempSym; the AN_ASSIGN arm empties this temp right after its
+        store. }
+      DynResultTempSym := dcTempSym;
       Result := IRAppend(IR_LEA, dcTempSym, -1, -1, 0, Ord(tyPointer));
     end;
 
@@ -6835,14 +6856,7 @@ begin
         copy + element-retain its contents into the fresh block — refs the raw
         fill below then overwrites (managed-element leak). From an empty
         handle the sizing SetLength copies nothing. }
-      dcZeroIdent := AllocNode(AN_INT_LIT);
-      ASTIVal[dcZeroIdent] := 0; ASTTk[dcZeroIdent] := Ord(tyInteger);
-      dcSlArg1 := AllocNode(AN_ARG); ASTLeft[dcSlArg1] := dcTempIdent;
-      dcSlArg2 := AllocNode(AN_ARG); ASTLeft[dcSlArg2] := dcZeroIdent;
-      ASTRight[dcSlArg1] := dcSlArg2;
-      dcSlCall := AllocNode(AN_CALL); ASTIVal[dcSlCall] := -102; ASTLeft[dcSlCall] := dcSlArg1;
-      dcSetlenVal := IRLowerAST(dcSlCall);
-      IRIVal[dcSetlenVal] := 1;
+      IREmitDynSetLenZero(dcTempSym);
       dcSlArg1 := AllocNode(AN_ARG); ASTLeft[dcSlArg1] := dcTempIdent;
       dcSlArg2 := AllocNode(AN_ARG); ASTLeft[dcSlArg2] := dcCountIdent;
       ASTRight[dcSlArg1] := dcSlArg2;
@@ -6957,6 +6971,11 @@ begin
         IRAppend(IR_STORE_MEM, IRAppend(IR_LOAD_SYM, dcGapTmp, -1, -1, 0, Ord(tyPointer)),
           IRAppend(IR_LOAD_SYM, dcValTmp, -1, -1, 0, Ord(dcElemTk)), -1, 0, Ord(dcElemTk));
 
+      { Hand the fresh buffer OFF to the assignment the parser wrapped this node
+        in, instead of holding a second reference until scope exit. See
+        DynResultTempSym; the AN_ASSIGN arm empties this temp right after its
+        store. }
+      DynResultTempSym := dcTempSym;
       Result := IRAppend(IR_LEA, dcTempSym, -1, -1, 0, Ord(tyPointer));
     end;
 
@@ -9114,6 +9133,9 @@ begin
 
     AN_ASSIGN:
     begin
+      { see DynResultTempSym: cleared here so only THIS assignment's own RHS can
+        set it, then consumed right after the store below. }
+      DynResultTempSym := -1;
       { `lv OP= rhs` with a side-effecting lvalue: the desugar shares one AST
         node between the destination and the binop's left operand, so it is
         lowered here, once, rather than walked twice. }
@@ -10262,6 +10284,25 @@ begin
             Result := IRAppend(IR_LOAD_MEM, leftAddr, -1, -1, 0, Ord(lhsStoreTk));
         end;
       end;
+      end;
+
+      { HAND OFF the fresh buffer from a Delete/Insert/Copy temp. The store just
+        above retained it, so the buffer is now held twice; empty the temp here
+        and the destination is its sole owner, which is what makes `arr := nil`
+        destroy the elements AT the nil instead of at scope exit. SetLength(_, 0)
+        rather than a raw slot zero on purpose: it is a real release, so the
+        refcount is right whether or not anything else shares the block, and the
+        nil'd slot makes the scope-exit walk a no-op.
+
+        A NESTED dyn expression (`a := Copy(Copy(b,0,3),0,2)`) hands off only the
+        OUTER temp — the inner one is overwritten here before it is read, and
+        keeps its buffer until scope exit exactly as every one of them did
+        before. Not a regression, and not silent: it is written down.
+        bug-a-a-dynarray-delete-temp-holds-the-new-buffer-until-scope-exit }
+      if DynResultTempSym >= 0 then
+      begin
+        IREmitDynSetLenZero(DynResultTempSym);
+        DynResultTempSym := -1;
       end;
 
       { The AGGREGATE half of the same C rule the scalar paths above state: an

@@ -5,6 +5,7 @@ delete:
   destroy 0
   destroy 1
   destroy 4
+  after nil
 delete-head:
   destroy 10
   destroy 11

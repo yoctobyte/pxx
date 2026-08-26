@@ -3719,6 +3719,20 @@ var
   GotoLabelNLen   : array[0..MAX_GOTO_LABELS-1] of Integer; { name length }
   GotoLabelCodePos: array[0..MAX_GOTO_LABELS-1] of Integer; { code position; -1 = not yet placed }
   GotoLabelBase : Integer;   { index where the CURRENT routine's labels start in the GotoLabel* tables. A routine used to reset GotoLabelCount to 0 and restore it on exit, which restored the COUNT but not the CONTENTS -- its labels were written over the enclosing program's slots, so `program p; label la; procedure Q; label lq; ...` lost `la` and the main body's `la:` died with "AN_LABEL: undeclared label". Every lookup scans [GotoLabelBase, GotoLabelCount) so a nested routine neither sees nor clobbers the enclosing scope's labels; a non-local goto stays impossible, which is the Pascal rule anyway. bug-p-a-routines-label-section-clobbers-the-enclosing-programs-labels }
+  { The fresh-buffer temp an AN_DYN_COPY / AN_DYN_DELETE / AN_DYN_INSERT just
+    yielded, or -1. Those three build a hidden dyn-array local, fill it and hand
+    back its handle; the PARSER wraps the node in `arr := <handle>`, and the
+    dyn-array store RETAINS. So the buffer was held twice — once by arr, once by
+    the temp — and the temp's half was only dropped by the scope-exit release
+    walk. Nothing leaked and nothing dangled, but `arr := nil` then destroyed
+    nothing: the survivors of a Delete over a COM-interface array died at
+    procedure exit instead, one scope late, which any destructor with a side
+    effect can see (fpc-testsuite tarray11's CheckFreedArray).
+    Cleared on entry to the AN_ASSIGN arm, set by the three arms, consumed and
+    cleared right after that arm's store — so a dyn node lowered somewhere that
+    is NOT an assignment RHS can never leave a value a later assignment picks up.
+    bug-a-a-dynarray-delete-temp-holds-the-new-buffer-until-scope-exit }
+  DynResultTempSym : Integer;
   CEOrdTk  : TTypeKind; { WHICH ORDINAL the const expression just folded by ConstEval yielded. ConstEval collapses every ordinal (char, enum, bool) to a bare Int64 -- a genuine simplification that is why Ord/Succ/Pred need no code at all -- so the declaration site has no way to ask what kind came back and used to guess from the FIRST TOKEN. That is right for a bare literal and wrong for every folded form: `const X = eB` printed 1, `const Z = Low(TE)` printed 0, `const W = Low(TC)` printed 97. tyInteger unless an arm says otherwise; tyBoolean and tyChar are the two it can say. Propagated through the levels: a relational sets tyBoolean, and/or/xor keep tyBoolean only when BOTH operands were boolean, everything else clears to tyInteger. Read by the untyped-const declaration immediately after its own top-level ConstEval call. bug-p-the-constant-evaluator-erases-an-ordinals-type }
   CEEnumId : Integer;   { companion to CEOrdTk: the enum TYPE id when the folded value is an enum member, else -1. An enum is not a TTypeKind in this dialect -- an enum symbol is tyInteger with SymEnumId >= 0 (see pasparser_decl.inc's VDTk handling) -- so the kind alone cannot carry it. }
   GotoLabelIRId   : array[0..MAX_GOTO_LABELS-1] of Integer; { IR label ID for IR path; -1 = unallocated }

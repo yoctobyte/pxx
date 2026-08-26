@@ -16,13 +16,16 @@ program test_dynarray_delete_insert_copy_of_interfaces;
 
   The destructor logs, so the .expected asserts WHICH objects die and WHEN.
 
-  KNOWN DIVERGENCE, deliberately kept out of the asserted region: pxx destroys
-  the survivors at SCOPE EXIT where FPC destroys them at the `a := nil`, because
-  the fresh-buffer temp holds a reference until then —
-  bug-a-a-dynarray-delete-temp-holds-the-new-buffer-until-scope-exit. Every line
-  below is inside one procedure whose exit is the last event, so the ORDER the
-  two compilers print is identical; do not add a statement after the final nil
-  without re-checking that.
+  The destruction TIME is asserted too, now that it can be. This test was
+  originally written around a divergence: pxx destroyed the survivors at SCOPE
+  EXIT where FPC destroys them at the `a := nil`, because the fresh-buffer temp
+  held a second reference until then. Every case was therefore one procedure
+  whose exit was the last event, so the two compilers printed the same ORDER and
+  the difference was invisible here. That is fixed
+  (bug-a-a-dynarray-delete-temp-holds-the-new-buffer-until-scope-exit), so
+  DeleteCase now prints a line AFTER its nil — which is exactly the statement the
+  old header warned not to add. It is the only thing in this file that would
+  catch the temp taking its reference back.
 
   .expected IS fpc 3.2.2's own output on this source. }
 {$mode objfpc}
@@ -67,6 +70,10 @@ begin
   Delete(a, 2, 2);
   Show('  kept:', a);          { survivors must still be ALIVE and readable }
   a := nil;
+  { The timing assertion. The three survivors must be destroyed BY the nil, so
+    this line comes after them; with the fresh-buffer temp still holding a
+    reference they would appear after it instead, at procedure exit. }
+  WriteLn('  after nil');
 end;
 
 procedure DeleteHeadCase;
