@@ -5,7 +5,7 @@ prio: 55
 # Dynamic Include Paths, Configuration Files, and System Scanner
 
 - **Type:** feature
-- **Status:** backlog (config-FILE slice landed 2026-08-21; manifests + scanner open)
+- **Status:** backlog (config-FILE slice 2026-08-21, host-fallback table 2026-08-26; manifests + scanner open)
 - **Owner:** —
 - **Opened:** 2026-06-14 (from ESP-IDF auto-import analysis)
 
@@ -204,6 +204,48 @@ call during a self-build") is still enforced by remembering.
 - `tools/pxx-scan` (probe host / IDF trees, emit a config).
 - Dynamic system-library soname mapping (`uses sqlite3` -> `libsqlite3.so.0`)
   out of the compiler and into config.
-- The hardcoded `/usr/include...` fallback chain in `cpreproc.inc` — still
-  present, still native-gated. `incpath` now gives a way to not need it, but
-  nothing removes it yet.
+- ~~The hardcoded `/usr/include...` fallback chain in `cpreproc.inc`~~ — now a
+  TABLE, see the 2026-08-26 entry below. Still native-gated, still spelled in
+  the source; but it is data a config tier can extend rather than control flow.
+
+
+---
+
+## 2026-08-26 — tier 4 is a table, and two of its entries were searching nothing
+
+The `/usr/include...` fallback was **sixteen copy-pasted five-line blocks**, each
+differing only by a literal path and a **hand-counted string length**. It is now
+one table (`CSysIncludeDirs`, filled by `BuildCSysIncludeDirs`) walked by one
+loop, and `pxx --where` prints it as the fourth tier — so the whole search order
+is now inspectable end to end, which was the half of this ticket that made the
+rest debuggable.
+
+**The bug that was hiding in there.** Two of the sixteen named a compiler
+VERSION directory:
+
+    /usr/lib/gcc/x86_64-linux-gnu/13/include/
+    /usr/lib/llvm-18/lib/clang/18/include/
+
+Both were stale on this box — gcc is 15 here — so **both entries had been
+searching a directory that does not exist**, for however long, in silence. A
+hardcoded version is a fallback that expires. They are now DISCOVERED by
+scanning the parent directory, and every installed version is added rather than
+a "newest" pick, which would need a version COMPARE (string order puts `9` after
+`15`) for no gain — these are freestanding headers, near-identical across
+versions.
+
+**Behaviour is unchanged, checked against the pinned compiler rather than
+reasoned:** the same host-only header (`<linux/limits.h>`) resolves to the same
+value with the same single warning under both binaries; a root PAST entry 0
+(`<glib/gtypes.h>`, table entry 3) resolves with zero host warnings under both,
+because the warning is deliberately scoped to the bare `/usr/include/` entry —
+the library roots below it have no pxx-shipped twin to be confused with.
+`-nostdinc` still refuses the lot.
+
+**Locked in `test-quick`** (the `cliux` recipe, beside the pxx.cfg rows): the
+tier prints; both gates (`-nostdinc`, and a cross target) say *not searched* AND
+print no roots underneath; and **no versioned root is `[MISSING]`** — a scanned
+root exists by construction, so that assertion fires exactly when a hardcoded
+version comes back. Each new row was verified to FAIL with its bug re-introduced
+(gcc-13 literal injected, rebuilt, row went red, reverted), because a row that
+cannot fail is not coverage.
