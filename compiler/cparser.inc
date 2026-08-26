@@ -3556,6 +3556,33 @@ begin
     Result := CNodeProcSig(ASTRight[inner], commaCallee);
     Exit;
   end;
+  if ASTKind[inner] = AN_TERNARY then
+  begin
+    { `(c ? f : g)(args)` — busybox's copy_file.c opens with
+
+          if ((FLAGS_DEREF ? stat : lstat)(source, &source_stat) < 0)
+
+      and the same shape appears in coreutils/stat.c, coreutils/test.c,
+      editors/ed.c and util-linux/acpid.c. C requires the two arms to have
+      compatible types, so EITHER supplies the signature; ask the then-arm and
+      fall back to the else-arm, because one of them may be a null pointer
+      constant that carries none.
+
+      RECURSES like the AN_COMMA arm directly above rather than adding another
+      shape to the chain below: the arms are function-pointer expressions in
+      their own right, and every shape this function already knows is legal
+      there. The callee stays the WHOLE ternary node so the condition is still
+      evaluated and the right arm selected at run time — AN_CALL_IND evaluates
+      its callee node as a value, which is exactly what the comma arm relies on.
+      bug-c-a-ternary-cannot-be-the-callee-of-a-call }
+    if ASTRight[inner] >= 0 then
+    begin
+      Result := CNodeProcSig(ASTLeft[ASTRight[inner]], commaCallee);
+      if Result < 0 then
+        Result := CNodeProcSig(ASTRight[ASTRight[inner]], commaCallee);
+    end;
+    Exit;
+  end;
   if ASTKind[inner] = AN_IDENT then
   begin
     if SymProcSig[ASTIVal[inner]] >= 0 then

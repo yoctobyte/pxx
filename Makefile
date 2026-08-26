@@ -6188,6 +6188,13 @@ test-core: $(COMPILER)
 	# AN_IDENT but not over an AN_FIELD. gcc -O0 oracle; pinned cannot compile it.
 	./$(COMPILER) test/cfnptr_array_callable.c $(TESTTMP)/cfnptr_array26
 	test "$$($(TESTTMP)/cfnptr_array26)" = "$$(printf 'local  11 30 -1\nfield  11 30 -1\ngfield 11 30\narrow  11 30\nvaridx 30 30\n16 48 8 \nderef  11 30\nnolist 5 13\nglobal 11 30\nraw    11 30\ntemp   -1\ndirect 11\nplain  9 7')"
+	# A ternary as the CALLEE of a call. (*fp)(a), (fp)(a), (name)(a), (a,fn)(x),
+	# arr[i](a) and s.f[i](a) were all recognised and `(c ? f : g)(a)` was not —
+	# busybox opens libbb/copy_file.c with `(FLAGS_DEREF ? stat : lstat)(...)`.
+	# Bare names and fn-pointer vars, both arms, nested, and the condition
+	# evaluated exactly once. gcc -O0 oracle.
+	./$(COMPILER) test/cternary_callee.c $(TESTTMP)/cterncallee26
+	test "$$($(TESTTMP)/cterncallee26)" = "$$(printf '10 4\n10 4\n10\n21\n4\n1')"
 	# Unary `!` in a C constant expression, and the negative array bound the idiom
 	# it appears in EXISTS to produce. CEvalConstPrimary's unary chain had -, +, ~
 	# and & and not !, so `char[1 - 2*!!(cond)]` — BUILD_BUG_ON, as busybox and the
