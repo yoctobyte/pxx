@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-22T21:07:18Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "fd93e4a71c37a7932b9ef73e4c9f8a7deceb3c34",
-   "tier": "slow",
-   "verdict": "GREEN"
-  },
-  {
    "date": "2026-08-22T21:16:08Z",
    "fixed": [],
    "new_red": [],
@@ -454,6 +446,14 @@
    "fixed": [],
    "new_red": [],
    "sha": "80c5229fb60ad15aa79bbc847b2287b184430edf",
+   "tier": "native",
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T02:56:21Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "49b2eccd8a2e87ffdfc920178c7fbcb3745ef77d",
    "tier": "native",
    "verdict": "GREEN"
   }
@@ -2048,6 +2048,7 @@
   "test-core#src:test/test_nilpy_subclass_unit_base.npy": "native",
   "test-core#src:test/test_nilpy_subscript_container_literal.npy": "native",
   "test-core#src:test/test_nilpy_ternary_comp.npy": "native",
+  "test-core#src:test/test_nilpy_true_division_return_type.npy": "native",
   "test-core#src:test/test_nilpy_truthy_value_ops.npy": "native",
   "test-core#src:test/test_nilpy_try_else.npy": "native",
   "test-core#src:test/test_nilpy_tuple_dict_key.npy": "native",
@@ -5147,6 +5148,7 @@
   "test-core#src:test/test_nilpy_subclass_unit_base.npy": "pass",
   "test-core#src:test/test_nilpy_subscript_container_literal.npy": "pass",
   "test-core#src:test/test_nilpy_ternary_comp.npy": "pass",
+  "test-core#src:test/test_nilpy_true_division_return_type.npy": "pass",
   "test-core#src:test/test_nilpy_truthy_value_ops.npy": "pass",
   "test-core#src:test/test_nilpy_try_else.npy": "pass",
   "test-core#src:test/test_nilpy_tuple_dict_key.npy": "pass",
@@ -6662,14 +6664,14 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T02:47:00Z",
+  "date": "2026-08-26T02:56:21Z",
   "deadline": 7200.0,
-  "sha": "80c5229fb60ad15aa79bbc847b2287b184430edf",
+  "sha": "49b2eccd8a2e87ffdfc920178c7fbcb3745ef77d",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 474.9
+  "wall": 469.0
  },
  "last_bench": {
   "conf_rows": 550,
