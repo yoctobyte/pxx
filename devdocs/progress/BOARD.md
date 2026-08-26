@@ -8,13 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (0)
 
-| Ticket | Track | Prio | Type | Summary | Blocked-by |
-| --- | --- | --- | --- | --- | --- |
-| feature-opt-o3-register-pressure | O | 85 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
+_none_
 
-## unfinished (23)
+## unfinished (24)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -33,6 +31,7 @@ _none_
 | feature-nilpy-cpyext-c-api-from-source | N | 65 | feature | cpyext: compile a CPython C extension's SOURCE against our own `Python.h` | — |
 | feature-nilpy-object-reclamation | A | 55 | feature | NilPy object reclamation — dict/list/instance/bound-method lifetime | — |
 | feature-nilpy-thirdparty-libraries-as-targets | N | 65 | feature | META: third-party Python libraries as pxx targets — classify, then compile | — |
+| feature-opt-o3-register-pressure | O | 85 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 | feature-pascal-corpus-fpc-testsuite | P | 65 | feature | Pascal corpus rung 1 — FPC test-suite subset (conformance) | — |
 | feature-pascal-corpus-generics | P | 65 | feature | rtl-generics (Generics.Collections) — rung 3 of the Pascal OOP corpus | gap-b-typinfo-ptypedata-has-no-ordtype-and-is-just-ptypeinfo |
 | feature-pascal-type-helpers | A | 55 | feature | `record helper for T` / `type helper for T` — type helpers | — |
@@ -54,7 +53,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (286)
+## backlog (283)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -136,10 +135,7 @@ _none_
 | bug-t-a-pin-verifys-reds-carry-no-reasons | T | 40 | bug | A pin verify's reds carry no reasons | — |
 | bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing | T | 45 | bug | 2461 Makefile assertions are a bare `test \"$$(...)\" = \"...\"`, which prints NOTHING when it fails. job_reason() is the log tail by deliberate design, so for those jobs the reason it records is whatever the recipe printed just before — and for the 480 cross-target ones that is two compile summaries with different code sizes, which reads exactly like a codegen divergence. It misled a Track T session for hours. The repo already uses `diff -u` in 362 places; the good pattern exists and is not reached. Fix edits Makefile, which is Track A's file-lane. | — |
 | bug-t-fpc-seed-canary-red-cited-lines-that-cannot-contain-the-identifier | T | 30 | bug | One gate.sh quick run reported the FPC seed canary RED with 'symtab.inc(5934,30) Identifier not found ByRefArgNeedsLvalue' — but line 5934 of that file contains an unrelated loop, and the real call sites are at 6185/6186, AFTER the definition at 6099. Not reproducible: fpc compiled the identical tree rc=0 twice by hand and the next gate.sh run was GREEN. Evidence points at the canary reading a stale/other tree state, the same class the fixedpoint step already defends against; a false RED costs an agent a full investigation. | — |
-| bug-t-the-push-rate-starves-breadth-coverage-entirely | T | 55 | bug | SHAPE 2 SHIPPED AND DID NOTHING (see the 2026-08-19 correction: 9 saved, 0 carried, 100% loss — fixed under bug-t-a-saved-partial-is-evicted-by-the-next-run-of-different-work); this closes on carried_runs leaving zero, not on more code. Zero full-tier runs on HEAD in the 5h13m between 9bfb7fcfac03 (10:31:57Z) and ~15:45Z, while cross-target coverage read as fine because every native verdict was green. RE-MEASURED: the watcher is idle 54% of that window (~2.8h, 8x what a full tier needs) — breadth is not starved by pushes, it is queued behind pin verify, which needs a contiguous 21 minutes, gets idle slices with a median of 299s, and discards 100% on every abort. Breadth ran within minutes of pin verify finally retiring. Fix is resumability plus bounding consecutive idle, NOT reserving a slot. | — |
-| bug-t-track-ts-own-pushes-destroy-track-ts-own-breadth-coverage | T | 45 | bug | NOTEST_PREFIXES is ('devdocs/', 'docs/'), so tools/** is testable — correct, since a testmgr change can change results. The consequence is that Track T is the only lane whose ordinary work systematically destroys its own coverage: any T tooling push aborts an in-flight idle-phase full tier and discards 100% of it. Measured 2026-08-19: one twatch push killed the first breadth run in 5h13m at ~207/2765 jobs. Batching by hand is a habit, not a property. | — |
 | bug-t-twatch-web-lists-a-target-that-cannot-be-built | T | 15 | bug | tools/twatch_web.py lists riscv64 in CROSS_TARGETS, but no compiler backend can produce a riscv64 binary and the test manager never mentions the target. The dashboard therefore carries a column that is structurally empty, and an empty column reads as 'no news' rather than 'impossible'. | — |
-| bug-t-two-devtests-measure-the-box-and-flake-the-fleet-job | T | 45 | bug | Two guards in the tools/*devtest*.py family assert on ambient timing and go red when the box is busy — which on plexus means whenever the watcher runs a tier, i.e. whenever the fleet job runs. bench_timing was FIXED (c194b01e9/415d8e9f2); twatch_bench_quiet_devtest.py is the surviving one, observed red at load 14 and green on immediate rerun. tools-devtest#00 stops at the first failing file, so one flake masks all 50 other guards. | — |
 | bug-the-queue-makes-filing-a-duplicate-the-path-of-least-resistance | A | 70 | bug | The queue makes filing a duplicate the path of least resistance | — |
 | chore-a-delete-the-dead-pascal-lvalue-statement-path | A | 30 | chore | `ParseLValue` and `CompileLValueAddress` in pasparser_lval.inc have no callers anywhere in compiler/** — ~130 lines of pre-AST statement-assignment parsing, including direct machine-code emission, that nothing reaches. | — |
 | chore-a-re-include-bench-timing-in-tools-devtest | A | 30 | chore | One line: `tools-devtest` skips `bench_timing_devtest.py` with an explicit `case ... continue`, added by a1fd5715e because the guard was load-sensitive. It has been fixed (c194b01e9) and is green under load average 14. Deleting the skip re-arms the only guard for bug-t-bench-sub-second-timings-quantized-to-50ms, which has not run in the fleet since the family was wired up. | — |
@@ -261,6 +257,7 @@ _none_
 | feature-opt-arch-level-and-dispatch | O | 25 | feature | What x86-64 feature level does pxx emit for? Referenced as 'if raised' by two existing tickets and never filed; raised by the user 2026-08-15 when FMA came up. MEASURED: our own gate box plexus is a Xeon E5-2620 v2 (Ivy Bridge, 2013) with AVX but NO FMA and no AVX2 — x86-64-v2, not v3. So a v2 bump is safe and FMA would SIGILL on the machine that gates every push. Includes the answer to the 'dispatch defeats inlining' objection: multiversion whole FUNCTIONS, not instructions. | — |
 | feature-opt-bulk-copy-is-byte-at-a-time | O | 65 | feature | The runtime's bulk-copy primitives move ONE BYTE per iteration. Copy() on a 64-element array is ~23x slower than FPC's (2.54s vs 0.11s over 3M copies). A word-at-a-time loop -- ~10 lines, portable, no backend work -- was prototyped and measured at 3.3x of that back. | — |
 | feature-opt-dynarray-grows-in-place | O | 40 | feature | A growing dynamic array leaves its whole geometric series behind as garbage | — |
+| feature-opt-emitasmx64-reparses-fixed-strings | O | 60 | feature | `EmitAsmX64` re-parses the same hardcoded assembly strings on every compile — ~12% of a NilPy compile | — |
 | feature-opt-heap-per-thread-cache | O | 48 | feature | Heap allocator serializes under threads — parallel alloc is 3x SLOWER than serial | — |
 | feature-opt-inline-float-and-record-returning-leaves | O | 45 | feature | The inliner takes only int/ordinal leaves — it rejects any function returning a float or a record. Measured on lib/rtl/math.pas's double-double kernels: hand-inlining the exact same arithmetic took a sin kernel from 7.96 us to 2.11 us, BIT-IDENTICAL, so ~74% of that path's cost was call overhead the inliner already knows how to remove for integers. | — |
 | feature-opt-rtti-emit-on-use | O | 32 | feature | RTTI is emitted unconditionally (every class, even a classless program) — dead weight on ESP32/embedded | — |
@@ -302,7 +299,6 @@ _none_
 | feature-t-nilpy-cpython-differential-fuzzer | T | 45 | feature | NilPy differential fuzzer — generate NilPy programs, diff pxx output against CPython as oracle | — |
 | feature-t-pasmith-rung-selftest | T | 30 | feature | A fuzz rung that has only ever been SILENT is indistinguishable from one that does not work. Proposes a --selftest that proves each rung's fold actually observes its construct, by MUTATING the generated program rather than by rebuilding an old compiler — cheaper, needs no checkout, and applies to rungs that were never written against a specific fix. | — |
 | feature-t-record-host-cpu-features-in-tstate | T | 20 | feature | tstate records host, sha, tier, wall and compiler_sha256 — nothing about the machine. So 'can we emit FMA?' could not be answered from the repo and needed an ssh into plexus. Record CPU model and the x86-64 feature level per host, once, in the host json. | — |
-| feature-t-tier-job-self-compile-differential-across-o-levels | T | 50 | feature | DECIDED 2026-08-19: a Track T tier job that compiles compiler.pas at every -O level and DIFFS the results across levels. Not in the per-fix loop — quick-gating must not slow down. The point is optimizer differential coverage as Track O ramps up, NOT the code-size issue that surfaced it; compiler.pas is the largest, densest program we can run the optimizer over. | — |
 | feature-t-uforth-bench-on-the-watcher-idle-phase | T | 25 | feature | tools/uforth_bench.py is standalone + a make target, so uforth rows only exist when a human types it. Hang it off the watcher's idle bench phase so rows land per-sha automatically — which is also the only way to get the quiet-box baseline the harness has never had, and the instrument for the open slow-creep question. | — |
 | feature-t-uforth-bench-restore-the-elfhash-outlier | T | 15 | feature | blocktest-elfhash SKIPs in the uforth bench: blocktest.fth needs uforth's block-word preamble (FIRST-TEST-BLOCK / LIMIT-TEST-BLOCK / [?IF]) that tester.fr alone does not supply. It is the tracked ~100x-slow outlier, so while it skips the harness has no visibility on the worst case. | — |
 | feature-t-windows-wine-harness | M | 20 | feature | Windows/Wine test bed — scratch-prefix wine runner + mingw-w64 differential oracle, hello-world gate | — |
@@ -606,9 +602,9 @@ _none_
 | decide-x86-64-baseline-for-arch-level-dispatch | U | 40 | decide | What x86-64 baseline does pxx target? The ticket says outright that the baseline row is the user's call, not an engineering one — and the gate box constrains it hard: plexus is Ivy Bridge (AVX, no FMA) = x86-64-v2, so a v3 baseline would SIGILL on the machine that gates every push. Whoever claims the feature otherwise has to guess something the project cannot un-choose. | — |
 | decide-xml-etree-thin-tree-model-or-a-real-xml-library | U | 62 | decide | The last shim row on the corpus is xml.etree.ElementTree (4 files). MEASURED: html5lib uses it as a TREE MODEL, not as an XML library — 3 factories and 10 element members, no parse, no fromstring, no XPath, and html5lib writes its own tostring. So a ~60-line thin shim would serve every corpus caller. The fork is not effort, it is NAMING: may a module called xml.etree.ElementTree ship without the ability to parse XML? Recommendation: yes, thin, with the parser surface absent and loud. | — |
 
-## done (2390)
+## done (2394)
 
-2390 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
+2394 ticket(s) — full table in [`BOARD-done.md`](./BOARD-done.md), generated alongside this file.
 
 ## rejected (40)
 
@@ -657,6 +653,7 @@ _none_
 
 ## Ready (no unmet blocker)
 
+- [p 85] [O] feature-opt-o3-register-pressure [parked — re-claim, do not duplicate]
 - [p 85] [A] perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime
 - [p 75] [N] bug-nilpy-empty-str-and-none-are-the-same-value
 - [p 75] [P] feature-pascal-corpus-expansion
@@ -719,6 +716,7 @@ _none_
 - [p 60] [N] feature-a-declaration-phase
 - [p 60] [N] feature-nilpy-process-exec-binding
 - [p 60] [N] feature-nilpy-tkinter-surface-vs-a-real-application
+- [p 60] [O] feature-opt-emitasmx64-reparses-fixed-strings
 - [p 60] [C] idea-c-realworld-test-targets
 - [p 58] [A] bug-a-nilpy-double-star-in-a-mixed-argument-list
 - [p 58] [P] compat-pascal-class-helpers
@@ -748,7 +746,6 @@ _none_
 - [p 55] [P] bug-p-inherited-ignores-the-parents-default-parameter-values
 - [p 55] [P] bug-p-sizeof-rejects-a-pointer-deref-in-its-operand
 - [p 55] [A] bug-pchar-difference-in-writeln-arg-segfaults
-- [p 55] [T] bug-t-the-push-rate-starves-breadth-coverage-entirely
 - [p 55] [A] chore-a-the-range-checked-fpc-seed-cannot-be-built
 - [p 55] [B] compat-pascal-ioresult-returns-a-negative-errno
 - [p 55] [A] feature-a-build-a-reduced-compiler-by-selecting-frontends-and-targets [parked — re-claim, do not duplicate]
@@ -782,7 +779,6 @@ _none_
 - [p 50] [A] feature-nested-routine-fixed-array-capture
 - [p 50] [A] feature-release-checksums-repro
 - [p 50] [T] feature-t-fpc-probe-needs-a-trunk-oracle
-- [p 50] [T] feature-t-tier-job-self-compile-differential-across-o-levels
 - [p 50] [C] refactor-c-string-literal-decay-belongs-at-the-producer
 - [p 48] [P] bug-a-low-high-of-a-char-indexed-array-answer-the-ordinal
 - [p 48] [O] feature-opt-heap-per-thread-cache
@@ -795,8 +791,6 @@ _none_
 - [p 45] [N] bug-n-object-is-the-one-builtin-type-name-that-is-not-a-value
 - [p 45] [N] bug-n-typeinfo-reads-the-wrong-token-and-switches-on-kind
 - [p 45] [T] bug-t-a-silent-test-assertion-makes-the-harness-report-the-wrong-thing
-- [p 45] [T] bug-t-track-ts-own-pushes-destroy-track-ts-own-breadth-coverage
-- [p 45] [T] bug-t-two-devtests-measure-the-box-and-flake-the-fleet-job
 - [p 45] [T] chore-t-split-lib-test-into-jobs-that-name-what-failed
 - [p 45] [P] compat-pascal-supports-three-arg-out-form
 - [p 45] [P] compat-pascal-uses-sysutils-withdraws-the-variadic-concat
