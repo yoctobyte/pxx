@@ -321,7 +321,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     isLiftedCall: Boolean;
     bitNot: Boolean; notOrdTk: TTypeKind; notConstV: Int64;
     szAi, szFlatLen, szDi, szBrDepth, szNIdx, szBase, szRec, szQUnit: Integer;
-    szNestCi, szScanCi: Integer;   { SizeOf(TOuter.TInner) — the SCOPED nested row }
+    szNestCi, szHops, szI: Integer; szNestName: AnsiString;   { SizeOf(TOuter.TInner) — the SCOPED nested row }
     szScan, szBd, szExprNode: Integer;
     szIsExpr: Boolean;
     szExprTk: TTypeKind;
@@ -3407,38 +3407,31 @@ begin
           strip too: `SizeOf(TOuter.TInner)` on a class-nested type. Without it the parse
           died on the '.' while `var r: TOuter.TInner` already worked — a half-working
           feature is worse than an absent one. Same rule as ParseTypeKind: pxx registers
-          nested types globally, so the qualifier only disambiguates the parse. }
+          nested types globally, so the qualifier only disambiguates the parse.
+
+          The walk is ScanNestedTypeRun's, shared with Default() — it keeps the
+          row the qualifier NAMES rather than dropping the qualifier and looking
+          the bare name up flat. Two records may each declare a `TSub`; the flat
+          lookup answers with whichever registered first, so `SizeOf(TB.TSub)`
+          reported TA's width — silently, and only in SizeOf: `var y: TB.TSub`
+          already resolved through the registry and was right. The scope-blind
+          half of bug-a-duplicate-class-name-check-is-scope-blind. This was an
+          inline copy of that walk until Default() turned out to need a third
+          one; the bare-name strip stays as the fallback for the (common) case
+          where the nested type kept its unqualified registration. }
         szNestCi := -1;
         if (CurTok.Kind = tkIdent) and (FindUClass(name) >= 0) and
            (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) and
            (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkIdent) then
         begin
-          { Walk the NESTED-TYPE registry, keeping the row the qualifier names,
-            rather than dropping the qualifier and re-looking the bare name up
-            flat. Two records may each declare a `TSub`; the flat lookup answers
-            with whichever registered first, so `SizeOf(TB.TSub)` reported TA's
-            width — silently, and only in SizeOf: `var y: TB.TSub` already
-            resolved through the registry and was right. The scope-blind half of
-            bug-a-duplicate-class-name-check-is-scope-blind, one construct on.
-            The bare-name strip stays as the fallback for the (common) case where
-            the nested type kept its unqualified registration. }
-          szScanCi := NestedOwnerCi(name);
-          while (TokPos < TokCount) and (Tokens[TokPos].Kind = tkDot) and
-                (TokPos + 1 < TokCount) and (Tokens[TokPos + 1].Kind = tkIdent) and
-                (FindNestedType(szScanCi, GetTokenStr(TokPos + 1)) >= 0) do
+          szNestCi := ScanNestedTypeRun(name, szNestName, szHops);
+          if szHops = 0 then szHops := 1;   { bare-name strip, one qualifier }
+          for szI := 1 to szHops do
           begin
-            szScanCi := FindNestedType(szScanCi, GetTokenStr(TokPos + 1));
-            szNestCi := szScanCi;
             Next;             { past the owner name — CurTok is now '.' }
             Next;             { past '.'            — CurTok is now the nested name }
-            name := CurTok.SVal;
           end;
-          if szNestCi < 0 then
-          begin
-            Next;               { past the class name — CurTok is now '.' }
-            Next;               { past '.'            — CurTok is now the nested type name }
-            name := CurTok.SVal;
-          end;
+          name := CurTok.SVal;
         end;
         { A builtin type spelled as a KEYWORD token (Double, Char, String, ...)
           carries no SVal, so give `name` the token's own text -- then ONE
