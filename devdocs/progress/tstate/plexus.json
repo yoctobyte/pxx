@@ -1,14 +1,6 @@
 {
  "history": [
   {
-   "date": "2026-08-25T09:25:35Z",
-   "fixed": [],
-   "new_red": [],
-   "sha": "d34ea0c3e6f09c6856fcce23cb4ca070989d15ce",
-   "tier": "native",
-   "verdict": "RED"
-  },
-  {
    "date": "2026-08-25T11:28:53Z",
    "fixed": [],
    "new_red": [
@@ -442,6 +434,15 @@
    "fixed": [],
    "new_red": [],
    "sha": "cd5a3aaf8f5f69cf8c246671905398808d096d2f",
+   "tier": "native",
+   "timed_out": false,
+   "verdict": "GREEN"
+  },
+  {
+   "date": "2026-08-26T06:31:35Z",
+   "fixed": [],
+   "new_red": [],
+   "sha": "61a41c41f8e38a0839ec594c5fffb835f3d4eea1",
    "tier": "native",
    "timed_out": false,
    "verdict": "GREEN"
@@ -993,11 +994,11 @@
   "test-core#129": "full",
   "test-core#157": "full",
   "test-core#160": "full",
-  "test-core#164": "native",
-  "test-core#165": "native",
   "test-core#166": "native",
   "test-core#167": "native",
   "test-core#168": "native",
+  "test-core#169": "native",
+  "test-core#170": "native",
   "test-core#src:compiler/compiler.pas@2": "native",
   "test-core#src:examples/sudoku/sudoku.pas": "native",
   "test-core#src:examples/tk/callbacks.npy": "native",
@@ -1961,6 +1962,7 @@
   "test-core#src:test/test_nilpy_class_attr.npy": "native",
   "test-core#src:test/test_nilpy_class_base_is_an_alias.npy": "native",
   "test-core#src:test/test_nilpy_class_named_after_its_imported_base.npy": "native",
+  "test-core#src:test/test_nilpy_class_named_after_its_py_module_base.npy": "native",
   "test-core#src:test/test_nilpy_configparser.npy": "native",
   "test-core#src:test/test_nilpy_convert.npy": "native",
   "test-core#src:test/test_nilpy_counter.npy": "native",
@@ -1975,6 +1977,7 @@
   "test-core#src:test/test_nilpy_dispatch_result_class.npy": "native",
   "test-core#src:test/test_nilpy_dot_edge_float_literals.npy": "native",
   "test-core#src:test/test_nilpy_dotted_import.npy": "native",
+  "test-core#src:test/test_nilpy_dunder_on_self_reaches_the_override.npy": "native",
   "test-core#src:test/test_nilpy_dynamic_dispatch.npy": "native",
   "test-core#src:test/test_nilpy_environ.npy": "native",
   "test-core#src:test/test_nilpy_fallback_import.npy": "native",
@@ -4099,11 +4102,11 @@
   "test-c-conformance-riscv32#shard5/6": "pass",
   "test-cjson#src:test/cjson/runner.c": "pass",
   "test-core#00": "pass",
-  "test-core#164": "pass",
-  "test-core#165": "pass",
   "test-core#166": "pass",
   "test-core#167": "pass",
   "test-core#168": "pass",
+  "test-core#169": "pass",
+  "test-core#170": "pass",
   "test-core#src:compiler/compiler.pas@2": "pass",
   "test-core#src:examples/sudoku/sudoku.pas": "pass",
   "test-core#src:examples/tk/callbacks.npy": "pass",
@@ -5065,6 +5068,7 @@
   "test-core#src:test/test_nilpy_class_attr.npy": "pass",
   "test-core#src:test/test_nilpy_class_base_is_an_alias.npy": "pass",
   "test-core#src:test/test_nilpy_class_named_after_its_imported_base.npy": "pass",
+  "test-core#src:test/test_nilpy_class_named_after_its_py_module_base.npy": "pass",
   "test-core#src:test/test_nilpy_configparser.npy": "pass",
   "test-core#src:test/test_nilpy_convert.npy": "pass",
   "test-core#src:test/test_nilpy_counter.npy": "pass",
@@ -5079,6 +5083,7 @@
   "test-core#src:test/test_nilpy_dispatch_result_class.npy": "pass",
   "test-core#src:test/test_nilpy_dot_edge_float_literals.npy": "pass",
   "test-core#src:test/test_nilpy_dotted_import.npy": "pass",
+  "test-core#src:test/test_nilpy_dunder_on_self_reaches_the_override.npy": "pass",
   "test-core#src:test/test_nilpy_dynamic_dispatch.npy": "pass",
   "test-core#src:test/test_nilpy_environ.npy": "pass",
   "test-core#src:test/test_nilpy_fallback_import.npy": "pass",
@@ -6661,14 +6666,14 @@
   "tools-devtest#00": "pass"
  },
  "last": {
-  "date": "2026-08-26T06:15:50Z",
+  "date": "2026-08-26T06:31:35Z",
   "deadline": 7200.0,
-  "sha": "cd5a3aaf8f5f69cf8c246671905398808d096d2f",
+  "sha": "61a41c41f8e38a0839ec594c5fffb835f3d4eea1",
   "tier": "native",
   "timed_out": false,
   "unreached": 0,
   "verdict": "GREEN",
-  "wall": 359.7
+  "wall": 366.2
  },
  "last_bench": {
   "conf_rows": 550,
