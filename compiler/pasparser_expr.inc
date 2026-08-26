@@ -337,6 +337,7 @@ var negConstVal: Int64;   { value of a negated CONSTANT — types the AN_NEG nod
     szNestCi, szHops, szI: Integer; szNestName: AnsiString;   { SizeOf(TOuter.TInner) — the SCOPED nested row }
     szScan, szBd, szExprNode: Integer;
     szFldRec: Integer; szFldName: AnsiString;   { SizeOf(<expr>.field) — the OWNER's record and the field name }
+    szLitNeg: Boolean;   { SizeOf(-1) — the sign is its own token and changes the width }
     szIsExpr: Boolean;
     szExprTk: TTypeKind;
     hlBoundV: Int64;
@@ -3315,8 +3316,56 @@ begin
           SizeOf(256) = 2), a real literal as Single (SizeOf(3.5) = 4) and a
           string literal by its length (SizeOf('abc') = 3) -- none of which the
           expression's own type reproduces, so routing them here would answer 8
-          and 8 and 8 silently. They keep the existing error until someone
-          models the rule; feature-p-sizeof-of-an-expression holds the table. }
+          and 8 and 8 silently. The block just below models that rule instead,
+          and the expression path is still the wrong place for a literal. }
+
+        { ---- SizeOf(<literal>) ----
+          A BARE literal, optionally signed, and nothing else: FPC types it by
+          its VALUE, so the answer has nothing to do with what the expression
+          parser would infer. Measured against fpc 3.2.2, and the whole table is
+          pinned in test/test_sizeof_of_a_literal.pas:
+
+            1 127 128 255 -> 1     256 32767 32768 65535 -> 2
+            65536 100000  -> 4     5000000000            -> 8
+            -1 -> 1   -129 -> 2    3.5 -> 4 (Single, NOT Double)
+            'a' '' -> 1   'abc' -> 3 (its LENGTH -- an array[1..3] of Char)
+            nil -> pointer width   True/False -> 1
+
+          Two of those look harmless to get wrong and are wrong everywhere:
+          SizeOf(3.5) is 4 because an untyped real constant is Single-typed for
+          this purpose even though it promotes to Double in arithmetic, and
+          SizeOf('abc') is 3 because a string literal is its own array of Char,
+          not a handle.
+
+          A SET literal is left refused. fpc's answer is inscrutable — `[1,2]`
+          and `[1,200]` are both 2 — and pxx bakes 32-byte masks, so any number
+          chosen here would be a guess reaching GetMem.
+          feature-p-sizeof-of-a-literal }
+        szScan := TokPos - 1;
+        szLitNeg := (szScan >= 0) and (szScan + 1 < TokCount) and
+                    (Tokens[szScan].Kind = tkMinus) and
+                    (Tokens[szScan + 1].Kind in [tkInteger, tkFloat]);
+        if (szScan >= 0) and (szScan + 1 < TokCount) and
+           (Tokens[szScan].Kind in [tkPlus, tkMinus]) and
+           (Tokens[szScan + 1].Kind in [tkInteger, tkFloat]) then
+          Inc(szScan);
+        if (szScan >= 0) and (szScan + 1 < TokCount) and
+           (Tokens[szScan + 1].Kind = tkRParen) and
+           (Tokens[szScan].Kind in [tkInteger, tkFloat, tkString, tkNil,
+                                    tkTrue, tkFalse]) then
+        begin
+          if szScan > TokPos - 1 then Next;   { the sign }
+          prevTok := SizeOfLiteralToken(TokPos - 1, szLitNeg);
+          Next;                               { the literal }
+          Expect(tkRParen, ')');
+          node := AllocNode(AN_INT_LIT);
+          ASTIVal[node] := prevTok;
+          ASTTk[node] := Ord(tyInteger);
+          CurASTNode := node;
+          LastExprTk := tyInteger;
+          Exit;
+        end;
+
         szIsExpr := False;
         szScan := TokPos - 1;
         if (szScan >= 0) and (szScan < TokCount) then

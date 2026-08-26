@@ -658,6 +658,53 @@ end;
 
 { ONE argument slot. Safe to call unconditionally — a no-op unless the argument
   really is a character constant and the parameter really wants the string. }
+{ `SizeOf(<literal>)` — the width fpc gives a literal, which is decided by its
+  VALUE and not by the type the expression parser would infer. tokIdx names the
+  literal's token; negated says a `-` preceded it, which changes the answer
+  (`-1` is a ShortInt at 1 byte, `-129` a SmallInt at 2).
+
+  Every number here is measured against fpc 3.2.2; the table lives in
+  test/test_sizeof_of_a_literal.pas, which is the spec. Two rows are traps:
+  a real literal is SINGLE-typed for this purpose (4, not 8) even though it
+  promotes to Double in arithmetic, and a string literal is its own
+  `array[1..N] of Char`, so `SizeOf('abc')` is 3 rather than a handle's width.
+  Both look harmless to get wrong and would be wrong everywhere.
+
+  feature-p-sizeof-of-a-literal }
+function SizeOfLiteralToken(tokIdx: Integer; negated: Boolean): Integer;
+var v: Int64;
+begin
+  SizeOfLiteralToken := TARGET_PTR_SIZE;
+  if (tokIdx < 0) or (tokIdx >= TokCount) then Exit;
+  if Tokens[tokIdx].Kind = tkFloat then
+  begin
+    SizeOfLiteralToken := 4;   { Single }
+    Exit;
+  end;
+  if Tokens[tokIdx].Kind = tkString then
+  begin
+    { the LENGTH; a zero-length literal is one byte, as fpc has it }
+    if Tokens[tokIdx].SLen <= 1 then SizeOfLiteralToken := 1
+    else SizeOfLiteralToken := Tokens[tokIdx].SLen;
+    Exit;
+  end;
+  if (Tokens[tokIdx].Kind = tkTrue) or (Tokens[tokIdx].Kind = tkFalse) then
+  begin
+    SizeOfLiteralToken := 1;
+    Exit;
+  end;
+  if Tokens[tokIdx].Kind = tkNil then Exit;   { pointer width }
+  if Tokens[tokIdx].Kind <> tkInteger then Exit;
+  v := Tokens[tokIdx].IVal;
+  if negated then v := -v;
+  { the smallest type that HOLDS it, signed or unsigned — which is why 128 and
+    255 are one byte (Byte) and -129 is two (SmallInt) }
+  if (v >= -128) and (v <= 255) then SizeOfLiteralToken := 1
+  else if (v >= -32768) and (v <= 65535) then SizeOfLiteralToken := 2
+  else if (v >= -2147483648) and (v <= 4294967295) then SizeOfLiteralToken := 4
+  else SizeOfLiteralToken := 8;
+end;
+
 { Is High(...)/Low(...)'s operand an EXPRESSION rather than a name?
 
   CurTok sits just past the `(`. A NAME-shaped operand is `ident` optionally

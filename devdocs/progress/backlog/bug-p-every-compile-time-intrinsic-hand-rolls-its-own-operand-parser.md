@@ -66,6 +66,42 @@ A consolidation that flattens either of those is a regression that compiles.
 `make compiler/pascal26` + every row of both tables diffed against fpc 3.2.2 +
 `tools/gate.sh quick`.
 
+## Progress
+
+Three of the four rows have landed. Each was gated against fpc 3.2.2 and each
+left its table pinned as a test, so the consolidation this ticket asks for now
+has a spec to move against rather than a description of one.
+
+- **`SizeOf` through a deref** — done. The walk gained a `^` arm, and measuring
+  it turned up a second defect nobody had filed: `SizeOf(p^)` over a
+  pointer-to-RECORD was refused outright while the same spelling over a
+  pointer-to-ARRAY answered. Pinned in `test/test_sizeof_through_a_deref.pas`.
+- **`High`/`Low` non-identifier operands** — done. Both arms now dispatch
+  through one predicate (`HighLowOperandIsExpr` in `pasparser_name.inc`)
+  instead of two copies of `if CurTok.Kind <> tkIdent then Error`. That is the
+  first piece of shared operand parsing in the family. Two shortstring-
+  expression rows diverge from fpc deliberately; the measurement and the reason
+  are in `devdocs/dev/pascal-dialect-divergences.md`. Pinned in
+  `test/test_high_low_operand_shapes.pas`.
+- **`SizeOf(<literal>)`** — done, and done the way this ticket demanded: NOT by
+  routing literals through the expression path, but through
+  `SizeOfLiteralToken`, which types the literal by its VALUE off the token
+  stream before any expression parsing happens. All 21 measured rows match fpc.
+  A SET literal stays refused on purpose — fpc's own answer is inscrutable
+  (`[1,2]` and `[1,200]` are both 2) and pxx bakes 32-byte masks, so any number
+  chosen would be a guess that reaches `GetMem`. Pinned in
+  `test/test_sizeof_of_a_literal.pas`.
+
+**Remaining: the char/Boolean/enum-indexed `Low`/`High` result type.** The
+values are right and the type is wrong (measured: pxx `97 101` / `0 1` / `0 2`
+where fpc says `a e` / `FALSE TRUE` / `eA eC`). The fix needs the index type
+carried on the array — `ArrTypeIdxTk`/`ArrTypeIdxEnumId` plus
+`SymArrIdxTk`/`SymArrIdxEnumId`, recorded in `ParseArrayDimBounds` — and read
+at **both** fold sites: `TryArrayTypeBound` in `pasparser_lval.inc` and the
+variable arms in `pasparser_expr.inc`. Those two must move together or
+`Low(TC)` and `Low(c)` disagree, which is the same two-mechanisms smell this
+umbrella exists to remove.
+
 ---
 
 # The folded tickets, verbatim

@@ -8016,6 +8016,17 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_high_low_operand_shapes.pas $(TESTTMP)/test_hlo26
 	test "$$($(TESTTMP)/test_hlo26)" = "$$(cat test/test_high_low_operand_shapes.expected)"
+	# SizeOf of a BARE literal, which fpc types by VALUE and not by inference.
+	# Every one of these was `SizeOf: expected type name` -- the arm only ever
+	# accepted a type NAME or an lvalue. The rows that make this worth pinning:
+	# 128 and 255 are ONE byte because they fit Byte, while -129 needs two; a
+	# real literal is SINGLE here (4) though it promotes to Double in
+	# arithmetic; and a string literal is its own array[1..N] of Char, so the
+	# answer is the LENGTH -- 11 for 'hello world', not a handle's width. A SET
+	# literal stays refused on purpose (see the parser comment).
+	# .expected IS fpc 3.2.2's own output on this source.
+	./$(COMPILER) test/test_sizeof_of_a_literal.pas $(TESTTMP)/test_sol26
+	test "$$($(TESTTMP)/test_sol26)" = "$$(cat test/test_sizeof_of_a_literal.expected)"
 	# ...and the guard: a genuine `var` parameter must still REFUSE the same
 	# argument. This is what stops the fix from being ungated -- tried, and it
 	# let a call RESULT bind to a var parameter and COMPILE, because the method
