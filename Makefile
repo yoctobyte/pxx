@@ -8189,6 +8189,15 @@ test-core: $(COMPILER)
 	# .expected IS fpc 3.2.2's own output on this source.
 	./$(COMPILER) test/test_low_high_index_type.pas $(TESTTMP)/test_lhit26
 	test "$$($(TESTTMP)/test_lhit26)" = "$$(cat test/test_low_high_index_type.expected)"
+	# The constant evaluator must not erase an ordinal's TYPE. ConstEval carries
+	# every ordinal as a bare Int64 — the simplification that makes Ord/Succ/Pred
+	# free — so the declaration site used to guess the kind from the FIRST TOKEN:
+	# right for a bare literal, wrong for every folded form (`const X = eB`
+	# printed 1, `const W = Low(TC)` printed 97). The Ord rows guard the other
+	# side: Ord DISCARDS the type and must not inherit its operand's. fpc 3.2.2
+	# (-Mobjfpc -O1) oracle.
+	./$(COMPILER) test/test_const_eval_ordinal_type.pas $(TESTTMP)/test_ceord26
+	test "$$($(TESTTMP)/test_ceord26)" = "$$(cat test/test_const_eval_ordinal_type.expected)"
 	# An array argument and a scalar argument must each reach their own overload,
 	# whichever order the two are declared in. pxx presents an array's ELEMENT
 	# kind as its type kind, so `array of AnsiString` and `AnsiString` (and

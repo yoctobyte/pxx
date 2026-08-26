@@ -6332,7 +6332,15 @@ function TryConstHighLowValue(wantHigh: Boolean; var v: Int64): Boolean;
 { Value twin of TryFoldHighLowType for the constant evaluator: CurTok sits on
   the (candidate) type name inside High(...)/Low(...); on success the bound is
   in v and the type name is consumed (bug-pascal-high-low-in-const-expr —
-  ZenGL's `array[0..High(LongWord) shr 1 - 1]`). }
+  ZenGL's `array[0..High(LongWord) shr 1 - 1]`).
+
+  Each arm also publishes WHICH ordinal the bound is, through the same
+  CEOrdTk/CEEnumId channel ConstEvalFactor resets before calling here. Its
+  expression twin TryFoldHighLowType stamps ASTTk/ASTEnumId on the node it
+  builds; this one had the answer in hand at every arm and threw it away, so
+  `const Z = Low(TE)` declared tyInteger and printed 0 instead of eA, and
+  `const W = Low(TC)` printed 97 instead of 'a'.
+  bug-p-the-constant-evaluator-erases-an-ordinals-type }
 var btk: TTypeKind; etid, aliasIdx, eLo, eHi: Integer; nm: AnsiString;
     tabIdxTk, tabIdxEnumId: Integer;   { TryArrayTypeBound's index-type pair }
 begin
@@ -6342,6 +6350,7 @@ begin
   begin
     btk := ParseTypeKind;   { consumes the type token, disambiguating byte/word/etc }
     Result := OrdinalTypeBound(btk, wantHigh, v);
+    if Result and ((btk = tyBoolean) or (btk = tyChar)) then CEOrdTk := btk;
     Exit;
   end;
   if CurTok.Kind <> tkIdent then Exit;
@@ -6362,6 +6371,8 @@ begin
       if AliasIsSub[aliasIdx] then
       begin
         if wantHigh then v := AliasSubHi[aliasIdx] else v := AliasSubLo[aliasIdx];
+        btk := IntToTypeKind(AliasTk[aliasIdx]);
+        if (btk = tyBoolean) or (btk = tyChar) then CEOrdTk := btk;
         Next;
         Result := True; Exit;
       end;
@@ -6370,6 +6381,7 @@ begin
   end;
   if (btk <> tyUnknown) and OrdinalTypeBound(btk, wantHigh, v) then
   begin
+    if (btk = tyBoolean) or (btk = tyChar) then CEOrdTk := btk;
     Next;
     Result := True; Exit;
   end;
@@ -6378,14 +6390,21 @@ begin
   begin
     EnumTypeOrdRange(etid, eLo, eHi);
     if wantHigh then v := eHi else v := eLo;
+    CEEnumId := etid;
     Next;
     Result := True; Exit;
   end;
 
-  { a CONST context has nowhere to put a type, so the pair is discarded here
-    on purpose -- `const N = High(TC)` is a number }
+  { An ARRAY type's bound is a value of its INDEX type: `Low(TC)` where
+    `TC = array['a'..'e'] of Integer` is 'a', not 97. TryArrayTypeBound has
+    always handed the index-type pair back, and this caller used to discard it
+    with a comment saying a const context has nowhere to put a type -- which was
+    true only because the channel did not exist yet. }
   if TryArrayTypeBound(nm, wantHigh, v, tabIdxTk, tabIdxEnumId) then
   begin
+    if (IntToTypeKind(tabIdxTk) = tyBoolean) or (IntToTypeKind(tabIdxTk) = tyChar) then
+      CEOrdTk := IntToTypeKind(tabIdxTk);
+    if tabIdxEnumId >= 0 then CEEnumId := tabIdxEnumId;
     Next;
     Result := True; Exit;
   end;

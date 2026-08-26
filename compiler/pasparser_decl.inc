@@ -1961,6 +1961,7 @@ procedure ParseConstSection(clsCi, clsVis: Integer);
 var name: AnsiString; v: Int64;
     cTk, cElemTk: TTypeKind; cLo, cHi, cIdx, cElem, cClassIdx: Integer;
     cEnumId: Integer;   { typed const of an enum type: its enum index, else -1 }
+    cOrdIdx: Integer;   { the sym just added for a folded ENUM const, to stamp SymEnumId on }
     isLocalConst: Boolean;
     constIsStatic: Boolean;   { routine-local typed const -> static BSS storage }
     cRec, fNameOff, fNameLen: Integer; fName: AnsiString; fTk: TTypeKind;
@@ -2683,15 +2684,32 @@ begin
       else
       begin
         v := ConstEval;
-        if CEIsBool then
+        if CEOrdTk = tyBoolean then
           { A folded BOOLEAN expression -- `const F = 1 > 0`,
             `const G = (a > b) and (c < d)`, `const H = not F`. ConstEval
-            collapses every ordinal to an Int64, so without CEIsBool the const
-            is declared tyInteger and prints 1 instead of TRUE, boxes as
-            vtInteger in `array of const`, and does not match a Boolean
+            collapses every ordinal to an Int64, so without the CEOrdTk channel
+            the const is declared tyInteger and prints 1 instead of TRUE, boxes
+            as vtInteger in `array of const`, and does not match a Boolean
             parameter. The bare True/False arm above already had this; a folded
             EXPRESSION did not, which its own comment noted. }
           AddConst(name, tyBoolean, v)
+        else if CEOrdTk = tyChar then
+          { A folded CHAR expression -- `const W = Low(TC)` over
+            `TC = array['a'..'e'] of ...`, `const C = Chr(65)`, `const D = C`.
+            The one-character LITERAL arm far above already declared tyChar at
+            its own site, which is what made this look narrower than it is:
+            a char survived only when it was written as a literal. }
+          AddConst(name, tyChar, v)
+        else if CEEnumId >= 0 then
+        begin
+          { A folded ENUM expression -- `const X = eB`, `const Z = Low(TE)`,
+            `const E = Succ(eA)`. An enum is not a TTypeKind here: an enum
+            symbol is tyInteger carrying SymEnumId, the same shape
+            ParseVarDecl produces for `var e: TE`, so WriteLn resolves the
+            member name from the id. }
+          cOrdIdx := AddConst(name, tyInteger, v);
+          SymEnumId[cOrdIdx] := CEEnumId;
+        end
         else
         { Widen to Int64 when the value does not fit a 32-bit Integer. The value
           itself always survived (ConstVal is an Int64); it was the declared TYPE

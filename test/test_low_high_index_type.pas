@@ -22,12 +22,20 @@ var
   c: TC; b: TB; e: TEA; i: TI; m: TM;
   ch: Char; bo: Boolean; en: TE; n: Integer;
   anon: array['p'..'t'] of Integer;
-{ NOT pinned here: `const CLO = Low(TC); WriteLn(CLO)` still prints 97. That is
-  not this fix -- pxx's constant evaluator represents every ordinal as a bare
-  Int64 by design, so `const X = eB` already prints 1 rather than eB, with no
-  Low/High involved. Filed separately as
-  bug-p-the-constant-evaluator-erases-an-ordinals-type. }
+{ These two were held out when this test was written: `const CLO = Low(TC)`
+  printed 97, because the constant evaluator represents every ordinal as a bare
+  Int64 and the declaration site guessed the kind from the FIRST TOKEN. That was
+  a separate defect with the same visible shape, fixed under
+  bug-p-the-constant-evaluator-erases-an-ordinals-type, and they belong here now:
+  the const path and the expression path must agree about what Low(TC) IS. }
+const
+  CLO = Low(TC);
+  CHI = High(TC);
+  CELO = Low(TEA);
+  CEHI = High(TEA);
 begin
+  WriteLn(CLO, ' ', CHI);
+  WriteLn(CELO, ' ', CEHI);
   { char index, through the variable and through the type name -- these two
     must agree, which is the reason they were both wrong before }
   WriteLn(Low(c), ' ', High(c));
