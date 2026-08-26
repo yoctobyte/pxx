@@ -8,10 +8,11 @@ lives in git, not in a timestamp._
 
 _none_
 
-## working (1)
+## working (2)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
+| bug-n-hasattr-through-an-untyped-parameter-is-always-false | N | 80 | bug | `hasattr(x, name)` returns False for EVERYTHING when x is a parameter with no static type — `hasattr(a_dict, 'keys')` and `hasattr(a_list, 'append')` are both False. Silently wrong, never an error, and it is how CPython code dispatches on duck type. | — |
 | feature-opt-o3-register-pressure | O | 85 | feature | -O3 register-pressure tier: operand scheduler + liveness-scaffold register allocator | — |
 
 ## unfinished (23)
@@ -54,7 +55,7 @@ _none_
 | feature-random-library | B | 45 | feature | Random library — HW/OS/software tiered RNG (cross-target capability test) | feature-a-rdrand-cpuid-compiler-builtins |
 | regression-cascade-4e27dc2be114 | P | 70 | regression | TRIAGED. Not a broken build: the cause is e1109d7bc (a bare NilPy import resolves to Python), and 4e27dc2be1 named in the header is docs-only. Two halves. Six test/** fixtures importing Pascal units were rewritten to the quoted spelling and now pass their exact Makefile assertions. The six examples/tk/*.npy are NOT a test bug -- lib/pcl/tkinter.pas is a deliberate Python-module facade missing from the curated list; blocked on the Track A ticket that adds it. | bug-n-tkinter-is-missing-from-the-python-serving-unit-list |
 
-## backlog (283)
+## backlog (282)
 
 | Ticket | Track | Prio | Type | Summary | Blocked-by |
 | --- | --- | --- | --- | --- | --- |
@@ -93,7 +94,6 @@ _none_
 | bug-n-augmented-true-division-does-not-widen-an-annotated-int-parameter | N | 62 | bug | `def f(x: int): x /= 2; print(x)` prints 4612811918334230528 — the double's bit pattern stored in the Int64 parameter slot. PyNoteLocalType DOES note the float (PXXDBG=n.locals shows tk=19), but a PARAMETER's symbol keeps its declared type, so the note is dropped. No return is involved: the plain print is already wrong. | — |
 | bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program | N | 78 | bug | `class X(mod.X)` — a class whose qualified base shares its name — is refused with `class X cannot inherit from itself` when written in the MAIN PROGRAM. The identical code in a pulled `.py` module compiles and dispatches correctly, and renaming either class makes the program case work too, so the variable is the name collision on the program path. This is how all ~100 of CPython's `encodings/*.py` and html5lib's filters are written. | — |
 | bug-n-exec-ignores-a-caller-supplied-builtins-mapping | N | 20 | bug | `exec(src, {\"__builtins__\": {}})` — the restricted-exec idiom — raises NameError in CPython and silently resolves builtins anyway in pxx. The caller's explicit instruction to resolve names against THIS mapping is discarded, so working CPython code takes a different path. Upward-compatibility defect, split out of the cosmetic decide-nilpy-exec-injects-a-builtins-key. | — |
-| bug-n-hasattr-through-an-untyped-parameter-is-always-false | N | 80 | bug | `hasattr(x, name)` returns False for EVERYTHING when x is a parameter with no static type — `hasattr(a_dict, 'keys')` and `hasattr(a_list, 'append')` are both False. Silently wrong, never an error, and it is how CPython code dispatches on duck type. | — |
 | bug-n-importing-both-f-and-F-from-one-module-loses-the-class | N | 68 | bug | Importing a lowercase function and an uppercase class of the same letter from one module breaks the class: `from M import f` plus `from M import F` gives `undefined variable (VAL)` on `F.VAL`, in EITHER order, while importing F alone works. Pre-existing (fails on pinned v351). CPython keeps them apart because it is case-sensitive; the flat namespace here folds case. | — |
 | bug-n-inline-cast-deref-loses-a-pointer-fields-pointee | N | 55 | bug | compiler/pyparser.inc:44098 carries a byte-identical copy of the alias-cast postfix loop just fixed on the Pascal side: its `^` arm answers the pointee from the ORIGINAL cast's alias every time, so the second `^` in a `PRec(x)^.fld^` chain gets the type the CAST points at instead of the type the FIELD points at. The deref happens, only the tag is wrong, so the value is plausible and silently wrong. | — |
 | bug-n-isinstance-does-not-accept-a-qualified-class-name | N | 65 | bug | `isinstance(x, mod.Class)` is a compile error — `unknown type in isinstance: cabc` — so any code that imports a module and tests against one of its classes must first rebind the class to a bare name. | — |
@@ -655,7 +655,6 @@ _none_
 ## Ready (no unmet blocker)
 
 - [p 85] [A] perf-a-every-npy-compile-still-rebuilds-the-whole-nilpy-runtime
-- [p 80] [N] bug-n-hasattr-through-an-untyped-parameter-is-always-false
 - [p 78] [N] bug-n-a-mixin-cannot-iterate-self-and-an-abstract-iter-breaks-its-overrides
 - [p 78] [N] bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
 - [p 78] [N] bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program

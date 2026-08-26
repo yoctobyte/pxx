@@ -4,6 +4,8 @@ prio: 80
 type: bug
 blocked-by: []
 summary: "`hasattr(x, name)` returns False for EVERYTHING when x is a parameter with no static type — `hasattr(a_dict, 'keys')` and `hasattr(a_list, 'append')` are both False. Silently wrong, never an error, and it is how CPython code dispatches on duck type."
+status: working
+owner: agent-a34da8ba
 ---
 
 # `hasattr` through an untyped parameter is always False
