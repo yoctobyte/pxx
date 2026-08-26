@@ -234,6 +234,42 @@ have given the wrong answer three of those four times.
 
 ---
 
+## A number moving in the direction you hoped is not a check
+
+Track T narrowed a blame range from 137 commits to 2, ran it against the live
+regression, saw the reduction, and read that as confirmation. It was evidence of
+the bug. The cut had been derived from "a pin-built job builds with the pinned
+binary, so only pin moves can change its verdict" -- but `make pin` freezes only
+`compiler/builtin/**` and **deliberately leaves `lib/rtl` and `lib/pcl` live**
+(the Makefile says so: Track B expects its lane editable), and the job compiles
+from the live `test/` tree. A pin-built job is blind to `compiler/**`, not to
+everything except the pin. Those 137 commits held **2 `lib/` and 34 `test/`**
+commits, every one a genuine candidate, and the cut discarded all of them. The
+corrected number is **137 -> 37**.
+
+Two lessons, and the second is the transferable one.
+
+**Too narrow is the direction that costs you.** A too-wide range costs bisect
+steps; a too-narrow one can exclude the culprit, and then the bisect terminates
+cleanly, prints a sha, and is indistinguishable from a correct answer. So when a
+range shrinks, the question is never "by how much" but "what did it drop, and
+could any of it have caused this?" **A commit whose file list cannot be read is
+KEPT.** Never narrow blindly.
+
+**The measurement confirmed what it was pointed at, which was the wrong
+question.** It answered *did the range shrink* when the question was *did it drop
+anything causal*. This is the sharpest instance in this file of a check that
+runs, passes, and asserts nothing about the thing at issue -- and it is more
+dangerous than an absent check, because it discharges the urge to look. A result
+that agrees with your hypothesis is the moment to ask what else would have
+produced that same result.
+
+The catch, both times it has happened: **writing the assertion forced an
+enumeration where the reasoning had been gesturing.** Asking "what must a
+pin-built job be able to see?" as a guard, rather than as a sentence, put `lib/`
+in the list immediately. The guard has now caught two defects the reasoning
+missed, both by demanding names instead of a wave.
+
 ## Assert the INVARIANT, not the current numbers -- and expect it to catch you
 
 Two things happened within an hour on 2026-08-26 that belong together.

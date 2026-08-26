@@ -143,9 +143,29 @@ stale_binary_hint() {
 pinned_rtl_canary() {
   local pin=stable_linux_amd64/default/pinned
   local src=test/test_uses_sysutils.pas
+  local bin="$LOGDIR/pinned-rtl-canary.bin"
   [ -x "$pin" ] || { echo "gate: (no pinned binary at $pin)"; return 0; }
   [ -f "$src" ] || { echo "gate: (canary fixture $src is gone)"; return 0; }
-  "./$pin" "$src" "$LOGDIR/pinned-rtl-canary.bin"
+  "./$pin" "$src" "$bin" || {
+    echo "^^ the PINNED binary cannot COMPILE the tree's lib/rtl."
+    echo "   An 'undefined variable' naming a lib/rtl unit means a commit added"
+    echo "   a builtin and used it from lib/rtl without a pin: coherent, self-"
+    echo "   hosts, and breaks every \$(PXX_STABLE) build until someone pins."
+    echo "   The change is usually RIGHT and the remedy is a pin, not a revert."
+    return 1
+  }
+  # ...and then RUN it. Near-zero, and it is a different question: the compile
+  # answers "does the frozen builtin still satisfy lib/rtl's references", the
+  # run answers "does the result work". A pinned RTL that compiles and then
+  # dies is just as broken for Track B, and nothing else in the dev loop asks.
+  # Reported apart from the compile so triage stays sharp -- a failure here is
+  # NOT the frozen-builtin seam.
+  "$bin" >/dev/null 2>&1 || {
+    echo "^^ the pinned binary COMPILED lib/rtl but the result did not run."
+    echo "   That is not the frozen-builtin seam; it is an ordinary runtime"
+    echo "   fault in the pinned RTL. Same impact on Track B, different owner."
+    return 1
+  }
 }
 
 echo "gate: mode=$MODE  logs=$LOGDIR"

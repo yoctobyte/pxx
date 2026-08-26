@@ -46,7 +46,33 @@ def t_the_gate_still_has_the_canary():
         src = f.read()
     assert "pinned_rtl_canary" in src, "gate.sh lost the canary function"
     assert "pinned builds live lib/rtl" in src, "gate.sh lost the canary step"
-    return "gate.sh defines and invokes the canary"
+    # Two questions, and the second is the one that would be dropped as
+    # redundant: the compile asks whether the frozen builtin still satisfies
+    # lib/rtl's references, the run asks whether the result works. A pinned RTL
+    # that compiles and then dies is just as broken for Track B.
+    fn = src.split("pinned_rtl_canary() {", 1)[1].split("\n}", 1)[0]
+    assert '"$bin"' in fn, (
+        "the canary no longer RUNS the program it built -- it answers only "
+        "half the question feature-t-gate-quick-should-smoke-the-pinned-"
+        "compiler asked")
+    return "gate.sh defines the canary, compiles AND runs"
+
+
+def t_make_pin_verifies_the_binary_it_just_blessed():
+    """The other end of the same seam. gate.sh catches the commit that breaks
+    $(PXX_STABLE); this catches the PIN that fails to fix it -- taken while
+    holding the repo-wide lock, which is the expensive moment to be wrong."""
+    with open(os.path.join(REPO, "Makefile")) as f:
+        mk = f.read()
+    pin = mk.split("\npin:", 1)[1].split("\n\n", 1)[0]
+    assert "PIN VERIFY FAILED" in pin, (
+        "make pin no longer verifies that the binary it just blessed can "
+        "build lib/rtl")
+    assert "exit 1" in pin, (
+        "the pin verification must FAIL the target -- the entire cost of this "
+        "failure is that nobody looks, so a warning that scrolls past is the "
+        "same as no check")
+    return "make pin verifies the new pin against lib/rtl and exits 1"
 
 
 def t_the_fixture_exists_so_the_skip_is_not_permanent():
@@ -126,6 +152,7 @@ def t_the_canary_is_red_when_live_rtl_outruns_the_frozen_builtin():
 def main():
     rc = 0
     for fn in (t_the_gate_still_has_the_canary,
+               t_make_pin_verifies_the_binary_it_just_blessed,
                t_the_fixture_exists_so_the_skip_is_not_permanent,
                t_the_canary_is_green_on_a_sound_tree,
                t_the_canary_is_red_when_live_rtl_outruns_the_frozen_builtin):

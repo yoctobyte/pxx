@@ -66,6 +66,31 @@ Standing gate for everyone: `make compiler/pascal26` + the repro +
 
 ---
 
+## `make pin` can now FAIL, and the pin has already moved when it does
+
+Since `926b5819a` the pin recipe verifies itself after the freeze: the
+just-blessed binary compiles `test/test_uses_sysutils.pas`, and on failure prints
+`PIN VERIFY FAILED`, the real compiler error, and exits 1. It is the other end of
+the `gate.sh` canary above -- the gate catches the commit that breaks
+`$(PXX_STABLE)`, this catches a pin that fails to FIX it.
+
+- **The pin has already moved.** It cannot be checked earlier: before the freeze
+  the frozen set is still the previous pin, so an earlier answer would describe a
+  binary nobody is about to commit. The undo is **`make revert`**, which moves
+  `pinned` back. Do that first, before diagnosing.
+- **It exits 1 rather than warning, and that is the coordinator standing
+  decision** (2026-08-26). The entire cost of this failure class is that nobody
+  looks, so a warning that scrolls past is the same as no check. A pin blocks
+  every other lane while it runs; it is the one operation that should have to be
+  actively kept rather than passively accepted.
+- **It fires only on the seam**: `undefined variable` naming a `lib/rtl` unit, so
+  `lib/rtl` references a builtin `compiler/builtin/**` does not define. Fix the
+  mismatch upstream, then re-pin. Anything else it prints is a different bug
+  through the same door.
+
+Because it exits 1, a `set -e` pin wrapper aborts before its own success line --
+which is right, but means the wrapper must say what happened. Ours does.
+
 ## When `pinned builds live lib/rtl` fails, that is a PIN request addressed to you
 
 `gate.sh` runs a ~1s step in every mode (since `1cc54252e`): compile a

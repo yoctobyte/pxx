@@ -2529,6 +2529,44 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
             # had at this sha — kept ONLY as the bisect fallback for older
             # commits, never as identity (see job_key).
             jrng, jgood = range_for(name)
+            pin_axis = False
+            if pinmap.get(name) and jrng and name not in first_seen:
+                # WRONG AXIS, not merely a wide range. This job builds with
+                # $(PXX_STABLE), so it is blind to every commit that does not
+                # move the pin: its compiler is the pinned binary, and the only
+                # events that can change its verdict are pin transitions.
+                # Publishing a commit range for it prints a lead that cannot
+                # exist -- observed at 137 commits, anchored on a tstate
+                # publish commit, i.e. naming a commit that changes nothing at
+                # all in the one place a person looks for a lead.
+                #
+                # pin_immune() already declines the BISECT; this is the
+                # publication half, which knew none of it.
+                #
+                # The axis is expressed in the existing type rather than a new
+                # one: a list of the commits in range that MOVED THE PIN. Those
+                # are exactly the events the job can observe, they are still
+                # commits so bisect_step needs no teaching, and pin.log commits
+                # touch stable_*/** so testable_only() keeps them.
+                pin_axis = True
+                obs = pin_observable(clone, jrng)
+                if len(obs) != len(jrng):
+                    print("twatch: %s builds with the PIN — %d of %d commit(s) "
+                          "in range change only compiler/tools/docs, which it "
+                          "cannot observe; range cut to %d"
+                          % (name, len(jrng) - len(obs), len(jrng), len(obs)),
+                          flush=True)
+                jrng = obs
+                if not jrng:
+                    # A real verdict, and one the system could not previously
+                    # express: every red on a pin-built job implicitly asserted
+                    # "something in the compiler changed", which for an interval
+                    # with no pin transition is simply false.
+                    print("twatch: %s — NOTHING it can observe changed between "
+                          "%s and %s (no pin move, no lib/ or test/ commit), so "
+                          "the cause is in the box or the job's own inputs, not "
+                          "in the commits"
+                          % (name, (jgood or "?")[:12], sha[:12]), flush=True)
             if name in first_seen:
                 # No earlier passing sha exists, so no interval can contain the
                 # cause. An EMPTY range is the honest answer and the machinery
@@ -2553,6 +2591,7 @@ def test_sha(clone, host, st, sha, tier, full=True, abort_check=None):
                          "good": jgood, "range": jrng, "opened": utcnow(),
                          "status": statmap.get(name, "fail"),
                          "first_seen": name in first_seen,
+                         "pin_axis": pin_axis,
                          "pin_built": pinmap.get(name, False)})
     st["open_regressions"] = regs
 
@@ -2886,6 +2925,37 @@ def pin_immune(clone, reg):
     return all(q.startswith(PIN_IMMUNE_PREFIXES) for q in paths)
 
 
+def pin_observable(clone, shas):
+    """The commits in `shas` a PIN-BUILT job can actually observe.
+
+    `make pin` freezes compiler/builtin/** next to the pinned binary, so a job
+    built with $(PXX_STABLE) cannot see a compiler/** commit -- but it very
+    much CAN see lib/** and test/**, which the pin deliberately leaves live
+    ("track B's own editable lane, which B expects live"). So the axis is NOT
+    "pin moves only": that drops every genuinely causal lib/ and test/ commit,
+    and a too-narrow range EXCLUDES the culprit, which last_covering_sha's own
+    docstring calls the failure that matters. First cut of this got that wrong
+    -- 137 commits down to 2 pin moves, discarding 36 candidates the job builds
+    from directly.
+
+    PIN_IMMUNE_PREFIXES is already exactly the right predicate and was already
+    correct; pin_immune() applies it to the ONE accused commit and nothing
+    applied it to the range. Which is this ticket's own thesis restated: the
+    decision was right, the publication was wrong, and the predicate was
+    sitting there.
+    """
+    out = []
+    for c in shas:
+        changed = sh(["git", "show", "--name-only", "--format=", c],
+                     cwd=clone.path, check=False)
+        files = [q for q in (changed or "").split("\n") if q.strip()]
+        if not files:
+            out.append(c)       # cannot tell -> keep it; never narrow blindly
+        elif not all(q.startswith(PIN_IMMUNE_PREFIXES) for q in files):
+            out.append(c)
+    return out
+
+
 def range_note(reg):
     """The Range section of a stub ticket — and it must not promise a bisect.
 
@@ -2899,6 +2969,29 @@ def range_note(reg):
     n = len(reg.get("range") or [])
     bad = (reg.get("bad") or "")[:12] or "unknown"
     good = (reg.get("good") or "")[:12] or "unknown"
+    if reg.get("pin_axis"):
+        # This job builds with $(PXX_STABLE), so it is blind to every commit
+        # that does not move the pin. Its range is counted in PIN MOVES, and
+        # saying "commits" here would re-describe the right range in the wrong
+        # units -- which is how the reader gets sent back to the commit log.
+        if not n:
+            return ("bad `%s`, and **nothing this job can observe changed** "
+                    "between `%s` and it — no pin move, no `lib/` or `test/` "
+                    "commit. It builds only with `$(PXX_STABLE)`, so the cause "
+                    "is in the box or the job's own inputs, **not** in the "
+                    "commits. **No idle bisect will happen**, and a commit "
+                    "range would name only innocents." % (bad, good))
+        return ("bad `%s`, last good `%s`, **%d observable commit(s)** in range "
+                "(it builds with `$(PXX_STABLE)`, so `compiler/` commits cannot "
+                "have caused it and are dropped; pin moves, `lib/` and `test/` "
+                "are kept) — the watcher narrows this by idle bisect."
+                % (bad, good, n))
+    if reg.get("first_seen"):
+        return ("bad `%s`, and this is the job's **first-ever run** — there is "
+                "no earlier passing sha, so no interval contains the cause and "
+                "every commit a range could name is equally innocent. **No "
+                "idle bisect will happen**; a red here is a finding about the "
+                "job, not a regression from the commits around it." % bad)
     if not n:
         return ("bad `%s`, range **unknown** (first run covering this job at "
                 "this tier, so there is no earlier passing sha to bound it) — "
@@ -4516,6 +4609,25 @@ def bisect_step(clone, host, st, tier):
                   "fail, it names an innocent commit"
                   % (reg.get("job", "?"), len(rng) - len(clean)), flush=True)
             reg["range"] = rng = clean
+            save_state(clone, host, st)
+        if reg.get("pin_built") and not reg.get("pin_axis") and rng:
+            # REPAIR ON READ, the same way the untestable-commit filter above
+            # repairs a range recorded before that fix existed. A pin-built
+            # regression opened before the pin-axis change carries a COMMIT
+            # range for a job that cannot observe commits -- and the live one
+            # that motivated this carries 137 of them, anchored on a tstate
+            # publish commit. Leaving those to age out means the board keeps
+            # printing the wrong axis for as long as the regression stays open,
+            # which for that job is already days.
+            obs = pin_observable(clone, rng)
+            print("twatch: %s — range cut to what a PIN-BUILT job can observe: "
+                  "%d commit(s) -> %d (dropped %d that change only "
+                  "compiler/tools/docs)%s"
+                  % (reg.get("job", "?"), len(rng), len(obs), len(rng) - len(obs),
+                     "; NOTHING it can observe changed across the interval"
+                     if not obs else ""), flush=True)
+            reg["pin_axis"] = True
+            reg["range"] = rng = obs
             save_state(clone, host, st)
         if len(rng) <= 1:
             continue

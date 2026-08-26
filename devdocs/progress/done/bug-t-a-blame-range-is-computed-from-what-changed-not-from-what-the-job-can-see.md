@@ -3,7 +3,8 @@ slug: bug-t-a-blame-range-is-computed-from-what-changed-not-from-what-the-job-ca
 title: A blame range is computed from what changed, not from what the job can see
 track: T
 prio: 60
-status: backlog
+status: done
+owner: pxx-aa
 ---
 
 ## The shape, stated once
@@ -107,3 +108,71 @@ guards both halves, including the one that must NOT change (red on arrival is
 still a NEW-RED) and the mirror case (a first-ever PASS is not a FIXED).
 
 Face 3 (the pin axis) remains open; this ticket stays in the backlog for it.
+
+## Face 3 fixed 2026-08-26 — the ticket is now closed
+
+The axis is expressed in the **existing type** rather than a new one: a
+pin-built regression's `range` becomes the list of commits in range that
+**moved the pin**. Those are exactly the events the job can observe, they are
+still commits so `bisect_step` needs no teaching, and pin.log commits touch
+`stable_*/**` so `testable_only()` keeps them. `pins_in_range()` already
+computed precisely this set for a different purpose.
+
+### The first cut of this was WRONG in the dangerous direction — corrected same session
+
+The first attempt replaced the range with **pin moves only**: 137 commits down
+to 2. That is too narrow, and too narrow is the failure that matters
+(`last_covering_sha`'s own docstring: *"a too-wide range costs bisect steps; a
+too-narrow one can exclude the culprit"*). `make pin` freezes
+`compiler/builtin/**` and **deliberately leaves `lib/rtl` and `lib/pcl` live** —
+"track B's own editable lane, which B expects live" — and the job compiles
+`test/lib_mimic_xml_etree_elementtree.npy` from the live tree. So a pin-built
+job is blind to `compiler/**`, **not** to everything but the pin. Measured: the
+137 contain 2 `lib/` and 34 `test/` commits, all of them genuinely causal
+candidates, and the pin-move cut discarded every one.
+
+The right predicate already existed and was already correct: `PIN_IMMUNE_PREFIXES`
+(`compiler/`, `tools/`, `devdocs/`, `docs/`). `pin_immune()` applies it to the
+ONE accused commit; nothing applied it to the range. Which is this ticket's own
+thesis, one more time — the decision was right, the publication was wrong, and
+the predicate was sitting there.
+
+Measured against the live regression that motivated the ticket:
+
+```
+lib-test#src:test/lib_mimic_xml_etree_elementtree.npy
+  137 commits  ->  37 observable   (dropped 100 that change only compiler/tools/docs)
+```
+
+A bisect over 37 candidates instead of 137, with nothing causal discarded — and
+the 100 dropped include the anchor `fd93e4a71c37`, a tstate publish commit,
+which changes nothing at all. An unknown file list never narrows: a commit whose
+paths cannot be read is kept.
+
+**Repaired on read**, like the untestable-commit filter: a regression opened
+before this change carries a commit range for a job that cannot observe
+commits, and waiting for it to age out means the board prints the wrong axis
+for as long as it stays open. That is already days for the one above.
+
+`range_note()` now speaks the axis, including the verdict that was previously
+inexpressible: *"no pin moved between `good` and `bad`. This job builds only
+with `$(PXX_STABLE)`, so its compiler did not change across the interval — the
+cause is in the test's own inputs or the box, **not** in the commits."* Every
+red on a pin-built job used to implicitly assert "something in the compiler
+changed"; across an interval with no pin transition that is simply false.
+
+### All four faces, closed
+
+| face | fix |
+| --- | --- |
+| wrong anchor | `c68e6492e` |
+| untestable commits in range | `cf7d805d4` |
+| **wrong axis (pin-built)** | **this change** |
+| first-ever run inherits a range | `663214041` |
+
+Guarded by `tools/twatch_first_seen_devtest.py` (9 cases), which covers both
+axis wordings, the empty-pin-axis verdict, and the ordinary commit range that
+must stay unchanged.
+
+## Log
+- 2026-08-26 — resolved, commit 4672796d0.

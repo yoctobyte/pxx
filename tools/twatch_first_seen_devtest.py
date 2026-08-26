@@ -92,6 +92,92 @@ def t_range_note_says_no_bisect_for_an_empty_range():
     return "empty range reads as unknown + no bisect"
 
 
+class _FakeClone:
+    """Answers `git show --name-only` from a dict, so the filter is tested
+    without a repo."""
+    path = "/nonexistent"
+
+    def __init__(self, files_by_sha):
+        self.files = files_by_sha
+
+
+def _patch_sh(clone):
+    orig = tw.sh
+
+    def fake(cmd, cwd=None, check=True):
+        assert cmd[:3] == ["git", "show", "--name-only"], cmd
+        return "\n".join(clone.files.get(cmd[-1], []))
+    tw.sh = fake
+    return orig
+
+
+def t_a_pin_built_range_keeps_lib_and_test_commits():
+    """THE correction that matters, and the direction that is dangerous.
+
+    The first cut of this replaced the range with pin moves only -- 137 commits
+    down to 2 -- which silently discarded 36 lib/ and test/ commits the job
+    builds from directly. `make pin` freezes compiler/builtin/** and
+    DELIBERATELY leaves lib/rtl live ("track B's own editable lane"), so a
+    pin-built job absolutely can see them. A too-wide range costs bisect steps;
+    a too-narrow one excludes the culprit, which is the failure that matters.
+    """
+    clone = _FakeClone({
+        "pin" + "0" * 37: ["stable_linux_amd64/default/pin.log"],
+        "lib" + "0" * 37: ["lib/rtl/sysutils.pas"],
+        "tst" + "0" * 37: ["test/foo.npy"],
+        "cmp" + "0" * 37: ["compiler/parser.inc"],
+        "doc" + "0" * 37: ["devdocs/progress/BOARD.md"],
+        "mix" + "0" * 37: ["compiler/parser.inc", "lib/rtl/x.pas"],
+        "non" + "0" * 37: [],
+    })
+    orig = _patch_sh(clone)
+    try:
+        keep = tw.pin_observable(clone, list(clone.files))
+    finally:
+        tw.sh = orig
+    assert "lib" + "0" * 37 in keep, "a lib/ commit IS observable by a pin build"
+    assert "tst" + "0" * 37 in keep, "a test/ commit IS observable"
+    assert "pin" + "0" * 37 in keep, "a pin move IS observable"
+    assert "mix" + "0" * 37 in keep, "compiler/ + lib/ is still observable"
+    assert "non" + "0" * 37 in keep, "unknown files must never narrow the range"
+    assert "cmp" + "0" * 37 not in keep, "a compiler-only commit is not observable"
+    assert "doc" + "0" * 37 not in keep, "a docs-only commit is not observable"
+    return "keeps lib/test/pin/mixed/unknown, drops compiler-only and docs-only"
+
+
+def t_a_pin_built_note_counts_observable_commits():
+    note = tw.range_note({"bad": "a" * 40, "good": "b" * 40,
+                          "range": ["c" * 40, "d" * 40], "pin_axis": True})
+    assert "observable commit(s)" in note, (
+        "a pin-built range must say what it counted, and why compiler/ is gone")
+    assert "pin move(s)" not in note, (
+        "counting pin moves alone was the wrong cut; the note must not "
+        "re-describe the corrected range in the discarded units")
+    return "pin-built range reports 2 observable commits"
+
+
+def t_nothing_observable_changed_is_a_real_verdict():
+    """The answer the system could not previously express. Every red on a
+    pin-built job implicitly asserted 'something it builds with changed'; for
+    an interval with no pin move and no lib/test commit that is simply false."""
+    note = tw.range_note({"bad": "a" * 40, "good": "b" * 40,
+                          "range": [], "pin_axis": True})
+    low = note.lower()
+    assert "nothing this job can observe changed" in low, (
+        "an empty pin-built range must SAY what did not change -- that is "
+        "information, not an absence of it")
+    assert "no idle bisect" in low
+    return "empty pin-built range reads as a verdict, not a gap"
+
+
+def t_a_first_seen_note_says_first_ever_run():
+    note = tw.range_note({"bad": "a" * 40, "range": [], "first_seen": True})
+    low = note.lower()
+    assert "first-ever run" in low, "a first-seen red must say so"
+    assert "no idle bisect" in low
+    return "first-seen red reads as a finding, not a regression"
+
+
 def t_a_populated_range_still_promises_the_bisect():
     note = tw.range_note({"bad": "a" * 40, "good": "b" * 40,
                           "range": ["c" * 40, "d" * 40]})
@@ -107,6 +193,10 @@ def main():
                t_a_known_job_going_red_is_not_first_seen,
                t_a_first_seen_pass_is_not_a_fixed,
                t_range_note_says_no_bisect_for_an_empty_range,
+               t_a_pin_built_range_keeps_lib_and_test_commits,
+               t_a_pin_built_note_counts_observable_commits,
+               t_nothing_observable_changed_is_a_real_verdict,
+               t_a_first_seen_note_says_first_ever_run,
                t_a_populated_range_still_promises_the_bisect):
         try:
             print("  ok   %s — %s" % (fn.__name__, fn()))
