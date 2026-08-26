@@ -477,3 +477,42 @@ checked against a four-parameter callee and pronounced correct; a two-parameter
 one was silently wrong (`map` answered `[1,2,3]` where CPython says `[2,3,4]`).
 Boundaries are where these live — check the smallest and the largest case, not a
 comfortable middle.
+
+## `perf` being blocked is not "no profiler" — build the compiler with FPC and `-pg`
+
+`perf` is refused on plexus (`kernel.perf_event_paranoid = 4`) and cannot be
+lowered without root. A session concluded from that there was no way to profile
+the compiler, recorded *"there is no pathological function to optimise"* on the
+strength of a linearity argument instead, and was wrong: the next session's
+profile found **four** hotspots and cut the measured cost in half
+(`bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost`).
+
+`compiler.pas` is FPC-bootstrappable by construction. FPC supports `-pg`.
+`gprof` is installed. Eleven seconds:
+
+```sh
+fpc -O2 -Tlinux -Px86_64 -pg -FU/tmp/units -o/tmp/pascal26-pg compiler/compiler.pas
+/tmp/pascal26-pg /tmp/repro.npy /tmp/o        # writes gmon.out into $PWD
+gprof -b -p /tmp/pascal26-pg gmon.out         # flat profile WITH CALL COUNTS
+gprof -b -q /tmp/pascal26-pg gmon.out         # call graph: who called whom, how often
+```
+
+(`-FU` a scratch unit dir, or a `-pg` `.o` will collide with a later non-`-pg`
+build and fail at link with `undefined reference to mcount`. Run the compiler
+from the repo root — it resolves `pylib`/`builtin` relative to the working
+directory.)
+
+**Read the CALL COUNTS, not the percentages.** The `-pg` binary is FPC's
+codegen, FPC's ansistrings and FPC's heap manager, so its time shares are
+*indicative* of ours and no more — measured on the same workload, the FPC-built
+compiler runs 3.8x faster than our own build of the same source. But the counts
+are properties of the SOURCE and are exactly ours. "284,481 calls issuing
+20,058,632 AppendChar" is not a judgement call, and it is what named the
+function. Confirm every fix on the real self-hosted binary before believing it.
+
+**Linear throughput is not evidence against a hotspot.** The wrong conclusion
+above came from a good measurement read badly: compile time tracked emitted code
+volume at a near-constant ~4 s/MB across a 150x range, which rules out a
+*superlinear* blowup and nothing else. A function costing a fixed 3 microseconds
+per emitted instruction plots as a perfectly straight line and is still 30% of
+the compile.

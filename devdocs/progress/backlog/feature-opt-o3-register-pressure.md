@@ -292,3 +292,97 @@ architecture `devdocs/dev/optimization-architecture.md`.
 - **Still -O3-only** (register-lifetime schemes, need soak): r8/r9 scratch,
   r12/r13 callee scratch, loop-local residency, float xmm residency —
   worth another promotion pass after a few days of -O3 soak + T back up.
+
+---
+
+## Measurement, 2026-08-26 (agent-A-perf-9s) — the gap has a number now: **~4x FPC**
+
+Found while resolving `bug-a-every-nilpy-compile-pays-a-fixed-nine-second-cost`.
+That ticket's four fixes removed the algorithmic hotspots from the compiler's
+own hot path (8.62s -> 4.06s on a NilPy compile). What is left is **not**
+algorithmic, and this ticket is where it lives.
+
+**The end-to-end number.** `compiler.pas` built by `fpc -O2` and `compiler.pas`
+built by pxx `-O2` are the same source and emit byte-identical output. Compiling
+`empty.npy`:
+
+| compiler binary | wall |
+| --- | --- |
+| built by `fpc -O2` | **1.06s** |
+| built by pxx `-O2` (self-hosted, sha 66c9b8332) | **4.06s** |
+
+Same work, same output, **3.8x**. Every self-host, every test binary, every
+compile every agent runs, carries that factor.
+
+**Isolated, so it is not an artifact of one workload.** Three locals, no memory
+traffic, no arrays, no strings, no bounds checks in play:
+
+```pascal
+program b_loop;
+var i, s, t: Integer;
+begin
+  s := 0; t := 1;
+  for i := 1 to 200000000 do begin s := s + i; t := t xor s; end;
+  WriteLn(s, ' ', t);
+end.
+```
+
+| build | wall |
+| --- | --- |
+| pxx `-O2` | 0.78s |
+| pxx `-O3` | 0.77s |
+| `fpc -O2` | **0.19s** |
+
+**4.1x, and `-O3` does not move it.** Both print the identical result, so this
+is a codegen comparison and not a semantics difference. A second benchmark
+(1000-element array fill + sum, 20k iterations) gives 0.16s vs 0.04s, the same
+ratio; a string-append benchmark gives 0.42s vs 0.24s, i.e. **the RTL is not the
+problem — scalar code is.**
+
+**`-S` says exactly what is wrong.** The whole emitted loop body, pxx `-O2`:
+
+```
+loop:
+    movsxd rax, [0x0041a7f0]     ; load i
+    mov    rcx, 0x0bebc200       ; rematerialise the loop bound
+    cmp    rax, rcx
+    jg     exit
+    movsxd rax, [0x0041a7f4]     ; load s
+    movsxd rcx, [0x0041a7f0]     ; load i  (2nd time)
+    add    rax, rcx
+    mov    [0x0041a7f4], eax     ; store s
+    movsxd rax, [0x0041a7f8]     ; load t
+    movsxd rcx, [0x0041a7f4]     ; load s  (just stored, one instruction ago)
+    xor    rax, rcx
+    mov    [0x0041a7f8], eax     ; store t
+    movsxd rax, [0x0041a7f0]     ; load i  (3rd time)
+    mov    rcx, 0x0bebc200       ; rematerialise the bound again
+    cmp    rax, rcx
+    je     exit
+    movsxd rax, [0x0041a7f0]     ; load i  (4th time)
+    add    rax, 0x00000001
+    mov    [0x0041a7f0], eax
+    jmp    loop
+```
+
+Twenty instructions and nine memory accesses for what is five instructions and
+zero memory accesses of real work. The induction variable is loaded **four times
+per iteration**, the loop bound is materialised into a register **twice per
+iteration**, and `s` is stored and immediately reloaded. This is the
+"single-pass stack machine moves values rather than computing them" cost this
+ticket already names, quantified: **~4x, on the simplest possible loop.**
+
+### Why the prio should be revisited (a Track U / coordinator call, not mine)
+
+Sitting at **35**. The owner's loudest standing complaint is *"we see testing
+overhead taking 95% of our development time"*, and this is now the **largest
+single remaining lever on it** — larger than any tiering or sharding proposal,
+and like the ticket it came from it **costs no coverage at all**: the same tests,
+faster. `make compiler/pascal26` is 23.4s today and is mandatory in every
+agent's per-fix loop on every track; a 2x codegen improvement takes it to ~12s
+and takes every test binary with it.
+
+Recorded here rather than acted on: the fix is a register allocator, which is
+this ticket's whole subject and a campaign, not a session. Reproduce the two
+benchmarks above before starting — they are 30 seconds each and they are the
+scoreboard.
