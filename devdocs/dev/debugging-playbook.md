@@ -343,6 +343,33 @@ Deliberately not general, for the reason this file keeps arriving at: **a checke
 that reports everything gets suppressed, and a suppressed checker asserts
 nothing.**
 
+## A comment is an unverified claim, and tickets inherit it
+
+Two N tickets in a row named the wrong mechanism, and the second one shows how a
+wrong lead becomes durable. `PyImportIsConsumedOnly` carried a comment asserting
+that `Counter` maps to *"pylib's TPyCounter constructors"*. It does not:
+`TPyCounter` is the `itertools.count` shim, sharing four letters with `Counter`
+and nothing else. The comment was wrong, the ticket quoted it as its "where to
+look", and the investigation started up the wrong tree with a citation behind it.
+
+The real binding was ordinary and discoverable in a minute: pylib has three
+`function Counter` overloads returning a dict in counter mode, so `Counter("aab")`
+compiles **with no import at all** and the from-import binds nothing.
+
+- **A comment is documentation of an intent, not of a fact**, and unlike code it
+  is never executed, so nothing ever contradicts it. It rots silently and in
+  place.
+- **A wrong comment is worse than none, because it launders into tickets.** Once
+  quoted, it arrives with apparent provenance and the next reader has no signal
+  that it was one person's belief.
+- **Verify the lead before following it.** Find what a name is *actually* bound
+  to -- read the binding site, or print it (`PXXDBG=n.locals`, `n.sig`) -- before
+  theorising about why it misbehaves. That check is cheap and it is exactly the
+  step the ticket's confident wording persuades you to skip.
+
+The companion habit, from the same fix: **when you disprove a comment, correct
+it in place, and grep for its copies.** That one had two.
+
 ## "The pinned binary reproduces it" may be a claim about a MIXED compiler
 
 A ticket recorded that `$(PXX_STABLE)` reproduced a segfault, which made a
