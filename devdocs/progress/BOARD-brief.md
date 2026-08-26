@@ -5,7 +5,7 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`working:1 unfinished:22 blocked:7 backlog:291 backlog_new:24 experimental:20 rainy-day:44 float:20 done-followup:3 decided:114 done:2363 rejected:40`
+`working:1 unfinished:22 blocked:7 backlog:290 backlog_new:28 experimental:20 rainy-day:44 float:21 done-followup:3 decided:114 done:2364 rejected:40`
 
 ## Held now (working/ — do not touch these files)
 
@@ -46,7 +46,7 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `feature-random-library` [B] — blocked-by: feature-a-rdrand-cpuid-compiler-builtins
 - `regression-cascade-4e27dc2be114` [P] — blocked-by: bug-n-tkinter-is-missing-from-the-python-serving-unit-list
 
-## Ready — top 30 of 325, ranked
+## Ready — top 30 of 328, ranked
 
 - `[p 88] [N]` bug-n-inferred-return-type-of-true-division-is-int
 - `[p 82] [N]` bug-n-sorted-by-a-key-returning-a-string-bearing-tuple-segfaults
@@ -58,7 +58,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 78] [N]` bug-n-a-subscript-inside-a-base-class-skips-the-subclass-override
 - `[p 78] [N]` bug-n-class-x-inherits-mod-x-is-refused-in-the-main-program
 - `[p 75] [N]` bug-nilpy-empty-str-and-none-are-the-same-value
-- `[p 75] [B]` feature-b-rtl-gap-inventory-22-sysutils-strutils-symbols
 - `[p 75] [P]` feature-pascal-corpus-expansion
 - `[p 75] [P]` feature-pascal-corpus-oop
 - `[p 72] [N]` bug-n-the-old-style-iteration-protocol-reaches-only-the-for-loop
@@ -78,5 +77,6 @@ _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 - `[p 70] [P]` regression-test-aarch64-test-forin-member-access
 - `[p 70] [N]` regression-test-nilpy-test-nilpy-type-name-of-a-big-int
 - `[p 70] [T]` regression-test-pascal-conformance-shard5-6-2
+- `[p 70] [T]` regression-test-uforth-core
 
-_295 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
+_298 more ready — `tools/progress.sh ready --track X` for a lane's full queue._
