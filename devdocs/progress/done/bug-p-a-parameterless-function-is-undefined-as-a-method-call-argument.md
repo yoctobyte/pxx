@@ -100,7 +100,7 @@ is one lookup shared by three CPython spellings and should stay — but the
 comment there that explains the constraint can come out once this is fixed.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit d6785805c.
 
 # Resolved 2026-08-26
 
