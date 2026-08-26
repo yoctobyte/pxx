@@ -102,6 +102,36 @@ Its author injected the mismatch into a scratch tree and watched the step return
 been seen to fail is not yet a canary** -- it is an assertion about one.
 
 
+## Reading the board at sync time: a NEW-RED on a first-ever run is not a NEW-RED
+
+The coordinator decides sync-backs by reading verdicts, so the coordinator is
+the one who has to know when a verdict cannot mean what it says.
+
+`diff_jobs()` classifies a job as NEW-RED when it is red now and was passing
+before -- and asks the second half with `prev_jobs.get(name, "pass")`. **A job
+never seen before defaults to "pass".** So the first-ever execution of a newly
+enrolled rung arrives as a NEW-RED against a green history it never had, and
+`range_for()` then bounds it with the commits since the last covering full run:
+a range over commits in which the job did not run once. Every sha in it is
+equally the first failing one, which is the same statement as *there is no first
+failing one*, and nothing downstream is shaped to say that.
+
+That is the whole hazard, and it is worse than a wrong answer: the range prints
+cleanly, names a sha, and is indistinguishable from a correct one. It enters the
+ledger with full authority.
+
+**Operational rule until this is fixed** (Track T is on it -- it is the fourth
+face of `bug-t-a-blame-range-is-computed-from-what-changed-not-from-what-the-job-can-see`):
+when a rung has just been enrolled or just been provisioned, treat its first
+appearance as **unlocalizable by construction, whatever range the board prints**.
+File it as a finding, do not hold the sync for it, and do not let it start a
+bisect. Ask "has this job ever run anywhere?" before "what changed?" -- the
+answer is not on the board, it is in the run history.
+
+The verdict half is right and should stay: a job that is red on arrival is red.
+What must not be inherited is the RANGE. Those are two questions, and one `.get`
+default currently answers both at the point where the distinction still exists.
+
 ## Roles — LIVE, 2026-08-25
 
 Sessions address each other by these names. **`ListAgents` lists them and
