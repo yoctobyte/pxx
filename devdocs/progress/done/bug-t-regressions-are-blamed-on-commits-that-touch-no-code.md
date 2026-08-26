@@ -114,7 +114,7 @@ top of the ranked queue -- four tickets at prio 70 this time -- and it trains
 everyone to distrust the queue, which is the expensive part.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 27ae5cc11.
 
 ## Resolved 2026-08-26 (pxx-aa, Track T)
 
