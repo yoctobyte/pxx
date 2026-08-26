@@ -66,4 +66,4 @@ The answer is known at compile time and it is False. `CanHoldInstance` now
 folds the term for every kind that cannot hold an instance, and the unknown /
 pointer-shaped kinds keep the test, so nothing that reached AN_IS_TEST before
 stops reaching it.
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 3739ed47b.

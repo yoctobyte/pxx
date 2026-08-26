@@ -60,4 +60,4 @@ did not cover it.
 
 The RHS must be spelled exactly as the class is, same `PyIsClassTypeExact` gate
 as its four siblings.
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 3739ed47b.
