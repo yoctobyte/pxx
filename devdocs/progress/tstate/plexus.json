@@ -6794,23 +6794,15 @@
   "would_pin": false
  },
  "pin_verify": {
-  "date": "2026-08-22T19:59:31Z",
+  "date": "2026-08-26T07:18:11Z",
   "red": [
-   "lib-test#src:test/lib_mimic_xml_etree_elementtree.npy",
-   "test-core#src:test/test_rtti.pas",
-   "test-core#src:test/test_classref.pas",
-   "test-nilpy#src:test/test_nilpy_type_as_default_arg.npy",
-   "test-nilpy#src:test/test_nilpy_warning_hierarchy.npy",
+   "test-fpjson#src:tools/install_lib_candidates.sh",
    "test-nilpy#src:test/test_nilpy_lowercase_name_vs_class.npy",
-   "test-nilpy#src:test/test_nilpy_raise_a_variant.npy",
-   "test-nilpy#src:test/test_nilpy_class_as_a_value.npy",
-   "test-nilpy#src:test/test_nilpy_isinstance_over_a_type_value.npy",
-   "test-nilpy#src:test/test_nilpy_arity_four_dynamic_call.npy",
-   "test-nilpy#src:test/test_nilpy_callable_to_str_param_fails.npy"
+   "test-nilpy#src:test/test_nilpy_isinstance_over_a_type_value.npy"
   ],
-  "sha": "a687bb87717a72671d3c1acd9f24c44f29e000c0",
+  "sha": "b924d8b4ae326e7cc866cabd5ab9715519e65cb2",
   "tier": "full",
-  "ver": "v374",
+  "ver": "v376",
   "verdict": "RED"
  },
  "renamed_from": [
