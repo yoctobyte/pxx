@@ -591,7 +591,33 @@ def main():
     ap.add_argument("--target", default="x86_64", choices=sorted(TARGETS),
                     help="CPU target: build with pxx --target=<arch> and run the "
                          "result through tools/run_target.sh (default x86_64)")
+    ap.add_argument("--run-tag", default=None,
+                    help="unique token stamped into this process's command line "
+                         "so a kill can be scoped to THIS run (default: auto)")
     args = ap.parse_args()
+
+    # Make this run addressable, then say how to address it.
+    #
+    # Two csmith batches were killed mid-run on 2026-08-20 from outside their own
+    # session. `pkill -f csmith_fuzz.py` asks "is there a process whose command
+    # line contains this text?" when the question is "is there a process I
+    # started?" — the same for one agent, silently different for two, and this
+    # box runs several. The tool cannot stop a careless kill, but it can make a
+    # careful one POSSIBLE: re-exec once with a unique token in argv, so the
+    # token is in /proc/<pid>/cmdline and a pattern kill can be scoped to a
+    # single run. Re-exec (not just a variable) is what puts it in the cmdline.
+    #
+    # Guarded against looping by the tag's own presence: the child arrives with
+    # --run-tag set and falls straight through.
+    if args.run_tag is None:
+        tag = "csmithrun-%d-%d" % (os.getpid(), int(time.time()))
+        os.execv(sys.executable,
+                 [sys.executable, os.path.abspath(__file__)] + sys.argv[1:]
+                 + ["--run-tag", tag])
+    print("csmith fuzz: run tag %s (pid %d)" % (args.run_tag, os.getpid()))
+    print("  to stop THIS run and nothing else:  kill %d" % os.getpid())
+    print("  from another shell:                 pkill -f %s" % args.run_tag)
+    print("  never `pkill -f csmith_fuzz.py` — it also kills other agents' runs")
 
     pxx = Path(args.compiler)
     if not pxx.is_file():

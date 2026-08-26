@@ -125,8 +125,17 @@ compiler inferred; print it.
 ## Two traps that produced confident wrong readings
 
 - **Stale binary.** A still-running instance makes the compiler's write a silent
-  no-op (ETXTBSY) while still printing `ok:`. `pkill -9` first, or use a fresh
-  output name and check it changed.
+  no-op (ETXTBSY) while still printing `ok:`. **Use a fresh output name and check
+  it changed** — that is the whole fix, it needs no signal at all, and it cannot
+  hurt anybody else. If you genuinely must kill the running copy, kill **the pid
+  you started** (`$!`, or `setsid` and kill the group), never a name pattern:
+  `pkill -f <tool>` asks *"is there a process whose command line contains this
+  text?"* when your question is *"is there a process **I** started?"*. Those
+  coincide exactly while one agent runs the tool and diverge silently the moment
+  two do — and several agents share this box. `tools/gui_shot.sh:52` carries the
+  same rule, learned when one agent's pattern-kill took down another's live Xvfb
+  mid-capture; a `pgrep` waiter has the mirror-image bug, because it matches
+  *itself* and never returns.
 - **Lost stdout.** SIGTERM discards buffered stdout, so "the marker never fired"
   and "it fired and the output died" look identical. Give tests a clean exit.
 
