@@ -82,7 +82,7 @@ Rung: [[feature-pascal-corpus-fgl]] · umbrella
 [[devdocs/dev/normalise-dont-special-case.md]]
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 15358cad6.
 
 ---
 
