@@ -99,6 +99,43 @@ begin
   b := nil;
 end;
 
+{ The name of this file says Insert, and until 2026-08-26 there was no Insert
+  case in it — which is exactly why
+  bug-a-insert-into-an-array-of-interfaces-crashes-on-the-second-pass survived:
+  pxx spells an interface `tyRecord`, so the gap store went through IR_COPY_REC
+  and copied the instance pointer with NO AddRef. The array then owned N+1 slots
+  while holding N references, and releasing it destroyed an object someone else
+  still had. Both operand shapes are here because they capture differently and
+  only one of them was wrong at a time: an LVALUE is captured by address, an
+  rvalue by value. }
+procedure InsertVarCase;
+var a: TIA; v: ITest;
+begin
+  WriteLn('insert-var:');
+  Fill(a, 3, 40);
+  v := TTest.Create(49);
+  Insert(v, a, 1);
+  Show('  after:', a);
+  a := nil;
+  { v STILL HOLDS ONE. Nothing may be destroyed here — this is the line that
+    fails when the gap store takes no reference: the array's release destroys
+    v's object, and the `v := nil` below then frees it a second time. }
+  WriteLn('  a nil''d, v still holds 49');
+  v := nil;
+  WriteLn('  v nil''d');
+end;
+
+procedure InsertRValueCase;
+var a: TIA;
+begin
+  WriteLn('insert-rvalue:');
+  Fill(a, 3, 50);
+  Insert(TTest.Create(59), a, 1);   { rvalue: captured by VALUE, not address }
+  Show('  after:', a);
+  a := nil;
+  WriteLn('  a nil''d');
+end;
+
 procedure ShrinkCase;
 var a: TIA;
 begin
@@ -113,6 +150,8 @@ begin
   DeleteCase;
   DeleteHeadCase;
   CopyCase;
+  InsertVarCase;
+  InsertRValueCase;
   ShrinkCase;
   WriteLn('end');
 end.

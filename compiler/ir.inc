@@ -6958,6 +6958,55 @@ begin
         dcSetlenVal := IRAppendCall(procIdx, first, -1, Ord(tyNativeInt));
         IRIVal[dcSetlenVal] := 1;
       end
+      else if ManagedElemKind(Ord(dcElemTk), dcElemRec) = 4 then
+      begin
+        { COM-INTERFACE element, and it MUST be tested before the record arms:
+          pxx spells an interface tyRecord (elemTk 5, elemSize 8 — the instance
+          pointer), so `IR_COPY_REC` claimed it and copied the pointer raw with
+          no AddRef. RecordHasManagedFields is False for an interface, so even
+          the MANAGED record arm would not have caught it.
+
+          The buffer-wide retain above could not cover the gap either — it runs
+          while the gap is still nil, as its own comment says. So the array
+          ended up owning four slots while holding three references, and
+          releasing it destroyed an object someone else still had:
+
+            v := TTest.Create(9); Insert(v, a, 1); a := nil;   { destroys v's }
+
+          fpc leaves `live = 1` there; pxx left 0, and the following `v := nil`
+          released freed memory and segfaulted.
+
+          PXXIntfAssign is the primitive that does this correctly — retain
+          source, release old dest, copy, in that order — and is what the
+          by-value interface param path already uses rather than hand-rolling
+          the halves.
+
+          WHAT dcValTmp HOLDS depends on which capture branch above ran, and the
+          two must be told apart or one of them dereferences a value as though
+          it were an address. An LVALUE operand was captured with IRLowerAddress,
+          so the slot holds the source's ADDRESS and is LOADED; an rvalue was
+          captured with IRLowerAST, so the slot holds the interface VALUE and is
+          its own storage, so the slot's own address is what PXXIntfAssign wants.
+          Same condition as the capture, deliberately spelled the same way.
+
+          The gap is fresh zeros, so the release-of-old is a no-op.
+          bug-a-insert-into-an-array-of-interfaces-crashes-on-the-second-pass }
+        dcSlArg1 := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcGapTmp, -1, -1, 0, Ord(tyPointer)),
+                     -1, -1, 0, Ord(tyPointer));
+        if ASTKind[dcCntAst] in [AN_IDENT, AN_FIELD, AN_INDEX, AN_DEREF] then
+          dcSlArg2 := IRAppend(IR_ARG, IRAppend(IR_LOAD_SYM, dcValTmp, -1, -1, 0, Ord(tyPointer)),
+                       -1, -1, 0, Ord(tyPointer))
+        else
+          dcSlArg2 := IRAppend(IR_ARG, IRAppend(IR_LEA, dcValTmp, -1, -1, 0, Ord(tyPointer)),
+                       -1, -1, 0, Ord(tyPointer));
+        IRB[dcSlArg1] := dcSlArg2;
+        dcSlCall := IRAppend(IR_ARG,
+                     IRAppend(IR_CONST_INT, -1, -1, -1, dcElemRec - REC_UCLASS_BASE, Ord(tyNativeInt)),
+                     -1, -1, 0, Ord(tyNativeInt));
+        IRB[dcSlArg2] := dcSlCall;
+        dcSetlenVal := IRAppendCall(FindProc('PXXIntfAssign'), dcSlArg1, -1, Ord(tyPointer));
+        IRIVal[dcSetlenVal] := 1;
+      end
       else if (dcElemTk = tyRecord) and RecordHasManagedFields(dcElemRec) then
         { Managed-field record: ARC-correct copy — retain the source's fields,
           release the destination's (the gap is fresh zeros, so nil-safe), then
