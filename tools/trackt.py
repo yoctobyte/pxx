@@ -292,6 +292,23 @@ def cmd_status(clone, attach_ok=True):
         age = "%s ago" % fmt_age(w.get("ts")) if fresh else "no phase written yet"
         print("  daemon : %sRUNNING%s pid %d — %s %s (%s)"
               % (GRN, OFF, pid, phase, extra, age))
+        # RUNNING says a process is alive. It does NOT say the process is
+        # running the code on disk — a daemon holds what it loaded at start,
+        # and the clone pulls underneath it all day. On 2026-08-26 three landed
+        # twatch fixes were absent from the publishing daemon while every status
+        # line said RUNNING, and the only reason anyone noticed is that one of
+        # them added a field whose absence showed up in a report.
+        live_fp = twatch.code_fingerprint(os.path.join(clone,
+                                                       "tools/twatch.py"))
+        run_fp = w.get("code_fp") or ""
+        if fresh and run_fp and live_fp and run_fp != live_fp:
+            print("  %scode   : STALE — this daemon is running twatch.py %s "
+                  "while the clone has %s. Landed fixes are NOT live until "
+                  "`trackt restart`.%s" % (RED, run_fp, live_fp, OFF))
+        elif fresh and not run_fp:
+            print("  %scode   : unknown — this daemon predates the code stamp, "
+                  "so it may be running anything; restart to make it "
+                  "answerable.%s" % (DIM, OFF))
     else:
         print("  daemon : %sSTOPPED%s — trackt start" % (RED, OFF))
     print_pubhealth(clone)

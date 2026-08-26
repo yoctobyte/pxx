@@ -278,8 +278,36 @@ def kill_child(proc, grace=30):
         pass
 
 
+def code_fingerprint(path=None):
+    """sha256 of twatch.py's own source, or "" if it cannot be read.
+
+    A running daemon holds the code it was STARTED with; the file underneath it
+    moves every time the clone pulls. `trackt status` said RUNNING and could not
+    say *what* was running, so a fix that had landed on origin, been pulled into
+    the clone, and passed its guards could still be absent from the process
+    actually publishing verdicts — indistinguishable from live. That happened on
+    2026-08-26 with three separate fixes, and the only reason it was noticed is
+    that one of them added a FIELD whose absence was visible in a report.
+
+    A content hash rather than a git sha on purpose: the question is "is the
+    process running the code that is on disk", which is independent of whether
+    the clone is on a branch, detached at a sha under test, or mid-rebase — and
+    the clone is usually detached, so HEAD would answer a different question.
+    """
+    try:
+        with open(path or os.path.abspath(__file__), "rb") as f:
+            return hashlib.sha256(f.read()).hexdigest()[:12]
+    except OSError:
+        return ""
+
+
+CODE_FP = ""            # set once at daemon start; "" for short-lived readers
+
+
 def set_phase(clone, host, phase, **kw):
-    d = {"ts": time.time(), "pid": os.getpid(), "host": host, "phase": phase}
+    d = {"ts": time.time(), "pid": os.getpid(), "host": host, "phase": phase,
+         # what code this process is actually running -- see code_fingerprint()
+         "code_fp": CODE_FP}
     d.update(kw)
     write_json_atomic(os.path.join(clone.path, WATCH_REL), d)
 HISTORY_CAP = 50
@@ -5569,6 +5597,11 @@ def main():
     BRANCH = args.branch or CONF.get("branch") or "master"
     clone = Clone(clone_path, args.remote, BRANCH)
     host = re.sub(r"[^A-Za-z0-9_-]", "-", args.host)
+    # Stamped ONCE, here, and never recomputed: the point is to record what this
+    # process loaded, so re-reading the file later would answer the question the
+    # stamp exists to make answerable.
+    global CODE_FP
+    CODE_FP = code_fingerprint()
 
     # config file fills in whatever the CLI didn't say (CLI wins); interval /
     # autoticket / no_bisect reload every cycle so ./trackt config applies to
