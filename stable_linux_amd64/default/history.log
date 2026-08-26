@@ -372,3 +372,4 @@
 2026-08-21T12:43:35Z  v372  87665b005797377727221dc1a3a0b3d22e6cf3957d663677b4c24fca1d4b66a3  d6299bebe9dc449ff174c018c15d5815c348e5e4  docs(progress): record the shas the resolves landed as
 2026-08-22T06:20:15Z  v373  74490ed539b023495cd1147a14225b274483e935d4a6b4cfaccf147344fbc24a  b8e531e9386fae544955dd3ab547e57573daf627  fix(A): the mode-Delphi generic rewrite is idempotent again
 2026-08-22T10:47:05Z  v374  610bb9fa143074efe77152aee8b9b302d91348b1072c3b1968701d3264720b74  a687bb87717a72671d3c1acd9f24c44f29e000c0  fix(A): a failed `as` downcast died silently — now PXXInvalidCast
+2026-08-26T02:15:49Z  v375  5767e833aa0c115b57c31db8ca9b063f3a914ef2b12b4693f57708475760cfd6  c6542612700fb5ef45bc55e8ab69f0f219f220d9  docs(progress): record the shas the one-char-literal fix landed as
