@@ -2197,6 +2197,33 @@ begin
   bytes := 0;
 end;
 
+{ -O1 pass 4 (compare-into-branch fusion) eligibility: an IR_BINOP condition
+  feeding IR_JUMP_IF_FALSE can skip setcc/movzx/test and branch straight off
+  the compare flags — but ONLY when the comparison would take the plain
+  integer `cmp rax, rcx` path. Exclude float (either operand -> ucomisd path),
+  AnsiString/String (dedicated compare helpers), and Variant. What remains is
+  the integer/pointer/char/boolean/enum ordinal compare that lowers to a bare
+  cmp + setcc — exactly the flags an inverted jcc can consume.
+
+  Hoisted above IREmitNode so the value-producing compare fold can ask the
+  same question: `x = k` as an rvalue and `if x = k` differ only in what
+  consumes the flags, and having ONE predicate decide both is the point. }
+function CmpFusible(node: Integer): Boolean;
+var opTk: Integer; lt, rt: TTypeKind;
+begin
+  CmpFusible := False;
+  opTk := IRC[node];
+  if not ((opTk = Ord(tkEq)) or (opTk = Ord(tkNeq)) or (opTk = Ord(tkLt)) or
+          (opTk = Ord(tkLe)) or (opTk = Ord(tkGt)) or (opTk = Ord(tkGe))) then Exit;
+  lt := IntToTypeKind(IRTk[IRA[node]]);
+  rt := IntToTypeKind(IRTk[IRB[node]]);
+  if TypeIsFloat(lt) or TypeIsFloat(rt) then Exit;
+  if (lt = tyAnsiString) or (lt = tyString) or
+     (rt = tyAnsiString) or (rt = tyString) then Exit;
+  if (lt = tyVariant) or (rt = tyVariant) then Exit;
+  CmpFusible := True;
+end;
+
 procedure EmitObjBlobBody(const procName: AnsiString);
 { Body of an object retain/release blob: preserve every caller-clobbered GP
   reg, rdi := rax (the object), call the named Pascal proc, restore, ret. }
@@ -5584,6 +5611,41 @@ begin
           Exit;
         end;
 
+        { -O3 cmp-immediate, value-producing form. The branch form is folded in
+          IREmitMachineCode's IR_JUMP_IF_FALSE arm; this is the same fold for a
+          comparison whose result is a VALUE — which is where a short-circuit
+          `and`/`or` puts every operand, so `if (c >= 'A') and (c <= 'Z')` paid
+          `mov rcx, imm32` twice per character with the branch fold alone.
+          CmpFusible is the shared predicate: it is exactly the set that lowers
+          to a bare `cmp` + setcc. }
+        if (OptLevel >= 3) and (IRKind[right] = IR_CONST_INT) and
+           (IRIVal[right] >= -2147483648) and (IRIVal[right] <= 2147483647) and
+           CmpFusible(node) then
+        begin
+          IREmitNode(left);
+          EmitB($48); EmitB($3D); EmitI32(Integer(IRIVal[right]));   { cmp rax, imm32 }
+          if TypeCompareUnsigned(IntToTypeKind(IRTk[left]), IntToTypeKind(IRTk[right])) then
+            case op of
+              tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;  { sete   al }
+              tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;  { setne  al }
+              tkLt:  begin EmitB($0F); EmitB($92); EmitB($C0); end;  { setb   al }
+              tkLe:  begin EmitB($0F); EmitB($96); EmitB($C0); end;  { setbe  al }
+              tkGt:  begin EmitB($0F); EmitB($97); EmitB($C0); end;  { seta   al }
+              tkGe:  begin EmitB($0F); EmitB($93); EmitB($C0); end;  { setae  al }
+            end
+          else
+            case op of
+              tkEq:  begin EmitB($0F); EmitB($94); EmitB($C0); end;  { sete   al }
+              tkNeq: begin EmitB($0F); EmitB($95); EmitB($C0); end;  { setne  al }
+              tkLt:  begin EmitB($0F); EmitB($9C); EmitB($C0); end;  { setl   al }
+              tkLe:  begin EmitB($0F); EmitB($9E); EmitB($C0); end;  { setle  al }
+              tkGt:  begin EmitB($0F); EmitB($9F); EmitB($C0); end;  { setg   al }
+              tkGe:  begin EmitB($0F); EmitB($9D); EmitB($C0); end;  { setge  al }
+            end;
+          EmitB($48); EmitB($0F); EmitB($B6); EmitB($C0);            { movzx rax, al }
+          Exit;
+        end;
+
         { -O3 narrowing-cast fold: the three-binop, three-constant shape a
           narrowing ordinal cast lowers to collapses to one movsx/movzx.
           See NarrowCastFold for the shapes and why they are value-identical. }
@@ -8530,29 +8592,6 @@ begin
     Error('Unsupported linear node in IR codegen');
   end;
   end;
-end;
-
-{ -O1 pass 4 (compare-into-branch fusion) eligibility: an IR_BINOP condition
-  feeding IR_JUMP_IF_FALSE can skip setcc/movzx/test and branch straight off
-  the compare flags — but ONLY when the comparison would take the plain
-  integer `cmp rax, rcx` path. Exclude float (either operand -> ucomisd path),
-  AnsiString/String (dedicated compare helpers), and Variant. What remains is
-  the integer/pointer/char/boolean/enum ordinal compare that lowers to a bare
-  cmp + setcc — exactly the flags an inverted jcc can consume. }
-function CmpFusible(node: Integer): Boolean;
-var opTk: Integer; lt, rt: TTypeKind;
-begin
-  CmpFusible := False;
-  opTk := IRC[node];
-  if not ((opTk = Ord(tkEq)) or (opTk = Ord(tkNeq)) or (opTk = Ord(tkLt)) or
-          (opTk = Ord(tkLe)) or (opTk = Ord(tkGt)) or (opTk = Ord(tkGe))) then Exit;
-  lt := IntToTypeKind(IRTk[IRA[node]]);
-  rt := IntToTypeKind(IRTk[IRB[node]]);
-  if TypeIsFloat(lt) or TypeIsFloat(rt) then Exit;
-  if (lt = tyAnsiString) or (lt = tyString) or
-     (rt = tyAnsiString) or (rt = tyString) then Exit;
-  if (lt = tyVariant) or (rt = tyVariant) then Exit;
-  CmpFusible := True;
 end;
 
 { ===== -O3 store->reload elimination (feature-opt-accumulator-value-tracker) =====
