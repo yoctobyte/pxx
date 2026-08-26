@@ -55,7 +55,7 @@ checked at the same time — it is the same indirection question.
 the shape is deliberately not asserted.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit cddf64977.
 
 # Resolved 2026-08-26
 

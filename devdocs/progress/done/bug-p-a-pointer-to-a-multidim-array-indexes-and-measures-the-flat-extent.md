@@ -54,7 +54,7 @@ quick`. Add the two rows back to
 where they were removed.
 
 ## Log
-- 2026-08-26 — resolved, commit PENDING-COMMIT.
+- 2026-08-26 — resolved, commit 46e8e1c65.
 
 # Resolved 2026-08-26
 
