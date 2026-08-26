@@ -343,6 +343,41 @@ Deliberately not general, for the reason this file keeps arriving at: **a checke
 that reports everything gets suppressed, and a suppressed checker asserts
 nothing.**
 
+## A correct fix on an opportunistic path is inert, and nothing reports it
+
+The runtime twin of every routing defect in this file, and the one that hides
+best, because **the code is present, the tests pass, and the output stays wrong.**
+
+`repair_regressions` was correct. It lived inside `bisect_step`, which is the last
+arm of an elif chain of idle phases -- pin verify, breadth backfill, opt, bench,
+then bisect -- so it ran only once every earlier phase had declined. Pin verify
+alone was preempted by a push three times in one hour, and idle work on this box
+has been starved for 40 hours at a stretch. **A correction to what the board
+publishes was gated behind the busiest lock in the system.** A dry run found
+three repairs that had never reached the published board, two of them written
+hours earlier: 99 untestable commits still in one range, and a red still
+attributed to a commit that could not have caused it.
+
+The generalisation: **it is not enough for the right answer to exist and be
+correct; it has to be on a path that runs when the answer is needed.**
+
+- **The tell is a trigger that is a PHASE rather than an EVENT.** "Runs during
+  idle", "runs after the queue drains", "runs on the next full pass" -- each
+  inherits the availability of something unrelated to the thing it fixes.
+- **Correctness tests cannot see this.** They call the function directly, so they
+  answer *does it work*, never *does it run*. A guard that exercises the caller's
+  scheduling is a different test and usually does not exist.
+- **The honest status of such a fix is "fixed in the code, inert in this
+  configuration"** -- not "fixed". Say it that way; a count of closed tickets that
+  includes inert ones is worth less than a smaller honest count.
+- **Make the repair idempotent and call it unconditionally.** It now runs every
+  cycle before any phase decision, costing one `diff-tree` and one `rev-list` per
+  *open* regression -- two -- against a cycle that otherwise spends minutes
+  compiling. And `bisect_step` calls it too rather than assuming the loop did:
+  **a repair that depends on its caller having been polite is not a repair.**
+  Guard that a second pass is a no-op, or an always-saving repair dirties the
+  tree every cycle and wedges the publish loop.
+
 ## A blocklist costs one outage per symptom; an allowlist closes the class
 
 When plexus stopped being headless, every test job began inheriting a live
