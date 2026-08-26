@@ -1,0 +1,115 @@
+# A callable held in an ATTRIBUTE reassigns that same attribute while it is
+# still running. CPython pushes a strong reference before the call and holds it
+# until the call returns, so the running callable and everything it captured
+# stay alive; NilPy borrowed the callee, so the reassignment dropped the last
+# reference and freed the closure -- and its captured object -- under the live
+# frame. Segfault, not a wrong value.
+#
+# Reduced from uforth's ANS core word set, where
+#   : WEIRD: CREATE DOES> 1 + DOES> 2 + ;
+# defines a word whose does-part contains a SECOND DOES>, and running it
+# rewrites the very Word.native slot holding the closure that is running.
+# regression-test-uforth-core
+#
+# Every expectation is CPython's own output.
+class Word:
+    def __init__(self, name):
+        self.name = name
+        self.native = None
+        self.body = None
+
+
+class VM:
+    def __init__(self):
+        self.last = None
+
+
+vm = VM()
+
+
+def run_word(v, w):
+    if w.native:
+        w.native(v)
+    if w.body:
+        i = 0
+        while i < len(w.body):
+            if w.body[i] == "DOES":
+                does(v, w.body[i + 1:])
+                break
+            i += 1
+    return w.name
+
+
+def does(v, rest):
+    target = v.last
+    dw = Word(target.name + ">")
+    dw.body = rest
+
+    # a nested def whose capture is a DEFAULT ARGUMENT -- a lifted bound-fn
+    # (variant tag 10), the shape uforth's does_runtime has
+    def does_runtime(v2, _dw=dw):
+        return run_word(v2, _dw)
+
+    target.native = does_runtime
+    target.body = None
+
+
+w1 = Word("W1")
+w1.body = ["DOES", "DOES"]
+vm.last = w1
+
+print(run_word(vm, w1))
+print(run_word(vm, w1))
+print(run_word(vm, w1))
+
+
+# The same hazard on the OTHER callable road: a plain def taken as a value
+# travels as a {code, recv} pair (tag 8) with a nil receiver, and the pair is
+# freed by the same reassignment.
+class Box:
+    pass
+
+
+b = Box()
+
+
+def second(n):
+    return n + 1000
+
+
+def first(n):
+    b.fn = second          # drops the last reference to `first` mid-call
+    return n + 1
+
+
+b.fn = first
+print(b.fn(1))
+print(b.fn(1))
+
+# and a bound METHOD held in an attribute, replaced from inside itself
+class Counter:
+    def __init__(self):
+        self.n = 0
+
+    def bump(self, k):
+        holder.cb = plain
+        self.n += k
+        return self.n
+
+
+class Holder:
+    pass
+
+
+holder = Holder()
+
+
+def plain(k):
+    return -k
+
+
+c = Counter()
+holder.cb = c.bump
+print(holder.cb(5))
+print(holder.cb(5))
+print(c.n)

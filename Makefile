@@ -2438,6 +2438,18 @@ test-nilpy: $(COMPILER)
 	@# wears a tag at or above VT_PROMO_BASE and the name mapping stopped below it
 	./$(COMPILER) test/test_nilpy_type_name_of_a_big_int.npy $(TESTTMP)/test_nilpy_typebig26
 	$(TESTTMP)/test_nilpy_typebig26 | diff -u test/test_nilpy_type_name_of_a_big_int.expected -
+	@# ...and the same test's `type(some_def).__name__` line then answered
+	@# 'method': a plain def and a bound method share variant tag 8 (the pair
+	@# with a nil receiver IS the plain def), so the tag alone cannot name them
+	@# and only the RECEIVER can. Its own test, both halves asserted.
+	./$(COMPILER) test/test_nilpy_type_name_function_vs_method.npy $(TESTTMP)/test_nilpy_typefnmeth26
+	$(TESTTMP)/test_nilpy_typefnmeth26 | diff -u test/test_nilpy_type_name_function_vs_method.expected -
+	@# a callable held in an ATTRIBUTE reassigns that same attribute while it is
+	@# still running -- uforth's `: WEIRD: CREATE DOES> 1 + DOES> 2 + ;`. The
+	@# callee was borrowed, so the reassignment freed the running closure and
+	@# its captures. SEGFAULT without the fix, not a wrong value.
+	./$(COMPILER) test/test_nilpy_callable_replaces_its_own_slot.npy $(TESTTMP)/test_nilpy_selfslot26
+	$(TESTTMP)/test_nilpy_selfslot26 | diff -u test/test_nilpy_callable_replaces_its_own_slot.expected -
 	@# a def whose return is `2 ** 70` or a wide literal answered 0 — `**`
 	@# lowers to a variant-returning call while the scan read the literals
 	./$(COMPILER) test/test_nilpy_def_returning_a_big_int.npy $(TESTTMP)/test_nilpy_defretbig26

@@ -2317,6 +2317,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-nilpy-test-nilpy-qualifier-vs-cproc | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_qualifier_vs_cproc.npy red at 34c41bde6fd6 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-sqlite-crud | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_sqlite_crud.npy red at 67015a8cf7d8 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-nilpy-str-isnumeric-istitle | T | 70 | regression | regression: test-nilpy#src:test/test_nilpy_str_isnumeric_istitle.npy red at 0d6de0cbeae1 (auto-filed by twatch) | — |
+| regression-test-nilpy-test-nilpy-type-name-of-a-big-int | N | 70 | regression | regression: test-nilpy#src:test/test_nilpy_type_name_of_a_big_int.npy red at 44193e547f6d (auto-filed by twatch) | — |
 | regression-test-nilpy-test-pascal-at-procvar-mode | P | 70 | regression | regression: test-nilpy#src:test/test_pascal_at_procvar_mode.pas@1 red at 23becd24b8e5 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-pascal-mode-switch-cli | P | 70 | regression | regression: test-nilpy#src:test/test_pascal_mode_switch_cli.pas@2 red at 23becd24b8e5 (auto-filed by twatch) | — |
 | regression-test-nilpy-test-pascal-self-result-delphi | P | 70 | regression | regression: test-nilpy#src:test/test_pascal_self_result_delphi.pas@1 red at 23becd24b8e5 (auto-filed by twatch) | — |
@@ -2337,6 +2338,7 @@ should not read it to find out what to do. Grep it freely._
 | regression-test-sqlite-threads-x86-64-00 | T | 70 | regression | regression: test-sqlite-threads-x86_64#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-test-threads-test-parallel-for-capture-aggr | P | 70 | regression | regression: test-threads#src:test/test_parallel_for_capture_aggr.pas red at b936d125601e (auto-filed by twatch) | — |
 | regression-test-uforth-00 | T | 70 | regression | regression: test-uforth#00 red at 378295f7c218 (auto-filed by twatch) | — |
+| regression-test-uforth-core | T | 70 | regression | regression: test-uforth#core red at 44193e547f6d (auto-filed by twatch) | — |
 | regression-test-zlib-00 | T | 70 | regression | regression: test-zlib#00 red at 83006e927e35 (auto-filed by twatch) | — |
 | regression-testmgr-conformance-shard-timeout-under-load | T | 60 | regression | Track T: c-conformance shards time out under full parallel load (false REDs) | — |
 | regression-tools-devtest-00 | T | 70 | regression | regression: tools-devtest#00 red at 1b9b43e5b511 (auto-filed by twatch) | — |
