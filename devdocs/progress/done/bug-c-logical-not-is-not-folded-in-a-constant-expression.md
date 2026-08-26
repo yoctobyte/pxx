@@ -8,7 +8,7 @@ blocked-by: []
 status: done
 owner: opus5-frank1
 created: 2026-08-26
-commit: PENDING-COMMIT
+commit: 2a5d0e95c
 summary: "CEvalConstPrimary's unary chain had -, + , ~ and & and not !, so `char[1 - 2*!!(cond)]` — BUILD_BUG_ON, as busybox and the Linux kernel spell it — died as `Expected: ], but got:` with no mention of !. Folded, the second half appeared: pxx ACCEPTED the -1 bound the macro produces, so every compile-time assertion in a source compiled and never fired. Found by compiling busybox 1.37.0; +5 files."
 ---
 
