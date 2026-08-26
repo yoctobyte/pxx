@@ -2,7 +2,8 @@
 slug: bug-a-error-recovery-silences-every-lowering-only-diagnostic
 track: A
 prio: 45
-status: backlog_new
+status: unfinished
+owner: ""
 ---
 
 # Once ANY diagnostic is recovered, every lowering-only check stops firing
@@ -89,3 +90,77 @@ diagnostics one at a time — that is the microfix, and the count of
 lowering-only checks is the measure of how much is hidden.
 
 *Banked by the Track P worker while fixing `regression-test-core-test-indexing-length-for-new-inc-positive`; filed by frank1-72.*
+
+## Measurement banked, 2026-08-26 (opus5-frank1) — parked, not fixed
+
+Confirmed the hole and sized the three options. **Option 3 is vacuous and option
+1 is 619 call sites**, which reframes the ticket: only option 2 is reachable,
+and only if the user-facing checks can be separated from the internal ones.
+
+### The hole reproduces exactly as filed
+
+```pascal
+program e2;
+type TR = record x: Integer; end;
+var r, q: TR; n, u: Integer;
+begin
+  u := undefinedthing;   { recovered }
+  n := r + q;            { lowering-only — silently not reported }
+end.
+```
+
+Alone, `n := r + q` gives *no operator overload found for record operands*.
+Behind one recovered error, only the first diagnostic is printed.
+
+### Option 3 ("bail only once an UNRECOVERABLE error was seen") cannot work
+
+`Error`/`ErrorAt` call `Halt(1)`. There is no unwinding, so an unrecoverable
+error never *reaches* `CompileAST` — it ends the process where it is raised. By
+the time `if ErrCount > 0 then Exit` is evaluated, every counted error is
+recovered **by construction**. So option 3's guard is either always false (bail
+never happens = the guard is removed = the original crash returns) or it is
+today's behaviour. It is not a third option; it is option "revert".
+
+### Option 1 ("split checks from emission") is 619 call sites
+
+| file | fatal `Error(`/`ErrorAt(` | recoverable |
+| --- | --- | --- |
+| `ir.inc` | 123 | 1 |
+| `ir_codegen.inc` | 100 | 0 |
+| `ir_codegen386.inc` | 96 | — |
+| `ir_codegen_riscv32.inc` | 87 | — |
+| `ir_codegen_aarch64.inc` | 85 | — |
+| `ir_codegen_arm32.inc` | 83 | — |
+| `ir_codegen_xtensa.inc` | 45 | — |
+
+Lowering cannot be run for its checks while any of those can fire, and there is
+no exception to catch them with. Classifying all 619 is not a ticket, it is a
+programme.
+
+### Which reframes the ticket to a countable one
+
+The 223 in `ir.inc`+`ir_codegen.inc` are overwhelmingly **internal
+consistency assertions**, not user diagnostics — `invalid symbol in lea`,
+`unknown IR opcode`, `invalid class index in vmtaddr`, `IR loop stack overflow`,
+`<helper> not loaded`. Those firing on a poisoned AST is precisely what the
+`ErrCount > 0 -> Exit` guard was added to prevent, and skipping them is right.
+
+The ones that matter are the handful of **user-facing dialect rules** squatting
+in shared IR, which is a smell on its own terms
+(`the-substrate-is-ast-and-ir-not-the-parser.md`). `93c0ee76d` moved one out.
+From the same sample, the remaining candidates are small and enumerable:
+
+- `no operator overload found for record operands` (`ir.inc:8721`)
+- `arithmetic operator not supported for dynamic arrays` (the arm above it)
+- `case range: lower bound is greater than upper bound` (x2)
+- `case of string: label must be a string constant` (x2)
+- `case label does not match the ordinal selector type` (x2)
+
+So the tractable shape is **option 2 applied to a list, not one at a time** —
+which is what the ticket asks for when it says not to close this by fixing
+individual diagnostics. The list above is that list, and the `case` rows suggest
+the sweep should look for dialect rules generally, not only operator ones.
+
+Parked here rather than half-done: the next worker starts from a sized problem
+instead of a design question. Repro above is a two-minute check that it is still
+live.

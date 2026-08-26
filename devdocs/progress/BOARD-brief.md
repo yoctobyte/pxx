@@ -5,14 +5,15 @@ _ranked queue head, live locks, and what not to claim. Full grid with_
 _summaries: [`BOARD.md`](./BOARD.md). Per-track queue:_
 _`tools/progress.sh ready --track X`; single pick: `next --track X`._
 
-`unfinished:24 blocked:7 backlog:258 backlog_new:24 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2430 rejected:44`
+`unfinished:25 blocked:7 backlog:258 backlog_new:23 experimental:20 rainy-day:44 float:21 done-followup:3 decided:115 done:2430 rejected:44`
 
 ## Held now (working/ — do not touch these files)
 
 _none — no lane is locked._
 
-## unfinished (24) — parked mid-flight; re-claim, do not duplicate
+## unfinished (25) — parked mid-flight; re-claim, do not duplicate
 
+- `bug-a-error-recovery-silences-every-lowering-only-diagnostic` [A]
 - `bug-a-nilpy-on-cross-targets-four-remaining-walls` [A]
 - `bug-b-reportlab-mimic-multi-font-heap-corruption` [N]
 - `bug-n-a-callable-value-reaches-a-str-parameter-and-renders-as-bound-method` [N]
